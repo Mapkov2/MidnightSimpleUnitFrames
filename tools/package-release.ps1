@@ -58,6 +58,15 @@ function Normalize-Version {
     $value = $RawVersion.Trim()
     $value = $value -replace '^refs/tags/', ''
     $value = $value -replace '^v(?=\d)', ''
+    if ($value -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+        $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+        $number = ""
+        if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+            $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+        }
+        return ($base + "-" + $Matches["channel"].ToLowerInvariant() + $number)
+    }
 
     if ([string]::IsNullOrWhiteSpace($value)) {
         throw "Version cannot be empty."
@@ -101,6 +110,18 @@ New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames") -Destination $stagePath -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $RepoRoot "MidnightSimpleUnitFrames_Castbars") -Destination $stagePath -Recurse -Force
+
+$perfyHookPath = Join-Path $stagePath "MidnightSimpleUnitFrames/MSUF_PerfyHook.lua"
+if (Test-Path -LiteralPath $perfyHookPath) {
+    Remove-Item -LiteralPath $perfyHookPath -Force
+}
+
+$changelogGenerator = Join-Path $RepoRoot "tools/update-addon-changelog.ps1"
+if (Test-Path -LiteralPath $changelogGenerator) {
+    & $changelogGenerator `
+        -Version $releaseVersion `
+        -OutputPath (Join-Path $stagePath "MidnightSimpleUnitFrames/Foundation/MSUF_Changelog.lua")
+}
 
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc") -TocVersion $releaseVersion
 Set-TocVersion -TocPath (Join-Path $stagePath "MidnightSimpleUnitFrames_Castbars/MidnightSimpleUnitFrames_Castbars.toc") -TocVersion $releaseVersion

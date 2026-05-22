@@ -7,6 +7,18 @@
 -- Zero overhead: no events, no OnUpdate, only fires on user click/hover.
 
 local addonName, ns = ...
+ns = ns or (_G.MSUF_NS) or {}
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns.Translate) == "function" then return ns.Translate(text) end
+    local locale = ns.L or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
 
 -- Click handler: Left = open menu, Right = toggle Edit Mode
 function MSUF_AddonCompartment_OnClick(_, btn)
@@ -44,13 +56,13 @@ function MSUF_AddonCompartment_OnEnter(_, menuButtonFrame)
     local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
         and _G.C_AddOns.GetAddOnMetadata(addonName, "Version")
     if type(version) == "string" and version ~= "" then
-        tt:AddLine("Version: " .. version, 0.6, 0.6, 0.6)
+        tt:AddLine(Tr("Version:") .. " " .. version, 0.6, 0.6, 0.6)
     end
 
     -- Active profile
     local profile = _G.MSUF_ActiveProfile
     if type(profile) == "string" and profile ~= "" then
-        tt:AddLine("Profile: " .. profile, 0.62, 0.82, 0.62)
+        tt:AddLine(Tr("Profile:") .. " " .. profile, 0.62, 0.82, 0.62)
     end
 
     -- Edit Mode status
@@ -60,12 +72,12 @@ function MSUF_AddonCompartment_OnEnter(_, menuButtonFrame)
         editActive = true
     end
     if editActive then
-        tt:AddLine("Edit Mode: |cff00ff00Active|r", 0.8, 0.8, 0.8)
+        tt:AddLine(Tr("Edit Mode: |cff00ff00Active|r"), 0.8, 0.8, 0.8)
     end
 
     tt:AddLine(" ")
-    tt:AddLine("|cffffffffLeft Click:|r Open MSUF Menu", 0.7, 0.7, 0.7)
-    tt:AddLine("|cffffffffRight Click:|r Toggle Edit Mode", 0.7, 0.7, 0.7)
+    tt:AddLine(Tr("|cffffffffLeft Click:|r Open MSUF Menu"), 0.7, 0.7, 0.7)
+    tt:AddLine(Tr("|cffffffffRight Click:|r Toggle Edit Mode"), 0.7, 0.7, 0.7)
     tt:Show()
 end
 

@@ -1,4 +1,4 @@
--- MSUF_InterruptReady.lua
+﻿-- MSUF_InterruptReady.lua
 -- =============================================================================
 -- Single source of truth for the player's interrupt spell + readiness state.
 -- Provides:
@@ -13,14 +13,14 @@
 --
 -- Architecture:
 --   * Class+spec hard-coded interrupt table (mirrors MidnightFocusInterrupt's
---     INTERRUPT_BY_CLASS — proven correct for 12.0.5 / Midnight, including
---     Rogue Kick 1766). Class identity is the source of truth — no
+--     INTERRUPT_BY_CLASS â€” proven correct for 12.0.5 / Midnight, including
+--     Rogue Kick 1766). Class identity is the source of truth â€” no
 --     IsSpellKnown / actionbar guessing games.
 --   * Cooldown read via C_Spell.GetSpellCooldownDuration(id):IsZero(). Returns
 --     a plain boolean even when the underlying duration object is opaque,
 --     so it is always safe to use in Lua-side logic.
 --   * Color via C_CurveUtil.EvaluateColorFromBoolean and visibility via
---     SetAlphaFromBoolean — both accept secret booleans cleanly.
+--     SetAlphaFromBoolean â€” both accept secret booleans cleanly.
 --   * Per-frame C_Timer.After(remaining + 0.05, refresh) for the CD-end repaint
 --     so the indicator turns green the moment Kick comes off cooldown without
 --     waiting for SPELL_UPDATE_COOLDOWN to retrigger.
@@ -44,6 +44,8 @@ local CreateFrame       = _G.CreateFrame
 local UnitClass         = _G.UnitClass
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
+local issecretvalue    = _G.issecretvalue
+local canaccessvalue   = _G.canaccessvalue
 
 -- =============================================================================
 -- Interrupt spell table (mirrors MidnightFocusInterrupt-3.14.2)
@@ -89,33 +91,66 @@ local _state = {
 -- Track every MSUF castbar frame that has had ApplyLayout() called, so
 -- RefreshAll() (and global cooldown sweeps) can iterate them cheaply.
 local _registeredFrames = {}
+local _activeFrames = {}
+local _activeFrameCount = 0
+local _eventFrame
+local _UpdateCooldownEventRegistration
 
 -- =============================================================================
 -- Helpers
 -- =============================================================================
 
+local _cfgRef, _cfgShowTarget, _cfgShowFocus, _cfgShowBoss, _cfgAnyShow
+local _BOSS_UNITS = {
+    boss1 = true, boss2 = true, boss3 = true, boss4 = true,
+    boss5 = true, boss6 = true, boss7 = true, boss8 = true,
+}
+
+local function _RefreshCfgCache(g)
+    if not g then
+        _cfgRef, _cfgShowTarget, _cfgShowFocus, _cfgShowBoss, _cfgAnyShow = nil, nil, nil, nil, false
+        return nil
+    end
+
+    local showTarget = g.kickReadyShowTarget == true
+    local showFocus = g.kickReadyShowFocus == true
+    local showBoss = g.kickReadyShowBoss == true
+    if g ~= _cfgRef
+        or showTarget ~= _cfgShowTarget
+        or showFocus ~= _cfgShowFocus
+        or showBoss ~= _cfgShowBoss
+    then
+        _cfgRef = g
+        _cfgShowTarget = showTarget
+        _cfgShowFocus = showFocus
+        _cfgShowBoss = showBoss
+        _cfgAnyShow = showTarget or showFocus or showBoss
+    end
+    return g
+end
+
 local function _GetCfg()
     -- The Castbar Options menu writes the kickReady* keys into MSUF_DB.general
-    -- (via its local `G()` accessor). Read from the same place — DO NOT use
+    -- (via its local `G()` accessor). Read from the same place â€” DO NOT use
     -- MSUF_DB.castbarVisuals here, otherwise the toggles will never apply.
     local db = _G.MSUF_DB
     if not db then return nil end
-    return db.general
+    return _RefreshCfgCache(db.general)
 end
 
 local function _AnyShowEnabled(cfg)
     if not cfg then return false end
-    return cfg.kickReadyShowTarget == true
-        or cfg.kickReadyShowFocus  == true
-        or cfg.kickReadyShowBoss   == true
+    if cfg ~= _cfgRef then _RefreshCfgCache(cfg) end
+    return _cfgAnyShow == true
 end
 
 local function _ShowOnUnit(cfg, unit)
     if not cfg or not unit then return false end
-    if unit == "target" then return cfg.kickReadyShowTarget == true end
-    if unit == "focus"  then return cfg.kickReadyShowFocus  == true end
-    if type(unit) == "string" and unit:sub(1, 4) == "boss" then
-        return cfg.kickReadyShowBoss == true
+    if cfg ~= _cfgRef then _RefreshCfgCache(cfg) end
+    if unit == "target" then return _cfgShowTarget == true end
+    if unit == "focus" then return _cfgShowFocus == true end
+    if _cfgShowBoss == true and type(unit) == "string" then
+        return _BOSS_UNITS[unit] == true or unit:sub(1, 4) == "boss"
     end
     return false
 end
@@ -178,7 +213,7 @@ end
 --   * C_CurveUtil.EvaluateColorFromBoolean(b, trueMixin, falseMixin)
 --   * SetShownSafe / SetEnabledFromBoolean (where applicable)
 --
--- Returns nil if the spell isn't resolved yet — callers must guard.
+-- Returns nil if the spell isn't resolved yet â€” callers must guard.
 
 local function _GetReadyBoolSecret()
     local id = _state.spellID
@@ -187,7 +222,7 @@ local function _GetReadyBoolSecret()
 
     local dur = C_Spell.GetSpellCooldownDuration(id)
     if not dur or not dur.IsZero then return nil end
-    return dur:IsZero()  -- secret bool — DO NOT compare in Lua
+    return dur:IsZero()  -- secret bool â€” DO NOT compare in Lua
 end
 
 -- =============================================================================
@@ -205,12 +240,27 @@ local function _EnsureColorMixins()
     _cooldownColorMixin = _G.CreateColor(COOLDOWN_COLOR.r, COOLDOWN_COLOR.g, COOLDOWN_COLOR.b, COOLDOWN_COLOR.a)
 end
 
+local _cachedReadyR, _cachedReadyG, _cachedReadyB
+local _cachedCdR, _cachedCdG, _cachedCdB
+local _cachedReadyColorMixin, _cachedCooldownColorMixin
+local _cachedOutlineR, _cachedOutlineG, _cachedOutlineB, _cachedOutlineA
+local _cachedOutlineColorMixin
+
+local function _ReadKickColor(g, key, dr, dg, db)
+    local c = g and g[key]
+    if type(c) ~= "table" then return dr, dg, db end
+    local r = tonumber(c["1"]) or tonumber(c[1]) or dr
+    local gx = tonumber(c["2"]) or tonumber(c[2]) or dg
+    local b = tonumber(c["3"]) or tonumber(c[3]) or db
+    return r, gx, b
+end
+
 -- =============================================================================
 -- Indicator: two visual styles
 -- =============================================================================
 -- Style "border" (default): tint the castbar's own outline (frame._msufOutline)
 --   green when the player's interrupt is ready, red when on cooldown. The
---   castbar's normal fill colors from the Color menu remain untouched —
+--   castbar's normal fill colors from the Color menu remain untouched â€”
 --   only the outline edges flip color while an interruptible cast is active
 --   and the unit is in scope.
 --
@@ -234,7 +284,7 @@ local function _CreateBox(frame)
     box:SetFrameLevel(parent:GetFrameLevel() + 5)
     box:Hide()
 
-    -- Single solid fill texture — the box IS the indicator (no icon).
+    -- Single solid fill texture â€” the box IS the indicator (no icon).
     local fill = box:CreateTexture(nil, "OVERLAY", nil, 7)
     fill:SetTexture("Interface\\Buttons\\WHITE8x8")
     fill:SetAllPoints(box)
@@ -287,12 +337,11 @@ end
 --   MSUF_DB.general.kickReadyColor    = { ["1"]=r, ["2"]=g, ["3"]=b }   (default green)
 --   MSUF_DB.general.kickNotReadyColor = { ["1"]=r, ["2"]=g, ["3"]=b }   (default red)
 -- These are written by MSUF_Options_Colors.lua and are the same swatches the
--- user sees under "Interrupt Ready Indicator" in the Colors menu — keeping
+-- user sees under "Interrupt Ready Indicator" in the Colors menu â€” keeping
 -- the indicator visually independent from the castbar fill colors.
 --
--- Returns plain ColorMixins built fresh per call, so live edits to the
--- Colors menu propagate immediately on the next repaint without any
--- explicit invalidation hook.
+-- Returns ColorMixins cached by the actual DB values. Live edits still
+-- propagate on the next repaint because changed RGB values miss the cache.
 local function _ResolveColorPair(_)
     _EnsureColorMixins()
 
@@ -301,26 +350,27 @@ local function _ResolveColorPair(_)
         return _readyColorMixin, _cooldownColorMixin
     end
 
-    local function _readKickColor(key, dr, dg, db)
-        local c = g[key]
-        if type(c) ~= "table" then return dr, dg, db end
-        local r = tonumber(c["1"]) or tonumber(c[1]) or dr
-        local gx = tonumber(c["2"]) or tonumber(c[2]) or dg
-        local b = tonumber(c["3"]) or tonumber(c[3]) or db
-        return r, gx, b
+    -- Defaults match the Colors-menu defaults (green / red).
+    local rr, rg, rb = _ReadKickColor(g, "kickReadyColor",    0, 1, 0)
+    local cr, cg, cb = _ReadKickColor(g, "kickNotReadyColor", 1, 0, 0)
+
+    if _cachedReadyColorMixin
+       and rr == _cachedReadyR and rg == _cachedReadyG and rb == _cachedReadyB
+       and cr == _cachedCdR and cg == _cachedCdG and cb == _cachedCdB then
+        return _cachedReadyColorMixin, _cachedCooldownColorMixin
     end
 
-    -- Defaults match the Colors-menu defaults (green / red).
-    local rr, rg, rb = _readKickColor("kickReadyColor",    0, 1, 0)
-    local cr, cg, cb = _readKickColor("kickNotReadyColor", 1, 0, 0)
-
-    return _G.CreateColor(rr, rg, rb, 1), _G.CreateColor(cr, cg, cb, 1)
+    _cachedReadyR, _cachedReadyG, _cachedReadyB = rr, rg, rb
+    _cachedCdR, _cachedCdG, _cachedCdB = cr, cg, cb
+    _cachedReadyColorMixin = _G.CreateColor(rr, rg, rb, 1)
+    _cachedCooldownColorMixin = _G.CreateColor(cr, cg, cb, 1)
+    return _cachedReadyColorMixin, _cachedCooldownColorMixin
 end
 
 -- Read the user's configured castbar outline color (the same RGBA that
 -- MSUF_ApplyCastbarOutline writes onto the four edge textures) and return
--- it as a fresh ColorMixin. Used as the "no tint" target when composing
--- via EvaluateColorFromBoolean — when the cast is non-interruptible the
+-- it as a cached ColorMixin. Used as the "no tint" target when composing
+-- via EvaluateColorFromBoolean â€” when the cast is non-interruptible the
 -- edge textures end up with this exact colour, so the user sees their
 -- normal castbar outline rather than our green/red indicator.
 local function _GetUserOutlineMixin()
@@ -330,7 +380,15 @@ local function _GetUserOutlineMixin()
     local gg = (g and tonumber(g.castbarBorderG)) or 0
     local b  = (g and tonumber(g.castbarBorderB)) or 0
     local a  = (g and tonumber(g.castbarBorderA)) or 1
-    return _G.CreateColor(r, gg, b, a)
+    if _cachedOutlineColorMixin
+       and r == _cachedOutlineR and gg == _cachedOutlineG
+       and b == _cachedOutlineB and a == _cachedOutlineA then
+        return _cachedOutlineColorMixin
+    end
+
+    _cachedOutlineR, _cachedOutlineG, _cachedOutlineB, _cachedOutlineA = r, gg, b, a
+    _cachedOutlineColorMixin = _G.CreateColor(r, gg, b, a)
+    return _cachedOutlineColorMixin
 end
 
 local function _RefreshRawNotInterruptible(frame)
@@ -386,7 +444,7 @@ end
 local function _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
     -- Plain-only fallback when the C-side selector or our two indicator
     -- mixins are missing. Cannot test readyBool here (would taint), so we
-    -- bias toward cooldown — readyBool's nil-vs-not is decided later via
+    -- bias toward cooldown â€” readyBool's nil-vs-not is decided later via
     -- C_CurveUtil only when it's safe to do so.
     if not (C_CurveUtil and C_CurveUtil.EvaluateColorFromBoolean) or not readyMixin or not cdMixin then
         if cdMixin and cdMixin.GetRGBA then
@@ -396,7 +454,7 @@ local function _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
     end
 
     -- Step 1: indicator colour (ready / cooldown). readyBool is passed
-    -- straight to C — never observed in Lua.
+    -- straight to C â€” never observed in Lua.
     local indicator = C_CurveUtil.EvaluateColorFromBoolean(readyBool, readyMixin, cdMixin)
 
     -- Step 2 (optional): non-interruptible gate. When rawNI is provided we
@@ -410,15 +468,24 @@ local function _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
 end
 
 -- Apply our color to the castbar's existing outline edges.
-local function _TintCastbarOutline(frame, r, g, b, a)
+local function _TintCastbarOutline(frame, r, g, b, a, force)
     local o = frame and frame._msufOutline
     if not o then return false end
+    if not force then
+        local secret = issecretvalue
+        if not (secret and (secret(r) or secret(g) or secret(b) or secret(a)))
+           and frame._kickReadyLastR == r and frame._kickReadyLastG == g
+           and frame._kickReadyLastB == b and frame._kickReadyLastA == a then
+            return true
+        end
+    end
     if o.top    and o.top.SetVertexColor    then o.top:SetVertexColor(r, g, b, a)    end
     if o.bottom and o.bottom.SetVertexColor then o.bottom:SetVertexColor(r, g, b, a) end
     if o.left   and o.left.SetVertexColor   then o.left:SetVertexColor(r, g, b, a)   end
     if o.right  and o.right.SetVertexColor  then o.right:SetVertexColor(r, g, b, a)  end
     -- Mark so the hook on MSUF_ApplyCastbarOutline knows to re-tint.
     frame._kickReadyBorderTinted = true
+    frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA = r, g, b, a
     return true
 end
 
@@ -427,6 +494,7 @@ local function _RestoreCastbarOutline(frame)
     if not frame then return end
     if not frame._kickReadyBorderTinted then return end
     frame._kickReadyBorderTinted = nil
+    frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA = nil, nil, nil, nil
     if type(_G.MSUF_ApplyCastbarOutline) == "function" then
         _G.MSUF_ApplyCastbarOutline(frame, true)
     end
@@ -443,18 +511,55 @@ local function _RegisterFrame(frame)
     _registeredFrames[frame] = true
 end
 
+local function _MarkActiveFrame(frame)
+    if not frame or _activeFrames[frame] then return end
+    _activeFrames[frame] = true
+    _activeFrameCount = _activeFrameCount + 1
+    if _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
+    end
+end
+
+local function _MarkInactiveFrame(frame)
+    if not frame or not _activeFrames[frame] then return end
+    _activeFrames[frame] = nil
+    _activeFrameCount = _activeFrameCount - 1
+    if _activeFrameCount < 0 then _activeFrameCount = 0 end
+    if _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
+    end
+end
+
 -- Public: create / reposition the indicator on `frame`. Called from
 -- MSUF_Castbars.lua after every visuals update. Cheap, idempotent.
 -- Hide all visual side-effects on a frame (used when feature off, unit out
 -- of scope, no cast, or cast not interruptible). Idempotent.
 local function _HideIndicator(frame)
     if not frame then return end
-    if frame.kickReadyBox then frame.kickReadyBox:Hide() end
+    _MarkInactiveFrame(frame)
+    local box = frame.kickReadyBox
+    if box then
+        if box._kickReadyShown or (box.IsShown and box:IsShown()) then
+            box:Hide()
+        end
+        box._kickReadyShown = nil
+    end
     _RestoreCastbarOutline(frame)
 end
 
 local function _CastAllowsKickIndicator(frame)
-    return not (frame and frame.MSUF_kickInterruptibleConfirmed == false)
+    return not (frame and (frame.isNotInterruptible == true or frame.MSUF_kickInterruptibleConfirmed == false))
+end
+
+local function _EnsureBox(frame, cfg)
+    if not frame or not frame.statusBar then return nil end
+    if not frame.kickReadyBox then
+        frame.kickReadyBox = _CreateBox(frame)
+    end
+    if frame.kickReadyBox then
+        _PositionBox(frame.kickReadyBox, frame, cfg)
+    end
+    return frame.kickReadyBox
 end
 
 local function ApplyLayout(frame)
@@ -472,16 +577,14 @@ local function ApplyLayout(frame)
         return
     end
 
-    -- Style switching: ensure the box exists for "box" style; in "border"
-    -- style we don't need the box, but creating it once is cheap and lets
-    -- the user switch styles without a /reload.
-    if not frame.kickReadyBox then
-        frame.kickReadyBox = _CreateBox(frame)
-    end
-    if frame.kickReadyBox then
-        _PositionBox(frame.kickReadyBox, frame, cfg)
+    if frame.MSUF_castActive ~= true or not _CastAllowsKickIndicator(frame) then
+        _HideIndicator(frame)
+        return
     end
 
+    if _GetStyle(cfg) == "box" then
+        _EnsureBox(frame, cfg)
+    end
     _RegisterFrame(frame)
 
     -- After (re)layout, repaint to reflect current cast & cooldown state.
@@ -491,26 +594,114 @@ local function ApplyLayout(frame)
 end
 
 -- =============================================================================
--- Per-frame repaint (color + visibility per style) — secret-safe
+-- Per-frame repaint (color + visibility per style) â€” secret-safe
 -- =============================================================================
 
 local _refreshTickerArmed = false
+local _refreshTimer = nil
+local _refreshTickerToken = 0
 local _TickerStep -- forward decl
 
+local function _PlainNumberOrNil(v)
+    local cav = canaccessvalue
+    if type(cav) == "function" and cav(v) ~= true then return nil end
+
+    local secret = issecretvalue
+    if type(secret) == "function" and secret(v) == true then return nil end
+
+    return (type(v) == "number") and v or nil
+end
+
+local function _ReadCooldownRemainingPlain()
+    local id = _state.spellID
+    if not id or not (C_Spell and C_Spell.GetSpellCooldownDuration) then return nil end
+
+    local dur = C_Spell.GetSpellCooldownDuration(id)
+    if not dur then return nil end
+
+    if dur.GetRemainingDuration then
+        local remaining = dur:GetRemainingDuration()
+        remaining = _PlainNumberOrNil(remaining)
+        if remaining ~= nil then return remaining end
+    end
+
+    if dur.GetRemaining then
+        local remaining = dur:GetRemaining()
+        remaining = _PlainNumberOrNil(remaining)
+        if remaining ~= nil then return remaining end
+    end
+
+    return nil
+end
+
+local function _GetCooldownPollDelay()
+    local remaining = _ReadCooldownRemainingPlain()
+    if remaining == nil then
+        return 0.25
+    end
+    if remaining > 0.05 then
+        return remaining + 0.05
+    end
+    return nil
+end
+
+local function _ArmRefreshTicker(delay, replace)
+    if not C_Timer then return end
+    if delay == nil then
+        if replace then
+            _refreshTickerToken = _refreshTickerToken + 1
+            _refreshTickerArmed = false
+        end
+        if replace and _refreshTimer and _refreshTimer.Cancel then
+            _refreshTimer:Cancel()
+            _refreshTimer = nil
+        end
+        return
+    end
+    if _refreshTickerArmed and not replace then return end
+
+    delay = _PlainNumberOrNil(delay)
+    if delay == nil then return end
+    if delay < 0.03 then delay = 0.03 end
+
+    if _refreshTimer and _refreshTimer.Cancel then
+        _refreshTimer:Cancel()
+        _refreshTimer = nil
+    end
+
+    _refreshTickerArmed = true
+    _refreshTickerToken = _refreshTickerToken + 1
+    local token = _refreshTickerToken
+    local function run()
+        if token ~= _refreshTickerToken then return end
+        if _TickerStep then _TickerStep() end
+    end
+
+    if C_Timer.NewTimer then
+        _refreshTimer = C_Timer.NewTimer(delay, run)
+    elseif C_Timer.After then
+        C_Timer.After(delay, run)
+    else
+        _refreshTickerArmed = false
+    end
+end
+
 -- Single repaint entry point. Style-aware.
-local function _PaintFrame(frame, readyBool)
-    local cfg = _GetCfg()
+local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
+    cfg = cfg or _GetCfg()
     if not cfg then return end
 
-    local style = _GetStyle(cfg)
-    local readyMixin, cdMixin = _ResolveColorPair(cfg)
+    style = style or _GetStyle(cfg)
+    if not readyMixin or not cdMixin then
+        readyMixin, cdMixin = _ResolveColorPair(cfg)
+    end
 
     -- rawNI: the secret-tagged "notInterruptible" value from the engine
     -- state (originally from UnitCastingInfo's notInterruptible field). Set
     -- in MSUF_CastbarDriver Cast() as `frame._msufApiNotInterruptibleRaw`.
     --
     -- Why we need it here:
-    --   `frame.isNotInterruptible` (plain bool) is event-driven only —
+    --   `frame.isNotInterruptible` (plain bool) is event-driven only â€”
     --   UNIT_SPELLCAST_NOT_INTERRUPTIBLE doesn't reliably fire for casts
     --   that are non-interruptible from the start (e.g. boss spells with
     --   permanent shield), so the upstream RefreshFrame gate doesn't catch
@@ -532,12 +723,21 @@ local function _PaintFrame(frame, readyBool)
             -- (we compose visibility via alpha instead). Use the cheaper
             -- single-step pick.
             local r, g, b, a = _PickColor(readyMixin, cdMixin, readyBool)
-            box.fill:SetVertexColor(r, g, b, a)
-            box:Show()
+            local secret = issecretvalue
+            if (secret and (secret(r) or secret(g) or secret(b) or secret(a)))
+               or box._kickReadyFillR ~= r or box._kickReadyFillG ~= g
+               or box._kickReadyFillB ~= b or box._kickReadyFillA ~= a then
+                box.fill:SetVertexColor(r, g, b, a)
+                box._kickReadyFillR, box._kickReadyFillG, box._kickReadyFillB, box._kickReadyFillA = r, g, b, a
+            end
+            if not box._kickReadyShown then
+                box:Show()
+                box._kickReadyShown = true
+            end
 
             -- Secret-safe visibility gate: when rawNI is true (secret or
-            -- plain), alpha goes to 0 → invisible; when false, alpha 1
-            -- → fully visible. The C-side helper accepts secret booleans.
+            -- plain), alpha goes to 0 â†’ invisible; when false, alpha 1
+            -- â†’ fully visible. The C-side helper accepts secret booleans.
             if rawNI ~= nil and box.SetAlphaFromBoolean then
                 box:SetAlphaFromBoolean(rawNI, 0, 1)
             else
@@ -547,21 +747,26 @@ local function _PaintFrame(frame, readyBool)
         -- Make sure no leftover border tint from a previous style switch.
         _RestoreCastbarOutline(frame)
     else -- "border"
-        if frame.kickReadyBox then frame.kickReadyBox:Hide() end
+        if frame.kickReadyBox then
+            if frame.kickReadyBox._kickReadyShown or (frame.kickReadyBox.IsShown and frame.kickReadyBox:IsShown()) then
+                frame.kickReadyBox:Hide()
+            end
+            frame.kickReadyBox._kickReadyShown = nil
+        end
 
         -- For the border, we compose colour rather than alpha so the
         -- user's normal outline remains visible during non-interruptible
         -- casts (just without our tint).
-        local userMixin = _GetUserOutlineMixin()
+        userMixin = userMixin or _GetUserOutlineMixin()
         local r, g, b, a = _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
         _TintCastbarOutline(frame, r, g, b, a)
     end
 end
 
-local function RefreshFrame(frame, state)
+local function RefreshFrame(frame, state, cfg, readyBool, style, readyMixin, cdMixin, userMixin)
     if not frame then return end
 
-    local cfg = _GetCfg()
+    cfg = cfg or _GetCfg()
     if not cfg then _HideIndicator(frame); return end
 
     local unit = frame.unit
@@ -598,39 +803,53 @@ local function RefreshFrame(frame, state)
 
     if not _state.spellID then Resolve() end
 
-    local readyBool = _GetReadyBoolSecret()
-    _PaintFrame(frame, readyBool)
-
-    -- Make sure the global ticker is running so the indicator repaints when
-    -- the interrupt cooldown ends (SPELL_UPDATE_COOLDOWN does not always
-    -- fire on the trailing edge in 12.0.5).
-    if not _refreshTickerArmed and C_Timer and C_Timer.After then
-        _refreshTickerArmed = true
-        C_Timer.After(0.25, _TickerStep)
+    if readyBool == nil then readyBool = _GetReadyBoolSecret() end
+    style = style or _GetStyle(cfg)
+    if style == "box" then
+        _EnsureBox(frame, cfg)
     end
+    _RegisterFrame(frame)
+    _MarkActiveFrame(frame)
+    _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
+
+    -- Arm a one-shot wakeup only while the interrupt is actually cooling down.
+    -- Ready-state changes rely on SPELL_UPDATE_COOLDOWN and cast events.
+    _ArmRefreshTicker(_GetCooldownPollDelay(), false)
 end
 
 -- Global low-rate repaint while at least one tracked cast is active.
 function _TickerStep()
     _refreshTickerArmed = false
+    _refreshTimer = nil
 
+    local cfg = _GetCfg()
+    if not cfg or not _AnyShowEnabled(cfg) then return end
+    if _activeFrameCount <= 0 then return end
+    local readyBool = _GetReadyBoolSecret()
+    local style = _GetStyle(cfg)
+    local readyMixin, cdMixin = _ResolveColorPair(cfg)
+    local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
     local anyActive = false
-    for frame in pairs(_registeredFrames) do
+    local frame = next(_activeFrames)
+    while frame do
+        local nextFrame = next(_activeFrames, frame)
         if frame.MSUF_castActive == true
            and not (frame.isNotInterruptible == true)
            and _CastAllowsKickIndicator(frame) then
-            local cfg = _GetCfg()
             if cfg and frame.unit and _ShowOnUnit(cfg, frame.unit) then
-                local readyBool = _GetReadyBoolSecret()
-                _PaintFrame(frame, readyBool)
+                _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
                 anyActive = true
+            else
+                _HideIndicator(frame)
             end
+        else
+            _HideIndicator(frame)
         end
+        frame = nextFrame
     end
 
-    if anyActive and C_Timer and C_Timer.After then
-        _refreshTickerArmed = true
-        C_Timer.After(0.25, _TickerStep)
+    if anyActive then
+        _ArmRefreshTicker(_GetCooldownPollDelay(), false)
     end
 end
 
@@ -641,18 +860,29 @@ local function RefreshAll()
 end
 
 local function RefreshActiveCooldownFrames()
+    if _activeFrameCount <= 0 then return false end
+
     local cfg = _GetCfg()
     if not cfg or not _AnyShowEnabled(cfg) then return end
 
+    local readyBool = _GetReadyBoolSecret()
+    local style = _GetStyle(cfg)
+    local readyMixin, cdMixin = _ResolveColorPair(cfg)
+    local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
     local didRefresh = false
-    for frame in pairs(_registeredFrames) do
+    local frame = next(_activeFrames)
+    while frame do
+        local nextFrame = next(_activeFrames, frame)
         if frame.MSUF_castActive == true
            and not (frame.isNotInterruptible == true)
            and _CastAllowsKickIndicator(frame)
            and frame.unit and _ShowOnUnit(cfg, frame.unit) then
-            RefreshFrame(frame, nil)
+            RefreshFrame(frame, nil, cfg, readyBool, style, readyMixin, cdMixin, userMixin)
             didRefresh = true
+        else
+            _HideIndicator(frame)
         end
+        frame = nextFrame
     end
     return didRefresh
 end
@@ -660,10 +890,15 @@ end
 local _cooldownRefreshQueued = false
 local function _CooldownRefreshFlush()
     _cooldownRefreshQueued = false
-    RefreshActiveCooldownFrames()
+    if RefreshActiveCooldownFrames() then
+        _ArmRefreshTicker(_GetCooldownPollDelay(), true)
+    elseif _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
+    end
 end
 
 local function _QueueCooldownRefresh()
+    if _activeFrameCount <= 0 then return end
     if _cooldownRefreshQueued then return end
     _cooldownRefreshQueued = true
     if C_Timer and C_Timer.After then
@@ -691,7 +926,7 @@ local function _InstallOutlineHook()
         if not frame or not _registeredFrames[frame] then return end
         if frame.MSUF_castActive ~= true then return end
         -- Plain-bool fast path: if the event-driven flag is already set,
-        -- skip the C-side composition entirely — the user's colour from
+        -- skip the C-side composition entirely â€” the user's colour from
         -- the original ApplyCastbarOutline call is already correct.
         if frame.isNotInterruptible == true then return end
         if not _CastAllowsKickIndicator(frame) then
@@ -713,7 +948,7 @@ local function _InstallOutlineHook()
         local readyMixin, cdMixin = _ResolveColorPair(cfg)
         local userMixin = _GetUserOutlineMixin()
         local r, g, b, a = _PickColor(readyMixin, cdMixin, _GetReadyBoolSecret(), userMixin, rawNI)
-        _TintCastbarOutline(frame, r, g, b, a)
+        _TintCastbarOutline(frame, r, g, b, a, true)
     end)
 end
 
@@ -721,7 +956,7 @@ end
 -- Event driver
 -- =============================================================================
 
-local _eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
+_eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
 
 local function _HandleEvent(_, event)
     if event == "PLAYER_LOGIN"
@@ -742,7 +977,7 @@ end
 _eventFrame:SetScript("OnEvent", _HandleEvent)
 
 -- Always-on events (cheap; only Resolve() runs on most of them, and only
--- once per fire — Resolve is O(1) table lookup).
+-- once per fire â€” Resolve is O(1) table lookup).
 _eventFrame:RegisterEvent("PLAYER_LOGIN")
 _eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 _eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
@@ -750,12 +985,12 @@ _eventFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 _eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 _eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 
--- SPELL_UPDATE_COOLDOWN is hot. Only register it while at least one
--- castbar consumer is enabled. We re-evaluate on each Init() / config apply.
-local function _ApplyEventGating()
+-- SPELL_UPDATE_COOLDOWN is hot. Only register it while a supported castbar is
+-- actively showing an interrupt indicator. FocusKick owns its own watcher, so
+-- this module stays completely cold when no MSUF castbar needs cooldown flips.
+_UpdateCooldownEventRegistration = function()
     local cfg = _GetCfg()
-    local want = _AnyShowEnabled(cfg) or (_G.MSUF_DB and _G.MSUF_DB.general
-                  and _G.MSUF_DB.general.enableFocusKickIcon == true)
+    local want = _activeFrameCount > 0 and _AnyShowEnabled(cfg)
     if want and not _state.eventsOn then
         _eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
         _state.eventsOn = true
@@ -763,6 +998,10 @@ local function _ApplyEventGating()
         _eventFrame:UnregisterEvent("SPELL_UPDATE_COOLDOWN")
         _state.eventsOn = false
     end
+end
+
+local function _ApplyEventGating()
+    _UpdateCooldownEventRegistration()
 end
 
 -- =============================================================================
@@ -802,7 +1041,7 @@ function _G.MSUF_KickReady_IsReady()
     -- For a Lua-safe color decision, call MSUF_KickReady_EvaluateColor(ready)
     -- and apply via :SetVertexColor(c:GetRGBA()).
     --
-    -- /dump on the return value is fine — the host renderer doesn't compare.
+    -- /dump on the return value is fine â€” the host renderer doesn't compare.
     if not _state.spellID then Resolve() end
     return _GetReadyBoolSecret()
 end
@@ -842,7 +1081,7 @@ function _G.MSUF_KickReady_EvaluateColor(readyBool)
     return _cooldownColorMixin or { GetRGBA = function() return COOLDOWN_COLOR.r, COOLDOWN_COLOR.g, COOLDOWN_COLOR.b, 1 end }
 end
 
--- Diagnostic dump — readable via /dump MSUF_KickReady_Debug()
+-- Diagnostic dump â€” readable via /dump MSUF_KickReady_Debug()
 function _G.MSUF_KickReady_Debug()
     if not _state.resolved then Resolve() end
 
@@ -853,7 +1092,7 @@ function _G.MSUF_KickReady_Debug()
     local key  = spec and SPEC_OVERRIDE[spec] or "DEFAULT"
 
     -- Note: we deliberately do NOT call _GetReadyBoolSecret() here and
-    -- include its result, because /dump renders the value via tostring() —
+    -- include its result, because /dump renders the value via tostring() â€”
     -- which on some clients/dev tools may attempt comparisons internally.
     -- The taint-safe info that's actionable for diagnosis is the spell ID,
     -- spec, and event/registration state. Use the dot's visible color

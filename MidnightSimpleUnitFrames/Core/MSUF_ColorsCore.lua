@@ -11,7 +11,7 @@ ns = ns or {}
 ------------------------------------------------------
 -- Local shortcuts (core only — no UI-framework refs)
 ------------------------------------------------------
-local EnsureDB              = _G.EnsureDB
+local EnsureDB              = _G.MSUF_EnsureDB
 local RAID_CLASS_COLORS     = RAID_CLASS_COLORS
 local C_Timer               = C_Timer
 local hooksecurefunc        = hooksecurefunc
@@ -65,6 +65,7 @@ local function _RefreshAllBarBackgroundVisuals()
     local forEach = _G.MSUF_ForEachUnitFrame
     local applyBg = _G.MSUF_ApplyBarBackgroundVisual
     local refreshHP = _G.MSUF_UFCore_RefreshHealthBarColor
+    local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
     if type(forEach) ~= "function" or type(applyBg) ~= "function" then return end
 
     forEach(function(frame)
@@ -73,6 +74,9 @@ local function _RefreshAllBarBackgroundVisuals()
                 refreshHP(frame)
             end
             applyBg(frame)
+            if type(syncMissing) == "function" then
+                syncMissing(frame)
+            end
         end
     end)
 end
@@ -101,7 +105,7 @@ local function _PushVisualUpdates_Flush()
         ns.GF.RebuildDispelColorCurve()
     end
 
-    local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts or _G.UpdateAllFonts
+    local fnFonts = _G.MSUF_UpdateAllFonts_Immediate or ns.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts
     if type(fnFonts) == "function" then
         fnFonts()
     end
@@ -133,10 +137,16 @@ local function _PushVisualUpdates_Flush()
     local reinit = _G.MSUF_PrioRows_Reinit
     if type(reinit) == "function" then reinit() end
 
-    -- Live-update highlight border colors during test mode (zero cost when no test active).
-    if _G.MSUF_AggroBorderTestMode or _G.MSUF_DispelBorderTestMode or _G.MSUF_PurgeBorderTestMode or _G.MSUF_BossTargetBorderTestMode then
+    -- Live-update static bar outlines and highlight test border colors.
+    do
         local applyAll = _G.MSUF_ApplyBarOutlineThickness_All
         if type(applyAll) == "function" then applyAll() end
+    end
+    if type(_G.MSUF_ApplyRoundedUnitframes) == "function" then
+        _G.MSUF_ApplyRoundedUnitframes()
+    end
+    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
+        _G.MSUF_UFPreview_RequestRefresh("MSUF_COLOR_CHANGE")
     end
 
     -- Safety: keep mouseover highlight bound to the correct unitframe.
@@ -169,11 +179,39 @@ end
 ------------------------------------------------------
 local function MSUF_GetHighlightObject(frame)
     if not frame then return nil end
+    -- Mouseover highlight is UF-only here. Do not pick up generic
+    -- `highlight` fields from edit-mode, menus, auras, or other helpers.
+    if not (frame.unit and frame.hpBar and frame.highlightBorder) then return nil end
     return frame.highlightBorder
-        or frame.MSUF_highlightBorder
-        or frame.MSUFHighlightBorder
-        or frame.MSUF_highlight
-        or frame.highlight
+end
+
+local function MSUF_GetHighlightRGB()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local hr, hg, hb = 1, 1, 1
+    local hc = g.highlightColor
+    if type(hc) == "table" then
+        hr, hg, hb = hc[1] or 1, hc[2] or 1, hc[3] or 1
+    else
+        local key = (type(hc) == "string" and hc:lower()) or "white"
+        local col = (type(MSUF_FONT_COLORS) == "table" and (MSUF_FONT_COLORS[key] or MSUF_FONT_COLORS.white)) or nil
+        if col then hr, hg, hb = col[1] or 1, col[2] or 1, col[3] or 1 end
+    end
+    return hr, hg, hb
+end
+
+local function MSUF_EnsureHoverLine(hb, key)
+    local lines = hb._msufHoverLines
+    if not lines then
+        lines = {}
+        hb._msufHoverLines = lines
+    end
+    local t = lines[key]
+    if not t and hb.CreateTexture then
+        t = hb:CreateTexture(nil, "OVERLAY")
+        t:SetTexture("Interface\\Buttons\\WHITE8x8")
+        lines[key] = t
+    end
+    return t
 end
 
 local function MSUF_FixHighlightForFrame(frame)
@@ -185,53 +223,12 @@ local function MSUF_FixHighlightForFrame(frame)
         hb:SetParent(frame)
     end
 
-    -- Ensure it is anchored to the unitframe (and includes the power bar if it extends below the main frame).
-    -- Also try to snap to pixel grid to avoid "one side thicker" artifacts at non-integer UI scales.
-    local bottomAnchor = frame
-    -- When power bar is detached, highlight only covers the HP bar area.
-    local pbDetached = frame._msufPowerBarDetached
-    local pb = not pbDetached and (
-        frame.targetPowerBar or frame.TargetPowerBar or frame.powerBar or frame.PowerBar
-        or frame.power or frame.Power or frame.ManaBar or frame.manaBar
-        or frame.MSUF_powerBar or frame.MSUF_PowerBar or frame.MSUFPowerBar
-        or frame.resourceBar or frame.ResourceBar or frame.classPowerBar or frame.ClassPowerBar
-    ) or nil
-
-    if pb and pb.IsShown and pb.GetObjectType then
-        -- Only use it if it behaves like a Region/Frame and is currently shown.
-        local ok = true
-        if pb.IsObjectType then
-            ok = pb:IsObjectType("Frame") or pb:IsObjectType("StatusBar")
-        end
-        if ok and pb:IsShown() then
-            bottomAnchor = pb
-        end
-    end
-
-    -- If we didn't find a known power bar field, try a lightweight child scan by name.
-    -- Skip scan when power bar is detached (highlight should only cover HP bar).
-    if not pbDetached and bottomAnchor == frame and frame.GetChildren then
-        local children = { frame:GetChildren() }
-        for i = 1, #children do
-            local c = children[i]
-            if c and c.IsShown and c.GetObjectType and c.IsObjectType then
-                local cname = c.GetName and c:GetName()
-                if type(cname) == "string" then
-                    local lc = cname:lower()
-                    if lc:find("power") or lc:find("mana") or lc:find("resource") then
-                        if c:IsShown() and (c:IsObjectType("StatusBar") or c:IsObjectType("Frame")) then
-                            bottomAnchor = c
-                            break
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- NOTE (Midnight secret-values): Do NOT use GetBottom()/GetTop() math here.
-    -- We anchor to the power bar frame directly instead of computing screen-space extents.
-    local yOff = 0
+    -- Use an outside 4-line border. Backdrop edges are drawn partly inside the
+    -- frame, which can put a horizontal line through HP/name text.
+    if hb.SetBackdrop then hb:SetBackdrop(nil) end
+    local edge = tonumber(hb._msufHoverEdgeSize) or 1
+    if edge < 1 then edge = 1 end
+    local r, g, b = MSUF_GetHighlightRGB()
 
     if hb.ClearAllPoints then
         hb:ClearAllPoints()
@@ -239,29 +236,78 @@ local function MSUF_FixHighlightForFrame(frame)
 
     if _G.PixelUtil and _G.PixelUtil.SetPoint then
         _G.PixelUtil.SetPoint(hb, "TOPLEFT", frame, "TOPLEFT", 0, 0)
-        _G.PixelUtil.SetPoint(hb, "BOTTOMRIGHT", bottomAnchor, "BOTTOMRIGHT", 0, yOff)
-    elseif hb.SetAllPoints and bottomAnchor == frame and yOff == 0 then
-        hb:SetAllPoints(frame)
+        _G.PixelUtil.SetPoint(hb, "BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
     elseif hb.SetPoint then
         hb:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        hb:SetPoint("BOTTOMRIGHT", bottomAnchor, "BOTTOMRIGHT", 0, yOff)
+        hb:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    end
+    if hb.SetClipsChildren then hb:SetClipsChildren(false) end
+
+    local top = MSUF_EnsureHoverLine(hb, "top")
+    local bottom = MSUF_EnsureHoverLine(hb, "bottom")
+    local left = MSUF_EnsureHoverLine(hb, "left")
+    local right = MSUF_EnsureHoverLine(hb, "right")
+    if top then
+        top:ClearAllPoints()
+        top:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", -edge, 0)
+        top:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", edge, 0)
+        top:SetHeight(edge)
+        top:SetVertexColor(r, g, b, 1)
+        top:Show()
+    end
+    if bottom then
+        bottom:ClearAllPoints()
+        bottom:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", -edge, 0)
+        bottom:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", edge, 0)
+        bottom:SetHeight(edge)
+        bottom:SetVertexColor(r, g, b, 1)
+        bottom:Show()
+    end
+    if left then
+        left:ClearAllPoints()
+        left:SetPoint("TOPRIGHT", frame, "TOPLEFT", 0, edge)
+        left:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", 0, -edge)
+        left:SetWidth(edge)
+        left:SetVertexColor(r, g, b, 1)
+        left:Show()
+    end
+    if right then
+        right:ClearAllPoints()
+        right:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, edge)
+        right:SetPoint("BOTTOMLEFT", frame, "BOTTOMRIGHT", 0, -edge)
+        right:SetWidth(edge)
+        right:SetVertexColor(r, g, b, 1)
+        right:Show()
     end
 
-    -- Keep it above the unitframe visuals
-
+    -- Keep it above bar fill, below user-facing text/icon layers where possible.
     if hb.SetFrameStrata and frame.GetFrameStrata then
         hb:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
     end
     if hb.SetFrameLevel and frame.GetFrameLevel then
-        hb:SetFrameLevel((frame:GetFrameLevel() or 0) + 20)
+        local hp = frame.hpBar
+        local baseLevel = (hp and hp.GetFrameLevel and hp:GetFrameLevel()) or (frame:GetFrameLevel() or 0)
+        local wantLevel = baseLevel + 2
+        local textFrame = frame.textFrame or frame.TextFrame
+        local textLevel = textFrame and textFrame.GetFrameLevel and textFrame:GetFrameLevel()
+        if textLevel and wantLevel >= textLevel then
+            wantLevel = textLevel - 1
+        end
+        local frameLevel = frame:GetFrameLevel() or 0
+        if wantLevel <= frameLevel then
+            wantLevel = frameLevel + 1
+        end
+        hb:SetFrameLevel(wantLevel)
     end
 
     -- Safety: if the unitframe hides while hovered, also hide the highlight
     if not hb.MSUF_hideHooked and hooksecurefunc and frame.Hide then
         hb.MSUF_hideHooked = true
+        local hideHighlight = hb.Hide
+        local isHighlightShown = hb.IsShown
         hooksecurefunc(frame, "Hide", function()
-            if hb and hb.Hide then
-                hb:Hide()
+            if hideHighlight and (not isHighlightShown or isHighlightShown(hb)) then
+                hideHighlight(hb)
             end
         end)
     end
@@ -517,7 +563,23 @@ end
 
 -- ── Bar BG Match HP ──
 local function GetBarBgMatchHP() return (_general() or {}).barBgMatchHPColor and true or false end
-local function SetBarBgMatchHP(v) local g = _general(); if g then g.barBgMatchHPColor = v and true or false; PushVisualUpdates() end end
+local function SetBarBgMatchHP(v)
+    local g = _general()
+    if g then
+        g.barBgMatchHPColor = v and true or false
+        if v then g.barBgClassColor = false end
+        PushVisualUpdates()
+    end
+end
+local function GetBarBgClassColor() return (_general() or {}).barBgClassColor and true or false end
+local function SetBarBgClassColor(v)
+    local g = _general()
+    if g then
+        g.barBgClassColor = v and true or false
+        if v then g.barBgMatchHPColor = false end
+        PushVisualUpdates()
+    end
+end
 
 -- ── NPC Colors ──
 local NPC_TYPE_KEYS = { "npcBoss", "npcMiniboss", "npcCaster", "npcMelee", "npcRegular" }
@@ -575,8 +637,27 @@ local function GetPowerBarBackgroundMatchHP() return (_general() or {}).powerBar
 local function SetPowerBarBackgroundMatchHP(v) local g = _general(); if g then g.powerBarBgMatchBarColor = v and true or false; PushVisualUpdates() end end
 
 -- ── Aggro Border ──
-local function GetAggroBorderColor() return _getRGB("aggroBorderR", "aggroBorderG", "aggroBorderB", 1.0, 0.5, 0.0) end
-local function SetAggroBorderColor(r, g, b) _setRGB("aggroBorderR", "aggroBorderG", "aggroBorderB", r, g, b, 1.0, 0.5, 0.0) end
+local function GetAggroBorderColor()
+    local g = _general()
+    if not g then return 1.0, 0.5, 0.0 end
+    return tonumber(g.hlAggroColorR) or tonumber(g.aggroBorderColorR) or tonumber(g.aggroBorderR) or 1.0,
+           tonumber(g.hlAggroColorG) or tonumber(g.aggroBorderColorG) or tonumber(g.aggroBorderG) or 0.5,
+           tonumber(g.hlAggroColorB) or tonumber(g.aggroBorderColorB) or tonumber(g.aggroBorderB) or 0.0
+end
+local function SetAggroBorderColor(r, g, b)
+    local gen = _general()
+    if not gen then return end
+    gen.hlAggroColorR = r or 1.0
+    gen.hlAggroColorG = g or 0.5
+    gen.hlAggroColorB = b or 0.0
+    gen.aggroBorderColorR, gen.aggroBorderColorG, gen.aggroBorderColorB = gen.hlAggroColorR, gen.hlAggroColorG, gen.hlAggroColorB
+    gen.aggroBorderR, gen.aggroBorderG, gen.aggroBorderB = gen.hlAggroColorR, gen.hlAggroColorG, gen.hlAggroColorB
+    PushVisualUpdates()
+end
+
+local function GetBarOutlineColor() return _getRGB("barOutlineColorR", "barOutlineColorG", "barOutlineColorB", 0, 0, 0) end
+local function SetBarOutlineColor(r, g, b) _setRGB("barOutlineColorR", "barOutlineColorG", "barOutlineColorB", r, g, b, 0, 0, 0) end
+_G.MSUF_GetBarOutlineColor = GetBarOutlineColor
 
 -- ═══════════════════════════════════════════════════════════════
 -- Export table
@@ -616,6 +697,8 @@ ns._colorsAPI = {
     ResetClassBarBgColor            = ResetClassBarBgColor,
     GetBarBgMatchHP                 = GetBarBgMatchHP,
     SetBarBgMatchHP                 = SetBarBgMatchHP,
+    GetBarBgClassColor              = GetBarBgClassColor,
+    SetBarBgClassColor              = SetBarBgClassColor,
     GetNPCColor                     = GetNPCColor,
     SetNPCColor                     = SetNPCColor,
     ResetAllNPCColors               = ResetAllNPCColors,
@@ -640,6 +723,8 @@ ns._colorsAPI = {
     SetPowerBarBackgroundColor      = SetPowerBarBackgroundColor,
     GetAggroBorderColor             = GetAggroBorderColor,
     SetAggroBorderColor             = SetAggroBorderColor,
+    GetBarOutlineColor              = GetBarOutlineColor,
+    SetBarOutlineColor              = SetBarOutlineColor,
     GetPowerBarBackgroundMatchHP    = GetPowerBarBackgroundMatchHP,
     SetPowerBarBackgroundMatchHP    = SetPowerBarBackgroundMatchHP,
 }

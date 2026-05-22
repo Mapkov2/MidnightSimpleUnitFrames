@@ -39,9 +39,11 @@ local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local PowerBarColor = _G.PowerBarColor
 local math_max = math.max
 local math_min = math.min
+local math_ceil = math.ceil
 local math_floor = math.floor
 local pairs = pairs
 local type = type
+local tonumber = tonumber
 local tostring = tostring
 local select = select
 local GetTime = _G.GetTime
@@ -118,7 +120,11 @@ local function RetireHeader(header)
             if ch.health then ch.health:Hide() end
             if ch.power then ch.power:Hide() end
             if ch._msufGFBorderFrame then ch._msufGFBorderFrame:Hide() end
-            if ch._msufGFHighlightBorder then ch._msufGFHighlightBorder:Hide() end
+            if ch._msufGFHighlightBorders then
+                for _, border in pairs(ch._msufGFHighlightBorders) do
+                    if border then border:Hide() end
+                end
+            elseif ch._msufGFHighlightBorder then ch._msufGFHighlightBorder:Hide() end
             if ch._msufGFNameText then ch._msufGFNameText:Hide() end
             if ch._msufGFStatusText then ch._msufGFStatusText:Hide() end
             -- Minimize + hide + reparent to hidden frame
@@ -149,8 +155,61 @@ GF.frameList   = GF.frameList or {}   -- compact live-frame iteration order
 
 -- Cross-system frame registry (A2, EM2, etc. resolve unit→frame via this table)
 if type(_G.MSUF_UnitFrames) ~= "table" then _G.MSUF_UnitFrames = {} end
+local GFUnitFrames = _G.MSUF_UnitFrames
 GF._eventFrame = GF._eventFrame or nil
 GF._previewActive = GF._previewActive or {}
+
+local _headerScanInputSerial = 0
+local _rebuildAllActive = false
+local function MarkHeaderScanInputsChanged()
+    _headerScanInputSerial = _headerScanInputSerial + 1
+end
+
+local function MarkPostCombatHeaderRecovery()
+    GF._pendingRebuild = true
+    GF._pendingVisibilityUpdate = true
+end
+
+------------------------------------------------------------------------
+-- Click-cast compatibility
+------------------------------------------------------------------------
+if type(_G.ClickCastFrames) ~= "table" then _G.ClickCastFrames = {} end
+local _GF_ClickCastFrames = _G.ClickCastFrames
+GF.ClickCastEnabled = true
+
+local function _GF_CallCliqueMethod(clique, methodName, ...)
+    local method = clique and clique[methodName]
+    if type(method) ~= "function" then return false end
+    local ok = pcall(method, clique, ...)
+    return ok == true
+end
+
+local function _GF_RegisterClickCastFrame(f, refreshEnterLeave)
+    if not (f and f.RegisterForClicks) then return end
+    if f._msufGFIsPreviewFrame or f._msufGFPreviewActive then return end
+
+    _GF_ClickCastFrames[f] = true
+
+    local clique = _G.Clique
+    if type(clique) ~= "table" or type(clique.ccframes) ~= "table" then return end
+
+    _GF_CallCliqueMethod(clique, "RegisterUnitFrame", f)
+
+    -- Clique key bindings depend on secure OnEnter/OnLeave wrappers. Group
+    -- frame effects install those scripts after the base button is built, so
+    -- refresh the wrappers once scripts are in their final position.
+    if not refreshEnterLeave or (InCombatLockdown and InCombatLockdown()) then return end
+    if clique.ccframes and clique.ccframes[f] then
+        if type(clique.UnwrapOnEnterOnLeave) == "function" and type(clique.WrapOnEnterOnLeave) == "function" then
+            _GF_CallCliqueMethod(clique, "UnwrapOnEnterOnLeave", f)
+            _GF_CallCliqueMethod(clique, "WrapOnEnterOnLeave", f)
+        elseif type(clique.ApplyAttributes) == "function" then
+            _GF_CallCliqueMethod(clique, "ApplyAttributes")
+        end
+    end
+end
+
+GF.RegisterClickCastFrame = _GF_RegisterClickCastFrame
 
 ------------------------------------------------------------------------
 -- Auto-register child frames with _G.MSUF_UnitFrames whenever the
@@ -174,100 +233,137 @@ GF._previewActive = GF._previewActive or {}
 --   "raid7" → "raid3" : clear raid7 entry, register raid3
 --   "raid7" → nil  : clear raid7 entry (member left group)
 ------------------------------------------------------------------------
+local function _GFResetUnitSlotState(self)
+    self._msufGFHasAnyDebuff       = false
+    self._msufGFDispelType         = nil
+    self._msufGFDispelAuraID       = nil
+    self._msufGFPrevDispelAuraID   = nil
+    self._msufGFMergedDispel       = nil
+    self._msufGFDispelColorObj     = nil
+    self._msufGFDispelColorRev     = nil
+    self._msufGFColorStyleRevision = nil
+
+    local stopGlow = _G.MSUF_GF_StopDispelGlow
+    if type(stopGlow) == "function" then
+        stopGlow(self)
+    else
+        self._msufGFDispelGlowActive = nil
+        self._msufGFDispelGlowAnchor = nil
+        self._msufGFDispelGlowStyle = nil
+    end
+
+    local hlBorder = self._msufGFHighlightBorder
+    if hlBorder then
+        hlBorder._msufHLActivePrio = nil
+    end
+    local hlBorders = self._msufGFHighlightBorders
+    if hlBorders then
+        for _, border in pairs(hlBorders) do
+            if border then
+                border._msufHLActivePrio = nil
+                if border:IsShown() then border:Hide() end
+            end
+        end
+    elseif hlBorder and hlBorder:IsShown() then
+        hlBorder:Hide()
+    end
+
+    self._msufGFLastFullAura       = nil
+    self._msufGFAggroLevel         = nil
+    self._msufGFLastName           = nil
+    self._msufGFNameCacheKey       = nil
+    self._msufGFNameStyleKey       = nil
+    self._msufGFNameText           = nil
+    self._msufGFNameClass          = nil
+    self._msufGFNameColorKey       = nil
+    self._msufGFNameHiddenForStatus = nil
+    self._msufGFStatusState        = nil
+    self._msufGFStatusDirty        = nil
+
+    if GF.ResetStatusIconCaches then GF.ResetStatusIconCaches(self) end
+    if GF.ResetOfflineHiddenFrame then GF.ResetOfflineHiddenFrame(self) end
+
+    local stripe = self._msufGFDebuffStripe
+    if stripe and stripe:IsShown() then stripe:Hide() end
+
+    local statusText = self._msufGFStatusText or self.statusIndicatorText
+    if statusText then
+        statusText:SetText("")
+        statusText:Hide()
+    end
+
+    local disp = self._msufDisplayedAuraIDs
+    if disp then
+        for k in pairs(disp) do disp[k] = nil end
+    end
+end
+
+local function _GFOnUnitAttributeChanged(self, name, value)
+    if name ~= "unit" then return end
+
+    local prev = self._msufGFRegisteredUnit
+    if prev == value and self.unit == value then
+        if value == nil or value == "" then return end
+        local uf = GFUnitFrames
+        if uf and uf[value] == self then return end
+    end
+
+    local uf = GFUnitFrames or _G.MSUF_UnitFrames
+    if not uf then return end
+    GFUnitFrames = uf
+
+    local unitChanged = (prev and prev ~= value)
+    if unitChanged then
+        if uf[prev] == self then uf[prev] = nil end
+        self._msufGFRegisteredUnit = nil
+    end
+
+    if unitChanged or (prev and not value) then
+        _GFResetUnitSlotState(self)
+    end
+
+    if type(value) == "string" and value ~= "" then
+        self.unit = value
+        local p5 = value:sub(1, 5)
+        if p5 == "party" or value:sub(1, 4) == "raid" then
+            uf[value] = self
+        end
+
+        if not self._msufGFBuilt then
+            if InCombatLockdown and InCombatLockdown() then
+                MarkPostCombatHeaderRecovery()
+            end
+            return
+        end
+
+        if self._msufGFRegisteredUnit ~= value then
+            if GF.IsFrameRuntimeEnabled and not GF.IsFrameRuntimeEnabled(self, self._msufGFKind) then
+                if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(self) end
+                self._msufGFRegisteredUnit = nil
+                return
+            end
+            self._msufGFRegisteredUnit = value
+            if not (InCombatLockdown and InCombatLockdown()) and GF.ApplyVisuals then
+                GF.ApplyVisuals(self, GF.DIRTY_ALL or 0x3F)
+            end
+            if GF.UpdateButton then GF.UpdateButton(self, value) end
+            if GF.RegisterUnitEvents then GF.RegisterUnitEvents(self, value) end
+        end
+    end
+end
+
 local function _GFInstallAttrHook(child)
     if not child or child._msufGFAttrHooked then return end
     if not child.HookScript then return end
     child._msufGFAttrHooked = true
-    child:HookScript("OnAttributeChanged", function(self, name, value)
-        if name ~= "unit" then return end
-        local uf = _G.MSUF_UnitFrames
-        if not uf then return end
-
-        -- Clear stale entry if unit changed or was cleared
-        local prev = self._msufGFRegisteredUnit
-        if prev == value and self.unit == value and type(value) == "string" and uf[value] == self then
-            return
-        end
-        local unitChanged = (prev and prev ~= value)
-        if unitChanged then
-            if uf[prev] == self then uf[prev] = nil end
-            self._msufGFRegisteredUnit = nil
-        end
-
-        -- Reset volatile per-frame state when the unit token changes or
-        -- is being cleared. Without this, raid roster reshuffles (player
-        -- leaves group, replacement takes the same SecureGroupHeader slot,
-        -- or phasing-driven re-anchoring) inherit stale visuals from the
-        -- previous occupant — most visibly the debuff stripe and dispel
-        -- border, which are diff-gated on cached presence flags.
-        if unitChanged or (prev and not value) then
-            self._msufGFHasAnyDebuff       = false
-            self._msufGFDispelType         = nil
-            self._msufGFDispelAuraID       = nil
-            self._msufGFPrevDispelAuraID   = nil
-            self._msufGFMergedDispel       = nil
-            self._msufGFDispelColorObj     = nil
-            self._msufGFDispelColorRev     = nil
-            self._msufGFColorStyleRevision = nil
-            self._msufGFLastFullAura       = nil
-            self._msufGFAggroLevel         = nil
-            self._msufGFLastName           = nil
-            self._msufGFNameCacheKey       = nil
-            self._msufGFNameStyleKey       = nil
-            self._msufGFNameText           = nil
-            self._msufGFNameClass          = nil
-            self._msufGFNameColorKey       = nil
-            self._msufGFStatusState        = nil
-            self._msufGFStatusDirty        = nil
-            -- Hide any visible stripe immediately so it doesn't bleed
-            -- into the new occupant's frame for one render cycle.
-            local stripe = self._msufGFDebuffStripe
-            if stripe and stripe:IsShown() then stripe:Hide() end
-            local statusText = self._msufGFStatusText or self.statusIndicatorText
-            if statusText then
-                statusText:SetText("")
-                statusText:Hide()
-            end
-            -- Wipe displayed-aura hash; UpdateFrameAuras will repopulate.
-            local disp = self._msufDisplayedAuraIDs
-            if disp then for k in pairs(disp) do disp[k] = nil end end
-        end
-
-        -- Register new unit. Only party*/raid* belong in this registry —
-        -- "player" and other base unit tokens live in the standalone UF
-        -- system (MidnightSimpleUnitFrames.lua's CreateSimpleUnitFrame).
-        if type(value) == "string" and value ~= "" then
-            self.unit = value
-            local p5 = value:sub(1, 5)
-            if p5 == "party" or value:sub(1, 4) == "raid" then
-                uf[value] = self
-            end
-            -- Trigger MSUF visual + event registration when the slot
-            -- transitions from inactive → active. Only valid once the
-            -- frame has been built by GF_InitButton (otherwise the
-            -- visual subsystems are nil-bound).
-            if self._msufGFBuilt and self._msufGFRegisteredUnit ~= value then
-                self._msufGFRegisteredUnit = value
-                -- Fresh SecureGroupHeader children can receive their unit token
-                -- after the initial button build pass. Re-apply layout/font here
-                -- so name anchors and offsets are correct immediately when a
-                -- party member joins, instead of only after /reload or a full
-                -- options refresh. Guarded for lockdown: no protected layout
-                -- mutations in combat, normal unit events still update values.
-                if not (InCombatLockdown and InCombatLockdown()) and GF.ApplyVisuals then
-                    GF.ApplyVisuals(self, GF.DIRTY_ALL or 0x3F)
-                end
-                if GF.UpdateButton then GF.UpdateButton(self, value) end
-                if GF.RegisterUnitEvents then GF.RegisterUnitEvents(self, value) end
-            end
-        end
-    end)
+    child:HookScript("OnAttributeChanged", _GFOnUnitAttributeChanged)
 end
 GF._InstallAttrHook = _GFInstallAttrHook
 
 RegisterTrackedFrame = function(f, kind)
     if not f then return end
     GF.frames[f] = kind
+    GF._disabledRuntimeCleanSig = nil
     if f._msufGFFrameListIndex then return end
     local list = GF.frameList
     local idx = #list + 1
@@ -278,6 +374,7 @@ end
 UnregisterTrackedFrame = function(f)
     if not f then return end
     GF.frames[f] = nil
+    GF._disabledRuntimeCleanSig = nil
 
     local idx = f._msufGFFrameListIndex
     if not idx then return end
@@ -295,14 +392,256 @@ UnregisterTrackedFrame = function(f)
     f._msufGFFrameListIndex = nil
 end
 
-function GF.ForEachFrame(fn)
+function GF.IsKindEnabled(kind)
+    kind = kind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    return conf and conf.enabled == true
+end
+
+function GF.IsFrameRuntimeEnabled(f, frameKind)
+    if f and f._msufGFPreviewActive then return true end
+    if f and f.unit and UnitExists and UnitExists(f.unit) and f.IsVisible and f:IsVisible() then
+        return true
+    end
+    return GF.IsKindEnabled(frameKind or (f and f._msufGFKind) or "party")
+end
+
+function GF.ForEachFrame(fn, includeDisabled)
     if type(fn) ~= "function" then return end
     local list = GF.frameList
-    for i = 1, #list do
-        local f = list[i]
-        if f then
-            fn(f, f._msufGFKind or GF.frames[f])
+    if list then
+        for i = 1, #list do
+            local f = list[i]
+            if f then
+                local frameKind = f._msufGFKind or GF.frames[f]
+                if includeDisabled or GF.IsFrameRuntimeEnabled(f, frameKind) then
+                    fn(f, frameKind)
+                end
+            end
         end
+    elseif GF.frames then
+        for f, frameKind in pairs(GF.frames) do
+            if f and (includeDisabled or GF.IsFrameRuntimeEnabled(f, frameKind)) then
+                fn(f, frameKind)
+            end
+        end
+    end
+end
+
+------------------------------------------------------------------------
+-- Group block border
+------------------------------------------------------------------------
+GF.groupBorders = GF.groupBorders or {}
+GF.previewGroupBorders = GF.previewGroupBorders or {}
+
+local function EnsureGroupBorder(kind)
+    local borders = GF.groupBorders
+    local border = borders[kind]
+    if border then return border end
+
+    border = CreateFrame("Frame", "MSUF_GFGroupBorder_" .. tostring(kind), UIParent, "BackdropTemplate")
+    border:EnableMouse(false)
+    border:SetFrameStrata("MEDIUM")
+    border:SetFrameLevel(1)
+    border:Hide()
+    borders[kind] = border
+    return border
+end
+
+local function EnsurePreviewGroupBorder(kind, parent)
+    local borders = GF.previewGroupBorders
+    local border = borders[kind]
+    if not border then
+        border = CreateFrame("Frame", "MSUF_GFPreviewGroupBorder_" .. tostring(kind), parent or UIParent, "BackdropTemplate")
+        border:EnableMouse(false)
+        border:SetFrameStrata("MEDIUM")
+        border:Hide()
+        borders[kind] = border
+    elseif parent and border:GetParent() ~= parent then
+        border:SetParent(parent)
+    end
+    return border
+end
+
+local function ApplyGroupBorderStyle(border, conf, size)
+    if border._msufGBSize ~= size then
+        border._msufGBSize = size
+        border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = size })
+        border:SetBackdropColor(0, 0, 0, 0)
+    end
+    border:SetBackdropBorderColor(
+        tonumber(conf.groupBorderR) or 0.38,
+        tonumber(conf.groupBorderG) or 0.68,
+        tonumber(conf.groupBorderB) or 1.00,
+        tonumber(conf.groupBorderA) or 0.95
+    )
+end
+
+function GF.RefreshGroupBorder(kind)
+    kind = kind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    local border = EnsureGroupBorder(kind)
+    if not conf or conf.groupBorderEnabled ~= true then
+        border:Hide()
+        return
+    end
+
+    local left, right, top, bottom
+    local uiScale = (UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if uiScale == 0 then uiScale = 1 end
+
+    GF.ForEachFrame(function(f, frameKind)
+        local unit = f and f.unit
+        if frameKind == kind and type(unit) == "string" and unit ~= ""
+            and UnitExists and UnitExists(unit)
+            and f.IsVisible and f:IsVisible()
+            and not f._msufGFPreviewActive then
+            local box = f.barGroup or f
+            if box and box.GetLeft then
+                local l, r, t, b = box:GetLeft(), box:GetRight(), box:GetTop(), box:GetBottom()
+                if l and r and t and b then
+                    local boxScale = (box.GetEffectiveScale and box:GetEffectiveScale()) or uiScale
+                    local ratio = boxScale / uiScale
+                    l, r, t, b = l * ratio, r * ratio, t * ratio, b * ratio
+                    left = left and math_min(left, l) or l
+                    right = right and math_max(right, r) or r
+                    top = top and math_max(top, t) or t
+                    bottom = bottom and math_min(bottom, b) or b
+                end
+            end
+        end
+    end)
+
+    if not left or not right or not top or not bottom or right <= left or top <= bottom then
+        border:Hide()
+        return
+    end
+
+    local size = math_floor((tonumber(conf.groupBorderSize) or 1) + 0.5)
+    if size < 1 then size = 1 elseif size > 12 then size = 12 end
+    local pad = math_floor((tonumber(conf.groupBorderPadding) or 2) + 0.5)
+    if pad < 0 then pad = 0 elseif pad > 40 then pad = 40 end
+
+    ApplyGroupBorderStyle(border, conf, size)
+    border:ClearAllPoints()
+    border:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left - pad, bottom - pad)
+    border:SetSize((right - left) + pad * 2, (top - bottom) + pad * 2)
+    border:Show()
+end
+
+function GF.RefreshPreviewGroupBorder(kind)
+    kind = kind or "party"
+    if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
+    local container = GF._previewContainer and GF._previewContainer[kind]
+    local conf = GF.GetConf and GF.GetConf(kind)
+    if not conf or conf.groupBorderEnabled ~= true
+        or not (GF._previewActive and GF._previewActive[kind])
+        or not container or not container.IsShown or not container:IsShown() then
+        local border = GF.previewGroupBorders and GF.previewGroupBorders[kind]
+        if border then border:Hide() end
+        return
+    end
+
+    local border = EnsurePreviewGroupBorder(kind, container)
+
+    local cL, cB = container:GetLeft(), container:GetBottom()
+    if not cL or not cB then
+        border:Hide()
+        return
+    end
+    local containerScale = (container.GetEffectiveScale and container:GetEffectiveScale()) or 1
+    if containerScale == 0 then containerScale = 1 end
+
+    local left, right, top, bottom
+    local frames = GF._previewFrames and GF._previewFrames[kind]
+    if frames then
+        for i = 1, #frames do
+            local f = frames[i]
+            if f and f._msufGFIsPreviewFrame and f.IsShown and f:IsShown() then
+                local box = f.barGroup or f
+                local l, r, t, b = box:GetLeft(), box:GetRight(), box:GetTop(), box:GetBottom()
+                if l and r and t and b then
+                    local boxScale = (box.GetEffectiveScale and box:GetEffectiveScale()) or containerScale
+                    l = ((l * boxScale) - (cL * containerScale)) / containerScale
+                    r = ((r * boxScale) - (cL * containerScale)) / containerScale
+                    t = ((t * boxScale) - (cB * containerScale)) / containerScale
+                    b = ((b * boxScale) - (cB * containerScale)) / containerScale
+                    left = left and math_min(left, l) or l
+                    right = right and math_max(right, r) or r
+                    top = top and math_max(top, t) or t
+                    bottom = bottom and math_min(bottom, b) or b
+                end
+            end
+        end
+    end
+
+    if not left or not right or not top or not bottom or right <= left or top <= bottom then
+        border:Hide()
+        return
+    end
+
+    local size = math_floor((tonumber(conf.groupBorderSize) or 1) + 0.5)
+    if size < 1 then size = 1 elseif size > 12 then size = 12 end
+    local pad = math_floor((tonumber(conf.groupBorderPadding) or 2) + 0.5)
+    if pad < 0 then pad = 0 elseif pad > 40 then pad = 40 end
+
+    ApplyGroupBorderStyle(border, conf, size)
+    border:SetFrameLevel((container.GetFrameLevel and container:GetFrameLevel() or 0) + 40)
+    border:ClearAllPoints()
+    border:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", left - pad, bottom - pad)
+    border:SetSize((right - left) + pad * 2, (top - bottom) + pad * 2)
+    border:Show()
+end
+
+function GF.RefreshGroupBorders(kind)
+    local previewActive = not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF._previewActive
+    if kind then
+        GF.RefreshGroupBorder(kind)
+        if previewActive and previewActive[kind] then GF.RefreshPreviewGroupBorder(kind) end
+        return
+    end
+    GF.RefreshGroupBorder("party")
+    GF.RefreshGroupBorder("raid")
+    GF.RefreshGroupBorder("mythicraid")
+    if previewActive then
+        if previewActive.party then GF.RefreshPreviewGroupBorder("party") end
+        if previewActive.raid then GF.RefreshPreviewGroupBorder("raid") end
+        if previewActive.mythicraid then GF.RefreshPreviewGroupBorder("mythicraid") end
+    end
+end
+
+-- PERF (Stage 1): Pre-built per-kind callbacks — created once on first call, reused thereafter.
+-- MSUF_ScheduleOnce deduplicates by key, replacing the old _groupBorderRefreshQueued table.
+-- Saves one closure allocation + one table write per GROUP_ROSTER_UPDATE burst call.
+local _GF_BorderFlushFn  = {}  -- [normalizedKind] = function (built once)
+local _GF_BorderSchedKey = {}  -- [normalizedKind] = schedKey string (built once)
+
+function GF.QueueGroupBorderRefresh(kind)
+    local k = kind or "_all"
+    local fn = _GF_BorderFlushFn[k]
+    if not fn then
+        fn = function() if GF.RefreshGroupBorders then GF.RefreshGroupBorders(kind) end end
+        _GF_BorderFlushFn[k]  = fn
+        _GF_BorderSchedKey[k] = "GF_BORDER_REFRESH_" .. k
+    end
+    local schedOnce = _G.MSUF_ScheduleOnce
+    if schedOnce then
+        schedOnce(_GF_BorderSchedKey[k], fn)
+        return
+    end
+    -- Fallback when MSUF_Scheduler is not yet available (early-init only).
+    GF._groupBorderRefreshQueued = GF._groupBorderRefreshQueued or {}
+    if GF._groupBorderRefreshQueued[k] then return end
+    GF._groupBorderRefreshQueued[k] = true
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(0, function()
+            GF._groupBorderRefreshQueued[k] = nil
+            if GF.RefreshGroupBorders then GF.RefreshGroupBorders(kind) end
+        end)
+    else
+        GF._groupBorderRefreshQueued[k] = nil
+        if GF.RefreshGroupBorders then GF.RefreshGroupBorders(kind) end
     end
 end
 
@@ -326,11 +665,18 @@ GF.UnregisterUnitEvents = GF.UnregisterUnitEvents or noop
 -- frame is briefly out of sync, and the late scans below still repair the real
 -- child size out of combat.
 ------------------------------------------------------------------------
-local function AnchorVisualRootToSlot(f, kind, w, h)
+local function AnchorVisualRootToSlot(f, kind, w, h, force)
     if not f or not f.barGroup then return end
     local conf = GF.GetConf(kind)
     local growth = (conf and conf.growth) or "DOWN"
     local bg = f.barGroup
+
+    if not force and bg._msufGFSlotW == w and bg._msufGFSlotH == h and bg._msufGFSlotGrowth == growth then
+        return
+    end
+    bg._msufGFSlotW = w
+    bg._msufGFSlotH = h
+    bg._msufGFSlotGrowth = growth
 
     bg:ClearAllPoints()
     bg:SetSize(w, h)
@@ -355,9 +701,29 @@ function GF.GetFrameLayerLevel(f, layer, fallback)
     return baseLvl + lvl, lvl
 end
 
+GF.STRATA_EFFECT = GF.STRATA_EFFECT or _G.MSUF_EFFECT_FRAME_STRATA or "HIGH"
+GF.STRATA_RANK = GF.STRATA_RANK or _G.MSUF_FRAME_STRATA_RANK
+GF.ClampFrameLevel = _G.MSUF_ClampFrameLevel
+GF.MaxFrameStrata = _G.MSUF_MaxFrameStrata
+
+function GF.SyncFrameLayerAbove(child, parent, offset, strata)
+    return _G.MSUF_SyncFrameLayerAbove(child, parent, offset, strata or GF.STRATA_EFFECT)
+end
+
 function GF.SetFrameLayerLevel(frame, owner, layer, fallback)
     if not (frame and frame.SetFrameLevel) then return end
     frame:SetFrameLevel(GF.GetFrameLayerLevel(owner, layer, fallback))
+end
+
+GF.LAYER_DISPEL_OVERLAY = GF.LAYER_DISPEL_OVERLAY or 6
+GF.LAYER_DEBUFF_STRIPE = GF.LAYER_DEBUFF_STRIPE or 7
+GF.LAYER_HIGHLIGHT_BORDER = GF.LAYER_HIGHLIGHT_BORDER or 10
+local GF_DISPEL_TYPE_LAYER_KEYS = { "magic", "curse", "disease", "poison", "bleed" }
+
+local function GetFrameOutlineInset(kind, conf)
+    -- Unit frames draw the bar outline outside the bars. Keep group-frame
+    -- health/power geometry unshrunk so the same thickness behaves identically.
+    return 0
 end
 
 ------------------------------------------------------------------------
@@ -378,8 +744,7 @@ local function BuildFrameHierarchy(f, kind)
     end
     local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
         or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
-    local inset  = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
-    if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
+    local inset = GetFrameOutlineInset(kind, conf)
 
     -- barGroup — visual container (bgFile-only, EQoL pattern)
     -- Edge tiling on SetAllPoints frames causes TexCoord crash during
@@ -400,16 +765,8 @@ local function BuildFrameHierarchy(f, kind)
     borderFrame:SetFrameLevel(barGroup:GetFrameLevel() + 1)
     borderFrame:EnableMouse(false)
     f._msufGFBorderFrame = borderFrame
-    if conf.borderEnabled then
-        local edgeSz = math_max(1, conf.borderSize or 1)
-        if GF.ScaleFrameValue then edgeSz = GF.ScaleFrameValue(kind, edgeSz, 1) end
-        borderFrame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edgeSz })
-        borderFrame:SetBackdropColor(0, 0, 0, 0)
-        borderFrame:SetBackdropBorderColor(conf.borderR or 0, conf.borderG or 0, conf.borderB or 0, conf.borderA or 1)
-    else
-        borderFrame:SetBackdrop(nil)
-        borderFrame:Hide()
-    end
+    if borderFrame.SetBackdrop then borderFrame:SetBackdrop(nil) end
+    borderFrame:Hide()
 
     -- Health StatusBar
     local health = CreateFrame("StatusBar", nil, barGroup)
@@ -463,10 +820,29 @@ local function BuildFrameHierarchy(f, kind)
     dispelOv:SetMinMaxValues(0, 1)
     dispelOv:SetValue(1)
     dispelOv:SetAllPoints(health)
-    dispelOv:SetFrameLevel(hLvl + 4)
+    GF.SyncFrameLayerAbove(dispelOv, health, GF.LAYER_DISPEL_OVERLAY)
     dispelOv:SetStatusBarColor(0, 0, 0, 0)
     dispelOv:Hide()
     f._msufGFDispelOverlay = dispelOv
+    f._msufGFDispelOverlays = { default = dispelOv }
+    dispelOv._msufGFDOKey = "default"
+
+    local function CreateDispelOverlayLayer(key)
+        local overlay = CreateFrame("StatusBar", nil, barGroup)
+        overlay:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+        overlay:SetMinMaxValues(0, 1)
+        overlay:SetValue(1)
+        overlay:SetAllPoints(health)
+        GF.SyncFrameLayerAbove(overlay, health, GF.LAYER_DISPEL_OVERLAY)
+        overlay:SetStatusBarColor(0, 0, 0, 0)
+        overlay._msufGFDOKey = key
+        overlay:Hide()
+        f._msufGFDispelOverlays[key] = overlay
+        return overlay
+    end
+    for i = 1, #GF_DISPEL_TYPE_LAYER_KEYS do
+        CreateDispelOverlayLayer("dispel:" .. GF_DISPEL_TYPE_LAYER_KEYS[i])
+    end
 
     -- Debuff stripe (thin edge indicator for any debuff — above dispel overlay, below text)
     local debuffStripe = CreateFrame("StatusBar", nil, barGroup)
@@ -476,7 +852,7 @@ local function BuildFrameHierarchy(f, kind)
     debuffStripe:SetPoint("BOTTOMLEFT", health, "BOTTOMLEFT", 0, 0)
     debuffStripe:SetPoint("BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
     debuffStripe:SetHeight(3)
-    debuffStripe:SetFrameLevel(hLvl + 5)
+    GF.SyncFrameLayerAbove(debuffStripe, health, GF.LAYER_DEBUFF_STRIPE)
     debuffStripe:SetStatusBarColor(0.8, 0.2, 0.2, 0.6)
     debuffStripe:Hide()
     f._msufGFDebuffStripe = debuffStripe
@@ -650,14 +1026,34 @@ local function BuildFrameHierarchy(f, kind)
     local hlBorder = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
     hlBorder:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
     hlBorder:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
-    hlBorder:SetFrameLevel(barGroup:GetFrameLevel() + 3)
+    GF.SyncFrameLayerAbove(hlBorder, health, GF.LAYER_HIGHLIGHT_BORDER)
     hlBorder:EnableMouse(false)
     hlBorder:Hide()
     f._msufGFHighlightBorder = hlBorder
+    f._msufGFHighlightBorders = { dispel = hlBorder }
+    hlBorder._msufGFHLKey = "dispel"
 
-    -- ClickCast integration
-    _G.ClickCastFrames = _G.ClickCastFrames or {}
-    _G.ClickCastFrames[f] = true
+    local function CreateHighlightBorderLayer(key)
+        local border = CreateFrame("Frame", nil, barGroup, "BackdropTemplate")
+        border:SetPoint("TOPLEFT", barGroup, "TOPLEFT", 0, 0)
+        border:SetPoint("BOTTOMRIGHT", barGroup, "BOTTOMRIGHT", 0, 0)
+        GF.SyncFrameLayerAbove(border, health, GF.LAYER_HIGHLIGHT_BORDER)
+        border:EnableMouse(false)
+        border._msufGFHLKey = key
+        border:Hide()
+        f._msufGFHighlightBorders[key] = border
+        return border
+    end
+    f._msufGFDispelHighlightBorder = hlBorder
+    for i = 1, #GF_DISPEL_TYPE_LAYER_KEYS do
+        CreateHighlightBorderLayer("dispel:" .. GF_DISPEL_TYPE_LAYER_KEYS[i])
+    end
+    CreateHighlightBorderLayer("aggro")
+    CreateHighlightBorderLayer("target")
+    CreateHighlightBorderLayer("focus")
+
+    -- ClickCast integration; effects refresh this after OnEnter/OnLeave are set.
+    if not f._msufGFIsPreviewFrame then GF.RegisterClickCastFrame(f, false) end
 
     -- Unit menu
     f.menu = function(btn)
@@ -679,6 +1075,8 @@ local function ApplyFonts(f, kind)
     local fontPath  = GF.ResolveFontPath(kind)
     local fontFlags = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
+    local db = _G.MSUF_DB
+    local fontKey = db and db.general and db.general.fontKey
     local fScale = conf._resolvedFrameScale or 1
     local nameSize  = conf.nameFontSize or 12
     local hpSize    = conf.hpFontSize or 10
@@ -689,21 +1087,31 @@ local function ApplyFonts(f, kind)
         powSize  = math_max(6, math_floor(powSize * fScale + 0.5))
     end
 
+    local safeSetFont = _G.MSUF_SetFontSafe
+    local function SetFont(fs, size)
+        if not fs then return end
+        if type(safeSetFont) == "function" then
+            safeSetFont(fs, fontPath, size, fontFlags, fontKey)
+        else
+            fs:SetFont(fontPath, size, fontFlags)
+        end
+    end
+
     if f.nameText then
-        f.nameText:SetFont(fontPath, nameSize, fontFlags)
+        SetFont(f.nameText, nameSize)
         -- Name color applied dynamically per-unit in dispatchName/UpdateButton
         f.nameText:SetTextColor(fr, fg, fb, 1)
     end
     if f.textLeftFS then
-        f.textLeftFS:SetFont(fontPath, hpSize, fontFlags)
+        SetFont(f.textLeftFS, hpSize)
         f.textLeftFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.textCenterFS then
-        f.textCenterFS:SetFont(fontPath, hpSize, fontFlags)
+        SetFont(f.textCenterFS, hpSize)
         f.textCenterFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.textRightFS then
-        f.textRightFS:SetFont(fontPath, hpSize, fontFlags)
+        SetFont(f.textRightFS, hpSize)
         f.textRightFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.statusIndicatorText then
@@ -713,18 +1121,18 @@ local function ApplyFonts(f, kind)
         else
             statusSize = nameSize + 2
         end
-        f.statusIndicatorText:SetFont(fontPath, statusSize, fontFlags)
+        SetFont(f.statusIndicatorText, statusSize)
     end
     if f.powerTextLeftFS then
-        f.powerTextLeftFS:SetFont(fontPath, powSize, fontFlags)
+        SetFont(f.powerTextLeftFS, powSize)
         f.powerTextLeftFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.powerTextCenterFS then
-        f.powerTextCenterFS:SetFont(fontPath, powSize, fontFlags)
+        SetFont(f.powerTextCenterFS, powSize)
         f.powerTextCenterFS:SetTextColor(fr, fg, fb, 0.9)
     end
     if f.powerTextRightFS then
-        f.powerTextRightFS:SetFont(fontPath, powSize, fontFlags)
+        SetFont(f.powerTextRightFS, powSize)
         f.powerTextRightFS:SetTextColor(fr, fg, fb, 0.9)
     end
 end
@@ -764,13 +1172,18 @@ local function LayoutText(f, kind)
             f.nameText:SetJustifyH("LEFT")
         end
         f.nameText:SetWordWrap(false)
-        if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
+        if GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then f.nameText:Show() else f.nameText:Hide() end
     end
     -- 3-slot health text
     local hpTextOn = conf.showHPText ~= false
-    local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-    local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-    local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+    local tl, tc, tr
+    if GF.ResolveHealthTextSlots then
+        tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+    else
+        tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+        tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+        tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+    end
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
         f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", 3, 0)
@@ -778,7 +1191,9 @@ local function LayoutText(f, kind)
     end
     if f.textCenterFS then
         f.textCenterFS:ClearAllPoints()
-        f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", 0, 0)
+        f.textCenterFS:SetPoint("LEFT", f.health, "LEFT", 3, 0)
+        f.textCenterFS:SetPoint("RIGHT", f.health, "RIGHT", -3, 0)
+        f.textCenterFS:SetJustifyH("CENTER")
         if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     end
     if f.textRightFS then
@@ -885,136 +1300,6 @@ local ROLE_COORDS = {
     HEALER  = { 20/64, 39/64, 1/64,  20/64 },
     DAMAGER = { 20/64, 39/64, 22/64, 41/64 },
 }
-
-------------------------------------------------------------------------
--- Melee/Ranged spec classification (EQoL pattern)
-------------------------------------------------------------------------
-local MELEE_SPECS = {
-    [250]=true,[251]=true,[252]=true,  -- DK
-    [577]=true,[581]=true,             -- DH
-    [103]=true,[104]=true,             -- Druid Feral/Guardian
-    [1473]=true,                       -- Evoker Aug
-    [255]=true,                        -- Hunter Survival
-    [268]=true,[269]=true,             -- Monk BM/WW
-    [66]=true,[70]=true,               -- Paladin Prot/Ret
-    [259]=true,[260]=true,[261]=true,  -- Rogue
-    [263]=true,                        -- Shaman Enh
-    [71]=true,[72]=true,[73]=true,     -- Warrior
-}
-local MELEE_CLASSES = {
-    WARRIOR=true, ROGUE=true, DEATHKNIGHT=true,
-    DEMONHUNTER=true, MONK=true, PALADIN=true,
-}
-
-local function GetDpsRangeRole(unit, classToken)
-    local specId
-    if GetInspectSpecialization and UnitIsUnit and UnitIsUnit(unit, "player") then
-        specId = GetSpecialization and GetSpecialization()
-        if specId then
-            local id = GetSpecializationInfo and GetSpecializationInfo(specId)
-            specId = id
-        end
-    end
-    if specId and MELEE_SPECS[specId] then return "MELEE" end
-    if specId and specId > 0 then return "RANGED" end
-    if classToken and MELEE_CLASSES[classToken] then return "MELEE" end
-    return "RANGED"
-end
-
-------------------------------------------------------------------------
--- NAMELIST sort builder: role → playerFirst → class → name
--- Used when separateMeleeRanged=true (native groupBy can't split DPS).
--- PERF: Pre-allocated entry pool (max 40 raid members) — zero GC per call.
-------------------------------------------------------------------------
-local _sortEntryPool = {}
-for i = 1, 40 do _sortEntryPool[i] = { name = "", sortRole = "", class = "", isPlayer = false } end
-local _sortNames = {}
-local _sortSeen  = {}
-
-local function BuildSortNameList(kind)
-    local conf = GF.GetConf(kind)
-    if not conf.sortByRole then return nil end
-
-    local separate = conf.separateMeleeRanged == true
-    local playerFirst = conf.playerFirstInRole == true
-
-    -- Parse role order string → priority map
-    local roleStr = conf.roleOrder or "TANK,HEALER,DAMAGER"
-    local rolePrio = {}
-    local idx = 0
-    for tok in roleStr:gmatch("[^,]+") do
-        idx = idx + 1
-        rolePrio[tok] = idx
-        -- Expand DAMAGER → MELEE + RANGED if separate and token is DAMAGER
-        if separate and tok == "DAMAGER" then
-            rolePrio["MELEE"] = idx
-            rolePrio["RANGED"] = idx + 0.5
-        end
-    end
-    if separate and not rolePrio["MELEE"] then rolePrio["MELEE"] = 90 end
-    if separate and not rolePrio["RANGED"] then rolePrio["RANGED"] = 91 end
-
-    -- Gather group members into pre-allocated pool
-    local entryCount = 0
-    local function addUnit(unit)
-        if not (unit and UnitExists(unit)) then return end
-        local name, realm = UnitName(unit)
-        if not name or name == "" then return end
-        if realm and realm ~= "" then name = name .. "-" .. realm end
-        local _, classToken = UnitClass(unit)
-        local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or "DAMAGER"
-        if role == "NONE" then role = "DAMAGER" end
-        local sortRole = role
-        if separate and role == "DAMAGER" then
-            sortRole = GetDpsRangeRole(unit, classToken)
-        end
-        entryCount = entryCount + 1
-        local e = _sortEntryPool[entryCount]
-        if not e then e = {}; _sortEntryPool[entryCount] = e end
-        e.name = name
-        e.sortRole = sortRole
-        e.class = classToken or ""
-        e.isPlayer = UnitIsUnit(unit, "player")
-    end
-
-    if kind == "party" then
-        if conf.showPlayer then addUnit("player") end
-        for i = 1, 4 do addUnit("party" .. i) end
-    else
-        local num = GetNumGroupMembers and GetNumGroupMembers() or 0
-        for i = 1, num do addUnit("raid" .. i) end
-    end
-
-    -- Sort only the active portion of the pool
-    -- table.sort needs a contiguous array — sort _sortEntryPool[1..entryCount]
-    -- We use a temporary view: since pool IS contiguous, sort in-place works.
-    local entries = _sortEntryPool
-    local ec = entryCount
-    table.sort(entries, function(a, b)
-        -- Only compare within active range (sort may access beyond, but pool entries exist)
-        local rA = rolePrio[a.sortRole] or 999
-        local rB = rolePrio[b.sortRole] or 999
-        if rA ~= rB then return rA < rB end
-        if playerFirst and a.isPlayer ~= b.isPlayer then return a.isPlayer == true end
-        if a.class ~= b.class then return a.class < b.class end
-        return a.name < b.name
-    end)
-
-    -- Build name list (reuse tables)
-    local nameCount = 0
-    for k in pairs(_sortSeen) do _sortSeen[k] = nil end
-    for i = 1, ec do
-        local n = entries[i].name
-        if not _sortSeen[n] then
-            _sortSeen[n] = true
-            nameCount = nameCount + 1
-            _sortNames[nameCount] = n
-        end
-    end
-    -- Trim excess from previous call
-    for i = nameCount + 1, #_sortNames do _sortNames[i] = nil end
-    return nameCount > 0 and table.concat(_sortNames, ",") or nil
-end
 
 local function LayoutIcons(f, kind)
     local conf = GF.GetConf(kind)
@@ -1137,13 +1422,52 @@ local function ApplyPowerColor(f, unit)
     f.power:SetStatusBarColor(r, g, b, 1)
 end
 
+local function _GF_CoreIconShow(icon)
+    if icon and icon.IsShown and not icon:IsShown() then icon:Show() end
+end
+
+local function _GF_CoreIconHide(icon)
+    if icon and icon.IsShown and icon:IsShown() then icon:Hide() end
+end
+
+local function _GF_CoreIconSetTexture(icon, texture)
+    if not icon or icon._msufGFCachedTexture == texture then return end
+    icon._msufGFCachedTexture = texture
+    icon:SetTexture(texture)
+end
+
+local function _GF_CoreIconSetTexCoord(icon, l, r, t, b)
+    if not icon then return end
+    if icon._msufGFTexL == l and icon._msufGFTexR == r
+        and icon._msufGFTexT == t and icon._msufGFTexB == b
+    then
+        return
+    end
+    icon._msufGFTexL = l
+    icon._msufGFTexR = r
+    icon._msufGFTexT = t
+    icon._msufGFTexB = b
+    icon:SetTexCoord(l, r, t, b)
+end
+
+local function _GF_CoreIconSetTextureAndCoords(icon, texture, l, r, t, b)
+    _GF_CoreIconSetTexture(icon, texture)
+    if l ~= nil then _GF_CoreIconSetTexCoord(icon, l, r, t, b) end
+end
+
 ------------------------------------------------------------------------
 -- Update all visuals for a unit (called on roster change + events)
 ------------------------------------------------------------------------
 function GF.UpdateButton(f, unit)
     if not f or not unit then return end
     local kind = f._msufGFKind or "party"
+    if GF.IsKindEnabled and not f._msufGFPreviewActive and not GF.IsKindEnabled(kind) then return end
     local conf = GF.GetConf(kind)
+    if f._msufGFOfflineActive and (_G.MSUF_InCombat ~= true or f._msufGFOfflineCombatAllowed)
+        and GF.UpdateOfflineHiddenFrame and GF.UpdateOfflineHiddenFrame(f, unit)
+    then
+        return
+    end
 
     if not UnitExists(unit) then
         if f.nameText then f.nameText:SetText("") end
@@ -1171,11 +1495,11 @@ function GF.UpdateButton(f, unit)
     end
 
     -- Name (with color mode + truncation)
-    if f.nameText and conf.showName ~= false then
+    if f.nameText and GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then
         local name = UnitName(unit) or ""
-        local maxC = conf.nameMaxChars or 0
+        local maxC, noEllipsis, clipSide = GF.ResolveNameTruncation(kind)
         if maxC > 0 then
-            name = GF.TruncateName(name, maxC, conf.nameNoEllipsis)
+            name = GF.TruncateName(name, maxC, noEllipsis, clipSide)
         end
         f.nameText:SetText(name)
         f.nameText:Show()
@@ -1204,23 +1528,27 @@ function GF.UpdateButton(f, unit)
         local hp    = UnitHealth(unit)
         local hpMax = UnitHealthMax(unit)
         local delim = conf.textDelimiter or " / "
-        local rev = conf.hpTextReverse
         local hpTextOn = conf.showHPText ~= false
-        local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-        local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-        local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+        local tl, tc, tr
+        if GF.ResolveHealthTextSlots then
+            tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+        else
+            tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+            tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+            tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+        end
         if f.textLeftFS then
-            local txt = GF.FormatHealthText(tl, hp, hpMax, delim, rev, unit)
+            local txt = GF.FormatHealthText(tl, hp, hpMax, delim, false, unit)
             f.textLeftFS:SetText(txt)
             if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
         end
         if f.textCenterFS then
-            local txt = GF.FormatHealthText(tc, hp, hpMax, delim, rev, unit)
+            local txt = GF.FormatHealthText(tc, hp, hpMax, delim, false, unit)
             f.textCenterFS:SetText(txt)
             if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
         end
         if f.textRightFS then
-            local txt = GF.FormatHealthText(tr, hp, hpMax, delim, rev, unit)
+            local txt = GF.FormatHealthText(tr, hp, hpMax, delim, false, unit)
             f.textRightFS:SetText(txt)
             if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
         end
@@ -1296,17 +1624,16 @@ function GF.UpdateButton(f, unit)
             if role and role ~= "NONE" then
                 local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
                 if tex then
-                    f.roleIcon:SetTexture(tex)
-                    f.roleIcon:SetTexCoord(l, r, t, b)
-                    f.roleIcon:Show()
+                    _GF_CoreIconSetTextureAndCoords(f.roleIcon, tex, l, r, t, b)
+                    _GF_CoreIconShow(f.roleIcon)
                 else
-                    f.roleIcon:Hide()
+                    _GF_CoreIconHide(f.roleIcon)
                 end
             else
-                f.roleIcon:Hide()
+                _GF_CoreIconHide(f.roleIcon)
             end
         else
-            f.roleIcon:Hide()
+            _GF_CoreIconHide(f.roleIcon)
         end
     end
 
@@ -1315,13 +1642,19 @@ function GF.UpdateButton(f, unit)
         if conf.raidMarker ~= false then
             local idx = GetRaidTargetIndex(unit)
             if idx then
+                -- Midnight/Beta can return a secret number here. Do not cache
+                -- or compare it in Lua; hand it directly to the C-side helper.
+                f.raidIcon._msufGFRaidMarkerIndex = nil
+                f.raidIcon._msufGFCachedTexture = nil
                 SetRaidTargetIconTexture(f.raidIcon, idx)
-                f.raidIcon:Show()
+                _GF_CoreIconShow(f.raidIcon)
             else
-                f.raidIcon:Hide()
+                _GF_CoreIconHide(f.raidIcon)
+                f.raidIcon._msufGFRaidMarkerIndex = nil
             end
         else
-            f.raidIcon:Hide()
+            _GF_CoreIconHide(f.raidIcon)
+            f.raidIcon._msufGFRaidMarkerIndex = nil
         end
     end
 
@@ -1331,14 +1664,13 @@ function GF.UpdateButton(f, unit)
             local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
             if isLeader then
                 local tex, l, r, t, b = GF.GetLeaderTexture(kind)
-                f.leaderIcon:SetTexture(tex)
-                f.leaderIcon:SetTexCoord(l, r, t, b)
-                f.leaderIcon:Show()
+                _GF_CoreIconSetTextureAndCoords(f.leaderIcon, tex, l, r, t, b)
+                _GF_CoreIconShow(f.leaderIcon)
             else
-                f.leaderIcon:Hide()
+                _GF_CoreIconHide(f.leaderIcon)
             end
         else
-            f.leaderIcon:Hide()
+            _GF_CoreIconHide(f.leaderIcon)
         end
     end
 
@@ -1349,14 +1681,13 @@ function GF.UpdateButton(f, unit)
             local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
             if isAssist and not isLeader then
                 local tex, l, r, t, b = GF.GetAssistTexture(kind)
-                f.assistIcon:SetTexture(tex)
-                f.assistIcon:SetTexCoord(l, r, t, b)
-                f.assistIcon:Show()
+                _GF_CoreIconSetTextureAndCoords(f.assistIcon, tex, l, r, t, b)
+                _GF_CoreIconShow(f.assistIcon)
             else
-                f.assistIcon:Hide()
+                _GF_CoreIconHide(f.assistIcon)
             end
         else
-            f.assistIcon:Hide()
+            _GF_CoreIconHide(f.assistIcon)
         end
     end
 end
@@ -1364,14 +1695,68 @@ end
 ------------------------------------------------------------------------
 -- Scan header children and init them
 ------------------------------------------------------------------------
-local function ScanHeaderChildren(header, kind, force)
+local function _SetFrameSizeIfChanged(frame, w, h)
+    if not frame then return end
+    local cw = frame.GetWidth and frame:GetWidth()
+    local ch = frame.GetHeight and frame:GetHeight()
+    if cw ~= w then frame:SetWidth(w) end
+    if ch ~= h then frame:SetHeight(h) end
+end
+
+local function _SetShownIfChanged(frame, shown)
+    if not frame then return end
+    shown = shown and true or false
+    if frame.IsShown and frame:IsShown() == shown then return end
+    if shown then frame:Show() else frame:Hide() end
+end
+
+local function _AnchorTwoPointIfChanged(frame, owner, key, tlx, tly, brx, bry, force)
+    if not frame or not owner then return end
+    if not force
+        and frame._msufGFScanAnchorOwner == owner
+        and frame._msufGFScanAnchorKey == key
+        and frame._msufGFScanTLX == tlx
+        and frame._msufGFScanTLY == tly
+        and frame._msufGFScanBRX == brx
+        and frame._msufGFScanBRY == bry
+    then
+        return
+    end
+    frame._msufGFScanAnchorOwner = owner
+    frame._msufGFScanAnchorKey = key
+    frame._msufGFScanTLX = tlx
+    frame._msufGFScanTLY = tly
+    frame._msufGFScanBRX = brx
+    frame._msufGFScanBRY = bry
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", owner, "TOPLEFT", tlx, tly)
+    frame:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", brx, bry)
+end
+
+local function _ScanHeaderChildrenVarargs(header, kind, force, ...)
     if not header then return end
-    -- Throttle normal GROUP_ROSTER_UPDATE bursts, but never throttle the
-    -- explicit post-layout repair scans. The repair scans are what normalize
-    -- the first/player child after SecureGroupHeader finishes its own pass.
-    local now = GetTime()
-    if not force and header._msufGFLastScan and (now - header._msufGFLastScan) < 0.05 then return end
-    header._msufGFLastScan = now
+    if GF.IsKindEnabled and not GF.IsKindEnabled(kind) then
+        if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime(kind, false) end
+        return
+    end
+    -- Throttle normal GROUP_ROSTER_UPDATE bursts. Forced scans are still
+    -- allowed for the post-layout repair pass, but identical forced scans
+    -- inside the same short burst are skipped.
+    local now = (GetTime and GetTime()) or 0
+    if force then
+        local scanKey = tostring(kind) .. ":" .. tostring(_headerScanInputSerial)
+        if header._msufGFLastForceScanKey == scanKey
+            and header._msufGFLastForceScanAt
+            and (now - header._msufGFLastForceScanAt) < 0.04
+        then
+            return
+        end
+        header._msufGFLastForceScanKey = scanKey
+        header._msufGFLastForceScanAt = now
+    else
+        if header._msufGFLastScan and (now - header._msufGFLastScan) < 0.05 then return end
+        header._msufGFLastScan = now
+    end
 
     -- Protected frames: cannot call SetSize/SetPoint in combat
     local inCombat = InCombatLockdown()
@@ -1381,11 +1766,10 @@ local function ScanHeaderChildren(header, kind, force)
         w, h = GF.GetScaledFrameMetrics(kind)
     end
 
-    -- GetChildren() is more reliable than GetAttribute("child"..i) for SecureGroupHeader
-    local children = { header:GetChildren() }
     local firstMeasured = false
-    for ci = 1, #children do
-        local child = children[ci]
+    local childCount = select("#", ...)
+    for ci = 1, childCount do
+        local child = select(ci, ...)
         -- Install OnAttributeChanged hook on every child BEFORE filtering by
         -- unit attribute. Children whose unit isn't set yet (secure code
         -- hasn't ticked) will get registered the moment the secure system
@@ -1396,7 +1780,7 @@ local function ScanHeaderChildren(header, kind, force)
         if child and child.GetAttribute and child:GetAttribute("unit") ~= nil then
             if not child._msufGFBuilt then
                 if inCombat then
-                    GF._pendingRebuild = true
+                    MarkPostCombatHeaderRecovery()
                     break
                 end
                 _G.MSUF_GF_InitButton(child, kind)
@@ -1404,61 +1788,91 @@ local function ScanHeaderChildren(header, kind, force)
             child._msufGFKind = kind
             child.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ("gf_" .. tostring(kind))
             local unit = child:GetAttribute("unit") or child.unit
-            -- Force size on every scan (no diff-gate).
+            -- Keep child slot size aligned with configured metrics.
             -- Use SetWidth + SetHeight separately (SetSize can be ignored when
             -- SecureGroupHeader has set conflicting anchor points on children).
             if not inCombat then
-                child:SetWidth(w)
-                child:SetHeight(h)
+                _SetFrameSizeIfChanged(child, w, h)
 
                 -- Clear any backdrop on child frame itself
                 -- (SecureUnitButtonTemplate may inherit BackdropTemplate in WoW 12.0)
-                if child.SetBackdrop then
+                if child.SetBackdrop and not child._msufGFChildBackdropCleared then
                     child:SetBackdrop(nil)
+                    child._msufGFChildBackdropCleared = true
                 end
 
                 -- Re-anchor the visual root to configured slot metrics.
                 -- Do not SetAllPoints(child): the protected child can be the
                 -- stale part; the visual bars must remain normalized.
-                AnchorVisualRootToSlot(child, kind, w, h)
+                AnchorVisualRootToSlot(child, kind, w, h, force)
 
                 -- borderFrame
                 if child._msufGFBorderFrame then
-                    child._msufGFBorderFrame:ClearAllPoints()
-                    child._msufGFBorderFrame:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", 0, 0)
-                    child._msufGFBorderFrame:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", 0, 0)
+                    _AnchorTwoPointIfChanged(child._msufGFBorderFrame, child.barGroup or child, "border", 0, 0, 0, 0, force)
                 end
 
                 -- highlightBorder
-                if child._msufGFHighlightBorder then
+                if child._msufGFHighlightBorders then
+                    for _, border in pairs(child._msufGFHighlightBorders) do
+                        if border then
+                            local hofs = border._msufHLOfs or 0
+                            _AnchorTwoPointIfChanged(border, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
+                            GF.SyncFrameLayerAbove(border, child.health or child.barGroup or child, border._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
+                        end
+                    end
+                elseif child._msufGFHighlightBorder then
                     local hofs = child._msufGFHighlightBorder._msufHLOfs or 0
-                    child._msufGFHighlightBorder:ClearAllPoints()
-                    child._msufGFHighlightBorder:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", -hofs, hofs)
-                    child._msufGFHighlightBorder:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", hofs, -hofs)
+                    _AnchorTwoPointIfChanged(child._msufGFHighlightBorder, child.barGroup or child, "highlight", -hofs, hofs, hofs, -hofs, force)
+                    GF.SyncFrameLayerAbove(child._msufGFHighlightBorder, child.health or child.barGroup or child, child._msufGFHighlightBorder._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER)
+                end
+                if child._msufGFDispelOverlays then
+                    for _, overlay in pairs(child._msufGFDispelOverlays) do
+                        if overlay then
+                            GF.SyncFrameLayerAbove(overlay, child.health or child.barGroup or child, overlay._msufDOLayerOffset or GF.LAYER_DISPEL_OVERLAY)
+                        end
+                    end
+                elseif child._msufGFDispelOverlay then
+                    GF.SyncFrameLayerAbove(child._msufGFDispelOverlay, child.health or child.barGroup or child, child._msufGFDispelOverlay._msufDOLayerOffset or GF.LAYER_DISPEL_OVERLAY)
+                end
+                if child._msufGFDebuffStripe then
+                    GF.SyncFrameLayerAbove(child._msufGFDebuffStripe, child.health or child.barGroup or child, GF.LAYER_DEBUFF_STRIPE)
                 end
 
                 -- health bar
-                local inset = ((conf.borderEnabled == true) and math_max(1, conf.borderSize or 1)) or 1
-                if GF.ScaleFrameValue then inset = GF.ScaleFrameValue(kind, inset, 1) end
+                local inset = GetFrameOutlineInset(kind, conf)
                 local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, unit, nil, conf))
                     or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (conf.powerHeight or 6))
                 if child.health then
-                    child.health:ClearAllPoints()
-                    child.health:SetPoint("TOPLEFT", child.barGroup or child, "TOPLEFT", inset, -inset)
-                    child.health:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", -inset, powerH > 0 and (powerH + inset) or inset)
+                    _AnchorTwoPointIfChanged(child.health, child.barGroup or child, "health", inset, -inset, -inset, powerH > 0 and (powerH + inset) or inset, force)
                 end
 
                 -- power bar
                 if child.power then
-                    child.power:ClearAllPoints()
-                    child.power:SetPoint("BOTTOMLEFT", child.barGroup or child, "BOTTOMLEFT", inset, inset)
-                    child.power:SetPoint("BOTTOMRIGHT", child.barGroup or child, "BOTTOMRIGHT", -inset, inset)
+                    local owner = child.barGroup or child
+                    if force
+                        or child.power._msufGFScanAnchorOwner ~= owner
+                        or child.power._msufGFScanAnchorKey ~= "power"
+                        or child.power._msufGFScanTLX ~= inset
+                        or child.power._msufGFScanTLY ~= inset
+                        or child.power._msufGFScanBRX ~= -inset
+                        or child.power._msufGFScanBRY ~= inset
+                    then
+                        child.power._msufGFScanAnchorOwner = owner
+                        child.power._msufGFScanAnchorKey = "power"
+                        child.power._msufGFScanTLX = inset
+                        child.power._msufGFScanTLY = inset
+                        child.power._msufGFScanBRX = -inset
+                        child.power._msufGFScanBRY = inset
+                        child.power:ClearAllPoints()
+                        child.power:SetPoint("BOTTOMLEFT", owner, "BOTTOMLEFT", inset, inset)
+                        child.power:SetPoint("BOTTOMRIGHT", owner, "BOTTOMRIGHT", -inset, inset)
+                    end
                     if powerH > 0 then
-                        child.power:SetHeight(powerH)
-                        child.power:Show()
+                        if child.power.GetHeight and child.power:GetHeight() ~= powerH then child.power:SetHeight(powerH) end
+                        _SetShownIfChanged(child.power, true)
                     else
-                        child.power:SetHeight(0.001)
-                        child.power:Hide()
+                        if child.power.GetHeight and child.power:GetHeight() ~= 0.001 then child.power:SetHeight(0.001) end
+                        _SetShownIfChanged(child.power, false)
                     end
                 end
             end
@@ -1497,16 +1911,29 @@ local function ScanHeaderChildren(header, kind, force)
             end
         end
     end
+
     -- After measuring delta, reposition header
     if not inCombat and GF.SyncHeaderPosition then
         GF.SyncHeaderPosition(kind, nil, header)
     end
+    if GF.QueueGroupBorderRefresh then GF.QueueGroupBorderRefresh(kind) end
+end
+
+local function ScanHeaderChildren(header, kind, force)
+    if not header then return end
+    -- GetChildren() is more reliable than GetAttribute("child"..i) for
+    -- SecureGroupHeader. Forwarding varargs avoids allocating a temporary
+    -- child table on every roster/header scan.
+    return _ScanHeaderChildrenVarargs(header, kind, force, header:GetChildren())
 end
 
 ------------------------------------------------------------------------
 -- Grid-center positioning helpers
 ------------------------------------------------------------------------
 GF._previewAnchorFrame = GF._previewAnchorFrame or {}
+
+local GetDefaultCenter
+local RaidGroupAllowed
 
 local function IsRaidLikeKind(kind)
     return kind == "raid" or kind == "mythicraid"
@@ -1516,14 +1943,340 @@ local function GetLiveRaidKind()
     return (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
 end
 
+GF.raidGroupHeaders = GF.raidGroupHeaders or {}
+
+local function PreserveRaidGroups(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    return IsRaidLikeKind(kind) and conf and conf.preserveRaidGroups == true
+end
+
+local function GetPreservedRaidGroupCount(conf)
+    local groups = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
+    if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+    if IsInRaid and IsInRaid() and GetNumGroupMembers and GetRaidRosterInfo then
+        local liveGroups = 0
+        local n = GetNumGroupMembers() or 0
+        for i = 1, n do
+            local subgroup = select(3, GetRaidRosterInfo(i))
+            subgroup = tonumber(subgroup) or 0
+            if subgroup > liveGroups then liveGroups = subgroup end
+        end
+        if liveGroups > groups then groups = liveGroups end
+        if groups > 8 then groups = 8 end
+    end
+    return groups
+end
+GF.GetPreservedRaidGroupCount = GetPreservedRaidGroupCount
+
+local function GetPreservedRaidPrimary(conf)
+    local upc = math_floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
+    if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
+    local primary = math_min(upc, 5)
+    local columns = math_ceil(5 / primary)
+    if columns < 1 then columns = 1 end
+    return upc, primary, columns
+end
+
+local function GetPreservedRaidMetrics(kind, conf)
+    conf = conf or GF.GetConf(kind)
+    local _, _, totalW, totalH, w, h, spacing, growth, _, _, _, _, primary, groups, blockColumns, blockW, blockH
+    if GF.GetPreservedRaidGridMetrics then
+        _, _, totalW, totalH, w, h, spacing, growth, _, _, _, _, primary, groups, blockColumns, blockW, blockH =
+            GF.GetPreservedRaidGridMetrics(kind, 5 * GetPreservedRaidGroupCount(conf))
+    end
+    if totalW then
+        return totalW, totalH, w, h, spacing, growth, primary, groups, blockColumns, blockW, blockH
+    end
+
+    w, h, spacing = GF.GetScaledFrameMetrics(kind)
+    growth = conf.growth or "DOWN"
+    local _, primaryFallback, columnsFallback = GetPreservedRaidPrimary(conf)
+    local groupsFallback = GetPreservedRaidGroupCount(conf)
+    if growth == "DOWN" or growth == "UP" then
+        blockW = columnsFallback * w + math_max(0, columnsFallback - 1) * spacing
+        blockH = primaryFallback * h + math_max(0, primaryFallback - 1) * spacing
+        totalW = groupsFallback * blockW + math_max(0, groupsFallback - 1) * spacing
+        totalH = blockH
+    else
+        blockW = primaryFallback * w + math_max(0, primaryFallback - 1) * spacing
+        blockH = columnsFallback * h + math_max(0, columnsFallback - 1) * spacing
+        totalW = blockW
+        totalH = groupsFallback * blockH + math_max(0, groupsFallback - 1) * spacing
+    end
+    return totalW, totalH, w, h, spacing, growth, primaryFallback, groupsFallback, columnsFallback, blockW, blockH
+end
+
+local function ForEachRaidHeader(fn)
+    if type(fn) ~= "function" then return end
+    local list = GF.raidGroupHeaders
+    if list then
+        for i = 1, #list do
+            local header = list[i]
+            if header then fn(header, i) end
+        end
+    end
+    local single = GF.headers and GF.headers.raid
+    if single and not single._msufRaidGroupIndex then
+        fn(single, nil)
+    end
+end
+
+local function AnyRaidHeader()
+    if GF.headers and GF.headers.raid then return true end
+    local list = GF.raidGroupHeaders
+    if list then
+        for i = 1, #list do
+            if list[i] then return true end
+        end
+    end
+    return false
+end
+
+local function HideRaidHeaders(preserveRuntime)
+    local container = GF.raidGroupContainer
+    if container then container:Hide() end
+    ForEachRaidHeader(function(header) header:Hide() end)
+    -- Preview hides the secure headers only; real visibility changes still clear child runtime.
+    if not preserveRuntime and GF.DeactivateKindRuntime then
+        local visual = not (InCombatLockdown and InCombatLockdown())
+        GF.DeactivateKindRuntime("raid", visual)
+        GF.DeactivateKindRuntime("mythicraid", visual)
+    end
+end
+GF.HideRaidHeaders = HideRaidHeaders
+
+local function ShowRaidHeaders(kind)
+    local showKind = kind or GetLiveRaidKind()
+    local conf = GF.GetConf(showKind)
+    if not (conf and conf.enabled == true) then
+        HideRaidHeaders()
+        return
+    end
+    local preserve = PreserveRaidGroups(showKind, conf)
+    local container = GF.raidGroupContainer
+    if container then
+        if preserve then container:Show() else container:Hide() end
+    end
+    ForEachRaidHeader(function(header)
+        local groupIndex = header._msufRaidGroupIndex
+        if preserve and groupIndex and RaidGroupAllowed and not RaidGroupAllowed(conf, groupIndex) then
+            header:Hide()
+        else
+            header:Show()
+        end
+    end)
+end
+GF.ShowRaidHeaders = ShowRaidHeaders
+
+local function RetirePreservedRaidHeaders()
+    local list = GF.raidGroupHeaders
+    if list then
+        for i = 1, #list do
+            if list[i] then RetireHeader(list[i]) end
+            list[i] = nil
+        end
+    end
+    local container = GF.raidGroupContainer
+    if container then
+        container:Hide()
+        container:ClearAllPoints()
+        container:SetSize(0.001, 0.001)
+        container:SetParent(GetHiddenParent())
+    end
+    GF.raidGroupContainer = nil
+    if GF.headers and GF.headers.raid and GF.headers.raid._msufRaidGroupIndex then
+        GF.headers.raid = nil
+    end
+end
+
+local function PositionPreservedRaidHeaders(kind, headerOverride)
+    if InCombatLockdown() then return end
+    local conf = GF.GetConf(kind)
+    local totalW, totalH, _, _, spacing, growth, _, groups, _, blockW, blockH = GetPreservedRaidMetrics(kind, conf)
+    local container = GF.raidGroupContainer
+    if not container then return end
+
+    local cx, cy = conf.offsetX, conf.offsetY
+    if cx == nil or cy == nil then
+        cx, cy = GetDefaultCenter(kind)
+    end
+    local anchorFrame = GF.ResolveAnchorFrame(kind)
+    local pt = conf.anchorPoint or conf.point or "CENTER"
+    container:ClearAllPoints()
+    container:SetSize(math_max(totalW, 1), math_max(totalH, 1))
+    container:SetPoint("CENTER", anchorFrame, pt, cx, cy)
+
+    local function PositionOne(header, groupIndex)
+        if not header then return end
+        groupIndex = groupIndex or header._msufRaidGroupIndex or 1
+        if groupIndex < 1 or groupIndex > groups then
+            header:Hide()
+            return
+        end
+
+        header:ClearAllPoints()
+        if growth == "DOWN" then
+            header:SetPoint("TOPLEFT", container, "TOPLEFT", (groupIndex - 1) * (blockW + spacing), 0)
+        elseif growth == "UP" then
+            header:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", (groupIndex - 1) * (blockW + spacing), 0)
+        elseif growth == "RIGHT" then
+            header:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -(groupIndex - 1) * (blockH + spacing))
+        elseif growth == "LEFT" then
+            header:SetPoint("TOPRIGHT", container, "TOPRIGHT", 0, -(groupIndex - 1) * (blockH + spacing))
+        else
+            header:SetPoint("TOPLEFT", container, "TOPLEFT", (groupIndex - 1) * (blockW + spacing), 0)
+        end
+    end
+
+    if headerOverride then
+        PositionOne(headerOverride)
+    else
+        local list = GF.raidGroupHeaders
+        for i = 1, groups do
+            PositionOne(list and list[i], i)
+        end
+    end
+end
+
+local function ScanRaidHeaders(kind, force)
+    local list = GF.raidGroupHeaders
+    if list and #list > 0 then
+        for i = 1, #list do
+            local header = list[i]
+            if header then
+                ScanHeaderChildren(header, kind, force)
+            end
+        end
+        return
+    end
+    local header = GF.headers and GF.headers.raid
+    if header then ScanHeaderChildren(header, kind, force) end
+end
+
+local _scheduledHeaderScans = {}
+local function ScheduleHeaderChildScan(scope, delay, kind)
+    scope = (scope == "party") and "party" or "raid"
+    delay = delay or 0
+    local key = scope .. ":" .. tostring(delay)
+    if _scheduledHeaderScans[key] then return end
+    _scheduledHeaderScans[key] = true
+
+    local function run()
+        _scheduledHeaderScans[key] = nil
+        if InCombatLockdown() then
+            MarkPostCombatHeaderRecovery()
+            return
+        end
+
+        local scanKind = kind
+        if scope == "raid" then
+            scanKind = scanKind or GetLiveRaidKind()
+            if GF.IsKindEnabled and not GF.IsKindEnabled(scanKind) then
+                if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime(scanKind, false) end
+                return
+            end
+            ScanRaidHeaders(scanKind, true)
+            return
+        else
+            scanKind = "party"
+        end
+        if GF.IsKindEnabled and not GF.IsKindEnabled(scanKind) then
+            if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime(scanKind, false) end
+            return
+        end
+        local header = GF.headers and GF.headers[scope]
+        if not header then return end
+        ScanHeaderChildren(header, scanKind, true)
+    end
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay, run)
+    else
+        run()
+    end
+end
+
 function GF.UpdateAnyEnabledFlag()
     local partyConf = GF.GetConf("party")
     local raidConf = GF.GetConf(GetLiveRaidKind())
-    GF._anyEnabled = ((partyConf and partyConf.enabled) or (raidConf and raidConf.enabled)) and true or false
+    GF._anyEnabled = ((partyConf and partyConf.enabled == true) or (raidConf and raidConf.enabled == true)) and true or false
     return GF._anyEnabled
 end
 
-local function GetDefaultCenter(kind)
+local function ClearKindFrameRuntime(f, visual)
+    if not f then return end
+    if GF.UnregisterUnitEvents then GF.UnregisterUnitEvents(f) end
+    if GF._RetireFromDirty then GF._RetireFromDirty(f) end
+    f._msufGFFullPending = nil
+    f._msufGFRegUnit = nil
+    f._msufGFRegBits = nil
+    f._msufGFRosterGUID = nil
+    f._msufGFRosterUnit = nil
+    f._msufGFRosterRole = nil
+    f._msufGFRosterLeaderState = nil
+    f._msufGFIsTarget = nil
+    f._msufGFIsFocus = nil
+
+    if visual then
+        if GF.HideFrameAuras then GF.HideFrameAuras(f) end
+        if GF.HideSpellIndicators then GF.HideSpellIndicators(f) end
+        if GF.ClearPrivateAuras then GF.ClearPrivateAuras(f) end
+        local hideHB = _G.MSUF_GF_HB_HideFrame
+        if type(hideHB) == "function" then hideHB(f) end
+        local gn = f._msufGroupNumberFS or f.groupNumberText
+        if gn then gn:SetText(""); gn:Hide() end
+        if f.statusIndicatorText then f.statusIndicatorText:SetText(""); f.statusIndicatorText:Hide() end
+        if f.roleIcon then f.roleIcon:Hide() end
+        if f.raidIcon then f.raidIcon:Hide() end
+        if f.leaderIcon then f.leaderIcon:Hide() end
+        if f.assistIcon then f.assistIcon:Hide() end
+        if f.readyCheckIcon then f.readyCheckIcon:Hide() end
+        if f.summonIcon then f.summonIcon:Hide() end
+        if f.resurrectIcon then f.resurrectIcon:Hide() end
+        if f.phaseIcon then f.phaseIcon:Hide() end
+        if f._msufGFHighlightBorders then
+            for _, border in pairs(f._msufGFHighlightBorders) do
+                if border then border:Hide() end
+            end
+        elseif f._msufGFHighlightBorder then f._msufGFHighlightBorder:Hide() end
+        if f._msufGFTargetBorder then f._msufGFTargetBorder:Hide() end
+        if f._msufGFDebuffStripe then f._msufGFDebuffStripe:Hide() end
+        if f.barGroup then f.barGroup:Hide() end
+        if f.Hide then f:Hide() end
+    end
+end
+
+function GF.DeactivateKindRuntime(kind, visual)
+    if not kind then return end
+    GF._disabledRuntimeCleanSig = nil
+    GF.ForEachFrame(function(f, frameKind)
+        if frameKind == kind then
+            ClearKindFrameRuntime(f, visual ~= false)
+        end
+    end, true)
+end
+
+function GF.DeactivateDisabledKinds(visual)
+    local visualOn = visual ~= false
+    local listCount = GF.frameList and #GF.frameList or 0
+    local sig = tostring(GF.IsKindEnabled("party")) .. "|"
+        .. tostring(GF.IsKindEnabled("raid")) .. "|"
+        .. tostring(GF.IsKindEnabled("mythicraid")) .. "|"
+        .. tostring(visualOn) .. "|"
+        .. tostring(listCount)
+    if GF._disabledRuntimeCleanSig == sig then return end
+
+    local seen = {}
+    GF.ForEachFrame(function(_, frameKind)
+        if frameKind and not seen[frameKind] and not GF.IsKindEnabled(frameKind) then
+            seen[frameKind] = true
+            GF.DeactivateKindRuntime(frameKind, visualOn)
+        end
+    end, true)
+    GF._disabledRuntimeCleanSig = sig
+end
+
+GetDefaultCenter = function(kind)
     return IsRaidLikeKind(kind) and -500 or -400, 0
 end
 
@@ -1576,6 +2329,9 @@ function GF.GetPositionCount(kind)
     local conf = GF.GetConf(kind)
     local upc = conf.unitsPerColumn or 5
     if IsRaidLikeKind(kind) then
+        if conf.preserveRaidGroups == true then
+            return 5 * (conf.maxColumns or 8)
+        end
         return upc * (conf.maxColumns or 8)
     end
     return upc
@@ -1621,9 +2377,15 @@ end
 
 function GF.SyncHeaderPosition(kind, countOverride, headerOverride)
     if InCombatLockdown() then return end
+    if PreserveRaidGroups(kind) then
+        PositionPreservedRaidHeaders(kind, headerOverride)
+        if GF.QueueGroupBorderRefresh then GF.QueueGroupBorderRefresh(kind) end
+        return
+    end
     local header = headerOverride or (GF.headers and GF.headers[kind])
     if not header then return end
     PositionHeaderFromGridCenter(kind, header, countOverride)
+    if GF.QueueGroupBorderRefresh then GF.QueueGroupBorderRefresh(kind) end
 end
 
 ------------------------------------------------------------------------
@@ -1648,6 +2410,44 @@ local function _GF_InvalidateAttrCache(header)
     if header then header._msufAttrCache = nil end
 end
 
+local _nativeRoleOrderParts = {}
+local _nativeRoleOrderSeen = {}
+
+local function AppendNativeRole(tok)
+    if tok == "MELEE" or tok == "RANGED" then tok = "DAMAGER" end
+    if tok ~= "TANK" and tok ~= "HEALER" and tok ~= "DAMAGER" then return end
+    if _nativeRoleOrderSeen[tok] then return end
+    _nativeRoleOrderSeen[tok] = true
+    _nativeRoleOrderParts[#_nativeRoleOrderParts + 1] = tok
+end
+
+local function BuildNativeRoleOrder(conf)
+    for i = #_nativeRoleOrderParts, 1, -1 do _nativeRoleOrderParts[i] = nil end
+    for k in pairs(_nativeRoleOrderSeen) do _nativeRoleOrderSeen[k] = nil end
+
+    local roleStr = conf.roleOrder or "TANK,HEALER,DAMAGER"
+    for tok in roleStr:gmatch("[^,]+") do
+        AppendNativeRole(tok)
+    end
+    AppendNativeRole("TANK")
+    AppendNativeRole("HEALER")
+    AppendNativeRole("DAMAGER")
+
+    return table.concat(_nativeRoleOrderParts, ",")
+end
+
+local function ApplyNativeRoleSort(header, conf)
+    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+    _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
+    _GF_SetAttrIfChanged(header, "groupingOrder", BuildNativeRoleOrder(conf))
+end
+
+local function ApplyIndexSort(header)
+    _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
+    _GF_SetAttrIfChanged(header, "groupBy", nil)
+    _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+end
+
 ------------------------------------------------------------------------
 -- Party header setup
 ------------------------------------------------------------------------
@@ -1657,6 +2457,7 @@ local function SetupPartyHeader()
         GF._pendingPartyRefresh = true
         return
     end
+    if not _rebuildAllActive then MarkHeaderScanInputsChanged() end
 
     local conf = GF.GetConf("party")
     if not conf.enabled then return end
@@ -1720,25 +2521,9 @@ local function SetupPartyHeader()
 
     -- Role sort
     if conf.sortByRole then
-        if conf.separateMeleeRanged then
-            -- NAMELIST: full control (melee/ranged split, playerFirst, class order)
-            local nameList = BuildSortNameList("party")
-            _GF_SetAttrIfChanged(header, "sortMethod", "NAMELIST")
-            _GF_SetAttrIfChanged(header, "nameList", nameList)
-            _GF_SetAttrIfChanged(header, "groupBy", nil)
-            _GF_SetAttrIfChanged(header, "groupingOrder", nil)
-        else
-            -- Native ASSIGNEDROLE (most performant, no nameList rebuild)
-            _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-            _GF_SetAttrIfChanged(header, "nameList", nil)
-            _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
-            _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
-        end
+        ApplyNativeRoleSort(header, conf)
     else
-        _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
-        _GF_SetAttrIfChanged(header, "groupBy", nil)
-        _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+        ApplyIndexSort(header)
     end
 
     -- Growth direction → point/xOffset/yOffset
@@ -1796,27 +2581,214 @@ local function SetupPartyHeader()
     local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
     header:SetAttribute("_msufLayoutNonce", nonce)
 
+    -- Try the first build immediately; delayed scans still catch secure
+    -- children whose unit token is assigned on the next tick.
+    ScanHeaderChildren(header, "party", true)
+
     -- Deferred child scan (children created async after Show)
-    C_Timer.After(0, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, "party", true) end
-    end)
-    C_Timer.After(0.05, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, "party", true) end
-    end)
+    ScheduleHeaderChildScan("party", 0, "party")
+    ScheduleHeaderChildScan("party", 0.05, "party")
 end
 
 ------------------------------------------------------------------------
 -- Raid header setup
 ------------------------------------------------------------------------
-local function SetupRaidHeader()
+RaidGroupAllowed = function(conf, groupIndex)
+    local gf = conf and conf.groupFilter
+    if type(gf) == "table" then
+        return gf[groupIndex] ~= false
+    end
+    if type(gf) == "string" and gf ~= "" then
+        local needle = tostring(groupIndex)
+        for token in gf:gmatch("[^,]+") do
+            token = token:match("^%s*(.-)%s*$")
+            if token == needle then return true end
+        end
+        return false
+    end
+    return true
+end
+
+local function ApplyPreservedRaidSort(header, conf)
+    local sortMode = conf.sortMode
+    if not sortMode then
+        sortMode = conf.sortByRole and "ROLE" or "INDEX"
+    end
+
+    if sortMode == "ROLE" or sortMode == "GROUP_ROLE" then
+        ApplyNativeRoleSort(header, conf)
+    elseif sortMode == "NAME" then
+        _GF_SetAttrIfChanged(header, "sortMethod", "NAME")
+        _GF_SetAttrIfChanged(header, "groupBy", nil)
+        _GF_SetAttrIfChanged(header, "groupingOrder", nil)
+    else
+        ApplyIndexSort(header)
+    end
+end
+
+local function ApplyRaidGrowthAttributes(header, growth, spacing)
+    if growth == "DOWN" then
+        _GF_SetAttrIfChanged(header, "point", "TOP")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    elseif growth == "UP" then
+        _GF_SetAttrIfChanged(header, "point", "BOTTOM")
+        _GF_SetAttrIfChanged(header, "xOffset", 0)
+        _GF_SetAttrIfChanged(header, "yOffset", spacing)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "LEFT")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    elseif growth == "RIGHT" then
+        _GF_SetAttrIfChanged(header, "point", "LEFT")
+        _GF_SetAttrIfChanged(header, "xOffset", spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    elseif growth == "LEFT" then
+        _GF_SetAttrIfChanged(header, "point", "RIGHT")
+        _GF_SetAttrIfChanged(header, "xOffset", -spacing)
+        _GF_SetAttrIfChanged(header, "yOffset", 0)
+        _GF_SetAttrIfChanged(header, "columnAnchorPoint", "TOP")
+        _GF_SetAttrIfChanged(header, "columnSpacing", spacing)
+    end
+end
+
+local function SetupPreservedRaidHeaders(kind, conf)
     if InCombatLockdown() then
         GF._pendingRaidRefresh = true
         return
     end
 
+    local parent = _G.PetBattleFrameHider or UIParent
+    if GF.headers.raid and not GF.headers.raid._msufRaidGroupIndex then
+        RetireHeader(GF.headers.raid)
+        GF.headers.raid = nil
+    end
+
+    local container = GF.raidGroupContainer
+    if not container then
+        container = CreateFrame("Frame", "MSUF_GFRaidGroupContainer", parent)
+        container._msufGFKind = kind
+        container:SetClampedToScreen(true)
+        GF.raidGroupContainer = container
+    end
+    if container:GetParent() ~= parent then container:SetParent(parent) end
+    container._msufGFKind = kind
+    container:Hide()
+
+    local w, h, spacing = conf.width or 80, conf.height or 32, conf.spacing or 1
+    local growth = conf.growth or "DOWN"
+    if GF.GetScaledFrameMetrics then
+        w, h, spacing = GF.GetScaledFrameMetrics(kind)
+    elseif GF.ApplyFrameScale then
+        GF.ApplyFrameScale(kind)
+    end
+
+    local _, primary, blockColumns = GetPreservedRaidPrimary(conf)
+    local groupCount = GetPreservedRaidGroupCount(conf)
+    local headers = GF.raidGroupHeaders
+    for groupIndex = 1, groupCount do
+        local header = headers[groupIndex]
+        if header and GF._forceRecreateHeaders then
+            RetireHeader(header)
+            header = nil
+            headers[groupIndex] = nil
+        end
+        if not header then
+            GF._raidHeaderSerial = (GF._raidHeaderSerial or 0) + 1
+            local headerName = "MSUF_GFRaidHeader" .. GF._raidHeaderSerial .. "Group" .. groupIndex
+            header = CreateFrame("Frame", headerName, container, "SecureGroupHeaderTemplate")
+            header._msufRaidGroupIndex = groupIndex
+            header:SetClampedToScreen(true)
+            if header.SetClipsChildren then header:SetClipsChildren(false) end
+            header:Hide()
+            header:HookScript("OnShow", function(self)
+                if not InCombatLockdown() then
+                    local n = (self:GetAttribute("_msufLayoutNonce") or 0) + 1
+                    self:SetAttribute("_msufLayoutNonce", n)
+                end
+            end)
+            headers[groupIndex] = header
+        end
+
+        header._msufGFKind = kind
+        header._msufRaidGroupIndex = groupIndex
+        if header:GetParent() ~= container then header:SetParent(container) end
+        header:Hide()
+
+        _GF_SetAttrIfChanged(header, "showParty", false)
+        _GF_SetAttrIfChanged(header, "showRaid", true)
+        _GF_SetAttrIfChanged(header, "showPlayer", true)
+        _GF_SetAttrIfChanged(header, "showSolo", false)
+        _GF_SetAttrIfChanged(header, "maxColumns", blockColumns)
+        _GF_SetAttrIfChanged(header, "unitsPerColumn", primary)
+        _GF_SetAttrIfChanged(header, "template", GF_UNIT_BUTTON_TEMPLATE)
+        _GF_SetAttrIfChanged(header, "initial-width", w)
+        _GF_SetAttrIfChanged(header, "initial-height", h)
+        _GF_SetAttrIfChanged(header, "sortDir", "ASC")
+        _GF_SetAttrIfChanged(header, "groupFilter", tostring(groupIndex))
+        ApplyPreservedRaidSort(header, conf)
+        ApplyRaidGrowthAttributes(header, growth, spacing)
+
+        _initCfgNonce = _initCfgNonce + 1
+        local initCfg = string.format([[
+        self:ClearAllPoints()
+        self:SetWidth(%.3f)
+        self:SetHeight(%.3f)
+        self:SetAttribute('*type1', 'target')
+        self:SetAttribute('*type2', 'togglemenu')
+        RegisterUnitWatch(self)
+        -- nonce %d
+    ]], w, h, _initCfgNonce)
+        header:SetAttribute("initialConfigFunction", initCfg)
+    end
+
+    for groupIndex = groupCount + 1, #headers do
+        if headers[groupIndex] then
+            RetireHeader(headers[groupIndex])
+            headers[groupIndex] = nil
+        end
+    end
+
+    GF.headers.raid = headers[1]
+    PositionPreservedRaidHeaders(kind)
+    container:Show()
+    for groupIndex = 1, groupCount do
+        local header = headers[groupIndex]
+        if header then
+            if RaidGroupAllowed(conf, groupIndex) then
+                header:Show()
+                local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
+                header:SetAttribute("_msufLayoutNonce", nonce)
+            else
+                header:Hide()
+            end
+        end
+    end
+
+    ScanRaidHeaders(kind, true)
+
+    ScheduleHeaderChildScan("raid", 0, kind)
+    ScheduleHeaderChildScan("raid", 0.05, kind)
+end
+
+local function SetupRaidHeader()
+    if InCombatLockdown() then
+        GF._pendingRaidRefresh = true
+        return
+    end
+    if not _rebuildAllActive then MarkHeaderScanInputsChanged() end
+
     local kind = GetLiveRaidKind()
     local conf = GF.GetConf(kind)
     if not conf.enabled then return end
+
+    if PreserveRaidGroups(kind, conf) then
+        SetupPreservedRaidHeaders(kind, conf)
+        return
+    end
+    RetirePreservedRaidHeaders()
 
     local parent = _G.PetBattleFrameHider or UIParent
     local header = GF.headers.raid
@@ -1895,41 +2867,26 @@ local function SetupRaidHeader()
     end
 
     if sortMode == "ROLE" then
-        if conf.separateMeleeRanged then
-            local nameList = BuildSortNameList("raid")
-            _GF_SetAttrIfChanged(header, "sortMethod", "NAMELIST")
-            _GF_SetAttrIfChanged(header, "nameList", nameList)
-            _GF_SetAttrIfChanged(header, "groupBy", nil)
-            _GF_SetAttrIfChanged(header, "groupingOrder", nil)
-        else
-            _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-            _GF_SetAttrIfChanged(header, "nameList", nil)
-            _GF_SetAttrIfChanged(header, "groupBy", "ASSIGNEDROLE")
-            _GF_SetAttrIfChanged(header, "groupingOrder", conf.roleOrder or "TANK,HEALER,DAMAGER")
-        end
+        ApplyNativeRoleSort(header, conf)
     elseif sortMode == "GROUP" then
         -- Group by raid group number (1-8), index within each
         _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", "GROUP")
         _GF_SetAttrIfChanged(header, "groupingOrder", "1,2,3,4,5,6,7,8")
     elseif sortMode == "GROUP_ROLE" then
         -- Group by raid group, then by role within each group
         _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", "GROUP")
         _GF_SetAttrIfChanged(header, "groupingOrder", "1,2,3,4,5,6,7,8")
         -- Note: within-group role sorting requires Blizzard's native prioritization
         -- which sorts TANK > HEALER > DAMAGER within each group automatically
     elseif sortMode == "NAME" then
         _GF_SetAttrIfChanged(header, "sortMethod", "NAME")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", nil)
         _GF_SetAttrIfChanged(header, "groupingOrder", nil)
     else
         -- INDEX (default): flat, no grouping
         _GF_SetAttrIfChanged(header, "sortMethod", "INDEX")
-        _GF_SetAttrIfChanged(header, "nameList", nil)
         _GF_SetAttrIfChanged(header, "groupBy", nil)
         _GF_SetAttrIfChanged(header, "groupingOrder", nil)
     end
@@ -1984,12 +2941,12 @@ local function SetupRaidHeader()
     local nonce = (header:GetAttribute("_msufLayoutNonce") or 0) + 1
     header:SetAttribute("_msufLayoutNonce", nonce)
 
-    C_Timer.After(0, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, kind, true) end
-    end)
-    C_Timer.After(0.05, function()
-        if header and not InCombatLockdown() then ScanHeaderChildren(header, kind, true) end
-    end)
+    -- Try the first build immediately; delayed scans still catch secure
+    -- children whose unit token is assigned on the next tick.
+    ScanHeaderChildren(header, kind, true)
+
+    ScheduleHeaderChildScan("raid", 0, kind)
+    ScheduleHeaderChildScan("raid", 0.05, kind)
 end
 
 ------------------------------------------------------------------------
@@ -1999,6 +2956,9 @@ local function HideFrameLocked(frame)
     if not frame then return end
     if frame._msufGFHidden then return end
     frame._msufGFHidden = true
+    if frame.GetParent and not frame._msufGFOriginalParent then
+        frame._msufGFOriginalParent = frame:GetParent()
+    end
     local hp = GetHiddenParent()
     if frame.SetParent then frame:SetParent(hp) end
     if not frame._msufGFHideHooked then
@@ -2017,6 +2977,118 @@ local function HideFrameLocked(frame)
     end
 end
 
+local function RestoreFrameLocked(frame, showAfter)
+    if not frame then return end
+    local wasHidden = frame._msufGFHidden == true
+    if not wasHidden and not showAfter then return end
+    frame._msufGFHidden = nil
+    local parent = frame._msufGFOriginalParent or UIParent
+    if not InCombatLockdown() then
+        if wasHidden and frame.SetParent then frame:SetParent(parent) end
+        if showAfter and frame.Show then frame:Show() end
+    end
+end
+
+local function NormalizeBlizzardFallbackMode(mode)
+    if type(mode) == "string" then mode = mode:upper() end
+    if mode == "SHOW" or mode == "BLIZZARD" or mode == true then return "SHOW" end
+    if mode == "NONE" or mode == "HIDE" or mode == false then return "NONE" end
+    return "AUTO"
+end
+
+local function BlizzardRaidManagerWantsShown()
+    local getSetting = _G.CompactRaidFrameManager_GetSetting
+    if type(getSetting) ~= "function" then return nil end
+    local value = getSetting("IsShown")
+    if value == nil then return nil end
+    if value == "0" or value == 0 or value == false then return false end
+    return value == "1" or value == 1 or value == true
+end
+
+local function RestoreBlizzardPartyFrames(showAfter)
+    showAfter = showAfter == true
+    RestoreFrameLocked(_G.PartyFrame, showAfter)
+    RestoreFrameLocked(_G.CompactPartyFrame, showAfter)
+    RestoreFrameLocked(_G.CompactPartyFrameTitle, showAfter)
+end
+
+local function HideBlizzardPartyFrames()
+    HideFrameLocked(_G.PartyFrame)
+    HideFrameLocked(_G.CompactPartyFrame)
+    HideFrameLocked(_G.CompactPartyFrameTitle)
+end
+
+local function RestoreBlizzardRaidFrames(showAfter)
+    RestoreFrameLocked(_G.CompactRaidFrameContainer, showAfter == true)
+end
+
+local function HideBlizzardRaidFrames()
+    HideFrameLocked(_G.CompactRaidFrameContainer)
+end
+
+local function ApplyDisabledPartyFallback(mode)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideBlizzardPartyFrames()
+        return
+    end
+
+    -- AUTO is the simple old off-state: release Blizzard frames without
+    -- forcing them visible. Blizzard's own party/raid-style-party rules decide.
+    RestoreBlizzardPartyFrames(mode == "SHOW")
+end
+
+local function ApplyDisabledRaidFallback(mode)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideBlizzardRaidFrames()
+        return
+    end
+
+    if mode == "SHOW" then
+        RestoreBlizzardRaidFrames(true)
+        return
+    end
+
+    local wantsShown = BlizzardRaidManagerWantsShown()
+    RestoreBlizzardRaidFrames(wantsShown == true)
+    if wantsShown == false and _G.CompactRaidFrameContainer and _G.CompactRaidFrameContainer.Hide then
+        _G.CompactRaidFrameContainer:Hide()
+    end
+end
+
+local function AnyMSUFGroupFrameEnabled()
+    return GF.IsKindEnabled("party") or GF.IsKindEnabled("raid") or GF.IsKindEnabled("mythicraid")
+end
+
+local function ApplyAutoOwnedDisabledPartyFallback(mode, msufOwnsGroupFrames)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideBlizzardPartyFrames()
+    elseif mode == "SHOW" then
+        RestoreBlizzardPartyFrames(true)
+    elseif msufOwnsGroupFrames then
+        -- AUTO only hands control back to Blizzard when every MSUF group scope is off.
+        HideBlizzardPartyFrames()
+    else
+        ApplyDisabledPartyFallback(mode)
+    end
+end
+
+local function ApplyAutoOwnedDisabledRaidFallback(mode, msufOwnsGroupFrames)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideBlizzardRaidFrames()
+    elseif mode == "SHOW" then
+        RestoreBlizzardRaidFrames(true)
+    elseif msufOwnsGroupFrames then
+        -- AUTO only hands control back to Blizzard when every MSUF group scope is off.
+        HideBlizzardRaidFrames()
+    else
+        ApplyDisabledRaidFallback(mode)
+    end
+end
+
 function GF.DisableBlizzardFrames()
     if InCombatLockdown() then
         GF._pendingBlizzardDisable = true
@@ -2024,27 +3096,27 @@ function GF.DisableBlizzardFrames()
     end
     local partyConf = GF.GetConf("party")
     local raidConf  = GF.GetConf(GetLiveRaidKind())
-    if partyConf.enabled then
-        HideFrameLocked(_G.PartyFrame)
-        HideFrameLocked(_G.CompactPartyFrame)
-        HideFrameLocked(_G.CompactPartyFrameTitle)
+    local msufOwnsGroupFrames = AnyMSUFGroupFrameEnabled()
+    local inRaid = IsInRaid and IsInRaid() or false
+    if partyConf.enabled == true then
+        HideBlizzardPartyFrames()
+    else
+        ApplyAutoOwnedDisabledPartyFallback(partyConf.blizzardFallbackMode, msufOwnsGroupFrames)
     end
-    if raidConf.enabled then
-        HideFrameLocked(_G.CompactRaidFrameContainer)
-        if _G.CompactRaidFrameManager_SetSetting then
-            _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
-        end
+    if raidConf.enabled == true then
+        HideBlizzardRaidFrames()
+    else
+        ApplyAutoOwnedDisabledRaidFallback(raidConf.blizzardFallbackMode, msufOwnsGroupFrames)
+    end
+    if not msufOwnsGroupFrames and inRaid and NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode) == "AUTO" then
+        HideBlizzardPartyFrames()
     end
 end
 
 function GF.RestoreBlizzardFrames()
     -- Undo reparenting
     for _, name in pairs({ "PartyFrame", "CompactPartyFrame", "CompactPartyFrameTitle", "CompactRaidFrameContainer" }) do
-        local f = _G[name]
-        if f and f._msufGFHidden then
-            f._msufGFHidden = nil
-            if f.SetParent and not InCombatLockdown() then f:SetParent(UIParent) end
-        end
+        RestoreFrameLocked(_G[name])
     end
 end
 
@@ -2067,14 +3139,15 @@ function GF.ApplyPreviewData(f, index, kind)
     local name = PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
     local role = PREVIEW_ROLES[((index - 1) % #PREVIEW_ROLES) + 1]
     f._msufGFPreviewRole = role
+    f._msufGFNameHiddenForStatus = nil
     local hpPct = 0.3 + (index * 0.15) % 0.7
 
     -- Name (with color + truncation)
-    if f.nameText and conf.showName ~= false then
+    if f.nameText and GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then
         local displayName = name
-        local maxC = conf.nameMaxChars or 0
+        local maxC, noEllipsis, clipSide = GF.ResolveNameTruncation(kind or "party")
         if maxC > 0 then
-            displayName = GF.TruncateName(displayName, maxC, conf.nameNoEllipsis)
+            displayName = GF.TruncateName(displayName, maxC, noEllipsis, clipSide)
         end
         f.nameText:SetText(displayName)
         f.nameText:Show()
@@ -2134,21 +3207,25 @@ function GF.ApplyPreviewData(f, index, kind)
         local fakeHP = math_floor(hpPct * 100)
         local fakeMax = 100
         local delim = conf.textDelimiter or " / "
-        local rev = conf.hpTextReverse
         local hpTextOn = conf.showHPText ~= false
-        local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-        local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-        local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+        local tl, tc, tr
+        if GF.ResolveHealthTextSlots then
+            tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+        else
+            tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+            tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+            tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+        end
         if f.textLeftFS then
-            f.textLeftFS:SetText(GF.FormatHealthText(tl, fakeHP, fakeMax, delim, rev))
+            f.textLeftFS:SetText(GF.FormatHealthText(tl, fakeHP, fakeMax, delim, false))
             if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:Hide() end
         end
         if f.textCenterFS then
-            f.textCenterFS:SetText(GF.FormatHealthText(tc, fakeHP, fakeMax, delim, rev))
+            f.textCenterFS:SetText(GF.FormatHealthText(tc, fakeHP, fakeMax, delim, false))
             if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:Hide() end
         end
         if f.textRightFS then
-            f.textRightFS:SetText(GF.FormatHealthText(tr, fakeHP, fakeMax, delim, rev))
+            f.textRightFS:SetText(GF.FormatHealthText(tr, fakeHP, fakeMax, delim, false))
             if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:Hide() end
         end
     end
@@ -2172,10 +3249,11 @@ function GF.ApplyPreviewData(f, index, kind)
         if tex and tex.SetAlpha then tex:SetAlpha(alpha) end
     end
     if f.incomingHealBar then
+        if GF._ApplyHealPredAnchor then GF._ApplyHealPredAnchor(f) end
         local hpEnabled = (GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(f._msufGFKind or "party", conf)) or false
         if hpEnabled ~= false then
             f.incomingHealBar:SetMinMaxValues(0, 100)
-            f.incomingHealBar:SetValue(math_min(hpVal + 20, 100))
+            f.incomingHealBar:SetValue(math_min(20, math_max(0, 100 - hpVal)))
             local r, g, b = 0.0, 1.0, 0.4
             if gen then
                 if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
@@ -2200,7 +3278,9 @@ function GF.ApplyPreviewData(f, index, kind)
         end
     end
     -- Absorb anchoring: SetReverseFill from absorbAnchorMode (per-GF → general)
-    if absorbBarVisible or (f.healAbsorbBar and conf.healAbsorbEnabled ~= false) then
+    if GF._ApplyAbsorbAnchor then
+        GF._ApplyAbsorbAnchor(f)
+    elseif absorbBarVisible or (f.healAbsorbBar and conf.healAbsorbEnabled ~= false) then
         local anchorMode = tonumber(_pResolve("absorbAnchorMode")) or 2
         local absorbReverse, healReverse
         if anchorMode == 1 then
@@ -2213,7 +3293,6 @@ function GF.ApplyPreviewData(f, index, kind)
         end
         if f.absorbBar and f.absorbBar.SetReverseFill then f.absorbBar:SetReverseFill(absorbReverse and true or false) end
         if f.healAbsorbBar and f.healAbsorbBar.SetReverseFill then f.healAbsorbBar:SetReverseFill(healReverse and true or false) end
-        if f.incomingHealBar and f.incomingHealBar.SetReverseFill then f.incomingHealBar:SetReverseFill(false) end
     end
     if f.absorbBar and absorbBarVisible then
         f.absorbBar:SetMinMaxValues(0, 100)
@@ -2469,11 +3548,44 @@ local function GridPosition(baseX, baseY, i, w, h, spacing, growth, upc)
     return baseX, baseY
 end
 
+local function PreviewUsesPreservedRaidGroups(kind, conf)
+    return IsRaidLikeKind(kind) and conf and conf.preserveRaidGroups == true
+end
+
+local function SetPreservedPreviewPoint(frame, container, i, w, h, spacing, growth, primary, blockW, blockH)
+    primary = primary or 5
+    blockW = blockW or w
+    blockH = blockH or h
+    local groupIndex = math_floor((i - 1) / 5)
+    local withinGroup = (i - 1) % 5
+    local minor = math_floor(withinGroup / primary)
+    local major = withinGroup % primary
+
+    if growth == "DOWN" then
+        frame:SetPoint("TOPLEFT", container, "TOPLEFT",
+            groupIndex * (blockW + spacing) + minor * (w + spacing),
+            -major * (h + spacing))
+    elseif growth == "UP" then
+        frame:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT",
+            groupIndex * (blockW + spacing) + minor * (w + spacing),
+            major * (h + spacing))
+    elseif growth == "RIGHT" then
+        frame:SetPoint("TOPLEFT", container, "TOPLEFT",
+            major * (w + spacing),
+            -(groupIndex * (blockH + spacing) + minor * (h + spacing)))
+    elseif growth == "LEFT" then
+        frame:SetPoint("TOPRIGHT", container, "TOPRIGHT",
+            -major * (w + spacing),
+            -(groupIndex * (blockH + spacing) + minor * (h + spacing)))
+    end
+end
+
 function GF.ShowPreview(kind, count)
     kind = kind or "party"
     count = count or GetDefaultPreviewCount(kind)
     local conf = GF.GetConf(kind)
-    local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
+    local _, _, totalW, totalH, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count)
+    local preservePreviewGroups = PreviewUsesPreservedRaidGroups(kind, conf)
     local key = kind
 
     GF._previewActive[key] = true
@@ -2550,18 +3662,22 @@ function GF.ShowPreview(kind, count)
         f:SetSize(w, h)
         f:ClearAllPoints()
 
-        -- Replicate SecureGroupHeader child layout (corner-anchored)
-        local row = (i - 1) % upc
-        local col = math_floor((i - 1) / upc)
+        if preservePreviewGroups then
+            SetPreservedPreviewPoint(f, container, i, w, h, spacing, growth, primary, blockW, blockH)
+        else
+            -- Replicate SecureGroupHeader child layout (corner-anchored)
+            local row = (i - 1) % upc
+            local col = math_floor((i - 1) / upc)
 
-        if growth == "DOWN" then
-            f:SetPoint("TOPLEFT", container, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
-        elseif growth == "UP" then
-            f:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
-        elseif growth == "RIGHT" then
-            f:SetPoint("TOPLEFT", container, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
-        elseif growth == "LEFT" then
-            f:SetPoint("TOPRIGHT", container, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+            if growth == "DOWN" then
+                f:SetPoint("TOPLEFT", container, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
+            elseif growth == "UP" then
+                f:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
+            elseif growth == "RIGHT" then
+                f:SetPoint("TOPLEFT", container, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
+            elseif growth == "LEFT" then
+                f:SetPoint("TOPRIGHT", container, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+            end
         end
 
         GF.ApplyPreviewData(f, i, kind)
@@ -2572,6 +3688,11 @@ function GF.ShowPreview(kind, count)
             GF.ClearPreviewData(frames[i])
             frames[i]:Hide()
         end
+    end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF.RefreshPreviewGroupBorder
+    then
+        GF.RefreshPreviewGroupBorder(kind)
     end
 end
 
@@ -2590,10 +3711,18 @@ function GF.HidePreview(kind)
     end
     local container = GF._previewContainer and GF._previewContainer[kind]
     if container then container:Hide() end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF.RefreshPreviewGroupBorder
+    then
+        GF.RefreshPreviewGroupBorder(kind)
+    end
 end
 
 local function GF_PreviewsAllowed()
     if _G.MSUF_UnitEditModeActive == true then
+        return true
+    end
+    if _G.MSUF2_GFPagePreviewActive == true then
         return true
     end
     local panel = _G.MSUF_GFOptionsPanel
@@ -2628,7 +3757,8 @@ function GF.RefreshPreviewLayout(kind)
     if not frames then return end
     local count = GetPreviewShownCount(kind)
     local conf = GF.GetConf(kind)
-    local _, _, totalW, totalH, w, h, spacing, growth, upc = GF.GetGridMetrics(kind, count)
+    local _, _, totalW, totalH, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count)
+    local preservePreviewGroups = PreviewUsesPreservedRaidGroups(kind, conf)
 
     -- Update container position (grid center = stored offset)
     local container = GF._previewContainer and GF._previewContainer[kind]
@@ -2656,19 +3786,28 @@ function GF.RefreshPreviewLayout(kind)
             f:SetSize(w, h)
             if f.barGroup then f.barGroup:SetSize(w, h) end
             f:ClearAllPoints()
-            local row = (i - 1) % upc
-            local col = math_floor((i - 1) / upc)
             local c = container or UIParent
-            if growth == "DOWN" then
-                f:SetPoint("TOPLEFT", c, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
-            elseif growth == "UP" then
-                f:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
-            elseif growth == "RIGHT" then
-                f:SetPoint("TOPLEFT", c, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
-            elseif growth == "LEFT" then
-                f:SetPoint("TOPRIGHT", c, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+            if preservePreviewGroups then
+                SetPreservedPreviewPoint(f, c, i, w, h, spacing, growth, primary, blockW, blockH)
+            else
+                local row = (i - 1) % upc
+                local col = math_floor((i - 1) / upc)
+                if growth == "DOWN" then
+                    f:SetPoint("TOPLEFT", c, "TOPLEFT", col * (w + spacing), -row * (h + spacing))
+                elseif growth == "UP" then
+                    f:SetPoint("BOTTOMLEFT", c, "BOTTOMLEFT", col * (w + spacing), row * (h + spacing))
+                elseif growth == "RIGHT" then
+                    f:SetPoint("TOPLEFT", c, "TOPLEFT", row * (w + spacing), -col * (h + spacing))
+                elseif growth == "LEFT" then
+                    f:SetPoint("TOPRIGHT", c, "TOPRIGHT", -row * (w + spacing), -col * (h + spacing))
+                end
             end
         end
+    end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and GF.RefreshPreviewGroupBorder
+    then
+        GF.RefreshPreviewGroupBorder(kind)
     end
 end
 
@@ -2686,19 +3825,25 @@ end
 
 function GF.RebuildAll()
     if InCombatLockdown() then
-        GF._pendingRebuild = true
+        GF.UpdateAnyEnabledFlag()
+        if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(false) end
+        if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+        MarkPostCombatHeaderRecovery()
         return
     end
+    MarkHeaderScanInputsChanged()
     GF.HideOrphanedPreviews()
     local partyConf = GF.GetConf("party")
     local raidKind = GetLiveRaidKind()
     local raidConf  = GF.GetConf(raidKind)
     GF.UpdateAnyEnabledFlag()
+    if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
 
     local inRaid = IsInRaid and IsInRaid() or false
 
+    _rebuildAllActive = true
     -- Party: build once, show only outside raid
-    if partyConf.enabled then
+    if partyConf.enabled == true then
         SetupPartyHeader()
         if inRaid and GF.headers.party then
             GF.headers.party:Hide()
@@ -2708,48 +3853,80 @@ function GF.RebuildAll()
     end
 
     -- Raid: build once, show only in raid
-    if raidConf.enabled then
+    if raidConf.enabled == true then
         SetupRaidHeader()
-        if not inRaid and GF.headers.raid then
-            GF.headers.raid:Hide()
+        if not inRaid then
+            HideRaidHeaders()
         end
-    elseif GF.headers.raid then
-        GF.headers.raid:Hide()
+    else
+        HideRaidHeaders()
     end
+    _rebuildAllActive = false
 
     GF.DisableBlizzardFrames()
     GF.RefreshPreviewLayout("party")
     GF.RefreshPreviewLayout("raid")
     GF.RefreshPreviewLayout("mythicraid")
     -- Deferred: after SecureGroupHeader repositions children, re-apply visuals (geometry, bars, text)
+    local function ClearBuiltRegisteredUnits(...)
+        for ci = 1, select("#", ...) do
+            local ch = select(ci, ...)
+            if ch and ch._msufGFBuilt then
+                ch._msufGFRegisteredUnit = nil
+            end
+        end
+    end
     C_Timer.After(0.05, function()
+        if InCombatLockdown() then
+            MarkPostCombatHeaderRecovery()
+            return
+        end
+        MarkHeaderScanInputsChanged()
         -- Force event re-registration (picks up aura/dispel toggle changes)
         for _, kind in pairs({"party"}) do
             local hdr = GF.headers[kind]
-            if hdr then
-                local kids = { hdr:GetChildren() }
-                for ci = 1, #kids do
-                    local ch = kids[ci]
-                    if ch and ch._msufGFBuilt then
-                        ch._msufGFRegisteredUnit = nil
-                    end
-                end
+            if hdr and GF.IsKindEnabled(kind) then
+                ClearBuiltRegisteredUnits(hdr:GetChildren())
                 ScanHeaderChildren(hdr, kind, true)
             end
         end
-        local hdr = GF.headers.raid
-        if hdr then
-            local kids = { hdr:GetChildren() }
-            for ci = 1, #kids do
-                local ch = kids[ci]
-                if ch and ch._msufGFBuilt then
-                    ch._msufGFRegisteredUnit = nil
-                end
-            end
-            ScanHeaderChildren(hdr, GetLiveRaidKind(), true)
+        if GF.IsKindEnabled(GetLiveRaidKind()) then
+            ForEachRaidHeader(function(hdr)
+                ClearBuiltRegisteredUnits(hdr:GetChildren())
+            end)
+            ScanRaidHeaders(GetLiveRaidKind(), true)
         end
         GF.MarkAllDirty(GF.DIRTY_ALL)
+        if GF.RefreshGroupBorders then GF.RefreshGroupBorders() end
+        if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
     end)
+end
+
+function GF.RefreshOutlineGeometry()
+    if InCombatLockdown() then
+        GF._pendingRefreshGeometry = true
+        GF._pendingRefreshVisuals = true
+        MarkPostCombatHeaderRecovery()
+        return
+    end
+    if GF.InvalidateConfCache then GF.InvalidateConfCache() end
+    MarkHeaderScanInputsChanged()
+
+    local partyHeader = GF.headers and GF.headers.party
+    if partyHeader and GF.IsKindEnabled("party") then
+        ScanHeaderChildren(partyHeader, "party", true)
+    end
+
+    local raidKind = GetLiveRaidKind()
+    if GF.IsKindEnabled(raidKind) then
+        ScanRaidHeaders(raidKind, true)
+    end
+
+    if GF.RefreshVisuals then
+        GF.RefreshVisuals()
+    elseif GF.MarkAllDirty then
+        GF.MarkAllDirty((GF.DIRTY_GEOMETRY or 0x01) + (GF.DIRTY_BORDER or 0x10) + (GF.DIRTY_LAYOUT or 0x20))
+    end
 end
 
 local function GF_DifficultySignature()
@@ -2774,8 +3951,11 @@ end
 function GF.UpdateGroupVisibility()
     if InCombatLockdown() then
         GF._pendingVisibilityUpdate = true
+        GF.UpdateAnyEnabledFlag()
+        if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(false) end
         return
     end
+    MarkHeaderScanInputsChanged()
     local inRaid = IsInRaid and IsInRaid() or false
     local partyConf = GF.GetConf("party")
     local raidKind = GetLiveRaidKind()
@@ -2784,38 +3964,52 @@ function GF.UpdateGroupVisibility()
 
     -- Party header
     if GF.headers.party then
-        if partyConf.enabled and not inRaid then
+        if partyConf.enabled == true and not inRaid then
             GF.SyncHeaderPosition("party")
             GF.headers.party:Show()
-            C_Timer.After(0, function()
-                if GF.headers.party then ScanHeaderChildren(GF.headers.party, "party", true) end
-            end)
-            C_Timer.After(0.5, function()
-                if GF.headers.party and not InCombatLockdown() then
-                    ScanHeaderChildren(GF.headers.party, "party", true)
-                end
-            end)
+            ScheduleHeaderChildScan("party", 0, "party")
+            ScheduleHeaderChildScan("party", 0.5, "party")
         else
             GF.headers.party:Hide()
+            if GF.DeactivateKindRuntime then GF.DeactivateKindRuntime("party", true) end
         end
     end
 
     -- Raid header
-    if GF.headers.raid then
-        if raidConf.enabled and inRaid then
-            GF.SyncHeaderPosition(raidKind, nil, GF.headers.raid)
-            GF.headers.raid:Show()
-            C_Timer.After(0, function()
-                if GF.headers.raid then ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind(), true) end
-            end)
-            C_Timer.After(0.5, function()
-                if GF.headers.raid and not InCombatLockdown() then
-                    ScanHeaderChildren(GF.headers.raid, GetLiveRaidKind(), true)
-                end
-            end)
+    if AnyRaidHeader() then
+        if raidConf.enabled == true and inRaid then
+            GF.SyncHeaderPosition(raidKind)
+            ShowRaidHeaders(raidKind)
+            ScheduleHeaderChildScan("raid", 0, raidKind)
+            ScheduleHeaderChildScan("raid", 0.5, raidKind)
         else
-            GF.headers.raid:Hide()
+            HideRaidHeaders()
         end
+    end
+    if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
+    if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+    if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+end
+
+local _gfVisibilityQueued = false
+local function GF_FlushGroupVisibility()
+    _gfVisibilityQueued = false
+    GF.UpdateGroupVisibility()
+end
+
+local function GF_RequestGroupVisibility()
+    if InCombatLockdown() then
+        GF._pendingVisibilityUpdate = true
+        return
+    end
+    if _gfVisibilityQueued then return end
+    _gfVisibilityQueued = true
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("GF_CORE_VISIBILITY", GF_FlushGroupVisibility)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, GF_FlushGroupVisibility)
+    else
+        GF_FlushGroupVisibility()
     end
 end
 
@@ -2828,41 +4022,26 @@ local function OnEvent(self, event, ...)
         local partyConf = GF.GetConf("party")
         local raidConf  = GF.GetConf(GetLiveRaidKind())
         GF.UpdateAnyEnabledFlag()
-        if partyConf.enabled or raidConf.enabled then
+        if partyConf.enabled == true or raidConf.enabled == true then
             GF.RebuildAll()
+        else
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
         end
         GF_UpdateDifficultyCache()
 
     elseif event == "GROUP_ROSTER_UPDATE" then
+        MarkHeaderScanInputsChanged()
+        GF.UpdateAnyEnabledFlag()
+        if not GF._anyEnabled then
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(not (InCombatLockdown and InCombatLockdown())) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+            return
+        end
         -- Switch party/raid visibility + rescan children
-        GF.UpdateGroupVisibility()
-
-        -- Refresh sort order when role-sorting with NAMELIST is active
-        -- (SecureGroupHeader auto-sorts for native groupBy modes,
-        -- but NAMELIST sort needs manual refresh on roster changes)
-        local needSortRefresh = false
-        local partyConf = GF.GetConf("party")
-        local raidConf  = GF.GetConf(GetLiveRaidKind())
-        if partyConf.separateMeleeRanged and partyConf.sortByRole then
-            needSortRefresh = true
-        end
-        local raidSort = raidConf.sortMode or (raidConf.sortByRole and "ROLE" or "INDEX")
-        if raidConf.separateMeleeRanged and raidSort == "ROLE" then
-            needSortRefresh = true
-        end
-        if needSortRefresh then
-            if InCombatLockdown() then
-                GF._pendingRebuild = true
-            else
-                C_Timer.After(0.2, function()
-                    if not InCombatLockdown() then
-                        GF.RebuildAll()
-                    else
-                        GF._pendingRebuild = true
-                    end
-                end)
-            end
-        end
+        GF_RequestGroupVisibility()
 
         -- Invalidate group size cache (dynamic aura scale)
         if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
@@ -2880,9 +4059,20 @@ local function OnEvent(self, event, ...)
             GF._pendingBlizzardDisable = nil
             GF.DisableBlizzardFrames()
         end
+        GF.UpdateAnyEnabledFlag()
+        if not GF._anyEnabled then
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+            GF._pendingRebuild = nil
+            GF._pendingVisibilityUpdate = nil
+            GF._pendingRefreshGeometry = nil
+            GF._pendingRefreshVisuals = nil
+            return
+        end
         -- Force rebuild if headers don't exist (mid-combat /reload recovery)
         local needRebuild = GF._pendingRebuild
-        if not GF.headers.party and not GF.headers.raid then needRebuild = true end
+        if not GF.headers.party and not AnyRaidHeader() then needRebuild = true end
         if needRebuild then
             GF._pendingRebuild = nil
             GF.RebuildAll()
@@ -2892,19 +4082,14 @@ local function OnEvent(self, event, ...)
             GF._pendingVisibilityUpdate = nil
             GF.UpdateGroupVisibility()
         end
-
-        -- EQoL pattern: refresh range fade on combat end.
-        -- UNIT_IN_RANGE_UPDATE fires less frequently OOC;
-        -- sweep all frames to ensure correct alpha after combat.
-        C_Timer.After(0.1, function()
-            local updateRange = _G.MSUF_GF_UpdateRange
-            if not updateRange then return end
-            GF.ForEachFrame(function(f)
-                if f.unit and f:IsVisible() then
-                    updateRange(f, f.unit)
-                end
-            end)
-        end)
+        if GF._pendingRefreshGeometry then
+            GF._pendingRefreshGeometry = nil
+            if GF.RefreshGeometry then GF.RefreshGeometry() end
+        end
+        if GF._pendingRefreshVisuals then
+            GF._pendingRefreshVisuals = nil
+            if GF.RefreshVisuals then GF.RefreshVisuals() end
+        end
 
     elseif event == "PLAYER_ENTERING_WORLD" then
         local isLogin, isReload = ...
@@ -2912,7 +4097,7 @@ local function OnEvent(self, event, ...)
         local partyConf = GF.GetConf("party")
         local raidConf  = GF.GetConf(GetLiveRaidKind())
         GF.UpdateAnyEnabledFlag()
-        if partyConf.enabled or raidConf.enabled then
+        if partyConf.enabled == true or raidConf.enabled == true then
             -- Only recreate headers on actual zone transitions (not /reload).
             -- /reload creates everything fresh anyway, no C-side state bug.
             if not isLogin and not isReload then
@@ -2931,8 +4116,14 @@ local function OnEvent(self, event, ...)
                     GF.RebuildAll()
                     GF._forceRecreateHeaders = nil
                     GF_UpdateDifficultyCache()
+                else
+                    MarkPostCombatHeaderRecovery()
                 end
             end)
+        else
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(not (InCombatLockdown and InCombatLockdown())) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
         end
     elseif event == "PLAYER_DIFFICULTY_CHANGED" then
         local sig = GF_DifficultySignature()
@@ -2940,10 +4131,17 @@ local function OnEvent(self, event, ...)
             return
         end
         GF._lastDifficultySig = sig
+        GF.UpdateAnyEnabledFlag()
+        if not GF._anyEnabled then
+            if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(not (InCombatLockdown and InCombatLockdown())) end
+            if GF.DisableBlizzardFrames then GF.DisableBlizzardFrames() end
+            if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+            GF_UpdateDifficultyCache()
+            return
+        end
 
         if InCombatLockdown() then
-            GF._pendingRebuild = true
-            GF._pendingVisibilityUpdate = true
+            MarkPostCombatHeaderRecovery()
         else
             local oldKind = GF._lastDifficultyLiveKind
             local switched = false
@@ -2984,6 +4182,7 @@ _G.MSUF_GF_HidePreview      = GF.HidePreview
 _G.MSUF_GF_RebuildAll        = GF.RebuildAll
 _G.MSUF_GF_RefreshAll        = GF.RefreshAll
 _G.MSUF_GF_Refresh           = GF.Refresh
+_G.MSUF_GF_RefreshOutlineGeometry = GF.RefreshOutlineGeometry
 _G.MSUF_GF_RefreshPreviewLayout = GF.RefreshPreviewLayout
 _G.MSUF_GF_DisableBlizzard   = GF.DisableBlizzardFrames
 _G.MSUF_GF_RestoreBlizzard   = GF.RestoreBlizzardFrames

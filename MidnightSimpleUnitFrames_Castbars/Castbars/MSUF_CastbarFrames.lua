@@ -3,6 +3,20 @@
 
 local _G = _G
 
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    local ns = _G.MSUF_NS
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 function _G.MSUF_BuildCastbarFrameElements(self)
     local height = 18
     self:SetHeight(height)
@@ -225,7 +239,7 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
         else label = "Castbar preview"
         end
     end
-    castText:SetText(label)
+    castText:SetText(Tr(label))
     f.castText = castText
 
     local showTime = opts.showTime
@@ -235,7 +249,11 @@ function _G.MSUF_CreateCastbarPreviewFrame(kind, frameName, opts)
         timeText:SetFont(fontPath, fontSize, flags)
         timeText:SetJustifyH("RIGHT")
         timeText:SetPoint("RIGHT", textOverlay, "RIGHT", -2, 0)
-        timeText:SetText(opts.timeLabel or "3.2")
+        local timeLabel = opts.timeLabel
+        if not timeLabel and type(_G.MSUF_GetCastbarTimeFormat) == "function" and type(_G.MSUF_FormatCastbarTimeText) == "function" then
+            timeLabel = _G.MSUF_FormatCastbarTimeText(_G.MSUF_GetCastbarTimeFormat(kind), 3.2, 4.0)
+        end
+        timeText:SetText(timeLabel or "3.2")
         f.timeText = timeText
     end
 

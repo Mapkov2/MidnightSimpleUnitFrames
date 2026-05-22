@@ -1,149 +1,326 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- WoW 12.0.5+ can throw hard errors when SetFont receives a missing asset.
--- Keep one early global guard so LSM entries from disabled/missing media addons
--- cannot break Edit Mode, previews, or runtime text refresh.
-do
-    local FALLBACK_FONT = "Fonts\\FRIZQT__.TTF"
-    local FONT_ALIASES = {
-        ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
-        ["interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway regular.ttf"] = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Fonts\\Expressway Regular.ttf",
-    }
-    local _probeFrame, _probeFS
-    local _fontPathCache = {}
+local _MSUF_KnownFileAssetCache = {}
 
-    local function NormalizeFontFlags(flags)
-        if type(flags) ~= "string" then return "" end
-        flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
-        if flags == "NONE" then return "" end
-        if flags:find(",", 1, true) or flags:find("%s") then
-            flags = flags:gsub("%s*,%s*", ","):gsub(",+", ",")
-            flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
-        end
-        return flags
+local function MSUF_NormalizeFileAssetPath(asset)
+    if type(asset) ~= "string" or asset == "" then return nil end
+    return asset:gsub("/", "\\")
+end
+
+local function MSUF_IsKnownFileAsset(asset)
+    asset = MSUF_NormalizeFileAssetPath(asset)
+    if not asset then return false end
+
+    local cacheKey = asset:lower()
+    local cached = _MSUF_KnownFileAssetCache[cacheKey]
+    if cached ~= nil then return cached end
+
+    local api = _G.C_UIFileAsset
+    if type(api) ~= "table" then
+        return nil
     end
+
+    local knownResult
+    if type(api.IsKnownFile) == "function" then
+        local ok, known = pcall(api.IsKnownFile, asset)
+        if ok and known ~= nil then
+            knownResult = known == true
+            if knownResult then
+                _MSUF_KnownFileAssetCache[cacheKey] = true
+                return true
+            end
+        end
+    end
+
+    if type(api.GetFileID) == "function" then
+        local ok, fileID = pcall(api.GetFileID, asset)
+        if ok then
+            local known = type(fileID) == "number"
+            if known then _MSUF_KnownFileAssetCache[cacheKey] = true end
+            return known
+        end
+    end
+
+    if knownResult ~= nil then
+        if knownResult then _MSUF_KnownFileAssetCache[cacheKey] = true end
+        return knownResult
+    end
+
+    return nil
+end
+
+_G.MSUF_IsKnownFileAsset = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+ns.Util = ns.Util or {}
+ns.Util.IsKnownFileAsset = ns.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
+
+-- Legacy visual-probing font resolvers were intentionally removed. The path-first
+-- pipeline below owns the public font helper globals and guarded SetFont path.
+
+-- Font pipeline v3: path-first, no visual guessing.
+-- A selected SharedMedia font is stored/resolved as the exact file path and is
+-- applied directly. Fallback is only used after SetFont itself rejects the path.
+do
+    local ADDON_FONT_BASE = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Fonts\\"
+    local FALLBACK_FONT = "Fonts\\FRIZQT___CYR.TTF"
+    local FALLBACK_FONT_ALTERNATES = {
+        "Fonts\\FRIZQT___CYR.TTF",
+        "Fonts\\FRIZQT__.TTF",
+        "Fonts\\ARIALN.TTF",
+    }
+
+    local ALIAS_TO_PATH = {
+        FRIZQT = "Fonts\\FRIZQT___CYR.TTF",
+        ARIALN = "Fonts\\ARIALN.TTF",
+        MORPHEUS = "Fonts\\MORPHEUS_CYR.TTF",
+        SKURRI = "Fonts\\SKURRI_CYR.TTF",
+        EXPRESSWAY = ADDON_FONT_BASE .. "Expressway Regular.ttf",
+        EXPRESSWAY_BOLD = ADDON_FONT_BASE .. "Expressway Bold.ttf",
+        EXPRESSWAY_SEMIBOLD = ADDON_FONT_BASE .. "Expressway SemiBold.ttf",
+        EXPRESSWAY_EXTRABOLD = ADDON_FONT_BASE .. "Expressway ExtraBold.ttf",
+        EXPRESSWAY_CONDENSED_LIGHT = ADDON_FONT_BASE .. "Expressway Condensed Light.otf",
+
+        ["Friz Quadrata TT"] = "Fonts\\FRIZQT___CYR.TTF",
+        ["Friz Quadrata (default)"] = "Fonts\\FRIZQT___CYR.TTF",
+        ["Arial Narrow"] = "Fonts\\ARIALN.TTF",
+        ["Arial (default)"] = "Fonts\\ARIALN.TTF",
+        ["Morpheus"] = "Fonts\\MORPHEUS_CYR.TTF",
+        ["Morpheus (default)"] = "Fonts\\MORPHEUS_CYR.TTF",
+        ["Skurri"] = "Fonts\\SKURRI_CYR.TTF",
+        ["Skurri (default)"] = "Fonts\\SKURRI_CYR.TTF",
+        ["Expressway Regular (MSUF)"] = ADDON_FONT_BASE .. "Expressway Regular.ttf",
+        ["Expressway (MSUF)"] = ADDON_FONT_BASE .. "Expressway Regular.ttf",
+        ["Expressway Bold (MSUF)"] = ADDON_FONT_BASE .. "Expressway Bold.ttf",
+        ["Expressway SemiBold (MSUF)"] = ADDON_FONT_BASE .. "Expressway SemiBold.ttf",
+        ["Expressway ExtraBold (MSUF)"] = ADDON_FONT_BASE .. "Expressway ExtraBold.ttf",
+        ["Expressway Condensed Light (MSUF)"] = ADDON_FONT_BASE .. "Expressway Condensed Light.otf",
+    }
 
     local function NormalizeFontPath(path)
         if type(path) ~= "string" or path == "" then return nil end
-        local key = path:gsub("/", "\\"):lower()
-        return FONT_ALIASES[key] or path
-    end
-
-    local function FontPathKey(path)
-        if type(path) ~= "string" or path == "" then return nil end
-        return path:gsub("/", "\\"):lower()
-    end
-
-    local FONT_EQUIV = {
-        ["fonts\\frizqt__.ttf"] = "friz",
-        ["fonts\\frizqt___cyr.ttf"] = "friz",
-        ["fonts\\arialn.ttf"] = "arial",
-        ["fonts\\morpheus.ttf"] = "morpheus",
-        ["fonts\\morpheus_cyr.ttf"] = "morpheus",
-        ["fonts\\skurri.ttf"] = "skurri",
-        ["fonts\\skurri_cyr.ttf"] = "skurri",
-    }
-
-    local function FontPathMatches(requested, actual)
-        local want = FontPathKey(NormalizeFontPath(requested))
-        local got = FontPathKey(NormalizeFontPath(actual))
-        if not want or not got then return false end
-        if want == got then return true end
-        local wantGroup = FONT_EQUIV[want]
-        return wantGroup ~= nil and wantGroup == FONT_EQUIV[got]
-    end
-
-    local function GetProbeFS()
-        if _probeFS then return _probeFS end
-        if type(CreateFrame) ~= "function" then return nil end
-        _probeFrame = _probeFrame or CreateFrame("Frame", "MSUF_FontProbeFrame", UIParent)
-        if _probeFrame and _probeFrame.Hide then _probeFrame:Hide() end
-        if _probeFrame and _probeFrame.CreateFontString then
-            _probeFS = _probeFrame:CreateFontString(nil, "OVERLAY")
-            if _probeFS and _probeFS.Hide then _probeFS:Hide() end
+        path = path:gsub("/", "\\")
+        if path:lower() == "interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway.ttf" then
+            return ADDON_FONT_BASE .. "Expressway Regular.ttf"
         end
-        return _probeFS
+        return path
     end
 
-    local function TrySetFont(fs, path, size, flags)
-        if not (fs and type(fs.SetFont) == "function" and path and size) then return false end
-        return pcall(fs.SetFont, fs, path, size, flags)
+    local function FontAssetAllowed(path)
+        path = NormalizeFontPath(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+        if type(isKnown) == "function" and isKnown(path) == false then return nil end
+        return path
+    end
+
+    local function ResolveFallbackFontPath()
+        for i = 1, #FALLBACK_FONT_ALTERNATES do
+            local path = FontAssetAllowed(FALLBACK_FONT_ALTERNATES[i])
+            if path then return path end
+        end
+        return NormalizeFontPath(FALLBACK_FONT)
+    end
+
+    local function IsPath(value)
+        if type(value) ~= "string" or value == "" then return false end
+        local lower = value:lower()
+        return value:find("\\", 1, true) ~= nil
+            or value:find("/", 1, true) ~= nil
+            or lower:match("%.ttf$") ~= nil
+            or lower:match("%.otf$") ~= nil
+    end
+
+    local function NormalizeFlags(flags)
+        if type(flags) ~= "string" then return "" end
+        flags = flags:gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+        if flags == "NONE" then return "" end
+        return flags:gsub("%s*,%s*", ","):gsub(",+", ","):gsub("^[%s,]+", ""):gsub("[%s,]+$", "")
+    end
+
+    local function GetLSM()
+        local LSM = (ns and ns.LSM) or _G.MSUF_LSM
+        if not LSM and type(_G.LibStub) == "function" then
+            local ok, lib = pcall(_G.LibStub, "LibSharedMedia-3.0", true)
+            if ok then LSM = lib end
+        end
+        return LSM
+    end
+
+    local function FetchLSMFontPath(key)
+        if type(key) ~= "string" or key == "" then return nil end
+        local LSM = GetLSM()
+        if not LSM then return nil end
+        if type(LSM.HashTable) == "function" then
+            local fonts = LSM:HashTable("font")
+            local path = fonts and fonts[key]
+            path = FontAssetAllowed(path)
+            if path then return path end
+        end
+        if type(LSM.Fetch) == "function" then
+            local ok, path = pcall(LSM.Fetch, LSM, "font", key, true)
+            path = ok and FontAssetAllowed(path) or nil
+            if path then return path end
+        end
+        return nil
+    end
+
+    local function ResolveFontKeyPath(value)
+        if IsPath(value) then return FontAssetAllowed(value) end
+        if type(value) ~= "string" or value == "" then return FontAssetAllowed(ALIAS_TO_PATH.FRIZQT) or ResolveFallbackFontPath() end
+        local normalized = type(_G.MSUF_NormalizeFontKey) == "function" and _G.MSUF_NormalizeFontKey(value) or value
+        if IsPath(normalized) then return FontAssetAllowed(normalized) end
+        return FontAssetAllowed(ALIAS_TO_PATH[normalized])
+            or FontAssetAllowed(ALIAS_TO_PATH[value])
+            or FetchLSMFontPath(normalized)
+            or FetchLSMFontPath(value)
+    end
+
+    local function ResolveFontPath(path, _, _, fontKey)
+        return FontAssetAllowed(path) or ResolveFontKeyPath(fontKey) or ResolveFallbackFontPath()
+    end
+
+    local function ApplyOne(fs, path, size, flags)
+        if not (fs and type(fs.SetFont) == "function" and type(path) == "string" and path ~= "") then return false end
+        local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+        if type(isKnown) == "function" and isKnown(path) == false then return false end
+        if fs._msufSafeFontPath == path
+            and fs._msufSafeFontSize == size
+            and fs._msufSafeFontFlags == flags
+        then
+            return true
+        end
+        local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+        if ok and applied ~= false then
+            fs._msufSafeFontPath = path
+            fs._msufSafeFontSize = size
+            fs._msufSafeFontFlags = flags
+        end
+        return ok and applied ~= false
+    end
+
+    local function SetFontSafe(fs, path, size, flags, fontKey)
+        size = tonumber(size) or 12
+        if size <= 0 then size = 12 end
+        flags = NormalizeFlags(flags)
+        local requested = ResolveFontPath(path, size, flags, fontKey)
+        if fs and fs._msufSafeFontRequestPath == requested
+            and fs._msufSafeFontRequestSize == size
+            and fs._msufSafeFontRequestFlags == flags
+        then
+            return true, fs._msufSafeFontAppliedPath or requested, fs._msufSafeFontSource or "cached"
+        end
+
+        if ApplyOne(fs, requested, size, flags) or (flags ~= "" and ApplyOne(fs, requested, size, "")) then
+            if fs then
+                fs._msufSafeFontRequestPath = requested
+                fs._msufSafeFontRequestSize = size
+                fs._msufSafeFontRequestFlags = flags
+                fs._msufSafeFontAppliedPath = requested
+                fs._msufSafeFontSource = "requested"
+            end
+            return true, requested, "requested"
+        end
+        local fallback = ResolveFallbackFontPath()
+        if fallback ~= requested and (ApplyOne(fs, fallback, size, flags) or (flags ~= "" and ApplyOne(fs, fallback, size, ""))) then
+            if fs then
+                fs._msufSafeFontRequestPath = requested
+                fs._msufSafeFontRequestSize = size
+                fs._msufSafeFontRequestFlags = flags
+                fs._msufSafeFontAppliedPath = fallback
+                fs._msufSafeFontSource = "fallback"
+            end
+            return true, fallback, "fallback"
+        end
+        if fs then
+            fs._msufSafeFontRequestPath = nil
+            fs._msufSafeFontRequestSize = nil
+            fs._msufSafeFontRequestFlags = nil
+            fs._msufSafeFontAppliedPath = nil
+            fs._msufSafeFontSource = nil
+        end
+        return false, requested, "failed"
     end
 
     function _G.MSUF_NormalizeFontFlags(flags)
-        return NormalizeFontFlags(flags)
+        return NormalizeFlags(flags)
     end
 
     function _G.MSUF_NormalizeFontPath(path)
         return NormalizeFontPath(path)
     end
 
-    function _G.MSUF_FontPathMatches(requested, actual)
-        return FontPathMatches(requested, actual)
+    function _G.MSUF_FontPathEquals(a, b)
+        a, b = NormalizeFontPath(a), NormalizeFontPath(b)
+        return a ~= nil and b ~= nil and a:lower() == b:lower()
+    end
+    _G.MSUF_FontPathMatches = _G.MSUF_FontPathEquals
+
+    function _G.MSUF_FontLooksLikeBundledExpressway(_, path)
+        local normalized = NormalizeFontPath(path)
+        local key = normalized and normalized:lower() or nil
+        return key ~= nil
+            and key:find("interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway", 1, true) ~= nil
+    end
+
+    function _G.MSUF_ResolveFontKeyPath(key)
+        return ResolveFontKeyPath(key)
+    end
+
+    function _G.MSUF_ResolveFontPath(path, size, flags, fontKey)
+        return ResolveFontPath(path, size, flags, fontKey)
+    end
+
+    function _G.MSUF_SetFontSafe(fs, path, size, flags, fontKey)
+        return SetFontSafe(fs, path, size, flags, fontKey)
     end
 
     function _G.MSUF_ClearResolvedFontPathCache()
-        for k in pairs(_fontPathCache) do
-            _fontPathCache[k] = nil
-        end
     end
 
-    function _G.MSUF_ResolveFontPath(path, size, flags)
-        size = tonumber(size) or 12
-        if size <= 0 then size = 12 end
-        flags = NormalizeFontFlags(flags)
+    function _G.MSUF_PrewarmFontVisualCache()
+        return true
+    end
 
-        local normalized = NormalizeFontPath(path)
-        local cacheKey = tostring(normalized or "") .. "|" .. tostring(flags)
-        local cached = _fontPathCache[cacheKey]
-        if cached then return cached end
+    function _G.MSUF_GetInternalFontPrimaryPath(key)
+        return ResolveFontKeyPath(key)
+    end
 
-        local candidates = {}
-        local seen = {}
-        local function Add(p)
-            p = NormalizeFontPath(p)
-            if type(p) ~= "string" or p == "" or seen[p] then return end
-            seen[p] = true
-            candidates[#candidates + 1] = p
+    function _G.MSUF_GetInternalFontPathCandidates(key, path)
+        return { ResolveFontPath(path, 14, "", key), ResolveFallbackFontPath() }
+    end
+
+    function _G.MSUF_DebugFontProbe(key)
+        if key == nil and _G.MSUF_DB and _G.MSUF_DB.general then
+            key = _G.MSUF_DB.general.fontKey
         end
-        local function AddGameFontAlternates(p)
-            local key = FontPathKey(p)
-            if key == "fonts\\morpheus.ttf" then
-                Add("Fonts\\MORPHEUS_CYR.TTF")
-            elseif key == "fonts\\morpheus_cyr.ttf" then
-                Add("Fonts\\MORPHEUS.TTF")
-            elseif key == "fonts\\skurri.ttf" then
-                Add("Fonts\\SKURRI_CYR.TTF")
-            elseif key == "fonts\\skurri_cyr.ttf" then
-                Add("Fonts\\SKURRI.TTF")
-            end
+        local requested = ResolveFontKeyPath(key)
+        local probe
+        if type(CreateFrame) == "function" then
+            local frame = CreateFrame("Frame")
+            if frame.Hide then frame:Hide() end
+            probe = frame.CreateFontString and frame:CreateFontString(nil, "OVERLAY")
         end
-
-        Add(normalized)
-        AddGameFontAlternates(normalized)
-        Add(FALLBACK_FONT)
-        Add("Fonts\\ARIALN.TTF")
-        Add(STANDARD_TEXT_FONT)
-
-        local probe = GetProbeFS()
-        if probe then
-            for i = 1, #candidates do
-                local p = candidates[i]
-                if TrySetFont(probe, p, size, flags) or (flags ~= "" and TrySetFont(probe, p, size, "")) then
-                    _fontPathCache[cacheKey] = p
-                    return p
-                end
-            end
+        local ok, applied, source = SetFontSafe(probe, requested, 14, "", key)
+        local actual
+        if probe and type(probe.GetFont) == "function" then
+            local okGet, got = pcall(probe.GetFont, probe)
+            if okGet then actual = got end
         end
-
-        local fallback = NormalizeFontPath(FALLBACK_FONT)
-        _fontPathCache[cacheKey] = fallback
-        return fallback
+        return {
+            key = key,
+            requested = requested,
+            ok = ok,
+            applied = applied,
+            actual = actual,
+            source = source,
+            lsm = FetchLSMFontPath(key),
+        }
     end
 
     ns.Util = ns.Util or {}
     ns.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
+    ns.Util.ResolveFontKeyPath = _G.MSUF_ResolveFontKeyPath
+    ns.Util.SetFontSafe = _G.MSUF_SetFontSafe
 end
 
 -- Shared Lib initialization (loaded BEFORE Options and Main)
@@ -171,6 +348,97 @@ local function TryInitLSM()
     return false
 end
 
+local _MSUF_StatusbarMediaRefreshPending = false
+local _MSUF_StatusbarMediaRefreshFrame
+
+local function RunStatusbarMediaRefresh()
+    _MSUF_StatusbarMediaRefreshPending = false
+
+    if type(_G.MSUF_ClearResolvedStatusbarTextureCache) == "function" then
+        pcall(_G.MSUF_ClearResolvedStatusbarTextureCache)
+    end
+
+    local updateBars = _G.MSUF_UpdateAllBarTextures_Immediate or _G.MSUF_UpdateAllBarTextures
+    if type(updateBars) == "function" then pcall(updateBars) end
+
+    if type(_G.MSUF_UpdateAbsorbBarTextures) == "function" then
+        pcall(_G.MSUF_UpdateAbsorbBarTextures)
+    end
+
+    local updateCastbars = _G.MSUF_UpdateCastbarTextures_Immediate or _G.MSUF_UpdateCastbarTextures
+    if type(updateCastbars) == "function" then pcall(updateCastbars) end
+
+    if type(_G.MSUF_ClassPower_RefreshTextures) == "function" then
+        pcall(_G.MSUF_ClassPower_RefreshTextures)
+    end
+
+    local gf = (_G.MSUF_NS and _G.MSUF_NS.GF) or (ns and ns.GF)
+    if gf then
+        if type(gf.InvalidateConfCache) == "function" then pcall(gf.InvalidateConfCache) end
+        if type(gf.RefreshVisuals) == "function" then
+            pcall(gf.RefreshVisuals)
+        elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then
+            pcall(_G.MSUF_GF_RefreshOverlays)
+        end
+    elseif type(_G.MSUF_GF_RefreshOverlays) == "function" then
+        pcall(_G.MSUF_GF_RefreshOverlays)
+    end
+end
+
+local function IsCombatLocked()
+    return (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) and true or false
+end
+
+local function EnsureStatusbarMediaRefreshFrame()
+    if _MSUF_StatusbarMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
+        return _MSUF_StatusbarMediaRefreshFrame
+    end
+    local frame = _G.CreateFrame("Frame")
+    frame:SetScript("OnEvent", function(self, event)
+        if event ~= "PLAYER_REGEN_ENABLED" then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if _MSUF_StatusbarMediaRefreshPending then
+            if IsCombatLocked() then
+                self:RegisterEvent("PLAYER_REGEN_ENABLED")
+            else
+                RunStatusbarMediaRefresh()
+            end
+        end
+    end)
+    _MSUF_StatusbarMediaRefreshFrame = frame
+    return frame
+end
+
+local function FlushStatusbarMediaRefresh()
+    if IsCombatLocked() then
+        local frame = EnsureStatusbarMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    RunStatusbarMediaRefresh()
+end
+
+local function ScheduleStatusbarMediaRefresh()
+    if _MSUF_StatusbarMediaRefreshPending then return end
+    _MSUF_StatusbarMediaRefreshPending = true
+    if IsCombatLocked() then
+        local frame = EnsureStatusbarMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("LSM_STATUSBAR_MEDIA_REFRESH", FlushStatusbarMediaRefresh)
+    elseif _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, FlushStatusbarMediaRefresh)
+    else
+        FlushStatusbarMediaRefresh()
+    end
+end
+
 local function EnsureLSMCallbacks()
     local LSM = ns.LSM
     if not LSM then return end
@@ -190,12 +458,12 @@ local function EnsureLSMCallbacks()
             if _G.MSUF_DB and _G.MSUF_DB.general and normalizeFontKey(_G.MSUF_DB.general.fontKey) == normalizeFontKey(key) then
                 if _G.C_Timer and _G.C_Timer.After then
                     _G.C_Timer.After(0, function()
-                        if _G.UpdateAllFonts then
-                            _G.UpdateAllFonts()
+                        if _G.MSUF_UpdateAllFonts then
+                            _G.MSUF_UpdateAllFonts()
                         end
                     end)
-                elseif _G.UpdateAllFonts then
-                    _G.UpdateAllFonts()
+                elseif _G.MSUF_UpdateAllFonts then
+                    _G.MSUF_UpdateAllFonts()
                 end
             end
 
@@ -203,9 +471,117 @@ local function EnsureLSMCallbacks()
             if _G.MSUF_RebuildStatusbarChoices then
                 _G.MSUF_RebuildStatusbarChoices()
             end
+            ScheduleStatusbarMediaRefresh()
         end
     end)
 end
+
+-- Shared statusbar texture choices for Menu2 dropdowns.
+-- Returns LibSharedMedia entries with a texture path so the native dropdown can
+-- render a small statusbar preview for every texture.
+local FALLBACK_STATUSBAR_TEXTURES = {
+    { key = "Blizzard",      path = "Interface\\TargetingFrame\\UI-StatusBar" },
+    { key = "Solid",         path = "Interface\\Buttons\\WHITE8X8" },
+    { key = "Flat",          path = "Interface\\Buttons\\WHITE8x8" },
+    { key = "RaidHP",        path = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill" },
+    { key = "RaidPower",     path = "Interface\\RaidFrame\\Raid-Bar-Resource-Fill" },
+    { key = "Skills",        path = "Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar" },
+    { key = "Outline",       path = "Interface\\Tooltips\\UI-Tooltip-Background" },
+    { key = "TooltipBorder", path = "Interface\\Tooltips\\UI-Tooltip-Border" },
+    { key = "DialogBG",      path = "Interface\\DialogFrame\\UI-DialogBox-Background" },
+    { key = "Parchment",     path = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground" },
+}
+
+local function GetStatusbarLSM()
+    local LSM = (ns and ns.LSM) or _G.MSUF_LSM
+    if not LSM and type(_G.LibStub) == "function" then
+        local ok, lib = pcall(_G.LibStub, "LibSharedMedia-3.0", true)
+        if ok then LSM = lib end
+    end
+    return LSM
+end
+
+local function StatusbarAssetAllowed(texture)
+    if type(texture) ~= "string" or texture == "" then return nil end
+    local isKnown = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+    if type(isKnown) == "function" and isKnown(texture) == false then return nil end
+    return texture
+end
+
+local function FetchStatusbarTexture(lsm, key)
+    if type(key) ~= "string" or key == "" then return nil end
+    local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
+    if type(builtins) == "table" then
+        local texture = builtins[key]
+        texture = StatusbarAssetAllowed(texture)
+        if texture then return texture end
+    end
+    for i = 1, #FALLBACK_STATUSBAR_TEXTURES do
+        local item = FALLBACK_STATUSBAR_TEXTURES[i]
+        if item.key == key then return StatusbarAssetAllowed(item.path) end
+    end
+    if key:find("\\", 1, true) or key:find("/", 1, true) then return StatusbarAssetAllowed(key) end
+    if lsm and type(lsm.Fetch) == "function" then
+        local ok, texture = pcall(lsm.Fetch, lsm, "statusbar", key, true)
+        texture = ok and StatusbarAssetAllowed(texture) or nil
+        if texture then return texture end
+    end
+    return nil
+end
+
+local function AddStatusbarItem(out, used, value, text, texture, translate)
+    if type(value) ~= "string" or value == "" or used[value] then return end
+    used[value] = true
+    out[#out + 1] = {
+        value = value,
+        text = text or value,
+        texture = texture,
+        translate = translate,
+    }
+end
+
+local function StatusBarTextureItems(followText)
+    local out, used = {}, {}
+    local lsm = GetStatusbarLSM()
+    if followText then
+        out[#out + 1] = { value = "", text = followText }
+        used[""] = true
+    end
+
+    for i = 1, #FALLBACK_STATUSBAR_TEXTURES do
+        local item = FALLBACK_STATUSBAR_TEXTURES[i]
+        AddStatusbarItem(out, used, item.key, item.key, item.path, false)
+    end
+
+    if lsm and type(lsm.List) == "function" then
+        local okList, names = pcall(lsm.List, lsm, "statusbar")
+        local hash
+        if type(lsm.HashTable) == "function" then
+            local okHash, h = pcall(lsm.HashTable, lsm, "statusbar")
+            if okHash and type(h) == "table" then hash = h end
+        end
+        if okList and type(names) == "table" then
+            table.sort(names, function(a, b)
+                return tostring(a):lower() < tostring(b):lower()
+            end)
+            for i = 1, #names do
+                local name = names[i]
+                if type(name) == "string" and name ~= "" then
+                    local texture = type(hash) == "table" and hash[name] or nil
+                    texture = texture or FetchStatusbarTexture(lsm, name)
+                    AddStatusbarItem(out, used, name, name, texture, false)
+                end
+            end
+        end
+    end
+
+    return out
+end
+
+ns.UI = ns.UI or {}
+ns.UI.StatusBarTextureItems = StatusBarTextureItems
+_G.MSUF_StatusBarTextureItems = StatusBarTextureItems
+_G.MSUF_RebuildStatusbarChoices = _G.MSUF_RebuildStatusbarChoices or function() end
 
 -- Bundled fonts (Media/Fonts)
 
@@ -469,8 +845,9 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
-        if _G.EnsureDB then
-            _G.EnsureDB()
+        local ensureDB = _G.MSUF_EnsureDB
+        if ensureDB then
+            ensureDB()
         end
 
         local g = _G.MSUF_DB and _G.MSUF_DB.general or nil
@@ -494,8 +871,9 @@ do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
-        if _G.EnsureDB then
-            _G.EnsureDB()
+        local ensureDB = _G.MSUF_EnsureDB
+        if ensureDB then
+            ensureDB()
         end
 
         local g = _G.MSUF_DB and _G.MSUF_DB.gameplay or nil

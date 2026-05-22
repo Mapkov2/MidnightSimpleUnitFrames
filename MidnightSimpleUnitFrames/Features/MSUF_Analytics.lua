@@ -197,8 +197,9 @@ local function SanitizeMetricPart(value)
 end
 
 local function EnsureMSUFDB()
-    if type(_G.EnsureDB) == "function" then
-        pcall(_G.EnsureDB)
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        pcall(ensureDB)
     end
 
     local db = _G.MSUF_DB
@@ -294,8 +295,10 @@ local function CollectSessionSnapshot(target)
 
     SafeSwitch(target, "Style_ClassColors", general.useClassColors ~= false)
     SafeSwitch(target, "Style_DarkMode", general.darkMode == true)
-    SafeSwitch(target, "Style_Gradient", general.enableGradient ~= false)
-    SafeSwitch(target, "Style_GlobalScalingDisabled", general.disableScaling == true)
+    SafeSwitch(target, "Style_Gradient", general.enableGradient == true)
+    SafeSwitch(target, "Style_HealthGradient", general.enableHealthGradient ~= false)
+    local uiScale = (type(general.UIScale) == "table") and general.UIScale or nil
+    SafeSwitch(target, "Style_GlobalScalingDisabled", not (uiScale and uiScale.Enabled == true))
     SafeCounter(target, "Profiles_Count", CountProfiles())
     SafeCounter(target, "MSUF_UiScalePct", Round((tonumber(general.msufUiScale) or 1) * 100))
 end

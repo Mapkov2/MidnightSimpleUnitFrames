@@ -1,5 +1,41 @@
--- Castbars/MSUF_CastbarPreviews.lua
--- Zero combat path — only used in MSUF Edit Mode.
+﻿-- Castbars/MSUF_CastbarPreviews.lua
+-- Zero combat path â€” only used in MSUF Edit Mode.
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    local ns = _G.MSUF_NS
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
+local L_PLAYER_CASTBAR_PREVIEW
+local L_TARGET_CASTBAR_PREVIEW
+local L_FOCUS_CASTBAR_PREVIEW
+local L_BOSS_CASTBAR_PREVIEW
+local L_TEST_CAST
+
+local function RefreshLocaleText()
+    L_PLAYER_CASTBAR_PREVIEW = Tr("Player castbar preview")
+    L_TARGET_CASTBAR_PREVIEW = Tr("Target castbar preview")
+    L_FOCUS_CASTBAR_PREVIEW = Tr("Focus castbar preview")
+    L_BOSS_CASTBAR_PREVIEW = Tr("Boss castbar preview")
+    L_TEST_CAST = Tr("Test Cast")
+end
+
+RefreshLocaleText()
+do
+    local ns = _G.MSUF_NS
+    if type(ns) == "table" and type(ns.RegisterLocaleCallback) == "function" then
+        ns.RegisterLocaleCallback("MSUF_CastbarPreviews", RefreshLocaleText)
+    end
+end
 
 local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
@@ -9,6 +45,23 @@ end
 -- The LoD module must anchor Edit Mode previews against that table, otherwise previews
 -- can appear missing (unanchored/off-screen).
 local UnitFrames = _G.MSUF_UnitFrames
+
+local function MSUF_CastbarTestCombatLocked()
+    return _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+end
+
+local function MSUF_FormatPreviewCastTime(frame, current, total)
+    local mode = "CURRENT"
+    local unit = frame and frame.unit
+    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
+        mode = _G.MSUF_GetCastbarTimeFormat(unit)
+    end
+    if frame then frame._msufCastTimeFormat = mode end
+    if type(_G.MSUF_FormatCastbarTimeText) == "function" then
+        return _G.MSUF_FormatCastbarTimeText(mode, current, total)
+    end
+    return string.format("%.1f", tonumber(current) or 0)
+end
 
 local function MSUF_HideBlizzardPlayerCastbar()
     EnsureDB()
@@ -46,6 +99,7 @@ end
 
 function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
     EnsureDB()
+    if active and MSUF_CastbarTestCombatLocked() then active = false end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
 
@@ -100,7 +154,7 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
 
         if isPreview then
             if frame.castText then
-                MSUF_SetTextIfChanged(frame.castText, "Player castbar preview")
+                MSUF_SetTextIfChanged(frame.castText, L_PLAYER_CASTBAR_PREVIEW)
             end
             if frame.timeText then
                 MSUF_SetTextIfChanged(frame.timeText, "")
@@ -190,7 +244,7 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
     f.interruptFeedbackEndTime = nil
 
     if f.castText then
-        MSUF_SetTextIfChanged(f.castText, "Test Cast")
+        MSUF_SetTextIfChanged(f.castText, L_TEST_CAST)
     end
     if f.icon then
         f.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
@@ -236,6 +290,11 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
         if not self.MSUF_testMode or not self.statusBar then
             return
         end
+        if MSUF_CastbarTestCombatLocked() then
+            self.MSUF_testMode = nil
+            self:SetScript("OnUpdate", nil)
+            return
+        end
         local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
         local d = self.MSUF_testDuration or 4.0
         if d <= 0 then d = 4.0 end
@@ -261,7 +320,7 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
             local remain = d - p
             if remain < 0 then remain = 0 end
             if showTime then
-                MSUF_SetTextIfChanged(self.timeText, string.format("%.1f", remain))
+                MSUF_SetTextIfChanged(self.timeText, MSUF_FormatPreviewCastTime(self, remain, d))
             else
                 MSUF_SetTextIfChanged(self.timeText, "")
             end
@@ -293,6 +352,11 @@ end
 -- Cluster E: Shared OnUpdate for simple preview dummy casts (Target, Focus).
 local function _MSUF_SimplePreview_OnUpdate(self)
     if not self or not self._msufTestActive then return end
+    if MSUF_CastbarTestCombatLocked() then
+        self._msufTestActive = nil
+        self:SetScript("OnUpdate", nil)
+        return
+    end
 
     local now = GetTime()
     local elapsed = now - (self.MSUF_testStart or now)
@@ -309,7 +373,7 @@ local function _MSUF_SimplePreview_OnUpdate(self)
     if self.timeText and self.timeText.SetText then
         local showTime = self._msufTestShowTime
         if showTime then
-            self.timeText:SetText(string.format("%.1f", remaining))
+            self.timeText:SetText(MSUF_FormatPreviewCastTime(self, remaining, dur))
             self.timeText:SetAlpha(1)
         else
             self.timeText:SetText("")
@@ -324,6 +388,7 @@ end
 
 local function _MSUF_SetSimpleCastbarTestMode(cfg, active, keepSetting)
     EnsureDB()
+    if active and MSUF_CastbarTestCombatLocked() then active = false end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
 
@@ -382,7 +447,7 @@ local function _MSUF_SetSimpleCastbarTestMode(cfg, active, keepSetting)
     if MSUF_UpdateCastbarVisuals then MSUF_UpdateCastbarVisuals() end
 
     if f.castText and f.castText.SetText then
-        f.castText:SetText("Test Cast")
+        f.castText:SetText(L_TEST_CAST)
         f.castText:Show()
         f.castText:SetAlpha(1)
     end
@@ -423,7 +488,7 @@ function _G.MSUF_SetTargetCastbarTestMode(active, keepSetting)
         previewName = "MSUF_TargetCastbarPreview",
         reanchorFn  = "MSUF_ReanchorTargetCastBar",
         showTimeKey = "showTargetCastTime",
-        label       = "Target castbar preview",
+        label       = L_TARGET_CASTBAR_PREVIEW,
     }, active, keepSetting)
 end
 
@@ -435,7 +500,7 @@ function _G.MSUF_SetFocusCastbarTestMode(active, keepSetting)
         previewName = "MSUF_FocusCastbarPreview",
         reanchorFn  = "MSUF_ReanchorFocusCastBar",
         showTimeKey = "showFocusCastTime",
-        label       = "Focus castbar preview",
+        label       = L_FOCUS_CASTBAR_PREVIEW,
     }, active, keepSetting)
 end
 
@@ -444,6 +509,11 @@ end
 -- Cluster E: Named OnUpdate for Boss preview dummy casts (avoids per-frame closure allocation).
 local function _MSUF_BossPreview_OnUpdate(self)
     if not self or not self.MSUF_bossTestMode then return end
+    if MSUF_CastbarTestCombatLocked() then
+        self.MSUF_bossTestMode = nil
+        self:SetScript("OnUpdate", nil)
+        return
+    end
 
     local now = GetTime()
     local elapsed = now - (self.MSUF_testStart or now)
@@ -469,14 +539,15 @@ local function _MSUF_BossPreview_OnUpdate(self)
 
     -- Keep label stable even if other refreshes happen while editing.
     if self.castText and self.castText.GetText and self.castText.SetText then
-        if self.castText:GetText() ~= "Test Cast" then
-            self.castText:SetText("Test Cast")
+        local testLabel = L_TEST_CAST
+        if self.castText:GetText() ~= testLabel then
+            self.castText:SetText(testLabel)
         end
     end
 
     if self.timeText and self.timeText.SetText then
         if self._msufTestShowTime then
-            self.timeText:SetText(string.format("%.1f", remaining))
+            self.timeText:SetText(MSUF_FormatPreviewCastTime(self, remaining, dur))
             self.timeText:SetAlpha(1)
         else
             self.timeText:SetText("")
@@ -491,6 +562,7 @@ end
 
 function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
     EnsureDB()
+    if active and MSUF_CastbarTestCombatLocked() then active = false end
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
 
@@ -508,7 +580,9 @@ function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
     end
 
     -- Make sure previews exist/are positioned before we try to drive a dummy cast.
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 
@@ -554,7 +628,7 @@ function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
                 end
 
                 if f.castText and f.castText.SetText then
-                    f.castText:SetText("Boss castbar preview")
+                    f.castText:SetText(L_BOSS_CASTBAR_PREVIEW)
                 end
                 if f.timeText and f.timeText.SetText then
                     f.timeText:SetText("")
@@ -596,7 +670,7 @@ function _G.MSUF_SetBossCastbarTestMode(active, keepSetting)
         end
 
         if f.castText and f.castText.SetText then
-            f.castText:SetText("Test Cast")
+        f.castText:SetText(L_TEST_CAST)
         end
 
         -- IMPORTANT: Do NOT force-show the icon in test mode.
@@ -687,7 +761,7 @@ local function MSUF_CreatePlayerCastbarPreview()
         strata = "DIALOG",
         width  = w,
         height = h,
-        label  = "Player castbar preview",
+        label  = L_PLAYER_CASTBAR_PREVIEW,
         showIcon = true,
         showTime = true,
         bgAlpha = 0.8,
@@ -734,7 +808,7 @@ local function MSUF_CreateTargetCastbarPreview()
         strata = "DIALOG",
         width  = w,
         height = h,
-        label  = "Target castbar preview",
+        label  = L_TARGET_CASTBAR_PREVIEW,
         showIcon = true,
         showTime = true,
         bgAlpha = 0.8,
@@ -779,7 +853,7 @@ local function MSUF_CreateFocusCastbarPreview()
         strata = "DIALOG",
         width  = w,
         height = h,
-        label  = "Focus castbar preview",
+        label  = L_FOCUS_CASTBAR_PREVIEW,
         showIcon = true,
         showTime = true,
         bgAlpha = 0.8,
@@ -1013,9 +1087,9 @@ end
     end
 end
 
--- ════════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- Boss Preview shared helpers (4.22 Beta hotfix)
--- ════════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- Module-scope helpers used by Setup/Refresh paths. Defined ONCE at file
 -- load (no per-call closure allocation), and used as stable references to
 -- C_Timer.After / Scheduler.ScheduleOnce so neither path produces garbage
@@ -1026,7 +1100,7 @@ end
 -- the preview during combat does nothing visible -- so we skip everything
 -- for 0 overhead and replay once at PLAYER_REGEN_ENABLED if any event was
 -- dropped. This kills the entire 20/sec burst path during boss combat.
--- ════════════════════════════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 local _pendingPostCombatRefresh = false
 
@@ -1088,13 +1162,51 @@ end
 -- The hooksecurefunc on MSUF_UpdateBossCastbarPreview will trigger Setup
 -- automatically; we do NOT call Setup explicitly any more (was double-work).
 local function _DoBossPreviewRefresh()
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    if _BossPreviewCombatLockdown() then
+        _pendingPostCombatRefresh = true
+        return
+    end
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 end
 
+local _bossPreviewEventsRegistered = false
+local _bossPreviewEvents = {
+    "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "ENCOUNTER_START",
+    "ENCOUNTER_END",
+    "PLAYER_ENTERING_WORLD",
+    "GROUP_ROSTER_UPDATE",
+}
+
+local function _SetBossPreviewEvents(active)
+    if active then
+        if _bossPreviewEventsRegistered then return end
+        _bossPreviewEventsRegistered = true
+        for i = 1, #_bossPreviewEvents do
+            MSUF_EventBus_Register(_bossPreviewEvents[i], "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+        end
+        return
+    end
+    if not _bossPreviewEventsRegistered then return end
+    _bossPreviewEventsRegistered = false
+    if type(MSUF_EventBus_Unregister) ~= "function" then return end
+    for i = 1, #_bossPreviewEvents do
+        MSUF_EventBus_Unregister(_bossPreviewEvents[i], "MSUF_BOSS_PREVIEW")
+    end
+end
+
+local function _OnBossPreviewCombatStart()
+    _pendingPostCombatRefresh = true
+    _SetBossPreviewEvents(false)
+end
+
 -- Replay deferred refresh after combat ends, if any event was dropped.
 local function _OnBossPreviewCombatEnd()
+    _SetBossPreviewEvents(_BossPreviewActiveConfig() ~= nil)
     if not _pendingPostCombatRefresh then return end
     _pendingPostCombatRefresh = false
     if type(_G.MSUF_RefreshBossPreview) == "function" then
@@ -1103,6 +1215,10 @@ local function _OnBossPreviewCombatEnd()
 end
 
 local function _ScheduleBossPreviewRefresh()
+    if _BossPreviewCombatLockdown() then
+        _pendingPostCombatRefresh = true
+        return
+    end
     -- Coalesce via MSUF Scheduler. Multiple events in same frame collapse
     -- to one refresh. Stable callback ref -- no per-event closure alloc.
     if _G.MSUF_ScheduleOnce then
@@ -1173,9 +1289,9 @@ end
 if not _G.MSUF_BossPreviewEventDriver then
     _G.MSUF_BossPreviewEventDriver = true
 
-    -- ────────────────────────────────────────────────────────────────────
+    -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     -- MSUF_RefreshBossPreview (4.22 Beta hotfix)
-    -- ────────────────────────────────────────────────────────────────────
+    -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     -- Original trace (60s boss + 40-man raid) showed this handler firing
     -- 1234x at 20/sec, allocating a fresh closure per call into C_Timer.After
     -- (~1.2k closures/min) and double-calling Setup (once via hooksecurefunc,
@@ -1193,7 +1309,7 @@ if not _G.MSUF_BossPreviewEventDriver then
     --  4. Removed the explicit Setup call in the deferred body (the
     --     hooksecurefunc on Update calls it; was duplicate work).
     --  5. Removed `(MSUF_DB and MSUF_DB.general) or {}` allocation pattern.
-    -- ────────────────────────────────────────────────────────────────────
+    -- â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     function MSUF_RefreshBossPreview(event, ...)
         -- Combat fast-path: ~50ns C-call + 1 bool test, then return.
@@ -1202,6 +1318,7 @@ if not _G.MSUF_BossPreviewEventDriver then
         -- allocations/min and 1234 redundant deferred refreshes/min.
         if _BossPreviewCombatLockdown() then
             _pendingPostCombatRefresh = true
+            _SetBossPreviewEvents(false)
             return
         end
 
@@ -1212,14 +1329,11 @@ if not _G.MSUF_BossPreviewEventDriver then
         _ScheduleBossPreviewRefresh()
     end
 
-    MSUF_EventBus_Register("INSTANCE_ENCOUNTER_ENGAGE_UNIT", "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("ENCOUNTER_START",                "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("ENCOUNTER_END",                  "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("PLAYER_ENTERING_WORLD",          "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
-    MSUF_EventBus_Register("GROUP_ROSTER_UPDATE",            "MSUF_BOSS_PREVIEW", MSUF_RefreshBossPreview)
+    _SetBossPreviewEvents((not _BossPreviewCombatLockdown()) and _BossPreviewActiveConfig() ~= nil)
 
     -- Replay channel: fires once after combat ends, only if any event was
     -- deferred during combat. Stable callback ref.
+    MSUF_EventBus_Register("PLAYER_REGEN_DISABLED",          "MSUF_BOSS_PREVIEW_COMBAT_START", _OnBossPreviewCombatStart)
     MSUF_EventBus_Register("PLAYER_REGEN_ENABLED",           "MSUF_BOSS_PREVIEW_COMBAT_END", _OnBossPreviewCombatEnd)
 end
 
@@ -1228,6 +1342,9 @@ if not _G.MSUF_BossPreviewApplyHooked and type(hooksecurefunc) == "function" the
 
     if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
         hooksecurefunc("MSUF_ApplyBossCastbarPositionSetting", function()
+            if _BossPreviewCombatLockdown() then return end
+            EnsureDB()
+            _SetBossPreviewEvents(_BossPreviewActiveConfig() ~= nil)
             if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
@@ -1236,6 +1353,9 @@ if not _G.MSUF_BossPreviewApplyHooked and type(hooksecurefunc) == "function" the
 
     if type(_G.MSUF_ApplyBossCastbarsEnabled) == "function" then
         hooksecurefunc("MSUF_ApplyBossCastbarsEnabled", function()
+            if _BossPreviewCombatLockdown() then return end
+            EnsureDB()
+            _SetBossPreviewEvents(_BossPreviewActiveConfig() ~= nil)
             if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
@@ -1439,7 +1559,9 @@ function MSUF_UpdatePlayerCastbarPreview()
         if MSUF_FocusCastbarPreview then
             MSUF_FocusCastbarPreview:Hide()
         end
-if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+then
     _G.MSUF_UpdateBossCastbarPreview()
 elseif _G.MSUF_BossCastbarPreview then
     _G.MSUF_BossCastbarPreview:Hide()
@@ -1532,7 +1654,9 @@ end
     elseif MSUF_FocusCastbarPreview then
         MSUF_FocusCastbarPreview:Hide()
     end
-if type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    and type(_G.MSUF_UpdateBossCastbarPreview) == "function"
+then
     _G.MSUF_UpdateBossCastbarPreview()
     MSUF_SetupBossCastbarPreviewEditMode()
 end

@@ -1,4 +1,4 @@
--- MSUF_Castbars.lua
+﻿-- MSUF_Castbars.lua
 
 local addonName, ns = ...
 
@@ -202,7 +202,7 @@ local MSUF_PositionTargetCastbarPreview          = _G.MSUF_PositionTargetCastbar
 local MSUF_PositionFocusCastbarPreview           = _G.MSUF_PositionFocusCastbarPreview
 local MSUF_SetupBossCastbarPreviewEditMode       = _G.MSUF_SetupBossCastbarPreviewEditMode
 -- NOTE: MSUF_RegisterCastbar / MSUF_UnregisterCastbar are defined IN this file
--- (inside the bootstrap do-block below). No local alias here â€” they must write to _G.
+-- (inside the bootstrap do-block below). No local alias here Ã¢â‚¬â€ they must write to _G.
 local MSUF_CreatePlayerCastbarPreview            = _G.MSUF_CreatePlayerCastbarPreview
 local MSUF_CreateTargetCastbarPreview            = _G.MSUF_CreateTargetCastbarPreview
 local MSUF_CreateFocusCastbarPreview             = _G.MSUF_CreateFocusCastbarPreview
@@ -302,11 +302,11 @@ function MSUF_InitSafePlayerCastbar()
             local tick = frame.empowerStageTicks[i]
             if not tick then
                 tick = statusBar:CreateTexture(nil, "OVERLAY")
-                tick:SetColorTexture(1, 1, 1, 0.8) -- dÃƒÂ¼nne helle Linie
+                tick:SetColorTexture(1, 1, 1, 0.8) -- dÃƒÆ’Ã‚Â¼nne helle Linie
                 frame.empowerStageTicks[i] = tick
             end
 
-            tick:SetSize(3, barHeight)  -- 2 px breit, volle HÃƒÂ¶he
+            tick:SetSize(3, barHeight)  -- 2 px breit, volle HÃƒÆ’Ã‚Â¶he
             tick:Hide()                 -- Standard: versteckt, nur bei Empower sichtbar
         end
 
@@ -373,12 +373,21 @@ do
     -- Avoids string.format + SetText when the displayed decimal (0.1s resolution) hasn't changed.
     -- The per-frame field `_msufLastTimeDecimal` stores floor(rem * 10) from the last update.
     local _floor = math.floor
-    local function MSUF_SetCastTimeText_Dedup(frame, rem)
+    local function MSUF_SetCastTimeText_Dedup(frame, rem, total)
         if not frame or not frame.timeText then return end
         local dec = _floor((rem or 0) * 10)
-        if dec == frame._msufLastTimeDecimal then return end
+        local totalDec = total and _floor((total or 0) * 10) or -1
+        local format = frame._msufCastTimeFormat or "CURRENT"
+        if dec == frame._msufLastTimeDecimal
+            and totalDec == frame._msufLastTimeTotalDecimal
+            and format == frame._msufLastTimeFormat
+        then
+            return
+        end
         frame._msufLastTimeDecimal = dec
-        MSUF_SetCastTimeText(frame, rem)
+        frame._msufLastTimeTotalDecimal = totalDec
+        frame._msufLastTimeFormat = format
+        MSUF_SetCastTimeText(frame, rem, total)
     end
 
 
@@ -453,6 +462,13 @@ do
         _castTimeRevLocal = _G.MSUF__castTimeGlobalRev
     end
 
+    local function CastTimeFormatUnit(frame, unit)
+        unit = tostring(unit or ""):lower()
+        if frame and frame._msufIsBossCastbar then return "boss" end
+        if unit:match("^boss%d+$") then return "boss" end
+        return unit
+    end
+
     local function RefreshCastTimeCache(frame)
         if not frame or not frame.unit then
             return true
@@ -472,6 +488,23 @@ do
             enabled = (g.showTargetCastTime ~= false)
         elseif u == "focus" then
             enabled = (g.showFocusCastTime ~= false)
+        elseif frame._msufIsBossCastbar or tostring(u or ""):match("^boss%d+$") then
+            enabled = (g.showBossCastTime ~= false)
+        end
+
+        local oldFormat = frame._msufCastTimeFormat
+        local format = "CURRENT"
+        if not frame.MSUF_gcdActive then
+            local readFormat = _G.MSUF_GetCastbarTimeFormat
+            if type(readFormat) == "function" then
+                format = readFormat(CastTimeFormatUnit(frame, u), g)
+            end
+        end
+        frame._msufCastTimeFormat = format or "CURRENT"
+        if oldFormat ~= frame._msufCastTimeFormat then
+            frame._msufLastTimeDecimal = nil
+            frame._msufLastTimeTotalDecimal = nil
+            frame._msufLastTimeFormat = nil
         end
 
         frame._msufCastTimeEnabled = enabled and true or false
@@ -530,17 +563,31 @@ do
         _HeavyUpdate = _G.MSUF_UpdateCastbarFrame
     end)
 
-    -- Active bar count — replaces `not next(active)` hash lookups.
+    -- Active bar count â€” replaces `not next(active)` hash lookups.
     local activeCount = 0
+    local activeHighFreq = 0
 
-    -- Monotonic clock accumulated from engine elapsed — avoids GetTimePreciseSec in heavy path.
+    -- Monotonic clock accumulated from engine elapsed â€” avoids GetTimePreciseSec in heavy path.
     local _monoClock = 0
 
     local function ManagerOnUpdate(self, elapsed)
         local active = self.active
         if activeCount <= 0 then
+            self._msufTickAccum = 0
             self:Hide()
             return
+        end
+
+        if activeHighFreq <= 0 then
+            local acc = (self._msufTickAccum or 0) + (elapsed or 0)
+            if acc < 0.02 then
+                self._msufTickAccum = acc
+                return
+            end
+            elapsed = acc
+            self._msufTickAccum = 0
+        else
+            self._msufTickAccum = 0
         end
 
         _monoClock = _monoClock + elapsed
@@ -580,7 +627,7 @@ do
                 if rem < 0 then rem = 0 end
                 frame._msufRemaining = rem
 
-                -- Fast-path completion: cast done — immediately cleanup.
+                -- Fast-path completion: cast done â€” immediately cleanup.
                 -- Eliminates ~6 wasted ticks waiting for heavy path to notice.
                 if rem <= 0.001 then
                     if frame.SetSucceeded then
@@ -591,14 +638,22 @@ do
                     -- OnHide hook will unregister; skip to next bar.
                 else
                     local dec = _floor(rem * 10)
-                    if dec ~= frame._msufLastTimeDecimal then
-                        frame._msufLastTimeDecimal = dec
-                        frame.timeText:SetFormattedText("%.1f", rem)
+                    local format = frame._msufCastTimeFormat or "CURRENT"
+                    if format == "CURRENT" then
+                        if dec ~= frame._msufLastTimeDecimal then
+                            frame._msufLastTimeDecimal = dec
+                            frame._msufLastTimeTotalDecimal = -1
+                            frame._msufLastTimeFormat = format
+                            frame.timeText._msufLastText = nil
+                            frame.timeText:SetFormattedText("%.1f", rem)
+                        end
+                    else
+                        MSUF_SetCastTimeText_Dedup(frame, rem, frame._msufPlainTotal)
                     end
 
                     -- Heavy path: only needed for CHANNELS (hard-stop safety + haste markers).
                     -- Non-channeled casts: fast path handles completion + time text fully.
-                    -- GlowFade inlined here — avoids entering the expensive heavy path just for cosmetics.
+                    -- GlowFade inlined here â€” avoids entering the expensive heavy path just for cosmetics.
                     if frame.MSUF_isChanneled then
                         if rem < 1.0 then
                             local cd = frame._msufHeavyIn
@@ -635,7 +690,7 @@ do
                 end
             else
                 -- Non-fast bars (GCD, empower, no timeText, no remaining):
-                -- always need heavy path — it drives everything.
+                -- always need heavy path â€” it drives everything.
                 local cd = frame._msufHeavyIn
                 if cd then
                     cd = cd - elapsed
@@ -656,7 +711,7 @@ do
         end
     end
 
-    -- OnUpdate is toggled via OnShow/OnHide — guarantees zero idle CPU.
+    -- OnUpdate is toggled via OnShow/OnHide â€” guarantees zero idle CPU.
     manager:SetScript("OnShow", function(self)
         self:SetScript("OnUpdate", ManagerOnUpdate)
     end)
@@ -669,6 +724,24 @@ do
     function MSUF_RegisterCastbar(frame)
         if not frame or not frame.statusBar then return end
         if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
+
+        local hasRuntimeState = frame.MSUF_castActive == true
+            or frame.MSUF_gcdActive == true
+            or frame.isEmpower == true
+            or frame.MSUF_timerDriven == true
+            or frame._msufPlainEndTime ~= nil
+            or frame._msufPlainTotal ~= nil
+            or frame.MSUF_durationObj ~= nil
+            or frame.MSUF_castDuration ~= nil
+            or frame.MSUF_channelDuration ~= nil
+            or frame.castDuration ~= nil
+            or frame.channelDuration ~= nil
+        if not hasRuntimeState then
+            if MSUF_CastbarManager.active[frame] == true and MSUF_UnregisterCastbar then
+                MSUF_UnregisterCastbar(frame)
+            end
+            return
+        end
 
         -- Empower bars drive SetValue() directly (not C-side animated), so they need ~33Hz for smooth fill.
         -- Always re-evaluate when empower state changes (a frame may switch between normal and empower).
@@ -694,9 +767,19 @@ do
             frame._msufRemaining = (rem > 0) and rem or 0
         end
 
+        local highFreq = frame.isEmpower == true
+        local wasActive = MSUF_CastbarManager.active[frame] == true
+        local wasHighFreq = frame._msufManagerHighFreq == true
+        if wasActive and wasHighFreq ~= highFreq then
+            activeHighFreq = activeHighFreq + (highFreq and 1 or -1)
+            if activeHighFreq < 0 then activeHighFreq = 0 end
+        end
+        frame._msufManagerHighFreq = highFreq or nil
+
         -- Only add to active set if not already present.
-        if not MSUF_CastbarManager.active[frame] then
+        if not wasActive then
             activeCount = activeCount + 1
+            if highFreq then activeHighFreq = activeHighFreq + 1 end
             MSUF_CastbarManager.active[frame] = true
         end
 
@@ -731,6 +814,10 @@ do
             MSUF_CastbarManager.active[frame] = nil
             activeCount = activeCount - 1
             if activeCount < 0 then activeCount = 0 end
+            if frame._msufManagerHighFreq then
+                activeHighFreq = activeHighFreq - 1
+                if activeHighFreq < 0 then activeHighFreq = 0 end
+            end
         end
 
         frame._msufNextTick = nil
@@ -738,10 +825,13 @@ do
         frame._msufHardStopNext = nil
         frame._msufZeroCount = nil
         frame._msufLastTimeDecimal = nil
+        frame._msufLastTimeTotalDecimal = nil
+        frame._msufLastTimeFormat = nil
         frame._msufFastText = nil
         frame._msufRemaining = nil
         frame._msufGlowIn = nil
         frame._msufCastTimeWasEnabled = nil
+        frame._msufManagerHighFreq = nil
 
         frame._msufInUnregister = nil
 
@@ -751,8 +841,8 @@ do
     end
 
     -- Secret-safe + cached update: time text and empower stage handling. StatusBar:SetTimerDuration animates the bar.
-    -- `monoClock` = manager's monotonic elapsed accumulator (for relative timing — no C-call).
-    -- `now` = wall clock — only computed when API drift correction actually needs it.
+    -- `monoClock` = manager's monotonic elapsed accumulator (for relative timing â€” no C-call).
+    -- `now` = wall clock â€” only computed when API drift correction actually needs it.
     function MSUF_UpdateCastbarFrame(frame, dt, now, monoClock)
         if not frame or not frame.statusBar then
             return
@@ -809,7 +899,7 @@ do
                 end
             end
 
-            -- oUF-style elapsed accumulator — eliminates GetTimePreciseSec per tick.
+            -- oUF-style elapsed accumulator â€” eliminates GetTimePreciseSec per tick.
             local dur = frame.MSUF_gcdDur or 0
             if dur <= 0 then
                 if _GCDStop then _GCDStop(frame) end
@@ -852,7 +942,7 @@ do
                     frame.statusBar:SetMinMaxValues(0, dur)
                 end
             end
-            -- 12.0: C-engine animates bar via SetTimerDuration → no per-tick SetValue.
+            -- 12.0: C-engine animates bar via SetTimerDuration â†’ no per-tick SetValue.
             -- Fallback for pre-12.0 or missing API: manual SetValue.
             if not frame._msufGcdTimerDriven then
                 if frame.statusBar.SetValue then
@@ -880,9 +970,11 @@ do
 
             if frame.timeText then
                 if castTimeEnabled and showTime then
-                    MSUF_SetCastTimeText_Dedup(frame, rem)
+                    MSUF_SetCastTimeText_Dedup(frame, rem, dur)
                 else
                     frame._msufLastTimeDecimal = nil
+                    frame._msufLastTimeTotalDecimal = nil
+                    frame._msufLastTimeFormat = nil
                     MSUF_SetTextIfChanged(frame.timeText, "")
                 end
             end
@@ -945,7 +1037,7 @@ do
             if frame.timeText and castTimeEnabled then
                 local rem = base - elapsed
                 if rem < 0 then rem = 0 end
-                MSUF_SetCastTimeText_Dedup(frame, rem)
+                MSUF_SetCastTimeText_Dedup(frame, rem, base)
             end
 
             if frame.MSUF_empowerLayoutPending and MSUF_LayoutEmpowerTicks then
@@ -989,7 +1081,7 @@ do
         end
         -- Hard-stop safety: only needed for CHANNELED casts (refresh gaps can cause false "no channel").
         -- Non-channeled casts have triple redundancy: fast-path rem<=0, OnHide hook, remNum<=0.001 safety.
-        -- Uses monotonic clock (mc) for relative timing — no GetTimePreciseSec needed.
+        -- Uses monotonic clock (mc) for relative timing â€” no GetTimePreciseSec needed.
         if frame.MSUF_isChanneled then
             local nxt = frame._msufHardStopNext
             if (not nxt) or (mc >= nxt) then
@@ -1208,7 +1300,7 @@ do
             end
 
             if frame.timeText and castTimeEnabled then
-                MSUF_SetCastTimeText_Dedup(frame, remNum)
+                MSUF_SetCastTimeText_Dedup(frame, remNum, totalNum)
             end
 
             -- "Glow effect": fade towards white as the cast approaches completion.

@@ -53,9 +53,11 @@ local function FlushNextFrame()
         queue[head] = nil
         head = head + 1
 
-        local cb = pending[key]
-        pending[key] = nil
-        if type(cb) == "function" then cb() end
+        if key ~= nil then
+            local cb = pending[key]
+            pending[key] = nil
+            if type(cb) == "function" then cb() end
+        end
     end
 
     -- Items appended during the flush (snapshotTail+1 .. Scheduler.tail).
@@ -64,9 +66,16 @@ local function FlushNextFrame()
     if liveTail >= head then
         local writeIdx = 0
         for i = head, liveTail do
-            writeIdx = writeIdx + 1
-            queue[writeIdx] = queue[i]
+            local key = queue[i]
             queue[i] = nil
+            if key ~= nil then
+                writeIdx = writeIdx + 1
+                queue[writeIdx] = key
+            end
+        end
+        if writeIdx <= 0 then
+            Scheduler.head, Scheduler.tail = 1, 0
+            return
         end
         Scheduler.head = 1
         Scheduler.tail = writeIdx

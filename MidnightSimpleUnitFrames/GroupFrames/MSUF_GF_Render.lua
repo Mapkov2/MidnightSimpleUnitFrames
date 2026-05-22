@@ -9,11 +9,17 @@ _G.MSUF_NS = ns
 local GF = ns.GF
 if not GF then return end
 
+local C_Secrets = _G.C_Secrets
 local issecretvalue = _G.issecretvalue
+    or (C_Secrets and type(C_Secrets.IsSecret) == "function" and C_Secrets.IsSecret)
+    or nil
 local C_Timer = _G.C_Timer
 local CreateFrame = _G.CreateFrame
+local InCombatLockdown = _G.InCombatLockdown
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
+local UnitGUID = _G.UnitGUID
+local UnitIsPlayer = _G.UnitIsPlayer
 local UnitHealth = _G.UnitHealth
 local UnitHealthMax = _G.UnitHealthMax
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
@@ -24,11 +30,48 @@ local type = type
 local tonumber = tonumber
 local math_max = math.max
 local math_floor = math.floor
+local math_ceil = math.ceil
+
+local function RuntimeEnabledForFrame(f)
+    if not f then return false end
+    if f._msufGFPreviewActive then return true end
+    if f.unit and UnitExists and UnitExists(f.unit) and f.IsVisible and f:IsVisible() then
+        return true
+    end
+    local kind = f._msufGFKind or (GF.frames and GF.frames[f]) or "party"
+    return not (GF.IsKindEnabled and not GF.IsKindEnabled(kind))
+end
 
 local MSUF_BETTER_BLIZZARD_TEXTURE = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\BetterBlizzard.blp"
 local UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B = 34/255, 34/255, 34/255
 local _unhaltedTextureChecked, _unhaltedTexture
 local GRAD_KEYS = { "left", "right", "up", "down" }
+
+local function GetSecretValueDetector()
+    local isv = issecretvalue
+    if not isv then
+        local secrets = C_Secrets or _G.C_Secrets
+        C_Secrets = secrets
+        isv = _G.issecretvalue
+            or (secrets and type(secrets.IsSecret) == "function" and secrets.IsSecret)
+            or nil
+        if isv then issecretvalue = isv end
+    end
+    return isv
+end
+
+local function SecretModeActiveWithoutDetector()
+    local secrets = C_Secrets or _G.C_Secrets
+    C_Secrets = secrets
+    local fn = secrets and secrets.ShouldAurasBeSecret
+    return type(fn) == "function" and fn() == true
+end
+
+local function IsSecretRuntimeValue(v)
+    local isv = GetSecretValueDetector()
+    if isv then return isv(v) == true end
+    return type(v) ~= "nil" and SecretModeActiveWithoutDetector()
+end
 
 local function ResolveUnhaltedTexture()
     if _unhaltedTextureChecked then return _unhaltedTexture end
@@ -146,7 +189,7 @@ local DIRTY_GEOMETRY = 0x01   -- size, powerHeight
 local DIRTY_TEXTURE  = 0x02   -- bar texture / background
 local DIRTY_FONT     = 0x04   -- font path / size / outline / color
 local DIRTY_COLOR    = 0x08   -- health color mode, bg, power color
-local DIRTY_BORDER   = 0x10   -- border enable / size / color, aggro/target border style
+local DIRTY_BORDER   = 0x10   -- border paint/color/state, aggro/target border style
 local DIRTY_LAYOUT   = 0x20   -- text anchors, icon positions
 local DIRTY_ALL      = 0x3F
 
@@ -183,10 +226,14 @@ local function _Enqueue(f)
     _queued[f] = true
 end
 
+local _flushQueued = false
 local function _DoFlush()
+    _flushQueued = false
     GF._FlushDirty()
 end
 local function ScheduleFlush()
+    if _flushQueued then return end
+    _flushQueued = true
     local sched = _G.MSUF_ScheduleOnce
     if sched then
         sched("GF_RENDER_FLUSH", _DoFlush)
@@ -311,25 +358,35 @@ local function _GF_SetGrad(tex, orientation, a1, a2, strength)
     if strength > 0 then tex:Show() else tex:Hide() end
 end
 
+local function _GF_GradientKeyActive(conf, key)
+    return conf and conf.hlOverride == true and conf.gradientOverride == true
+        and conf.gradientOverrideVersion == 2
+        and type(conf.gradientOverrideKeys) == "table"
+        and conf.gradientOverrideKeys[key] == true
+end
+
 local function _GF_GradientValue(conf, gen, key, defaultVal)
-    local v = nil
-    if conf and conf.hlOverride == true and conf[key] ~= nil then v = conf[key] end
-    if v == nil and gen then v = gen[key] end
-    if v == nil then return defaultVal end
-    return v
+    if _GF_GradientKeyActive(conf, key) and conf[key] ~= nil then
+        return conf[key]
+    end
+    local v = gen and gen[key]
+    if v ~= nil then return v end
+    return defaultVal
 end
 
 local function _GF_GradientDirState(conf, gen)
-    if conf and conf.hlOverride == true and (
-        conf.gradientDirLeft ~= nil or conf.gradientDirRight ~= nil or
-        conf.gradientDirUp ~= nil or conf.gradientDirDown ~= nil
-    ) then
-        local left  = (conf.gradientDirLeft == true)
-        local right = (conf.gradientDirRight == true)
-        local up    = (conf.gradientDirUp == true)
-        local down  = (conf.gradientDirDown == true)
+    if _GF_GradientKeyActive(conf, "gradientDirLeft")
+        or _GF_GradientKeyActive(conf, "gradientDirRight")
+        or _GF_GradientKeyActive(conf, "gradientDirUp")
+        or _GF_GradientKeyActive(conf, "gradientDirDown")
+        or _GF_GradientKeyActive(conf, "gradientDirection")
+    then
+        local left  = _GF_GradientKeyActive(conf, "gradientDirLeft") and (conf.gradientDirLeft == true) or false
+        local right = _GF_GradientKeyActive(conf, "gradientDirRight") and (conf.gradientDirRight == true) or false
+        local up    = _GF_GradientKeyActive(conf, "gradientDirUp") and (conf.gradientDirUp == true) or false
+        local down  = _GF_GradientKeyActive(conf, "gradientDirDown") and (conf.gradientDirDown == true) or false
         if not left and not right and not up and not down then
-            local dir = conf.gradientDirection
+            local dir = _GF_GradientKeyActive(conf, "gradientDirection") and conf.gradientDirection or nil
             if dir == "LEFT" then left = true
             elseif dir == "UP" then up = true
             elseif dir == "DOWN" then down = true
@@ -355,9 +412,9 @@ local function _GF_ApplyGradientToBar(bar, conf, gen, isPower)
     if not bar then return end
     local strength = tonumber(_GF_GradientValue(conf, gen, "gradientStrength", 0.45)) or 0.45
     if isPower then
-        if _GF_GradientValue(conf, gen, "enablePowerGradient", true) == false then strength = 0 end
+        if _GF_GradientValue(conf, gen, "enablePowerGradient", false) ~= true then strength = 0 end
     else
-        if _GF_GradientValue(conf, gen, "enableGradient", true) == false then strength = 0 end
+        if _GF_GradientValue(conf, gen, "enableGradient", false) ~= true then strength = 0 end
     end
     if strength <= 0 then
         local grads = bar._msufGFGrads
@@ -409,6 +466,8 @@ ApplyGradient = function(f, kind)
     if f.power  then _GF_ApplyGradientToBar(f.power,  conf, gen, true)  end
 end
 
+local ResolveClassColor
+
 ------------------------------------------------------------------------
 -- Apply: bar background tint (missing-health / missing-power background)
 --
@@ -430,11 +489,48 @@ local function ApplyBackgroundTint(f, kind)
     local r = conf.bgR or 0.1
     local g = conf.bgG or 0.1
     local b = conf.bgB or 0.1
+    local hr, hg, hb = r, g, b
     local a = conf.bgA or 0.85
     local hpBgA = conf.hpBgAlpha or a
     local layerA = GetGFBackgroundAlpha(kind, conf)
     local effA = a * layerA
     local effHpBgA = hpBgA * layerA
+
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen and gen.barBgClassColor then
+        local cls
+        if f.unit and UnitExists and UnitExists(f.unit) then
+            local guid = UnitGUID and UnitGUID(f.unit) or f.unit
+            if f._msufGFClassBgGuid == guid then
+                cls = f._msufGFClassBgClass
+            elseif UnitClass and ((not UnitIsPlayer) or UnitIsPlayer(f.unit)) then
+                local _
+                _, cls = UnitClass(f.unit)
+                f._msufGFClassBgGuid = guid
+                f._msufGFClassBgClass = cls
+            else
+                f._msufGFClassBgGuid = guid
+                f._msufGFClassBgClass = nil
+            end
+        else
+            f._msufGFClassBgGuid = nil
+            f._msufGFClassBgClass = nil
+            cls = f._msufGFPreviewClass
+        end
+        if ResolveClassColor then
+            local rev = _G.MSUF_ColorStyleRevision or 0
+            local cr, cg, cb
+            if f._msufGFClassBgColorToken == cls and f._msufGFClassBgColorRev == rev then
+                cr, cg, cb = f._msufGFClassBgR, f._msufGFClassBgG, f._msufGFClassBgB
+            else
+                cr, cg, cb = ResolveClassColor(cls)
+                f._msufGFClassBgColorToken = cls
+                f._msufGFClassBgColorRev = rev
+                f._msufGFClassBgR, f._msufGFClassBgG, f._msufGFClassBgB = cr, cg, cb
+            end
+            if cr then hr, hg, hb = cr, cg, cb end
+        end
+    end
 
     -- Detect if any aura group uses behind-bar
     local auras = conf.auras
@@ -456,9 +552,9 @@ local function ApplyBackgroundTint(f, kind)
         local bbBg = f._msufBehindBarBg
         bbBg:SetAllPoints(f.health)
         bbBg:SetTexture(GF.ResolveBarBgTexture(kind))
-        if f._msufBBgR ~= r or f._msufBBgG ~= g or f._msufBBgB ~= b or f._msufBBgA ~= effHpBgA then
-            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = r, g, b, effHpBgA
-            bbBg:SetVertexColor(r, g, b, effHpBgA)
+        if f._msufBBgR ~= hr or f._msufBBgG ~= hg or f._msufBBgB ~= hb or f._msufBBgA ~= effHpBgA then
+            f._msufBBgR, f._msufBBgG, f._msufBBgB, f._msufBBgA = hr, hg, hb, effHpBgA
+            bbBg:SetVertexColor(hr, hg, hb, effHpBgA)
         end
         bbBg:Show()
         f._msufBehindBarActive = true
@@ -470,10 +566,10 @@ local function ApplyBackgroundTint(f, kind)
             f._msufBehindBarActive = nil
         end
         if f.healthBg then
-            if f._msufGFCachedHBgR ~= r or f._msufGFCachedHBgG ~= g
-               or f._msufGFCachedHBgB ~= b or f._msufGFCachedHBgA ~= effHpBgA then
-                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = r, g, b, effHpBgA
-                f.healthBg:SetVertexColor(r, g, b, effHpBgA)
+            if f._msufGFCachedHBgR ~= hr or f._msufGFCachedHBgG ~= hg
+               or f._msufGFCachedHBgB ~= hb or f._msufGFCachedHBgA ~= effHpBgA then
+                f._msufGFCachedHBgR, f._msufGFCachedHBgG, f._msufGFCachedHBgB, f._msufGFCachedHBgA = hr, hg, hb, effHpBgA
+                f.healthBg:SetVertexColor(hr, hg, hb, effHpBgA)
             end
         end
     end
@@ -487,12 +583,246 @@ local function ApplyBackgroundTint(f, kind)
     end
 end
 
+local function ApplyBackgroundAlpha(f, kind)
+    if not f then return end
+    local conf = GF.GetConf(kind)
+    if not conf then return end
+    local layerA = GetGFBackgroundAlpha(kind, conf)
+    if f.barGroup and f.barGroup.SetBackdropColor then
+        f.barGroup:SetBackdropColor(
+            conf.bgR or 0.1, conf.bgG or 0.1,
+            conf.bgB or 0.1, (conf.bgA or 0.85) * layerA)
+    end
+    ApplyBackgroundTint(f, kind)
+end
+GF.ApplyBackgroundAlpha = ApplyBackgroundAlpha
+
 ------------------------------------------------------------------------
--- Apply: frame border (backdrop bg + edge)
--- Reuses shared tables to avoid allocation per-call
+-- Apply: frame background + outside bar outline
 ------------------------------------------------------------------------
 local _bgOnlyBd = { bgFile = "Interface\\Buttons\\WHITE8x8" }
-local _borderBd = { edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 }
+local _GF_OUTLINE_KEYS = { "top", "bottom", "left", "right" }
+
+local function BorderEffectiveScale(region)
+    if region and region.GetEffectiveScale then
+        local scale = region:GetEffectiveScale()
+        if scale and scale > 0 then return scale end
+    end
+    local parent = _G.UIParent
+    if parent and parent.GetEffectiveScale then
+        local scale = parent:GetEffectiveScale()
+        if scale and scale > 0 then return scale end
+    end
+    return 1
+end
+
+local function BorderPixelToUIUnitFactor()
+    local getSize = _G.GetPhysicalScreenSize
+    if type(getSize) == "function" then
+        local _, physicalHeight = getSize()
+        physicalHeight = tonumber(physicalHeight) or 0
+        if physicalHeight > 0 then return 768 / physicalHeight end
+    end
+    return 1
+end
+
+local function BorderPixelSize(region, value, minPixels)
+    value = tonumber(value) or 0
+    if value == 0 then return 0 end
+
+    local scale = BorderEffectiveScale(region)
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.GetNearestPixelSize) == "function" then
+        local size = pixelUtil.GetNearestPixelSize(value, scale, minPixels)
+        if size and size ~= 0 then return size end
+    end
+
+    local factor = BorderPixelToUIUnitFactor()
+    if factor <= 0 or scale <= 0 then return value end
+
+    local pixels = value * scale / factor
+    if pixels >= 0 then
+        pixels = math_floor(pixels + 0.5)
+    else
+        pixels = math_ceil(pixels - 0.5)
+    end
+
+    minPixels = tonumber(minPixels) or 0
+    if minPixels > 0 then
+        if pixels == 0 then
+            pixels = (value < 0) and -minPixels or minPixels
+        elseif pixels > 0 and pixels < minPixels then
+            pixels = minPixels
+        elseif pixels < 0 and pixels > -minPixels then
+            pixels = -minPixels
+        end
+    end
+
+    return pixels * factor / scale
+end
+
+local function DisableBorderSnap(region)
+    if not region then return end
+    if region.SetSnapToPixelGrid then region:SetSnapToPixelGrid(false) end
+    if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
+end
+
+local function BorderSetPoint(region, ...)
+    if not region then return end
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.SetPoint) == "function" then
+        pixelUtil.SetPoint(region, ...)
+    elseif region.SetPoint then
+        region:SetPoint(...)
+    end
+end
+
+local function BorderSetHeight(region, height)
+    if not region then return end
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.SetHeight) == "function" then
+        pixelUtil.SetHeight(region, height)
+    elseif region.SetHeight then
+        region:SetHeight(height)
+    end
+end
+
+local function BorderSetWidth(region, width)
+    if not region then return end
+    local pixelUtil = _G.PixelUtil
+    if pixelUtil and type(pixelUtil.SetWidth) == "function" then
+        pixelUtil.SetWidth(region, width)
+    elseif region.SetWidth then
+        region:SetWidth(width)
+    end
+end
+
+local function EnsureOutlineLine(owner, key)
+    if not (owner and owner.CreateTexture) then return nil end
+    local lines = owner._msufGFOutlineLines
+    if type(lines) ~= "table" then
+        lines = {}
+        owner._msufGFOutlineLines = lines
+    end
+
+    local line = lines[key]
+    if not (line and line.ClearAllPoints and line.SetPoint and line.SetVertexColor) then
+        line = owner:CreateTexture(nil, "OVERLAY")
+        lines[key] = line
+    end
+
+    if line.SetDrawLayer then line:SetDrawLayer("OVERLAY", 0) end
+    if line.SetTexture then line:SetTexture("Interface\\Buttons\\WHITE8x8") end
+    DisableBorderSnap(line)
+    return line
+end
+
+local function HideOutlineLines(owner)
+    local lines = owner and owner._msufGFOutlineLines
+    if type(lines) ~= "table" then return end
+    for i = 1, #_GF_OUTLINE_KEYS do
+        local line = lines[_GF_OUTLINE_KEYS[i]]
+        if line and line.Hide then line:Hide() end
+    end
+end
+
+local function SetOutlineLineColor(owner, r, g, b, a)
+    local lines = owner and owner._msufGFOutlineLines
+    if type(lines) ~= "table" then return end
+    for i = 1, #_GF_OUTLINE_KEYS do
+        local line = lines[_GF_OUTLINE_KEYS[i]]
+        if line and line.SetVertexColor then
+            line:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
+        end
+    end
+end
+
+local function ReadBarOutlineColor()
+    local fn = _G.MSUF_GetBarOutlineColor
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn)
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
+    local gen = _G.MSUF_DB and _G.MSUF_DB.general
+    if gen then
+        return tonumber(gen.barOutlineColorR) or 0,
+               tonumber(gen.barOutlineColorG) or 0,
+               tonumber(gen.barOutlineColorB) or 0
+    end
+    return 0, 0, 0
+end
+
+local function LayoutOutlineLines(owner, edge)
+    if not owner then return end
+
+    local top = EnsureOutlineLine(owner, "top")
+    local bottom = EnsureOutlineLine(owner, "bottom")
+    local left = EnsureOutlineLine(owner, "left")
+    local right = EnsureOutlineLine(owner, "right")
+
+    if top then
+        top:ClearAllPoints()
+        BorderSetPoint(top, "TOPLEFT", owner, "TOPLEFT", 0, 0)
+        BorderSetPoint(top, "TOPRIGHT", owner, "TOPRIGHT", 0, 0)
+        BorderSetHeight(top, edge)
+        top:Show()
+    end
+    if bottom then
+        bottom:ClearAllPoints()
+        BorderSetPoint(bottom, "BOTTOMLEFT", owner, "BOTTOMLEFT", 0, 0)
+        BorderSetPoint(bottom, "BOTTOMRIGHT", owner, "BOTTOMRIGHT", 0, 0)
+        BorderSetHeight(bottom, edge)
+        bottom:Show()
+    end
+    if left then
+        left:ClearAllPoints()
+        BorderSetPoint(left, "TOPLEFT", owner, "TOPLEFT", 0, 0)
+        BorderSetPoint(left, "BOTTOMLEFT", owner, "BOTTOMLEFT", 0, 0)
+        BorderSetWidth(left, edge)
+        left:Show()
+    end
+    if right then
+        right:ClearAllPoints()
+        BorderSetPoint(right, "TOPRIGHT", owner, "TOPRIGHT", 0, 0)
+        BorderSetPoint(right, "BOTTOMRIGHT", owner, "BOTTOMRIGHT", 0, 0)
+        BorderSetWidth(right, edge)
+        right:Show()
+    end
+end
+
+local function ApplyFrameBorderLevel(f, border)
+    if not (f and border and border.SetFrameLevel) then return end
+    local anchor = f.barGroup or f
+    local anchorLevel = anchor and anchor.GetFrameLevel and anchor:GetFrameLevel() or 0
+    local wantLevel = anchorLevel + 3
+    local minTextLevel
+    local layer = f.nameTextLayer
+    local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level then minTextLevel = level end
+    layer = f.healthTextLayer
+    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level and (not minTextLevel or level < minTextLevel) then
+        minTextLevel = level
+    end
+    layer = f.powerTextLayer
+    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level and (not minTextLevel or level < minTextLevel) then
+        minTextLevel = level
+    end
+    layer = f.statusTextLayer
+    level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
+    if level and (not minTextLevel or level < minTextLevel) then
+        minTextLevel = level
+    end
+    if minTextLevel and wantLevel >= minTextLevel then wantLevel = minTextLevel - 1 end
+    if wantLevel <= anchorLevel then wantLevel = anchorLevel + 1 end
+    if border._msufGFFrameBorderLevel ~= wantLevel then
+        border._msufGFFrameBorderLevel = wantLevel
+        border:SetFrameLevel(wantLevel)
+    end
+end
 
 local function ApplyFrameBorder(f, kind)
     local conf = GF.GetConf(kind)
@@ -500,23 +830,52 @@ local function ApplyFrameBorder(f, kind)
     if not bg then return end
     local fScale = conf._resolvedFrameScale or 1
 
-    bg:SetBackdrop(_bgOnlyBd)
-    bg:SetBackdropColor(
-        conf.bgR or 0.1, conf.bgG or 0.1,
-        conf.bgB or 0.1, (conf.bgA or 0.85) * GetGFBackgroundAlpha(kind, conf))
+    if bg._msufGFBackdropKind ~= "bg" then
+        bg:SetBackdrop(_bgOnlyBd)
+        bg._msufGFBackdropKind = "bg"
+        bg._msufGFBackdropR = nil
+    end
+    local br = conf.bgR or 0.1
+    local bgc = conf.bgG or 0.1
+    local bb = conf.bgB or 0.1
+    local ba = (conf.bgA or 0.85) * GetGFBackgroundAlpha(kind, conf)
+    if bg._msufGFBackdropR ~= br or bg._msufGFBackdropG ~= bgc
+        or bg._msufGFBackdropB ~= bb or bg._msufGFBackdropA ~= ba
+    then
+        bg:SetBackdropColor(br, bgc, bb, ba)
+        bg._msufGFBackdropR, bg._msufGFBackdropG = br, bgc
+        bg._msufGFBackdropB, bg._msufGFBackdropA = bb, ba
+    end
 
     local bf = f._msufGFBorderFrame
     if bf then
         local borderSize = (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2
         if fScale ~= 1 then borderSize = ScaleValue(borderSize, fScale, 0) end
+        ApplyFrameBorderLevel(f, bf)
         if borderSize > 0 then
-            _borderBd.edgeSize = borderSize
-            bf:SetBackdrop(_borderBd)
-            bf:SetBackdropColor(0, 0, 0, 0)
-            bf:SetBackdropBorderColor(0, 0, 0, 1)
-            bf:Show()
+            if bf.SetBackdrop and bf._msufGFLineOutlineBackdropCleared ~= true then
+                bf:SetBackdrop(nil)
+                bf._msufGFLineOutlineBackdropCleared = true
+            end
+            if bf.SetClipsChildren then bf:SetClipsChildren(false) end
+            DisableBorderSnap(bf)
+
+            local edge = BorderPixelSize(bf, borderSize, 1)
+            if edge <= 0 then edge = borderSize end
+            if bf._msufGFBorderSize ~= borderSize or bf._msufGFBorderEdge ~= edge then
+                bf._msufGFBorderSize = borderSize
+                bf._msufGFBorderEdge = edge
+                bf:ClearAllPoints()
+                BorderSetPoint(bf, "TOPLEFT", bg, "TOPLEFT", -edge, edge)
+                BorderSetPoint(bf, "BOTTOMRIGHT", bg, "BOTTOMRIGHT", edge, -edge)
+            end
+            LayoutOutlineLines(bf, edge)
+            local r, g, b = ReadBarOutlineColor()
+            SetOutlineLineColor(bf, r, g, b, 1)
+            if not bf:IsShown() then bf:Show() end
         else
-            bf:Hide()
+            HideOutlineLines(bf)
+            if bf:IsShown() then bf:Hide() end
         end
     end
 end
@@ -537,12 +896,28 @@ local function ApplyEffectBorderStyles(f, kind)
         hlOfs = ScaleValue(hlOfs, fScale)
     end
 
-    local hb = f._msufGFHighlightBorder
-    if hb then
-        hb:ClearAllPoints()
-        hb:SetPoint("TOPLEFT", -hlOfs, hlOfs)
-        hb:SetPoint("BOTTOMRIGHT", hlOfs, -hlOfs)
-        hb:SetFrameLevel(hlLay == "ABOVE_BORDER" and baseLvl + 8 or baseLvl + 3)
+    local function syncHighlightBorder(hb)
+        if not hb then return end
+        local layerOffset = hb._msufHLLayerOffset or GF.LAYER_HIGHLIGHT_BORDER or 10
+        local wantLevel = GF.SyncFrameLayerAbove and GF.SyncFrameLayerAbove(hb, f.health or anchor, layerOffset)
+            or ((f.health and f.health.GetFrameLevel and f.health:GetFrameLevel() or baseLvl) + layerOffset)
+        if hb._msufGFStyleOfs ~= hlOfs then
+            hb._msufGFStyleOfs = hlOfs
+            hb:ClearAllPoints()
+            hb:SetPoint("TOPLEFT", -hlOfs, hlOfs)
+            hb:SetPoint("BOTTOMRIGHT", hlOfs, -hlOfs)
+        end
+        if hb._msufGFStyleLevel ~= wantLevel then
+            hb._msufGFStyleLevel = wantLevel
+            if not GF.SyncFrameLayerAbove then hb:SetFrameLevel(wantLevel) end
+        end
+    end
+    if f._msufGFHighlightBorders then
+        for _, hb in pairs(f._msufGFHighlightBorders) do
+            syncHighlightBorder(hb)
+        end
+    else
+        syncHighlightBorder(f._msufGFHighlightBorder)
     end
 end
 
@@ -554,6 +929,8 @@ local function ApplyFonts(f, kind)
     local fontPath   = GF.ResolveFontPath(kind)
     local fontFlags  = GF.ResolveFontFlags(kind)
     local fr, fg, fb = GF.ResolveFontColor(kind)
+    local db = _G.MSUF_DB
+    local fontKey = db and db.general and db.general.fontKey
     local fScale     = conf._resolvedFrameScale or 1
     local nameSize   = (conf.nameFontSize  or 12) * fScale
     local hpSize     = (conf.hpFontSize    or 10) * fScale
@@ -570,11 +947,18 @@ local function ApplyFonts(f, kind)
     end
 
     -- Skip redundant SetFont (path+size compare) + SetTextColor (color compare)
+    local safeSetFont = _G.MSUF_SetFontSafe
     local function set(fs, size, r, g, b, a)
         if not fs then return end
-        local curP, curS = fs:GetFont()
-        if curP ~= fontPath or curS ~= size then
-            fs:SetFont(fontPath, size, fontFlags)
+        local curP, curS, curF = fs:GetFont()
+        curF = curF or ""
+        local wantF = fontFlags or ""
+        if curP ~= fontPath or curS ~= size or curF ~= wantF then
+            if type(safeSetFont) == "function" then
+                safeSetFont(fs, fontPath, size, wantF, fontKey)
+            else
+                fs:SetFont(fontPath, size, wantF)
+            end
         end
         if r and colorChanged then fs:SetTextColor(r, g, b, a or 1) end
         fs:SetShadowOffset(0, 0)
@@ -612,8 +996,7 @@ local function ApplyGeometry(f, kind)
     local powerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
         or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
         or ScaleValue(conf.powerHeight or 6, fScale, 0))
-    local inset  = math_max(0, (GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind)) or 2)
-    if fScale ~= 1 then inset = ScaleValue(inset, fScale, 0) end
+    local inset  = 0
 
     if f.health then
         f.health:ClearAllPoints()
@@ -666,7 +1049,7 @@ end
 -- Resolve bar color for a class token (shared by live + preview)
 -- Respects global Colors menu custom class color overrides.
 ------------------------------------------------------------------------
-local function ResolveClassColor(cls)
+ResolveClassColor = function(cls)
     if not cls then return nil end
     local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
     if type(fastClass) == "function" then
@@ -747,7 +1130,10 @@ local function ApplyHealthColor(f, kind, unit)
     if mode == "GRADIENT" and unit and UnitExists(unit) then
         local hp    = UnitHealth(unit)
         local hpMax = UnitHealthMax(unit)
-        if issecretvalue and (issecretvalue(hp) or issecretvalue(hpMax)) then
+        local iss = GetSecretValueDetector()
+        local secretHealth = (iss and (iss(hp) or iss(hpMax)))
+            or (not iss and SecretModeActiveWithoutDetector())
+        if secretHealth then
             f.health:SetStatusBarColor(0.2, 0.8, 0.2, 1)
             return
         end
@@ -787,6 +1173,42 @@ local function HidePreserveMissingHP(f)
     if f and f._msufGFMissingHPBg then f._msufGFMissingHPBg:Hide() end
 end
 
+local function ResolvePreserveMissingHPColor(f, kind)
+    local source = f and (f._msufBehindBarBg or f.healthBg)
+    if source and source.GetVertexColor then
+        local r, g, b = source:GetVertexColor()
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            -- Frame API colors can be secret-tagged in Midnight. They are safe
+            -- to pass to C-side color setters, but not to compare/cache in Lua.
+            return r, g, b, 1, true
+        end
+    end
+
+    local conf = GF.GetConf(kind)
+    if conf then
+        return conf.bgR or 0.1,
+            conf.bgG or 0.1,
+            conf.bgB or 0.1,
+            1
+    end
+    return UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1
+end
+
+local function ApplyPreserveMissingHPColor(f, bg, kind)
+    if not bg or not bg.SetStatusBarColor then return end
+    local r, g, b, a, secretColor = ResolvePreserveMissingHPColor(f, kind)
+    if a < 0 then a = 0 elseif a > 1 then a = 1 end
+    if secretColor then
+        bg:SetStatusBarColor(r, g, b, a)
+        bg._msufGFMissingR, bg._msufGFMissingG, bg._msufGFMissingB, bg._msufGFMissingA = nil, nil, nil, nil
+        return
+    end
+    if bg._msufGFMissingR ~= r or bg._msufGFMissingG ~= g or bg._msufGFMissingB ~= b or bg._msufGFMissingA ~= a then
+        bg:SetStatusBarColor(r, g, b, a)
+        bg._msufGFMissingR, bg._msufGFMissingG, bg._msufGFMissingB, bg._msufGFMissingA = r, g, b, a
+    end
+end
+
 local function EnsurePreserveMissingHP(f, kind)
     local h = f and f.health
     if not h then return nil end
@@ -798,26 +1220,35 @@ local function EnsurePreserveMissingHP(f, kind)
         bg = CreateFrame("StatusBar", nil, f.barGroup or f)
         bg:SetMinMaxValues(0, 1)
         bg:SetValue(0)
-        bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
         bg:Hide()
         f._msufGFMissingHPBg = bg
     end
 
-    bg:ClearAllPoints()
-    bg:SetAllPoints(h)
+    if bg._msufGFMissingAnchor ~= h then
+        bg:ClearAllPoints()
+        bg:SetAllPoints(h)
+        bg._msufGFMissingAnchor = h
+    end
     if bg.SetFrameLevel and h.GetFrameLevel then
         local lvl = (h:GetFrameLevel() or 1) - 1
         if lvl < 0 then lvl = 0 end
-        bg:SetFrameLevel(lvl)
+        if bg._msufGFMissingLevel ~= lvl then
+            bg:SetFrameLevel(lvl)
+            bg._msufGFMissingLevel = lvl
+        end
     end
     local tex = ResolveUnhaltedTexture() or GF.ResolveBarBgTexture(kind)
     if tex and bg._msufGFMissingBgTex ~= tex then
         bg:SetStatusBarTexture(tex)
         bg._msufGFMissingBgTex = tex
     end
-    bg:SetStatusBarColor(UNHALTED_BG_R, UNHALTED_BG_G, UNHALTED_BG_B, 1)
+    ApplyPreserveMissingHPColor(f, bg, kind)
     if bg.SetReverseFill and h.GetReverseFill then
-        bg:SetReverseFill(not h:GetReverseFill())
+        local rev = not h:GetReverseFill()
+        if bg._msufGFMissingReverse ~= rev then
+            bg:SetReverseFill(rev)
+            bg._msufGFMissingReverse = rev
+        end
     end
     return bg
 end
@@ -825,39 +1256,79 @@ end
 local function SyncPreserveMissingHP(f, kind, hp, hpMax)
     if not f or not f.health then return end
     kind = kind or f._msufGFKind or "party"
-    local conf = GF.GetConf(kind)
-    local preserve = conf and conf.alphaPreserveHPColor == true
-    if f.healthBg and f.healthBg.SetAlpha then f.healthBg:SetAlpha(preserve and 0 or 1) end
-    if f._msufBehindBarBg and f._msufBehindBarBg.SetAlpha then f._msufBehindBarBg:SetAlpha(preserve and 0 or 1) end
+    local c = f._c
+    local preserve
+    if c and c.alphaPreserveHPColor ~= nil then
+        preserve = c.alphaPreserveHPColor == true
+    else
+        local conf = GF.GetConf(kind)
+        preserve = conf and conf.alphaPreserveHPColor == true
+    end
+    if f._msufGFPreserveAlphaState ~= preserve then
+        f._msufGFPreserveAlphaState = preserve
+        if f.healthBg and f.healthBg.SetAlpha then f.healthBg:SetAlpha(preserve and 0 or 1) end
+        if f._msufBehindBarBg and f._msufBehindBarBg.SetAlpha then f._msufBehindBarBg:SetAlpha(preserve and 0 or 1) end
+    end
     if not preserve then
-        HidePreserveMissingHP(f)
+        if f._msufGFPreserveAlphaState == false
+            and not f._msufGFMissingHPBg
+            and f._msufGFMissingValue == nil
+            and f._msufGFMissingMax == nil then
+            return
+        end
+        if f._msufGFMissingHPBg then HidePreserveMissingHP(f) end
+        f._msufGFMissingValue, f._msufGFMissingMax = nil, nil
         return
     end
 
     local bg = EnsurePreserveMissingHP(f, kind)
     if not bg then return end
+    ApplyPreserveMissingHPColor(f, bg, kind)
     local unit = f.unit
-    if hpMax == nil and unit and UnitHealthMax then hpMax = UnitHealthMax(unit) end
-    if hpMax == nil and f.health.GetMinMaxValues then
+    if type(hpMax) == "nil" and unit and UnitHealthMax then hpMax = UnitHealthMax(unit) end
+    if type(hpMax) == "nil" and f.health.GetMinMaxValues then
         local _, mx = f.health:GetMinMaxValues()
         hpMax = mx
     end
 
     local missing
-    if unit and _G.UnitHealthMissing then
+    local iss = GetSecretValueDetector()
+    local secretNoDetector = not iss and SecretModeActiveWithoutDetector()
+    local comparable = type(hpMax) == "number" and type(hp) == "number"
+        and not secretNoDetector
+        and not (iss and (iss(hpMax) or iss(hp)))
+    if comparable then
+        missing = hpMax - hp
+        if missing < 0 then missing = 0 end
+    elseif unit and _G.UnitHealthMissing then
         missing = _G.UnitHealthMissing(unit, true)
-    end
-    if missing == nil then
-        if hp == nil and unit and UnitHealth then hp = UnitHealth(unit) end
+    elseif not secretNoDetector then
+        if type(hp) == "nil" and unit and UnitHealth then hp = UnitHealth(unit) end
         if type(hpMax) == "number" and type(hp) == "number" then
             missing = hpMax - hp
             if missing < 0 then missing = 0 end
         end
     end
 
-    bg:SetMinMaxValues(0, hpMax or 1)
-    bg:SetValue(missing or 0)
-    bg:Show()
+    local maxValue = (type(hpMax) == "nil") and 1 or hpMax
+    local maxSecret = secretNoDetector or (iss and iss(maxValue))
+    if maxSecret then
+        bg:SetMinMaxValues(0, maxValue)
+        bg._msufGFMissingMax = nil
+    elseif bg._msufGFMissingMax ~= maxValue then
+        bg:SetMinMaxValues(0, maxValue)
+        bg._msufGFMissingMax = maxValue
+    end
+    local value = (type(missing) == "nil") and 0 or missing
+    local valueSecret = secretNoDetector or (iss and iss(value))
+    if valueSecret then
+        bg:SetValue(value)
+        bg._msufGFMissingValue = nil
+    elseif bg._msufGFMissingValue ~= value then
+        bg:SetValue(value)
+        bg._msufGFMissingValue = value
+    end
+    if not bg:IsShown() then bg:Show() end
 end
 GF.SyncPreserveMissingHP = SyncPreserveMissingHP
 
@@ -936,6 +1407,7 @@ local function ApplyHealthBarAlpha(f, kind)
         fgA = 1
     end
     local boolValue = f._msufGFHealthAlphaBool
+    local boolSecret = type(boolValue) ~= "nil" and IsSecretRuntimeValue(boolValue)
     local falseMul = tonumber(f._msufGFHealthAlphaFalseMul) or 1
     if falseMul < 0 then falseMul = 0 elseif falseMul > 1 then falseMul = 1 end
     local falseA = fgA * falseMul
@@ -953,7 +1425,7 @@ local function ApplyHealthBarAlpha(f, kind)
         SetStatusBarTextureAlphaFromBoolean(f.absorbBar, boolValue, activeA, inactiveA)
         SetStatusBarTextureAlphaFromBoolean(f.healAbsorbBar, boolValue, activeA, inactiveA)
         SetStatusBarTextureAlphaFromBoolean(f.incomingHealBar, boolValue, activeA, inactiveA)
-    elseif dynamic and type(boolValue) ~= "nil" and (issecretvalue and issecretvalue(boolValue)) and f.health.SetAlphaFromBoolean then
+    elseif dynamic and type(boolValue) ~= "nil" and boolSecret and f.health.SetAlphaFromBoolean then
         -- Fallback for clients where statusbar textures cannot consume secret
         -- booleans directly.
         f._msufCachedHpBarAlpha = nil
@@ -967,7 +1439,7 @@ local function ApplyHealthBarAlpha(f, kind)
     else
         local mul
         if dynamic then
-            if type(boolValue) ~= "nil" and not (issecretvalue and issecretvalue(boolValue)) then
+            if type(boolValue) ~= "nil" and not boolSecret then
                 mul = (boolValue == false) and falseMul or 1
             else
                 mul = tonumber(f._msufGFHealthAlphaMul) or falseMul
@@ -1049,32 +1521,44 @@ local function ApplyTextLayout(f, kind)
             f.nameText:SetJustifyH("LEFT")
         end
         f.nameText:SetWordWrap(false)
-        if conf.showName ~= false then f.nameText:Show() else f.nameText:Hide() end
+        if GF.ShouldShowNameText and GF.ShouldShowNameText(f, conf) then f.nameText:Show() else f.nameText:Hide() end
     end
 
     -- 3-slot health text
     local hox = ScaleValue(conf.hpOffsetX or 0, fScale)
     local hoy = ScaleValue(conf.hpOffsetY or 0, fScale)
+    local hlx = ScaleValue(conf.hpTextLeftOffsetX or 0, fScale)
+    local hly = ScaleValue(conf.hpTextLeftOffsetY or 0, fScale)
+    local hcx = ScaleValue(conf.hpTextCenterOffsetX or 0, fScale)
+    local hcy = ScaleValue(conf.hpTextCenterOffsetY or 0, fScale)
+    local hrx = ScaleValue(conf.hpTextRightOffsetX or 0, fScale)
+    local hry = ScaleValue(conf.hpTextRightOffsetY or 0, fScale)
     local hpTextOn = conf.showHPText ~= false
-    local tl = hpTextOn and (conf.textLeft  or "NONE") or "NONE"
-    local tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
-    local tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+    local tl, tc, tr
+    if GF.ResolveHealthTextSlots then
+        tl, tc, tr = GF.ResolveHealthTextSlots(conf)
+    else
+        tl = hpTextOn and (conf.textLeft or "NONE") or "NONE"
+        tc = hpTextOn and (conf.textCenter or "NONE") or "NONE"
+        tr = hpTextOn and (conf.textRight or "NONE") or "NONE"
+    end
 
     if f.textLeftFS then
         f.textLeftFS:ClearAllPoints()
-        f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", pad3 + hox, hoy)
+        f.textLeftFS:SetPoint("LEFT", f.health, "LEFT", pad3 + hox + hlx, hoy + hly)
         f.textLeftFS:SetJustifyH("LEFT")
         if tl ~= "NONE" then f.textLeftFS:Show() else f.textLeftFS:SetText(""); f.textLeftFS:Hide() end
     end
     if f.textCenterFS then
         f.textCenterFS:ClearAllPoints()
-        f.textCenterFS:SetPoint("CENTER", f.health, "CENTER", hox, hoy)
+        f.textCenterFS:SetPoint("LEFT", f.health, "LEFT", pad3 + hox + hcx, hoy + hcy)
+        f.textCenterFS:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + hox + hcx, hoy + hcy)
         f.textCenterFS:SetJustifyH("CENTER")
         if tc ~= "NONE" then f.textCenterFS:Show() else f.textCenterFS:SetText(""); f.textCenterFS:Hide() end
     end
     if f.textRightFS then
         f.textRightFS:ClearAllPoints()
-        f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + hox, hoy)
+        f.textRightFS:SetPoint("RIGHT", f.health, "RIGHT", -pad3 + hox + hrx, hoy + hry)
         f.textRightFS:SetJustifyH("RIGHT")
         if tr ~= "NONE" then f.textRightFS:Show() else f.textRightFS:SetText(""); f.textRightFS:Hide() end
     end
@@ -1117,6 +1601,12 @@ local function ApplyTextLayout(f, kind)
     -- 3-slot power text
     local pox = ScaleValue(conf.powerOffsetX or 0, fScale)
     local poy = ScaleValue(conf.powerOffsetY or 0, fScale)
+    local plx = ScaleValue(conf.powerTextLeftOffsetX or 0, fScale)
+    local ply = ScaleValue(conf.powerTextLeftOffsetY or 0, fScale)
+    local pcx = ScaleValue(conf.powerTextCenterOffsetX or 0, fScale)
+    local pcy = ScaleValue(conf.powerTextCenterOffsetY or 0, fScale)
+    local prx = ScaleValue(conf.powerTextRightOffsetX or 0, fScale)
+    local pry = ScaleValue(conf.powerTextRightOffsetY or 0, fScale)
     local effectivePowerH = (GF.GetEffectivePowerHeight and GF.GetEffectivePowerHeight(kind, f.unit, f._msufGFPreviewRole, conf))
         or ((GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind))
         or ScaleValue(conf.powerHeight or 6, fScale, 0))
@@ -1128,19 +1618,19 @@ local function ApplyTextLayout(f, kind)
 
     if f.powerTextLeftFS then
         f.powerTextLeftFS:ClearAllPoints()
-        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", pad2 + pox, poy)
+        f.powerTextLeftFS:SetPoint("LEFT", powerTextAnchor, "LEFT", pad2 + pox + plx, poy + ply)
         f.powerTextLeftFS:SetJustifyH("LEFT")
         if ptl ~= "NONE" then f.powerTextLeftFS:Show() else f.powerTextLeftFS:Hide() end
     end
     if f.powerTextCenterFS then
         f.powerTextCenterFS:ClearAllPoints()
-        f.powerTextCenterFS:SetPoint("CENTER", powerTextAnchor, "CENTER", pox, poy)
+        f.powerTextCenterFS:SetPoint("CENTER", powerTextAnchor, "CENTER", pox + pcx, poy + pcy)
         f.powerTextCenterFS:SetJustifyH("CENTER")
         if ptc ~= "NONE" then f.powerTextCenterFS:Show() else f.powerTextCenterFS:Hide() end
     end
     if f.powerTextRightFS then
         f.powerTextRightFS:ClearAllPoints()
-        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -pad2 + pox, poy)
+        f.powerTextRightFS:SetPoint("RIGHT", powerTextAnchor, "RIGHT", -pad2 + pox + prx, poy + pry)
         f.powerTextRightFS:SetJustifyH("RIGHT")
         if ptr ~= "NONE" then f.powerTextRightFS:Show() else f.powerTextRightFS:Hide() end
     end
@@ -1262,7 +1752,7 @@ local function ApplyOverlayColors(f)
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     local kind = f._msufGFKind or "party"
     -- Incoming heal (heal prediction) — colors from general (shared)
-    if f.incomingHealBar then
+    if f.incomingHealBar and f._c and f._c.healPredEn == true then
         local r, g, b = 0.0, 1.0, 0.4
         if gen then
             if type(gen.healPredColorR) == "number" then r = gen.healPredColorR end
@@ -1313,6 +1803,9 @@ local function ApplyOverlayColors(f)
     -- change, power-row toggle). ApplyOverlayColors fires on DIRTY_COLOR; width
     -- updates from DIRTY_GEOMETRY/DIRTY_LAYOUT are caught by the unconditional
     -- call added in ApplyVisuals below.
+    if f._c and f._c.healPredEn == true and GF._ApplyHealPredAnchor then
+        GF._ApplyHealPredAnchor(f)
+    end
     if GF._ApplyAbsorbAnchor then
         GF._ApplyAbsorbAnchor(f)
     end
@@ -1324,7 +1817,7 @@ end
 local function ApplyVisuals(f, bits)
     if not f then return end
     local kind = f._msufGFKind or "party"
-    local needGeometry = (band(bits, DIRTY_GEOMETRY) ~= 0) or (band(bits, DIRTY_BORDER) ~= 0)
+    local needGeometry = (band(bits, DIRTY_GEOMETRY) ~= 0)
 
     if needGeometry then
         ApplyGeometry(f, kind)
@@ -1337,6 +1830,7 @@ local function ApplyVisuals(f, bits)
     end
     if band(bits, DIRTY_COLOR) ~= 0 then
         ApplyHealthColor(f, kind, f.unit)
+        ApplyBackgroundTint(f, kind)
         ApplyOverlayColors(f)
         ApplyHealthBarAlpha(f, kind)
         ApplyPowerBarAlpha(f, kind)
@@ -1356,11 +1850,20 @@ local function ApplyVisuals(f, bits)
     -- Absorb anchor: ensure mode 4 overflow and mode 3 clipping track hpBar
     -- width changes from DIRTY_GEOMETRY / DIRTY_LAYOUT (not just DIRTY_COLOR
     -- via ApplyOverlayColors). Internal diff-gate short-circuits no-ops at ~2μs.
+    if f._c and f._c.healPredEn == true and GF._ApplyHealPredAnchor then
+        GF._ApplyHealPredAnchor(f)
+    end
     if GF._ApplyAbsorbAnchor then
         GF._ApplyAbsorbAnchor(f)
     end
     -- Rebuild hot-path settings cache (eliminates GF.GetConf from combat events)
     if GF.BuildFrameCache then GF.BuildFrameCache(f) end
+    if _G.MSUF_RoundedUF_Active == true then
+        local applyRounded = _G.MSUF_RoundedUF_OnGroupFrameApplied
+        if type(applyRounded) == "function" then
+            applyRounded(f, kind)
+        end
+    end
 end
 
 ------------------------------------------------------------------------
@@ -1406,7 +1909,7 @@ function GF._FlushDirty()
             _dirtyBits[f] = nil
             _queued[f] = nil
 
-            if bits then
+            if bits and RuntimeEnabledForFrame(f) then
                 anyFlushed = true
                 ApplyVisuals(f, bits)
                 if f._msufGFPreviewActive then
@@ -1480,6 +1983,7 @@ end
 ------------------------------------------------------------------------
 function GF.MarkDirty(f, bits)
     if not f then return end
+    if not RuntimeEnabledForFrame(f) then return end
     bits = bits or DIRTY_ALL
     local prev = _dirtyBits[f] or 0
     _dirtyBits[f] = bor(prev, bits)
@@ -1504,6 +2008,15 @@ end
 ------------------------------------------------------------------------
 function GF.MarkAllDirty(bits)
     bits = bits or DIRTY_ALL
+    if InCombatLockdown and InCombatLockdown() then
+        if GF.UpdateAnyEnabledFlag then GF.UpdateAnyEnabledFlag() end
+        if GF._anyEnabled == false then return end
+        if band(bits, bor(DIRTY_GEOMETRY, DIRTY_LAYOUT)) ~= 0 then
+            GF._pendingRefreshGeometry = true
+        end
+        GF._pendingRefreshVisuals = true
+        return
+    end
 
     -- OOC Options path: one coalesced full refresh. This preserves exact live
     -- feedback for legacy option widgets while combat/runtime remains granular.
@@ -1516,7 +2029,7 @@ function GF.MarkAllDirty(bits)
     if list then
         for i = 1, #list do
             local f = list[i]
-            if f then
+            if f and RuntimeEnabledForFrame(f) then
                 local prev = _dirtyBits[f] or 0
                 _dirtyBits[f] = bor(prev, bits)
                 _Enqueue(f)
@@ -1524,9 +2037,11 @@ function GF.MarkAllDirty(bits)
         end
     else
         for f in pairs(GF.frames) do
-            local prev = _dirtyBits[f] or 0
-            _dirtyBits[f] = bor(prev, bits)
-            _Enqueue(f)
+            if RuntimeEnabledForFrame(f) then
+                local prev = _dirtyBits[f] or 0
+                _dirtyBits[f] = bor(prev, bits)
+                _Enqueue(f)
+            end
         end
     end
     -- Also mark preview frames
@@ -1550,6 +2065,12 @@ end
 -- Use for Options "Apply" when user expects instant feedback.
 ------------------------------------------------------------------------
 function GF.RefreshVisuals()
+    if InCombatLockdown and InCombatLockdown() then
+        if GF.UpdateAnyEnabledFlag then GF.UpdateAnyEnabledFlag() end
+        if GF._anyEnabled == false then return end
+        GF._pendingRefreshVisuals = true
+        return
+    end
     if not _cachedUpdateAll then
         local fn = _G.MSUF_GF_UpdateAll
         if type(fn) == "function" then _cachedUpdateAll = fn end
@@ -1558,7 +2079,7 @@ function GF.RefreshVisuals()
     if list then
         for i = 1, #list do
             local f = list[i]
-            if f then
+            if f and RuntimeEnabledForFrame(f) then
                 ApplyVisuals(f, DIRTY_ALL)
                 if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
                     if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
@@ -1567,9 +2088,11 @@ function GF.RefreshVisuals()
         end
     else
         for f in pairs(GF.frames) do
-            ApplyVisuals(f, DIRTY_ALL)
-            if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
-                if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+            if RuntimeEnabledForFrame(f) then
+                ApplyVisuals(f, DIRTY_ALL)
+                if f.unit and UnitExists(f.unit) and not f._msufGFPreviewActive then
+                    if _cachedUpdateAll then _cachedUpdateAll(f, f.unit) end
+                end
             end
         end
     end
@@ -1589,6 +2112,7 @@ function GF.RefreshVisuals()
     end
     -- Options panel preview (drag-to-position mock frame)
     if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
+    if GF.RefreshGroupBorders then GF.RefreshGroupBorders() end
 end
 
 ------------------------------------------------------------------------
@@ -1614,6 +2138,10 @@ function GF.RefreshColors()
 end
 
 function GF.RefreshGeometry()
+    if InCombatLockdown and InCombatLockdown() then
+        GF._pendingRefreshGeometry = true
+        return
+    end
     GF.MarkAllDirty(bor(DIRTY_GEOMETRY, DIRTY_LAYOUT))
 end
 
@@ -1652,6 +2180,7 @@ do
     if type(origInit) == "function" then
         _G.MSUF_GF_InitButton = function(f, kind)
             origInit(f, kind)
+            if not RuntimeEnabledForFrame(f) then return end
             ApplyVisuals(f, DIRTY_ALL)
         end
     end

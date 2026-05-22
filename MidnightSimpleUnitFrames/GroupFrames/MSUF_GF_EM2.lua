@@ -350,7 +350,8 @@ function HideHeaders()
     if InCombatLockdown() then return end
     local gf = ns.GF; if not gf or not gf.headers then return end
     if gf.headers.party then gf.headers.party:Hide() end
-    if gf.headers.raid  then gf.headers.raid:Hide()  end
+    if type(gf.HideRaidHeaders) == "function" then gf.HideRaidHeaders(true)
+    elseif gf.headers.raid then gf.headers.raid:Hide() end
 end
 
 ------------------------------------------------------------------------
@@ -438,6 +439,11 @@ end
 
 local function EnterEditMode()
     if _em2Active then return end
+    local gf = ns.GF
+    if gf and gf._em2UpdateGroupVisibilityWrapper then
+        gf.UpdateGroupVisibility = gf._em2UpdateGroupVisibilityWrapper
+        _G.MSUF_GF_UpdateGroupVisibility = gf.UpdateGroupVisibility
+    end
     _em2Active = true
     SyncAllContainers()
     HideHeaders()
@@ -452,6 +458,10 @@ local function ExitEditMode()
     -- see _em2Active=false and skip their ShowPreviewOnly() branch.
     _em2Active = false
     _previewShownByEM2 = false
+    if gf._origUpdateGroupVisibility then
+        gf.UpdateGroupVisibility = gf._origUpdateGroupVisibility
+        _G.MSUF_GF_UpdateGroupVisibility = gf.UpdateGroupVisibility
+    end
 
     -- Hide preview frames
     DisablePreviewMouse(false)
@@ -511,8 +521,9 @@ end
 -- Post-Drag hook
 ------------------------------------------------------------------------
 local function HookPostDrag()
-    if type(_G.ApplySettingsForKey) ~= "function" then return end
-    hooksecurefunc("ApplySettingsForKey", function(key)
+    local hookName = type(_G.MSUF_ApplySettingsForKey) == "function" and "MSUF_ApplySettingsForKey" or "ApplySettingsForKey"
+    if type(_G[hookName]) ~= "function" then return end
+    hooksecurefunc(hookName, function(key)
         local keyToKind = {
             gf_party = "party",
             gf_raid = "raid",
@@ -754,11 +765,11 @@ do
         local origUGV = gf.UpdateGroupVisibility
         if type(origUGV) == "function" then
             gf._origUpdateGroupVisibility = origUGV
-            gf.UpdateGroupVisibility = function(...)
+            gf._em2UpdateGroupVisibilityWrapper = function(...)
                 if _em2Active then return end
                 origUGV(...)
             end
-            _G.MSUF_GF_UpdateGroupVisibility = gf.UpdateGroupVisibility
+            _G.MSUF_GF_UpdateGroupVisibility = origUGV
         end
     end)
 end
@@ -861,6 +872,9 @@ local function BuildGFPopup(mode)
             if upc then conf.unitsPerColumn = floor(max(1, min(40, upc)) + 0.5) end
             local mc = popup.mcBox and tonumber(popup.mcBox:GetText())
             if mc then conf.maxColumns = floor(max(1, min(8, mc)) + 0.5) end
+            if popup.preserveRaidGroupsCB then
+                conf.preserveRaidGroups = popup.preserveRaidGroupsCB:GetChecked() and true or false
+            end
         end
 
         -- Name
@@ -948,6 +962,7 @@ local function BuildGFPopup(mode)
         if isRaid then
             S(popup.upcBox, conf.unitsPerColumn or 5)
             S(popup.mcBox,  conf.maxColumns or 8)
+            SC(popup.preserveRaidGroupsCB, conf.preserveRaidGroups == true)
         end
 
         -- Name
@@ -1011,8 +1026,10 @@ local function BuildGFPopup(mode)
     local lSP = F.PairRow(popup, lB, lC, { label1="Spacing:", label2="PBar H:",
         key1="spacingBox", key2="pbhBox", onChanged=Apply })
     if isRaid then
-        F.PairRow(popup, lB, lC, { label1="Units/Col:", label2="Max Cols:",
+        local lRaid = F.PairRow(popup, lB, lC, { label1="Units/Col:", label2="Max Cols:",
             key1="upcBox", key2="mcBox", anchorTo=lSP, onChanged=Apply })
+        F.CheckRow(popup, lB, lC, { label="Preserve raid groups",
+            cbKey="preserveRaidGroupsCB", anchorTo=lRaid, onChanged=function() Apply() end })
     end
     lC:RecalcHeight()
 

@@ -42,13 +42,60 @@ local function EnsureUI()
 end
 
 local pending = false
+local f
+local focusEventsBound = false
+
+local function SetFocusEventsBound(active)
+  active = active and true or false
+  if focusEventsBound == active then return end
+  focusEventsBound = active
+
+  if active then
+    f:RegisterUnitEvent("UNIT_SPELLCAST_START", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "focus")
+
+    f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "focus")
+
+    f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "focus")
+
+    f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "focus")
+    f:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "focus")
+  else
+    f:UnregisterEvent("UNIT_SPELLCAST_START")
+    f:UnregisterEvent("UNIT_SPELLCAST_STOP")
+    f:UnregisterEvent("UNIT_SPELLCAST_FAILED")
+    f:UnregisterEvent("UNIT_SPELLCAST_INTERRUPTED")
+    f:UnregisterEvent("UNIT_SPELLCAST_DELAYED")
+
+    f:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+    f:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
+    f:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_UPDATE")
+
+    f:UnregisterEvent("UNIT_SPELLCAST_EMPOWER_START")
+    f:UnregisterEvent("UNIT_SPELLCAST_EMPOWER_STOP")
+    f:UnregisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE")
+
+    f:UnregisterEvent("UNIT_SPELLCAST_INTERRUPTIBLE")
+    f:UnregisterEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE")
+  end
+end
 
 local function UpdateNow()
-  if IsEnabled() then
+  local enabled = IsEnabled()
+  SetFocusEventsBound(enabled)
+
+  if enabled then
     EnsureUI()
   end
 
-  if not IsEnabled() then
+  if not enabled then
     SetFocusCastbarHidden(false)
 
     if type(_G.MSUF_FocusKick_ApplyCastState) == "function" then
@@ -93,31 +140,12 @@ local function ScheduleUpdate()
 end
 
 -- Driver frame
-local f = CreateFrame("Frame")
+f = CreateFrame("Frame")
 
 -- System events
 f:RegisterEvent("PLAYER_LOGIN")
 f:RegisterEvent("PLAYER_ENTERING_WORLD")
 f:RegisterEvent("PLAYER_FOCUS_CHANGED")
-
--- Focus spellcast triggers (schedule-only)
-f:RegisterUnitEvent("UNIT_SPELLCAST_START", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "focus")
-
-f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "focus")
-
-f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", "focus")
--- Some clients use EMPOWER_UPDATE; if not present, RegisterUnitEvent will ignore silently.
-f:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "focus")
-
-f:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "focus")
-f:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "focus")
 
 f:SetScript("OnEvent", function(self, event, unit)
   -- Optional: show interrupt feedback even though the focus castbar is hidden.
