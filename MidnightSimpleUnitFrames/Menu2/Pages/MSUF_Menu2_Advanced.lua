@@ -577,14 +577,34 @@ end
 local function TogglePillAt(ctx, parent, label, x, y, width, getTable, key, default, apply)
     local btn = T.Button(parent, label, width or 90, 22)
     btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
+    local marker = btn:CreateTexture(nil, "OVERLAY")
+    marker:SetTexture("Interface\\Buttons\\WHITE8X8")
+    marker:SetSize(7, 7)
+    marker:SetPoint("LEFT", btn, "LEFT", 8, 0)
+    if btn._msuf2Label then
+        btn._msuf2Label:ClearAllPoints()
+        btn._msuf2Label:SetPoint("LEFT", btn, "LEFT", 22, 0)
+        btn._msuf2Label:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+        btn._msuf2Label:SetJustifyH("LEFT")
+    end
+    local function PaintMarker(active)
+        if active then
+            marker:SetVertexColor(0.24, 0.88, 0.46, 1)
+        else
+            marker:SetVertexColor(0.92, 0.20, 0.26, 1)
+        end
+    end
     btn:SetScript("OnClick", function(self)
         local tbl = getTable()
         local current = BoolValue(tbl, key, default)
         SetValue(tbl, key, not current, apply)
         self:SetActive(not current)
+        PaintMarker(not current)
     end)
     M.AddRefresher(ctx, function()
-        btn:SetActive(BoolValue(getTable(), key, default))
+        local active = BoolValue(getTable(), key, default)
+        btn:SetActive(active)
+        PaintMarker(active)
     end)
     return btn
 end
@@ -708,7 +728,7 @@ local function BuildAuras(ctx)
     local AURA_REMINDERS, AURA_SORT_ORDER, PANDEMIC_MODES = deps.AURA_REMINDERS, deps.AURA_SORT_ORDER, deps.PANDEMIC_MODES
 
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Unit Auras", "Auras 2.0 display, filters, layout, timer text and reminders.", 72)
+    b:GlobalStyleHeader("Unit Auras", "Set where auras appear, choose the edited scope, then tune caps, filters, layout and reminders.", 72)
     local contentW = max(320, tonumber(ctx and ctx.width) or 720)
 
     local sharedOnlyControls = {}
@@ -744,116 +764,129 @@ local function BuildAuras(ctx)
         return tostring(scopeKey or "")
     end
 
-    local unitPillPos, unitPillBottomY = FlowTopLeft({ 90, 90, 90, 96 }, 12, -120, contentW - 14, 6, 28, 22)
-    local top = b:Section("Unit Auras", max(148, abs(unitPillBottomY) + 14))
     local function ApplyUnitAuraEnabled()
         local a2 = AurasDB()
         if a2.enabled == false and type(_G.MSUF_A2_HardDisableAll) == "function" then pcall(_G.MSUF_A2_HardDisableAll) end
         ApplyAuras()
     end
-    local enableUnitAuras = W.SwitchAt(top, "Enable Unit Auras", 12, -34, 160)
-    M.BindToggle(ctx, enableUnitAuras,
-        function() return BoolValue(AurasDB(), "enabled", true) end,
-        function(v)
-            SetValue(AurasDB(), "enabled", v and true or false, ApplyUnitAuraEnabled)
-        end)
-    Track(sharedOnlyControls, enableUnitAuras)
-    Track(filterOverrideControls, ScopedSwitchAt(ctx, top, "Enable filters", 230, -34, 160, AuraFilters, "enabled", true, ForceAuraFilterOverride, ApplyAuras))
-    Track(sharedOnlyControls, ToggleAt(ctx, top, "Preview in Edit Mode", 12, -58, AuraShared, "showInEditMode", true, ApplyAuras))
-    Track(sharedOnlyControls, SwitchAt(ctx, top, "Enable Masque skinning", 230, -58, 220, AuraShared, "masqueEnabled", false, ApplyAuras))
-    Track(sharedOnlyControls, ToggleAt(ctx, top, "Hide Masque borders", 200, -82, AuraShared, "masqueHideBorder", false, ApplyAuras))
-    LabelAt(top, "Units", 12, -94, 180, "GameFontNormalSmall", T.colors.muted)
-    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Player", unitPillPos[1].x, unitPillPos[1].y, unitPillPos[1].width, function() return AurasDB() end, "showPlayer", false, ApplyAuras))
-    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Target", unitPillPos[2].x, unitPillPos[2].y, unitPillPos[2].width, function() return AurasDB() end, "showTarget", true, ApplyAuras))
-    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Focus", unitPillPos[3].x, unitPillPos[3].y, unitPillPos[3].width, function() return AurasDB() end, "showFocus", true, ApplyAuras))
-    Track(sharedOnlyControls, TogglePillAt(ctx, top, "Boss 1-5", unitPillPos[4].x, unitPillPos[4].y, unitPillPos[4].width, function() return AurasDB() end, "showBoss", true, ApplyAuras))
 
-    local scopeOpts = {
-        values = AURA_SCOPES,
-        centerY = -20,
-        labelX = 10,
-        labelWidth = 64,
-        gap = 6,
-        width = contentW,
-        getValue = AuraScope,
-        setValue = function(value)
-            if type(M.PersistMenuStateValue) == "function" then
-                M.PersistMenuStateValue("auraScope", value or "shared")
-            else
-                M.auraScope = value or "shared"
-            end
-            RefreshAurasPage(ctx)
-        end,
-        hasOverride = AuraHasOverride,
-    }
-    local scopeMetrics = W.MeasureScopeOverrideBar and W.MeasureScopeOverrideBar(AURA_SCOPES, scopeOpts)
-    local scopeBottomY = (scopeMetrics and scopeMetrics.bottomY) or -32
-    local overrideY = min(-48, scopeBottomY - 16)
-    local overridePos, overrideBottomY = FlowTopLeft({ 168, 150, 168, 118 }, 10, overrideY, contentW - 10, 10, 30, 24)
-    local summaryY = overrideBottomY - 12
-
-    local scope = b:Section("", max(104, abs(summaryY) + 24))
-    if scope.title then scope.title:Hide() end
-    local scopeSeg = W.ScopeOverrideBar(ctx, scope, scopeOpts)
-    local function RefreshScopeButtons()
-        if scopeSeg and scopeSeg.Refresh then scopeSeg:Refresh() end
+    local function ActiveAuraUnitCount()
+        local a2 = AurasDB()
+        local count = 0
+        if BoolValue(a2, "showPlayer", false) then count = count + 1 end
+        if BoolValue(a2, "showTarget", true) then count = count + 1 end
+        if BoolValue(a2, "showFocus", true) then count = count + 1 end
+        if BoolValue(a2, "showBoss", true) then count = count + 1 end
+        return count
     end
-    M.AddRefresher(ctx, RefreshScopeButtons)
 
-    local overrideFilters = FitInlineToggle(ValueToggleAt(ctx, scope, "Custom filters", overridePos[1].x, overridePos[1].y,
-        function()
-            local s = AuraScope()
-            return s ~= "shared" and AurasUnit(s).overrideFilters == true
-        end,
-        function(v)
-            local s = AuraScope()
-            if s == "shared" then return end
-            if v then
-                ForceAuraFilterOverride()
-            else
-                AurasUnit(s).overrideFilters = false
-            end
-            ApplyAuras()
-            RefreshScopeButtons()
-            RefreshAurasPage(ctx)
-        end), overridePos[1].width)
-    local overrideCaps = FitInlineToggle(ValueToggleAt(ctx, scope, "Custom caps", overridePos[2].x, overridePos[2].y,
-        function()
-            local s = AuraScope()
-            return s ~= "shared" and AurasUnit(s).overrideSharedLayout == true
-        end,
-        function(v)
-            local s = AuraScope()
-            if s == "shared" then return end
-            if v then
-                ForceAuraCapsOverride()
-            else
-                AurasUnit(s).overrideSharedLayout = false
-            end
-            ApplyAuras()
-            RefreshScopeButtons()
-            RefreshAurasPage(ctx)
-        end), overridePos[2].width)
-    local overrideLayout = FitInlineToggle(ValueToggleAt(ctx, scope, "Custom layout", overridePos[3].x, overridePos[3].y,
-        function()
-            local s = AuraScope()
-            return s ~= "shared" and AurasUnit(s).overrideLayout == true
-        end,
-        function(v)
-            local s = AuraScope()
-            if s == "shared" then return end
-            if v then
-                ForceAuraLayoutOverride()
-            else
-                AurasUnit(s).overrideLayout = false
-            end
-            ApplyAuras()
-            RefreshScopeButtons()
-            RefreshAurasPage(ctx)
-        end), overridePos[3].width)
-    local reset = T.Button(scope, "Reset Overrides", 118, 22)
-    reset:SetPoint("TOPLEFT", scope, "TOPLEFT", overridePos[4].x, overridePos[4].y + 1)
-    reset:SetScript("OnClick", function()
+    local QUICK_PRESETS = {
+        clean = {
+            label = "Clean",
+            maxBuffs = 6, maxDebuffs = 12, perRow = 10, splitSpacing = 4, iconSize = 24, spacing = 2, sortOrder = 0,
+            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", privateGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+            hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = true,
+            includeDispellable = true, onlyMineBuffs = false, onlyMineDebuffs = false,
+            highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
+        },
+        focused = {
+            label = "Focused",
+            maxBuffs = 10, maxDebuffs = 16, perRow = 10, splitSpacing = 6, iconSize = 26, spacing = 2, sortOrder = 3,
+            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", privateGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+            hidePermanent = false, buffIncludeBoss = true, debuffIncludeBoss = true, includeStealable = true,
+            includeDispellable = true, onlyMineBuffs = true, onlyMineDebuffs = true,
+            highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
+        },
+        performance = {
+            label = "Fast",
+            maxBuffs = 4, maxDebuffs = 8, perRow = 8, splitSpacing = 2, iconSize = 22, spacing = 1, sortOrder = 0,
+            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", privateGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+            hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = false,
+            includeDispellable = false, onlyMineBuffs = false, onlyMineDebuffs = false,
+            highlightOwnBuffs = false, highlightOwnDebuffs = false, showCooldownSwipe = false, showCooldownText = true, showStackCount = false, useBlizzardTimerText = true,
+        },
+    }
+    local previewPreset
+
+    local function EffectiveCapsValues()
+        local p = previewPreset and QUICK_PRESETS[previewPreset]
+        local caps = AuraCaps()
+        local shared = AuraShared()
+        return {
+            maxBuffs = p and p.maxBuffs or NumValue(caps, "maxBuffs", 8),
+            maxDebuffs = p and p.maxDebuffs or NumValue(caps, "maxDebuffs", 15),
+            perRow = p and p.perRow or NumValue(caps, "perRow", 11),
+            iconSize = p and p.iconSize or NumValue(AuraLayout(), "iconSize", 26),
+            spacing = p and p.spacing or NumValue(AuraLayout(), "spacing", 2),
+            privateMax = NumValue(shared, "privateAuraMaxPlayer", 4),
+            sortOrder = p and p.sortOrder or NumValue(caps, "sortOrder", 0),
+        }
+    end
+
+    local function BudgetInfo()
+        local v = EffectiveCapsValues()
+        local shared = AuraShared()
+        local total = (BoolValue(shared, "showBuffs", true) and v.maxBuffs or 0)
+            + (BoolValue(shared, "showDebuffs", true) and v.maxDebuffs or 0)
+            + ((BoolValue(shared, "privateAurasEnabled", true) and BoolValue(shared, "showPrivateAurasPlayer", true)) and v.privateMax or 0)
+        if total <= 18 then return "Light", total, T.colors.ok end
+        if total <= 30 then return "Medium", total, T.colors.accent2 end
+        return "Heavy", total, T.colors.danger end
+
+    local function SortLabel(value)
+        for i = 1, #AURA_SORT_ORDER do
+            if tostring(AURA_SORT_ORDER[i].value) == tostring(value) then return AURA_SORT_ORDER[i].text or tostring(value) end
+        end
+        return tostring(value or 0)
+    end
+
+    local function ApplyQuickPreset(name)
+        local p = QUICK_PRESETS[name]
+        if not p then return end
+        local sharedScope = AuraScope() == "shared"
+        if not sharedScope then
+            ForceAuraFilterOverride()
+            ForceAuraCapsOverride()
+            ForceAuraLayoutOverride()
+        end
+        local caps = AuraCaps()
+        local layout = AuraLayout()
+        local filters = AuraFilters()
+        local buffs = AuraBuffFilters()
+        local debuffs = AuraDebuffFilters()
+        caps.maxBuffs, caps.maxDebuffs, caps.perRow = p.maxBuffs, p.maxDebuffs, p.perRow
+        caps.splitSpacing, caps.sortOrder = p.splitSpacing, p.sortOrder
+        caps.layoutMode = p.layoutMode or caps.layoutMode or "SEPARATE"
+        caps.buffGrowth, caps.debuffGrowth, caps.privateGrowth = p.buffGrowth, p.debuffGrowth, p.privateGrowth
+        caps.buffRowWrap, caps.debuffRowWrap = p.buffRowWrap, p.debuffRowWrap
+        layout.iconSize, layout.spacing = p.iconSize, p.spacing
+        filters.hidePermanent = p.hidePermanent
+        buffs.includeBoss, debuffs.includeBoss = p.buffIncludeBoss, p.debuffIncludeBoss
+        buffs.includeStealable, debuffs.includeDispellable = p.includeStealable, p.includeDispellable
+        buffs.onlyMine, debuffs.onlyMine = p.onlyMineBuffs, p.onlyMineDebuffs
+        if sharedScope then
+            local shared = AuraShared()
+            shared.highlightOwnBuffs = p.highlightOwnBuffs
+            shared.highlightOwnDebuffs = p.highlightOwnDebuffs
+            shared.showCooldownSwipe = p.showCooldownSwipe
+            shared.showCooldownText = p.showCooldownText
+            shared.showStackCount = p.showStackCount
+            shared.useBlizzardTimerText = p.useBlizzardTimerText
+        end
+        ApplyAuras()
+        RefreshAurasPage(ctx)
+    end
+
+    local function ResetSelectedScope()
+        local s = AuraScope()
+        if s == "shared" then return end
+        local a2 = AurasDB()
+        if a2.perUnit then a2.perUnit[s] = nil end
+        ApplyAuras()
+        RefreshAurasPage(ctx)
+    end
+
+    local function ResetAllAuraOverrides()
         local a2 = AurasDB()
         for i = 2, #AURA_SCOPES do
             local key = AURA_SCOPES[i].value
@@ -871,9 +904,464 @@ local function BuildAuras(ctx)
         end
         ApplyAuras()
         RefreshAurasPage(ctx)
+    end
+
+    local function AuraAccordionState()
+        if type(M.GetPersistentMenuStateTable) == "function" then
+            M.accordionState = M.GetPersistentMenuStateTable("accordionState")
+        else
+            M.accordionState = M.accordionState or {}
+        end
+        return M.accordionState
+    end
+
+    local function SetAurasUXMode(mode)
+        local state = AuraAccordionState()
+        local prefix = tostring(ctx.key or "page") .. ":"
+        local advanced = mode == "advanced"
+        local desired = {
+            a2_display = true,
+            a2_layout = true,
+            a2_text_coloring = advanced,
+            a2_private = advanced,
+            a2_filters = advanced,
+            a2_ignore = advanced,
+            a2_reminders = advanced,
+        }
+        for id, open in pairs(desired) do
+            local stateKey = prefix .. id
+            state[stateKey] = open and true or false
+            if b and b.collapsibles then
+                for i = 1, #b.collapsibles do
+                    local entry = b.collapsibles[i]
+                    if entry and entry.stateKey == stateKey then
+                        entry.open = open and true or false
+                    end
+                end
+            end
+        end
+        if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("auraUXMode", advanced and "advanced" or "basic") end
+        local rebuilt = false
+        local key = (ctx and ctx.key) or M.activeKey or "auras2"
+        if M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
+            M.InvalidatePage(key)
+            M.activeKey = nil
+            rebuilt = M.SelectPage(key) and true or false
+        end
+        if not rebuilt then
+            if b and b.RelayoutCollapsibles then b:RelayoutCollapsibles() end
+            if M.Refresh then M.Refresh(ctx) end
+        end
+    end
+
+    local function IsAdvancedUXMode()
+        local state = AuraAccordionState()
+        local prefix = tostring(ctx.key or "page") .. ":"
+        return state[prefix .. "a2_filters"] == true
+            or state[prefix .. "a2_text_coloring"] == true
+            or state[prefix .. "a2_private"] == true
+            or state[prefix .. "a2_ignore"] == true
+            or state[prefix .. "a2_reminders"] == true
+    end
+
+    local hasSidePreview = contentW >= 860
+    local previewW = hasSidePreview and min(420, max(360, floor(contentW * 0.34))) or max(320, contentW - 28)
+    local leftW = hasSidePreview and max(380, contentW - previewW - 42) or max(320, contentW - 28)
+    local compactSetup = leftW < 660
+    local setupGap = 12
+    local essentialsH = compactSetup and 150 or 128
+    local scopeH = compactSetup and 226 or 142
+    local presetH = compactSetup and 214 or 128
+    local cardsBottomOffset = 38 + essentialsH + setupGap + scopeH + setupGap + presetH
+    local previewH = hasSidePreview and max(348, min(388, cardsBottomOffset - 44)) or 350
+    local controlH = hasSidePreview and (cardsBottomOffset + 44) or (cardsBottomOffset + previewH + 72)
+    local control = b:Section("Aura Setup", controlH)
+
+    local essentialsY = -38
+    local scopeY = essentialsY - essentialsH - setupGap
+    local presetY = scopeY - scopeH - setupGap
+    local essentials = W.ControlCard(control, "1. Essentials", nil, 14, essentialsY, leftW, essentialsH)
+    local scopeCard = W.ControlCard(control, "2. Scope", nil, 14, scopeY, leftW, scopeH)
+    local presetCard = W.ControlCard(control, "3. Preset & View", nil, 14, presetY, leftW, presetH)
+
+    local switchCols = compactSetup and 2 or 4
+    local switchColW = floor((leftW - 32) / switchCols)
+    local switchLabelW = max(80, min(154, switchColW - 48))
+    local function SwitchX(index)
+        return 16 + ((index - 1) % switchCols) * switchColW
+    end
+    local function SwitchY(index)
+        return -50 - floor((index - 1) / switchCols) * 28
+    end
+    local function EssentialSwitch(index, label, getValue, setValue, trackList)
+        local sw = W.SwitchAt(essentials, label, SwitchX(index), SwitchY(index), switchLabelW)
+        M.BindToggle(ctx, sw,
+            function() return getValue() and true or false end,
+            function(v) setValue(v and true or false) end)
+        if trackList then Track(trackList, sw) end
+        return sw
+    end
+
+    EssentialSwitch(1, "Unit Auras",
+        function() return BoolValue(AurasDB(), "enabled", true) end,
+        function(v) SetValue(AurasDB(), "enabled", v, ApplyUnitAuraEnabled) end,
+        sharedOnlyControls)
+    EssentialSwitch(2, "Filters",
+        function() return BoolValue(AuraFilters(), "enabled", true) end,
+        function(v)
+            if AuraScope() ~= "shared" then ForceAuraFilterOverride() end
+            SetValue(AuraFilters(), "enabled", v, ApplyAuras)
+        end,
+        filterOverrideControls)
+    EssentialSwitch(3, "Edit Preview",
+        function() return BoolValue(AuraShared(), "showInEditMode", true) end,
+        function(v) SetValue(AuraShared(), "showInEditMode", v, ApplyAuras) end,
+        sharedOnlyControls)
+    EssentialSwitch(4, "Masque",
+        function() return BoolValue(AuraShared(), "masqueEnabled", false) end,
+        function(v) SetValue(AuraShared(), "masqueEnabled", v, ApplyAuras) end,
+        sharedOnlyControls)
+
+    local unitY = compactSetup and -106 or -88
+    LabelAt(essentials, "Visible units", 16, unitY + 4, 88, "GameFontNormalSmall", T.colors.muted)
+    local unitPillPos = FlowTopLeft({ 90, 90, 90, 96 }, 112, unitY + 8, leftW - 16, 6, 28, 22)
+    Track(sharedOnlyControls, TogglePillAt(ctx, essentials, "Player", unitPillPos[1].x, unitPillPos[1].y, unitPillPos[1].width, function() return AurasDB() end, "showPlayer", false, ApplyAuras))
+    Track(sharedOnlyControls, TogglePillAt(ctx, essentials, "Target", unitPillPos[2].x, unitPillPos[2].y, unitPillPos[2].width, function() return AurasDB() end, "showTarget", true, ApplyAuras))
+    Track(sharedOnlyControls, TogglePillAt(ctx, essentials, "Focus", unitPillPos[3].x, unitPillPos[3].y, unitPillPos[3].width, function() return AurasDB() end, "showFocus", true, ApplyAuras))
+    Track(sharedOnlyControls, TogglePillAt(ctx, essentials, "Boss 1-5", unitPillPos[4].x, unitPillPos[4].y, unitPillPos[4].width, function() return AurasDB() end, "showBoss", true, ApplyAuras))
+
+    local scopeDropdownW = compactSetup and max(190, min(260, leftW - 32)) or max(210, min(260, floor(leftW * 0.28)))
+    local scopeDrop = ValueDropdownAt(ctx, scopeCard, "Editing scope", 16, -50, AURA_SCOPES, scopeDropdownW,
+        AuraScope,
+        function(value)
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("auraScope", value or "shared")
+            else
+                M.auraScope = value or "shared"
+            end
+            RefreshAurasPage(ctx)
+        end)
+    local scopeSummaryX = compactSetup and 16 or (scopeDropdownW + 42)
+    local scopeSummaryY = compactSetup and -96 or -52
+    local scopeSummaryW = compactSetup and (leftW - 32) or max(120, leftW - scopeSummaryX - 16)
+    local scopeSummary = LabelAt(scopeCard, "", scopeSummaryX, scopeSummaryY, scopeSummaryW, "GameFontDisableSmall", T.colors.muted)
+    if scopeSummary.SetWordWrap then scopeSummary:SetWordWrap(true) end
+    if scopeSummary.SetHeight then scopeSummary:SetHeight(compactSetup and 34 or 34) end
+
+    local function RefreshScopeButtons()
+        if scopeDrop and scopeDrop.SetValue then scopeDrop:SetValue(AuraScope()) end
+    end
+    M.AddRefresher(ctx, RefreshScopeButtons)
+
+    local overrideY = compactSetup and -142 or -108
+    LabelAt(scopeCard, "Overrides", 16, overrideY + 4, 76, "GameFontNormalSmall", T.colors.muted)
+    local overrideStartX = compactSetup and 16 or 106
+    local overridePos = FlowTopLeft({ 128, 112, 120, 118, 92, 82 }, overrideStartX, overrideY + 8, leftW - 16, 8, 28, 22)
+    local overrideFilters = FitInlineToggle(ValueToggleAt(ctx, scopeCard, "Custom filters", overridePos[1].x, overridePos[1].y,
+        function()
+            local s = AuraScope()
+            return s ~= "shared" and AurasUnit(s).overrideFilters == true
+        end,
+        function(v)
+            local s = AuraScope()
+            if s == "shared" then return end
+            if v then ForceAuraFilterOverride() else AurasUnit(s).overrideFilters = false end
+            ApplyAuras()
+            RefreshScopeButtons()
+            RefreshAurasPage(ctx)
+        end), overridePos[1].width)
+    local overrideCaps = FitInlineToggle(ValueToggleAt(ctx, scopeCard, "Custom caps", overridePos[2].x, overridePos[2].y,
+        function()
+            local s = AuraScope()
+            return s ~= "shared" and AurasUnit(s).overrideSharedLayout == true
+        end,
+        function(v)
+            local s = AuraScope()
+            if s == "shared" then return end
+            if v then ForceAuraCapsOverride() else AurasUnit(s).overrideSharedLayout = false end
+            ApplyAuras()
+            RefreshScopeButtons()
+            RefreshAurasPage(ctx)
+        end), overridePos[2].width)
+    local overrideLayout = FitInlineToggle(ValueToggleAt(ctx, scopeCard, "Custom layout", overridePos[3].x, overridePos[3].y,
+        function()
+            local s = AuraScope()
+            return s ~= "shared" and AurasUnit(s).overrideLayout == true
+        end,
+        function(v)
+            local s = AuraScope()
+            if s == "shared" then return end
+            if v then ForceAuraLayoutOverride() else AurasUnit(s).overrideLayout = false end
+            ApplyAuras()
+            RefreshScopeButtons()
+            RefreshAurasPage(ctx)
+        end), overridePos[3].width)
+    local overrideIgnoreTop = FitInlineToggle(ValueToggleAt(ctx, scopeCard, "Custom ignore", overridePos[4].x, overridePos[4].y,
+        function()
+            local s = AuraScope()
+            return s ~= "shared" and AurasUnit(s).overrideIgnore == true
+        end,
+        function(v)
+            local s = AuraScope()
+            if s == "shared" then return end
+            if v then ForceAuraIgnoreOverride() else AurasUnit(s).overrideIgnore = false end
+            ApplyAuras()
+            RefreshScopeButtons()
+            RefreshAurasPage(ctx)
+        end), overridePos[4].width)
+    local resetScope = T.Button(scopeCard, "Reset scope", overridePos[5].width, 22)
+    resetScope:SetPoint("TOPLEFT", scopeCard, "TOPLEFT", overridePos[5].x, overridePos[5].y + 1)
+    resetScope:SetScript("OnClick", function()
+        M.CaptureHistory("Reset aura scope", "auras2:scope:reset", ResetSelectedScope)
     end)
-    local summary = LabelAt(scope, "", 10, summaryY, max(120, contentW - 20), "GameFontDisableSmall", T.colors.dim)
+    local resetAll = T.Button(scopeCard, "Reset all", overridePos[6].width, 22)
+    resetAll:SetPoint("TOPLEFT", scopeCard, "TOPLEFT", overridePos[6].x, overridePos[6].y + 1)
+    resetAll:SetScript("OnClick", function()
+        M.CaptureHistory("Reset all aura overrides", "auras2:overrides:reset", ResetAllAuraOverrides)
+    end)
+
+    LabelAt(presetCard, "Quick setup", 16, -50, 92, "GameFontNormalSmall", T.colors.muted)
+    local quickY = compactSetup and -70 or -66
+    local quickPos, quickBottomY = FlowTopLeft({ 108, 132, 104 }, compactSetup and 16 or 112, quickY, leftW - 16, 8, 28, 24)
+    local presetHintX = compactSetup and 16 or 472
+    local presetHintY = compactSetup and (quickBottomY - 14) or -52
+    local presetHintW = compactSetup and (leftW - 32) or max(120, leftW - presetHintX - 16)
+    local presetHint = LabelAt(presetCard, "", presetHintX, presetHintY, presetHintW, "GameFontDisableSmall", T.colors.muted)
+    if presetHint.SetWordWrap then presetHint:SetWordWrap(true) end
+    if presetHint.SetHeight then presetHint:SetHeight(44) end
+    local quickIndex = 0
+    local function QuickButton(name, label)
+        quickIndex = quickIndex + 1
+        local p = QUICK_PRESETS[name]
+        local pos = quickPos[quickIndex]
+        local btn = T.Button(presetCard, label or p.label, pos.width or 102, 24)
+        btn:SetPoint("TOPLEFT", presetCard, "TOPLEFT", pos.x, pos.y)
+        btn:SetScript("OnClick", function()
+            previewPreset = nil
+            M.CaptureHistory("Apply aura preset " .. p.label, "auras2:preset:" .. name, function() ApplyQuickPreset(name) end)
+        end)
+        btn:HookScript("OnEnter", function()
+            previewPreset = name
+            if M.Refresh then M.Refresh(ctx) end
+        end)
+        btn:HookScript("OnLeave", function()
+            if previewPreset == name then
+                previewPreset = nil
+                if M.Refresh then M.Refresh(ctx) end
+            end
+        end)
+        return btn
+    end
+    QuickButton("clean", "Clean 6/12")
+    QuickButton("focused", "Focused 10/16")
+    QuickButton("performance", "Fast 4/8")
+
+    local modeY = compactSetup and (presetHintY - 54) or -108
+    LabelAt(presetCard, "Show", 16, modeY + 4, 76, "GameFontNormalSmall", T.colors.muted)
+    local basicMode = T.Button(presetCard, "Basic", 104, 24)
+    basicMode:SetPoint("TOPLEFT", presetCard, "TOPLEFT", compactSetup and 86 or 112, modeY + 8)
+    basicMode:SetScript("OnClick", function() SetAurasUXMode("basic") end)
+    local advancedMode = T.Button(presetCard, "All settings", 124, 24)
+    advancedMode:SetPoint("TOPLEFT", presetCard, "TOPLEFT", compactSetup and 198 or 224, modeY + 8)
+    advancedMode:SetScript("OnClick", function() SetAurasUXMode("advanced") end)
+
+    local previewX = hasSidePreview and (leftW + 28) or 14
+    local previewY = hasSidePreview and -38 or (-cardsBottomOffset - 24)
+    local preview = T.Panel(control, nil, { 0.018, 0.026, 0.052, 0.88 }, T.colors.cardBorder or T.colors.borderSoft)
+    preview:SetPoint("TOPLEFT", control, "TOPLEFT", previewX, previewY)
+    preview:SetSize(previewW, previewH)
+    LabelAt(preview, "Aura Preview", 14, -14, previewW - 28, "GameFontNormal", T.colors.text)
+    local previewChips = {
+        LabelAt(preview, "", 14, -40, 90, "GameFontDisableSmall", T.colors.muted),
+        LabelAt(preview, "", 112, -40, 90, "GameFontDisableSmall", T.colors.muted),
+        LabelAt(preview, "", 210, -40, previewW - 224, "GameFontDisableSmall", T.colors.accent2),
+    }
+    local stage = T.Panel(preview, nil, { 0.010, 0.014, 0.030, 0.70 }, T.colors.borderSoft)
+    stage:SetPoint("TOPLEFT", preview, "TOPLEFT", 14, -64)
+    stage:SetSize(previewW - 28, previewH - 136)
+    local groupLabels = {
+        buffs = LabelAt(stage, "", 10, -10, previewW - 48, "GameFontNormalSmall", T.colors.text),
+        debuffs = LabelAt(stage, "", 10, -78, previewW - 48, "GameFontNormalSmall", T.colors.text),
+        private = LabelAt(stage, "", 10, -146, previewW - 48, "GameFontNormalSmall", T.colors.text),
+    }
+    local previewMeta = LabelAt(preview, "", 14, -previewH + 60, previewW - 28, "GameFontDisableSmall", T.colors.muted)
+    if previewMeta.SetWordWrap then previewMeta:SetWordWrap(true) end
+    local iconPools = { buffs = {}, debuffs = {}, private = {} }
+    local function PreviewIconSet(globalName, fallback)
+        local icons = _G and _G[globalName]
+        if type(icons) == "table" and #icons > 0 then return icons end
+        return fallback
+    end
+    local PREVIEW_AURA_ICONS = {
+        buff = PreviewIconSet("MSUF_A2_PREVIEW_BUFF_TEXTURES", { 136116, 135932, 135987, 136085, 135915, 132333, 136075, 135981, 136076, 135964, 136048, 132316 }),
+        debuff = PreviewIconSet("MSUF_A2_PREVIEW_DEBUFF_TEXTURES", { 136118, 136139, 136197, 135817, 132851, 135813, 136188, 136186, 135975, 132337, 136093, 136170 }),
+        private = { 136177, 134400, 135894, 136116, 135987, 136085, 132333, 135932, 136075, 135981, 136048, 132316 },
+    }
+    local DEBUFF_BORDER_COLORS = {
+        { 0.32, 0.58, 1.00, 0.96 },
+        { 0.72, 0.38, 1.00, 0.96 },
+        { 0.28, 0.82, 0.44, 0.96 },
+        { 0.72, 0.48, 0.22, 0.96 },
+    }
+    local function SetPreviewIconTexture(icon, texture)
+        if type(_G.MSUF_SetIconTexture) == "function" then
+            _G.MSUF_SetIconTexture(icon.icon, texture, "")
+        else
+            icon.icon:SetTexture(texture)
+        end
+        if icon.icon.SetTexCoord then icon.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    end
+    local function PaintPreviewBorder(icon, r, g, b, a)
+        for i = 1, #icon.border do
+            icon.border[i]:SetVertexColor(r, g, b, a or 1)
+        end
+    end
+    local function CreatePreviewIcon(kind)
+        local f = CreateFrame("Frame", nil, stage)
+        f.shadow = f:CreateTexture(nil, "BACKGROUND", nil, -1)
+        f.shadow:SetPoint("TOPLEFT", f, "TOPLEFT", -1, 1)
+        f.shadow:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 1, -1)
+        f.shadow:SetTexture("Interface\\Buttons\\WHITE8X8")
+        f.shadow:SetVertexColor(0, 0, 0, 0.85)
+        f.icon = f:CreateTexture(nil, "BACKGROUND")
+        f.icon:SetAllPoints(f)
+        f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        f.cooldownShade = f:CreateTexture(nil, "ARTWORK")
+        f.cooldownShade:SetAllPoints(f)
+        f.cooldownShade:SetTexture("Interface\\Buttons\\WHITE8X8")
+        f.border = {}
+        f.border[1] = f:CreateTexture(nil, "BORDER")
+        f.border[1]:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        f.border[1]:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+        f.border[1]:SetHeight(2)
+        f.border[2] = f:CreateTexture(nil, "BORDER")
+        f.border[2]:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
+        f.border[2]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+        f.border[2]:SetHeight(2)
+        f.border[3] = f:CreateTexture(nil, "BORDER")
+        f.border[3]:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0)
+        f.border[3]:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0)
+        f.border[3]:SetWidth(2)
+        f.border[4] = f:CreateTexture(nil, "BORDER")
+        f.border[4]:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0)
+        f.border[4]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0)
+        f.border[4]:SetWidth(2)
+        for i = 1, #f.border do f.border[i]:SetTexture("Interface\\Buttons\\WHITE8X8") end
+        f.timer = T.Font(f, nil, "", T.colors.text)
+        f.timer:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 2, 1)
+        if f.timer.SetShadowColor then f.timer:SetShadowColor(0, 0, 0, 1) end
+        if f.timer.SetShadowOffset then f.timer:SetShadowOffset(1, -1) end
+        f.stack = T.Font(f, nil, "", T.colors.text)
+        f.stack:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -1)
+        if f.stack.SetShadowColor then f.stack:SetShadowColor(0, 0, 0, 1) end
+        if f.stack.SetShadowOffset then f.stack:SetShadowOffset(1, -1) end
+        f.privateLock = f:CreateTexture(nil, "OVERLAY")
+        f.privateLock:SetTexture(134400)
+        f.privateLock:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
+        f.privateLock:Hide()
+        f._kind = kind
+        return f
+    end
+    for i = 1, 40 do
+        iconPools.buffs[i] = CreatePreviewIcon("buff")
+        iconPools.debuffs[i] = CreatePreviewIcon("debuff")
+    end
+    for i = 1, 12 do iconPools.private[i] = CreatePreviewIcon("private") end
+
+    local function DrawIconPool(pool, count, startX, startY, iconSize, spacing, perRow, kind)
+        perRow = max(1, perRow)
+        local icons = PREVIEW_AURA_ICONS[kind] or PREVIEW_AURA_ICONS.buff
+        for i = 1, #pool do
+            local icon = pool[i]
+            if i <= count then
+                local row = floor((i - 1) / perRow)
+                local col = (i - 1) % perRow
+                icon:ClearAllPoints()
+                icon:SetPoint("TOPLEFT", stage, "TOPLEFT", startX + col * (iconSize + spacing), startY - row * (iconSize + spacing))
+                icon:SetSize(iconSize, iconSize)
+                SetPreviewIconTexture(icon, icons[((i - 1) % #icons) + 1])
+                if icon.cooldownShade then
+                    local shade = BoolValue(AuraShared(), "showCooldownSwipe", true) and (i % 3 == 0 and 0.34 or 0.16) or 0
+                    icon.cooldownShade:SetVertexColor(0, 0, 0, shade)
+                end
+                if icon.privateLock then
+                    if kind == "private" then
+                        local lockSize = max(9, floor(iconSize * 0.38))
+                        icon.privateLock:SetSize(lockSize, lockSize)
+                        icon.privateLock:Show()
+                    else
+                        icon.privateLock:Hide()
+                    end
+                end
+                if kind == "debuff" and BoolValue(AuraShared(), "useDebuffTypeBorders", false) then
+                    local d = DEBUFF_BORDER_COLORS[((i - 1) % #DEBUFF_BORDER_COLORS) + 1]
+                    PaintPreviewBorder(icon, d[1], d[2], d[3], d[4])
+                elseif (icon._kind == "buff" and BoolValue(AuraShared(), "highlightOwnBuffs", false) and i % 4 == 1)
+                    or (icon._kind == "debuff" and BoolValue(AuraShared(), "highlightOwnDebuffs", false) and i % 5 == 1)
+                    or icon._kind == "private" then
+                    PaintPreviewBorder(icon, 0.96, 0.76, 0.22, 0.96)
+                elseif kind == "buff" then
+                    PaintPreviewBorder(icon, 0.18, 0.66, 0.36, 0.82)
+                elseif kind == "debuff" then
+                    PaintPreviewBorder(icon, 0.74, 0.18, 0.24, 0.86)
+                else
+                    PaintPreviewBorder(icon, 0.58, 0.38, 0.96, 0.92)
+                end
+                icon.timer:SetText(BoolValue(AuraShared(), "showCooldownText", true) and (icon._kind == "buff" and (i % 3 == 0 and "2m" or "42") or icon._kind == "private" and "P" or tostring(({ 8, 14, 22, 4 })[((i - 1) % 4) + 1])) or "")
+                icon.stack:SetText(BoolValue(AuraShared(), "showStackCount", true) and (i % 3 == 1 and "2" or "") or "")
+                icon:Show()
+            else
+                icon:Hide()
+            end
+        end
+    end
+
+    local function RefreshPreview()
+        local caps = EffectiveCapsValues()
+        local shared = AuraShared()
+        local stageW = tonumber(stage.GetWidth and stage:GetWidth()) or (previewW - 28)
+        if stageW < 80 then stageW = previewW - 28 end
+        local iconSize = max(18, min(34, caps.iconSize))
+        local spacing = max(1, min(6, caps.spacing))
+        local perRow = max(1, min(caps.perRow, floor((stageW - 22) / (iconSize + spacing))))
+        local buffCount = BoolValue(shared, "showBuffs", true) and max(0, min(40, caps.maxBuffs)) or 0
+        local debuffCount = BoolValue(shared, "showDebuffs", true) and max(0, min(40, caps.maxDebuffs)) or 0
+        local privateCount = (BoolValue(shared, "privateAurasEnabled", true) and BoolValue(shared, "showPrivateAurasPlayer", true)) and max(0, min(12, caps.privateMax)) or 0
+        local budget, total, budgetColor = BudgetInfo()
+        previewChips[1]:SetText("Auras only")
+        previewChips[2]:SetText("Scope: " .. AuraScopeLabel())
+        previewChips[3]:SetText((previewPreset and (QUICK_PRESETS[previewPreset].label .. " preview") or ("Budget: " .. budget)))
+        if previewChips[3].SetTextColor and budgetColor then previewChips[3]:SetTextColor(budgetColor[1], budgetColor[2], budgetColor[3], 1) end
+        groupLabels.buffs:SetText("Buffs  " .. buffCount .. "/" .. caps.maxBuffs .. " shown")
+        groupLabels.debuffs:SetText("Debuffs  " .. debuffCount .. "/" .. caps.maxDebuffs .. " shown")
+        groupLabels.private:SetText("Private  " .. privateCount .. "/" .. caps.privateMax .. " shown")
+        local function RowsFor(count)
+            return max(1, floor((max(0, count) + perRow - 1) / perRow))
+        end
+        local function MoveGroupLabel(label, y)
+            label:ClearAllPoints()
+            label:SetPoint("TOPLEFT", stage, "TOPLEFT", 10, y)
+        end
+        local buffRows = RowsFor(buffCount)
+        local debuffRows = RowsFor(debuffCount)
+        local buffY = -10
+        local buffIconsY = buffY - 20
+        local debuffY = buffIconsY - buffRows * (iconSize + spacing) - 14
+        local debuffIconsY = debuffY - 20
+        local privateY = debuffIconsY - debuffRows * (iconSize + spacing) - 14
+        local privateIconsY = privateY - 20
+        MoveGroupLabel(groupLabels.buffs, buffY)
+        MoveGroupLabel(groupLabels.debuffs, debuffY)
+        MoveGroupLabel(groupLabels.private, privateY)
+        DrawIconPool(iconPools.buffs, buffCount, 10, buffIconsY, iconSize, spacing, perRow, "buff")
+        DrawIconPool(iconPools.debuffs, debuffCount, 10, debuffIconsY, iconSize, spacing, perRow, "debuff")
+        DrawIconPool(iconPools.private, privateCount, 10, privateIconsY, iconSize, spacing, perRow, "private")
+        previewMeta:SetText("Icon " .. caps.iconSize .. "px   Per row " .. caps.perRow .. "   Total " .. total .. "   Sort " .. SortLabel(caps.sortOrder))
+    end
+    M.AddRefresher(ctx, RefreshPreview)
+
     M.AddRefresher(ctx, function()
+        local budget, total = BudgetInfo()
         local active = {}
         for i = 2, #AURA_SCOPES do
             local spec = AURA_SCOPES[i]
@@ -881,21 +1369,36 @@ local function BuildAuras(ctx)
         end
         local isShared = AuraScope() == "shared"
         if isShared and #active == 0 then
-            summary:SetText("|cff9aa0a6" .. M.Tr("No unit overrides active.") .. "|r")
+            scopeSummary:SetText("|cffffffff" .. M.Tr("Shared baseline") .. "|r\n|cff9aa0a6" .. M.Tr("No unit overrides are active.") .. "|r")
         elseif isShared then
-            summary:SetText("|cffffffff" .. M.Tr("Overrides active:") .. "|r " .. table.concat(active, ", "))
+            scopeSummary:SetText("|cffffffff" .. M.Tr("Shared baseline") .. "|r\n|cff9aa0a6" .. tostring(#active) .. M.Tr(" unit scopes override it: ") .. table.concat(active, ", ") .. "|r")
         else
             local selected = AuraScope()
             if AuraHasOverride(selected) then
-                summary:SetText("|cffffffff" .. M.Tr("This unit uses custom aura settings.") .. "|r " .. M.Tr("Shared changes will not affect overridden parts until Reset Overrides is used."))
+                scopeSummary:SetText("|cffffffff" .. AuraScopeLabel() .. M.Tr(" uses custom aura settings.") .. "|r\n|cff9aa0a6" .. M.Tr("Shared still controls every unchecked group.") .. "|r")
             else
-                summary:SetText("|cff9aa0a6" .. M.Tr("This unit follows Shared aura settings. Enable custom filters, caps, or layout only when this unit needs different auras.") .. "|r")
+                scopeSummary:SetText("|cffffffff" .. AuraScopeLabel() .. "|r\n|cff9aa0a6" .. M.Tr("Inherits Shared until a custom checkbox is enabled.") .. "|r")
+            end
+        end
+        if presetHint then
+            if previewPreset and QUICK_PRESETS[previewPreset] then
+                local p = QUICK_PRESETS[previewPreset]
+                presetHint:SetText(M.Tr(p.label) .. ": " .. tostring(p.maxBuffs) .. M.Tr(" buffs, ") .. tostring(p.maxDebuffs) .. M.Tr(" debuffs, ") .. tostring(p.iconSize) .. "px")
+            else
+                presetHint:SetText(tostring(ActiveAuraUnitCount()) .. M.Tr(" visible groups, ") .. budget .. M.Tr(" budget, ") .. tostring(total) .. M.Tr(" max icons"))
             end
         end
         SetControlEnabled(overrideFilters, not isShared)
         SetControlEnabled(overrideCaps, not isShared)
         SetControlEnabled(overrideLayout, not isShared)
+        SetControlEnabled(overrideIgnoreTop, not isShared)
+        SetControlEnabled(resetScope, not isShared and AuraHasOverride(AuraScope()))
+        SetControlEnabled(resetAll, #active > 0)
+        local advancedModeActive = IsAdvancedUXMode()
+        if basicMode.SetActive then basicMode:SetActive(not advancedModeActive) end
+        if advancedMode.SetActive then advancedMode:SetActive(advancedModeActive) end
         RefreshScopeButtons()
+        RefreshPreview()
     end)
 
     local compactDisplay = contentW < 560
@@ -941,6 +1444,7 @@ local function BuildAuras(ctx)
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Swipe darkens on loss", displayCol2 - 2, lowerToggleY - 22, AuraShared, "cooldownSwipeDarkenOnLoss", false, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Show cooldown text", displayCol2 - 2, lowerToggleY - 44, AuraShared, "showCooldownText", true, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Dispel-type borders", displayCol3 - 2, borderToggleY, AuraShared, "useDebuffTypeBorders", false, ApplyAuras), displayCol3W))
+    Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Hide Masque borders", displayCol3 - 2, borderToggleY - 22, AuraShared, "masqueHideBorder", false, ApplyAuras), displayCol3W))
     local displayScopeHint = W.Text(master, "Player-only buff hiding uses Custom caps and Max Buffs 0 because Show Buffs is shared.", 14, displayHintY, contentW - 28, T.colors.muted)
     if displayScopeHint.SetWordWrap then displayScopeHint:SetWordWrap(true) end
     if displayScopeHint.SetHeight then displayScopeHint:SetHeight(52) end
@@ -1017,6 +1521,15 @@ local function BuildAuras(ctx)
             ApplyAuras()
         end))
 
+    M.AddRefresher(ctx, function()
+        local sharedScope = IsSharedScope()
+        W.SetControlsEnabled(sharedOnlyControls, sharedScope)
+        W.SetControlsEnabled(filterOverrideControls, sharedScope or UnitOverrideEnabled("overrideFilters"))
+        W.SetControlsEnabled(capsOverrideControls, sharedScope or UnitOverrideEnabled("overrideSharedLayout"))
+        W.SetControlsEnabled(layoutOverrideControls, sharedScope or UnitOverrideEnabled("overrideLayout"))
+    end)
+
+    if IsAdvancedUXMode() then
     local visual = b:CollapsibleSection("a2_text_coloring", "Text Coloring", 520, false)
     LabelAt(visual, "Cooldown Timer Text", 12, -10, 240, "GameFontNormal", T.colors.text)
     W.Text(visual, "Blizzard native timer text keeps aura countdowns cheap; MSUF only applies the configured colors.", 12, -34, 650, T.colors.muted)
@@ -1211,6 +1724,7 @@ local function BuildAuras(ctx)
         SetControlEnabled(expiry, remindersEnabled)
         SetControlEnabled(grow, remindersEnabled)
     end)
+    end
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
