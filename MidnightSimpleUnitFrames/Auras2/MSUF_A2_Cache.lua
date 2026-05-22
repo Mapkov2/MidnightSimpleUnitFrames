@@ -500,6 +500,13 @@ local function DebuffIsDispellable(unit, aid, aura, lIsFiltered)
     return false
 end
 
+local function DebuffMatchesDispelException(unit, aid, aura, cfg, lIsFiltered)
+    if cfg and cfg._debuffTypeFilter then
+        return DebuffMatchesSelectedDispelType(aura, cfg)
+    end
+    return DebuffIsDispellable(unit, aid, aura, lIsFiltered)
+end
+
 -- Helpful/harmful classification (secret-safe).
 -- Prefer explicit AuraData polarity when the client exposes it. Some player
 -- auras can give ambiguous filter answers during UNIT_AURA deltas, which made
@@ -932,9 +939,8 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
             end
         end
     else
-        if cfg._debuffTypeFilter and not DebuffMatchesSelectedDispelType(data, cfg) then return false end
         if cfg._debuffsOnlyMine and not cfg._useMergeDebuffs and not isOwn then
-            if not (cfg._includeDispellableDebuffs and DebuffIsDispellable(unit, aid, data, lIsFiltered)) then
+            if not (cfg._includeDispellableDebuffs and DebuffMatchesDispelException(unit, aid, data, cfg, lIsFiltered)) then
                 return false
             end
         end
@@ -942,7 +948,7 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
 
         if cfg._onlyImpDebuffs and lIsFiltered then
             if ReadAccessibleBool(lIsFiltered(unit, aid, HARMFUL_IMPORTANT)) == true then
-                if not (cfg._includeDispellableDebuffs and DebuffIsDispellable(unit, aid, data, lIsFiltered)) then
+                if not (cfg._includeDispellableDebuffs and DebuffMatchesDispelException(unit, aid, data, cfg, lIsFiltered)) then
                     return false
                 end
             end
@@ -1034,7 +1040,7 @@ local function PrepareFilterConfig(cfg, cfgGen)
         and not cfg._hidePermanent and not cfg._onlyImpBuffs and not cfg._onlyImpDebuffs
         and not cfg._useMergeBuffs and not cfg._useMergeDebuffs
         and not cfg._includeStealableBuffs
-        and not cfg._includeDispellableDebuffs and not cfg._debuffTypeFilter
+        and not cfg._includeDispellableDebuffs
         and not cfg._hideOtherBossHealAuras
     cfg._sortOrder = cfg.sortOrder or cfg.capsSortOrder or 0
 end
