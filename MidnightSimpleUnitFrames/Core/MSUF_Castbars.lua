@@ -7,6 +7,33 @@ local type, tonumber, ipairs, pairs = type, tonumber, ipairs, pairs
 local string_format = string.format
 local LSM = (ns and ns.LSM) or _G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 local FONT_LIST = _G.MSUF_FONT_LIST
+
+local function CurrentLSM()
+    local lsm = (ns and ns.LSM) or _G.MSUF_LSM or LSM
+    if lsm then LSM = lsm end
+    return lsm
+end
+
+local function IsStatusbarTextureUsable(texture)
+    if type(texture) ~= "string" or texture == "" then return false end
+    local isKnown = _G.MSUF_IsKnownFileAsset
+    if type(isKnown) == "function" and isKnown(texture) == false then return false end
+    return true
+end
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
 local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path)
     if type(_G.MSUF_NormalizeFontPath) == "function" then
         return _G.MSUF_NormalizeFontPath(path)
@@ -24,6 +51,9 @@ local CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame or function(fn)
 end
 
 local function _MSUF_DeferredBossPreviewEditModeRefresh()
+    if _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false) then
+        return
+    end
     if _G.MSUF_UpdateBossCastbarPreview then
         _G.MSUF_UpdateBossCastbarPreview()
     end
@@ -100,11 +130,11 @@ function MSUF_GetCastbarUnitFromFrame(frame)
 end
 function MSUF_ApplyUnitframeKeyAndSync(key, changedFonts)
     if not key then  return end
-    if not MSUF_DB then EnsureDB() end
-    if ApplySettingsForKey then
-        ApplySettingsForKey(key)
-    elseif ApplyAllSettings then
-        ApplyAllSettings()
+    if not MSUF_DB then MSUF_EnsureDB() end
+    if _G.MSUF_ApplySettingsForKey then
+        _G.MSUF_ApplySettingsForKey(key)
+    elseif _G.MSUF_ApplyAllSettings then
+        _G.MSUF_ApplyAllSettings()
     end
     if changedFonts then
         if _G.MSUF_UpdateAllFonts then
@@ -122,7 +152,7 @@ end
  end
 function MSUF_ApplyCastbarUnitAndSync(unitKey)
     if not unitKey then  return end
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     if MSUF_IsBossCastbarUnit(unitKey) then
         if _G.MSUF_ApplyBossCastbarPositionSetting then
             _G.MSUF_ApplyBossCastbarPositionSetting()
@@ -130,7 +160,9 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
         if _G.MSUF_ApplyBossCastbarTimeSetting then
             _G.MSUF_ApplyBossCastbarTimeSetting()
     end
-        if _G.MSUF_UpdateBossCastbarPreview then
+        if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
+            and _G.MSUF_UpdateBossCastbarPreview
+        then
             _G.MSUF_UpdateBossCastbarPreview()
     end
         if type(MSUF_SyncCastbarPositionPopup) == "function" then
@@ -155,15 +187,27 @@ function MSUF_ApplyCastbarUnitAndSync(unitKey)
  end
 local MSUF_GetFontFlags
 local function MSUF_GetFontPath()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     MSUF_DB = MSUF_DB or {}
     local g = MSUF_DB.general or {}
     MSUF_DB.general = g
     local key = g.fontKey
+    local pathForKey = _G.MSUF_GetFontPathForKey or (ns and ns.MSUF_GetFontPathForKey)
+    if type(pathForKey) == "function" and key and key ~= "" then
+        local p = pathForKey(key)
+        if p then return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags()) end
+    end
+
+    local internalPath
+    if type(_G.MSUF_GetInternalFontPathByKey) == "function" then
+        internalPath = _G.MSUF_GetInternalFontPathByKey(key)
+    end
+    if internalPath then return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags()) end
+
     local lsm = LSM or (ns and ns.LSM) or _G.MSUF_LSM
-    local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
-    local lsmKey = normalizeFontKey(key)
     if lsm and key and key ~= "" then
+        local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+        local lsmKey = normalizeFontKey(key)
         local p
         if type(lsm.Fetch) == "function" then
             p = lsm:Fetch("font", lsmKey, true)
@@ -173,18 +217,12 @@ local function MSUF_GetFontPath()
         end
         if p then return ResolveFontPath(p, g.fontSize or 14, MSUF_GetFontFlags()) end
     end
-    local internalPath
-    if type(GetInternalFontPathByKey) == "function" then
-        internalPath = GetInternalFontPathByKey(lsmKey) or GetInternalFontPathByKey(key)
-    end
-    if internalPath then
-         return ResolveFontPath(internalPath, g.fontSize or 14, MSUF_GetFontFlags())
-    end
+
     local fallback = (FONT_LIST and FONT_LIST[1] and FONT_LIST[1].path) or "Fonts\\FRIZQT__.TTF"
     return ResolveFontPath(fallback, g.fontSize or 14, MSUF_GetFontFlags())
 end
 MSUF_GetFontFlags = function()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     MSUF_DB = MSUF_DB or {}
     MSUF_DB.general = MSUF_DB.general or {}
     local g = MSUF_DB.general
@@ -197,7 +235,7 @@ MSUF_GetFontFlags = function()
     end
  end
 function ns.MSUF_GetGlobalFontSettings()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = MSUF_DB.general or {}
     local path  = MSUF_GetFontPath()
     local flags = MSUF_GetFontFlags()
@@ -214,7 +252,7 @@ function MSUF_GetGlobalFontSettings()
 end
 function MSUF_GetCastbarTexture()
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local castKey = g and g.castbarTexture or nil
@@ -231,35 +269,54 @@ function MSUF_GetCastbarTexture()
     end
     local function TryResolve(key)
         if type(key) ~= "string" or key == "" then
-             return nil
+             return nil, true
         end
         local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
         if type(builtins) == "table" then
             local t = builtins[key]
             if type(t) == "string" and t ~= "" then
-                 return t
+                if IsStatusbarTextureUsable(t) then
+                    return t, true
+                end
+                return nil, false
             end
         end
         if key:find("\\") or key:find("/") then
-             return key
+            if IsStatusbarTextureUsable(key) then
+                return key, true
+            end
+            return nil, false
         end
-        if LSM and LSM.Fetch then
-            local tex = LSM:Fetch("statusbar", key)
-            if tex and tex ~= "" then
-                 return tex
+        local lsm = CurrentLSM()
+        if lsm and lsm.Fetch then
+            local tex = lsm:Fetch("statusbar", key, true)
+            if type(tex) == "string" and tex ~= "" then
+                if IsStatusbarTextureUsable(tex) then
+                    return tex, true
+                end
+                return nil, false
             end
         end
-         return nil
+         return nil, false
     end
-    local tex = TryResolve(castKey) or TryResolve(barKey) or "Interface\\TARGETINGFRAME\\UI-StatusBar"
-    cache[ck] = tex
+    local tex, castResolved = TryResolve(castKey)
+    local cacheable = castResolved
+    if not tex then
+        local barTex, barResolved = TryResolve(barKey)
+        tex = barTex
+        cacheable = cacheable and barResolved
+    end
+    tex = tex or "Interface\\TARGETINGFRAME\\UI-StatusBar"
+    if cacheable then
+        cache[ck] = tex
+    end
      return tex
 end
 _G.MSUF_GetCastbarTexture = MSUF_GetCastbarTexture
 _G.MSUF_GetCastbarTexture = MSUF_GetCastbarTexture
 function MSUF_GetCastbarBackgroundTexture()
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = MSUF_DB and MSUF_DB.general
     local bgKey = g and g.castbarBackgroundTexture or nil
@@ -303,7 +360,7 @@ local function MSUF_IsCastTimeEnabled(frame)
 end
 function MSUF_GetCastbarReverseFill(isChanneled)
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = MSUF_DB and MSUF_DB.general
     local dir = g and g.castbarFillDirection or "RTL"
@@ -357,7 +414,7 @@ function MSUF_GetGlobalCastbarStyleCache()
     cache = cache or {}
     cache.rev = rev
     if not MSUF_DB then
-        EnsureDB()
+        MSUF_EnsureDB()
     end
     local g = (MSUF_DB and MSUF_DB.general) or {}
     cache.unifiedDirection = (g.castbarUnifiedDirection == true)
@@ -434,7 +491,7 @@ MSUF_BumpCastbarStyleRevision()
             frame.MSUF_cachedCastbarTexture = tex
             frame.MSUF_cachedReverseFillNormal    = MSUF_GetCastbarReverseFill(false) and true or false
             frame.MSUF_cachedReverseFillChanneled = MSUF_GetCastbarReverseFill(true)  and true or false
-            if not MSUF_DB then EnsureDB() end; local _g = MSUF_DB and MSUF_DB.general; frame.MSUF_cachedUnifiedDirection = (_g and _g.castbarUnifiedDirection) == true
+            if not MSUF_DB then MSUF_EnsureDB() end; local _g = MSUF_DB and MSUF_DB.general; frame.MSUF_cachedUnifiedDirection = (_g and _g.castbarUnifiedDirection) == true
     end
         if frame and frame.backgroundBar then
             frame.backgroundBar:SetTexture(bgTex)
@@ -483,6 +540,28 @@ function MSUF_UpdateCastbarFillDirection()
  end
 -- PERF: Result cache — key→texture mapping never changes during runtime.
 local _resolveTexCache = {}
+function MSUF_ClearResolvedStatusbarTextureCache()
+    _resolveTexCache = {}
+
+    local castbarCache = _G.MSUF_CastbarTextureCache
+    if type(castbarCache) == "table" then
+        for key in pairs(castbarCache) do
+            castbarCache[key] = nil
+        end
+    end
+
+    local dpb = ns and ns.Bars and ns.Bars._DetachedPowerBarTextures
+    if dpb then
+        dpb.fgK = false
+        dpb.fgC = nil
+        dpb.bgK = false
+        dpb.bgC = nil
+    end
+
+    CurrentLSM()
+end
+_G.MSUF_ClearResolvedStatusbarTextureCache = MSUF_ClearResolvedStatusbarTextureCache
+
 function MSUF_ResolveStatusbarTextureKey(key)
     if type(key) ~= "string" or key == "" then
         return "Interface\\TargetingFrame\\UI-StatusBar"
@@ -491,24 +570,43 @@ function MSUF_ResolveStatusbarTextureKey(key)
     if cached then return cached end
 
     local result
+    local cacheable = false
     local builtins = _G.MSUF_BUILTIN_BAR_TEXTURES
     if type(builtins) == "table" then
         local t = builtins[key]
         if type(t) == "string" and t ~= "" then
-            result = t
+            if IsStatusbarTextureUsable(t) then
+                result = t
+                cacheable = true
+            end
         end
     end
     if not result then
         if key:find("\\") or key:find("/") then
-            result = key
-        elseif LSM and type(LSM.Fetch) == "function" then
-            local tex = LSM:Fetch("statusbar", key, true)
-            if tex then result = tex end
+            if IsStatusbarTextureUsable(key) then
+                result = key
+                cacheable = true
+            end
+        else
+            local lsm = CurrentLSM()
+            if lsm and type(lsm.Fetch) == "function" then
+                local tex = lsm:Fetch("statusbar", key, true)
+                if type(tex) == "string" and tex ~= "" then
+                    if IsStatusbarTextureUsable(tex) then
+                        result = tex
+                        cacheable = true
+                    end
+                end
+            end
         end
     end
-    result = result or "Interface\\TargetingFrame\\UI-StatusBar"
-    _resolveTexCache[key] = result
-    return result
+    if result then
+        if cacheable then _resolveTexCache[key] = result end
+        return result
+    end
+    local fallback = "Interface\\TargetingFrame\\UI-StatusBar"
+    if cacheable then _resolveTexCache[key] = fallback end
+    return fallback
 end
 _G.MSUF_ResolveStatusbarTextureKey = MSUF_ResolveStatusbarTextureKey
 _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {
@@ -523,13 +621,13 @@ _G.MSUF_BUILTIN_BAR_TEXTURES = _G.MSUF_BUILTIN_BAR_TEXTURES or {
     Parchment      = "Interface\\AchievementFrame\\UI-Achievement-StatsBackground",
 }
 function MSUF_GetBarTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.barTexture
     return MSUF_ResolveStatusbarTextureKey(key)
 end
 function MSUF_GetBarBackgroundTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.barBackgroundTexture
     if key == nil or key == "" then
@@ -538,7 +636,7 @@ function MSUF_GetBarBackgroundTexture()
     return MSUF_ResolveStatusbarTextureKey(key)
 end
 function MSUF_GetAbsorbBarTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.absorbBarTexture
     if key == nil or key == "" then
@@ -547,7 +645,7 @@ function MSUF_GetAbsorbBarTexture()
     return MSUF_ResolveStatusbarTextureKey(key)
 end
 function MSUF_GetHealAbsorbBarTexture()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = (MSUF_DB and MSUF_DB.general) or nil
     local key = g and g.healAbsorbBarTexture
     if key == nil or key == "" then
@@ -627,17 +725,17 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
         btn:SetPoint("TOPRIGHT", anchorParent, "TOPRIGHT", -175, -152)
     end
     local function UpdateButtonLabel()
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         local g       = MSUF_DB.general or {}
         local active  = g.castbarPlayerPreviewEnabled and true or false
         if active then
-            btn:SetText("Castbar Edit Mode: ON")
+            btn:SetText(Tr("Castbar Edit Mode: ON"))
         else
-            btn:SetText("Castbar Edit Mode: OFF")
+            btn:SetText(Tr("Castbar Edit Mode: OFF"))
     end
      end
     btn:SetScript("OnClick", function(self)
-        if not MSUF_DB then EnsureDB() end
+        if not MSUF_DB then MSUF_EnsureDB() end
         local g = MSUF_DB.general or {}
         local wasActive = g.castbarPlayerPreviewEnabled and true or false
         if wasActive then
@@ -661,15 +759,17 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if _G.MSUF_UpdateBossCastbarPreview then
+            if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
+                and _G.MSUF_UpdateBossCastbarPreview
+            then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
     end
         g.castbarPlayerPreviewEnabled = not (g.castbarPlayerPreviewEnabled and true or false)
         if g.castbarPlayerPreviewEnabled then
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r drag player/target/focus castbars with the mouse.")
+            print(Tr("|cffffd700MSUF:|r Castbar Edit Mode |cff00ff00ON|r drag player/target/focus castbars with the mouse."))
         else
-            print("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r.")
+            print(Tr("|cffffd700MSUF:|r Castbar Edit Mode |cffff0000OFF|r."))
     end
         if MSUF_UpdatePlayerCastbarPreview then
             MSUF_UpdatePlayerCastbarPreview()
@@ -678,7 +778,9 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
             if _G.MSUF_ApplyBossCastbarPositionSetting then
                 _G.MSUF_ApplyBossCastbarPositionSetting()
             end
-            if _G.MSUF_UpdateBossCastbarPreview then
+            if not (_G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false))
+                and _G.MSUF_UpdateBossCastbarPreview
+            then
                 _G.MSUF_UpdateBossCastbarPreview()
             end
             if _G.MSUF_SetupBossCastbarPreviewEditMode then
@@ -698,7 +800,7 @@ local function MSUF_InitPlayerCastbarPreviewToggle()
 -- ══════════════════════════════════════════════════════════════
 function MSUF_UpdateCastbarVisuals()
 MSUF_BumpCastbarStyleRevision()
-    if not MSUF_DB then EnsureDB() end
+    if not MSUF_DB then MSUF_EnsureDB() end
     local g = MSUF_DB.general or {}
     local showIcon    = ns.Util.Enabled(nil, g, "castbarShowIcon", true)
     local showName    = ns.Util.Enabled(nil, g, "castbarShowSpellName", true)
@@ -720,8 +822,13 @@ MSUF_BumpCastbarStyleRevision()
     local useShadow = g.textBackdrop and true or false
     local baseSize = g.fontSize or 14
     local effectiveSize = (fontSize > 0) and fontSize or baseSize
+    local safeSetFont = _G.MSUF_SetFontSafe
     local function ApplyFontColor(fs, size)
-        fs:SetFont(fontPath, size, fontFlags)
+        if type(safeSetFont) == "function" then
+            safeSetFont(fs, fontPath, size, fontFlags, g.fontKey)
+        else
+            fs:SetFont(fontPath, size, fontFlags)
+        end
         fs:SetTextColor(fr, fg, fb, 1)
      end
     local function ApplyShadow(fs)
@@ -909,13 +1016,16 @@ MSUF_BumpCastbarStyleRevision()
     ApplyMSUF(MSUF_PlayerCastbar)
     ApplyMSUF(MSUF_TargetCastbar)
     ApplyMSUF(MSUF_FocusCastbar)
-    ApplyMSUF(MSUF_PlayerCastbarPreview)
-    ApplyMSUF(MSUF_TargetCastbarPreview)
-    ApplyMSUF(MSUF_FocusCastbarPreview)
-    if _G.MSUF_BossCastbarPreview then
-        ApplyMSUF(_G.MSUF_BossCastbarPreview)
+    local previewCombatLocked = _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+    if not previewCombatLocked then
+        ApplyMSUF(MSUF_PlayerCastbarPreview)
+        ApplyMSUF(MSUF_TargetCastbarPreview)
+        ApplyMSUF(MSUF_FocusCastbarPreview)
+        if _G.MSUF_BossCastbarPreview then
+            ApplyMSUF(_G.MSUF_BossCastbarPreview)
+        end
     end
-    if type(_G.MSUF_UpdateBossCastbarPreview) == "function" and not _G.MSUF_BossPreviewRefreshLock then
+    if not previewCombatLocked and type(_G.MSUF_UpdateBossCastbarPreview) == "function" and not _G.MSUF_BossPreviewRefreshLock then
         _G.MSUF_BossPreviewRefreshLock = true
         _G.MSUF_UpdateBossCastbarPreview()
         if _G.MSUF_SetupBossCastbarPreviewEditMode then

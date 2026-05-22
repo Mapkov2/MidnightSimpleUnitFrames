@@ -47,17 +47,6 @@ local function _ScheduleOnce(key, fn)
     end
 end
 
-local function _ScheduleDelayOnce(key, delay, fn)
-    local sched = _G.MSUF_ScheduleDelayOnce
-    if sched then
-        sched(key, delay, fn)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(delay or 0, fn)
-    elseif type(fn) == "function" then
-        fn()
-    end
-end
-
 -- P3: Boss UNIT_AURA gate.
 -- UNIT_AURA for boss slots is only meaningful during an active encounter.
 -- Between encounters the engine still dispatches these events (boss units exist
@@ -123,6 +112,53 @@ local function MarkDirty(unit, delay)
     if f then
         f(unit, delay)
     end
+end
+
+local function UnitAuraDeltaNeedsRescan(updateInfo)
+    if type(updateInfo) ~= "table" then return true end
+    if updateInfo.isFullUpdate then return true end
+
+    local added = updateInfo.addedAuras
+    local removed = updateInfo.removedAuraInstanceIDs
+    local updated = updateInfo.updatedAuraInstanceIDs
+
+    return (added and added[5] ~= nil)
+        or (removed and removed[5] ~= nil)
+        or (updated and updated[9] ~= nil)
+        or false
+end
+
+local function FeedUnitAuraDelta(unit, updateInfo)
+    if not unit then return true end
+    if not _refsBound then BindCachedRefs() end
+
+    if _unitAuraRescanQueued[unit] == true then
+        return true
+    end
+
+    if UnitAuraDeltaNeedsRescan(updateInfo) then
+        _unitAuraRescanQueued[unit] = true
+
+        if updateInfo == nil or (type(updateInfo) == "table" and updateInfo.isFullUpdate == true) then
+            local onAura = _cachedOnUnitAura
+            if onAura then
+                onAura(unit, updateInfo)
+                return true
+            end
+        end
+
+        local invalid = _cachedInvalidUnit
+        if invalid then
+            invalid(unit)
+        end
+        return true
+    end
+
+    local onAura = _cachedOnUnitAura
+    if onAura then
+        onAura(unit, updateInfo)
+    end
+    return false
 end
 
 -- PERF: Epoch counter for rapid-click deduplication.
@@ -193,8 +229,17 @@ local function _flushTargetRender()
 end
 
 Events._flushTargetSwap = function()
-    Events._targetRenderExpected = _targetRenderEpoch
-    _ScheduleDelayOnce("A2_TARGET_RENDER_FLUSH", 0.05, _flushTargetRender)
+    local expected = _targetRenderEpoch
+    Events._targetRenderExpected = expected
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.05, function()
+            if _targetRenderEpoch ~= expected then return end
+            Events._targetRenderExpected = expected
+            _flushTargetRender()
+        end)
+    else
+        _flushTargetRender()
+    end
 end
 
 Events._ClearUnitAuraRescanQueued = function(unit)
@@ -841,6 +886,7 @@ end
             busUnreg("PLAYER_TARGET_CHANGED", "MSUF_A2_EVENTS")
             busUnreg("PLAYER_FOCUS_CHANGED", "MSUF_A2_EVENTS")
         end
+        _G.MSUF_A2_OnTargetChanged = nil
 
         local list = ef._msufA2_unitAuraFrames
         if type(list) == "table" then
@@ -953,11 +999,22 @@ end
                     end
                 end
 
+                -- Defensive hard gate for stale helper frames. Use the same
+                -- runtime predicate as registration so reminder-only player
+                -- updates still work while Auras2 master-off stays cold.
+                if not UnitNeedsAuraRuntime(unit, API.DB and API.DB.cache) then return end
+
                 -- No-op skip: some clients can fire UNIT_AURA with an empty updateInfo.
                 -- P3: Boss UNIT_AURA gate — single table + bool check, ~0 cost.
                 -- Skips Store update + MarkDirty for boss slots outside encounters.
                 -- Cache is fully invalidated on INSTANCE_ENCOUNTER_ENGAGE_UNIT anyway.
-                if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then return end
+                if _IS_BOSS_UNIT[unit] and not _bossEncounterActive then
+                    -- Some Midnight boss slots become targetable and start
+                    -- producing aura deltas before INSTANCE_ENCOUNTER_ENGAGE_UNIT.
+                    -- Keep empty-slot spam gated, but do not drop real boss auras.
+                    if not (UnitExists and UnitExists(unit)) then return end
+                    _bossEncounterActive = true
+                end
 
                 -- During a target swap, ignore target deltas completely.
                 -- They can belong to the outgoing target or be partial updates for
@@ -965,28 +1022,27 @@ end
                 if unit == "target" and Events._targetSwapQueued then return end
 
                 local now = GetTime()
-                local nextAt = _unitAuraPending[unit]
-                if nextAt and now < nextAt then
-                    if not _refsBound then BindCachedRefs() end
-                    local invalid = _cachedInvalidUnit
-                    if invalid and not _unitAuraRescanQueued[unit] then
-                        _unitAuraRescanQueued[unit] = true
-                        invalid(unit)
-                    end
-                    -- Correctness guard: refresh/removal deltas can arrive inside
-                    -- the coalesce window after the previous render already ran.
-                    -- Force one render so expired icons disappear and refreshed
-                    -- duration objects are reattached immediately.
-                    MarkDirty(unit, 0)
-                    return
-                end
-
                 local infoIsTable = (type(updateInfo) == "table")
                 if infoIsTable and not updateInfo.isFullUpdate then
                     local a = updateInfo.addedAuras
                     local r = updateInfo.removedAuraInstanceIDs
                     local u = updateInfo.updatedAuraInstanceIDs
                     if (not a or a[1] == nil) and (not r or r[1] == nil) and (not u or u[1] == nil) then return end
+                end
+
+                local nextAt = _unitAuraPending[unit]
+                if nextAt and now < nextAt then
+                    -- Keep merging normal deltas while the render is coalesced.
+                    -- Only large/full/unsafe bursts invalidate to a render-time
+                    -- FullScan. This preserves expired-aura removal without
+                    -- turning every dense UNIT_AURA burst into a cache wipe.
+                    FeedUnitAuraDelta(unit, updateInfo)
+                    -- Correctness guard: refresh/removal deltas can arrive
+                    -- inside the coalesce window after the previous render
+                    -- already ran. MarkDirty dedupes by unit and only
+                    -- accelerates an existing delayed flush when delay == 0.
+                    MarkDirty(unit, 0)
+                    return
                 end
 
                 if not ShouldScheduleLiveRenderFast(unit, self, now) then
@@ -1000,55 +1056,12 @@ end
                 end
                 _hiddenAuraInvalid[unit] = nil
 
-                do
-                    if not _refsBound then BindCachedRefs() end
-                    local forceRescan = (_unitAuraRescanQueued[unit] == true)
-                    if (not forceRescan) and infoIsTable then
-                        if updateInfo.isFullUpdate then
-                            forceRescan = true
-                        else
-                            local a = updateInfo.addedAuras
-                            local r = updateInfo.removedAuraInstanceIDs
-                            local u = updateInfo.updatedAuraInstanceIDs
-                            forceRescan = (a and a[5] ~= nil) or (r and r[5] ~= nil) or (u and u[9] ~= nil)
-                        end
-                    end
+                FeedUnitAuraDelta(unit, updateInfo)
 
-                    if forceRescan then
-                        local invalid = _cachedInvalidUnit
-                        if invalid then
-                            _unitAuraRescanQueued[unit] = true
-                            invalid(unit)
-                        end
-                    else
-                        local onAura = _cachedOnUnitAura
-                        if onAura then
-                            onAura(unit, updateInfo)
-                        end
-                    end
-
-                    local delay = (unit == "player") and _UNIT_AURA_COALESCE_PLAYER or _UNIT_AURA_COALESCE_DEFAULT
-                    _unitAuraPending[unit] = now + delay
-                    MarkDirty(unit, delay)
-                    return
-                end
-
-                -- Always feed delta into Store so cache stays current.
-                -- ShouldProcessUnitEvent is NOT gated here — RegisterUnitEvent
-                -- already ensures we only receive events for enabled units.
-                if not _refsBound then BindCachedRefs() end
-                local onAura = _cachedOnUnitAura
-                if onAura then
-                    onAura(unit, updateInfo)
-                end
-
-                -- P2: per-unit burst dedup — only one timer per unit per 20ms window.
-                local now = GetTime()
-                local nextAt = _unitAuraPending[unit]
-                if not nextAt or now >= nextAt then
-                    _unitAuraPending[unit] = now + 0.02
-                    MarkDirty(unit)
-                end
+                local delay = (unit == "player") and _UNIT_AURA_COALESCE_PLAYER or _UNIT_AURA_COALESCE_DEFAULT
+                _unitAuraPending[unit] = now + delay
+                MarkDirty(unit, delay)
+                return
             end
             ef._msufA2_unitAuraOnEvent = handler
         end
@@ -1128,6 +1141,9 @@ function Events.Init()
         -- immediately — without waiting for the player to interact.
         if event == "UNIT_TARGETABLE_CHANGED" then
             if arg1 and _IS_BOSS_UNIT[arg1] then
+                if UnitExists and UnitExists(arg1) then
+                    _bossEncounterActive = true
+                end
                 if not _refsBound then BindCachedRefs() end
                 local inv = _cachedInvalidUnit
                 ClearLiveRenderVisibility(arg1)

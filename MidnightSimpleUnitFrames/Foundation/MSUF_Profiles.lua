@@ -1,5 +1,127 @@
 -- Extracted from MidnightSimpleUnitFrames.lua (profiles + active profile state)
 local addonName, ns = ...
+local function MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
+    if type(str) ~= "string" then
+        return nil
+    end
+    local trimmed = str:match("^%s*(.-)%s*$")
+    if not trimmed or trimmed == "" then
+        return nil
+    end
+    local payload = trimmed
+    local returned = trimmed:match("^return%s*(.+)$")
+    if returned then
+        payload = returned:match("^%s*(.-)%s*$")
+    end
+    if payload and payload:sub(1, 1) == "{" and payload:sub(-1) == "}" then
+        return "return " .. payload
+    end
+    return nil
+end
+local function MSUF_ProfileIO_SandboxLoadstring(fn)
+    if type(fn) == "function" and type(setfenv) == "function" then
+        pcall(setfenv, fn, {})
+    end
+    return fn
+end
+local function MSUF_ProfileIO_LoadLegacyChunk(str)
+    if type(loadstring) ~= "function" then
+        return nil, "loadstring unavailable"
+    end
+    local chunk = MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
+    if not chunk then
+        return nil, "legacy import must be a table literal"
+    end
+    local func, err = loadstring(chunk)
+    if func then
+        MSUF_ProfileIO_SandboxLoadstring(func)
+    end
+    return func, err
+end
+local function MSUF_ProfileIO_RunEnsureDB()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then
+        ensureDB()
+        return true
+    end
+    return false
+end
+local function MSUF_ProfileIO_RunApplyAllSettings()
+    local applyAllSettings = _G.MSUF_ApplyAllSettings
+    if type(applyAllSettings) == "function" then
+        applyAllSettings()
+        return true
+    end
+    return false
+end
+local function MSUF_ProfileIO_CallGlobal(name, ...)
+    local fn = _G[name]
+    if type(fn) ~= "function" then
+        return false
+    end
+    local ok = pcall(fn, ...)
+    return ok == true
+end
+local MSUF_ProfileIO_PostProfileRuntimeApply
+local function MSUF_ProfileIO_InCombatLockdown()
+    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
+end
+local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
+    if not MSUF_ProfileIO_InCombatLockdown() then
+        return false
+    end
+    _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = {
+        reason = reason or "PROFILE_APPLY",
+        applyAll = applyAll == true,
+    }
+    local f = _G.MSUF_ProfileIO_PostProfileDeferFrame
+    if not f and type(_G.CreateFrame) == "function" then
+        f = _G.CreateFrame("Frame")
+        _G.MSUF_ProfileIO_PostProfileDeferFrame = f
+        f:SetScript("OnEvent", function(self, event)
+            if event ~= "PLAYER_REGEN_ENABLED" then return end
+            if MSUF_ProfileIO_InCombatLockdown() then return end
+            self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            local pending = _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply
+            _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = nil
+            if pending and MSUF_ProfileIO_PostProfileRuntimeApply then
+                MSUF_ProfileIO_PostProfileRuntimeApply(pending.reason or "PROFILE_APPLY_AFTER_COMBAT", pending.applyAll == true)
+            end
+        end)
+    end
+    if f and f.RegisterEvent then
+        f:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    if applyAll == true then
+        MSUF_ProfileIO_RunApplyAllSettings()
+    end
+    return true
+end
+MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
+    reason = reason or "PROFILE_APPLY"
+    if MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll) then
+        return
+    end
+    if applyAll == true then
+        if not MSUF_ProfileIO_CallGlobal("MSUF_ApplyAllSettings_Immediate") then
+            MSUF_ProfileIO_RunApplyAllSettings()
+        end
+    end
+
+    local nsGlobal = _G.MSUF_NS
+    local core = nsGlobal and nsGlobal.MSUF_UnitframeCore
+    if core and type(core.InvalidateAllFrameConfigs) == "function" then
+        pcall(core.InvalidateAllFrameConfigs)
+    end
+    MSUF_ProfileIO_CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+    MSUF_ProfileIO_CallGlobal("MSUF_ApplyModules")
+    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_Refresh")
+    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshTextures")
+    MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
+    MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    MSUF_ProfileIO_CallGlobal("MSUF_Portraits_ForceRefresh")
+    MSUF_ProfileIO_CallGlobal("MSUF_PortraitDecoration_RefreshAll")
+end
 -- Compact codec (backward compatible)
 -- New export format (preferred):
 --   MSUF3: base64(CBOR(table)) using Blizzard C_EncodingUtil
@@ -159,7 +281,7 @@ do
         --    Only attempt if it looks like a table (avoid executing arbitrary code).
         local trimmed = payload:match("^%s*(.-)%s*$")
         if trimmed and trimmed:sub(1,1) == "{" and trimmed:sub(-1) == "}" then
-            local fn = loadstring and loadstring("return " .. trimmed)
+            local fn = MSUF_ProfileIO_LoadLegacyChunk(trimmed)
             if fn then
                 local ok3, t = pcall(fn)
                 if ok3 and type(t) == "table" then
@@ -169,9 +291,44 @@ do
         end
          return nil
     end
-    local function EncodeCompactTable(tbl)
-        local E = GetEncodingUtil()
-        if not E then  return nil end
+    local function IsSecretRuntimeValue(value)
+        local isSecret = _G.issecretvalue
+        if type(isSecret) ~= "function" then
+            return false
+        end
+        local ok, secret = pcall(isSecret, value)
+        return ok and secret == true
+    end
+    local function CompactSerializableCopy(value, seen)
+        if IsSecretRuntimeValue(value) then
+            return nil
+        end
+        local tv = type(value)
+        if tv == "nil" or tv == "number" or tv == "string" or tv == "boolean" then
+            return value
+        end
+        if tv ~= "table" then
+            return nil
+        end
+        seen = seen or {}
+        if seen[value] then
+            return nil
+        end
+        seen[value] = true
+        local out = {}
+        for k, v in pairs(value) do
+            local kt = type(k)
+            if kt == "number" or kt == "string" or kt == "boolean" then
+                local safeValue = CompactSerializableCopy(v, seen)
+                if safeValue ~= nil then
+                    out[k] = safeValue
+                end
+            end
+        end
+        seen[value] = nil
+        return out
+    end
+    local function TryEncodeCompactPayload(E, tbl)
         local ok1, bin = pcall(E.SerializeCBOR, tbl)
         if not ok1 or type(bin) ~= "string" then  return nil end
         -- Prefer smaller strings when compression exists.
@@ -179,6 +336,19 @@ do
         local ok2, b64 = pcall(E.EncodeBase64, payload)
         if not ok2 or type(b64) ~= "string" then  return nil end
         return "MSUF3:" .. b64
+    end
+    local function EncodeCompactTable(tbl)
+        local E = GetEncodingUtil()
+        if not E then  return nil end
+        local compact = TryEncodeCompactPayload(E, tbl)
+        if compact then  return compact end
+        -- Some dirty runtime profiles can contain transient values that cannot
+        -- be CBOR-encoded. Drop those the same way the Lua fallback would.
+        local safe = CompactSerializableCopy(tbl)
+        if safe then
+            return TryEncodeCompactPayload(E, safe)
+        end
+        return nil
     end
     local function TryDecodeCompactString(str)
         if type(str) ~= "string" then  return nil end
@@ -286,7 +456,7 @@ function MSUF_InitProfiles()
     -- Without this, CreateSimpleUnitFrame sees conf=nil/{} for pet/targettarget
     -- when the profile was saved from an older version missing those keys,
     -- and UpdateSimpleUnitFrame defaults showPowerText=true since conf.showPower is nil.
-    if type(EnsureDB) == "function" then EnsureDB() end
+    MSUF_ProfileIO_RunEnsureDB()
  end
 function MSUF_CreateProfile(name)
     if not name or name == "" then  return end
@@ -319,14 +489,11 @@ function MSUF_SwitchProfile(name)
             core.InvalidateAllFrameConfigs()
         end
     end
-    if EnsureDB then
-        EnsureDB()
-    end
-    if ApplyAllSettings then
-        ApplyAllSettings()
-    end
-    if UpdateAllFonts then
-        UpdateAllFonts()
+    MSUF_ProfileIO_RunEnsureDB()
+    MSUF_ProfileIO_RunApplyAllSettings()
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_SWITCH", false)
+    if _G.MSUF_UpdateAllFonts then
+        _G.MSUF_UpdateAllFonts()
     end
     print("|cff00ff00MSUF:|r Switched to profile '"..name.."'.")
  end
@@ -340,14 +507,11 @@ function MSUF_ResetProfile(name)
         if _G.MSUF_UFCore_InvalidateSettingsCache then
             _G.MSUF_UFCore_InvalidateSettingsCache()
         end
-        if EnsureDB then
-            EnsureDB()
-        end
-        if ApplyAllSettings then
-            ApplyAllSettings()
-        end
-        if UpdateAllFonts then
-            UpdateAllFonts()
+        MSUF_ProfileIO_RunEnsureDB()
+        MSUF_ProfileIO_RunApplyAllSettings()
+        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_RESET", false)
+        if _G.MSUF_UpdateAllFonts then
+            _G.MSUF_UpdateAllFonts()
         end
     end
     print("|cffffd700MSUF:|r Profile '"..name.."' reset to defaults.")
@@ -670,7 +834,7 @@ local function MSUF_IsColorKey(k)
     if lk:find("color", 1, true) then  return true end
     -- Global theme/mode keys
     if lk == "barmode" or lk == "darkmode" or lk == "darkbartone" or lk == "darkbgbrightness" then  return true end
-    if lk == "useclasscolors" or lk == "enablegradient" or lk == "gradientstrength" then  return true end
+    if lk == "useclasscolors" or lk == "enablehealthgradient" or lk == "gradientstrength" then  return true end
     -- Font/Highlight naming
     if lk == "fontcolor" or lk == "highlightcolor" or lk == "usecustomfontcolor" then  return true end
     if lk == "nameclasscolor" or lk == "npcnamered" then  return true end
@@ -726,7 +890,7 @@ local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
     alphaHPOutOfCombat = 1,
     alphaPreserveHPColor = false,
 }
-local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focus", "pet", "boss" }
+local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
 local function MSUF_IsUnitframeAlphaKey(key)
     return (type(key) == "string") and (MSUF_UNITFRAME_ALPHA_KEYS[key] == true)
 end
@@ -807,7 +971,7 @@ local function MSUF_ProfileIO_EnsureGroupFramesDB()
     end
 end
 local function MSUF_ProfileIO_EnsureCompleteProfileDB()
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_EnsureGroupFramesDB()
     local auras = ns and ns.MSUF_Auras2
@@ -891,6 +1055,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
     if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
     if auras.blizzardDispelMode == nil then auras.blizzardDispelMode = "allDispellable" end
+    if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
     MSUF_ProfileIO_NormalizeBlizzardAuraPosition(auras)
 
     MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "buff", "RAID")
@@ -1070,7 +1235,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if type(kind) ~= "string" or type(payload) ~= "table" then
          return false, "invalid snapshot"
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     -- Always keep the profile-table reference stable (important!).
     MSUF_DB = MSUF_DB or {}
     if kind == "unitframe" then
@@ -1168,11 +1333,12 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     if MSUF_GlobalDB and MSUF_GlobalDB.profiles and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -1195,7 +1361,7 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
         print("|cffff0000MSUF:|r Legacy import failed: not a table.")
          return false
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     -- Keep profile table reference stable; wipe + copy.
     MSUF_DB = MSUF_DB or {}
     MSUF_WipeTable(MSUF_DB)
@@ -1205,11 +1371,12 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     if MSUF_GlobalDB and MSUF_GlobalDB.profiles and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
     end
-    EnsureDB()
+    MSUF_ProfileIO_RunEnsureDB()
     MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
+    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_LEGACY_IMPORT", true)
     print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
      return true
 end
@@ -1247,10 +1414,7 @@ function MSUF_ImportFromString(str)
          return false
     end
     -- OLD PATH (Lua table string)
-    local func, err = loadstring(str)
-    if not func then
-        func, err = loadstring("return " .. str)
-    end
+    local func, err = MSUF_ProfileIO_LoadLegacyChunk(str)
     if not func then
         print("|cffff0000MSUF:|r Import failed: " .. tostring(err))
          return false
@@ -1313,10 +1477,7 @@ function MSUF_ImportLegacyFromString(str)
         print("|cffff0000MSUF:|r Legacy import failed: could not decode compact profile string (" .. prefix .. ").")
          return false
     end
-    local func, err = loadstring(str)
-    if not func then
-        func, err = loadstring("return " .. str)
-    end
+    local func, err = MSUF_ProfileIO_LoadLegacyChunk(str)
     if not func then
         print("|cffff0000MSUF:|r Legacy import failed: " .. tostring(err))
          return false
@@ -1350,10 +1511,8 @@ local function MSUF_ProfileIO_GetProfileTable(profileKey)
     if type(profileKey) ~= "string" or profileKey == "" then
          return nil
     end
-    -- Ensure profile system is initialized (safe, used elsewhere via EnsureDB()).
-    if type(EnsureDB) == "function" then
-        EnsureDB()
-    elseif type(MSUF_InitProfiles) == "function" then
+    -- Ensure profile system is initialized.
+    if not MSUF_ProfileIO_RunEnsureDB() and type(MSUF_InitProfiles) == "function" then
         MSUF_InitProfiles()
     end
     MSUF_ProfileIO_EnsureProfilesTable()
@@ -1365,6 +1524,12 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
     end
     if type(newTable) ~= "table" then
          return false, "not a table"
+    end
+    if type(_G.MSUF_NormalizePortraitRenderDB) == "function" then
+        pcall(_G.MSUF_NormalizePortraitRenderDB, newTable)
+    end
+    if type(_G.MSUF_MigrateDispelPriorityProfile) == "function" then
+        pcall(_G.MSUF_MigrateDispelPriorityProfile, newTable)
     end
     MSUF_ProfileIO_EnsureProfilesTable()
     local existing = MSUF_GlobalDB.profiles[profileKey]
@@ -1378,13 +1543,12 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
             target[k] = MSUF_DeepCopy(v)
         end
         MSUF_GlobalDB.profiles[profileKey] = target
-        if type(EnsureDB) == "function" then
-            EnsureDB()
-        end
+        MSUF_ProfileIO_RunEnsureDB()
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
         MSUF_ProfileIO_PostImportApply_Auras("all", target)
         MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
         MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
+        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_EXTERNAL_IMPORT", true)
          return true
     end
     if type(existing) == "table" then
@@ -1458,10 +1622,7 @@ function MSUF_ImportExternal(profileString, profileKey)
         return false, "could not decode compact profile string (" .. tostring(prefix) .. ")"
     end
     -- Optional legacy table-string support (last resort).
-    local func = loadstring(profileString)
-    if not func then
-        func = loadstring("return " .. profileString)
-    end
+    local func = MSUF_ProfileIO_LoadLegacyChunk(profileString)
     if not func then
          return false, "invalid lua table string"
     end

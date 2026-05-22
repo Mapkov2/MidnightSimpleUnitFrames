@@ -8,7 +8,13 @@ local HUD = {}; EM2.HUD = HUD
 local L     = (ns and ns.L) or _G.MSUF_L or setmetatable({}, { __index = function(_, k) return k end })
 local FONT  = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local W8    = "Interface/Buttons/WHITE8X8"
+local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
 local floor, max, min = math.floor, math.max, math.min
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
 
 local hudFrame, row2Frame
 local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
@@ -17,6 +23,7 @@ local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
 local helpBtn, tutorialPanel, tourState
 local bgWidget, gridWidget
+local HelpText
 
 local R1_H    = 42
 local R2_H    = 34
@@ -58,7 +65,7 @@ local function SetTip(widget, text)
     if not widget or not text then return end
     widget:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
-        GameTooltip:SetText(text, 1, 1, 1, 1, true)
+        GameTooltip:SetText(HelpText(text), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -71,7 +78,7 @@ local function MakeBtn(parent, text, w, h, fontSize, onClick)
     local hl = btn:CreateTexture(nil, "HIGHLIGHT")
     hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
     local label = MakeFS(btn, fontSize or 12, TH.textR, TH.textG, TH.textB, 0.92)
-    label:SetPoint("CENTER"); label:SetText(text)
+    label:SetPoint("CENTER"); label:SetText(HelpText(text))
     btn._label = label
     local dot = btn:CreateTexture(nil, "OVERLAY")
     dot:SetSize(w - 8, 2); dot:SetPoint("BOTTOM", btn, "BOTTOM", 0, 2)
@@ -79,6 +86,18 @@ local function MakeBtn(parent, text, w, h, fontSize, onClick)
     btn._dot = dot
     if onClick then btn:SetScript("OnClick", onClick) end
     return btn
+end
+
+local function AttachHistoryIcon(btn, texturePath)
+    if not btn then return end
+    if btn._label then btn._label:Hide() end
+    if btn._dot then btn._dot:Hide() end
+    local icon = btn:CreateTexture(nil, "ARTWORK", nil, 5)
+    icon:SetTexture(texturePath)
+    icon:SetSize(17, 17)
+    icon:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn._historyIcon = icon
+    return icon
 end
 
 local function MakeSep(parent, h)
@@ -101,39 +120,53 @@ local function LayoutCenter(anchor, items, gap, sepW)
     end
 end
 
--- Localization: EN defaults (translators override via ns.AddLocale)
+local HELP_DEFAULTS = {
+    EM_HELP_DRAG    = "Hold the left mouse button on a mover overlay and drag it. The live frame follows the mover, and the X/Y readout below the overlay shows the current screen offset. Release the button to commit the position.",
+    EM_HELP_NUDGE   = "Arrow keys move the active target. Priority is: selected preview handle, open castbar popup, open aura popup, then the currently selected unit frame. Step size: 1 px, Shift = 5 px, Ctrl = 10 px, Alt = current grid step.",
+    EM_HELP_POPUP   = "Left-click a mover without dragging to open its edit popup. Unit popups edit frame size, position, text anchors, detached power settings, and copy-to-unit options. Castbar and aura movers open their own focused popups.",
+    EM_HELP_SNAP    = "The grid is visual guidance. Left-click |cff60a5ffGrid ##px|r to toggle grid lines on or off; scroll it to change spacing. |cff60a5ffSnap|r is separate: when enabled, dragged movers snap to the screen center or to edges/centers of other visible movers, with orange guide lines.",
+    EM_HELP_OPACITY = "Scroll the |cff60a5ffBG ##%|r control to change only the Edit Mode background overlay opacity. It does not change unitframe alpha or saved frame visibility.",
+    EM_HELP_PREVIEW = "|cff60a5ffPreview|r toggles placeholder unit data for missing target, focus, target-of-target, pet, boss, and castbar previews while Edit Mode is active. |cff60a5ffAuras|r toggles aura preview icons and aura mover boxes.",
+    EM_HELP_UNDO    = "|cff60a5ffUndo|r and |cff60a5ffRedo|r restore recent Edit Mode changes captured before drags, nudges, and popup edits. |cff60a5ffCancel All|r asks for confirmation, restores the snapshot from before Edit Mode was entered, then exits.",
+    EM_HELP_CDM     = "|cff60a5ffCDM|r toggles the global Essential Cooldown Manager anchor. |cff60a5ffAnchor|r opens the anchor picker; hover a named frame, hold Ctrl, and left-click to use it as the global anchor. Picking a custom anchor turns CDM off.",
+    EM_HELP_COPYTO  = "In unit and castbar popups, |cff60a5ffCopy To|r copies the current popup's settings to another target. Unit frame copy keeps the target's position and anchor settings; castbar copy keeps target X/Y offsets.",
+    EM_HELP_EXIT    = "|cff60a5ffExit|r leaves Edit Mode and keeps the current changes. Entering combat also exits Edit Mode. Popup Escape closes/cancels that popup; the HUD Exit button is the normal way to leave.",
+    EM_HELP_TITLE   = "Edit Mode - Quick Reference",
+    EM_TOUR_START   = "Start Guided Tour",
+    EM_TOUR_NEXT    = "Next",
+    EM_TOUR_BACK    = "Back",
+    EM_TOUR_SKIP    = "Skip",
+    EM_TOUR_DONE    = "Done",
+    EM_TOUR_STEP    = "Step %d of %d",
+    EM_HELP_BTN     = "? Help",
+    EM_HELP_BTN_TIP = "Quick reference and guided tour\nfor Edit Mode controls.",
+    ["Drag & Move"]        = "Drag & Move",
+    ["Arrow Key Nudge"]    = "Arrow Key Nudge",
+    ["Click Popup"]        = "Click Popup",
+    ["Grid & Snap"]        = "Grid & Snap",
+    ["Background Opacity"] = "Background Opacity",
+    ["Preview & Auras"]    = "Preview & Auras",
+    ["Undo / Cancel All"]  = "Undo / Cancel All",
+    ["CDM & Anchor"]       = "CDM & Anchor",
+    ["Copy Settings"]      = "Copy Settings",
+    ["Exit Edit Mode"]     = "Exit Edit Mode",
+}
+
+function HelpText(key)
+    if type(key) ~= "string" then return key end
+    local value = type(L) == "table" and rawget(L, key) or nil
+    if type(value) == "string" and value ~= "" and value ~= key then
+        return value
+    end
+    return HELP_DEFAULTS[key] or key
+end
+
+-- Seed the current locale table for old callers, but all Help/Tour rendering
+-- uses HelpText() so ns.SetLocale() rebuilds cannot expose raw keys again.
 do
-    local raw = L
-    if raw["EM_HELP_DRAG"] == "EM_HELP_DRAG" then
-        raw["EM_HELP_DRAG"]    = "Left-click and drag any mover overlay to reposition a frame. Hold |cff60a5ffShift|r while dragging to ignore snap and move freely."
-        raw["EM_HELP_NUDGE"]   = "Use arrow keys to nudge the selected frame by 1 pixel. |cff60a5ffShift|r = 5 px, |cff60a5ffCtrl|r = 10 px, |cff60a5ffAlt|r = grid step."
-        raw["EM_HELP_POPUP"]   = "Left-click any mover to open its settings popup — fine-tune X/Y position, size, text anchors, and per-unit overrides."
-        raw["EM_HELP_SNAP"]    = "Toggle |cff60a5ffSnap|r in the HUD toolbar. Scroll over |cff60a5ffGrid ##px|r to change step size. Frames snap to edges of other frames while dragging."
-        raw["EM_HELP_OPACITY"] = "Scroll over |cff60a5ffBG ##%|r to darken the game world. Makes it easier to see frame positions and alignment."
-        raw["EM_HELP_PREVIEW"] = "|cff60a5ffPreview|r fills empty unitframes with placeholder data (health, power, names). |cff60a5ffAuras|r shows aura icons and lets you reposition aura groups."
-        raw["EM_HELP_UNDO"]    = "|cff60a5ffUndo|r / |cff60a5ffRedo|r track every position change. |cff60a5ffCancel All|r reverts everything to the state before Edit Mode was opened."
-        raw["EM_HELP_CDM"]     = "|cff60a5ffCDM|r anchors all unitframes to the Essential Cooldown Manager. |cff60a5ffAnchor|r lets you pick any visible frame as a global anchor point."
-        raw["EM_HELP_COPYTO"]  = "Inside a popup, use |cff60a5ffCopy Settings|r to copy the current frame's size, text, and layout to another unit — without copying position."
-        raw["EM_HELP_EXIT"]    = "|cff60a5ffExit|r saves all changes and locks positions. You can also press |cff60a5ffEsc|r to leave Edit Mode."
-        raw["EM_HELP_TITLE"]   = "Edit Mode — Quick Reference"
-        raw["EM_TOUR_START"]   = "Start Guided Tour"
-        raw["EM_TOUR_NEXT"]    = "Next"
-        raw["EM_TOUR_BACK"]    = "Back"
-        raw["EM_TOUR_SKIP"]    = "Skip"
-        raw["EM_TOUR_DONE"]    = "Done"
-        raw["EM_TOUR_STEP"]    = "Step %d of %d"
-        raw["EM_HELP_BTN"]     = "? Help"
-        raw["EM_HELP_BTN_TIP"] = "Quick reference and guided tour\nfor Edit Mode controls."
-        raw["Drag & Move"]          = "Drag & Move"
-        raw["Arrow Key Nudge"]      = "Arrow Key Nudge"
-        raw["Click Popup"]          = "Click Popup"
-        raw["Grid & Snap"]          = "Grid & Snap"
-        raw["Background Opacity"]   = "Background Opacity"
-        raw["Preview & Auras"]      = "Preview & Auras"
-        raw["Undo / Cancel All"]    = "Undo / Cancel All"
-        raw["CDM & Anchor"]         = "CDM & Anchor"
-        raw["Copy Settings"]        = "Copy Settings"
-        raw["Exit Edit Mode"]       = "Exit Edit Mode"
+    for key, text in pairs(HELP_DEFAULTS) do
+        local current = rawget(L, key)
+        if current == nil or current == key then L[key] = text end
     end
 end
 
@@ -181,10 +214,13 @@ local function EnsureTutorialPanel()
             self:SetPropagateKeyboardInput(true)
         end
     end)
+    p:HookScript("OnHide", function(self)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
 
     local hdr = MakeFS(p, 13, 0.75, 0.88, 1.00, 1)
     hdr:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, -12)
-    hdr:SetText(L["EM_HELP_TITLE"])
+    hdr:SetText(HelpText("EM_HELP_TITLE"))
 
     local closeBtn = CreateFrame("Button", nil, p)
     closeBtn:SetSize(CLOSE_SZ, CLOSE_SZ)
@@ -208,14 +244,14 @@ local function EnsureTutorialPanel()
 
         local tFS = MakeFS(p, TITLE_SZ, 1.00, 0.82, 0.00, 1.00)
         tFS:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y)
-        tFS:SetText(L[sec.title])
+        tFS:SetText(HelpText(sec.title))
 
         y = y - (TITLE_SZ + 4)
 
         local bFS = MakeFS(p, BODY_SZ, 0.78, 0.82, 0.90, 0.90)
         bFS:SetPoint("TOPLEFT", p, "TOPLEFT", PANEL_PAD, y)
         bFS:SetWidth(BODY_W); bFS:SetWordWrap(true); bFS:SetJustifyH("LEFT")
-        bFS:SetText(L[sec.body])
+        bFS:SetText(HelpText(sec.body))
 
         local bH = bFS:GetStringHeight() or 14
         y = y - bH - SEC_GAP
@@ -232,7 +268,7 @@ local function EnsureTutorialPanel()
     local tbHL = tourBtn:CreateTexture(nil, "HIGHLIGHT")
     tbHL:SetAllPoints(); tbHL:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.10)
     local tbFS = MakeFS(tourBtn, 12, TH.onR, TH.onG, TH.onB, 1)
-    tbFS:SetPoint("CENTER"); tbFS:SetText(L["EM_TOUR_START"])
+    tbFS:SetPoint("CENTER"); tbFS:SetText(HelpText("EM_TOUR_START"))
     tourBtn:SetScript("OnClick", function()
         p:Hide()
         HUD.StartTour()
@@ -254,59 +290,59 @@ local SPOT_PAD   = 6
 local function GetTourSteps()
     return {
         {
-            title  = L["Drag & Move"],
-            body   = L["EM_HELP_DRAG"],
+            title  = HelpText("Drag & Move"),
+            body   = HelpText("EM_HELP_DRAG"),
             anchor = "CENTER",
         },
         {
             target = function() return previewBtn end,
-            title  = L["Preview & Auras"],
-            body   = L["EM_HELP_PREVIEW"],
+            title  = HelpText("Preview & Auras"),
+            body   = HelpText("EM_HELP_PREVIEW"),
             anchor = "BOTTOM",
         },
         {
-            title  = L["Click Popup"],
-            body   = L["EM_HELP_POPUP"],
+            title  = HelpText("Click Popup"),
+            body   = HelpText("EM_HELP_POPUP"),
             anchor = "CENTER",
         },
         {
-            title  = L["Arrow Key Nudge"],
-            body   = L["EM_HELP_NUDGE"],
+            title  = HelpText("Arrow Key Nudge"),
+            body   = HelpText("EM_HELP_NUDGE"),
             anchor = "CENTER",
         },
         {
             target = function() return snapToggle end,
-            title  = L["Grid & Snap"],
-            body   = L["EM_HELP_SNAP"],
+            title  = HelpText("Grid & Snap"),
+            body   = HelpText("EM_HELP_SNAP"),
             anchor = "BOTTOM",
         },
         {
             target = function() return bgWidget end,
-            title  = L["Background Opacity"],
-            body   = L["EM_HELP_OPACITY"],
+            title  = HelpText("Background Opacity"),
+            body   = HelpText("EM_HELP_OPACITY"),
             anchor = "BOTTOM",
         },
         {
             target = function() return cdmBtn end,
-            title  = L["CDM & Anchor"],
-            body   = L["EM_HELP_CDM"],
+            title  = HelpText("CDM & Anchor"),
+            body   = HelpText("EM_HELP_CDM"),
             anchor = "BOTTOM",
         },
         {
-            title  = L["Copy Settings"],
-            body   = L["EM_HELP_COPYTO"],
+            title  = HelpText("Copy Settings"),
+            body   = HelpText("EM_HELP_COPYTO"),
             anchor = "CENTER",
         },
         {
             target = function() return undoBtn end,
-            title  = L["Undo / Cancel All"],
-            body   = L["EM_HELP_UNDO"],
+            title  = HelpText("Undo / Cancel All"),
+            body   = HelpText("EM_HELP_UNDO"),
             anchor = "BOTTOM",
         },
         {
             target = function() return exitBtn end,
-            title  = L["Exit Edit Mode"],
-            body   = L["EM_HELP_EXIT"],
+            title  = HelpText("Exit Edit Mode"),
+            body   = HelpText("EM_HELP_EXIT"),
             anchor = "BOTTOM",
         },
     }
@@ -352,6 +388,9 @@ local function EnsureTourFrames()
             self:SetPropagateKeyboardInput(true)
         end
     end)
+    ts.card:HookScript("OnHide", function(self)
+        if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
+    end)
 
     ts.stepFS = MakeFS(ts.card, 10, TH.mutedR, TH.mutedG, TH.mutedB, 0.70)
     ts.stepFS:SetPoint("TOPRIGHT", ts.card, "TOPRIGHT", -CARD_PAD, -10)
@@ -380,13 +419,13 @@ local function EnsureTourFrames()
         return b
     end
 
-    ts.skipBtn = NavBtn(L["EM_TOUR_SKIP"])
+    ts.skipBtn = NavBtn(HelpText("EM_TOUR_SKIP"))
     ts.skipBtn:SetScript("OnClick", function() HUD.StopTour() end)
 
-    ts.backBtn = NavBtn(L["EM_TOUR_BACK"])
+    ts.backBtn = NavBtn(HelpText("EM_TOUR_BACK"))
     ts.backBtn:SetScript("OnClick", function() HUD.TourStep(ts.step - 1) end)
 
-    ts.nextBtn = NavBtn(L["EM_TOUR_NEXT"])
+    ts.nextBtn = NavBtn(HelpText("EM_TOUR_NEXT"))
     ts.nextBtn:SetScript("OnClick", function()
         local steps = GetTourSteps()
         if ts.step >= #steps then
@@ -483,7 +522,7 @@ function HUD.TourStep(idx)
 
     ts.titleFS:SetText(s.title)
     ts.bodyFS:SetText(s.body)
-    ts.stepFS:SetText(L["EM_TOUR_STEP"]:format(idx, #steps))
+    ts.stepFS:SetText(HelpText("EM_TOUR_STEP"):format(idx, #steps))
 
     local bH = ts.bodyFS:GetStringHeight() or 14
     ts.card:SetHeight(28 + bH + 12 + 26 + 12)
@@ -499,7 +538,7 @@ function HUD.TourStep(idx)
     if idx <= 1 then ts.backBtn:Hide() else ts.backBtn:Show() end
 
     local isLast = idx >= #steps
-    ts.nextBtn._fs:SetText(isLast and L["EM_TOUR_DONE"] or L["EM_TOUR_NEXT"])
+    ts.nextBtn._fs:SetText(isLast and HelpText("EM_TOUR_DONE") or HelpText("EM_TOUR_NEXT"))
     if isLast then
         ts.nextBtn._fs:SetTextColor(TH.onR, TH.onG, TH.onB, 1)
     else
@@ -539,7 +578,7 @@ local function EnsureHUD()
 
     local title = MakeFS(hudFrame, 11, TH.titleR, TH.titleG, TH.titleB, 0.50)
     title:SetPoint("LEFT", hudFrame, "LEFT", 14, 0)
-    title:SetText("EDIT MODE")
+    title:SetText(HelpText("EDIT MODE"))
 
     -- ── Prominent HELP button ──
     helpBtn = CreateFrame("Button", nil, hudFrame, "BackdropTemplate")
@@ -559,7 +598,7 @@ local function EnsureHUD()
         hl:SetAllPoints(); hl:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.12)
 
         local lbl = MakeFS(helpBtn, 12, TH.onR, TH.onG, TH.onB, 1)
-        lbl:SetPoint("CENTER", 0, 0); lbl:SetText(L["EM_HELP_BTN"])
+        lbl:SetPoint("CENTER", 0, 0); lbl:SetText(HelpText("EM_HELP_BTN"))
         helpBtn._label = lbl
 
         local pulse = helpBtn:CreateAnimationGroup()
@@ -580,7 +619,7 @@ local function EnsureHUD()
         if self._pulse then self._pulse:Stop() end
         self:SetAlpha(1)
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, -6)
-        GameTooltip:SetText(L["EM_HELP_BTN_TIP"], 1, 1, 1, 1, true)
+        GameTooltip:SetText(HelpText("EM_HELP_BTN_TIP"), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     helpBtn:SetScript("OnLeave", function()
@@ -613,7 +652,7 @@ local function EnsureHUD()
         cf:EnableMouse(true)
         local msg = MakeFS(cf, 13, TH.textR, TH.textG, TH.textB, 1)
         msg:SetPoint("TOP", cf, "TOP", 0, -18)
-        msg:SetText("Discard all changes and exit?")
+        msg:SetText(HelpText("Discard all changes and exit?"))
         local function ConfBtn(text, xOff, onClick)
             local b = CreateFrame("Button", nil, cf)
             b:SetSize(90, 28)
@@ -623,7 +662,7 @@ local function EnsureHUD()
             brd:SetFrameLevel(max(0, b:GetFrameLevel()-1))
             brd:SetBackdrop({edgeFile=W8, edgeSize=1}); brd:SetBackdropBorderColor(0.10, 0.20, 0.42, 0.65)
             local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.06)
-            local fs = MakeFS(b, 12, TH.textR, TH.textG, TH.textB, 1); fs:SetPoint("CENTER"); fs:SetText(text)
+            local fs = MakeFS(b, 12, TH.textR, TH.textG, TH.textB, 1); fs:SetPoint("CENTER"); fs:SetText(HelpText(text))
             b:SetScript("OnClick", onClick); return b
         end
         ConfBtn("Yes, discard", -54, function() cf:Hide(); EM2.State.CancelAll() end)
@@ -632,6 +671,9 @@ local function EnsureHUD()
         cf:SetScript("OnKeyDown", function(s, k)
             if k == "ESCAPE" then s:SetPropagateKeyboardInput(false); cf:Hide()
             else s:SetPropagateKeyboardInput(true) end
+        end)
+        cf:HookScript("OnHide", function(s)
+            if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end
         end)
         cf:Show()
     end)
@@ -689,7 +731,7 @@ local function EnsureHUD()
         db.general = db.general or {}
         db.general.anchorToCooldown = not (db.general.anchorToCooldown and true or false)
         SetActive(cdmBtn, db.general.anchorToCooldown)
-        if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+        ApplyAllSettingsSafe()
         C_Timer.After(0.1, function()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
@@ -707,7 +749,7 @@ local function EnsureHUD()
             db.general.anchorName = frameName
             db.general.anchorToCooldown = false
             SetActive(cdmBtn, false)
-            if type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+            ApplyAllSettingsSafe()
             C_Timer.After(0.1, function()
                 if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             end)
@@ -733,21 +775,21 @@ local function EnsureHUD()
     c2:SetSize(1, BTN_H2); c2:SetPoint("CENTER", row2Frame, "CENTER", 0, 0)
     local r2 = {}
 
-    undoBtn = MakeBtn(c2, "Undo", 52, BTN_H2, 11, function()
+    undoBtn = MakeBtn(c2, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
     end)
-    undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
-    undoBtn._dot:Hide()
+    _G.MSUF_EditModeUndoBtn = undoBtn
+    AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
     SetTip(undoBtn, "Undo last position change.")
     r2[#r2+1] = undoBtn
 
-    redoBtn = MakeBtn(c2, "Redo", 52, BTN_H2, 11, function()
+    redoBtn = MakeBtn(c2, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
     end)
-    redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.85)
-    redoBtn._dot:Hide()
+    _G.MSUF_EditModeRedoBtn = redoBtn
+    AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
     SetTip(redoBtn, "Redo last undone change.")
     r2[#r2+1] = redoBtn
 
@@ -755,17 +797,26 @@ local function EnsureHUD()
 
     do
         local f = CreateFrame("Frame", nil, c2)
-        f:SetSize(80, BTN_H2); f:EnableMouseWheel(true)
+        f:SetSize(80, BTN_H2); f:EnableMouse(true); f:EnableMouseWheel(true)
         gridWidget = f
+        local stateBg = f:CreateTexture(nil, "BACKGROUND")
+        stateBg:SetAllPoints()
+        stateBg:SetColorTexture(0, 0, 0, 0)
+        f._stateBg = stateBg
         stepFS = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
         stepFS:SetPoint("CENTER")
         local hl = f:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.04)
+        f:SetScript("OnMouseUp", function(_, button)
+            if button ~= "LeftButton" or not EM2.Grid or not EM2.Grid.ToggleEnabled then return end
+            EM2.Grid.ToggleEnabled()
+            HUD.RefreshControls()
+        end)
         f:SetScript("OnMouseWheel", function(_, d)
             if not EM2.Grid then return end
             EM2.Grid.SetGridStep(max(4, min(80, EM2.Grid.GetGridStep() + d * 4)))
             HUD.RefreshControls()
         end)
-        SetTip(f, "Grid step size.\nScroll to adjust.")
+        SetTip(f, "Left-click to toggle grid lines.\nScroll to adjust spacing.")
         r2[#r2+1] = f
     end
 
@@ -791,8 +842,18 @@ end
 function HUD.RefreshUnitSelector() end
 
 function HUD.RefreshControls()
-    if alphaFS and EM2.Grid then alphaFS:SetText("BG " .. floor(EM2.Grid.GetBgAlpha() * 100 + 0.5) .. "%") end
-    if stepFS and EM2.Grid then stepFS:SetText("Grid " .. floor(EM2.Grid.GetGridStep()) .. "px") end
+    if alphaFS and EM2.Grid then alphaFS:SetText(HelpText("BG") .. " " .. floor(EM2.Grid.GetBgAlpha() * 100 + 0.5) .. "%") end
+    if stepFS and EM2.Grid then
+        local enabled = not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()
+        stepFS:SetText(HelpText("Grid") .. " " .. floor(EM2.Grid.GetGridStep()) .. "px")
+        if enabled then
+            stepFS:SetTextColor(0.45, 0.95, 0.55, 0.95)
+            if gridWidget and gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(0.05, 0.28, 0.10, 0.18) end
+        else
+            stepFS:SetTextColor(0.95, 0.38, 0.38, 0.95)
+            if gridWidget and gridWidget._stateBg then gridWidget._stateBg:SetColorTexture(0.34, 0.06, 0.06, 0.20) end
+        end
+    end
     if snapToggle and EM2.Snap then SetActive(snapToggle, EM2.Snap.IsEnabled()) end
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if cdmBtn then
@@ -805,13 +866,11 @@ function HUD.RefreshControls()
     end
     local canUndo = EM2.Undo and EM2.Undo.CanUndo() or false
     local canRedo = EM2.Undo and EM2.Undo.CanRedo() or false
-    if undoBtn and undoBtn._label then
-        if canUndo then undoBtn._label:SetTextColor(TH.textR, TH.textG, TH.textB, 1)
-        else undoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.35) end
+    if undoBtn and undoBtn._historyIcon then
+        undoBtn._historyIcon:SetAlpha(canUndo and 1 or 0.35)
     end
-    if redoBtn and redoBtn._label then
-        if canRedo then redoBtn._label:SetTextColor(TH.textR, TH.textG, TH.textB, 1)
-        else redoBtn._label:SetTextColor(TH.mutedR, TH.mutedG, TH.mutedB, 0.35) end
+    if redoBtn and redoBtn._historyIcon then
+        redoBtn._historyIcon:SetAlpha(canRedo and 1 or 0.35)
     end
 end
 

@@ -8,10 +8,14 @@ local type = type
 local tostring = tostring
 local tonumber = tonumber
 local math_floor = math.floor
+local pairs = pairs
 
 Native.RENDER_CUSTOM = "CUSTOM"
 Native.RENDER_BLIZZARD = "BLIZZARD"
 Native.RENDER_MIXED = "MIXED"
+Native.DEFAULT_CONTAINER_STRATA = "AUTO"
+Native.DEFAULT_CONTAINER_FRAME_LEVEL = 1
+Native.DEFAULT_PRIVATE_LAYER_OFFSET = 1
 
 local DEFAULT_TYPES = {
     buffs = true,
@@ -28,15 +32,98 @@ local VALID_FRAME_ANCHORS = {
     BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
 }
 
-local STRATA_FIX = {
-    BACKGROUND = "LOW",
-    LOW = "MEDIUM",
-    MEDIUM = "HIGH",
-    HIGH = "DIALOG",
-    DIALOG = "FULLSCREEN",
-    FULLSCREEN = "FULLSCREEN_DIALOG",
-    FULLSCREEN_DIALOG = "TOOLTIP",
+local VALID_CONTAINER_STRATA = {
+    AUTO = true,
+    BACKGROUND = true,
+    LOW = true,
+    MEDIUM = true,
+    HIGH = true,
+    DIALOG = true,
 }
+Native.VALID_CONTAINER_STRATA = VALID_CONTAINER_STRATA
+
+
+local DISPEL_OVERLAY_ORIENTATION = _G.EnumUtil and _G.EnumUtil.MakeEnum("VerticalTopToBottom", "VerticalBottomToTop", "HorizontalLeftToRight")
+
+local function SetOverlayAtlas(texture, atlas)
+    if not (texture and texture.SetAtlas and atlas) then return end
+    if not texture.GetAtlas or texture:GetAtlas() ~= atlas then
+        texture:SetAtlas(atlas, false)
+    end
+end
+
+local function ResolveDispelOverlayOrientation(value)
+    if DISPEL_OVERLAY_ORIENTATION then
+        if value == DISPEL_OVERLAY_ORIENTATION.VerticalBottomToTop then return "VerticalBottomToTop" end
+        if value == DISPEL_OVERLAY_ORIENTATION.HorizontalLeftToRight then return "HorizontalLeftToRight" end
+    end
+    if type(value) == "string" then
+        local token = value:gsub("[%s_]", ""):lower()
+        if token == "verticalbottomtotop" then return "VerticalBottomToTop" end
+        if token == "horizontallefttoright" then return "HorizontalLeftToRight" end
+    end
+    return "VerticalTopToBottom"
+end
+
+-- Blizzard_PrivateAurasUI may ask every registered private-aura parent for a
+-- DispelOverlay when C_UnitAuras.TriggerPrivateAuraShowDispelType is enabled.
+-- Custom slot parents created by addons do not get that member automatically,
+-- so provide the same lightweight shape Blizzard compact frames expose.
+function Native.EnsurePrivateAuraDispelOverlay(parent)
+    if not parent then return nil end
+    local overlay = parent.DispelOverlay
+    if overlay then return overlay end
+
+    overlay = _G.CreateFrame("Frame", nil, parent)
+    overlay:EnableMouse(false)
+    overlay:SetAllPoints(parent)
+
+    local background = overlay:CreateTexture(nil, "ARTWORK", nil, -6)
+    background:SetAllPoints(overlay)
+    SetOverlayAtlas(background, "RaidFrame-Dispel-Fill")
+    overlay.Background = background
+
+    local gradient = overlay:CreateTexture(nil, "ARTWORK", nil, -5)
+    gradient:SetAllPoints(overlay)
+    overlay.Gradient = gradient
+
+    local border = overlay:CreateTexture(nil, "ARTWORK", nil, -5)
+    border:SetAllPoints(overlay)
+    SetOverlayAtlas(border, "RaidFrame-DispelHighlight")
+    overlay.Border = border
+
+    function overlay:SetOrientation(orientationOrOwner, orientation, xOffset, yOffset)
+        local resolvedOrientation = orientationOrOwner
+        local resolvedX = orientation
+        local resolvedY = xOffset
+        if type(orientationOrOwner) == "table" and orientation ~= nil then
+            resolvedOrientation = orientation
+            resolvedX = xOffset
+            resolvedY = yOffset
+        end
+        local token = ResolveDispelOverlayOrientation(resolvedOrientation)
+        if token == "HorizontalLeftToRight" then
+            SetOverlayAtlas(self.Gradient, "!RaidFrame-Dispel-Vertical")
+            self.Gradient:SetTexCoord(0, 1, 0, 1)
+        else
+            SetOverlayAtlas(self.Gradient, "_RaidFrame-Dispel-Highlight-Horizontal")
+            if token == "VerticalBottomToTop" then
+                self.Gradient:SetTexCoord(0, 1, 1, 0)
+            else
+                self.Gradient:SetTexCoord(0, 1, 0, 1)
+            end
+        end
+        self.Border:ClearAllPoints()
+        self.Border:SetPoint("TOPLEFT")
+        self.Border:SetPoint("BOTTOMRIGHT", self, "BOTTOMRIGHT", resolvedX or 0, resolvedY or 0)
+    end
+
+    overlay:SetOrientation(DISPEL_OVERLAY_ORIENTATION and DISPEL_OVERLAY_ORIENTATION.VerticalTopToBottom or "VerticalTopToBottom", 0, 0)
+    overlay:Hide()
+    parent.DispelOverlay = overlay
+    parent.DispelOverlayAuraOffset = parent.DispelOverlayAuraOffset or 0
+    return overlay
+end
 
 local function Clamp(v, def, lo, hi)
     v = tonumber(v)
@@ -46,6 +133,172 @@ local function Clamp(v, def, lo, hi)
     return v
 end
 Native.Clamp = Clamp
+
+local function IsInCombat()
+    return _G.InCombatLockdown and _G.InCombatLockdown()
+end
+
+function Native.NormalizeContainerStrata(value)
+    if value == nil or value == "" then return Native.DEFAULT_CONTAINER_STRATA end
+    value = tostring(value):upper()
+    if VALID_CONTAINER_STRATA[value] then return value end
+    return Native.DEFAULT_CONTAINER_STRATA
+end
+
+local function ResolveSourceStrata(container, parent, levelParent)
+    local source = (levelParent and levelParent.GetFrameStrata and levelParent)
+        or (parent and parent.GetFrameStrata and parent)
+        or (container and container.GetFrameStrata and container)
+    local strata = source and source:GetFrameStrata()
+    if VALID_CONTAINER_STRATA[strata] and strata ~= "AUTO" then return strata end
+    return "LOW"
+end
+
+local function ResolveLayerValues(container, cfg, parent, levelParent)
+    cfg = cfg or {}
+    levelParent = levelParent or parent
+    local strata = Native.NormalizeContainerStrata(cfg.containerStrata or cfg.blizzardContainerStrata)
+    if strata == "AUTO" then
+        strata = ResolveSourceStrata(container, parent, levelParent)
+    end
+    local offset = math_floor(Clamp(cfg.containerFrameLevel or cfg.blizzardContainerFrameLevel, Native.DEFAULT_CONTAINER_FRAME_LEVEL, 0, 30) + 0.5)
+    local baseLevel = 0
+    if levelParent and levelParent.GetFrameLevel then
+        baseLevel = tonumber(levelParent:GetFrameLevel()) or 0
+    elseif parent and parent.GetFrameLevel then
+        baseLevel = tonumber(parent:GetFrameLevel()) or 0
+    end
+    return strata, baseLevel + offset, offset
+end
+
+local function EnsureLayerEventFrame()
+    if Native._layerEventFrame then return Native._layerEventFrame end
+    local frame = _G.CreateFrame("Frame")
+    frame:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        Native._layerEventRegistered = nil
+        local pending = Native._layerDeferred
+        Native._layerDeferred = nil
+        if not pending then return end
+        for container in pairs(pending) do
+            if container and container._msufLayerDeferred then
+                local item = container._msufLayerDeferred
+                container._msufLayerDeferred = nil
+                Native.ApplyBlizzardAuraContainerLayer(container, item.unitKey, item.opts)
+                if item.privateHost then
+                    Native.EnsurePrivateAuraHost(container, item.unitKey, item.opts)
+                end
+            end
+        end
+    end)
+    Native._layerEventFrame = frame
+    return frame
+end
+
+local function QueueLayerApply(container, unitKey, opts, privateHost)
+    if not container then return false end
+    container._msufLayerDeferred = {
+        unitKey = unitKey,
+        opts = opts,
+        privateHost = privateHost and true or false,
+    }
+    Native._layerDeferred = Native._layerDeferred or {}
+    Native._layerDeferred[container] = true
+    local frame = EnsureLayerEventFrame()
+    if frame and not Native._layerEventRegistered then
+        frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        Native._layerEventRegistered = true
+    end
+    return false
+end
+
+function Native.ApplyBlizzardAuraContainerLayerForConfig(container, unitKey, cfg, parent, levelParent)
+    if not container then return false end
+    if IsInCombat() then
+        return QueueLayerApply(container, unitKey, {
+            config = cfg or {},
+            parent = parent,
+            levelParent = levelParent,
+        }, false)
+    end
+
+    local wantStrata, wantLevel = ResolveLayerValues(container, cfg, parent, levelParent)
+    if container.SetFrameStrata and container._msufAppliedStrata ~= wantStrata then
+        container:SetFrameStrata(wantStrata)
+        container._msufAppliedStrata = wantStrata
+    end
+    if container.SetFrameLevel and container._msufAppliedFrameLevel ~= wantLevel then
+        container:SetFrameLevel(wantLevel)
+        container._msufAppliedFrameLevel = wantLevel
+    end
+    return true
+end
+
+function Native.ApplyBlizzardAuraContainerLayer(container, unitKey, opts)
+    opts = opts or {}
+    return Native.ApplyBlizzardAuraContainerLayerForConfig(container, unitKey, opts.config or opts, opts.parent, opts.levelParent)
+end
+
+function Native.ClearPrivateAuraHost(container)
+    local host = container and container._msufPrivateAuraHost
+    if host then
+        host:Hide()
+    end
+end
+
+function Native.EnsurePrivateAuraHostForConfig(container, unitKey, cfg)
+    if not container then return nil end
+    cfg = cfg or {}
+    if cfg.privateLayerFix == false or cfg.blizzardPrivateLayerFix == false then
+        Native.ClearPrivateAuraHost(container)
+        return nil
+    end
+    if IsInCombat() then
+        QueueLayerApply(container, unitKey, { config = cfg }, true)
+        return container._msufPrivateAuraHost
+    end
+
+    local host = container._msufPrivateAuraHost
+    if not host then
+        host = _G.CreateFrame("Frame", nil, container)
+        host:EnableMouse(false)
+        if host.SetMouseClickEnabled then host:SetMouseClickEnabled(false) end
+        host:SetAllPoints(container)
+        container._msufPrivateAuraHost = host
+    elseif host.GetParent and host:GetParent() ~= container and host.SetParent then
+        host:SetParent(container)
+        host:ClearAllPoints()
+        host:SetAllPoints(container)
+    end
+
+    local wantStrata = (container.GetFrameStrata and container:GetFrameStrata()) or container._msufAppliedStrata or "LOW"
+    local offset = math_floor(Clamp(cfg.privateLayerOffset or cfg.blizzardPrivateLayerOffset, Native.DEFAULT_PRIVATE_LAYER_OFFSET, 0, 10) + 0.5)
+    local baseLevel = (container.GetFrameLevel and (tonumber(container:GetFrameLevel()) or 0)) or 0
+    local wantLevel = baseLevel + offset
+    if host.SetFrameStrata and host._msufAppliedStrata ~= wantStrata then
+        host:SetFrameStrata(wantStrata)
+        host._msufAppliedStrata = wantStrata
+    end
+    if host.SetFrameLevel and host._msufAppliedFrameLevel ~= wantLevel then
+        host:SetFrameLevel(wantLevel)
+        host._msufAppliedFrameLevel = wantLevel
+    end
+    host:Show()
+    return host
+end
+
+function Native.EnsurePrivateAuraHost(container, unitKey, opts)
+    opts = opts or {}
+    return Native.EnsurePrivateAuraHostForConfig(container, unitKey, opts.config or opts)
+end
+
+_G.MSUF_ApplyBlizzardAuraContainerLayer = function(container, unitKey, opts)
+    return Native.ApplyBlizzardAuraContainerLayer(container, unitKey, opts)
+end
+
+_G.MSUF_EnsurePrivateAuraHost = function(container, unitKey, opts)
+    return Native.EnsurePrivateAuraHost(container, unitKey, opts)
+end
 
 function Native.NormalizeRenderer(value)
     if value == Native.RENDER_BLIZZARD or value == "blizzard" or value == "Blizzard" then
@@ -197,6 +450,8 @@ function Native.Clear(container)
     container._msufNativeAuraAnchorID = nil
     container._msufNativeAuraSignature = nil
     container._msufNativeAuraUnit = nil
+    container._msufNativeAuraRenderParent = nil
+    Native.ClearPrivateAuraHost(container)
     container:Hide()
     return true
 end
@@ -241,25 +496,12 @@ function Native.Signature(unit, cfg)
         tostring(cfg.iconAnchor or ""),
         tostring(cfg.iconOffsetX or 0),
         tostring(cfg.iconOffsetY or 0),
+        tostring(cfg.privateLayerFix ~= false and cfg.blizzardPrivateLayerFix ~= false),
     }, ":")
 end
 
-function Native.ApplyFrameStrata(container, parent, levelParent)
-    if not container then return end
-
-    local strataSource = (levelParent and levelParent.GetFrameStrata and levelParent) or (parent and parent.GetFrameStrata and parent)
-    if container.SetFrameStrata and strataSource then
-        local wantStrata = STRATA_FIX[strataSource:GetFrameStrata()] or "DIALOG"
-        if not container.GetFrameStrata or container:GetFrameStrata() ~= wantStrata then
-            container:SetFrameStrata(wantStrata)
-        end
-    end
-    if levelParent and container.SetFrameLevel and levelParent.GetFrameLevel then
-        local wantLevel = (levelParent:GetFrameLevel() or 0) + 100
-        if not container.GetFrameLevel or container:GetFrameLevel() ~= wantLevel then
-            container:SetFrameLevel(wantLevel)
-        end
-    end
+function Native.ApplyFrameStrata(container, parent, levelParent, cfg)
+    return Native.ApplyBlizzardAuraContainerLayerForConfig(container, nil, cfg or {}, parent, levelParent)
 end
 
 function Native.Apply(container, unit, cfg, parent, levelParent)
@@ -293,8 +535,17 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     local sig = Native.Signature(unit, cfg)
     parent = parent or container:GetParent()
     if not cfg.forceApply and container._msufNativeAuraAnchorID and container._msufNativeAuraSignature == sig then
-        Native.ApplyFrameStrata(container, parent, levelParent)
+        Native.ApplyFrameStrata(container, parent, levelParent, cfg)
+        local renderParent = container
+        if cfg.privateAuras ~= false and cfg.privateLayerFix ~= false and cfg.blizzardPrivateLayerFix ~= false then
+            renderParent = Native.EnsurePrivateAuraHostForConfig(container, unit, cfg) or container
+        else
+            Native.ClearPrivateAuraHost(container)
+        end
         container:SetAttribute("update-settings", true)
+        if renderParent ~= container and renderParent.SetAttribute then
+            renderParent:SetAttribute("update-settings", true)
+        end
         container:Show()
         return true
     end
@@ -325,18 +576,27 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     end
     container:EnableMouse(false)
     if container.SetMouseClickEnabled then container:SetMouseClickEnabled(false) end
-    Native.ApplyFrameStrata(container, parent, levelParent)
+    Native.ApplyFrameStrata(container, parent, levelParent, cfg)
 
-    Native.SetContainerAttributes(container, cfg)
     if not Native.Clear(container) then
         return false
+    end
+    local renderParent = container
+    if cfg.privateAuras ~= false and cfg.privateLayerFix ~= false and cfg.blizzardPrivateLayerFix ~= false then
+        renderParent = Native.EnsurePrivateAuraHostForConfig(container, unit, cfg) or container
+    else
+        Native.ClearPrivateAuraHost(container)
+    end
+    Native.SetContainerAttributes(container, cfg)
+    if renderParent ~= container then
+        Native.SetContainerAttributes(renderParent, cfg)
     end
 
     local iconSize = math_floor(Clamp(cfg.iconSize, 20, 1, 96) + 0.5)
     local borderScale = Clamp(cfg.borderScale, iconSize / 11, 0, 20)
     local args = {
         unitToken = unit,
-        parent = container,
+        parent = renderParent,
         isContainer = true,
         auraIndex = 1,
         showCountdownFrame = cfg.showCountdownFrame ~= false,
@@ -347,7 +607,7 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
             borderScale = borderScale,
             iconAnchor = {
                 point = resolvedIconAnchor,
-                relativeTo = container,
+                relativeTo = renderParent,
                 relativePoint = resolvedIconAnchor,
                 offsetX = resolvedIconOffsetX,
                 offsetY = resolvedIconOffsetY,
@@ -366,6 +626,8 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     container._msufNativeAuraAnchorID = anchorID
     container._msufNativeAuraSignature = sig
     container._msufNativeAuraUnit = unit
+    container._msufNativeAuraRenderParent = renderParent
     container:Show()
+    if renderParent ~= container then renderParent:Show() end
     return true
 end

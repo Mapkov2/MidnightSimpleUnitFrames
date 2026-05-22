@@ -18,6 +18,42 @@ local floor = math.floor
 local max   = math.max
 local min   = math.min
 
+local function RefreshUFPreview(reason)
+    local fn = _G.MSUF_UFPreview_RequestRefresh
+    if type(fn) == "function" then fn(reason or "EM2_LAYOUT") end
+end
+local function ApplySettingsForKeySafe(key)
+    local fn = _G.MSUF_ApplySettingsForKey
+    if type(fn) == "function" then fn(key); return true end
+    return false
+end
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
+
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+end
+
+local function BlockConfigCombatLocked()
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if IsConfigCombatLocked() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    return false
+end
+
 -- Theme (read from MSUF_THEME, fall back to Midnight defaults)
 local function T()
     return _G.MSUF_THEME or {
@@ -33,7 +69,7 @@ local function GetBgAlpha()
     if db and db.general and type(db.general.editModeBgAlpha) == "number" then
         return db.general.editModeBgAlpha
     end
-    return 0.50
+    return 0.75
 end
 
 local function SetBgAlpha(v)
@@ -60,21 +96,95 @@ local function SetGridStep(v)
     end
 end
 
+local function GetGridEnabled()
+    local db = _G.MSUF_DB
+    if db and db.general and db.general.editModeGridEnabled == false then
+        return false
+    end
+    return true
+end
+
+local function SetGridEnabled(v)
+    local db = _G.MSUF_DB
+    if db then
+        db.general = db.general or {}
+        db.general.editModeGridEnabled = v and true or false
+    end
+end
+
 -- Frame + texture pools
 local gridFrame
 local bgTex
 local crossV, crossH, pipV, pipH
+local crossVShadow, crossHShadow, pipVShadow, pipHShadow
 local lines     = {}
+local lineShadows = {}
 local lineCount = 0
+local RebuildLines
+
+local function GetCanvasSize()
+    local w = UIParent and UIParent.GetWidth and (UIParent:GetWidth() or 0) or 0
+    local h = UIParent and UIParent.GetHeight and (UIParent:GetHeight() or 0) or 0
+
+    if w <= 0 and type(GetScreenWidth) == "function" then
+        w = GetScreenWidth() or 0
+    end
+    if h <= 0 and type(GetScreenHeight) == "function" then
+        h = GetScreenHeight() or 0
+    end
+
+    return w, h
+end
+
+local function GetGridStyle()
+    local th = T()
+    local bg = max(0, min(1, GetBgAlpha()))
+    local boost = max(0, min(1, (0.60 - bg) / 0.60))
+    local r = (th.edgeR or 0.20) + (0.72 - (th.edgeR or 0.20)) * boost
+    local g = (th.edgeG or 0.30) + (0.88 - (th.edgeG or 0.30)) * boost
+    local b = (th.edgeB or 0.50) + (1.00 - (th.edgeB or 0.50)) * boost
+    local lineAlpha = 0.16 + 0.64 * boost
+    local crossAlpha = 0.40 + 0.35 * boost
+    local pipAlpha = 0.55 + 0.30 * boost
+    local shadowAlpha = 0.10 + 0.42 * boost
+    return r, g, b, lineAlpha, crossAlpha, pipAlpha, shadowAlpha
+end
+
+local function ApplyGridVisibility()
+    local r, g, b, _, crossAlpha, pipAlpha, shadowAlpha = GetGridStyle()
+    if crossVShadow then crossVShadow:SetColorTexture(0, 0, 0, shadowAlpha) end
+    if crossHShadow then crossHShadow:SetColorTexture(0, 0, 0, shadowAlpha) end
+    if pipVShadow then pipVShadow:SetColorTexture(0, 0, 0, shadowAlpha + 0.10) end
+    if pipHShadow then pipHShadow:SetColorTexture(0, 0, 0, shadowAlpha + 0.10) end
+    if crossV then crossV:SetColorTexture(r, g, b, crossAlpha) end
+    if crossH then crossH:SetColorTexture(r, g, b, crossAlpha) end
+    if pipV then pipV:SetColorTexture(1, 1, 1, pipAlpha) end
+    if pipH then pipH:SetColorTexture(1, 1, 1, pipAlpha) end
+end
+
+local function SetCenterGridShown(shown)
+    local method = shown and "Show" or "Hide"
+    if crossVShadow then crossVShadow[method](crossVShadow) end
+    if crossHShadow then crossHShadow[method](crossHShadow) end
+    if pipVShadow then pipVShadow[method](pipVShadow) end
+    if pipHShadow then pipHShadow[method](pipHShadow) end
+    if crossV then crossV[method](crossV) end
+    if crossH then crossH[method](crossH) end
+    if pipV then pipV[method](pipV) end
+    if pipH then pipH[method](pipH) end
+end
 
 local function EnsureGridFrame()
     if gridFrame then return gridFrame end
 
     gridFrame = CreateFrame("Frame", "MSUF_EM2_Grid", UIParent)
-    gridFrame:SetFrameStrata("BACKGROUND")
+    gridFrame:SetFrameStrata("LOW")
     gridFrame:SetFrameLevel(0)
     gridFrame:SetAllPoints(UIParent)
     gridFrame:Hide()
+    gridFrame:SetScript("OnSizeChanged", function()
+        if gridFrame:IsShown() and RebuildLines then RebuildLines() end
+    end)
 
     -- Background overlay
     bgTex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -8)
@@ -82,31 +192,47 @@ local function EnsureGridFrame()
     bgTex:SetColorTexture(0.02, 0.03, 0.04, GetBgAlpha())
 
     -- Center crosshair (accent colored, full screen length)
-    local th = T()
+    crossVShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
+    crossVShadow:SetWidth(3)
+    crossVShadow:SetPoint("TOP", UIParent, "TOP", 0, 0)
+    crossVShadow:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
+
     crossV = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
-    crossV:SetColorTexture(th.edgeR, th.edgeG, th.edgeB, 0.35)
     crossV:SetWidth(1)
     crossV:SetPoint("TOP", UIParent, "TOP", 0, 0)
     crossV:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
 
+    crossHShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
+    crossHShadow:SetHeight(3)
+    crossHShadow:SetPoint("LEFT", UIParent, "LEFT", 0, 0)
+    crossHShadow:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
+
     crossH = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
-    crossH:SetColorTexture(th.edgeR, th.edgeG, th.edgeB, 0.35)
     crossH:SetHeight(1)
     crossH:SetPoint("LEFT", UIParent, "LEFT", 0, 0)
     crossH:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
 
     -- Short white pip at dead center
+    pipVShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
+    pipVShadow:SetWidth(3)
+    pipVShadow:SetHeight(24)
+    pipVShadow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+
     pipV = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -4)
-    pipV:SetColorTexture(1, 1, 1, 0.50)
     pipV:SetWidth(1)
     pipV:SetHeight(20)
     pipV:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 
+    pipHShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
+    pipHShadow:SetHeight(3)
+    pipHShadow:SetWidth(24)
+    pipHShadow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+
     pipH = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -4)
-    pipH:SetColorTexture(1, 1, 1, 0.50)
     pipH:SetHeight(1)
     pipH:SetWidth(20)
     pipH:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    ApplyGridVisibility()
 
     -- Keep legacy global alive (Style scanner etc.)
     _G.MSUF_GridFrame = gridFrame
@@ -118,24 +244,49 @@ end
 local function GetLine(idx)
     local tex = lines[idx]
     if not tex then
-        tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -7)
+        tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
         lines[idx] = tex
     end
     return tex
 end
 
-local function RebuildLines()
+local function GetLineShadow(idx)
+    local tex = lineShadows[idx]
+    if not tex then
+        tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
+        lineShadows[idx] = tex
+    end
+    return tex
+end
+
+local function HideGridLines()
+    for i = 1, lineCount do
+        if lines[i] then lines[i]:Hide() end
+        if lineShadows[i] then lineShadows[i]:Hide() end
+    end
+end
+
+function RebuildLines()
     if not gridFrame then return end
 
     local step = max(8, min(64, floor(GetGridStep())))
-    local w = UIParent:GetWidth() or 0
-    local h = UIParent:GetHeight() or 0
-    local th = T()
-    local lineAlpha = 0.12
+    local w, h = GetCanvasSize()
+    local lineR, lineG, lineB, lineAlpha, _, _, shadowAlpha = GetGridStyle()
 
-    -- Hide all existing lines
-    for i = 1, lineCount do
-        lines[i]:Hide()
+    if not GetGridEnabled() then
+        HideGridLines()
+        SetCenterGridShown(false)
+        lineCount = 0
+        return
+    end
+
+    ApplyGridVisibility()
+    SetCenterGridShown(true)
+    HideGridLines()
+
+    if w <= 0 or h <= 0 then
+        lineCount = 0
+        return
     end
 
     local idx = 0
@@ -146,9 +297,17 @@ local function RebuildLines()
     local x = cx - step
     while x > 0 do
         idx = idx + 1
+        local shadow = GetLineShadow(idx)
+        shadow:ClearAllPoints()
+        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
+        shadow:SetWidth(3)
+        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x - 1, 0)
+        shadow:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x - 1, 0)
+        shadow:Show()
+
         local tex = GetLine(idx)
         tex:ClearAllPoints()
-        tex:SetColorTexture(th.edgeR, th.edgeG, th.edgeB, lineAlpha)
+        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
         tex:SetWidth(1)
         tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x, 0)
         tex:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x, 0)
@@ -158,9 +317,17 @@ local function RebuildLines()
     x = cx + step
     while x < w do
         idx = idx + 1
+        local shadow = GetLineShadow(idx)
+        shadow:ClearAllPoints()
+        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
+        shadow:SetWidth(3)
+        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x - 1, 0)
+        shadow:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x - 1, 0)
+        shadow:Show()
+
         local tex = GetLine(idx)
         tex:ClearAllPoints()
-        tex:SetColorTexture(th.edgeR, th.edgeG, th.edgeB, lineAlpha)
+        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
         tex:SetWidth(1)
         tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x, 0)
         tex:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x, 0)
@@ -172,9 +339,17 @@ local function RebuildLines()
     local y = cy - step
     while y > 0 do
         idx = idx + 1
+        local shadow = GetLineShadow(idx)
+        shadow:ClearAllPoints()
+        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
+        shadow:SetHeight(3)
+        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y + 1)
+        shadow:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y + 1)
+        shadow:Show()
+
         local tex = GetLine(idx)
         tex:ClearAllPoints()
-        tex:SetColorTexture(th.edgeR, th.edgeG, th.edgeB, lineAlpha)
+        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
         tex:SetHeight(1)
         tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y)
         tex:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y)
@@ -184,9 +359,17 @@ local function RebuildLines()
     y = cy + step
     while y < h do
         idx = idx + 1
+        local shadow = GetLineShadow(idx)
+        shadow:ClearAllPoints()
+        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
+        shadow:SetHeight(3)
+        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y + 1)
+        shadow:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y + 1)
+        shadow:Show()
+
         local tex = GetLine(idx)
         tex:ClearAllPoints()
-        tex:SetColorTexture(th.edgeR, th.edgeG, th.edgeB, lineAlpha)
+        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
         tex:SetHeight(1)
         tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y)
         tex:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y)
@@ -203,6 +386,11 @@ function Grid.Show()
     bgTex:SetColorTexture(0.02, 0.03, 0.04, GetBgAlpha())
     RebuildLines()
     gridFrame:Show()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if gridFrame and gridFrame:IsShown() then RebuildLines() end
+        end)
+    end
 end
 
 function Grid.Hide()
@@ -217,6 +405,8 @@ function Grid.SetBgAlpha(v)
     v = max(0.05, min(0.85, v))
     SetBgAlpha(v)
     if bgTex then bgTex:SetColorTexture(0.02, 0.03, 0.04, v) end
+    ApplyGridVisibility()
+    if gridFrame and gridFrame:IsShown() then RebuildLines() end
 end
 
 function Grid.SetGridStep(v)
@@ -227,6 +417,16 @@ end
 
 function Grid.GetBgAlpha()    return GetBgAlpha() end
 function Grid.GetGridStep()   return GetGridStep() end
+function Grid.GetEnabled()    return GetGridEnabled() end
+function Grid.SetEnabled(v)
+    SetGridEnabled(v)
+    if gridFrame then RebuildLines() end
+end
+function Grid.ToggleEnabled()
+    local enabled = not GetGridEnabled()
+    Grid.SetEnabled(enabled)
+    return enabled
+end
 function Grid.Rebuild()       RebuildLines() end
 
 -- MSUF_EM2_Snap.lua
@@ -593,7 +793,7 @@ end
 
 local function NudgeTarget(dx, dy)
     if not EM2.State or not EM2.State.IsActive() then return end
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return end
     local db = _G.MSUF_DB
     if not db then return end
     local s = GetStep()
@@ -638,6 +838,7 @@ local function NudgeTarget(dx, dy)
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        RefreshUFPreview("EM2_CASTBAR_NUDGE", unit)
         return
     end
 
@@ -717,13 +918,12 @@ local function NudgeTarget(dx, dy)
     end
     conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + ndx) + 0.5)
     conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + ndy) + 0.5)
-    if type(ApplySettingsForKey) == "function" then
-        ApplySettingsForKey(key)
-    elseif type(ApplyAllSettings) == "function" then
-        ApplyAllSettings()
+    if not ApplySettingsForKeySafe(key) then
+        ApplyAllSettingsSafe()
     end
     if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshUFPreview("EM2_UNIT_NUDGE", key)
 end
 
 function Nudge.Enable()
@@ -753,7 +953,7 @@ function Nudge.Enable()
         end
     end
 
-    if InCombatLockdown and InCombatLockdown() then
+    if IsConfigCombatLocked() then
         owner.__msufPendingClear = false
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
@@ -765,7 +965,7 @@ end
 
 function Nudge.Disable()
     if not owner then return end
-    if InCombatLockdown and InCombatLockdown() then
+    if IsConfigCombatLocked() then
         owner.__msufPendingClear = true
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
@@ -801,6 +1001,7 @@ local ECV_ANCHORS = {
     target       = { "LEFT",  "RIGHT",  20,   0 },
     focus        = { "TOP",   "LEFT",    0,   0 },
     targettarget = { "TOP",   "RIGHT",   0, -40 },
+    focustarget  = { "TOP",   "RIGHT",   0,  40 },
 }
 
 local function PointXY(fr, p)
@@ -884,7 +1085,7 @@ local function OnUpdate(self, elapsed)
         -- ═══════════════════════════════════════════════════════════════
 
         local bar = d.bar
-        if bar and not InCombatLockdown() then
+        if bar and not IsConfigCombatLocked() then
             local anchor = d.anchor
             local conf = d.conf
 
@@ -1074,10 +1275,27 @@ function Ticker.EndDrag()
     local moved = abs(cx - d.startCX) > 0.5 or abs(cy - d.startCY) > 0.5
 
     if moved then
+        if type(MSUF_DB) == "table" then
+            MSUF_DB.general = MSUF_DB.general or {}
+            MSUF_DB.general.hasMovedFramesInEditMode = true
+        end
+        if type(_G.MSUF_EditState) == "table" then
+            _G.MSUF_EditState.hasMovedFramesInEditMode = true
+        end
+        local menu = (type(ns) == "table" and ns.MSUF2) or _G.MSUF2
+        if menu and menu.activeKey == "home" and menu.InvalidatePage and menu.SelectPage then
+            local function RefreshHomeDashboard()
+                if menu.frame and menu.frame.IsShown and menu.frame:IsShown() then
+                    menu.InvalidatePage("home")
+                    menu.SelectPage("home")
+                end
+            end
+            if C_Timer and C_Timer.After then C_Timer.After(0.08, RefreshHomeDashboard) else RefreshHomeDashboard() end
+        end
         if d.isGroupFrame and d.conf then
             d.conf.offsetX = round(cx - d.screenW * 0.5)
             d.conf.offsetY = round(cy - d.screenH * 0.5)
-            if d.bar and not InCombatLockdown() then
+            if d.bar and not IsConfigCombatLocked() then
                 pcall(function()
                     d.bar._msufDragActive = false
                     d.bar:ClearAllPoints()
@@ -1087,14 +1305,13 @@ function Ticker.EndDrag()
             end
         end
         -- Offsets already written by OnUpdate. Just finalize pipeline.
-        if type(ApplySettingsForKey) == "function" then
-            ApplySettingsForKey(d.key)
-        end
+        ApplySettingsForKeySafe(d.key)
         C_Timer.After(0.06, function()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
         end)
         if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
         if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
+        RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
     end
 
     return moved

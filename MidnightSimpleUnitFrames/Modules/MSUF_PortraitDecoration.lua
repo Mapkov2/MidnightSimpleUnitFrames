@@ -1,6 +1,6 @@
 -- Modules/MSUF_PortraitDecoration.lua
 -- Portrait decoration: borders, backgrounds, size override, offset, strata elevation.
--- Loads AFTER MSUF_3DPortraits.lua in the TOC.
+-- Loads AFTER Core/MSUF_Portraits.lua in the TOC.
 --
 -- Architecture:
 --   - portraitContainer frame: reparents portrait texture for strata elevation (above HP/power bars)
@@ -14,7 +14,7 @@
 
 local addonName, ns = ...
 
-local type, tonumber, math_max, rawget = type, tonumber, math.max, rawget
+local type, tonumber, math_max = type, tonumber, math.max
 local UnitClassBase = UnitClassBase or (C_UnitInfo and C_UnitInfo.GetUnitClassBase)
 local UnitReaction  = UnitReaction
 local RAID_CLASS_COLORS = RAID_CLASS_COLORS
@@ -33,6 +33,12 @@ local function V(conf, key, def)
     return (v ~= nil) and v or def
 end
 
+local function GV(key, def)
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    if type(g) == "table" and g[key] ~= nil then return g[key] end
+    return def
+end
+
 -- ────────────────────────────────────────────────────────────
 -- Decoration stamp (all visual fields)
 -- ────────────────────────────────────────────────────────────
@@ -40,15 +46,15 @@ local function DecoStamp(conf)
     return V(conf,"portraitShape","Q") .. "|" ..
            V(conf,"portraitBorderStyle","N") .. "|" ..
            V(conf,"portraitBorderThickness",2) .. "|" ..
-           V(conf,"portraitBorderColorR",0) .. "|" ..
-           V(conf,"portraitBorderColorG",0) .. "|" ..
-           V(conf,"portraitBorderColorB",0) .. "|" ..
-           V(conf,"portraitBorderColorA",1) .. "|" ..
+           GV("portraitBorderColorR",0) .. "|" ..
+           GV("portraitBorderColorG",0) .. "|" ..
+           GV("portraitBorderColorB",0) .. "|" ..
+           GV("portraitBorderColorA",1) .. "|" ..
            (V(conf,"portraitBgEnabled",false) and "1" or "0") .. "|" ..
-           V(conf,"portraitBgColorR",0.05) .. "|" ..
-           V(conf,"portraitBgColorG",0.05) .. "|" ..
-           V(conf,"portraitBgColorB",0.05) .. "|" ..
-           V(conf,"portraitBgColorA",0.85) .. "|" ..
+           GV("portraitBgColorR",0.05) .. "|" ..
+           GV("portraitBgColorG",0.05) .. "|" ..
+           GV("portraitBgColorB",0.05) .. "|" ..
+           GV("portraitBgColorA",0.85) .. "|" ..
            V(conf,"portraitClassStyle","B") .. "|" ..
            (conf.portraitRender or "2D")
 end
@@ -92,6 +98,23 @@ local function EnsureDecor(f)
     return d
 end
 
+local function PortraitUsesContainerPoints(portrait, container)
+    if not (portrait and container and portrait.GetNumPoints and portrait.GetPoint) then
+        return false
+    end
+    local n = portrait:GetNumPoints()
+    if not n or n <= 0 then
+        return false
+    end
+    for i = 1, n do
+        local _, relTo = portrait:GetPoint(i)
+        if relTo ~= container then
+            return false
+        end
+    end
+    return true
+end
+
 -- ────────────────────────────────────────────────────────────
 -- LAYOUT: position, size, container reparent, strata.
 -- Runs every hook call but stamp-gated internally.
@@ -105,8 +128,10 @@ local function ComputeAndApplyLayout(f, conf, portrait)
 
     -- Layout stamp: skip if nothing layout-relevant changed AND portrait is in container
     local lStamp = LayoutStamp(conf)
-    local inContainer = d and d.portraitContainer and portrait.GetParent and portrait:GetParent() == d.portraitContainer
-    if inContainer and f._msufLayoutStamp == lStamp then return end
+    local pc = d and d.portraitContainer
+    local inContainer = pc and portrait.GetParent and portrait:GetParent() == pc
+    local containerShown = pc and pc.IsShown and pc:IsShown()
+    if inContainer and containerShown and PortraitUsesContainerPoints(portrait, pc) and f._msufLayoutStamp == lStamp then return end
     f._msufLayoutStamp = lStamp
 
     local anchor = f.hpBar or f
@@ -116,11 +141,6 @@ local function ComputeAndApplyLayout(f, conf, portrait)
     local autoSize = math_max(16, h - 4)
     local sizeOvr = tonumber(V(conf, "portraitSizeOverride", 0)) or 0
     local size = (sizeOvr > 0) and math_max(16, sizeOvr) or autoSize
-
-    if V(conf, "portraitFillBorder", false) and V(conf, "portraitBorderStyle", "NONE") ~= "NONE" then
-        local thick = math_max(1, tonumber(V(conf, "portraitBorderThickness", 2)) or 2)
-        size = size + (thick * 2)
-    end
 
     local ox = tonumber(V(conf, "portraitOffsetX", 0)) or 0
     local oy = tonumber(V(conf, "portraitOffsetY", 0)) or 0
@@ -135,7 +155,7 @@ local function ComputeAndApplyLayout(f, conf, portrait)
 
     -- Reparent portrait into elevated container
     if d and d.portraitContainer then
-        local pc = d.portraitContainer
+        pc = d.portraitContainer
         if portrait.GetParent and portrait:GetParent() ~= pc then
             portrait:SetParent(pc)
         end
@@ -151,20 +171,6 @@ local function ComputeAndApplyLayout(f, conf, portrait)
         else portrait:SetPoint("LEFT", anchor, "RIGHT", ox, oy) end
     end
 
-    -- 3D model follows container
-    local model = rawget(f, "portraitModel")
-    if model and model.IsShown and model:IsShown() then
-        if model.SetSize then model:SetSize(size, size) end
-        local target = (d and d.portraitContainer) or portrait
-        if model.ClearAllPoints then
-            model:ClearAllPoints()
-            if model.SetAllPoints then model:SetAllPoints(target)
-            elseif model.SetPoint then model:SetPoint("CENTER", target, "CENTER", 0, 0) end
-        end
-        if d and d.portraitContainer and model.SetFrameLevel then
-            model:SetFrameLevel(d.portraitContainer:GetFrameLevel() + 1)
-        end
-    end
 end
 
 -- ────────────────────────────────────────────────────────────
@@ -173,9 +179,9 @@ end
 local function ResolveBorderColor(conf, unit)
     local style = V(conf, "portraitBorderStyle", "NONE")
     if style == "NONE" then return nil end
-    if style == "CUSTOM" then
-        return V(conf,"portraitBorderColorR",1), V(conf,"portraitBorderColorG",1),
-               V(conf,"portraitBorderColorB",1), V(conf,"portraitBorderColorA",1)
+    if style == "CUSTOM" or style == "SOLID" then
+        return GV("portraitBorderColorR",1), GV("portraitBorderColorG",1),
+               GV("portraitBorderColorB",1), GV("portraitBorderColorA",1)
     end
     if style == "CLASS_COLOR" then
         local class = UnitClassBase and UnitClassBase(unit)
@@ -194,14 +200,15 @@ local function ResolveBorderColor(conf, unit)
         end
         return 1, 1, 1, 1
     end
-    return 1, 1, 1, 1  -- SOLID
+    return 1, 1, 1, 1
 end
 
 -- ────────────────────────────────────────────────────────────
 -- Shape TexCoord
 -- ────────────────────────────────────────────────────────────
-local function ApplyShapeTexCoord(portrait, shape, isRondo)
+local function ApplyShapeTexCoord(portrait, shape, isRondo, preserveTexCoord)
     if not portrait or not portrait.SetTexCoord then return end
+    if preserveTexCoord then return end
     if isRondo then portrait:SetTexCoord(0, 1, 0, 1); return end
     if shape == "CIRCLE" then
         portrait:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -218,8 +225,8 @@ local function ApplyBackground(d, conf, portrait)
     d.bg:ClearAllPoints()
     d.bg:SetPoint("TOPLEFT", portrait, "TOPLEFT", -1, 1)
     d.bg:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 1, -1)
-    d.bg:SetVertexColor(V(conf,"portraitBgColorR",0.05), V(conf,"portraitBgColorG",0.05),
-                        V(conf,"portraitBgColorB",0.05), V(conf,"portraitBgColorA",0.85))
+    d.bg:SetVertexColor(GV("portraitBgColorR",0.05), GV("portraitBgColorG",0.05),
+                        GV("portraitBgColorB",0.05), GV("portraitBgColorA",0.85))
     local pLevel = (portrait.GetParent and portrait:GetParent() and portrait:GetParent().GetFrameLevel)
         and portrait:GetParent():GetFrameLevel() or 0
     d:SetFrameLevel(math_max(0, pLevel)); d.bg:SetDrawLayer("BACKGROUND", -1); d.bg:Show()
@@ -235,29 +242,49 @@ local function ApplyBorder(d, conf, portrait, shape, r, g, b, a)
         return
     end
     local thick = math_max(1, tonumber(V(conf, "portraitBorderThickness", 2)) or 2)
+    local drawInside = V(conf, "portraitFillBorder", false) == true
     local ringTex = SHAPE_RING[shape]
     if ringTex then
         for i = 1, 4 do d._edges[i]:Hide() end
         d.shapedBorder:SetTexture(ringTex); d.shapedBorder:SetTexCoord(0, 1, 0, 1)
         d.shapedBorder:ClearAllPoints()
-        d.shapedBorder:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
-        d.shapedBorder:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+        if drawInside then
+            d.shapedBorder:SetAllPoints(portrait)
+        else
+            d.shapedBorder:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
+            d.shapedBorder:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+        end
         d.shapedBorder:SetVertexColor(r, g, b, a); d.shapedBorder:Show()
     else
         d.shapedBorder:Hide()
         local eT, eB, eL, eR = d.edgeT, d.edgeB, d.edgeL, d.edgeR
-        eT:ClearAllPoints(); eT:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
-        eT:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
-        eT:SetHeight(thick); eT:SetVertexColor(r,g,b,a); eT:Show()
-        eB:ClearAllPoints(); eB:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
-        eB:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
-        eB:SetHeight(thick); eB:SetVertexColor(r,g,b,a); eB:Show()
-        eL:ClearAllPoints(); eL:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
-        eL:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
-        eL:SetWidth(thick); eL:SetVertexColor(r,g,b,a); eL:Show()
-        eR:ClearAllPoints(); eR:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
-        eR:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
-        eR:SetWidth(thick); eR:SetVertexColor(r,g,b,a); eR:Show()
+        if drawInside then
+            eT:ClearAllPoints(); eT:SetPoint("TOPLEFT", portrait, "TOPLEFT", 0, 0)
+            eT:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", 0, 0)
+            eT:SetHeight(thick); eT:SetVertexColor(r,g,b,a); eT:Show()
+            eB:ClearAllPoints(); eB:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", 0, 0)
+            eB:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 0, 0)
+            eB:SetHeight(thick); eB:SetVertexColor(r,g,b,a); eB:Show()
+            eL:ClearAllPoints(); eL:SetPoint("TOPLEFT", portrait, "TOPLEFT", 0, 0)
+            eL:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", 0, 0)
+            eL:SetWidth(thick); eL:SetVertexColor(r,g,b,a); eL:Show()
+            eR:ClearAllPoints(); eR:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", 0, 0)
+            eR:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 0, 0)
+            eR:SetWidth(thick); eR:SetVertexColor(r,g,b,a); eR:Show()
+        else
+            eT:ClearAllPoints(); eT:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
+            eT:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
+            eT:SetHeight(thick); eT:SetVertexColor(r,g,b,a); eT:Show()
+            eB:ClearAllPoints(); eB:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
+            eB:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+            eB:SetHeight(thick); eB:SetVertexColor(r,g,b,a); eB:Show()
+            eL:ClearAllPoints(); eL:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thick, thick)
+            eL:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thick, -thick)
+            eL:SetWidth(thick); eL:SetVertexColor(r,g,b,a); eL:Show()
+            eR:ClearAllPoints(); eR:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thick, thick)
+            eR:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thick, -thick)
+            eR:SetWidth(thick); eR:SetVertexColor(r,g,b,a); eR:Show()
+        end
     end
     local pLevel = (portrait.GetParent and portrait:GetParent() and portrait:GetParent().GetFrameLevel)
         and portrait:GetParent():GetFrameLevel() or 0
@@ -268,6 +295,10 @@ end
 -- Hide all decoration
 -- ────────────────────────────────────────────────────────────
 local function HideAllDecor(f)
+    f._msufDecoStamp = nil
+    f._msufDecoUnitStamp = nil
+    f._msufLayoutStamp = nil
+
     local d = f._msufPortraitDecor
     if not d then return end
     d:Hide(); d.bg:Hide(); d.shapedBorder:Hide(); d.borderFrame:Hide()
@@ -304,9 +335,12 @@ local function MSUF_ApplyPortraitDecoration(f, unit, conf, existsForPortrait)
 
     local shape = V(conf, "portraitShape", "SQUARE")
     local render = conf.portraitRender or "2D"
-    local isRondo = (render == "CLASS") and RONDO_PACKS[V(conf, "portraitClassStyle", "BLIZZARD")] or false
+    local classStyle = V(conf, "portraitClassStyle", "BLIZZARD")
+    local isClassRender = render == "CLASS"
+    local isRondo = isClassRender and RONDO_PACKS[classStyle] or false
+    local preserveClassAtlasCoords = isClassRender and not isRondo
 
-    ApplyShapeTexCoord(portrait, shape, isRondo)
+    ApplyShapeTexCoord(portrait, shape, isRondo, preserveClassAtlasCoords)
     ApplyBackground(d, conf, portrait)
 
     if isRondo then
@@ -329,7 +363,7 @@ end
 -- Hooks
 -- ────────────────────────────────────────────────────────────
 if type(hooksecurefunc) == "function" then
-    -- After portrait rendering (2D/3D/CLASS texture is set)
+    -- After portrait rendering (2D/CLASS texture is set)
     if type(_G.MSUF_UpdatePortraitIfNeeded) == "function" then
         local function OnUpdatePortrait(f, unit, conf, exists)
             local fn = _G.MSUF_ApplyPortraitDecoration
@@ -378,7 +412,7 @@ local function InvalidateByKey(key)
 end
 
 local function InvalidateAll()
-    for _, k in ipairs({ "player", "target", "focus", "pet", "targettarget" }) do
+    for _, k in ipairs({ "player", "target", "focus", "focustarget", "pet", "targettarget" }) do
         InvalidateByKey(k)
     end
     InvalidateByKey("boss")
@@ -402,6 +436,7 @@ end
 
 local function SyncFocusTimer()
     SyncUnitSafe("focus")
+    SyncUnitSafe("focustarget")
 end
 
 local function SyncPetTimer()
@@ -432,7 +467,7 @@ do
         local db = _G.MSUF_DB
         if db then
             local allOff = true
-            for _, k in ipairs({"player","target","focus","pet","targettarget","boss"}) do
+            for _, k in ipairs({"player","target","focus","focustarget","pet","targettarget","boss"}) do
                 local c = db[k]
                 if c and (c.portraitMode or "OFF") ~= "OFF" then allOff = false; break end
             end
@@ -446,7 +481,7 @@ do
             InvalidateByKey("target"); InvalidateByKey("targettarget")
             SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncTarget", SyncTargetTimer)
         elseif event == "PLAYER_FOCUS_CHANGED" then
-            InvalidateByKey("focus")
+            InvalidateByKey("focus"); InvalidateByKey("focustarget")
             SchedulePortraitTimer(0, "PortraitDecoration.Timer.SyncFocus", SyncFocusTimer)
         elseif event == "UNIT_PET" then
             InvalidateByKey("pet")
@@ -494,7 +529,7 @@ end
 _G.MSUF_PortraitDecoration_SyncUnit = SyncDecorationUnit
 
 local function RefreshAllDecoration()
-    for _, k in ipairs({"player","target","focus","pet","targettarget"}) do
+    for _, k in ipairs({"player","target","focus","focustarget","pet","targettarget"}) do
         _G.MSUF_PortraitDecoration_SyncUnit(k)
     end
     _G.MSUF_PortraitDecoration_SyncUnit("boss")

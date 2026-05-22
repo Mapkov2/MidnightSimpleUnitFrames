@@ -39,10 +39,13 @@ local tonumber        = tonumber
 local string_match    = string.match
 local string_format   = string.format
 local math_floor      = math.floor
+local select          = select
 local UnitIsUnit      = UnitIsUnit
 local IsInRaid        = IsInRaid
 local GetRaidRosterInfo = GetRaidRosterInfo
 local InCombatLockdown = InCombatLockdown
+local bitlib          = bit or bit32
+local bit_band        = bitlib and bitlib.band
 
 -- ---------------------------------------------------------------------------
 -- Defaults: mirror the slider/dropdown defaults declared in MSUF_Options_GF.lua
@@ -61,15 +64,12 @@ local VALID_ANCHORS = {
 }
 
 -- ---------------------------------------------------------------------------
--- Font & color resolution (matches MSUF GF font pattern: per-kind override,
--- global fallback). Mirrors what MSUF_Options_Fonts.lua reads/writes.
+-- Font & color resolution. Font family is global; GF scopes only affect
+-- style/color values.
 -- ---------------------------------------------------------------------------
-local function _ResolveFontPath(kindConf)
-    local key = kindConf and kindConf.fontKey
-    if type(key) ~= "string" or key == "" then
-        local g = _G.MSUF_DB and _G.MSUF_DB.general
-        key = (g and g.fontKey) or "FRIZQT"
-    end
+local function _ResolveFontPath()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local key = (g and g.fontKey) or "FRIZQT"
     local fn = _G.MSUF_GetFontPathForKey
     if type(fn) == "function" then
         local p = fn(key)
@@ -77,6 +77,11 @@ local function _ResolveFontPath(kindConf)
     end
     local resolve = _G.MSUF_ResolveFontPath or function(path) return path end
     return resolve("Fonts\\FRIZQT__.TTF", 12, "")
+end
+
+local function _ResolveFontKey()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    return (g and g.fontKey) or "FRIZQT"
 end
 
 local function _ResolveOutline(kindConf)
@@ -191,9 +196,15 @@ local function _UpdateFrame(frame, kindConf)
     if type(size) ~= "number" or size < 4 then size = DEFAULT_SIZE end
     local path    = _ResolveFontPath(kindConf)
     local outline = _ResolveOutline(kindConf)
+    local key     = _ResolveFontKey(kindConf)
     local fontKey = path .. "\1" .. size .. "\1" .. outline
     if fs._msufFontKey ~= fontKey then
-        fs:SetFont(path, size, outline)
+        local safeSetFont = _G.MSUF_SetFontSafe
+        if type(safeSetFont) == "function" then
+            safeSetFont(fs, path, size, outline, key)
+        else
+            fs:SetFont(path, size, outline)
+        end
         fs._msufFontKey = fontKey
     end
 
@@ -271,13 +282,13 @@ local function _AnyEnabled()
     local GF = NS and NS.GF
     if not GF or not GF.GetConf then return false end
     local party = GF.GetConf("party")
-    if party and party.showGroupNumber == true then return true end
+    if party and party.enabled == true and party.showGroupNumber == true then return true end
     local raidKind = (GF.GetLiveRaidKind and GF.GetLiveRaidKind()) or "raid"
     local raid = GF.GetConf(raidKind)
-    if raid and raid.showGroupNumber == true then return true end
+    if raid and raid.enabled == true and raid.showGroupNumber == true then return true end
     if raidKind ~= "raid" then
         raid = GF.GetConf("raid")
-        if raid and raid.showGroupNumber == true then return true end
+        if raid and raid.enabled == true and raid.showGroupNumber == true then return true end
     end
     return false
 end
@@ -349,7 +360,7 @@ local function _RefreshAll()
             if type(f) == "table" and f.unit then
                 local kind = f._msufGFKind or "party"
                 local conf = GF.GetConf(kind)
-                if conf then _UpdateFrame(f, conf) end
+                if conf and (conf.enabled == true or f._msufGFPreviewActive) then _UpdateFrame(f, conf) end
             end
         end
     else
@@ -357,7 +368,7 @@ local function _RefreshAll()
             if type(f) == "table" and f.unit then
                 local kind = f._msufGFKind or "party"
                 local conf = GF.GetConf(kind)
-                if conf then _UpdateFrame(f, conf) end
+                if conf and (conf.enabled == true or f._msufGFPreviewActive) then _UpdateFrame(f, conf) end
             end
         end
     end
@@ -431,6 +442,21 @@ _InvalidateAll = function(invalAnchor, invalFont)
     end
 end
 
+local function _HasAnyDirtyBit(bits, ...)
+    if type(bits) ~= "number" then return true end
+    for i = 1, select("#", ...) do
+        local flag = select(i, ...)
+        if type(flag) == "number" then
+            if bit_band then
+                if bit_band(bits, flag) ~= 0 then return true end
+            elseif bits % (flag + flag) >= flag then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 -- ---------------------------------------------------------------------------
 -- API hooks. Idempotent under repeated _Init attempts (deferral path).
 -- ---------------------------------------------------------------------------
@@ -462,15 +488,22 @@ local function _Init()
         end
     end
 
-    -- MarkAllDirty: any layout flag → invalidate anchor cache
+    -- MarkAllDirty: only layout/geometry/font bits affect group-number paint.
     if type(GF.MarkAllDirty) == "function" then
         local orig = GF.MarkAllDirty
         GF.MarkAllDirty = function(level, ...)
             orig(level, ...)
-            -- Conservative: invalidate anchor on every dirty mark. The
-            -- coalesced scheduler keeps the cost to one walk per tick.
-            _RequestInvalidate(true, false)
-            _Schedule()
+            local bits = (type(level) == "number") and level or (GF.DIRTY_ALL or 0x3F)
+            local anchorDirty = _HasAnyDirtyBit(bits, GF.DIRTY_GEOMETRY or 0x01, GF.DIRTY_LAYOUT or 0x20)
+            local fontDirty = _HasAnyDirtyBit(bits, GF.DIRTY_FONT or 0x04)
+            if bits == (GF.DIRTY_ALL or 0x3F) then
+                anchorDirty = true
+                fontDirty = true
+            end
+            if anchorDirty or fontDirty then
+                _RequestInvalidate(anchorDirty, fontDirty)
+                _Schedule()
+            end
         end
     end
 

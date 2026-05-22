@@ -293,7 +293,7 @@ _G.MSUF_ApplyCompatAnchor_PlayerFrame = MSUF_ApplyCompatAnchor_PlayerFrame
 
 local function HideDefaultFrames()
     if not MSUF_DB then
-        local fn = _G.EnsureDB
+        local fn = _G.MSUF_EnsureDB
         if type(fn) == "function" then fn() end
     end
     local g = (MSUF_DB and MSUF_DB.general) or {}

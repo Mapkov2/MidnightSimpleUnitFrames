@@ -15,6 +15,9 @@ local function GetBossPreviewCount()
 end
 
 local function ApplyBossPreviewTextLayout()
+    if _G.MSUF_InCombat == true or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false) then
+        return
+    end
     local function applyOne(f)
         if not f or not f.statusBar or not f.castText or not f.timeText then
             return

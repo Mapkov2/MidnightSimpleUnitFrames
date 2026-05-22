@@ -15,6 +15,29 @@ local max = math.max
 local W8 = "Interface/Buttons/WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local round = function(n) return n + (2^52 + 2^51) - (2^52 + 2^51) end
+local function ApplySettingsForKeySafe(key)
+    local fn = _G.MSUF_ApplySettingsForKey
+    if type(fn) == "function" then fn(key); return true end
+    return false
+end
+local function ApplyAllSettingsSafe()
+    local fn = _G.MSUF_ApplyAllSettings
+    if type(fn) == "function" then fn(); return true end
+    return false
+end
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
 
 local function T()
     return _G.MSUF_THEME or {
@@ -27,6 +50,33 @@ end
 
 local movers = {}
 local moverParent
+
+local function RefreshUFPreview(reason)
+    if _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) then return end
+    local fn = _G.MSUF_UFPreview_RequestRefresh
+    if type(fn) == "function" then fn(reason or "EM2_MOVERS") end
+end
+
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+end
+
+local function BlockConfigCombatLocked()
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if IsConfigCombatLocked() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        end
+        return true
+    end
+    return false
+end
 
 local function SyncMoverToFrame(mover, frame)
     if not frame then return end
@@ -66,7 +116,7 @@ local function CreateMover(key, cfg)
 
     local label = mover:CreateFontString(nil, "OVERLAY")
     label:SetFont(FONT, 10, "OUTLINE"); label:SetPoint("CENTER")
-    label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(cfg.label or key)
+    label:SetTextColor(th.textR, th.textG, th.textB, 0.85); label:SetText(Tr(cfg.label or key))
     mover._label = label
 
     local coordFS = mover:CreateFontString(nil, "OVERLAY")
@@ -91,7 +141,7 @@ local function CreateMover(key, cfg)
 
     -- Hide label when preview is active (preview frame already shows unit name)
     function mover:UpdateLabelVisibility()
-        if _G.MSUF_PreviewTestMode and not self._dragging then
+        if _G.MSUF_PreviewTestMode and not (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) and not self._dragging then
             self._label:Hide()
             self._bg:SetColorTexture(0, 0, 0, 0)
             self._brd:SetBackdropBorderColor(th.edgeR, th.edgeG, th.edgeB, 0.25)
@@ -104,7 +154,7 @@ local function CreateMover(key, cfg)
 
     -- Drag → delegate to Ticker
     mover:SetScript("OnDragStart", function(self)
-        if InCombatLockdown and InCombatLockdown() then return end
+        if BlockConfigCombatLocked() then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         self._dragging = true
         self._coordFS:Show()
@@ -251,6 +301,7 @@ local function RegisterAll()
         { key = "target",       label = "Target",           order = 20 },
         { key = "focus",        label = "Focus",            order = 30 },
         { key = "targettarget", label = "Target of Target", order = 40 },
+        { key = "focustarget",  label = "Focus Target",     order = 45 },
         { key = "pet",          label = "Pet",              order = 50 },
     }
 
@@ -357,7 +408,7 @@ end
 
 -- ── MSUF_MakeBlizzardOptionsMovable ──────────────────────────────────────
 _G.MSUF_MakeBlizzardOptionsMovable = function()
-    if InCombatLockdown and InCombatLockdown() then return end
+    if BlockConfigCombatLocked() then return false end
     local frame = _G.SettingsPanel or _G.InterfaceOptionsFrame
     if not frame then return end
     if frame.MSUF_Movable then return end
@@ -371,7 +422,7 @@ _G.MSUF_MakeBlizzardOptionsMovable = function()
     drag:EnableMouse(true)
     drag:RegisterForDrag("LeftButton")
     drag:SetScript("OnDragStart", function(self)
-        if InCombatLockdown and InCombatLockdown() then return end
+        if BlockConfigCombatLocked() then return end
         local p = self:GetParent()
         if p and p.StartMoving then p:StartMoving() end
     end)
@@ -395,11 +446,12 @@ _G.MSUF_ResetCurrentEditUnit = function()
         db.general.anchorToCooldown = false
         db.general.anchorName = "UIParent"
     end
-    if type(ApplySettingsForKey) == "function" then ApplySettingsForKey(key)
-    elseif type(ApplyAllSettings) == "function" then ApplyAllSettings() end
+    if not ApplySettingsForKeySafe(key) then
+        ApplyAllSettingsSafe()
+    end
 end
 
--- ── MSUF_UpdateEditModeInfo (called by Castbars, Options_Core, main) ─────
+-- ── MSUF_UpdateEditModeInfo (called by Castbars/main) ─────
 _G.MSUF_UpdateEditModeInfo = function()
     -- No-op: EM2 HUD handles display. Old GridFrame.infoText is gone.
 end
@@ -448,13 +500,15 @@ _G.MSUF_A2_EnsureAuraPositionPopup = function()
 end
 
 -- ── MSUF_SyncUnitPositionPopup ───────────────────────────────────────────
-_G.MSUF_SyncUnitPositionPopup = function()
+_G.MSUF_SyncUnitPositionPopup = function(unit)
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
+    RefreshUFPreview("EM2_SYNC_UNIT_POPUP", unit)
 end
 
 -- ── MSUF_SyncCastbarPositionPopup ────────────────────────────────────────
 _G.MSUF_SyncCastbarPositionPopup = function(unit)
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
+    RefreshUFPreview("EM2_SYNC_CASTBAR_POPUP", unit)
 end
 
 -- ── MSUF_SyncAuras2PositionPopup ─────────────────────────────────────────
@@ -465,9 +519,14 @@ end
 -- ── MSUF_SetMSUFEditModeDirect (THE primary entry point) ─────────────────
 _G.MSUF_SetMSUFEditModeDirect = function(active, unitKey)
     if not EM2.State then return end
-    if active and InCombatLockdown and InCombatLockdown() then return end
+    if active and type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return false end
+    if active and IsConfigCombatLocked() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        return false
+    end
     if active then EM2.State.Enter(unitKey)
     else EM2.State.Exit("direct") end
+    return true
 end
 
 -- ── MSUF_SetMSUFEditModeFromBlizzard ─────────────────────────────────────
@@ -483,12 +542,12 @@ end
 _G.MSUF_UnitPreviewActive = false
 _G.MSUF_PreviewTestMode = false
 
-local PREVIEW_UNITS = { "target", "focus", "targettarget", "pet" }
+local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet" }
 
 _G.MSUF_EM2_ReforcePreviewFrames = function()
     if not _G.MSUF_PreviewTestMode then return end
-    if InCombatLockdown and InCombatLockdown() then return end
-    local UpdateFn = _G.UpdateSimpleUnitFrame
+    if IsConfigCombatLocked() then return end
+    local UpdateFn = _G.MSUF_UpdateSimpleUnitFrame
     for _, uk in ipairs(PREVIEW_UNITS) do
         local frame = _G["MSUF_" .. uk]
             or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[uk])
@@ -515,7 +574,11 @@ _G.MSUF_SyncAllUnitPreviews = function()
     local editOn = EM2.State and EM2.State.IsActive()
     local want = active and editOn
 
-    if InCombatLockdown and InCombatLockdown() then return end
+    if IsConfigCombatLocked() then
+        _G.MSUF_PreviewTestMode = false
+        _G.MSUF_BossTestMode = false
+        return
+    end
 
     -- Set preview flag (core visibility driver reads this)
     _G.MSUF_PreviewTestMode = want
@@ -532,7 +595,7 @@ _G.MSUF_SyncAllUnitPreviews = function()
         _G.MSUF_RefreshAllUnitVisibilityDrivers(want)
     end
 
-    local UpdateFn = _G.UpdateSimpleUnitFrame
+    local UpdateFn = _G.MSUF_UpdateSimpleUnitFrame
     for _, uk in ipairs(PREVIEW_UNITS) do
         local frame = _G["MSUF_" .. uk]
             or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[uk])
@@ -584,8 +647,10 @@ do
 
     local function ScheduleReforce(delay)
         if not _G.MSUF_PreviewTestMode then return end
+        if IsConfigCombatLocked() then return end
         C_Timer.After(delay, function()
             if not _G.MSUF_PreviewTestMode then return end
+            if IsConfigCombatLocked() then return end
             if _G.MSUF_EM2_ReforcePreviewFrames then
                 _G.MSUF_EM2_ReforcePreviewFrames()
             end
@@ -600,11 +665,13 @@ do
 
     local function InstallPipelineHooks()
         if _hooksInstalled then return end
-        if type(_G.ApplyAllSettings) ~= "function" then return end
+        if type(_G.MSUF_ApplyAllSettings) ~= "function" then return end
         _hooksInstalled = true
 
         -- Pipeline entry points (async commit → 0.12s settle)
+        SafeHook("MSUF_ApplyAllSettings", 0.12)
         SafeHook("ApplyAllSettings", 0.12)
+        SafeHook("MSUF_ApplySettingsForKey", 0.12)
         SafeHook("ApplySettingsForKey", 0.12)
 
         -- Font updates (direct overwrite → 0.05s)
@@ -668,7 +735,9 @@ _G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
     if _G.MSUF_UpdateFocusCastbarPreview then
         _G.MSUF_UpdateFocusCastbarPreview()
     end
-    if _G.MSUF_UpdateBossCastbarPreview then
+    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+        and _G.MSUF_UpdateBossCastbarPreview
+    then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 end
@@ -688,24 +757,6 @@ Edit.Transitions = Edit.Transitions or {}
 Edit.Transitions.SetMSUFEditModeDirect = _G.MSUF_SetMSUFEditModeDirect
 
 -- ── AnyEditMode listeners (registration handled in State.lua) ────────────
-
--- ── MSUF_EM_DropdownPreset (used by old Options code) ────────────────────
-_G.MSUF_EM_DropdownPreset = function(drop, width, placeholder)
-    if drop and UIDropDownMenu_SetWidth then UIDropDownMenu_SetWidth(drop, width or 120) end
-    if drop and UIDropDownMenu_SetText then UIDropDownMenu_SetText(drop, placeholder or "Select...") end
-end
-
--- ── MSUF_EM_RegisterPopupDropdown (no-op, EM2 popups don't need layer management) ──
-_G.MSUF_EM_RegisterPopupDropdown = function() end
-
--- ── MSUF_EM_AddPopupTitleAndClose (no-op, EM2 popups use Factory.Panel) ──
-_G.MSUF_EM_AddPopupTitleAndClose = function() end
-
--- ── MSUF_EM_AddSectionHeader (no-op) ─────────────────────────────────────
-_G.MSUF_EM_AddSectionHeader = function() end
-
--- ── MSUF_EM_AddDivider (no-op) ──────────────────────────────────────────
-_G.MSUF_EM_AddDivider = function() end
 
 -- ── Castbar anchor toggle (detach/attach to unitframe) ──────────────────
 _G.MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or function(unit, anchored)
@@ -758,10 +809,11 @@ _G.MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or fun
     local ra = reanchorFns[unit]
     if ra and type(_G[ra]) == "function" then _G[ra]() end
     if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
+    RefreshUFPreview("EM2_CASTBAR_ANCHOR_TOGGLE", unit)
 end
 
 -- ── Anchor Picker Singleton ─────────────────────────────────────────────
--- Shared by Edit Mode (global anchor) and Options_Player (per-unit anchor).
+-- Shared by Edit Mode and Menu2 anchor pickers.
 -- Caller sets _G.MSUF_AnchorPicker._onPick = function(frameName) ... end
 -- before showing, to control where the picked name is written.
 if not _G.MSUF_EnsureAnchorPicker then
@@ -864,10 +916,36 @@ do
         if ov.SetPropagateKeyboardInput then ov:SetPropagateKeyboardInput(true) end
         ov:Hide(); ov._onPick = nil
         local bg = ov:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.12)
-        local info = ov:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-        info:SetPoint("TOP", ov, "TOP", 0, -28); info:SetJustifyH("CENTER"); ov._info = info
-        local sub = ov:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        sub:SetPoint("TOP", info, "BOTTOM", 0, -10); sub:SetJustifyH("CENTER"); ov._sub = sub
+        local topPanel = CreateFrame("Frame", nil, ov, "BackdropTemplate")
+        topPanel:SetPoint("TOP", ov, "TOP", 0, -92)
+        topPanel:SetSize(760, 58)
+        topPanel:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        topPanel:SetBackdropColor(0.01, 0.015, 0.025, 0.96)
+        topPanel:SetBackdropBorderColor(1, 0.82, 0, 0.75)
+        ov._topPanel = topPanel
+        local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+        local info = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+        info:SetPoint("TOP", topPanel, "TOP", 0, -8)
+        info:SetJustifyH("CENTER")
+        info:SetFont(font, 15, "OUTLINE")
+        info:SetTextColor(1.00, 0.88, 0.22, 1)
+        info:SetShadowColor(0, 0, 0, 1)
+        info:SetShadowOffset(1, -1)
+        ov._info = info
+        local sub = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        sub:SetPoint("TOP", info, "BOTTOM", 0, -8)
+        sub:SetJustifyH("CENTER")
+        sub:SetWidth(720)
+        sub:SetFont(font, 12, "OUTLINE")
+        sub:SetTextColor(1, 1, 1, 1)
+        sub:SetShadowColor(0, 0, 0, 1)
+        sub:SetShadowOffset(1, -1)
+        ov._sub = sub
         local hover = ov:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         hover:SetPoint("BOTTOMLEFT", ov, "BOTTOMLEFT", 24, 24); hover:SetTextColor(0.9, 0.9, 0.9); ov._hover = hover
         local ctrl = ov:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -877,42 +955,60 @@ do
         hl:SetBackdropBorderColor(0, 1, 0, 0.95); hl:Hide(); ov._highlight = hl
 
         ov:SetScript("OnShow", function(self)
+            if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
+                self:Hide()
+                return
+            end
             self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
-            self._info:SetText("Anchor Picker")
-            self._sub:SetText("Hover over any frame, then CTRL + Left-Click to anchor.  |  Right-Click or Escape to cancel.")
-            self._hover:SetText("Hover: no named frame found")
-            self._ctrlHint:SetText("CTRL: not held"); self._ctrlHint:SetTextColor(1, 0.3, 0.3)
+            self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
+            self._lCtrlNotHeld = Tr("CTRL: not held")
+            self._lHoverNone = Tr("Hover: no named frame found")
+            self._lHoverFmt = Tr("Hover: %s")
+            self._lCtrlRequired = Tr("|cffff6060CTRL required:|r |cffffffffhold |r|cff55ff55CTRL + Left-Click|r|cffffffff to confirm the anchor target.|r")
+            self._lNoNamedFrame = Tr("|cffffcc33No named frame found under cursor.|r |cffffffffTry a different spot.|r")
+            self._info:SetText(Tr("Anchor Picker"))
+            self._sub:SetText(Tr("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r"))
+            self._hover:SetText(self._lHoverNone)
+            self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(1, 0.3, 0.3)
             self._highlight:Hide()
             if self.RegisterEvent then self:RegisterEvent("GLOBAL_MOUSE_DOWN") end
+            if self.RegisterEvent then self:RegisterEvent("PLAYER_REGEN_DISABLED") end
         end)
         ov:SetScript("OnHide", function(self)
             if self.UnregisterEvent then self:UnregisterEvent("GLOBAL_MOUSE_DOWN") end
+            if self.UnregisterEvent then self:UnregisterEvent("PLAYER_REGEN_DISABLED") end
             self._pickedFrame = nil; self._pickedName = nil; self._highlight:Hide()
+            if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(true) end
         end)
         ov:SetScript("OnUpdate", function(self, elapsed)
             self._elapsed = (self._elapsed or 0) + elapsed; if self._elapsed < 0.03 then return end; self._elapsed = 0
             local cd = IsControlKeyDown and IsControlKeyDown()
-            if cd then self._ctrlHint:SetText("CTRL: held  —  click to anchor!"); self._ctrlHint:SetTextColor(0.2, 1, 0.2)
-            else self._ctrlHint:SetText("CTRL: not held"); self._ctrlHint:SetTextColor(1, 0.3, 0.3) end
+            if cd then self._ctrlHint:SetText(self._lCtrlHeld); self._ctrlHint:SetTextColor(0.2, 1, 0.2)
+            else self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(1, 0.3, 0.3) end
             local f, n = _GetNamed(); self._pickedFrame = f; self._pickedName = n
             if n then
-                self._hover:SetText("Hover: " .. n)
+                self._hover:SetText(string.format(self._lHoverFmt, n))
                 local l, b, w, h = _SafeGetRect(f)
                 if l then
                     self._highlight:ClearAllPoints(); self._highlight:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b); self._highlight:SetSize(w, h)
                     self._highlight:SetBackdropBorderColor(cd and 0 or 1, cd and 1 or 1, 0, cd and 0.95 or 0.6); self._highlight:Show()
                 else self._highlight:Hide() end
-            else self._hover:SetText("Hover: no named frame found"); self._highlight:Hide() end
+            else self._hover:SetText(self._lHoverNone); self._highlight:Hide() end
         end)
         ov:SetScript("OnEvent", function(self, event, button)
+            if event == "PLAYER_REGEN_DISABLED" then
+                if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+                self:Hide()
+                return
+            end
             if event ~= "GLOBAL_MOUSE_DOWN" then return end
             if button == "RightButton" then self:Hide(); return end
             if button ~= "LeftButton" then return end
             if not (IsControlKeyDown and IsControlKeyDown()) then
-                self._sub:SetText("|cffff5555You must hold CTRL|r while left-clicking to confirm the anchor target."); return
+                self._sub:SetText(self._lCtrlRequired); return
             end
             local n = self._pickedName
-            if not n or n == "" then self._sub:SetText("No named frame found under cursor. Try a different spot."); return end
+            if not n or n == "" then self._sub:SetText(self._lNoNamedFrame); return end
             if type(self._onPick) == "function" then self._onPick(n) end
             self:Hide()
         end)

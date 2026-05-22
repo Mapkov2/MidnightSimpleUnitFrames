@@ -7,7 +7,7 @@ ns = ns or {}
 local type, tostring, tonumber, select = type, tostring, tonumber, select
 local pairs, ipairs, next = pairs, ipairs, next
 local math_min, math_max, math_floor = math.min, math.max, math.floor
-local string_format, string_match, string_sub = string.format, string.match, string.sub
+local string_format, string_match, string_sub, string_gsub, string_lower = string.format, string.match, string.sub, string.gsub, string.lower
 local UnitExists, UnitIsPlayer = UnitExists, UnitIsPlayer
 local UnitHealth, UnitHealthMax = UnitHealth, UnitHealthMax
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
@@ -155,6 +155,66 @@ ns.MSUF_Util = ns.MSUF_Util or {}
 local U = ns.MSUF_Util
 _G.MSUF_Util = U
 
+-- Shared frame layering for visual effects (highlight borders, overlays, stripes).
+-- Keep this in Foundation so UnitFrames and GroupFrames use identical strata/level
+-- behavior without duplicating hot-path helpers.
+if type(_G.MSUF_FRAME_STRATA_RANK) ~= "table" then
+    _G.MSUF_FRAME_STRATA_RANK = {
+        BACKGROUND = 1,
+        LOW = 2,
+        MEDIUM = 3,
+        HIGH = 4,
+        DIALOG = 5,
+        FULLSCREEN = 6,
+        FULLSCREEN_DIALOG = 7,
+        TOOLTIP = 8,
+    }
+end
+
+if type(_G.MSUF_EFFECT_FRAME_STRATA) ~= "string" or _G.MSUF_EFFECT_FRAME_STRATA == "" then
+    _G.MSUF_EFFECT_FRAME_STRATA = "HIGH"
+end
+
+if type(_G.MSUF_ClampFrameLevel) ~= "function" then
+    function _G.MSUF_ClampFrameLevel(level)
+        level = tonumber(level) or 0
+        if level < 0 then return 0 end
+        if level > 10000 then return 10000 end
+        return level
+    end
+end
+
+if type(_G.MSUF_MaxFrameStrata) ~= "function" then
+    function _G.MSUF_MaxFrameStrata(a, b)
+        if not a or a == "" then return b end
+        if not b or b == "" then return a end
+        local rank = _G.MSUF_FRAME_STRATA_RANK
+        return ((rank[a] or 0) >= (rank[b] or 0)) and a or b
+    end
+end
+
+if type(_G.MSUF_SyncFrameLayerAbove) ~= "function" then
+    function _G.MSUF_SyncFrameLayerAbove(child, parent, offset, strata)
+        if not (child and parent) then return nil end
+
+        local parentStrata = parent.GetFrameStrata and parent:GetFrameStrata() or nil
+        local wantStrata = _G.MSUF_MaxFrameStrata(parentStrata, strata or _G.MSUF_EFFECT_FRAME_STRATA)
+        if wantStrata and child.SetFrameStrata and (not child.GetFrameStrata or child:GetFrameStrata() ~= wantStrata) then
+            child:SetFrameStrata(wantStrata)
+        end
+
+        if child.SetFrameLevel and parent.GetFrameLevel then
+            local level = _G.MSUF_ClampFrameLevel((parent:GetFrameLevel() or 0) + (tonumber(offset) or 1))
+            if not child.GetFrameLevel or child:GetFrameLevel() ~= level then
+                child:SetFrameLevel(level)
+            end
+            return level
+        end
+
+        return nil
+    end
+end
+
 -- Atlas helper used by status/state indicator icons.
 -- Some call-sites use a global helper name; provide it here as a safe fallback
 -- so indicator modules can remain self-contained without load-order fragility.
@@ -180,6 +240,97 @@ if type(_G._MSUF_SetAtlasOrFallback) ~= "function" then
 
         return false
     end
+end
+
+-- External icon-pack support:
+-- In Midnight, spell/aura APIs commonly return FileDataIDs. Passing those IDs
+-- directly to SetTexture bypasses loose files in Interface\Icons. For accessible
+-- icon IDs, resolve the original filename and set the extensionless path instead
+-- so files like Interface\Icons\inv_belt_39a.tga can override the default icon.
+do
+    local _fileDataIconPathCache = {}
+    local _GetFilenameFromFileDataID
+
+    local function MSUF_CanReadTextureValue(value)
+        local canaccessvalue = _G.canaccessvalue
+        if type(canaccessvalue) == "function" then
+            return canaccessvalue(value) == true
+        end
+        local issecretvalue = _G.issecretvalue
+        if type(issecretvalue) == "function" and issecretvalue(value) == true then
+            return false
+        end
+        return true
+    end
+
+    local function MSUF_GetFilenameResolver()
+        if _GetFilenameFromFileDataID then return _GetFilenameFromFileDataID end
+        local C_Texture = _G.C_Texture
+        _GetFilenameFromFileDataID = C_Texture and C_Texture.GetFilenameFromFileDataID
+        return _GetFilenameFromFileDataID
+    end
+
+    local function MSUF_NormalizeInterfaceIconPath(path)
+        if type(path) ~= "string" or path == "" then return nil end
+        path = string_gsub(path, "/", "\\")
+        local lower = string_lower(path)
+        if string_sub(lower, 1, 16) ~= "interface\\icons\\" then
+            return nil
+        end
+        path = string_gsub(path, "%.[Bb][Ll][Pp]$", "")
+        path = string_gsub(path, "%.[Tt][Gg][Aa]$", "")
+        path = string_gsub(path, "%.[Pp][Nn][Gg]$", "")
+        return path
+    end
+
+    if type(_G.MSUF_ResolveIconTexturePath) ~= "function" then
+        function _G.MSUF_ResolveIconTexturePath(texture)
+            if not MSUF_CanReadTextureValue(texture) then
+                return texture
+            end
+
+            local vt = type(texture)
+            if vt == "string" then
+                return MSUF_NormalizeInterfaceIconPath(texture) or texture
+            end
+            if vt ~= "number" or texture <= 0 then
+                return texture
+            end
+
+            local cached = _fileDataIconPathCache[texture]
+            if cached ~= nil then
+                return cached or texture
+            end
+
+            local resolver = MSUF_GetFilenameResolver()
+            if type(resolver) == "function" then
+                local ok, filename = pcall(resolver, texture)
+                local path = ok and MSUF_NormalizeInterfaceIconPath(filename) or nil
+                if path then
+                    _fileDataIconPathCache[texture] = path
+                    return path
+                end
+            end
+
+            _fileDataIconPathCache[texture] = false
+            return texture
+        end
+    end
+
+    if type(_G.MSUF_SetIconTexture) ~= "function" then
+        function _G.MSUF_SetIconTexture(textureRegion, texture, fallback)
+            if not (textureRegion and textureRegion.SetTexture) then return end
+            local resolver = _G.MSUF_ResolveIconTexturePath
+            local value = (type(resolver) == "function") and resolver(texture) or texture
+            if MSUF_CanReadTextureValue(value) and (value == nil or value == "") then
+                value = fallback or ""
+            end
+            textureRegion:SetTexture(value)
+        end
+    end
+
+    U.ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+    U.SetIconTexture = _G.MSUF_SetIconTexture
 end
 
 function MSUF_DeepCopy(value, seen)
@@ -260,7 +411,79 @@ function MSUF_SetTextIfChanged(fs, text)
     fs:SetText(v)
 end
 
-function MSUF_SetCastTimeText(frame, seconds)
+local MSUF_CASTBAR_TIME_FORMAT_CURRENT = "CURRENT"
+local MSUF_CASTBAR_TIME_FORMATS = {
+    CURRENT = true,
+    CURRENT_MAX = true,
+    MAX_CURRENT = true,
+    ELAPSED_MAX = true,
+    MAX_ELAPSED = true,
+}
+
+function MSUF_NormalizeCastbarTimeFormat(value)
+    if type(value) ~= "string" then return MSUF_CASTBAR_TIME_FORMAT_CURRENT end
+    value = value:upper()
+    value = value:gsub("%s+", "")
+    value = value:gsub("/", "_")
+    value = value:gsub("-", "_")
+    if value == "CURRENTONLY" or value == "CURRENT_ONLY" or value == "REMAINING" or value == "REMAINING_ONLY" then
+        return "CURRENT"
+    end
+    if value == "REMAINING_MAX" then return "CURRENT_MAX" end
+    if value == "MAX_REMAINING" then return "MAX_CURRENT" end
+    if MSUF_CASTBAR_TIME_FORMATS[value] then return value end
+    return MSUF_CASTBAR_TIME_FORMAT_CURRENT
+end
+
+function MSUF_GetCastbarTimeFormatDBKey(unit)
+    unit = tostring(unit or ""):lower()
+    if unit == "player" then return "castbarPlayerTimeFormat" end
+    if unit == "target" then return "castbarTargetTimeFormat" end
+    if unit == "focus" then return "castbarFocusTimeFormat" end
+    if unit == "boss" or unit:match("^boss%d+$") then return "bossCastTimeFormat" end
+    return nil
+end
+
+function MSUF_GetCastbarTimeFormat(unit, g)
+    local key = MSUF_GetCastbarTimeFormatDBKey(unit)
+    if not key then return MSUF_CASTBAR_TIME_FORMAT_CURRENT end
+    if not g then
+        local db = _G.MSUF_DB
+        g = db and db.general
+    end
+    return MSUF_NormalizeCastbarTimeFormat(g and g[key])
+end
+
+function MSUF_FormatCastbarTimeText(mode, current, total)
+    local cur = tonumber(current)
+    if type(cur) ~= "number" then return nil end
+    if cur < 0 then cur = 0 end
+
+    mode = MSUF_NormalizeCastbarTimeFormat(mode)
+    local maxTime = tonumber(total)
+    if not maxTime or maxTime <= 0 then
+        return string.format("%.1f", cur)
+    end
+    if cur > maxTime then cur = maxTime end
+
+    if mode == "CURRENT_MAX" then
+        return string.format("%.1f / %.1f", cur, maxTime)
+    elseif mode == "MAX_CURRENT" then
+        return string.format("%.1f / %.1f", maxTime, cur)
+    elseif mode == "ELAPSED_MAX" then
+        local elapsed = maxTime - cur
+        if elapsed < 0 then elapsed = 0 end
+        return string.format("%.1f / %.1f", elapsed, maxTime)
+    elseif mode == "MAX_ELAPSED" then
+        local elapsed = maxTime - cur
+        if elapsed < 0 then elapsed = 0 end
+        return string.format("%.1f / %.1f", maxTime, elapsed)
+    end
+
+    return string.format("%.1f", cur)
+end
+
+function MSUF_SetCastTimeText(frame, seconds, totalSeconds)
     local fs = frame and frame.timeText
     if not fs then return end
 
@@ -277,10 +500,18 @@ function MSUF_SetCastTimeText(frame, seconds)
         return
     end
 
-    if fs.SetFormattedText then
+    local mode = frame._msufCastTimeFormat
+    if not mode and frame.unit then
+        mode = MSUF_GetCastbarTimeFormat(frame.unit)
+    end
+    mode = MSUF_NormalizeCastbarTimeFormat(mode)
+
+    if mode == "CURRENT" and fs.SetFormattedText then
+        fs._msufLastText = nil
         fs:SetFormattedText("%.1f", n)
     else
-        MSUF_SetTextIfChanged(fs, string.format("%.1f", n))
+        local text = MSUF_FormatCastbarTimeText(mode, n, totalSeconds or frame._msufPlainTotal)
+        MSUF_SetTextIfChanged(fs, text or "")
     end
 end
 
@@ -358,6 +589,10 @@ U.RestoreKeys = MSUF_RestoreKeys
 U.Clamp = MSUF_Clamp
 U.GetNumber = MSUF_GetNumber
 U.SetTextIfChanged = MSUF_SetTextIfChanged
+U.NormalizeCastbarTimeFormat = MSUF_NormalizeCastbarTimeFormat
+U.GetCastbarTimeFormatDBKey = MSUF_GetCastbarTimeFormatDBKey
+U.GetCastbarTimeFormat = MSUF_GetCastbarTimeFormat
+U.FormatCastbarTimeText = MSUF_FormatCastbarTimeText
 U.SetCastTimeText = MSUF_SetCastTimeText
 U.SetAlphaIfChanged = MSUF_SetAlphaIfChanged
 U.SetWidthIfChanged = MSUF_SetWidthIfChanged
@@ -481,6 +716,46 @@ if not _G.MSUF_IsInAnyEditMode then
              return true
         end
          return false
+    end
+end
+
+do
+    local _lastConfigCombatMessage = 0
+
+    if type(_G.MSUF_IsConfigCombatLocked) ~= "function" then
+        function _G.MSUF_IsConfigCombatLocked()
+            if InCombatLockdown and InCombatLockdown() then return true end
+            local uac = _G.UnitAffectingCombat
+            if type(uac) == "function" and uac("player") then return true end
+            return false
+        end
+    end
+
+    if type(_G.MSUF_ShowConfigCombatLockMessage) ~= "function" then
+        function _G.MSUF_ShowConfigCombatLockMessage()
+            local now = (GetTime and GetTime()) or 0
+            if now > 0 and (now - _lastConfigCombatMessage) < 1.25 then return end
+            _lastConfigCombatMessage = now
+
+            local msg = "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."
+            local tr = ns and ns.Translate
+            if type(tr) == "function" then msg = tr(msg) or msg end
+            if _G.UIErrorsFrame and _G.UIErrorsFrame.AddMessage then
+                _G.UIErrorsFrame:AddMessage(msg, 1, 0.82, 0.1)
+            end
+            if print then print(msg) end
+        end
+    end
+
+    if type(_G.MSUF_BlockConfigCombatLocked) ~= "function" then
+        function _G.MSUF_BlockConfigCombatLocked()
+            local locked = _G.MSUF_IsConfigCombatLocked and _G.MSUF_IsConfigCombatLocked()
+            if locked then
+                if _G.MSUF_ShowConfigCombatLockMessage then _G.MSUF_ShowConfigCombatLockMessage() end
+                return true
+            end
+            return false
+        end
     end
 end
 

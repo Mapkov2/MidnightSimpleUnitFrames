@@ -80,7 +80,10 @@ local function CP_Create(playerFrame)
         if CP.container then return end
 
         local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
-        c:SetFrameLevel(playerFrame:GetFrameLevel() + 5)  -- above hpBar (Unhalted overlay approach)
+        local b = _cpDB.bars or {}
+        local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
+        if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
+        c:SetFrameLevel(playerFrame:GetFrameLevel() + levelOffset)  -- above hpBar (Unhalted overlay approach)
         c:Hide()
         CP.container = c
 
@@ -147,22 +150,58 @@ builders.LAYOUT = function(E)
     local function CP_Layout(playerFrame, maxPower, height)
         if not CP.container or maxPower <= 0 then return end
 
+        local inLockdown = (type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked())
+            or (InCombatLockdown and InCombatLockdown())
+            or false
+        if inLockdown and CP.container._msufLayoutInitialized == true then
+            CP._layoutDirty = true
+            _G.MSUF_ClassPowerLayoutDirty = true
+            if type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+                _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+            end
+            return
+        end
+
         local h = height
         local b = _cpDB.bars or {}
+        local layoutCache = type(_G.MSUF_GetProfileScopedCache) == "function" and _G.MSUF_GetProfileScopedCache("classPowerLayoutCache") or nil
+        local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
+        if levelOffset < 0 then levelOffset = 0 elseif levelOffset > 30 then levelOffset = 30 end
+        if playerFrame.GetFrameLevel and CP.container.SetFrameLevel then
+            local targetLevel = (playerFrame:GetFrameLevel() or 0) + levelOffset
+            if CP.container._msufFrameLevelStamp ~= targetLevel then
+                CP.container:SetFrameLevel(targetLevel)
+                CP.container._msufFrameLevelStamp = targetLevel
+            end
+            if CP.textFrame and CP.textFrame.SetFrameLevel then
+                local textLevel = targetLevel + 10
+                if CP.textFrame._msufFrameLevelStamp ~= textLevel then
+                    CP.textFrame:SetFrameLevel(textLevel)
+                    CP.textFrame._msufFrameLevelStamp = textLevel
+                end
+            end
+        end
 
         local tickW = tonumber(b.classPowerTickWidth) or 1
         if tickW < 0 then tickW = 0 elseif tickW > 4 then tickW = 4 end
+
+        local snap = _G.MSUF_Snap
 
         local widthMode = b.classPowerWidthMode or "player"
         local userW
 
         local cdmName = CPConst.CDM_FRAMES[widthMode]
         if cdmName then
-            local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
-            if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
-                local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
-                if type(cdmWidthFn) == "function" then
-                    userW = cdmWidthFn(cdmFrame, CP.container)
+            local cachedW = (layoutCache and tonumber(layoutCache["width:" .. cdmName])) or tonumber(CP.container._msufStableWidth)
+            if inLockdown and cachedW and cachedW >= 30 then
+                userW = cachedW
+            else
+                local cdmFrame = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame(cdmName)) or _G[cdmName]
+                if cdmFrame and cdmFrame.IsShown and cdmFrame:IsShown() then
+                    local cdmWidthFn = (type(GetCDMScaledWidth) == "function" and GetCDMScaledWidth()) or _G.MSUF_CDM_GetScaledWidth
+                    if type(cdmWidthFn) == "function" then
+                        userW = cdmWidthFn(cdmFrame, CP.container)
+                    end
                 end
             end
             if not userW or userW < 30 then
@@ -191,29 +230,79 @@ builders.LAYOUT = function(E)
             end
             userW = userW - 4
         end
+        if type(snap) == "function" then
+            userW = snap(CP.container, userW)
+        end
+        if not userW or userW < 1 then userW = 1 end
 
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
-        CP.container:ClearAllPoints()
-        CP.container:SetSize(userW, h)
-        if b.classPowerAnchorToCooldown == true then
-            local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
-            if ecv and ecv.IsShown and ecv:IsShown() then
-                CP.container:SetPoint("TOP", ecv, "BOTTOM", oX, oY)
+        local cachedCooldownAnchor = false
+        if inLockdown and b.classPowerAnchorToCooldown == true then
+            CP.container:SetSize(userW, h)
+            if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
+                and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
+            then
+                CP.container._msufDirectCooldownAnchor = true
+                CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
+                cachedCooldownAnchor = true
             else
+                CP._layoutDirty = true
+                _G.MSUF_ClassPowerLayoutDirty = true
+                if type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+                    _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                end
+                return
+            end
+        end
+
+        if not cachedCooldownAnchor then
+            CP.container:ClearAllPoints()
+            CP.container:SetSize(userW, h)
+        end
+        if b.classPowerAnchorToCooldown == true and not cachedCooldownAnchor then
+            local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
+            local anchorFrame = nil
+            if ecv and ecv.IsShown and ecv:IsShown() then
+                if not anchorFrame and not inLockdown then
+                    anchorFrame = ecv
+                end
+            end
+            if anchorFrame then
+                CP.container:SetPoint("TOP", anchorFrame, "BOTTOM", oX, oY)
+                CP.container._msufDirectCooldownAnchor = true
+                CP.container._msufHardLockPoint = "TOP"
+                if type(_G.MSUF_CacheUnitFrameScreenPosition) == "function" then
+                    _G.MSUF_CacheUnitFrameScreenPosition(CP.container, "classpower", "classpower", "TOP")
+                end
+            else
+                if inLockdown and type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+                    _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                elseif type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+                    _G.MSUF_ScheduleLateAnchorReanchor()
+                end
                 CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                CP.container._msufDirectCooldownAnchor = nil
+                CP.container._msufHardLockPoint = nil
             end
         else
             CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+            CP.container._msufDirectCooldownAnchor = nil
+            CP.container._msufHardLockPoint = nil
+        end
+        CP.container._msufLayoutInitialized = true
+        CP.container._msufStableWidth = userW
+        CP._layoutDirty = nil
+        _G.MSUF_ClassPowerLayoutDirty = nil
+        if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
+            layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
 
         local outlineThick = tonumber(b.classPowerOutline) or 1
         if outlineThick < 0 then outlineThick = 0 elseif outlineThick > 4 then outlineThick = 4 end
-        local snap = _G.MSUF_Snap
 
         if outlineThick > 0 then
-            local edge = (type(snap) == "function") and snap(CP.container, outlineThick) or outlineThick
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
                 local ol = CreateFrame("Frame", nil, CP.container, tpl)
@@ -221,18 +310,23 @@ builders.LAYOUT = function(E)
                 CP._outline = ol
                 CP._outlineEdge = -1
             end
-            -- Frame level above bars (bars inherit container+1, outline must be higher)
-            CP._outline:SetFrameLevel(CP.container:GetFrameLevel() + 3)
-            if CP._outlineEdge ~= edge then
-                CP._outline:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edge })
-                CP._outline:SetBackdropColor(0, 0, 0, 0)
-                CP._outline:SetBackdropBorderColor(0, 0, 0, 1)
-                CP._outlineEdge = edge
+            local edge = (type(snap) == "function") and snap(CP._outline, outlineThick) or outlineThick
+            if not edge or edge <= 0 then
+                CP._outline:Hide()
+            else
+                -- Frame level above bars (bars inherit container+1, outline must be higher)
+                CP._outline:SetFrameLevel(CP.container:GetFrameLevel() + 3)
+                if CP._outlineEdge ~= edge then
+                    CP._outline:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = edge })
+                    CP._outline:SetBackdropColor(0, 0, 0, 0)
+                    CP._outline:SetBackdropBorderColor(0, 0, 0, 1)
+                    CP._outlineEdge = edge
+                end
+                CP._outline:ClearAllPoints()
+                CP._outline:SetPoint("TOPLEFT", CP.container, "TOPLEFT", -edge, edge)
+                CP._outline:SetPoint("BOTTOMRIGHT", CP.container, "BOTTOMRIGHT", edge, -edge)
+                CP._outline:Show()
             end
-            CP._outline:ClearAllPoints()
-            CP._outline:SetPoint("TOPLEFT", CP.container, "TOPLEFT", -edge, edge)
-            CP._outline:SetPoint("BOTTOMRIGHT", CP.container, "BOTTOMRIGHT", edge, -edge)
-            CP._outline:Show()
         else
             if CP._outline then CP._outline:Hide() end
         end
@@ -316,7 +410,9 @@ builders.LAYOUT = function(E)
         local needPBRefresh = false
         if conf and conf.powerBarDetached == true then
             if conf.detachedPowerBarSyncClassPower == true then
-                conf.detachedPowerBarWidth = math_floor(userW + 0.5)
+                if not inLockdown then
+                    conf.detachedPowerBarWidth = math_floor(userW + 0.5)
+                end
                 needPBRefresh = true
             end
             if conf.detachedPowerBarAnchorToClassPower == true then
@@ -329,7 +425,15 @@ builders.LAYOUT = function(E)
             if pf and pf.targetPowerBar then
                 local sc = pf._msufStampCache
                 if sc then sc["PBEmbedLayout"] = nil end
-                _G.MSUF_ApplyPowerBarEmbedLayout(pf)
+                if inLockdown then
+                    pf._msufPowerBarLayoutDirty = true
+                    _G.MSUF_PowerBarLayoutDirty = true
+                    if type(_G.MSUF_RequestUnitFrameReanchorAfterCombat) == "function" then
+                        _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+                    end
+                else
+                    _G.MSUF_ApplyPowerBarEmbedLayout(pf)
+                end
             end
         end
     end

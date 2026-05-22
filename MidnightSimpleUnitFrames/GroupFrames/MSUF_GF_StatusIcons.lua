@@ -38,6 +38,59 @@ local SUMMON_TEX = {
     [3] = "Interface\\RaidFrame\\Raid-Icon-SummonDeclined",
 }
 
+local function IconShow(icon)
+    if icon and icon.IsShown and not icon:IsShown() then icon:Show() end
+end
+
+local function IconHide(icon)
+    if icon and icon.IsShown and icon:IsShown() then icon:Hide() end
+end
+
+local function IconSetTexture(icon, tex)
+    if not icon or icon._msufGFCachedTexture == tex then return end
+    icon._msufGFCachedTexture = tex
+    icon:SetTexture(tex)
+end
+
+local function IconSetTexCoord(icon, l, r, t, b)
+    if not icon then return end
+    if icon._msufGFTexL == l and icon._msufGFTexR == r
+        and icon._msufGFTexT == t and icon._msufGFTexB == b
+    then
+        return
+    end
+    icon._msufGFTexL = l
+    icon._msufGFTexR = r
+    icon._msufGFTexT = t
+    icon._msufGFTexB = b
+    icon:SetTexCoord(l, r, t, b)
+end
+
+local function IconSetTextureAndCoords(icon, tex, l, r, t, b)
+    IconSetTexture(icon, tex)
+    if l ~= nil then IconSetTexCoord(icon, l, r, t, b) end
+end
+
+function GF.ResetStatusIconCaches(f)
+    if not f then return end
+    local icons = {
+        f.roleIcon, f.raidIcon, f.leaderIcon, f.assistIcon,
+        f.readyCheckIcon, f.summonIcon, f.resurrectIcon, f.phaseIcon,
+    }
+    for i = 1, #icons do
+        local icon = icons[i]
+        if icon then
+            icon._msufGFCachedTexture = nil
+            icon._msufGFTexL = nil
+            icon._msufGFTexR = nil
+            icon._msufGFTexT = nil
+            icon._msufGFTexB = nil
+            icon._msufGFRaidMarkerIndex = nil
+        end
+    end
+    f._msufGFSummonActive = nil
+end
+
 function GF._UpdatePowerRoleVisibility(f, unit)
     if not f.power then return false end
     local c = f._c
@@ -78,12 +131,12 @@ function GF.UpdateRoleIcon(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if not unit or not UnitExists(unit) then
-        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
+        IconHide(f.roleIcon)
         f._msufGFPowRoleHidden = false
         return
     end
     if conf.roleIcon == false then
-        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
+        IconHide(f.roleIcon)
         GF._UpdatePowerRoleVisibility(f, unit)
         return
     end
@@ -92,16 +145,22 @@ function GF.UpdateRoleIcon(f, unit)
     GF._UpdatePowerRoleVisibility(f, unit)
 
     if role and role ~= "NONE" then
+        if (role == "TANK"    and conf.roleIconShowTank   == false) or
+           (role == "HEALER"  and conf.roleIconShowHealer == false) or
+           (role == "DAMAGER" and conf.roleIconShowDPS    == false) then
+            IconHide(f.roleIcon)
+            GF._UpdatePowerRoleVisibility(f, unit)
+            return
+        end
         local tex, l, r, t, b = GF.GetRoleTexture(kind, role)
         if tex then
-            f.roleIcon:SetTexture(tex)
-            f.roleIcon:SetTexCoord(l, r, t, b)
-            if not f.roleIcon:IsShown() then f.roleIcon:Show() end
+            IconSetTextureAndCoords(f.roleIcon, tex, l, r, t, b)
+            IconShow(f.roleIcon)
         else
-            if f.roleIcon:IsShown() then f.roleIcon:Hide() end
+            IconHide(f.roleIcon)
         end
     else
-        if f.roleIcon:IsShown() then f.roleIcon:Hide() end
+        IconHide(f.roleIcon)
     end
 end
 
@@ -110,15 +169,21 @@ function GF.UpdateRaidMarker(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.raidMarker == false or not unit or not UnitExists(unit) then
-        if f.raidIcon:IsShown() then f.raidIcon:Hide() end
+        IconHide(f.raidIcon)
+        f.raidIcon._msufGFRaidMarkerIndex = nil
         return
     end
     local idx = GetRaidTargetIndex(unit)
     if idx then
+        -- Midnight/Beta can return a secret number here. Do not cache
+        -- or compare it in Lua; hand it directly to the C-side helper.
+        f.raidIcon._msufGFRaidMarkerIndex = nil
+        f.raidIcon._msufGFCachedTexture = nil
         SetRaidTargetIconTexture(f.raidIcon, idx)
-        if not f.raidIcon:IsShown() then f.raidIcon:Show() end
+        IconShow(f.raidIcon)
     else
-        if f.raidIcon:IsShown() then f.raidIcon:Hide() end
+        IconHide(f.raidIcon)
+        f.raidIcon._msufGFRaidMarkerIndex = nil
     end
 end
 
@@ -127,32 +192,30 @@ function GF.UpdateLeaderIcon(f, unit)
     local conf = GF.GetConf(kind)
     if f.leaderIcon then
         if conf.leaderIcon == false or not unit or not UnitExists(unit) then
-            if f.leaderIcon:IsShown() then f.leaderIcon:Hide() end
+            IconHide(f.leaderIcon)
         else
             local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
             if isLeader then
                 local tex, l, r, t, b = GF.GetLeaderTexture(kind)
-                f.leaderIcon:SetTexture(tex)
-                f.leaderIcon:SetTexCoord(l, r, t, b)
-                if not f.leaderIcon:IsShown() then f.leaderIcon:Show() end
+                IconSetTextureAndCoords(f.leaderIcon, tex, l, r, t, b)
+                IconShow(f.leaderIcon)
             else
-                if f.leaderIcon:IsShown() then f.leaderIcon:Hide() end
+                IconHide(f.leaderIcon)
             end
         end
     end
     if f.assistIcon then
         if conf.assistIcon == false or not unit or not UnitExists(unit) then
-            if f.assistIcon:IsShown() then f.assistIcon:Hide() end
+            IconHide(f.assistIcon)
         else
             local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
             local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
             if isAssist and not isLeader then
                 local tex, l, r, t, b = GF.GetAssistTexture(kind)
-                f.assistIcon:SetTexture(tex)
-                f.assistIcon:SetTexCoord(l, r, t, b)
-                if not f.assistIcon:IsShown() then f.assistIcon:Show() end
+                IconSetTextureAndCoords(f.assistIcon, tex, l, r, t, b)
+                IconShow(f.assistIcon)
             else
-                if f.assistIcon:IsShown() then f.assistIcon:Hide() end
+                IconHide(f.assistIcon)
             end
         end
     end
@@ -169,21 +232,21 @@ function GF.UpdateReadyCheck(f, unit, event)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.readyCheckIcon == false or not unit then
-        f.readyCheckIcon:Hide()
+        IconHide(f.readyCheckIcon)
         GF.CancelReadyCheckTimer(f)
         return
     end
 
     local status = GetReadyCheckStatus and GetReadyCheckStatus(unit)
     if status == "ready" then
-        f.readyCheckIcon:SetTexture(ICON_TEX.ready)
-        f.readyCheckIcon:Show()
+        IconSetTexture(f.readyCheckIcon, ICON_TEX.ready)
+        IconShow(f.readyCheckIcon)
     elseif status == "notready" then
-        f.readyCheckIcon:SetTexture(ICON_TEX.notReady)
-        f.readyCheckIcon:Show()
+        IconSetTexture(f.readyCheckIcon, ICON_TEX.notReady)
+        IconShow(f.readyCheckIcon)
     elseif status == "waiting" then
-        f.readyCheckIcon:SetTexture(ICON_TEX.waiting)
-        f.readyCheckIcon:Show()
+        IconSetTexture(f.readyCheckIcon, ICON_TEX.waiting)
+        IconShow(f.readyCheckIcon)
     else
         if event == "READY_CHECK_FINISHED" and f.readyCheckIcon:IsShown() then
             GF.CancelReadyCheckTimer(f)
@@ -193,11 +256,11 @@ function GF.UpdateReadyCheck(f, unit, event)
                 if _readyCheckTimers[f] ~= token then return end
                 _readyCheckTimers[f] = nil
                 if f.readyCheckIcon then
-                    f.readyCheckIcon:Hide()
+                    IconHide(f.readyCheckIcon)
                 end
             end)
         else
-            f.readyCheckIcon:Hide()
+            IconHide(f.readyCheckIcon)
         end
     end
 end
@@ -207,7 +270,7 @@ function GF.UpdateSummonIcon(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.summonIcon == false or not unit then
-        f.summonIcon:Hide()
+        IconHide(f.summonIcon)
         f._msufGFSummonActive = false
         return
     end
@@ -217,11 +280,11 @@ function GF.UpdateSummonIcon(f, unit)
     end
     local tex = status and SUMMON_TEX[status]
     if tex then
-        f.summonIcon:SetTexture(tex)
-        f.summonIcon:Show()
+        IconSetTexture(f.summonIcon, tex)
+        IconShow(f.summonIcon)
         f._msufGFSummonActive = true
     else
-        f.summonIcon:Hide()
+        IconHide(f.summonIcon)
         f._msufGFSummonActive = false
     end
 end
@@ -231,19 +294,19 @@ function GF.UpdateResurrectIcon(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.resurrectIcon == false or not unit then
-        f.resurrectIcon:Hide()
+        IconHide(f.resurrectIcon)
         return
     end
     if f._msufGFSummonActive then
-        f.resurrectIcon:Hide()
+        IconHide(f.resurrectIcon)
         return
     end
     local show = UnitHasIncomingResurrection and UnitHasIncomingResurrection(unit)
     if show then
-        f.resurrectIcon:SetTexture(ICON_TEX.resurrect)
-        f.resurrectIcon:Show()
+        IconSetTexture(f.resurrectIcon, ICON_TEX.resurrect)
+        IconShow(f.resurrectIcon)
     else
-        f.resurrectIcon:Hide()
+        IconHide(f.resurrectIcon)
     end
 end
 
@@ -252,7 +315,7 @@ function GF.UpdatePhaseIcon(f, unit)
     local kind = f._msufGFKind or "party"
     local conf = GF.GetConf(kind)
     if conf.phaseIcon == false or not unit then
-        f.phaseIcon:Hide()
+        IconHide(f.phaseIcon)
         return
     end
     local reason
@@ -262,9 +325,9 @@ function GF.UpdatePhaseIcon(f, unit)
         if conn then reason = UnitPhaseReason(unit) end
     end
     if reason then
-        f.phaseIcon:SetTexture(ICON_TEX.phase)
-        f.phaseIcon:Show()
+        IconSetTexture(f.phaseIcon, ICON_TEX.phase)
+        IconShow(f.phaseIcon)
     else
-        f.phaseIcon:Hide()
+        IconHide(f.phaseIcon)
     end
 end
