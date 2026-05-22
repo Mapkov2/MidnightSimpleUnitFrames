@@ -2271,7 +2271,7 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
 
     if pageKey == "gf_layout" then
         SearchRouteApplySectionSpecs(route, pageKey, normalized, {
-            { id = "general", terms = { "general", "enable", "show player", "show solo", "solo", "visibility", "party frames not showing", "raid frames not showing" } },
+            { id = "general", terms = { "general", "enable", "disable", "turn off", "off", "hide group frames", "hide raid frames", "hide party frames", "group frames off", "raid frames off", "party frames off", "use msuf group frames", "show player", "show solo", "solo", "visibility", "party frames not showing", "raid frames not showing", "ausschalten", "deaktivieren", "ausblenden" } },
             { id = "layout", terms = { "layout", "growth", "direction", "spacing", "columns", "rows", "width", "height" } },
             { id = "sorting", terms = { "sorting", "sort", "role order", "player first", "groups first" } },
             { id = "scaling", terms = { "frame scaling", "scale", "smooth health fill", "smooth fill", "party smooth fill", "raid smooth fill" } },
