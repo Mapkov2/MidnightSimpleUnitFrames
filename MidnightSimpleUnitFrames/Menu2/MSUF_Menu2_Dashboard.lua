@@ -415,19 +415,19 @@ local function BuildDashboardUX(ctx)
     end
 
     local function ToggleEditMode()
-        local active = IsEditModeActive()
-        if (not active) and IsEditModeCombatLocked() then
+        local active = ((_G.MSUF_IsMSUFEditModeActive and _G.MSUF_IsMSUFEditModeActive()) or _G.MSUF_UnitEditModeActive) and true or false
+        if (not active) and ((_G.InCombatLockdown and _G.InCombatLockdown()) or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) then
             if M.BlockCombatAction then M.BlockCombatAction() end
-            M.RefreshDashboardEditModeButton()
+            if type(M.RefreshDashboardEditModeButton) == "function" then M.RefreshDashboardEditModeButton() end
             if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
             return
         end
         if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
             _G.MSUF_SetMSUFEditModeDirect(not active)
         end
-        RefreshMenuFramePriority()
-        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshMenuFramePriority) end
-        M.RefreshDashboardEditModeButton()
+        if type(M.RefreshMenuFramePriority) == "function" then M.RefreshMenuFramePriority() end
+        if C_Timer and C_Timer.After and type(M.RefreshMenuFramePriority) == "function" then C_Timer.After(0, M.RefreshMenuFramePriority) end
+        if type(M.RefreshDashboardEditModeButton) == "function" then M.RefreshDashboardEditModeButton() end
         if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
     end
 
