@@ -3005,39 +3005,87 @@ local function BlizzardRaidManagerWantsShown()
     return value == "1" or value == 1 or value == true
 end
 
+local function RestoreBlizzardPartyFrames(showAfter)
+    showAfter = showAfter == true
+    RestoreFrameLocked(_G.PartyFrame, showAfter)
+    RestoreFrameLocked(_G.CompactPartyFrame, showAfter)
+    RestoreFrameLocked(_G.CompactPartyFrameTitle, showAfter)
+end
+
+local function HideBlizzardPartyFrames()
+    HideFrameLocked(_G.PartyFrame)
+    HideFrameLocked(_G.CompactPartyFrame)
+    HideFrameLocked(_G.CompactPartyFrameTitle)
+end
+
+local function RestoreBlizzardRaidFrames(showAfter)
+    RestoreFrameLocked(_G.CompactRaidFrameContainer, showAfter == true)
+end
+
+local function HideBlizzardRaidFrames()
+    HideFrameLocked(_G.CompactRaidFrameContainer)
+end
+
 local function ApplyDisabledPartyFallback(mode)
     mode = NormalizeBlizzardFallbackMode(mode)
     if mode == "NONE" then
-        HideFrameLocked(_G.PartyFrame)
-        HideFrameLocked(_G.CompactPartyFrame)
-        HideFrameLocked(_G.CompactPartyFrameTitle)
+        HideBlizzardPartyFrames()
         return
     end
-    RestoreFrameLocked(_G.PartyFrame, true)
-    RestoreFrameLocked(_G.CompactPartyFrame, true)
-    RestoreFrameLocked(_G.CompactPartyFrameTitle, true)
+
+    -- AUTO is the simple old off-state: release Blizzard frames without
+    -- forcing them visible. Blizzard's own party/raid-style-party rules decide.
+    RestoreBlizzardPartyFrames(mode == "SHOW")
 end
 
 local function ApplyDisabledRaidFallback(mode)
     mode = NormalizeBlizzardFallbackMode(mode)
     if mode == "NONE" then
-        HideFrameLocked(_G.CompactRaidFrameContainer)
-        if _G.CompactRaidFrameManager_SetSetting then
-            _G.CompactRaidFrameManager_SetSetting("IsShown", "0")
-        end
+        HideBlizzardRaidFrames()
         return
     end
+
     if mode == "SHOW" then
-        if _G.CompactRaidFrameManager_SetSetting then
-            _G.CompactRaidFrameManager_SetSetting("IsShown", "1")
-        end
-        RestoreFrameLocked(_G.CompactRaidFrameContainer, true)
+        RestoreBlizzardRaidFrames(true)
         return
     end
+
     local wantsShown = BlizzardRaidManagerWantsShown()
-    RestoreFrameLocked(_G.CompactRaidFrameContainer, wantsShown == true)
+    RestoreBlizzardRaidFrames(wantsShown == true)
     if wantsShown == false and _G.CompactRaidFrameContainer and _G.CompactRaidFrameContainer.Hide then
         _G.CompactRaidFrameContainer:Hide()
+    end
+end
+
+local function AnyMSUFGroupFrameEnabled()
+    return GF.IsKindEnabled("party") or GF.IsKindEnabled("raid") or GF.IsKindEnabled("mythicraid")
+end
+
+local function ApplyAutoOwnedDisabledPartyFallback(mode, msufOwnsGroupFrames)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideBlizzardPartyFrames()
+    elseif mode == "SHOW" then
+        RestoreBlizzardPartyFrames(true)
+    elseif msufOwnsGroupFrames then
+        -- AUTO only hands control back to Blizzard when every MSUF group scope is off.
+        HideBlizzardPartyFrames()
+    else
+        ApplyDisabledPartyFallback(mode)
+    end
+end
+
+local function ApplyAutoOwnedDisabledRaidFallback(mode, msufOwnsGroupFrames)
+    mode = NormalizeBlizzardFallbackMode(mode)
+    if mode == "NONE" then
+        HideBlizzardRaidFrames()
+    elseif mode == "SHOW" then
+        RestoreBlizzardRaidFrames(true)
+    elseif msufOwnsGroupFrames then
+        -- AUTO only hands control back to Blizzard when every MSUF group scope is off.
+        HideBlizzardRaidFrames()
+    else
+        ApplyDisabledRaidFallback(mode)
     end
 end
 
@@ -3048,17 +3096,20 @@ function GF.DisableBlizzardFrames()
     end
     local partyConf = GF.GetConf("party")
     local raidConf  = GF.GetConf(GetLiveRaidKind())
+    local msufOwnsGroupFrames = AnyMSUFGroupFrameEnabled()
+    local inRaid = IsInRaid and IsInRaid() or false
     if partyConf.enabled == true then
-        HideFrameLocked(_G.PartyFrame)
-        HideFrameLocked(_G.CompactPartyFrame)
-        HideFrameLocked(_G.CompactPartyFrameTitle)
+        HideBlizzardPartyFrames()
     else
-        ApplyDisabledPartyFallback(partyConf.blizzardFallbackMode)
+        ApplyAutoOwnedDisabledPartyFallback(partyConf.blizzardFallbackMode, msufOwnsGroupFrames)
     end
     if raidConf.enabled == true then
-        HideFrameLocked(_G.CompactRaidFrameContainer)
+        HideBlizzardRaidFrames()
     else
-        ApplyDisabledRaidFallback(raidConf.blizzardFallbackMode)
+        ApplyAutoOwnedDisabledRaidFallback(raidConf.blizzardFallbackMode, msufOwnsGroupFrames)
+    end
+    if not msufOwnsGroupFrames and inRaid and NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode) == "AUTO" then
+        HideBlizzardPartyFrames()
     end
 end
 

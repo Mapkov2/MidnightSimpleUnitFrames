@@ -118,7 +118,7 @@ local function BuildGFLayout(ctx)
 
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
-    local enableGroup = BindScopeToggle(ctx, W.SwitchAt(general, "MSUF group frames", generalLeftX, -64, generalLeftW), "enabled", false, "rebuild")
+    local enableGroup = BindScopeToggle(ctx, W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "enabled", false, "rebuild")
     enableGroup._msuf2GroupFrameGateAlwaysEnabled = true
     BindScopeToggle(ctx, W.ToggleAt(general, "Show player", generalLeftX, -94, generalLeftToggleW), "showPlayer", true, "rebuild")
     BindScopeToggle(ctx, W.ToggleAt(general, "Show while solo", generalLeftX, -124, generalLeftToggleW), "showSolo", false, "rebuild")
@@ -127,12 +127,12 @@ local function BuildGFLayout(ctx)
     BindScopeToggle(ctx, W.ToggleAt(general, "Hide during client scene", generalRightX, -124, generalRightToggleW), "hideInClientScene", true, "visual")
 
     local fallbackModeW = min(260, generalLeftW)
-    local fallbackMode = W.Dropdown(general, "When MSUF is disabled", BLIZZARD_FALLBACK_VALUES, fallbackModeW)
+    local fallbackMode = W.Dropdown(general, "If this switch is off", BLIZZARD_FALLBACK_VALUES, fallbackModeW)
     fallbackMode._msuf2GroupFrameGateAlwaysEnabled = true
     W.MoveWidget(fallbackMode, general, generalLeftX, -166, fallbackModeW, "LEFT")
     BindScopeDropdown(ctx, fallbackMode, "blizzardFallbackMode", "AUTO", "rebuild")
 
-    local fallbackHelp = W.Text(general, "Auto follows Blizzard's own visibility where available. Show none keeps both MSUF and Blizzard group frames hidden for this scope.", generalRightX, -154, generalRightW, T.colors.muted)
+    local fallbackHelp = W.Text(general, "Blizzard default is the simple off-state when no MSUF group-frame scope is active. If any MSUF group frames are on, Auto keeps Blizzard group frames hidden to avoid duplicates.", generalRightX, -154, generalRightW, T.colors.muted)
     if fallbackHelp and fallbackHelp.SetWordWrap then fallbackHelp:SetWordWrap(true) end
 
     W.DividerAt(general, -226, generalLeftX, 32)
@@ -170,11 +170,12 @@ local function BuildGFLayout(ctx)
             generalNotice:SetShown(not scopeEnabled)
             if not scopeEnabled then
                 local mode = Val(CurrentScope(), "blizzardFallbackMode", "AUTO")
-                local behavior = "Blizzard visibility decides."
+                local anyMSUF = Bool("party", "enabled", false) or Bool("raid", "enabled", false) or Bool("mythicraid", "enabled", false)
+                local behavior = anyMSUF and "Blizzard frames stay hidden because another MSUF group scope is on." or "Blizzard decides normally."
                 if mode == "SHOW" then
-                    behavior = "Blizzard frames will be shown."
+                    behavior = "Blizzard frames are forced visible."
                 elseif mode == "NONE" then
-                    behavior = "Blizzard frames will stay hidden."
+                    behavior = "MSUF and Blizzard frames stay hidden."
                 end
                 generalNotice:SetMessage(ScopeLabel() .. " group frames are disabled. " .. behavior, "warning")
             end

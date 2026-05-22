@@ -33,9 +33,9 @@ local GROWTH_VALUES = {
 }
 
 local BLIZZARD_FALLBACK_VALUES = {
-    { value = "AUTO", text = "Blizzard setting" },
-    { value = "SHOW", text = "Show Blizzard" },
-    { value = "NONE", text = "Show none" },
+    { value = "AUTO", text = "Blizzard default" },
+    { value = "SHOW", text = "Force Blizzard frames" },
+    { value = "NONE", text = "Hide all frames" },
 }
 
 local HEALTH_MODES = {
