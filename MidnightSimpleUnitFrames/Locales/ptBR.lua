@@ -1434,7 +1434,7 @@ local MSUF2_HELPER_ptBR = {
     ["Why is text overlapping or in the wrong place?"] = "Por que o texto está sobreposto ou no lugar errado?",
     ["width"] = "largura",
     ["Z"] = "Z",
-    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\n\nEsta é uma versão Alpha inicial.\nPor favor, relate bugs e compartilhe comentários em nosso Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"] = "|cffb088f0MSUF Alpha Build|r\n\nEsta é uma versão Alpha inicial.\nPor favor, relate bugs e compartilhe comentários em nosso Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r",
 }
 for k, v in pairs(MSUF2_HELPER_ptBR) do
     L[k] = v

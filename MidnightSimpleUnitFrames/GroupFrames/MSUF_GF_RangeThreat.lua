@@ -13,6 +13,9 @@ local UnitExists = _G.UnitExists
 local UnitIsConnected = _G.UnitIsConnected
 local UnitHealth = _G.UnitHealth
 local UnitInRange = _G.UnitInRange
+local UnitGUID = _G.UnitGUID
+local UnitFullName = _G.UnitFullName
+local UnitName = _G.UnitName
 local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local UnitThreatSituation = _G.UnitThreatSituation
 local IsInGroup = _G.IsInGroup
@@ -37,6 +40,79 @@ local UpdateStatusText = GF.UpdateStatusText or _G.MSUF_GF_UpdateStatus or funct
 local function _UnsecretBool(value)
     if issecretvalue and issecretvalue(value) then return nil end
     return value
+end
+
+local _playerGUID
+local _playerNameKey
+
+local function _GF_SafeGUID(unit)
+    if not (unit and UnitGUID) then return nil end
+    local guid = UnitGUID(unit)
+    if guid and not (issecretvalue and issecretvalue(guid)) then
+        return guid
+    end
+    return nil
+end
+
+local function _GF_NameKey(unit)
+    if not unit then return nil end
+    if UnitFullName then
+        local name, realm = UnitFullName(unit)
+        if name and not (issecretvalue and issecretvalue(name)) then
+            if realm and realm ~= "" and not (issecretvalue and issecretvalue(realm)) then
+                return name .. "-" .. realm
+            end
+            return name
+        end
+    elseif UnitName then
+        local name, realm = UnitName(unit)
+        if name and not (issecretvalue and issecretvalue(name)) then
+            if realm and realm ~= "" and not (issecretvalue and issecretvalue(realm)) then
+                return name .. "-" .. realm
+            end
+            return name
+        end
+    end
+    return nil
+end
+
+local function _GF_IsSelfUnit(f, unit)
+    if unit == "player" then return true end
+    if not unit then return false end
+
+    if f and f._msufGFRangeFadeSelfUnit == unit and f._msufGFRangeFadeSelfResolved == true then
+        return f._msufGFRangeFadeSelf == true
+    end
+
+    local resolved, isSelf = false, false
+    local pg = _playerGUID or _GF_SafeGUID("player")
+    if pg then
+        _playerGUID = pg
+        local ug = _GF_SafeGUID(unit)
+        if ug then
+            resolved = true
+            isSelf = (ug == pg)
+        end
+    end
+
+    if not resolved then
+        local pk = _playerNameKey or _GF_NameKey("player")
+        if pk then
+            _playerNameKey = pk
+            local uk = _GF_NameKey(unit)
+            if uk then
+                resolved = true
+                isSelf = (uk == pk)
+            end
+        end
+    end
+
+    if f and resolved then
+        f._msufGFRangeFadeSelfUnit = unit
+        f._msufGFRangeFadeSelf = isSelf
+        f._msufGFRangeFadeSelfResolved = true
+    end
+    return isSelf
 end
 
 local function _NormalizeRangeFadeLayerMode(mode)
@@ -113,6 +189,9 @@ do
         if not c and GF.BuildFrameCache then GF.BuildFrameCache(f); c = f._c end
         if f._msufGFRangeFadeUnit ~= unit then
             f._msufGFRangeFadeUnit = unit
+            f._msufGFRangeFadeSelfUnit = nil
+            f._msufGFRangeFadeSelf = nil
+            f._msufGFRangeFadeSelfResolved = nil
         end
         local conf
         if not c then conf = GF.GetConf(kind) end
@@ -156,7 +235,11 @@ do
         if not hpMode then
             _ClearHealthRangeFade(f, kind)
         end
-        if inRange == nil and unit and UnitInRange then inRange = UnitInRange(unit) end
+        if _GF_IsSelfUnit(f, unit) then
+            inRange = true
+        elseif inRange == nil and unit and UnitInRange then
+            inRange = UnitInRange(unit)
+        end
         if type(inRange) ~= "nil" then
             if hpMode then
                 _ApplyHealthRangeFade(f, kind, inRange, fadeAlpha)
@@ -171,6 +254,10 @@ do
                     end
                 end
             end
+        else
+            _ClearHealthRangeFade(f, kind)
+            local target = (f and f.barGroup) or f
+            if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
         end
     end
 end

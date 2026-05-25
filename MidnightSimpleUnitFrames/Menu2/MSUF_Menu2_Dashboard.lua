@@ -849,7 +849,7 @@ local function BuildDashboardUX(ctx)
             if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help") end
         end)
         Button(recovery, "Discord", 238, -94, 80, 22, function()
-            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/JQnhZXnTAK") end
+            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
         end)
         Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), recoveryWrap and -126 or -94, 136, 22, function()
             if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "fullreset confirm") end

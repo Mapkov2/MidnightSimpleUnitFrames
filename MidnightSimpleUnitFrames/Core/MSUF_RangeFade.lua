@@ -272,10 +272,10 @@ do
         return true
     end
 
-    local function ClearMul(unit, confKey)
+    local function ClearMul(unit, confKey, forceApply)
         local hadState = (_state[unit] ~= nil)
         local hadMul = (_mulT[unit] ~= nil and _mulT[unit] ~= 1)
-        if not hadState and not hadMul then return false end
+        if not forceApply and not hadState and not hadMul then return false end
         _state[unit] = nil
         _repairTicks[unit] = nil
         _mulT[unit] = 1
@@ -699,6 +699,10 @@ do
             _state["target"] = nil
             TargetClassifyAndWire()
         end)
+        bus("PLAYER_REGEN_ENABLED", "MSUF_RANGEFADE", function()
+            -- Do not rescan range after combat. Restore from cached base alpha/background.
+            ClearMul("target", "target", UnitExists and UnitExists("target"))
+        end)
         -- SPELLS_CHANGED coalescing: can fire 800+/sec in combat.
         -- Defer to next frame to process once regardless of fire count.
         local _tgtSpellsDirty = false
@@ -741,6 +745,7 @@ do
         unreg("SPELL_RANGE_CHECK_UPDATE", "MSUF_RANGEFADE")
         unreg("PLAYER_TARGET_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_ENTERING_WORLD", "MSUF_RANGEFADE")
+        unreg("PLAYER_REGEN_ENABLED", "MSUF_RANGEFADE")
         unreg("SPELLS_CHANGED", "MSUF_RANGEFADE")
         unreg("PLAYER_TALENT_UPDATE", "MSUF_RANGEFADE")
         unreg("ACTIVE_PLAYER_SPECIALIZATION_CHANGED", "MSUF_RANGEFADE")
@@ -1123,11 +1128,13 @@ do
                     CheckEnemyUnits()
                 end
             elseif event == "PLAYER_REGEN_ENABLED" then
+                ClearMul("focus", "focus", UnitExists and UnitExists("focus"))
+                for i = 1, 5 do
+                    local unit = _bossUnits[i]
+                    ClearMul(unit, "boss", UnitExists and UnitExists(unit))
+                end
                 if not NeedsPoll() and not _ticker then return end
                 SyncTicker()
-                if NeedsPoll() or _ticker then
-                    CheckEnemyUnits()
-                end
             elseif event == "PLAYER_STARTED_MOVING" then
                 if not NeedsPoll() and not _ticker then return end
                 _playerMoving = true

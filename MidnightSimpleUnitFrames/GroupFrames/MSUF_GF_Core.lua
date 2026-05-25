@@ -2196,6 +2196,80 @@ local function ScheduleHeaderChildScan(scope, delay, kind)
     end
 end
 
+local function ResetChildRuntimeForReconcile(...)
+    for ci = 1, select("#", ...) do
+        local ch = select(ci, ...)
+        if ch and ch._msufGFBuilt then
+            ch._msufGFRegisteredUnit = nil
+            ch._msufGFRegUnit = nil
+            ch._msufGFRegBits = nil
+            ch._msufGFFullPending = nil
+        end
+    end
+end
+
+local function ReconcileHeaderChildren(header, kind)
+    if not header then return end
+    ResetChildRuntimeForReconcile(header:GetChildren())
+    header._msufGFLastForceScanKey = nil
+    header._msufGFLastForceScanAt = nil
+    ScanHeaderChildren(header, kind, true)
+end
+
+local function ReconcileRaidHeaders(kind)
+    local list = GF.raidGroupHeaders
+    if list and #list > 0 then
+        for i = 1, #list do
+            ReconcileHeaderChildren(list[i], kind)
+        end
+        return
+    end
+    ReconcileHeaderChildren(GF.headers and GF.headers.raid, kind)
+end
+
+function GF.ReconcileLiveFrames()
+    if InCombatLockdown() then
+        MarkPostCombatHeaderRecovery()
+        return
+    end
+    MarkHeaderScanInputsChanged()
+    GF.UpdateAnyEnabledFlag()
+    if not GF._anyEnabled then
+        if GF.DeactivateDisabledKinds then GF.DeactivateDisabledKinds(true) end
+        if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+        return
+    end
+
+    local inRaid = IsInRaid and IsInRaid() or false
+    local partyConf = GF.GetConf("party")
+    local raidKind = GetLiveRaidKind()
+    local raidConf  = GF.GetConf(raidKind)
+
+    if partyConf.enabled == true and not inRaid then
+        if not GF.headers.party then
+            GF.RebuildAll()
+            return
+        end
+        ReconcileHeaderChildren(GF.headers.party, "party")
+    end
+
+    if raidConf.enabled == true and inRaid then
+        if not AnyRaidHeader() then
+            GF.RebuildAll()
+            return
+        end
+        ReconcileRaidHeaders(raidKind)
+    end
+
+    if GF.RefreshVisuals then
+        GF.RefreshVisuals()
+    elseif GF.MarkAllDirty then
+        GF.MarkAllDirty(GF.DIRTY_ALL or 0x3F)
+    end
+    if GF.RefreshGroupBorders then GF.RefreshGroupBorders() end
+    if GF.SyncGroupGlobalEvents then GF.SyncGroupGlobalEvents() end
+end
+
 function GF.UpdateAnyEnabledFlag()
     local partyConf = GF.GetConf("party")
     local raidConf = GF.GetConf(GetLiveRaidKind())
@@ -3962,6 +4036,13 @@ function GF.UpdateGroupVisibility()
     local raidConf  = GF.GetConf(raidKind)
     GF.UpdateAnyEnabledFlag()
 
+    if (partyConf.enabled == true and not inRaid and not GF.headers.party)
+        or (raidConf.enabled == true and inRaid and not AnyRaidHeader())
+    then
+        GF.RebuildAll()
+        return
+    end
+
     -- Party header
     if GF.headers.party then
         if partyConf.enabled == true and not inRaid then
@@ -4182,6 +4263,7 @@ _G.MSUF_GF_HidePreview      = GF.HidePreview
 _G.MSUF_GF_RebuildAll        = GF.RebuildAll
 _G.MSUF_GF_RefreshAll        = GF.RefreshAll
 _G.MSUF_GF_Refresh           = GF.Refresh
+_G.MSUF_GF_ReconcileLiveFrames = GF.ReconcileLiveFrames
 _G.MSUF_GF_RefreshOutlineGeometry = GF.RefreshOutlineGeometry
 _G.MSUF_GF_RefreshPreviewLayout = GF.RefreshPreviewLayout
 _G.MSUF_GF_DisableBlizzard   = GF.DisableBlizzardFrames

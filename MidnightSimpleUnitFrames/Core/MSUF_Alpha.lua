@@ -1133,8 +1133,10 @@ local function _MSUF_ConfWantsCombatAlphaSwap(conf)
     return (aIn ~= aOut)
 end
 
--- Fast combat-only alpha refresh:
--- On combat toggles, only refresh frames whose configured alpha differs in/out-of-combat.
+-- Fast combat-toggle alpha refresh:
+-- On combat enter/leave, only refresh frames whose configured alpha differs in/out-of-combat.
+-- Background/layer alpha is already cached on the frame, so this must not fall back
+-- to a global alpha sweep after combat.
 function _G.MSUF_RefreshCombatUnitAlphas()
     MSUF_Alpha_EnsureDB()
     local UnitFrames = _G.MSUF_UnitFrames
@@ -1144,15 +1146,17 @@ function _G.MSUF_RefreshCombatUnitAlphas()
 
     local didAny = false
     for unitKey, f in pairs(UnitFrames) do
-        local cfgKey = f and (f.msufConfigKey
-            or (GetConfigKeyForUnit and GetConfigKeyForUnit(f.unit or unitKey))
-            or unitKey)
-        local conf = (MSUF_DB and cfgKey) and MSUF_DB[cfgKey] or nil
-        if conf and _MSUF_ConfWantsCombatAlphaSwap(conf) then
-            didAny = true
-            if f and f.SetAlpha then
-                if not f.msufConfigKey then f.msufConfigKey = cfgKey end
-                ApplyUnitAlpha(f, cfgKey)
+        if f and not f._msufIsGroupFrame then
+            local cfgKey = f.msufConfigKey
+                or (GetConfigKeyForUnit and GetConfigKeyForUnit(f.unit or unitKey))
+                or unitKey
+            local conf = (MSUF_DB and cfgKey) and MSUF_DB[cfgKey] or nil
+            if conf and _MSUF_ConfWantsCombatAlphaSwap(conf) then
+                didAny = true
+                if f.SetAlpha then
+                    if not f.msufConfigKey then f.msufConfigKey = cfgKey end
+                    ApplyUnitAlpha(f, cfgKey)
+                end
             end
         end
     end
@@ -1182,10 +1186,11 @@ do
     end
 
     function _G.MSUF_RequestAlphaRefresh(combatOnly)
-        if combatOnly then
-            pendingCombatOnly = true
+        if pending then
+            if not combatOnly then pendingCombatOnly = false end
+            return
         end
-        if pending then return end
+        pendingCombatOnly = combatOnly and true or false
         pending = true
         if _G.MSUF_ScheduleOnce then
             _G.MSUF_ScheduleOnce("ALPHA_FLUSH", _Flush)

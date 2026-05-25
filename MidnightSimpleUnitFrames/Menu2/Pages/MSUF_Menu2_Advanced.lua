@@ -968,9 +968,10 @@ local function BuildAuras(ctx)
     local previewW = hasSidePreview and min(420, max(360, floor(contentW * 0.34))) or max(320, contentW - 28)
     local leftW = hasSidePreview and max(380, contentW - previewW - 42) or max(320, contentW - 28)
     local compactSetup = leftW < 660
+    local scopeSingleColumn = leftW < 430
     local setupGap = 12
     local essentialsH = compactSetup and 150 or 128
-    local scopeH = compactSetup and 226 or 142
+    local scopeH = compactSetup and (scopeSingleColumn and 326 or 254) or 142
     local presetH = compactSetup and 214 or 128
     local cardsBottomOffset = 38 + essentialsH + setupGap + scopeH + setupGap + presetH
     local previewH = hasSidePreview and max(348, min(388, cardsBottomOffset - 44)) or 350
@@ -1046,17 +1047,20 @@ local function BuildAuras(ctx)
     local scopeSummaryW = compactSetup and (leftW - 32) or max(120, leftW - scopeSummaryX - 16)
     local scopeSummary = LabelAt(scopeCard, "", scopeSummaryX, scopeSummaryY, scopeSummaryW, "GameFontDisableSmall", T.colors.muted)
     if scopeSummary.SetWordWrap then scopeSummary:SetWordWrap(true) end
-    if scopeSummary.SetHeight then scopeSummary:SetHeight(compactSetup and 34 or 34) end
+    if scopeSummary.SetHeight then scopeSummary:SetHeight(compactSetup and (scopeSingleColumn and 50 or 46) or 34) end
 
     local function RefreshScopeButtons()
         if scopeDrop and scopeDrop.SetValue then scopeDrop:SetValue(AuraScope()) end
     end
     M.AddRefresher(ctx, RefreshScopeButtons)
 
-    local overrideY = compactSetup and -142 or -108
+    local overrideY = compactSetup and (scopeSingleColumn and -166 or -158) or -108
     LabelAt(scopeCard, "Overrides", 16, overrideY + 4, 76, "GameFontNormalSmall", T.colors.muted)
     local overrideStartX = compactSetup and 16 or 106
-    local overridePos = FlowTopLeft({ 128, 112, 120, 118, 92, 82 }, overrideStartX, overrideY + 8, leftW - 16, 8, 28, 22)
+    local overrideWidths = scopeSingleColumn
+        and { leftW - 32, leftW - 32, leftW - 32, leftW - 32, 106, 92 }
+        or { 128, 112, 120, 118, 92, 82 }
+    local overridePos = FlowTopLeft(overrideWidths, overrideStartX, overrideY + 8, leftW - 16, 8, 28, 22)
     local overrideFilters = FitInlineToggle(ValueToggleAt(ctx, scopeCard, "Custom filters", overridePos[1].x, overridePos[1].y,
         function()
             local s = AuraScope()
@@ -1644,7 +1648,8 @@ local function BuildAuras(ctx)
 
     local ignore = b:CollapsibleSection("a2_ignore", "Global Ignore List", 228, false)
     local ignoreLabel = LabelAt(ignore, "", 170, -10, 260, "GameFontHighlightSmall", T.colors.muted)
-    local ignoreOverride = ValueToggleAt(ctx, ignore, "Override for this unit", 380, -10,
+    local ignoreToggleWidth = 320
+    local ignoreOverride = FitInlineToggle(ValueToggleAt(ctx, ignore, "Override for this unit", 380, -10,
         function()
             local s = AuraScope()
             return s ~= "shared" and AurasUnit(s).overrideIgnore == true
@@ -1660,18 +1665,18 @@ local function BuildAuras(ctx)
             ApplyAuras()
             RefreshScopeButtons()
             RefreshAurasPage(ctx)
-        end)
+        end), ignoreToggleWidth)
     local ignoreControls = {}
     for i = 1, #AURA_IGNORE_CATEGORIES do
         local spec = AURA_IGNORE_CATEGORIES[i]
         local col = (i <= 5) and 12 or 380
         local row = (i <= 5) and i or (i - 5)
-        ignoreControls[#ignoreControls + 1] = ScopedToggleAt(ctx, ignore, spec.label, col, -34 - (row - 1) * 28, AuraIgnoreCats, spec.key, false, ForceAuraIgnoreOverride, function()
+        ignoreControls[#ignoreControls + 1] = FitInlineToggle(ScopedToggleAt(ctx, ignore, spec.label, col, -34 - (row - 1) * 28, AuraIgnoreCats, spec.key, false, ForceAuraIgnoreOverride, function()
             local api = ns and ns.MSUF_Auras2
             local cache = api and api.Cache
             if cache and type(cache.InvalidateIgnoreHash) == "function" then pcall(cache.InvalidateIgnoreHash) end
             ApplyAuras()
-        end)
+        end), ignoreToggleWidth)
     end
     M.AddRefresher(ctx, function()
         local key = AuraScope()
@@ -1693,11 +1698,12 @@ local function BuildAuras(ctx)
     W.Text(reminders, "Ghost icons appear at the player frame when a buff is missing or about to expire. Position via Edit Mode mover.", 12, -6, 620, T.colors.muted)
     local remMaster = SwitchAt(ctx, reminders, "Enable Buff Reminders", 12, -28, 220, AuraShared, "showReminders", true, function() MarkReminderDirty(); ApplyAuras() end)
     local reminderControls = {}
+    local reminderToggleWidth = 320
     for i = 1, #AURA_REMINDERS do
         local spec = AURA_REMINDERS[i]
         local col = (i <= 5) and 12 or 380
         local row = (i <= 5) and i or (i - 5)
-        reminderControls[#reminderControls + 1] = ToggleAt(ctx, reminders, spec.label, col, -52 - (row - 1) * 24, AuraReminders, spec.key, true, function() MarkReminderDirty(); ApplyAuras() end)
+        reminderControls[#reminderControls + 1] = FitInlineToggle(ToggleAt(ctx, reminders, spec.label, col, -52 - (row - 1) * 24, AuraReminders, spec.key, true, function() MarkReminderDirty(); ApplyAuras() end), reminderToggleWidth)
     end
     local expiry = SliderAt(ctx, reminders, "Expiry Warning", 12, -220, 0, 600, 5, 340, AuraShared, "reminderThreshold", 0, function() MarkReminderDirty(); ApplyAuras() end)
     local grow = DropdownAt(ctx, reminders, "Grow Direction", 500, -200, AURA_GROWTH, 190, AuraShared, "reminderGrowth", "RIGHT", function() MarkReminderDirty(); ApplyAuras() end)

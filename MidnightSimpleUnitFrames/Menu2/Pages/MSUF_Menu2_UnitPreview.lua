@@ -2027,6 +2027,9 @@ local function BuildPreview(parent, panel, width, height)
     mock.cast.text:SetPoint("LEFT", mock.cast, "LEFT", 24, 0)
     mock.cast.time = MakeFS(mock.cast, "OVERLAY", 11)
     mock.cast.time:SetPoint("RIGHT", mock.cast, "RIGHT", -6, 0)
+    mock.cast.sizeTag = mock.cast:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    mock.cast.sizeTag:SetPoint("BOTTOM", mock.cast, "TOP", 0, 2)
+    mock.cast.sizeTag:SetTextColor(0.20, 0.90, 0.85, 0.95)
 
     mock.icons = {}
     for i = 1, #STATUS_PREVIEW do
@@ -3138,6 +3141,10 @@ function Preview.Refresh(box, reason)
         end
         local scw, sch = max(20, S(castW)), max(6, S(castBarH))
         mock.cast:SetSize(scw, sch)
+        if mock.cast.sizeTag then
+            mock.cast.sizeTag:SetText(format("%d x %d", floor(castW + 0.5), floor(castBarH + 0.5)))
+            mock.cast.sizeTag:Show()
+        end
         mock.cast:ClearAllPoints()
         if castDetached then
             mock.cast:SetPoint("CENTER", canvas, "CENTER", S(castOffsetX), S(castOffsetY))
@@ -3208,6 +3215,7 @@ function Preview.Refresh(box, reason)
         box.handleCastbar:SetSize(max(36, scw), max(18, sch + 8))
         PlaceHandle(box.handleCastbar, mock.cast)
     else
+        if mock.cast.sizeTag then mock.cast.sizeTag:Hide() end
         mock.cast:Hide()
         box.handleCastbar:Hide()
     end

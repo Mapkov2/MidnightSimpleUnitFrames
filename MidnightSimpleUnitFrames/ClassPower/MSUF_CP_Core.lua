@@ -282,9 +282,16 @@ builders.LAYOUT = function(E)
                 elseif type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
                     _G.MSUF_ScheduleLateAnchorReanchor()
                 end
-                CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
-                CP.container._msufDirectCooldownAnchor = nil
-                CP.container._msufHardLockPoint = nil
+                if type(_G.MSUF_ApplyCachedUnitFrameScreenPosition) == "function"
+                    and _G.MSUF_ApplyCachedUnitFrameScreenPosition(CP.container, "classpower", "classpower")
+                then
+                    CP.container._msufDirectCooldownAnchor = true
+                    CP.container._msufHardLockPoint = CP.container._msufHardLockPoint or "TOP"
+                else
+                    CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))
+                    CP.container._msufDirectCooldownAnchor = nil
+                    CP.container._msufHardLockPoint = nil
+                end
             end
         else
             CP.container:SetPoint("TOPLEFT", playerFrame, "TOPLEFT", 2 + oX, -(2 - oY))

@@ -1513,7 +1513,7 @@ local MSUF2_HELPER_ruRU = {
     ["Why is text overlapping or in the wrong place?"] = "Почему текст перекрывается или находится не в том месте?",
     ["width"] = "ширина",
     ["Z"] = "З",
-    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0Альфа-сборка MSUF|r\n\nЭто ранняя альфа-версия.\nСообщайте об ошибках и делитесь отзывами в нашем Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"] = "|cffb088f0Альфа-сборка MSUF|r\n\nЭто ранняя альфа-версия.\nСообщайте об ошибках и делитесь отзывами в нашем Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r",
 }
 for k, v in pairs(MSUF2_HELPER_ruRU) do
     L[k] = v

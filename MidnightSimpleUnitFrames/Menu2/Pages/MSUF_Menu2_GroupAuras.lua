@@ -117,16 +117,30 @@ local function BuildGFAuras(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
 
-    local renderer = b:CollapsibleSection("blizzrenderer", "Aura Display Mode", 590, false)
+    local rendererBaseW = ctx.width or 720
+    local rendererCompact = rendererBaseW < 700
+    local rendererBaseRightW = rendererCompact and max(300, rendererBaseW - 28) or max(330, min(390, rendererBaseW - 364))
+    local rendererRouteStacked = rendererBaseRightW < 410
+    local renderer = b:CollapsibleSection("blizzrenderer", "Aura Display Mode", rendererCompact and (rendererRouteStacked and 1130 or 1050) or (rendererRouteStacked and 670 or 590), false)
+    local rendererW = renderer._msuf2Width or ctx.width or 720
+    local leftX, leftW = 14, rendererCompact and max(300, rendererW - 28) or 300
+    local rightCardX = rendererCompact and 14 or 340
+    local rightCardW = rendererCompact and leftW or max(330, min(390, rendererW - 364))
+    rendererRouteStacked = rightCardW < 410
+    local rightX = rightCardX + 10
+    local rightCol2X = rendererRouteStacked and rightX or (rendererCompact and min(rightX + 170, rightCardX + rightCardW - 170) or 520)
+    local rightTextW = max(220, rightCardW - 20)
+    local rightTopY = rendererCompact and -566 or -64
+    local rightTopH = rendererRouteStacked and 324 or 244
+    local rightBottomY = rendererCompact and (rightTopY - rightTopH - 32) or (rendererRouteStacked and -422 or -342)
     do
-        local rendererW = renderer._msuf2Width or ctx.width or 720
-        local rightCardW = max(330, min(390, rendererW - 364))
-        W.ControlCardBackdrop(renderer, 14, -38, 300, 254)
-        W.ControlCardBackdrop(renderer, 340, -64, rightCardW, 244)
-        W.ControlCardBackdrop(renderer, 14, -310, 300, 234)
-        W.ControlCardBackdrop(renderer, 340, -342, rightCardW, 184)
+        W.ControlCardBackdrop(renderer, leftX, -38, leftW, 254)
+        W.ControlCardBackdrop(renderer, rightCardX, rightTopY, rightCardW, rightTopH)
+        W.ControlCardBackdrop(renderer, leftX, -310, leftW, 234)
+        W.ControlCardBackdrop(renderer, rightCardX, rightBottomY, rightCardW, 184)
     end
-    W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Highlights keep Blizzard icons while allowing MSUF's dispel border, glow, and overlay visuals.", 14, -38, 620, T.colors.muted)
+    local desc = W.Text(renderer, "Blizzard mode lets WoW place the selected aura types. MSUF Custom mode lets MSUF control aura size, growth, position, filters, and styling. MSUF Dispel Highlights keep Blizzard icons while allowing MSUF's dispel border, glow, and overlay visuals.", leftX + 6, -48, max(260, min(rendererW - 40, rendererCompact and (leftW - 12) or 620)), T.colors.muted)
+    if desc and desc.SetWordWrap then desc:SetWordWrap(true) end
 
     local function PlaceDropdown(dropdown, x, y, width, hideTitle)
         if dropdown._msuf2Title then
@@ -209,20 +223,20 @@ local function BuildGFAuras(ctx)
     end
 
     local rendererMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_RENDERERS, 180), function() return AurasRoot(CurrentScope()) end, "renderer", "BLIZZARD", "rebuild")
-    PlaceDropdown(rendererMode, 14, -96, 180, true)
+    PlaceDropdown(rendererMode, leftX, -96, min(180, leftW - 28), true)
     AddAuraTooltip(rendererMode, "Aura Display Mode", "Blizzard mode uses WoW placement and cannot be dragged. MSUF Custom mode gives MSUF full positioning and styling control. If the preview marks an aura area as Blizzard-owned, MSUF can show the area but cannot drag that native aura block.")
 
     local iconSize = BindRendererSlider(W.Slider(renderer, "", 8, 80, 1, 260), function() return AurasRoot(CurrentScope()) end, "blizzardIconSize", 20, "geometry",
         function(v) return string.format(Tr("Icon size: %d"), v) end)
-    PlaceSlider(iconSize, 14, -156, 260)
+    PlaceSlider(iconSize, leftX, -156, min(260, leftW - 40))
 
     local buffMax = BindRendererSlider(W.Slider(renderer, "", 0, 20, 1, 260), function() return AuraGroup(CurrentScope(), "buff") end, "max", 6, "visual",
         function(v) return string.format(Tr("Buff max: %d"), v) end)
-    PlaceSlider(buffMax, 14, -208, 260)
+    PlaceSlider(buffMax, leftX, -208, min(260, leftW - 40))
 
     local debuffMax = BindRendererSlider(W.Slider(renderer, "", 0, 20, 1, 260), function() return AuraGroup(CurrentScope(), "debuff") end, "max", 3, "visual",
         function(v) return string.format(Tr("Debuff max: %d"), v) end)
-    PlaceSlider(debuffMax, 14, -260, 260)
+    PlaceSlider(debuffMax, leftX, -260, min(260, leftW - 40))
 
     local function BlizzardTypes()
         local root = AurasRoot(CurrentScope())
@@ -230,32 +244,43 @@ local function BuildGFAuras(ctx)
         return root.blizzardTypes
     end
 
-    local routingLabel = W.Text(renderer, "Aura types handled by Blizzard", 350, -82, 330, T.colors.text)
-    local buffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Buffs", 350, -112, 170), BlizzardTypes, "buffs", true, "rebuild")
-    local buffMixedHint = W.Text(renderer, "Off = MSUF Custom Buffs run too; duplicates can appear.", 350, -140, 330, T.colors.danger or { 0.88, 0.28, 0.28, 1 })
+    local routeLabelY = rightTopY - 18
+    local routeBuffY = rightTopY - 48
+    local routeHintY = rightTopY - 76
+    local routeDebuffY = rendererRouteStacked and (rightTopY - 106) or (rightTopY - 108)
+    local routeDispelY = rendererRouteStacked and (rightTopY - 136) or (rightTopY - 168)
+    local routeExtY = rendererRouteStacked and (rightTopY - 166) or routeBuffY
+    local routeCooldownY = rendererRouteStacked and (rightTopY - 196) or routeDebuffY
+    local routePrivateY = rendererRouteStacked and (rightTopY - 226) or routeDispelY
+    local routeHighlightsY = rendererRouteStacked and (rightTopY - 256) or (rightTopY - 198)
+    local routeOrgLabelY = rendererRouteStacked and (rightTopY - 286) or (rightTopY - 228)
+    local routeOrgY = rendererRouteStacked and (rightTopY - 306) or (rightTopY - 250)
+    local routingLabel = W.Text(renderer, "Aura types handled by Blizzard", rightX, routeLabelY, rightTextW, T.colors.text)
+    local buffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Buffs", rightX, routeBuffY, 170), BlizzardTypes, "buffs", true, "rebuild")
+    local buffMixedHint = W.Text(renderer, "Off = MSUF Custom Buffs run too; duplicates can appear.", rightX, routeHintY, rightTextW, T.colors.danger or { 0.88, 0.28, 0.28, 1 })
     if buffMixedHint and buffMixedHint.SetWordWrap then buffMixedHint:SetWordWrap(false) end
-    local debuffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Debuffs", 350, -172, 140), BlizzardTypes, "debuffs", true, "rebuild")
-    local dispelChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Dispels", 350, -232, 140), BlizzardTypes, "dispels", true, "rebuild")
-    local extChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Defensives", 520, -112, 150), BlizzardTypes, "externals", true, "rebuild")
-    local cdTextChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Blizzard Cooldown Text", 520, -172, 150), function() return AurasRoot(CurrentScope()) end, "blizzardShowCooldownText", true, "visual")
-    local privateChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Private Auras", 520, -232, 190), BlizzardTypes, "privateAuras", true, "rebuild")
-    local blizzDispelBorderChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "MSUF Dispel Highlights", 350, -262, 240), function() return AurasRoot(CurrentScope()) end, "blizzardDispelBorder", false, "rebuild")
+    local debuffChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Debuffs", rightX, routeDebuffY, 140), BlizzardTypes, "debuffs", true, "rebuild")
+    local dispelChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Dispels", rightX, routeDispelY, 140), BlizzardTypes, "dispels", true, "rebuild")
+    local extChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Defensives", rightCol2X, routeExtY, rendererRouteStacked and 220 or 150), BlizzardTypes, "externals", true, "rebuild")
+    local cdTextChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Blizzard Cooldown Text", rightCol2X, routeCooldownY, rendererRouteStacked and 220 or 170), function() return AurasRoot(CurrentScope()) end, "blizzardShowCooldownText", true, "visual")
+    local privateChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "Use Blizzard: Private Auras", rightCol2X, routePrivateY, rendererRouteStacked and 220 or 190), BlizzardTypes, "privateAuras", true, "rebuild")
+    local blizzDispelBorderChk = BindNestedToggle(ctx, W.ToggleAt(renderer, "MSUF Dispel Highlights", rightX, routeHighlightsY, 240), function() return AurasRoot(CurrentScope()) end, "blizzardDispelBorder", false, "rebuild")
     AddAuraTooltip(buffChk, "Use Blizzard: Buffs", "Turning Use Blizzard: Buffs off makes MSUF Custom Buffs run while Blizzard rendering stays active. Matching buffs can appear twice.")
     AddAuraTooltip(debuffChk, "Use Blizzard: Debuffs", "When enabled, WoW owns debuff icons. MSUF hide categories and custom debuff positioning do not filter Blizzard-rendered debuffs.")
     AddAuraTooltip(extChk, "Use Blizzard: Defensives", "When enabled, WoW owns defensive icons. MSUF custom positioning and styling apply only when this is off or the renderer is MSUF Custom.")
     AddAuraTooltip(blizzDispelBorderChk, "MSUF Dispel Highlights", "Keeps Blizzard aura icons active, but lets MSUF scan and draw the Dispel Border, Dispel Glow, and Dispel Overlay. Runtime work only applies while the related MSUF dispel visuals are enabled.")
 
-    local orgLabel = W.Text(renderer, "Organization", 350, -292, 240, T.colors.text)
+    local orgLabel = W.Text(renderer, "Organization", rightX, routeOrgLabelY, rightTextW, T.colors.text)
     local orgMode = BindNestedDropdown(ctx, W.Dropdown(renderer, "", GF_AURA_ORG, 260), function() return AurasRoot(CurrentScope()) end, "blizzardOrganizationType", "default", "geometry")
-    PlaceDropdown(orgMode, 350, -314, 260, true)
+    PlaceDropdown(orgMode, rightX, routeOrgY, min(260, rightTextW), true)
 
-    local layerLabel = W.Text(renderer, "Advanced Layering", 14, -324, 240, T.colors.text)
-    local layerHint = W.Text(renderer, "Only adjust this if Blizzard-controlled aura icons appear behind other frames.", 14, -344, 300, T.colors.muted)
+    local layerLabel = W.Text(renderer, "Advanced Layering", leftX, -324, leftW - 24, T.colors.text)
+    local layerHint = W.Text(renderer, "Only adjust this if Blizzard-controlled aura icons appear behind other frames.", leftX, -344, leftW - 24, T.colors.muted)
     local strataMode = W.Dropdown(renderer, "Aura Layer Strata", BLIZZARD_CONTAINER_STRATA, 180)
     M.BindDropdown(ctx, strataMode,
         function() return GetAuraOption("blizzardContainerStrata", "AUTO") end,
         function(value) SetAuraOption("blizzardContainerStrata", value or "AUTO", false) end)
-    PlaceDropdown(strataMode, 14, -398, 180, false)
+    PlaceDropdown(strataMode, leftX, -398, min(180, leftW - 28), false)
     AddLayerTooltip(strataMode)
 
     local containerLevel = W.Slider(renderer, "", 0, 30, 1, 260)
@@ -274,17 +299,17 @@ local function BuildGFAuras(ctx)
     end)
     M.AddRefresher(ctx, RefreshContainerLevelLabel)
     RefreshContainerLevelLabel()
-    PlaceSlider(containerLevel, 14, -452, 260)
+    PlaceSlider(containerLevel, leftX, -452, min(260, leftW - 40))
     AddLayerTooltip(containerLevel)
 
-    local privateLayerFix = W.ToggleAt(renderer, "Keep private auras above frames", 14, -512, 230)
+    local privateLayerFix = W.ToggleAt(renderer, "Keep private auras above frames", leftX, -512, min(260, leftW - 44))
     M.BindToggle(ctx, privateLayerFix,
         function() return GetAuraOption("blizzardPrivateLayerFix", true) ~= false end,
         function(value) SetAuraOption("blizzardPrivateLayerFix", value and true or false, true) end)
     AddLayerTooltip(privateLayerFix)
 
-    local posLabel = W.Text(renderer, "Blizzard-Controlled Position", 350, -362, 260, T.colors.text)
-    local posHint = W.Text(renderer, "Blizzard controls this aura block, so MSUF cannot drag it. Switch to MSUF Custom mode if you want full positioning control. The preview marks the Blizzard-owned area.", 350, -382, 330, T.colors.muted)
+    local posLabel = W.Text(renderer, "Blizzard-Controlled Position", rightX, rightBottomY - 20, rightTextW, T.colors.text)
+    local posHint = W.Text(renderer, "Blizzard controls this aura block, so MSUF cannot drag it. Switch to MSUF Custom mode if you want full positioning control. The preview marks the Blizzard-owned area.", rightX, rightBottomY - 42, rightTextW, T.colors.muted)
 
     local function RefreshRendererState()
         local native = (AurasRoot(CurrentScope()).renderer or "BLIZZARD") ~= "CUSTOM"
