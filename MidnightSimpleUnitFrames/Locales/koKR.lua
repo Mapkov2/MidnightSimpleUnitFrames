@@ -1468,7 +1468,7 @@ local MSUF2_HELPER_koKR = {
     ["Why is text overlapping or in the wrong place?"] = "텍스트가 겹치거나 잘못된 위치에 있는 이유는 무엇입니까?",
     ["width"] = "폭",
     ["Z"] = "지",
-    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF 알파 빌드|r\n\n초기 알파 버전입니다.\nDiscord에서 버그를 신고하고 피드백을 공유해 주세요!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"] = "|cffb088f0MSUF 알파 빌드|r\n\n초기 알파 버전입니다.\nDiscord에서 버그를 신고하고 피드백을 공유해 주세요!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r",
 }
 for k, v in pairs(MSUF2_HELPER_koKR) do
     L[k] = v

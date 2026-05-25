@@ -1519,7 +1519,7 @@ local MSUF2_HELPER_zhTW = {
     ["Why is text overlapping or in the wrong place?"] = "為什麼文字重疊或位於錯誤的位置？",
     ["width"] = "寬度",
     ["Z"] = "Z",
-    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\n\n這是早期 Alpha 版本。 \n請回報錯誤並在我們的 Discord 上分享回饋！ \n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"] = "|cffb088f0MSUF Alpha Build|r\n\n這是早期 Alpha 版本。 \n請回報錯誤並在我們的 Discord 上分享回饋！ \n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r",
 }
 for k, v in pairs(MSUF2_HELPER_zhTW) do
     L[k] = v

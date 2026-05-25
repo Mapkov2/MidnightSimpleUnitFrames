@@ -1861,7 +1861,7 @@ local MSUF2_HELPER_frFR = {
     ["Why is text overlapping or in the wrong place?"] = "Pourquoi le texte se chevauche-t-il ou est-il au mauvais endroit ?",
     ["width"] = "largeur",
     ["Z"] = "Z",
-    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\n\nIl s'agit d'une première version Alpha.\nVeuillez signaler les bugs et partager vos commentaires sur notre Discord !\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"] = "|cffb088f0MSUF Alpha Build|r\n\nIl s'agit d'une première version Alpha.\nVeuillez signaler les bugs et partager vos commentaires sur notre Discord !\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r",
 }
 for k, v in pairs(MSUF2_HELPER_frFR) do
     L[k] = v

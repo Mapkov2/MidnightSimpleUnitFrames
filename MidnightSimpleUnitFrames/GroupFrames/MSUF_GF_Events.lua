@@ -13,7 +13,9 @@ local type, pairs = type, pairs
 local issecretvalue = _G.issecretvalue
 local InCombatLockdown = _G.InCombatLockdown
 local UnitExists = _G.UnitExists
-local UnitIsUnit = _G.UnitIsUnit
+local UnitGUID = _G.UnitGUID
+local UnitFullName = _G.UnitFullName
+local UnitName = _G.UnitName
 local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local CreateFrame = _G.CreateFrame
 local C_Timer = _G.C_Timer
@@ -36,6 +38,44 @@ end
 local function _UnsecretBool(value)
     if issecretvalue and issecretvalue(value) then return nil end
     return value and true or false
+end
+
+local function _SafeUnitGUID(unit)
+    if not (unit and UnitGUID) then return nil end
+    local guid = UnitGUID(unit)
+    if guid and not (issecretvalue and issecretvalue(guid)) then return guid end
+    return nil
+end
+
+local function _UnitNameKey(unit)
+    if not unit then return nil end
+    if UnitFullName then
+        local name, realm = UnitFullName(unit)
+        if name and not (issecretvalue and issecretvalue(name)) then
+            if realm and realm ~= "" and not (issecretvalue and issecretvalue(realm)) then
+                return name .. "-" .. realm
+            end
+            return name
+        end
+    elseif UnitName then
+        local name, realm = UnitName(unit)
+        if name and not (issecretvalue and issecretvalue(name)) then
+            if realm and realm ~= "" and not (issecretvalue and issecretvalue(realm)) then
+                return name .. "-" .. realm
+            end
+            return name
+        end
+    end
+    return nil
+end
+
+local function _SameUnitToken(left, right)
+    if left == right then return true end
+    if not (left and right) then return false end
+    local lg, rg = _SafeUnitGUID(left), _SafeUnitGUID(right)
+    if lg and rg then return lg == rg end
+    local ln, rn = _UnitNameKey(left), _UnitNameKey(right)
+    return (ln and rn and ln == rn) and true or false
 end
 
 local function UpdateGroupNumber(f, unit)
@@ -186,7 +226,7 @@ function GF.RegisterUnitEvents(f, unit)
     end
     if powerEvents then
         GF._RegisterTrackedUnitEventList(f, unit, regTbl, GF._unitEventGroups.power)
-        if c.powFrequent and UnitIsUnit and _UnsecretBool(UnitIsUnit(unit, "player")) == true then
+        if c.powFrequent and _SameUnitToken(unit, "player") then
             GF._RegisterTrackedUnitEvent(f, unit, regTbl, "UNIT_POWER_FREQUENT")
         end
     end
@@ -259,6 +299,9 @@ local function _gfRosterFlushFrame(f, gmap)
         f._msufGFRosterUnit = nil
         f._msufGFRosterRole = nil
         f._msufGFRosterLeaderState = nil
+        f._msufGFRangeFadeSelfUnit = nil
+        f._msufGFRangeFadeSelf = nil
+        f._msufGFRangeFadeSelfResolved = nil
         f._msufGFIsTarget = nil
         f._msufGFIsFocus = nil
         return
@@ -273,6 +316,11 @@ local function _gfRosterFlushFrame(f, gmap)
     if hasGUID then gmap[guid] = f end
 
     local sameRosterUnit = hasGUID and f._msufGFRosterGUID == guid and f._msufGFRosterUnit == u
+    if not sameRosterUnit then
+        f._msufGFRangeFadeSelfUnit = nil
+        f._msufGFRangeFadeSelf = nil
+        f._msufGFRangeFadeSelfResolved = nil
+    end
     f._msufGFRosterGUID = hasGUID and guid or nil
     f._msufGFRosterUnit = u
 
@@ -682,10 +730,7 @@ do
         local function CB(f, changedUnit)
             local c = f and f._c
             if not (c and c.statusTextEn and f.unit and UnitExists(f.unit)) then return end
-            local sameUnit = (f.unit == changedUnit)
-            if not sameUnit and UnitIsUnit then
-                sameUnit = _UnsecretBool(UnitIsUnit(f.unit, changedUnit)) == true
-            end
+            local sameUnit = _SameUnitToken(f.unit, changedUnit)
             if sameUnit then
                 UpdateStatusText(f, f.unit, true)
             end

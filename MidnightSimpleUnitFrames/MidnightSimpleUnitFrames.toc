@@ -3,13 +3,13 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 5.52
+## Version: 5.53
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
 ## X-Curse-Project-ID: 1384660
 ## X-Wago-ID: XKq9aoKy
-## X-Website: https://discord.gg/JQnhZXnTAK
+## X-Website: https://discord.gg/2Gf9b2Wprz
 ## X-MSUF-StatusIconPack: 1
 ## X-MSUF-IconPack-Name: UX Pro
 ## X-MSUF-IconFolder: Icons\UXPro

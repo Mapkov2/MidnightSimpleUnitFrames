@@ -11,6 +11,89 @@ local type, tonumber = type, tonumber
 local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer
 local issecretvalue = _G.issecretvalue
 
+do
+    local LEGACY_CDM_ANCHOR = "EssentialCooldownViewer_MSA_Container"
+
+    local function _CompatCharKey()
+        local fn = _G.MSUF_GetCharKey
+        if type(fn) == "function" then
+            local ok, key = pcall(fn)
+            if ok and type(key) == "string" and key ~= "" then return key end
+        end
+        local name = _G.UnitName and _G.UnitName("player")
+        local realm = _G.GetRealmName and _G.GetRealmName()
+        if type(name) == "string" and name ~= "" and type(realm) == "string" and realm ~= "" then
+            return name .. "-" .. realm
+        end
+        return "global"
+    end
+
+    local function _CompatProfileKey()
+        local active = _G.MSUF_ActiveProfile
+        if type(active) == "string" and active ~= "" then return active end
+        local gdb = _G.MSUF_GlobalDB
+        local charKey = _CompatCharKey()
+        local char = gdb and type(gdb.char) == "table" and gdb.char[charKey]
+        active = char and char.activeProfile
+        if type(active) == "string" and active ~= "" then return active end
+        return "Default"
+    end
+
+    local function _CompatCache(rootKey)
+        local gdb = _G.MSUF_GlobalDB
+        local root = gdb and gdb[rootKey]
+        if type(root) ~= "table" then return nil end
+        local byChar = root[_CompatCharKey()] or root.global
+        if type(byChar) ~= "table" then return nil end
+        return byChar[_CompatProfileKey()]
+    end
+
+    local function _ApplyCompatAnchorCache(anchor)
+        if not (anchor and _G.UIParent) then return false end
+        local bucket = _CompatCache("externalAnchorCache")
+        local cached = type(bucket) == "table"
+            and (bucket[LEGACY_CDM_ANCHOR] or bucket.EssentialCooldownViewer)
+            or nil
+        if type(cached) ~= "table" then return false end
+        local x, y = tonumber(cached.x), tonumber(cached.y)
+        if not (x and y) then return false end
+        local w = tonumber(cached.w) or 1
+        local h = tonumber(cached.h) or 1
+        if w < 1 then w = 1 end
+        if h < 1 then h = 1 end
+        anchor:ClearAllPoints()
+        anchor:SetSize(w, h)
+        anchor:SetPoint("CENTER", _G.UIParent, "CENTER", math.floor(x + 0.5), math.floor(y + 0.5))
+        return true
+    end
+
+    function _G.MSUF_EnsureLegacyCooldownViewerAnchor()
+        if not (_G.CreateFrame and _G.UIParent) then return nil end
+        local anchor = _G[LEGACY_CDM_ANCHOR]
+        if not anchor then
+            anchor = _G.CreateFrame("Frame", LEGACY_CDM_ANCHOR, _G.UIParent)
+            _G[LEGACY_CDM_ANCHOR] = anchor
+        end
+        anchor._msufLegacyCooldownAnchor = true
+        if anchor.EnableMouse then anchor:EnableMouse(false) end
+        if anchor.SetAlpha then anchor:SetAlpha(0) end
+        if not _ApplyCompatAnchorCache(anchor) then
+            anchor:ClearAllPoints()
+            anchor:SetSize(1, 1)
+            anchor:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+        end
+        if anchor.Show then anchor:Show() end
+        return anchor
+    end
+
+    _G.MSUF_PositionLegacyCooldownViewerAnchor = function()
+        local anchor = _G.MSUF_EnsureLegacyCooldownViewerAnchor and _G.MSUF_EnsureLegacyCooldownViewerAnchor()
+        return _ApplyCompatAnchorCache(anchor)
+    end
+
+    _G.MSUF_EnsureLegacyCooldownViewerAnchor()
+end
+
 local function EnsureDBSafe()
     if not _G.MSUF_DB and type(_G.MSUF_EnsureDB) == "function" then
         (_G.MSUF_EnsureDB)()

@@ -2347,6 +2347,13 @@ local function _ZeroOverlayBar(bar)
     bar:Hide()
 end
 
+local function _UFCore_IsPositiveOverlayAmount(value)
+    if value == nil then return false end
+    if _UFCORE_issecret and _UFCORE_issecret(value) then return true end
+    if type(value) == "number" then return value > 0 end
+    return (tonumber(value) or 0) > 0
+end
+
 local function _ResolveAbsorbDisplayFast(f)
     local bars = addon and addon.Bars
     local resolve = bars and bars._ResolveAbsorbDisplay
@@ -2428,7 +2435,7 @@ local function _AbsorbValueFast(f)
     end
 
     local absAmt = _CalcDamageAbsorbs(calc, unit)
-    if absAmt == nil then
+    if not _UFCore_IsPositiveOverlayAmount(absAmt) then
         _ZeroOverlayBar(ab)
         _RefreshAbsorbTextFast(f, hp, showText)
         return
@@ -2459,7 +2466,7 @@ local function _HealAbsorbValueFast(f)
     local hp = calc:GetCurrentHealth()
     hab:SetMinMaxValues(0, maxHP)
     local habAmt = _CalcHealAbsorbs(calc, unit)
-    if habAmt == nil then
+    if not _UFCore_IsPositiveOverlayAmount(habAmt) then
         _ZeroOverlayBar(hab)
         _RefreshAbsorbTextFast(f, hp, nil)
         return

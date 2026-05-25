@@ -1812,6 +1812,7 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
         if custom and custom ~= UIParent and custom ~= WorldFrame and (not custom.IsForbidden or not custom:IsForbidden()) then
             return custom
         end
+        return anchor, customName
     end
 
     local atv = conf.anchorToUnitframe
@@ -1822,6 +1823,7 @@ local function MSUF_ResolveConfiguredAnchorFrame(key, conf, fallbackAnchor)
         if rel and rel ~= UIParent and rel ~= WorldFrame and (not rel.IsForbidden or not rel:IsForbidden()) then
             return rel
         end
+        return anchor, atv
     end
 
     return anchor
@@ -2332,14 +2334,111 @@ _G.MSUF_LateAnchorReanchorState = _G.MSUF_LateAnchorReanchorState or {
     pending = false,
     attempts = 0,
 }
+local MSUF_LATE_ANCHOR_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
+local MSUF_LATE_ANCHOR_UNIT_KEYS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "boss" }
+
+local function MSUF_HasLateAnchorConfig()
+    local db = MSUF_DB
+    if type(db) ~= "table" then return false end
+    local g = db.general
+    if g and g.anchorToCooldown == true then return true end
+    local bars = db.bars
+    if bars and bars.classPowerAnchorToCooldown == true then return true end
+    for i = 1, #MSUF_LATE_ANCHOR_UNIT_KEYS do
+        local conf = db[MSUF_LATE_ANCHOR_UNIT_KEYS[i]]
+        if type(conf) == "table" then
+            if type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then return true end
+            local atv = conf.anchorToUnitframe
+            if type(atv) == "string" and atv ~= "" and atv ~= "GLOBAL" and atv ~= "FREE" and atv ~= "global" then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function MSUF_LateAnchorReanchorFlush()
+    if InCombatLockdown and InCombatLockdown() then
+        if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+            _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+        end
+        return false
+    end
+    if type(_G.MSUF_PositionLegacyCooldownViewerAnchor) == "function" then
+        pcall(_G.MSUF_PositionLegacyCooldownViewerAnchor)
+    end
+    _G.MSUF_CDMBridgeDirty = true
+    if type(_G.MSUF_FlushCDMBridgeRefresh) == "function" then
+        _G.MSUF_FlushCDMBridgeRefresh()
+    elseif type(_G.MSUF_OnCDMExtensionChanged) == "function" then
+        _G.MSUF_OnCDMExtensionChanged()
+    end
+    return true
+end
+
 _G.MSUF_ScheduleLateAnchorReanchor = function()
     _G.MSUF_CDMBridgeDirty = true
     if InCombatLockdown and InCombatLockdown() then
         if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
             _G.MSUF_RequestUnitFrameReanchorAfterCombat()
         end
+        return false
     end
-    return false
+
+    local state = _G.MSUF_LateAnchorReanchorState
+    if type(state) ~= "table" then
+        state = { pending = false, attempts = 0 }
+        _G.MSUF_LateAnchorReanchorState = state
+    end
+    if state.pending then return false end
+    state.pending = true
+    state.attempts = 0
+
+    if not (C_Timer and C_Timer.After) then
+        MSUF_LateAnchorReanchorFlush()
+        state.pending = false
+        return true
+    end
+
+    for i = 1, #MSUF_LATE_ANCHOR_RETRY_DELAYS do
+        C_Timer.After(MSUF_LATE_ANCHOR_RETRY_DELAYS[i], function()
+            if not state.pending then return end
+            state.attempts = i
+            MSUF_LateAnchorReanchorFlush()
+            if i == #MSUF_LATE_ANCHOR_RETRY_DELAYS then
+                state.pending = false
+            end
+        end)
+    end
+    return true
+end
+
+do
+    local function ScheduleLateAnchorFromEvent()
+        local function run()
+            if MSUF_HasLateAnchorConfig() and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+                _G.MSUF_ScheduleLateAnchorReanchor()
+            end
+        end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, run)
+        else
+            run()
+        end
+    end
+
+    local lateAnchorEvents = CreateFrame("Frame")
+    lateAnchorEvents:RegisterEvent("PLAYER_LOGIN")
+    lateAnchorEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
+    lateAnchorEvents:RegisterEvent("EDIT_MODE_LAYOUTS_UPDATED")
+    lateAnchorEvents:RegisterEvent("ADDON_LOADED")
+    lateAnchorEvents:SetScript("OnEvent", function(_, event, addon)
+        if event == "ADDON_LOADED" then
+            if type(addon) ~= "string" then return end
+            if addon ~= "Blizzard_EditMode" and not string.find(addon, "Cooldown", 1, true) then return end
+        end
+        ScheduleLateAnchorFromEvent()
+    end)
 end
 
 function _G.MSUF_IsUnitFramePositionLocked()
@@ -2519,15 +2618,35 @@ local function PositionUnitFrame(f, unit, refreshConfig)
     if not conf then return end
     local ecv = (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer")) or _G["EssentialCooldownViewer"]
     local _g = MSUF_DB and MSUF_DB.general
-    local anchor = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
+    local anchor, missingAnchorName = MSUF_ResolveConfiguredAnchorFrame(key, conf, MSUF_GetAnchorFrame())
     local isCooldownAnchor = false
     local usesExternalAnchor = false
+    local unresolvedConfiguredAnchor = missingAnchorName ~= nil
     if _g and _g.anchorToCooldown then
         usesExternalAnchor = true
     elseif type(conf.anchorFrameName) == "string" and conf.anchorFrameName ~= "" then
         usesExternalAnchor = true
     elseif MSUF_ShouldSnapshotExternalAnchor(anchor) then
         usesExternalAnchor = true
+    end
+    if (_g and _g.anchorToCooldown and not ecv) or unresolvedConfiguredAnchor then
+        unresolvedConfiguredAnchor = true
+        if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+            _G.MSUF_ScheduleLateAnchorReanchor()
+        end
+        if inLockdown then
+            if _G.MSUF_RequestUnitFrameReanchorAfterCombat then
+                _G.MSUF_RequestUnitFrameReanchorAfterCombat()
+            end
+            return
+        end
+        local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
+        if type(applyCached) == "function" and applyCached(f, key, unit) then
+            return
+        end
+        if initialized then
+            return
+        end
     end
     if inLockdown and not initialized and usesExternalAnchor then
         local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
@@ -2602,7 +2721,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             f._msufStableExternalSig = nil
             f._msufDirectCooldownAnchor = true
             f._msufHardLockPoint = point
-            if _G.MSUF_CacheUnitFrameScreenPosition then
+            if not unresolvedConfiguredAnchor and _G.MSUF_CacheUnitFrameScreenPosition then
                 _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit, point)
             end
             return
@@ -2641,7 +2760,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             f._msufStableExternalSig = nil
             f._msufDirectCooldownAnchor = true
             f._msufHardLockPoint = "CENTER"
-            if _G.MSUF_CacheUnitFrameScreenPosition then
+            if not unresolvedConfiguredAnchor and _G.MSUF_CacheUnitFrameScreenPosition then
                 _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit, "CENTER")
             end
             return
@@ -2652,6 +2771,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             return
         end
         if MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", x, y)
+            and not unresolvedConfiguredAnchor
             and _G.MSUF_CacheUnitFrameScreenPosition
         then
             _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit)
@@ -2671,7 +2791,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             f._msufStableExternalSig = nil
             f._msufDirectCooldownAnchor = true
             f._msufHardLockPoint = "CENTER"
-            if _G.MSUF_CacheUnitFrameScreenPosition then
+            if not unresolvedConfiguredAnchor and _G.MSUF_CacheUnitFrameScreenPosition then
                 _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit, "CENTER")
             end
             return
@@ -2682,6 +2802,7 @@ local function PositionUnitFrame(f, unit, refreshConfig)
             return
         end
         if MSUF_ApplyStableUnitFramePoint(f, "CENTER", anchor, "CENTER", conf.offsetX, conf.offsetY)
+            and not unresolvedConfiguredAnchor
             and _G.MSUF_CacheUnitFrameScreenPosition
         then
             _G.MSUF_CacheUnitFrameScreenPosition(f, key, unit)
@@ -2859,6 +2980,9 @@ function _G.MSUF_FlushCDMBridgeRefresh()
     if not _G.MSUF_CDMBridgeDirty then return end
     if InCombatLockdown and InCombatLockdown() then return end
     _G.MSUF_CDMBridgeDirty = false
+    if type(_G.MSUF_PositionLegacyCooldownViewerAnchor) == "function" then
+        pcall(_G.MSUF_PositionLegacyCooldownViewerAnchor)
+    end
     if _G.MSUF_UpdateAllExternalAnchorProxies then
         _G.MSUF_UpdateAllExternalAnchorProxies()
     end
@@ -6483,6 +6607,40 @@ end
 	    end
     if type(ns.Castbars._InitPlayerCastbarPreviewToggle) == "function" then
         C_Timer.After(1.1, ns.Castbars._InitPlayerCastbarPreviewToggle)
+    end
+    local postLoginFullApplied = false
+    local function MSUF_PostLoginReconcile(fullAllowed)
+        if MSUF_OptionsApplyCombatLocked() then return end
+        if fullAllowed ~= false and not postLoginFullApplied then
+            local didFullWork = false
+            if type(_G.MSUF_ApplyAllSettings_Immediate) == "function" then
+                _G.MSUF_ApplyAllSettings_Immediate()
+                didFullWork = true
+            end
+            if type(_G.MSUF_RefreshAllUnitAlphas) == "function" then
+                _G.MSUF_RefreshAllUnitAlphas()
+                didFullWork = true
+            end
+            if type(_G.MSUF_RangeFade_EvaluateActive) == "function" then
+                _G.MSUF_RangeFade_EvaluateActive(true)
+                didFullWork = true
+            end
+            if type(_G.MSUF_RangeFadeFB_EvaluateActive) == "function" then
+                _G.MSUF_RangeFadeFB_EvaluateActive(true)
+                didFullWork = true
+            end
+            postLoginFullApplied = didFullWork
+        end
+        if type(_G.MSUF_GF_ReconcileLiveFrames) == "function" then
+            _G.MSUF_GF_ReconcileLiveFrames()
+        elseif type(_G.MSUF_GF_RebuildAll) == "function" then
+            _G.MSUF_GF_RebuildAll()
+        end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function() MSUF_PostLoginReconcile(false) end)
+        C_Timer.After(0.20, function() MSUF_PostLoginReconcile(true) end)
+        C_Timer.After(0.80, function() MSUF_PostLoginReconcile(true) end)
     end
     if not MSUF_DB or not MSUF_DB.general or MSUF_DB.general.showWelcomeMessage ~= false then
         print("|cff7aa2f7MSUF|r: |cffc0caf5/msuf|r |cff565f89to open options|r  |cff565f89|r |cffc0caf5 Thank you for using MSUF -|r  |cfff7768eReport bugs in the Discord.|r")

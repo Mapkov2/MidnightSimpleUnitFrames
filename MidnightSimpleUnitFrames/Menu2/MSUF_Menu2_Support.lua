@@ -266,7 +266,7 @@ do
     local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
     if isAlpha and _G.StaticPopupDialogs and not _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD then
         _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD = {
-            text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"),
+            text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
             button1 = Tr("Copy Discord Link"),
             button2 = _G.CLOSE or Tr("Close"),
             timeout = 0,
@@ -275,7 +275,7 @@ do
             preferredIndex = 3,
             OnAccept = function()
                 if type(_G.MSUF_ShowCopyLink) == "function" then
-                    _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/JQnhZXnTAK")
+                    _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz")
                 end
             end,
         }

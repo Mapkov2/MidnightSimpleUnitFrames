@@ -2160,7 +2160,7 @@ local MSUF2_HELPER_zhCN = {
     ["Why is text overlapping or in the wrong place?"] = "为什么文本重叠或位于错误的位置？",
     ["width"] = "宽度",
     ["Z"] = "Z",
-    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r"] = "|cffb088f0MSUF Alpha Build|r\n\n这是早期 Alpha 版本。\n请报告错误并在我们的 Discord 上分享反馈！\n\n|cff7289dahttps://discord.gg/JQnhZXnTAK|r",
+    ["|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"] = "|cffb088f0MSUF Alpha Build|r\n\n这是早期 Alpha 版本。\n请报告错误并在我们的 Discord 上分享反馈！\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r",
 }
 for k, v in pairs(MSUF2_HELPER_zhCN) do
     L[k] = v

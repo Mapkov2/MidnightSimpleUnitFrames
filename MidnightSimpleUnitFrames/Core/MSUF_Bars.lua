@@ -4,6 +4,7 @@
 local addonName, ns = ...
 local F = ns.Cache and ns.Cache.F or {}
 local type, tonumber = type, tonumber
+local issecretvalue = _G.issecretvalue
 
 -- ═══════════════════════════════════════════════════════════════════════
 -- P0 PERFORMANCE: WoW C API Upvalues for absorb + heal-prediction paths
@@ -412,6 +413,13 @@ local function _MSUF_GetHealAbsorbs(calc, unit)
     return nil
 end
 
+local function _MSUF_IsPositiveOverlayAmount(value)
+    if value == nil then return false end
+    if issecretvalue and issecretvalue(value) then return true end
+    if type(value) == "number" then return value > 0 end
+    return (tonumber(value) or 0) > 0
+end
+
 -- Unified health+absorb+prediction update using C-side calculator.
 -- Called on UNIT_MAXHEALTH, UNIT_ABSORB_AMOUNT_CHANGED, UNIT_HEAL_ABSORB_AMOUNT_CHANGED,
 -- UNIT_HEAL_PREDICTION, UNIT_MAXHEALTHMODIFIER — NOT on UNIT_HEALTH (lean path).
@@ -474,7 +482,7 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         if frame.absorbBar then
             if frame._msufAbsorbEnCached then
                 local absorbAmt = _MSUF_GetDamageAbsorbs(calc, unit)
-                if absorbAmt ~= nil then
+                if _MSUF_IsPositiveOverlayAmount(absorbAmt) then
                     frame.absorbBar:SetMinMaxValues(0, maxHP)
                     frame.absorbBar:SetValue(absorbAmt)
                     frame.absorbBar:Show()
@@ -489,7 +497,7 @@ local function _MSUF_HealthCalcUpdate(frame, unit)
         -- Heal absorb bar — direct C++ SetValue
         if frame.healAbsorbBar then
             local healAbsorbAmt = _MSUF_GetHealAbsorbs(calc, unit)
-            if healAbsorbAmt ~= nil then
+            if _MSUF_IsPositiveOverlayAmount(healAbsorbAmt) then
                 frame.healAbsorbBar:SetMinMaxValues(0, maxHP)
                 frame.healAbsorbBar:SetValue(healAbsorbAmt)
                 frame.healAbsorbBar:Show()
@@ -976,7 +984,7 @@ local function MSUF_UpdateAbsorbBars(self, unit, maxHP, isHeal)
          return
     end
     local total = api(unit)
-    if not total then
+    if not _MSUF_IsPositiveOverlayAmount(total) then
         MSUF_ResetBarZero(bar, true)
          return
     end
