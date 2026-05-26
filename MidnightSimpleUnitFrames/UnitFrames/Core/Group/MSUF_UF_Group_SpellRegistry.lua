@@ -1,0 +1,174 @@
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+_G.MSUF_NS = MSUF
+_G.MSUF = MSUF
+
+local GF = MSUF.GF or {}
+MSUF.GF = GF
+
+local SI = GF.SpellIndicators or {}
+GF.SpellIndicators = SI
+_G.MSUF_GF_SpellIndicators = SI
+
+SI.SpecInfo = SI.SpecInfo or {}
+SI.SpellIDs = SI.SpellIDs or {}
+SI.AltSpellIDs = SI.AltSpellIDs or {}
+SI.SecretSpellIDs = SI.SecretSpellIDs or {}
+SI.IconTextures = SI.IconTextures or {}
+SI.TrackableAuras = SI.TrackableAuras or {}
+SI.SpecDefaults = SI.SpecDefaults or {}
+SI.SpecMap = SI.SpecMap or {}
+
+local function SpellID(value)
+    local id = tonumber(value)
+    return id and id > 0 and id or nil
+end
+
+local function SpellName(id)
+    if C_Spell and C_Spell.GetSpellName then
+        return C_Spell.GetSpellName(id)
+    end
+    if GetSpellInfo then
+        return GetSpellInfo(id)
+    end
+    return nil
+end
+
+if type(SI.GetPlayerSpec) ~= "function" then
+    function SI.GetPlayerSpec()
+        local specIndex = GetSpecialization and GetSpecialization() or nil
+        if not specIndex then return nil end
+        local _, classToken = UnitClass and UnitClass("player")
+        local mapped = classToken and SI.SpecMap and SI.SpecMap[classToken .. "_" .. specIndex]
+        if mapped then return mapped end
+        local specID, specName
+        if GetSpecializationInfo then
+            specID, specName = GetSpecializationInfo(specIndex)
+        end
+        specID = tonumber(specID)
+        if not specID then return nil end
+        local key = tostring(specID)
+        SI.SpecInfo[key] = SI.SpecInfo[key] or { display = specName or key, specID = specID }
+        SI.TrackableAuras[key] = SI.TrackableAuras[key] or {}
+        return key
+    end
+end
+
+local function EnsureTrackable(specKey, auraKey, entry)
+    if not specKey then return end
+    local ids = {}
+    local id = SpellID(auraKey)
+    if id then ids[#ids + 1] = id end
+    if type(entry) == "table" then
+        id = SpellID(entry.spellID or entry.spellId or entry.id)
+        if id then ids[#ids + 1] = id end
+        if type(entry.spells) == "string" then
+            for token in entry.spells:gmatch("%d+") do
+                id = SpellID(token)
+                if id then ids[#ids + 1] = id end
+            end
+        end
+    end
+    if #ids == 0 then return end
+
+    SI.SpecInfo[specKey] = SI.SpecInfo[specKey] or { display = specKey }
+    local list = SI.TrackableAuras[specKey] or {}
+    SI.TrackableAuras[specKey] = list
+    local name = tostring(ids[1])
+    for i = 1, #list do
+        if list[i].name == name then return end
+    end
+    list[#list + 1] = {
+        name = name,
+        display = SpellName(ids[1]) or name,
+        spellID = ids[1],
+        color = { 0.45, 0.85, 1 },
+    }
+end
+
+function SI.RefreshFromDB()
+    if not GF.GetConf then return end
+    local kinds = { "party", "raid", "mythicraid" }
+    for i = 1, #kinds do
+        local conf = GF.GetConf(kinds[i])
+        local root = conf and conf.spellIndicators and conf.spellIndicators.specs
+        if type(root) == "table" then
+            for specKey, specCfg in pairs(root) do
+                if type(specCfg) == "table" then
+                    for auraKey, entry in pairs(specCfg) do
+                        EnsureTrackable(specKey, auraKey, entry)
+                    end
+                end
+            end
+        end
+    end
+end
+
+function SI.EnsureSpecConfig(siCfg, specKey)
+    if not (siCfg and specKey) then return false end
+    siCfg.specs = siCfg.specs or {}
+    siCfg.specs[specKey] = siCfg.specs[specKey] or {}
+    local defaults = SI.SpecDefaults and SI.SpecDefaults[specKey]
+    if type(defaults) == "table" then
+        for auraKey, def in pairs(defaults) do
+            if type(siCfg.specs[specKey][auraKey]) ~= "table" then
+                siCfg.specs[specKey][auraKey] = GF._DeepCopyTable and GF._DeepCopyTable(def) or def
+            end
+            EnsureTrackable(specKey, auraKey, siCfg.specs[specKey][auraKey])
+        end
+    end
+    SI.RefreshFromDB()
+    return true
+end
+
+if type(SI.GetAuraIcon) ~= "function" then
+    function SI.GetAuraIcon(specKey, auraName)
+        local icon = SI.IconTextures and SI.IconTextures[auraName]
+        if icon then return icon end
+        local id = SpellID(auraName)
+        if not id then
+            local ids = specKey and SI.SpellIDs and SI.SpellIDs[specKey]
+            id = ids and SpellID(ids[auraName])
+        end
+        if not id then
+            local list = specKey and SI.TrackableAuras and SI.TrackableAuras[specKey]
+            if type(list) == "table" then
+                for i = 1, #list do
+                    if list[i].name == auraName then id = SpellID(list[i].spellID); break end
+                end
+            end
+        end
+        if id and C_Spell and C_Spell.GetSpellTexture then return C_Spell.GetSpellTexture(id) end
+        if id and GetSpellTexture then return GetSpellTexture(id) end
+        return 136243
+    end
+end
+
+function SI.InvalidateRuntimeCaches()
+    SI.RefreshFromDB()
+end
+
+do
+    local frame = CreateFrame and CreateFrame("Frame")
+    if frame then
+        local pending
+        local function Refresh()
+            pending = nil
+            if SI.RefreshFromDB then SI.RefreshFromDB() end
+            if GF.RefreshAll then GF.RefreshAll() end
+        end
+        local function QueueRefresh()
+            if pending then return end
+            pending = true
+            if C_Timer and C_Timer.After then C_Timer.After(0, Refresh) else Refresh() end
+        end
+        frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+        frame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
+        frame:RegisterEvent("PLAYER_TALENT_UPDATE")
+        frame:RegisterEvent("TRAIT_CONFIG_UPDATED")
+        frame:SetScript("OnEvent", function(_, event, unit)
+            if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
+            QueueRefresh()
+        end)
+    end
+end

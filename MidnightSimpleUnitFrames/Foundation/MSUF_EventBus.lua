@@ -1,0 +1,239 @@
+--- MSUF_EventBus.lua - Global and unit-filtered event fanout.
+--- API: MSUF_EventBus_Register(event, key, fn, unitFilter, once)
+--- MSUF_EventBus_Unregister(event, key)
+--- MSUF_EventBus_UnregisterAll(keyPrefix)
+local _, MSUF = ...
+MSUF = MSUF or {}
+local type, pairs, pcall, tostring = type, pairs, pcall, tostring
+local unpack = unpack or table.unpack
+
+local bus = { safeCalls = false, handlers = {}, _errOnce = {} }
+local driver = CreateFrame("Frame")
+driver:Hide()
+bus.driver = driver
+
+local function IsUnitEvent(event)
+    return type(event) == "string" and event:sub(1, 5) == "UNIT_"
+end
+
+local function NormalizeUnitFilter(unitFilter)
+    if type(unitFilter) == "string" then
+        if unitFilter ~= "" then return { [unitFilter] = true }, 1 end
+        return nil, 0
+    end
+    if type(unitFilter) ~= "table" then return nil, 0 end
+
+    local units, n = {}, 0
+    for k, v in pairs(unitFilter) do
+        local unit
+        if type(v) == "string" then
+            unit = v
+        elseif v and type(k) == "string" then
+            unit = k
+        end
+        if unit and unit ~= "" and not units[unit] then
+            units[unit] = true
+            n = n + 1
+        end
+    end
+    if n == 0 then return nil, 0 end
+    return units, n
+end
+
+local function BuildUnitList(ev)
+    local list, seen = {}, {}
+    local handlers = ev and ev.list
+    if not handlers then return list end
+    for i = 1, #handlers do
+        local h = handlers[i]
+        local units = h and h.fn and not h.dead and h.units
+        if units then
+            for unit in pairs(units) do
+                if not seen[unit] then
+                    seen[unit] = true
+                    list[#list + 1] = unit
+                end
+            end
+        end
+    end
+    return list
+end
+
+local function RefreshDriverRegistration(event, ev)
+    if not ev then return end
+    if not ev.unitEvent then
+        if not driver:IsEventRegistered(event) then driver:RegisterEvent(event) end
+        return
+    end
+
+    if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
+    local units = BuildUnitList(ev)
+    if #units == 0 then return end
+    if driver.RegisterUnitEvent then
+        driver:RegisterUnitEvent(event, unpack(units))
+    else
+        driver:RegisterEvent(event)
+    end
+end
+
+local function UnitFilterMatches(units, unit)
+    return not units or (unit and units[unit] == true)
+end
+
+local function Compact(ev)
+    if not ev or not ev.dirty then return end
+    local list, idx, w = ev.list, ev.index, 0
+    for k in pairs(idx) do idx[k] = nil end
+    for i = 1, #list do
+        local h = list[i]
+        if h and h.fn and not h.dead then
+            w = w + 1; list[w] = h; idx[h.key] = w
+        end
+    end
+    for i = w + 1, #list do list[i] = nil end
+    ev.dirty = false
+end
+
+local function MaybeUnregister(event)
+    local ev = bus.handlers[event]
+    if not ev then
+        if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
+        return
+    end
+    if (ev.dd or 0) > 0 then return end
+    if ev.dirty then Compact(ev) end
+    if #ev.list == 0 then
+        bus.handlers[event] = nil
+        if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
+    elseif ev.unitEvent then
+        RefreshDriverRegistration(event, ev)
+    end
+end
+
+function bus:Register(event, key, fn, unitFilter, once)
+    if type(event) ~= "string" or event == "" or type(key) ~= "string" or type(fn) ~= "function" then return false end
+    local unitEvent = IsUnitEvent(event)
+    local units
+    if unitEvent then
+        units = NormalizeUnitFilter(unitFilter)
+        if not units then return false end
+    end
+    local ev = bus.handlers[event]
+    if not ev then
+        ev = { list = {}, index = {}, dd = 0, dirty = false, unitEvent = unitEvent }
+        bus.handlers[event] = ev
+    elseif ev.unitEvent ~= unitEvent then
+        return false
+    end
+    local idx = ev.index[key]
+    if idx then
+        local h = ev.list[idx]
+        if h then
+            h.fn = fn
+            h.once = once and true or false
+            h.units = units
+            h.dead = false
+            RefreshDriverRegistration(event, ev)
+            return true
+        end
+        ev.index[key] = nil
+    end
+    local n = #ev.list + 1
+    ev.list[n] = { key = key, fn = fn, once = once and true or false, dead = false, units = units }
+    ev.index[key] = n
+    RefreshDriverRegistration(event, ev)
+    return true
+end
+
+function bus:Unregister(event, key)
+    local ev = bus.handlers[event]; if not ev then return end
+    local idx = ev.index[key]; if not idx then return end
+    ev.index[key] = nil
+    if (ev.dd or 0) > 0 then
+        local h = ev.list[idx]; if h then h.fn = nil; h.dead = true end; ev.dirty = true; return
+    end
+    local last = #ev.list
+    if idx ~= last then
+        local tail = ev.list[last]; ev.list[idx] = tail
+        if tail and tail.key then ev.index[tail.key] = idx end
+    end
+    ev.list[last] = nil
+    MaybeUnregister(event)
+end
+
+function bus:UnregisterAll(prefix)
+    if type(prefix) ~= "string" or prefix == "" then return end
+    local plen = #prefix
+    for event, ev in pairs(bus.handlers) do
+        local list, changed = ev.list, false
+        if (ev.dd or 0) > 0 then
+            for i = 1, #list do
+                local h = list[i]
+                if h and h.fn and h.key and h.key:sub(1, plen) == prefix then
+                    ev.index[h.key] = nil; h.fn = nil; h.dead = true; changed = true
+                end
+            end
+            if changed then ev.dirty = true end
+        else
+            local i = #list
+            while i >= 1 do
+                local h = list[i]
+                if h and h.fn and h.key and h.key:sub(1, plen) == prefix then
+                    ev.index[h.key] = nil
+                    local last = #list
+                    if i ~= last then
+                        local tail = list[last]; list[i] = tail
+                        if tail and tail.key then ev.index[tail.key] = i end
+                    end
+                    list[last] = nil; changed = true
+                end
+                i = i - 1
+            end
+        end
+        if changed then MaybeUnregister(event) end
+    end
+end
+
+driver:SetScript("OnEvent", function(_, event, ...)
+    local ev = bus.handlers[event]; if not ev then return end
+    ev.dd = (ev.dd or 0) + 1
+    local list, n, safe = ev.list, #ev.list, bus.safeCalls
+    local unit = ...
+    for i = 1, n do
+        local h = list[i]
+        if h and h.fn and UnitFilterMatches(h.units, unit) then
+            if safe then
+                local ok, err = pcall(h.fn, event, ...)
+                if not ok then
+                    local gate = event .. "|" .. (h.key or "")
+                    if not bus._errOnce[gate] then
+                        bus._errOnce[gate] = true
+                        if _G.print then _G.print("|cffff5555MSUF EventBus error|r " .. gate .. ": " .. tostring(err)) end
+                    end
+                end
+            else
+                h.fn(event, ...)
+            end
+            if h.once then ev.index[h.key] = nil; h.fn = nil; h.dead = true; ev.dirty = true end
+        end
+    end
+    ev.dd = (ev.dd or 0) - 1
+    if ev.dd <= 0 then
+        ev.dd = 0
+        if ev.dirty then Compact(ev) end
+        if #ev.list == 0 then
+            bus.handlers[event] = nil
+            if driver:IsEventRegistered(event) then driver:UnregisterEvent(event) end
+        elseif ev.unitEvent then
+            RefreshDriverRegistration(event, ev)
+        end
+    end
+end)
+--- Public API
+_G.MSUF_EventBus = bus
+_G.MSUF_EventBus_Register = function(e, k, f, u, o) return bus:Register(e, k, f, u, o) end
+_G.MSUF_EventBus_Unregister = function(e, k) return bus:Unregister(e, k) end
+_G.MSUF_EventBus_UnregisterAll = function(p) return bus:UnregisterAll(p) end
+_G.MSUF_EventBus_SetSafeCalls = function(v) bus.safeCalls = v and true or false end
+MSUF.MSUF_EventBus = bus
+return bus

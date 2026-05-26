@@ -1,0 +1,18 @@
+package-as: MidnightSimpleUnitFrames
+enable-nolib-creation: no
+
+move-folders:
+  MidnightSimpleUnitFrames/MidnightSimpleUnitFrames: MidnightSimpleUnitFrames
+
+ignore:
+  - .github
+  - .idea
+  - CHANGELOG.md
+  - dist
+  - tools
+  - README.md
+  - VERSION
+
+manual-changelog:
+  filename: dist/RELEASE_NOTES_CF.html
+  markup-type: html

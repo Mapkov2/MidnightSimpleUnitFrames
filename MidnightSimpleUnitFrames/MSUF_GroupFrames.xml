@@ -1,0 +1,18 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Script file="Foundation\MSUF_AuraNative.lua"/>
+    <Script file="GroupFrames\MSUF_GroupFrames_DB.lua"/>
+    <Script file="GroupFrames\MSUF_GroupFrames_DB_SpellIndicators.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_SpellIndicators_Data.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_SpellRegistry.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Config_Indicators.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Config.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_AuraCache.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Status.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Visuals.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Auras.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Indicators.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Headers.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Adapter.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Blizzard.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Runtime.lua"/>
+</Ui>

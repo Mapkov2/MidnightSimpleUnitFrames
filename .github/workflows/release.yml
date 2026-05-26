@@ -1,0 +1,313 @@
+name: MSUF
+run-name: Publish ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
+
+on:
+  push:
+    tags:
+      - "[0-9]*"
+      - "v[0-9]*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Release tag to publish
+        required: true
+        type: string
+      prerelease:
+        description: Publish as alpha/beta on Wago and CurseForge based on tag channel
+        required: true
+        default: false
+        type: boolean
+      release_name:
+        description: Display name for GitHub, Wago, and CurseForge
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: github.repository == 'Mapkov2/MidnightSimpleUnitFrames'
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
+      RELEASE_IS_PRERELEASE: ${{ github.event.release.prerelease || inputs.prerelease }}
+      RELEASE_NAME_INPUT: ${{ github.event.release.name || inputs.release_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Validate publishing config
+        shell: pwsh
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+          CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
+        run: |
+          $expectedRepository = "Mapkov2/MidnightSimpleUnitFrames"
+          if ($env:GITHUB_REPOSITORY -ne $expectedRepository) {
+            throw "Publishing is only allowed from '$expectedRepository'. Current repository is '$($env:GITHUB_REPOSITORY)'."
+          }
+
+          $missing = @()
+          if ([string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) {
+            $missing += "secret WAGO_API_TOKEN"
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CF_API_KEY)) {
+            $missing += "secret CF_API_KEY"
+          }
+          if ($missing.Count -gt 0) {
+            throw "Missing release publishing config: $($missing -join ', ')"
+          }
+
+      - name: Resolve release channel
+        id: channel
+        shell: pwsh
+        run: |
+          $tag = $env:RELEASE_VERSION
+          $isPrerelease = $env:RELEASE_IS_PRERELEASE -eq "true" -or $tag -match '(?i)(alpha|beta|rc|pre)'
+          $releaseName = $env:RELEASE_NAME_INPUT
+          if ([string]::IsNullOrWhiteSpace($releaseName)) {
+            $tagSubject = git for-each-ref "refs/tags/$tag" --format='%(contents:subject)' 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($tagSubject)) {
+              $releaseName = $tagSubject.Trim()
+            }
+          }
+          if ([string]::IsNullOrWhiteSpace($releaseName)) {
+            $displayVersion = $tag -replace '^refs/tags/', ''
+            $displayVersion = $displayVersion -replace '^v(?=\d)', ''
+            if ($displayVersion -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) {
+                $displayVersion = $base
+              } else {
+                $number = ""
+                if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                  $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
+                }
+                $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+                $displayVersion = ($base + " " + $channel + $number).Trim()
+              }
+            } else {
+              $displayVersion = $displayVersion -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
+              $displayVersion = $displayVersion -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
+              $displayVersion = $displayVersion -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
+              $displayVersion = $displayVersion -replace '[-_]+', ' '
+              $displayVersion = ($displayVersion -replace '\s+', ' ').Trim()
+            }
+            $releaseName = "MSUF $displayVersion"
+          }
+          $releaseName = ($releaseName -replace '[\r\n]+', ' ').Trim()
+
+          if ($tag -match '(?i)alpha') {
+            $wagoStability = "alpha"
+            $curseForgeType = "alpha"
+          } elseif ($isPrerelease) {
+            $wagoStability = "beta"
+            $curseForgeType = "beta"
+          } else {
+            $wagoStability = "stable"
+            $curseForgeType = "release"
+          }
+
+          "RELEASE_IS_PRERELEASE=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_ENV
+          "WAGO_STABILITY=$wagoStability" >> $env:GITHUB_ENV
+          "CF_RELEASE_TYPE=$curseForgeType" >> $env:GITHUB_ENV
+          "RELEASE_NAME=$releaseName" >> $env:GITHUB_ENV
+          "release_is_prerelease=$($isPrerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "github_make_latest=$(if ($isPrerelease) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
+          "release_name=$releaseName" >> $env:GITHUB_OUTPUT
+          Write-Host "Release $tag uses name '$releaseName', Wago stability '$wagoStability', and CurseForge type '$curseForgeType'."
+
+      - name: Enforce alpha channel for alpha tags
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_VERSION -match '(?i)alpha') {
+            if ($env:WAGO_STABILITY -ne "alpha" -or $env:CF_RELEASE_TYPE -ne "alpha") {
+              throw "Alpha tag '$env:RELEASE_VERSION' must publish as alpha. Got Wago '$env:WAGO_STABILITY' and CurseForge '$env:CF_RELEASE_TYPE'."
+            }
+          }
+
+      - name: Build AddOns zip
+        shell: pwsh
+        run: |
+          ./tools/update-addon-changelog.ps1 -Version $env:RELEASE_VERSION
+          ./tools/package-release.ps1 -Version $env:RELEASE_VERSION
+
+      - name: Write GitHub release notes
+        shell: pwsh
+        run: |
+          function Normalize-Key([string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            $v = $value.Trim()
+            $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '^v(?=\d)', ''
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+              $number = ""
+              if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                $number = (($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
+              }
+              return ($base + $Matches["channel"].ToLowerInvariant() + $number)
+            }
+            return (($v.ToLowerInvariant()) -replace '[^a-z0-9]+', '')
+          }
+
+          function Get-PrereleaseFallbackKey([string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "" }
+            $v = $value.Trim()
+            $v = $v -replace '^refs/tags/', ''
+            $v = $v -replace '^v(?=\d)', ''
+            if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              return Normalize-Key ($base + " " + $Matches["channel"] + " " + $Matches["number"])
+            }
+            return ""
+          }
+
+          function Convert-TagToDisplay([string]$tag) {
+            $display = $tag -replace '^refs/tags/', ''
+            $display = $display -replace '^v(?=\d)', ''
+            if ($display -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+              $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
+              if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
+              $number = ""
+              if (-not [string]::IsNullOrWhiteSpace($Matches["number"])) {
+                $number = " " + ((($Matches["number"] -split '\.') | ForEach-Object { [int]$_ }) -join ".")
+              }
+              $channel = (Get-Culture).TextInfo.ToTitleCase($Matches["channel"].ToLowerInvariant()) -replace '\bRc\b', 'RC'
+              return ($base + " " + $channel + $number).Trim()
+            }
+            $display = $display -replace '(?i)[\-_]?beta[\-_.]?(\d+)', ' Beta $1'
+            $display = $display -replace '(?i)[\-_]?alpha[\-_.]?(\d+)', ' Alpha $1'
+            $display = $display -replace '(?i)[\-_]?rc[\-_.]?(\d+)', ' RC $1'
+            $display = $display -replace '(?i)[\-_]?pre[\-_.]?(\d+)', ' Pre $1'
+            $display = $display -replace '[-_]+', ' '
+            return (($display -replace '\s+', ' ').Trim())
+          }
+
+          $tag = $env:RELEASE_VERSION
+          $display = Convert-TagToDisplay $tag
+          $wanted = @(
+            (Normalize-Key $tag),
+            (Normalize-Key $display),
+            (Get-PrereleaseFallbackKey $tag),
+            (Get-PrereleaseFallbackKey $display)
+          ) | Where-Object { $_ } | Select-Object -Unique
+          $lines = [regex]::Split((Get-Content -LiteralPath "CHANGELOG.md" -Raw), "\r?\n")
+          $start = -1
+          $end = $lines.Count
+
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^##\s+(.+?)(?:\s+-\s+\d{4}-\d{2}-\d{2})?\s*$') {
+              if ($wanted -contains (Normalize-Key $Matches[1])) {
+                $start = $i
+                for ($j = $i + 1; $j -lt $lines.Count; $j++) {
+                  if ($lines[$j] -match '^##\s+') {
+                    $end = $j
+                    break
+                  }
+                }
+                break
+              }
+            }
+          }
+
+          if ($start -lt 0) {
+            throw "Could not find CHANGELOG.md section for release '$tag' ('$display')."
+          }
+
+          function Close-List {
+            if ($script:InList) {
+              $script:HtmlLines += "</ul>"
+              $script:InList = $false
+            }
+          }
+
+          function Add-HtmlLine([string]$line) {
+            $trimmed = $line.Trim()
+            if ([string]::IsNullOrWhiteSpace($trimmed)) {
+              Close-List
+              return
+            }
+
+            if ($trimmed -match '^###\s+(.+?)\s*$') {
+              Close-List
+              $script:HtmlLines += ("<h3>" + [System.Net.WebUtility]::HtmlEncode($Matches[1].Trim()) + "</h3>")
+              return
+            }
+
+            if ($trimmed -match '^##\s+(.+?)(?:\s+-\s+(\d{4}-\d{2}-\d{2}))?\s*$') {
+              Close-List
+              $title = [System.Net.WebUtility]::HtmlEncode($Matches[1].Trim())
+              if ($Matches.ContainsKey(2) -and -not [string]::IsNullOrWhiteSpace($Matches[2])) {
+                $title += " - " + [System.Net.WebUtility]::HtmlEncode($Matches[2].Trim())
+              }
+              $script:HtmlLines += ("<h2>" + $title + "</h2>")
+              return
+            }
+
+            if ($trimmed -match '^\-\s+(.+?)\s*$') {
+              if (-not $script:InList) {
+                $script:HtmlLines += "<ul>"
+                $script:InList = $true
+              }
+              $script:HtmlLines += ("<li>" + [System.Net.WebUtility]::HtmlEncode($Matches[1].Trim()) + "</li>")
+              return
+            }
+
+            Close-List
+            $script:HtmlLines += ("<p>" + [System.Net.WebUtility]::HtmlEncode($trimmed) + "</p>")
+          }
+
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          $notes = [string[]]$lines[$start..($end - 1)]
+          [System.IO.File]::WriteAllText("dist/RELEASE_NOTES.md", (($notes -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+
+          $script:HtmlLines = @()
+          $script:InList = $false
+          foreach ($line in $notes) {
+            Add-HtmlLine $line
+          }
+          Close-List
+          [System.IO.File]::WriteAllText("dist/RELEASE_NOTES_CF.html", (($script:HtmlLines -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.RELEASE_VERSION }}
+          name: ${{ steps.channel.outputs.release_name }}
+          files: dist/*.zip
+          body_path: dist/RELEASE_NOTES.md
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          prerelease: ${{ steps.channel.outputs.release_is_prerelease }}
+          make_latest: ${{ steps.channel.outputs.github_make_latest }}
+
+      - name: Upload to Wago
+        shell: pwsh
+        env:
+          WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
+        run: |
+          $zip = Get-ChildItem -Path dist -Filter "*.zip" | Select-Object -First 1
+          if (-not $zip) {
+            throw "No release zip found in dist."
+          }
+
+          if ($env:RELEASE_IS_PRERELEASE -eq "true") {
+            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ReleaseName $env:RELEASE_NAME -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY -Prerelease
+          } else {
+            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ReleaseName $env:RELEASE_NAME -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY
+          }
+
+      - name: Upload to CurseForge
+        uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY || secrets.CURSEFORGE }}
+        with:
+          args: -g retail -m .pkgmeta -n "{package-name}{project-version}:${{ steps.channel.outputs.release_name }}"

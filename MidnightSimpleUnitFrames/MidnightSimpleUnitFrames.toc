@@ -1,0 +1,152 @@
+## Interface: 120000, 120001, 120005, 120007
+## Title: |cff38c7f0Midnight|r |cffcce0ffSimple Unit Frames|r
+## Notes: Lightweight unitframes with MSUF Edit Mode.
+## Author: Mapko
+## Category: Combat
+## Version: 6.0 alpha 1
+## SavedVariables: MSUF_DB, MSUF_GlobalDB
+## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
+## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
+## X-Curse-Project-ID: 1384660
+## X-Wago-ID: XKq9aoKy
+## X-Website: https://discord.gg/2Gf9b2Wprz
+## X-MSUF-StatusIconPack: 1
+## X-MSUF-IconPack-Name: UX Pro
+## X-MSUF-IconFolder: Icons\UXPro
+## X-MSUF-HasMidnightSuffix: 1
+## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
+## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick
+## AddonCompartmentFuncOnEnter: MSUF_AddonCompartment_OnEnter
+## AddonCompartmentFuncOnLeave: MSUF_AddonCompartment_OnLeave
+
+
+# ---------------------------------------------------------------
+# LIBS
+# ---------------------------------------------------------------
+Libs\LibStub\LibStub.lua
+Libs\WagoAnalyticsShim\Shim.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibRangeCheck-3.0\LibRangeCheck-3.0.lua
+Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
+Libs\LibCustomGlow-1.0\LibCustomGlow-1.0.lua
+Core\MSUF_Bootstrap.lua
+Foundation\MSUF_Libs.lua
+
+# ---------------------------------------------------------------
+# LOCALES
+# ---------------------------------------------------------------
+Locales\MSUF_Localization.lua
+Locales\enUS.lua
+Locales\enGB.lua
+Locales\zhCN.lua
+Locales\zhTW.lua
+Locales\deDE.lua
+Locales\frFR.lua
+Locales\esES.lua
+Locales\esMX.lua
+Locales\itIT.lua
+Locales\koKR.lua
+Locales\ptBR.lua
+Locales\ruRU.lua
+Locales\MSUF_RuntimeLocalization.lua
+
+# ---------------------------------------------------------------
+# FOUNDATION
+# ---------------------------------------------------------------
+Foundation\MSUF_Util.lua
+Foundation\MSUF_Changelog.lua
+Foundation\MSUF_Transitions.lua
+Foundation\MSUF_Defaults.lua
+Foundation\MSUF_Profiles.lua
+Foundation\MSUF_Style.lua
+Foundation\MSUF_Modules.lua
+Foundation\MSUF_EventBus.lua
+Foundation\MSUF_Scheduler.lua
+Foundation\MSUF_AuraStore.lua
+Foundation\MSUF_Widgets.lua
+
+# ---------------------------------------------------------------
+# EDIT MODE 2
+# ---------------------------------------------------------------
+EditMode\MSUF_EditMode.xml
+
+# ---------------------------------------------------------------
+# CORE (pre-main)
+# ---------------------------------------------------------------
+Castbars\MSUF_Castbars_Backend.lua
+Castbars\MSUF_Castbars_LoDStub.lua
+UI\MidnightSimpleUnitFrames_MinimapButton.lua
+UI\MSUF_AddonCompartment.lua
+Media\MSUF_Media.lua
+Core\MSUF_PortraitMedia.lua
+Core\MSUF_ProfileIO.lua
+Core\MSUF_ChatAndTooltips.lua
+UnitFrames\MSUF_UnitFrameCore_PreMain.xml
+Core\MSUF_ColorsCore.lua
+Foundation\MSUF_BlizzardFrames.lua
+
+# ---------------------------------------------------------------
+# AURAS
+# ---------------------------------------------------------------
+Auras3\MSUF_Auras3_Runtime.xml
+
+# ---------------------------------------------------------------
+# FEATURES
+# ---------------------------------------------------------------
+Features\MSUF_Feature_GameplayHelpers.lua
+Features\MSUF_Feature_GameplayConfig.lua
+Features\MSUF_Feature_GameplayRuntime.lua
+Features\MSUF_Feature_TargetSound.lua
+Features\MSUF_Feature_TotemPreview.lua
+Features\MSUF_Analytics.lua
+Features\MSUF_VersionCheck.lua
+
+# ---------------------------------------------------------------
+# BACKBONE
+# ---------------------------------------------------------------
+Core\MSUF_BarBackgroundRuntime.lua
+Core\MSUF_IconLayoutRuntime.lua
+Core\MSUF_FontRegistry.lua
+UnitFrames\MSUF_UnitFrameCore_PreRuntime.xml
+Integrations\MSUF_Integration_ThirdPartyAnchors.lua
+MidnightSimpleUnitFrames.lua
+UnitFrames\MSUF_UnitFrameCore_Runtime.xml
+Core\MSUF_SwapRecolor.lua
+Core\MSUF_FontRuntime.lua
+Core\MSUF_TextureRuntime.lua
+Features\MSUF_Feature_DebugPosition.lua
+
+# ---------------------------------------------------------------
+# CORE (post-main)
+# ---------------------------------------------------------------
+UnitFrames\MSUF_UnitFrameCore_PostMain.xml
+Castbars\MSUF_Castbars_Core.lua
+UnitFrames\MSUF_UnitFrameCore_Visuals.xml
+Borders\MSUF_Borders.xml
+UnitFrames\MSUF_UnitFrameCore_AfterBorders.xml
+ClassPower\MSUF_CP_Constants.lua
+ClassPower\MSUF_CP_Modes.lua
+ClassPower\MSUF_CP_Core.lua
+ClassPower\MSUF_CP_AltMana.lua
+ClassPower\MSUF_CP_BalanceDruid.lua
+ClassPower\MSUF_CP_Controller.lua
+Core\MSUF_ClassPower.lua
+
+# ---------------------------------------------------------------
+# GROUP FRAMES
+# ---------------------------------------------------------------
+MSUF_GroupFrames.xml
+
+# ---------------------------------------------------------------
+# OPTIONS
+# ---------------------------------------------------------------
+# MENU2
+Menu2\MSUF_Menu2.xml
+Auras3\MSUF_Auras3_Menu.xml
+
+# ---------------------------------------------------------------
+# MODULES
+# ---------------------------------------------------------------
+Modules\MSUF_InterruptReady.lua
+Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
+Modules\MSUF_RoundedUnitframes.lua
