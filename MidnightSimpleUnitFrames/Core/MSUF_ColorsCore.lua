@@ -509,13 +509,16 @@ local function ResetCastbarBackgroundColor()
     g.castbarBgR, g.castbarBgG, g.castbarBgB, g.castbarBgA = nil, nil, nil, nil; PushVisualUpdates()
 end
 
--- ── Cast Colors (interruptible / non-interruptible / feedback) ──
+-- ── Cast Colors (interruptible / non-interruptible / interrupt unavailable / feedback) ──
 local function GetInterruptibleCastColor() return _getRGBPalette("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", "castbarInterruptibleColor", "turquoise", 0, 0.9, 0.8) end
 MSUF_GetInterruptibleCastColor = GetInterruptibleCastColor
 local function SetInterruptibleCastColor(r, g, b) _setRGB("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", r, g, b, 0, 0.9, 0.8) end
 local function GetNonInterruptibleCastColor() return _getRGBTonumber("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", "castbarNonInterruptibleColor", "red", 0.4, 0.01, 0.01) end
 MSUF_GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01) end
+local function GetInterruptUnavailableCastColor() return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", "castbarInterruptUnavailableColor", "yellow", 1.0, 0.55, 0.05) end
+MSUF_GetInterruptUnavailableCastColor = GetInterruptUnavailableCastColor
+local function SetInterruptUnavailableCastColor(r, g, b) _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b, 1.0, 0.55, 0.05) end
 local function GetInterruptFeedbackCastColor() return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0) end
 local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0) end
 
@@ -680,6 +683,8 @@ ns._colorsAPI = {
     SetInterruptibleCastColor       = SetInterruptibleCastColor,
     GetNonInterruptibleCastColor    = GetNonInterruptibleCastColor,
     SetNonInterruptibleCastColor    = SetNonInterruptibleCastColor,
+    GetInterruptUnavailableCastColor = GetInterruptUnavailableCastColor,
+    SetInterruptUnavailableCastColor = SetInterruptUnavailableCastColor,
     GetInterruptFeedbackCastColor   = GetInterruptFeedbackCastColor,
     SetInterruptFeedbackCastColor   = SetInterruptFeedbackCastColor,
     GetPlayerCastbarOverrideEnabled = GetPlayerCastbarOverrideEnabled,

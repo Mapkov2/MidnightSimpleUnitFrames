@@ -93,6 +93,8 @@ local _state = {
 local _registeredFrames = {}
 local _activeFrames = {}
 local _activeFrameCount = 0
+local _fillActiveFrames = {}
+local _fillActiveFrameCount = 0
 local _eventFrame
 local _UpdateCooldownEventRegistration
 
@@ -153,6 +155,16 @@ local function _ShowOnUnit(cfg, unit)
         return _BOSS_UNITS[unit] == true or unit:sub(1, 4) == "boss"
     end
     return false
+end
+
+local function _FillColorEnabled(cfg)
+    return cfg and cfg.castbarInterruptUnavailableColorEnabled == true
+end
+
+local function _FillAppliesToUnit(unit)
+    if type(unit) ~= "string" then return false end
+    if unit == "target" or unit == "focus" then return true end
+    return unit:sub(1, 4) == "boss"
 end
 
 -- =============================================================================
@@ -223,6 +235,14 @@ local function _GetReadyBoolSecret()
     local dur = C_Spell.GetSpellCooldownDuration(id)
     if not dur or not dur.IsZero then return nil end
     return dur:IsZero()  -- secret bool â€” DO NOT compare in Lua
+end
+
+local function _FillTintRuntimeAvailable()
+    if not _state.spellID then Resolve() end
+    if not _state.spellID then return false end
+    return type(C_Spell and C_Spell.GetSpellCooldownDuration) == "function"
+        and type(C_CurveUtil and C_CurveUtil.EvaluateColorFromBoolean) == "function"
+        and type(_G.CreateColor) == "function"
 end
 
 -- =============================================================================
@@ -530,6 +550,25 @@ local function _MarkInactiveFrame(frame)
     end
 end
 
+local function _MarkFillActiveFrame(frame)
+    if not frame or _fillActiveFrames[frame] then return end
+    _fillActiveFrames[frame] = true
+    _fillActiveFrameCount = _fillActiveFrameCount + 1
+    if _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
+    end
+end
+
+local function _MarkFillInactiveFrame(frame)
+    if not frame or not _fillActiveFrames[frame] then return end
+    _fillActiveFrames[frame] = nil
+    _fillActiveFrameCount = _fillActiveFrameCount - 1
+    if _fillActiveFrameCount < 0 then _fillActiveFrameCount = 0 end
+    if _UpdateCooldownEventRegistration then
+        _UpdateCooldownEventRegistration()
+    end
+end
+
 -- Public: create / reposition the indicator on `frame`. Called from
 -- MSUF_Castbars.lua after every visuals update. Cheap, idempotent.
 -- Hide all visual side-effects on a frame (used when feature off, unit out
@@ -549,6 +588,28 @@ end
 
 local function _CastAllowsKickIndicator(frame)
     return not (frame and (frame.isNotInterruptible == true or frame.MSUF_kickInterruptibleConfirmed == false))
+end
+
+local function _TrackFillFrame(frame, state, cfg)
+    if not frame then return false end
+    cfg = cfg or _GetCfg()
+    local unit = frame.unit
+
+    local active = false
+    if state ~= nil then
+        active = (state.active == true)
+    elseif frame.MSUF_castActive == true then
+        active = true
+    end
+
+    if not (_FillColorEnabled(cfg) and active and _FillAppliesToUnit(unit) and _CastAllowsKickIndicator(frame) and _FillTintRuntimeAvailable()) then
+        _MarkFillInactiveFrame(frame)
+        return false
+    end
+
+    _RegisterFrame(frame)
+    _MarkFillActiveFrame(frame)
+    return true
 end
 
 local function _EnsureBox(frame, cfg)
@@ -601,6 +662,7 @@ local _refreshTickerArmed = false
 local _refreshTimer = nil
 local _refreshTickerToken = 0
 local _TickerStep -- forward decl
+local RefreshFillCooldownFrames
 
 local function _PlainNumberOrNil(v)
     local cav = canaccessvalue
@@ -767,11 +829,21 @@ local function RefreshFrame(frame, state, cfg, readyBool, style, readyMixin, cdM
     if not frame then return end
 
     cfg = cfg or _GetCfg()
+    local fillTracked = _TrackFillFrame(frame, state, cfg)
+    local function ArmFillRefresh()
+        if fillTracked then
+            if frame.UpdateColorForInterruptible then
+                frame:UpdateColorForInterruptible()
+            end
+            _ArmRefreshTicker(_GetCooldownPollDelay(), false)
+        end
+    end
     if not cfg then _HideIndicator(frame); return end
 
     local unit = frame.unit
     if not unit or not _ShowOnUnit(cfg, unit) then
         _HideIndicator(frame)
+        ArmFillRefresh()
         return
     end
 
@@ -823,29 +895,35 @@ function _TickerStep()
     _refreshTimer = nil
 
     local cfg = _GetCfg()
-    if not cfg or not _AnyShowEnabled(cfg) then return end
-    if _activeFrameCount <= 0 then return end
-    local readyBool = _GetReadyBoolSecret()
-    local style = _GetStyle(cfg)
-    local readyMixin, cdMixin = _ResolveColorPair(cfg)
-    local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
+    if not cfg then return end
     local anyActive = false
-    local frame = next(_activeFrames)
-    while frame do
-        local nextFrame = next(_activeFrames, frame)
-        if frame.MSUF_castActive == true
-           and not (frame.isNotInterruptible == true)
-           and _CastAllowsKickIndicator(frame) then
-            if cfg and frame.unit and _ShowOnUnit(cfg, frame.unit) then
-                _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
-                anyActive = true
+
+    if _AnyShowEnabled(cfg) and _activeFrameCount > 0 then
+        local readyBool = _GetReadyBoolSecret()
+        local style = _GetStyle(cfg)
+        local readyMixin, cdMixin = _ResolveColorPair(cfg)
+        local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
+        local frame = next(_activeFrames)
+        while frame do
+            local nextFrame = next(_activeFrames, frame)
+            if frame.MSUF_castActive == true
+               and not (frame.isNotInterruptible == true)
+               and _CastAllowsKickIndicator(frame) then
+                if cfg and frame.unit and _ShowOnUnit(cfg, frame.unit) then
+                    _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, userMixin)
+                    anyActive = true
+                else
+                    _HideIndicator(frame)
+                end
             else
                 _HideIndicator(frame)
             end
-        else
-            _HideIndicator(frame)
+            frame = nextFrame
         end
-        frame = nextFrame
+    end
+
+    if RefreshFillCooldownFrames and RefreshFillCooldownFrames(cfg) then
+        anyActive = true
     end
 
     if anyActive then
@@ -859,30 +937,67 @@ local function RefreshAll()
     end
 end
 
-local function RefreshActiveCooldownFrames()
-    if _activeFrameCount <= 0 then return false end
+RefreshFillCooldownFrames = function(cfg)
+    if _fillActiveFrameCount <= 0 then return false end
+    cfg = cfg or _GetCfg()
 
-    local cfg = _GetCfg()
-    if not cfg or not _AnyShowEnabled(cfg) then return end
-
-    local readyBool = _GetReadyBoolSecret()
-    local style = _GetStyle(cfg)
-    local readyMixin, cdMixin = _ResolveColorPair(cfg)
-    local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
     local didRefresh = false
-    local frame = next(_activeFrames)
+    local frame = next(_fillActiveFrames)
     while frame do
-        local nextFrame = next(_activeFrames, frame)
-        if frame.MSUF_castActive == true
+        local nextFrame = next(_fillActiveFrames, frame)
+        if _FillColorEnabled(cfg)
+           and frame.MSUF_castActive == true
            and not (frame.isNotInterruptible == true)
            and _CastAllowsKickIndicator(frame)
-           and frame.unit and _ShowOnUnit(cfg, frame.unit) then
-            RefreshFrame(frame, nil, cfg, readyBool, style, readyMixin, cdMixin, userMixin)
-            didRefresh = true
+           and _FillAppliesToUnit(frame.unit) then
+            if frame.UpdateColorForInterruptible then
+                frame:UpdateColorForInterruptible()
+                didRefresh = true
+            end
         else
-            _HideIndicator(frame)
+            _MarkFillInactiveFrame(frame)
         end
         frame = nextFrame
+    end
+    return didRefresh
+end
+
+local function RefreshActiveCooldownFrames()
+    local cfg = _GetCfg()
+    if not cfg then return false end
+
+    local didRefresh = false
+
+    if _AnyShowEnabled(cfg) and _activeFrameCount > 0 then
+        local readyBool = _GetReadyBoolSecret()
+        local style = _GetStyle(cfg)
+        local readyMixin, cdMixin = _ResolveColorPair(cfg)
+        local userMixin = (style == "border") and _GetUserOutlineMixin() or nil
+        local frame = next(_activeFrames)
+        while frame do
+            local nextFrame = next(_activeFrames, frame)
+            if frame.MSUF_castActive == true
+               and not (frame.isNotInterruptible == true)
+               and _CastAllowsKickIndicator(frame)
+               and frame.unit and _ShowOnUnit(cfg, frame.unit) then
+                RefreshFrame(frame, nil, cfg, readyBool, style, readyMixin, cdMixin, userMixin)
+                didRefresh = true
+            else
+                _HideIndicator(frame)
+            end
+            frame = nextFrame
+        end
+    elseif _activeFrameCount > 0 then
+        local frame = next(_activeFrames)
+        while frame do
+            local nextFrame = next(_activeFrames, frame)
+            _HideIndicator(frame)
+            frame = nextFrame
+        end
+    end
+
+    if RefreshFillCooldownFrames(cfg) then
+        didRefresh = true
     end
     return didRefresh
 end
@@ -898,7 +1013,7 @@ local function _CooldownRefreshFlush()
 end
 
 local function _QueueCooldownRefresh()
-    if _activeFrameCount <= 0 then return end
+    if _activeFrameCount <= 0 and _fillActiveFrameCount <= 0 then return end
     if _cooldownRefreshQueued then return end
     _cooldownRefreshQueued = true
     if C_Timer and C_Timer.After then
@@ -986,11 +1101,13 @@ _eventFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
 _eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 
 -- SPELL_UPDATE_COOLDOWN is hot. Only register it while a supported castbar is
--- actively showing an interrupt indicator. FocusKick owns its own watcher, so
--- this module stays completely cold when no MSUF castbar needs cooldown flips.
+-- actively showing an interrupt indicator or using the interrupt-unavailable
+-- fill tint. FocusKick owns its own watcher, so this module stays cold when no
+-- MSUF castbar needs cooldown flips.
 _UpdateCooldownEventRegistration = function()
     local cfg = _GetCfg()
-    local want = _activeFrameCount > 0 and _AnyShowEnabled(cfg)
+    local want = (_activeFrameCount > 0 and _AnyShowEnabled(cfg))
+        or (_fillActiveFrameCount > 0 and _FillColorEnabled(cfg))
     if want and not _state.eventsOn then
         _eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
         _state.eventsOn = true
@@ -1055,6 +1172,15 @@ function _G.MSUF_KickReady_RefreshFrame(frame, state)
     return RefreshFrame(frame, state)
 end
 
+function _G.MSUF_KickReady_TrackFillFrame(frame, state)
+    local tracked = _TrackFillFrame(frame, state)
+    _UpdateCooldownEventRegistration()
+    if tracked then
+        _ArmRefreshTicker(_GetCooldownPollDelay(), false)
+    end
+    return tracked
+end
+
 function _G.MSUF_KickReady_ApplyLayout(frame)
     _ApplyEventGating()
     _InstallOutlineHook()
@@ -1111,6 +1237,8 @@ function _G.MSUF_KickReady_Debug()
         showTarget    = cfg.kickReadyShowTarget == true,
         showFocus     = cfg.kickReadyShowFocus  == true,
         showBoss      = cfg.kickReadyShowBoss   == true,
+        fillTint      = cfg.castbarInterruptUnavailableColorEnabled == true,
+        fillTracked   = _fillActiveFrameCount,
         size          = cfg.kickReadySize,
         anchor        = cfg.kickReadyAnchor,
         offsetX       = cfg.kickReadyOffsetX,

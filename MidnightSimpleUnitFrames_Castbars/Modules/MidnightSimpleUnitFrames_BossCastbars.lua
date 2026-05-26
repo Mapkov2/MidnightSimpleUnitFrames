@@ -638,8 +638,13 @@ end
 			nr, ng, nb = 0.9, 0.1, 0.1
 		end
 
+		local ur, ug, ub, ua, readyBool, useUnavailable = nil, nil, nil, nil, nil, false
+		if type(_G.MSUF_Castbar_GetInterruptUnavailableTintArgs) == "function" then
+			ur, ug, ub, ua, readyBool, useUnavailable = _G.MSUF_Castbar_GetInterruptUnavailableTintArgs(self)
+		end
+
 		if type(_G.MSUF_Castbar_ApplyNonInterruptibleTint) == "function" then
-			_G.MSUF_Castbar_ApplyNonInterruptibleTint(self, rawNI, nr, ng, nb, na, ir, ig, ib, ia, isNI)
+			_G.MSUF_Castbar_ApplyNonInterruptibleTint(self, rawNI, nr, ng, nb, na, ir, ig, ib, ia, isNI, ur, ug, ub, ua, readyBool, useUnavailable)
 		else
 			local r = (isNI and nr or ir)
 			local gcol = (isNI and ng or ig)

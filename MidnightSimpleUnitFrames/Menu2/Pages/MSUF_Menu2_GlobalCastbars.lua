@@ -708,6 +708,13 @@ local function BuildCastbars(ctx)
                 local ok, r, g, b = pcall(_G.MSUF_ResolveCastbarColors)
                 if ok and r then ir, ig, ib = r, g or ig, b or ib end
             end
+            if kind ~= "interrupted"
+                and ReadGBool("castbarInterruptUnavailableColorEnabled", false)
+                and (unit == "target" or unit == "focus" or unit == "boss")
+                and type(_G.MSUF_ResolveInterruptUnavailableCastColor) == "function" then
+                local ok, r, g, b = pcall(_G.MSUF_ResolveInterruptUnavailableCastColor)
+                if ok and r and g and b then ir, ig, ib = r, g, b end
+            end
             if now < (self.interruptUntil or 0) then
                 ir, ig, ib = 0.90, 0.14, 0.20
             end
@@ -1293,7 +1300,7 @@ local function BuildCastbars(ctx)
     M.AddRefresher(ctx, syncFocusKick)
     syncFocusKick()
 
-    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 360, false)
+    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 386, false)
     W.Text(kick, "Shows a colored indicator on castbars when your interrupt is ready or on cooldown.", 14, -38, ctx.width - 28, T.colors.muted)
     local kickLeftX, kickRightX = 14, 392
     W.LabelAt(kick, "Castbars", kickLeftX, -70, 160, "GameFontNormalSmall", T.colors.accent)
@@ -1338,7 +1345,18 @@ local function BuildCastbars(ctx)
             RefreshCastPreview()
             if syncKickReady then syncKickReady() end
         end)
-    local colorHint = W.Text(kick, "Ready / cooldown colors: Colors menu > Interrupt Ready Indicator", kickRightX, -228, 370, T.colors.muted)
+    local fillTint = W.Toggle(kick, "Recolor cast fill when interrupt is unavailable")
+    MoveToggle(fillTint, kick, kickRightX, -228, 360)
+    M.BindToggle(ctx, fillTint,
+        function() return ReadGBool("castbarInterruptUnavailableColorEnabled", false) end,
+        function(v)
+            SetGBool("castbarInterruptUnavailableColorEnabled", v, "MSUF2_CASTBAR_INTERRUPT_UNAVAILABLE_COLOR", { castbar = true, preview = true })
+            ApplyCastbars("MSUF2_CASTBAR_INTERRUPT_UNAVAILABLE_COLOR")
+            Call("MSUF_KickReady_RefreshAll")
+            RefreshCastPreview()
+            if syncKickReady then syncKickReady() end
+        end)
+    local colorHint = W.Text(kick, "Fill color: Colors menu > Castbar Colors", kickRightX, -258, 370, T.colors.muted)
     W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.accent)
     local anchor = W.Dropdown(kick, "Anchor", {
         { value = "RIGHT", text = "Right" },
@@ -1363,9 +1381,10 @@ local function BuildCastbars(ctx)
     syncKickReady = function()
         local enabled = ReadGBool("kickReadyShowTarget", false) or ReadGBool("kickReadyShowFocus", false) or ReadGBool("kickReadyShowBoss", false)
         local autoOn = ReadGBool("kickReadyAutoSize", true)
+        local fillOn = ReadGBool("castbarInterruptUnavailableColorEnabled", false)
         SetControlsEnabled({ style, auto, anchor, offX, offY }, enabled)
         SetControlEnabled(size, enabled and not autoOn)
-        SetControlEnabled(colorHint, enabled)
+        SetControlEnabled(colorHint, fillOn)
     end
     M.AddRefresher(ctx, syncKickReady)
     syncKickReady()

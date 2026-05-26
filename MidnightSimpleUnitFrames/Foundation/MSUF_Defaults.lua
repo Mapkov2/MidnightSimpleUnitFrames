@@ -973,6 +973,12 @@ end
     if g.castbarInterruptColor == nil then
         g.castbarInterruptColor = "red"
     end
+    if g.castbarInterruptUnavailableColorEnabled == nil then
+        g.castbarInterruptUnavailableColorEnabled = false
+    end
+    if g.castbarInterruptUnavailableColor == nil then
+        g.castbarInterruptUnavailableColor = "yellow"
+    end
     if g.playerCastbarOverrideEnabled == nil then
         g.playerCastbarOverrideEnabled = true
     end
