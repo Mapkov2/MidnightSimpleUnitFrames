@@ -520,17 +520,25 @@ end
 
 local FrameRuntimeUpdate
 
+local function OwnerModeIsUnitless(mode)
+    return mode == "unitless" or mode == "both"
+end
+
 local function OwnerModeAllowsUnit(mode, frame, unit)
     if mode == nil then
         return nil, false
     end
     if unit and unit ~= frame.unit then
-        if mode == "unitless" or mode == "both" then
+        if OwnerModeIsUnitless(mode) then
             return unit, true
         end
         return nil, false
     end
     return unit or frame.unit, true
+end
+
+local function OwnerAllowsUnitless(owners, name)
+    return OwnerModeIsUnitless(owners and owners[name])
 end
 
 local function ResolveOwnerUnit(frame, owners, name, unit)
@@ -650,8 +658,9 @@ local function RunHealthHot(frame, owners, event, unit)
     if not ok then
         return
     end
-    local hp, maxHP = RunElementUpdateResolved(frame, "Health", event, eventUnit)
+    local hp, maxHP, calc = RunElementUpdateResolved(frame, "Health", event, eventUnit)
     RunTextHealth(frame, nil, event, eventUnit, hp, maxHP)
+    return hp, maxHP, calc
 end
 
 local function RunPowerHot(frame, owners, event, unit)
@@ -666,6 +675,7 @@ end
 local function RunGroupAuraHot(frame, owners, event, unit, ...)
     RunElementUpdate(frame, owners, "GroupAuraCache", event, unit, ...)
     RunElementUpdate(frame, owners, "Auras", event, unit, ...)
+    RunElementUpdate(frame, owners, "DispelOverlay", event, unit, ...)
     RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
     RunElementUpdate(frame, owners, "GroupCornerIndicators", event, unit, ...)
     RunElementUpdate(frame, owners, "GroupSpellIndicators", event, unit, ...)
@@ -713,12 +723,16 @@ local HOT_EVENT_KIND = {
 local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
     local kind = HOT_EVENT_KIND[event]
     if kind == 1 then
+        local hp, maxHP, calc
         if unit and unit ~= frame.unit then
             RunElementUpdate(frame, owners, "InlineToT", event, unit, ...)
+            if OwnerAllowsUnitless(owners, "Prediction") then
+                RunElementUpdate(frame, owners, "Prediction", event, unit, ...)
+            end
             return true
         end
         if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
-            RunHealthHot(frame, owners, event, unit)
+            hp, maxHP, calc = RunHealthHot(frame, owners, event, unit)
             if event == "UNIT_HEALTH" then
                 RunTextName(frame, owners, event, unit)
             end
@@ -733,8 +747,8 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
             RunElementUpdate(frame, owners, "StatusTextIndicator", event, unit, ...)
             RunElementUpdate(frame, owners, "CombatIndicator", event, unit, ...)
         end
-        if event == "UNIT_MAXHEALTH" then
-            RunElementUpdate(frame, owners, "Prediction", event, unit, ...)
+        if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+            RunElementUpdate(frame, owners, "Prediction", event, unit, hp, maxHP, calc)
         end
         RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
         return true
@@ -747,13 +761,16 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
     elseif kind == 3 then
         if unit and unit ~= frame.unit then
             RunElementUpdate(frame, owners, "InlineToT", event, unit)
+            if OwnerAllowsUnitless(owners, "Prediction") then
+                RunElementUpdate(frame, owners, "Prediction", event, unit)
+            end
             return true
         end
-        RunHealthHot(frame, owners, event, unit)
+        local hp, maxHP, calc = RunHealthHot(frame, owners, event, unit)
         RunPowerHot(frame, owners, event, unit)
         RunTextName(frame, owners, event, unit)
         RunElementUpdate(frame, owners, "Portrait", event, unit)
-        RunElementUpdate(frame, owners, "Prediction", event, unit)
+        RunElementUpdate(frame, owners, "Prediction", event, unit, hp, maxHP, calc)
         RunElementUpdate(frame, owners, "StatusTextIndicator", event, unit)
         RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit)
         return true
@@ -783,11 +800,10 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
         RunElementUpdate(frame, owners, "Portrait", event, unit, ...)
         return true
     elseif kind == 9 then
-        if unit and unit ~= frame.unit then
+        if unit and unit ~= frame.unit and not OwnerAllowsUnitless(owners, "Prediction") then
             return true
         end
         RunElementUpdate(frame, owners, "Prediction", event, unit, ...)
-        RunTextHealth(frame, owners, event, unit)
         return true
     elseif kind == 10 then
         if event == "UNIT_LEVEL" then
@@ -837,6 +853,11 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
         return true
     elseif kind == 18 then
         RunElementUpdate(frame, owners, "Alpha", event, unit, ...)
+        RunElementUpdate(frame, owners, "GroupAuraCache", event, unit, ...)
+        RunElementUpdate(frame, owners, "DispelOverlay", event, unit, ...)
+        RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
+        RunElementUpdate(frame, owners, "GroupCornerIndicators", event, unit, ...)
+        RunElementUpdate(frame, owners, "Borders", event, unit, ...)
         return true
     end
     return false
@@ -851,6 +872,8 @@ function DispatchFrameEvent(frame, event, unit, ...)
         and not (frame._msufEventUnitless and frame._msufEventUnitless[event] == true) then
         return
     end
+
+    frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
 
     if DispatchHotFrameEvent(frame, owners, event, unit, ...) then
         return
@@ -892,6 +915,7 @@ local RUNTIME_UPDATE_OWNERS = {
     IncomingResIndicator = true,
     Prediction = true,
     Auras = true,
+    DispelOverlay = true,
     Borders = true,
     GroupAuraCache = true,
     GroupBlizzardAuras = true,
@@ -910,17 +934,30 @@ local MASK_PREDICTION = { prediction = true }
 local MASK_FONT_RUNTIME = { health = true, power = true, name = true }
 local MASK_CASTBAR_SYNC = { health = true, power = true, name = true, portrait = true, status = true, borders = true }
 local MASK_HEALTH_BORDERS = { health = true, borders = true }
-local MASK_PREDICTION_HEALTH_TEXT = { prediction = true, healthText = true }
+local MASK_UNIT_IDENTITY = {
+    health = true,
+    power = true,
+    name = true,
+    inline = true,
+    portrait = true,
+    status = true,
+    prediction = true,
+    alpha = true,
+    auras = true,
+    borders = true,
+}
 
 local RUNTIME_REASON_MASKS = {
     FONT_RUNTIME = MASK_FONT_RUNTIME,
     CASTBAR_SYNC = MASK_CASTBAR_SYNC,
+    MSUF_UNIT_IDENTITY = MASK_UNIT_IDENTITY,
+    MSUF_UNIT_IDENTITY_SOFT = MASK_UNIT_IDENTITY,
     MSUF_ALPHA = MASK_ALPHA,
     MSUF_BORDER_LAYOUT = MASK_BORDERS,
     MSUF2_BORDER = MASK_BORDERS,
     MSUF2_BAR_OUTLINE = MASK_BORDERS,
     MSUF2_GRADIENT = MASK_HEALTH_BORDERS,
-    MSUF2_ABSORB_MODE = MASK_PREDICTION_HEALTH_TEXT,
+    MSUF2_ABSORB_MODE = MASK_PREDICTION,
     MSUF2_ABSORB = MASK_PREDICTION,
     MSUF2_ABSORB_ANCHOR = MASK_PREDICTION,
     MSUF2_ABSORB_OPACITY = MASK_PREDICTION,
@@ -958,9 +995,11 @@ FrameRuntimeUpdate = function(frame, reason)
         return
     end
     reason = reason or "MSUF_FORCE_UPDATE"
+    frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
     local mask = RUNTIME_REASON_MASKS[reason]
+    local hp, maxHP, calc
     if not mask or mask.health then
-        RunHealthHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
+        hp, maxHP, calc = RunHealthHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
     end
     if mask and mask.healthText then
         RunTextHealth(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
@@ -990,7 +1029,7 @@ FrameRuntimeUpdate = function(frame, reason)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, frame.unit)
     end
     if not mask or mask.prediction then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Prediction", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Prediction", reason, frame.unit, hp, maxHP, calc)
     end
     if not mask or mask.alpha then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Alpha", reason, frame.unit)
@@ -1005,6 +1044,7 @@ FrameRuntimeUpdate = function(frame, reason)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupSpellIndicators", reason, frame.unit)
     end
     if not mask or mask.borders then
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "DispelOverlay", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Borders", reason, frame.unit)
     end
 end
@@ -1222,6 +1262,7 @@ local DEFAULT_APPLY_MASK = {
     StatusIndicators = true,
     Prediction = true,
     Auras = true,
+    DispelOverlay = true,
     Borders = true,
 }
 
@@ -1630,34 +1671,36 @@ function _G.MSUF_ApplyCachedUnitFrameScreenPosition(frame, key, unit)
     return true
 end
 
-local function ForceUnits(...)
+local function ForceUnits(reason, ...)
     for i = 1, select("#", ...) do
         local unit = select(i, ...)
         if unit then
-            UF.UpdateRuntime(unit, "MSUF_FORCE_UPDATE")
+            UF.UpdateRuntime(unit, reason or "MSUF_FORCE_UPDATE")
         end
     end
 end
 
 local function DriverOnEvent(self, event, unit)
     if event == "PLAYER_TARGET_CHANGED" then
-        ForceUnits("target", "targettarget")
+        UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY")
+        UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
     elseif event == "PLAYER_FOCUS_CHANGED" then
-        ForceUnits("focus", "focustarget")
+        UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY")
+        UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
     elseif event == "UNIT_TARGET" then
         if unit == "target" then
-            UF.UpdateRuntime("targettarget", "MSUF_FORCE_UPDATE")
+            UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY")
         elseif unit == "focus" then
-            UF.UpdateRuntime("focustarget", "MSUF_FORCE_UPDATE")
+            UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY")
         elseif unit and BOSS_UNITS[unit] then
-            UF.UpdateRuntime(unit, "MSUF_FORCE_UPDATE")
+            UF.UpdateRuntime(unit, "MSUF_UNIT_IDENTITY")
         end
     elseif event == "UNIT_PET" then
         if unit == "player" then
-            UF.UpdateRuntime("pet", "MSUF_FORCE_UPDATE")
+            UF.UpdateRuntime("pet", "MSUF_UNIT_IDENTITY")
         end
     elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-        ForceUnits("boss1", "boss2", "boss3", "boss4", "boss5")
+        ForceUnits("MSUF_UNIT_IDENTITY", "boss1", "boss2", "boss3", "boss4", "boss5")
     else
         UF.UpdateRuntime(nil, "MSUF_FORCE_UPDATE")
     end
@@ -1681,7 +1724,7 @@ end
 local HEALTH_TEXT_BORDER_ELEMENTS = { "Health", "Text", "NameText", "HealthText", "InlineToT", "Borders" }
 local VISUAL_ELEMENTS = {
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText", "InlineToT",
-    "Portrait", "StatusIndicators", "RaidMarkerIndicator", "LeaderIndicator",
+    "Portrait", "StatusIndicators", "RaidMarkerIndicator", "LeaderIndicator", "Prediction",
     "LevelIndicator", "RaidGroupIndicator", "EliteIndicator", "StatusTextIndicator",
     "CombatIndicator", "RestingIndicator", "IncomingResIndicator", "Alpha", "Borders",
 }

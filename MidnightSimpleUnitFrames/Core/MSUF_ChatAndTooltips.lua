@@ -108,7 +108,7 @@ local function MSUF_PrintHelp()
     print(Tr("  /msuf reset     - Reset all MSUF frame positions and visibility to defaults."))
     print(Tr("  /msuf fullreset - FULL factory reset (all profiles/settings)."))
     print(Tr("                   Confirm stages the reset; reload via /reload or MSUF Menu > Advanced > Factory Reset."))
-    print(Tr("  /msuf absorb    - Toggle showing total absorb amount in HP text."))
+    print(Tr("  /msuf absorb    - Toggle absorb bars."))
     print(Tr("  /msuf analytics off|on|status - Toggle Wago Analytics beta telemetry."))
     print(Tr("  /msuf gfhoverdebug on|off|status - Debug group-frame hover + tooltip paths."))
     print(Tr("  /msuf inputdebug - Print keyboard-capture frames for movement-lock diagnosis."))
@@ -323,12 +323,14 @@ SlashCmdList["MIDNIGHTSUF"] = function(msg)
             print(Tr("|cffff0000MSUF:|r DB not initialized."))
              return
         end
-        g.showTotalAbsorbAmount = not g.showTotalAbsorbAmount
+        g.enableAbsorbBar = not (g.enableAbsorbBar == true)
+        g.absorbTextMode = g.enableAbsorbBar and 2 or 1
+        g.showTotalAbsorbAmount = false
         MSUF_Chat_RunApplyAllSettings()
-        if g.showTotalAbsorbAmount then
-            print(Tr("|cff00ff00MSUF:|r Total absorb amount in HP text ENABLED."))
+        if g.enableAbsorbBar then
+            print(Tr("|cff00ff00MSUF:|r Absorb bars ENABLED."))
         else
-            print(Tr("|cff00ff00MSUF:|r Total absorb amount in HP text DISABLED."))
+            print(Tr("|cff00ff00MSUF:|r Absorb bars DISABLED."))
         end
          return
     end

@@ -1945,16 +1945,18 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         mock._absorb:SetStatusBarColor(runtimePrediction.absorbR or 0.55, runtimePrediction.absorbG or 0.70, runtimePrediction.absorbB or 1, runtimePrediction.absorbA or 0.55)
         local absorbMode = tonumber(runtimePrediction.absorbAnchorMode) or tonumber((conf.hlOverride and conf.absorbAnchorMode ~= nil and conf.absorbAnchorMode) or (gen and gen.absorbAnchorMode)) or 2
         if absorbMode < 1 or absorbMode > 5 then absorbMode = 2 end
-        local absorbTextMode = (conf.hlOverride and conf.absorbTextMode ~= nil) and conf.absorbTextMode or (gen and gen.absorbTextMode)
-        absorbTextMode = tonumber(absorbTextMode)
         local absorbShown
         if runtimeSpec then
             absorbShown = runtimePrediction.absorb == true
-        elseif absorbTextMode then
-            absorbShown = (absorbTextMode == 2 or absorbTextMode == 3)
         else
-            local enableAbsorbBar = (conf.hlOverride and conf.enableAbsorbBar ~= nil) and conf.enableAbsorbBar or (gen and gen.enableAbsorbBar)
-            absorbShown = enableAbsorbBar ~= false
+            local displayMode = (conf.hlOverride and conf.absorbTextMode ~= nil) and conf.absorbTextMode or (gen and gen.absorbTextMode)
+            displayMode = tonumber(displayMode)
+            if displayMode then
+                absorbShown = displayMode == 2 or displayMode == 3
+            else
+                local enableAbsorbBar = (conf.hlOverride and conf.enableAbsorbBar ~= nil) and conf.enableAbsorbBar or (gen and gen.enableAbsorbBar)
+                absorbShown = enableAbsorbBar ~= false
+            end
         end
         local absorbAnchorTex = hpTex or mock._health
         if healPredShown and (healPredMode == 3 or healPredMode == 4) and mock._healPred.GetStatusBarTexture then

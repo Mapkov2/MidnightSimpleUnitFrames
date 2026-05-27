@@ -10,7 +10,7 @@ function HealthText.IsEnabled(frame, spec)
 end
 
 function HealthText.GetEvents(frame, spec)
-    return spec and spec.prediction and spec.prediction.absorbText == true and R.HEALTH_TEXT_ABSORB_EVENTS or R.HEALTH_TEXT_EVENTS
+    return R.HEALTH_TEXT_EVENTS
 end
 
 function HealthText.Update(frame, event, unit, hp, hpMax)

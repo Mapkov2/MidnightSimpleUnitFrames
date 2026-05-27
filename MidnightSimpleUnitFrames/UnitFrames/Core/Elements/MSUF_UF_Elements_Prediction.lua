@@ -34,6 +34,10 @@ local TEST_INCOMING = 20
 local TEST_ABSORB = 25
 local TEST_HEAL_ABSORB = 15
 local EMPTY_EVENTS = {}
+local DERIVED_PREDICTION_UNITS = {
+    targettarget = true,
+    focustarget = true,
+}
 local PREDICTION_EVENTS = {
     [1] = { "UNIT_HEAL_PREDICTION", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
     [2] = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
@@ -42,6 +46,15 @@ local PREDICTION_EVENTS = {
     [5] = { "UNIT_HEAL_PREDICTION", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
     [6] = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
     [7] = { "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+}
+local PREDICTION_HEALTH_EVENTS = {
+    [1] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+    [2] = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+    [3] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+    [4] = { "UNIT_HEALTH", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+    [5] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+    [6] = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+    [7] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
 }
 
 local calcUnsupported
@@ -55,9 +68,10 @@ end
 
 local function SetTextureCached(bar, texture)
     texture = texture or WHITE
-    if bar and bar._msufTexture ~= texture then
+    if bar and (bar._msufTexture ~= texture or bar.MSUF_cachedStatusbarTexture ~= texture) then
         bar:SetStatusBarTexture(texture)
         bar._msufTexture = texture
+        bar.MSUF_cachedStatusbarTexture = texture
     end
 end
 
@@ -104,27 +118,49 @@ local function ClampModeForAnchor(mode)
     return ABSORB_MISSING
 end
 
+local function IncomingClampModeForAnchor(mode)
+    if mode == 1 or mode == 2 or mode == 4 or mode == 5 then
+        return INCOMING_MAX
+    end
+    return INCOMING_MISSING
+end
+
+local function CacheableValue(value)
+    return not (issecretvalue and issecretvalue(value))
+end
+
 local function SetMinMaxCached(bar, maxValue)
     if not bar or type(maxValue) == "nil" then
-        return
+        return false
+    end
+    local cacheable = CacheableValue(maxValue)
+    if cacheable and bar._msufMax == maxValue then
+        return false
     end
     bar:SetMinMaxValues(0, maxValue)
-    bar._msufMax = nil
+    bar._msufMax = cacheable and maxValue or nil
+    return true
 end
 
 local function SetValueCached(bar, value)
     if not bar or type(value) == "nil" then
         return
     end
+    local cacheable = CacheableValue(value)
+    if cacheable and bar._msufValue == value then
+        return
+    end
     bar:SetValue(value)
-    bar._msufValue = nil
+    bar._msufValue = cacheable and value or nil
 end
 
 local function HideBar(bar)
     if not bar then
         return
     end
-    SetMinMaxCached(bar, 1)
+    if SetMinMaxCached(bar, 1) then
+        bar._msufValue = nil
+    end
     SetValueCached(bar, 0)
     SetShownCached(bar, false)
 end
@@ -151,17 +187,28 @@ local function ShowValue(bar, maxValue, value)
     if type(maxValue) == "nil" then
         maxValue = 1
     end
-    SetMinMaxCached(bar, maxValue)
+    if SetMinMaxCached(bar, maxValue) then
+        bar._msufValue = nil
+    end
     SetValueCached(bar, value)
     SetShownCached(bar, true)
+end
+
+local function CanShareHealthCalc(frame)
+    return not (frame and frame.MSUFSpec and frame.MSUFSpec.scope == "group")
 end
 
 local function EnsureCalc(frame)
     if calcUnsupported then
         return nil
     end
-    local calc = frame._msufPredictionCalc
+    local shareHealthCalc = CanShareHealthCalc(frame)
+    local calc = frame._msufPredictionCalc or (shareHealthCalc and frame._msufHealthCalc) or nil
     if calc then
+        frame._msufPredictionCalc = calc
+        if shareHealthCalc and not frame._msufHealthCalc then
+            frame._msufHealthCalc = calc
+        end
         return calc
     end
     if not (CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction) then
@@ -177,6 +224,9 @@ local function EnsureCalc(frame)
         calc:SetIncomingHealOverflowPercent(1)
     end
     frame._msufPredictionCalc = calc
+    if shareHealthCalc then
+        frame._msufHealthCalc = calc
+    end
     return calc
 end
 
@@ -186,7 +236,7 @@ local function ConfigureCalc(calc, cfg)
     end
     local healMode = NormalizeAnchorMode(cfg and cfg.healAnchorMode, 3)
     local absorbMode = NormalizeAnchorMode(cfg and cfg.absorbAnchorMode, 2)
-    local incomingClamp = healMode == 4 and INCOMING_MAX or INCOMING_MISSING
+    local incomingClamp = IncomingClampModeForAnchor(healMode)
     local damageClamp = ClampModeForAnchor(absorbMode)
 
     if calc.SetIncomingHealClampMode and calc._msufIncomingClamp ~= incomingClamp then
@@ -213,7 +263,8 @@ local function CalcIncomingHeals(calc, unit)
         if type(value) ~= "nil" then
             return value
         end
-    elseif calc and calc.GetTotalIncomingHeals then
+    end
+    if calc and calc.GetTotalIncomingHeals then
         local value = calc:GetTotalIncomingHeals()
         if type(value) ~= "nil" then
             return value
@@ -227,7 +278,8 @@ local function CalcDamageAbsorbs(calc, unit)
         if calc.GetDamageAbsorbs then
             local value = calc:GetDamageAbsorbs()
             if type(value) ~= "nil" then return value end
-        elseif calc.GetTotalDamageAbsorbs then
+        end
+        if calc.GetTotalDamageAbsorbs then
             local value = calc:GetTotalDamageAbsorbs()
             if type(value) ~= "nil" then return value end
         end
@@ -240,7 +292,8 @@ local function CalcHealAbsorbs(calc, unit)
         if calc.GetHealAbsorbs then
             local value = calc:GetHealAbsorbs()
             if type(value) ~= "nil" then return value end
-        elseif calc.GetTotalHealAbsorbs then
+        end
+        if calc.GetTotalHealAbsorbs then
             local value = calc:GetTotalHealAbsorbs()
             if type(value) ~= "nil" then return value end
         end
@@ -248,9 +301,16 @@ local function CalcHealAbsorbs(calc, unit)
     return UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or nil
 end
 
-local function ClampIncoming(value, hp, maxHP)
-    if type(value) == "nil" then
+local function ClampIncomingToMissing(value, hp, maxHP)
+    if type(value) ~= "number" or type(hp) ~= "number" or type(maxHP) ~= "number" then
         return value
+    end
+    local missing = maxHP - hp
+    if missing <= 0 then
+        return 0
+    end
+    if value > missing then
+        return missing
     end
     return value
 end
@@ -315,6 +375,17 @@ local function VisibleFollowBar(cfg, bar)
     return cfg and cfg.heal == true and bar and bar._msufShown == true and bar or nil
 end
 
+local function SetParentCached(bar, parent)
+    if not (bar and parent and bar.GetParent) then
+        return false
+    end
+    if bar:GetParent() == parent then
+        return false
+    end
+    bar:SetParent(parent)
+    return true
+end
+
 local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
     local hpBar = frame.hpBar or frame.Health
     if not (bar and hpBar) then
@@ -323,12 +394,23 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
     mode = NormalizeAnchorMode(mode, 2)
     SyncBarLayer(frame, hpBar, bar, levelOffset)
     local follow = (mode == 3 or mode == 4) and (StatusTexture(followBar) or StatusTexture(hpBar)) or nil
-    local width = tonumber(frame.MSUFSpec and frame.MSUFSpec.width) or (hpBar.GetWidth and hpBar:GetWidth()) or 1
+    local width = (hpBar.GetWidth and hpBar:GetWidth()) or tonumber(frame.MSUFSpec and frame.MSUFSpec.width) or 1
+    if not width or width <= 0 then
+        width = tonumber(frame.MSUFSpec and frame.MSUFSpec.width) or 1
+    end
     local anchorTarget = follow or hpBar
+    local parent = (mode == 4) and frame or hpBar
+    local parentChanged = SetParentCached(bar, parent)
+    if hpBar.SetClipsChildren and mode == 3 and hpBar._msufPredictionClipsChildren ~= true then
+        hpBar:SetClipsChildren(true)
+        hpBar._msufPredictionClipsChildren = true
+    end
     if bar._msufPredictionMode ~= mode
         or bar._msufPredictionReverse ~= reverse
         or bar._msufPredictionAnchorTarget ~= anchorTarget
-        or bar._msufPredictionWidth ~= width then
+        or bar._msufPredictionWidth ~= width
+        or bar._msufPredictionParent ~= parent
+        or parentChanged then
         bar:ClearAllPoints()
         if follow then
             bar:SetWidth(width)
@@ -346,11 +428,25 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
         bar._msufPredictionReverse = reverse
         bar._msufPredictionAnchorTarget = anchorTarget
         bar._msufPredictionWidth = width
+        bar._msufPredictionParent = parent
     end
     if bar.SetReverseFill and bar._msufReverseFill ~= reverse then
         bar:SetReverseFill(reverse)
         bar._msufReverseFill = reverse
     end
+end
+
+local function NeedsHealthEvent(cfg)
+    if not cfg then
+        return false
+    end
+    if cfg.healAbsorb == true then
+        return true
+    end
+    if cfg.heal == true and NormalizeAnchorMode(cfg.healAnchorMode, 3) == 3 then
+        return true
+    end
+    return cfg.absorb == true and NormalizeAnchorMode(cfg.absorbAnchorMode, 2) == 3
 end
 
 local Prediction = {}
@@ -359,8 +455,7 @@ function Prediction.IsEnabled(frame, spec)
     return spec and spec.prediction and spec.prediction.enabled == true
 end
 
-function Prediction.GetEvents(frame, spec)
-    local cfg = spec and spec.prediction
+local function PredictionEventsForConfig(cfg, healthAware)
     if not (cfg and cfg.enabled == true) then
         return EMPTY_EVENTS
     end
@@ -370,7 +465,19 @@ function Prediction.GetEvents(frame, spec)
     local mask = (cfg.heal == true and 1 or 0)
         + (cfg.absorb == true and 2 or 0)
         + (cfg.healAbsorb == true and 4 or 0)
-    return PREDICTION_EVENTS[mask] or EMPTY_EVENTS
+    local eventTable = healthAware ~= false and NeedsHealthEvent(cfg) and PREDICTION_HEALTH_EVENTS or PREDICTION_EVENTS
+    return eventTable[mask] or EMPTY_EVENTS
+end
+
+function Prediction.GetEvents(frame, spec)
+    return PredictionEventsForConfig(spec and spec.prediction, true)
+end
+
+function Prediction.GetUnitlessEvents(frame, spec)
+    if not (frame and DERIVED_PREDICTION_UNITS[frame.unit] == true) then
+        return EMPTY_EVENTS
+    end
+    return PredictionEventsForConfig(spec and spec.prediction, false)
 end
 
 function Prediction.Create(frame, spec)
@@ -390,6 +497,7 @@ end
 function Prediction.Apply(frame, spec)
     local cfg = spec and spec.prediction or {}
     Prediction.Create(frame, spec)
+    ConfigureCalc(EnsureCalc(frame), cfg)
     local hpReverse = spec and spec.health and spec.health.reverse == true
     local healMode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
     local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
@@ -422,8 +530,13 @@ function Prediction.Disable(frame)
     HideBar(frame and frame.healAbsorbBar)
 end
 
-function Prediction.Update(frame, event, unit)
-    unit = unit or frame.unit
+function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+    if unit and frame and unit ~= frame.unit then
+        unit = frame.unit
+        seedHP, seedMaxHP, seedCalc = nil, nil, nil
+    else
+        unit = unit or frame.unit
+    end
     local cfg = frame.MSUFSpec and frame.MSUFSpec.prediction
     if not (cfg and cfg.enabled == true) then
         Prediction.Disable(frame)
@@ -464,7 +577,10 @@ function Prediction.Update(frame, event, unit)
     local calc = EnsureCalc(frame)
     ConfigureCalc(calc, cfg)
     local hp, maxHP
-    if calc and UnitGetDetailedHealPrediction then
+    local canUseSeed = calc and seedCalc == calc and type(seedHP) ~= "nil" and type(seedMaxHP) ~= "nil"
+    if canUseSeed then
+        hp, maxHP = seedHP, seedMaxHP
+    elseif calc and UnitGetDetailedHealPrediction then
         UnitGetDetailedHealPrediction(unit, "player", calc)
         hp = calc.GetCurrentHealth and calc:GetCurrentHealth() or nil
         maxHP = calc.GetMaximumHealth and calc:GetMaximumHealth() or nil
@@ -472,9 +588,10 @@ function Prediction.Update(frame, event, unit)
     if type(hp) == "nil" and UnitHealth then hp = UnitHealth(unit) end
     if type(maxHP) == "nil" and UnitHealthMax then maxHP = UnitHealthMax(unit) end
     if cfg.heal == true and frame.incomingHealBar then
+        local mode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
         local incoming = CalcIncomingHeals(calc, unit)
-        if not calc and NormalizeAnchorMode(cfg.healAnchorMode, 3) ~= 4 then
-            incoming = ClampIncoming(incoming, hp, maxHP)
+        if not calc and mode == 3 then
+            incoming = ClampIncomingToMissing(incoming, hp, maxHP)
         end
         ShowValue(frame.incomingHealBar, maxHP, incoming)
     elseif frame.incomingHealBar then

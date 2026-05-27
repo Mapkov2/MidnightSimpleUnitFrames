@@ -5,7 +5,6 @@ if not Text then return end
 local CreateFrame = Text.CreateFrame
 local UnitHealthPercent = Text.UnitHealthPercent
 local UnitPowerPercent = Text.UnitPowerPercent
-local UnitGetTotalAbsorbs = Text.UnitGetTotalAbsorbs
 local AbbreviateNumbers = Text.AbbreviateNumbers
 local AbbreviateLargeNumbers = Text.AbbreviateLargeNumbers
 local tonumber = Text.tonumber
@@ -79,26 +78,6 @@ local function AddSuffix(text, suffix)
         return (text or "") .. suffix
     end
     return text
-end
-
-local function UpdateAbsorbTextCache(rt, unit)
-    if not rt then
-        return
-    end
-    rt.absorbSuffixKnown = true
-    rt.absorbSuffixShort = false
-    rt.absorbSuffixFull = false
-    if not UnitGetTotalAbsorbs then
-        return
-    end
-    local value = UnitGetTotalAbsorbs(unit)
-    if value == nil then
-        return
-    end
-    local shortText = FormatValue(value, true, rt.canHaveSecretValues)
-    local fullText = FormatValue(value, false, rt.canHaveSecretValues)
-    rt.absorbSuffixShort = shortText and (" +" .. shortText) or false
-    rt.absorbSuffixFull = fullText and (" +" .. fullText) or false
 end
 
 local function SetReadableModeText(fs, mode, cur, max, pct, delimiter, short, hidePercentSymbol, suffix, canSecret)
@@ -418,13 +397,6 @@ local function CompileTextRuntime(frame, spec, text)
     end
     rt.healthSlotCount = nextIndex - 1
     rt.healthNeedsPercent = needsPercent
-    local absorbText = spec and spec.prediction and spec.prediction.absorbText == true
-    if rt.absorbText ~= absorbText then
-        rt.absorbSuffixKnown = nil
-        rt.absorbSuffixShort = nil
-        rt.absorbSuffixFull = nil
-    end
-    rt.absorbText = absorbText
     TrimTextSlots(rt.healthSlots, nextIndex)
 
     local showPower = spec and spec.showPowerText ~= false and spec.power and spec.power.enabled == true
@@ -480,14 +452,10 @@ local function UpdateTextSlots(slots, count, cur, max, unit, percentFn, needsPer
     for i = 1, count do
         local slot = slots[i]
         if slot then
-            local suffix
-            if rt and rt.absorbText == true then
-                suffix = slot.short and rt.absorbSuffixShort or rt.absorbSuffixFull
-            end
             if slot.mode == "DEFICIT" and rt and rt.healthMissing ~= nil then
-                SetTextCached(slot.fs, AddSuffix("-" .. (FormatValue(rt.healthMissing, slot.short, rt.canHaveSecretValues) or "0"), suffix))
+                SetTextCached(slot.fs, "-" .. (FormatValue(rt.healthMissing, slot.short, rt.canHaveSecretValues) or "0"))
             else
-                SetModeText(slot.fs, slot.mode, cur, max, slot.delimiter, unit, nil, slot.short, slot.hidePercentSymbol, pct, pctKnown, suffix, rt and rt.canHaveSecretValues)
+                SetModeText(slot.fs, slot.mode, cur, max, slot.delimiter, unit, nil, slot.short, slot.hidePercentSymbol, pct, pctKnown, nil, rt and rt.canHaveSecretValues)
             end
         end
     end
@@ -599,7 +567,6 @@ Text.FormatValue = FormatValue
 Text.FormatPercentValue = FormatPercentValue
 Text.SetTextCached = SetTextCached
 Text.AddSuffix = AddSuffix
-Text.UpdateAbsorbTextCache = UpdateAbsorbTextCache
 Text.SetModeText = SetModeText
 Text.ResolveHealthTextModes = ResolveHealthTextModes
 Text.AddTextSlot = AddTextSlot

@@ -213,7 +213,7 @@ function Health.Update(frame, event, unit)
     if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
         ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
     end
-    return hp, maxHP
+    return hp, maxHP, calc
 end
 
 UF.RegisterElement("Health", Health)

@@ -131,6 +131,59 @@ local function Clamp01(value, fallback)
     return value
 end
 
+local function NormalizeDispelDetectTrigger(value)
+    local ds = UF and UF.DispelState
+    if ds and type(ds.NormalizeDetectTrigger) == "function" then
+        return ds.NormalizeDetectTrigger(value)
+    end
+    value = tostring(value or ""):upper()
+    if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
+        return "DISPEL_TYPE"
+    elseif value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then
+        return "ANY_DEBUFF"
+    elseif value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then
+        return "PLAYER_CAST"
+    end
+    return "BY_ME"
+end
+
+local function NormalizeDispelOverlayTrigger(value)
+    local ds = UF and UF.DispelState
+    if ds and type(ds.NormalizeOverlayTrigger) == "function" then
+        return ds.NormalizeOverlayTrigger(value)
+    end
+    value = tostring(value or ""):upper()
+    if value == "BORDER" or value == "INHERIT" or value == "SAME" then
+        return "BORDER"
+    end
+    return NormalizeDispelDetectTrigger(value)
+end
+
+local function NormalizeDispelOverlayStyle(value)
+    if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then
+        return value
+    end
+    return "FULL"
+end
+
+local function OutlineModeEnabled(value, fallback)
+    if value == nil then value = fallback end
+    if value == true or value == false then return value end
+    value = tonumber(value)
+    if value == nil then return fallback == true end
+    return value == 1
+end
+
+local function ScopedValue(conf, general, key, fallback)
+    if conf and conf.hlOverride == true and conf[key] ~= nil then
+        return conf[key]
+    end
+    if general and general[key] ~= nil then
+        return general[key]
+    end
+    return fallback
+end
+
 local function CopyColor(dst, r, g, b, a)
     dst.r = Number(r, dst.r or 1)
     dst.g = Number(g, dst.g or 1)
@@ -265,7 +318,7 @@ local function NormalizeAbsorbTestScope(scope)
         return "shared"
     elseif scope == "gf_party" or scope == "group_party" or scope == "gfparty" then
         return "party"
-    elseif scope == "gf_raid" or scope == "group_raid" or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then
+    elseif scope == "gf_raid" or scope == "gf_mythicraid" or scope == "group_raid" or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then
         return "raid"
     elseif scope == "focus_target" then
         return "focustarget"
@@ -1136,34 +1189,26 @@ local function ResolveUnit(db, unit, out)
     end
 
     out.prediction = out.prediction or {}
-    local absorbMode = Number(conf.absorbTextMode or general.absorbTextMode, nil)
+    local absorbMode = Number(ScopedValue(conf, general, "absorbTextMode", nil), nil)
     if absorbMode then
         out.prediction.absorb = absorbMode == 2 or absorbMode == 3
-        out.prediction.absorbText = absorbMode == 3 or absorbMode == 4
-    elseif conf.enableAbsorbBar ~= nil then
-        out.prediction.absorb = conf.enableAbsorbBar ~= false
-        out.prediction.absorbText = conf.showTotalAbsorbAmount == true
     else
-        out.prediction.absorb = general.enableAbsorbBar ~= false
-        out.prediction.absorbText = general.showTotalAbsorbAmount == true
+        out.prediction.absorb = ScopedValue(conf, general, "enableAbsorbBar", true) ~= false
     end
-    if conf.healPredEnabled ~= nil then
-        out.prediction.heal = conf.healPredEnabled == true
-    else
-        out.prediction.heal = general.showSelfHealPrediction == true or general.enableHealPrediction == true
-    end
-    out.prediction.healAbsorb = out.prediction.absorb == true and general.healAbsorbEnabled ~= false
+    out.prediction.heal = general.showSelfHealPrediction == true or general.enableHealPrediction == true
+    out.prediction.healAbsorb = out.prediction.absorb == true and ScopedValue(conf, general, "healAbsorbEnabled", true) ~= false
     out.prediction.test = AbsorbTestEnabledForKey(key)
     if out.prediction.test == true then
         out.prediction.absorb = true
-        out.prediction.healAbsorb = general.healAbsorbEnabled ~= false
+        out.prediction.heal = true
+        out.prediction.healAbsorb = true
     end
     out.prediction.enabled = out.prediction.heal == true or out.prediction.absorb == true or out.prediction.healAbsorb == true
     out.prediction.texture = out.texture
-    out.prediction.healAnchorMode = Number(conf.healPredAnchorMode or general.healPredAnchorMode, 3)
-    out.prediction.absorbAnchorMode = Number(conf.absorbAnchorMode or general.absorbAnchorMode, 2)
-    out.prediction.absorbTexture = conf.absorbBarTexture or general.absorbBarTexture
-    out.prediction.healAbsorbTexture = conf.healAbsorbBarTexture or general.healAbsorbBarTexture
+    out.prediction.healAnchorMode = Number(ScopedValue(conf, general, "healPredAnchorMode", 3), 3)
+    out.prediction.absorbAnchorMode = Number(ScopedValue(conf, general, "absorbAnchorMode", 2), 2)
+    out.prediction.absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil)
+    out.prediction.healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil)
     out.prediction.healR = Number(general.healPredictionColorR, 0)
     out.prediction.healG = Number(general.healPredictionColorG, 1)
     out.prediction.healB = Number(general.healPredictionColorB, 0)
@@ -1171,15 +1216,45 @@ local function ResolveUnit(db, unit, out)
     out.prediction.absorbR = Number(general.absorbBarColorR, 1)
     out.prediction.absorbG = Number(general.absorbBarColorG, 1)
     out.prediction.absorbB = Number(general.absorbBarColorB, 1)
-    out.prediction.absorbA = Number(conf.absorbBarOpacity or general.absorbBarOpacity or general.absorbBarColorA, 0.75)
+    out.prediction.absorbA = Number(ScopedValue(conf, general, "absorbBarOpacity", general.absorbBarColorA), 0.75)
     out.prediction.healAbsorbR = Number(general.healAbsorbBarColorR, 0.7)
     out.prediction.healAbsorbG = Number(general.healAbsorbBarColorG, 0)
     out.prediction.healAbsorbB = Number(general.healAbsorbBarColorB, 0)
-    out.prediction.healAbsorbA = Number(conf.healAbsorbBarOpacity or general.healAbsorbBarOpacity or general.healAbsorbBarColorA, 1)
+    out.prediction.healAbsorbA = Number(ScopedValue(conf, general, "healAbsorbBarOpacity", general.healAbsorbBarColorA), 1)
 
     CompileAlpha(out, conf, general, key)
 
     CompileLoadConditions(out, conf)
+
+    out.dispel = out.dispel or {}
+    local dispelColorMode = ScopedValue(conf, general, "hlDispelColorMode", "SINGLE")
+    out.dispel.colorMode = dispelColorMode == "TYPE" and "TYPE" or "SINGLE"
+    out.dispel.r = Number(ScopedValue(conf, general, "hlDispelColorR", general.dispelBorderColorR), 0.25)
+    out.dispel.g = Number(ScopedValue(conf, general, "hlDispelColorG", general.dispelBorderColorG), 0.75)
+    out.dispel.b = Number(ScopedValue(conf, general, "hlDispelColorB", general.dispelBorderColorB), 1)
+    out.dispel.a = 1
+    out.dispel.typeMagicR = Number(general.dispelTypeMagicR, 0.20)
+    out.dispel.typeMagicG = Number(general.dispelTypeMagicG, 0.60)
+    out.dispel.typeMagicB = Number(general.dispelTypeMagicB, 1.00)
+    out.dispel.typeCurseR = Number(general.dispelTypeCurseR, 0.60)
+    out.dispel.typeCurseG = Number(general.dispelTypeCurseG, 0.00)
+    out.dispel.typeCurseB = Number(general.dispelTypeCurseB, 1.00)
+    out.dispel.typeDiseaseR = Number(general.dispelTypeDiseaseR, 0.60)
+    out.dispel.typeDiseaseG = Number(general.dispelTypeDiseaseG, 0.40)
+    out.dispel.typeDiseaseB = Number(general.dispelTypeDiseaseB, 0.00)
+    out.dispel.typePoisonR = Number(general.dispelTypePoisonR, 0.00)
+    out.dispel.typePoisonG = Number(general.dispelTypePoisonG, 0.60)
+    out.dispel.typePoisonB = Number(general.dispelTypePoisonB, 0.00)
+    out.dispel.typeBleedR = Number(general.dispelTypeBleedR, 0.80)
+    out.dispel.typeBleedG = Number(general.dispelTypeBleedG, 0.10)
+    out.dispel.typeBleedB = Number(general.dispelTypeBleedB, 0.10)
+
+    out.dispelOverlay = out.dispelOverlay or {}
+    out.dispelOverlay.enabled = ScopedValue(conf, general, "unitDispelOverlayEnabled", false) == true
+    out.dispelOverlay.trigger = NormalizeDispelOverlayTrigger(ScopedValue(conf, general, "unitDispelOverlayTrigger", "BORDER"))
+    out.dispelOverlay.style = NormalizeDispelOverlayStyle(ScopedValue(conf, general, "unitDispelOverlayStyle", "FULL"))
+    out.dispelOverlay.onHealth = ScopedValue(conf, general, "unitDispelOverlayOnHealth", true) ~= false
+    out.dispelOverlay.alpha = Clamp01(ScopedValue(conf, general, "unitDispelOverlayAlpha", 0.35), 0.35)
 
     out.border = out.border or {}
     local outlineThickness = conf.hlOverride == true and conf.barOutlineThickness ~= nil and conf.barOutlineThickness or bars.barOutlineThickness
@@ -1193,9 +1268,17 @@ local function ResolveUnit(db, unit, out)
     out.border.b = Number(general.barOutlineColorB or general.barBorderB, 0)
     out.border.a = Number(general.barOutlineColorA or general.barBorderA, 1)
     out.border.highlightThickness = Number(bars.highlightBorderThickness or general.highlightBorderThickness, out.border.thickness)
-    out.border.aggro = general.aggroIndicatorMode == "border" or general.enableAggroHighlight == true
-    out.border.dispel = general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true
-    out.border.purge = general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true
+    local legacyDispelBorder = general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true
+    if general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then
+        legacyDispelBorder = true
+    end
+    out.border.aggro = OutlineModeEnabled(ScopedValue(conf, general, "aggroOutlineMode", nil),
+        general.aggroIndicatorMode == "border" or general.enableAggroHighlight == true)
+    out.border.dispel = OutlineModeEnabled(ScopedValue(conf, general, "dispelOutlineMode", nil),
+        legacyDispelBorder)
+    out.border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "BY_ME"))
+    out.border.purge = OutlineModeEnabled(ScopedValue(conf, general, "purgeOutlineMode", nil),
+        general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true)
 
     out.portrait = out.portrait or {}
     local portraitMode = NormalizePortraitMode(conf)

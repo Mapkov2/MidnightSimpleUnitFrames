@@ -735,7 +735,7 @@ local function RefreshBorderTestModes()
         return
     end
     local scope = CurrentBarsScope()
-    if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" then scope = "raid" end
+    if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" or scope == "gf_mythicraid" then scope = "raid" end
     if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
         _G.MSUF_SetDispelBorderTestMode(true, scope)
     end
@@ -752,7 +752,7 @@ local function SetAbsorbTextureTest(enabled)
         enabled = false
     end
     local scope = CurrentBarsScope()
-    if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" then scope = "raid" end
+    if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" or scope == "gf_mythicraid" then scope = "raid" end
     if type(_G.MSUF_SetAbsorbTextureTestMode) == "function" then
         _G.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope)
     else

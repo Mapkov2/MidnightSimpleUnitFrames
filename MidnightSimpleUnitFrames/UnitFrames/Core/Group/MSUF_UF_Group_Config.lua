@@ -186,14 +186,34 @@ local function ResolveHealthVisual(conf)
 end
 
 local function NormalizeDispelOverlayTrigger(value)
+    local ds = UF and UF.DispelState
+    if ds and type(ds.NormalizeOverlayTrigger) == "function" then
+        return ds.NormalizeOverlayTrigger(value)
+    end
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
         return "DISPEL_TYPE"
     elseif value == "ANY_DEBUFF" or value == "DEBUFF" then
         return "ANY_DEBUFF"
-    elseif value == "BY_ME" or value == "PLAYER" then
+    elseif value == "BY_ME" or value == "PLAYER" or value == "DISPELLABLE_BY_ME" then
         return "BY_ME"
     end
     return "BORDER"
+end
+
+local function NormalizeDispelDetectTrigger(value)
+    local ds = UF and UF.DispelState
+    if ds and type(ds.NormalizeDetectTrigger) == "function" then
+        return ds.NormalizeDetectTrigger(value)
+    end
+    value = tostring(value or ""):upper()
+    if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
+        return "DISPEL_TYPE"
+    elseif value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then
+        return "ANY_DEBUFF"
+    elseif value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then
+        return "PLAYER_CAST"
+    end
+    return "BY_ME"
 end
 
 local function NormalizeDispelOverlayStyle(value)
@@ -478,36 +498,72 @@ local function CompileStatus(kind, conf)
     }
 end
 
+local function GroupScopeValue(kind, conf, general, key, fallback)
+    if conf and conf.hlOverride == true and conf[key] ~= nil then
+        return conf[key]
+    end
+    if general and general[key] ~= nil then
+        return general[key]
+    end
+    return fallback
+end
+
+local function NormalizePredictionTestScope(scope)
+    scope = tostring(scope or "shared"):lower()
+    scope = scope:gsub("%s+", "")
+    scope = scope:gsub("%-", "_")
+    if scope == "" or scope == "all" or scope == "global" then
+        return "shared"
+    elseif scope == "gf_party" or scope == "group_party" or scope == "gfparty" then
+        return "party"
+    elseif scope == "gf_raid" or scope == "gf_mythicraid" or scope == "group_raid" or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then
+        return "raid"
+    end
+    return scope
+end
+
+local function PredictionTestEnabledForKind(kind)
+    if _G.MSUF_AbsorbTextureTestMode ~= true then
+        return false
+    end
+    local scope = NormalizePredictionTestScope(_G.MSUF_AbsorbTextureTestScope)
+    kind = NormalizePredictionTestScope(kind)
+    return scope == "shared" or scope == kind
+end
+
 local function CompilePrediction(kind, conf, texture)
     local general = _G.MSUF_DB and _G.MSUF_DB.general or {}
-    local absorbMode = Num(conf.absorbTextMode or general.absorbTextMode, nil)
-    local absorb, absorbText
+    local absorbMode = Num(GroupScopeValue(kind, conf, general, "absorbTextMode", nil), nil)
+    local absorb
     if absorbMode then
         absorb = absorbMode == 2 or absorbMode == 3
-        absorbText = absorbMode == 3 or absorbMode == 4
-    elseif conf.absorbEnabled ~= nil then
-        absorb = conf.absorbEnabled == true
-        absorbText = conf.showTotalAbsorbAmount == true
     else
-        absorb = general.enableAbsorbBar ~= false
-        absorbText = general.showTotalAbsorbAmount == true
+        local absorbEnabled = GroupScopeValue(kind, conf, general, "enableAbsorbBar", nil)
+        if absorbEnabled == nil and conf and conf.hlOverride == true and conf.absorbEnabled ~= nil then
+            absorbEnabled = conf.absorbEnabled
+        end
+        if absorbEnabled == nil then absorbEnabled = true end
+        absorb = absorbEnabled ~= false
     end
     local heal = GF.IsHealPredictionEnabled and GF.IsHealPredictionEnabled(kind, conf) or conf.healPredEnabled == true
-    local healAbsorb = absorb == true and general.healAbsorbEnabled ~= false
-    if conf.healAbsorbEnabled ~= nil then
-        healAbsorb = absorb == true and conf.healAbsorbEnabled == true
+    local healAbsorb = absorb == true and GroupScopeValue(kind, conf, general, "healAbsorbEnabled", true) ~= false
+    local test = PredictionTestEnabledForKind(kind)
+    if test == true then
+        heal = true
+        absorb = true
+        healAbsorb = true
     end
     return {
         enabled = heal == true or absorb == true or healAbsorb == true,
         heal = heal == true,
         absorb = absorb == true,
-        absorbText = absorbText == true,
         healAbsorb = healAbsorb == true,
-        healAnchorMode = Num(conf.healPredAnchorMode or general.healPredAnchorMode, 3),
-        absorbAnchorMode = Num(conf.absorbAnchorMode or general.absorbAnchorMode, 2),
+        test = test == true,
+        healAnchorMode = Num(GroupScopeValue(kind, conf, general, "healPredAnchorMode", 3), 3),
+        absorbAnchorMode = Num(GroupScopeValue(kind, conf, general, "absorbAnchorMode", 2), 2),
         texture = texture,
-        absorbTexture = conf.absorbBarTexture or general.absorbBarTexture,
-        healAbsorbTexture = conf.healAbsorbBarTexture or general.healAbsorbBarTexture,
+        absorbTexture = GroupScopeValue(kind, conf, general, "absorbBarTexture", nil),
+        healAbsorbTexture = GroupScopeValue(kind, conf, general, "healAbsorbBarTexture", nil),
         healR = Num(general.healPredictionColorR, 0),
         healG = Num(general.healPredictionColorG, 1),
         healB = Num(general.healPredictionColorB, 0),
@@ -515,11 +571,38 @@ local function CompilePrediction(kind, conf, texture)
         absorbR = Num(general.absorbBarColorR, 1),
         absorbG = Num(general.absorbBarColorG, 1),
         absorbB = Num(general.absorbBarColorB, 1),
-        absorbA = Clamp01(conf.absorbBarOpacity or general.absorbBarOpacity or general.absorbBarColorA, 0.75),
+        absorbA = Clamp01(GroupScopeValue(kind, conf, general, "absorbBarOpacity", general.absorbBarColorA), 0.75),
         healAbsorbR = Num(general.healAbsorbBarColorR, 0.7),
         healAbsorbG = Num(general.healAbsorbBarColorG, 0),
         healAbsorbB = Num(general.healAbsorbBarColorB, 0),
-        healAbsorbA = Clamp01(conf.healAbsorbBarOpacity or general.healAbsorbBarOpacity or general.healAbsorbBarColorA, 1),
+        healAbsorbA = Clamp01(GroupScopeValue(kind, conf, general, "healAbsorbBarOpacity", general.healAbsorbBarColorA), 1),
+    }
+end
+
+local function CompileDispelVisual(kind, conf)
+    local general = GeneralDB() or {}
+    local mode = GroupScopeValue(kind, conf, general, "hlDispelColorMode", "SINGLE")
+    return {
+        colorMode = mode == "TYPE" and "TYPE" or "SINGLE",
+        r = Num(GroupScopeValue(kind, conf, general, "hlDispelColorR", general.dispelBorderColorR), 0.25),
+        g = Num(GroupScopeValue(kind, conf, general, "hlDispelColorG", general.dispelBorderColorG), 0.75),
+        b = Num(GroupScopeValue(kind, conf, general, "hlDispelColorB", general.dispelBorderColorB), 1),
+        a = 1,
+        typeMagicR = Num(general.dispelTypeMagicR, 0.20),
+        typeMagicG = Num(general.dispelTypeMagicG, 0.60),
+        typeMagicB = Num(general.dispelTypeMagicB, 1.00),
+        typeCurseR = Num(general.dispelTypeCurseR, 0.60),
+        typeCurseG = Num(general.dispelTypeCurseG, 0.00),
+        typeCurseB = Num(general.dispelTypeCurseB, 1.00),
+        typeDiseaseR = Num(general.dispelTypeDiseaseR, 0.60),
+        typeDiseaseG = Num(general.dispelTypeDiseaseG, 0.40),
+        typeDiseaseB = Num(general.dispelTypeDiseaseB, 0.00),
+        typePoisonR = Num(general.dispelTypePoisonR, 0.00),
+        typePoisonG = Num(general.dispelTypePoisonG, 0.60),
+        typePoisonB = Num(general.dispelTypePoisonB, 0.00),
+        typeBleedR = Num(general.dispelTypeBleedR, 0.80),
+        typeBleedG = Num(general.dispelTypeBleedG, 0.10),
+        typeBleedB = Num(general.dispelTypeBleedB, 0.10),
     }
 end
 
@@ -871,6 +954,12 @@ local function CompileSpecUncached(kind, frame, unit)
     local status = CompileStatus(kind, conf)
     local group = CompileGroupVisuals(kind, conf)
     local alpha = CompileAlpha(conf)
+    local dispelBorderEnabled = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlDispelEnabled")
+    if dispelBorderEnabled == nil then
+        dispelBorderEnabled = conf.dispelEnabled == true
+    end
+    local general = GeneralDB() or {}
+    local dispelBorderTrigger = GroupScopeValue(kind, conf, general, "dispelBorderTrigger", "BY_ME")
 
     return {
         scope = "group",
@@ -967,6 +1056,7 @@ local function CompileSpecUncached(kind, frame, unit)
             shortNumbers = true,
         },
         prediction = CompilePrediction(kind, conf, texture),
+        dispel = CompileDispelVisual(kind, conf),
         status = status,
         border = {
             enabled = conf.borderEnabled ~= false,
@@ -976,7 +1066,8 @@ local function CompileSpecUncached(kind, frame, unit)
             b = Num(conf.borderB, 0),
             a = Num(conf.borderA, 1),
             aggro = conf.aggroEnabled == true,
-            dispel = conf.dispelEnabled == true or conf.dispelOverlayEnabled == true,
+            dispel = dispelBorderEnabled == true,
+            dispelTrigger = NormalizeDispelDetectTrigger(dispelBorderTrigger),
         },
         alpha = alpha,
         auras = CompileCoreAuras(kind, conf),

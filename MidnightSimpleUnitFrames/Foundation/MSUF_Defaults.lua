@@ -900,6 +900,8 @@ end
         g.bossTargetOutlineMode = g.bossTargetHighlightEnabled and 1 or 0
     end
     --- UnitFrame dispel overlay (health-bar tint driven by the Dispel Border aura scanner)
+    if g.dispelOutlineMode == nil then g.dispelOutlineMode = 1 end
+    if g.dispelBorderTrigger == nil then g.dispelBorderTrigger = "BY_ME" end
     if g.unitDispelOverlayEnabled == nil then g.unitDispelOverlayEnabled = false end
     if g.unitDispelOverlayStyle == nil then g.unitDispelOverlayStyle = "FULL" end
     if g.unitDispelOverlayOnHealth == nil then g.unitDispelOverlayOnHealth = true end
@@ -1477,12 +1479,10 @@ end
         end
         g._msufUFTextPerUnitMigrated_v4325 = true
     end
-    if g.showTotalAbsorbAmount == nil then
-        g.showTotalAbsorbAmount = false
-    end
     if g.enableAbsorbBar == nil then
         g.enableAbsorbBar = true
     end
+    g.showTotalAbsorbAmount = false
     if g.showSelfHealPrediction == nil then
         g.showSelfHealPrediction = false
     end
@@ -1490,21 +1490,15 @@ end
         g.healPredAnchorMode = 3
     end
 
-    --- Absorb display dropdown stores a mode; keep runtime flags in sync on load.
+    --- Absorb display is bar-only in 6.0; collapse legacy text modes on load.
     if g.absorbTextMode ~= nil then
         local mode = tonumber(g.absorbTextMode)
-        if mode == 1 then
+        if mode == 1 or mode == 4 then
+            g.absorbTextMode = 1
             g.enableAbsorbBar = false
-            g.showTotalAbsorbAmount = false
-        elseif mode == 2 then
+        else
+            g.absorbTextMode = 2
             g.enableAbsorbBar = true
-            g.showTotalAbsorbAmount = false
-        elseif mode == 3 then
-            g.enableAbsorbBar = true
-            g.showTotalAbsorbAmount = true
-        elseif mode == 4 then
-            g.enableAbsorbBar = false
-            g.showTotalAbsorbAmount = true
         end
     end
 	    if g.absorbAnchorMode == nil then

@@ -52,12 +52,27 @@ local function ScheduleApplyCommit()
 end
 
 local _iterState = {}
+local PREDICTION_REFRESH_ELEMENTS = { "Prediction" }
+
+local function RefreshPredictionElements(reason)
+    local refreshed = false
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.RefreshElements) == "function" then
+        refreshed = UF.RefreshElements(nil, PREDICTION_REFRESH_ELEMENTS, reason or "MSUF2_ABSORB_TEXTURE") or refreshed
+    end
+    local GF = MSUF and MSUF.GF
+    if GF and type(GF.RefreshVisuals) == "function" then
+        refreshed = GF.RefreshVisuals(nil, GF.DIRTY_VISUAL) or refreshed
+    end
+    return refreshed
+end
 
 local function _ApplyTexCached(sb, tex)
     if not sb or not tex then return end
     if sb.MSUF_cachedStatusbarTexture ~= tex then
         sb:SetStatusBarTexture(tex)
         sb.MSUF_cachedStatusbarTexture = tex
+        sb._msufTexture = tex
         local applyAlpha = (MSUF.Bars and MSUF.Bars._ApplyOverlayTextureAlpha) or _G.MSUF_ApplyOverlayTextureAlpha
         if type(applyAlpha) == "function" then
             applyAlpha(sb)
@@ -68,9 +83,6 @@ end
 local function _Iter_ApplyAllBarTex(f)
     local S = _iterState
     _ApplyTexCached(f.hpBar, S.texHP)
-    _ApplyTexCached(f.absorbBar, S.texAbs)
-    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
-    _ApplyTexCached(f.incomingHealBar or f.selfHealPredBar, S.texHP)
     if S.applyBg then S.applyBg(f) end
 
     local pbTex = S.texHP
@@ -80,31 +92,20 @@ local function _Iter_ApplyAllBarTex(f)
     _ApplyTexCached(f.targetPowerBar, pbTex)
 end
 
-local function _Iter_ApplyAbsorbTex(f)
-    local S = _iterState
-    _ApplyTexCached(f.absorbBar, S.texAbs)
-    _ApplyTexCached(f.healAbsorbBar, S.texHeal)
-end
-
 local function UpdateAllBarTextures()
     local getBarTexture = _G.MSUF_GetBarTexture
     if type(getBarTexture) ~= "function" then return end
     local texHP = getBarTexture()
     if not texHP then return end
 
-    local getAbsorbTexture = _G.MSUF_GetAbsorbBarTexture
-    local getHealAbsorbTexture = _G.MSUF_GetHealAbsorbBarTexture
-    local texAbs = type(getAbsorbTexture) == "function" and getAbsorbTexture() or nil
-    local texHeal = type(getHealAbsorbTexture) == "function" and getHealAbsorbTexture() or nil
     local dpb = MSUF.Bars and MSUF.Bars._DetachedPowerBarTextures
 
     _iterState.texHP = texHP
-    _iterState.texAbs = texAbs or texHP
-    _iterState.texHeal = texHeal or texHP
     _iterState.texDPB = (dpb and dpb.ResolveFg and dpb.ResolveFg()) or texHP
     _iterState.applyBg = _G.MSUF_ApplyBarBackgroundVisual
 
     ForEachUnitFrame(_Iter_ApplyAllBarTex)
+    RefreshPredictionElements("MSUF2_BAR_TEXTURE")
     if _G.MSUF_RoundedUF_Active == true then
         local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
         if type(applyRounded) == "function" then
@@ -120,28 +121,14 @@ local function UpdateAllBarTextures()
 end
 
 local function UpdateAbsorbBarTextures()
-    local getAbsorbTexture = _G.MSUF_GetAbsorbBarTexture
-    local getHealAbsorbTexture = _G.MSUF_GetHealAbsorbBarTexture
-    local texAbs = type(getAbsorbTexture) == "function" and getAbsorbTexture() or nil
-    local texHeal = type(getHealAbsorbTexture) == "function" and getHealAbsorbTexture() or nil
-
-    if not texAbs or not texHeal then
-        local getBarTexture = _G.MSUF_GetBarTexture
-        local texHP = type(getBarTexture) == "function" and getBarTexture() or nil
-        texAbs = texAbs or texHP
-        texHeal = texHeal or texHP
-        if not texAbs or not texHeal then return end
-    end
-
-    _iterState.texAbs = texAbs
-    _iterState.texHeal = texHeal
-    ForEachUnitFrame(_Iter_ApplyAbsorbTex)
+    local refreshed = RefreshPredictionElements("MSUF2_ABSORB_TEXTURE")
     if _G.MSUF_RoundedUF_Active == true then
         local applyRounded = _G.MSUF_RoundedUF_OnApplyAll
         if type(applyRounded) == "function" then
             applyRounded()
         end
     end
+    return refreshed
 end
 
 Export("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
@@ -172,28 +159,22 @@ if MSUF then
     MSUF.MSUF_UpdateAllBarTextures = UpdateAllBarTextures
 end
 
-local function MSUF_UpdateAbsorbTextMode()
+local function MSUF_UpdateAbsorbDisplayMode(mode)
     EnsureDBSafe()
     local g = (_G.MSUF_DB and _G.MSUF_DB.general) or nil
     if not g then return end
-    local mode = tonumber(g.absorbTextMode)
-    if not mode then return end
-    if mode == 1 then
+    mode = tonumber(mode or g.absorbTextMode) or 2
+    if mode == 1 or mode == 4 then
+        g.absorbTextMode = 1
         g.enableAbsorbBar = false
-        g.showTotalAbsorbAmount = false
-    elseif mode == 2 then
+    else
+        g.absorbTextMode = 2
         g.enableAbsorbBar = true
-        g.showTotalAbsorbAmount = false
-    elseif mode == 3 then
-        g.enableAbsorbBar = true
-        g.showTotalAbsorbAmount = true
-    elseif mode == 4 then
-        g.enableAbsorbBar = false
-        g.showTotalAbsorbAmount = true
     end
+    g.showTotalAbsorbAmount = false
 end
 
-Export("MSUF_UpdateAbsorbTextMode", MSUF_UpdateAbsorbTextMode, "MSUF_UpdateAbsorbTextMode")
+Export("MSUF_UpdateAbsorbDisplayMode", MSUF_UpdateAbsorbDisplayMode, "MSUF_UpdateAbsorbDisplayMode")
 
 MSUF.Textures.UpdateAllBarTextures = UpdateAllBarTextures
 MSUF.Textures.UpdateAbsorbBarTextures = UpdateAbsorbBarTextures

@@ -813,16 +813,17 @@ local function BuildBars(ctx)
     local absorbMode = W.Dropdown(absorb, "Display mode", {
         { value = 1, text = "Absorb off" },
         { value = 2, text = "Absorb bar" },
-        { value = 3, text = "Absorb bar + text" },
-        { value = 4, text = "Absorb text only" },
     }, absorbLeftW)
+    local function ReadAbsorbDisplayMode()
+        local mode = tonumber(BarScopeGet("absorbTextMode", 2)) or 2
+        return (mode == 1 or mode == 4) and 1 or 2
+    end
     M.BindDropdown(ctx, absorbMode,
-        function() return tonumber(BarScopeGet("absorbTextMode", 2)) or 2 end,
+        ReadAbsorbDisplayMode,
         function(v)
-            local mode = tonumber(v) or 2
+            local mode = (tonumber(v) == 1) and 1 or 2
             BarScopeSet("absorbTextMode", mode, "MSUF2_ABSORB_MODE")
             Call("MSUF_InvalidateAbsorbCache")
-            Call("MSUF_UpdateAbsorbTextMode", mode)
             ApplyBars("MSUF2_ABSORB_MODE")
             RefreshGroupFrameVisuals()
         end)
@@ -915,7 +916,7 @@ local function BuildBars(ctx)
         end)
     W.MoveWidget(healAbsorbTex, absorb, absorbRightX, -124, absorbRightW, "LEFT")
 
-    local absorbTest = W.ToggleAt(absorb, "Test absorb textures", absorbRightX, -186, absorbRightW)
+    local absorbTest = W.ToggleAt(absorb, "Test prediction bars", absorbRightX, -186, absorbRightW)
     M.BindToggle(ctx, absorbTest,
         function() return _G.MSUF_AbsorbTextureTestMode and true or false end,
         function(v) SetAbsorbTextureTest(v and true or false) end)
@@ -933,26 +934,26 @@ local function BuildBars(ctx)
     W.MoveWidget(healAbsorbOpacity, absorb, absorbRightX, -294, absorbRightW, "LEFT")
 
     M.AddRefresher(ctx, function()
-        local mode = tonumber(BarScopeGet("absorbTextMode", 2)) or 2
-        local showBar = mode == 2 or mode == 3
+        local mode = ReadAbsorbDisplayMode()
+        local showBar = mode == 2
         local scopedActive = ScopedBarsControlsActive()
         local sharedActive = SharedBarsControlsActive()
         local groupScope = CurrentBarsScopeIsGroupFrame()
-        SetControlEnabled(absorbMode, scopedActive)
-        SetControlEnabled(absorbAnchor, scopedActive and showBar)
-        SetControlEnabled(absorbTex, scopedActive and showBar)
-        SetControlEnabled(healAbsorbTex, scopedActive and showBar)
-        SetControlEnabled(absorbTest, showBar)
-        SetControlEnabled(absorbOpacity, scopedActive and showBar)
-        SetControlEnabled(healAbsorbOpacity, scopedActive and showBar)
         local healPredOn
         if groupScope then
             healPredOn = BarScopeGet("healPredEnabled", ReadGBool("showSelfHealPrediction", false)) == true
         else
             healPredOn = ReadGBool("showSelfHealPrediction", false)
         end
-        SetControlEnabled(healPredToggle, groupScope and scopedActive or (sharedActive and mode ~= 1))
-        SetControlEnabled(healPredAnchor, groupScope and scopedActive and healPredOn or ((not groupScope) and scopedActive and mode ~= 1 and healPredOn))
+        SetControlEnabled(absorbMode, scopedActive)
+        SetControlEnabled(absorbAnchor, scopedActive and showBar)
+        SetControlEnabled(absorbTex, scopedActive and showBar)
+        SetControlEnabled(healAbsorbTex, scopedActive and showBar)
+        SetControlEnabled(absorbTest, true)
+        SetControlEnabled(absorbOpacity, scopedActive and showBar)
+        SetControlEnabled(healAbsorbOpacity, scopedActive and showBar)
+        SetControlEnabled(healPredToggle, groupScope and scopedActive or sharedActive)
+        SetControlEnabled(healPredAnchor, scopedActive and healPredOn)
     end)
 
     local outline = b:CollapsibleSection("bars_outline", "Frame Outline", 126, false)

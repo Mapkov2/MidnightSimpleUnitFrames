@@ -23,7 +23,6 @@ local InlineTextColor = Text.InlineTextColor
 local SetPowerTextColor = Text.SetPowerTextColor
 local HealthPercent = Text.HealthPercent
 local PowerPercent = Text.PowerPercent
-local UpdateAbsorbTextCache = Text.UpdateAbsorbTextCache
 local UpdateTextSlots = Text.UpdateTextSlots
 local QueueHealthTextFlush = Text.QueueHealthTextFlush
 local QueuePowerTextFlush = Text.QueuePowerTextFlush
@@ -147,9 +146,6 @@ function Text.UpdateHealth(frame, event, unit, hp, hpMax)
     if hpMax == nil then
         hpMax = UnitHealthMax(unit)
     end
-    if rt.absorbText == true and (rt.absorbSuffixKnown ~= true or event == "UNIT_ABSORB_AMOUNT_CHANGED" or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF2_ABSORB_MODE") then
-        UpdateAbsorbTextCache(rt, unit)
-    end
     local calc = frame and frame._msufHealthCalc
     rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
 
@@ -218,7 +214,6 @@ local NAME_EVENTS = { "UNIT_NAME_UPDATE" }
 local NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
 local NAME_STATUS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED", "UNIT_HEALTH" }
 local HEALTH_TEXT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
-local HEALTH_TEXT_ABSORB_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_ABSORB_AMOUNT_CHANGED" }
 local INLINE_TARGET_EVENTS = { "UNIT_TARGET" }
 local INLINE_NAME_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE" }
 local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
@@ -261,7 +256,6 @@ local Runtime = {
     NAME_COLOR_EVENTS = NAME_COLOR_EVENTS,
     NAME_STATUS_EVENTS = NAME_STATUS_EVENTS,
     HEALTH_TEXT_EVENTS = HEALTH_TEXT_EVENTS,
-    HEALTH_TEXT_ABSORB_EVENTS = HEALTH_TEXT_ABSORB_EVENTS,
     INLINE_TARGET_EVENTS = INLINE_TARGET_EVENTS,
     INLINE_NAME_UNITLESS_EVENTS = INLINE_NAME_UNITLESS_EVENTS,
     INLINE_COLOR_UNITLESS_EVENTS = INLINE_COLOR_UNITLESS_EVENTS,
