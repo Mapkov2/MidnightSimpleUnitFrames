@@ -158,6 +158,17 @@ local function SafeNumber(value)
     return tonumber(value)
 end
 
+local function SafeBoolIsFalse(value)
+    if IsSecretValue(value) then return false end
+    return value == false or value == 0
+end
+
+local function CoreDispelOwnsBorder(owner)
+    local active = owner and owner._msufActiveElements
+    return UF and UF.DispelState and active
+        and (active.DispelOverlay == true or active.GroupVisuals == true)
+end
+
 local function IsEditMode()
     local st = rawget(_G, "MSUF_EditState")
     return (st and st.active == true) or rawget(_G, "MSUF_UnitEditModeActive") == true
@@ -216,11 +227,14 @@ end
 
 local function SafeAuraSpellID(data)
     if type(data) ~= "table" then return nil end
-    return tonumber(data.spellId)
+    local spellId = data.spellId
+    if spellId == nil or IsSecretValue(spellId) then return nil end
+    return tonumber(spellId)
 end
 
 local function SafeHashHas(hash, key)
     if type(hash) ~= "table" or key == nil then return false end
+    if IsSecretValue(key) then return false end
     return hash[key] == true
 end
 
@@ -945,6 +959,11 @@ local function UpdateBorderAuraState(lane)
         lane._msufBorderAuraState = nil
         return
     end
+    if CoreDispelOwnsBorder(owner) then
+        lane._msufBorderAuraStateKnown = false
+        lane._msufBorderAuraState = nil
+        return
+    end
 
     local all = lane.all
     local active = lane.active
@@ -1565,8 +1584,8 @@ local function UpdateElement(element, unit, updateInfo)
     if not unit then return end
 
     local cfg = ConfigureElement(element, frame, unit)
-    local unitExists = UnitExists and UnitExists(unit)
-    if not cfg.enabled or (not unitExists and not IsEditMode()) or element.numTotal <= 0 then
+    local unitMissing = UnitExists and SafeBoolIsFalse(UnitExists(unit))
+    if not cfg.enabled or (unitMissing and not IsEditMode()) or element.numTotal <= 0 then
         if element.Buffs then ClearLane(element.Buffs, unit) end
         if element.Debuffs then ClearLane(element.Debuffs, unit) end
         if element.Externals then ClearLane(element.Externals, unit) end

@@ -1,4 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
     <Script file="Core\MSUF_UF_Core.lua"/>
+    <Script file="Core\MSUF_UF_DispelState.lua"/>
     <Script file="Core\MSUF_UF_Config.lua"/>
 </Ui>

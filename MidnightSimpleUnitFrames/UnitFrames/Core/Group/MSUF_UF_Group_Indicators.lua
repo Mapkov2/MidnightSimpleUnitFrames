@@ -11,6 +11,7 @@ if not (UF and UF.RegisterElement) then return end
 
 local AuraCache = GF.AuraCache or {}
 local SetShown = AuraCache.SetShown or function(region, show) if region then region:SetShown(show) end end
+local DispelState = UF and UF.DispelState or {}
 local UnitExists = UnitExists
 local UnitThreatSituation = UnitThreatSituation
 local CreateFrame = CreateFrame
@@ -19,6 +20,7 @@ local type = type
 local pairs = pairs
 local floor = math.floor
 local max = math.max
+local issecretvalue = _G.issecretvalue
 
 local EMPTY = AuraCache.EMPTY or {}
 local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -121,7 +123,8 @@ local function HasThreat(unit)
     if status == nil then
         status = UnitThreatSituation(unit)
     end
-    return tonumber(status or 0) >= 2
+    if status == nil or (issecretvalue and issecretvalue(status)) then return false end
+    return tonumber(status) >= 2
 end
 
 local GroupCornerIndicators = {}
@@ -174,6 +177,9 @@ local function UpdateCornerIndicators(frame)
         if slot.category == "dispel" then
             show = snapshot and snapshot.dispellable == true
             r, g, b = 0.25, 0.75, 1
+            if show and DispelState.ColorForTrigger then
+                r, g, b = DispelState.ColorForTrigger(snapshot, "BY_ME", frame.MSUFSpec and frame.MSUFSpec.dispel, cfg.alpha or 1)
+            end
         elseif slot.category == "aggro" then
             show = threat
             r, g, b = cfg.aggroR or 1, cfg.aggroG or 0.55, cfg.aggroB or 0

@@ -11,6 +11,7 @@ if not (UF and UF.RegisterElement) then return end
 
 local AuraCache = GF.AuraCache or {}
 local SetShown = AuraCache.SetShown or function(region, show) if region then region:SetShown(show) end end
+local DispelState = UF and UF.DispelState or {}
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent
@@ -19,15 +20,61 @@ local tonumber = tonumber
 local min = math.min
 local max = math.max
 local floor = math.floor
-local next = next
 
 local EMPTY_EVENTS = {}
+local MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
+local DISPEL_OVERLAY_TEXTURES = {
+    TOP = MEDIA_ROOT .. "MSUF_Grad_V.tga",
+    BOTTOM = MEDIA_ROOT .. "MSUF_Grad_V_Rev.tga",
+    LEFT = MEDIA_ROOT .. "MSUF_Grad_H.tga",
+    RIGHT = MEDIA_ROOT .. "MSUF_Grad_H_Rev.tga",
+}
 local VISUAL_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
 local VISUAL_AURA_EVENTS = { "UNIT_AURA" }
 local VISUAL_HEALTH_AURA_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_AURA" }
 local VISUAL_TARGET_EVENT = { "PLAYER_TARGET_CHANGED" }
 local VISUAL_FOCUS_EVENT = { "PLAYER_FOCUS_CHANGED" }
 local VISUAL_TARGET_FOCUS_EVENTS = { "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED" }
+local VISUAL_DISPEL_EVENTS = {
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "PLAYER_TALENT_UPDATE",
+    "TRAIT_CONFIG_UPDATED",
+    "SPELLS_CHANGED",
+}
+local VISUAL_TARGET_DISPEL_EVENTS = {
+    "PLAYER_TARGET_CHANGED",
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "PLAYER_TALENT_UPDATE",
+    "TRAIT_CONFIG_UPDATED",
+    "SPELLS_CHANGED",
+}
+local VISUAL_FOCUS_DISPEL_EVENTS = {
+    "PLAYER_FOCUS_CHANGED",
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "PLAYER_TALENT_UPDATE",
+    "TRAIT_CONFIG_UPDATED",
+    "SPELLS_CHANGED",
+}
+local VISUAL_TARGET_FOCUS_DISPEL_EVENTS = {
+    "PLAYER_TARGET_CHANGED",
+    "PLAYER_FOCUS_CHANGED",
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "PLAYER_TALENT_UPDATE",
+    "TRAIT_CONFIG_UPDATED",
+    "SPELLS_CHANGED",
+}
+
+local function IsDispelCapabilityEvent(event)
+    return event == "PLAYER_SPECIALIZATION_CHANGED"
+        or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+        or event == "PLAYER_TALENT_UPDATE"
+        or event == "TRAIT_CONFIG_UPDATED"
+        or event == "SPELLS_CHANGED"
+end
 
 local function GroupSpec(frame)
     local spec = frame and frame.MSUFSpec
@@ -175,45 +222,6 @@ local function UpdateStripe(frame, cfg, snapshot)
     SetShown(tex, true)
 end
 
-local function DebuffLaneState(frame)
-    local lane = frame and frame.Auras and frame.Auras.Debuffs or frame and frame.Debuffs
-    if not lane then
-        return nil
-    end
-    local anyDebuff = (tonumber(lane.visibleButtons) or 0) > 0
-    local byMe = false
-    local active, all = lane.active, lane.all
-    if type(active) == "table" and type(all) == "table" then
-        for auraInstanceID in next, active do
-            anyDebuff = true
-            local data = all[auraInstanceID]
-            if data and data.isPlayerAura == true then
-                byMe = true
-            end
-        end
-    end
-    return {
-        anyDebuff = anyDebuff,
-        dispellable = lane._msufBorderAuraState == "dispel",
-        anyDispelType = lane._msufBorderAuraState == "dispel",
-        byMe = byMe,
-    }
-end
-
-local function FallbackAuraSnapshot(frame, event, updateInfo)
-    if event == "UNIT_AURA" and AuraCache.UpdateSnapshot then
-        return AuraCache.UpdateSnapshot(frame, updateInfo)
-    end
-    if event == "MSUF_GF_VISUALS_APPLY" and AuraCache.GetSnapshot then
-        return AuraCache.GetSnapshot(frame)
-    end
-    return frame and frame._msufGFAuraSnapshot or nil
-end
-
-local function AuraSnapshot(frame, event, updateInfo)
-    return DebuffLaneState(frame) or FallbackAuraSnapshot(frame, event, updateInfo)
-end
-
 local function SpecNeedsAuraSnapshot(spec)
     local cfg = spec and spec.group
     if not cfg then return false end
@@ -224,21 +232,155 @@ local function SpecNeedsAuraSnapshot(spec)
     return border and border.dispel == true
 end
 
-local function NeedsAuraSnapshot(frame, cfg)
+local function TriggerNeedsCapability(trigger)
+    trigger = DispelState.NormalizeOverlayTrigger and DispelState.NormalizeOverlayTrigger(trigger) or trigger
+    return trigger == "BY_ME" or trigger == "BORDER"
+end
+
+local function SpecNeedsDispelCapability(spec)
+    local cfg = spec and spec.group
+    local border = spec and spec.border
+    if border and border.dispel == true and TriggerNeedsCapability(border.dispelTrigger or "BY_ME") then
+        return true
+    end
+    if cfg and cfg.dispelOverlayEnabled == true then
+        local trigger = cfg.dispelOverlayTrigger or "BORDER"
+        if trigger == "BORDER" then
+            if not border or border.dispel ~= true then return true end
+            return TriggerNeedsCapability(border.dispelTrigger or "BY_ME")
+        end
+        return TriggerNeedsCapability(trigger)
+    end
+    return false
+end
+
+local function NeedsAuraSnapshot(frame)
     return SpecNeedsAuraSnapshot(frame and frame.MSUFSpec)
 end
 
-local function DispelOverlayActive(cfg, snapshot)
-    if not snapshot then return false end
-    local trigger = cfg.dispelOverlayTrigger or "BORDER"
+local function TriggerNeeds(trigger, needs)
+    trigger = DispelState.NormalizeOverlayTrigger and DispelState.NormalizeOverlayTrigger(trigger) or trigger
     if trigger == "ANY_DEBUFF" then
-        return snapshot.anyDebuff == true
+        needs.anyDebuff = true
     elseif trigger == "DISPEL_TYPE" then
-        return snapshot.anyDispelType == true or snapshot.dispellable == true
-    elseif trigger == "BY_ME" then
-        return snapshot.byMe == true
+        needs.anyDispelType = true
+    elseif trigger == "PLAYER_CAST" then
+        needs.playerCast = true
+    else
+        needs.dispellable = true
     end
-    return snapshot.dispellable == true
+end
+
+local function AuraSnapshot(frame, cfg, spec)
+    if not (DispelState and DispelState.Update) then return nil end
+    local border = spec and spec.border
+    local needs = frame._msufGFDispelNeeds
+    if not needs then
+        needs = {}
+        frame._msufGFDispelNeeds = needs
+    end
+    needs.anyDebuff = cfg and cfg.debuffStripeEnabled == true
+    needs.anyDispelType = false
+    needs.dispellable = false
+    needs.playerCast = false
+    if border and border.dispel == true then
+        TriggerNeeds(border.dispelTrigger or "BY_ME", needs)
+    end
+    if cfg and cfg.dispelOverlayEnabled == true then
+        local trigger = cfg.dispelOverlayTrigger or "BORDER"
+        if trigger == "BORDER" and border and border.dispel == true then
+            TriggerNeeds(border.dispelTrigger or "BY_ME", needs)
+        else
+            TriggerNeeds(trigger, needs)
+        end
+    end
+
+    local options = frame._msufGFDispelOptions
+    if not options then
+        options = {}
+        frame._msufGFDispelOptions = options
+    end
+    options.needAnyDebuff = needs.anyDebuff
+    options.needAnyDispelType = needs.anyDispelType
+    options.needDispellable = needs.dispellable
+    options.needPlayerCast = needs.playerCast
+    local snapshot = DispelState.Update(frame, options)
+    if not snapshot then return nil end
+
+    local borderTrigger = border and border.dispelTrigger or "BY_ME"
+    snapshot.borderTrigger = borderTrigger
+    snapshot.borderActive = border and border.dispel == true
+        and DispelState.ActiveForTrigger(snapshot, borderTrigger, false) == true
+    if snapshot.borderActive then
+        snapshot.borderAuraInstanceID = DispelState.AuraIDForTrigger(snapshot, borderTrigger)
+        snapshot.borderR, snapshot.borderG, snapshot.borderB, snapshot.borderA =
+            DispelState.ColorForTrigger(snapshot, borderTrigger, spec and spec.dispel, 1)
+    end
+
+    local overlayTrigger = cfg and cfg.dispelOverlayTrigger or "BORDER"
+    snapshot.overlayTrigger = overlayTrigger
+    local overlayActiveTrigger = overlayTrigger == "BORDER" and not (border and border.dispel == true) and "BY_ME" or overlayTrigger
+    snapshot.overlayActive = cfg and cfg.dispelOverlayEnabled == true
+        and DispelState.ActiveForTrigger(snapshot, overlayActiveTrigger, snapshot.borderActive) == true
+    if snapshot.overlayActive then
+        local colorTrigger = overlayTrigger == "BORDER" and border and border.dispel == true and borderTrigger or overlayActiveTrigger
+        snapshot.overlayAuraInstanceID = DispelState.AuraIDForTrigger(snapshot, colorTrigger)
+        snapshot.overlayR, snapshot.overlayG, snapshot.overlayB, snapshot.overlayA =
+            DispelState.ColorForTrigger(snapshot, colorTrigger, spec and spec.dispel, cfg.dispelOverlayAlpha or 0.35)
+    end
+    return snapshot
+end
+
+local function HideDispelOverlays(frame, except)
+    local tex = frame and frame.MSUFGFDispelOverlay
+    if tex and tex ~= except then SetShown(tex, false) end
+    tex = frame and frame.MSUFGFDispelOverlayFrame
+    if tex and tex ~= except then SetShown(tex, false) end
+    tex = frame and frame.MSUFGFDispelOverlayHealth
+    if tex and tex ~= except then SetShown(tex, false) end
+end
+
+local function EnsureDispelOverlayLayer(frame)
+    local layer = frame.MSUFGFDispelOverlayLayer
+    if not layer then
+        layer = CreateFrame("Frame", nil, frame)
+        layer:SetAllPoints(frame)
+        layer:EnableMouse(false)
+        frame.MSUFGFDispelOverlayLayer = layer
+    end
+    if layer.SetFrameLevel and frame.GetFrameLevel then
+        local level = (frame:GetFrameLevel() or 1) + 35
+        if layer._msufDispelOverlayLevel ~= level then
+            layer:SetFrameLevel(level)
+            layer._msufDispelOverlayLevel = level
+        end
+    end
+    return layer
+end
+
+local function DispelOverlayParent(frame, cfg)
+    if cfg and cfg.dispelOverlayOnHealth ~= false and frame.hpBar and frame.hpBar.CreateTexture then
+        return frame.hpBar, "MSUFGFDispelOverlayHealth"
+    end
+    return EnsureDispelOverlayLayer(frame), "MSUFGFDispelOverlayFrame"
+end
+
+local function EnsureDispelOverlay(frame, cfg)
+    local parent, key = DispelOverlayParent(frame, cfg)
+    local tex = frame[key]
+    if not tex then
+        tex = parent:CreateTexture(nil, "OVERLAY")
+        if tex.SetDrawLayer then
+            tex:SetDrawLayer("OVERLAY", 7)
+        end
+        tex:SetColorTexture(0.25, 0.75, 1, 0.35)
+        tex:SetBlendMode("BLEND")
+        tex:Hide()
+        frame[key] = tex
+    end
+    frame.MSUFGFDispelOverlay = tex
+    HideDispelOverlays(frame, tex)
+    return tex
 end
 
 local function OverlayTarget(frame, cfg)
@@ -279,14 +421,39 @@ local function LayoutOverlayStyle(tex, frame, cfg)
     end
 end
 
-local function UpdateDispelOverlay(frame, cfg, snapshot)
-    local tex = EnsureTexture(frame, "MSUFGFDispelOverlay", "OVERLAY")
-    if not (cfg.dispelOverlayEnabled == true and DispelOverlayActive(cfg, snapshot)) then
-        SetShown(tex, false)
+local function OverlayAlpha(alpha, cfg, spec)
+    alpha = tonumber(alpha) or tonumber(cfg and cfg.dispelOverlayAlpha) or 0.35
+    if cfg and cfg.dispelOverlayOnHealth ~= false
+        and (cfg.dispelOverlayStyle or "FULL") == "FULL"
+        and spec and spec.health and spec.health.mode == "dark"
+        and alpha > 0.18 then
+        return 0.18
+    end
+    return alpha
+end
+
+local function PaintOverlay(tex, style, r, g, b, a)
+    local texture = DISPEL_OVERLAY_TEXTURES[style or "FULL"]
+    if texture then
+        tex:SetTexture(texture)
+        tex:SetVertexColor(r, g, b, a)
+    else
+        tex:SetColorTexture(r, g, b, a)
+    end
+end
+
+local function UpdateDispelOverlay(frame, cfg, snapshot, spec)
+    if not (cfg.dispelOverlayEnabled == true and snapshot and snapshot.overlayActive == true) then
+        HideDispelOverlays(frame)
         return
     end
+    local tex = EnsureDispelOverlay(frame, cfg)
     LayoutOverlayStyle(tex, frame, cfg)
-    tex:SetColorTexture(0.25, 0.75, 1, cfg.dispelOverlayAlpha or 0.35)
+    PaintOverlay(tex, cfg.dispelOverlayStyle,
+        snapshot.overlayR or 0.25,
+        snapshot.overlayG or 0.75,
+        snapshot.overlayB or 1,
+        OverlayAlpha(snapshot.overlayA, cfg, spec))
     SetShown(tex, true)
 end
 
@@ -310,8 +477,13 @@ end
 function GroupVisuals.GetUnitlessEvents(frame, spec)
     local cfg = spec and spec.group
     if not cfg then return EMPTY_EVENTS end
+    local capability = SpecNeedsDispelCapability(spec) == true
     local target = cfg.targetIndicator == true
     local focus = cfg.focusIndicator == true
+    if capability and target and focus then return VISUAL_TARGET_FOCUS_DISPEL_EVENTS end
+    if capability and target then return VISUAL_TARGET_DISPEL_EVENTS end
+    if capability and focus then return VISUAL_FOCUS_DISPEL_EVENTS end
+    if capability then return VISUAL_DISPEL_EVENTS end
     if target and focus then return VISUAL_TARGET_FOCUS_EVENTS end
     if target then return VISUAL_TARGET_EVENT end
     if focus then return VISUAL_FOCUS_EVENT end
@@ -322,33 +494,40 @@ local function UpdateVisuals(frame, event, updateInfo)
     local cfg = GroupSpec(frame)
     if not cfg then return end
     local spec = frame.MSUFSpec
-    local needsSnapshot = NeedsAuraSnapshot(frame, cfg)
-    local snapshot = needsSnapshot and AuraSnapshot(frame, event, updateInfo) or nil
+    local needsSnapshot = NeedsAuraSnapshot(frame)
+    local snapshot = needsSnapshot and AuraSnapshot(frame, cfg, spec) or nil
     local border = spec and spec.border
     local borderAuraEnabled = border and border.dispel == true
     frame._msufGFBorderAuraStateKnown = true
     frame._msufGFBorderAuraEnabled = borderAuraEnabled and true or false
-    frame._msufGFBorderAuraState = borderAuraEnabled and snapshot and snapshot.dispellable and "dispel" or nil
+    frame._msufGFBorderAuraState = borderAuraEnabled and snapshot and snapshot.borderActive and "dispel" or nil
+    frame._msufGFBorderAuraColorR = snapshot and snapshot.borderR or nil
+    frame._msufGFBorderAuraColorG = snapshot and snapshot.borderG or nil
+    frame._msufGFBorderAuraColorB = snapshot and snapshot.borderB or nil
+    frame._msufGFBorderAuraColorA = snapshot and snapshot.borderA or nil
     local debuffs = frame.Auras and frame.Auras.Debuffs
     if debuffs then
         debuffs._msufBorderAuraStateKnown = true
         debuffs._msufBorderAuraEnabled = borderAuraEnabled and true or false
         debuffs._msufBorderAuraState = frame._msufGFBorderAuraState
+        debuffs._msufBorderAuraColorR = frame._msufGFBorderAuraColorR
+        debuffs._msufBorderAuraColorG = frame._msufGFBorderAuraColorG
+        debuffs._msufBorderAuraColorB = frame._msufGFBorderAuraColorB
+        debuffs._msufBorderAuraColorA = frame._msufGFBorderAuraColorA
     end
 
     UpdateTarget(frame, cfg)
     UpdateFocus(frame, cfg)
     UpdateHealthFade(frame, cfg)
     UpdateStripe(frame, cfg, snapshot)
-    UpdateDispelOverlay(frame, cfg, snapshot)
+    UpdateDispelOverlay(frame, cfg, snapshot, spec)
 
-    -- Borders reads frame._msufGFBorderAuraState set above. The core dispatcher
-    -- already runs Borders.Update AFTER GroupVisuals for aura/threat events
-    -- (kind 5, 6), so explicitly poking Borders there would fire it twice.
-    -- We only need the explicit refresh on Apply/non-dispatched flows where
-    -- Borders.Apply ran first (via elementOrder) and saw stale state.
-    if event == "MSUF_GF_VISUALS_APPLY" or event == "MSUF_GF_RANGE_ALPHA" then
-        local borders = UF.elements and UF.elements.Borders
+    -- Borders no longer owns UNIT_AURA. GroupVisuals computes the shared
+    -- snapshot once, then pokes the border from here so aura + border never
+    -- perform separate scans for the same frame/event.
+    if event == "MSUF_GF_VISUALS_APPLY" or event == "MSUF_GF_RANGE_ALPHA" or event == "UNIT_AURA" or IsDispelCapabilityEvent(event) then
+        local active = frame._msufActiveElements
+        local borders = active and active.Borders == true and UF.elements and UF.elements.Borders
         if borders and borders.Update then
             borders.Update(frame, "MSUF_GF_VISUALS", frame.unit)
         end

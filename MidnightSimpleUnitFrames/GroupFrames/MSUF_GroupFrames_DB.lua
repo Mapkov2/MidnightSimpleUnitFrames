@@ -308,7 +308,7 @@ local PARTY_DEFAULTS = {
     dispelOverlayStyle    = "FULL",   --- FULL / BOTTOM / TOP / LEFT / RIGHT
     dispelOverlayOnHealth = true,     --- true = clip to current health fill
     dispelOverlayAlpha    = 0.35,
-    dispelOverlayTrigger  = "BORDER", --- BORDER / BY_ME / DISPEL_TYPE / ANY_DEBUFF
+    dispelOverlayTrigger  = "BORDER", --- BORDER / BY_ME(dispellable by player) / DISPEL_TYPE / ANY_DEBUFF
 
     --- Debuff stripe (thin edge indicator for any debuff)
     debuffStripeEnabled   = false,

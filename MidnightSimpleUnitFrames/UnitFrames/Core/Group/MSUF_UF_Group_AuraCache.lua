@@ -9,9 +9,9 @@ MSUF.GF = GF
 
 local AuraCache = GF.AuraCache or {}
 GF.AuraCache = AuraCache
+local DispelState = UF and UF.DispelState or {}
 
 local C_UnitAuras = C_UnitAuras
-local UnitClass = UnitClass
 local tonumber = tonumber
 local type = type
 local pairs = pairs
@@ -46,16 +46,6 @@ function AuraCache.BoolIsFalse(value)
     return value == false or value == 0
 end
 
-local DISPEL_CLASS = {
-    DRUID = { Curse = true, Poison = true, Magic = true },
-    EVOKER = { Curse = true, Poison = true, Magic = true },
-    MAGE = { Curse = true },
-    MONK = { Disease = true, Poison = true, Magic = true },
-    PALADIN = { Disease = true, Poison = true, Magic = true },
-    PRIEST = { Disease = true, Magic = true },
-    SHAMAN = { Curse = true, Magic = true },
-}
-
 function AuraCache.SetShown(region, show)
     if region and region._msufGFShown ~= show then
         region:SetShown(show)
@@ -63,12 +53,17 @@ function AuraCache.SetShown(region, show)
     end
 end
 
-local function PlayerCanDispel(dispelName)
-    if not dispelName then return false end
-    local _, class = UnitClass("player")
-    local map = class and DISPEL_CLASS[class]
-    if not map then return true end
-    return map[dispelName] == true
+local function SafeString(value)
+    if value == nil or IsSecret(value) or type(value) ~= "string" or value == "" then
+        return nil
+    end
+    return value
+end
+
+local function SafeDispelName(value)
+    value = SafeString(value)
+    if value == "None" then return nil end
+    return value
 end
 
 local function AuraFromPlayer(data)
@@ -82,15 +77,29 @@ local function AuraFromPlayer(data)
     return fromPlayer == true or fromPlayer == 1
 end
 
-local function GetAuraSlots(unit, filter, maxSlots)
+local function CaptureAuraSlots(buffer, ...)
+    local n = select("#", ...)
+    local count = 0
+    for i = 1, n do
+        local value = select(i, ...)
+        if type(value) == "table" then
+            return value
+        elseif type(value) == "number" then
+            count = count + 1
+            buffer[count] = value
+        end
+    end
+    for i = count + 1, #buffer do
+        buffer[i] = nil
+    end
+    return count > 0 and buffer or nil
+end
+
+local function GetAuraSlots(unit, filter, maxSlots, buffer)
     if not (C_UnitAuras and C_UnitAuras.GetAuraSlots and unit) then
         return nil
     end
-    local continuationToken, slots = C_UnitAuras.GetAuraSlots(unit, filter, maxSlots)
-    if type(slots) == "table" then
-        return slots
-    end
-    return type(continuationToken) == "table" and continuationToken or nil
+    return CaptureAuraSlots(buffer or EMPTY, C_UnitAuras.GetAuraSlots(unit, filter, maxSlots))
 end
 
 local function GetAuraDataBySlot(unit, slot)
@@ -104,7 +113,10 @@ local function GetAuraDataByInstance(unit, auraInstanceID)
 end
 
 local function AuraInstanceID(data)
-    return data and (data.auraInstanceID or data.auraInstanceId)
+    if not data then return nil end
+    local auraInstanceID = data.auraInstanceID
+    if auraInstanceID ~= nil then return auraInstanceID end
+    return data.auraInstanceId
 end
 
 local function ClassifyAura(data, fallback)
@@ -135,10 +147,18 @@ local function NewSnapshot(unit)
         instanceHarmful = {},
         helpfulOrder = {},
         harmfulOrder = {},
+        slotBuffer = {},
         anyDebuff = false,
         anyDispelType = false,
         dispellable = false,
+        dispellableByMe = false,
         byMe = false,
+        playerCastDebuff = false,
+        dispelAuraInstanceID = nil,
+        anyDispelAuraInstanceID = nil,
+        anyDebuffAuraInstanceID = nil,
+        dispelName = nil,
+        anyDispelName = nil,
     }
 end
 
@@ -156,7 +176,14 @@ local function ResetDerived(snapshot)
     snapshot.anyDebuff = false
     snapshot.anyDispelType = false
     snapshot.dispellable = false
+    snapshot.dispellableByMe = false
     snapshot.byMe = false
+    snapshot.playerCastDebuff = false
+    snapshot.dispelAuraInstanceID = nil
+    snapshot.anyDispelAuraInstanceID = nil
+    snapshot.anyDebuffAuraInstanceID = nil
+    snapshot.dispelName = nil
+    snapshot.anyDispelName = nil
 end
 
 local function ResetSnapshot(snapshot, unit)
@@ -176,6 +203,7 @@ local function EnsureSnapshot(frame, unit)
         snapshot = NewSnapshot(unit)
         if frame then frame._msufGFAuraSnapshot = snapshot end
     end
+    snapshot.frame = frame
     return snapshot
 end
 
@@ -219,17 +247,14 @@ end
 
 local function IndexAura(snapshot, data, harmful)
     if not data then return end
-    -- Cheap checks (nil/type/empty) run BEFORE IsSecret so non-secret nil
-    -- fields cost just one branch. IsSecret is the most expensive guard
-    -- (C-function call); keep it last in each chain.
     local iconList = harmful and snapshot.debuffIcons or snapshot.buffIcons
     local icon = data.icon
-    if icon and not IsSecret(icon) then
+    if icon ~= nil and not IsSecret(icon) then
         iconList[#iconList + 1] = icon
     end
     local fromPlayer = AuraFromPlayer(data)
     local spellId = data.spellId
-    if spellId and not IsSecret(spellId) then
+    if spellId ~= nil and not IsSecret(spellId) then
         local id = tonumber(spellId)
         if id then
             local byId = harmful and snapshot.harmfulById or snapshot.helpfulById
@@ -240,8 +265,8 @@ local function IndexAura(snapshot, data, harmful)
             end
         end
     end
-    local name = data.name
-    if name and type(name) == "string" and name ~= "" and not IsSecret(name) then
+    local name = SafeString(data.name)
+    if name then
         local byName = harmful and snapshot.harmfulByName or snapshot.helpfulByName
         if not byName[name] then byName[name] = data end
         if fromPlayer then
@@ -251,16 +276,64 @@ local function IndexAura(snapshot, data, harmful)
     end
     if harmful then
         snapshot.anyDebuff = true
-        local dispelName = data.dispelName
-        if dispelName and not IsSecret(dispelName) then
+        local auraInstanceID = AuraInstanceID(data)
+        if auraInstanceID and not snapshot.anyDebuffAuraInstanceID then
+            snapshot.anyDebuffAuraInstanceID = auraInstanceID
+        end
+        local dispelName = SafeDispelName(data.dispelName)
+        if dispelName then
             snapshot.anyDispelType = true
-            if PlayerCanDispel(dispelName) then
-                snapshot.dispellable = true
-            end
+            snapshot.anyDispelName = snapshot.anyDispelName or dispelName
+            snapshot.anyDispelAuraInstanceID = snapshot.anyDispelAuraInstanceID or auraInstanceID
+        end
+        if DispelState.AuraCanActivePlayerDispel and DispelState.AuraCanActivePlayerDispel(data) then
+            snapshot.anyDispelType = true
+            snapshot.anyDispelName = snapshot.anyDispelName or dispelName or "DISPELLABLE"
+            snapshot.anyDispelAuraInstanceID = snapshot.anyDispelAuraInstanceID or auraInstanceID
+            snapshot.dispellable = true
+            snapshot.dispellableByMe = true
+            snapshot.dispelName = snapshot.dispelName or dispelName
+            snapshot.dispelAuraInstanceID = snapshot.dispelAuraInstanceID or auraInstanceID
         end
         if fromPlayer then
             snapshot.byMe = true
+            snapshot.playerCastDebuff = true
         end
+    end
+end
+
+local function SnapshotNeedsDirectDispel(snapshot)
+    local spec = snapshot and snapshot.frame and snapshot.frame.MSUFSpec
+    local cfg = spec and spec.cornerIndicators
+    local slots = cfg and cfg.slots
+    if type(slots) ~= "table" then return false end
+    for i = 1, #slots do
+        if slots[i] and slots[i].category == "dispel" then return true end
+    end
+    return false
+end
+
+local function MergeDirectDispelSnapshot(snapshot)
+    if not (snapshot and snapshot.unit and DispelState.Update) then return end
+    if not SnapshotNeedsDirectDispel(snapshot) then return end
+    if snapshot.dispellableByMe == true and snapshot.dispelAuraInstanceID then return end
+    local direct = DispelState.Update(snapshot.frame or snapshot.unit, {
+        needAnyDebuff = false,
+        needAnyDispelType = false,
+        needDispellable = true,
+        needPlayerCast = false,
+    })
+    if not direct then return end
+    if direct.dispellableByMe == true then
+        snapshot.anyDebuff = true
+        snapshot.anyDispelType = true
+        snapshot.dispellable = true
+        snapshot.dispellableByMe = true
+        snapshot.dispelAuraInstanceID = snapshot.dispelAuraInstanceID or direct.dispelAuraInstanceID
+        snapshot.anyDispelAuraInstanceID = snapshot.anyDispelAuraInstanceID or direct.anyDispelAuraInstanceID
+        snapshot.anyDebuffAuraInstanceID = snapshot.anyDebuffAuraInstanceID or direct.anyDebuffAuraInstanceID
+        snapshot.dispelName = snapshot.dispelName or direct.dispelName
+        snapshot.anyDispelName = snapshot.anyDispelName or direct.anyDispelName
     end
 end
 
@@ -275,12 +348,13 @@ local function ReindexSnapshot(snapshot)
     for i = 1, #helpfulOrder do
         IndexAura(snapshot, dataByInstance[helpfulOrder[i]], false)
     end
+    MergeDirectDispelSnapshot(snapshot)
     snapshot.valid = true
     snapshot.revision = (snapshot.revision or 0) + 1
 end
 
 local function ScanFilter(snapshot, unit, filter, maxSlots, harmful)
-    local slots = GetAuraSlots(unit, filter, maxSlots)
+    local slots = GetAuraSlots(unit, filter, maxSlots, snapshot.slotBuffer)
     if not slots then return end
     for i = 1, #slots do
         local data = GetAuraDataBySlot(unit, slots[i])
@@ -466,15 +540,33 @@ function GroupAuraCache.IsEnabled(frame, spec)
         and #(spec.spellIndicators.items or EMPTY) > 0 then
         return true
     end
-    local group = spec.group
-    if group and (group.dispelOverlayEnabled == true or group.debuffStripeEnabled == true) then
-        return not (spec.auras and spec.auras.enabled == true)
-    end
     return false
 end
 
 function GroupAuraCache.GetEvents()
     return { "UNIT_AURA" }
+end
+
+local DISPEL_CAPABILITY_EVENTS = {
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "PLAYER_TALENT_UPDATE",
+    "TRAIT_CONFIG_UPDATED",
+    "SPELLS_CHANGED",
+}
+
+local function CornerNeedsDispel(spec)
+    local cfg = spec and spec.cornerIndicators
+    local slots = cfg and cfg.slots
+    if type(slots) ~= "table" then return false end
+    for i = 1, #slots do
+        if slots[i] and slots[i].category == "dispel" then return true end
+    end
+    return false
+end
+
+function GroupAuraCache.GetUnitlessEvents(frame, spec)
+    return CornerNeedsDispel(spec) and DISPEL_CAPABILITY_EVENTS or nil
 end
 
 function GroupAuraCache.Apply(frame)

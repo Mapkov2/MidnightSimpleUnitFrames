@@ -353,7 +353,7 @@ local function ClearPrivateAnchors(holder)
     local remove = C_UnitAuras and C_UnitAuras.RemovePrivateAuraAnchor
     if holder and holder.anchors and type(remove) == "function" then
         for i = 1, #holder.anchors do
-            remove(holder.anchors[i])
+            pcall(remove, holder.anchors[i])
             holder.anchors[i] = nil
         end
     end
@@ -443,6 +443,7 @@ local function ApplyPrivateAuras(frame)
     local size = cfg.size or 20
     local spacing = cfg.spacing or 1
     local dx, dy = GrowthStep(cfg.growth, size, spacing)
+    local borderScale = size / 10
     local added = 0
     for i = 1, num do
         local anchor = EnsurePrivateAuraAnchor(holder, i)
@@ -450,15 +451,17 @@ local function ApplyPrivateAuras(frame)
         anchor:ClearAllPoints()
         anchor:SetPoint("CENTER", holder, "CENTER", (i - 1) * dx, (i - 1) * dy)
         anchor:Show()
-        local anchorID = add({
+        local ok, anchorID = pcall(add, {
             unitToken = frame.unit,
             auraIndex = i,
             parent = anchor,
+            isContainer = false,
             showCountdownFrame = cfg.showCountdown ~= false,
             showCountdownNumbers = cfg.showNumbers == true,
             iconInfo = {
                 iconWidth = size,
                 iconHeight = size,
+                borderScale = borderScale,
                 iconAnchor = {
                     point = "CENTER",
                     relativeTo = anchor.Icon,
@@ -468,9 +471,11 @@ local function ApplyPrivateAuras(frame)
                 },
             },
         })
-        if anchorID then
+        if ok and anchorID then
             holder.anchors[#holder.anchors + 1] = anchorID
             added = added + 1
+        else
+            holder._msufLastError = anchorID
         end
     end
     for i = num + 1, #holder do

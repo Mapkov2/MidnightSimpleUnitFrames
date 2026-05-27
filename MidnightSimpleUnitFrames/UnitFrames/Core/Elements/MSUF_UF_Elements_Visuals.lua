@@ -34,6 +34,7 @@ local C_SpellBook = _G.C_SpellBook
 local LibStub = _G.LibStub
 local C_Spell_IsSpellInRange = C_Spell and C_Spell.IsSpellInRange
 local C_SpellBook_IsSpellInSpellBook = C_SpellBook and C_SpellBook.IsSpellInSpellBook
+local DispelState = UF and UF.DispelState or {}
 
 -- WoW marks select unit-API returns as "secret values" when reading them
 -- would leak hidden combat info. Using a secret value in a comparison
@@ -63,8 +64,29 @@ local ALPHA_RANGE_EVENTS = {
 }
 local BORDER_AURA_EVENTS = { "UNIT_AURA" }
 local BORDER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
-local BORDER_ALL_EVENTS = { "UNIT_AURA", "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
+local DISPEL_CAPABILITY_EVENTS = {
+    "PLAYER_SPECIALIZATION_CHANGED",
+    "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
+    "PLAYER_TALENT_UPDATE",
+    "TRAIT_CONFIG_UPDATED",
+    "SPELLS_CHANGED",
+}
+
+local function IsDispelCapabilityEvent(event)
+    return event == "PLAYER_SPECIALIZATION_CHANGED"
+        or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
+        or event == "PLAYER_TALENT_UPDATE"
+        or event == "TRAIT_CONFIG_UPDATED"
+        or event == "SPELLS_CHANGED"
+end
 local WHITE = "Interface\\Buttons\\WHITE8x8"
+local MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
+local DISPEL_OVERLAY_TEXTURES = {
+    TOP = MEDIA_ROOT .. "MSUF_Grad_V.tga",
+    BOTTOM = MEDIA_ROOT .. "MSUF_Grad_V_Rev.tga",
+    LEFT = MEDIA_ROOT .. "MSUF_Grad_H.tga",
+    RIGHT = MEDIA_ROOT .. "MSUF_Grad_H_Rev.tga",
+}
 local TARGET_INTERACT_DISTANCE_INDEX = 4
 local RANGE_CHECK_CACHE_AGE = 0.25
 local QUESTION_MARK = "Interface\\ICONS\\INV_Misc_QuestionMark"
@@ -1345,6 +1367,288 @@ if CreateFrame and not Alpha.stateDriver then
     Alpha.stateDriver = driver
 end
 
+local function UnitDispelRuntimeEnabled(spec)
+    if not spec or spec.scope == "group" then return false end
+    local border = spec.border
+    local overlay = spec.dispelOverlay
+    return (border and border.dispel == true) or (overlay and overlay.enabled == true)
+end
+
+local function DispelTriggerNeedsCapability(trigger)
+    trigger = DispelState.NormalizeOverlayTrigger and DispelState.NormalizeOverlayTrigger(trigger) or trigger
+    return trigger == "BY_ME" or trigger == "BORDER"
+end
+
+local function UnitDispelNeedsCapability(spec)
+    local border = spec and spec.border
+    local overlay = spec and spec.dispelOverlay
+    if border and border.dispel == true and DispelTriggerNeedsCapability(border.dispelTrigger or "BY_ME") then
+        return true
+    end
+    if overlay and overlay.enabled == true then
+        local trigger = overlay.trigger or "BORDER"
+        if trigger == "BORDER" then
+            if not border or border.dispel ~= true then return true end
+            return DispelTriggerNeedsCapability(border.dispelTrigger or "BY_ME")
+        end
+        return DispelTriggerNeedsCapability(trigger)
+    end
+    return false
+end
+
+local function DispelTriggerNeeds(trigger, needs)
+    trigger = DispelState.NormalizeOverlayTrigger and DispelState.NormalizeOverlayTrigger(trigger) or trigger
+    if trigger == "ANY_DEBUFF" then
+        needs.needAnyDebuff = true
+    elseif trigger == "DISPEL_TYPE" then
+        needs.needAnyDispelType = true
+    elseif trigger == "PLAYER_CAST" then
+        needs.needPlayerCast = true
+    else
+        needs.needDispellable = true
+    end
+end
+
+local function ResetUnitDispelState(frame, borderEnabled)
+    frame._msufUFBorderAuraStateKnown = true
+    frame._msufUFBorderAuraEnabled = borderEnabled == true
+    frame._msufUFBorderAuraState = nil
+    frame._msufUFBorderAuraColorR = nil
+    frame._msufUFBorderAuraColorG = nil
+    frame._msufUFBorderAuraColorB = nil
+    frame._msufUFBorderAuraColorA = nil
+    frame._msufUFDispelOverlayActive = false
+    frame._msufUFDispelOverlayR = nil
+    frame._msufUFDispelOverlayG = nil
+    frame._msufUFDispelOverlayB = nil
+    frame._msufUFDispelOverlayA = nil
+end
+
+local function UpdateUnitDispelState(frame, spec)
+    local border = spec and spec.border
+    local overlay = spec and spec.dispelOverlay
+    local borderEnabled = border and border.dispel == true
+    ResetUnitDispelState(frame, borderEnabled)
+    if not (DispelState and DispelState.Update and UnitDispelRuntimeEnabled(spec)) then
+        return nil
+    end
+
+    local needs = frame._msufUFDispelNeeds
+    if not needs then
+        needs = {}
+        frame._msufUFDispelNeeds = needs
+    end
+    needs.needAnyDebuff = false
+    needs.needAnyDispelType = false
+    needs.needDispellable = false
+    needs.needPlayerCast = false
+
+    if borderEnabled then
+        DispelTriggerNeeds(border.dispelTrigger or "BY_ME", needs)
+    end
+    if overlay and overlay.enabled == true then
+        local trigger = overlay.trigger or "BORDER"
+        if trigger == "BORDER" and borderEnabled then
+            DispelTriggerNeeds(border.dispelTrigger or "BY_ME", needs)
+        else
+            DispelTriggerNeeds(trigger, needs)
+        end
+    end
+
+    local snapshot = DispelState.Update(frame, needs)
+    if not snapshot then return nil end
+
+    if borderEnabled then
+        local trigger = border.dispelTrigger or "BY_ME"
+        local active = DispelState.ActiveForTrigger(snapshot, trigger, false) == true
+        frame._msufUFBorderAuraState = active and "dispel" or nil
+        if active then
+            frame._msufUFBorderAuraColorR, frame._msufUFBorderAuraColorG, frame._msufUFBorderAuraColorB, frame._msufUFBorderAuraColorA =
+                DispelState.ColorForTrigger(snapshot, trigger, spec and spec.dispel, 1)
+        end
+    end
+
+    if overlay and overlay.enabled == true then
+        local trigger = overlay.trigger or "BORDER"
+        local borderActive = frame._msufUFBorderAuraState == "dispel"
+        local activeTrigger = trigger == "BORDER" and not borderEnabled and "BY_ME" or trigger
+        local active = DispelState.ActiveForTrigger(snapshot, activeTrigger, borderActive) == true
+        frame._msufUFDispelOverlayActive = active
+        if active then
+            local colorTrigger = trigger == "BORDER" and borderEnabled and (border and border.dispelTrigger or "BY_ME") or activeTrigger
+            frame._msufUFDispelOverlayR, frame._msufUFDispelOverlayG, frame._msufUFDispelOverlayB, frame._msufUFDispelOverlayA =
+                DispelState.ColorForTrigger(snapshot, colorTrigger, spec and spec.dispel, overlay.alpha or 0.35)
+        end
+    end
+
+    return snapshot
+end
+
+local function HideDispelOverlays(frame, except)
+    local tex = frame and frame.MSUFDispelOverlay
+    if tex and tex ~= except then SetShown(tex, false) end
+    tex = frame and frame.MSUFDispelOverlayFrame
+    if tex and tex ~= except then SetShown(tex, false) end
+    tex = frame and frame.MSUFDispelOverlayHealth
+    if tex and tex ~= except then SetShown(tex, false) end
+end
+
+local function EnsureDispelOverlayLayer(frame)
+    local layer = frame.MSUFDispelOverlayLayer
+    if not layer then
+        layer = CreateFrame("Frame", nil, frame)
+        layer:SetAllPoints(frame)
+        layer:EnableMouse(false)
+        frame.MSUFDispelOverlayLayer = layer
+    end
+    if layer.SetFrameLevel and frame.GetFrameLevel then
+        local level = (frame:GetFrameLevel() or 1) + 35
+        if layer._msufDispelOverlayLevel ~= level then
+            layer:SetFrameLevel(level)
+            layer._msufDispelOverlayLevel = level
+        end
+    end
+    return layer
+end
+
+local function DispelOverlayParent(frame, cfg)
+    if cfg and cfg.onHealth ~= false and frame.hpBar and frame.hpBar.CreateTexture then
+        return frame.hpBar, "MSUFDispelOverlayHealth"
+    end
+    return EnsureDispelOverlayLayer(frame), "MSUFDispelOverlayFrame"
+end
+
+local function EnsureDispelOverlay(frame, cfg)
+    local parent, key = DispelOverlayParent(frame, cfg)
+    local tex = frame[key]
+    if not tex then
+        tex = parent:CreateTexture(nil, "OVERLAY")
+        if tex.SetDrawLayer then
+            tex:SetDrawLayer("OVERLAY", 7)
+        end
+        tex:SetColorTexture(0.25, 0.75, 1, 0.35)
+        tex:SetBlendMode("BLEND")
+        tex:Hide()
+        frame[key] = tex
+    end
+    frame.MSUFDispelOverlay = tex
+    HideDispelOverlays(frame, tex)
+    return tex
+end
+
+local function DispelOverlayTarget(frame, cfg)
+    if cfg and cfg.onHealth ~= false and frame.hpBar then
+        if frame.hpBar.GetStatusBarTexture then
+            local tex = frame.hpBar:GetStatusBarTexture()
+            if tex then return tex end
+        end
+        return frame.hpBar
+    end
+    return frame
+end
+
+local function LayoutDispelOverlay(tex, frame, cfg)
+    local target = DispelOverlayTarget(frame, cfg)
+    local style = cfg and cfg.style or "FULL"
+    local h = frame.GetHeight and frame:GetHeight() or 16
+    local thickness = max(2, floor((tonumber(h) or 16) * 0.18 + 0.5))
+    tex:ClearAllPoints()
+    if style == "TOP" then
+        tex:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        tex:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        tex:SetHeight(thickness)
+    elseif style == "BOTTOM" then
+        tex:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        tex:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        tex:SetHeight(thickness)
+    elseif style == "LEFT" then
+        tex:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        tex:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        tex:SetWidth(thickness)
+    elseif style == "RIGHT" then
+        tex:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        tex:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        tex:SetWidth(thickness)
+    else
+        tex:SetAllPoints(target)
+    end
+end
+
+local function DispelOverlayAlpha(alpha, cfg, spec)
+    alpha = tonumber(alpha) or tonumber(cfg and cfg.alpha) or 0.35
+    if cfg and cfg.onHealth ~= false
+        and (cfg.style or "FULL") == "FULL"
+        and spec and spec.health and spec.health.mode == "dark"
+        and alpha > 0.18 then
+        return 0.18
+    end
+    return alpha
+end
+
+local function PaintDispelOverlay(tex, style, r, g, b, a)
+    local texture = DISPEL_OVERLAY_TEXTURES[style or "FULL"]
+    if texture then
+        tex:SetTexture(texture)
+        tex:SetVertexColor(r, g, b, a)
+    else
+        tex:SetColorTexture(r, g, b, a)
+    end
+end
+
+local function UpdateDispelOverlayTexture(frame, spec)
+    local cfg = spec and spec.dispelOverlay
+    local tex = frame.MSUFDispelOverlay
+    if not (cfg and cfg.enabled == true and frame._msufUFDispelOverlayActive == true) then
+        HideDispelOverlays(frame)
+        return
+    end
+    tex = EnsureDispelOverlay(frame, cfg)
+    LayoutDispelOverlay(tex, frame, cfg)
+    PaintDispelOverlay(tex, cfg.style,
+        frame._msufUFDispelOverlayR or 0.25,
+        frame._msufUFDispelOverlayG or 0.75,
+        frame._msufUFDispelOverlayB or 1,
+        DispelOverlayAlpha(frame._msufUFDispelOverlayA, cfg, spec))
+    SetShown(tex, true)
+end
+
+local DispelOverlay = {}
+
+function DispelOverlay.IsEnabled(frame, spec)
+    return UnitDispelRuntimeEnabled(spec)
+end
+
+function DispelOverlay.GetEvents()
+    return BORDER_AURA_EVENTS
+end
+
+function DispelOverlay.GetUnitlessEvents(frame, spec)
+    return UnitDispelNeedsCapability(spec) and DISPEL_CAPABILITY_EVENTS or nil
+end
+
+function DispelOverlay.Apply(frame, spec)
+    UpdateUnitDispelState(frame, spec)
+    UpdateDispelOverlayTexture(frame, spec)
+end
+
+function DispelOverlay.Disable(frame)
+    ResetUnitDispelState(frame, false)
+    HideDispelOverlays(frame)
+end
+
+function DispelOverlay.Update(frame, event)
+    local spec = frame and frame.MSUFSpec
+    UpdateUnitDispelState(frame, spec)
+    UpdateDispelOverlayTexture(frame, spec)
+    local active = frame and frame._msufActiveElements
+    local borders = active and active.Borders == true and UF.elements and UF.elements.Borders
+    if borders and borders.Update then
+        borders.Update(frame, IsDispelCapabilityEvent(event) and "MSUF_DISPEL_CAPABILITY" or "MSUF_DISPEL_STATE", frame.unit)
+    end
+end
+
+UF.RegisterElement("DispelOverlay", DispelOverlay)
+
 local Borders = {}
 
 function Borders.GetEvents(frame, spec)
@@ -1352,13 +1656,13 @@ function Borders.GetEvents(frame, spec)
     if not cfg then
         return EMPTY_EVENTS
     end
-    if cfg.dispel == true and cfg.aggro == true then
-        return BORDER_ALL_EVENTS
-    elseif cfg.dispel == true then
-        return BORDER_AURA_EVENTS
-    elseif cfg.aggro == true then
+    if cfg.aggro == true then
         return BORDER_THREAT_EVENTS
     end
+    return EMPTY_EVENTS
+end
+
+function Borders.GetUnitlessEvents(frame, spec)
     return EMPTY_EVENTS
 end
 
@@ -1433,6 +1737,150 @@ local function LayoutBorder(frame, thickness)
     frame._msufBorderLayoutReady = true
 end
 
+local function BorderNormalEnabled(cfg)
+    return cfg and cfg.enabled == true and (tonumber(cfg.thickness) or 0) > 0
+end
+
+local function IsBossUnit(unit)
+    if type(unit) ~= "string" or unit:sub(1, 4) ~= "boss" then return false end
+    local index = tonumber(unit:sub(5))
+    return index ~= nil and index >= 1 and index <= 5
+end
+
+local function IsAggroBorderUnit(frame)
+    local unit = frame and frame.unit
+    if unit == "player" or unit == "target" or unit == "focus" then return true end
+    return IsBossUnit(unit) or (frame and frame.MSUFSpec and frame.MSUFSpec.scope == "group")
+end
+
+local function IsPurgeBorderUnit(frame)
+    local unit = frame and frame.unit
+    return unit == "target" or unit == "focus" or unit == "targettarget"
+end
+
+local function TestScopeApplies(frame, scope)
+    if not frame then return false end
+    scope = scope or "shared"
+    if scope == "shared" then return true end
+    local spec = frame.MSUFSpec
+    local groupKind = frame._msufGFKind or spec and spec.groupKind
+    if scope == "party" or scope == "gf_party" then
+        return groupKind == "party"
+    elseif scope == "raid" or scope == "gf_raid" then
+        return groupKind == "raid" or groupKind == "mythicraid"
+    elseif scope == "mythicraid" or scope == "gf_mythicraid" then
+        return groupKind == "mythicraid"
+    elseif groupKind then
+        return false
+    elseif scope == "boss" then
+        return IsBossUnit(frame.unit)
+    end
+    return frame.unit == scope or frame.configKey == scope or frame.unitKey == scope
+end
+
+local function RefreshBorderTestFrames()
+    if UF and UF.RefreshBorders then
+        UF.RefreshBorders()
+    end
+    local gf = MSUF and MSUF.GF
+    if gf then
+        if gf.RefreshVisuals then
+            gf.RefreshVisuals()
+        elseif gf.MarkAllDirty then
+            gf.MarkAllDirty((gf.DIRTY_VISUAL or 2) + (gf.DIRTY_LAYOUT or 32))
+        end
+    end
+end
+
+local function RefreshBorderTestModesActive()
+    _G.MSUF_BorderTestModesActive = _G.MSUF_AggroBorderTestMode == true
+        or _G.MSUF_DispelBorderTestMode == true
+        or _G.MSUF_PurgeBorderTestMode == true
+        or _G.MSUF_BossTargetBorderTestMode == true
+end
+
+local function SetBorderTestMode(flag, scopeFlag, active, scope)
+    _G[flag] = active == true
+    if scopeFlag then _G[scopeFlag] = scope or "shared" end
+    RefreshBorderTestModesActive()
+    RefreshBorderTestFrames()
+    return true
+end
+
+_G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active, scope)
+    return SetBorderTestMode("MSUF_AggroBorderTestMode", "MSUF_AggroBorderTestScope", active, scope)
+end
+
+_G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active, scope)
+    return SetBorderTestMode("MSUF_DispelBorderTestMode", "MSUF_DispelBorderTestScope", active, scope)
+end
+
+_G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(active, scope)
+    return SetBorderTestMode("MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope", active, scope)
+end
+
+_G.MSUF_SetBossTargetBorderTestMode = _G.MSUF_SetBossTargetBorderTestMode or function(active)
+    return SetBorderTestMode("MSUF_BossTargetBorderTestMode", nil, active, "boss")
+end
+
+local function AggroTestApplies(frame)
+    return _G.MSUF_BorderTestModesActive == true
+        and _G.MSUF_AggroBorderTestMode == true
+        and IsAggroBorderUnit(frame)
+        and TestScopeApplies(frame, _G.MSUF_AggroBorderTestScope)
+end
+
+local function DispelTestApplies(frame)
+    return _G.MSUF_BorderTestModesActive == true
+        and _G.MSUF_DispelBorderTestMode == true
+        and TestScopeApplies(frame, _G.MSUF_DispelBorderTestScope)
+end
+
+local function PurgeTestApplies(frame)
+    return _G.MSUF_BorderTestModesActive == true
+        and _G.MSUF_PurgeBorderTestMode == true
+        and IsPurgeBorderUnit(frame)
+        and TestScopeApplies(frame, _G.MSUF_PurgeBorderTestScope)
+end
+
+local function BossTargetTestApplies(frame)
+    return _G.MSUF_BorderTestModesActive == true
+        and _G.MSUF_BossTargetBorderTestMode == true
+        and IsBossUnit(frame and frame.unit)
+end
+
+local function BorderHighlightEnabled(frame, cfg)
+    if cfg and (cfg.dispel == true or cfg.aggro == true or cfg.purge == true) then
+        return true
+    end
+    if _G.MSUF_BorderTestModesActive ~= true then
+        return false
+    end
+    return AggroTestApplies(frame)
+        or DispelTestApplies(frame)
+        or PurgeTestApplies(frame)
+        or BossTargetTestApplies(frame)
+end
+
+local function BorderNormalThickness(cfg)
+    local thickness = cfg and tonumber(cfg.thickness) or nil
+    if not thickness or thickness < 1 then
+        return 1
+    end
+    return thickness
+end
+
+local function BorderHighlightThickness(cfg)
+    local thickness = cfg and tonumber(cfg.highlightThickness) or nil
+    if not thickness or thickness < 1 then
+        thickness = cfg and tonumber(cfg.thickness) or nil
+    end
+    if not thickness or thickness < 1 then
+        return 1
+    end
+    return thickness
+end
+
 local function SetBorder(frame, show, r, g, b, a)
     if not frame.MSUFBorderEdges then
         return
@@ -1460,12 +1908,27 @@ local function AuraBorderState(frame)
     local auras = frame.Auras
     local debuffs = auras and auras.Debuffs
     local cfg = frame.MSUFSpec and frame.MSUFSpec.border
-    local wantsDispel = cfg and cfg.enabled == true and cfg.dispel == true
+    local wantsDispel = cfg and cfg.dispel == true
+    if frame._msufUFBorderAuraStateKnown == true and frame._msufUFBorderAuraEnabled == (wantsDispel and true or false) then
+        return frame._msufUFBorderAuraState,
+            frame._msufUFBorderAuraColorR,
+            frame._msufUFBorderAuraColorG,
+            frame._msufUFBorderAuraColorB,
+            frame._msufUFBorderAuraColorA
+    end
     if debuffs and debuffs._msufBorderAuraStateKnown == true and debuffs._msufBorderAuraEnabled == (wantsDispel and true or false) then
-        return debuffs._msufBorderAuraState
+        return debuffs._msufBorderAuraState,
+            debuffs._msufBorderAuraColorR,
+            debuffs._msufBorderAuraColorG,
+            debuffs._msufBorderAuraColorB,
+            debuffs._msufBorderAuraColorA
     end
     if frame._msufGFBorderAuraStateKnown == true and frame._msufGFBorderAuraEnabled == (wantsDispel and true or false) then
-        return frame._msufGFBorderAuraState
+        return frame._msufGFBorderAuraState,
+            frame._msufGFBorderAuraColorR,
+            frame._msufGFBorderAuraColorG,
+            frame._msufGFBorderAuraColorB,
+            frame._msufGFBorderAuraColorA
     end
     return nil
 end
@@ -1484,7 +1947,45 @@ local function ThreatState(frame)
     else
         status = UnitThreatSituation("player", unit)
     end
-    return status ~= nil and status >= 2
+    if status == nil or not NotSecretValue(status) then
+        return false
+    end
+    return status >= 2
+end
+
+local function GeneralDB()
+    local db = _G.MSUF_DB
+    return db and db.general or nil
+end
+
+local function DispelTestColor(frame)
+    local dispel = frame and frame.MSUFSpec and frame.MSUFSpec.dispel
+    if dispel and dispel.colorMode == "TYPE" then
+        local dispelType = tostring(_G.MSUF_DispelBorderTestType or "Magic")
+        local prefix = "type" .. dispelType
+        return dispel[prefix .. "R"] or dispel.r or 0.25,
+            dispel[prefix .. "G"] or dispel.g or 0.75,
+            dispel[prefix .. "B"] or dispel.b or 1,
+            1
+    end
+    return dispel and dispel.r or 0.25, dispel and dispel.g or 0.75, dispel and dispel.b or 1, 1
+end
+
+local function PurgeColor()
+    local general = GeneralDB()
+    return tonumber(general and (general.hlPurgeColorR or general.purgeBorderColorR)) or 1.00,
+        tonumber(general and (general.hlPurgeColorG or general.purgeBorderColorG)) or 0.85,
+        tonumber(general and (general.hlPurgeColorB or general.purgeBorderColorB)) or 0.00,
+        1
+end
+
+local function BossTargetColor()
+    local general = GeneralDB()
+    local color = general and general.bossTargetHighlightColor
+    if type(color) == "table" then
+        return tonumber(color[1]) or 1, tonumber(color[2]) or 0.82, tonumber(color[3]) or 0, tonumber(color[4]) or 1
+    end
+    return 1, 0.82, 0, 1
 end
 
 function Borders.Create(frame)
@@ -1493,18 +1994,21 @@ end
 
 function Borders.Apply(frame, spec)
     local cfg = spec and spec.border
-    LayoutBorder(frame, cfg and cfg.thickness or 1)
-    if not cfg or cfg.enabled ~= true or (cfg.thickness or 0) <= 0 then
+    if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
+        LayoutBorder(frame, 1)
         SetBorder(frame, false)
     elseif cfg.dispel == true or cfg.aggro == true then
+        LayoutBorder(frame, BorderHighlightThickness(cfg))
         Borders.Update(frame, "MSUF_BORDER_APPLY", frame.unit)
     else
+        LayoutBorder(frame, BorderNormalThickness(cfg))
         SetBorder(frame, true, cfg.r or 0, cfg.g or 0, cfg.b or 0, cfg.a or 1)
     end
 end
 
 function Borders.IsEnabled(frame, spec)
-    return spec and spec.border and spec.border.enabled == true and (spec.border.thickness or 0) > 0
+    local cfg = spec and spec.border
+    return BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg) or false
 end
 
 function Borders.Disable(frame)
@@ -1513,19 +2017,43 @@ end
 
 function Borders.Update(frame)
     local cfg = frame.MSUFSpec and frame.MSUFSpec.border
-    if not cfg or cfg.enabled ~= true or (cfg.thickness or 0) <= 0 then
+    local normalEnabled = BorderNormalEnabled(cfg)
+    if not cfg or not (normalEnabled or BorderHighlightEnabled(frame, cfg)) then
         SetBorder(frame, false)
         return
     end
-    local auraState = AuraBorderState(frame)
-    if cfg.dispel and auraState == "dispel" then
-        SetBorder(frame, true, 0.25, 0.75, 1, 1)
+    local testActive = _G.MSUF_BorderTestModesActive == true
+    local auraState, auraR, auraG, auraB, auraA = AuraBorderState(frame)
+    if testActive and DispelTestApplies(frame) then
+        LayoutBorder(frame, BorderHighlightThickness(cfg))
+        SetBorder(frame, true, DispelTestColor(frame))
         return
     end
-    if cfg.aggro and ThreatState(frame) then
+    if cfg.dispel and auraState == "dispel" then
+        LayoutBorder(frame, BorderHighlightThickness(cfg))
+        SetBorder(frame, true, auraR or 0.25, auraG or 0.75, auraB or 1, auraA or 1)
+        return
+    end
+    if (testActive and AggroTestApplies(frame)) or (cfg.aggro and ThreatState(frame)) then
+        LayoutBorder(frame, BorderHighlightThickness(cfg))
         SetBorder(frame, true, 1, 0.15, 0.05, 1)
         return
     end
+    if testActive and PurgeTestApplies(frame) then
+        LayoutBorder(frame, BorderHighlightThickness(cfg))
+        SetBorder(frame, true, PurgeColor())
+        return
+    end
+    if testActive and BossTargetTestApplies(frame) then
+        LayoutBorder(frame, BorderHighlightThickness(cfg))
+        SetBorder(frame, true, BossTargetColor())
+        return
+    end
+    if not normalEnabled then
+        SetBorder(frame, false)
+        return
+    end
+    LayoutBorder(frame, BorderNormalThickness(cfg))
     SetBorder(frame, true, cfg.r or 0, cfg.g or 0, cfg.b or 0, cfg.a or 1)
 end
 
@@ -1600,6 +2128,28 @@ UF.RegisterElement("Portrait", Portrait)
 UF.RegisterElement("Alpha", Alpha)
 UF.RegisterElement("Auras", Auras)
 UF.RegisterElement("Borders", Borders)
+
+local function RefreshUnitDispelFrame(frame)
+    if not frame then return end
+    local active = frame._msufActiveElements
+    if active and active.DispelOverlay == true then
+        DispelOverlay.Update(frame, "MSUF_DISPEL_REFRESH", frame.unit)
+    end
+    if active and active.Borders == true and Borders.Update then
+        Borders.Update(frame, "MSUF_DISPEL_REFRESH", frame.unit)
+    end
+end
+
+_G.MSUF_RefreshUnitDispelOverlays = function()
+    if UF.ForEachFrame then
+        UF.ForEachFrame(RefreshUnitDispelFrame)
+        return true
+    end
+    return false
+end
+
+_G.MSUF_RefreshDispelOutlineStates = _G.MSUF_RefreshUnitDispelOverlays
+_G.MSUF_DispelOutline_ApplyEventRegistration = _G.MSUF_RefreshUnitDispelOverlays
 
 _G.MSUF_RefreshCombatUnitAlphas = function()
     local combatFrames = Alpha.combatFrames

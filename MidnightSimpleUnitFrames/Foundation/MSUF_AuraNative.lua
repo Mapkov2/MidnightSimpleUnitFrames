@@ -125,6 +125,18 @@ function Native.EnsurePrivateAuraDispelOverlay(parent)
     return overlay
 end
 
+--- Blizzard container anchors install an OnAttributeChanged settings hook on
+--- the parent frame. Reused MSUF-owned parents must be clean before re-add.
+local function ClearPrivateAuraSettingsHandler(frame)
+    if not (frame and frame.SetScript) then return end
+    if frame.GetScript and not frame:GetScript("OnAttributeChanged") then return end
+    frame:SetScript("OnAttributeChanged", nil)
+end
+
+function Native.ClearPrivateAuraSettingsHandler(frame)
+    ClearPrivateAuraSettingsHandler(frame)
+end
+
 local function Clamp(v, def, lo, hi)
     v = tonumber(v)
     if v == nil then v = def end
@@ -433,6 +445,7 @@ end
 function Native.Clear(container)
     if not container then return true end
     local id = container._msufNativeAuraAnchorID
+    local renderParent = container._msufNativeAuraRenderParent
     if id then
         local CUA = _G.C_UnitAuras
         local removeFn = CUA and CUA.RemovePrivateAuraAnchor
@@ -446,6 +459,12 @@ function Native.Clear(container)
             container._msufNativeAuraLastError = "RemovePrivateAuraAnchor unavailable"
             return false
         end
+    end
+    ClearPrivateAuraSettingsHandler(renderParent)
+    ClearPrivateAuraSettingsHandler(container)
+    local host = container._msufPrivateAuraHost
+    if host ~= renderParent then
+        ClearPrivateAuraSettingsHandler(host)
     end
     container._msufNativeAuraAnchorID = nil
     container._msufNativeAuraSignature = nil
@@ -591,6 +610,10 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     if renderParent ~= container then
         Native.SetContainerAttributes(renderParent, cfg)
     end
+    ClearPrivateAuraSettingsHandler(renderParent)
+    if renderParent ~= container then
+        ClearPrivateAuraSettingsHandler(container)
+    end
 
     local iconSize = math_floor(Clamp(cfg.iconSize, 20, 1, 96) + 0.5)
     local borderScale = Clamp(cfg.borderScale, iconSize / 11, 0, 20)
@@ -619,6 +642,10 @@ function Native.Apply(container, unit, cfg, parent, levelParent)
     local ok, anchorID = pcall(addFn, args)
     if not ok or not anchorID then
         container._msufNativeAuraLastError = anchorID
+        ClearPrivateAuraSettingsHandler(renderParent)
+        if renderParent ~= container then
+            ClearPrivateAuraSettingsHandler(container)
+        end
         Native.Clear(container)
         return false
     end
