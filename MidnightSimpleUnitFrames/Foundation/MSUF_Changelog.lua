@@ -4,10 +4,69 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "6.0 Alpha 1",
-    previousVersion = "",
-    rangeLabel = "6.0 Alpha 1",
+    currentVersion = "6.0 Alpha 2",
+    previousVersion = "6.0 Alpha 1",
+    rangeLabel = "6.0 Alpha 1 -> 6.0 Alpha 2",
     entries = {
+        {
+            version = "6.0 Alpha 2",
+            date = "2026-05-27",
+            sections = {
+                {
+                    title = "Release Channel",
+                    bullets = {
+                        "Alpha-only release for CurseForge and Wago.",
+                        "Wago stability must be alpha; this build is not stable.",
+                        "CurseForge release type must be alpha.",
+                        "The 6.0 line is still a complete backend rewrite from the 5.54/5.x runtime stack, with group frames, unit frame core, Auras3, and castbar integration running through the new backend.",
+                    },
+                },
+                {
+                    title = "Backend Rewrite Follow-Up",
+                    bullets = {
+                        "Folded the separate castbar addon tree into the core addon package so the 6.0 backend ships as one coordinated addon instead of a split runtime.",
+                        "Kept the castbar runtime, boss castbar preview, channel ticks, empower handling, focus kick state, and player castbar bridge in the core package load order.",
+                        "Trimmed unit frame hot paths in health, prediction, text formatting, group aura cache, core dispatch, and frame factory code.",
+                        "Reduced disabled-feature overhead further after Alpha 1, especially around group aura cache scans and repeated unit-frame update paths.",
+                        "Added MSUF_UF_DispelState as the shared state resolver for dispel overlays, glow, border, and group-frame visual consumers.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed absorb, heal prediction, and heal absorb placement so bars use safer resolved anchors and avoid secret-value comparison failures.",
+                        "Restored scoped dispel glow and aggro border behavior for the rewritten visual backend.",
+                        "Fixed group frame visual config paths for dispel borders, glow, and indicator consumers.",
+                        "Optimized 2D portrait refresh so portrait visuals avoid unnecessary rebuild work when the visual state did not change.",
+                        "Fixed texture/runtime handling used by bars and prediction previews after the backend rewrite.",
+                    },
+                },
+                {
+                    title = "Group Frame Preview",
+                    bullets = {
+                        "Added the same preview controls used by Unit Frame Preview: zoom buttons, Fit, 1:1, Ctrl + mouse wheel zoom, and canvas panning.",
+                        "Added Ctrl + left-drag, right-drag, and middle-drag panning for the group preview canvas.",
+                        "Kept handle dragging stable while the preview refreshes by freezing preview scale during drag.",
+                        "Updated preview hints and tooltips so zoom, pan, arrow nudging, Shift nudging, and Ctrl nudging are visible in the UI.",
+                    },
+                },
+                {
+                    title = "Menu And Aura Editing",
+                    bullets = {
+                        "Split Auras3 options into scoped menu sections instead of one overloaded page.",
+                        "Updated menu search data and search indexing for the new aura and group-frame sections.",
+                        "Improved group aura menu bindings for the rewritten group backend.",
+                    },
+                },
+                {
+                    title = "Known Alpha Notes",
+                    bullets = {
+                        "This is still an alpha build. Test profile migration, group frame layout, castbars, aura rendering, dispel overlays, aggro borders, prediction bars, click-casting, Clique, and Wago/CurseForge channel handling.",
+                        "The release tag for this build is 6.0-alpha2; alpha tags are expected to publish to Wago as alpha, never stable.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0 Alpha 1",
             date = "2026-05-27",

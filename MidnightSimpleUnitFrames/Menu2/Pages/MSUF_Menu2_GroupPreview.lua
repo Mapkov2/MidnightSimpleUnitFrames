@@ -248,6 +248,12 @@ local GF_PREVIEW_ROUNDED_EDGE = GF_PREVIEW_MASK_ROOT .. "rounded_bar_edge_4x.tga
 local GF_PREVIEW_MIN_W = 380
 local GF_PREVIEW_MIN_H = 130
 local GF_PREVIEW_ROLE = "HEALER"
+local GF_PREVIEW_ZOOM_MIN, GF_PREVIEW_ZOOM_MAX = 0.35, 4.0
+local GF_PREVIEW_ZOOM_STEPS = { 0.35, 0.50, 0.75, 1.00, 1.25, 1.50, 2.00, 3.00, 4.00 }
+
+local function GFPreviewTr(text)
+    return (M.Tr and M.Tr(text)) or text
+end
 
 local GF_PREVIEW_CLASSES = {
     "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT",
@@ -455,6 +461,120 @@ local function GFPreviewScaleValue(value, scale, minValue)
     local v = GFPreviewRound((tonumber(value) or 0) * (tonumber(scale) or 1))
     if minValue ~= nil and v < minValue then v = minValue end
     return v
+end
+
+local function GFPreviewClampZoom(value)
+    value = tonumber(value) or 1
+    if value < GF_PREVIEW_ZOOM_MIN then return GF_PREVIEW_ZOOM_MIN end
+    if value > GF_PREVIEW_ZOOM_MAX then return GF_PREVIEW_ZOOM_MAX end
+    return floor(value * 100 + 0.5) / 100
+end
+
+local function GFPreviewUpdateZoomControls(box)
+    if not box then return end
+    local zoom = box._manualZoom
+    local scale = tonumber(box._mockScale) or tonumber(zoom) or tonumber(box._mockAutoScale) or 1
+    if box._zoomReadout then
+        local pct = floor(scale * 100 + 0.5)
+        if zoom then
+            box._zoomReadout:SetText(string.format("%d%%", pct))
+        else
+            box._zoomReadout:SetText(string.format(GFPreviewTr("Fit %d%%"), pct))
+        end
+    end
+    if box._zoomFitButton and box._zoomFitButton._fs then
+        box._zoomFitButton._fs:SetTextColor(zoom and 0.72 or 0.25, zoom and 0.78 or 0.95, zoom and 0.90 or 1.00, 1)
+    end
+end
+
+local function GFPreviewApplyPan(box)
+    if not (box and box._stage and box._mock) then return end
+    local x = (tonumber(box._mockBaseOffsetX) or 0) + (tonumber(box._zoomPanX) or 0)
+    local y = (tonumber(box._mockBaseOffsetY) or 0) + (tonumber(box._zoomPanY) or 0)
+    box._mock:ClearAllPoints()
+    box._mock:SetPoint("TOPLEFT", box._stage, "TOPLEFT", x, y)
+end
+
+local function GFPreviewSetZoom(box, zoom, reason)
+    if not box then return end
+    if zoom == nil or zoom == "fit" then
+        box._manualZoom = nil
+        box._zoomPanX, box._zoomPanY = 0, 0
+    else
+        box._manualZoom = GFPreviewClampZoom(zoom)
+    end
+    GFPreviewUpdateZoomControls(box)
+    if box.Refresh then box:Refresh(reason or "GROUP_PREVIEW_ZOOM") end
+end
+
+local function GFPreviewStepZoom(box, direction)
+    if not box then return end
+    local current = GFPreviewClampZoom(box._manualZoom or box._mockScale or box._mockAutoScale or 1)
+    local nextZoom = current
+    if (tonumber(direction) or 0) > 0 then
+        for i = 1, #GF_PREVIEW_ZOOM_STEPS do
+            if GF_PREVIEW_ZOOM_STEPS[i] > current + 0.001 then
+                nextZoom = GF_PREVIEW_ZOOM_STEPS[i]
+                break
+            end
+        end
+    else
+        for i = #GF_PREVIEW_ZOOM_STEPS, 1, -1 do
+            if GF_PREVIEW_ZOOM_STEPS[i] < current - 0.001 then
+                nextZoom = GF_PREVIEW_ZOOM_STEPS[i]
+                break
+            end
+        end
+    end
+    GFPreviewSetZoom(box, nextZoom, "GROUP_PREVIEW_ZOOM_STEP")
+end
+
+local GFPreviewUpdateHint
+
+local function GFPreviewStopPan(stage)
+    if not stage then return end
+    local box = stage._msufGFPreviewPanBox
+    stage._msufGFPreviewPanning = nil
+    stage._msufGFPreviewPanBox = nil
+    stage._msufGFPreviewPanCursorX = nil
+    stage._msufGFPreviewPanCursorY = nil
+    stage._msufGFPreviewPanStartX = nil
+    stage._msufGFPreviewPanStartY = nil
+    stage:SetScript("OnUpdate", nil)
+    if box then GFPreviewUpdateHint(box, box._selectedHandle) end
+end
+
+local function GFPreviewStartPan(stage, box, button)
+    if not (stage and box) then return false end
+    local ctrlLeft = button == "LeftButton" and IsControlKeyDown and IsControlKeyDown()
+    if not (ctrlLeft or button == "RightButton" or button == "MiddleButton") then return false end
+    if not box._manualZoom then
+        box._manualZoom = GFPreviewClampZoom(box._mockScale or box._mockAutoScale or 1)
+        GFPreviewUpdateZoomControls(box)
+    end
+    local cx, cy = GetCursorPosition()
+    local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+    if uiScale <= 0 then uiScale = 1 end
+    stage._msufGFPreviewPanning = true
+    stage._msufGFPreviewPanBox = box
+    stage._msufGFPreviewPanCursorX = (cx or 0) / uiScale
+    stage._msufGFPreviewPanCursorY = (cy or 0) / uiScale
+    stage._msufGFPreviewPanStartX = tonumber(box._zoomPanX) or 0
+    stage._msufGFPreviewPanStartY = tonumber(box._zoomPanY) or 0
+    if box._hint then box._hint:SetText(GFPreviewTr("moving preview canvas - release mouse to stop - Fit recenters")) end
+    stage:SetScript("OnUpdate", function(self)
+        if not self._msufGFPreviewPanning then return end
+        local mx, my = GetCursorPosition()
+        local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
+        if scale <= 0 then scale = 1 end
+        local nextX = GFPreviewRound((self._msufGFPreviewPanStartX or 0) + ((mx or 0) / scale - (self._msufGFPreviewPanCursorX or 0)))
+        local nextY = GFPreviewRound((self._msufGFPreviewPanStartY or 0) + ((my or 0) / scale - (self._msufGFPreviewPanCursorY or 0)))
+        if box._zoomPanX ~= nextX or box._zoomPanY ~= nextY then
+            box._zoomPanX, box._zoomPanY = nextX, nextY
+            GFPreviewApplyPan(box)
+        end
+    end)
+    return true
 end
 
 local function GFPreviewReadBarsBool(key, default)
@@ -1040,14 +1160,14 @@ local function GFPreviewHandleOffsets(handle)
     return nil
 end
 
-local function GFPreviewUpdateHint(box, handle)
+GFPreviewUpdateHint = function(box, handle)
     if not (box and box._hint) then return end
     if not handle then
-        box._hint:SetText("click layers to hide - drag custom handles - arrows nudge selected")
+        box._hint:SetText(GFPreviewTr("click layers to hide - drag custom handles - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans"))
         return
     end
     local anchor, x, y = GFPreviewHandleOffsets(handle)
-    local nudgeHint = (M.Tr and M.Tr("arrows nudge, Shift=5, Ctrl=10")) or "arrows nudge, Shift=5, Ctrl=10"
+    local nudgeHint = GFPreviewTr("arrows nudge, Shift=5, Ctrl=10 - Ctrl+left drag pans")
     if anchor then
         box._hint:SetText(string.format("%s   %s   x: %d   y: %d   %s",
             GFPreviewHandleText(handle), tostring(anchor or "CENTER"), GFPreviewRound(x or 0), GFPreviewRound(y or 0), nudgeHint))
@@ -1119,6 +1239,32 @@ GFPreviewHelpers.HealPredictionEnabled = GFPreviewHealPredictionEnabled
 GFPreviewHelpers.SetOutlineShown = GFPreviewSetOutlineShown
 GFPreviewHelpers.LayoutOutline = GFPreviewLayoutOutline
 
+local function GFPreviewCreateZoomButton(parent, text, width, tooltip, onClick)
+    local btn = CreateFrame("Button", nil, parent, T.Template())
+    btn:SetSize(width or 24, 18)
+    btn:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
+    btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
+    btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
+    btn._fs = T.Font(btn, "GameFontDisableSmall", text, { 0.78, 0.84, 0.96, 1 })
+    btn._fs:SetPoint("CENTER")
+    btn:SetScript("OnClick", onClick)
+    btn:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(0.05, 0.07, 0.11, 0.98)
+        self:SetBackdropBorderColor(0.28, 0.42, 0.68, 1)
+        if GameTooltip and tooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(GFPreviewTr(tooltip), 1, 1, 1)
+            GameTooltip:Show()
+        end
+    end)
+    btn:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
+        self:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    return btn
+end
+
 local function CreateNativeGFPreview(parent, ctx, onOpen)
     local H = GFPreviewHelpers
     local width = (ctx.width or 720) - 28
@@ -1132,14 +1278,80 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
     box._title = title
-    local hint = T.Font(box, "GameFontDisableSmall", M.Tr("click layers to hide - drag custom handles - arrows nudge selected"), T.colors.muted)
+    local hint = T.Font(box, "GameFontDisableSmall", GFPreviewTr("click layers to hide - drag custom handles - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
 
     local stage = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
     stage:SetSize(width - 98, 218)
+    if stage.SetClipsChildren then stage:SetClipsChildren(true) end
+    stage:EnableMouse(true)
+    stage:EnableMouseWheel(true)
+    if stage.SetPropagateMouseWheel then stage:SetPropagateMouseWheel(true) end
     box._stage = stage
+
+    local zoomBar = CreateFrame("Frame", nil, stage, T.Template())
+    zoomBar:SetSize(160, 22)
+    zoomBar:SetPoint("TOPRIGHT", stage, "TOPRIGHT", -8, -6)
+    zoomBar:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
+    zoomBar:SetBackdropColor(0.015, 0.018, 0.030, 0.86)
+    zoomBar:SetBackdropBorderColor(0.10, 0.14, 0.22, 0.92)
+    if zoomBar.SetFrameLevel then zoomBar:SetFrameLevel((stage.GetFrameLevel and stage:GetFrameLevel() or 0) + 80) end
+    zoomBar:EnableMouse(true)
+    zoomBar:EnableMouseWheel(true)
+    if zoomBar.SetPropagateMouseWheel then zoomBar:SetPropagateMouseWheel(false) end
+    box._zoomBar = zoomBar
+    zoomBar:SetScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(GFPreviewTr("Preview zoom"), 1, 1, 1)
+            GameTooltip:AddLine(GFPreviewTr("Use the buttons or Ctrl + mouse wheel to zoom."), 0.82, 0.82, 0.82, true)
+            GameTooltip:AddLine(GFPreviewTr("Ctrl + left-drag moves the preview canvas. Fit recenters it."), 0.55, 0.68, 0.86, true)
+            GameTooltip:Show()
+        end
+    end)
+    zoomBar:SetScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
+    local zoomOut = GFPreviewCreateZoomButton(zoomBar, "-", 18, "Zoom out", function() GFPreviewStepZoom(box, -1) end)
+    zoomOut:SetPoint("LEFT", zoomBar, "LEFT", 3, 0)
+    box._zoomOutButton = zoomOut
+
+    local zoomReadout = T.Font(zoomBar, "GameFontDisableSmall", "", { 0.72, 0.78, 0.90, 1 })
+    zoomReadout:SetPoint("LEFT", zoomOut, "RIGHT", 3, 0)
+    zoomReadout:SetSize(54, 18)
+    zoomReadout:SetJustifyH("CENTER")
+    box._zoomReadout = zoomReadout
+
+    local zoomFit = GFPreviewCreateZoomButton(zoomBar, "Fit", 28, "Fit preview", function() GFPreviewSetZoom(box, nil, "GROUP_PREVIEW_ZOOM_FIT") end)
+    zoomFit:SetPoint("LEFT", zoomReadout, "RIGHT", 3, 0)
+    box._zoomFitButton = zoomFit
+
+    local zoomOne = GFPreviewCreateZoomButton(zoomBar, "1:1", 30, "Pixel preview", function() GFPreviewSetZoom(box, 1, "GROUP_PREVIEW_ZOOM_1TO1") end)
+    zoomOne:SetPoint("LEFT", zoomFit, "RIGHT", 3, 0)
+    box._zoomOneButton = zoomOne
+
+    local zoomIn = GFPreviewCreateZoomButton(zoomBar, "+", 18, "Zoom in", function() GFPreviewStepZoom(box, 1) end)
+    zoomIn:SetPoint("LEFT", zoomOne, "RIGHT", 3, 0)
+    box._zoomInButton = zoomIn
+
+    local function GFPreviewZoomWheel(self, delta)
+        local dir = (delta or 0) > 0 and 1 or -1
+        if IsControlKeyDown and IsControlKeyDown() then
+            if self.SetPropagateMouseWheel then self:SetPropagateMouseWheel(false) end
+            GFPreviewStepZoom(box, dir)
+        elseif self.SetPropagateMouseWheel then
+            self:SetPropagateMouseWheel(true)
+        end
+    end
+    box._zoomWheel = GFPreviewZoomWheel
+    stage:SetScript("OnMouseWheel", GFPreviewZoomWheel)
+    zoomBar:SetScript("OnMouseWheel", function(_, delta) GFPreviewStepZoom(box, (delta or 0) > 0 and 1 or -1) end)
+    stage:SetScript("OnMouseDown", function(self, button) GFPreviewStartPan(self, box, button) end)
+    stage:SetScript("OnMouseUp", GFPreviewStopPan)
+    stage:SetScript("OnHide", GFPreviewStopPan)
 
     local bounds = CreateFrame("Frame", nil, stage, T.Template())
     bounds:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
@@ -1227,6 +1439,13 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
     mock:SetBackdropBorderColor(0.0, 0.0, 0.0, 0)
     mock:EnableMouse(true)
+    mock:EnableMouseWheel(true)
+    if mock.SetPropagateMouseWheel then mock:SetPropagateMouseWheel(true) end
+    mock:SetScript("OnMouseWheel", GFPreviewZoomWheel)
+    mock:SetScript("OnMouseDown", function(_, button) GFPreviewStartPan(stage, box, button) end)
+    mock:SetScript("OnMouseUp", function()
+        if stage._msufGFPreviewPanning then GFPreviewStopPan(stage) end
+    end)
     box._mock = mock
 
     mock._health = CreateFrame("StatusBar", nil, mock)
@@ -1456,6 +1675,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end
 
     local function StopHandleDrag(handle, button)
+        if box._stage and box._stage._msufGFPreviewPanning then
+            GFPreviewStopPan(box._stage)
+        end
         if button and button ~= "LeftButton" then return end
         handle = handle or (box._dragFrame and box._dragFrame._handle)
         local wasDragging = handle and handle._dragging == true
@@ -1464,6 +1686,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             box._dragFrame._handle = nil
             box._dragFrame:Hide()
         end
+        local hadFrozenScale = box._dragFrozenScale ~= nil
+        box._dragFrozenScale = nil
         if handle then
             handle._dragging = nil
             handle._dragPoint = nil
@@ -1477,6 +1701,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             handle._dragCursorY = nil
             handle._dragScale = nil
         end
+        local didFinalRefresh
         if wasDragging and handle and handle._cfgText then
             if handle._lastDragX ~= nil or handle._lastDragY ~= nil then
                 CheckpointHandleHistory(handle, "Move")
@@ -1485,8 +1710,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             end
         elseif wasDragging then
             SaveHandlePosition(handle, "Move")
+            didFinalRefresh = true
         else
             GFPreviewRefreshHandleSelection(box)
+        end
+        if hadFrozenScale and not box._manualZoom and not didFinalRefresh and box.Refresh then
+            box:Refresh()
         end
     end
     box._dragFrame:SetScript("OnMouseUp", function(_, button)
@@ -1529,12 +1758,17 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
 
     local function StartHandleDrag(handle, button)
         if button and button ~= "LeftButton" then return end
+        if button == "LeftButton" and IsControlKeyDown and IsControlKeyDown() and GFPreviewStartPan(box._stage, box, button) then
+            handle._suppressNextClick = true
+            return
+        end
         SelectHandle(handle)
         if not handle or handle._locked then return end
         local point, relativeTo, relativePoint, xOfs, yOfs = handle:GetPoint(1)
         local cx, cy = GetCursorPosition()
         if not (point and cx and cy) then return end
         handle._dragging = true
+        box._dragFrozenScale = tonumber(box._mockScale) or tonumber(box._mockAutoScale) or 1
         if handle._cfgText then
             local _, cfgX, cfgY = GFPreviewHandleOffsets(handle)
             handle._dragCfgStartX = tonumber(cfgX) or 0
@@ -1564,6 +1798,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         handle:SetSize(width or 32, height or 32)
         handle:SetMovable(true)
         handle:EnableMouse(true)
+        handle:EnableMouseWheel(true)
+        if handle.SetPropagateMouseWheel then handle:SetPropagateMouseWheel(true) end
         if handle.RegisterForDrag then handle:RegisterForDrag("LeftButton") end
         handle:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
         handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, 0.42)
@@ -1600,9 +1836,11 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
                 GameTooltip:SetText(GFPreviewHandleText(self), 1, 1, 1)
                 if self._locked then
                     GameTooltip:AddLine((M.Tr and M.Tr("This preview layer follows Blizzard/native placement and is locked.")) or "This preview layer follows Blizzard/native placement and is locked.", 0.82, 0.82, 0.82, true)
+                    GameTooltip:AddLine(GFPreviewTr("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
                 else
                     GameTooltip:AddLine((M.Tr and M.Tr("Drag this preview element to adjust the same placement offsets used by Group Frames.")) or "Drag this preview element to adjust the same placement offsets used by Group Frames.", 0.82, 0.82, 0.82, true)
                     GameTooltip:AddLine((M.Tr and M.Tr("Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.")) or "Arrow keys nudge the selected element. Shift = 5, Ctrl = 10.", 0.55, 0.62, 0.72, true)
+                    GameTooltip:AddLine(GFPreviewTr("Ctrl + left-drag pans the preview canvas."), 0.55, 0.68, 0.86, true)
                 end
                 GameTooltip:Show()
             end
@@ -1613,8 +1851,13 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if GameTooltip then GameTooltip:Hide() end
         end)
         handle:SetScript("OnClick", function(self)
+            if self._suppressNextClick then
+                self._suppressNextClick = nil
+                return
+            end
             SelectHandle(self)
         end)
+        handle:SetScript("OnMouseWheel", GFPreviewZoomWheel)
         handle:SetScript("OnMouseDown", StartHandleDrag)
         handle:SetScript("OnMouseUp", StopHandleDrag)
         handle:HookScript("OnHide", function(self)
@@ -1718,7 +1961,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         powerRight = powerRightTextHandle,
     }
 
-    local footer = T.Font(box, "GameFontDisableSmall", M.Tr("Click a handle to select - drag custom layers - arrow keys nudge selected; Blizzard is locked"), T.colors.muted)
+    local footer = T.Font(box, "GameFontDisableSmall", GFPreviewTr("Click a handle to select - drag custom layers - Ctrl+wheel zoom - Ctrl+left drag pans"), T.colors.muted)
     footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
 
     function box:Refresh()
@@ -1852,14 +2095,19 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             frameScale = tonumber(sc2) or 1
         end
         liveW, liveH = max(1, liveW), max(1, liveH)
-        local zoom = min(GF_PREVIEW_MIN_W / liveW, GF_PREVIEW_MIN_H / liveH)
-        zoom = max(1.4, min(2.8, zoom))
-        local previewScale = zoom
-        local mockW = max(48, GFPreviewRound(liveW * zoom))
-        local mockH = max(20, GFPreviewRound(liveH * zoom))
-        local powerH = runtimePower and runtimePower.enabled == true and GFPreviewScaleValue(runtimePower.height, zoom, 0) or 0
+        local autoZoom = min(GF_PREVIEW_MIN_W / liveW, GF_PREVIEW_MIN_H / liveH)
+        autoZoom = max(1.4, min(2.8, autoZoom))
+        local manualZoom = tonumber(self._manualZoom)
+        local frozenZoom = tonumber(self._dragFrozenScale)
+        local previewScale = manualZoom and GFPreviewClampZoom(manualZoom) or (frozenZoom and GFPreviewClampZoom(frozenZoom) or autoZoom)
+        self._mockAutoScale = autoZoom
+        self._mockScale = previewScale
+        GFPreviewUpdateZoomControls(self)
+        local mockW = max(48, GFPreviewRound(liveW * previewScale))
+        local mockH = max(20, GFPreviewRound(liveH * previewScale))
+        local powerH = runtimePower and runtimePower.enabled == true and GFPreviewScaleValue(runtimePower.height, previewScale, 0) or 0
         if not runtimeSpec then
-            powerH = H.MockPowerHeight(kind, conf, zoom, frameScale)
+            powerH = H.MockPowerHeight(kind, conf, previewScale, frameScale)
         end
         local borderEnabled = runtimeSpec and (runtimeBorder.enabled ~= false) or (not runtimeSpec and conf.borderEnabled ~= false)
         local outline = borderEnabled and (tonumber(runtimeBorder and runtimeBorder.thickness) or 1) or 0
@@ -1870,8 +2118,9 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         local startY = -GFPreviewRound((stageH - mockH) * 0.5)
         local mock = self._mock
         mock._previewScale = previewScale
+        self._mockBaseOffsetX, self._mockBaseOffsetY = startX, startY
         mock:ClearAllPoints()
-        mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX, startY)
+        mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX + (tonumber(self._zoomPanX) or 0), startY + (tonumber(self._zoomPanY) or 0))
         mock:SetSize(mockW, mockH)
         mock:SetBackdrop({ bgFile = WHITE8X8 })
         local bgAlpha = conf.bgA or 0.88
