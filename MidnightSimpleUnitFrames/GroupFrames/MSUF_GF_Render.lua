@@ -795,8 +795,10 @@ end
 local function ApplyFrameBorderLevel(f, border)
     if not (f and border and border.SetFrameLevel) then return end
     local anchor = f.barGroup or f
-    local anchorLevel = anchor and anchor.GetFrameLevel and anchor:GetFrameLevel() or 0
-    local wantLevel = anchorLevel + 3
+    local base = f.health or anchor
+    local baseLevel = base and base.GetFrameLevel and base:GetFrameLevel() or 0
+    local absorbTopLevel = baseLevel + 3
+    local wantLevel = absorbTopLevel + 1
     local minTextLevel
     local layer = f.nameTextLayer
     local level = layer and layer.GetFrameLevel and layer:GetFrameLevel()
@@ -816,11 +818,26 @@ local function ApplyFrameBorderLevel(f, border)
     if level and (not minTextLevel or level < minTextLevel) then
         minTextLevel = level
     end
-    if minTextLevel and wantLevel >= minTextLevel then wantLevel = minTextLevel - 1 end
-    if wantLevel <= anchorLevel then wantLevel = anchorLevel + 1 end
+    if minTextLevel and wantLevel >= minTextLevel then
+        local belowText = minTextLevel - 1
+        if belowText > absorbTopLevel then
+            wantLevel = belowText
+        end
+    end
+    if wantLevel <= absorbTopLevel then wantLevel = absorbTopLevel + 1 end
+    if GF.SyncFrameLayerAbove and base then
+        wantLevel = GF.SyncFrameLayerAbove(border, base, wantLevel - baseLevel) or wantLevel
+    elseif anchor and anchor.GetFrameStrata and border.SetFrameStrata then
+        local strata = anchor:GetFrameStrata()
+        if strata and (not border.GetFrameStrata or border:GetFrameStrata() ~= strata) then
+            border:SetFrameStrata(strata)
+        end
+    end
     if border._msufGFFrameBorderLevel ~= wantLevel then
         border._msufGFFrameBorderLevel = wantLevel
-        border:SetFrameLevel(wantLevel)
+        if not GF.SyncFrameLayerAbove then
+            border:SetFrameLevel(wantLevel)
+        end
     end
 end
 
