@@ -194,21 +194,12 @@ local function ShowValue(bar, maxValue, value)
     SetShownCached(bar, true)
 end
 
-local function CanShareHealthCalc(frame)
-    return not (frame and frame.MSUFSpec and frame.MSUFSpec.scope == "group")
-end
-
 local function EnsureCalc(frame)
     if calcUnsupported then
         return nil
     end
-    local shareHealthCalc = CanShareHealthCalc(frame)
-    local calc = frame._msufPredictionCalc or (shareHealthCalc and frame._msufHealthCalc) or nil
+    local calc = frame._msufPredictionCalc
     if calc then
-        frame._msufPredictionCalc = calc
-        if shareHealthCalc and not frame._msufHealthCalc then
-            frame._msufHealthCalc = calc
-        end
         return calc
     end
     if not (CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction) then
@@ -224,9 +215,6 @@ local function EnsureCalc(frame)
         calc:SetIncomingHealOverflowPercent(1)
     end
     frame._msufPredictionCalc = calc
-    if shareHealthCalc then
-        frame._msufHealthCalc = calc
-    end
     return calc
 end
 

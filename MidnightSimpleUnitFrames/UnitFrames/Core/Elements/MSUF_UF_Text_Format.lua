@@ -69,8 +69,12 @@ local function FormatPercentValue(value, hideSymbol, canSecret)
 end
 
 local function SetTextCached(fs, text)
+    -- Intentionally NO dedupe/compare: `text` may be a WoW secret value
+    -- (health/power/name-derived strings). Passing a secret to SetText is fine,
+    -- but comparing one with == raises a hard error. Always set directly, like
+    -- the status SetText helper's `raw` path. Upstream throttling already caps
+    -- how often this runs.
     fs:SetText(text or "")
-    fs._msufLastSetText = nil
 end
 
 local function AddSuffix(text, suffix)

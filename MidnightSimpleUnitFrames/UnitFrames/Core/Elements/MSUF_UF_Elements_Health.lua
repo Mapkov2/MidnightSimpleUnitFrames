@@ -72,51 +72,15 @@ local ApplyHealthStatusColor = C.ApplyHealthStatusColor
 local ApplyBackgrounds = C.ApplyBackgrounds
 local PowerColor = C.PowerColor
 local RefreshUnitState = C.RefreshUnitState
-local CreateUnitHealPredictionCalculator = _G.CreateUnitHealPredictionCalculator
-local UnitGetDetailedHealPrediction = _G.UnitGetDetailedHealPrediction
 local Health = {
     events = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION" },
 }
 local GROUP_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
 
-local calcUnsupported
-local function EnsureHealthCalc(frame)
-    if calcUnsupported then
-        return nil
-    end
-    local calc = frame._msufHealthCalc
-    if calc then
-        return calc
-    end
-    if not (CreateUnitHealPredictionCalculator and UnitGetDetailedHealPrediction) then
-        calcUnsupported = true
-        return nil
-    end
-    calc = CreateUnitHealPredictionCalculator()
-    if not calc then
-        calcUnsupported = true
-        return nil
-    end
-    if calc.SetIncomingHealOverflowPercent then
-        calc:SetIncomingHealOverflowPercent(1)
-    end
-    frame._msufHealthCalc = calc
-    return calc
-end
-
-local function ReadHealthValues(frame, unit)
-    local calc = EnsureHealthCalc(frame)
-    if calc then
-        UnitGetDetailedHealPrediction(unit, "player", calc)
-        return calc:GetCurrentHealth(), calc:GetMaximumHealth(), calc
-    end
-    return UnitHealth(unit), UnitHealthMax(unit), nil
-end
-
 local function ReadDirectHealthValues(unit)
     local hp = UnitHealth(unit)
     local maxHP = UnitHealthMax(unit)
-    return hp or 0, maxHP or 1, nil
+    return hp or 0, maxHP or 1
 end
 
 function Health.Create(frame, spec)
@@ -143,15 +107,13 @@ function Health.Apply(frame, spec)
     if not frame.hpBar then
         Health.Create(frame, spec)
     end
+    frame._msufIsGroupFrame = spec and spec.scope == "group"
     frame._msufHealthColorByHealth = spec and spec.health and spec.health.mode == "gradient"
     frame._msufHealthBgDynamic = spec and spec.health and spec.health.backgroundMatchHealth == true
     frame._msufPowerBgDynamic = spec and spec.power and spec.power.backgroundMatchHealth == true
-    frame._msufHealthColdColor = spec and spec.scope == "group"
+    frame._msufHealthColdColor = frame._msufIsGroupFrame
         and frame._msufHealthColorByHealth ~= true
         or nil
-    if spec and spec.scope == "group" then
-        frame._msufHealthCalc = nil
-    end
     SetStatusTexture(frame.hpBar, spec and spec.health and spec.health.texture or spec and spec.texture or WHITE)
     if frame.hpBar.SetReverseFill then
         local reverse = spec and spec.health and spec.health.reverse == true
@@ -165,7 +127,7 @@ function Health.Apply(frame, spec)
 end
 
 function Health.GetEvents(frame, spec)
-    if spec and spec.scope == "group" then
+    if frame._msufIsGroupFrame then
         return GROUP_HEALTH_EVENTS
     end
     return Health.events
@@ -183,12 +145,7 @@ function Health.Update(frame, event, unit)
         RefreshUnitState(frame, unit, spec, event)
     end
 
-    local hp, maxHP, calc
-    if spec and spec.scope == "group" then
-        hp, maxHP, calc = ReadDirectHealthValues(unit)
-    else
-        hp, maxHP, calc = ReadHealthValues(frame, unit)
-    end
+    local hp, maxHP = ReadDirectHealthValues(unit)
     local animate = event == "UNIT_HEALTH"
 
     SetBarMinMax(bar, maxHP, true)
@@ -208,12 +165,12 @@ function Health.Update(frame, event, unit)
 
     local rawHealthColor
     if updateColor then
-        rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc)
+        rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP)
     end
     if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
         ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
     end
-    return hp, maxHP, calc
+    return hp, maxHP
 end
 
 UF.RegisterElement("Health", Health)

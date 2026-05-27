@@ -135,14 +135,6 @@ local function NewSnapshot(unit)
         revision = 0,
         buffIcons = {},
         debuffIcons = {},
-        helpfulById = {},
-        harmfulById = {},
-        playerHelpfulById = {},
-        playerHarmfulById = {},
-        helpfulByName = {},
-        harmfulByName = {},
-        playerHelpfulByName = {},
-        playerHarmfulByName = {},
         instanceData = {},
         instanceHarmful = {},
         helpfulOrder = {},
@@ -165,14 +157,6 @@ end
 local function ResetDerived(snapshot)
     wipe(snapshot.buffIcons)
     wipe(snapshot.debuffIcons)
-    wipe(snapshot.helpfulById)
-    wipe(snapshot.harmfulById)
-    wipe(snapshot.playerHelpfulById)
-    wipe(snapshot.playerHarmfulById)
-    wipe(snapshot.helpfulByName)
-    wipe(snapshot.harmfulByName)
-    wipe(snapshot.playerHelpfulByName)
-    wipe(snapshot.playerHarmfulByName)
     snapshot.anyDebuff = false
     snapshot.anyDispelType = false
     snapshot.dispellable = false
@@ -253,27 +237,6 @@ local function IndexAura(snapshot, data, harmful)
         iconList[#iconList + 1] = icon
     end
     local fromPlayer = AuraFromPlayer(data)
-    local spellId = data.spellId
-    if spellId ~= nil and not IsSecret(spellId) then
-        local id = tonumber(spellId)
-        if id then
-            local byId = harmful and snapshot.harmfulById or snapshot.helpfulById
-            if not byId[id] then byId[id] = data end
-            if fromPlayer then
-                local playerById = harmful and snapshot.playerHarmfulById or snapshot.playerHelpfulById
-                if not playerById[id] then playerById[id] = data end
-            end
-        end
-    end
-    local name = SafeString(data.name)
-    if name then
-        local byName = harmful and snapshot.harmfulByName or snapshot.helpfulByName
-        if not byName[name] then byName[name] = data end
-        if fromPlayer then
-            local playerByName = harmful and snapshot.playerHarmfulByName or snapshot.playerHelpfulByName
-            if not playerByName[name] then playerByName[name] = data end
-        end
-    end
     if harmful then
         snapshot.anyDebuff = true
         local auraInstanceID = AuraInstanceID(data)
@@ -453,77 +416,59 @@ function AuraCache.GetSnapshot(frame)
     return AuraCache.BuildSnapshot(frame)
 end
 
-local function SelectMap(snapshot, filter, onlyOwn)
+local function SelectOrder(snapshot, filter)
     local harmful = type(filter) == "string" and filter:find("HARMFUL", 1, true)
-    local player = onlyOwn == true or (type(filter) == "string" and filter:find("PLAYER", 1, true))
     if harmful then
-        return player and snapshot.playerHarmfulById or snapshot.harmfulById
+        return snapshot.harmfulOrder
     end
-    return player and snapshot.playerHelpfulById or snapshot.helpfulById
+    return snapshot.helpfulOrder
 end
 
-local function SelectNameMap(snapshot, filter, onlyOwn)
-    local harmful = type(filter) == "string" and filter:find("HARMFUL", 1, true)
-    local player = onlyOwn == true or (type(filter) == "string" and filter:find("PLAYER", 1, true))
-    if harmful then
-        return player and snapshot.playerHarmfulByName or snapshot.harmfulByName
-    end
-    return player and snapshot.playerHelpfulByName or snapshot.helpfulByName
-end
-
-function AuraCache.FindBySpellIDs(frame, filter, ids, onlyOwn)
-    if not ids then return false, nil end
+function AuraCache.Find(frame, filter, ids, names, onlyOwn)
     local snapshot = AuraCache.GetSnapshot(frame)
-    local byId = snapshot and SelectMap(snapshot, filter, onlyOwn)
-    if not byId then return false, nil end
-    for id in pairs(ids) do
-        local data = byId[id]
-        if data then
-            return true, data
+    if not snapshot then return false, nil end
+    local order = SelectOrder(snapshot, filter)
+    local playerReq = onlyOwn == true or (type(filter) == "string" and filter:find("PLAYER", 1, true))
+
+    for i = 1, #order do
+        local data = snapshot.instanceData[order[i]]
+        if data and (not playerReq or AuraFromPlayer(data)) then
+            if ids and data.spellId and not IsSecret(data.spellId) and ids[tonumber(data.spellId)] then
+                return true, data
+            end
+            if names and data.name and not IsSecret(data.name) and names[data.name] then
+                return true, data
+            end
         end
     end
     return false, nil
 end
 
-function AuraCache.Find(frame, filter, ids, names, onlyOwn)
-    local found, data = AuraCache.FindBySpellIDs(frame, filter, ids, onlyOwn)
-    if found then return true, data end
-    if not names then return false, nil end
-    local snapshot = AuraCache.GetSnapshot(frame)
-    local byName = snapshot and SelectNameMap(snapshot, filter, onlyOwn)
-    if not byName then return false, nil end
-    for name in pairs(names) do
-        data = byName[name]
-        if data then return true, data end
-    end
-    return false, nil
+function AuraCache.FindBySpellIDs(frame, filter, ids, onlyOwn)
+    return AuraCache.Find(frame, filter, ids, nil, onlyOwn)
 end
 
 function AuraCache.ContainsAny(frame, watched)
     if not watched then return true end
     local snapshot = AuraCache.GetSnapshot(frame)
     if not snapshot then return false end
-    local ids = watched.ids
-    if ids then
-        for id in pairs(ids) do
-            if snapshot.helpfulById[id] or snapshot.harmfulById[id]
-                or snapshot.playerHelpfulById[id] or snapshot.playerHarmfulById[id]
-            then
-                return true
+
+    local function checkOrder(order)
+        for i = 1, #order do
+            local data = snapshot.instanceData[order[i]]
+            if data then
+                if watched.ids and data.spellId and not IsSecret(data.spellId) and watched.ids[tonumber(data.spellId)] then
+                    return true
+                end
+                if watched.names and data.name and not IsSecret(data.name) and watched.names[data.name] then
+                    return true
+                end
             end
         end
+        return false
     end
-    local names = watched.names
-    if names then
-        for name in pairs(names) do
-            if snapshot.helpfulByName[name] or snapshot.harmfulByName[name]
-                or snapshot.playerHelpfulByName[name] or snapshot.playerHarmfulByName[name]
-            then
-                return true
-            end
-        end
-    end
-    return false
+
+    return checkOrder(snapshot.harmfulOrder) or checkOrder(snapshot.helpfulOrder)
 end
 
 local GroupAuraCache = {}

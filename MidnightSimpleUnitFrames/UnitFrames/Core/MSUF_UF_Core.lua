@@ -498,6 +498,9 @@ local function FrameEnableElement(frame, name)
 
     SyncElementEvents(frame, name, element, spec)
     frame._msufActiveElements[name] = true
+    if element and element.Update then
+        frame["_msufUpdate" .. name] = element.Update
+    end
     return true
 end
 
@@ -508,6 +511,7 @@ local function FrameDisableElement(frame, name)
     local element = UF.elements[name]
     UnregisterElementEvents(frame, name)
     frame._msufActiveElements[name] = nil
+    frame["_msufUpdate" .. name] = nil
     if element and element.Disable then
         element.Disable(frame)
     end
@@ -575,25 +579,17 @@ local function RunElementUpdate(frame, owners, name, event, unit, ...)
     if not ok then
         return nil
     end
-    local active = frame and frame._msufActiveElements
-    if not active or active[name] ~= true then
-        return nil
-    end
-    local element = Elements[name]
-    if element and element.Update then
-        return element.Update(frame, event, eventUnit, ...)
+    local updateFn = frame and frame["_msufUpdate" .. name]
+    if updateFn then
+        return updateFn(frame, event, eventUnit, ...)
     end
     return nil
 end
 
 local function RunElementUpdateResolved(frame, name, event, unit, ...)
-    local active = frame and frame._msufActiveElements
-    if not active or active[name] ~= true then
-        return nil
-    end
-    local element = Elements[name]
-    if element and element.Update then
-        return element.Update(frame, event, unit or frame.unit, ...)
+    local updateFn = frame and frame["_msufUpdate" .. name]
+    if updateFn then
+        return updateFn(frame, event, unit or frame.unit, ...)
     end
     return nil
 end
@@ -605,16 +601,9 @@ local function RunTextHealth(frame, owners, event, unit, hp, maxHP)
             return
         end
     end
-    local active = frame and frame._msufActiveElements
-    if not active or active.HealthText ~= true then
-        return
-    end
-    if unit and unit ~= frame.unit then
-        return
-    end
-    local text = Elements.HealthText
-    if text and text.Update then
-        text.Update(frame, event, unit or frame.unit, hp, maxHP)
+    local updateFn = frame and frame._msufUpdateHealthText
+    if updateFn and (not unit or unit == frame.unit) then
+        return updateFn(frame, event, unit or frame.unit, hp, maxHP)
     end
 end
 
@@ -625,16 +614,9 @@ local function RunTextPower(frame, owners, event, unit, power, maxPower)
             return
         end
     end
-    local active = frame and frame._msufActiveElements
-    if not active or active.PowerText ~= true then
-        return
-    end
-    if unit and unit ~= frame.unit then
-        return
-    end
-    local text = Elements.PowerText
-    if text and text.Update then
-        text.Update(frame, event, unit or frame.unit, power, maxPower)
+    local updateFn = frame and frame._msufUpdatePowerText
+    if updateFn and (not unit or unit == frame.unit) then
+        return updateFn(frame, event, unit or frame.unit, power, maxPower)
     end
 end
 
@@ -643,13 +625,9 @@ local function RunTextName(frame, owners, event, unit)
     if not ok then
         return
     end
-    local active = frame and frame._msufActiveElements
-    if not active or active.NameText ~= true then
-        return
-    end
-    local text = Elements.NameText
-    if text and text.Update then
-        text.Update(frame, event, eventUnit)
+    local updateFn = frame and frame._msufUpdateNameText
+    if updateFn then
+        return updateFn(frame, event, eventUnit)
     end
 end
 
@@ -720,6 +698,10 @@ local HOT_EVENT_KIND = {
     SPELLS_CHANGED = 18,
 }
 
+-- Hot-path dispatch: hard-codes element names per event "kind" instead of
+-- walking the generic element list, to keep the busiest events cheap. The cost
+-- is coupling -- adding an element that must react to a hot event means updating
+-- HOT_EVENT_KIND, this switch, and RUNTIME_UPDATE_OWNERS/masks together.
 local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
     local kind = HOT_EVENT_KIND[event]
     if kind == 1 then
@@ -733,10 +715,6 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
         end
         if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
             hp, maxHP, calc = RunHealthHot(frame, owners, event, unit)
-            if event == "UNIT_HEALTH" then
-                RunTextName(frame, owners, event, unit)
-            end
-            RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
         else
             RunElementUpdate(frame, owners, "Health", event, unit, ...)
         end
@@ -746,6 +724,7 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
         if event == "UNIT_FLAGS" then
             RunElementUpdate(frame, owners, "StatusTextIndicator", event, unit, ...)
             RunElementUpdate(frame, owners, "CombatIndicator", event, unit, ...)
+            RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
         end
         if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
             RunElementUpdate(frame, owners, "Prediction", event, unit, hp, maxHP, calc)
@@ -1000,9 +979,6 @@ FrameRuntimeUpdate = function(frame, reason)
     local hp, maxHP, calc
     if not mask or mask.health then
         hp, maxHP, calc = RunHealthHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
-    end
-    if mask and mask.healthText then
-        RunTextHealth(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
     end
     if not mask or mask.power then
         RunPowerHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)

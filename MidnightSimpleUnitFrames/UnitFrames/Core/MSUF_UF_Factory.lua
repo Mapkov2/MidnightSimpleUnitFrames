@@ -90,14 +90,14 @@ local function ApplyPosition(frame, spec)
         return false
     end
     local point = spec.point or "CENTER"
-    local anchor, missingAnchorName, requestedAnchor, blockedMissingAnchor = ResolveAnchor(spec, frame)
+    local anchor, missingAnchorName, requestedAnchor = ResolveAnchor(spec, frame)
     local relativePoint = spec.relativePoint or point
     local x = tonumber(spec.x) or 0
     local y = tonumber(spec.y) or 0
     local key = spec.key or (UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(frame.unit)) or frame.unit
 
     if missingAnchorName then
-        if not blockedMissingAnchor and type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
+        if type(_G.MSUF_ScheduleLateAnchorReanchor) == "function" then
             _G.MSUF_ScheduleLateAnchorReanchor()
         end
         local applyCached = _G.MSUF_ApplyCachedUnitFrameScreenPosition
@@ -371,12 +371,14 @@ function Factory.EnsureDeferredDriver()
     Factory.deferredDriver:RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
-local LATE_ANCHOR_RETRY_DELAYS = { 0, 0.05, 0.20, 0.60, 1.20, 2.00 }
 local LATE_ANCHOR_KEYS = { "player", "target", "targettarget", "focus", "focustarget", "pet", "boss" }
 
+-- Class-power late-anchoring is currently disabled. Kept as an explicit stub
+-- (rather than deleting the call sites) so it can be re-enabled without rewiring
+-- HasLateAnchorConfig / FlushLateAnchorReanchor. Previously written as
+-- `... == true and false`, which always evaluated false but read like a bug.
 local function HasClassPowerLateAnchor()
-    local bars = _G.MSUF_DB and _G.MSUF_DB.bars
-    return bars and bars.classPowerAnchorToCooldown == true and false
+    return false
 end
 
 local function HasLateAnchorConfig()
@@ -426,12 +428,11 @@ function _G.MSUF_ScheduleLateAnchorReanchor()
 
     local state = _G.MSUF_LateAnchorReanchorState
     if type(state) ~= "table" then
-        state = { pending = false, attempts = 0 }
+        state = { pending = false }
         _G.MSUF_LateAnchorReanchorState = state
     end
     if state.pending then return false end
     state.pending = true
-    state.attempts = 0
 
     if not (_G.C_Timer and _G.C_Timer.After) then
         FlushLateAnchorReanchor()
@@ -439,16 +440,11 @@ function _G.MSUF_ScheduleLateAnchorReanchor()
         return true
     end
 
-    for i = 1, #LATE_ANCHOR_RETRY_DELAYS do
-        _G.C_Timer.After(LATE_ANCHOR_RETRY_DELAYS[i], function()
-            if not state.pending then return end
-            state.attempts = i
-            FlushLateAnchorReanchor()
-            if i == #LATE_ANCHOR_RETRY_DELAYS then
-                state.pending = false
-            end
-        end)
-    end
+    _G.C_Timer.After(0, function()
+        if not state.pending then return end
+        FlushLateAnchorReanchor()
+        state.pending = false
+    end)
     return true
 end
 
