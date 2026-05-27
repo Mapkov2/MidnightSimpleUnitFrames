@@ -1077,6 +1077,10 @@ function MSUF_ReanchorPlayerCastBar()
     end
 
     if not MSUF_ShouldUseCastbarUnit("player", g) then
+        local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
+        if type(applyPlayerState) == "function" then
+            applyPlayerState()
+        end
         if MSUF_PlayerCastbar then
             MSUF_PlayerCastbar:SetScript("OnUpdate", nil)
             MSUF_PlayerCastbar.interruptFeedbackEndTime = nil
@@ -1094,7 +1098,12 @@ function MSUF_ReanchorPlayerCastBar()
         return
     end
 
-    MSUF_InitSafePlayerCastbar()
+    local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
+    if type(applyPlayerState) == "function" then
+        applyPlayerState()
+    else
+        MSUF_InitSafePlayerCastbar()
+    end
 
     local frames = GetUnitFrames()
     local msufPlayer = frames and frames["player"]

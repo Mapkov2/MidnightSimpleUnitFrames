@@ -87,18 +87,9 @@ local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 
 local function BuildCastbars(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Castbar", "Castbar behavior, textures, GCD and interrupt indicators.", 72)
-
-    local function EnsureCastbars()
-        if type(_G.MSUF_EnsureAddonLoaded) == "function" then
-            pcall(_G.MSUF_EnsureAddonLoaded, "MidnightSimpleUnitFrames_Castbars")
-        elseif _G.C_AddOns and type(C_AddOns.LoadAddOn) == "function" then
-            pcall(C_AddOns.LoadAddOn, "MidnightSimpleUnitFrames_Castbars")
-        end
-    end
+    b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
 
     local function ApplyCastbarTextures(reason)
-        EnsureCastbars()
         Call("MSUF_UpdateCastbarTextures_Immediate")
         Call("MSUF_UpdateCastbarTextures")
         Call("MSUF_UpdateCastbarVisuals_Immediate")
@@ -108,8 +99,6 @@ local function BuildCastbars(ctx)
     end
 
     local function BuildPreview()
-        EnsureCastbars()
-
         local section = b:Section("Preview", 132)
         local sectionW = section._msuf2Width or b.width or ctx.width or 720
         local innerW = max(360, sectionW - 28)
@@ -1090,32 +1079,6 @@ local function BuildCastbars(ctx)
     M.BindToggle(ctx, ticks,
         function() return ReadGBool("castbarShowChannelTicks", false) end,
         function(v) SetGBool("castbarShowChannelTicks", v, "MSUF2_CASTBAR_TICKS", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_TICKS"); RefreshCastPreview() end)
-
-    local gcd = b:CollapsibleSection("castbar_gcd", "GCD Bar", 150, false)
-    local syncGCDSubs
-    local gcdShow = W.Toggle(gcd, "Show GCD bar for instant casts")
-    M.BindToggle(ctx, gcdShow,
-        function() return ReadGBool("showGCDBar", false) end,
-        function(v)
-            SetGBool("showGCDBar", v, "MSUF2_CASTBAR_GCD", { castbar = true, preview = true })
-            EnsureCastbars()
-            if type(_G.MSUF_SetGCDBarEnabled) == "function" then pcall(_G.MSUF_SetGCDBarEnabled, v) end
-            ApplyCastbars("MSUF2_CASTBAR_GCD")
-            if syncGCDSubs then syncGCDSubs() end
-        end)
-    local gcdTime = W.Toggle(gcd, "GCD bar: show time text")
-    M.BindToggle(ctx, gcdTime,
-        function() return ReadGBool("showGCDBarTime", true) end,
-        function(v) SetGBool("showGCDBarTime", v, "MSUF2_CASTBAR_GCD_TIME", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_GCD_TIME") end)
-    local gcdSpell = W.Toggle(gcd, "GCD bar: show spell name + icon")
-    M.BindToggle(ctx, gcdSpell,
-        function() return ReadGBool("showGCDBarSpell", true) end,
-        function(v) SetGBool("showGCDBarSpell", v, "MSUF2_CASTBAR_GCD_SPELL", { castbar = true, preview = true }); ApplyCastbars("MSUF2_CASTBAR_GCD_SPELL") end)
-    syncGCDSubs = function()
-        SetControlsEnabled({ gcdTime, gcdSpell }, ReadGBool("showGCDBar", false))
-    end
-    M.AddRefresher(ctx, syncGCDSubs)
-    syncGCDSubs()
 
     local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
     local texLeftX, texRightX = 14, 392

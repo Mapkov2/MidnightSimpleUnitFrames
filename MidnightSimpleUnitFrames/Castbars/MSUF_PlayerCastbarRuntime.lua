@@ -800,9 +800,6 @@ end
 
 local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
     if not MSUF_IsCastbarEnabledForUnit("player") then
-        if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-            _G.MSUF_PlayerGCDBar_Stop(self)
-        end
         self:SetScript("OnUpdate", nil)
         if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
         self.interruptFeedbackEndTime = nil
@@ -825,9 +822,6 @@ local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
     local unitToken = select(1, ...)
 
     if event == "UNIT_SPELLCAST_EMPOWER_START" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
-        if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-            _G.MSUF_PlayerGCDBar_Stop(self, true)
-        end
         MSUF_PlayerCastbar_EmpowerStart(self, select(3, ...))
         return
     elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
@@ -863,10 +857,6 @@ local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
             return
         end
 
-        if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-            _G.MSUF_PlayerGCDBar_Stop(self, true)
-        end
-
         MSUF_PlayerCastbar_ClearActiveIdentifiers(self)
         MSUF_PlayerCastbar_ShowInterruptFeedback(self, INTERRUPTED)
         return
@@ -878,9 +868,6 @@ local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
         or event == "UNIT_SPELLCAST_CHANNEL_START"
         or event == "UNIT_SPELLCAST_INTERRUPTIBLE"
         or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
-            if type(_G.MSUF_PlayerGCDBar_Stop) == "function" then
-                _G.MSUF_PlayerGCDBar_Stop(self, true)
-            end
             MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
             return
         elseif event == "UNIT_SPELLCAST_CHANNEL_UPDATE" or event == "UNIT_SPELLCAST_DELAYED" then

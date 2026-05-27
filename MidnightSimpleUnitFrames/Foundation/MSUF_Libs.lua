@@ -699,9 +699,9 @@ else
     end)
 end
 
---- LoD module helpers (Castbars/GamePlay/etc.)
+--- LoD module helpers (GamePlay/etc.; castbars now load with core)
 
---- Export the core namespace for LoadOnDemand sub-addons.
+--- Export the core namespace for optional modules/sub-addons.
 _G.MSUF_NS = _G.MSUF_NS or MSUF
 
 --- Safe helper to load a LoD sub-addon at runtime.
@@ -837,36 +837,6 @@ if _G.C_Timer and _G.C_Timer.After then
     end)
 else
     _G.MSUF_InstallGlobalScaleGate()
-end
-
---- Auto-load Castbars LoD addon on login when any castbar feature is enabled.
---- (Keeps the core addon slim, but still "just works" out of the box.)
-do
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_LOGIN")
-    f:SetScript("OnEvent", function()
-        local ensureDB = _G.MSUF_EnsureDB
-        if ensureDB then
-            ensureDB()
-        end
-
-        local g = _G.MSUF_DB and _G.MSUF_DB.general or nil
-        if not g then return end
-
-        local need = false
-        if type(_G.MSUF_AreAnyCastbarsEnabled) == "function" then
-            need = _G.MSUF_AreAnyCastbarsEnabled() and true or false
-        else
-            if g.enablePlayerCastbar ~= false then need = true end
-            if g.enableTargetCastbar ~= false then need = true end
-            if g.enableFocusCastbar ~= false then need = true end
-            if g.enableBossCastbar == true then need = true end
-        end
-
-        if need then
-            _G.MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Castbars")
-        end
-    end)
 end
 
 --- Auto-load Gameplay LoD addon on login when any gameplay feature is enabled.

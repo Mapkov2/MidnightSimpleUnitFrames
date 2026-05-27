@@ -126,12 +126,45 @@ local function MSUF_Driver_IsCastbarEnabled(unit)
     end
 end
 
-local function MSUF_Driver_ShouldUseBlizzardCastbar(unit)
-    local fn = _G.MSUF_ShouldUseBlizzardCastbar
-    if type(fn) == "function" then
-        return fn(unit) == true
+local CASTBAR_UNIT_EVENTS = {
+    "UNIT_SPELLCAST_START",
+    "UNIT_SPELLCAST_STOP",
+    "UNIT_SPELLCAST_DELAYED",
+    "UNIT_SPELLCAST_CHANNEL_START",
+    "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_SPELLCAST_CHANNEL_UPDATE",
+    "UNIT_SPELLCAST_EMPOWER_START",
+    "UNIT_SPELLCAST_EMPOWER_STOP",
+    "UNIT_SPELLCAST_EMPOWER_UPDATE",
+    "UNIT_SPELLCAST_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_FAILED",
+    "UNIT_SPELLCAST_SUCCEEDED",
+    "UNIT_SPELLCAST_INTERRUPTED",
+}
+
+local function MSUF_Driver_SetUnitEvents(frame, unit, enabled)
+    if not frame then return end
+    if enabled then
+        if frame._msufDriverEventsRegistered then return end
+        for i = 1, #CASTBAR_UNIT_EVENTS do
+            frame:RegisterUnitEvent(CASTBAR_UNIT_EVENTS[i], unit)
+        end
+        if unit == "target" or unit == "focus" then
+            frame:RegisterEvent("PLAYER_" .. unit:upper() .. "_CHANGED")
+        end
+        frame._msufDriverEventsRegistered = true
+        return
     end
-    return not MSUF_Driver_IsCastbarEnabled(unit)
+
+    if not frame._msufDriverEventsRegistered then return end
+    for i = 1, #CASTBAR_UNIT_EVENTS do
+        frame:UnregisterEvent(CASTBAR_UNIT_EVENTS[i])
+    end
+    if unit == "target" or unit == "focus" then
+        frame:UnregisterEvent("PLAYER_" .. unit:upper() .. "_CHANGED")
+    end
+    frame._msufDriverEventsRegistered = nil
 end
 
 -- Avoid repeated StatusBar:SetStatusBarColor with identical values.
@@ -532,10 +565,17 @@ local function CreateCastBar(name, unit)
 frame:SetScript("OnEvent", function(self, event, arg1, ...)
         local _, spellID = ...
         if not MSUF_Driver_IsCastbarEnabled(self.unit or "") then
+            if self.unit == "target" or self.unit == "focus" then
+                MSUF_Driver_SetUnitEvents(self, self.unit, false)
+            end
             MSUF_Driver_SetSafetyTicker(self, false)
             MSUF_Driver_CancelStopConfirm(self)
+            MSUF_Driver_CancelStartRetry(self)
             MSUF__HidePlayerChannelHasteStripes(self)
             _G.MSUF_CB_ResetStateOnStop(self, "HARDHIDE")
+            if _G.MSUF_UnregisterCastbar then
+                _G.MSUF_UnregisterCastbar(self)
+            end
             return
         end
 
@@ -1012,33 +1052,12 @@ function frame:SetSucceeded()
     _G.MSUF_CB_ResetStateOnStop(self, "SUCCEEDED")
 end
 
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_START", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", unit)
-
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", unit)
-
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", unit)
-
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", unit)
-
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", unit)
-    frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", unit)
+    MSUF_Driver_SetUnitEvents(frame, unit, true)
 
     -- Death detection is handled by the low-frequency safety ticker while a cast
     -- is active. Do not subscribe target/focus castbars to UNIT_HEALTH: on raid
     -- bosses it can fire thousands of times per minute and does not change cast
     -- state except for the rare death case the ticker already catches.
-
-    if unit == "target" or unit == "focus" then
-        frame:RegisterEvent("PLAYER_" .. unit:upper() .. "_CHANGED")
-    end
 
     local msufFrame = _G["MSUF_" .. unit]
     if msufFrame then
@@ -1107,10 +1126,78 @@ local function MSUF_CastbarDriver_EnsureUnit(unit)
         return nil
 end
 
+local function MSUF_CastbarDriver_CancelTimer(frame, key)
+        local t = frame and frame[key]
+        if t and t.Cancel then
+            t:Cancel()
+        end
+        if frame then
+            frame[key] = nil
+        end
+end
+
+local function MSUF_CastbarDriver_StopFrame(frame)
+        if not frame then return end
+        MSUF_Driver_SetSafetyTicker(frame, false)
+        MSUF_CastbarDriver_CancelTimer(frame, "timer")
+        MSUF_CastbarDriver_CancelTimer(frame, "hideTimer")
+        MSUF_CastbarDriver_CancelTimer(frame, "_msufStopTimer1")
+        MSUF_CastbarDriver_CancelTimer(frame, "_msufStopTimer2")
+        MSUF_CastbarDriver_CancelTimer(frame, "_msufStopTimer3")
+        MSUF_CastbarDriver_CancelTimer(frame, "_msufStartRetryTimer")
+        frame._msufStartRetryPending = nil
+        frame._msufDeathRecheckPending = nil
+        frame.MSUF_castActive = false
+        frame.interrupted = nil
+        frame.MSUF_kickInterruptibleConfirmed = nil
+        MSUF__HidePlayerChannelHasteStripes(frame)
+        if _G.MSUF_CB_ResetStateOnStop then
+            _G.MSUF_CB_ResetStateOnStop(frame, "HARDHIDE")
+        elseif frame.Hide then
+            frame:Hide()
+        end
+        if _G.MSUF_UnregisterCastbar then
+            _G.MSUF_UnregisterCastbar(frame)
+        end
+        if frame.SetScript then
+            frame:SetScript("OnUpdate", nil)
+        end
+        if frame.Hide then
+            frame:Hide()
+        end
+end
+
+local function MSUF_CastbarDriver_GetFrame(unit)
+        if unit == "target" then
+            return _G.TargetCastBar or _G.MSUF_TargetCastBar or _G.MSUF_TargetCastbar
+        elseif unit == "focus" then
+            return _G.FocusCastBar or _G.MSUF_FocusCastBar or _G.MSUF_FocusCastbar
+        end
+        return nil
+end
+
+local function MSUF_CastbarDriver_ApplyBackendState(unit)
+        if unit ~= "target" and unit ~= "focus" then return nil end
+        local enabled = MSUF_Driver_IsCastbarEnabled(unit)
+        local frame = MSUF_CastbarDriver_GetFrame(unit)
+        if enabled then
+            frame = frame or MSUF_CastbarDriver_EnsureUnit(unit)
+            if frame then
+                MSUF_Driver_SetUnitEvents(frame, unit, true)
+            end
+            return frame
+        end
+        if frame then
+            MSUF_Driver_SetUnitEvents(frame, unit, false)
+            MSUF_CastbarDriver_StopFrame(frame)
+        end
+        return nil
+end
+
 
 function MSUF_CastbarDriver_OnLogin(event)
-        MSUF_CastbarDriver_EnsureUnit("target")
-        MSUF_CastbarDriver_EnsureUnit("focus")
+        MSUF_CastbarDriver_ApplyBackendState("target")
+        MSUF_CastbarDriver_ApplyBackendState("focus")
 
         if MSUF_ReanchorTargetCastBar then MSUF_ReanchorTargetCastBar() end
         if MSUF_ReanchorFocusCastBar  then MSUF_ReanchorFocusCastBar()  end
@@ -1121,28 +1208,8 @@ function MSUF_CastbarDriver_OnLogin(event)
 end
 
 function MSUF_CastbarDriver_OnEnteringWorld(event)
-        local function HideBlizzardCastbar(frame, unit)
-            if not frame or MSUF_Driver_ShouldUseBlizzardCastbar(unit) then
-                return
-            end
-            frame:Hide()
-            if not frame.MSUF_BackendHideHooked then
-                frame.MSUF_BackendHideHooked = true
-                frame:HookScript("OnShow", function(bar)
-                    if not MSUF_Driver_ShouldUseBlizzardCastbar(unit) then
-                        bar:Hide()
-                    end
-                end)
-            end
-        end
-
-        if TargetFrameSpellBar then
-            HideBlizzardCastbar(TargetFrameSpellBar, "target")
-        end
-
-        if FocusFrameSpellBar then
-            HideBlizzardCastbar(FocusFrameSpellBar, "focus")
-        end
+        MSUF_CastbarDriver_ApplyBackendState("target")
+        MSUF_CastbarDriver_ApplyBackendState("focus")
 
         if PetCastingBarFrame then
             PetCastingBarFrame:UnregisterAllEvents()
@@ -1163,3 +1230,4 @@ MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_CASTBAR_DRIVER_WORLD", MSU
 -- Optional export (debug / other modules)
 _G.MSUF_CreateCastBar = CreateCastBar
 _G.MSUF_CastbarDriver_EnsureUnit = MSUF_CastbarDriver_EnsureUnit
+_G.MSUF_CastbarDriver_ApplyBackendState = MSUF_CastbarDriver_ApplyBackendState

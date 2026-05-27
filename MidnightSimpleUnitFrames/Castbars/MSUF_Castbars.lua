@@ -211,6 +211,90 @@ local MSUF_CreatePlayerCastbarPreview            = _G.MSUF_CreatePlayerCastbarPr
 local MSUF_CreateTargetCastbarPreview            = _G.MSUF_CreateTargetCastbarPreview
 local MSUF_CreateFocusCastbarPreview             = _G.MSUF_CreateFocusCastbarPreview
 
+local PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_ONLY = {
+    "UNIT_SPELLCAST_EMPOWER_START",
+    "UNIT_SPELLCAST_EMPOWER_STOP",
+    "UNIT_SPELLCAST_EMPOWER_UPDATE",
+}
+
+local PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_VEHICLE = {
+    "UNIT_SPELLCAST_START",
+    "UNIT_SPELLCAST_STOP",
+    "UNIT_SPELLCAST_CHANNEL_START",
+    "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_SPELLCAST_CHANNEL_UPDATE",
+    "UNIT_SPELLCAST_DELAYED",
+    "UNIT_SPELLCAST_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_FAILED",
+    "UNIT_SPELLCAST_INTERRUPTED",
+}
+
+local function MSUF_SetPlayerCastbarEventState(frame, enabled)
+    if not frame then return end
+    if enabled then
+        if frame._msufPlayerEventsRegistered then return end
+        for i = 1, #PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_ONLY do
+            frame:RegisterUnitEvent(PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_ONLY[i], "player")
+        end
+        for i = 1, #PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_VEHICLE do
+            frame:RegisterUnitEvent(PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_VEHICLE[i], "player", "vehicle")
+        end
+        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        frame:SetScript("OnEvent", MSUF_PlayerCastbar_OnEvent)
+        frame._msufPlayerEventsRegistered = true
+        return
+    end
+
+    if not frame._msufPlayerEventsRegistered then return end
+    for i = 1, #PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_ONLY do
+        frame:UnregisterEvent(PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_ONLY[i])
+    end
+    for i = 1, #PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_VEHICLE do
+        frame:UnregisterEvent(PLAYER_CASTBAR_UNIT_EVENTS_PLAYER_VEHICLE[i])
+    end
+    frame:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    frame:SetScript("OnEvent", nil)
+    frame._msufPlayerEventsRegistered = nil
+end
+
+local function MSUF_StopPlayerCastbarFrame(frame)
+    if not frame then return end
+    if frame.hideTimer and frame.hideTimer.Cancel then
+        frame.hideTimer:Cancel()
+    end
+    frame.hideTimer = nil
+    frame:SetScript("OnUpdate", nil)
+    frame.interruptFeedbackEndTime = nil
+    frame.MSUF_castActive = false
+    frame.MSUF_wantsEmpower = nil
+    if frame.timeText then frame.timeText:SetText("") end
+    if frame.latencyBar then frame.latencyBar:Hide() end
+    if MSUF_PlayerChannelHasteMarkers_Hide then MSUF_PlayerChannelHasteMarkers_Hide(frame) end
+    if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(frame) end
+    frame:Hide()
+end
+
+function _G.MSUF_PlayerCastbar_ApplyBackendState()
+    local enabled = true
+    local isEnabled = _G.MSUF_IsCastbarEnabledForUnit
+    if type(isEnabled) == "function" then
+        enabled = isEnabled("player") == true
+    end
+    if enabled then
+        MSUF_InitSafePlayerCastbar()
+        if MSUF_PlayerCastbar then
+            MSUF_SetPlayerCastbarEventState(MSUF_PlayerCastbar, true)
+        end
+        return MSUF_PlayerCastbar
+    end
+    if MSUF_PlayerCastbar then
+        MSUF_SetPlayerCastbarEventState(MSUF_PlayerCastbar, false)
+        MSUF_StopPlayerCastbarFrame(MSUF_PlayerCastbar)
+    end
+    return nil
+end
+
 function MSUF_InitSafePlayerCastbar()
     if not MSUF_PlayerCastbar then
         local frame = CreateFrame("Frame", "MSUF_PlayerCastBar", UIParent)
@@ -314,29 +398,11 @@ function MSUF_InitSafePlayerCastbar()
             tick:Hide()                 -- Standard: versteckt, nur bei Empower sichtbar
         end
 
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_START", "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_STOP",  "player")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "player")
-
-                frame:RegisterUnitEvent("UNIT_SPELLCAST_START", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_STOP", "player", "vehicle")
-
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_UPDATE", "player", "vehicle")
-
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_DELAYED", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTIBLE", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_NOT_INTERRUPTIBLE", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", "player", "vehicle")
-        frame:RegisterUnitEvent("UNIT_SPELLCAST_INTERRUPTED", "player", "vehicle")
-
-        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-        frame:SetScript("OnEvent", MSUF_PlayerCastbar_OnEvent)
+        MSUF_SetPlayerCastbarEventState(frame, true)
         frame:Hide()
     end
         C_Timer.After(0, function()
+            if not (MSUF_PlayerCastbar and MSUF_PlayerCastbar._msufPlayerEventsRegistered) then return end
             if not MSUF_PlayerCastbar or not MSUF_PlayerCastbar_Cast then return end
             local castName = UnitCastingInfo("player")
             local chanName = UnitChannelInfo("player")
@@ -409,9 +475,6 @@ do
     -- PERF: Cache hot-path function refs as upvalues (avoids type(_G.xxx)=="function" per tick).
     local _GlowFade = _G.MSUF_ApplyCastbarGlowFade
     local _GlowReset = _G.MSUF_ResetCastbarGlowFade
-    local _IsGCDEnabled = _G.MSUF_IsGCDBarEnabled
-    local _GCDStop = _G.MSUF_PlayerGCDBar_Stop
-    local _GCDSubOpts = _G.MSUF_GCD_GetSubOptions
     local _RefreshStyleCache = _G.MSUF_RefreshCastbarStyleCache
 
     -- Deferred re-cache after all files loaded (handles load-order where globals aren't set yet).
@@ -419,9 +482,6 @@ do
         C_Timer.After(0, function()
             _GlowFade = _G.MSUF_ApplyCastbarGlowFade or _GlowFade
             _GlowReset = _G.MSUF_ResetCastbarGlowFade or _GlowReset
-            _IsGCDEnabled = _G.MSUF_IsGCDBarEnabled or _IsGCDEnabled
-            _GCDStop = _G.MSUF_PlayerGCDBar_Stop or _GCDStop
-            _GCDSubOpts = _G.MSUF_GCD_GetSubOptions or _GCDSubOpts
             _RefreshStyleCache = _G.MSUF_RefreshCastbarStyleCache or _RefreshStyleCache
         end)
     end
@@ -498,11 +558,9 @@ do
 
         local oldFormat = frame._msufCastTimeFormat
         local format = "CURRENT"
-        if not frame.MSUF_gcdActive then
-            local readFormat = _G.MSUF_GetCastbarTimeFormat
-            if type(readFormat) == "function" then
-                format = readFormat(CastTimeFormatUnit(frame, u), g)
-            end
+        local readFormat = _G.MSUF_GetCastbarTimeFormat
+        if type(readFormat) == "function" then
+            format = readFormat(CastTimeFormatUnit(frame, u), g)
         end
         frame._msufCastTimeFormat = format or "CURRENT"
         if oldFormat ~= frame._msufCastTimeFormat then
@@ -608,7 +666,7 @@ do
 
             if not skipFrame then
             -- oUF-style fast path: remaining -= elapsed, inline dedup, single-flag gate.
-            -- _msufFastText guarantees: timeText exists, castTime enabled, NOT gcd, NOT empower.
+            -- _msufFastText guarantees: timeText exists, castTime enabled, not empower.
             local rem = frame._msufRemaining
             if frame._msufFastText and rem then
                 rem = rem - elapsed
@@ -677,7 +735,7 @@ do
                     end
                 end
             else
-                -- Non-fast bars (GCD, empower, no timeText, no remaining):
+                -- Non-fast bars (empower, no timeText, no remaining):
                 -- always need heavy path â€” it drives everything.
                 local cd = frame._msufHeavyIn
                 if cd then
@@ -794,7 +852,6 @@ do
         if not MSUF_CastbarManager or not MSUF_CastbarManager.active then return end
 
         local hasRuntimeState = frame.MSUF_castActive == true
-            or frame.MSUF_gcdActive == true
             or frame.isEmpower == true
             or frame.MSUF_timerDriven == true
             or frame._msufPlainEndTime ~= nil
@@ -815,19 +872,15 @@ do
 
         -- Opt 5: Single-flag fast-path gate (replaces 4 field reads + 4 compares per tick).
         -- true = this bar gets the lightweight time-text fast path.
-        -- GCD and empower bars are driven entirely by the heavy path.
+        -- Empower bars are driven entirely by the heavy path.
         frame._msufFastText = (frame.timeText and frame._msufCastTimeEnabled ~= false
                                and frame.MSUF_timerDriven == true
-                               and not frame.MSUF_gcdActive and not frame.isEmpower) or false
+                               and not frame.isEmpower) or false
 
         -- Empower/manual fallback bars drive SetValue() in Lua and need higher cadence.
         -- Timer-driven normal casts only need low-frequency text/safety work.
         if frame.isEmpower then
             frame._msufTickInterval = 0.03
-        elseif frame.MSUF_gcdActive == true and frame._msufGcdTimerDriven ~= true then
-            if frame._msufTickInterval == nil or frame._msufTickInterval > 0.05 then
-                frame._msufTickInterval = 0.05
-            end
         elseif frame._msufFastText ~= true and frame.MSUF_timerDriven ~= true then
             if frame._msufTickInterval == nil or frame._msufTickInterval > 0.05 then
                 frame._msufTickInterval = 0.05
@@ -964,119 +1017,6 @@ do
         -- Use monotonic clock for relative timing (hard-stop, haste markers).
         -- Only compute wall-clock `now` when API drift correction actually needs it.
         local mc = monoClock or 0
-
-        -- GCD bar virtual cast (instant casts): driven by MSUF_CastbarGCD + CastbarManager tick.
-        if frame.MSUF_gcdActive then
-            if _IsGCDEnabled and not _IsGCDEnabled() then
-                if _GCDStop then _GCDStop(frame) end
-                return
-            end
-
-            -- Real casts/channel/empower always win.
-            if frame.isEmpower then
-                if _GCDStop then _GCDStop(frame, true) end
-                return
-            end
-
-            -- Gate real-cast check at 4Hz (was every heavy tick = 10Hz).
-            local nxtCastCheck = frame._msufGcdCastCheckNext
-            if (not nxtCastCheck) or mc >= nxtCastCheck then
-                frame._msufGcdCastCheckNext = mc + 0.25
-                local u = frame.MSUF_gcdUnit or frame.unit or "player"
-                if UnitCastingInfo(u) or UnitChannelInfo(u) then
-                    if _GCDStop then _GCDStop(frame, true) end
-                    return
-                end
-            end
-
-            -- oUF-style elapsed accumulator â€” eliminates GetTimePreciseSec per tick.
-            local dur = frame.MSUF_gcdDur or 0
-            if dur <= 0 then
-                if _GCDStop then _GCDStop(frame) end
-                return
-            end
-
-            local elapsed = (frame._msufGcdElapsed or 0) + dt
-            if elapsed > dur then elapsed = dur end
-            frame._msufGcdElapsed = elapsed
-
-            local rem = dur - elapsed
-            if rem <= 0.001 then
-                if _GCDStop then _GCDStop(frame) end
-                return
-            end
-
-            -- Sub-toggles: cache per frame, refresh on rev bump.
-            local showTime, showSpell
-            local subRev = _castTimeRevLocal
-            if frame._msufGcdSubOptsRev == subRev then
-                showTime = frame._msufGcdShowTimeCached
-                showSpell = frame._msufGcdShowSpellCached
-            else
-                showTime = true
-                showSpell = true
-                if _GCDSubOpts then
-                    showTime, showSpell = _GCDSubOpts()
-                end
-                frame._msufGcdShowTimeCached = showTime
-                frame._msufGcdShowSpellCached = showSpell
-                frame._msufGcdSubOptsRev = subRev
-            end
-            frame.MSUF_gcdShowTime = showTime
-            frame.MSUF_gcdShowSpell = showSpell
-
-            -- SetMinMaxValues only once per GCD (dur is constant for the duration).
-            if not frame._msufGcdMinMaxSet then
-                frame._msufGcdMinMaxSet = true
-                if frame.statusBar.SetMinMaxValues then
-                    frame.statusBar:SetMinMaxValues(0, dur)
-                end
-            end
-            -- 12.0: C-engine animates bar via SetTimerDuration â†’ no per-tick SetValue.
-            -- Fallback for pre-12.0 or missing API: manual SetValue.
-            if not frame._msufGcdTimerDriven then
-                if frame.statusBar.SetValue then
-                    frame.statusBar:SetValue(elapsed)
-                end
-            end
-
-            -- Dedup spell name + icon (constant during GCD).
-            if frame.castText then
-                if showSpell then
-                    MSUF_SetTextIfChanged(frame.castText, frame.MSUF_gcdSpellName or "")
-                else
-                    MSUF_SetTextIfChanged(frame.castText, "")
-                end
-            end
-            if frame.icon then
-                local wantTex = (showSpell and frame.MSUF_gcdSpellIcon) or nil
-                if frame._msufGcdLastIcon ~= wantTex then
-                    frame._msufGcdLastIcon = wantTex
-                    if frame.icon.SetTexture then
-                        frame.icon:SetTexture(wantTex)
-                    end
-                end
-            end
-
-            if frame.timeText then
-                if castTimeEnabled and showTime then
-                    MSUF_SetCastTimeText_Dedup(frame, rem, dur)
-                else
-                    frame._msufLastTimeDecimal = nil
-                    frame._msufLastTimeTotalDecimal = nil
-                    frame._msufLastTimeFormat = nil
-                    MSUF_SetTextIfChanged(frame.timeText, "")
-                end
-            end
-
-            -- Optional glow fade near completion.
-            if _GlowFade then
-                _GlowFade(frame, rem, dur)
-            end
-
-            return
-        end
-
 
         -- Empowered casts: update value + time text and stage blink.
         -- IMPORTANT (12.0/Midnight): dt is not reliable for player empower updates (can be 0),

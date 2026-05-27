@@ -2088,7 +2088,6 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
     elseif pageKey == "opt_castbar" then
         SearchRouteApplySectionSpecs(route, pageKey, normalized, {
             { id = "castbar_behavior", terms = { "shake", "fill direction", "castbar direction", "castbar behavior" } },
-            { id = "castbar_gcd", terms = { "gcd", "global cooldown", "gcd bar", "instant casts" } },
             { id = "castbar_textures", terms = { "textures", "texture", "outline", "castbar texture" } },
             { id = "castbar_empowered", terms = { "empowered casts", "evoker", "empower", "stage blink", "hold cast", "release cast" } },
             { id = "castbar_name_shortening", terms = { "name shortening", "spell name", "cast name", "max name length" } },

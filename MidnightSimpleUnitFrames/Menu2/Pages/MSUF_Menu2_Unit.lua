@@ -28,10 +28,10 @@ local POWER_UNITS = {
 }
 
 local CASTBAR_FIELDS = {
-    player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
-    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
-    focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat" },
-    boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat" },
+    player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
+    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
+    focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat" },
+    boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat" },
 }
 
 local LOAD_CONDITIONS = {
@@ -603,18 +603,25 @@ local function CopyPowerBarFields(dst, src, srcKey)
 end
 
 local CASTBAR_KEY_MAP = {
-    player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
-    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
-    focus  = { enable = "enableFocusCastbar",  backend = "castbarFocusBackend",  time = "showFocusCastTime",  icon = "castbarFocusShowIcon",  name = "castbarFocusShowSpellName",  timeFormat = "castbarFocusTimeFormat" },
-    boss   = { enable = "enableBossCastbar",   backend = "bossCastbarBackend",   time = "showBossCastTime",   icon = "showBossCastIcon",      name = "showBossCastName",          timeFormat = "bossCastTimeFormat" },
+    player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
+    target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
+    focus  = { enable = "enableFocusCastbar",  backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide",  time = "showFocusCastTime",  icon = "castbarFocusShowIcon",  name = "castbarFocusShowSpellName",  timeFormat = "castbarFocusTimeFormat" },
+    boss   = { enable = "enableBossCastbar",   backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide",   time = "showBossCastTime",   icon = "showBossCastIcon",      name = "showBossCastName",          timeFormat = "bossCastTimeFormat" },
 }
 
 local function CopyCastbar(g, src, dst)
     src, dst = CanonUnitKey(src), CanonUnitKey(dst)
     local s, d = CASTBAR_KEY_MAP[src], CASTBAR_KEY_MAP[dst]
     if not s or not d then return end
-    g[d.enable] = g[s.enable]
-    g[d.backend] = g[s.backend]
+    local normalize = _G.MSUF_NormalizeCastbarBackendForUnit
+    local backend = (type(normalize) == "function") and normalize(dst, g[s.backend]) or g[s.backend]
+    if backend == nil then backend = (g[s.enable] == false) and ((dst == "player") and "BLIZZARD" or "HIDE") or "MSUF" end
+    if backend == "BLIZZARD" and dst ~= "player" then backend = "HIDE" end
+    local remembered = g[s.providerMemory]
+    if remembered == "BLIZZARD" and dst ~= "player" then remembered = "MSUF" end
+    g[d.enable] = (backend == "MSUF")
+    g[d.backend] = backend
+    g[d.providerMemory] = remembered
     g[d.time] = g[s.time]
     g[d.icon] = g[s.icon]
     g[d.name] = g[s.name]

@@ -82,6 +82,7 @@ local function CastbarUnit(unit)
 end
 
 local function CastbarBackend(unit)
+    unit = CastbarUnit(unit)
     local fn = _G.MSUF_GetCastbarBackend
     if type(fn) == "function" then
         return fn(unit)
@@ -90,11 +91,11 @@ local function CastbarBackend(unit)
     if not g then
         return "MSUF"
     end
-    local key = CASTBAR_KEYS[CastbarUnit(unit)]
+    local key = CASTBAR_KEYS[unit]
     if not key then
         return nil
     end
-    return (g[key] == false) and "BLIZZARD" or "MSUF"
+    return (g[key] == false) and ((unit == "player") and "BLIZZARD" or "HIDE") or "MSUF"
 end
 
 local function ShouldUseMSUFCastbar(unit)
@@ -102,6 +103,9 @@ local function ShouldUseMSUFCastbar(unit)
 end
 
 local function ShouldUseBlizzardCastbar(unit)
+    if CastbarUnit(unit) ~= "player" then
+        return false
+    end
     return CastbarBackend(unit) == "BLIZZARD"
 end
 
@@ -172,10 +176,19 @@ local function Hide(frame)
     end
 end
 
+local function BlizzardCastbarOnShow(frame)
+    if frame and frame.MSUF_BackendAllowShown then
+        return
+    end
+    Hide(frame)
+end
+
 local function KeepBlizzardCastbar(frame)
     if not (frame and frame.SetParent) then
         return
     end
+    frame.MSUF_BackendAllowShown = true
+    frame.showCastbar = true
     if InCombatLockdown and InCombatLockdown() and frame.IsProtected and frame:IsProtected() then
         visibleFrames[frame] = true
         EnsureWatcher():RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -184,18 +197,16 @@ local function KeepBlizzardCastbar(frame)
     frame:SetParent(UIParent)
 end
 
-local function HideBlizzardCastbar(frame, unit)
+local function HideBlizzardCastbar(frame)
     if not frame then
         return
     end
+    frame.MSUF_BackendAllowShown = false
+    frame.showCastbar = false
     Hide(frame)
     if not frame.MSUF_BackendHideHooked and frame.HookScript then
         frame.MSUF_BackendHideHooked = true
-        frame:HookScript("OnShow", function(bar)
-            if not ShouldUseBlizzardCastbar(unit) then
-                Hide(bar)
-            end
-        end)
+        frame:HookScript("OnShow", BlizzardCastbarOnShow)
     end
 end
 
@@ -255,7 +266,8 @@ local function HandleFrame(frame, doNotReparent, unit)
     if keepCastbar then
         KeepBlizzardCastbar(castbar)
     else
-        HideBlizzardCastbar(castbar, unit)
+        Unregister(castbar)
+        HideBlizzardCastbar(castbar)
     end
 end
 

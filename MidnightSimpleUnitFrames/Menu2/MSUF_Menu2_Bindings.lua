@@ -646,10 +646,10 @@ local UNIT_PAGE_RESETS = {
 }
 
 local UNIT_CASTBAR_GENERAL_KEYS = {
-    player = { "enablePlayerCastbar", "castbarPlayerBackend", "showPlayerCastTime", "castbarPlayerShowIcon", "castbarPlayerShowSpellName", "castbarPlayerTimeFormat" },
-    target = { "enableTargetCastbar", "castbarTargetBackend", "showTargetCastTime", "castbarTargetShowIcon", "castbarTargetShowSpellName", "castbarTargetTimeFormat" },
-    focus = { "enableFocusCastbar", "castbarFocusBackend", "showFocusCastTime", "castbarFocusShowIcon", "castbarFocusShowSpellName", "castbarFocusTimeFormat" },
-    boss = { "enableBossCastbar", "bossCastbarBackend", "showBossCastTime", "showBossCastIcon", "showBossCastName", "bossCastTimeFormat" },
+    player = { "enablePlayerCastbar", "castbarPlayerBackend", "castbarPlayerBackendBeforeHide", "showPlayerCastTime", "castbarPlayerShowIcon", "castbarPlayerShowSpellName", "castbarPlayerTimeFormat" },
+    target = { "enableTargetCastbar", "castbarTargetBackend", "castbarTargetBackendBeforeHide", "showTargetCastTime", "castbarTargetShowIcon", "castbarTargetShowSpellName", "castbarTargetTimeFormat" },
+    focus = { "enableFocusCastbar", "castbarFocusBackend", "castbarFocusBackendBeforeHide", "showFocusCastTime", "castbarFocusShowIcon", "castbarFocusShowSpellName", "castbarFocusTimeFormat" },
+    boss = { "enableBossCastbar", "bossCastbarBackend", "bossCastbarBackendBeforeHide", "showBossCastTime", "showBossCastIcon", "showBossCastName", "bossCastTimeFormat" },
 }
 
 local PAGE_RESET_INFO = {
@@ -711,7 +711,7 @@ local PAGE_RESET_INFO = {
     opt_castbar = {
         label = "Castbar",
         kind = "castbar",
-        summary = "global castbar behavior, textures, GCD, boss castbar and interrupt indicator settings",
+        summary = "global castbar behavior, textures, boss castbar and interrupt indicator settings",
     },
     opt_colors = {
         label = "Colors",
@@ -915,9 +915,6 @@ local MISC_UNIT_KEYS = {
 }
 
 local CASTBAR_GENERAL_KEYS = {
-    showGCDBar = true,
-    showGCDBarTime = true,
-    showGCDBarSpell = true,
     empowerColorStages = true,
     enableFocusKickIcon = true,
     focusKickIconWidth = true,

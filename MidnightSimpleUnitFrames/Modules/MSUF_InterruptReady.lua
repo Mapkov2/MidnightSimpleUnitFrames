@@ -33,7 +33,7 @@
 --- frame's own `frame.isNotInterruptible` plain boolean, which the
 --- castbar driver already cleanses via DetectNonInterruptible.
 --- * GetSpellCooldownDuration(id) returns a duration object; we only call
---- :IsZero() on it (returns plain boolean). No GCD math is performed.
+--- :IsZero() on it (returns plain boolean). No cooldown math is performed.
 --- =============================================================================
 
 local _G = _G
@@ -89,7 +89,7 @@ local _state = {
 }
 
 --- Track every MSUF castbar frame that has had ApplyLayout() called, so
---- RefreshAll() (and global cooldown sweeps) can iterate them cheaply.
+--- RefreshAll() and cooldown sweeps can iterate them cheaply.
 local _registeredFrames = {}
 local _activeFrames = {}
 local _activeFrameCount = 0

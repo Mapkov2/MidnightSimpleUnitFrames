@@ -15,7 +15,7 @@ performance changes.
 - Use the last known broad Perfy zip only as the hook-file reference:
   `%USERPROFILE%\Downloads\MSUF_Perfy_Instrumented_5.1_zero_menu_overhead.zip`
 - Keep the addon shape identical to a real install: include
-  `MidnightSimpleUnitFrames` and `MidnightSimpleUnitFrames_Castbars`.
+  `MidnightSimpleUnitFrames`. Castbars are part of the core addon.
 - Overlay direction is always one-way: repo/source files go into the extracted
   Downloads Perfy build. Never copy files from an extracted Perfy build or
   Perfy zip back into the repo.
@@ -42,11 +42,12 @@ been overlaid.
 The expected broad shape is:
 
 - `MidnightSimpleUnitFrames\MSUF_PerfyHook.lua`
-- 146 Lua files in the generated package after the current 5.2 repo state
-- 125 Lua files containing `Perfy_Trace`: current first-party addon files
+- Lua file counts should match the current release package plus
+  `MSUF_PerfyHook.lua`; do not use historical counts as pass/fail criteria.
+- Lua files containing `Perfy_Trace`: current first-party addon files
   excluding vendor `Libs`, plus `MSUF_PerfyHook.lua`
-- both top-level addon folders:
-  `MidnightSimpleUnitFrames` and `MidnightSimpleUnitFrames_Castbars`
+- one top-level addon folder:
+  `MidnightSimpleUnitFrames`
 
 Current output names:
 
@@ -58,7 +59,7 @@ Current output names:
 Known important instrumentation exclusions:
 
 - Do not instrument `_msuf_probeNum` in
-  `MidnightSimpleUnitFrames_Castbars/Castbars/MSUF_CastbarDriver.lua`.
+  `MidnightSimpleUnitFrames/Castbars/MSUF_CastbarDriver.lua`.
   That helper intentionally errors inside `pcall`, so instrumenting it creates
   enter/leave imbalance.
 - Do not instrument `MSUF_PerfyHook.lua` itself with the direct function
@@ -261,7 +262,6 @@ The repo is always the source:
 
 ```text
 repo\MidnightSimpleUnitFrames              -> build\MidnightSimpleUnitFrames
-repo\MidnightSimpleUnitFrames_Castbars     -> build\MidnightSimpleUnitFrames_Castbars
 ```
 
 2. Read the old broad zip only for:
@@ -269,7 +269,7 @@ repo\MidnightSimpleUnitFrames_Castbars     -> build\MidnightSimpleUnitFrames_Cas
 - `MidnightSimpleUnitFrames\MSUF_PerfyHook.lua`
 
 Do not use the old zip as the source-file reference. Instrument current
-repo-derived first-party Lua files from both addon folders. Exclude vendor
+repo-derived first-party Lua files from the core addon folder. Exclude vendor
 `Libs` and `MSUF_PerfyHook.lua` itself.
 
 3. Patch the generated build TOC, not the repo TOC.
@@ -311,17 +311,12 @@ foreach ($file in $luaFiles) {
 }
 ```
 
-Expected result after the current base:
+Expected result: all generated Lua files pass `luac -p`.
 
-```text
-luac ok: 146 files
-```
-
-6. Compress both top-level addon folders from inside the temporary build root:
+6. Compress the top-level addon folder from inside the temporary build root:
 
 ```text
 MidnightSimpleUnitFrames
-MidnightSimpleUnitFrames_Castbars
 ```
 
 Current output names:
@@ -336,14 +331,13 @@ Current output names:
 ```text
 MidnightSimpleUnitFrames\MidnightSimpleUnitFrames.toc
 MidnightSimpleUnitFrames\MSUF_PerfyHook.lua
-MidnightSimpleUnitFrames_Castbars\MidnightSimpleUnitFrames_Castbars.toc
 ```
 
 And verify:
 
 ```text
-luaFiles=146
-perfyTraceFiles=125
+luaFiles=<current package lua count + 1 hook file>
+perfyTraceFiles=<current first-party non-Libs lua count + 1 hook file>
 tocHasPerfyOptionalDep=True
 tocLoadsHook=True
 hasHook=True
@@ -354,7 +348,7 @@ hasHook=True
 The normal repo must stay clean of Perfy artifacts:
 
 ```powershell
-rg -n "Perfy_Trace|Perfy_GetTime|MSUF_PerfyHook" MidnightSimpleUnitFrames MidnightSimpleUnitFrames_Castbars tools .github CHANGELOG.md README.md VERSION
+rg -n "Perfy_Trace|Perfy_GetTime|MSUF_PerfyHook" MidnightSimpleUnitFrames tools .github CHANGELOG.md README.md VERSION
 ```
 
 Expected result: no matches. Documentation examples in this file are the only

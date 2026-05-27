@@ -43,9 +43,8 @@ local TOT_INLINE_COLOR_VALUES = {
     [TOT_INLINE_COLOR_DEFAULT] = true,
 }
 local CASTBAR_BACKEND_VALUES = {
-    { value = "MSUF", text = "MSUF" },
-    { value = "BLIZZARD", text = "Blizzard" },
-    { value = "HIDE", text = "Hide" },
+    { value = "MSUF", text = "MSUF castbar" },
+    { value = "BLIZZARD", text = "Blizzard castbar" },
 }
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
@@ -2274,10 +2273,19 @@ local function BuildCastbar(ctx, builder, unit)
     local rightX = math.max(340, sectionW - 236)
     local textX = rightX + 86
     local RefreshCastbarEnabled
+    local providerMemoryKey = fields.providerMemory or (fields.backend and (fields.backend .. "BeforeHide") or nil)
+    local canUseBlizzardProvider = (unit == "player")
 
     local function NormalizeBackend(value)
+        local fnUnit = _G.MSUF_NormalizeCastbarBackendForUnit
+        if type(fnUnit) == "function" then return fnUnit(unit, value) or "MSUF" end
         local fn = _G.MSUF_NormalizeCastbarBackend
-        if type(fn) == "function" then return fn(value) or "MSUF" end
+        if type(fn) == "function" then
+            local backend = fn(value) or "MSUF"
+            if backend == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
+            return backend
+        end
+        if value == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
         if value == "BLIZZARD" or value == "HIDE" or value == "MSUF" then return value end
         return "MSUF"
     end
@@ -2290,7 +2298,7 @@ local function BuildCastbar(ctx, builder, unit)
         local g = GetGeneral()
         local value = fields.backend and g[fields.backend]
         if value == nil then
-            return ReadGeneralBool(fields.enable, true) and "MSUF" or "BLIZZARD"
+            return ReadGeneralBool(fields.enable, true) and "MSUF" or (canUseBlizzardProvider and "BLIZZARD" or "HIDE")
         end
         return NormalizeBackend(value)
     end
@@ -2298,6 +2306,9 @@ local function BuildCastbar(ctx, builder, unit)
     local function SetCastbarBackend(value)
         local backend = NormalizeBackend(value)
         local g = GetGeneral()
+        if providerMemoryKey and backend ~= "HIDE" then
+            g[providerMemoryKey] = backend
+        end
         local fn = _G.MSUF_SetCastbarBackend
         if type(fn) == "function" then
             fn(unit, backend, g)
@@ -2313,21 +2324,56 @@ local function BuildCastbar(ctx, builder, unit)
         if RefreshCastbarEnabled then RefreshCastbarEnabled() end
     end
 
-    local enabledLabel = "Enable Castbar"
+    local function ReadCastbarProvider()
+        if not canUseBlizzardProvider then return "MSUF" end
+        local backend = ReadCastbarBackend()
+        if backend == "BLIZZARD" then return "BLIZZARD" end
+        if backend == "MSUF" then return "MSUF" end
+        local remembered = providerMemoryKey and NormalizeBackend(GetGeneral()[providerMemoryKey]) or nil
+        if remembered == "BLIZZARD" then return "BLIZZARD" end
+        return "MSUF"
+    end
+
+    local function SetCastbarProvider(value)
+        if not canUseBlizzardProvider then return end
+        local backend = NormalizeBackend(value)
+        if backend == "HIDE" then backend = "MSUF" end
+        SetCastbarBackend(backend)
+    end
+
+    local function SetCastbarEnabled(enabled)
+        if enabled then
+            SetCastbarBackend(canUseBlizzardProvider and ReadCastbarProvider() or "MSUF")
+        else
+            local backend = ReadCastbarBackend()
+            if providerMemoryKey and backend ~= "HIDE" then
+                GetGeneral()[providerMemoryKey] = backend
+            end
+            SetCastbarBackend("HIDE")
+        end
+    end
+
     local timeLabel = (unit == "boss") and "Show boss cast time" or ("Show " .. UnitTopLabel(unit):lower() .. " cast time")
-    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(sec, -160, "Enable", 88)
+    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(sec, -160, "Use MSUF", 96)
     if castbarNoticeButton then
         castbarNoticeButton:SetScript("OnClick", function()
             SetCastbarBackend("MSUF")
         end)
     end
 
-    local enabled = W.SwitchAt(sec, enabledLabel, leftX, -42, 240)
+    local enabled = W.SwitchAt(sec, "Enable Castbar", leftX, -42, 240)
     M.BindToggle(ctx, enabled,
-        function() return ReadCastbarBackend() == "MSUF" end,
-        function(v)
-            SetCastbarBackend(v and "MSUF" or "BLIZZARD")
-        end)
+        function() return ReadCastbarBackend() ~= "HIDE" end,
+        SetCastbarEnabled)
+
+    local provider
+    if canUseBlizzardProvider then
+        provider = W.Dropdown(sec, "Castbar provider", CASTBAR_BACKEND_VALUES, 220)
+        W.MoveWidget(provider, sec, rightX, -42, 220)
+        M.BindDropdown(ctx, provider,
+            ReadCastbarProvider,
+            SetCastbarProvider)
+    end
 
     local time = W.ToggleAt(sec, timeLabel, leftX, -72, 240)
     M.BindToggle(ctx, time,
@@ -2338,12 +2384,6 @@ local function BuildCastbar(ctx, builder, unit)
     M.BindToggle(ctx, interrupt,
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end)
-
-    local provider = W.Dropdown(sec, "Castbar provider", CASTBAR_BACKEND_VALUES, 220)
-    W.MoveWidget(provider, sec, rightX, -42, 220)
-    M.BindDropdown(ctx, provider,
-        ReadCastbarBackend,
-        SetCastbarBackend)
 
     local icon = W.ToggleAt(sec, "Icon", rightX, -102, 70)
     M.BindToggle(ctx, icon,
@@ -2357,17 +2397,18 @@ local function BuildCastbar(ctx, builder, unit)
 
     RefreshCastbarEnabled = function()
         local backend = ReadCastbarBackend()
-        local on = (backend == "MSUF")
-        SetControlEnabled(time, on)
-        SetControlEnabled(interrupt, on)
-        SetControlEnabled(icon, on)
-        SetControlEnabled(text, on)
+        local enabledOn = (backend ~= "HIDE")
+        local msufOn = (backend == "MSUF")
+        SetControlEnabled(time, msufOn)
+        SetControlEnabled(interrupt, msufOn)
+        SetControlEnabled(icon, msufOn)
+        SetControlEnabled(text, msufOn)
         SetControlEnabled(enabled, true)
-        SetControlEnabled(provider, true)
+        if provider then SetControlEnabled(provider, enabledOn) end
 
-        if not on then
+        if not msufOn then
             if backend == "HIDE" then
-                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is hidden. Select MSUF to adjust time, interrupt, icon, and text behavior.", "warning")
+                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is off. Turn it on to use the MSUF castbar.", "warning")
             else
                 castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar uses Blizzard. Select MSUF to adjust time, interrupt, icon, and text behavior.", "warning")
             end

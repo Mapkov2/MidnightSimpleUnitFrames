@@ -1520,8 +1520,34 @@ local BOSS_CASTBAR_GLOBAL_EVENTS = {
     "PLAYER_ENTERING_WORLD",
 }
 
+local function SetBossCastbarFrameEvents(f, enabled)
+    if not f then return end
+    if enabled then
+        if f._msufBossEventsRegistered then return end
+        for j = 1, #BOSS_CASTBAR_UNIT_EVENTS do
+            f:RegisterUnitEvent(BOSS_CASTBAR_UNIT_EVENTS[j], f.unit)
+        end
+        for j = 1, #BOSS_CASTBAR_GLOBAL_EVENTS do
+            f:RegisterEvent(BOSS_CASTBAR_GLOBAL_EVENTS[j])
+        end
+        f._msufBossEventsRegistered = true
+        return
+    end
+
+    if not f._msufBossEventsRegistered then return end
+    for j = 1, #BOSS_CASTBAR_UNIT_EVENTS do
+        f:UnregisterEvent(BOSS_CASTBAR_UNIT_EVENTS[j])
+    end
+    for j = 1, #BOSS_CASTBAR_GLOBAL_EVENTS do
+        f:UnregisterEvent(BOSS_CASTBAR_GLOBAL_EVENTS[j])
+    end
+    f._msufBossEventsRegistered = nil
+end
+
 local function InitBossCastbars()
     if _G.MSUF_BossCastbars then return end
+    if not IsBossCastbarEnabled() then return end
+
     _G.MSUF_BossCastbars = {}
 
     for i = 1, MAX_BOSS do
@@ -1529,12 +1555,7 @@ local function InitBossCastbars()
         local f = CreateBossCastbarFrame(unit)
         _G.MSUF_BossCastbars[i] = f
 
-        for j = 1, #BOSS_CASTBAR_UNIT_EVENTS do
-            f:RegisterUnitEvent(BOSS_CASTBAR_UNIT_EVENTS[j], unit)
-        end
-        for j = 1, #BOSS_CASTBAR_GLOBAL_EVENTS do
-            f:RegisterEvent(BOSS_CASTBAR_GLOBAL_EVENTS[j])
-        end
+        SetBossCastbarFrameEvents(f, true)
         f:SetScript("OnEvent", BossCastbar_OnEvent)
 
         -- Pre-created callback: deferred death recheck (avoids closure per UNIT_HEALTH event)
@@ -1547,7 +1568,7 @@ local function InitBossCastbars()
         end
 
         f._msufDeferredStartCB = function()
-            if f and f.unit then BossCastbar_Start(f) end
+            if f and f.unit and IsBossCastbarEnabled() then BossCastbar_Start(f) end
         end
 
         -- Late-load safety: if a boss is already casting when we load/reload, refresh once.
@@ -1632,10 +1653,14 @@ function _G.MSUF_SetBossCastbarsEnabled(enabled)
     if _G.MSUF_DB and _G.MSUF_DB.general then
         local setBackend = _G.MSUF_SetCastbarBackend
         if type(setBackend) == "function" then
-            setBackend("boss", enabled and "MSUF" or "BLIZZARD", _G.MSUF_DB.general)
+            setBackend("boss", enabled and "MSUF" or "HIDE", _G.MSUF_DB.general)
         else
             _G.MSUF_DB.general.enableBossCastbar = enabled and true or false
         end
+    end
+
+    if enabled and not _G.MSUF_BossCastbars then
+        InitBossCastbars()
     end
 
     local frames = _G.MSUF_BossCastbars
@@ -1644,12 +1669,18 @@ function _G.MSUF_SetBossCastbarsEnabled(enabled)
     if enabled then
         for i = 1, #frames do
             local f = frames[i]
-            if f then BossCastbar_Start(f) end
+            if f then
+                SetBossCastbarFrameEvents(f, true)
+                BossCastbar_Start(f)
+            end
         end
     else
         for i = 1, #frames do
             local f = frames[i]
-            if f then BossCastbar_Stop(f) end
+            if f then
+                BossCastbar_Stop(f)
+                SetBossCastbarFrameEvents(f, false)
+            end
         end
     end
 

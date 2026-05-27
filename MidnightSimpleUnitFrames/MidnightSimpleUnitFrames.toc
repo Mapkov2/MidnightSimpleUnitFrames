@@ -74,7 +74,7 @@ EditMode\MSUF_EditMode.xml
 # CORE (pre-main)
 # ---------------------------------------------------------------
 Castbars\MSUF_Castbars_Backend.lua
-Castbars\MSUF_Castbars_LoDStub.lua
+Castbars\MSUF_Castbars_Bridge.lua
 UI\MidnightSimpleUnitFrames_MinimapButton.lua
 UI\MSUF_AddonCompartment.lua
 Media\MSUF_Media.lua
@@ -121,6 +121,24 @@ Features\MSUF_Feature_DebugPosition.lua
 # ---------------------------------------------------------------
 UnitFrames\MSUF_UnitFrameCore_PostMain.xml
 Castbars\MSUF_Castbars_Core.lua
+Castbars\MSUF_CastbarRegistry.lua
+Castbars\MSUF_CastbarStyle.lua
+Castbars\MSUF_CastbarUtils.lua
+Castbars\MSUF_CastbarEmpower.lua
+Castbars\MSUF_CastbarChannelTicks.lua
+Castbars\MSUF_CastbarFrames.lua
+Castbars\MSUF_CastbarAnchors.lua
+Castbars\MSUF_PlayerCastbarRuntime.lua
+Castbars\MSUF_CastbarPreviewEdit.lua
+Castbars\MSUF_CastbarPreviews.lua
+Castbars\MSUF_CastbarVisuals.lua
+Castbars\MSUF_BossPreviewTextHook.lua
+Castbars\MSUF_CastbarEngine.lua
+Castbars\MSUF_CastbarDriver.lua
+Castbars\MSUF_FocusKick_StateDriver.lua
+Modules\MidnightSimpleUnitFrames_BossCastbars.lua
+Modules\BossCastbars_Preview.lua
+Castbars\MSUF_Castbars.lua
 UnitFrames\MSUF_UnitFrameCore_Visuals.xml
 Borders\MSUF_Borders.xml
 UnitFrames\MSUF_UnitFrameCore_AfterBorders.xml

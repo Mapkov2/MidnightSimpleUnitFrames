@@ -866,19 +866,6 @@ MSUF_BumpCastbarStyleRevision()
             fs:SetShadowOffset(0, 0)
     end
      end
-    local function ApplyBlizzard(frame)
-        if not frame then  return end
-        local icon = frame.Icon or frame.icon or (frame.IconFrame and frame.IconFrame.Icon)
-        if icon then icon:SetShown(showIcon) end
-        local text = frame.Text or frame.text
-        if text then
-            text:SetShown(showName)
-            ApplyFontColor(text, effectiveSize)
-            ApplyShadow(text)
-    end
-     end
-    ApplyBlizzard(TargetFrameSpellBar)
-    ApplyBlizzard(PetCastingBarFrame)
     local function ApplyMSUF(frame)
         if not frame or not frame.statusBar then  return end
         local statusBar = frame.statusBar

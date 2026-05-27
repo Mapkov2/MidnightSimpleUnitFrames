@@ -1016,10 +1016,8 @@ if g.castbarUnifiedFillDirection ~= nil then
     if g.castbarOpositeDirectionTarget == nil then
         g.castbarOpositeDirectionTarget = false
     end
-    --- GCD/Instant-cast bar (disabled by default; options treat nil as enabled)
-    if g.showGCDBar == nil then g.showGCDBar = false end
-    if g.showGCDBarTime == nil then g.showGCDBarTime = true end
-    if g.showGCDBarSpell == nil then g.showGCDBarSpell = true end
+    --- Removed GCD/instant-cast bar. Force-disable legacy profiles that had it enabled.
+    g.showGCDBar = false
     if g.empowerColorStages == nil then
         g.empowerColorStages = true
     end
@@ -1051,18 +1049,20 @@ if g.castbarUnifiedFillDirection ~= nil then
         if v == "HIDE" or v == "HIDDEN" or v == "NONE" or v == "DISABLED" then return "HIDE" end
         return nil
     end
-    local function _InitCastbarBackend(backendKey, enableKey)
+    local function _InitCastbarBackend(unit, backendKey, enableKey)
         local backend = _NormalizeCastbarBackendDefault(g[backendKey])
         if not backend then
-            backend = (g[enableKey] == false) and "BLIZZARD" or "MSUF"
+            backend = (g[enableKey] == false) and ((unit == "player") and "BLIZZARD" or "HIDE") or "MSUF"
+        elseif backend == "BLIZZARD" and unit ~= "player" then
+            backend = "HIDE"
         end
         g[backendKey] = backend
         g[enableKey] = (backend == "MSUF")
     end
-    _InitCastbarBackend("castbarPlayerBackend", "enablePlayerCastbar")
-    _InitCastbarBackend("castbarTargetBackend", "enableTargetCastbar")
-    _InitCastbarBackend("castbarFocusBackend", "enableFocusCastbar")
-    _InitCastbarBackend("bossCastbarBackend", "enableBossCastbar")
+    _InitCastbarBackend("player", "castbarPlayerBackend", "enablePlayerCastbar")
+    _InitCastbarBackend("target", "castbarTargetBackend", "enableTargetCastbar")
+    _InitCastbarBackend("focus", "castbarFocusBackend", "enableFocusCastbar")
+    _InitCastbarBackend("boss", "bossCastbarBackend", "enableBossCastbar")
 if g.showPlayerCastTime == nil then
     g.showPlayerCastTime = true
 end

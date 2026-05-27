@@ -80,6 +80,10 @@ local function MSUF_HideBlizzardPlayerCastbar()
         local fn = _G.MSUF_ShouldUseBlizzardCastbar
         return type(fn) == "function" and fn("player") == true
     end
+    local function HideUnlessAllowed(self)
+        if self and self.MSUF_PlayerCastbarAllowShown then return end
+        if self and self.Hide then self:Hide() end
+    end
     local frames = {}
 
     if PlayerCastingBarFrame then
@@ -94,18 +98,17 @@ local function MSUF_HideBlizzardPlayerCastbar()
         return
     end
 
+    local playerUsesBlizzard = PlayerUsesBlizzardCastbar()
     for _, frame in ipairs(frames) do
+        frame.MSUF_PlayerCastbarAllowShown = playerUsesBlizzard
+        frame.showCastbar = playerUsesBlizzard
         if frame and not frame.MSUF_HideHooked then
             frame.MSUF_HideHooked = true
 
-            hooksecurefunc(frame, "Show", function(self)
-                if not PlayerUsesBlizzardCastbar() then
-                    self:Hide()
-                end
-            end)
+            hooksecurefunc(frame, "Show", HideUnlessAllowed)
         end
 
-        if not PlayerUsesBlizzardCastbar() then
+        if not playerUsesBlizzard then
             frame:Hide()
         end
     end

@@ -669,9 +669,6 @@ _G.MSUF_SyncAllUnitPreviews = function()
     end
 
     --- 3) Castbars
-    if want and type(_G.MSUF_EnsureCastbarsLoaded) == "function" then
-        _G.MSUF_EnsureCastbarsLoaded("msuf_preview")
-    end
     if _G.MSUF_SyncCastbarEditModeWithUnitEdit then
         _G.MSUF_SyncCastbarEditModeWithUnitEdit()
     end
@@ -762,7 +759,7 @@ do
     _G.MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineHooks
 end
 
---- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar LoD preview sync) ---
+--- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar preview sync) ---
 _G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
     local db = _G.MSUF_DB
     if not db then return end
@@ -770,10 +767,6 @@ _G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
     local g = db.general
     local active = EM2.State and EM2.State.IsActive()
     g.castbarPlayerPreviewEnabled = active and true or false
-
-    if active and type(_G.MSUF_EnsureCastbarsLoaded) == "function" then
-        _G.MSUF_EnsureCastbarsLoaded("msuf_edit_mode")
-    end
 
     if _G.MSUF_UpdateCastbarVisuals then
         _G.MSUF_UpdateCastbarVisuals()

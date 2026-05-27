@@ -20,6 +20,10 @@ local BACKEND_KEYS = {
     boss = "bossCastbarBackend",
 }
 
+local BLIZZARD_BACKEND_UNITS = {
+    player = true,
+}
+
 local LEGACY_ENABLE_KEYS = {
     player = "enablePlayerCastbar",
     target = "enableTargetCastbar",
@@ -59,6 +63,14 @@ function Backend.Normalize(value)
     return nil
 end
 
+function Backend.NormalizeForUnit(unit, value)
+    local backend = Backend.Normalize(value)
+    if backend == BACKEND_BLIZZARD and not BLIZZARD_BACKEND_UNITS[CanonUnit(unit)] then
+        return BACKEND_HIDE
+    end
+    return backend
+end
+
 function Backend.Unit(unit)
     return CanonUnit(unit)
 end
@@ -80,15 +92,17 @@ function Backend.Get(unit, g)
     g = General(g)
     if not g then return BACKEND_MSUF end
 
-    local backend = Backend.Normalize(g[backendKey])
+    local backend = Backend.NormalizeForUnit(u, g[backendKey])
     if not backend then
-        backend = (enableKey and g[enableKey] == false) and BACKEND_BLIZZARD or BACKEND_MSUF
+        backend = (enableKey and g[enableKey] == false)
+            and (BLIZZARD_BACKEND_UNITS[u] and BACKEND_BLIZZARD or BACKEND_HIDE)
+            or BACKEND_MSUF
         g[backendKey] = backend
     elseif g[backendKey] ~= backend then
         g[backendKey] = backend
     elseif enableKey and g[enableKey] ~= nil then
         if g[enableKey] == false and backend == BACKEND_MSUF then
-            backend = BACKEND_BLIZZARD
+            backend = BLIZZARD_BACKEND_UNITS[u] and BACKEND_BLIZZARD or BACKEND_HIDE
             g[backendKey] = backend
         elseif g[enableKey] == true and backend ~= BACKEND_MSUF then
             backend = BACKEND_MSUF
@@ -111,7 +125,7 @@ function Backend.Set(unit, value, g)
     g = General(g)
     if not g then return nil end
 
-    local backend = Backend.Normalize(value) or BACKEND_MSUF
+    local backend = Backend.NormalizeForUnit(u, value) or BACKEND_MSUF
     g[backendKey] = backend
     if enableKey then
         g[enableKey] = (backend == BACKEND_MSUF)
@@ -143,6 +157,10 @@ end
 
 function _G.MSUF_NormalizeCastbarBackend(value)
     return Backend.Normalize(value)
+end
+
+function _G.MSUF_NormalizeCastbarBackendForUnit(unit, value)
+    return Backend.NormalizeForUnit(unit, value)
 end
 
 function _G.MSUF_GetCastbarBackendKey(unit)

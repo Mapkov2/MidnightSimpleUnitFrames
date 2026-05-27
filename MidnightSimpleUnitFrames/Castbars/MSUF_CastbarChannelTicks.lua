@@ -2,30 +2,58 @@
 -- Phase 3 extraction: Channel tick markers (5 white static lines on player channel bar).
 -- Self-contained. Only dependency: MSUF_DB (global).
 
--- Player-only: Channeled Cast Tick Markers (5 white static lines)
+-- Player-only: Channeled Cast Tick Markers.
 -- Goal: Always visible from channel START (not progress-based), with static positions.
 -- Secret-safe: uses only StatusBar width + static fractions. No haste reads, no duration math, no combat log, no secret comparisons.
 -------------------------------------------------------------------------------
 
--- Master toggle (Options Castbars Behavior "Show channeled cast tick lines")
--- Default ON (nil treated as true). Stored in MSUF_DB.general.castbarShowChannelTicks.
-local function MSUF_IsChannelTickLinesEnabled()
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    if g and g.castbarShowChannelTicks == false then
-        return false
+local DEFAULT_TICK_COUNT = 5
+local MAX_TICKS = 10
+
+-- Master toggle (Options Castbars Behavior "Show channeled cast tick lines").
+-- Custom player tick settings are preserved for older profiles/imports.
+local function MSUF_GetPlayerChannelTickConfig()
+    local db = MSUF_DB
+    local g = db and db.general or nil
+    local pc = db and db.player and db.player.castbar or nil
+    local custom = pc and pc.channelTickUseCustom == true
+
+    if not custom and not (g and g.castbarShowChannelTicks == true) then
+        return false, 0, nil, false
     end
-    return true
+
+    local count = custom and tonumber(pc.channelTickCount) or DEFAULT_TICK_COUNT
+    count = count or DEFAULT_TICK_COUNT
+    if count < 0 then
+        count = 0
+    elseif count > MAX_TICKS then
+        count = MAX_TICKS
+    end
+
+    return count > 0, count, custom and pc.channelTickPosPct or nil, custom
 end
 
-local function MSUF_PlayerChannelHasteMarkers_Ensure(self)
+local function MSUF_IsChannelTickLinesEnabled()
+    local enabled = MSUF_GetPlayerChannelTickConfig()
+    return enabled == true
+end
+
+local function MSUF_PlayerChannelHasteMarkers_Ensure(self, count)
     if not (self and self.unit == "player") then return end
     local sb = self.statusBar
     if not (sb and sb.CreateTexture) then return end
 
-    if self._msufPlayerChannelHasteMarkers then return end
+    local stripes = self._msufPlayerChannelHasteMarkers
+    if not stripes then
+        stripes = {}
+        self._msufPlayerChannelHasteMarkers = stripes
+    end
 
-    local stripes = {}
-    for i = 1, 5 do
+    count = count or DEFAULT_TICK_COUNT
+    for i = 1, count do
+        if stripes[i] then
+            -- already created
+        else
         local t = sb:CreateTexture(nil, "OVERLAY", nil, 7)
         t:SetColorTexture(1, 1, 1, 1)
         if t.SetAlpha then t:SetAlpha(1) end
@@ -35,7 +63,7 @@ local function MSUF_PlayerChannelHasteMarkers_Ensure(self)
         t:Hide()
         stripes[i] = t
     end
-    self._msufPlayerChannelHasteMarkers = stripes
+    end
 
     -- Keep markers aligned if the castbar is resized (Edit Mode, scale changes, etc.)
     if not self._msufPlayerChannelHasteMarkersHooked and sb.HookScript then
@@ -45,6 +73,15 @@ local function MSUF_PlayerChannelHasteMarkers_Ensure(self)
                 self._msufPlayerChannelHasteMarkersForce = true
             end
         end)
+    end
+end
+
+local function MSUF_PlayerChannelHasteMarkers_HideFrom(self, index)
+    local stripes = self and self._msufPlayerChannelHasteMarkers
+    if not stripes then return end
+    for i = index, #stripes do
+        local t = stripes[i]
+        if t and t.Hide then t:Hide() end
     end
 end
 
@@ -65,7 +102,8 @@ local function MSUF_PlayerChannelHasteMarkers_Update(self, force)
     if not (self and self.unit == "player") then return end
 
     -- Respect the menu toggle; if disabled, force-hide markers immediately.
-    if not MSUF_IsChannelTickLinesEnabled() then
+    local enabled, count, customPositions, custom = MSUF_GetPlayerChannelTickConfig()
+    if not enabled then
         MSUF_PlayerChannelHasteMarkers_Hide(self)
         return
     end
@@ -79,7 +117,7 @@ local function MSUF_PlayerChannelHasteMarkers_Update(self, force)
     local sb = self.statusBar
     if not (sb and sb.GetWidth) then return end
 
-    MSUF_PlayerChannelHasteMarkers_Ensure(self)
+    MSUF_PlayerChannelHasteMarkers_Ensure(self, count)
     local stripes = self._msufPlayerChannelHasteMarkers
     if not stripes then return end
 
@@ -105,16 +143,23 @@ local function MSUF_PlayerChannelHasteMarkers_Update(self, force)
 
         local rf = (self._msufStripeReverseFill == true)
 
-        -- Static 5 markers at 1/6..5/6. Decorative only; never depends on haste.
-        local div = 6
-        for i = 1, 5 do
+        -- Static markers. Decorative only; never depends on haste.
+        local div = count + 1
+        for i = 1, count do
             local t = stripes[i]
             if t and t.SetPoint then
                 if t.SetAlpha then t:SetAlpha(1) end
-                local pos = (i / div)
-                if pos < 0.02 then pos = 0.02 end
-                if pos > 0.98 then pos = 0.98 end
-                local x = w * pos
+                local x
+                if custom and type(customPositions) == "table" and type(customPositions[i]) == "number" then
+                    local pct = customPositions[i]
+                    if pct < 0 then pct = 0 elseif pct > 100 then pct = 100 end
+                    x = w * (pct / 100)
+                else
+                    local pos = i / div
+                    if pos < 0.02 then pos = 0.02 end
+                    if pos > 0.98 then pos = 0.98 end
+                    x = w * pos
+                end
                 t:ClearAllPoints()
                 if rf then
                     t:SetPoint("TOP", sb, "TOPRIGHT", -x, 0)
@@ -125,10 +170,11 @@ local function MSUF_PlayerChannelHasteMarkers_Update(self, force)
                 end
             end
         end
+        MSUF_PlayerChannelHasteMarkers_HideFrom(self, count + 1)
     end
 
     -- Always visible during the entire channel.
-    for i = 1, #stripes do
+    for i = 1, count do
         local t = stripes[i]
         if t then
             if t.SetAlpha then t:SetAlpha(1) end
@@ -140,18 +186,9 @@ end
 
 -- Export: Options can call this to apply immediately (overrides core LoD stub).
 function _G.MSUF_UpdateCastbarChannelTicks()
-    local function Apply(frame)
-        if not frame then return end
-        if MSUF_IsChannelTickLinesEnabled() then
-            MSUF_PlayerChannelHasteMarkers_Update(frame, true)
-        else
-            MSUF_PlayerChannelHasteMarkers_Hide(frame)
-        end
-    end
-
     -- Real + preview (Edit Mode)
-    Apply(_G.MSUF_PlayerCastbar)
-    Apply(_G.MSUF_PlayerCastbarPreview)
+    MSUF_PlayerChannelHasteMarkers_Update(_G.MSUF_PlayerCastbar, true)
+    MSUF_PlayerChannelHasteMarkers_Update(_G.MSUF_PlayerCastbarPreview, true)
 end
 
 
@@ -166,3 +203,4 @@ _G.MSUF_IsChannelTickLinesEnabled          = MSUF_IsChannelTickLinesEnabled
 _G.MSUF_PlayerChannelHasteMarkers_Update   = MSUF_PlayerChannelHasteMarkers_Update
 _G.MSUF_PlayerChannelHasteMarkers_Hide     = MSUF_PlayerChannelHasteMarkers_Hide
 _G.MSUF_PlayerChannelHasteMarkers_Ensure   = MSUF_PlayerChannelHasteMarkers_Ensure
+_G.MSUF_ApplyPlayerChannelTickMarkers      = _G.MSUF_UpdateCastbarChannelTicks
