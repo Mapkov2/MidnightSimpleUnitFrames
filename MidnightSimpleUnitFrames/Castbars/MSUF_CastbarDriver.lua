@@ -341,8 +341,13 @@ local function CreateCastBar(name, unit)
 	            rawNI = true
 	        end
 
+	        local ur, ug, ub, ua, readyBool, useUnavailable = nil, nil, nil, nil, nil, false
+	        if type(_G.MSUF_Castbar_GetInterruptUnavailableTintArgs) == "function" then
+	            ur, ug, ub, ua, readyBool, useUnavailable = _G.MSUF_Castbar_GetInterruptUnavailableTintArgs(self)
+	        end
+
 	        if type(_G.MSUF_Castbar_ApplyNonInterruptibleTint) == "function" then
-	            _G.MSUF_Castbar_ApplyNonInterruptibleTint(self, rawNI, nr, ng, nb, 1, ir, ig, ib, 1, isNonInterruptible)
+	            _G.MSUF_Castbar_ApplyNonInterruptibleTint(self, rawNI, nr, ng, nb, 1, ir, ig, ib, 1, isNonInterruptible, ur, ug, ub, ua, readyBool, useUnavailable)
 	        else
 	            if isNonInterruptible then
 	                _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, nr, ng, nb, 1)

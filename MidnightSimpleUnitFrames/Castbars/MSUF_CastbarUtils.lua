@@ -265,6 +265,7 @@ end
 -- These colors only change when the user modifies settings, not per-cast.
 local _tintCacheNonInt = { r = nil, g = nil, b = nil, a = nil, obj = nil }
 local _tintCacheInt    = { r = nil, g = nil, b = nil, a = nil, obj = nil }
+local _tintCacheUnavailable = { r = nil, g = nil, b = nil, a = nil, obj = nil }
 
 local function _GetCachedColor(cache, r, g, b, a)
   if cache.r == r and cache.g == g and cache.b == b and cache.a == a and cache.obj then
@@ -280,12 +281,15 @@ end
 function _G.MSUF_Castbar_ApplyNonInterruptibleTint(frame, rawNotInterruptible,
   nonIntR, nonIntG, nonIntB, nonIntA,
   intR, intG, intB, intA,
-  fallbackIsNonInterruptible)
+  fallbackIsNonInterruptible,
+  unavailableR, unavailableG, unavailableB, unavailableA,
+  interruptReadyBool, useUnavailableColor)
 
   local sb = frame and frame.statusBar
   if not sb then return false end
 
   local wantNI = (fallbackIsNonInterruptible == true)
+  local useUnavailable = (useUnavailableColor == true and unavailableR ~= nil and unavailableG ~= nil and unavailableB ~= nil)
 
   local ar = wantNI and nonIntR or intR
   local ag = wantNI and nonIntG or intG
@@ -303,13 +307,18 @@ function _G.MSUF_Castbar_ApplyNonInterruptibleTint(frame, rawNotInterruptible,
     -- Quick Win #13: reuse cached color objects (only re-created when RGBA changes).
     local nonCol = _GetCachedColor(_tintCacheNonInt, nonIntR, nonIntG, nonIntB, nonIntA or 1)
     local intCol = _GetCachedColor(_tintCacheInt, intR, intG, intB, intA or 1)
+    local activeIntCol = intCol
+    if useUnavailable and C_CurveUtil and C_CurveUtil.EvaluateColorFromBoolean then
+      local unavailableCol = _GetCachedColor(_tintCacheUnavailable, unavailableR, unavailableG, unavailableB, unavailableA or 1)
+      activeIntCol = C_CurveUtil.EvaluateColorFromBoolean(interruptReadyBool, intCol, unavailableCol)
+    end
 
     local v = rawNotInterruptible
     if v == nil then
       v = (wantNI == true)
     end
 
-    tex:SetVertexColorFromBoolean(v, nonCol, intCol)
+    tex:SetVertexColorFromBoolean(v, nonCol, activeIntCol)
     usedC = true
   end
 
@@ -320,12 +329,17 @@ function _G.MSUF_Castbar_ApplyNonInterruptibleTint(frame, rawNotInterruptible,
     -- IMPORTANT (0-regression fix): keep the StatusBar color caches in sync even when
     -- we color via vertex tint. Otherwise later calls that rely on cached colors
     -- (e.g. interrupt feedback) may early-return and skip applying red on "2nd interrupt".
-    sb._msufLastColorR, sb._msufLastColorG, sb._msufLastColorB, sb._msufLastColorA = ar, ag, ab, aa
-    sb._msufLastR, sb._msufLastG, sb._msufLastB, sb._msufLastA = ar, ag, ab, aa
+    if useUnavailable then
+      sb._msufLastColorR, sb._msufLastColorG, sb._msufLastColorB, sb._msufLastColorA = nil, nil, nil, nil
+      sb._msufLastR, sb._msufLastG, sb._msufLastB, sb._msufLastA = nil, nil, nil, nil
+    else
+      sb._msufLastColorR, sb._msufLastColorG, sb._msufLastColorB, sb._msufLastColorA = ar, ag, ab, aa
+      sb._msufLastR, sb._msufLastG, sb._msufLastB, sb._msufLastA = ar, ag, ab, aa
+    end
   end
 
   -- Also keep glow-base tracking stable across both tint paths.
-  if not sb._msufGlowSkipBase then
+  if not sb._msufGlowSkipBase and not useUnavailable then
     local br, bg, bb, ba = sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA
     if br ~= ar or bg ~= ag or bb ~= ab or ba ~= aa then
       sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA = ar, ag, ab, aa
@@ -585,6 +599,9 @@ function _G.MSUF_Castbar_ApplyActiveDuration(frame, state, opts)
     if frame.UpdateColorForInterruptible then
         frame:UpdateColorForInterruptible()
     end
+    if type(_G.MSUF_KickReady_TrackFillFrame) == "function" then
+        _G.MSUF_KickReady_TrackFillFrame(frame, state)
+    end
 
     if type(_G.MSUF_RegisterCastbar) == "function" and opts.skipRegister ~= true then
         _G.MSUF_RegisterCastbar(frame)
@@ -762,6 +779,64 @@ function _G.MSUF_GetNonInterruptibleCastColor()
     end
 end
 
+function _G.MSUF_GetInterruptUnavailableCastColor()
+    _EnsureDBLazy()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local r = tonumber(g.castbarInterruptUnavailableR)
+    local gg = tonumber(g.castbarInterruptUnavailableG)
+    local b = tonumber(g.castbarInterruptUnavailableB)
+    if r and gg and b then
+        return r, gg, b, 1
+    end
+end
+
+local function _MSUF_CastbarUnitSupportsInterruptUnavailableTint(frame)
+    local unit = frame and frame.unit
+    if type(unit) ~= "string" then return false end
+    if unit == "target" or unit == "focus" then return true end
+    return unit:sub(1, 4) == "boss"
+end
+
+function _G.MSUF_Castbar_ShouldUseInterruptUnavailableColor(frame)
+    _EnsureDBLazy()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    if g.castbarInterruptUnavailableColorEnabled ~= true then return false end
+    return _MSUF_CastbarUnitSupportsInterruptUnavailableTint(frame)
+end
+
+function _G.MSUF_ResolveInterruptUnavailableCastColor()
+    _EnsureDBLazy()
+    local g = (MSUF_DB and MSUF_DB.general) or {}
+    local r, gg, b
+    if type(_G.MSUF_GetInterruptUnavailableCastColor) == "function" then
+        r, gg, b = _G.MSUF_GetInterruptUnavailableCastColor()
+    end
+    if not (r and gg and b) then
+        local key = g.castbarInterruptUnavailableColor or "yellow"
+        local c = (type(_G.MSUF_GetColorFromKey) == "function") and _G.MSUF_GetColorFromKey(key) or nil
+        if c and c.GetRGB then
+            r, gg, b = c:GetRGB()
+        end
+    end
+    if not (r and gg and b) then
+        r, gg, b = 1.0, 0.55, 0.05
+    end
+    return r, gg, b, 1
+end
+
+function _G.MSUF_Castbar_GetInterruptUnavailableTintArgs(frame)
+    if not _G.MSUF_Castbar_ShouldUseInterruptUnavailableColor(frame) then return nil end
+    if type(_G.MSUF_KickReady_IsReady) ~= "function" then return nil end
+    if type(_G.MSUF_KickReady_GetSpellID) == "function" and not _G.MSUF_KickReady_GetSpellID() then return nil end
+    if not (_G.C_Spell and _G.C_Spell.GetSpellCooldownDuration and _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorFromBoolean) then return nil end
+
+    local readyBool = _G.MSUF_KickReady_IsReady()
+    if readyBool == nil then return nil end
+
+    local r, gg, b, a = _G.MSUF_ResolveInterruptUnavailableCastColor()
+    return r, gg, b, a or 1, readyBool, true
+end
+
 -- "Glow effect" (Options -> Castbars -> Behavior): end-of-cast fade to white.
 -- NOTE: This is intentionally texture-agnostic and does not rely on background/foreground textures matching.
 -- It simply blends the current fill color towards white as the cast approaches completion.
@@ -927,6 +1002,9 @@ function _G.MSUF_CB_ApplyColor(frame, state)
         -- color is reapplied. Cheap when no dot exists or feature is disabled.
         if _G.MSUF_KickReady_RefreshFrame then
             _G.MSUF_KickReady_RefreshFrame(frame, state)
+        end
+        if type(_G.MSUF_KickReady_TrackFillFrame) == "function" then
+            _G.MSUF_KickReady_TrackFillFrame(frame, state)
         end
         return r
     end

@@ -931,6 +931,7 @@ local CASTBAR_GENERAL_KEYS = {
     kickReadyAnchor = true,
     kickReadyOffsetX = true,
     kickReadyOffsetY = true,
+    castbarInterruptUnavailableColorEnabled = true,
 }
 
 local CASTBAR_EXCLUDED_KEYS = {
@@ -1045,6 +1046,7 @@ end
 
 local function IsColorKey(key)
     if type(key) ~= "string" then return false end
+    if key == "castbarInterruptUnavailableColorEnabled" then return false end
     if COLOR_GENERAL_KEYS[key] == true then return true end
     local lower = string.lower(key)
     if lower:find("color", 1, true) then return true end

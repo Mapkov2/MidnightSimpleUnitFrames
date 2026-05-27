@@ -907,6 +907,7 @@ end
 local function MSUF_IsColorKey(k)
     if type(k) ~= "string" then  return false end
     local lk = string.lower(k)
+    if lk == "castbarinterruptunavailablecolorenabled" then return false end
     --- Obvious markers
     if lk:find("color", 1, true) then  return true end
     --- Global theme/mode keys

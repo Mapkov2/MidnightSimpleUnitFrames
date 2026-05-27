@@ -70,6 +70,7 @@ local function ApplyCastbarColors()
     ApplyColors()
     if MSUF and type(MSUF.MSUF_UpdateCastbarVisuals) == "function" then pcall(MSUF.MSUF_UpdateCastbarVisuals) end
     if MSUF and type(MSUF.MSUF_UpdateCastbarTextures_Immediate) == "function" then pcall(MSUF.MSUF_UpdateCastbarTextures_Immediate) end
+    CallGlobal("MSUF_KickReady_RefreshAll")
 end
 
 local function ApplyGameplayColors()
@@ -846,6 +847,9 @@ local function BuildColors(ctx)
             if type(fn) == "function" then pcall(fn, r, g, c, 0.85) else SetGeneralRGB("castbarBg", r, g, c) end
             ApplyCastbarColors()
         end)
+    ColorValueAt(ctx, castbar, "Interrupt unavailable cast color", 360, -118,
+        function() return ApiRGB("GetInterruptUnavailableCastColor", 1.0, 0.55, 0.05) end,
+        function(r, g, c) ApiSetRGB("SetInterruptUnavailableCastColor", r, g, c); ApplyCastbarColors() end)
     LabelAt(castbar, "Player castbar override", 12, -134, 260, "GameFontNormal", T.colors.text)
     local overrideModeX, overrideModeW = 300, 190
     local overrideColorX = min(max(overrideModeX + overrideModeW + 36, floor(castW * 0.56)), castW - 236)
@@ -900,7 +904,9 @@ local function BuildColors(ctx)
         local g = G()
         g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = nil, nil, nil
         g.castbarNonInterruptibleR, g.castbarNonInterruptibleG, g.castbarNonInterruptibleB = nil, nil, nil
+        g.castbarInterruptUnavailableR, g.castbarInterruptUnavailableG, g.castbarInterruptUnavailableB = nil, nil, nil
         g.castbarInterruptFeedbackR, g.castbarInterruptFeedbackG, g.castbarInterruptFeedbackB = nil, nil, nil
+        g.castbarInterruptUnavailableColorEnabled = false
         g.playerCastbarOverrideEnabled = false
         g.playerCastbarOverrideMode = "CLASS"
         g.playerCastbarOverrideR, g.playerCastbarOverrideG, g.playerCastbarOverrideB = nil, nil, nil
