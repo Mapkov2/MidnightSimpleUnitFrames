@@ -30,6 +30,14 @@ local AURA_TABS = {
     { value = "special", text = "Special" },
 }
 
+local AURA_PAGE_KEYS = {
+    overview = "auras3",
+    rendering = "auras3_rendering",
+    filters = "auras3_filters",
+    styling = "auras3_styling",
+    private = "auras3_private",
+}
+
 local AURA_SCOPE_VALUES = {
     { value = "shared", text = "Shared" },
     { value = "player", text = "Player" },
@@ -153,6 +161,16 @@ local function SetCurrentTab(tab)
         M.PersistMenuStateValue("auraStyleTab", tab)
     else
         M.auraStyleTab = tab
+    end
+end
+
+local function SelectAuraPage(pageKey, scope)
+    if scope then SetCurrentScope(scope) end
+    pageKey = pageKey or AURA_PAGE_KEYS.overview
+    if M.SelectPage then
+        M.SelectPage(pageKey)
+    else
+        SetCurrentTab("overview")
     end
 end
 
@@ -586,6 +604,36 @@ local function GFReadBlizzardType(scope, key, defaultValue)
     return types[key] == true
 end
 
+local function GFNativeKeyForGroup(groupKey)
+    if groupKey == "buff" then return "buffs" end
+    if groupKey == "debuff" then return "debuffs" end
+    if groupKey == "externals" then return "externals" end
+    return tostring(groupKey or "")
+end
+
+local function GFBlizzardTypeEnabled(scope, nativeKey)
+    nativeKey = tostring(nativeKey or "")
+    if nativeKey == "" then return false end
+    local gf = GF()
+    if gf and type(gf.IsBlizzardAuraTypeEnabled) == "function" then
+        local kind = GroupScopeKinds(scope)
+        return gf.IsBlizzardAuraTypeEnabled(GroupConf(kind), nativeKey) == true
+    end
+    local root = GFReadRoot(scope)
+    if (root.renderer or "BLIZZARD") == "CUSTOM" then return false end
+    return GFReadBlizzardType(scope, nativeKey, true)
+end
+
+local function GFGroupHandledByBlizzard(scope, groupKey)
+    return GFBlizzardTypeEnabled(scope, GFNativeKeyForGroup(groupKey))
+end
+
+local function GFAllCustomAuraGroupsHandledByBlizzard(scope)
+    return GFGroupHandledByBlizzard(scope, "buff")
+        and GFGroupHandledByBlizzard(scope, "debuff")
+        and GFGroupHandledByBlizzard(scope, "externals")
+end
+
 local function GFApplyBlizzardLayering(scope, forceReapply)
     local gf = GF()
     if gf and type(gf.ApplyBlizzardAuraContainerLayering) == "function" then
@@ -794,6 +842,35 @@ local function BindGFPrivateToggle(ctx, parent, label, x, y, width, scope, key, 
     return widget
 end
 
+local function BindGFPrivateSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, scope, key, default, mode)
+    local widget = W.Slider(parent, label, minVal, maxVal, step, width)
+    W.MoveWidget(widget, parent, x, y, width)
+    M.BindSlider(ctx, widget,
+        function()
+            local pa = GFReadPrivate(scope)
+            return tonumber(pa[key]) or default or 0
+        end,
+        function(value)
+            value = floor((tonumber(value) or default or 0) + 0.5)
+            GFWritePrivateValue(scope, key, value, mode or "visual")
+        end)
+    return widget
+end
+
+local function BindGFPrivateDropdown(ctx, parent, label, x, y, values, width, scope, key, default, mode)
+    local widget = W.Dropdown(parent, label, values, width)
+    W.MoveWidget(widget, parent, x, y, width)
+    M.BindDropdown(ctx, widget,
+        function()
+            local pa = GFReadPrivate(scope)
+            return pa[key] or default
+        end,
+        function(value)
+            GFWritePrivateValue(scope, key, value or default, mode or "visual")
+        end)
+    return widget
+end
+
 local function BindGFConfToggle(ctx, parent, label, x, y, width, scope, key, default, mode, afterSet)
     local widget = W.ToggleAt(parent, label, x, y, width or 180)
     M.BindToggle(ctx, widget,
@@ -975,7 +1052,7 @@ end
 local function BuildGroupFrameStyleControls(ctx, parent, x, y, width)
     local scope = CurrentGFStyleScope()
     local groupKey = CurrentGFStyleLane(true)
-    local card = AuraControlCard(parent, "Group Frame Custom Aura Style", "Moved here from Group Frames. Raid and Mythic Raid are edited together.", x, y, width, 410)
+    local card = AuraControlCard(parent, "Group Frame Custom Aura Style", "Text, stack and per-lane visuals for MSUF Custom aura icons. Raid and Mythic Raid are edited together.", x, y, width, 410)
     W.LabelAt(card, "Group", 16, -46, 80, "GameFontNormalSmall", T.colors.accent)
     BuildGFStyleScopeTabs(ctx, card, 80, -42, min(270, width - 112))
     W.LabelAt(card, "Lane", 16, -86, 80, "GameFontNormalSmall", T.colors.accent)
@@ -985,13 +1062,11 @@ local function BuildGroupFrameStyleControls(ctx, parent, x, y, width)
     local rightX = 36 + leftW
     local rightW = max(250, width - rightX - 20)
     W.LabelAt(card, GroupScopeLabel(scope) .. " - " .. GroupLaneLabel(groupKey), 16, -126, width - 32, "GameFontNormalSmall", T.colors.text)
+    local lockHint = W.Text(card, "", 16, -146, width - 32, T.colors.danger or T.colors.muted)
 
     local controls = {}
     if groupKey == "buff" or groupKey == "debuff" then
-        controls[#controls + 1] = BindGFDropdown(ctx, card, "Base Filter", 16, -178, GroupFilterValues(groupKey), leftW, scope, groupKey, "filterToken", groupKey == "buff" and "RAID" or "ALL", "visual")
-        if groupKey == "debuff" then
-            controls[#controls + 1] = BindGFToggle(ctx, card, "Show Dispel Type Border", 16, -232, leftW, scope, groupKey, "showDispelBorder", true, "visual")
-        end
+        W.Text(card, "Filter rules and category blacklists live on Filters & Blacklist. This page only changes custom icon presentation.", 16, -178, leftW, T.colors.muted)
     else
         W.Text(card, "Defensives use Blizzard's big-defensive token and only expose text styling here.", 16, -168, leftW, T.colors.muted)
     end
@@ -1004,6 +1079,13 @@ local function BuildGroupFrameStyleControls(ctx, parent, x, y, width)
     controls[#controls + 1] = BindGFSlider(ctx, card, "Cooldown Font", 16, -300, 6, 24, 1, leftW, scope, groupKey, "cooldownSize", groupKey == "externals" and 10 or 8, "font")
     controls[#controls + 1] = BindGFDropdown(ctx, card, "Cooldown Anchor", 16, -354, GFAnchorValues(), leftW, scope, groupKey, "cooldownAnchor", "CENTER", "geometry")
     controls[#controls + 1] = BindGFSlider(ctx, card, "Stack Font", rightX, -354, 6, 24, 1, rightW, scope, groupKey, "stackSize", 10, "font")
+    M.AddRefresher(ctx, function()
+        local locked = GFGroupHandledByBlizzard(scope, groupKey)
+        W.SetControlsEnabled(controls, not locked)
+        if lockHint and lockHint.SetText then
+            lockHint:SetText(locked and (GroupLaneLabel(groupKey) .. " are handled by Blizzard for this group scope. Switch that aura type to MSUF Custom on Rendering before editing custom styling.") or "")
+        end
+    end)
 end
 
 local function CategoryLabel(cat)
@@ -1025,7 +1107,7 @@ local function BuildGroupFrameCategoryBlacklist(ctx, parent, x, y, width)
     local hint = groupKey == "buff"
         and "Checked categories hide MSUF custom buff icons only. Blizzard-rendered buffs bypass this list while Use Blizzard: Buffs is enabled."
         or "Checked categories hide MSUF custom debuff icons only. Blizzard-rendered debuffs bypass this list while Use Blizzard: Debuffs is enabled."
-    W.Text(card, hint, 16, -124, width - 32, T.colors.danger or T.colors.muted)
+    local hintText = W.Text(card, hint, 16, -124, width - 32, T.colors.danger or T.colors.muted)
 
     if not (type(meta) == "table" and #meta > 0) then
         W.Text(card, "No public aura category data is loaded.", 16, -166, width - 32, T.colors.muted)
@@ -1036,12 +1118,14 @@ local function BuildGroupFrameCategoryBlacklist(ctx, parent, x, y, width)
     local colW = max(230, floor((width - 56) / 2))
     local x2 = 16 + colW + 24
     local startY = -176
+    local controls = {}
     for i = 1, #meta do
         local cat = meta[i]
         local col = i <= half and 0 or 1
         local row = col == 0 and (i - 1) or (i - half - 1)
         local tx = col == 0 and 16 or x2
         local toggle = W.ToggleAt(card, CategoryLabel(cat), tx, startY - row * 30, colW)
+        controls[#controls + 1] = toggle
         M.BindToggle(ctx, toggle,
             function() return GFReadBlacklistCat(scope, groupKey, cat.key) end,
             function(value) GFWriteBlacklistCat(scope, groupKey, cat.key, value) end)
@@ -1049,6 +1133,13 @@ local function BuildGroupFrameCategoryBlacklist(ctx, parent, x, y, width)
             AddTooltip(toggle, CategoryLabel(cat), cat.tooltip)
         end
     end
+    M.AddRefresher(ctx, function()
+        local locked = GFGroupHandledByBlizzard(scope, groupKey)
+        W.SetControlsEnabled(controls, not locked)
+        if hintText and hintText.SetText then
+            hintText:SetText(locked and (GroupLaneLabel(groupKey) .. " are handled by Blizzard for this group scope. Category blacklists only apply to MSUF Custom aura icons.") or hint)
+        end
+    end)
 end
 
 local function BuildGroupFrameUtilityControls(ctx, parent, x, y, width)
@@ -1072,6 +1163,229 @@ local function BuildGroupFrameUtilityControls(ctx, parent, x, y, width)
     BindGFRootToggle(ctx, card, "Prefer player auras", rightX, -160, colW, scope, "preferPlayer", true, "visual")
     BindGFPrivateToggle(ctx, card, "Private aura countdown", 16, -192, colW, scope, "showCountdown", true, "visual")
     BindGFPrivateToggle(ctx, card, "Private aura numbers", rightX, -192, colW, scope, "showNumbers", false, "visual")
+end
+
+local function BuildGroupFrameFilterControls(ctx, parent, x, y, width)
+    local scope = CurrentGFStyleScope()
+    local groupKey = CurrentGFBlacklistLane()
+    local card = AuraControlCard(parent, "Group Frame Filters", "Base filters and sort behavior for MSUF Custom group-frame aura icons.", x, y, width, 286)
+    W.LabelAt(card, "Group", 16, -46, 80, "GameFontNormalSmall", T.colors.accent)
+    BuildGFStyleScopeTabs(ctx, card, 80, -42, min(270, width - 112))
+    W.LabelAt(card, "Lane", 16, -86, 80, "GameFontNormalSmall", T.colors.accent)
+    BuildGFLaneTabs(ctx, card, 80, -82, min(300, width - 112), false, true)
+
+    local colW = max(250, floor((width - 60) / 2))
+    local rightX = 36 + colW
+    local rightW = max(250, width - rightX - 20)
+    local controls = {}
+    local rootControls = {}
+    local lockHint = W.Text(card, "", 16, -126, width - 32, T.colors.danger or T.colors.muted)
+
+    controls[#controls + 1] = BindGFDropdown(ctx, card, "Base Filter", 16, -176, GroupFilterValues(groupKey), colW, scope, groupKey, "filterToken", groupKey == "buff" and "RAID" or "ALL", "visual")
+    if groupKey == "debuff" then
+        controls[#controls + 1] = BindGFToggle(ctx, card, "Show Dispel Type Border", 16, -230, colW, scope, groupKey, "showDispelBorder", true, "visual")
+    else
+        W.Text(card, "Buff filters use Blizzard-declassified public aura categories when available.", 16, -226, colW, T.colors.muted)
+    end
+
+    rootControls[#rootControls + 1] = BindGFRootToggle(ctx, card, "Show tooltip on auras", rightX, -170, rightW, scope, "showTooltip", true, "visual")
+    rootControls[#rootControls + 1] = BindGFRootToggle(ctx, card, "Sort by duration", rightX, -202, rightW, scope, "sortByDuration", false, "visual")
+    rootControls[#rootControls + 1] = BindGFRootToggle(ctx, card, "Prefer player auras", rightX, -234, rightW, scope, "preferPlayer", true, "visual")
+
+    M.AddRefresher(ctx, function()
+        local locked = GFGroupHandledByBlizzard(scope, groupKey)
+        local allLocked = GFAllCustomAuraGroupsHandledByBlizzard(scope)
+        W.SetControlsEnabled(controls, not locked)
+        W.SetControlsEnabled(rootControls, not allLocked)
+        if lockHint and lockHint.SetText then
+            lockHint:SetText(locked and (GroupLaneLabel(groupKey) .. " are handled by Blizzard for this group scope. Filters only apply after that aura type is routed to MSUF Custom on Rendering.") or "")
+        end
+    end)
+end
+
+local function BuildGroupFrameStyleUtilityControls(ctx, parent, x, y, width)
+    local scope = CurrentGFStyleScope()
+    local card = AuraControlCard(parent, "Custom Aura Styling Utilities", "Applies only to group-frame aura types routed to MSUF Custom.", x, y, width, 166)
+    local colW = max(250, floor((width - 56) / 2))
+    local rightX = 16 + colW + 24
+    local controls = {}
+    controls[#controls + 1] = BindGFConfToggle(ctx, card, "Cooldown darkens on loss", 16, -58, colW, scope, "cooldownSwipeDarkenOnLoss", false, "visual")
+    controls[#controls + 1] = BindGFConfToggle(ctx, card, "Masque skin", 16, -90, colW, scope, "masqueEnabled", false, "visual", function()
+        local gf = GF()
+        if gf and gf.Masque and type(gf.Masque.ReskinAllIcons) == "function" then
+            gf.Masque.ReskinAllIcons()
+        end
+    end)
+    controls[#controls + 1] = BindGFRootToggle(ctx, card, "Dynamic icon scale", rightX, -58, colW, scope, "dynamicScale", false, "geometry")
+    local lockHint = W.Text(card, "", rightX, -94, colW, T.colors.danger or T.colors.muted)
+    M.AddRefresher(ctx, function()
+        local locked = GFAllCustomAuraGroupsHandledByBlizzard(scope)
+        W.SetControlsEnabled(controls, not locked)
+        if lockHint and lockHint.SetText then
+            lockHint:SetText(locked and "All group-frame aura types are handled by Blizzard for this scope." or "")
+        end
+    end)
+end
+
+local function BuildGroupFramePrivateAuraControls(ctx, b)
+    local section = b:Section("Private Auras", 384)
+    local w = section._msuf2Width or b.width or 720
+    local scope = CurrentGFStyleScope()
+    local card = AuraControlCard(section, "Group Frame Private Auras", "MSUF Custom private-aura placement is disabled while Blizzard owns private auras for this group scope.", 24, -42, w - 48, 310)
+    W.LabelAt(card, "Group", 16, -46, 80, "GameFontNormalSmall", T.colors.accent)
+    BuildGFStyleScopeTabs(ctx, card, 80, -42, min(270, w - 160))
+
+    local colW = max(250, floor((w - 104) / 2))
+    local rightX = 40 + colW
+    local rightW = max(250, w - rightX - 72)
+    local controls = {}
+    controls[#controls + 1] = BindGFPrivateToggle(ctx, card, "Enable MSUF Private Auras", 16, -96, colW, scope, "enabled", true, "visual")
+    controls[#controls + 1] = BindGFPrivateSlider(ctx, card, "Private aura max", 16, -150, 0, 12, 1, colW, scope, "max", 4, "visual")
+    controls[#controls + 1] = BindGFPrivateSlider(ctx, card, "Private aura size", 16, -210, 8, 64, 1, colW, scope, "size", 20, "geometry")
+    controls[#controls + 1] = BindGFPrivateDropdown(ctx, card, "Private aura anchor", rightX, -96, GFAnchorValues(), rightW, scope, "anchor", "TOPRIGHT", "geometry")
+    controls[#controls + 1] = BindGFPrivateSlider(ctx, card, "Private aura X", rightX, -150, -100, 100, 1, rightW, scope, "x", 0, "geometry")
+    controls[#controls + 1] = BindGFPrivateSlider(ctx, card, "Private aura Y", rightX, -210, -100, 100, 1, rightW, scope, "y", 0, "geometry")
+    controls[#controls + 1] = BindGFPrivateToggle(ctx, card, "Private aura countdown", 16, -246, colW, scope, "showCountdown", true, "visual")
+    controls[#controls + 1] = BindGFPrivateToggle(ctx, card, "Private aura numbers", rightX, -246, rightW, scope, "showNumbers", false, "visual")
+    local lockHint = W.Text(card, "", 16, -282, w - 96, T.colors.danger or T.colors.muted)
+
+    M.AddRefresher(ctx, function()
+        local locked = GFBlizzardTypeEnabled(scope, "privateAuras")
+        W.SetControlsEnabled(controls, not locked)
+        if lockHint and lockHint.SetText then
+            lockHint:SetText(locked and "Private Auras are handled by Blizzard for this group scope. Change Private Auras routing on Rendering before editing MSUF placement or countdown behavior." or "")
+        end
+    end)
+end
+
+local function BuildUnitFrameRenderingControls(ctx, b, scope)
+    local section = b:Section("Rendering", 292)
+    local w = section._msuf2Width or b.width or 720
+    local colW = max(300, floor((w - 64) / 2))
+    local rightX = 32 + colW + 18
+    local rightW = max(260, w - rightX - 24)
+    local card = AuraControlCard(section, "Unit Frame Aura Renderer", "Unit-frame auras use MSUF Custom rendering. Blizzard/custom routing is only available for Group Frames.", 24, -42, w - 48, 214)
+
+    if scope == "shared" then
+        W.LabelAt(card, "Visible Units", 16, -54, colW, "GameFontNormalSmall", T.colors.accent)
+        BindSwitch(ctx, card, "Player", 16, -86, 120, function() return Model.UnitEnabled("player") end, function(v) Model.SetUnitEnabled("player", v) end, "player", "AURAS3_RENDER_PLAYER", true)
+        BindSwitch(ctx, card, "Target", 152, -86, 120, function() return Model.UnitEnabled("target") end, function(v) Model.SetUnitEnabled("target", v) end, "target", "AURAS3_RENDER_TARGET", true)
+        BindSwitch(ctx, card, "Focus", 16, -120, 120, function() return Model.UnitEnabled("focus") end, function(v) Model.SetUnitEnabled("focus", v) end, "focus", "AURAS3_RENDER_FOCUS", true)
+        BindSwitch(ctx, card, "Boss", 152, -120, 120, function() return Model.UnitEnabled("boss") end, function(v) Model.SetUnitEnabled("boss", v) end, "boss", "AURAS3_RENDER_BOSS", true)
+        W.Text(card, "Use unit pages for positioning, size and per-unit inheritance. This page controls the shared renderer state.", rightX, -58, rightW, T.colors.muted)
+        return
+    end
+
+    local unit = (scope == "boss") and "boss" or scope
+    local controls = {}
+    controls[#controls + 1] = BindSwitch(ctx, card, "Enable Auras", 16, -72, colW,
+        function() return Model.UnitEnabled(unit) end,
+        function(v) Model.SetUnitEnabled(unit, v) end,
+        unit, "AURAS3_RENDER_UNIT_ENABLE", true)
+    controls[#controls + 1] = BindSwitch(ctx, card, "Use Shared Visuals", 16, -106, colW,
+        function() return Model.UseSharedVisuals(unit) end,
+        function(v) Model.SetUseSharedVisuals(unit, v) end,
+        unit, "AURAS3_RENDER_SHARED_VISUALS", true)
+    controls[#controls + 1] = BindSwitch(ctx, card, "Use Shared Rules", 16, -140, colW,
+        function() return Model.UseSharedRules(unit) end,
+        function(v) Model.SetUseSharedRules(unit, v) end,
+        unit, "AURAS3_RENDER_SHARED_RULES", true)
+    W.Text(card, "Renderer: MSUF Custom. Position can be changed from the unit page aura section or the aura position popup.", rightX, -72, rightW, T.colors.muted)
+    local popupBtn = StyleButton(card, "Position Popup", 136, 24)
+    popupBtn:SetPoint("TOPLEFT", card, "TOPLEFT", rightX, -138)
+    popupBtn:SetScript("OnClick", function()
+        if type(_G.MSUF_OpenAuras3PositionPopup) == "function" then _G.MSUF_OpenAuras3PositionPopup(unit == "boss" and "boss1" or unit, popupBtn) end
+    end)
+    M.AddRefresher(ctx, function()
+        W.SetControlEnabled(popupBtn, Model.UnitEnabled(unit))
+    end)
+end
+
+local function BuildUnitFrameTextStyleControls(ctx, b, scope)
+    local section = b:Section("Unit Aura Text", 386)
+    local w = section._msuf2Width or b.width or 720
+    local colW = max(300, floor((w - 64) / 2))
+    local rightX = 32 + colW + 18
+    local rightW = max(260, w - rightX - 24)
+    local card = AuraControlCard(section, "Unit Aura Text Styling", "Timer and stack visibility are shared. Size and anchor can be overridden per unit when shared visuals are off.", 24, -42, w - 48, 310)
+    local unit = (scope == "shared" or not Model.UnitSupported(scope)) and "shared" or scope
+    local controls = {}
+    local useShared
+    if unit ~= "shared" then
+        useShared = BindSwitch(ctx, card, "Use Shared Visuals", 16, -62, colW,
+            function() return Model.UseSharedVisuals(unit) end,
+            function(v) Model.SetUseSharedVisuals(unit, v) end,
+            unit, "AURAS3_STYLE_SHARED_VISUALS", true)
+    end
+    BindSwitch(ctx, card, "Show Stack Count", 16, unit == "shared" and -62 or -100, colW,
+        function() return Model.ReadSharedBool("showStackCount", true) end,
+        function(v) Model.WriteSharedBool("showStackCount", v) end,
+        "shared", "AURAS3_STYLE_STACK_TOGGLE", true)
+    BindSwitch(ctx, card, "Show Cooldown Text", 16, unit == "shared" and -96 or -134, colW,
+        function() return Model.ReadSharedBool("showCooldownText", true) end,
+        function(v) Model.WriteSharedBool("showCooldownText", v) end,
+        "shared", "AURAS3_STYLE_COOLDOWN_TOGGLE", true)
+
+    controls[#controls + 1] = BindDropdown(ctx, card, "Stack Anchor", 16, -192, Model.StackAnchorValues(), colW,
+        function() return Model.ReadStackAnchor(unit) end,
+        function(v) Model.WriteStackAnchor(unit, v) end,
+        unit, "AURAS3_STYLE_STACK_ANCHOR")
+    controls[#controls + 1] = BindSlider(ctx, card, "Stack size", 16, -250, 6, 40, 1, colW,
+        function() return Model.ReadNumber(unit, "stackTextSize", 14, 6, 40) end,
+        function(v) Model.WriteNumber(unit, "stackTextSize", v, 6, 40) end,
+        unit, "AURAS3_STYLE_STACK_SIZE")
+    controls[#controls + 1] = BindSlider(ctx, card, "Cooldown size", rightX, -192, 6, 40, 1, rightW,
+        function() return Model.ReadNumber(unit, "cooldownTextSize", 14, 6, 40) end,
+        function(v) Model.WriteNumber(unit, "cooldownTextSize", v, 6, 40) end,
+        unit, "AURAS3_STYLE_COOLDOWN_SIZE")
+    controls[#controls + 1] = BindSlider(ctx, card, "Stack X", rightX, -250, -40, 40, 1, rightW,
+        function() return Model.ReadNumber(unit, "stackTextOffsetX", -1, -2000, 2000) end,
+        function(v) Model.WriteNumber(unit, "stackTextOffsetX", v, -2000, 2000) end,
+        unit, "AURAS3_STYLE_STACK_X")
+    controls[#controls + 1] = BindSlider(ctx, card, "Stack Y", rightX, -304, -40, 40, 1, rightW,
+        function() return Model.ReadNumber(unit, "stackTextOffsetY", 1, -2000, 2000) end,
+        function(v) Model.WriteNumber(unit, "stackTextOffsetY", v, -2000, 2000) end,
+        unit, "AURAS3_STYLE_STACK_Y")
+
+    local inheritHint = W.Text(card, "", 16, -304, colW, T.colors.muted)
+    M.AddRefresher(ctx, function()
+        local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
+        W.SetControlsEnabled(controls, editable)
+        if useShared then W.SetControlEnabled(useShared, true) end
+        if inheritHint and inheritHint.SetText then
+            inheritHint:SetText(editable and "Font family follows Global Fonts." or "This scope inherits Shared aura text styling.")
+        end
+    end)
+end
+
+local function BuildPlayerPrivateAuraControls(ctx, b, scope)
+    local section = b:Section("Private Auras", 292)
+    local w = section._msuf2Width or b.width or 720
+    local card = AuraControlCard(section, "Player Private Auras", "Private Auras are player-only in the unit-frame renderer and are stored in the shared Auras3 profile.", 24, -42, w - 48, 214)
+    local locked = scope ~= "player"
+    local controls = {}
+    controls[#controls + 1] = BindSwitch(ctx, card, "Enable Private Auras", 16, -70, 220,
+        function() return Model.ReadSharedBool("privateAurasEnabled", true) end,
+        function(v) Model.WriteSharedBool("privateAurasEnabled", v) end,
+        "player", "AURAS3_PRIVATE_ENABLE", true)
+    controls[#controls + 1] = BindSwitch(ctx, card, "Show on Player", 16, -104, 180,
+        function() return Model.ReadSharedBool("showPrivateAurasPlayer", true) end,
+        function(v) Model.WriteSharedBool("showPrivateAurasPlayer", v) end,
+        "player", "AURAS3_PRIVATE_SHOW_PLAYER", true)
+    controls[#controls + 1] = BindSlider(ctx, card, "Max Private Auras", 16, -164, 0, 12, 1, 260,
+        function() return Model.ReadSharedNumber("privateAuraMaxPlayer", 4, 0, 12) end,
+        function(v) Model.WriteSharedNumber("privateAuraMaxPlayer", v, 0, 12) end,
+        "player", "AURAS3_PRIVATE_MAX")
+    controls[#controls + 1] = BindDropdown(ctx, card, "Growth Direction", 330, -164, Model.GrowthValues(), 220,
+        function() return tostring(Model.ReadValue("shared", "privateGrowth", "RIGHT") or "RIGHT") end,
+        function(v) Model.WriteValue("shared", "privateGrowth", v or "RIGHT") end,
+        "player", "AURAS3_PRIVATE_GROWTH")
+    local hint = W.Text(card, "", 16, -202, w - 96, T.colors.muted)
+    M.AddRefresher(ctx, function()
+        locked = CurrentScope() ~= "player"
+        W.SetControlsEnabled(controls, not locked)
+        hint:SetText(locked and "Select Player scope to edit unit-frame Private Auras." or "Blizzard private aura ownership for Group Frames is controlled on the Rendering page.")
+    end)
 end
 
 function M.BuildAuras3UnitSection(ctx, builder, unit)
@@ -1111,12 +1425,12 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         unit, "AURAS3_UNIT_SHARED_RULES", true)
     sharedRules._msuf2UnitFrameGateAlwaysEnabled = true
 
-    local styleBtn = StyleButton(sec, "Aura Style", 118, 24)
+    local styleBtn = StyleButton(sec, "Aura Styling", 118, 24)
     styleBtn:SetPoint("TOPLEFT", sec, "TOPLEFT", rightX, -44)
     styleBtn._msuf2UnitFrameGateAlwaysEnabled = true
     styleBtn:SetScript("OnClick", function()
         SetCurrentScope(unit)
-        if M.SelectPage then M.SelectPage("auras3") end
+        SelectAuraPage(AURA_PAGE_KEYS.styling, unit)
     end)
 
     local popupBtn = StyleButton(sec, "Position Popup", 136, 24)
@@ -1138,7 +1452,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     blacklistBtn:SetScript("OnClick", function()
         SetCurrentScope(unit)
         SetCurrentTab("blacklist")
-        if M.SelectPage then M.SelectPage("auras3") end
+        SelectAuraPage(AURA_PAGE_KEYS.filters, unit)
     end)
 
     local laneTabsW = min(280, colW)
@@ -1326,7 +1640,7 @@ local function BuildOverviewTab(ctx, b, scope)
     BindSwitch(ctx, section, "Target", 168, -86, 110, function() return Model.UnitEnabled("target") end, function(v) Model.SetUnitEnabled("target", v) end, "target", "AURAS3_OVERVIEW_TARGET", true)
     BindSwitch(ctx, section, "Focus", 30, -118, 110, function() return Model.UnitEnabled("focus") end, function(v) Model.SetUnitEnabled("focus", v) end, "focus", "AURAS3_OVERVIEW_FOCUS", true)
     BindSwitch(ctx, section, "Boss", 168, -118, 110, function() return Model.UnitEnabled("boss") end, function(v) Model.SetUnitEnabled("boss", v) end, "boss", "AURAS3_OVERVIEW_BOSS", true)
-    W.Text(section, "Unit pages own positioning. Aura Style owns unit rules, blacklists, colors and group-frame custom aura filters/style.", 30, -154, leftW - 32, T.colors.muted)
+    W.Text(section, "Unit pages own positioning. Aura subsections own rendering, filters, blacklists, colors and private aura behavior.", 30, -154, leftW - 32, T.colors.muted)
 
     W.ControlCardBackdrop(section, rightX, -38, rightW, 254)
     W.LabelAt(section, "Active Scope", rightX + 16, -56, 160, "GameFontNormalSmall", T.colors.accent)
@@ -1351,7 +1665,7 @@ local function BuildGroupOverviewTab(ctx, b, scope)
     local card = AuraControlCard(section, "Group Frame Aura Style", "This scope edits " .. GroupScopeLabel(scope) .. ". Position, size and growth stay on the Group Frames page.", 24, -42, w - 48, 214)
     W.LabelAt(card, "Active Scope", 16, -54, 160, "GameFontNormalSmall", T.colors.accent)
     W.Text(card, GroupScopeLabel(scope), 16, -82, w - 96, T.colors.text)
-    W.Text(card, "Use Rules for renderer, Blizzard routing, custom filters and aura text. Use Blacklist for declassified category hiding. Use Special for shared group-frame aura behavior.", 16, -120, w - 96, T.colors.muted)
+    W.Text(card, "Use Rendering for Blizzard/MSUF ownership, Filters & Blacklist for custom filter rules, Styling for timer and stack presentation, and Private Auras for player-only native aura behavior.", 16, -120, w - 96, T.colors.muted)
 end
 
 local function BuildGroupRulesTab(ctx, b)
@@ -1374,7 +1688,7 @@ local function BuildGroupSpecialTab(ctx, b)
 end
 
 local function BuildRulesTab(ctx, b, scope)
-    local section = b:Section("Rules", 1380)
+    local section = b:Section("Filters", 530)
     local w = section._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 48) / 2))
     local rightX = 24 + colW + 16
@@ -1434,9 +1748,7 @@ local function BuildRulesTab(ctx, b, scope)
         function(v) Model.WriteFilter(scope, "debuff", "exclusive", v or "none") end,
         scope, "AURAS3_RULE_DEBUFF_EXCLUSIVE", true)
 
-    W.Text(section, "Currently active: Player, Important and stealable marker. Other Blizzard filter tokens are saved here for the later filter module.", 24, -474, w - 48, T.colors.muted)
-    BuildGroupFrameDisplayControls(ctx, section, 24, -532, w - 48)
-    BuildGroupFrameStyleControls(ctx, section, 24, -940, w - 48)
+    W.Text(section, "These filters apply to MSUF custom unit-frame aura lanes. Blizzard-owned group-frame aura types are configured on the Rendering page.", 24, -474, w - 48, T.colors.muted)
     M.AddRefresher(ctx, function()
         local customRules = scope == "shared" or not Model.UseSharedRules(scope)
         local filtersOn = customRules and Model.ScopeFiltersEnabled(scope)
@@ -1447,7 +1759,7 @@ local function BuildRulesTab(ctx, b, scope)
 end
 
 local function BuildBlacklistTab(ctx, b, scope)
-    local section = b:Section("Blacklist", 940)
+    local section = b:Section("Blacklist", 570)
     local w = section._msuf2Width or b.width or 720
     local colW = max(310, floor((w - 68) / 2))
     local rightX = 36 + colW + 24
@@ -1635,7 +1947,6 @@ local function BuildBlacklistTab(ctx, b, scope)
         moreText:SetShown(#entries > 0)
     end)
 
-    BuildGroupFrameCategoryBlacklist(ctx, section, 24, -532, w - 48)
 end
 
 local function BuildColorsTab(ctx, b, scope)
@@ -1730,7 +2041,7 @@ local function BuildColorsTab(ctx, b, scope)
         function(v) Model.WriteGeneralNumber("gfAurasCooldownTextUrgentSeconds", v, 0, 30); GFRequestTextRefresh() end,
         "shared", "AURAS3_GF_COLOR_URGENT_SECONDS")
 
-    W.Text(section, "Aura text size, anchor and position live on UnitFrame pages and in Aura Style > Rules for Group Frames.", 24, -606, w - 48, T.colors.muted)
+    W.Text(section, "Timer and stack colors are shared. Per-lane size, anchor and stack visibility live in the Styling sections above.", 24, -606, w - 48, T.colors.muted)
     M.AddRefresher(ctx, RefreshColorSamples)
 end
 
@@ -1766,20 +2077,91 @@ local function BuildSpecialTab(ctx, b, scope)
     BuildGroupFrameUtilityControls(ctx, section, 24, -322, w - 48)
 end
 
-local function BuildAuraStyle(ctx)
+local function BuildAuraPageChrome(ctx, b, title, subtitle)
     Model.EnsureDB()
-    local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Aura Style", "Shared rules, blacklists, group-frame custom aura filters, colors and player-only special aura settings.", 72)
+    b:GlobalStyleHeader(title, subtitle, 72)
     local w = max(320, tonumber(ctx and ctx.width) or 720)
-    local chrome = b:Section("Aura Scope", 108)
+    local chrome = b:Section("Aura Scope", 68)
     W.LabelAt(chrome, "Scope", 18, -20, 80, "GameFontNormalSmall", T.colors.accent)
     BuildScopeTabs(ctx, chrome, 92, -16, min(820, w - 128), function()
         Rebuild(ctx)
     end)
-    W.LabelAt(chrome, "Tab", 18, -62, 80, "GameFontNormalSmall", T.colors.accent)
-    BuildTabButtons(ctx, chrome, 92, -58, min(680, w - 128))
+    return CurrentScope()
+end
 
-    local scope = CurrentScope()
+local function FinishAuraPage(ctx, b)
+    ctx:SetContentHeight(abs(b.y) + 42)
+end
+
+local function BuildAuraOverview(ctx)
+    local b = W.PageBuilder(ctx)
+    local scope = BuildAuraPageChrome(ctx, b, "Aura Overview", "Choose the edited aura scope, then use the Aura subsections for rendering, filters, styling and private auras.")
+    if IsGroupAuraScope(scope) then
+        BuildGroupOverviewTab(ctx, b, scope)
+    else
+        BuildOverviewTab(ctx, b, scope)
+    end
+    FinishAuraPage(ctx, b)
+end
+
+local function BuildAuraRendering(ctx)
+    local b = W.PageBuilder(ctx)
+    local scope = BuildAuraPageChrome(ctx, b, "Aura Rendering", "Renderer ownership, Blizzard routing and unit-frame aura enablement.")
+    if IsGroupAuraScope(scope) then
+        local section = b:Section("Group Frame Rendering", 468)
+        local w = section._msuf2Width or b.width or 720
+        BuildGroupFrameDisplayControls(ctx, section, 24, -42, w - 48)
+    else
+        BuildUnitFrameRenderingControls(ctx, b, scope)
+    end
+    FinishAuraPage(ctx, b)
+end
+
+local function BuildAuraFilters(ctx)
+    local b = W.PageBuilder(ctx)
+    local scope = BuildAuraPageChrome(ctx, b, "Aura Filters & Blacklist", "Custom aura filters, unit-frame spell blacklists and group-frame declassified category hiding.")
+    if IsGroupAuraScope(scope) then
+        local filter = b:Section("Group Frame Filters", 708)
+        local w = filter._msuf2Width or b.width or 720
+        BuildGroupFrameFilterControls(ctx, filter, 24, -42, w - 48)
+        BuildGroupFrameCategoryBlacklist(ctx, filter, 24, -352, w - 48)
+    else
+        BuildRulesTab(ctx, b, scope)
+        BuildBlacklistTab(ctx, b, scope)
+    end
+    FinishAuraPage(ctx, b)
+end
+
+local function BuildAuraStyling(ctx)
+    local b = W.PageBuilder(ctx)
+    local scope = BuildAuraPageChrome(ctx, b, "Aura Styling", "Timer colors, stack text and custom aura presentation.")
+    if IsGroupAuraScope(scope) then
+        local style = b:Section("Group Frame Styling", 692)
+        local w = style._msuf2Width or b.width or 720
+        BuildGroupFrameStyleControls(ctx, style, 24, -42, w - 48)
+        BuildGroupFrameStyleUtilityControls(ctx, style, 24, -476, w - 48)
+        BuildColorsTab(ctx, b, scope)
+    else
+        BuildUnitFrameTextStyleControls(ctx, b, scope)
+        BuildColorsTab(ctx, b, scope)
+    end
+    FinishAuraPage(ctx, b)
+end
+
+local function BuildAuraPrivate(ctx)
+    local b = W.PageBuilder(ctx)
+    local scope = BuildAuraPageChrome(ctx, b, "Private Auras", "Player private auras and group-frame private aura ownership.")
+    if IsGroupAuraScope(scope) then
+        BuildGroupFramePrivateAuraControls(ctx, b)
+    else
+        BuildPlayerPrivateAuraControls(ctx, b, scope)
+    end
+    FinishAuraPage(ctx, b)
+end
+
+local function BuildAuraStyle(ctx)
+    local b = W.PageBuilder(ctx)
+    local scope = BuildAuraPageChrome(ctx, b, "Aura Style", "Legacy Aura Style view. Use the Aura sidebar subsections for the rewritten pages.")
     local tab = CurrentTab()
     if IsGroupAuraScope(scope) and tab == "rules" then
         BuildGroupRulesTab(ctx, b)
@@ -1800,7 +2182,11 @@ local function BuildAuraStyle(ctx)
     else
         BuildOverviewTab(ctx, b, scope)
     end
-    ctx:SetContentHeight(abs(b.y) + 42)
+    FinishAuraPage(ctx, b)
 end
 
-M.RegisterPage("auras3", { title = "MSUF Aura Style", build = BuildAuraStyle, version = 38 })
+M.RegisterPage("auras3", { title = "MSUF Aura Overview", build = BuildAuraOverview, version = 41 })
+M.RegisterPage("auras3_rendering", { title = "MSUF Aura Rendering", build = BuildAuraRendering, version = 1 })
+M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters & Blacklist", build = BuildAuraFilters, version = 1 })
+M.RegisterPage("auras3_styling", { title = "MSUF Aura Styling", build = BuildAuraStyling, version = 1 })
+M.RegisterPage("auras3_private", { title = "MSUF Private Auras", build = BuildAuraPrivate, version = 1 })

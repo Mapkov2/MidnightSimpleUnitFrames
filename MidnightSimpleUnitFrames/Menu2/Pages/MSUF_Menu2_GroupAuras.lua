@@ -160,7 +160,7 @@ local function BuildGFAuras(ctx)
             local nativeGroup = IsGroupRenderedByBlizzard(groupKey)
             local mixedGroup = groupEnabled and IsBlizzardRendererMode() and not nativeGroup
             local warningColor = T.colors.danger or { 0.88, 0.28, 0.28, 1 }
-            SetOptionsEnabled(controls, groupEnabled)
+            SetOptionsEnabled(controls, groupEnabled and not nativeGroup)
             SetOptionEnabled(enable, true)
             if type(SetSectionHeaderStatus) == "function" then
                 if nativeGroup then
@@ -194,6 +194,17 @@ local function BuildGFAuras(ctx)
     BuildAuraGroupSection("debuff", "Debuffs")
     BuildAuraGroupSection("externals", "Defensives")
 
+    local function IsPrivateAurasRenderedByBlizzard()
+        local gf = GF and GF()
+        if gf and type(gf.IsBlizzardAuraTypeEnabled) == "function" then
+            return gf.IsBlizzardAuraTypeEnabled(Conf(CurrentScope()), "privateAuras") == true
+        end
+        local root = AurasRoot(CurrentScope())
+        if (root.renderer or "BLIZZARD") == "CUSTOM" then return false end
+        local types = root.blizzardTypes
+        return type(types) ~= "table" or types.privateAuras ~= false
+    end
+
     local priv = b:CollapsibleSection("priv", "Private Auras", 224, false)
     local privW = priv._msuf2Width or ctx.width or 900
     local privLeftX = 32
@@ -226,9 +237,21 @@ local function BuildGFAuras(ctx)
     W.MoveWidget(privX, priv, privRightX, -116, privRightControlW)
     W.MoveWidget(privY, priv, privRightX, -168, privRightControlW)
     local function RefreshPrivateAuraState()
-        SetOptionsEnabled(privControls, PrivateAuras(CurrentScope()).enabled ~= false)
+        local nativePrivate = IsPrivateAurasRenderedByBlizzard()
+        SetOptionsEnabled(privControls, PrivateAuras(CurrentScope()).enabled ~= false and not nativePrivate)
         SetOptionEnabled(privEnable, true)
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(priv, nil) end
+        if type(SetSectionHeaderStatus) == "function" then
+            if nativePrivate then
+                SetSectionHeaderStatus(priv, {
+                    hint = Tr("Rendered by Blizzard"),
+                    hintColor = T.colors.danger or { 0.88, 0.28, 0.28, 1 },
+                    bg = { 0.120, 0.035, 0.040, 0.55 },
+                    arrowColor = T.colors.danger or { 0.88, 0.28, 0.28, 1 },
+                })
+            else
+                SetSectionHeaderStatus(priv, nil)
+            end
+        end
     end
     M.AddRefresher(ctx, RefreshPrivateAuraState)
     RefreshPrivateAuraState()

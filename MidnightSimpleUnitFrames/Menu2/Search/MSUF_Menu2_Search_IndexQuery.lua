@@ -2113,16 +2113,33 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
             { id = "classpower_detached_power", terms = { "detached power", "detached power bar", "alternate power", "dual resource" } },
             { id = "classpower_alt_mana", terms = { "alternative mana", "alt mana", "mana bar" } },
         })
-    elseif pageKey == "auras3" then
-        SearchRouteApplySectionSpecs(route, pageKey, normalized, {
-            { id = "a2_display", terms = { "display", "click through", "click-through", "buffs", "debuffs", "show buffs", "show debuffs" } },
-            { id = "a2_layout", terms = { "caps", "icons", "max buffs", "max debuffs", "icon size", "rows", "spacing", "anchor" } },
-            { id = "a2_text_coloring", terms = { "text coloring", "cooldown text", "timer color", "stack text", "pandemic" } },
-            { id = "a2_private", terms = { "private auras", "private aura" } },
-            { id = "a2_filters", terms = { "aura filters", "filter", "sorting", "dispellable", "only mine", "own buffs", "own debuffs" } },
-            { id = "a2_ignore", terms = { "ignore list", "global ignore", "blacklist" } },
-            { id = "a2_reminders", terms = { "buff reminders", "reminders", "missing buff" } },
-        })
+    elseif pageKey == "auras3" or pageKey == "auras3_rendering" or pageKey == "auras3_filters" or pageKey == "auras3_styling" or pageKey == "auras3_private" then
+        if pageKey == "auras3_rendering" then
+            SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+                { id = "Group Frame Rendering", terms = { "renderer", "rendering", "blizzard", "custom", "aura display mode", "private auras route", "msuf dispel highlights" } },
+                { id = "Rendering", terms = { "enable auras", "unit aura renderer", "use shared visuals", "use shared rules" } },
+            })
+        elseif pageKey == "auras3_filters" then
+            SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+                { id = "Filters", terms = { "filters", "only mine", "own buffs", "own debuffs", "dispellable", "stealable", "exclusive filter" } },
+                { id = "Blacklist", terms = { "blacklist", "ignore list", "spell id", "blacklist presets" } },
+                { id = "Group Frame Filters", terms = { "base filter", "sort by duration", "prefer player", "category blacklist", "declassified" } },
+            })
+        elseif pageKey == "auras3_styling" then
+            SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+                { id = "Unit Aura Text", terms = { "stack size", "cooldown size", "stack anchor", "timer text", "unit aura text" } },
+                { id = "Group Frame Styling", terms = { "group frame custom aura style", "stack font", "cooldown font", "cooldown swipe", "masque", "dynamic icon scale" } },
+                { id = "Colors", terms = { "timer color", "cooldown text color", "stack color", "own buff", "own debuff", "safe warning urgent" } },
+            })
+        elseif pageKey == "auras3_private" then
+            SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+                { id = "Private Auras", terms = { "private auras", "private aura", "countdown", "numbers", "private aura max", "private aura size", "private aura anchor" } },
+            })
+        else
+            SearchRouteApplySectionSpecs(route, pageKey, normalized, {
+                { id = "Overview", terms = { "overview", "aura scope", "visible units", "active scope" } },
+            })
+        end
         if SearchRouteHasAny(normalized, { "player" }) then
             SearchRouteSetState(route, "auraScope", "player")
         elseif SearchRouteHasAny(normalized, { "target" }) then
@@ -2131,6 +2148,12 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
             SearchRouteSetState(route, "auraScope", "focus")
         elseif SearchRouteHasAny(normalized, { "boss" }) then
             SearchRouteSetState(route, "auraScope", "boss")
+        elseif SearchRouteHasAny(normalized, { "party" }) then
+            SearchRouteSetState(route, "auraScope", "party")
+            SearchRouteSetState(route, "auraStyleGFScope", "party")
+        elseif SearchRouteHasAny(normalized, { "raid", "mythic" }) then
+            SearchRouteSetState(route, "auraScope", "raid")
+            SearchRouteSetState(route, "auraStyleGFScope", "raid")
         elseif SearchRouteHasAny(normalized, { "shared", "global" }) then
             SearchRouteSetState(route, "auraScope", "shared")
         end

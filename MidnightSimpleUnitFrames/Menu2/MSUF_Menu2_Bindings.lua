@@ -684,9 +684,29 @@ local PAGE_RESET_INFO = {
         summary = "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides",
     },
     auras3 = {
-        label = "Unit Auras",
+        label = "Auras",
         kind = "auras",
-        summary = "Auras 2.0 shared settings, per-unit aura overrides, filters, caps, layout, timer text and reminders",
+        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout, timer text and private aura settings",
+    },
+    auras3_rendering = {
+        label = "Aura Rendering",
+        kind = "auras",
+        summary = "Auras3 shared settings, per-unit aura overrides, renderer state, filters, caps, layout and timer text",
+    },
+    auras3_filters = {
+        label = "Aura Filters & Blacklist",
+        kind = "auras",
+        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout and timer text",
+    },
+    auras3_styling = {
+        label = "Aura Styling",
+        kind = "auras",
+        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout and timer text",
+    },
+    auras3_private = {
+        label = "Private Auras",
+        kind = "auras",
+        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout and timer text",
     },
     opt_castbar = {
         label = "Castbar",
