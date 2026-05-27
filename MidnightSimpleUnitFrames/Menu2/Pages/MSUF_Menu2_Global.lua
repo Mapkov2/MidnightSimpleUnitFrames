@@ -634,20 +634,7 @@ local function GroupScopeUsesBlizzardRenderer(info)
 end
 
 local function GroupScopeBlocksDispelGlow(info)
-    local conf, gf = GroupScopeConf(info)
-    if not conf or conf.dispelEnabled == false then return false end
-    local auras = conf.auras
-    if not auras or auras.enabled == false or auras.blizzardDispelBorder == true then return false end
-    if gf and type(gf.GetBlizzardAuraTypeFlags) == "function" then
-        local _, _, dispels = gf.GetBlizzardAuraTypeFlags(conf)
-        return dispels == true
-    end
-    if gf and type(gf.IsBlizzardAuraTypeEnabled) == "function" then
-        return gf.IsBlizzardAuraTypeEnabled(conf, "dispels") == true
-    end
-    if (auras.renderer or "BLIZZARD") == "CUSTOM" then return false end
-    local types = auras.blizzardTypes
-    return type(types) ~= "table" or types.dispels ~= false
+    return false
 end
 
 local function GroupBlizzardRendererActiveForKind(kind)

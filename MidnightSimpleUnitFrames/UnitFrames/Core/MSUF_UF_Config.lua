@@ -166,6 +166,16 @@ local function NormalizeDispelOverlayStyle(value)
     return "FULL"
 end
 
+local function NormalizeDispelGlowStyle(value)
+    value = tostring(value or "PIXEL"):upper()
+    if value == "AUTOCAST" or value == "SHINE" or value == "AUTOCAST_SHINE" then
+        return "AUTOCAST"
+    elseif value == "PROC" or value == "PROC_GLOW" then
+        return "PROC"
+    end
+    return "PIXEL"
+end
+
 local function OutlineModeEnabled(value, fallback)
     if value == nil then value = fallback end
     if value == true or value == false then return value end
@@ -1248,6 +1258,11 @@ local function ResolveUnit(db, unit, out)
     out.dispel.typeBleedR = Number(general.dispelTypeBleedR, 0.80)
     out.dispel.typeBleedG = Number(general.dispelTypeBleedG, 0.10)
     out.dispel.typeBleedB = Number(general.dispelTypeBleedB, 0.10)
+    out.dispel.glowEnabled = ScopedValue(conf, general, "hlDispelGlowEnabled", true) ~= false
+    out.dispel.glowStyle = NormalizeDispelGlowStyle(ScopedValue(conf, general, "hlDispelGlowStyle", "PIXEL"))
+    out.dispel.glowLines = Number(ScopedValue(conf, general, "hlDispelGlowLines", 8), 8)
+    out.dispel.glowFrequency = Number(ScopedValue(conf, general, "hlDispelGlowFrequency", 0.25), 0.25)
+    out.dispel.glowThickness = Number(ScopedValue(conf, general, "hlDispelGlowThickness", 2), 2)
 
     out.dispelOverlay = out.dispelOverlay or {}
     out.dispelOverlay.enabled = ScopedValue(conf, general, "unitDispelOverlayEnabled", false) == true
@@ -1267,7 +1282,17 @@ local function ResolveUnit(db, unit, out)
     out.border.g = Number(general.barOutlineColorG or general.barBorderG, 0)
     out.border.b = Number(general.barOutlineColorB or general.barBorderB, 0)
     out.border.a = Number(general.barOutlineColorA or general.barBorderA, 1)
-    out.border.highlightThickness = Number(bars.highlightBorderThickness or general.highlightBorderThickness, out.border.thickness)
+    out.border.highlightThickness = Number(ScopedValue(conf, general, "highlightBorderThickness", bars.highlightBorderThickness or general.highlightBorderThickness), out.border.thickness)
+    out.border.aggroR = Number(ScopedValue(conf, general, "hlAggroColorR", general.aggroBorderColorR or general.aggroBorderR), 1.00)
+    out.border.aggroG = Number(ScopedValue(conf, general, "hlAggroColorG", general.aggroBorderColorG or general.aggroBorderG), 0.55)
+    out.border.aggroB = Number(ScopedValue(conf, general, "hlAggroColorB", general.aggroBorderColorB or general.aggroBorderB), 0.00)
+    out.border.purgeR = Number(ScopedValue(conf, general, "hlPurgeColorR", general.purgeBorderColorR), 1.00)
+    out.border.purgeG = Number(ScopedValue(conf, general, "hlPurgeColorG", general.purgeBorderColorG), 0.85)
+    out.border.purgeB = Number(ScopedValue(conf, general, "hlPurgeColorB", general.purgeBorderColorB), 0.00)
+    local bossColor = general.bossTargetHighlightColor
+    out.border.bossTargetR = Number(type(bossColor) == "table" and bossColor[1], 1.00)
+    out.border.bossTargetG = Number(type(bossColor) == "table" and bossColor[2], 0.82)
+    out.border.bossTargetB = Number(type(bossColor) == "table" and bossColor[3], 0.00)
     local legacyDispelBorder = general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true
     if general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then
         legacyDispelBorder = true

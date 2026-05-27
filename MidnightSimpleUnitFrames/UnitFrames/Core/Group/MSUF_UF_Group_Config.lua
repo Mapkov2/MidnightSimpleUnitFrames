@@ -223,6 +223,16 @@ local function NormalizeDispelOverlayStyle(value)
     return "FULL"
 end
 
+local function NormalizeDispelGlowStyle(value)
+    value = tostring(value or "PIXEL"):upper()
+    if value == "AUTOCAST" or value == "SHINE" or value == "AUTOCAST_SHINE" then
+        return "AUTOCAST"
+    elseif value == "PROC" or value == "PROC_GLOW" then
+        return "PROC"
+    end
+    return "PIXEL"
+end
+
 local function NormalizeRangeFadeLayerMode(value)
     if value == "health" or value == "hp" or value == "HP" then
         return "health"
@@ -603,6 +613,11 @@ local function CompileDispelVisual(kind, conf)
         typeBleedR = Num(general.dispelTypeBleedR, 0.80),
         typeBleedG = Num(general.dispelTypeBleedG, 0.10),
         typeBleedB = Num(general.dispelTypeBleedB, 0.10),
+        glowEnabled = GroupScopeValue(kind, conf, general, "hlDispelGlowEnabled", true) ~= false,
+        glowStyle = NormalizeDispelGlowStyle(GroupScopeValue(kind, conf, general, "hlDispelGlowStyle", "PIXEL")),
+        glowLines = Num(GroupScopeValue(kind, conf, general, "hlDispelGlowLines", 8), 8),
+        glowFrequency = Num(GroupScopeValue(kind, conf, general, "hlDispelGlowFrequency", 0.25), 0.25),
+        glowThickness = Num(GroupScopeValue(kind, conf, general, "hlDispelGlowThickness", 2), 2),
     }
 end
 
@@ -959,6 +974,27 @@ local function CompileSpecUncached(kind, frame, unit)
         dispelBorderEnabled = conf.dispelEnabled == true
     end
     local general = GeneralDB() or {}
+    local aggroBorderMode = GF.GetHighlightVal and GF.GetHighlightVal(kind, "hlAggroEnabled")
+    if aggroBorderMode == nil and GF.GetHighlightVal then
+        aggroBorderMode = GF.GetHighlightVal(kind, "aggroOutlineMode")
+    end
+    if aggroBorderMode == nil then
+        aggroBorderMode = GroupScopeValue(kind, conf, general, "aggroOutlineMode", nil)
+    end
+    local aggroBorderEnabled
+    if aggroBorderMode == nil then
+        aggroBorderEnabled = conf.aggroEnabled == true
+    else
+        aggroBorderEnabled = tonumber(aggroBorderMode) == 1 or aggroBorderMode == true
+    end
+    local highlightThickness = GF.GetHighlightVal and GF.GetHighlightVal(kind, "highlightBorderThickness")
+    if highlightThickness == nil and GF.GetHighlightVal then
+        highlightThickness = GF.GetHighlightVal(kind, "hlAggroSize")
+    end
+    if highlightThickness == nil then
+        highlightThickness = GroupScopeValue(kind, conf, general, "highlightBorderThickness", nil)
+            or GroupScopeValue(kind, conf, general, "hlAggroSize", nil)
+    end
     local dispelBorderTrigger = GroupScopeValue(kind, conf, general, "dispelBorderTrigger", "BY_ME")
 
     return {
@@ -1065,7 +1101,15 @@ local function CompileSpecUncached(kind, frame, unit)
             g = Num(conf.borderG, 0),
             b = Num(conf.borderB, 0),
             a = Num(conf.borderA, 1),
-            aggro = conf.aggroEnabled == true,
+            highlightThickness = Num(highlightThickness, GF.GetBarOutlineThickness and GF.GetBarOutlineThickness(kind) or Num(conf.borderSize, 1)),
+            aggro = aggroBorderEnabled == true,
+            aggroMode = conf.aggroMode or general.aggroMode or "ALL",
+            aggroR = Num(GroupScopeValue(kind, conf, general, "hlAggroColorR", general.aggroBorderColorR or general.aggroBorderR), 1.00),
+            aggroG = Num(GroupScopeValue(kind, conf, general, "hlAggroColorG", general.aggroBorderColorG or general.aggroBorderG), 0.55),
+            aggroB = Num(GroupScopeValue(kind, conf, general, "hlAggroColorB", general.aggroBorderColorB or general.aggroBorderB), 0.00),
+            purgeR = Num(GroupScopeValue(kind, conf, general, "hlPurgeColorR", general.purgeBorderColorR), 1.00),
+            purgeG = Num(GroupScopeValue(kind, conf, general, "hlPurgeColorG", general.purgeBorderColorG), 0.85),
+            purgeB = Num(GroupScopeValue(kind, conf, general, "hlPurgeColorB", general.purgeBorderColorB), 0.00),
             dispel = dispelBorderEnabled == true,
             dispelTrigger = NormalizeDispelDetectTrigger(dispelBorderTrigger),
         },

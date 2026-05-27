@@ -128,6 +128,16 @@ function DispelState.NormalizeOverlayTrigger(value)
     return DispelState.NormalizeDetectTrigger(value)
 end
 
+local function CanonicalOverlayTrigger(trigger)
+    if trigger == "BORDER" or trigger == "ANY_DEBUFF"
+        or trigger == "DISPEL_TYPE" or trigger == "PLAYER_CAST"
+        or trigger == "BY_ME"
+    then
+        return trigger
+    end
+    return DispelState.NormalizeOverlayTrigger(trigger)
+end
+
 _G.MSUF_NormalizeDispelBorderTrigger = DispelState.NormalizeDetectTrigger
 _G.MSUF_NormalizeUnitDispelOverlayTrigger = DispelState.NormalizeOverlayTrigger
 
@@ -354,7 +364,7 @@ end
 
 function DispelState.ActiveForTrigger(snapshot, trigger, borderActive)
     if not snapshot then return false end
-    trigger = DispelState.NormalizeOverlayTrigger(trigger)
+    trigger = CanonicalOverlayTrigger(trigger)
     if trigger == "BORDER" then return borderActive == true end
     if trigger == "ANY_DEBUFF" then return snapshot.anyDebuff == true end
     if trigger == "DISPEL_TYPE" then return snapshot.anyDispelType == true end
@@ -434,7 +444,7 @@ end
 
 function DispelState.AuraIDForTrigger(snapshot, trigger)
     if not snapshot then return nil end
-    trigger = DispelState.NormalizeOverlayTrigger(trigger)
+    trigger = CanonicalOverlayTrigger(trigger)
     if trigger == "ANY_DEBUFF" then
         return snapshot.anyDebuffAuraInstanceID
     elseif trigger == "DISPEL_TYPE" then

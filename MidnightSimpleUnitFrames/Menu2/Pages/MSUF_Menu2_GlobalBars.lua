@@ -1304,8 +1304,19 @@ local function BuildBars(ctx)
         local glowOn = (not groupGlowBlocked) and BarScopeGet("hlDispelGlowEnabled", true) ~= false
         local pixelGlow = NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) == "PIXEL"
         local conflictText = GlowConflictTextForCurrentScope()
-        if conflictText then
-            glowConflictHint:SetText(conflictText)
+        local glowHintText = conflictText
+        if not glowHintText and scopedActive then
+            local scope = CurrentBarsScope()
+            if scope == "gf_raid" then
+                glowHintText = "Dispel Glow works on Raid frames. It is animated and can cost FPS when many raid members glow at once; BY_ME is the cheapest detect mode."
+            elseif scope == "gf_party" then
+                glowHintText = "Dispel Glow works on Party frames. It is animated; BY_ME is the cheapest detect mode."
+            else
+                glowHintText = "Dispel Glow is animated. For the lowest combat overhead, use BY_ME or disable glow."
+            end
+        end
+        if glowHintText then
+            glowConflictHint:SetText(glowHintText)
             glowConflictHint:Show()
             local color = groupGlowBlocked and { 1.00, 0.55, 0.20, 1 } or T.colors.muted
             glowConflictHint:SetTextColor(color[1], color[2], color[3], color[4] or 1)

@@ -119,12 +119,10 @@ end
 
 local function HasThreat(unit)
     if not UnitThreatSituation or not unit then return false end
-    local status = UnitThreatSituation("player", unit)
-    if status == nil then
-        status = UnitThreatSituation(unit)
-    end
+    local status = UnitThreatSituation(unit)
     if status == nil or (issecretvalue and issecretvalue(status)) then return false end
-    return tonumber(status) >= 2
+    status = tonumber(status)
+    return status ~= nil and status >= 1
 end
 
 local GroupCornerIndicators = {}

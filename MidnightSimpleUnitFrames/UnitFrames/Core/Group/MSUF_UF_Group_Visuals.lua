@@ -385,10 +385,6 @@ end
 
 local function OverlayTarget(frame, cfg)
     if cfg.dispelOverlayOnHealth ~= false and frame.hpBar then
-        if frame.hpBar.GetStatusBarTexture then
-            local tex = frame.hpBar:GetStatusBarTexture()
-            if tex then return tex end
-        end
         return frame.hpBar
     end
     return frame

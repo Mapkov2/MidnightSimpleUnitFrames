@@ -7,6 +7,7 @@ local UF = MSUF.UF
 local CreateFrame = CreateFrame
 local UnitExists = UnitExists
 local UnitThreatSituation = UnitThreatSituation
+local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local CheckInteractDistance = CheckInteractDistance
 local UnitClass = UnitClass
 local UnitReaction = UnitReaction
@@ -29,12 +30,14 @@ local select = select
 local wipe = wipe
 local max = math.max
 local abs = math.abs
+local floor = math.floor
 local C_Spell = _G.C_Spell
 local C_SpellBook = _G.C_SpellBook
 local LibStub = _G.LibStub
 local C_Spell_IsSpellInRange = C_Spell and C_Spell.IsSpellInRange
 local C_SpellBook_IsSpellInSpellBook = C_SpellBook and C_SpellBook.IsSpellInSpellBook
 local DispelState = UF and UF.DispelState or {}
+local LCG = LibStub and LibStub("LibCustomGlow-1.0", true)
 
 -- WoW marks select unit-API returns as "secret values" when reading them
 -- would leak hidden combat info. Using a secret value in a comparison
@@ -1538,10 +1541,6 @@ end
 
 local function DispelOverlayTarget(frame, cfg)
     if cfg and cfg.onHealth ~= false and frame.hpBar then
-        if frame.hpBar.GetStatusBarTexture then
-            local tex = frame.hpBar:GetStatusBarTexture()
-            if tex then return tex end
-        end
         return frame.hpBar
     end
     return frame
@@ -1650,13 +1649,14 @@ end
 UF.RegisterElement("DispelOverlay", DispelOverlay)
 
 local Borders = {}
+local IsAggroBorderUnit
 
 function Borders.GetEvents(frame, spec)
     local cfg = spec and spec.border
     if not cfg then
         return EMPTY_EVENTS
     end
-    if cfg.aggro == true then
+    if cfg.aggro == true and IsAggroBorderUnit(frame) then
         return BORDER_THREAT_EVENTS
     end
     return EMPTY_EVENTS
@@ -1667,6 +1667,123 @@ function Borders.GetUnitlessEvents(frame, spec)
 end
 
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
+local DISPEL_GLOW_KEY = "msufDispel"
+local dispelGlowColor = { 0, 0, 0, 1 }
+local dispelProcGlowOptions = { color = dispelGlowColor, key = DISPEL_GLOW_KEY }
+
+local function GlowLib()
+    if LCG then
+        return LCG
+    end
+    if LibStub then
+        LCG = LibStub("LibCustomGlow-1.0", true)
+    end
+    return LCG
+end
+
+local function StopDispelGlowOn(anchor)
+    local lib = GlowLib()
+    if not (lib and anchor) then return end
+    if lib.PixelGlow_Stop then lib.PixelGlow_Stop(anchor, DISPEL_GLOW_KEY) end
+    if lib.AutoCastGlow_Stop then lib.AutoCastGlow_Stop(anchor, DISPEL_GLOW_KEY) end
+    if lib.ProcGlow_Stop then lib.ProcGlow_Stop(anchor, DISPEL_GLOW_KEY) end
+end
+
+local function StopDispelGlow(frame)
+    if not frame then return end
+    if not frame._msufDispelGlowActive
+        and not frame._msufDispelGlowAnchor
+        and not frame._msufDispelGlowStyle
+    then
+        return
+    end
+    frame._msufDispelGlowActive = nil
+    local anchor = frame._msufDispelGlowAnchor
+    frame._msufDispelGlowAnchor = nil
+    frame._msufDispelGlowStyle = nil
+    frame._msufDispelGlowR = nil
+    frame._msufDispelGlowG = nil
+    frame._msufDispelGlowB = nil
+    frame._msufDispelGlowLines = nil
+    frame._msufDispelGlowFreq = nil
+    frame._msufDispelGlowThick = nil
+    StopDispelGlowOn(anchor)
+    if frame.MSUFBorderOverlay and frame.MSUFBorderOverlay ~= anchor then
+        StopDispelGlowOn(frame.MSUFBorderOverlay)
+    end
+    if frame._msufRoundedHighlightGlowAnchor and frame._msufRoundedHighlightGlowAnchor ~= anchor then
+        StopDispelGlowOn(frame._msufRoundedHighlightGlowAnchor)
+    end
+    if frame._msufRGF_GlowAnchor and frame._msufRGF_GlowAnchor ~= anchor then
+        StopDispelGlowOn(frame._msufRGF_GlowAnchor)
+    end
+    if frame ~= anchor then
+        StopDispelGlowOn(frame)
+    end
+end
+
+local function StartDispelGlow(frame, r, g, b, spec)
+    local dispel = spec and spec.dispel
+    if not (dispel and dispel.glowEnabled == true) then
+        StopDispelGlow(frame)
+        return
+    end
+    local lib = GlowLib()
+    if not lib then
+        StopDispelGlow(frame)
+        return
+    end
+    local anchor = frame._msufRoundedHighlightGlowAnchor
+        or frame._msufRGF_GlowAnchor
+        or frame.MSUFBorderOverlay
+        or frame
+    local style = dispel.glowStyle or "PIXEL"
+    local lines = tonumber(dispel.glowLines) or 8
+    local freq = tonumber(dispel.glowFrequency) or 0.25
+    local thick = tonumber(dispel.glowThickness) or 2
+    local secretColor = issecretvalue and (issecretvalue(r) or issecretvalue(g) or issecretvalue(b))
+    if secretColor then
+        r, g, b = dispel.r or 0.25, dispel.g or 0.75, dispel.b or 1
+    end
+    if frame._msufDispelGlowActive == true
+        and frame._msufDispelGlowAnchor == anchor
+        and frame._msufDispelGlowStyle == style
+        and frame._msufDispelGlowR == r
+        and frame._msufDispelGlowG == g
+        and frame._msufDispelGlowB == b
+        and frame._msufDispelGlowLines == lines
+        and frame._msufDispelGlowFreq == freq
+        and frame._msufDispelGlowThick == thick
+    then
+        return
+    end
+    local oldAnchor = frame._msufDispelGlowAnchor
+    if oldAnchor and (oldAnchor ~= anchor or frame._msufDispelGlowStyle ~= style) then
+        StopDispelGlowOn(oldAnchor)
+    end
+    if anchor ~= frame then
+        StopDispelGlowOn(frame)
+    end
+    dispelGlowColor[1], dispelGlowColor[2], dispelGlowColor[3] = r, g, b
+    if style == "AUTOCAST" and lib.AutoCastGlow_Start then
+        lib.AutoCastGlow_Start(anchor, dispelGlowColor, lines, freq, nil, nil, nil, DISPEL_GLOW_KEY)
+    elseif style == "PROC" and lib.ProcGlow_Start then
+        dispelProcGlowOptions.color = dispelGlowColor
+        dispelProcGlowOptions.key = DISPEL_GLOW_KEY
+        lib.ProcGlow_Start(anchor, dispelProcGlowOptions)
+    elseif lib.PixelGlow_Start then
+        lib.PixelGlow_Start(anchor, dispelGlowColor, lines, freq, nil, thick, nil, nil, nil, DISPEL_GLOW_KEY)
+    end
+    frame._msufDispelGlowActive = true
+    frame._msufDispelGlowAnchor = anchor
+    frame._msufDispelGlowStyle = style
+    frame._msufDispelGlowR = r
+    frame._msufDispelGlowG = g
+    frame._msufDispelGlowB = b
+    frame._msufDispelGlowLines = lines
+    frame._msufDispelGlowFreq = freq
+    frame._msufDispelGlowThick = thick
+end
 
 local function EnsureBorderOverlay(parent)
     local overlay = parent.MSUFBorderOverlay
@@ -1747,7 +1864,7 @@ local function IsBossUnit(unit)
     return index ~= nil and index >= 1 and index <= 5
 end
 
-local function IsAggroBorderUnit(frame)
+function IsAggroBorderUnit(frame)
     local unit = frame and frame.unit
     if unit == "player" or unit == "target" or unit == "focus" then return true end
     return IsBossUnit(unit) or (frame and frame.MSUFSpec and frame.MSUFSpec.scope == "group")
@@ -1934,10 +2051,32 @@ local function AuraBorderState(frame)
 end
 
 local function ThreatState(frame)
-    if not UnitThreatSituation then
+    if not (UnitThreatSituation and frame and frame.unit) then
         return false
     end
     local unit = frame.unit
+    local spec = frame.MSUFSpec
+    if spec and spec.scope == "group" then
+        local exists = UnitExists and UnitExists(unit)
+        if exists ~= nil and NotSecretValue(exists) and exists == false then
+            return false
+        end
+        local cfg = spec.border
+        local mode = cfg and cfg.aggroMode
+        if mode == "TANK" or mode == "HEALER" then
+            local role = UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit) or nil
+            if role == nil or not NotSecretValue(role) or role ~= mode then
+                return false
+            end
+        end
+        local status = UnitThreatSituation(unit)
+        if status == nil or not NotSecretValue(status) then
+            return false
+        end
+        status = tonumber(status)
+        return status ~= nil and status >= 1
+    end
+
     local status
     if unit == "player" then
         status = UnitThreatSituation("player", "target")
@@ -1950,7 +2089,8 @@ local function ThreatState(frame)
     if status == nil or not NotSecretValue(status) then
         return false
     end
-    return status >= 2
+    status = tonumber(status)
+    return status ~= nil and status >= 2
 end
 
 local function GeneralDB()
@@ -1971,15 +2111,25 @@ local function DispelTestColor(frame)
     return dispel and dispel.r or 0.25, dispel and dispel.g or 0.75, dispel and dispel.b or 1, 1
 end
 
-local function PurgeColor()
-    local general = GeneralDB()
-    return tonumber(general and (general.hlPurgeColorR or general.purgeBorderColorR)) or 1.00,
-        tonumber(general and (general.hlPurgeColorG or general.purgeBorderColorG)) or 0.85,
-        tonumber(general and (general.hlPurgeColorB or general.purgeBorderColorB)) or 0.00,
+local function AggroColor(cfg)
+    return cfg and cfg.aggroR or 1.00,
+        cfg and cfg.aggroG or 0.55,
+        cfg and cfg.aggroB or 0.00,
         1
 end
 
-local function BossTargetColor()
+local function PurgeColor(cfg)
+    local general = GeneralDB()
+    return cfg and cfg.purgeR or tonumber(general and (general.hlPurgeColorR or general.purgeBorderColorR)) or 1.00,
+        cfg and cfg.purgeG or tonumber(general and (general.hlPurgeColorG or general.purgeBorderColorG)) or 0.85,
+        cfg and cfg.purgeB or tonumber(general and (general.hlPurgeColorB or general.purgeBorderColorB)) or 0.00,
+        1
+end
+
+local function BossTargetColor(cfg)
+    if cfg and cfg.bossTargetR then
+        return cfg.bossTargetR or 1, cfg.bossTargetG or 0.82, cfg.bossTargetB or 0, 1
+    end
     local general = GeneralDB()
     local color = general and general.bossTargetHighlightColor
     if type(color) == "table" then
@@ -1996,12 +2146,14 @@ function Borders.Apply(frame, spec)
     local cfg = spec and spec.border
     if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
         LayoutBorder(frame, 1)
+        StopDispelGlow(frame)
         SetBorder(frame, false)
-    elseif cfg.dispel == true or cfg.aggro == true then
+    elseif cfg.dispel == true or cfg.aggro == true or cfg.purge == true then
         LayoutBorder(frame, BorderHighlightThickness(cfg))
         Borders.Update(frame, "MSUF_BORDER_APPLY", frame.unit)
     else
         LayoutBorder(frame, BorderNormalThickness(cfg))
+        StopDispelGlow(frame)
         SetBorder(frame, true, cfg.r or 0, cfg.g or 0, cfg.b or 0, cfg.a or 1)
     end
 end
@@ -2012,6 +2164,7 @@ function Borders.IsEnabled(frame, spec)
 end
 
 function Borders.Disable(frame)
+    StopDispelGlow(frame)
     SetBorder(frame, false)
 end
 
@@ -2019,34 +2172,40 @@ function Borders.Update(frame)
     local cfg = frame.MSUFSpec and frame.MSUFSpec.border
     local normalEnabled = BorderNormalEnabled(cfg)
     if not cfg or not (normalEnabled or BorderHighlightEnabled(frame, cfg)) then
+        StopDispelGlow(frame)
         SetBorder(frame, false)
         return
     end
     local testActive = _G.MSUF_BorderTestModesActive == true
     local auraState, auraR, auraG, auraB, auraA = AuraBorderState(frame)
     if testActive and DispelTestApplies(frame) then
+        local r, g, b, a = DispelTestColor(frame)
         LayoutBorder(frame, BorderHighlightThickness(cfg))
-        SetBorder(frame, true, DispelTestColor(frame))
+        SetBorder(frame, true, r, g, b, a)
+        StartDispelGlow(frame, r, g, b, frame.MSUFSpec)
         return
     end
     if cfg.dispel and auraState == "dispel" then
+        local r, g, b, a = auraR or 0.25, auraG or 0.75, auraB or 1, auraA or 1
         LayoutBorder(frame, BorderHighlightThickness(cfg))
-        SetBorder(frame, true, auraR or 0.25, auraG or 0.75, auraB or 1, auraA or 1)
+        SetBorder(frame, true, r, g, b, a)
+        StartDispelGlow(frame, r, g, b, frame.MSUFSpec)
         return
     end
-    if (testActive and AggroTestApplies(frame)) or (cfg.aggro and ThreatState(frame)) then
+    StopDispelGlow(frame)
+    if (testActive and AggroTestApplies(frame)) or (cfg.aggro and IsAggroBorderUnit(frame) and ThreatState(frame)) then
         LayoutBorder(frame, BorderHighlightThickness(cfg))
-        SetBorder(frame, true, 1, 0.15, 0.05, 1)
+        SetBorder(frame, true, AggroColor(cfg))
         return
     end
     if testActive and PurgeTestApplies(frame) then
         LayoutBorder(frame, BorderHighlightThickness(cfg))
-        SetBorder(frame, true, PurgeColor())
+        SetBorder(frame, true, PurgeColor(cfg))
         return
     end
     if testActive and BossTargetTestApplies(frame) then
         LayoutBorder(frame, BorderHighlightThickness(cfg))
-        SetBorder(frame, true, BossTargetColor())
+        SetBorder(frame, true, BossTargetColor(cfg))
         return
     end
     if not normalEnabled then
