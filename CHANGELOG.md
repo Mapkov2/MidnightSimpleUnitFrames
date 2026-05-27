@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.54 - 2026-05-27
+
+### Critical Fixes
+
+- Fixed Blizzard-rendered group-frame private auras reusing a stale Blizzard settings-change handler after instance or roster transitions.
+- Fixed group-frame absorb and heal-absorb overlays drawing over the normal frame outline on party and raid frames.
+
 ## 5.53 - 2026-05-26
 
 ### Critical Fixes
