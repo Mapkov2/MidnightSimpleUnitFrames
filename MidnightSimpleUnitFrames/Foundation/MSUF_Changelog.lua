@@ -4,10 +4,23 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.53",
+    currentVersion = "5.54",
     previousVersion = "5.41",
-    rangeLabel = "5.41 -> 5.53",
+    rangeLabel = "5.41 -> 5.54",
     entries = {
+        {
+            version = "5.54",
+            date = "2026-05-27",
+            sections = {
+                {
+                    title = "Critical Fixes",
+                    bullets = {
+                        "Fixed Blizzard-rendered group-frame private auras reusing a stale Blizzard settings-change handler after instance or roster transitions.",
+                        "Fixed group-frame absorb and heal-absorb overlays drawing over the normal frame outline on party and raid frames.",
+                    },
+                },
+            },
+        },
         {
             version = "5.53",
             date = "2026-05-26",
