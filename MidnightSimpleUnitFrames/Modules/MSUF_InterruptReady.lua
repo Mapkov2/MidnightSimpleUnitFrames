@@ -166,7 +166,7 @@ local function _ShowOnUnit(cfg, unit)
 end
 
 local function _FillColorEnabled(cfg)
-    return cfg and cfg.castbarInterruptUnavailableColorEnabled == true
+    return cfg and cfg.kickReadyStyle == "fill"
 end
 
 local function _FillAppliesToUnit(unit, cfg)
@@ -531,7 +531,7 @@ end
 
 local function _GetStyle(cfg)
     local s = cfg and cfg.kickReadyStyle
-    if s == "box" or s == "border" then return s end
+    if s == "box" or s == "border" or s == "fill" then return s end
     return "border" --- default
 end
 
@@ -886,6 +886,11 @@ local function RefreshFrame(frame, state, cfg, readyBool, style, readyMixin, cdM
 
     if readyBool == nil then readyBool = _GetReadyBoolSecret() end
     style = style or _GetStyle(cfg)
+    if style == "fill" then
+        _HideIndicator(frame)
+        ArmFillRefresh()
+        return
+    end
     if style == "box" then
         _EnsureBox(frame, cfg)
     end
@@ -1246,7 +1251,7 @@ function _G.MSUF_KickReady_Debug()
         showTarget    = cfg.kickReadyShowTarget == true,
         showFocus     = cfg.kickReadyShowFocus  == true,
         showBoss      = cfg.kickReadyShowBoss   == true,
-        fillTint      = cfg.castbarInterruptUnavailableColorEnabled == true,
+        fillTint      = cfg.kickReadyStyle == "fill",
         fillTracked   = _fillActiveFrameCount,
         size          = cfg.kickReadySize,
         anchor        = cfg.kickReadyAnchor,

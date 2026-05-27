@@ -790,18 +790,27 @@ function _G.MSUF_GetInterruptUnavailableCastColor()
     end
 end
 
-local function _MSUF_CastbarUnitSupportsInterruptUnavailableTint(frame)
+local function _MSUF_CastbarUnitSupportsInterruptUnavailableTint(frame, g)
     local unit = frame and frame.unit
     if type(unit) ~= "string" then return false end
-    if unit == "target" or unit == "focus" then return true end
-    return unit:sub(1, 4) == "boss"
+    local shouldUse = _G.MSUF_ShouldUseMSUFCastbar
+    local function owns(which)
+        if type(shouldUse) == "function" then
+            return shouldUse(which, g) == true
+        end
+        return true
+    end
+    if unit == "target" then return g.kickReadyShowTarget == true and owns("target") end
+    if unit == "focus" then return g.kickReadyShowFocus == true and owns("focus") end
+    if unit:sub(1, 4) == "boss" then return g.kickReadyShowBoss == true and owns("boss") end
+    return false
 end
 
 function _G.MSUF_Castbar_ShouldUseInterruptUnavailableColor(frame)
     _EnsureDBLazy()
     local g = (MSUF_DB and MSUF_DB.general) or {}
-    if g.castbarInterruptUnavailableColorEnabled ~= true then return false end
-    return _MSUF_CastbarUnitSupportsInterruptUnavailableTint(frame)
+    if g.kickReadyStyle ~= "fill" then return false end
+    return _MSUF_CastbarUnitSupportsInterruptUnavailableTint(frame, g)
 end
 
 function _G.MSUF_ResolveInterruptUnavailableCastColor()
@@ -812,14 +821,14 @@ function _G.MSUF_ResolveInterruptUnavailableCastColor()
         r, gg, b = _G.MSUF_GetInterruptUnavailableCastColor()
     end
     if not (r and gg and b) then
-        local key = g.castbarInterruptUnavailableColor or "yellow"
-        local c = (type(_G.MSUF_GetColorFromKey) == "function") and _G.MSUF_GetColorFromKey(key) or nil
+        local key = g.castbarInterruptUnavailableColor
+        local c = (key and type(_G.MSUF_GetColorFromKey) == "function") and _G.MSUF_GetColorFromKey(key) or nil
         if c and c.GetRGB then
             r, gg, b = c:GetRGB()
         end
     end
     if not (r and gg and b) then
-        r, gg, b = 1.0, 0.55, 0.05
+        r, gg, b = 1.0, 0.494117647, 0.137254902
     end
     return r, gg, b, 1
 end
