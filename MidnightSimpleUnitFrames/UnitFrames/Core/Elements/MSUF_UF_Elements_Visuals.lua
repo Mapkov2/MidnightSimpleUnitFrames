@@ -79,6 +79,12 @@ local DYNAMIC_PORTRAIT_BORDER = {
     CLASS_COLOR = true,
     REACTION = true,
 }
+local QUEUED_2D_PORTRAIT_EVENTS = {
+    UNIT_PORTRAIT_UPDATE = true,
+    UNIT_MODEL_CHANGED = true,
+    UNIT_CONNECTION = true,
+    MSUF_UNIT_IDENTITY_SOFT = true,
+}
 
 local function SetShown(obj, show)
     if not obj then
@@ -157,6 +163,14 @@ local function SetAlphaFromBool(obj, boolValue, inAlpha, outAlpha, field)
 end
 
 local Portrait = {}
+local portraitQueue = {}
+local portraitQueueCount = 0
+local portraitQueueDriver
+local portraitQueueScheduled = false
+local ApplyUnitPortrait
+local ResolvePortraitBorderColor
+local PortraitBorderNeedsUpdate
+local LayoutPortraitBorder
 
 local function SetTextureCached(texture, value)
     if texture and texture._msufTexture ~= value then
@@ -189,6 +203,78 @@ local function SetVertexColorCached(texture, r, g, b, a)
     end
 end
 
+local function ClearPortraitTexture(texture)
+    if not texture then
+        return
+    end
+    texture:SetTexture(nil)
+    texture._msufTexture = nil
+    texture._msufAtlas = nil
+end
+
+local function PortraitFrameVisible(frame)
+    if not frame then
+        return false
+    end
+    if frame.IsShown and not frame:IsShown() then
+        return false
+    end
+    local holder = frame.MSUFPortraitHolder
+    if holder and holder.IsShown and not holder:IsShown() then
+        return false
+    end
+    return holder ~= nil
+end
+
+local function FlushQueuedPortraits()
+    portraitQueueScheduled = false
+    if portraitQueueDriver then
+        portraitQueueDriver:Hide()
+    end
+
+    local count = portraitQueueCount
+    portraitQueueCount = 0
+    for i = 1, count do
+        local frame = portraitQueue[i]
+        portraitQueue[i] = nil
+        if frame and frame._msufPortraitQueued == true then
+            frame._msufPortraitQueued = nil
+            local p = frame.MSUFSpec and frame.MSUFSpec.portrait
+            local texture = frame.portrait
+            if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
+                frame._msufPortraitNeedsVisibleRefresh = nil
+                ApplyUnitPortrait(texture, frame.unit)
+                if PortraitBorderNeedsUpdate("MSUF_PORTRAIT_FLUSH", p) then
+                    LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
+                end
+            elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
+                frame._msufPortraitNeedsVisibleRefresh = true
+            end
+        end
+    end
+end
+
+local function QueuePortraitUpdate(frame)
+    if not frame then
+        return
+    end
+    if frame._msufPortraitQueued ~= true then
+        portraitQueueCount = portraitQueueCount + 1
+        portraitQueue[portraitQueueCount] = frame
+        frame._msufPortraitQueued = true
+    end
+    if portraitQueueScheduled then
+        return
+    end
+    portraitQueueScheduled = true
+    if not portraitQueueDriver then
+        portraitQueueDriver = CreateFrame("Frame")
+        portraitQueueDriver:Hide()
+        portraitQueueDriver:SetScript("OnUpdate", FlushQueuedPortraits)
+    end
+    portraitQueueDriver:Show()
+end
+
 local function EnsurePortrait(frame)
     local holder = frame.MSUFPortraitHolder
     if holder then
@@ -198,6 +284,15 @@ local function EnsurePortrait(frame)
     holder = CreateFrame("Frame", nil, frame)
     holder:EnableMouse(false)
     frame.MSUFPortraitHolder = holder
+    if frame.HookScript and not frame._msufPortraitOnShowHooked then
+        frame._msufPortraitOnShowHooked = true
+        frame:HookScript("OnShow", function(self)
+            if self._msufPortraitNeedsVisibleRefresh == true and Portrait.Update then
+                self._msufPortraitNeedsVisibleRefresh = nil
+                Portrait.Update(self, "MSUF_PORTRAIT_ONSHOW", self.unit)
+            end
+        end)
+    end
 
     local bg = holder:CreateTexture(nil, "BACKGROUND")
     bg:SetTexture(WHITE)
@@ -323,7 +418,7 @@ local function ApplyClassPortrait(texture, unit, p, class)
     SetTexCoordCached(texture, l or 0, r or 1, t or 0, b or 1)
 end
 
-local function ApplyUnitPortrait(texture, unit)
+ApplyUnitPortrait = function(texture, unit)
     SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
     texture._msufTexture = nil
     texture._msufAtlas = nil
@@ -334,7 +429,7 @@ local function ApplyUnitPortrait(texture, unit)
     end
 end
 
-local function ResolvePortraitBorderColor(frame, p, class)
+ResolvePortraitBorderColor = function(frame, p, class)
     local border = p and p.border
     local style = border and border.style or "NONE"
     if style == "NONE" then
@@ -360,7 +455,7 @@ local function ResolvePortraitBorderColor(frame, p, class)
     return border.r or 1, border.g or 1, border.b or 1, border.a or 1
 end
 
-local function PortraitBorderNeedsUpdate(event, p)
+PortraitBorderNeedsUpdate = function(event, p)
     if event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" then
         return true
     end
@@ -368,7 +463,7 @@ local function PortraitBorderNeedsUpdate(event, p)
     return DYNAMIC_PORTRAIT_BORDER[style] == true
 end
 
-local function LayoutPortraitBorder(holder, p, r, g, b, a)
+LayoutPortraitBorder = function(holder, p, r, g, b, a)
     local border = holder and holder.border
     local edges = holder and holder.edges
     if not (border and edges) then
@@ -471,6 +566,7 @@ end
 
 function Portrait.Disable(frame)
     local holder = frame.MSUFPortraitHolder
+    frame._msufPortraitNeedsVisibleRefresh = nil
     if holder then
         SetShown(holder, false)
         if holder.bg then SetShown(holder.bg, false) end
@@ -487,16 +583,35 @@ end
 function Portrait.Update(frame, event, unit)
     local p = frame.MSUFSpec and frame.MSUFSpec.portrait
     local texture = frame.portrait
-    if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder and frame.MSUFPortraitHolder:IsShown()) then
+    if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
         return
     end
     unit = unit or frame.unit
+    if not PortraitFrameVisible(frame) then
+        frame._msufPortraitNeedsVisibleRefresh = true
+        if p.render ~= "CLASS" and event == "MSUF_UNIT_IDENTITY_SOFT" then
+            ClearPortraitTexture(texture)
+        end
+        return
+    end
+
     local class
     if p.render == "CLASS" then
+        frame._msufPortraitNeedsVisibleRefresh = nil
+        frame._msufPortraitQueued = nil
         class = UnitClassToken(unit)
         ApplyClassPortrait(texture, unit, p, class)
     else
-        ApplyUnitPortrait(texture, unit)
+        if QUEUED_2D_PORTRAIT_EVENTS[event] == true then
+            if event == "MSUF_UNIT_IDENTITY_SOFT" then
+                ClearPortraitTexture(texture)
+            end
+            QueuePortraitUpdate(frame)
+        else
+            frame._msufPortraitNeedsVisibleRefresh = nil
+            frame._msufPortraitQueued = nil
+            ApplyUnitPortrait(texture, unit)
+        end
     end
     if PortraitBorderNeedsUpdate(event, p) then
         LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p, class))
