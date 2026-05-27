@@ -516,9 +516,9 @@ local function SetInterruptibleCastColor(r, g, b) _setRGB("castbarInterruptibleR
 local function GetNonInterruptibleCastColor() return _getRGBTonumber("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", "castbarNonInterruptibleColor", "red", 0.4, 0.01, 0.01) end
 MSUF_GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
 local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01) end
-local function GetInterruptUnavailableCastColor() return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", "castbarInterruptUnavailableColor", "yellow", 1.0, 0.55, 0.05) end
+local function GetInterruptUnavailableCastColor() return _getRGBTonumber("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", "castbarInterruptUnavailableColor", nil, 1.0, 0.494117647, 0.137254902) end
 MSUF_GetInterruptUnavailableCastColor = GetInterruptUnavailableCastColor
-local function SetInterruptUnavailableCastColor(r, g, b) _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b, 1.0, 0.55, 0.05) end
+local function SetInterruptUnavailableCastColor(r, g, b) _setRGB("castbarInterruptUnavailableR", "castbarInterruptUnavailableG", "castbarInterruptUnavailableB", r, g, b, 1.0, 0.494117647, 0.137254902) end
 local function GetInterruptFeedbackCastColor() return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0) end
 local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0) end
 

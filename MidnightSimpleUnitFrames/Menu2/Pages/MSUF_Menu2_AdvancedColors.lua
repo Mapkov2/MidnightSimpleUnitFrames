@@ -876,9 +876,6 @@ local function BuildColors(ctx)
             if type(fn) == "function" then pcall(fn, r, g, c, 0.85) else SetGeneralRGB("castbarBg", r, g, c) end
             ApplyCastbarColors()
         end)
-    ColorValueAt(ctx, castbar, "Interrupt unavailable cast color", 360, -118,
-        function() return ApiRGB("GetInterruptUnavailableCastColor", 1.0, 0.55, 0.05) end,
-        function(r, g, c) ApiSetRGB("SetInterruptUnavailableCastColor", r, g, c); ApplyCastbarColors() end)
     LabelAt(castbar, "Player castbar override", 12, -134, 260, "GameFontNormal", T.colors.text)
     local overrideModeX, overrideModeW = 300, 190
     local overrideColorX = min(max(overrideModeX + overrideModeW + 36, floor(castW * 0.56)), castW - 236)
@@ -925,6 +922,9 @@ local function BuildColors(ctx)
     ColorValueAt(ctx, castbar, "Not ready color (kick on cooldown)", 12, -310,
         function() return TableRGB(G(), "kickNotReadyColor", 1, 0, 0) end,
         function(r, g, c) SetTableRGB(G(), "kickNotReadyColor", r, g, c); ApplyCastbarColors() end)
+    ColorValueAt(ctx, castbar, "Unavailable fill color", 12, -346,
+        function() return ApiRGB("GetInterruptUnavailableCastColor", 1.0, 0.494117647, 0.137254902) end,
+        function(r, g, c) ApiSetRGB("SetInterruptUnavailableCastColor", r, g, c); ApplyCastbarColors() end)
     ButtonAt(castbar, "Reset castbar colors", 12, -470, 170, function()
         local api = ColorAPI()
         if type(api.ResetCastbarTextColorToGlobal) == "function" then pcall(api.ResetCastbarTextColorToGlobal) end
@@ -935,7 +935,6 @@ local function BuildColors(ctx)
         g.castbarNonInterruptibleR, g.castbarNonInterruptibleG, g.castbarNonInterruptibleB = nil, nil, nil
         g.castbarInterruptUnavailableR, g.castbarInterruptUnavailableG, g.castbarInterruptUnavailableB = nil, nil, nil
         g.castbarInterruptFeedbackR, g.castbarInterruptFeedbackG, g.castbarInterruptFeedbackB = nil, nil, nil
-        g.castbarInterruptUnavailableColorEnabled = false
         g.playerCastbarOverrideEnabled = false
         g.playerCastbarOverrideMode = "CLASS"
         g.playerCastbarOverrideR, g.playerCastbarOverrideG, g.playerCastbarOverrideB = nil, nil, nil

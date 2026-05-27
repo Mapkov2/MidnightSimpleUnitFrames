@@ -708,8 +708,10 @@ local function BuildCastbars(ctx)
                 local ok, r, g, b = pcall(_G.MSUF_ResolveCastbarColors)
                 if ok and r then ir, ig, ib = r, g or ig, b or ib end
             end
+            local kickKey = KickReadyKey(unit)
             if kind ~= "interrupted"
-                and ReadGBool("castbarInterruptUnavailableColorEnabled", false)
+                and kickKey and ReadGBool(kickKey, false)
+                and ReadG("kickReadyStyle", "border") == "fill"
                 and (unit == "target" or unit == "focus" or unit == "boss")
                 and type(_G.MSUF_ResolveInterruptUnavailableCastColor) == "function" then
                 local ok, r, g, b = pcall(_G.MSUF_ResolveInterruptUnavailableCastColor)
@@ -722,7 +724,6 @@ local function BuildCastbars(ctx)
 
             if self.bar.SetBackdropBorderColor then
                 self.bar:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 0.7)
-                local kickKey = KickReadyKey(unit)
                 if kickKey and ReadGBool(kickKey, false) and ReadG("kickReadyStyle", "border") == "border" then
                     self.bar:SetBackdropBorderColor(0.24, 0.86, 0.46, 0.95)
                 end
@@ -1300,7 +1301,7 @@ local function BuildCastbars(ctx)
     M.AddRefresher(ctx, syncFocusKick)
     syncFocusKick()
 
-    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 386, false)
+    local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 360, false)
     W.Text(kick, "Shows a colored indicator on castbars when your interrupt is ready or on cooldown.", 14, -38, ctx.width - 28, T.colors.muted)
     local kickLeftX, kickRightX = 14, 392
     W.LabelAt(kick, "Castbars", kickLeftX, -70, 160, "GameFontNormalSmall", T.colors.accent)
@@ -1325,11 +1326,18 @@ local function BuildCastbars(ctx)
     local style = W.Dropdown(kick, "Indicator style", {
         { value = "border", text = "Castbar border" },
         { value = "box", text = "Color box next to cast" },
+        { value = "fill", text = "Unavailable cast fill" },
     }, 260)
     W.MoveWidget(style, kick, kickRightX, -88, 300)
     M.BindDropdown(ctx, style,
         function() return ReadG("kickReadyStyle", "border") end,
-        function(v) SetG("kickReadyStyle", v or "border", "MSUF2_KICK_READY_STYLE", { castbar = true, preview = true }); ApplyCastbars("MSUF2_KICK_READY_STYLE"); RefreshCastPreview() end)
+        function(v)
+            SetG("kickReadyStyle", v or "border", "MSUF2_KICK_READY_STYLE", { castbar = true, preview = true })
+            ApplyCastbars("MSUF2_KICK_READY_STYLE")
+            Call("MSUF_KickReady_RefreshAll")
+            RefreshCastPreview()
+            if syncKickReady then syncKickReady() end
+        end)
     local size = W.Slider(kick, "Indicator size", 8, 32, 1, 300)
     W.MoveWidget(size, kick, kickRightX, -142, 320)
     M.BindSlider(ctx, size,
@@ -1345,18 +1353,7 @@ local function BuildCastbars(ctx)
             RefreshCastPreview()
             if syncKickReady then syncKickReady() end
         end)
-    local fillTint = W.Toggle(kick, "Recolor cast fill when interrupt is unavailable")
-    MoveToggle(fillTint, kick, kickRightX, -228, 360)
-    M.BindToggle(ctx, fillTint,
-        function() return ReadGBool("castbarInterruptUnavailableColorEnabled", false) end,
-        function(v)
-            SetGBool("castbarInterruptUnavailableColorEnabled", v, "MSUF2_CASTBAR_INTERRUPT_UNAVAILABLE_COLOR", { castbar = true, preview = true })
-            ApplyCastbars("MSUF2_CASTBAR_INTERRUPT_UNAVAILABLE_COLOR")
-            Call("MSUF_KickReady_RefreshAll")
-            RefreshCastPreview()
-            if syncKickReady then syncKickReady() end
-        end)
-    local colorHint = W.Text(kick, "Fill color: Colors menu > Castbar Colors", kickRightX, -258, 370, T.colors.muted)
+    local colorHint = W.Text(kick, "Colors: Colors menu > Castbar Colors", kickRightX, -228, 370, T.colors.muted)
     W.LabelAt(kick, "Placement", kickLeftX, -178, 160, "GameFontNormalSmall", T.colors.accent)
     local anchor = W.Dropdown(kick, "Anchor", {
         { value = "RIGHT", text = "Right" },
@@ -1381,10 +1378,12 @@ local function BuildCastbars(ctx)
     syncKickReady = function()
         local enabled = ReadGBool("kickReadyShowTarget", false) or ReadGBool("kickReadyShowFocus", false) or ReadGBool("kickReadyShowBoss", false)
         local autoOn = ReadGBool("kickReadyAutoSize", true)
-        local fillOn = ReadGBool("castbarInterruptUnavailableColorEnabled", false)
-        SetControlsEnabled({ style, auto, anchor, offX, offY }, enabled)
-        SetControlEnabled(size, enabled and not autoOn)
-        SetControlEnabled(colorHint, fillOn)
+        local isFill = ReadG("kickReadyStyle", "border") == "fill"
+        SetControlEnabled(style, enabled)
+        SetControlEnabled(auto, enabled and not isFill)
+        SetControlEnabled(size, enabled and not isFill and not autoOn)
+        SetControlsEnabled({ anchor, offX, offY }, enabled and not isFill)
+        SetControlEnabled(colorHint, enabled)
     end
     M.AddRefresher(ctx, syncKickReady)
     syncKickReady()
