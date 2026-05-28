@@ -1032,11 +1032,23 @@ end
 
                 local nextAt = _unitAuraPending[unit]
                 if nextAt and now < nextAt then
-                    -- Keep merging normal deltas while the render is coalesced.
-                    -- Only large/full/unsafe bursts invalidate to a render-time
-                    -- FullScan. This preserves expired-aura removal without
-                    -- turning every dense UNIT_AURA burst into a cache wipe.
-                    FeedUnitAuraDelta(unit, updateInfo)
+                    -- Tiny 5.54 correctness fix:
+                    -- Target/boss DoT refreshes can arrive as update-only deltas
+                    -- inside the coalesce window. The fully delta-merged 5.54
+                    -- path could leave the icon timer stale until the old aura
+                    -- visually expired. Keep the 5.54 fast delta path for
+                    -- player/focus, but restore the safer 5.2-style render-time
+                    -- full scan only for target and boss units.
+                    if unit == "target" or _IS_BOSS_UNIT[unit] == true then
+                        if not _refsBound then BindCachedRefs() end
+                        local invalid = _cachedInvalidUnit
+                        if invalid and not _unitAuraRescanQueued[unit] then
+                            _unitAuraRescanQueued[unit] = true
+                            invalid(unit)
+                        end
+                    else
+                        FeedUnitAuraDelta(unit, updateInfo)
+                    end
                     -- Correctness guard: refresh/removal deltas can arrive
                     -- inside the coalesce window after the previous render
                     -- already ran. MarkDirty dedupes by unit and only
