@@ -33,6 +33,17 @@ local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local POWER_EVENTS = Text.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
 
+local function IsSecret(value)
+    return issecretvalue and issecretvalue(value) == true
+end
+
+local function MissingValue(value)
+    if IsSecret(value) then
+        return false
+    end
+    return value == nil
+end
+
 local function ReadPowerValues(unit)
     local powerType = UnitPowerType and UnitPowerType(unit) or nil
     local power, maxPower
@@ -141,10 +152,10 @@ function Text.UpdateHealth(frame, event, unit, hp, hpMax)
     if not rt or not rt.healthSlotCount or rt.healthSlotCount <= 0 then
         return
     end
-    if hp == nil then
+    if MissingValue(hp) then
         hp = UnitHealth(unit)
     end
-    if hpMax == nil then
+    if MissingValue(hpMax) then
         hpMax = UnitHealthMax(unit)
     end
 
@@ -155,9 +166,7 @@ function Text.UpdateHealth(frame, event, unit, hp, hpMax)
     -- we fall through and render (the downstream FontString diff stays ~free).
     if event == "UNIT_HEALTH" then
         local lastHp, lastMax = rt._lastHpRaw, rt._lastHpMaxRaw
-        local isv = issecretvalue
-        if not (isv and (isv(hp) or isv(hpMax)
-            or (lastHp ~= nil and isv(lastHp)) or (lastMax ~= nil and isv(lastMax)))) then
+        if not (IsSecret(hp) or IsSecret(hpMax) or IsSecret(lastHp) or IsSecret(lastMax)) then
             if hp == lastHp and hpMax == lastMax then
                 return
             end
@@ -201,12 +210,12 @@ function Text.UpdatePower(frame, event, unit, power, powerMax)
         SetPowerTextColor(frame, r, g, b, 1)
         frame._msufPowerTextColorInitialized = true
     end
-    if power == nil or powerMax == nil then
+    if MissingValue(power) or MissingValue(powerMax) then
         local currentPower, currentMax = ReadPowerValues(unit)
-        if power == nil then
+        if MissingValue(power) then
             power = currentPower
         end
-        if powerMax == nil then
+        if MissingValue(powerMax) then
             powerMax = currentMax
         end
     end
@@ -216,9 +225,7 @@ function Text.UpdatePower(frame, event, unit, power, powerMax)
     -- pattern); same secret-safe ordering as the health path.
     if event == "UNIT_POWER_FREQUENT" or event == "UNIT_POWER_UPDATE" then
         local lastP, lastMax = rt._lastPowerRaw, rt._lastPowerMaxRaw
-        local isv = issecretvalue
-        if not (isv and (isv(power) or isv(powerMax)
-            or (lastP ~= nil and isv(lastP)) or (lastMax ~= nil and isv(lastMax)))) then
+        if not (IsSecret(power) or IsSecret(powerMax) or IsSecret(lastP) or IsSecret(lastMax)) then
             if power == lastP and powerMax == lastMax then
                 return
             end

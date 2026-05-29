@@ -27,6 +27,7 @@ local scanKind = setmetatable({}, { __mode = "k" })
 local attrUnit = setmetatable({}, { __mode = "k" })
 local attrHooked = setmetatable({}, { __mode = "k" })
 local childKind = setmetatable({}, { __mode = "k" })
+local NO_UNIT = false
 local appliedSerial = setmetatable({}, { __mode = "k" })
 local appliedUnit = setmetatable({}, { __mode = "k" })
 local appliedKind = setmetatable({}, { __mode = "k" })
@@ -282,25 +283,56 @@ local function HookButton(frame)
     end)
 end
 
+local function NormalizeAttrUnit(value)
+    if type(value) == "string" and value ~= "" then
+        return value
+    end
+    return NO_UNIT
+end
+
+local function StoredAttrUnit(frame)
+    local value = attrUnit[frame]
+    if value == NO_UNIT then
+        return nil
+    end
+    if value ~= nil then
+        return value
+    end
+    return frame and frame.unit or nil
+end
+
 local function OnChildAttributeChanged(self, name, value)
     if name ~= UNIT_ATTR then return end
-    local oldUnit = attrUnit[self] or self.unit
-    local kind
-    if oldUnit == value and self.MSUFSpec and scanUnit[self] == value then
-        kind = childKind[self] or self._msufGFKind
+    local rawUnit = NormalizeAttrUnit(value)
+    if attrUnit[self] == rawUnit then
+        return
+    end
+
+    local oldUnit = StoredAttrUnit(self)
+    local kind = childKind[self] or self._msufGFKind
+    attrUnit[self] = rawUnit
+
+    if rawUnit == NO_UNIT then
+        if not oldUnit and not self.unit then
+            return
+        end
+        self.unit = nil
+        self.unitKey = nil
+        UF.OnUnitChanged(self, oldUnit, nil)
+        scanUnit[self] = nil
+        return
+    end
+
+    if oldUnit == rawUnit and self.MSUFSpec and scanUnit[self] == rawUnit then
         if not kind or scanKind[self] == kind then
             return
         end
-    else
-        kind = childKind[self] or self._msufGFKind
     end
-    attrUnit[self] = value
-    UF.OnUnitChanged(self, oldUnit, value)
-    if type(value) ~= "string" or value == "" then
-        return
-    end
-    if kind and not ApplyUnitChangeFast(self, kind, value) then
+
+    UF.OnUnitChanged(self, oldUnit, rawUnit)
+    if kind and not ApplyUnitChangeFast(self, kind, rawUnit) then
         GF.ApplyButton(self, kind, "UNIT_CHANGED")
+        return
     end
 end
 

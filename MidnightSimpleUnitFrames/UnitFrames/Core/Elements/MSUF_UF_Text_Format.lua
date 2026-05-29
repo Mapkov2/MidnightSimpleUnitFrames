@@ -14,7 +14,25 @@ local max = Text.max
 local GetTime = Text.GetTime
 local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
+local issecretvalue = _G.issecretvalue
+local C_Timer = _G.C_Timer
+local pairs = pairs
+
+local function IsSecret(value)
+    return issecretvalue and issecretvalue(value) == true
+end
+
+local function IsNil(value)
+    if IsSecret(value) then
+        return false
+    end
+    return value == nil
+end
+
 local function ValueArg(value, canSecret)
+    if IsSecret(value) then
+        return value
+    end
     return value or 0
 end
 
@@ -47,6 +65,15 @@ local function ModeNeedsPercent(mode)
 end
 
 local function FormatValue(value, short, canSecret)
+    if IsSecret(value) then
+        if short then
+            local abbreviate = AbbreviateNumbers or AbbreviateLargeNumbers
+            if abbreviate then
+                return abbreviate(value)
+            end
+        end
+        return value
+    end
     if not short then
         return format("%d", value or 0)
     end
@@ -58,6 +85,9 @@ local function FormatValue(value, short, canSecret)
 end
 
 local function FormatPercentValue(value, hideSymbol, canSecret)
+    if IsSecret(value) then
+        return value
+    end
     if value == nil then
         return nil
     end
@@ -69,12 +99,20 @@ local function FormatPercentValue(value, hideSymbol, canSecret)
 end
 
 local function SetTextCached(fs, text)
-    -- Intentionally NO dedupe/compare: `text` may be a WoW secret value
-    -- (health/power/name-derived strings). Passing a secret to SetText is fine,
-    -- but comparing one with == raises a hard error. Always set directly, like
-    -- the status SetText helper's `raw` path. Upstream throttling already caps
-    -- how often this runs.
-    fs:SetText(text or "")
+    if not fs then
+        return
+    end
+    if IsSecret(text) then
+        fs._msufTextLastPlain = nil
+        fs:SetText(text)
+        return
+    end
+    text = text or ""
+    if fs._msufTextLastPlain == text then
+        return
+    end
+    fs._msufTextLastPlain = text
+    fs:SetText(text)
 end
 
 local function AddSuffix(text, suffix)
@@ -84,144 +122,242 @@ local function AddSuffix(text, suffix)
     return text
 end
 
-local function SetReadableModeText(fs, mode, cur, max, pct, delimiter, short, hidePercentSymbol, suffix, canSecret)
-    local c, m, p
-
-    if mode == "CURRENT" then
-        c = FormatValue(cur, short, canSecret)
-        SetTextCached(fs, AddSuffix(c, suffix))
-    elseif mode == "MAX" then
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(m, suffix))
-    elseif mode == "CURMAX" then
-        c = FormatValue(cur, short, canSecret)
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(c .. delimiter .. m, suffix))
-    elseif mode == "MAXCUR" then
-        c = FormatValue(cur, short, canSecret)
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(m .. delimiter .. c, suffix))
-    elseif mode == "PERCENT" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        SetTextCached(fs, AddSuffix(p, suffix))
-    elseif mode == "CURPERCENT" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        c = FormatValue(cur, short, canSecret)
-        SetTextCached(fs, AddSuffix(c .. delimiter .. p, suffix))
-    elseif mode == "PERCENTCUR" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        c = FormatValue(cur, short, canSecret)
-        SetTextCached(fs, AddSuffix(p .. delimiter .. c, suffix))
-    elseif mode == "CURMAXPERCENT" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        c = FormatValue(cur, short, canSecret)
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(c .. delimiter .. m .. delimiter .. p, suffix))
-    elseif mode == "PERCENTMAXCUR" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        c = FormatValue(cur, short, canSecret)
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(p .. delimiter .. m .. delimiter .. c, suffix))
-    elseif mode == "MAXPERCENT" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(m .. delimiter .. p, suffix))
-    elseif mode == "PERCENTMAX" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(p .. delimiter .. m, suffix))
-    elseif mode == "PERCENTCURMAX" then
-        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-        if not p then return false end
-        c = FormatValue(cur, short, canSecret)
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(p .. delimiter .. c .. delimiter .. m, suffix))
-    elseif mode == "DEFICIT" then
-        SetTextCached(fs, "")
-    else
-        c = FormatValue(cur, short, canSecret)
-        m = FormatValue(max, short, canSecret)
-        SetTextCached(fs, AddSuffix(c .. delimiter .. m, suffix))
-    end
-    return true
+local function SlotText(slot, text)
+    SetTextCached(slot.fs, AddSuffix(text, slot.suffix))
 end
 
-local function SetShortModeText(fs, mode, curArg, maxArg, pctArg, pctKnown, delimiter, hidePercentSymbol)
-    local abbreviate = AbbreviateNumbers or AbbreviateLargeNumbers
-    if not abbreviate then
-        return false
+local function SlotFormatted(slot, pattern, ...)
+    local fs = slot and slot.fs
+    if not fs then
+        return
     end
-    local c = abbreviate(curArg)
-    local m = abbreviate(maxArg)
-    local pctFormat = hidePercentSymbol and "%d" or "%d%%"
-    if mode == "CURRENT" then
-        fs:SetText(c)
-    elseif mode == "MAX" then
-        fs:SetText(m)
-    elseif mode == "CURMAX" then
-        fs:SetText(c .. delimiter .. m)
-    elseif mode == "MAXCUR" then
-        fs:SetText(m .. delimiter .. c)
-    elseif mode == "PERCENT" then
-        if pctKnown then
-            fs:SetFormattedText(pctFormat, pctArg)
-        else
-            fs:SetText("")
-        end
-    elseif mode == "CURPERCENT" then
-        if pctKnown then
-            fs:SetFormattedText("%s%s" .. pctFormat, c, delimiter, pctArg)
-        else
-            fs:SetText(c)
-        end
-    elseif mode == "PERCENTCUR" then
-        if pctKnown then
-            fs:SetFormattedText(pctFormat .. "%s%s", pctArg, delimiter, c)
-        else
-            fs:SetText(c)
-        end
-    elseif mode == "CURMAXPERCENT" then
-        if pctKnown then
-            fs:SetFormattedText("%s%s%s%s" .. pctFormat, c, delimiter, m, delimiter, pctArg)
-        else
-            fs:SetText(c .. delimiter .. m)
-        end
-    elseif mode == "PERCENTMAXCUR" then
-        if pctKnown then
-            fs:SetFormattedText(pctFormat .. "%s%s%s%s", pctArg, delimiter, m, delimiter, c)
-        else
-            fs:SetText(m .. delimiter .. c)
-        end
-    elseif mode == "MAXPERCENT" then
-        if pctKnown then
-            fs:SetFormattedText("%s%s" .. pctFormat, m, delimiter, pctArg)
-        else
-            fs:SetText(m)
-        end
-    elseif mode == "PERCENTMAX" then
-        if pctKnown then
-            fs:SetFormattedText(pctFormat .. "%s%s", pctArg, delimiter, m)
-        else
-            fs:SetText(m)
-        end
-    elseif mode == "PERCENTCURMAX" then
-        if pctKnown then
-            fs:SetFormattedText(pctFormat .. "%s%s%s%s", pctArg, delimiter, c, delimiter, m)
-        else
-            fs:SetText(c .. delimiter .. m)
-        end
-    else
-        return false
-    end
-    return true
+    fs._msufTextLastPlain = nil
+    fs:SetFormattedText(pattern, ...)
 end
+
+local function SlotValue(slot, value)
+    return FormatValue(value, slot.short, slot.canSecret)
+end
+
+local function SlotPercent(slot, pct)
+    return FormatPercentValue(pct, slot.hidePercentSymbol, slot.canSecret)
+end
+
+local function SlotFormattedValue(slot, value)
+    if IsSecret(value) then
+        if slot.short then
+            local abbreviate = AbbreviateNumbers or AbbreviateLargeNumbers
+            if abbreviate then
+                return abbreviate(value), "%s"
+            end
+        end
+        return ValueArg(value, slot.canSecret), "%d"
+    end
+    return SlotValue(slot, value), "%s"
+end
+
+local function SlotFormattedPercent(slot, pct)
+    if IsSecret(pct) then
+        return ValueArg(pct, slot.canSecret), slot.hidePercentSymbol and "%d" or "%d%%"
+    end
+    return SlotPercent(slot, pct), "%s"
+end
+
+local function WriteCurrent(slot, cur)
+    if IsSecret(cur) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        SlotFormatted(slot, cf, c)
+        return
+    end
+    SlotText(slot, SlotValue(slot, cur))
+end
+
+local function WriteMax(slot, cur, maxValue)
+    if IsSecret(maxValue) then
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        SlotFormatted(slot, mf, m)
+        return
+    end
+    SlotText(slot, SlotValue(slot, maxValue))
+end
+
+local function WriteCurMax(slot, cur, maxValue)
+    if IsSecret(cur) or IsSecret(maxValue) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        SlotFormatted(slot, cf .. "%s" .. mf, c, slot.delimiter, m)
+        return
+    end
+    SlotText(slot, SlotValue(slot, cur) .. slot.delimiter .. SlotValue(slot, maxValue))
+end
+
+local function WriteMaxCur(slot, cur, maxValue)
+    if IsSecret(cur) or IsSecret(maxValue) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        SlotFormatted(slot, mf .. "%s" .. cf, m, slot.delimiter, c)
+        return
+    end
+    SlotText(slot, SlotValue(slot, maxValue) .. slot.delimiter .. SlotValue(slot, cur))
+end
+
+local function WritePercent(slot, cur, maxValue, pct, pctKnown)
+    if pctKnown and IsSecret(pct) then
+        local p, pf = SlotFormattedPercent(slot, pct)
+        SlotFormatted(slot, pf, p)
+        return
+    end
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p or "")
+end
+
+local function WriteCurPercent(slot, cur, maxValue, pct, pctKnown)
+    if IsSecret(cur) or (pctKnown and IsSecret(pct)) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        if pctKnown then
+            local p, pf = SlotFormattedPercent(slot, pct)
+            SlotFormatted(slot, cf .. "%s" .. pf, c, slot.delimiter, p)
+        else
+            SlotFormatted(slot, cf, c)
+        end
+        return
+    end
+    local c = SlotValue(slot, cur)
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p and (c .. slot.delimiter .. p) or c)
+end
+
+local function WritePercentCur(slot, cur, maxValue, pct, pctKnown)
+    if IsSecret(cur) or (pctKnown and IsSecret(pct)) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        if pctKnown then
+            local p, pf = SlotFormattedPercent(slot, pct)
+            SlotFormatted(slot, pf .. "%s" .. cf, p, slot.delimiter, c)
+        else
+            SlotFormatted(slot, cf, c)
+        end
+        return
+    end
+    local c = SlotValue(slot, cur)
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p and (p .. slot.delimiter .. c) or c)
+end
+
+local function WriteCurMaxPercent(slot, cur, maxValue, pct, pctKnown)
+    if IsSecret(cur) or IsSecret(maxValue) or (pctKnown and IsSecret(pct)) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        if pctKnown then
+            local p, pf = SlotFormattedPercent(slot, pct)
+            SlotFormatted(slot, cf .. "%s" .. mf .. "%s" .. pf, c, slot.delimiter, m, slot.delimiter, p)
+        else
+            SlotFormatted(slot, cf .. "%s" .. mf, c, slot.delimiter, m)
+        end
+        return
+    end
+    local c = SlotValue(slot, cur)
+    local m = SlotValue(slot, maxValue)
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p and (c .. slot.delimiter .. m .. slot.delimiter .. p) or (c .. slot.delimiter .. m))
+end
+
+local function WritePercentMaxCur(slot, cur, maxValue, pct, pctKnown)
+    if IsSecret(cur) or IsSecret(maxValue) or (pctKnown and IsSecret(pct)) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        if pctKnown then
+            local p, pf = SlotFormattedPercent(slot, pct)
+            SlotFormatted(slot, pf .. "%s" .. mf .. "%s" .. cf, p, slot.delimiter, m, slot.delimiter, c)
+        else
+            SlotFormatted(slot, mf .. "%s" .. cf, m, slot.delimiter, c)
+        end
+        return
+    end
+    local c = SlotValue(slot, cur)
+    local m = SlotValue(slot, maxValue)
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p and (p .. slot.delimiter .. m .. slot.delimiter .. c) or (m .. slot.delimiter .. c))
+end
+
+local function WriteMaxPercent(slot, cur, maxValue, pct, pctKnown)
+    if IsSecret(maxValue) or (pctKnown and IsSecret(pct)) then
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        if pctKnown then
+            local p, pf = SlotFormattedPercent(slot, pct)
+            SlotFormatted(slot, mf .. "%s" .. pf, m, slot.delimiter, p)
+        else
+            SlotFormatted(slot, mf, m)
+        end
+        return
+    end
+    local m = SlotValue(slot, maxValue)
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p and (m .. slot.delimiter .. p) or m)
+end
+
+local function WritePercentMax(slot, cur, maxValue, pct, pctKnown)
+    if IsSecret(maxValue) or (pctKnown and IsSecret(pct)) then
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        if pctKnown then
+            local p, pf = SlotFormattedPercent(slot, pct)
+            SlotFormatted(slot, pf .. "%s" .. mf, p, slot.delimiter, m)
+        else
+            SlotFormatted(slot, mf, m)
+        end
+        return
+    end
+    local m = SlotValue(slot, maxValue)
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p and (p .. slot.delimiter .. m) or m)
+end
+
+local function WritePercentCurMax(slot, cur, maxValue, pct, pctKnown)
+    if IsSecret(cur) or IsSecret(maxValue) or (pctKnown and IsSecret(pct)) then
+        local c, cf = SlotFormattedValue(slot, cur)
+        local m, mf = SlotFormattedValue(slot, maxValue)
+        if pctKnown then
+            local p, pf = SlotFormattedPercent(slot, pct)
+            SlotFormatted(slot, pf .. "%s" .. cf .. "%s" .. mf, p, slot.delimiter, c, slot.delimiter, m)
+        else
+            SlotFormatted(slot, cf .. "%s" .. mf, c, slot.delimiter, m)
+        end
+        return
+    end
+    local c = SlotValue(slot, cur)
+    local m = SlotValue(slot, maxValue)
+    local p = pctKnown and SlotPercent(slot, pct) or nil
+    SlotText(slot, p and (p .. slot.delimiter .. c .. slot.delimiter .. m) or (c .. slot.delimiter .. m))
+end
+
+local function WriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
+    local missing = rt and rt.healthMissing
+    if IsSecret(missing) then
+        local value, valueFormat = SlotFormattedValue(slot, missing)
+        SlotFormatted(slot, "-" .. valueFormat, value)
+        return
+    end
+    if missing ~= nil then
+        SlotText(slot, "-" .. (FormatValue(missing, slot.short, slot.canSecret) or "0"))
+        return
+    end
+    SlotText(slot, "")
+end
+
+local MODE_WRITERS = {
+    CURRENT = WriteCurrent,
+    MAX = WriteMax,
+    CURMAX = WriteCurMax,
+    MAXCUR = WriteMaxCur,
+    PERCENT = WritePercent,
+    CURPERCENT = WriteCurPercent,
+    PERCENTCUR = WritePercentCur,
+    CURMAXPERCENT = WriteCurMaxPercent,
+    PERCENTMAXCUR = WritePercentMaxCur,
+    MAXPERCENT = WriteMaxPercent,
+    PERCENTMAX = WritePercentMax,
+    PERCENTCURMAX = WritePercentCurMax,
+    DEFICIT = WriteDeficit,
+}
 
 local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride, pctOverrideSet, suffix, canSecret)
     if not fs then
@@ -235,89 +371,29 @@ local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short
     delimiter = delimiter or " - "
     local pct
     local pctKnown = false
-    local pctArg
     if ModeNeedsPercent(mode) then
         if pctOverrideSet then
             pct = pctOverride
         else
             pct = percentFn and percentFn(unit)
         end
-        pctKnown = pct ~= nil
-        pctArg = pctKnown and ValueArg(pct, canSecret) or nil
+        pctKnown = not IsNil(pct)
     end
 
-    if SetReadableModeText(fs, mode, cur, max, pct, delimiter, short, hidePercentSymbol, suffix, canSecret) then
-        return
+    local slot = Text._modeTextSlot
+    if not slot then
+        slot = {}
+        Text._modeTextSlot = slot
     end
-
-    local curArg = ValueArg(cur, canSecret)
-    local maxArg = ValueArg(max, canSecret)
-    fs._msufLastSetText = nil
-    if short and SetShortModeText(fs, mode, curArg, maxArg, pctArg, pctKnown, delimiter, hidePercentSymbol) then
-        return
-    end
-
-    if mode == "CURRENT" then
-        fs:SetFormattedText("%d", curArg)
-    elseif mode == "MAX" then
-        fs:SetFormattedText("%d", maxArg)
-    elseif mode == "CURMAX" then
-        fs:SetFormattedText("%d%s%d", curArg, delimiter, maxArg)
-    elseif mode == "MAXCUR" then
-        fs:SetFormattedText("%d%s%d", maxArg, delimiter, curArg)
-    elseif mode == "PERCENT" then
-        if pctKnown then
-            fs:SetFormattedText("%d%%", pctArg)
-        else
-            fs:SetText("")
-        end
-    elseif mode == "CURPERCENT" then
-        if pctKnown then
-            fs:SetFormattedText("%d%s%d%%", curArg, delimiter, pctArg)
-        else
-            fs:SetFormattedText("%d", curArg)
-        end
-    elseif mode == "PERCENTCUR" then
-        if pctKnown then
-            fs:SetFormattedText("%d%%%s%d", pctArg, delimiter, curArg)
-        else
-            fs:SetFormattedText("%d", curArg)
-        end
-    elseif mode == "CURMAXPERCENT" then
-        if pctKnown then
-            fs:SetFormattedText("%d%s%d%s%d%%", curArg, delimiter, maxArg, delimiter, pctArg)
-        else
-            fs:SetFormattedText("%d%s%d", curArg, delimiter, maxArg)
-        end
-    elseif mode == "PERCENTMAXCUR" then
-        if pctKnown then
-            fs:SetFormattedText("%d%%%s%d%s%d", pctArg, delimiter, maxArg, delimiter, curArg)
-        else
-            fs:SetFormattedText("%d%s%d", maxArg, delimiter, curArg)
-        end
-    elseif mode == "MAXPERCENT" then
-        if pctKnown then
-            fs:SetFormattedText("%d%s%d%%", maxArg, delimiter, pctArg)
-        else
-            fs:SetFormattedText("%d", maxArg)
-        end
-    elseif mode == "PERCENTMAX" then
-        if pctKnown then
-            fs:SetFormattedText("%d%%%s%d", pctArg, delimiter, maxArg)
-        else
-            fs:SetFormattedText("%d", maxArg)
-        end
-    elseif mode == "PERCENTCURMAX" then
-        if pctKnown then
-            fs:SetFormattedText("%d%%%s%d%s%d", pctArg, delimiter, curArg, delimiter, maxArg)
-        else
-            fs:SetFormattedText("%d%s%d", curArg, delimiter, maxArg)
-        end
-    elseif mode == "DEFICIT" then
-        fs:SetText("")
-    else
-        fs:SetFormattedText("%d%s%d", curArg, delimiter, maxArg)
-    end
+    slot.fs = fs
+    slot.delimiter = delimiter
+    slot.short = short == true
+    slot.hidePercentSymbol = hidePercentSymbol == true
+    slot.suffix = suffix
+    slot.canSecret = canSecret
+    local writer = MODE_WRITERS[mode] or WriteCurMax
+    writer(slot, cur, max, pct, pctKnown, nil)
+    slot.fs = nil
 end
 
 local function ResolveHealthTextModes(text)
@@ -338,6 +414,7 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     if not (fs and mode and mode ~= "NONE") then
         return index, false
     end
+    local needsPercent = ModeNeedsPercent(mode)
     local slot = slots[index]
     if not slot then
         slot = {}
@@ -345,10 +422,14 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     end
     slot.fs = fs
     slot.mode = mode
-    slot.delimiter = delimiter
+    slot.writer = MODE_WRITERS[mode] or WriteCurMax
+    slot.needsPercent = needsPercent
+    slot.delimiter = delimiter or " - "
     slot.short = short == true
     slot.hidePercentSymbol = hidePercentSymbol == true
-    return index + 1, ModeNeedsPercent(mode)
+    slot.suffix = nil
+    slot.canSecret = nil
+    return index + 1, needsPercent
 end
 
 local function TrimTextSlots(slots, firstDead)
@@ -477,15 +558,15 @@ local function UpdateTextSlots(slots, count, cur, max, unit, percentFn, needsPer
     local pctKnown = false
     if needsPercent == true then
         pct = percentFn and percentFn(unit)
-        pctKnown = pct ~= nil
+        pctKnown = not IsNil(pct)
     end
     for i = 1, count do
         local slot = slots[i]
         if slot then
-            if slot.mode == "DEFICIT" and rt and rt.healthMissing ~= nil then
-                SetTextCached(slot.fs, "-" .. (FormatValue(rt.healthMissing, slot.short, rt.canHaveSecretValues) or "0"))
-            else
-                SetModeText(slot.fs, slot.mode, cur, max, slot.delimiter, unit, nil, slot.short, slot.hidePercentSymbol, pct, pctKnown, nil, rt and rt.canHaveSecretValues)
+            slot.canSecret = rt and rt.canHaveSecretValues
+            local writer = slot.writer
+            if writer then
+                writer(slot, cur, max, pct, pctKnown, rt)
             end
         end
     end
@@ -514,13 +595,16 @@ local function FlushPendingHealthText(frame)
 end
 
 local textThrottleFrame
+local textThrottleTimerActive
+local textThrottleTimerAt
 local healthTextQueue = {}
 local powerTextQueue = {}
 local TEXT_FLUSH_PER_TICK = 10
+local TEXT_MIN_DELAY = 0.01
 
-local function TextThrottleOnUpdate(self)
-    local now = GetTime and GetTime() or 0
+local function FlushTextQueues(now)
     local active = false
+    local nextAt
     local flushed = 0
 
     for frame, when in pairs(healthTextQueue) do
@@ -530,10 +614,12 @@ local function TextThrottleOnUpdate(self)
             flushed = flushed + 1
             if flushed >= TEXT_FLUSH_PER_TICK then
                 active = true
+                nextAt = now + TEXT_MIN_DELAY
                 break
             end
         else
             active = true
+            if not nextAt or when < nextAt then nextAt = when end
         end
     end
 
@@ -545,26 +631,69 @@ local function TextThrottleOnUpdate(self)
             flushed = flushed + 1
             if flushed >= TEXT_FLUSH_PER_TICK then
                 active = true
+                nextAt = now + TEXT_MIN_DELAY
                 break
             end
         else
             active = true
+            if not nextAt or when < nextAt then nextAt = when end
         end
     end
 
+    return active, nextAt
+end
+
+local ScheduleTextThrottleTimer
+
+local function TextThrottleTimerTick()
+    textThrottleTimerActive = nil
+    textThrottleTimerAt = nil
+
+    local now = GetTime and GetTime() or 0
+    local active, nextAt = FlushTextQueues(now)
+    if active then
+        local delay = nextAt and nextAt > now and (nextAt - now) or TEXT_MIN_DELAY
+        ScheduleTextThrottleTimer(delay, now + delay)
+    end
+end
+
+local function TextThrottleOnUpdate(self)
+    local now = GetTime and GetTime() or 0
+    local active = FlushTextQueues(now)
     if not active then
         self:Hide()
     end
 end
 
-local function QueueTextThrottle(queue, frame, remaining)
+ScheduleTextThrottleTimer = function(delay, when)
+    delay = delay and delay > 0 and delay or TEXT_MIN_DELAY
+    when = when or ((GetTime and GetTime() or 0) + delay)
+
+    local after = C_Timer and C_Timer.After
+    if after then
+        if textThrottleTimerActive and textThrottleTimerAt and textThrottleTimerAt <= when then
+            return
+        end
+        textThrottleTimerActive = true
+        textThrottleTimerAt = when
+        after(delay, TextThrottleTimerTick)
+        return
+    end
+
     if not textThrottleFrame then
         textThrottleFrame = CreateFrame("Frame")
         textThrottleFrame:SetScript("OnUpdate", TextThrottleOnUpdate)
         textThrottleFrame:Hide()
     end
-    queue[frame] = (GetTime and GetTime() or 0) + (remaining > 0 and remaining or 0.01)
     textThrottleFrame:Show()
+end
+
+local function QueueTextThrottle(queue, frame, remaining)
+    local now = GetTime and GetTime() or 0
+    local delay = remaining > 0 and remaining or TEXT_MIN_DELAY
+    local when = now + delay
+    queue[frame] = when
+    ScheduleTextThrottleTimer(delay, when)
 end
 
 local function QueueHealthTextFlush(frame, rt, remaining)

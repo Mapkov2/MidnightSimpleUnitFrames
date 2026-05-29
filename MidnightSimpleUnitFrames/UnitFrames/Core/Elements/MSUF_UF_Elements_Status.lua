@@ -608,14 +608,30 @@ local function UpdateLeaderPair(frame, status)
     local assistRaw = exists and (not leader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
     local assist = assistRaw == true or assistRaw == 1
 
-    if leaderCfg and leaderCfg.enabled and leaderTex and leader then
+    local showLeader = leaderCfg and leaderCfg.enabled and leaderTex and leader
+    local showAssist = assistCfg and assistCfg.enabled and assistTex and assist
+    local state = (showLeader and 1 or 0) + (showAssist and 2 or 0)
+    local serial = frame and frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial or 0
+    if frame
+        and frame._msufLeaderPairState == state
+        and frame._msufLeaderPairSerial == serial
+        and (not leaderTex or leaderTex._msufStatusShown == (showLeader and true or false))
+        and (not assistTex or assistTex._msufStatusShown == (showAssist and true or false)) then
+        return
+    end
+    if frame then
+        frame._msufLeaderPairState = state
+        frame._msufLeaderPairSerial = serial
+    end
+
+    if showLeader then
         ApplyLeaderTexture(leaderTex, leaderCfg, status, false)
         SetShown(leaderTex, true)
     else
         SetShown(leaderTex, false)
     end
 
-    if assistCfg and assistCfg.enabled and assistTex and assist then
+    if showAssist then
         ApplyLeaderTexture(assistTex, assistCfg, status, true)
         SetShown(assistTex, true)
     else

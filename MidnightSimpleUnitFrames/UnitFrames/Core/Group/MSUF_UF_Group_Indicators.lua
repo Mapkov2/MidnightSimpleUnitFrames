@@ -188,14 +188,15 @@ local function UpdateCornerIndicators(frame)
             end
             r, g, b = slot.r or 0.4, slot.g or 1, slot.b or 0.4
         end
-        local tex, holder = EnsureCorner(frame, slot.key, cfg.layer)
         if show then
+            local tex, holder = EnsureCorner(frame, slot.key, cfg.layer)
             local size = max(1, tonumber(cfg.size) or 8)
             SetSizeCached(tex, size, size)
             SetColorTextureCached(tex, r, g, b, cfg.alpha or 1)
             SetPointCached(tex, slot.anchor or "CENTER", holder, slot.anchor or "CENTER", slot.x or 0, slot.y or 0)
             SetShown(tex, true)
         else
+            local tex = frame.MSUFGFCornerIndicators and frame.MSUFGFCornerIndicators[slot.key]
             SetShown(tex, false)
         end
     end

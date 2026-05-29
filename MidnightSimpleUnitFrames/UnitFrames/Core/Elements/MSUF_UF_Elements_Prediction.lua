@@ -276,6 +276,9 @@ local function ClampIncomingToMissing(value, hp, maxHP)
     if type(value) ~= "number" or type(hp) ~= "number" or type(maxHP) ~= "number" then
         return value
     end
+    if issecretvalue and (issecretvalue(value) or issecretvalue(hp) or issecretvalue(maxHP)) then
+        return value
+    end
     local missing = maxHP - hp
     if missing <= 0 then
         return 0
@@ -284,6 +287,39 @@ local function ClampIncomingToMissing(value, hp, maxHP)
         return missing
     end
     return value
+end
+
+local function ReadIncomingHeals(unit, hp, maxHP, healMode)
+    local value = UnitGetIncomingHeals and UnitGetIncomingHeals(unit) or nil
+    if healMode == 3 then
+        value = ClampIncomingToMissing(value, hp, maxHP)
+    end
+    return value
+end
+
+local function ReadDamageAbsorbs(unit, hp, maxHP, absorbMode)
+    local value = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or nil
+    if absorbMode == 3 then
+        value = ClampIncomingToMissing(value, hp, maxHP)
+    end
+    return value
+end
+
+local function ClampToValue(value, maxValue)
+    if type(value) ~= "number" or type(maxValue) ~= "number" then
+        return value
+    end
+    if issecretvalue and (issecretvalue(value) or issecretvalue(maxValue)) then
+        return value
+    end
+    if value > maxValue then
+        return maxValue
+    end
+    return value
+end
+
+local function ReadHealAbsorbs(unit, hp)
+    return ClampToValue(UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or nil, hp)
 end
 
 local function ResolveTexture(key, fallback)
@@ -471,6 +507,7 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     frame._msufPredictionHealReverse = ReverseForMode(healMode, hpReverse)
     frame._msufPredictionAbsorbReverse = ReverseForMode(absorbMode, hpReverse)
     frame._msufPredictionMask = PredictionMask(cfg)
+    frame._msufPredictionNeedsHealth = NeedsHealthEvent(cfg)
 end
 
 local function EnsurePredictionRuntime(frame, cfg)
@@ -566,6 +603,7 @@ function Prediction.Disable(frame)
     HideBar(frame and frame.absorbBar)
     HideBar(frame and frame.healAbsorbBar)
     ClearPredictionCache(frame)
+    frame._msufPredictionNeedsHealth = nil
     frame._msufPredictionDisabled = true
 end
 
@@ -662,38 +700,23 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
 
     local needAmountRefresh = refreshHeal or refreshAbsorb or refreshHealAbsorb
-    local calc
-    if needAmountRefresh then
-        calc = EnsureCalc(frame)
-        if calc and calc._msufPredictionCfg ~= cfg then
-            ConfigureCalc(calc, cfg)
-        end
-    end
     local hp, maxHP
     local canUseSeed = type(seedHP) ~= "nil"
         and type(seedMaxHP) ~= "nil"
-        and ((not needAmountRefresh) or (not calc) or seedCalc == calc)
     if canUseSeed then
         hp, maxHP = seedHP, seedMaxHP
-    elseif needAmountRefresh and calc and UnitGetDetailedHealPrediction then
-        UnitGetDetailedHealPrediction(unit, "player", calc)
-        hp = calc.GetCurrentHealth and calc:GetCurrentHealth() or nil
-        maxHP = calc.GetMaximumHealth and calc:GetMaximumHealth() or nil
     end
     if type(hp) == "nil" and UnitHealth then hp = UnitHealth(unit) end
     if type(maxHP) == "nil" and UnitHealthMax then maxHP = UnitHealthMax(unit) end
     if refreshHeal then
-        local incoming = CalcIncomingHeals(calc, unit)
-        if not calc and healMode == 3 then
-            incoming = ClampIncomingToMissing(incoming, hp, maxHP)
-        end
+        local incoming = ReadIncomingHeals(unit, hp, maxHP, healMode)
         frame._msufPredictionIncoming = incoming
     end
     if refreshAbsorb then
-        frame._msufPredictionAbsorb = CalcDamageAbsorbs(calc, unit)
+        frame._msufPredictionAbsorb = ReadDamageAbsorbs(unit, hp, maxHP, absorbMode)
     end
     if refreshHealAbsorb then
-        frame._msufPredictionHealAbsorb = CalcHealAbsorbs(calc, unit)
+        frame._msufPredictionHealAbsorb = ReadHealAbsorbs(unit, hp)
     end
     if needAmountRefresh then
         frame._msufPredictionCacheReady = true

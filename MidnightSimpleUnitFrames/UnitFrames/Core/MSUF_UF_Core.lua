@@ -1164,7 +1164,9 @@ local function DispatchCompiledHotFrameEvent(frame, state, event, unit, a, b, c)
             end
             if state.predictionUnitless then
                 local fn = state.prediction
-                if fn then fn(frame, event, unit, a, b, c) end
+                if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
+                    fn(frame, event, unit, a, b, c)
+                end
             end
             if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
             return true
@@ -1183,7 +1185,9 @@ local function DispatchCompiledHotFrameEvent(frame, state, event, unit, a, b, c)
                 if fn then fn(frame, event, unit) end
             end
             fn = state.prediction
-            if fn then fn(frame, event, unit, hp, maxHP, calc) end
+            if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
+                fn(frame, event, unit, hp, maxHP, calc)
+            end
             fn = state.name
             if fn then fn(frame, event, unit) end
             fn = state.statusText
@@ -1451,7 +1455,9 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, a, b, c)
             local pmode = owners["Prediction"]
             if pmode == "unitless" or pmode == "both" then
                 local fn = frame._msufUpdatePrediction
-                if fn then fn(frame, event, unit, a, b, c) end
+                if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
+                    fn(frame, event, unit, a, b, c)
+                end
             end
             return true
         end
@@ -1467,7 +1473,9 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, a, b, c)
             end
             if owners["Prediction"] then
                 local fn = frame._msufUpdatePrediction
-                if fn then fn(frame, event, unit, hp, maxHP, calc) end
+                if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
+                    fn(frame, event, unit, hp, maxHP, calc)
+                end
             end
         else
             -- UNIT_FLAGS / UNIT_FACTION

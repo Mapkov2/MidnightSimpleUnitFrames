@@ -1094,6 +1094,51 @@ local function AlphaPair(cfg, mode)
     return cfg.foregroundInCombat or inAlpha, cfg.foregroundOutOfCombat or outAlpha
 end
 
+local function CompileAlphaRuntime(frame, cfg, force)
+    if not frame then
+        return nil
+    end
+    if not cfg then
+        frame._msufAlphaRuntimeCfg = nil
+        frame._msufAlphaRuntime = nil
+        return nil
+    end
+    if force ~= true and frame._msufAlphaRuntimeCfg == cfg and frame._msufAlphaRuntime then
+        return frame._msufAlphaRuntime
+    end
+
+    local rt = frame._msufAlphaRuntime
+    if not rt then
+        rt = {}
+        frame._msufAlphaRuntime = rt
+    end
+    frame._msufAlphaRuntimeCfg = cfg
+
+    local baseIn = cfg.inCombat or 1
+    local baseOut = cfg.outCombat or 1
+    local layered = cfg.layered == true
+    local layerMode = NormalizeAlphaLayerMode(cfg.layerMode)
+
+    rt.layered = layered
+    rt.frameIn = layered and 1 or baseIn
+    rt.frameOut = layered and 1 or baseOut
+    rt.fgIn = cfg.foregroundInCombat or baseIn
+    rt.fgOut = cfg.foregroundOutOfCombat or baseOut
+    rt.bgIn = cfg.backgroundInCombat or baseIn
+    rt.bgOut = cfg.backgroundOutOfCombat or baseOut
+    rt.hpIn = layerMode == "health" and (cfg.healthInCombat or cfg.foregroundInCombat or baseIn) or rt.fgIn
+    rt.hpOut = layerMode == "health" and (cfg.healthOutOfCombat or cfg.foregroundOutOfCombat or baseOut) or rt.fgOut
+    rt.powerIn = layerMode == "health" and 1 or rt.fgIn
+    rt.powerOut = layerMode == "health" and 1 or rt.fgOut
+    rt.preserveHPColor = cfg.preserveHPColor == true
+    rt.rangeMode = cfg.rangeLayerMode == "health" and "health" or "frame"
+    rt.rangePortrait = cfg.rangePortrait == true
+    rt.rangeEnabled = cfg.rangeEnabled == true
+    rt.rangeIn = cfg.rangeIn or 1
+    rt.rangeOut = cfg.rangeOut or 0.5
+    return rt
+end
+
 local function CurrentAlpha(cfg, mode, event)
     local inAlpha, outAlpha = AlphaPair(cfg, mode)
     return InCombatForEvent(event) and inAlpha or outAlpha
@@ -1136,19 +1181,35 @@ local function UntrackAlphaFrame(frame)
     end
 end
 
-local function CurrentRangeMultiplier(frame, cfg)
-    if not (cfg and cfg.rangeEnabled == true and frame and frame.unit) then
+local function RangeMultiplierFromState(frame, rt, inRange)
+    frame._msufAlphaRangeKnown = inRange
+    return inRange and (rt.rangeIn or 1) or (rt.rangeOut or 0.5)
+end
+
+local function CurrentRangeMultiplier(frame, rt, event, eventUnit, eventRange)
+    if not (rt and rt.rangeEnabled == true and frame and frame.unit) then
         return 1
     end
     local manual = tonumber(frame._msufManualRangeMul)
     if manual ~= nil then
         return Clamp01(manual, 1)
     end
+
+    if event == "UNIT_IN_RANGE_UPDATE" and (not eventUnit or eventUnit == frame.unit) then
+        if NotSecretValue(eventRange) then
+            if eventRange == true or eventRange == 1 then
+                return RangeMultiplierFromState(frame, rt, true)
+            elseif eventRange == false or eventRange == 0 then
+                return RangeMultiplierFromState(frame, rt, false)
+            end
+        end
+    end
+
     local inRange = UnitIsInRange(frame.unit)
     if inRange == nil then
         inRange = true
     end
-    return inRange and (cfg.rangeIn or 1) or (cfg.rangeOut or 0.5)
+    return RangeMultiplierFromState(frame, rt, inRange and true or false)
 end
 
 local function ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, powerAlpha, healthBgAlpha, portraitAlpha, statusAlpha, force)
@@ -1179,9 +1240,12 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
         return
     end
     local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_VISUALS"
+        or event == "MSUF_ALPHA"
+    local rt = CompileAlphaRuntime(frame, cfg, force)
+    if not rt then
+        return
+    end
 
-    local layered = cfg.layered == true
-    local layerMode = NormalizeAlphaLayerMode(cfg.layerMode)
     local inCombat
     if event == "PLAYER_REGEN_DISABLED" then
         inCombat = true
@@ -1193,9 +1257,7 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
         inCombat = InCombatLockdown and InCombatLockdown() and true or false
     end
 
-    local baseIn = cfg.inCombat or 1
-    local baseOut = cfg.outCombat or 1
-    local frameAlpha = inCombat and baseIn or baseOut
+    local frameAlpha = inCombat and rt.frameIn or rt.frameOut
     local fgAlpha = 1
     local bgAlpha = 1
     local hpAlpha = 1
@@ -1204,25 +1266,22 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
     local portraitAlpha = 1
     local statusAlpha = 1
 
-    if layered then
-        frameAlpha = 1
-        fgAlpha = inCombat and (cfg.foregroundInCombat or baseIn) or (cfg.foregroundOutOfCombat or baseOut)
-        bgAlpha = inCombat and (cfg.backgroundInCombat or baseIn) or (cfg.backgroundOutOfCombat or baseOut)
-        hpAlpha = layerMode == "health"
-            and (inCombat and (cfg.healthInCombat or cfg.foregroundInCombat or baseIn) or (cfg.healthOutOfCombat or cfg.foregroundOutOfCombat or baseOut))
-            or fgAlpha
-        powerAlpha = layerMode == "health" and 1 or fgAlpha
-        healthBgAlpha = cfg.preserveHPColor == true and hpAlpha or bgAlpha
+    if rt.layered then
+        fgAlpha = inCombat and rt.fgIn or rt.fgOut
+        bgAlpha = inCombat and rt.bgIn or rt.bgOut
+        hpAlpha = inCombat and rt.hpIn or rt.hpOut
+        powerAlpha = inCombat and rt.powerIn or rt.powerOut
+        healthBgAlpha = rt.preserveHPColor == true and hpAlpha or bgAlpha
         statusAlpha = fgAlpha
     end
 
-    local rangeMul = CurrentRangeMultiplier(frame, cfg)
-    local rangeMode = cfg.rangeLayerMode == "health" and "health" or "frame"
+    local rangeMul = CurrentRangeMultiplier(frame, rt, event, eventUnit, eventRange)
+    local rangeMode = rt.rangeMode
     if rangeMul < 1 then
         if rangeMode == "health" then
             hpAlpha = hpAlpha * rangeMul
             healthBgAlpha = healthBgAlpha * rangeMul
-            if cfg.rangePortrait == true then
+            if rt.rangePortrait == true then
                 portraitAlpha = portraitAlpha * rangeMul
             end
         else
@@ -1234,7 +1293,7 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
         frameAlpha = 0.35
     end
 
-    local useLayeredApply = layered or (rangeMode == "health" and rangeMul < 1)
+    local useLayeredApply = rt.layered or (rangeMode == "health" and rangeMul < 1)
     if not force
         and frame._msufAlphaLastLayered == useLayeredApply
         and frame._msufAlphaLastFrame == frameAlpha
@@ -1334,6 +1393,8 @@ function Alpha.Disable(frame)
         return
     end
     UntrackAlphaFrame(frame)
+    frame._msufAlphaRuntimeCfg = nil
+    frame._msufAlphaRuntime = nil
     ClearAlphaField(frame, "_msufLastAlpha")
     SetFrameAlpha(frame, 1)
     ResetLegacyLayerAlphas(frame)
