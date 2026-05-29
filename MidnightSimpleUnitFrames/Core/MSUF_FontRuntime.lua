@@ -67,6 +67,36 @@ local _fontState = {}
 local _MSUF_FontPathSerialByKey = {}
 local _MSUF_FontPathSerialNext = 0
 
+-- Cold-start text fix, folded into the font subsystem (no standalone file).
+-- See the 6.0 MSUF_FontRuntime for the full rationale: the configured font may
+-- not be loadable when the per-frame init layout runs, so width-dependent text
+-- anchors get committed against wrong metrics. UpdateAllFonts re-runs the text
+-- layout once the configured font is applied + measurable, retrying via the
+-- existing scheduler until then.
+local _fontApplyFailed = false
+local _fontRelayoutRetries = 0
+local MSUF_FONT_RELAYOUT_MAX_RETRIES = 200
+local _measureFS
+
+local function _ConfiguredFontReady()
+    local getPath = _G.MSUF_GetFontPath
+    local path = (type(getPath) == "function" and getPath()) or _fontState.path or "Fonts\\FRIZQT__.TTF"
+    if type(path) ~= "string" or path == "" then return false end
+    if not _measureFS then
+        if not _G.UIParent then return true end
+        _measureFS = _G.UIParent:CreateFontString(nil, "BACKGROUND")
+        _measureFS:Hide()
+    end
+    if not pcall(_measureFS.SetFont, _measureFS, path, 14, "") then return false end
+    local applied = _measureFS:GetFont()
+    if not applied or tostring(applied):gsub("/", "\\"):lower() ~= tostring(path):gsub("/", "\\"):lower() then
+        return false
+    end
+    _measureFS:SetText("ABCabcgjpqy0123")
+    local w = _measureFS:GetStringWidth()
+    return type(w) == "number" and w > 0
+end
+
 local function _MSUF_GetFontPathSerial(path)
     local key = tostring(path or "")
     local serial = _MSUF_FontPathSerialByKey[key]
@@ -117,6 +147,7 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
             fs._msufShadowOn = nil
         else
             fs._msufFontRev = nil
+            _fontApplyFailed = true
         end
     end
 
@@ -254,6 +285,7 @@ local function UpdateAllFonts(onlyKey)
     _fontState.onlyKey = onlyKey
     _fontState.UpdateNameColor = _G.MSUF_UpdateNameColor
 
+    _fontApplyFailed = false
     ForEachUnitFrame(_MSUF_ApplyFontsToFrame)
 
     if _G.MSUF_UpdateCastbarVisuals_Immediate then
@@ -266,6 +298,26 @@ local function UpdateAllFonts(onlyKey)
     if _G.MSUF_Auras2_ApplyFontsFromGlobal then _G.MSUF_Auras2_ApplyFontsFromGlobal() end
     if _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
     if ns and ns.MSUF_ToTInline_RequestRefresh then ns.MSUF_ToTInline_RequestRefresh("FONTS") end
+
+    -- Re-run the text layout once the configured font is loaded + measurable so
+    -- width-dependent anchors recompute; retry via the scheduler on a cold start.
+    local ready = (not _fontApplyFailed) and _ConfiguredFontReady()
+    if ready then
+        _fontRelayoutRetries = 0
+        local force = _G.MSUF_ForceTextLayoutForUnitKey
+        if type(force) == "function" then
+            ForEachUnitFrame(function(f)
+                if f then force(f.unit or f.msufConfigKey) end
+            end)
+        end
+    elseif _fontRelayoutRetries < MSUF_FONT_RELAYOUT_MAX_RETRIES then
+        _fontRelayoutRetries = _fontRelayoutRetries + 1
+        if _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(0.1, function() UpdateAllFonts() end)
+        elseif _G.MSUF_ScheduleOnce then
+            _G.MSUF_ScheduleOnce("UF_FONT_COLD_RELAYOUT", function() UpdateAllFonts() end)
+        end
+    end
 
     if _G.MSUF_BossTestMode and _G.MSUF_UnitEditModeActive and not _G.MSUF_InCombat then
         local frames = _G.MSUF_UnitFrames or {}
@@ -323,3 +375,12 @@ if not _G.MSUF_UpdateAllFonts_Immediate then
 end
 
 ns.Fonts.UpdateAllFonts = UpdateAllFonts
+
+do
+    local kick = CreateFrame("Frame")
+    kick:RegisterEvent("PLAYER_ENTERING_WORLD")
+    kick:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        UpdateAllFonts()
+    end)
+end
