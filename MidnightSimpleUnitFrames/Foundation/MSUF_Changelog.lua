@@ -17,6 +17,8 @@ local data = {
                     bullets = {
                         "Fixed Blizzard-rendered group-frame private auras reusing a stale Blizzard settings-change handler after instance or roster transitions.",
                         "Fixed group-frame absorb and heal-absorb overlays drawing over the normal frame outline on party and raid frames.",
+                        "Fixed an edge case where active debuffs could drop off the display even while they were still running.",
+                        "Fixed cold-start font application so unit-frame text relayouts after the configured font becomes available, preventing wrong text anchoring after login or reload.",
                     },
                 },
             },
