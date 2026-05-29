@@ -333,7 +333,14 @@ function Power.Update(frame, event, unit)
     local power, maxPower = ReadPowerValues(unit)
     local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
 
-    SetBarMinMax(bar, maxPower, true)
+    -- Max power only changes on UNIT_MAXPOWER / UNIT_DISPLAYPOWER (and forced
+    -- applies); skip the SetMinMaxValues C call on the frequent value ticks.
+    -- Gated on the plain event string -- the (possibly secret) max is never
+    -- compared.
+    if not animate or bar._msufMinMaxInit ~= true then
+        SetBarMinMax(bar, maxPower, true)
+        bar._msufMinMaxInit = true
+    end
     SetBarValue(bar, power, true, animate)
     if not animate then
         SnapBarInterpolation(bar)

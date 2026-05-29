@@ -98,6 +98,26 @@ local function IsElementRegistered(name)
     return type(name) == "string" and type(UF.elements[name]) == "table"
 end
 
+-- Precomputed update-fn key table. Lookups like `frame["_msufUpdate" .. name]`
+-- in the hot dispatch path do a string concat per call (and the result is GC'd
+-- soon after). Element names are fixed and registered via UF.RegisterElement,
+-- which pre-bakes every key as a plain table entry. A defensive __index keeps
+-- the table correct if some caller uses an unregistered name — but the hot path
+-- never triggers it because RegisterElement has already populated every key.
+local UPDATE_KEYS = UF._updateKeys or setmetatable({}, {
+    __index = function(t, name)
+        if type(name) ~= "string" then return nil end
+        local key = "_msufUpdate" .. name
+        t[name] = key
+        return key
+    end,
+})
+UF._updateKeys = UPDATE_KEYS
+
+local function GetUpdateKey(name)
+    return UPDATE_KEYS[name]
+end
+
 local DispatchFrameEvent
 
 function UF.ElementEnabled(element, frame, spec)
@@ -115,6 +135,7 @@ function UF.RegisterElement(name, element)
     end
     UF.elements[name] = element
     Elements[name] = element
+    GetUpdateKey(name) -- bake "_msufUpdate"..name into UPDATE_KEYS once
     return true
 end
 
@@ -149,6 +170,14 @@ local UNIT_EVENT_HAS_UNIT = {
     UNIT_OTHER_PARTY_CHANGED = true,
 }
 
+-- Forward declarations: the unit-filter / event-driver helpers below need to
+-- reference each other across the dispatch helper block, so declare them up
+-- front. Assignments (not `local function`) bind to these names.
+local ReindexFrameUnitFilter
+local ClearFrameUnitFilter
+local ApplyFrameUnitFilter
+local EnsureEventDriver
+
 local eventDriver = UF.eventDriver
 local eventFrames = UF.eventFrames or {}
 local eventFrameCounts = UF.eventFrameCounts or {}
@@ -161,6 +190,16 @@ UF.eventUnitFrames = eventUnitFrames
 UF.eventUnitlessFrames = eventUnitlessFrames
 UF.eventUnitlessFrameCounts = eventUnitlessFrameCounts
 
+-- Central driver path. Used only for:
+--   * unitless events (no unit parameter, e.g. GROUP_ROSTER_UPDATE)
+--   * UNIT_EVENT_HAS_UNIT events where a frame needs "unitless" mode (fan-out
+--     to that frame regardless of the event's unit)
+--   * fallback frames that couldn't install per-frame RegisterUnitEvent
+--     (frame.unit was nil at registration, or frame.RegisterUnitEvent missing)
+-- Hot per-frame unit events go through frame-local RegisterUnitEvent (set up
+-- in RegisterDriverFrameEvent below), bypassing this dispatch entirely. Frames
+-- using the per-frame filter are NOT added to eventUnitFrames, so this loop
+-- only sees fallback frames.
 local function EventDriverOnEvent(_, event, unit, ...)
     local frames = eventFrames[event]
     if not frames then
@@ -168,27 +207,27 @@ local function EventDriverOnEvent(_, event, unit, ...)
     end
 
     if UNIT_EVENT_HAS_UNIT[event] and unit then
+        local unitlessFrames = eventUnitlessFrames[event]
+        if unitlessFrames then
+            for ownerFrame in pairs(unitlessFrames) do
+                DispatchFrameEvent(ownerFrame, event, unit, ...)
+            end
+        end
         local unitFrames = eventUnitFrames[event]
         unitFrames = unitFrames and unitFrames[unit]
         if unitFrames then
             for frame in pairs(unitFrames) do
-                if frames[frame] then
+                if not (unitlessFrames and unitlessFrames[frame]) then
                     DispatchFrameEvent(frame, event, unit, ...)
                 end
             end
         else
+            -- Fallback for frames registered before their unit was known: look
+            -- up the unit frame by name and dispatch if it's listening.
             local frame = UF.frames[unit]
-            if frame and frames[frame] then
+            if frame and frames[frame] and not (unitlessFrames and unitlessFrames[frame])
+                and not (frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event]) then
                 DispatchFrameEvent(frame, event, unit, ...)
-            end
-        end
-
-        local unitlessFrames = eventUnitlessFrames[event]
-        if unitlessFrames then
-            for ownerFrame in pairs(unitlessFrames) do
-                if not (unitFrames and unitFrames[ownerFrame]) then
-                    DispatchFrameEvent(ownerFrame, event, unit, ...)
-                end
             end
         end
         return
@@ -261,10 +300,26 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
         frame.unitKey = newUnit
     end
     ReindexFrameUnitEvents(frame, oldUnit, frame.unit)
+    ReindexFrameUnitFilter(frame, oldUnit, frame.unit)
     return true
 end
 
+local function PromoteEventToCentralDriver(frame, event)
+    -- A unitless registration arrived (or replaced a unit-mode registration).
+    -- Tear down the per-frame C-side filter and register on the central driver
+    -- so this frame receives the event for any unit (not just frame.unit).
+    if frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event] then
+        ClearFrameUnitFilter(frame, event)
+    end
+    if not (eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event]) then
+        EnsureEventDriver():RegisterEvent(event)
+        eventDriver._msufRegistered = eventDriver._msufRegistered or {}
+        eventDriver._msufRegistered[event] = true
+    end
+end
+
 local function RegisterDriverFrameUnitlessEvent(frame, event)
+    PromoteEventToCentralDriver(frame, event)
     local frames = eventUnitlessFrames[event]
     if not frames then
         frames = {}
@@ -292,7 +347,7 @@ local function UnregisterDriverFrameUnitlessEvent(frame, event)
     end
 end
 
-local function EnsureEventDriver()
+EnsureEventDriver = function()
     if not eventDriver then
         eventDriver = CreateFrame("Frame")
         eventDriver:SetScript("OnEvent", EventDriverOnEvent)
@@ -301,20 +356,93 @@ local function EnsureEventDriver()
     return eventDriver
 end
 
+-- Per-frame unit-event filter. For events that take a unit parameter we install
+-- RegisterUnitEvent on the frame itself. Blizzard's C side filters the event by
+-- unit, so the frame's own OnEvent (FrameOnEvent → DispatchFrameEvent) is called
+-- directly — no central-driver pairs() loop, no eventFrames/eventUnitFrames hash
+-- lookups, no fan-out. This is the 5.5 group-frame dispatch shape.
+ApplyFrameUnitFilter = function(frame, event, unit)
+    if not (frame and event and unit and UNIT_EVENT_HAS_UNIT[event]) then
+        return
+    end
+    if not frame.RegisterUnitEvent then
+        return
+    end
+    local registered = frame._msufFrameUnitEvents
+    if not registered then
+        registered = {}
+        frame._msufFrameUnitEvents = registered
+    end
+    if registered[event] == unit then
+        return
+    end
+    frame:RegisterUnitEvent(event, unit)
+    registered[event] = unit
+end
+
+ClearFrameUnitFilter = function(frame, event)
+    local registered = frame and frame._msufFrameUnitEvents
+    if not (registered and registered[event]) then
+        return
+    end
+    registered[event] = nil
+    if frame.UnregisterEvent then
+        frame:UnregisterEvent(event)
+    end
+end
+
+ReindexFrameUnitFilter = function(frame, oldUnit, newUnit)
+    local registered = frame and frame._msufFrameUnitEvents
+    if not registered or oldUnit == newUnit then
+        return
+    end
+    if not newUnit then
+        for event in pairs(registered) do
+            ClearFrameUnitFilter(frame, event)
+        end
+        return
+    end
+    for event, unit in pairs(registered) do
+        if unit == oldUnit then
+            ApplyFrameUnitFilter(frame, event, newUnit)
+        end
+    end
+end
+
+local function FrameHasUnitlessForEvent(frame, event)
+    local unitless = frame and frame._msufEventUnitless
+    return unitless and unitless[event] == true
+end
+
 local function RegisterDriverFrameEvent(frame, event)
     local frames = eventFrames[event]
     if not frames then
         frames = {}
         eventFrames[event] = frames
     end
-    if frames[frame] then
+    if not frames[frame] then
+        frames[frame] = true
+        eventFrameCounts[event] = (eventFrameCounts[event] or 0) + 1
+    end
+    if UNIT_EVENT_HAS_UNIT[event]
+        and frame.unit
+        and frame.RegisterUnitEvent
+        and not FrameHasUnitlessForEvent(frame, event)
+    then
+        -- Per-frame C-side filter. The event is NOT registered on the central
+        -- driver (unless some other frame needs unitless fan-out), and we
+        -- intentionally skip AddEventUnitFrame so EventDriverOnEvent does not
+        -- double-dispatch when the central driver also happens to be active
+        -- because of unitless registrations on other frames.
+        ApplyFrameUnitFilter(frame, event, frame.unit)
         return
     end
-    frames[frame] = true
-    local count = (eventFrameCounts[event] or 0) + 1
-    eventFrameCounts[event] = count
-    if count == 1 then
+    -- Unitless / non-unit event / no frame.unit: route through the central driver.
+    ClearFrameUnitFilter(frame, event)
+    if not eventDriver or not eventDriver._msufRegistered or not eventDriver._msufRegistered[event] then
         EnsureEventDriver():RegisterEvent(event)
+        eventDriver._msufRegistered = eventDriver._msufRegistered or {}
+        eventDriver._msufRegistered[event] = true
     end
     AddEventUnitFrame(frame, event, frame.unit)
 end
@@ -325,6 +453,7 @@ local function UnregisterDriverFrameEvent(frame, event)
         return
     end
     frames[frame] = nil
+    ClearFrameUnitFilter(frame, event)
     RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or frame.unit)
     local count = (eventFrameCounts[event] or 1) - 1
     if count <= 0 then
@@ -333,7 +462,8 @@ local function UnregisterDriverFrameEvent(frame, event)
         eventUnitFrames[event] = nil
         eventUnitlessFrameCounts[event] = nil
         eventUnitlessFrames[event] = nil
-        if eventDriver then
+        if eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event] then
+            eventDriver._msufRegistered[event] = nil
             eventDriver:UnregisterEvent(event)
         end
     else
@@ -541,20 +671,6 @@ local function OwnerModeAllowsUnit(mode, frame, unit)
     return unit or frame.unit, true
 end
 
-local function OwnerAllowsUnitless(owners, name)
-    return OwnerModeIsUnitless(owners and owners[name])
-end
-
-local function ResolveOwnerUnit(frame, owners, name, unit)
-    if not frame then
-        return nil, false
-    end
-    if owners then
-        return OwnerModeAllowsUnit(owners[name], frame, unit)
-    end
-    return unit or frame.unit, true
-end
-
 local function FrameForceUpdate(frame, reason)
     if not frame then
         return
@@ -575,88 +691,67 @@ local function FrameForceUpdate(frame, reason)
 end
 
 local function RunElementUpdate(frame, owners, name, event, unit, ...)
-    local eventUnit, ok = ResolveOwnerUnit(frame, owners, name, unit)
-    if not ok then
-        return nil
+    if owners then
+        local mode = owners[name]
+        if mode == nil then return nil end
+        if unit and unit ~= frame.unit then
+            if mode ~= "unitless" and mode ~= "both" then return nil end
+        else
+            unit = unit or frame.unit
+        end
+    else
+        unit = unit or frame.unit
     end
-    local updateFn = frame and frame["_msufUpdate" .. name]
+    local updateFn = frame[UPDATE_KEYS[name]]
     if updateFn then
-        return updateFn(frame, event, eventUnit, ...)
+        return updateFn(frame, event, unit, ...)
     end
     return nil
-end
-
-local function RunElementUpdateResolved(frame, name, event, unit, ...)
-    local updateFn = frame and frame["_msufUpdate" .. name]
-    if updateFn then
-        return updateFn(frame, event, unit or frame.unit, ...)
-    end
-    return nil
-end
-
-local function RunTextHealth(frame, owners, event, unit, hp, maxHP)
-    if owners then
-        local _, ok = ResolveOwnerUnit(frame, owners, "HealthText", unit)
-        if not ok then
-            return
-        end
-    end
-    local updateFn = frame and frame._msufUpdateHealthText
-    if updateFn and (not unit or unit == frame.unit) then
-        return updateFn(frame, event, unit or frame.unit, hp, maxHP)
-    end
-end
-
-local function RunTextPower(frame, owners, event, unit, power, maxPower)
-    if owners then
-        local _, ok = ResolveOwnerUnit(frame, owners, "PowerText", unit)
-        if not ok then
-            return
-        end
-    end
-    local updateFn = frame and frame._msufUpdatePowerText
-    if updateFn and (not unit or unit == frame.unit) then
-        return updateFn(frame, event, unit or frame.unit, power, maxPower)
-    end
 end
 
 local function RunTextName(frame, owners, event, unit)
-    local eventUnit, ok = ResolveOwnerUnit(frame, owners, "NameText", unit)
-    if not ok then
-        return
+    if owners then
+        local mode = owners["NameText"]
+        if mode == nil then return end
+        if unit and unit ~= frame.unit and mode ~= "unitless" and mode ~= "both" then
+            return
+        end
     end
-    local updateFn = frame and frame._msufUpdateNameText
+    local updateFn = frame._msufUpdateNameText
     if updateFn then
-        return updateFn(frame, event, eventUnit)
+        return updateFn(frame, event, unit or frame.unit)
     end
 end
 
+-- Hot helper used by kind=1/3 same-unit branches. Caller has already verified
+-- `unit == frame.unit` (or unit is nil), so the owner-mode unit check is skipped.
 local function RunHealthHot(frame, owners, event, unit)
-    local eventUnit, ok = ResolveOwnerUnit(frame, owners, "Health", unit)
-    if not ok then
+    if owners and owners["Health"] == nil then
         return
     end
-    local hp, maxHP, calc = RunElementUpdateResolved(frame, "Health", event, eventUnit)
-    RunTextHealth(frame, nil, event, eventUnit, hp, maxHP)
+    unit = unit or frame.unit
+    local updateFn = frame._msufUpdateHealth
+    if not updateFn then return end
+    local hp, maxHP, calc = updateFn(frame, event, unit)
+    local textFn = frame._msufUpdateHealthText
+    if textFn then
+        textFn(frame, event, unit, hp, maxHP)
+    end
     return hp, maxHP, calc
 end
 
 local function RunPowerHot(frame, owners, event, unit)
-    local eventUnit, ok = ResolveOwnerUnit(frame, owners, "Power", unit)
-    if not ok then
+    if owners and owners["Power"] == nil then
         return
     end
-    local power, maxPower = RunElementUpdateResolved(frame, "Power", event, eventUnit)
-    RunTextPower(frame, nil, event, eventUnit, power, maxPower)
-end
-
-local function RunGroupAuraHot(frame, owners, event, unit, ...)
-    RunElementUpdate(frame, owners, "GroupAuraCache", event, unit, ...)
-    RunElementUpdate(frame, owners, "Auras", event, unit, ...)
-    RunElementUpdate(frame, owners, "DispelOverlay", event, unit, ...)
-    RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
-    RunElementUpdate(frame, owners, "GroupCornerIndicators", event, unit, ...)
-    RunElementUpdate(frame, owners, "GroupSpellIndicators", event, unit, ...)
+    unit = unit or frame.unit
+    local updateFn = frame._msufUpdatePower
+    if not updateFn then return end
+    local power, maxPower = updateFn(frame, event, unit)
+    local textFn = frame._msufUpdatePowerText
+    if textFn then
+        textFn(frame, event, unit, power, maxPower)
+    end
 end
 
 local HOT_EVENT_KIND = {
@@ -699,169 +794,421 @@ local HOT_EVENT_KIND = {
 }
 
 -- Hot-path dispatch: hard-codes element names per event "kind" instead of
--- walking the generic element list, to keep the busiest events cheap. The cost
--- is coupling -- adding an element that must react to a hot event means updating
--- HOT_EVENT_KIND, this switch, and RUNTIME_UPDATE_OWNERS/masks together.
-local function DispatchHotFrameEvent(frame, owners, event, unit, ...)
+-- walking the generic element list, to keep the busiest events cheap.
+--
+-- Each branch directly does `owners[name]` + `frame._msufUpdateName` rather than
+-- routing through RunElementUpdate. That removes one Lua function call and one
+-- UPDATE_KEYS hash lookup per element. The kind=1/2/5 branches are the highest
+-- volume (UNIT_HEALTH, UNIT_POWER_*, UNIT_AURA), so this matters a lot.
+--
+-- The "cross-unit" branches (unit ~= frame.unit) handle ToT/Prediction unitless
+-- mode. Same-unit branches assume `unit == frame.unit`, so no per-element unit
+-- gating is needed.
+--
+-- The cost is coupling — adding an element that must react to a hot event means
+-- updating HOT_EVENT_KIND, this switch, and RUNTIME_UPDATE_OWNERS/masks.
+local function DispatchHotFrameEvent(frame, owners, event, unit, a, b, c)
     local kind = HOT_EVENT_KIND[event]
+    if not kind then return false end
+
+    local sameUnit = (not unit) or unit == frame.unit
+    if sameUnit then
+        unit = unit or frame.unit
+    end
+
     if kind == 1 then
-        local hp, maxHP, calc
-        if unit and unit ~= frame.unit then
-            RunElementUpdate(frame, owners, "InlineToT", event, unit, ...)
-            if OwnerAllowsUnitless(owners, "Prediction") then
-                RunElementUpdate(frame, owners, "Prediction", event, unit, ...)
+        -- UNIT_HEALTH, UNIT_MAXHEALTH, UNIT_FLAGS, UNIT_FACTION
+        if not sameUnit then
+            local imode = owners["InlineToT"]
+            if imode == "unitless" or imode == "both" then
+                local fn = frame._msufUpdateInlineToT
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+            local pmode = owners["Prediction"]
+            if pmode == "unitless" or pmode == "both" then
+                local fn = frame._msufUpdatePrediction
+                if fn then fn(frame, event, unit, a, b, c) end
             end
             return true
         end
+        local hp, maxHP, calc
         if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
-            hp, maxHP, calc = RunHealthHot(frame, owners, event, unit)
+            if owners["Health"] then
+                local fn = frame._msufUpdateHealth
+                if fn then
+                    hp, maxHP, calc = fn(frame, event, unit)
+                    local textFn = frame._msufUpdateHealthText
+                    if textFn then textFn(frame, event, unit, hp, maxHP) end
+                end
+            end
+            if owners["Prediction"] then
+                local fn = frame._msufUpdatePrediction
+                if fn then fn(frame, event, unit, hp, maxHP, calc) end
+            end
         else
-            RunElementUpdate(frame, owners, "Health", event, unit, ...)
+            -- UNIT_FLAGS / UNIT_FACTION
+            if owners["Health"] then
+                local fn = frame._msufUpdateHealth
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+            if owners["NameText"] then
+                local fn = frame._msufUpdateNameText
+                if fn then fn(frame, event, unit) end
+            end
+            if event == "UNIT_FLAGS" then
+                if owners["StatusTextIndicator"] then
+                    local fn = frame._msufUpdateStatusTextIndicator
+                    if fn then fn(frame, event, unit, a, b, c) end
+                end
+                if owners["CombatIndicator"] then
+                    local fn = frame._msufUpdateCombatIndicator
+                    if fn then fn(frame, event, unit, a, b, c) end
+                end
+                if owners["GroupVisuals"] then
+                    local fn = frame._msufUpdateGroupVisuals
+                    if fn then fn(frame, event, unit, a, b, c) end
+                end
+            end
         end
-        if event == "UNIT_FLAGS" or event == "UNIT_FACTION" then
-            RunTextName(frame, owners, event, unit)
+        if owners["GroupStatusRuntime"] then
+            local fn = frame._msufUpdateGroupStatusRuntime
+            if fn then fn(frame, event, unit, a, b, c) end
         end
-        if event == "UNIT_FLAGS" then
-            RunElementUpdate(frame, owners, "StatusTextIndicator", event, unit, ...)
-            RunElementUpdate(frame, owners, "CombatIndicator", event, unit, ...)
-            RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
-        end
-        if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
-            RunElementUpdate(frame, owners, "Prediction", event, unit, hp, maxHP, calc)
-        end
-        RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
         return true
     elseif kind == 2 then
-        if unit and unit ~= frame.unit then
-            return true
+        -- UNIT_POWER_UPDATE / UNIT_POWER_FREQUENT / UNIT_MAXPOWER / UNIT_DISPLAYPOWER /
+        -- UNIT_POWER_BAR_SHOW / UNIT_POWER_BAR_HIDE
+        if not sameUnit then return true end
+        if owners["Power"] then
+            local fn = frame._msufUpdatePower
+            if fn then
+                local power, maxPower = fn(frame, event, unit)
+                local textFn = frame._msufUpdatePowerText
+                if textFn then textFn(frame, event, unit, power, maxPower) end
+            end
         end
-        RunPowerHot(frame, owners, event, unit)
+        return true
+    elseif kind == 5 then
+        -- UNIT_AURA (highest-volume in 40-man)
+        if not sameUnit then return true end
+        if owners["GroupAuraCache"] then
+            local fn = frame._msufUpdateGroupAuraCache
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["Auras"] then
+            local fn = frame._msufUpdateAuras
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["DispelOverlay"] then
+            local fn = frame._msufUpdateDispelOverlay
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupVisuals"] then
+            local fn = frame._msufUpdateGroupVisuals
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupCornerIndicators"] then
+            local fn = frame._msufUpdateGroupCornerIndicators
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupSpellIndicators"] then
+            local fn = frame._msufUpdateGroupSpellIndicators
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["Borders"] then
+            local fn = frame._msufUpdateBorders
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 3 then
-        if unit and unit ~= frame.unit then
-            RunElementUpdate(frame, owners, "InlineToT", event, unit)
-            if OwnerAllowsUnitless(owners, "Prediction") then
-                RunElementUpdate(frame, owners, "Prediction", event, unit)
+        -- UNIT_CONNECTION
+        if not sameUnit then
+            local mode = owners["InlineToT"]
+            if mode == "unitless" or mode == "both" then
+                local fn = frame._msufUpdateInlineToT
+                if fn then fn(frame, event, unit) end
+            end
+            local pmode = owners["Prediction"]
+            if pmode == "unitless" or pmode == "both" then
+                local fn = frame._msufUpdatePrediction
+                if fn then fn(frame, event, unit) end
             end
             return true
         end
-        local hp, maxHP, calc = RunHealthHot(frame, owners, event, unit)
-        RunPowerHot(frame, owners, event, unit)
-        RunTextName(frame, owners, event, unit)
-        RunElementUpdate(frame, owners, "Portrait", event, unit)
-        RunElementUpdate(frame, owners, "Prediction", event, unit, hp, maxHP, calc)
-        RunElementUpdate(frame, owners, "StatusTextIndicator", event, unit)
-        RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit)
+        local hp, maxHP, calc
+        if owners["Health"] then
+            local fn = frame._msufUpdateHealth
+            if fn then
+                hp, maxHP, calc = fn(frame, event, unit)
+                local textFn = frame._msufUpdateHealthText
+                if textFn then textFn(frame, event, unit, hp, maxHP) end
+            end
+        end
+        if owners["Power"] then
+            local fn = frame._msufUpdatePower
+            if fn then
+                local power, maxPower = fn(frame, event, unit)
+                local textFn = frame._msufUpdatePowerText
+                if textFn then textFn(frame, event, unit, power, maxPower) end
+            end
+        end
+        if owners["NameText"] then
+            local fn = frame._msufUpdateNameText
+            if fn then fn(frame, event, unit) end
+        end
+        if owners["Portrait"] then
+            local fn = frame._msufUpdatePortrait
+            if fn then fn(frame, event, unit) end
+        end
+        if owners["Prediction"] then
+            local fn = frame._msufUpdatePrediction
+            if fn then fn(frame, event, unit, hp, maxHP, calc) end
+        end
+        if owners["StatusTextIndicator"] then
+            local fn = frame._msufUpdateStatusTextIndicator
+            if fn then fn(frame, event, unit) end
+        end
+        if owners["GroupStatusRuntime"] then
+            local fn = frame._msufUpdateGroupStatusRuntime
+            if fn then fn(frame, event, unit) end
+        end
         return true
     elseif kind == 4 then
-        RunTextName(frame, owners, event, unit)
-        RunElementUpdate(frame, owners, "InlineToT", event, unit)
-        return true
-    elseif kind == 5 then
-        if unit and unit ~= frame.unit then
-            return true
+        -- UNIT_NAME_UPDATE
+        if owners["NameText"] then
+            local fn = frame._msufUpdateNameText
+            if fn then fn(frame, event, unit) end
         end
-        RunGroupAuraHot(frame, owners, event, unit, ...)
-        RunElementUpdate(frame, owners, "Borders", event, unit, ...)
+        if owners["InlineToT"] then
+            local fn = frame._msufUpdateInlineToT
+            if fn then fn(frame, event, unit) end
+        end
         return true
     elseif kind == 6 then
-        if unit and unit ~= frame.unit then
-            return true
+        -- UNIT_THREAT_SITUATION_UPDATE / UNIT_THREAT_LIST_UPDATE
+        if not sameUnit then return true end
+        if owners["GroupVisuals"] then
+            local fn = frame._msufUpdateGroupVisuals
+            if fn then fn(frame, event, unit, a, b, c) end
         end
-        RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupCornerIndicators", event, unit, ...)
-        RunElementUpdate(frame, owners, "Borders", event, unit, ...)
+        if owners["GroupCornerIndicators"] then
+            local fn = frame._msufUpdateGroupCornerIndicators
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["Borders"] then
+            local fn = frame._msufUpdateBorders
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 8 then
-        if unit and unit ~= frame.unit then
-            return true
+        -- UNIT_PORTRAIT_UPDATE / UNIT_MODEL_CHANGED
+        if not sameUnit then return true end
+        if owners["Portrait"] then
+            local fn = frame._msufUpdatePortrait
+            if fn then fn(frame, event, unit, a, b, c) end
         end
-        RunElementUpdate(frame, owners, "Portrait", event, unit, ...)
         return true
     elseif kind == 9 then
-        if unit and unit ~= frame.unit and not OwnerAllowsUnitless(owners, "Prediction") then
+        -- UNIT_HEAL_PREDICTION / UNIT_ABSORB_AMOUNT_CHANGED / UNIT_HEAL_ABSORB_AMOUNT_CHANGED
+        if not sameUnit then
+            local pmode = owners["Prediction"]
+            if pmode == "unitless" or pmode == "both" then
+                local fn = frame._msufUpdatePrediction
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
             return true
         end
-        RunElementUpdate(frame, owners, "Prediction", event, unit, ...)
+        if owners["Prediction"] then
+            local fn = frame._msufUpdatePrediction
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 10 then
         if event == "UNIT_LEVEL" then
-            RunElementUpdate(frame, owners, "LevelIndicator", event, unit, ...)
-            RunElementUpdate(frame, owners, "EliteIndicator", event, unit, ...)
-            RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
+            if owners["LevelIndicator"] then
+                local fn = frame._msufUpdateLevelIndicator
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+            if owners["EliteIndicator"] then
+                local fn = frame._msufUpdateEliteIndicator
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
         elseif event == "UNIT_CLASSIFICATION_CHANGED" then
-            RunTextName(frame, owners, event, unit)
-            RunElementUpdate(frame, owners, "InlineToT", event, unit, ...)
-            RunElementUpdate(frame, owners, "EliteIndicator", event, unit, ...)
-            RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
+            if owners["NameText"] then
+                local fn = frame._msufUpdateNameText
+                if fn then fn(frame, event, unit) end
+            end
+            if owners["InlineToT"] then
+                local fn = frame._msufUpdateInlineToT
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+            if owners["EliteIndicator"] then
+                local fn = frame._msufUpdateEliteIndicator
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
         elseif event == "INCOMING_RESURRECT_CHANGED" then
-            RunElementUpdate(frame, owners, "IncomingResIndicator", event, unit, ...)
-            RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
+            if owners["IncomingResIndicator"] then
+                local fn = frame._msufUpdateIncomingResIndicator
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+        end
+        if owners["GroupStatusRuntime"] then
+            local fn = frame._msufUpdateGroupStatusRuntime
+            if fn then fn(frame, event, unit, a, b, c) end
         end
         return true
     elseif kind == 11 then
-        RunElementUpdate(frame, owners, "Alpha", event, unit, ...)
-        RunElementUpdate(frame, owners, "CombatIndicator", event, unit, ...)
-        RunElementUpdate(frame, owners, "LoadConditions", event, unit, ...)
+        -- PLAYER_REGEN_DISABLED / PLAYER_REGEN_ENABLED
+        if owners["Alpha"] then
+            local fn = frame._msufUpdateAlpha
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["CombatIndicator"] then
+            local fn = frame._msufUpdateCombatIndicator
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["LoadConditions"] then
+            local fn = frame._msufUpdateLoadConditions
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 12 then
-        RunElementUpdate(frame, owners, "RaidMarkerIndicator", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
+        -- RAID_TARGET_UPDATE
+        if owners["RaidMarkerIndicator"] then
+            local fn = frame._msufUpdateRaidMarkerIndicator
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupStatusRuntime"] then
+            local fn = frame._msufUpdateGroupStatusRuntime
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 13 then
-        RunElementUpdate(frame, owners, "LeaderIndicator", event, unit, ...)
-        RunElementUpdate(frame, owners, "RaidGroupIndicator", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
+        -- GROUP_ROSTER_UPDATE / PARTY_LEADER_CHANGED
+        if owners["LeaderIndicator"] then
+            local fn = frame._msufUpdateLeaderIndicator
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["RaidGroupIndicator"] then
+            local fn = frame._msufUpdateRaidGroupIndicator
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupStatusRuntime"] then
+            local fn = frame._msufUpdateGroupStatusRuntime
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 14 then
-        RunElementUpdate(frame, owners, "LevelIndicator", event, unit, ...)
+        -- PLAYER_LEVEL_UP / PLAYER_LEVEL_CHANGED
+        if owners["LevelIndicator"] then
+            local fn = frame._msufUpdateLevelIndicator
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 15 then
-        RunElementUpdate(frame, owners, "StatusTextIndicator", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
+        -- PLAYER_FLAGS_CHANGED
+        if owners["StatusTextIndicator"] then
+            local fn = frame._msufUpdateStatusTextIndicator
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupStatusRuntime"] then
+            local fn = frame._msufUpdateGroupStatusRuntime
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 16 then
-        RunElementUpdate(frame, owners, "RestingIndicator", event, unit, ...)
-        RunElementUpdate(frame, owners, "Alpha", event, unit, ...)
-        RunElementUpdate(frame, owners, "LoadConditions", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupStatusRuntime", event, unit, ...)
+        -- PLAYER_UPDATE_RESTING / PLAYER_ENTERING_WORLD
+        if owners["RestingIndicator"] then
+            local fn = frame._msufUpdateRestingIndicator
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["Alpha"] then
+            local fn = frame._msufUpdateAlpha
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["LoadConditions"] then
+            local fn = frame._msufUpdateLoadConditions
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupStatusRuntime"] then
+            local fn = frame._msufUpdateGroupStatusRuntime
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 17 then
-        RunElementUpdate(frame, owners, "InlineToT", event, unit, ...)
-        RunElementUpdate(frame, owners, "Alpha", event, unit, ...)
+        -- UNIT_TARGET
+        if owners["InlineToT"] then
+            local fn = frame._msufUpdateInlineToT
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["Alpha"] then
+            local fn = frame._msufUpdateAlpha
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     elseif kind == 18 then
-        RunElementUpdate(frame, owners, "Alpha", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupAuraCache", event, unit, ...)
-        RunElementUpdate(frame, owners, "DispelOverlay", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupVisuals", event, unit, ...)
-        RunElementUpdate(frame, owners, "GroupCornerIndicators", event, unit, ...)
-        RunElementUpdate(frame, owners, "Borders", event, unit, ...)
+        -- SPELL_UPDATE_COOLDOWN / SPELLS_CHANGED
+        if owners["Alpha"] then
+            local fn = frame._msufUpdateAlpha
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupAuraCache"] then
+            local fn = frame._msufUpdateGroupAuraCache
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["DispelOverlay"] then
+            local fn = frame._msufUpdateDispelOverlay
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupVisuals"] then
+            local fn = frame._msufUpdateGroupVisuals
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["GroupCornerIndicators"] then
+            local fn = frame._msufUpdateGroupCornerIndicators
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if owners["Borders"] then
+            local fn = frame._msufUpdateBorders
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
         return true
     end
     return false
 end
 
 function DispatchFrameEvent(frame, event, unit, ...)
-    local owners = frame and frame._msufEventOwners and frame._msufEventOwners[event]
-    if not owners then
-        return
-    end
-    if unit and unit ~= frame.unit
-        and not (frame._msufEventUnitless and frame._msufEventUnitless[event] == true) then
-        return
+    -- Called directly as the frame's OnEvent script. `frame` is guaranteed
+    -- non-nil; the outer `frame._msufEventOwners` table is created on first
+    -- element registration, so a frame that gets here without owners (e.g.,
+    -- because a stale event registration survived a detach) just returns.
+    local allOwners = frame._msufEventOwners
+    if not allOwners then return end
+    local owners = allOwners[event]
+    if not owners then return end
+
+    -- Cross-unit (ToT-style) gating: when the event's unit isn't this frame's
+    -- unit, dispatch only if the frame has at least one element in "unitless"
+    -- mode for this event. Per-frame RegisterUnitEvent already filters at the C
+    -- side for the common same-unit path, so this check is just a safety net
+    -- for central-driver delivery.
+    if unit and unit ~= frame.unit then
+        local unitless = frame._msufEventUnitless
+        if not (unitless and unitless[event]) then
+            return
+        end
     end
 
-    frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
+    frame._msufDispatchToken = frame._msufDispatchToken + 1
 
     if DispatchHotFrameEvent(frame, owners, event, unit, ...) then
         return
     end
 
-    local list = frame._msufEventElementLists and frame._msufEventElementLists[event]
-    if not list then
-        return
-    end
+    -- Fallback for events not in HOT_EVENT_KIND: walk the pre-built flat list.
+    local lists = frame._msufEventElementLists
+    local list = lists and lists[event]
+    if not list then return end
     for i = 1, #list, 2 do
         local element = list[i]
         local eventUnit, ok = OwnerModeAllowsUnit(list[i + 1], frame, unit)
@@ -1042,20 +1389,25 @@ function UF.UpdateRuntime(unit, reason)
     return true
 end
 
-local function FrameOnEvent(frame, event, unit, ...)
-    DispatchFrameEvent(frame, event, unit, ...)
-end
+-- DispatchFrameEvent is bound directly as the frame's OnEvent handler below.
+-- WoW's SetScript calls `fn(frame, event, ...)`; DispatchFrameEvent's matching
+-- `(frame, event, unit, ...)` signature means no wrapper closure is needed —
+-- saves one function call per event.
 
 function UF.AttachFrameMethods(frame, opts)
-    local ownsEvents = not (opts and opts.ownEvents == false)
     if not frame then
         return frame
     end
+    -- Always install the OnEvent script. Per-frame RegisterUnitEvent (the hot
+    -- dispatch path) delivers events through the frame's own OnEvent, so even
+    -- group frames (formerly opts.ownEvents == false) need it installed. The
+    -- opts.ownEvents flag is preserved for callers that still read it, but no
+    -- longer gates SetScript.
     if frame._msufCleanCoreMethods then
-        if ownsEvents and frame._msufCleanCoreOwnEvents ~= true then
-            frame:SetScript("OnEvent", FrameOnEvent)
-            frame._msufCleanCoreOwnEvents = true
+        if frame:GetScript("OnEvent") ~= DispatchFrameEvent then
+            frame:SetScript("OnEvent", DispatchFrameEvent)
         end
+        frame._msufCleanCoreOwnEvents = true
         return frame
     end
     frame._msufCleanCoreMethods = true
@@ -1067,10 +1419,8 @@ function UF.AttachFrameMethods(frame, opts)
     frame.ForceUpdate = FrameForceUpdate
     frame.RegisterElementEvent = RegisterElementEvent
     frame.UnregisterElementEvents = UnregisterElementEvents
-    if ownsEvents then
-        frame:SetScript("OnEvent", FrameOnEvent)
-        frame._msufCleanCoreOwnEvents = true
-    end
+    frame:SetScript("OnEvent", DispatchFrameEvent)
+    frame._msufCleanCoreOwnEvents = true
     return frame
 end
 
@@ -1090,6 +1440,11 @@ function UF.AttachFrame(frame, opts)
     end
     if opts and opts.unit ~= nil then
         UF.OnUnitChanged(frame, frame.unit, opts.unit)
+    end
+    -- Initialize the dispatch token at attach time so DispatchFrameEvent can use
+    -- a plain `+ 1` on the hot path (no `or 0` fallback evaluated per event).
+    if frame._msufDispatchToken == nil then
+        frame._msufDispatchToken = 0
     end
     if UF.attachedFrames[frame] ~= true then
         UF.attachedFrames[frame] = true

@@ -315,7 +315,16 @@ local function RefreshUnitState(frame, unit, spec, event)
     if not state then
         state = {}
         frame._msufUnitState = state
-    elseif state.unit == unit and state.ready == true and event == "UNIT_HEALTH" then
+    elseif state.unit == unit and state.ready == true
+        and (event == "UNIT_HEALTH"
+            or event == "UNIT_POWER_FREQUENT"
+            or event == "UNIT_POWER_UPDATE") then
+        -- High-frequency value ticks cannot change unit identity, existence,
+        -- death, connection or NPC-kind -- those arrive on their own events and
+        -- refresh the cache then. 5.54's _HealthValueFast/_PowerFrequent skipped
+        -- this recompute entirely; reusing the cached state matches that and
+        -- drops ~7 C calls (UnitCanHaveSecretValues + 5x ReadUnitBool +
+        -- UnitNPCKind) per power tick on the player frame.
         return state
     end
 

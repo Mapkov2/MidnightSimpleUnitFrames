@@ -148,7 +148,13 @@ function Health.Update(frame, event, unit)
     local hp, maxHP = ReadDirectHealthValues(unit)
     local animate = event == "UNIT_HEALTH"
 
-    SetBarMinMax(bar, maxHP, true)
+    -- Max health only changes on UNIT_MAXHEALTH (and forced applies); skip the
+    -- SetMinMaxValues C call on the high-frequency UNIT_HEALTH tick. Gated on the
+    -- plain event string, so the (possibly secret) max is never compared.
+    if not animate or bar._msufMinMaxInit ~= true then
+        SetBarMinMax(bar, maxHP, true)
+        bar._msufMinMaxInit = true
+    end
     SetBarValue(bar, hp, true, animate)
     if not animate then
         SnapBarInterpolation(bar)

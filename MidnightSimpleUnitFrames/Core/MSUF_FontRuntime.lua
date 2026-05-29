@@ -60,6 +60,41 @@ local _fontState = {}
 local _MSUF_FontPathSerialByKey = {}
 local _MSUF_FontPathSerialNext = 0
 
+-- Cold-start text fix, folded into the font subsystem (no standalone file).
+-- On the first login after a client start the configured font may not be
+-- loadable when the per-frame init layout runs, so width-dependent text anchors
+-- (name maxChars clamp, inline ToT, centre/right text) get committed against the
+-- wrong glyph metrics and stay off until a /reload. UpdateAllFonts is the single
+-- point every font (re)apply already flows through (init, the LSM
+-- LibSharedMedia_Registered callback, font option changes), so it re-runs the
+-- text layout there -- but only once the configured font is genuinely applied
+-- and measurable, retrying via the existing scheduler until then.
+local _fontApplyFailed = false
+local _fontRelayoutRetries = 0
+local MSUF_FONT_RELAYOUT_MAX_RETRIES = 200   -- ~20s @ 0.1s; a missing font can't loop forever
+local _measureFS
+
+local function _ConfiguredFontReady()
+    local getPath = _G.MSUF_GetFontPath
+    local path = (type(getPath) == "function" and getPath()) or _fontState.path or "Fonts\\FRIZQT__.TTF"
+    if type(path) ~= "string" or path == "" then return false end
+    if not _measureFS then
+        if not _G.UIParent then return true end
+        _measureFS = _G.UIParent:CreateFontString(nil, "BACKGROUND")
+        _measureFS:Hide()
+    end
+    if not pcall(_measureFS.SetFont, _measureFS, path, 14, "") then return false end
+    -- If td won't match -> not ready yet.
+    local applied = _measureFS:GetFont()
+    if not applied or tostring(applied):gsub("/", "\\"):lower() ~= tostring(path):gsub("/", "\\"):lower() then
+        return false
+    end
+    _he requested font didn't actually apply (cold start), GetFont returns
+    -- the fallback anmeasureFS:SetText("ABCabcgjpqy0123")
+    local w = _measureFS:GetStringWidth()
+    return type(w) == "number" and w > 0
+end
+
 local function _MSUF_GetFontPathSerial(path)
     local key = tostring(path or "")
     local serial = _MSUF_FontPathSerialByKey[key]
@@ -110,6 +145,7 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
             fs._msufShadowOn = nil
         else
             fs._msufFontRev = nil
+            _fontApplyFailed = true
         end
     end
 
@@ -247,6 +283,7 @@ local function UpdateAllFonts(onlyKey)
     _fontState.onlyKey = onlyKey
     _fontState.UpdateNameColor = nil
 
+    _fontApplyFailed = false
     ForEachUnitFrame(_MSUF_ApplyFontsToFrame)
 
     if _G.MSUF_UpdateCastbarVisuals_Immediate then
@@ -258,11 +295,32 @@ local function UpdateAllFonts(onlyKey)
     if type(_G.MSCB_ApplyFontsFromMSUF) == "function" then _G.MSCB_ApplyFontsFromMSUF() end
     if _G.MSUF_Auras3_ApplyFontsFromGlobal then _G.MSUF_Auras3_ApplyFontsFromGlobal() end
     if _G.MSUF_ClassPower_ApplyFonts then _G.MSUF_ClassPower_ApplyFonts() end
-    if MSUF and MSUF.UF then
-        if MSUF.UF.UpdateRuntime then
-            MSUF.UF.UpdateRuntime("targettarget", "FONT_RUNTIME")
-        elseif MSUF.UF.ForceUpdate then
-            MSUF.UF.ForceUpdate("targettarget")
+    -- Re-resolve every spec's font and re-run the text layout so width-dependent
+    -- anchors recompute for the fonts now applied -- but only once the configured
+    -- font is loaded + measurable. On a cold start it isn't yet, so reschedule via
+    -- the existing scheduler and try again; this is what fixes the first-login
+    -- misposition, driven by the font actually being ready rather than a guess.
+    local ready = (not _fontApplyFailed) and _ConfiguredFontReady()
+    if ready then
+        _fontRelayoutRetries = 0
+        local force = _G.MSUF_ForceTextLayoutForUnitKey
+        if type(force) == "function" then
+            ForEachUnitFrame(function(f)
+                if f then force(f.unit or f.msufConfigKey) end
+            end)
+        elseif MSUF and MSUF.UF then
+            if MSUF.UF.UpdateRuntime then
+                MSUF.UF.UpdateRuntime("targettarget", "FONT_RUNTIME")
+            elseif MSUF.UF.ForceUpdate then
+                MSUF.UF.ForceUpdate("targettarget")
+            end
+        end
+    elseif _fontRelayoutRetries < MSUF_FONT_RELAYOUT_MAX_RETRIES then
+        _fontRelayoutRetries = _fontRelayoutRetries + 1
+        if _G.C_Timer and _G.C_Timer.After then
+            _G.C_Timer.After(0.1, function() UpdateAllFonts() end)
+        elseif _G.MSUF_ScheduleOnce then
+            _G.MSUF_ScheduleOnce("UF_FONT_COLD_RELAYOUT", function() UpdateAllFonts() end)
         end
     end
 
@@ -322,3 +380,16 @@ if not _G.MSUF_UpdateAllFonts_Immediate then
 end
 
 MSUF.Fonts.UpdateAllFonts = UpdateAllFonts
+
+-- The per-frame init layout uses a font snapshot that can pre-date the font being
+-- loadable, so kick one font apply + readiness-gated text relayout at login
+-- through the same UpdateAllFonts path. Self-unregisters; the retry inside
+-- UpdateAllFonts handles cold starts.
+do
+    local kick = CreateFrame("Frame")
+    kick:RegisterEvent("PLAYER_ENTERING_WORLD")
+    kick:SetScript("OnEvent", function(self)
+        self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        UpdateAllFonts()
+    end)
+end

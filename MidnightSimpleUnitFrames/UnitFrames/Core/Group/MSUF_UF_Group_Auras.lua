@@ -10,6 +10,18 @@ MSUF.GF = GF
 if not (UF and UF.RegisterElement) then return end
 
 local AuraCache = GF.AuraCache or {}
+local Apply = MSUF.Apply
+if not Apply then
+    -- Defensive: if the shared paint backbone failed to load first, fall back to
+    -- direct (non-memoized) setters so the group system still works correctly.
+    Apply = {
+        Texture = function(r, t) if r then r:SetTexture(t) end end,
+        Size = function(r, w, h) if r then r:SetSize(w, h or w) end end,
+        Point = function(r, p, rel, rp, x, y) if r then r:ClearAllPoints(); r:SetPoint(p, rel, rp, x, y) end end,
+        Shown = function(r, s) if r then r:SetShown(s and true or false) end end,
+        Invalidate = function() end,
+    }
+end
 local SetShown = AuraCache.SetShown or function(region, show) if region then region:SetShown(show) end end
 local CreateFrame = CreateFrame
 local C_UnitAuras = C_UnitAuras
@@ -65,6 +77,21 @@ local function FillIcons(src, remaining, out)
     return remaining
 end
 
+-- Incremental aura-lane render.
+--
+-- 6.0 goal: "only redraw what actually changed." The aura *data* is already
+-- incremental (AuraCache.UpdateSnapshot consumes the UNIT_AURA delta), but the
+-- previous version re-issued SetTexture+SetSize+ClearAllPoints+SetPoint+SetShown
+-- on every icon on every UNIT_AURA, for every frame -- the single most expensive
+-- repeated cost in a 40-man. We now drive every icon property through the shared
+-- MSUF.Apply backbone, which memoizes each setter per region: in steady state
+-- (4 stable auras) this issues ZERO C calls. Same discipline oUF gets from
+-- `reanchorIfVisibleChanged`, here at full per-icon granularity, shared with the
+-- unit-frame paint path so there is no second hot implementation.
+local AURA_LEFT_ANCHOR = {
+    TOPLEFT = true, LEFT = true, BOTTOMLEFT = true,
+}
+
 local function UpdateAuraLanes(frame, event, updateInfo)
     local cfg = frame.MSUFSpec and frame.MSUFSpec.group and frame.MSUFSpec.group.auras
     if not cfg then return end
@@ -74,6 +101,7 @@ local function UpdateAuraLanes(frame, event, updateInfo)
     else
         snapshot = AuraCache.GetSnapshot and AuraCache.GetSnapshot(frame)
     end
+
     local maxIcons = cfg.maxIcons or 4
     local icons = frame._msufGFAuraIconScratch
     if not icons then
@@ -90,32 +118,61 @@ local function UpdateAuraLanes(frame, event, updateInfo)
         FillIcons(snapshot and snapshot.buffIcons, remaining, icons)
     end
 
-    local size, spacing = cfg.iconSize or 20, cfg.spacing or 2
-    local anchor, x, y = cfg.anchor or "TOPRIGHT", cfg.x or 0, cfg.y or 0
-    for i = 1, maxIcons do
+    local newN = #icons
+    if newN > maxIcons then newN = maxIcons end
+
+    local size = cfg.iconSize or 20
+    local spacing = cfg.spacing or 2
+    local anchor = cfg.anchor or "TOPRIGHT"
+    local x = cfg.x or 0
+    local y = cfg.y or 0
+    local step = size + spacing
+    local leftGrowth = AURA_LEFT_ANCHOR[anchor] == true
+
+    -- Paint the visible icons. Every setter is memoized in MSUF.Apply, so a C
+    -- call fires only when that icon's texture / size / point actually moved.
+    for i = 1, newN do
         local icon = EnsureAuraIcon(frame, i)
-        local texture = icons[i]
-        if texture then
-            icon:SetTexture(texture)
-            icon:SetSize(size, size)
-            icon:ClearAllPoints()
-            if anchor == "TOPLEFT" or anchor == "LEFT" or anchor == "BOTTOMLEFT" then
-                icon:SetPoint(anchor, frame, anchor, x + ((i - 1) * (size + spacing)), y)
-            else
-                icon:SetPoint(anchor, frame, anchor, x - ((i - 1) * (size + spacing)), y)
-            end
-            SetShown(icon, true)
+        Apply.Texture(icon, icons[i])
+        Apply.Size(icon, size, size)
+        local off = (i - 1) * step
+        if leftGrowth then
+            Apply.Point(icon, anchor, frame, anchor, x + off, y)
         else
-            SetShown(icon, false)
+            Apply.Point(icon, anchor, frame, anchor, x - off, y)
+        end
+        Apply.Shown(icon, true)
+    end
+
+    -- Hide only the icons that *were* visible last pass and no longer are.
+    -- No full 1..maxIcons sweep, no touching icons that were already hidden.
+    local prevN = frame._gfAuraN or 0
+    if prevN > newN then
+        local icoList = frame.MSUFGroupAuraIcons
+        if icoList then
+            for i = newN + 1, prevN do
+                Apply.Shown(icoList[i], false)
+            end
         end
     end
+    frame._gfAuraN = newN
 end
 
 function GroupAuraLanes.Apply(frame) UpdateAuraLanes(frame) end
 function GroupAuraLanes.Update(frame, event, unit, updateInfo) UpdateAuraLanes(frame, event, updateInfo) end
 function GroupAuraLanes.Disable(frame)
     if frame and frame.MSUFGroupAuraIcons then
-        for i = 1, #frame.MSUFGroupAuraIcons do SetShown(frame.MSUFGroupAuraIcons[i], false) end
+        local icons = frame.MSUFGroupAuraIcons
+        for i = 1, #icons do
+            local icon = icons[i]
+            if icon then
+                Apply.Shown(icon, false)
+                Apply.Invalidate(icon)
+            end
+        end
+    end
+    if frame then
+        frame._gfAuraN = 0
     end
 end
 

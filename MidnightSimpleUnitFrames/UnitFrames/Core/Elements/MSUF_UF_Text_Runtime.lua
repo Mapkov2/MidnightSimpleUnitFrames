@@ -23,6 +23,7 @@ local InlineTextColor = Text.InlineTextColor
 local SetPowerTextColor = Text.SetPowerTextColor
 local HealthPercent = Text.HealthPercent
 local PowerPercent = Text.PowerPercent
+local issecretvalue = _G.issecretvalue
 local UpdateTextSlots = Text.UpdateTextSlots
 local QueueHealthTextFlush = Text.QueueHealthTextFlush
 local QueuePowerTextFlush = Text.QueuePowerTextFlush
@@ -146,6 +147,26 @@ function Text.UpdateHealth(frame, event, unit, hp, hpMax)
     if hpMax == nil then
         hpMax = UnitHealthMax(unit)
     end
+
+    -- Raw-value short-circuit (5.54 _HealthValueFast pattern). On the frequent
+    -- UNIT_HEALTH tick, if the raw HP and max are unchanged the formatted text
+    -- cannot differ, so skip the whole slot-format pass. issecretvalue is checked
+    -- FIRST so a secret value never reaches the == compare; if any side is secret
+    -- we fall through and render (the downstream FontString diff stays ~free).
+    if event == "UNIT_HEALTH" then
+        local lastHp, lastMax = rt._lastHpRaw, rt._lastHpMaxRaw
+        local isv = issecretvalue
+        if not (isv and (isv(hp) or isv(hpMax)
+            or (lastHp ~= nil and isv(lastHp)) or (lastMax ~= nil and isv(lastMax)))) then
+            if hp == lastHp and hpMax == lastMax then
+                return
+            end
+        end
+        rt._lastHpRaw, rt._lastHpMaxRaw = hp, hpMax
+    else
+        rt._lastHpRaw, rt._lastHpMaxRaw = hp, hpMax
+    end
+
     local calc = frame and frame._msufHealthCalc
     rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
 
@@ -190,6 +211,21 @@ function Text.UpdatePower(frame, event, unit, power, powerMax)
         end
     end
     rt.healthMissing = nil
+
+    -- Raw-value short-circuit for the frequent power ticks (5.54 _PowerFrequent
+    -- pattern); same secret-safe ordering as the health path.
+    if event == "UNIT_POWER_FREQUENT" or event == "UNIT_POWER_UPDATE" then
+        local lastP, lastMax = rt._lastPowerRaw, rt._lastPowerMaxRaw
+        local isv = issecretvalue
+        if not (isv and (isv(power) or isv(powerMax)
+            or (lastP ~= nil and isv(lastP)) or (lastMax ~= nil and isv(lastMax)))) then
+            if power == lastP and powerMax == lastMax then
+                return
+            end
+        end
+    end
+    rt._lastPowerRaw, rt._lastPowerMaxRaw = power, powerMax
+
     local throttle = rt.powerThrottle or 0
     if throttle > 0
         and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
