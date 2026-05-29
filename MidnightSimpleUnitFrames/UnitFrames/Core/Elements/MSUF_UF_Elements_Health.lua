@@ -56,7 +56,6 @@ local GetLayerBaseLevel = C.GetLayerBaseLevel
 local SetStatusTexture = C.SetStatusTexture
 local ApplyStatusColor = C.ApplyStatusColor
 local SetBarMinMax = C.SetBarMinMax
-local SetBarValue = C.SetBarValue
 local SnapBarInterpolation = C.SnapBarInterpolation
 local SetBarSmoothing = C.SetBarSmoothing
 local ApplyTextureColor = C.ApplyTextureColor
@@ -76,12 +75,6 @@ local Health = {
     events = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION" },
 }
 local GROUP_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
-
-local function ReadDirectHealthValues(unit)
-    local hp = UnitHealth(unit)
-    local maxHP = UnitHealthMax(unit)
-    return hp or 0, maxHP or 1
-end
 
 function Health.Create(frame, spec)
     if frame.hpBar then
@@ -145,7 +138,8 @@ function Health.Update(frame, event, unit)
         RefreshUnitState(frame, unit, spec, event)
     end
 
-    local hp, maxHP = ReadDirectHealthValues(unit)
+    local hp = UnitHealth(unit) or 0
+    local maxHP = UnitHealthMax(unit) or 1
     local animate = event == "UNIT_HEALTH"
 
     -- Max health only changes on UNIT_MAXHEALTH (and forced applies); skip the
@@ -155,7 +149,14 @@ function Health.Update(frame, event, unit)
         SetBarMinMax(bar, maxHP, true)
         bar._msufMinMaxInit = true
     end
-    SetBarValue(bar, hp, true, animate)
+    local interp = animate and bar._msufSmoothInterp or nil
+    if interp then
+        bar:SetValue(hp, interp)
+        bar._msufInterpolating = true
+    else
+        bar:SetValue(hp)
+    end
+    bar._msufValue = nil
     if not animate then
         SnapBarInterpolation(bar)
     end

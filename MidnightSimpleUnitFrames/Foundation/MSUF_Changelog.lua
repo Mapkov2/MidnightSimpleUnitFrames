@@ -4,10 +4,41 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "6.0 Alpha 2",
-    previousVersion = "6.0 Alpha 1",
-    rangeLabel = "6.0 Alpha 1 -> 6.0 Alpha 2",
+    currentVersion = "6.0 Alpha 4",
+    previousVersion = "6.0 Alpha 3",
+    rangeLabel = "6.0 Alpha 3 -> 6.0 Alpha 4",
     entries = {
+        {
+            version = "6.0 Alpha 4",
+            date = "2026-05-29",
+            sections = {
+                {
+                    title = "Runtime Kernel",
+                    bullets = {
+                        "Added compiled per-frame hot-event states for health, power, connection, aura, and prediction/absorb dispatch.",
+                        "Stored direct update function references for hot and generic event lists, reducing repeated element table and update-key lookups during frame events.",
+                        "Added a generic hot-event tail so future elements registered to hot events still run without requiring switch edits.",
+                        "Reused unit identity/state reads within a single dispatch token to avoid duplicate UnitExists/UnitIsConnected/UnitIsPlayer style calls when multiple elements handle the same event.",
+                        "Fixed combined unit/unitless event owner tracking so both registrations stay unitless-capable through unregister/rebuild paths.",
+                    },
+                },
+            },
+        },
+        {
+            version = "6.0 Alpha 3",
+            date = "2026-05-29",
+            sections = {
+                {
+                    title = "Aura Backend Pause",
+                    bullets = {
+                        "Removed the live 6.0 Auras3 runtime while Blizzard's Midnight aura refactor is still in flux.",
+                        "Removed custom unit-frame aura rendering, group aura cache snapshots, group custom aura lanes, Blizzard/private aura anchoring, and aura cooldown text runtime management.",
+                        "Kept Auras3 profile data, menu surfaces, edit-mode handles, and unit/group preview configuration so user settings can survive until a new supported backend is ready.",
+                        "Group aura-dependent spell indicators, custom corner aura indicators, dispel overlays, and dispel aura borders no longer register live aura runtime work while the backend is disabled.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0 Alpha 2",
             date = "2026-05-27",

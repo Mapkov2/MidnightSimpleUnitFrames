@@ -63,12 +63,12 @@ local function Clamp01(value, fallback)
     return value
 end
 
-local function BoolIsTrue(value)
+local function PlainTrue(value)
     if IsSecret(value) then return false end
     return value == true or value == 1
 end
 
-local function BoolIsFalse(value)
+local function PlainFalse(value)
     if IsSecret(value) then return false end
     return value == false or value == 0
 end
@@ -77,12 +77,12 @@ local function UnitIsFriendly(unit)
     if not unit then return false end
     if UnitIsUnit then
         local isPlayer = UnitIsUnit(unit, "player")
-        if BoolIsTrue(isPlayer) or IsSecret(isPlayer) then return true end
+        if PlainTrue(isPlayer) or IsSecret(isPlayer) then return true end
     end
     if UnitIsFriend then
         local isFriend = UnitIsFriend("player", unit)
         if IsSecret(isFriend) then return true end
-        return BoolIsTrue(isFriend)
+        return PlainTrue(isFriend)
     end
     return true
 end
@@ -90,7 +90,7 @@ end
 local function ExistingUnit(unit)
     if not unit then return false end
     if UnitExists then
-        return not BoolIsFalse(UnitExists(unit))
+        return not PlainFalse(UnitExists(unit))
     end
     return true
 end
@@ -200,7 +200,7 @@ local function ResetSnapshot(snapshot, unit)
 end
 
 function DispelState.AuraCanActivePlayerDispel(data)
-    return data and BoolIsTrue(data.canActivePlayerDispel) or false
+    return data and PlainTrue(data.canActivePlayerDispel) or false
 end
 
 function DispelState.IndexAura(snapshot, data)
@@ -225,7 +225,7 @@ function DispelState.IndexAura(snapshot, data)
         snapshot.dispelName = snapshot.dispelName or dispelName
         snapshot.dispelAuraInstanceID = snapshot.dispelAuraInstanceID or aid
     end
-    if BoolIsTrue(data.isFromPlayerOrPlayerPet) then
+    if PlainTrue(data.isFromPlayerOrPlayerPet) then
         snapshot.playerCastDebuff = true
         snapshot.byMe = true
         snapshot.playerAuraInstanceID = snapshot.playerAuraInstanceID or aid

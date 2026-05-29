@@ -163,7 +163,7 @@ function _G.MSUF_SetPlayerCastbarTestMode(active, keepSetting)
 
         -- Reset optional visual effects when leaving dummy-cast mode.
         if type(_G.MSUF_ResetCastbarGlowFade) == "function" then
-            pcall(_G.MSUF_ResetCastbarGlowFade, frame)
+            _G.MSUF_ResetCastbarGlowFade(frame)
         end
         if frame.latencyBar and frame.latencyBar.Hide then
             frame.latencyBar:Hide()
@@ -985,9 +985,9 @@ end
             f.statusBar:SetPoint("RIGHT", f, "RIGHT", -1, 0)
 
             if type(MSUF_GetCastbarTexture) == "function" and f.statusBar.SetStatusBarTexture then
-                local ok, tex = MSUF_FastCall(MSUF_GetCastbarTexture)
-                if ok and tex then
-                    MSUF_FastCall(f.statusBar.SetStatusBarTexture, f.statusBar, tex)
+                local tex = MSUF_GetCastbarTexture()
+                if tex then
+                    f.statusBar:SetStatusBarTexture(tex)
                 end
             end
         end
@@ -1438,7 +1438,7 @@ function MSUF_PositionPlayerCastbarPreview()
 
 
     if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        pcall(_G.MSUF_ApplyCastbarTimeTextLayout, MSUF_PlayerCastbarPreview, "player")
+        _G.MSUF_ApplyCastbarTimeTextLayout(MSUF_PlayerCastbarPreview, "player")
     end
 
     MSUF_PlayerCastbarPreview:ClearAllPoints()
@@ -1488,7 +1488,7 @@ function MSUF_PositionTargetCastbarPreview()
     end
 
     if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        pcall(_G.MSUF_ApplyCastbarTimeTextLayout, MSUF_TargetCastbarPreview, "target")
+        _G.MSUF_ApplyCastbarTimeTextLayout(MSUF_TargetCastbarPreview, "target")
     end
 
 
@@ -1544,7 +1544,7 @@ function MSUF_PositionFocusCastbarPreview()
     end
     
     if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        pcall(_G.MSUF_ApplyCastbarTimeTextLayout, MSUF_FocusCastbarPreview, "focus")
+        _G.MSUF_ApplyCastbarTimeTextLayout(MSUF_FocusCastbarPreview, "focus")
     end
 
 

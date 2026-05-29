@@ -6,6 +6,9 @@ if not (UF and R) then return end
 local StatusTextIndicator = {}
 
 function StatusTextIndicator.IsEnabled(frame, spec)
+    if spec and spec.status and spec.status.group == true then
+        return false
+    end
     return R.StatusEnabled(spec, "statusText")
 end
 
@@ -17,8 +20,8 @@ function StatusTextIndicator.GetUnitlessEvents()
     return R.STATUS_TEXT_UNITLESS_EVENTS
 end
 
-function StatusTextIndicator.Update(frame)
-    R.UpdateStatusText(frame, frame.MSUFSpec and frame.MSUFSpec.status)
+function StatusTextIndicator.Update(frame, event)
+    R.UpdateStatusText(frame, frame.MSUFSpec and frame.MSUFSpec.status, event)
 end
 
 function StatusTextIndicator.Disable(frame)

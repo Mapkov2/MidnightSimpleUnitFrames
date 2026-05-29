@@ -1,5 +1,9 @@
 --- Auras3/MSUF_Auras3_Core.lua
---- Auras3 runtime namespace and profile DB adapter.
+--- Frontend-only Auras3 namespace and profile DB adapter.
+---
+--- 6.0 keeps aura configuration, menu, edit-mode handles, and previews, but
+--- intentionally does not install a live aura backend while Blizzard's
+--- Midnight aura API refactor is still moving.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -11,22 +15,35 @@ if type(A3) ~= "table" then
     A3 = {}
     MSUF.MSUF_Auras3 = A3
 end
+_G.MSUF_Auras3 = A3
 
 A3.version = 3
-A3.Store = MSUF.AuraStore or _G.MSUF_AuraStore
-A3.unitFrameAuras = true
+A3.frontendOnly = true
+A3.backendEnabled = false
+A3.unitFrameAuras = false
 A3.masqueEnabled = false
 A3._runtimeConfigGen = A3._runtimeConfigGen or 1
-A3._unitAuraPending = A3._unitAuraPending or {}
 A3._unitFrameOwners = A3._unitFrameOwners or {}
-A3._unitAuraEnabledGen = A3._unitAuraEnabledGen or {}
-A3._unitAuraEnabledValue = A3._unitAuraEnabledValue or {}
 
+MSUF.AuraBackendEnabled = false
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 _G.MSUF_AuraCore = MSUF.AuraCore
 MSUF.AuraCore.Auras3 = A3
 
-local BOSS_UNITS = { boss1=true, boss2=true, boss3=true, boss4=true, boss5=true }
+local CT = A3.CooldownText
+if type(CT) ~= "table" then
+    CT = {}
+    A3.CooldownText = CT
+end
+MSUF.AuraCore.CooldownText = CT
+
+local function NoopTrue()
+    return true
+end
+
+local function NoopFalse()
+    return false
+end
 
 local function EnsureRootDB()
     local db = _G.MSUF_DB
@@ -56,13 +73,12 @@ function A3.EnsureDB()
     return current, current.shared
 end
 
-function A3.DisablesMasque()
-    return A3.unitFrameAuras == true and A3.masqueEnabled ~= true
+function A3.BackendEnabled()
+    return false
 end
 
-local function ReadConfig()
-    local db = _G.MSUF_DB
-    return db and db.auras3
+function A3.DisablesMasque()
+    return false
 end
 
 function A3.BumpRuntimeConfig()
@@ -70,29 +86,8 @@ function A3.BumpRuntimeConfig()
     return A3._runtimeConfigGen
 end
 
-local function ComputeUnitFrameAuraEnabled(unit)
-    if not unit then return false end
-    local auras = ReadConfig()
-    if type(auras) ~= "table" or auras.enabled ~= true then return false end
-    if unit == "player" then return auras.showPlayer == true end
-    if unit == "target" then return auras.showTarget == true end
-    if unit == "focus" then return auras.showFocus == true end
-    if BOSS_UNITS[unit] then return auras.showBoss == true end
+function A3.UnitFrameAuraEnabled()
     return false
-end
-
-function A3.UnitFrameAuraEnabled(unit)
-    if not unit then return false end
-    local gen = A3._runtimeConfigGen or 0
-    local gens = A3._unitAuraEnabledGen
-    if gens[unit] == gen then
-        return A3._unitAuraEnabledValue[unit] == true
-    end
-
-    local enabled = ComputeUnitFrameAuraEnabled(unit) == true
-    gens[unit] = gen
-    A3._unitAuraEnabledValue[unit] = enabled
-    return enabled
 end
 
 function A3.SetUnitFrameOwner(unit, frame, owns)
@@ -105,51 +100,83 @@ function A3.SetUnitFrameOwner(unit, frame, owns)
     end
 end
 
-function A3.UnitFrameOwnsUnitAura(unit)
-    if A3.unitFrameAuras ~= true or A3.UnitFrameAuraEnabled(unit) ~= true then return false end
-    local f = A3._unitFrameOwners and A3._unitFrameOwners[unit]
-    if not f then
-        local UF = MSUF and MSUF.UF
-        local frames = UF and UF.frames
-        f = frames and frames[unit]
-    end
-    return (f and f._msufA3UnitAuraOwner == true and f.RegisterUnitEvent) and true or false
+function A3.UnitFrameOwnsUnitAura()
+    return false
 end
 
-local function UnitAuraUpdateHasWork(updateInfo)
-    -- Do not inspect UNIT_AURA updateInfo here. In Midnight/12.x the delta
-    -- table can carry secret aura values; touching it during the event can
-    -- taint other consumers that run later in the same dispatch.
-    return updateInfo ~= false
+function A3.RuntimeOwnsUnit()
+    return false
 end
 
-function A3.HandleUnitAura(unit, updateInfo, frame)
-    if not (frame and frame._msufA3UnitAuraOwner == true) and not A3.UnitFrameAuraEnabled(unit) then return end
-    if type(updateInfo) == "table" and not UnitAuraUpdateHasWork(updateInfo) then return end
-
-    if A3.useUnitFrameRuntime == true and A3.OnUnitAura then
-        return A3.OnUnitAura(unit, updateInfo, frame)
-    end
-
-    local store = A3.Store or MSUF.AuraStore or _G.MSUF_AuraStore
-    if store and store.OnUnitAura then
-        store.OnUnitAura(unit, updateInfo)
-    end
-
-    local now = _G.GetTime and _G.GetTime() or 0
-    local pending = A3._unitAuraPending
-    local delay = (unit == "player") and 0.03 or 0.04
-    local nextAt = pending[unit]
-    local requestDelay = delay
-    if nextAt and now < nextAt then
-        requestDelay = 0
-    else
-        pending[unit] = now + delay
-    end
-
-    if A3.RequestUnit then
-        A3.RequestUnit(unit, requestDelay)
-    end
+function A3.HandleUnitAura()
+    return false
 end
 
-_G.MSUF_Auras3 = A3
+function A3.EnableFrame(frame)
+    if frame then frame._msufA3UnitAuraOwner = nil end
+    return false
+end
+
+function A3.DisableFrame(frame)
+    if frame then frame._msufA3UnitAuraOwner = nil end
+    return true
+end
+
+function A3.RenderFrame()
+    return false
+end
+
+function A3.ForceUpdateFrame()
+    return false
+end
+
+function A3.RequestUnit()
+    return false
+end
+
+function A3.RefreshAll()
+    A3.BumpRuntimeConfig()
+    return true
+end
+
+A3.RefreshRuntime = A3.RefreshAll
+
+function A3.RefreshUnit()
+    A3.BumpRuntimeConfig()
+    return true
+end
+
+function A3.UpdateUnitAnchor()
+    return true
+end
+
+function A3.RefreshEditPreview()
+    return true
+end
+
+function A3.ResolveUnitFrameConfig()
+    return nil
+end
+
+function A3.BuildAuraLaneMetrics()
+    return nil
+end
+
+CT.ApplyButtonStyle = CT.ApplyButtonStyle or NoopFalse
+CT.RegisterButton = CT.RegisterButton or NoopFalse
+CT.TouchButton = CT.TouchButton or NoopTrue
+CT.UnregisterButton = CT.UnregisterButton or NoopTrue
+CT.Invalidate = CT.Invalidate or NoopTrue
+CT.ForceRecolor = CT.ForceRecolor or NoopTrue
+
+_G.MSUF_A3_RequestUnit = A3.RequestUnit
+_G.MSUF_A3_RefreshAll = A3.RefreshAll
+_G.MSUF_A3_InvalidateCooldownTextCurve = function() return CT.Invalidate("unit") end
+_G.MSUF_A3_ForceCooldownTextRecolor = function() return CT.ForceRecolor("unit") end
+_G.MSUF_Auras3_ApplyFontsFromGlobal = _G.MSUF_Auras3_ApplyFontsFromGlobal or NoopTrue
+_G.MSUF_Auras3_RefreshUnit = A3.RefreshUnit
+_G.MSUF_Auras3_RefreshAll = A3.RefreshAll
+_G.MSUF_Auras3_UpdateUnitAnchor = A3.UpdateUnitAnchor
+_G.MSUF_Auras3_RefreshEditPreview = A3.RefreshEditPreview
+_G.MSUF_A3_RefreshUnit = A3.RefreshUnit
+_G.MSUF_A3_UpdateUnitAnchor = A3.UpdateUnitAnchor

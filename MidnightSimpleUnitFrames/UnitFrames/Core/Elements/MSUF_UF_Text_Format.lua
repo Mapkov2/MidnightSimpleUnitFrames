@@ -85,43 +85,69 @@ local function AddSuffix(text, suffix)
 end
 
 local function SetReadableModeText(fs, mode, cur, max, pct, delimiter, short, hidePercentSymbol, suffix, canSecret)
-    local c = FormatValue(cur, short, canSecret)
-    local m = FormatValue(max, short, canSecret)
-    local p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
-    if not (c and m) then
-        return false
-    end
-    local needsPct = ModeNeedsPercent(mode)
-    if needsPct and not p then
-        return false
-    end
+    local c, m, p
+
     if mode == "CURRENT" then
+        c = FormatValue(cur, short, canSecret)
         SetTextCached(fs, AddSuffix(c, suffix))
     elseif mode == "MAX" then
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(m, suffix))
     elseif mode == "CURMAX" then
+        c = FormatValue(cur, short, canSecret)
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(c .. delimiter .. m, suffix))
     elseif mode == "MAXCUR" then
+        c = FormatValue(cur, short, canSecret)
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(m .. delimiter .. c, suffix))
     elseif mode == "PERCENT" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
         SetTextCached(fs, AddSuffix(p, suffix))
     elseif mode == "CURPERCENT" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
+        c = FormatValue(cur, short, canSecret)
         SetTextCached(fs, AddSuffix(c .. delimiter .. p, suffix))
     elseif mode == "PERCENTCUR" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
+        c = FormatValue(cur, short, canSecret)
         SetTextCached(fs, AddSuffix(p .. delimiter .. c, suffix))
     elseif mode == "CURMAXPERCENT" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
+        c = FormatValue(cur, short, canSecret)
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(c .. delimiter .. m .. delimiter .. p, suffix))
     elseif mode == "PERCENTMAXCUR" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
+        c = FormatValue(cur, short, canSecret)
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(p .. delimiter .. m .. delimiter .. c, suffix))
     elseif mode == "MAXPERCENT" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(m .. delimiter .. p, suffix))
     elseif mode == "PERCENTMAX" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(p .. delimiter .. m, suffix))
     elseif mode == "PERCENTCURMAX" then
+        p = FormatPercentValue(pct, hidePercentSymbol, canSecret)
+        if not p then return false end
+        c = FormatValue(cur, short, canSecret)
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(p .. delimiter .. c .. delimiter .. m, suffix))
     elseif mode == "DEFICIT" then
         SetTextCached(fs, "")
     else
+        c = FormatValue(cur, short, canSecret)
+        m = FormatValue(max, short, canSecret)
         SetTextCached(fs, AddSuffix(c .. delimiter .. m, suffix))
     end
     return true
@@ -207,8 +233,6 @@ local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short
         return
     end
     delimiter = delimiter or " - "
-    local curArg = ValueArg(cur, canSecret)
-    local maxArg = ValueArg(max, canSecret)
     local pct
     local pctKnown = false
     local pctArg
@@ -226,6 +250,8 @@ local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short
         return
     end
 
+    local curArg = ValueArg(cur, canSecret)
+    local maxArg = ValueArg(max, canSecret)
     fs._msufLastSetText = nil
     if short and SetShortModeText(fs, mode, curArg, maxArg, pctArg, pctKnown, delimiter, hidePercentSymbol) then
         return
@@ -490,24 +516,37 @@ end
 local textThrottleFrame
 local healthTextQueue = {}
 local powerTextQueue = {}
+local TEXT_FLUSH_PER_TICK = 10
 
 local function TextThrottleOnUpdate(self)
     local now = GetTime and GetTime() or 0
     local active = false
+    local flushed = 0
 
     for frame, when in pairs(healthTextQueue) do
         if now >= when then
             healthTextQueue[frame] = nil
             FlushPendingHealthText(frame)
+            flushed = flushed + 1
+            if flushed >= TEXT_FLUSH_PER_TICK then
+                active = true
+                break
+            end
         else
             active = true
         end
     end
 
+    flushed = 0
     for frame, when in pairs(powerTextQueue) do
         if now >= when then
             powerTextQueue[frame] = nil
             FlushPendingPowerText(frame)
+            flushed = flushed + 1
+            if flushed >= TEXT_FLUSH_PER_TICK then
+                active = true
+                break
+            end
         else
             active = true
         end

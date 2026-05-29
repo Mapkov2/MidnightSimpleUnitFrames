@@ -24,20 +24,34 @@ local scanSeen = setmetatable({}, { __mode = "k" })
 local scanNonce = setmetatable({}, { __mode = "k" })
 local scanUnit = setmetatable({}, { __mode = "k" })
 local scanKind = setmetatable({}, { __mode = "k" })
+local attrUnit = setmetatable({}, { __mode = "k" })
 local attrHooked = setmetatable({}, { __mode = "k" })
 local childKind = setmetatable({}, { __mode = "k" })
+local appliedSerial = setmetatable({}, { __mode = "k" })
+local appliedUnit = setmetatable({}, { __mode = "k" })
+local appliedKind = setmetatable({}, { __mode = "k" })
+local appliedPowerEnabled = setmetatable({}, { __mode = "k" })
+local appliedPowerHeight = setmetatable({}, { __mode = "k" })
 local DEFAULT_TOOLTIP = { tooltipMode = "ALWAYS", tooltipModifier = "ALT" }
+local UNIT_ATTR = "unit"
+local UNIT_CHANGED_REASON = "MSUF_UNIT_IDENTITY"
 
 local APPLY_MASK = {
     Health = true, Power = true, Text = true, NameText = true,
     HealthText = true, PowerText = true, StatusIndicators = true,
-    GroupAuraCache = true, GroupStatusRuntime = true, Prediction = true,
+    GroupStatusRuntime = true, Prediction = true,
     Alpha = true, Auras = true,
     Borders = true, GroupRangeFade = true, GroupVisuals = true,
-    GroupBlizzardAuras = true,
-    GroupCornerIndicators = true, GroupSpellIndicators = true, GroupPrivateAuras = true,
+    GroupCornerIndicators = true, GroupSpellIndicators = true,
 }
 GF.GROUP_APPLY_MASK = APPLY_MASK
+
+local UNIT_CHANGE_FAST_MASK = {
+    GroupRangeFade = true,
+    Prediction = true,
+}
+
+local ApplyUnitChangeFast
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -269,11 +283,23 @@ local function HookButton(frame)
 end
 
 local function OnChildAttributeChanged(self, name, value)
-    if name ~= "unit" then return end
-    UF.OnUnitChanged(self, self.unit, value)
-    if type(value) ~= "string" or value == "" then return end
-    local kind = childKind[self] or self._msufGFKind
-    if kind then
+    if name ~= UNIT_ATTR then return end
+    local oldUnit = attrUnit[self] or self.unit
+    local kind
+    if oldUnit == value and self.MSUFSpec and scanUnit[self] == value then
+        kind = childKind[self] or self._msufGFKind
+        if not kind or scanKind[self] == kind then
+            return
+        end
+    else
+        kind = childKind[self] or self._msufGFKind
+    end
+    attrUnit[self] = value
+    UF.OnUnitChanged(self, oldUnit, value)
+    if type(value) ~= "string" or value == "" then
+        return
+    end
+    if kind and not ApplyUnitChangeFast(self, kind, value) then
         GF.ApplyButton(self, kind, "UNIT_CHANGED")
     end
 end
@@ -294,6 +320,73 @@ local function HeaderLayoutNonce(frame)
     return 0
 end
 
+local function TrackFrame(frame)
+    if GF.frames[frame] ~= true then
+        GF.frames[frame] = true
+        GF.frameList[#GF.frameList + 1] = frame
+    end
+end
+
+local function MarkApplied(frame, kind, unit, spec)
+    local power = spec and spec.power
+    appliedSerial[frame] = spec and spec._msufGFCompileSerial or 0
+    appliedUnit[frame] = unit
+    appliedKind[frame] = kind
+    appliedPowerEnabled[frame] = power and power.enabled or false
+    appliedPowerHeight[frame] = power and power.height or 0
+end
+
+local function HasSameApplyState(frame, kind, unit, spec)
+    local power = spec and spec.power
+    return frame
+        and frame.MSUFSpec
+        and appliedSerial[frame] == (spec and spec._msufGFCompileSerial or 0)
+        and appliedUnit[frame] == unit
+        and appliedKind[frame] == kind
+        and appliedPowerEnabled[frame] == (power and power.enabled or false)
+        and appliedPowerHeight[frame] == (power and power.height or 0)
+end
+
+ApplyUnitChangeFast = function(frame, kind, unit)
+    if not (frame and kind and type(unit) == "string" and unit ~= "" and frame.MSUFSpec and GF.CompileSpec) then
+        return false
+    end
+
+    local oldSpec = frame.MSUFSpec
+    local oldPower = oldSpec and oldSpec.power
+    local oldPowerEnabled = oldPower and oldPower.enabled
+    local oldPowerHeight = oldPower and oldPower.height
+
+    childKind[frame] = kind
+    frame._msufGFKind = kind
+    frame._msufIsGroupFrame = true
+    frame.unit = unit
+    frame.unitKey = unit
+    frame.configKey = "gf_" .. kind
+    attrUnit[frame] = unit
+
+    local spec = GF.CompileSpec(kind, frame, unit)
+    frame.MSUFSpec = spec
+    frame.cachedConfig = spec
+    frame.configKey = spec.key
+    frame.unitKey = spec.unit or unit
+
+    local power = spec and spec.power
+    if oldPowerEnabled ~= (power and power.enabled) or oldPowerHeight ~= (power and power.height) then
+        UF.ApplySpec(frame, spec, UNIT_CHANGED_REASON, APPLY_MASK)
+    else
+        UF.ApplySpec(frame, spec, UNIT_CHANGED_REASON, UNIT_CHANGE_FAST_MASK)
+    end
+    MarkApplied(frame, kind, unit, spec)
+
+    local layoutNonce = HeaderLayoutNonce(frame)
+    scanNonce[frame] = layoutNonce
+    scanUnit[frame] = unit
+    scanKind[frame] = kind
+    TrackFrame(frame)
+    return true
+end
+
 function GF.UntrackFrame(frame)
     if not frame then return end
     if GF.UnregisterClickCastFrame then
@@ -303,7 +396,13 @@ function GF.UntrackFrame(frame)
     scanNonce[frame] = nil
     scanUnit[frame] = nil
     scanKind[frame] = nil
+    attrUnit[frame] = nil
     childKind[frame] = nil
+    appliedSerial[frame] = nil
+    appliedUnit[frame] = nil
+    appliedKind[frame] = nil
+    appliedPowerEnabled[frame] = nil
+    appliedPowerHeight[frame] = nil
     local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
     local uf = _G.MSUF_UnitFrames
     if type(unit) == "string" and uf and uf[unit] == frame then
@@ -338,12 +437,24 @@ function GF.ApplyButton(frame, kind, reason)
     frame.unit = unit
     frame.unitKey = unit
     frame.configKey = "gf_" .. kind
+    attrUnit[frame] = unit
 
     UF.AttachFrame(frame, { scope = "group", ownEvents = false, unit = unit })
     InstallChildAttrHook(frame, kind)
     HookButton(frame)
 
     local spec = GF.CompileSpec(kind, frame, unit)
+    frame.MSUFSpec = spec
+    frame.cachedConfig = spec
+    frame.configKey = spec.key
+    frame.unitKey = spec.unit or unit
+    if HasSameApplyState(frame, kind, unit, spec) then
+        scanNonce[frame] = layoutNonce
+        scanUnit[frame] = unit
+        scanKind[frame] = kind
+        TrackFrame(frame)
+        return true
+    end
     if not InCombat() then
         if frame.SetSize then
             frame:SetSize(spec.width, spec.height)
@@ -357,6 +468,7 @@ function GF.ApplyButton(frame, kind, reason)
         end
     end
     UF.ApplySpec(frame, spec, reason or "MSUF_GF_APPLY", APPLY_MASK)
+    MarkApplied(frame, kind, unit, spec)
     ApplyClickCast(frame, spec)
     if not (spec.group and spec.group.hoverHighlightEnabled == true) then
         SetHoverShown(frame, false)
@@ -365,10 +477,7 @@ function GF.ApplyButton(frame, kind, reason)
     scanUnit[frame] = unit
     scanKind[frame] = kind
 
-    if GF.frames[frame] ~= true then
-        GF.frames[frame] = true
-        GF.frameList[#GF.frameList + 1] = frame
-    end
+    TrackFrame(frame)
     return true
 end
 

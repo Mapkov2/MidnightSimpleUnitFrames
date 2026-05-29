@@ -52,14 +52,6 @@ local function BossPreviewCombatLocked()
         or _G.MSUF_InCombat == true
 end
 
-local function UnitExistsSafe(unit)
-    if not UnitExists then
-        return true
-    end
-    local exists = UnitExists(unit)
-    return exists == true or exists == 1
-end
-
 local function InInstance()
     if not IsInInstance then
         return false
@@ -153,7 +145,12 @@ local function RegisterVisibility(frame, spec)
     if visibility ~= "hide" and SecureCmdOptionParse then
         show = SecureCmdOptionParse(visibility) == "show"
     elseif visibility ~= "hide" then
-        show = UnitExistsSafe(frame.unit)
+        if UnitExists then
+            local exists = UnitExists(frame.unit)
+            show = exists == true or exists == 1
+        else
+            show = true
+        end
     end
     if frame._msufLoadShown ~= show then
         frame:SetShown(show)

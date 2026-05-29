@@ -7,7 +7,7 @@ MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
 MSUF.Fonts = MSUF.Fonts or {}
 
-local type, tostring, tonumber, pcall, pairs = type, tostring, tonumber, pcall, pairs
+local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 
 local function Export(key, fn, aliasKey, forceAlias)
     if MSUF then MSUF[key] = fn end
@@ -83,14 +83,13 @@ local function _ConfiguredFontReady()
         _measureFS = _G.UIParent:CreateFontString(nil, "BACKGROUND")
         _measureFS:Hide()
     end
-    if not pcall(_measureFS.SetFont, _measureFS, path, 14, "") then return false end
-    -- If td won't match -> not ready yet.
+    if _measureFS:SetFont(path, 14, "") == false then return false end
+    -- If the requested path does not match yet, the client is still using a fallback font.
     local applied = _measureFS:GetFont()
     if not applied or tostring(applied):gsub("/", "\\"):lower() ~= tostring(path):gsub("/", "\\"):lower() then
         return false
     end
-    _he requested font didn't actually apply (cold start), GetFont returns
-    -- the fallback anmeasureFS:SetText("ABCabcgjpqy0123")
+    _measureFS:SetText("ABCabcgjpqy0123")
     local w = _measureFS:GetStringWidth()
     return type(w) == "number" and w > 0
 end
@@ -108,8 +107,8 @@ end
 
 local function _MSUF_FontApplied(fs, requestedPath)
     if type(fs.GetFont) ~= "function" then return true end
-    local ok, actual = pcall(fs.GetFont, fs)
-    if not ok or not actual then return true end
+    local actual = fs:GetFont()
+    if not actual then return true end
     local matches = _G.MSUF_FontPathMatches or _G.MSUF_FontPathEquals
     if type(matches) == "function" then
         return matches(requestedPath, actual) == true
@@ -124,8 +123,8 @@ local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
         return ok == true
     end
 
-    local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
-    return ok and applied ~= false and _MSUF_FontApplied(fs, path)
+    local applied = fs:SetFont(path, size, flags)
+    return applied ~= false and _MSUF_FontApplied(fs, path)
 end
 
 local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)

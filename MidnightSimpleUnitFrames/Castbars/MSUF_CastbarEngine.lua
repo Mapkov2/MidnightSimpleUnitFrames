@@ -12,11 +12,22 @@
 local addonName, ns = ...
 ns = ns or {}
 
--- P3 Fix #16 + #10: Local FastCall cache + frame-tick BuildState cache.
-local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
-
 local Registry = ns.MSUF_CastbarRegistry  -- loaded earlier in the TOC
 local Style    = ns.MSUF_CastbarStyle     -- loaded earlier in the TOC
+local ToPlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(v)
+    if v == nil then return nil end
+    local toPlain = _G.ToPlain
+    if type(toPlain) == "function" then
+        local pv = toPlain(v)
+        local pn = tonumber(tostring(pv))
+        if pn ~= nil then return pn end
+    end
+    local t = type(v)
+    if t == "number" or t == "string" then
+        return tonumber(tostring(v))
+    end
+    return nil
+end
 
 ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
 local E = ns.MSUF_CastbarEngine
@@ -140,14 +151,12 @@ local function DetectEmpower(unit)
     -- Best-effort: if empower stage API exists and stage count > 0 while casting, treat as empower.
     if type(GetUnitEmpowerStageCount) ~= "function" then return false end
 
-    local ok, c = MSUF_FastCall(GetUnitEmpowerStageCount, unit)
+    local c = GetUnitEmpowerStageCount(unit)
 
     -- Secret-safe: convert and compare only plain numbers.
-    if ok then
-        local n = (type(_G.MSUF__ToNumber_SecretSafe) == "function") and _G.MSUF__ToNumber_SecretSafe(c) or tonumber(c)
-        if type(n) == "number" and n > 0 then
-            return true
-        end
+    local n = ToPlainNumber(c)
+    if type(n) == "number" and n > 0 then
+        return true
     end
 
     return false
@@ -206,8 +215,7 @@ function E:BuildState(unit, frameHint)
 
         -- Duration object (if available)
         if type(UnitCastingDuration) == "function" then
-            local ok, d = MSUF_FastCall(UnitCastingDuration, unit)
-            if ok then state.durationObj = d end
+            state.durationObj = UnitCastingDuration(unit)
         end
 
         state.reverseFill = GetFillDirectionReverseFor(state.castType, state.unit)
@@ -232,8 +240,7 @@ function E:BuildState(unit, frameHint)
         state.isNotInterruptible = DetectNonInterruptible(unit, frameHint)
 
         if type(UnitChannelDuration) == "function" then
-            local ok, d = MSUF_FastCall(UnitChannelDuration, unit)
-            if ok then state.durationObj = d end
+            state.durationObj = UnitChannelDuration(unit)
         end
 
         state.reverseFill = GetFillDirectionReverseFor(state.castType, state.unit)

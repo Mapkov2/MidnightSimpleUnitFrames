@@ -2,9 +2,6 @@
 
 local addonName, ns = ...
 
--- P2 Fix #10: Cache MSUF_FastCall as local upvalue (avoids _G lookup on every call).
-local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
-
 -- Phase 1A: Use shared _G.MSUF_EnsureDBLazy (defined in Utils, loaded earlier in TOC).
 local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
@@ -1194,9 +1191,9 @@ do
                 -- If we can't safely coerce it, derive remaining from the animated StatusBar value instead.
                 if (not remNum) and frame.statusBar and frame.MSUF_timerDriven then
                     local bar = frame.statusBar
-                    local okMM, minV, maxV = pcall(bar.GetMinMaxValues, bar)
-                    local okV, val = pcall(bar.GetValue, bar)
-                    if okMM and okV then
+                    if bar.GetMinMaxValues and bar.GetValue then
+                        local minV, maxV = bar:GetMinMaxValues()
+                        local val = bar:GetValue()
                         minV = ToPlain(minV) or 0
                         maxV = ToPlain(maxV)
                         val  = ToPlain(val)
@@ -1228,12 +1225,11 @@ do
                 -- If we still couldn't read remaining and have no snapshot, show raw value as last resort.
                 if not remNum and not snapRem then
                     if frame.timeText and castTimeEnabled and rem ~= nil then
-                        local t = ""
-                        local okFmt, s = pcall(string.format, "%.1f", rem)
-                        if okFmt and s then
-                            t = s
+                        local t
+                        if type(rem) == "number" then
+                            t = string.format("%.1f", rem)
                         else
-                            t = tostring(rem)
+                            t = tostring(rem or "")
                         end
                         MSUF_SetTextIfChanged(frame.timeText, t)
                         frame._msufZeroCount = nil
@@ -1274,8 +1270,8 @@ do
                     end
                     if (not totalNum) and frame.statusBar then
                         local bar = frame.statusBar
-                        local okMM, minV, maxV = pcall(bar.GetMinMaxValues, bar)
-                        if okMM then
+                        if bar.GetMinMaxValues then
+                            local minV, maxV = bar:GetMinMaxValues()
                             minV = ToPlain(minV) or 0
                             maxV = ToPlain(maxV)
                             if maxV and maxV > minV then
@@ -1336,8 +1332,8 @@ do
             -- "Glow effect": fade towards white as the cast approaches completion.
             if _GlowFade and frame.statusBar then
                 local bar = frame.statusBar
-                local okMM, minV, maxV = pcall(bar.GetMinMaxValues, bar)
-                if okMM then
+                if bar.GetMinMaxValues then
+                    local minV, maxV = bar:GetMinMaxValues()
                     minV = ToPlain(minV) or 0
                     maxV = ToPlain(maxV)
                     if maxV and maxV > minV then

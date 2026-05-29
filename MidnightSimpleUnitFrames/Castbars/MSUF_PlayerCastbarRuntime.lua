@@ -2,9 +2,22 @@
 --  extraction: Player castbar runtime (latency, color, interrupt, cast, OnEvent).
 -- Loaded AFTER Empower + ChannelTicks (needs _G exports from those files).
 
-local MSUF_FastCall = _G.MSUF_FastCall or function(...) return pcall(...) end
 local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
+end
+local MSUF_PlayerCastbar_ToPlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(v)
+    if v == nil then return nil end
+    local toPlain = _G.ToPlain
+    if type(toPlain) == "function" then
+        local pv = toPlain(v)
+        local pn = tonumber(tostring(pv))
+        if pn ~= nil then return pn end
+    end
+    local t = type(v)
+    if t == "number" or t == "string" then
+        return tonumber(tostring(v))
+    end
+    return nil
 end
 
 -- Cross-file refs (call-time resolved, set by earlier TOC files)
@@ -81,6 +94,7 @@ local function MSUF_PlayerCastbar_UpdateLatencyZone(self, isChanneled, durSec)
     if not self or not self.latencyBar or not self.statusBar then
         return
     end
+    durSec = MSUF_PlayerCastbar_ToPlainNumber(durSec)
 
     -- Honor Options -> Castbars -> Style -> Show latency indicator (default ON)
     _EnsureDBLazy()  -- P3 Fix #14: lazy guard
@@ -339,7 +353,7 @@ local function MSUF_PlayerCastbar_ShowInterruptFeedback(self, label)
         self:SetScript("OnUpdate", nil)
         self.interruptFeedbackEndTime = nil
         if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
-        if self.statusBar and self.statusBar.SetValue then MSUF_FastCall(self.statusBar.SetValue, self.statusBar, 0) end
+        if self.statusBar and self.statusBar.SetValue then self.statusBar:SetValue(0) end
         self:Hide()
         return
     end
@@ -457,6 +471,9 @@ local function MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
     if not self then return end
     MSUF_PlayerCastbar_ResetPlainTiming(self)
 
+    startTimeMS = MSUF_PlayerCastbar_ToPlainNumber(startTimeMS)
+    endTimeMS = MSUF_PlayerCastbar_ToPlainNumber(endTimeMS)
+
     local now = GetTime()
     if type(endTimeMS) == "number" then
         local endSec = endTimeMS / 1000
@@ -478,8 +495,8 @@ end
 local function MSUF_PlayerCastbar_ApplyManualTimerFallback(self, totalSec, remSec, reverseFill)
     if not (self and self.statusBar and self.statusBar.SetMinMaxValues and self.statusBar.SetValue) then return end
 
-    local total = (type(totalSec) == "number" and totalSec or 0)
-    local rem = (type(remSec) == "number" and remSec or total)
+    local total = MSUF_PlayerCastbar_ToPlainNumber(totalSec) or 0
+    local rem = MSUF_PlayerCastbar_ToPlainNumber(remSec) or total
     if total < 0 then total = 0 end
     if rem < 0 then rem = 0 end
     if rem > total then rem = total end
@@ -492,6 +509,103 @@ local function MSUF_PlayerCastbar_ApplyManualTimerFallback(self, totalSec, remSe
         self.statusBar:SetValue(rem)
     else
         self.statusBar:SetValue(span - rem)
+    end
+end
+
+local function MSUF_PlayerCastbar_StartDuration(self, unit, castType, name, text, tex, startTimeMS, endTimeMS, rawNotInterruptible, spellID, castGUID, castBarID, durationObj)
+    local isChanneled = (castType == "CHANNEL")
+
+    self.interruptFeedbackEndTime = nil
+    self.interrupted = nil
+    self.MSUF_castActive = true
+    self._msufActiveCastUnit = unit
+    self._msufChanNilSince = nil
+    self._msufCastNilSince = nil
+    self._msufHardStopNilSince = nil
+    MSUF_PlayerCastbar_SetActiveIdentifiers(self, isChanneled and nil or castGUID, spellID, castBarID)
+
+    self.MSUF_castDuration = isChanneled and nil or durationObj
+    self.MSUF_channelDuration = isChanneled and durationObj or nil
+    self.MSUF_channelTotal = nil
+
+    local rf = _G.MSUF_GetReverseFillSafe(self, isChanneled)
+    local timerDriven = false
+
+    if durationObj then
+        local state = self._msufPlayerState or {}
+        self._msufPlayerState = state
+        state.active = true
+        state.unit = unit
+        state.castType = castType
+        state.spellName = name
+        state.text = text or name
+        state.icon = tex
+        state.spellId = spellID
+        state.startTimeMS = startTimeMS
+        state.endTimeMS = endTimeMS
+        state.durationObj = durationObj
+        state.reverseFill = rf
+
+        timerDriven = _G.MSUF_Castbar_ApplyActiveDuration(self, state, {
+            skipColor = true,
+            skipRegister = true,
+            skipTimeText = true,
+            skipShow = true,
+        }) and true or false
+    else
+        self.MSUF_durationObj = nil
+        self.MSUF_isChanneled = isChanneled
+        self.MSUF_timerDriven = nil
+        if self.icon then self.icon:SetTexture(tex or nil) end
+        if self.castText then MSUF_SetTextIfChanged(self.castText, name or "") end
+    end
+
+    self._msufStripeReverseFill = (rf and true or false)
+    if isChanneled then
+        self.MSUF_channelDirect = nil
+    else
+        MSUF_PlayerChannelHasteMarkers_Hide(self)
+    end
+
+    local apiNI = false
+    if rawNotInterruptible then apiNI = true end
+    self.isNotInterruptible = apiNI
+
+    MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
+    if (not timerDriven) and self._msufPlainTotal and self._msufRemaining then
+        MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, rf)
+    end
+
+    MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
+
+    local durSec = nil
+    if durationObj and durationObj.GetTotalDuration then
+        durSec = MSUF_PlayerCastbar_ToPlainNumber(durationObj:GetTotalDuration())
+    end
+    if (not isChanneled) and durSec == nil and durationObj and durationObj.GetRemainingDuration then
+        durSec = MSUF_PlayerCastbar_ToPlainNumber(durationObj:GetRemainingDuration())
+    end
+    if durSec == nil then durSec = self._msufPlainTotal end
+    if isChanneled then
+        self.MSUF_channelTotal = durSec
+    end
+    MSUF_PlayerCastbar_UpdateLatencyZone(self, isChanneled, durSec)
+
+    self:SetScript("OnUpdate", nil)
+    self.MSUF_durationObj = durationObj
+    self.MSUF_timerDriven = timerDriven and true or nil
+    MSUF_EnsureCastbarManager()
+    if MSUF_RegisterCastbar then
+        MSUF_RegisterCastbar(self)
+    end
+    if _G.MSUF_UpdateCastbarFrame then
+        local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
+        _G.MSUF_UpdateCastbarFrame(self, 0, now)
+    end
+
+    self:Show()
+    if isChanneled then
+        MSUF_PlayerChannelHasteMarkers_Update(self, true)
     end
 end
 
@@ -535,71 +649,10 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
 
         local castDuration = nil
         if type(UnitCastingDuration) == "function" then
-            local okDur, d = MSUF_FastCall(UnitCastingDuration, unit)
-            if okDur then castDuration = d end
+            castDuration = UnitCastingDuration(unit)
         end
 
-        self.interruptFeedbackEndTime = nil
-        self._msufActiveCastUnit = unit
-        self._msufChanNilSince = nil
-        self._msufCastNilSince = nil
-        self._msufHardStopNilSince = nil
-        MSUF_PlayerCastbar_SetActiveIdentifiers(self, castGUID, spellID, castBarID)
-
-        self.MSUF_castDuration = castDuration
-        self.MSUF_channelDuration = nil
-        self.MSUF_channelTotal = nil
-
-        local __msuf_rf = _G.MSUF_GetReverseFillSafe(self, false)
-        local timerDriven = false
-        if castDuration then
-            timerDriven = _G.MSUF_ApplyTimerAndFill(self.statusBar, castDuration, __msuf_rf) and true or false
-        end
-
-        self.MSUF_isChanneled = false
-        self._msufStripeReverseFill = (__msuf_rf and true or false)
-        MSUF_PlayerChannelHasteMarkers_Hide(self)
-
-        local apiNI = false
-        if notInterruptible then apiNI = true end
-        self.isNotInterruptible = apiNI
-        if self.icon then self.icon:SetTexture(castTex or nil) end
-        if self.castText then MSUF_SetTextIfChanged(self.castText, castName or "") end
-
-        MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
-        if (not timerDriven) and self._msufPlainTotal and self._msufRemaining then
-            MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, __msuf_rf)
-        end
-
-        MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
-
-        do
-            local durSec = nil
-            if castDuration and castDuration.GetTotalDuration then
-                local okT, total = MSUF_FastCall(castDuration.GetTotalDuration, castDuration)
-                if okT then durSec = total end
-            end
-            if durSec == nil and castDuration and castDuration.GetRemainingDuration then
-                local okR, rem = MSUF_FastCall(castDuration.GetRemainingDuration, castDuration)
-                if okR then durSec = rem end
-            end
-            if durSec == nil then durSec = self._msufPlainTotal end
-            MSUF_PlayerCastbar_UpdateLatencyZone(self, false, durSec)
-        end
-
-        self:SetScript("OnUpdate", nil)
-        self.MSUF_durationObj = castDuration
-        self.MSUF_timerDriven = timerDriven and true or nil
-        MSUF_EnsureCastbarManager()
-        if MSUF_RegisterCastbar then
-            MSUF_RegisterCastbar(self)
-        end
-        if _G.MSUF_UpdateCastbarFrame then
-            local _now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-            _G.MSUF_UpdateCastbarFrame(self, 0, _now)
-        end
-
-        self:Show()
+        MSUF_PlayerCastbar_StartDuration(self, unit, "CAST", castName, castText, castTex, startTimeMS, endTimeMS, notInterruptible, spellID, castGUID, castBarID, castDuration)
         return
     end
 
@@ -614,100 +667,34 @@ local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
 
         local channelDuration = nil
         if type(UnitChannelDuration) == "function" then
-            local okDur, d = MSUF_FastCall(UnitChannelDuration, unit)
-            if okDur then channelDuration = d end
+            channelDuration = UnitChannelDuration(unit)
         end
 
-        self.interruptFeedbackEndTime = nil
-        self._msufActiveCastUnit = unit
-        self._msufChanNilSince = nil
-        self._msufCastNilSince = nil
-        self._msufHardStopNilSince = nil
-        MSUF_PlayerCastbar_SetActiveIdentifiers(self, nil, spellID, castBarID)
-
-        self.MSUF_channelDuration = channelDuration
-        self.MSUF_castDuration = nil
-
-        local __msuf_rf = _G.MSUF_GetReverseFillSafe(self, true)
-        local timerDriven = false
-        if channelDuration then
-            timerDriven = _G.MSUF_ApplyTimerAndFill(self.statusBar, channelDuration, __msuf_rf) and true or false
-        end
-
-        self.MSUF_isChanneled = true
-        self._msufStripeReverseFill = (__msuf_rf and true or false)
-
-        local apiNI = false
-        if notInterruptible then apiNI = true end
-        self.isNotInterruptible = apiNI
-        if self.icon then self.icon:SetTexture(chanTex or nil) end
-        if self.castText then MSUF_SetTextIfChanged(self.castText, chanName or "") end
-
-        MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
-        if (not timerDriven) and self._msufPlainTotal and self._msufRemaining then
-            MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, __msuf_rf)
-        end
-
-        MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
-
-        do
-            local total = nil
-            if channelDuration and channelDuration.GetTotalDuration then
-                local okTotal, t = MSUF_FastCall(channelDuration.GetTotalDuration, channelDuration)
-                if okTotal then total = t end
-            end
-            if total == nil then total = self._msufPlainTotal end
-            self.MSUF_channelTotal = total
-        end
-
-        do
-            local durSec = self.MSUF_channelTotal
-            if durSec == nil and channelDuration and channelDuration.GetRemainingDuration then
-                local okR, rem = MSUF_FastCall(channelDuration.GetRemainingDuration, channelDuration)
-                if okR then durSec = rem end
-            end
-            if durSec == nil then durSec = self._msufPlainTotal end
-            MSUF_PlayerCastbar_UpdateLatencyZone(self, true, durSec)
-        end
-
-        self:SetScript("OnUpdate", nil)
-        self.MSUF_durationObj = channelDuration
-        self.MSUF_timerDriven = timerDriven and true or nil
-        MSUF_EnsureCastbarManager()
-        if MSUF_RegisterCastbar then
-            MSUF_RegisterCastbar(self)
-        end
-        if _G.MSUF_UpdateCastbarFrame then
-            local _now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-            _G.MSUF_UpdateCastbarFrame(self, 0, _now)
-        end
-
-        self:Show()
-        MSUF_PlayerChannelHasteMarkers_Update(self, true)
+        MSUF_PlayerCastbar_StartDuration(self, unit, "CHANNEL", chanName, chanText, chanTex, startTimeMS, endTimeMS, notInterruptible, spellID, nil, castBarID, channelDuration)
         return
     end
 
     if CAST_STOP[event] then
-        self:SetScript("OnUpdate", nil)
         self._msufChanNilSince = nil
         self._msufCastNilSince = nil
         self._msufHardStopNilSince = nil
-        self.MSUF_durationObj = nil
-        self.MSUF_timerDriven = nil
         self.MSUF_channelDuration = nil
         self.MSUF_castDuration = nil
         self.MSUF_channelTotal = nil
-        self.MSUF_isChanneled = nil
         MSUF_PlayerCastbar_ResetPlainTiming(self)
         MSUF_PlayerCastbar_ClearActiveIdentifiers(self)
         self._msufActiveCastUnit = nil
-        if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-
         MSUF_PlayerChannelHasteMarkers_Hide(self)
-        if self.latencyBar then self.latencyBar:Hide() end
-        if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
-        if self.statusBar and self.statusBar.SetValue then MSUF_FastCall(self.statusBar.SetValue, self.statusBar, 0) end
-        self:Hide()
+        if _G.MSUF_CB_ResetStateOnStop then
+            _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
+        else
+            self:SetScript("OnUpdate", nil)
+            if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
+            if self.latencyBar then self.latencyBar:Hide() end
+            if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
+            self:Hide()
+        end
+        if self.statusBar and self.statusBar.SetValue then self.statusBar:SetValue(0) end
         return
     end
 end
@@ -767,12 +754,10 @@ function _G.MSUF_UpdateCastbarLatencyIndicator()
         local durSec = f.MSUF_channelTotal
         local obj = f.MSUF_channelDuration
         if durSec == nil and obj and obj.GetTotalDuration then
-            local okT, total = MSUF_FastCall(obj.GetTotalDuration, obj)
-            if okT then durSec = total end
+            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetTotalDuration())
         end
         if durSec == nil and obj and obj.GetRemainingDuration then
-            local okR, rem = MSUF_FastCall(obj.GetRemainingDuration, obj)
-            if okR then durSec = rem end
+            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetRemainingDuration())
         end
         if durSec == nil then durSec = f._msufPlainTotal end
         MSUF_PlayerCastbar_UpdateLatencyZone(f, true, durSec)
@@ -783,12 +768,10 @@ function _G.MSUF_UpdateCastbarLatencyIndicator()
         local durSec = nil
         local obj = f.MSUF_castDuration
         if obj and obj.GetTotalDuration then
-            local okT, total = MSUF_FastCall(obj.GetTotalDuration, obj)
-            if okT then durSec = total end
+            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetTotalDuration())
         end
         if durSec == nil and obj and obj.GetRemainingDuration then
-            local okR, rem = MSUF_FastCall(obj.GetRemainingDuration, obj)
-            if okR then durSec = rem end
+            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetRemainingDuration())
         end
         if durSec == nil then durSec = f._msufPlainTotal end
         MSUF_PlayerCastbar_UpdateLatencyZone(f, false, durSec)

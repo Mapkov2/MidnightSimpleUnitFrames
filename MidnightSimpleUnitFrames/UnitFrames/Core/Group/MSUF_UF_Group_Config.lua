@@ -325,15 +325,17 @@ end
 -- registers ZERO events with the framework (and the event-driver never sees
 -- the event for that frame at all — true zero combat overhead). Each `if`
 -- below gates a feature; disabled features add no entries.
-local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusText, incomingRes)
+local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextHealth, statusTextFlags, incomingRes)
     local events, unitlessEvents
     if phase then
         events = AddEvent(events, "UNIT_PHASE")
         events = AddEvent(events, "UNIT_OTHER_PARTY_CHANGED")
     end
-    if statusText then
+    if statusTextHealth then
         events = AddEvent(events, "UNIT_HEALTH")
         events = AddEvent(events, "UNIT_CONNECTION")
+    end
+    if statusTextFlags then
         events = AddEvent(events, "UNIT_FLAGS")
         unitlessEvents = AddEvent(unitlessEvents, "PLAYER_FLAGS_CHANGED")
     end
@@ -369,11 +371,13 @@ local function CompileStatus(kind, conf)
     local summonEnabled = conf.summonIcon ~= false
     local incomingResEnabled = conf.resurrectIcon ~= false
     local phaseEnabled = conf.phaseIcon ~= false
-    local statusTextEnabled = conf.statusText ~= false or conf.statusGhostText ~= false or conf.statusAFKText ~= false
+    local statusHealthTextEnabled = conf.statusText ~= false or conf.statusGhostText ~= false
+    local statusFlagTextEnabled = conf.statusAFKText ~= false
+    local statusTextEnabled = statusHealthTextEnabled or statusFlagTextEnabled
     local raidGroupEnabled = conf.showGroupNumber == true
     local runtimeEvents, runtimeUnitlessEvents = CompileStatusRuntimeEvents(
         leaderEnabled, assistEnabled, readyCheckEnabled, summonEnabled, phaseEnabled,
-        raidMarkerEnabled, raidGroupEnabled, statusTextEnabled, incomingResEnabled
+        raidMarkerEnabled, raidGroupEnabled, statusHealthTextEnabled, statusFlagTextEnabled, incomingResEnabled
     )
     local runtimeEnabled = roleEnabled or leaderEnabled or assistEnabled
         or readyCheckEnabled or summonEnabled or phaseEnabled
@@ -387,6 +391,14 @@ local function CompileStatus(kind, conf)
         groupRuntimeEnabled = runtimeEnabled,
         groupRuntimeEvents = runtimeEvents,
         groupRuntimeUnitlessEvents = runtimeUnitlessEvents,
+        runtimeLeaderPair = leaderEnabled or assistEnabled,
+        runtimeReadyCheck = readyCheckEnabled,
+        runtimeSummon = summonEnabled,
+        runtimePhase = phaseEnabled,
+        runtimeRaidMarker = raidMarkerEnabled,
+        runtimeRaidGroup = raidGroupEnabled,
+        runtimeStatusText = statusTextEnabled,
+        runtimeIncomingRes = incomingResEnabled,
         kind = kind,
         alpha = 1,
         useMidnight = conf.useMidnightIcons == true,
@@ -690,10 +702,6 @@ local function BlizzardOwnsAuraGroup(root, nativeKey)
     if not root or root.renderer == "CUSTOM" then
         return false
     end
-    local native = MSUF and MSUF.MSUF_AuraNative
-    if not (native and native.Supported and native.Supported() == true) then
-        return false
-    end
     local types = root.blizzardTypes
     return type(types) ~= "table" or types[nativeKey] ~= false
 end
@@ -934,6 +942,7 @@ end
 
 local compiledSpecCache = GF._compiledSpec or {}
 GF._compiledSpec = compiledSpecCache
+GF._compiledSpecSerial = GF._compiledSpecSerial or 1
 
 local function CompileSpecUncached(kind, frame, unit)
     kind = kind or "party"
@@ -998,6 +1007,7 @@ local function CompileSpecUncached(kind, frame, unit)
     local dispelBorderTrigger = GroupScopeValue(kind, conf, general, "dispelBorderTrigger", "BY_ME")
 
     return {
+        _msufGFCompileSerial = GF._compiledSpecSerial or 1,
         scope = "group",
         key = "gf_" .. kind,
         unit = unit,
@@ -1128,6 +1138,7 @@ local function CompileSpecUncached(kind, frame, unit)
 end
 
 function GF.InvalidateCompiledSpecs(kind)
+    GF._compiledSpecSerial = (GF._compiledSpecSerial or 1) + 1
     if kind then
         compiledSpecCache[kind] = nil
     else

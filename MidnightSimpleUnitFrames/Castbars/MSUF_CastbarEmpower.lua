@@ -1,13 +1,26 @@
 -- Castbars/MSUF_CastbarEmpower.lua
 -- All public functions exported to _G for cross-file resolution.
 
-local MSUF_FastCall = _G.MSUF_FastCall or function(...) return pcall(...) end
 local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
 end
+local MSUF_Empower_ToPlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(v)
+    if v == nil then return nil end
+    local toPlain = _G.ToPlain
+    if type(toPlain) == "function" then
+        local pv = toPlain(v)
+        local pn = tonumber(tostring(pv))
+        if pn ~= nil then return pn end
+    end
+    local t = type(v)
+    if t == "number" or t == "string" then
+        return tonumber(tostring(v))
+    end
+    return nil
+end
 
 local function MSUF_Empower_NormalizeSeconds(v)
-    v = tonumber(v)
+    v = MSUF_Empower_ToPlainNumber(v)
     if not v then return nil end
     if v > 20 then
         v = v / 1000
@@ -21,8 +34,7 @@ local function MSUF_BuildEmpowerTimeline(unit)
 
     local function getStageDur(idx)
         if type(GetUnitEmpowerStageDuration) ~= "function" then return nil end
-        local ok, raw = MSUF_FastCall(GetUnitEmpowerStageDuration, unit, idx)
-        if not ok then raw = nil end
+        local raw = GetUnitEmpowerStageDuration(unit, idx)
         local d = MSUF_Empower_NormalizeSeconds(raw)
         if not d or d <= 0 then return nil end
         return d
@@ -30,11 +42,8 @@ local function MSUF_BuildEmpowerTimeline(unit)
 
     local stageCount = nil
     if type(GetUnitEmpowerStageCount) == "function" then
-        local ok, c = MSUF_FastCall(GetUnitEmpowerStageCount, unit)
-        if ok then
-            c = tonumber(c)
-            if c and c > 0 then stageCount = c end
-        end
+        local c = MSUF_Empower_ToPlainNumber(GetUnitEmpowerStageCount(unit))
+        if c and c > 0 then stageCount = c end
     end
 
     local zeroBased = (getStageDur(0) ~= nil)
@@ -59,16 +68,17 @@ local function MSUF_BuildEmpowerTimeline(unit)
 
     local maxHold = 0
     if type(GetUnitEmpowerHoldAtMaxTime) == "function" then
-        local ok, raw = MSUF_FastCall(GetUnitEmpowerHoldAtMaxTime, unit)
-        if not ok then raw = nil end
+        local raw = GetUnitEmpowerHoldAtMaxTime(unit)
         maxHold = MSUF_Empower_NormalizeSeconds(raw) or 0
         if maxHold < 0 then maxHold = 0 end
     end
 
     local castTotal, castStartSec, castEndSec = nil, nil, nil
     if type(UnitCastingInfo) == "function" then
-        local ok, _, _, _, startMS, endMS = MSUF_FastCall(UnitCastingInfo, unit)
-        if ok and startMS and endMS and endMS > startMS then
+        local _, _, _, startMS, endMS = UnitCastingInfo(unit)
+        startMS = MSUF_Empower_ToPlainNumber(startMS)
+        endMS = MSUF_Empower_ToPlainNumber(endMS)
+        if startMS and endMS and endMS > startMS then
             castStartSec = startMS / 1000
             castEndSec   = endMS / 1000
             castTotal    = (endMS - startMS) / 1000
@@ -539,13 +549,13 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
 
     -- Quick Win #3: Pre-cache plain numbers so the per-tick update path never calls ToPlain().
     -- MSUF_BuildEmpowerTimeline already returns plain Lua numbers, but we tonumber() for safety.
-    self._msufEmpowerStartNum    = tonumber(self.empowerStartTime) or now
-    self._msufEmpowerTotalNum    = tonumber(self.empowerTotalWithGrace) or 0
-    self._msufEmpowerBaseNum     = tonumber(self.empowerTotalBase) or self._msufEmpowerTotalNum
+    self._msufEmpowerStartNum    = MSUF_Empower_ToPlainNumber(self.empowerStartTime) or now
+    self._msufEmpowerTotalNum    = MSUF_Empower_ToPlainNumber(self.empowerTotalWithGrace) or 0
+    self._msufEmpowerBaseNum     = MSUF_Empower_ToPlainNumber(self.empowerTotalBase) or self._msufEmpowerTotalNum
     if tl.stageEnds then
         local nums = {}
         for i = 1, #tl.stageEnds do
-            nums[i] = tonumber(tl.stageEnds[i])
+            nums[i] = MSUF_Empower_ToPlainNumber(tl.stageEnds[i])
         end
         self._msufEmpowerStageEndsNum = nums
     else
@@ -554,11 +564,9 @@ local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
     local rf = _G.MSUF_GetReverseFillSafe(self, true)
     local empDObj = nil
     if type(UnitCastingDuration) == "function" then
-        local okD
-        okD, empDObj = MSUF_FastCall(UnitCastingDuration, "player")
-        if not okD then empDObj = nil end
+        empDObj = UnitCastingDuration("player")
     end
-    _G.MSUF_ApplyTimerAndFill(self.statusBar, empDObj, rf)
+    _G.MSUF_ApplyTimerAndFill(self.statusBar, empDObj, rf, false)
 
     self.statusBar:SetMinMaxValues(0, self.empowerTotalWithGrace)
     local elapsed0 = now - (self.empowerStartTime or now)

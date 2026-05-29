@@ -6,9 +6,6 @@
 -- -------------------------------------------------
 local addonName, ns = ...
 
--- Safe: parent addon loads first due to ## Dependencies, FastCall is always available.
-local MSUF_FastCall = MSUF_FastCall or function(...) return pcall(...) end
-
 -- ─── Safety OnUpdate for target/focus castbars ────────────────────
 -- Catches stuck bars when events don't fire (unit death mid-cast,
 -- duration reaching 0 without STOP event). 4Hz gated, zero hot-path cost.
@@ -186,7 +183,7 @@ function _G.MSUF_SetStatusBarColorIfChanged(sb, r, g, b, a)
     local lr, lg, lb, la = sb._msufLastColorR, sb._msufLastColorG, sb._msufLastColorB, sb._msufLastColorA
     if lr == r and lg == g and lb == b and la == a then return end
     sb._msufLastColorR, sb._msufLastColorG, sb._msufLastColorB, sb._msufLastColorA = r, g, b, a
-    MSUF_FastCall(sb.SetStatusBarColor, sb, r, g, b, a)
+    sb:SetStatusBarColor(r, g, b, a)
 end
 
 
@@ -203,23 +200,6 @@ local function MSUF__UpdatePlayerChannelHasteStripes(frame, force)
     if type(fn) == "function" then fn(frame, force) end
 end
 
--- We derive remaining time from the StatusBar's animated value/min/max (timer-driven or manual).
--- Pre-built probe: avoids creating a closure per IsPlainNumber call.
--- pcall passes arguments through, so n arrives as the first param.
-local function _msuf_probeNum(n)
-    local _ = n + 0
-    local __ = (n > -1e308)
-    return _ and __ ~= nil
-end
-
-local function MSUF__IsPlainNumber_SecretSafe(n)
-    if type(n) ~= "number" then return false end
-    -- Secret numbers can still report type=="number" but will throw on arithmetic/comparisons.
-    -- PERF: Reuse a single probe function (no closure allocation per call).
-    local ok = pcall(_msuf_probeNum, n)
-    return ok
-end
-
 -- PERF: Cache ToPlain once (avoids _G lookup per call in hot path).
 local _ToPlain_Driver = _G.ToPlain
 
@@ -227,30 +207,20 @@ local function MSUF__ToNumber_SecretSafe(v)
     if v == nil then return nil end
 
     -- In Midnight/Beta, "secret numbers" can still report type(v) == "number" but will error on arithmetic/comparisons.
-    -- Therefore: prefer ToPlain() when available, but STILL validate the result.
+    -- Converting through string strips the secret tag before arithmetic/comparisons.
     if _ToPlain_Driver then
-        local ok, pv = pcall(_ToPlain_Driver, v)
-        if ok then
-            local n = tonumber(pv)
-            if n ~= nil and MSUF__IsPlainNumber_SecretSafe(n) then
-                return n
-            end
+        local pv = _ToPlain_Driver(v)
+        local n = tonumber(tostring(pv))
+        if n ~= nil then
+            return n
         end
     end
 
-    -- If it's a number, validate it via pcall arithmetic/comparison.
-    if type(v) == "number" then
-        if MSUF__IsPlainNumber_SecretSafe(v) then
-            return v
-        end
-        return nil
+    local t = type(v)
+    if t == "number" or t == "string" then
+        return tonumber(tostring(v))
     end
 
-    -- Last resort: try tonumber on stringy values safely, then validate.
-    local ok2, n2 = pcall(tonumber, v)
-    if ok2 and n2 ~= nil and MSUF__IsPlainNumber_SecretSafe(n2) then
-        return n2
-    end
     return nil
 end
 
@@ -258,11 +228,8 @@ local function MSUF__GetRemainingFromStatusBar(frame)
     local sb = frame and frame.statusBar
     if not (sb and sb.GetValue and sb.GetMinMaxValues) then return nil end
 
-    local okV, v = MSUF_FastCall(sb.GetValue, sb)
-    if not okV then return nil end
-
-    local okMM, minV, maxV = MSUF_FastCall(sb.GetMinMaxValues, sb)
-    if not okMM then return nil end
+    local v = sb:GetValue()
+    local minV, maxV = sb:GetMinMaxValues()
 
     v    = MSUF__ToNumber_SecretSafe(v)
     minV = MSUF__ToNumber_SecretSafe(minV)
@@ -298,12 +265,10 @@ function _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
         if frame._msufPlainTotal then
             total = frame._msufPlainTotal
         elseif frame.statusBar and frame.statusBar.GetMinMaxValues then
-            local ok, minV, maxV = pcall(frame.statusBar.GetMinMaxValues, frame.statusBar)
-            if ok then
-                minV = MSUF__ToNumber_SecretSafe(minV) or 0
-                maxV = MSUF__ToNumber_SecretSafe(maxV)
-                if maxV and maxV > minV then total = maxV - minV end
-            end
+            local minV, maxV = frame.statusBar:GetMinMaxValues()
+            minV = MSUF__ToNumber_SecretSafe(minV) or 0
+            maxV = MSUF__ToNumber_SecretSafe(maxV)
+            if maxV and maxV > minV then total = maxV - minV end
         end
         MSUF_SetCastTimeText(frame, rem, total)
     else
@@ -820,68 +785,19 @@ if self.isEmpower then
 end
 
 if spellName and durationObj then
-            self.interrupted = nil
+            state.durationObj = durationObj
+            state.text = text or spellName
+            state.icon = texture
+            _G.MSUF_Castbar_ApplyActiveDuration(self, state, {
+                skipColor = true,
+                skipRegister = true,
+                skipTimeText = true,
+                skipShow = true,
+            })
 
-            if self.icon and texture then
-                self.icon:SetTexture(texture)
-            end
-
-            if self.castText then
-                _G.MSUF_CB_ApplyTexts(self, nil, text or spellName or "", nil)
-            end
-
-            self.MSUF_durationObj = durationObj
-            self.MSUF_isChanneled = isChanneled
-
-            -- oUF-style snapshot: read remaining + total ONCE at cast start.
-            -- The manager fast-path then uses pure arithmetic (endTime - now) instead of
-            -- calling dObj:GetRemainingDuration() + ToPlain() every tick.
-            -- Re-snapshots automatically on DELAYED / CHANNEL_UPDATE / target change (re-Cast).
-            do
-                local snapRem, snapTotal
-                if durationObj.GetRemainingDuration then
-                    snapRem = MSUF__ToNumber_SecretSafe(durationObj:GetRemainingDuration())
-                elseif durationObj.GetRemaining then
-                    snapRem = MSUF__ToNumber_SecretSafe(durationObj:GetRemaining())
-                end
-                if durationObj.GetTotalDuration then
-                    snapTotal = MSUF__ToNumber_SecretSafe(durationObj:GetTotalDuration())
-                end
-                local snapNow = GetTime()
-                if snapRem and snapRem > 0 then
-                    self._msufPlainEndTime = snapNow + snapRem
-                    self._msufRemaining = snapRem
-                else
-                    self._msufPlainEndTime = nil
-                    self._msufRemaining = nil
-                end
-                self._msufPlainTotal = snapTotal
-            end
-
-            -- Reset hard-stop persistence timers on a successful (re)start.
-            self._msufHardStopNoChannelSince = nil
-            self._msufHardStopNoCastSince = nil
-
-            self.castDuration = nil
-            self.castElapsed  = nil
-            self.MSUF_timerDriven = nil
-            self.MSUF_timerRangeSet = nil
-            self._msufLastSBValue = nil
-            self.MSUF_channelDirect = (isChanneled and (self.unit == "target" or self.unit == "focus")) and true or nil
-
-            local okTimer = false
--- Phase 1C: Use shared reverseFill resolution (replaces 8-line inline block + BuildCastState call).
-local __msuf_rf = _G.MSUF_GetReverseFillSafe(self, isChanneled)
-
--- Player-only: remember reverseFill so stripe anchoring matches bar direction.
-self._msufStripeReverseFill = __msuf_rf
-
--- Player-only: (re)compute channel haste stripes (positions depend on current haste + bar width).
-MSUF__UpdatePlayerChannelHasteStripes(self, true)
-
--- Phase 1B: Use shared timer-direction application (replaces 30-line fallback chain).
-okTimer = _G.MSUF_ApplyTimerAndFill(self.statusBar, durationObj, __msuf_rf)
-self.MSUF_timerDriven = okTimer and true or false
+            local __msuf_rf = _G.MSUF_GetReverseFillSafe(self, isChanneled)
+            self._msufStripeReverseFill = __msuf_rf
+            MSUF__UpdatePlayerChannelHasteStripes(self, true)
 
             if self.UpdateColorForInterruptible then
                 _G.MSUF_CB_ApplyColor(self)

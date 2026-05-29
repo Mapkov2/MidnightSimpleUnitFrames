@@ -315,22 +315,32 @@ local function RefreshUnitState(frame, unit, spec, event)
     if not state then
         state = {}
         frame._msufUnitState = state
-    elseif state.unit == unit and state.ready == true
-        and (event == "UNIT_HEALTH"
-            or event == "UNIT_POWER_FREQUENT"
-            or event == "UNIT_POWER_UPDATE") then
-        -- High-frequency value ticks cannot change unit identity, existence,
-        -- death, connection or NPC-kind -- those arrive on their own events and
-        -- refresh the cache then. 5.54's _HealthValueFast/_PowerFrequent skipped
-        -- this recompute entirely; reusing the cached state matches that and
-        -- drops ~7 C calls (UnitCanHaveSecretValues + 5x ReadUnitBool +
-        -- UnitNPCKind) per power tick on the player frame.
-        return state
+    elseif state.unit == unit and state.ready == true then
+        local dispatchToken = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+        if dispatchToken and state.dispatchToken == dispatchToken then
+            return state
+        end
+        if event ~= "UNIT_HEALTH"
+            and event ~= "UNIT_POWER_FREQUENT"
+            and event ~= "UNIT_POWER_UPDATE" then
+            -- Full recompute below: lower-frequency events may change identity,
+            -- connection or NPC-kind state.
+        else
+            -- High-frequency value ticks cannot change unit identity, existence,
+            -- death, connection or NPC-kind -- those arrive on their own events and
+            -- refresh the cache then. 5.54's _HealthValueFast/_PowerFrequent skipped
+            -- this recompute entirely; reusing the cached state matches that and
+            -- drops ~7 C calls (UnitCanHaveSecretValues + 5x ReadUnitBool +
+            -- UnitNPCKind) per power tick on the player frame.
+            return state
+        end
     end
 
+    local dispatchToken = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
     local canSecret = UnitCanHaveSecretValues(unit)
     frame._msufCanHaveSecretValues = canSecret
     state.unit = unit
+    state.dispatchToken = dispatchToken
     state.ready = true
     state.canHaveSecretValues = canSecret
     state.exists, state.existsKnown = ReadUnitBool(UnitExists, unit, canSecret, true)

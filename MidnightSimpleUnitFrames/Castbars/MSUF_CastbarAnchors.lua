@@ -129,7 +129,7 @@ function MSUF_ReanchorTargetCastBar()
     end
 
     if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        pcall(_G.MSUF_ApplyCastbarTimeTextLayout, frame, "target")
+        _G.MSUF_ApplyCastbarTimeTextLayout(frame, "target")
     end
 
     if MSUF_TargetCastbarPreview and MSUF_PositionTargetCastbarPreview then
@@ -221,7 +221,7 @@ function MSUF_ReanchorFocusCastBar()
     end
 
     if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        pcall(_G.MSUF_ApplyCastbarTimeTextLayout, frame, "focus")
+        _G.MSUF_ApplyCastbarTimeTextLayout(frame, "focus")
     end
 
     if MSUF_FocusCastbarPreview and MSUF_PositionFocusCastbarPreview then
@@ -1169,7 +1169,7 @@ function MSUF_ReanchorPlayerCastBar()
     end
 
     if type(_G.MSUF_ApplyCastbarTimeTextLayout) == "function" then
-        pcall(_G.MSUF_ApplyCastbarTimeTextLayout, MSUF_PlayerCastbar, "player")
+        _G.MSUF_ApplyCastbarTimeTextLayout(MSUF_PlayerCastbar, "player")
     end
 
     -- Keep the PLAYER preview size 1:1 with the real bar (show/hide handled elsewhere)

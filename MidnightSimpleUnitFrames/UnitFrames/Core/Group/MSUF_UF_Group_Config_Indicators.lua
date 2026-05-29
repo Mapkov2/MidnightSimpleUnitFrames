@@ -17,6 +17,11 @@ local sort = table.sort
 
 local EMPTY = {}
 
+local function AuraBackendEnabled()
+    local a3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
+    return a3 and type(a3.BackendEnabled) == "function" and a3.BackendEnabled() == true
+end
+
 local function Num(value, fallback)
     value = tonumber(value)
     if value == nil then return fallback end
@@ -192,11 +197,15 @@ function GF.CompileCornerIndicators(conf)
     conf = conf or {}
     local slots, slotMap = {}, {}
     local hasWork, needsAura, needsThreat = false, false, false
+    local auraBackend = AuraBackendEnabled()
     for i = 1, #CI_SLOT_FIELDS do
         local field = CI_SLOT_FIELDS[i]
         local slotKey = field.key
         local category = conf["ciSlot" .. slotKey] or "none"
         local custom = conf["ciCustom" .. slotKey]
+        if not auraBackend and (category == "dispel" or category == "custom") then
+            category = "none"
+        end
         local ids
         if type(custom) == "table" then
             ids = MergeSpellIDs(ids, CompileSpellIDList(custom.spells))
@@ -300,6 +309,10 @@ function GF.CompileSpellIndicators(conf)
         hasEffects = false,
     }
     if not out.enabled or not (registry and type(si.specs) == "table") then
+        return out
+    end
+    if not AuraBackendEnabled() then
+        out.enabled = false
         return out
     end
 

@@ -6,6 +6,9 @@ if not (UF and R) then return end
 local IncomingResIndicator = {}
 
 function IncomingResIndicator.IsEnabled(frame, spec)
+    if spec and spec.status and spec.status.group == true then
+        return false
+    end
     return R.StatusEnabled(spec, "incomingRes")
 end
 

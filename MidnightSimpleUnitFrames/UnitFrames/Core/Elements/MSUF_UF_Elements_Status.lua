@@ -129,18 +129,6 @@ local function EnsureLayerFrame(frame, layer)
     return holder, layer
 end
 
-local function IsTrue(value)
-    return value == true or value == 1
-end
-
-local function UnitExistsSafe(unit)
-    if not UnitExists then
-        return true
-    end
-    local exists = UnitExists(unit)
-    return exists == true or exists == 1
-end
-
 local function SetShown(region, show)
     if region and region._msufStatusShown ~= show then
         region:SetShown(show)
@@ -554,14 +542,17 @@ end
 local function UpdateRaidMarker(frame, status)
     local cfg = status and status.raidMarker
     local tex = frame.raidTargetIcon
-    if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and UnitExistsSafe(frame.unit)) then
+    local unit = frame.unit
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and exists) then
         if tex then
             tex._msufRaidMarkerIndex = nil
             SetShown(tex, false)
         end
         return
     end
-    local index = GetRaidTargetIndex(frame.unit)
+    local index = GetRaidTargetIndex(unit)
     if not index then
         tex._msufRaidMarkerIndex = nil
         SetShown(tex, false)
@@ -585,14 +576,17 @@ end
 local function UpdateLeader(frame, status)
     local cfg = status and status.leader
     local tex = frame.LeaderIndicator
-    if not (cfg and cfg.enabled and tex and UnitExistsSafe(frame.unit)) then
+    local unit = frame.unit
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (cfg and cfg.enabled and tex and exists) then
         SetShown(tex, false)
         return
     end
-    local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(frame.unit)
-    local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(frame.unit)
-    local leader = IsTrue(isLeader)
-    local assist = (not leader) and IsTrue(isAssist)
+    local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
+    local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
+    local leader = (isLeader == true or isLeader == 1)
+    local assist = (not leader) and (isAssist == true or isAssist == 1)
     if leader or assist then
         ApplyLeaderTexture(tex, cfg, status, assist)
         SetShown(tex, true)
@@ -607,9 +601,12 @@ local function UpdateLeaderPair(frame, status)
     local assistCfg = status and status.assist
     local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
     local assistTex = frame and frame.assistIcon
-    local exists = UnitExistsSafe(unit)
-    local leader = exists and UnitIsGroupLeader and IsTrue(UnitIsGroupLeader(unit))
-    local assist = exists and (not leader) and UnitIsGroupAssistant and IsTrue(UnitIsGroupAssistant(unit))
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    local leaderRaw = exists and UnitIsGroupLeader and UnitIsGroupLeader(unit)
+    local leader = leaderRaw == true or leaderRaw == 1
+    local assistRaw = exists and (not leader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
+    local assist = assistRaw == true or assistRaw == 1
 
     if leaderCfg and leaderCfg.enabled and leaderTex and leader then
         ApplyLeaderTexture(leaderTex, leaderCfg, status, false)
@@ -687,7 +684,8 @@ local function UpdateRole(frame, status)
     local cfg = status and status.role
     local tex = frame and frame.roleIcon
     local unit = frame and frame.unit
-    local exists = UnitExistsSafe(unit)
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
     local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
     if role == "NONE" then role = nil end
     if status then status.roleValue = role end
@@ -784,7 +782,8 @@ local function UpdatePhase(frame, status)
         return
     end
     local reason
-    if UnitIsPlayer and IsTrue(UnitIsPlayer(unit)) and UnitPhaseReason then
+    local isPlayer = UnitIsPlayer and UnitIsPlayer(unit)
+    if (isPlayer == true or isPlayer == 1) and UnitPhaseReason then
         reason = UnitPhaseReason(unit)
     end
     if reason then
@@ -799,11 +798,14 @@ end
 local function UpdateLevel(frame, status)
     local cfg = status and status.level
     local fs = frame.levelText
-    if not (cfg and cfg.enabled and fs and UnitLevel and UnitExistsSafe(frame.unit)) then
+    local unit = frame.unit
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (cfg and cfg.enabled and fs and UnitLevel and exists) then
         SetShown(fs, false)
         return
     end
-    local level = UnitLevel(frame.unit)
+    local level = UnitLevel(unit)
     level = tonumber(level)
     if not level then
         SetShown(fs, false)
@@ -828,11 +830,14 @@ end
 local function UpdateRaidGroup(frame, status)
     local cfg = status and status.raidGroup
     local fs = frame.raidGroupNameText
-    if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and UnitExistsSafe(frame.unit)) then
+    local unit = frame.unit
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and exists) then
         SetShown(fs, false)
         return
     end
-    local index = UnitInRaid(frame.unit)
+    local index = UnitInRaid(unit)
     if not index then
         SetShown(fs, false)
         return
@@ -854,7 +859,9 @@ local function EliteAtlas(state)
 end
 
 local function EliteState(unit)
-    if not (UnitClassification and UnitExistsSafe(unit)) then
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (UnitClassification and exists) then
         return nil
     end
     local class = UnitClassification(unit)
@@ -906,42 +913,67 @@ local function StatusText(frame, cfg)
     end
     if cfg and cfg.showGhost and UnitIsGhost then
         local ghost = UnitIsGhost(frame.unit)
-        if IsTrue(ghost) then
+        if ghost == true or ghost == 1 then
             return "GHOST", "ghost"
         end
     end
     if cfg and cfg.showDead then
         local dead = UnitIsDead and UnitIsDead(frame.unit)
-        if not IsTrue(dead) and UnitIsDeadOrGhost then
+        if not (dead == true or dead == 1) and UnitIsDeadOrGhost then
             dead = UnitIsDeadOrGhost(frame.unit)
         end
-        if IsTrue(dead) then
+        if dead == true or dead == 1 then
             return "DEAD", "dead"
         end
     end
     if cfg and cfg.showAFK and UnitIsAFK then
         local afk = UnitIsAFK(frame.unit)
-        if IsTrue(afk) then
+        if afk == true or afk == 1 then
             return "AFK", "afk"
         end
     end
     if cfg and cfg.showDND and UnitIsDND then
         local dnd = UnitIsDND(frame.unit)
-        if IsTrue(dnd) then
+        if dnd == true or dnd == 1 then
             return "DND", "afk"
         end
     end
     return nil
 end
 
-local function UpdateStatusText(frame, status)
+local function UpdateStatusText(frame, status, event)
     local cfg = status and status.statusText
     local fs = frame.statusIndicatorText
-    if not (cfg and cfg.enabled and fs and UnitExistsSafe(frame.unit)) then
+    local unit = frame.unit
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (cfg and cfg.enabled and fs and exists) then
+        if frame._msufStatusTextValue == nil
+            and frame._msufStatusTextLayout == nil
+            and fs and fs._msufStatusShown == false then
+            return
+        end
+        frame._msufStatusTextValue = nil
+        frame._msufStatusTextLayout = nil
         if fs then
             SetText(fs, "")
             SetShown(fs, false)
         end
+        return
+    end
+    if status.testMode ~= true
+        and event == "UNIT_HEALTH"
+        and frame._msufStatusTextValue == nil
+        and (cfg.showDead == true or cfg.showGhost == true) then
+        local deadOrGhost = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
+        if not (deadOrGhost == true or deadOrGhost == 1) then
+            return
+        end
+    elseif status.testMode ~= true
+        and event == "UNIT_HEALTH"
+        and frame._msufStatusTextValue == nil
+        and cfg.showDead ~= true
+        and cfg.showGhost ~= true then
         return
     end
     local text, state = status.testMode and "DEAD" or nil, status.testMode and "dead" or nil
@@ -958,14 +990,35 @@ local function UpdateStatusText(frame, status)
             layout = cfg.dead
         end
         if layout and layout.enabled == false then
+            if frame._msufStatusTextValue == nil
+                and frame._msufStatusTextLayout == nil
+                and fs._msufStatusShown == false then
+                return
+            end
+            frame._msufStatusTextValue = nil
+            frame._msufStatusTextLayout = nil
             SetText(fs, "")
             SetShown(fs, false)
             return
         end
+        if frame._msufStatusTextValue == text
+            and frame._msufStatusTextLayout == layout
+            and fs._msufStatusShown == true then
+            return
+        end
+        frame._msufStatusTextValue = text
+        frame._msufStatusTextLayout = layout
         LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
         SetText(fs, text)
         SetShown(fs, true)
     else
+        if frame._msufStatusTextValue == nil
+            and frame._msufStatusTextLayout == nil
+            and fs._msufStatusShown == false then
+            return
+        end
+        frame._msufStatusTextValue = nil
+        frame._msufStatusTextLayout = nil
         SetText(fs, "")
         SetShown(fs, false)
     end
@@ -974,13 +1027,17 @@ end
 local function UpdateCombat(frame, status)
     local cfg = status and status.combat
     local tex = frame.combatStateIndicatorIcon
-    if not (cfg and cfg.enabled and tex and UnitExistsSafe(frame.unit)) then
+    local unit = frame.unit
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (cfg and cfg.enabled and tex and exists) then
         SetShown(tex, false)
         return
     end
     local active = status.testMode
     if not active and UnitAffectingCombat then
-        active = IsTrue(UnitAffectingCombat(frame.unit))
+        local activeRaw = UnitAffectingCombat(unit)
+        active = activeRaw == true or activeRaw == 1
     end
     SetShown(tex, active == true)
 end
@@ -994,7 +1051,8 @@ local function UpdateResting(frame, status)
     end
     local active = status.testMode
     if not active and frame.unit == "player" and IsResting then
-        active = IsTrue(IsResting())
+        local activeRaw = IsResting()
+        active = activeRaw == true or activeRaw == 1
     end
     SetShown(tex, active == true)
 end
@@ -1002,7 +1060,10 @@ end
 local function UpdateIncomingRes(frame, status)
     local cfg = status and status.incomingRes
     local tex = frame.incomingResIndicatorIcon
-    if not (cfg and cfg.enabled and tex and UnitExistsSafe(frame.unit)) then
+    local unit = frame.unit
+    local exists = (not UnitExists) or UnitExists(unit)
+    exists = exists == true or exists == 1
+    if not (cfg and cfg.enabled and tex and exists) then
         SetShown(tex, false)
         return
     end
@@ -1012,7 +1073,8 @@ local function UpdateIncomingRes(frame, status)
     end
     local active = status.testMode
     if not active and UnitHasIncomingResurrection then
-        active = IsTrue(UnitHasIncomingResurrection(frame.unit))
+        local activeRaw = UnitHasIncomingResurrection(unit)
+        active = activeRaw == true or activeRaw == 1
     end
     SetShown(tex, active == true)
 end
@@ -1030,6 +1092,10 @@ function Status.GetUnitlessEvents()
 end
 
 function Status.Apply(frame, spec)
+    if frame then
+        frame._msufStatusTextValue = nil
+        frame._msufStatusTextLayout = nil
+    end
     ApplyConfiguredRegions(frame, spec)
 end
 
@@ -1052,6 +1118,8 @@ function Status.Disable(frame)
     HideField(frame, "summonIcon")
     HideField(frame, "phaseIcon")
     frame._msufGFSummonActive = false
+    frame._msufStatusTextValue = nil
+    frame._msufStatusTextLayout = nil
     CancelReadyCheckTimer(frame)
 end
 

@@ -7,95 +7,6 @@
 local addonName, ns = ...
 
 -- =====================================================================
--- 12.0 SetTimerDuration helper (NO global hook)
---
--- IMPORTANT (Midnight/secret values):
--- Replacing or hooksecuring the shared StatusBar:SetTimerDuration method will
--- route *all* Blizzard timer bars through addon Lua, which taints the duration/
--- remaining-time values. Blizzard UI (e.g. EncounterTimeline) then can crash on
--- secret-number comparisons ("attempt to compare ... secret number value tainted by ...").
---
--- Therefore we MUST NOT hook/override StatusBar:SetTimerDuration globally.
---
--- Instead, MSUF uses this scoped helper for its own statusbars to normalize the
--- optional interpolation/direction arguments and avoid legacy callers passing dt/0/1/bool.
--- =====================================================================
-
-do
-  if type(_G.MSUF_StatusBarSetTimerDurationSafe) ~= "function" then
-    local enumInterp = _G.Enum and _G.Enum.StatusBarInterpolation
-    local enumDir    = _G.Enum and _G.Enum.StatusBarTimerDirection
-
-    local validInterp = nil
-    local validDir    = nil
-
-    if type(enumInterp) == "table" then
-      validInterp = {}
-      for _, v in pairs(enumInterp) do
-        if type(v) == "number" then validInterp[v] = true end
-      end
-    end
-
-    if type(enumDir) == "table" then
-      validDir = {}
-      for _, v in pairs(enumDir) do
-        if type(v) == "number" then validDir[v] = true end
-      end
-    end
-
-    local function _NormalizeInterpolation(x)
-      if x == nil then return nil end
-      local t = type(x)
-      if t == "number" then
-        if validInterp and validInterp[x] then return x end
-        return nil
-      elseif t == "boolean" then
-        if enumInterp and type(enumInterp.Immediate) == "number" then
-          return enumInterp.Immediate
-        end
-        return nil
-      end
-      return nil
-    end
-
-    local function _NormalizeDirection(x)
-      if x == nil then return nil end
-      local t = type(x)
-      if t == "number" then
-        if validDir and validDir[x] then return x end
-        return nil
-      elseif t == "boolean" then
-        if enumDir then
-          local rem = enumDir.RemainingTime
-          local ela = enumDir.ElapsedTime
-          if x and type(rem) == "number" then return rem end
-          if (not x) and type(ela) == "number" then return ela end
-        end
-        return nil
-      end
-      return nil
-    end
-
-    function _G.MSUF_StatusBarSetTimerDurationSafe(statusBar, duration, interpolation, direction)
-      if not statusBar or not statusBar.SetTimerDuration then
-        return false
-      end
-
-      interpolation = _NormalizeInterpolation(interpolation)
-      direction     = _NormalizeDirection(direction)
-
-      if interpolation ~= nil and direction ~= nil then
-        statusBar:SetTimerDuration(duration, interpolation, direction)
-        return true
-      end
-
-      statusBar:SetTimerDuration(duration)
-      return true
-    end
-  end
-end
-
--- =====================================================================
 -- Edit Mode Preview Hard-Sync
 --
 -- After profile reset/import/load (and /reload), DB values can be transient
@@ -125,13 +36,7 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
     -- IMPORTANT: This function runs during Edit Mode preview build/sync. In Midnight/Beta,
     -- various frame APIs can return "secret" numbers; ANY numeric comparisons/arithmetic
     -- on such values can throw and would otherwise break Edit Mode entry.
-    --
-    -- Guard: keep Edit Mode stable even if some underlying values are secret/tainted.
-    -- This is NOT a hot path; a single pcall here is acceptable and avoids user-facing
-    -- LUA_WARNING spam after combat when entering Edit Mode.
     if not preview or not real then return end
-
-    local ok = pcall(function()
 
     -- NOTE: Frame size (SetSize on the outer frame) is intentionally NOT synced
     -- here. Frame size is always authoritative from the DB via
@@ -180,14 +85,6 @@ if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
           preview.latencyBar:SetWidth(lw)
         end
       end
-
-    end) -- pcall
-
-    if not ok then
-      -- Swallow any secret-value comparison/arithmetic errors so Edit Mode entry
-      -- never breaks. Preview will still be functional; it just won't hard-sync.
-      return
-    end
   end
 end
 
@@ -361,7 +258,6 @@ local function _MSUF_SetTextIfChanged(fs, s)
         fs:SetText(s or "")
     end
 end
-
 -- Deferred re-cache after all addons loaded.
 if _G.C_Timer and _G.C_Timer.After then
     _G.C_Timer.After(0, function()
@@ -455,47 +351,6 @@ function _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
 end
 
 -- =====================================================================
--- Phase 1B: Canonical timer-direction + reverse-fill application.
--- Contains the full fallback chain with mode-probe cache.
--- Returns true when timer-driven animation was set up successfully.
--- =====================================================================
-function _G.MSUF_ApplyTimerAndFill(sb, durationObj, reverseFill)
-    if not sb then return false end
-    local okTimer = false
-    if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
-        okTimer = (_G.MSUF_ApplyCastbarTimerDirection(sb, durationObj, reverseFill) == true)
-    elseif type(_G.MSUF_SetStatusBarTimerDuration) == "function" then
-        okTimer = (_G.MSUF_SetStatusBarTimerDuration(sb, durationObj, reverseFill) == true)
-        if sb.SetReverseFill then
-            pcall(sb.SetReverseFill, sb, reverseFill and true or false)
-        end
-    elseif sb.SetTimerDuration then
-        local mode = _G.__MSUF_TimerDurationMode
-        if mode ~= nil then
-            okTimer = (pcall(sb.SetTimerDuration, sb, durationObj, mode) == true)
-        else
-            local ok0 = pcall(sb.SetTimerDuration, sb, durationObj, 0)
-            if ok0 then
-                _G.__MSUF_TimerDurationMode = 0
-                okTimer = true
-            else
-                local okB = pcall(sb.SetTimerDuration, sb, durationObj, true)
-                if okB then
-                    _G.__MSUF_TimerDurationMode = true
-                    okTimer = true
-                end
-            end
-        end
-        if sb.SetReverseFill then
-            pcall(sb.SetReverseFill, sb, reverseFill and true or false)
-        end
-    elseif sb.SetReverseFill then
-        pcall(sb.SetReverseFill, sb, reverseFill and true or false)
-    end
-    return okTimer
-end
-
--- =====================================================================
 -- Phase 1D: Canonical color resolution for interruptible / non-interruptible.
 -- Returns: ir, ig, ib, nr, ng, nb  (interruptible RGB, non-interruptible RGB)
 -- =====================================================================
@@ -538,65 +393,6 @@ function _G.MSUF_ResolveCastbarColors()
     return ir, ig, ib, nr, ng, nb
 end
 
--- Apply a normal CAST/CHANNEL state that has a durationObj.
--- Returns true when it applied and showed the bar; false when state is not applicable.
-function _G.MSUF_Castbar_ApplyActiveDuration(frame, state, opts)
-    if not (frame and state and state.active) then return false end
-    local durObj = state.durationObj
-    local spellName = state.spellName
-    if durObj == nil or not spellName then return false end
-
-    opts = opts or {}
-    local resetRuntime = (opts.resetRuntime ~= false)
-
-    local isChanneled = (state.castType == "CHANNEL")
-    frame.MSUF_durationObj = durObj
-    frame.MSUF_isChanneled = isChanneled and true or false
-    frame.MSUF_channelDirect = (isChanneled and (frame.unit == "target" or frame.unit == "focus")) and true or nil
-
-    frame.interrupted = nil
-
-    -- Basic visuals
-    if frame.icon and state.icon then
-        frame.icon:SetTexture(state.icon)
-    end
-    if frame.castText then
-        _MSUF_SetTextIfChanged(frame.castText, state.text or spellName or "")
-    end
-
-    -- Reset hotpath caches (prevents "stale last value" issues after retargeting / refresh)
-    if resetRuntime then
-        frame.castDuration = nil
-        frame.castElapsed  = nil
-        frame.MSUF_timerDriven = nil
-        frame.MSUF_timerRangeSet = nil
-        frame._msufLastSBValue = nil
-        frame.MSUF_channelDirect = (isChanneled and (frame.unit == "target" or frame.unit == "focus")) and true or nil
-        frame._msufHardStopNoChannelSince = nil
-        frame._msufHardStopNoCastSince = nil
-    end
-
-    local rev = _MSUF_GetReverseFill(frame, state, isChanneled)
-
-    -- Phase 1B: Use shared timer-direction application helper.
-    local okTimer = _G.MSUF_ApplyTimerAndFill(frame.statusBar, durObj, rev)
-    frame.MSUF_timerDriven = okTimer and true or false
-
-    if frame.UpdateColorForInterruptible then
-        frame:UpdateColorForInterruptible()
-    end
-
-    if type(_G.MSUF_RegisterCastbar) == "function" and opts.skipRegister ~= true then
-        _G.MSUF_RegisterCastbar(frame)
-    end
-
-    if frame.timeText and opts.skipTimeText ~= true and type(_G.MSUF_UpdateCastTimeText_FromStatusBar) == "function" then
-        _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
-    end
-
-    if frame.Show then frame:Show() end
-    return true
-end
 local function MSUF_EnsureCastbarShakeAnimation(frame)
     if not frame or frame.MSUF_ShakeGroup then
         return
@@ -739,7 +535,6 @@ function _G.MSUF_PlayCastbarShake(frame)
         frame.MSUF_ShakeGroup:Play()
     end
 end
-
 function _G.MSUF_GetInterruptibleCastColor()
     _EnsureDBLazy()
     local g = (MSUF_DB and MSUF_DB.general) or {}
@@ -768,13 +563,19 @@ end
 
 -- Fix 3: Fast-path for plain numbers (callers already pass converted values).
 local function _MSUF_ToPlainNumber(x)
-    if type(x) == "number" then return x end
+    if type(x) == "number" then return tonumber(tostring(x)) end
     local fn = _G.MSUF_ToPlainNumber
     if type(fn) == "function" then
-        return fn(x)
+        local v = fn(x)
+        if type(v) == "number" then
+            return tonumber(tostring(v))
+        end
+        return v
     end
-    local ok, n = pcall(tonumber, x)
-    if ok then return n end
+    local t = type(x)
+    if t == "number" or t == "string" then
+        return tonumber(tostring(x))
+    end
     return nil
 end
 
@@ -877,11 +678,9 @@ function _G.MSUF_ApplyCastbarGlowFade(frame, remaining, total)
     if type(br) ~= "number" or type(bg) ~= "number" or type(bb) ~= "number" then
         -- Fallback: capture current color as base (best-effort).
         if sb.GetStatusBarColor then
-            local ok, rr, gg, bb2, aa2 = pcall(sb.GetStatusBarColor, sb)
-            if ok then
-                br, bg, bb, ba = rr, gg, bb2, aa2
-                sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA = br, bg, bb, ba
-            end
+            local rr, gg, bb2, aa2 = sb:GetStatusBarColor()
+            br, bg, bb, ba = rr, gg, bb2, aa2
+            sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA = br, bg, bb, ba
         end
     end
     if type(br) ~= "number" or type(bg) ~= "number" or type(bb) ~= "number" then
@@ -993,223 +792,4 @@ function _G.MSUF_ClearEmpowerState(frame)
             if s then s:Hide() end
         end
     end
-end
-
--- =====================================================================
---  Shared interrupt feedback bar visuals.
--- Performs the common visual steps for showing "Interrupted" on any castbar.
--- Callers handle their own lifecycle (timers, state tracking, cleanup).
---
--- opts = {
---   label      = "Interrupted",     -- text to show
---   barValue   = 1,                 -- fill value (Boss=1, Player=0.8)
---   colorR/G/B = 0.8/0.1/0.1,      -- bar color
---   reverseFill = false,            -- computed reverse fill
---   skipShake  = false,             -- suppress shake animation
--- }
--- =====================================================================
-function _G.MSUF_ApplyInterruptBarVisuals(frame, opts)
-    if not frame then return end
-    opts = opts or {}
-    local sb = frame.statusBar
-    if not sb then return end
-
-    local barVal = opts.barValue or 1
-    local cr = opts.colorR or 0.8
-    local cg = opts.colorG or 0.1
-    local cb = opts.colorB or 0.1
-    local rf = opts.reverseFill
-
-    -- Set bar to full/near-full red
-    if sb.SetMinMaxValues then pcall(sb.SetMinMaxValues, sb, 0, 1) end
-    if sb.SetValue then pcall(sb.SetValue, sb, barVal) end
-
-    -- Apply reverse fill via canonical helper
-    if rf ~= nil then
-        if type(_G.MSUF_ApplyCastbarTimerDirection) == "function" then
-            _G.MSUF_ApplyCastbarTimerDirection(sb, nil, rf)
-        elseif sb.SetReverseFill then
-            pcall(sb.SetReverseFill, sb, rf and true or false)
-        end
-    end
-
-    -- Apply color
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(sb, cr, cg, cb, 1)
-    elseif sb.SetStatusBarColor then
-        sb:SetStatusBarColor(cr, cg, cb, 1)
-    end
-
-    -- Set text
-    local label = opts.label or "Interrupted"
-    if frame.castText then
-        if type(_G.MSUF_CB_ApplyTexts) == "function" then
-            _G.MSUF_CB_ApplyTexts(frame, nil, label, nil)
-        elseif frame.castText.SetText then
-            frame.castText:SetText(label)
-        end
-    end
-    if frame.timeText then
-        if type(_G.MSUF_CB_ApplyTexts) == "function" then
-            _G.MSUF_CB_ApplyTexts(frame, nil, nil, "")
-        elseif frame.timeText.SetText then
-            frame.timeText:SetText("")
-        end
-    end
-
-    -- Show + Shake
-    if frame.Show then frame:Show() end
-    if frame.SetAlpha then frame:SetAlpha(1) end
-
-    if not opts.skipShake and type(_G.MSUF_PlayCastbarShake) == "function" then
-        pcall(_G.MSUF_PlayCastbarShake, frame)
-    end
-end
-
-
--- Stop/Reset reason enum (local, stable strings; used only to select existing stop-path behavior).
-local MSUF_CB_STOP_REASON = {
-    SUCCEEDED   = "SUCCEEDED",
-    FAILED      = "FAILED",
-    INTERRUPTED = "INTERRUPTED",
-    STOPPED     = "STOPPED",
-    HARDHIDE    = "HARDHIDE",
-}
-
--- Centralized stop/reset helper (Phase 2.2):
--- This is intentionally a thin 1:1 extraction of existing duplicated stop blocks.
--- It does NOT make color decisions (interrupt/SSoT remains elsewhere).
-
-function _G.MSUF_CB_ResetStateOnStop(frame, reasonOrState, opts)
-    if not frame then return end
-    opts = opts or {}
-
-    local reason = reasonOrState
-    if type(reasonOrState) == "table" then
-        reason = reasonOrState.reason or reasonOrState.kind or reasonOrState[1]
-    end
-    if type(reason) ~= "string" then
-        reason = MSUF_CB_STOP_REASON.STOPPED
-    end
-
-    -- NOTE: We intentionally keep per-reason behavior differences (what gets cleared/hidden),
-    -- to ensure 0-regression vs the prior copy/paste blocks.
-
-    if reason == MSUF_CB_STOP_REASON.HARDHIDE then
-        -- 1:1 with the "castbar disabled" early return block in Driver OnEvent.
-        frame:SetScript("OnUpdate", nil)
-        if MSUF_UnregisterCastbar then
-            MSUF_UnregisterCastbar(frame)
-        end
-        frame.MSUF_durationObj = nil
-        frame._msufPlainEndTime = nil
-        frame._msufRemaining = nil
-        frame._msufFastText = nil
-        frame._msufPlainTotal = nil
-        frame.MSUF_isChanneled = nil
-        frame.MSUF_channelDirect = nil
-        frame.MSUF_timerDriven = nil
-        frame.MSUF_timerRangeSet = nil
-        frame._msufLastSBValue = nil
-        frame.castDuration = nil
-        frame.castElapsed = nil
-        if frame.timeText then
-            _G.MSUF_CB_ApplyTexts(frame, nil, nil, "")
-        end
-        if frame.latencyBar then
-            frame.latencyBar:Hide()
-        end
-        frame:Hide()
-        return
-    end
-
-    if reason == MSUF_CB_STOP_REASON.STOPPED then
-        -- 1:1 with the deferred stop-reset in frame:Cast() (when no active state).
-        frame:SetScript("OnUpdate", nil)
-        if MSUF_UnregisterCastbar then
-            MSUF_UnregisterCastbar(frame)
-        end
-        frame.MSUF_durationObj = nil
-        frame._msufPlainEndTime = nil
-        frame._msufRemaining = nil
-        frame._msufFastText = nil
-        frame._msufPlainTotal = nil
-        frame.castDuration = nil
-        frame.castElapsed  = nil
-        frame.MSUF_timerDriven = nil
-        frame.MSUF_timerRangeSet = nil
-        frame.MSUF_isChanneled = nil
-        frame.MSUF_channelDirect = nil
-        if frame.timeText then
-            _G.MSUF_CB_ApplyTexts(frame, nil, nil, "")
-        end
-        if frame.castText then
-            _G.MSUF_CB_ApplyTexts(frame, nil, "", nil)
-        end
-        if frame.latencyBar then
-            frame.latencyBar:Hide()
-        end
-        if not frame.interrupted then
-            frame:Hide()
-        end
-        return
-    end
-
-    -- Shared core stop-reset (SUCCEEDED/FAILED/INTERRUPTED):
-    -- This matches the duplicated blocks previously in SetSucceeded/SetInterrupted.
-
-    if frame.isEmpower then
-        _G.MSUF_ClearEmpowerState(frame)
-    end
-
-    frame:SetScript("OnUpdate", nil)
-
-    local t = frame.hideTimer
-    if t and t.Cancel then t:Cancel() end
-    frame.hideTimer = nil
-
-    t = frame.succeededTimer
-    if t and t.Cancel then t:Cancel() end
-    frame.succeededTimer = nil
-
-    t = frame.timer
-    if t and t.Cancel then t:Cancel() end
-    frame.timer = nil
-
-    if MSUF_UnregisterCastbar then
-        MSUF_UnregisterCastbar(frame)
-    end
-
-    frame.MSUF_durationObj = nil
-    frame._msufPlainEndTime = nil
-    frame._msufRemaining = nil
-    frame._msufFastText = nil
-    frame._msufPlainTotal = nil
-    frame.MSUF_isChanneled = nil
-    frame.MSUF_channelDirect = nil
-    frame.MSUF_timerDriven = nil
-    frame.MSUF_timerRangeSet = nil
-
-    if reason == MSUF_CB_STOP_REASON.INTERRUPTED then
-        if _G.MSUF_ClearCastbarTimerDuration and frame.statusBar then
-            _G.MSUF_ClearCastbarTimerDuration(frame.statusBar)
-        end
-    end
-
-    frame.castDuration = nil
-    frame.castElapsed  = nil
-
-    if reason == MSUF_CB_STOP_REASON.SUCCEEDED or reason == MSUF_CB_STOP_REASON.FAILED then
-        if frame.castText then
-            _G.MSUF_CB_ApplyTexts(frame, nil, "", nil)
-        end
-        if frame.timeText then
-            _G.MSUF_CB_ApplyTexts(frame, nil, nil, "")
-        end
-        frame:Hide()
-        return
-    end
-
-    -- INTERRUPTED: do not apply colors here (interrupt/SSoT handles it).
-    -- Text/Show/Hold timer remain in the caller (SetInterrupted), matching the old code.
 end

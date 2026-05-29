@@ -43,7 +43,7 @@ local function EnsureUI()
   if _G.__MSUF_FocusKickUIInit then return end
   if type(_G.MSUF_InitFocusKickIcon) ~= "function" then return end
   _G.__MSUF_FocusKickUIInit = true
-  pcall(_G.MSUF_InitFocusKickIcon)
+  _G.MSUF_InitFocusKickIcon()
 end
 
 local pending = false
@@ -117,8 +117,7 @@ local function UpdateNow()
 
   local state
   if type(_G.MSUF_BuildCastState) == "function" then
-    local ok, s = pcall(_G.MSUF_BuildCastState, "focus")
-    if ok then state = s end
+    state = _G.MSUF_BuildCastState("focus")
   end
 
   if type(_G.MSUF_FocusKick_ApplyCastState) == "function" then
@@ -156,7 +155,7 @@ f:SetScript("OnEvent", function(self, event, unit)
   -- Optional: show interrupt feedback even though the focus castbar is hidden.
   if event == "UNIT_SPELLCAST_INTERRUPTED" and unit == "focus" then
     if IsEnabled() and type(_G.MSUF_FocusKick_PlayInterruptFeedback) == "function" then
-      pcall(_G.MSUF_FocusKick_PlayInterruptFeedback)
+      _G.MSUF_FocusKick_PlayInterruptFeedback()
     end
   end
   ScheduleUpdate()

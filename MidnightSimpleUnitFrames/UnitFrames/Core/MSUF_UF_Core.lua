@@ -177,6 +177,9 @@ local ReindexFrameUnitFilter
 local ClearFrameUnitFilter
 local ApplyFrameUnitFilter
 local EnsureEventDriver
+local RefreshEventDriverRegistration
+local RefreshFrameUnitEventRouting
+local RemoveEventUnitFrame
 
 local eventDriver = UF.eventDriver
 local eventFrames = UF.eventFrames or {}
@@ -189,6 +192,34 @@ UF.eventFrameCounts = eventFrameCounts
 UF.eventUnitFrames = eventUnitFrames
 UF.eventUnitlessFrames = eventUnitlessFrames
 UF.eventUnitlessFrameCounts = eventUnitlessFrameCounts
+
+-- A UNIT_* event may only fan out through the central driver when a feature
+-- really needs cross-unit state. Health, power, prediction and similar hot
+-- unit events must stay unit-scoped; otherwise one raid UNIT_HEALTH tick can
+-- wake every attached group frame.
+local UNIT_EVENT_UNITLESS_ALLOWED = {
+    UNIT_TARGET = true,
+    UNIT_NAME_UPDATE = true,
+    UNIT_FACTION = true,
+    UNIT_FLAGS = true,
+    UNIT_CONNECTION = true,
+    UNIT_CLASSIFICATION_CHANGED = true,
+}
+
+local function UnitEventAllowsUnitless(event)
+    return not UNIT_EVENT_HAS_UNIT[event] or UNIT_EVENT_UNITLESS_ALLOWED[event] == true
+end
+
+local function FrameUnitMatches(frame, unit)
+    if not (frame and unit) then
+        return false
+    end
+    if frame.unit == unit then
+        return true
+    end
+    local attrUnit = frame.GetAttribute and frame:GetAttribute("unit")
+    return attrUnit == unit
+end
 
 -- Central driver path. Used only for:
 --   * unitless events (no unit parameter, e.g. GROUP_ROSTER_UPDATE)
@@ -206,8 +237,15 @@ local function EventDriverOnEvent(_, event, unit, ...)
         return
     end
 
-    if UNIT_EVENT_HAS_UNIT[event] and unit then
-        local unitlessFrames = eventUnitlessFrames[event]
+    if UNIT_EVENT_HAS_UNIT[event] then
+        -- UNIT_* events are only useful when Blizzard provides the unit token.
+        -- A nil-unit fallback would fan out to every registered unit/group frame
+        -- and was the largest observed trace cost.
+        if not unit then
+            return
+        end
+
+        local unitlessFrames = UnitEventAllowsUnitless(event) and eventUnitlessFrames[event] or nil
         if unitlessFrames then
             for ownerFrame in pairs(unitlessFrames) do
                 DispatchFrameEvent(ownerFrame, event, unit, ...)
@@ -217,7 +255,9 @@ local function EventDriverOnEvent(_, event, unit, ...)
         unitFrames = unitFrames and unitFrames[unit]
         if unitFrames then
             for frame in pairs(unitFrames) do
-                if not (unitlessFrames and unitlessFrames[frame]) then
+                if not FrameUnitMatches(frame, unit) then
+                    RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or unit)
+                elseif not (unitlessFrames and unitlessFrames[frame]) then
                     DispatchFrameEvent(frame, event, unit, ...)
                 end
             end
@@ -255,9 +295,12 @@ local function AddEventUnitFrame(frame, event, unit)
     byUnit[frame] = true
     frame._msufDriverEventUnits = frame._msufDriverEventUnits or {}
     frame._msufDriverEventUnits[event] = unit
+    if RefreshEventDriverRegistration then
+        RefreshEventDriverRegistration(event)
+    end
 end
 
-local function RemoveEventUnitFrame(frame, event, unit)
+RemoveEventUnitFrame = function(frame, event, unit)
     if not (frame and event and unit and UNIT_EVENT_HAS_UNIT[event]) then
         return
     end
@@ -274,6 +317,9 @@ local function RemoveEventUnitFrame(frame, event, unit)
     end
     if frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] == unit then
         frame._msufDriverEventUnits[event] = nil
+    end
+    if RefreshEventDriverRegistration then
+        RefreshEventDriverRegistration(event)
     end
 end
 
@@ -299,8 +345,12 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
         frame.unit = newUnit
         frame.unitKey = newUnit
     end
-    ReindexFrameUnitEvents(frame, oldUnit, frame.unit)
-    ReindexFrameUnitFilter(frame, oldUnit, frame.unit)
+    if RefreshFrameUnitEventRouting then
+        RefreshFrameUnitEventRouting(frame)
+    else
+        ReindexFrameUnitEvents(frame, oldUnit, frame.unit)
+        ReindexFrameUnitFilter(frame, oldUnit, frame.unit)
+    end
     return true
 end
 
@@ -319,6 +369,9 @@ local function PromoteEventToCentralDriver(frame, event)
 end
 
 local function RegisterDriverFrameUnitlessEvent(frame, event)
+    if UNIT_EVENT_HAS_UNIT[event] and not UnitEventAllowsUnitless(event) then
+        return false
+    end
     PromoteEventToCentralDriver(frame, event)
     local frames = eventUnitlessFrames[event]
     if not frames then
@@ -326,10 +379,14 @@ local function RegisterDriverFrameUnitlessEvent(frame, event)
         eventUnitlessFrames[event] = frames
     end
     if frames[frame] then
-        return
+        return true
     end
     frames[frame] = true
     eventUnitlessFrameCounts[event] = (eventUnitlessFrameCounts[event] or 0) + 1
+    if RefreshEventDriverRegistration then
+        RefreshEventDriverRegistration(event)
+    end
+    return true
 end
 
 local function UnregisterDriverFrameUnitlessEvent(frame, event)
@@ -345,6 +402,9 @@ local function UnregisterDriverFrameUnitlessEvent(frame, event)
     else
         eventUnitlessFrameCounts[event] = count
     end
+    if RefreshEventDriverRegistration then
+        RefreshEventDriverRegistration(event)
+    end
 end
 
 EnsureEventDriver = function()
@@ -354,6 +414,33 @@ EnsureEventDriver = function()
         UF.eventDriver = eventDriver
     end
     return eventDriver
+end
+
+local function EventNeedsCentralDriver(event)
+    if not event then
+        return false
+    end
+    if UNIT_EVENT_HAS_UNIT[event] then
+        return eventUnitlessFrameCounts[event] ~= nil or eventUnitFrames[event] ~= nil
+    end
+    return eventFrameCounts[event] ~= nil
+end
+
+RefreshEventDriverRegistration = function(event)
+    if not event then
+        return
+    end
+    local registered = eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event]
+    if EventNeedsCentralDriver(event) then
+        if not registered then
+            EnsureEventDriver():RegisterEvent(event)
+            eventDriver._msufRegistered = eventDriver._msufRegistered or {}
+            eventDriver._msufRegistered[event] = true
+        end
+    elseif registered then
+        eventDriver._msufRegistered[event] = nil
+        eventDriver:UnregisterEvent(event)
+    end
 end
 
 -- Per-frame unit-event filter. For events that take a unit parameter we install
@@ -414,6 +501,34 @@ local function FrameHasUnitlessForEvent(frame, event)
     return unitless and unitless[event] == true
 end
 
+RefreshFrameUnitEventRouting = function(frame)
+    local ownersByEvent = frame and frame._msufEventOwners
+    if not ownersByEvent then
+        return
+    end
+    local unit = frame.unit
+    for event in pairs(ownersByEvent) do
+        if UNIT_EVENT_HAS_UNIT[event] then
+            local centralUnit = frame._msufDriverEventUnits and frame._msufDriverEventUnits[event]
+            if FrameHasUnitlessForEvent(frame, event) then
+                if centralUnit then
+                    RemoveEventUnitFrame(frame, event, centralUnit)
+                end
+                ClearFrameUnitFilter(frame, event)
+            elseif unit and frame.RegisterUnitEvent then
+                if centralUnit then
+                    RemoveEventUnitFrame(frame, event, centralUnit)
+                end
+                ApplyFrameUnitFilter(frame, event, unit)
+            else
+                ClearFrameUnitFilter(frame, event)
+                AddEventUnitFrame(frame, event, unit)
+            end
+            RefreshEventDriverRegistration(event)
+        end
+    end
+end
+
 local function RegisterDriverFrameEvent(frame, event)
     local frames = eventFrames[event]
     if not frames then
@@ -435,16 +550,13 @@ local function RegisterDriverFrameEvent(frame, event)
         -- double-dispatch when the central driver also happens to be active
         -- because of unitless registrations on other frames.
         ApplyFrameUnitFilter(frame, event, frame.unit)
+        RefreshEventDriverRegistration(event)
         return
     end
     -- Unitless / non-unit event / no frame.unit: route through the central driver.
     ClearFrameUnitFilter(frame, event)
-    if not eventDriver or not eventDriver._msufRegistered or not eventDriver._msufRegistered[event] then
-        EnsureEventDriver():RegisterEvent(event)
-        eventDriver._msufRegistered = eventDriver._msufRegistered or {}
-        eventDriver._msufRegistered[event] = true
-    end
     AddEventUnitFrame(frame, event, frame.unit)
+    RefreshEventDriverRegistration(event)
 end
 
 local function UnregisterDriverFrameEvent(frame, event)
@@ -468,6 +580,7 @@ local function UnregisterDriverFrameEvent(frame, event)
         end
     else
         eventFrameCounts[event] = count
+        RefreshEventDriverRegistration(event)
     end
 end
 
@@ -476,12 +589,17 @@ local function ClearArray(t)
     wipe(t)
 end
 
+local RebuildHotEventState
+
 local function RebuildFrameEventList(frame, event)
     local owners = frame and frame._msufEventOwners and frame._msufEventOwners[event]
     local lists = frame and frame._msufEventElementLists
     if not owners then
         if lists then
             lists[event] = nil
+        end
+        if frame and frame._msufHotEventState then
+            frame._msufHotEventState[event] = nil
         end
         return
     end
@@ -504,11 +622,14 @@ local function RebuildFrameEventList(frame, event)
             local element = UF.elements[name]
             if element and element.Update then
                 n = n + 1
-                list[n] = element
+                list[n] = element.Update
                 n = n + 1
                 list[n] = mode
             end
         end
+    end
+    if RebuildHotEventState then
+        RebuildHotEventState(frame, event, owners)
     end
 end
 
@@ -536,10 +657,17 @@ local function RegisterElementEvent(frame, elementName, event, unitless)
     end
 
     if unitless == true then
+        if not RegisterDriverFrameUnitlessEvent(frame, event) then
+            return
+        end
         unitlessOwners[event] = true
-        RegisterDriverFrameUnitlessEvent(frame, event)
     end
-    byElement[elementName] = unitless == true and "unitless" or true
+    local previous = byElement[elementName]
+    if unitless == true then
+        byElement[elementName] = previous == true and "both" or "unitless"
+    else
+        byElement[elementName] = previous == "unitless" and "both" or true
+    end
     RebuildFrameEventList(frame, event)
 end
 
@@ -563,7 +691,7 @@ local function UnregisterElementEvents(frame, elementName)
             elseif frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
                 local hasUnitless = false
                 for _, mode in pairs(byElement) do
-                    if mode == "unitless" then
+                    if mode == "unitless" or mode == "both" then
                         hasUnitless = true
                         break
                     end
@@ -589,21 +717,41 @@ local function ElementEvents(element, kind, frame, spec)
 end
 
 local function SyncElementEvents(frame, name, element, spec)
+    local events = ElementEvents(element, "unit", frame, spec)
+    local unitlessEvents = ElementEvents(element, "unitless", frame, spec)
+    local eventRefs = frame._msufElementEventRefs
+    if eventRefs then
+        local refs = eventRefs[name]
+        if refs and refs.events == events and refs.unitlessEvents == unitlessEvents then
+            return
+        end
+    end
+
     UnregisterElementEvents(frame, name)
 
-    local events = ElementEvents(element, "unit", frame, spec)
     if type(events) == "table" then
         for i = 1, #events do
             RegisterElementEvent(frame, name, events[i], false)
         end
     end
 
-    local unitlessEvents = ElementEvents(element, "unitless", frame, spec)
     if type(unitlessEvents) == "table" then
         for i = 1, #unitlessEvents do
             RegisterElementEvent(frame, name, unitlessEvents[i], true)
         end
     end
+
+    if not eventRefs then
+        eventRefs = {}
+        frame._msufElementEventRefs = eventRefs
+    end
+    local refs = eventRefs[name]
+    if not refs then
+        refs = {}
+        eventRefs[name] = refs
+    end
+    refs.events = events
+    refs.unitlessEvents = unitlessEvents
 end
 
 local function FrameEnableElement(frame, name)
@@ -626,11 +774,11 @@ local function FrameEnableElement(frame, name)
         return false
     end
 
+    if element and element.Update then
+        frame[GetUpdateKey(name)] = element.Update
+    end
     SyncElementEvents(frame, name, element, spec)
     frame._msufActiveElements[name] = true
-    if element and element.Update then
-        frame["_msufUpdate" .. name] = element.Update
-    end
     return true
 end
 
@@ -640,8 +788,11 @@ local function FrameDisableElement(frame, name)
     end
     local element = UF.elements[name]
     UnregisterElementEvents(frame, name)
+    if frame._msufElementEventRefs then
+        frame._msufElementEventRefs[name] = nil
+    end
     frame._msufActiveElements[name] = nil
-    frame["_msufUpdate" .. name] = nil
+    frame[GetUpdateKey(name)] = nil
     if element and element.Disable then
         element.Disable(frame)
     end
@@ -793,6 +944,479 @@ local HOT_EVENT_KIND = {
     SPELLS_CHANGED = 18,
 }
 
+local function HotAdd(state, owners, name, fnKey, modeKey)
+    local mode = owners[name]
+    if mode == nil then return end
+    local element = UF.elements[name]
+    local update = element and element.Update
+    if not update then return end
+    state[fnKey] = update
+    if modeKey then
+        state[modeKey] = mode
+    end
+end
+
+local HOT_HANDLED_1 = {
+    InlineToT = true,
+    Prediction = true,
+    Health = true,
+    HealthText = true,
+    NameText = true,
+    StatusTextIndicator = true,
+    CombatIndicator = true,
+    GroupVisuals = true,
+    GroupStatusRuntime = true,
+}
+
+local HOT_HANDLED_2 = {
+    Power = true,
+    PowerText = true,
+}
+
+local HOT_HANDLED_3 = {
+    InlineToT = true,
+    Prediction = true,
+    Health = true,
+    HealthText = true,
+    Power = true,
+    PowerText = true,
+    NameText = true,
+    Portrait = true,
+    StatusTextIndicator = true,
+    GroupStatusRuntime = true,
+}
+
+local HOT_HANDLED_5 = {
+    Auras = true,
+    DispelOverlay = true,
+    GroupVisuals = true,
+    GroupCornerIndicators = true,
+    GroupSpellIndicators = true,
+    Borders = true,
+}
+
+local HOT_HANDLED_9 = {
+    Prediction = true,
+}
+
+local function HotTailAdd(state, owners, handled)
+    local tail, n
+    for i = 1, #UF.elementOrder do
+        local name = UF.elementOrder[i]
+        local mode = owners[name]
+        if mode ~= nil and not handled[name] then
+            local element = UF.elements[name]
+            local update = element and element.Update
+            if update then
+                if not tail then
+                    tail = {}
+                    n = 0
+                end
+                n = n + 1
+                tail[n] = update
+                n = n + 1
+                tail[n] = mode
+            end
+        end
+    end
+    state.tail = tail
+    state.tailCount = n
+end
+
+local function DispatchHotTail(frame, state, event, unit, a, b, c)
+    local tail = state.tail
+    if not tail then return end
+    for i = 1, state.tailCount, 2 do
+        local update = tail[i]
+        local eventUnit, ok = OwnerModeAllowsUnit(tail[i + 1], frame, unit)
+        if ok then
+            update(frame, event, eventUnit, a, b, c)
+        end
+    end
+end
+
+RebuildHotEventState = function(frame, event, owners)
+    local kind = HOT_EVENT_KIND[event]
+    local states = frame and frame._msufHotEventState
+    if not kind or not owners then
+        if states then states[event] = nil end
+        return
+    end
+    if not states then
+        states = {}
+        frame._msufHotEventState = states
+    end
+
+    local state = states[event]
+    if not state then
+        state = {}
+        states[event] = state
+    else
+        wipe(state)
+    end
+    state.kind = kind
+
+    if kind == 1 then
+        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
+        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
+        HotAdd(state, owners, "Health", "health")
+        HotAdd(state, owners, "HealthText", "healthText")
+        HotAdd(state, owners, "NameText", "name")
+        HotAdd(state, owners, "StatusTextIndicator", "statusText")
+        HotAdd(state, owners, "CombatIndicator", "combat")
+        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
+        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
+        HotTailAdd(state, owners, HOT_HANDLED_1)
+    elseif kind == 2 then
+        HotAdd(state, owners, "Power", "power")
+        HotAdd(state, owners, "PowerText", "powerText")
+        HotTailAdd(state, owners, HOT_HANDLED_2)
+    elseif kind == 3 then
+        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
+        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
+        HotAdd(state, owners, "Health", "health")
+        HotAdd(state, owners, "HealthText", "healthText")
+        HotAdd(state, owners, "Power", "power")
+        HotAdd(state, owners, "PowerText", "powerText")
+        HotAdd(state, owners, "NameText", "name")
+        HotAdd(state, owners, "Portrait", "portrait")
+        HotAdd(state, owners, "StatusTextIndicator", "statusText")
+        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
+        HotTailAdd(state, owners, HOT_HANDLED_3)
+    elseif kind == 5 then
+        HotAdd(state, owners, "Auras", "auras")
+        HotAdd(state, owners, "DispelOverlay", "dispel")
+        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
+        HotAdd(state, owners, "GroupCornerIndicators", "groupCorners")
+        HotAdd(state, owners, "GroupSpellIndicators", "groupSpells")
+        HotAdd(state, owners, "Borders", "borders")
+        HotTailAdd(state, owners, HOT_HANDLED_5)
+    elseif kind == 9 then
+        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
+        HotTailAdd(state, owners, HOT_HANDLED_9)
+    elseif kind == 4 then
+        HotAdd(state, owners, "NameText", "name")
+        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
+    elseif kind == 6 then
+        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
+        HotAdd(state, owners, "GroupCornerIndicators", "groupCorners")
+        HotAdd(state, owners, "Borders", "borders")
+    elseif kind == 8 then
+        HotAdd(state, owners, "Portrait", "portrait")
+    elseif kind == 10 then
+        HotAdd(state, owners, "LevelIndicator", "level")
+        HotAdd(state, owners, "EliteIndicator", "elite")
+        HotAdd(state, owners, "NameText", "name")
+        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
+        HotAdd(state, owners, "IncomingResIndicator", "incomingRes")
+        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
+    elseif kind == 11 then
+        HotAdd(state, owners, "Alpha", "alpha")
+        HotAdd(state, owners, "CombatIndicator", "combat")
+        HotAdd(state, owners, "LoadConditions", "load")
+    elseif kind == 12 then
+        HotAdd(state, owners, "RaidMarkerIndicator", "raidMarker")
+        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
+    elseif kind == 13 then
+        HotAdd(state, owners, "LeaderIndicator", "leader")
+        HotAdd(state, owners, "RaidGroupIndicator", "raidGroup")
+        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
+    elseif kind == 14 then
+        HotAdd(state, owners, "LevelIndicator", "level")
+    elseif kind == 15 then
+        HotAdd(state, owners, "StatusTextIndicator", "statusText")
+        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
+    elseif kind == 16 then
+        HotAdd(state, owners, "RestingIndicator", "resting")
+        HotAdd(state, owners, "Alpha", "alpha")
+        HotAdd(state, owners, "LoadConditions", "load")
+        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
+    elseif kind == 17 then
+        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
+        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
+        HotAdd(state, owners, "Alpha", "alpha")
+    elseif kind == 18 then
+        HotAdd(state, owners, "Alpha", "alpha")
+        HotAdd(state, owners, "DispelOverlay", "dispel")
+        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
+        HotAdd(state, owners, "GroupCornerIndicators", "groupCorners")
+        HotAdd(state, owners, "Borders", "borders")
+    end
+
+    state.inlineUnitless = OwnerModeIsUnitless(state.inlineMode)
+    state.predictionUnitless = OwnerModeIsUnitless(state.predictionMode)
+end
+
+local function DispatchCompiledHotFrameEvent(frame, state, event, unit, a, b, c)
+    local kind = state and state.kind
+    if not kind then return false end
+
+    local sameUnit = (not unit) or unit == frame.unit
+    if sameUnit then
+        unit = unit or frame.unit
+    end
+
+    if kind == 1 then
+        if not sameUnit then
+            if state.inlineUnitless then
+                local fn = state.inline
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+            if state.predictionUnitless then
+                local fn = state.prediction
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+            return true
+        end
+
+        local hp, maxHP, calc
+        if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+            local fn = state.health
+            if fn then
+                hp, maxHP, calc = fn(frame, event, unit)
+                local textFn = state.healthText
+                if textFn then textFn(frame, event, unit, hp, maxHP) end
+            end
+            if not fn then
+                fn = state.healthText
+                if fn then fn(frame, event, unit) end
+            end
+            fn = state.prediction
+            if fn then fn(frame, event, unit, hp, maxHP, calc) end
+            fn = state.name
+            if fn then fn(frame, event, unit) end
+            fn = state.statusText
+            if fn then fn(frame, event, unit, a, b, c) end
+            fn = state.groupVisuals
+            if fn then fn(frame, event, unit, a, b, c) end
+        else
+            local fn = state.health
+            if fn then fn(frame, event, unit, a, b, c) end
+            fn = state.name
+            if fn then fn(frame, event, unit) end
+            if event == "UNIT_FLAGS" then
+                fn = state.statusText
+                if fn then fn(frame, event, unit, a, b, c) end
+                fn = state.combat
+                if fn then fn(frame, event, unit, a, b, c) end
+                fn = state.groupVisuals
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+        end
+
+        local fn = state.groupStatus
+        if fn then fn(frame, event, unit, a, b, c) end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    elseif kind == 2 then
+        if not sameUnit then
+            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+            return true
+        end
+        local fn = state.power
+        if fn then
+            local power, maxPower = fn(frame, event, unit)
+            local textFn = state.powerText
+            if textFn then textFn(frame, event, unit, power, maxPower) end
+        end
+        if not fn then
+            fn = state.powerText
+            if fn then fn(frame, event, unit) end
+        end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    elseif kind == 3 then
+        if not sameUnit then
+            if state.inlineUnitless then
+                local fn = state.inline
+                if fn then fn(frame, event, unit) end
+            end
+            if state.predictionUnitless then
+                local fn = state.prediction
+                if fn then fn(frame, event, unit) end
+            end
+            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+            return true
+        end
+
+        local hp, maxHP, calc
+        local fn = state.health
+        if fn then
+            hp, maxHP, calc = fn(frame, event, unit)
+            local textFn = state.healthText
+            if textFn then textFn(frame, event, unit, hp, maxHP) end
+        else
+            fn = state.healthText
+            if fn then fn(frame, event, unit) end
+        end
+        fn = state.power
+        if fn then
+            local power, maxPower = fn(frame, event, unit)
+            local textFn = state.powerText
+            if textFn then textFn(frame, event, unit, power, maxPower) end
+        else
+            fn = state.powerText
+            if fn then fn(frame, event, unit) end
+        end
+        fn = state.name
+        if fn then fn(frame, event, unit) end
+        fn = state.portrait
+        if fn then fn(frame, event, unit) end
+        fn = state.prediction
+        if fn then fn(frame, event, unit, hp, maxHP, calc) end
+        fn = state.statusText
+        if fn then fn(frame, event, unit) end
+        fn = state.groupStatus
+        if fn then fn(frame, event, unit) end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    elseif kind == 5 then
+        if not sameUnit then
+            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+            return true
+        end
+        local fn = state.auras
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.dispel
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupVisuals
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupCorners
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupSpells
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.borders
+        if fn then fn(frame, event, unit, a, b, c) end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    elseif kind == 9 then
+        if not sameUnit then
+            if state.predictionUnitless then
+                local fn = state.prediction
+                if fn then fn(frame, event, unit, a, b, c) end
+            end
+            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+            return true
+        end
+        local fn = state.prediction
+        if fn then fn(frame, event, unit, a, b, c) end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    elseif kind == 4 then
+        local fn = state.name
+        if fn then fn(frame, event, unit) end
+        fn = state.inline
+        if fn then fn(frame, event, unit) end
+        return true
+    elseif kind == 6 then
+        if not sameUnit then return true end
+        local fn = state.groupVisuals
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupCorners
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.borders
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 8 then
+        if not sameUnit then return true end
+        local fn = state.portrait
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 10 then
+        local fn
+        if event == "UNIT_LEVEL" then
+            fn = state.level
+            if fn then fn(frame, event, unit, a, b, c) end
+            fn = state.elite
+            if fn then fn(frame, event, unit, a, b, c) end
+        elseif event == "UNIT_CLASSIFICATION_CHANGED" then
+            fn = state.name
+            if fn then fn(frame, event, unit) end
+            fn = state.inline
+            if fn then fn(frame, event, unit, a, b, c) end
+            fn = state.elite
+            if fn then fn(frame, event, unit, a, b, c) end
+        elseif event == "INCOMING_RESURRECT_CHANGED" then
+            fn = state.incomingRes
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        fn = state.groupStatus
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 11 then
+        local fn = state.alpha
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.combat
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.load
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 12 then
+        local fn = state.raidMarker
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupStatus
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 13 then
+        local fn = state.leader
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.raidGroup
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupStatus
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 14 then
+        local fn = state.level
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 15 then
+        local fn = state.statusText
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupStatus
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 16 then
+        local fn = state.resting
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.alpha
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.load
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupStatus
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 17 then
+        local fn = state.inline
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.prediction
+        if fn then
+            local frameUnit = frame.unit
+            if (frameUnit == "targettarget" and unit == "target")
+                or (frameUnit == "focustarget" and unit == "focus") then
+                fn(frame, event, frameUnit, a, b, c)
+            end
+        end
+        fn = state.alpha
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    elseif kind == 18 then
+        local fn = state.alpha
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.dispel
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupVisuals
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupCorners
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.borders
+        if fn then fn(frame, event, unit, a, b, c) end
+        return true
+    end
+
+    return false
+end
+
 -- Hot-path dispatch: hard-codes element names per event "kind" instead of
 -- walking the generic element list, to keep the busiest events cheap.
 --
@@ -891,10 +1515,6 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, a, b, c)
     elseif kind == 5 then
         -- UNIT_AURA (highest-volume in 40-man)
         if not sameUnit then return true end
-        if owners["GroupAuraCache"] then
-            local fn = frame._msufUpdateGroupAuraCache
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
         if owners["Auras"] then
             local fn = frame._msufUpdateAuras
             if fn then fn(frame, event, unit, a, b, c) end
@@ -1141,6 +1761,14 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, a, b, c)
             local fn = frame._msufUpdateInlineToT
             if fn then fn(frame, event, unit, a, b, c) end
         end
+        if owners["Prediction"] then
+            local frameUnit = frame.unit
+            if (frameUnit == "targettarget" and unit == "target")
+                or (frameUnit == "focustarget" and unit == "focus") then
+                local fn = frame._msufUpdatePrediction
+                if fn then fn(frame, event, frameUnit, a, b, c) end
+            end
+        end
         if owners["Alpha"] then
             local fn = frame._msufUpdateAlpha
             if fn then fn(frame, event, unit, a, b, c) end
@@ -1150,10 +1778,6 @@ local function DispatchHotFrameEvent(frame, owners, event, unit, a, b, c)
         -- SPELL_UPDATE_COOLDOWN / SPELLS_CHANGED
         if owners["Alpha"] then
             local fn = frame._msufUpdateAlpha
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupAuraCache"] then
-            local fn = frame._msufUpdateGroupAuraCache
             if fn then fn(frame, event, unit, a, b, c) end
         end
         if owners["DispelOverlay"] then
@@ -1200,22 +1824,35 @@ function DispatchFrameEvent(frame, event, unit, ...)
     end
 
     frame._msufDispatchToken = frame._msufDispatchToken + 1
+    frame._msufDispatchActive = true
+
+    local hotStates = frame._msufHotEventState
+    local hotState = hotStates and hotStates[event]
+    if hotState and DispatchCompiledHotFrameEvent(frame, hotState, event, unit, ...) then
+        frame._msufDispatchActive = nil
+        return
+    end
 
     if DispatchHotFrameEvent(frame, owners, event, unit, ...) then
+        frame._msufDispatchActive = nil
         return
     end
 
     -- Fallback for events not in HOT_EVENT_KIND: walk the pre-built flat list.
     local lists = frame._msufEventElementLists
     local list = lists and lists[event]
-    if not list then return end
+    if not list then
+        frame._msufDispatchActive = nil
+        return
+    end
     for i = 1, #list, 2 do
-        local element = list[i]
+        local update = list[i]
         local eventUnit, ok = OwnerModeAllowsUnit(list[i + 1], frame, unit)
         if ok then
-            element.Update(frame, event, eventUnit, ...)
+            update(frame, event, eventUnit, ...)
         end
     end
+    frame._msufDispatchActive = nil
 end
 UF.DispatchFrameEvent = DispatchFrameEvent
 
@@ -1243,8 +1880,6 @@ local RUNTIME_UPDATE_OWNERS = {
     Auras = true,
     DispelOverlay = true,
     Borders = true,
-    GroupAuraCache = true,
-    GroupBlizzardAuras = true,
     GroupStatusRuntime = true,
     GroupRangeFade = true,
     GroupVisuals = true,
@@ -1360,8 +1995,6 @@ FrameRuntimeUpdate = function(frame, reason)
     end
     if not mask or mask.auras then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Auras", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupAuraCache", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupBlizzardAuras", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupVisuals", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupCornerIndicators", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupSpellIndicators", reason, frame.unit)
@@ -1505,7 +2138,9 @@ function UF.DetachFrame(frame)
     end
     frame._msufEventOwners = nil
     frame._msufEventUnitless = nil
+    frame._msufElementEventRefs = nil
     frame._msufEventElementLists = nil
+    frame._msufHotEventState = nil
     frame._msufDriverEventUnits = nil
     frame._msufCoreScope = nil
     frame._msufCoreAdapter = nil

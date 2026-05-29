@@ -10,6 +10,7 @@ local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
 local IsInRaid = IsInRaid
+local GetNumGroupMembers = GetNumGroupMembers
 local hooksecurefunc = hooksecurefunc
 local type = type
 local next = next
@@ -28,6 +29,7 @@ local hookedShow = {}
 local ownedFrames = {}
 local pendingHide = {}
 local pendingRestore = {}
+local lastOwnershipSig
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -488,6 +490,7 @@ function GF.HideBlizzardRaidFrames()
 end
 
 function GF.RestoreBlizzardGroupFrames(showAfter)
+    lastOwnershipSig = nil
     RestorePartyFrames(showAfter == true)
     RestoreRaidFrames(showAfter == true)
 end
@@ -501,9 +504,18 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     if GF.EnsureDB then
         GF.EnsureDB()
     end
+    local force = type(reason) == "string" and reason:sub(1, 12) == "addon-loaded"
+    local groupCount = GetNumGroupMembers and GetNumGroupMembers() or 0
+    local inRaid = IsInRaid and IsInRaid() and true or false
 
     if not ShouldManageBlizzardGroups() then
+        local sig = "off|" .. tostring(groupCount) .. "|" .. tostring(inRaid)
+        if not force and lastOwnershipSig == sig and not next(pendingHide) and not next(pendingRestore) then
+            return true
+        end
+        lastOwnershipSig = sig
         GF.RestoreBlizzardGroupFrames(false)
+        lastOwnershipSig = sig
         return true
     end
 
@@ -511,22 +523,41 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     local raidKind = LiveRaidKind()
     local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
     local msufOwnsGroupFrames = MSUFOwnsLiveGroupFrames()
+    local partyActive = PartyScopeActive()
+    local raidActive = RaidScopeActive()
+    local partyMode = GF.NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode)
+    local raidMode = GF.NormalizeBlizzardFallbackMode(raidConf.blizzardFallbackMode)
+    local wantsShown = (not raidActive and raidMode == "AUTO" and not msufOwnsGroupFrames) and BlizzardRaidManagerWantsShown() or nil
+    local sig = "on|" .. tostring(groupCount)
+        .. "|" .. tostring(inRaid)
+        .. "|" .. tostring(raidKind)
+        .. "|" .. tostring(msufOwnsGroupFrames)
+        .. "|" .. tostring(partyActive)
+        .. "|" .. tostring(raidActive)
+        .. "|" .. tostring(partyMode)
+        .. "|" .. tostring(raidMode)
+        .. "|" .. tostring(wantsShown)
 
-    if PartyScopeActive() then
+    if not force and lastOwnershipSig == sig and not next(pendingHide) and not next(pendingRestore) then
+        return true
+    end
+    lastOwnershipSig = sig
+
+    if partyActive then
         HidePartyFrames(true)
     else
-        ApplyDisabledPartyFallback(partyConf.blizzardFallbackMode, msufOwnsGroupFrames)
+        ApplyDisabledPartyFallback(partyMode, msufOwnsGroupFrames)
     end
 
-    if RaidScopeActive() then
+    if raidActive then
         HideRaidFrames(true)
     else
-        ApplyDisabledRaidFallback(raidConf.blizzardFallbackMode, msufOwnsGroupFrames)
+        ApplyDisabledRaidFallback(raidMode, msufOwnsGroupFrames)
     end
 
     if not msufOwnsGroupFrames
-        and IsInRaid and IsInRaid()
-        and GF.NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode) == "AUTO"
+        and inRaid
+        and partyMode == "AUTO"
     then
         HidePartyFrames(true)
     end

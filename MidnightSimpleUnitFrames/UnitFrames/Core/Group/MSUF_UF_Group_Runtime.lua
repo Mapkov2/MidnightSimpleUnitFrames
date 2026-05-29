@@ -54,8 +54,7 @@ local MASK_BORDER = {
     Borders = true, GroupVisuals = true,
 }
 local MASK_AURAS = {
-    Auras = true, GroupAuraCache = true, GroupBlizzardAuras = true,
-    GroupPrivateAuras = true, GroupVisuals = true, GroupCornerIndicators = true,
+    Auras = true, GroupVisuals = true, GroupCornerIndicators = true,
     GroupSpellIndicators = true, Borders = true,
 }
 local MASK_VISUAL = {
@@ -68,7 +67,6 @@ local MASK_RUNTIME = {
     Health = true, Power = true, Text = true, NameText = true,
     HealthText = true, PowerText = true, StatusIndicators = true,
     Prediction = true, Alpha = true, Auras = true, Borders = true,
-    GroupAuraCache = true, GroupBlizzardAuras = true, GroupPrivateAuras = true,
     GroupStatusRuntime = true, GroupRangeFade = true, GroupVisuals = true,
     GroupCornerIndicators = true, GroupSpellIndicators = true,
 }

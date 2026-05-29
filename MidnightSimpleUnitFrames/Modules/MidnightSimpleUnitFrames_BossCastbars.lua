@@ -48,18 +48,8 @@ local function MSUF_GetInterruptFeedbackGrace()
     return MSUF_BOSS_INTERRUPT_FEEDBACK_DURATION
 end
 
--- -------------------------------------------------
--- Safe helpers
--- -------------------------------------------------
-local function SafeCall(fn, ...)
-    if type(fn) ~= "function" then return nil end
-    local ok, a, b, c, d, e = MSUF_FastCall(fn, ...)
-    if ok then return a, b, c, d, e end
-    return nil
-end
-
 local function SavedMsufScale()
-    if type(_G.EnsureDB) == "function" then SafeCall(_G.EnsureDB) end
+    if type(_G.EnsureDB) == "function" then _G.EnsureDB() end
     local g = _G.MSUF_DB and _G.MSUF_DB.general
     local scale = tonumber(g and (g.msufUiScale or g.uiScale)) or 1
     if scale < 0.25 then return 0.25 end
@@ -141,20 +131,12 @@ local function MSUF_GetCanonicalCastUnitForBoss(unit)
 end
 
 
--- PERF: Pre-built arithmetic probe (avoids closure per ToPlainNumber call).
-local function _bossAddZero(v) return v + 0 end
-
 -- Secret-safe number coercion: returns a plain Lua number or nil if the value is a secret.
 local function ToPlainNumber(v)
     if v == nil then return nil end
-    if type(v) == "number" then
-        local s = tostring(v)
-        return tonumber(s)
-    end
-    local ok, n = pcall(_bossAddZero, v)
-    if ok and type(n) == "number" then
-        local s = tostring(n)
-        return tonumber(s)
+    local t = type(v)
+    if t == "number" or t == "string" then
+        return tonumber(tostring(v))
     end
     return nil
 end
@@ -242,7 +224,7 @@ end
 
 local function EnsureDBSafe()
     if type(_G.EnsureDB) == "function" then
-        SafeCall(_G.EnsureDB)
+        _G.EnsureDB()
     end
 end
 
@@ -548,15 +530,15 @@ end
 
 local texture = "Interface\\TargetingFrame\\UI-StatusBar"
 if type(_G.MSUF_GetCastbarTexture) == "function" then
-    local t = SafeCall(_G.MSUF_GetCastbarTexture)
+    local t = _G.MSUF_GetCastbarTexture()
     if t then texture = t end
 end
 
 if self.statusBar and self.statusBar.SetStatusBarTexture then
-    SafeCall(self.statusBar.SetStatusBarTexture, self.statusBar, texture)
-    local sbTex = SafeCall(self.statusBar.GetStatusBarTexture, self.statusBar)
+    self.statusBar:SetStatusBarTexture(texture)
+    local sbTex = self.statusBar.GetStatusBarTexture and self.statusBar:GetStatusBarTexture() or nil
     if sbTex and sbTex.SetHorizTile then
-        SafeCall(sbTex.SetHorizTile, sbTex, true)
+        sbTex:SetHorizTile(true)
     end
 end
 
@@ -568,13 +550,13 @@ if self.backgroundBar then
             bgTex = t2
         end
     end
-    SafeCall(self.backgroundBar.SetTexture, self.backgroundBar, bgTex)
+    self.backgroundBar:SetTexture(bgTex)
     do
         local r, g, b, a = 0.176, 0.176, 0.176, 1
         if type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
             r, g, b, a = _G.MSUF_GetCastbarBackgroundColor()
         end
-        SafeCall(self.backgroundBar.SetVertexColor, self.backgroundBar, r, g, b, a)
+        self.backgroundBar:SetVertexColor(r, g, b, a)
     end
     if self.statusBar then
         self.backgroundBar:ClearAllPoints()
@@ -586,11 +568,11 @@ end
 if self.statusBar and self.statusBar.SetReverseFill then
     local rf = false
     if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-        rf = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, self, false) or false
+        rf = _G.MSUF_GetCastbarReverseFillForFrame(self, false) or false
     elseif type(_G.MSUF_GetCastbarReverseFill) == "function" then
-        rf = SafeCall(_G.MSUF_GetCastbarReverseFill) or false
+        rf = _G.MSUF_GetCastbarReverseFill() or false
     end
-    SafeCall(self.statusBar.SetReverseFill, self.statusBar, rf and true or false)
+    self.statusBar:SetReverseFill(rf and true or false)
 end
 
     end
@@ -822,7 +804,7 @@ BossCastbar_Stop = function(frame)
 
     -- Hard-stop the fill without doing any comparisons on duration values (secret-safe).
     if frame.statusBar and frame.statusBar.SetValue then
-        SafeCall(frame.statusBar.SetValue, frame.statusBar, 0)
+        frame.statusBar:SetValue(0)
     end
 
     if type(_G.MSUF_UnregisterCastbar) == "function" then
@@ -892,33 +874,26 @@ local function BossCastbar_ShowInterruptFeedback(frame, label)
 
     local txt = label or "Interrupted"
 
-    if frame.statusBar then
-        -- Full red bar (no reliance on real timer values)
-        SafeCall(frame.statusBar.SetMinMaxValues, frame.statusBar, 0, 1)
-        SafeCall(frame.statusBar.SetValue, frame.statusBar, 1)
-
-        if frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-            local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, false)
-            if rev ~= nil then
-                SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev)
+    if type(_G.MSUF_ApplyInterruptBarVisuals) == "function" then
+        _G.MSUF_ApplyInterruptBarVisuals(frame, { label = txt })
+    else
+        if frame.statusBar then
+            frame.statusBar:SetMinMaxValues(0, 1)
+            frame.statusBar:SetValue(1)
+            if frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
+                local rev = _G.MSUF_GetCastbarReverseFillForFrame(frame, false)
+                if rev ~= nil then
+                    frame.statusBar:SetReverseFill(rev and true or false)
+                end
             end
+            frame.statusBar:SetStatusBarColor(0.8, 0.1, 0.1, 1)
         end
-
-        SafeCall(frame.statusBar.SetStatusBarColor, frame.statusBar, 0.8, 0.1, 0.1, 1)
-    end
-
-    if frame.castText then
-        frame.castText:SetText(txt)
-    end
-    if frame.timeText then
-        frame.timeText:SetText("")
-    end
-
-    frame:Show()
-
-    -- Match the core castbar driver behavior: play shake feedback on interrupts.
-    if type(_G.MSUF_PlayCastbarShake) == "function" then
-        SafeCall(_G.MSUF_PlayCastbarShake, frame)
+        if frame.castText then frame.castText:SetText(txt) end
+        if frame.timeText then frame.timeText:SetText("") end
+        frame:Show()
+        if type(_G.MSUF_PlayCastbarShake) == "function" then
+            _G.MSUF_PlayCastbarShake(frame)
+        end
     end
 
     if _G.C_Timer and _G.C_Timer.NewTimer then
@@ -1005,6 +980,68 @@ Boss_UnregisterBestDriver = function(frame)
     end
 end
 
+local function BossCastbar_ApplyDuration(frame, castType, spellName, icon, durObj)
+    if not (frame and spellName and durObj) then return false end
+
+    local isChanneled = (castType == "CHANNEL")
+    frame.MSUF_isChanneled = isChanneled
+    frame.MSUF_channelDirect = isChanneled and true or nil
+    frame.MSUF_timerRangeSet = nil
+    frame.MSUF_durationObj = durObj
+
+    if type(_G.MSUF_SetChannelStaticStripes) == "function" then
+        _G.MSUF_SetChannelStaticStripes(frame, isChanneled)
+    end
+
+    local state = frame._msufBossState or {}
+    frame._msufBossState = state
+    state.key = frame._msufBarKey
+    state.unit = frame.unit
+    state.active = true
+    state.castType = castType
+    state.phase = castType
+    state.spellName = spellName
+    state.text = spellName
+    state.icon = icon
+    state.durationObj = durObj
+    state.holdUntil = nil
+
+    if type(_G.MSUF_Castbar_ApplyActiveDuration) == "function" then
+        _G.MSUF_Castbar_ApplyActiveDuration(frame, state, {
+            skipColor = true,
+            skipRegister = true,
+            skipTimeText = true,
+            skipShow = true,
+        })
+    else
+        local rev = false
+        if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
+            rev = _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled) and true or false
+        end
+        if type(_G.MSUF_ApplyTimerAndFill) == "function" then
+            _G.MSUF_ApplyTimerAndFill(frame.statusBar, durObj, rev, isChanneled)
+        elseif frame.statusBar and frame.statusBar.SetTimerDuration then
+            if frame.statusBar.SetReverseFill then
+                frame.statusBar:SetReverseFill(rev)
+            end
+            frame.statusBar:SetTimerDuration(durObj)
+        end
+        if frame.castText then frame.castText:SetText(spellName or "") end
+        if frame.icon then frame.icon:SetTexture(icon or nil) end
+    end
+
+    frame.MSUF_channelDirect = isChanneled and true or nil
+    frame._msufCastState = state
+    Boss_SnapshotPlainTimes(frame, durObj)
+
+    frame:UpdateColorForInterruptible()
+    frame.MSUF_castActive = true
+    Boss_RefreshKickReady(frame)
+    frame:Show()
+    Boss_RegisterWithBestDriver(frame)
+    return true
+end
+
 BossCastbar_OnUpdate = function(self, elapsed)
     if not self or not self.unit or not self:IsShown() then return end
 
@@ -1088,16 +1125,30 @@ BossCastbar_OnUpdate = function(self, elapsed)
     -- Refresh duration object if possible.
     local castUnit = MSUF_GetCanonicalCastUnitForBoss(self.unit)
     local newObj
-    if chanName then
-        newObj = SafeCall(UnitChannelDuration, castUnit)
+    local isChanneled = chanName and true or false
+    if isChanneled then
+        if type(UnitChannelDuration) == "function" then
+            newObj = UnitChannelDuration(castUnit)
+        end
     else
-        newObj = SafeCall(UnitCastingDuration, castUnit)
+        if type(UnitCastingDuration) == "function" then
+            newObj = UnitCastingDuration(castUnit)
+        end
     end
     if newObj then
         self.MSUF_durationObj = newObj
         if self._msufCastState then self._msufCastState.durationObj = newObj end
-        if self.statusBar and self.statusBar.SetTimerDuration then
-            SafeCall(self.statusBar.SetTimerDuration, self.statusBar, newObj)
+        local rev = false
+        if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
+            rev = _G.MSUF_GetCastbarReverseFillForFrame(self, isChanneled) and true or false
+        end
+        if type(_G.MSUF_ApplyTimerAndFill) == "function" then
+            _G.MSUF_ApplyTimerAndFill(self.statusBar, newObj, rev, isChanneled)
+        elseif self.statusBar and self.statusBar.SetTimerDuration then
+            if self.statusBar.SetReverseFill then
+                self.statusBar:SetReverseFill(rev)
+            end
+            self.statusBar:SetTimerDuration(newObj)
         end
         -- Re-snapshot for future ticks.
         Boss_SnapshotPlainTimes(self, newObj)
@@ -1170,24 +1221,24 @@ BossCastbar_Start = function(frame)
                 frame.MSUF_empowerLayoutPending = true
 
                 if frame.statusBar and frame.statusBar.SetMinMaxValues and frame.statusBar.SetValue then
-                    SafeCall(frame.statusBar.SetMinMaxValues, frame.statusBar, 0, tl.totalWithGrace)
+                    frame.statusBar:SetMinMaxValues(0, tl.totalWithGrace)
                     local now = MSUF_Now()
                     local elapsed = now - (tl.castStartSec or now)
                     if elapsed < 0 then elapsed = 0 end
-                    SafeCall(frame.statusBar.SetValue, frame.statusBar, elapsed)
+                    frame.statusBar:SetValue(elapsed)
                 end
 
                 -- Apply fill direction for empowered casts.
                 if frame.statusBar and frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-                    local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, true)
+                    local rev = _G.MSUF_GetCastbarReverseFillForFrame(frame, true)
                     if rev ~= nil then
-                        SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
+                        frame.statusBar:SetReverseFill(rev and true or false)
                     end
                 end
 
                 -- Ensure ticks/segments are laid out immediately.
                 if type(_G.MSUF_LayoutEmpowerTicks) == "function" then
-                    SafeCall(_G.MSUF_LayoutEmpowerTicks, frame)
+                    _G.MSUF_LayoutEmpowerTicks(frame)
                 end
 
                 frame.castText:SetText(castName or "")
@@ -1225,7 +1276,10 @@ BossCastbar_Start = function(frame)
         end
 
         local castUnit = MSUF_GetCanonicalCastUnitForBoss(frame.unit)
-        local durObj = SafeCall(UnitCastingDuration, castUnit)
+        local durObj
+        if type(UnitCastingDuration) == "function" then
+            durObj = UnitCastingDuration(castUnit)
+        end
         if not durObj then
             frame.castText:SetText(castName or "")
             if frame.icon then frame.icon:SetTexture(castTex or nil) end
@@ -1239,67 +1293,7 @@ BossCastbar_Start = function(frame)
             return
         end
 
-        frame.MSUF_isChanneled = false
-        frame.MSUF_channelDirect = nil
-        if type(_G.MSUF_SetChannelStaticStripes) == "function" then
-            _G.MSUF_SetChannelStaticStripes(frame, false)
-        end
-        frame.MSUF_timerRangeSet = nil
-        frame.MSUF_durationObj = durObj
-        local __st = frame._msufCastState or {}
-        frame._msufCastState = __st
-        __st.key = frame._msufBarKey or __st.key
-        __st.unit = frame.unit
-        __st.active = true
-        __st.phase = "CHANNEL"
-        __st.durationObj = durObj
-        local __st = frame._msufCastState or {}
-        frame._msufCastState = __st
-        __st.key = frame._msufBarKey or __st.key
-        __st.unit = frame.unit
-        __st.active = true
-        __st.phase = "CAST"
-        __st.durationObj = durObj
-        do
-            local st = frame._msufCastState or {}
-            frame._msufCastState = st
-            st.key = frame._msufBarKey or st.key
-            st.unit = frame.unit
-            st.active = true
-            st.phase = "CAST"
-            st.durationObj = durObj
-        end
-        if frame._msufCastState then
-            frame._msufCastState.unit = frame.unit
-            frame._msufCastState.key = frame._msufBarKey
-            frame._msufCastState.active = true
-            frame._msufCastState.phase = (frame.isEmpower and 'EMPOWER') or (frame.MSUF_isChanneled and 'CHANNEL') or 'CAST'
-            frame._msufCastState.durationObj = durObj
-            frame._msufCastState.holdUntil = nil
-        end
-
-        if frame.statusBar and frame.statusBar.SetTimerDuration then
-            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj)
-        end
-        Boss_SnapshotPlainTimes(frame, durObj)
-	    
-
-        -- Apply fill direction immediately for this cast type.
-        if frame.statusBar and frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-            local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, false)
-            if rev ~= nil then
-                SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
-            end
-        end
-        frame.castText:SetText(castName or "")
-        if frame.icon then frame.icon:SetTexture(castTex or nil) end
-
-        frame:UpdateColorForInterruptible()
-        frame.MSUF_castActive = true
-        Boss_RefreshKickReady(frame)
-        frame:Show()
-
-        Boss_RegisterWithBestDriver(frame)
+        BossCastbar_ApplyDuration(frame, "CAST", castName, castTex, durObj)
         return
     end
 
@@ -1314,7 +1308,10 @@ BossCastbar_Start = function(frame)
     -- Interruptible state handled by UNIT_SPELLCAST_(NOT_)INTERRUPTIBLE events (see BossCastbar_OnEvent).
     if chanName then
         local castUnit = MSUF_GetCanonicalCastUnitForBoss(frame.unit)
-        local durObj = SafeCall(UnitChannelDuration, castUnit)
+        local durObj
+        if type(UnitChannelDuration) == "function" then
+            durObj = UnitChannelDuration(castUnit)
+        end
         if not durObj then
             frame.castText:SetText(chanName or "")
             if frame.icon then frame.icon:SetTexture(chanTex or nil) end
@@ -1328,44 +1325,7 @@ BossCastbar_Start = function(frame)
             return
         end
 
-        frame.MSUF_isChanneled = true
-        frame.MSUF_channelDirect = true
-        if type(_G.MSUF_SetChannelStaticStripes) == "function" then
-            _G.MSUF_SetChannelStaticStripes(frame, true)
-        end
-        frame.MSUF_timerRangeSet = nil
-        frame.MSUF_durationObj = durObj
-        if frame._msufCastState then
-            frame._msufCastState.unit = frame.unit
-            frame._msufCastState.key = frame._msufBarKey
-            frame._msufCastState.active = true
-            frame._msufCastState.phase = (frame.isEmpower and 'EMPOWER') or (frame.MSUF_isChanneled and 'CHANNEL') or 'CAST'
-            frame._msufCastState.durationObj = durObj
-            frame._msufCastState.holdUntil = nil
-        end
-
-        if frame.statusBar and frame.statusBar.SetTimerDuration then
-            SafeCall(frame.statusBar.SetTimerDuration, frame.statusBar, durObj)
-        end
-        Boss_SnapshotPlainTimes(frame, durObj)
-	    
-
-        -- Apply fill direction immediately for this cast type.
-        if frame.statusBar and frame.statusBar.SetReverseFill and type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
-            local rev = SafeCall(_G.MSUF_GetCastbarReverseFillForFrame, frame, true)
-            if rev ~= nil then
-                SafeCall(frame.statusBar.SetReverseFill, frame.statusBar, rev and true or false)
-            end
-        end
-        frame.castText:SetText(chanName or "")
-        if frame.icon then frame.icon:SetTexture(chanTex or nil) end
-
-        frame:UpdateColorForInterruptible()
-        frame.MSUF_castActive = true
-        Boss_RefreshKickReady(frame)
-        frame:Show()
-
-        Boss_RegisterWithBestDriver(frame)
+        BossCastbar_ApplyDuration(frame, "CHANNEL", chanName, chanTex, durObj)
         return
     end
 

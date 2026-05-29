@@ -26,7 +26,7 @@ local function ApplyBossPreviewTextLayout()
         end
         if type(_G.MSUF_ApplyBossCastbarTextsLayout) == "function" then
             -- Match legacy feel: time text baseline inset is -2,0
-            pcall(_G.MSUF_ApplyBossCastbarTextsLayout, f, { baselineTimeX = -2, baselineTimeY = 0 })
+            _G.MSUF_ApplyBossCastbarTextsLayout(f, { baselineTimeX = -2, baselineTimeY = 0 })
         end
     end
 
@@ -41,8 +41,8 @@ local function ApplyBossPreviewTextLayout()
 end
 
 -- Try to hook preview updates so layout is always re-applied when sliders/toggles change.
-if type(hooksecurefunc) == "function" then
-    pcall(hooksecurefunc, "MSUF_UpdateBossCastbarPreview", ApplyBossPreviewTextLayout)
+if type(hooksecurefunc) == "function" and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+    hooksecurefunc("MSUF_UpdateBossCastbarPreview", ApplyBossPreviewTextLayout)
 end
 
 -- Also apply once on next tick (helps if preview exists already when we load).

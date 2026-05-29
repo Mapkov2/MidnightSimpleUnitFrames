@@ -76,8 +76,8 @@ local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 -- not match -> we treat that as "not applied" and retry on the next layout pass.
 local function FontApplied(fs, requested)
     if type(fs.GetFont) ~= "function" then return true end
-    local ok, actual = pcall(fs.GetFont, fs)
-    if not ok or not actual then return false end
+    local actual = fs:GetFont()
+    if not actual then return false end
     return tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
 end
 
@@ -89,8 +89,8 @@ local function SetFont(fs, spec, size)
     local fontSize = tonumber(size) or 12
     local flags = spec and spec.fontFlags or "OUTLINE"
     if fs._msufFont ~= font or fs._msufFontSize ~= fontSize or fs._msufFontFlags ~= flags then
-        local ok = pcall(fs.SetFont, fs, font, fontSize, flags)
-        if ok and FontApplied(fs, font) then
+        fs:SetFont(font, fontSize, flags)
+        if FontApplied(fs, font) then
             fs._msufFont = font
             fs._msufFontSize = fontSize
             fs._msufFontFlags = flags
@@ -101,7 +101,7 @@ local function SetFont(fs, spec, size)
             -- next layout pass retries it once the real font has loaded. (Without
             -- this the memo records the intended font and the fallback face/metrics
             -- stick until a /reload.)
-            pcall(fs.SetFont, fs, STANDARD_FONT, fontSize, flags)
+            fs:SetFont(STANDARD_FONT, fontSize, flags)
             fs._msufFont = nil
             fs._msufFontSize = nil
             fs._msufFontFlags = nil

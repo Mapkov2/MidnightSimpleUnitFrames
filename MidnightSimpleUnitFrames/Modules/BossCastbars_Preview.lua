@@ -8,7 +8,6 @@ ns = ns or {}
 local CreateFrame = CreateFrame
 local UIParent = UIParent
 local type, tonumber, rawget, select = type, tonumber, rawget, select
-local pcall = pcall
 local math_floor = math.floor
 
 local function Tr(text)
@@ -24,11 +23,9 @@ local function Tr(text)
     return text
 end
 
-local function SafeCall(fn, ...)
+local function Call(fn, ...)
     if type(fn) ~= "function" then return nil end
-    local ok, a, b, c, d, e = MSUF_FastCall(fn, ...)
-    if ok then return a, b, c, d, e end
-    return nil
+    return fn(...)
 end
 
 local function GetColorFromKeyFallback(key)
@@ -43,7 +40,7 @@ end
 
 local function EnsureDBSafe()
     if type(_G.EnsureDB) == "function" then
-        SafeCall(_G.EnsureDB)
+        Call(_G.EnsureDB)
     end
 end
 
@@ -157,7 +154,7 @@ local function MSUF_ApplyInterruptiblePreviewColor(f)
         r, gg, b = 0.2, 0.8, 0.8
     end
 
-    SafeCall(f.statusBar.SetStatusBarColor, f.statusBar, r, gg, b, 1)
+    Call(f.statusBar.SetStatusBarColor, f.statusBar, r, gg, b, 1)
 end
 
 local function MSUF_CreateBossCastbarPreview(index)
@@ -224,9 +221,9 @@ local function MSUF_CreateBossCastbarPreview(index)
     local icon = f:CreateTexture(nil, "OVERLAY", nil, 7)
     -- Deterministic fake icon (preview only). Add a fallback path in case fileIDs behave oddly.
     if icon and icon.SetTexture then
-        local ok = pcall(icon.SetTexture, icon, MSUF_BOSS_PREVIEW_FAKE_ICON)
-        if not ok then
-            pcall(icon.SetTexture, icon, "Interface\\Icons\\INV_Misc_QuestionMark")
+        local applied = icon:SetTexture(MSUF_BOSS_PREVIEW_FAKE_ICON)
+        if applied == false then
+            icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
         end
     end
     if icon and icon.SetTexCoord then
@@ -309,9 +306,9 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
     if f.icon then
         if f.icon.SetTexture then
             -- Deterministic fake icon (preview only). Add a fallback path in case fileIDs behave oddly.
-            local ok = pcall(f.icon.SetTexture, f.icon, MSUF_BOSS_PREVIEW_FAKE_ICON)
-            if not ok then
-                pcall(f.icon.SetTexture, f.icon, "Interface\\Icons\\INV_Misc_QuestionMark")
+            local applied = f.icon:SetTexture(MSUF_BOSS_PREVIEW_FAKE_ICON)
+            if applied == false then
+                f.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
             end
         end
         if f.icon.SetTexCoord then
@@ -354,11 +351,11 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
     do
         local t
         if type(_G.MSUF_RefreshCastbarStyleCache) == "function" then
-            SafeCall(_G.MSUF_RefreshCastbarStyleCache, f)
+            Call(_G.MSUF_RefreshCastbarStyleCache, f)
         end
-        t = f.MSUF_cachedCastbarTexture or SafeCall(_G.MSUF_GetCastbarTexture)
+        t = f.MSUF_cachedCastbarTexture or Call(_G.MSUF_GetCastbarTexture)
         if t and f.statusBar and f.statusBar.SetStatusBarTexture then
-            SafeCall(f.statusBar.SetStatusBarTexture, f.statusBar, t)
+            Call(f.statusBar.SetStatusBarTexture, f.statusBar, t)
         end
         if t and f.backgroundBar then
             local bgTex = t
@@ -368,7 +365,7 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
                     bgTex = t2
                 end
             end
-            SafeCall(f.backgroundBar.SetTexture, f.backgroundBar, bgTex)
+            Call(f.backgroundBar.SetTexture, f.backgroundBar, bgTex)
         end
     end
 
@@ -396,10 +393,10 @@ local function MSUF_ApplyBossCastbarPreviewLayout(f, index)
 	end
 	if textOverlay then
 		if f.castText and f.castText.SetParent then
-			pcall(f.castText.SetParent, f.castText, textOverlay)
+			f.castText:SetParent(textOverlay)
 		end
 		if f.timeText and f.timeText.SetParent then
-			pcall(f.timeText.SetParent, f.timeText, textOverlay)
+			f.timeText:SetParent(textOverlay)
 		end
 	end
 

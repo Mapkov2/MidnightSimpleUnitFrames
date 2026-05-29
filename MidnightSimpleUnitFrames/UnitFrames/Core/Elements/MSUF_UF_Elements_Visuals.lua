@@ -57,12 +57,42 @@ end
 
 local EMPTY_EVENTS = {}
 local PORTRAIT_2D_EVENTS = { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
-local ALPHA_RANGE_EVENTS = {
-    "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED", "UNIT_TARGET",
-    "SPELL_UPDATE_COOLDOWN", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
-    "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+local ALPHA_RANGE_UNIT_EVENTS = {
     "UNIT_CONNECTION", "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE",
     "UNIT_CTR_OPTIONS", "UNIT_OTHER_PARTY_CHANGED",
+}
+local ALPHA_RANGE_GLOBAL_EVENTS = {
+    "SPELL_UPDATE_COOLDOWN", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
+    "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "UNIT_INVENTORY_CHANGED",
+}
+local ALPHA_RANGE_TARGET_EVENTS = {
+    "SPELL_UPDATE_COOLDOWN", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
+    "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "UNIT_INVENTORY_CHANGED",
+    "PLAYER_TARGET_CHANGED",
+}
+local ALPHA_RANGE_FOCUS_EVENTS = {
+    "SPELL_UPDATE_COOLDOWN", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
+    "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "UNIT_INVENTORY_CHANGED",
+    "PLAYER_FOCUS_CHANGED",
+}
+local ALPHA_RANGE_TARGET_TARGET_EVENTS = {
+    "SPELL_UPDATE_COOLDOWN", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
+    "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "UNIT_INVENTORY_CHANGED",
+    "PLAYER_TARGET_CHANGED", "UNIT_TARGET",
+}
+local ALPHA_RANGE_FOCUS_TARGET_EVENTS = {
+    "SPELL_UPDATE_COOLDOWN", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
+    "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
+    "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "UNIT_INVENTORY_CHANGED",
+    "PLAYER_FOCUS_CHANGED", "UNIT_TARGET",
+}
+local ALPHA_RANGE_BOSS_EVENTS = {
+    "SPELL_UPDATE_COOLDOWN", "SPELLS_CHANGED", "PLAYER_ENTERING_WORLD",
+    "PLAYER_REGEN_ENABLED", "INSTANCE_ENCOUNTER_ENGAGE_UNIT",
     "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "UNIT_INVENTORY_CHANGED",
 }
 local BORDER_AURA_EVENTS = { "UNIT_AURA" }
@@ -1047,22 +1077,21 @@ local function InCombatForEvent(event)
 end
 
 local function AlphaPair(cfg, mode)
-    local inAlpha = Clamp01(cfg and cfg.inCombat, 1)
-    local outAlpha = Clamp01(cfg and cfg.outCombat, 1)
-    if cfg and cfg.layered == true then
-        mode = NormalizeAlphaLayerMode(mode)
-        if mode == "background" then
-            inAlpha = Clamp01(cfg.backgroundInCombat, inAlpha)
-            outAlpha = Clamp01(cfg.backgroundOutOfCombat, outAlpha)
-        elseif mode == "health" then
-            inAlpha = Clamp01(cfg.healthInCombat, Clamp01(cfg.foregroundInCombat, inAlpha))
-            outAlpha = Clamp01(cfg.healthOutOfCombat, Clamp01(cfg.foregroundOutOfCombat, outAlpha))
-        else
-            inAlpha = Clamp01(cfg.foregroundInCombat, inAlpha)
-            outAlpha = Clamp01(cfg.foregroundOutOfCombat, outAlpha)
-        end
+    if not cfg then
+        return 1, 1
     end
-    return inAlpha, outAlpha
+    local inAlpha = cfg.inCombat or 1
+    local outAlpha = cfg.outCombat or 1
+    if cfg.layered ~= true then
+        return inAlpha, outAlpha
+    end
+    if mode == "background" then
+        return cfg.backgroundInCombat or inAlpha, cfg.backgroundOutOfCombat or outAlpha
+    elseif mode == "health" then
+        return cfg.healthInCombat or cfg.foregroundInCombat or inAlpha,
+            cfg.healthOutOfCombat or cfg.foregroundOutOfCombat or outAlpha
+    end
+    return cfg.foregroundInCombat or inAlpha, cfg.foregroundOutOfCombat or outAlpha
 end
 
 local function CurrentAlpha(cfg, mode, event)
@@ -1119,7 +1148,7 @@ local function CurrentRangeMultiplier(frame, cfg)
     if inRange == nil then
         inRange = true
     end
-    return inRange and Clamp01(cfg.rangeIn, 1) or Clamp01(cfg.rangeOut, 0.5)
+    return inRange and (cfg.rangeIn or 1) or (cfg.rangeOut or 0.5)
 end
 
 local function ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, powerAlpha, healthBgAlpha, portraitAlpha, statusAlpha, force)
@@ -1153,7 +1182,20 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
 
     local layered = cfg.layered == true
     local layerMode = NormalizeAlphaLayerMode(cfg.layerMode)
-    local frameAlpha = CurrentAlpha(cfg, "foreground", event)
+    local inCombat
+    if event == "PLAYER_REGEN_DISABLED" then
+        inCombat = true
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        inCombat = false
+    elseif _G.MSUF_InCombat ~= nil then
+        inCombat = _G.MSUF_InCombat == true
+    else
+        inCombat = InCombatLockdown and InCombatLockdown() and true or false
+    end
+
+    local baseIn = cfg.inCombat or 1
+    local baseOut = cfg.outCombat or 1
+    local frameAlpha = inCombat and baseIn or baseOut
     local fgAlpha = 1
     local bgAlpha = 1
     local hpAlpha = 1
@@ -1164,16 +1206,18 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
 
     if layered then
         frameAlpha = 1
-        fgAlpha = CurrentAlpha(cfg, "foreground", event)
-        bgAlpha = CurrentAlpha(cfg, "background", event)
-        hpAlpha = layerMode == "health" and CurrentAlpha(cfg, "health", event) or fgAlpha
+        fgAlpha = inCombat and (cfg.foregroundInCombat or baseIn) or (cfg.foregroundOutOfCombat or baseOut)
+        bgAlpha = inCombat and (cfg.backgroundInCombat or baseIn) or (cfg.backgroundOutOfCombat or baseOut)
+        hpAlpha = layerMode == "health"
+            and (inCombat and (cfg.healthInCombat or cfg.foregroundInCombat or baseIn) or (cfg.healthOutOfCombat or cfg.foregroundOutOfCombat or baseOut))
+            or fgAlpha
         powerAlpha = layerMode == "health" and 1 or fgAlpha
         healthBgAlpha = cfg.preserveHPColor == true and hpAlpha or bgAlpha
         statusAlpha = fgAlpha
     end
 
     local rangeMul = CurrentRangeMultiplier(frame, cfg)
-    local rangeMode = NormalizeRangeLayerMode(cfg.rangeLayerMode)
+    local rangeMode = cfg.rangeLayerMode == "health" and "health" or "frame"
     if rangeMul < 1 then
         if rangeMode == "health" then
             hpAlpha = hpAlpha * rangeMul
@@ -1190,7 +1234,22 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
         frameAlpha = 0.35
     end
 
-    if layered or (rangeMode == "health" and rangeMul < 1) then
+    local useLayeredApply = layered or (rangeMode == "health" and rangeMul < 1)
+    if not force
+        and frame._msufAlphaLastLayered == useLayeredApply
+        and frame._msufAlphaLastFrame == frameAlpha
+        and frame._msufAlphaLastFG == fgAlpha
+        and frame._msufAlphaLastBG == bgAlpha
+        and frame._msufAlphaLastHP == hpAlpha
+        and frame._msufAlphaLastPower == powerAlpha
+        and frame._msufAlphaLastHealthBG == healthBgAlpha
+        and frame._msufAlphaLastPortrait == portraitAlpha
+        and frame._msufAlphaLastStatus == statusAlpha
+        and frame._msufAlphaRangeMul == rangeMul then
+        return
+    end
+
+    if useLayeredApply then
         ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, powerAlpha, healthBgAlpha, portraitAlpha, statusAlpha, force)
     else
         SetFrameAlpha(frame, frameAlpha)
@@ -1201,6 +1260,15 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
 
     frame._msufAlphaEffective = frameAlpha
     frame._msufAlphaRangeMul = rangeMul
+    frame._msufAlphaLastLayered = useLayeredApply
+    frame._msufAlphaLastFrame = frameAlpha
+    frame._msufAlphaLastFG = fgAlpha
+    frame._msufAlphaLastBG = bgAlpha
+    frame._msufAlphaLastHP = hpAlpha
+    frame._msufAlphaLastPower = powerAlpha
+    frame._msufAlphaLastHealthBG = healthBgAlpha
+    frame._msufAlphaLastPortrait = portraitAlpha
+    frame._msufAlphaLastStatus = statusAlpha
 end
 
 function Alpha.IsEnabled(frame, spec)
@@ -1208,6 +1276,10 @@ function Alpha.IsEnabled(frame, spec)
 end
 
 function Alpha.GetEvents(frame, spec)
+    local cfg = spec and spec.alpha
+    if cfg and cfg.rangeEnabled == true then
+        return ALPHA_RANGE_UNIT_EVENTS
+    end
     return EMPTY_EVENTS
 end
 
@@ -1217,7 +1289,19 @@ function Alpha.GetUnitlessEvents(frame, spec)
         return EMPTY_EVENTS
     end
     if cfg.rangeEnabled == true then
-        return ALPHA_RANGE_EVENTS
+        local unit = frame and frame.unit
+        if unit == "targettarget" then
+            return ALPHA_RANGE_TARGET_TARGET_EVENTS
+        elseif unit == "focustarget" then
+            return ALPHA_RANGE_FOCUS_TARGET_EVENTS
+        elseif unit == "target" then
+            return ALPHA_RANGE_TARGET_EVENTS
+        elseif unit == "focus" then
+            return ALPHA_RANGE_FOCUS_EVENTS
+        elseif unit == "boss1" or unit == "boss2" or unit == "boss3" or unit == "boss4" or unit == "boss5" then
+            return ALPHA_RANGE_BOSS_EVENTS
+        end
+        return ALPHA_RANGE_GLOBAL_EVENTS
     end
     return EMPTY_EVENTS
 end
@@ -1371,6 +1455,10 @@ if CreateFrame and not Alpha.stateDriver then
 end
 
 local function UnitDispelRuntimeEnabled(spec)
+    local a3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
+    if not (a3 and type(a3.BackendEnabled) == "function" and a3.BackendEnabled() == true) then
+        return false
+    end
     if not spec or spec.scope == "group" then return false end
     local border = spec.border
     local overlay = spec.dispelOverlay
@@ -2225,10 +2313,13 @@ local function GetAuraCore()
 end
 
 function Auras.IsEnabled(frame, spec)
+    local A3 = MSUF.MSUF_Auras3 or _G.MSUF_Auras3
+    if not (A3 and type(A3.BackendEnabled) == "function" and A3.BackendEnabled() == true) then
+        return false
+    end
     if not (frame and spec and spec.auras and spec.auras.enabled == true) then
         return false
     end
-    local A3 = MSUF.MSUF_Auras3 or _G.MSUF_Auras3
     local cfg = A3 and A3.ResolveUnitFrameConfig and A3.ResolveUnitFrameConfig(frame.unit, frame)
     if not cfg then
         return true

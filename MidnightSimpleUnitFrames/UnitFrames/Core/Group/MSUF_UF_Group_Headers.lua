@@ -63,20 +63,14 @@ local function HiddenParent()
     return hiddenParent
 end
 
-local function SafeCall(method, frame, ...)
-    if frame and method then
-        method(frame, ...)
-    end
-end
-
 local function RetireHeaderChildren(hidden, ...)
     for i = 1, select("#", ...) do
         local child = select(i, ...)
         if child then
             if GF.UntrackFrame then GF.UntrackFrame(child) end
-            SafeCall(child.Hide, child)
-            SafeCall(child.ClearAllPoints, child)
-            SafeCall(child.SetParent, child, hidden)
+            if child.Hide then child:Hide() end
+            if child.ClearAllPoints then child:ClearAllPoints() end
+            if child.SetParent then child:SetParent(hidden) end
         end
     end
 end
@@ -87,9 +81,9 @@ local function RetireHeader(header)
     if header.GetChildren then
         RetireHeaderChildren(hidden, header:GetChildren())
     end
-    SafeCall(header.Hide, header)
-    SafeCall(header.ClearAllPoints, header)
-    SafeCall(header.SetParent, header, hidden)
+    if header.Hide then header:Hide() end
+    if header.ClearAllPoints then header:ClearAllPoints() end
+    if header.SetParent then header:SetParent(hidden) end
 end
 
 function GF.RetireHeader(key)

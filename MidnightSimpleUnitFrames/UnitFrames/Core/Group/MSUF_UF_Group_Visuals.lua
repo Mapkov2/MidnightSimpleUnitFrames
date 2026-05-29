@@ -76,9 +76,9 @@ local function IsDispelCapabilityEvent(event)
         or event == "SPELLS_CHANGED"
 end
 
-local function GroupSpec(frame)
-    local spec = frame and frame.MSUFSpec
-    return spec and spec.group
+local function AuraBackendEnabled()
+    local a3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
+    return a3 and type(a3.BackendEnabled) == "function" and a3.BackendEnabled() == true
 end
 
 local function EnsureTexture(frame, key, layer)
@@ -223,6 +223,7 @@ local function UpdateStripe(frame, cfg, snapshot)
 end
 
 local function SpecNeedsAuraSnapshot(spec)
+    if not AuraBackendEnabled() then return false end
     local cfg = spec and spec.group
     if not cfg then return false end
     if cfg.dispelOverlayEnabled == true or cfg.debuffStripeEnabled == true then
@@ -238,6 +239,7 @@ local function TriggerNeedsCapability(trigger)
 end
 
 local function SpecNeedsDispelCapability(spec)
+    if not AuraBackendEnabled() then return false end
     local cfg = spec and spec.group
     local border = spec and spec.border
     if border and border.dispel == true and TriggerNeedsCapability(border.dispelTrigger or "BY_ME") then
@@ -487,9 +489,9 @@ function GroupVisuals.GetUnitlessEvents(frame, spec)
 end
 
 local function UpdateVisuals(frame, event, updateInfo)
-    local cfg = GroupSpec(frame)
-    if not cfg then return end
     local spec = frame.MSUFSpec
+    local cfg = spec and spec.group
+    if not cfg then return end
     local needsSnapshot = NeedsAuraSnapshot(frame)
     local snapshot = needsSnapshot and AuraSnapshot(frame, cfg, spec) or nil
     local border = spec and spec.border
