@@ -1032,11 +1032,11 @@ end
 
                 local nextAt = _unitAuraPending[unit]
                 if nextAt and now < nextAt then
-                    -- Tiny 5.54 correctness fix:
+                    -- Tiny 5.55 correctness fix:
                     -- Target/boss DoT refreshes can arrive as update-only deltas
-                    -- inside the coalesce window. The fully delta-merged 5.54
+                    -- inside the coalesce window. The fully delta-merged path
                     -- path could leave the icon timer stale until the old aura
-                    -- visually expired. Keep the 5.54 fast delta path for
+                    -- visually expired. Keep the fast delta path for
                     -- player/focus, but restore the safer 5.2-style render-time
                     -- full scan only for target and boss units.
                     if unit == "target" or _IS_BOSS_UNIT[unit] == true then
