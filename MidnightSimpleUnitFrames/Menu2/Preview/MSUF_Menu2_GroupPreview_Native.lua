@@ -1340,6 +1340,11 @@ GFPreviewHelpers.HealPredAnchorMode = GFPreviewHealPredAnchorMode
 GFPreviewHelpers.HealPredictionEnabled = GFPreviewHealPredictionEnabled
 GFPreviewHelpers.SetOutlineShown = GFPreviewSetOutlineShown
 GFPreviewHelpers.LayoutOutline = GFPreviewLayoutOutline
+GFPreviewHelpers.TextMovesTogether = GFPreviewTextMovesTogether
+GFPreviewHelpers.PlaceHandleAroundRegions = GFPreviewPlaceHandleAroundRegions
+GFPreviewHelpers.NormalizeTextFocusKind = GFPreviewNormalizeTextFocusKind
+GFPreviewHelpers.NormalizeTextFocusSlot = GFPreviewNormalizeTextFocusSlot
+GFPreviewHelpers.ApplyTextFocus = GFPreviewApplyTextFocus
 
 local function GFPreviewCreateZoomButton(parent, text, width, tooltip, onClick)
     local btn = CreateFrame("Button", nil, parent, T.Template())
@@ -2063,8 +2068,8 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         powerRight = powerRightTextHandle,
     }
     function box:FocusTextSlot(kind, slot, active)
-        kind = GFPreviewNormalizeTextFocusKind(kind)
-        slot = GFPreviewNormalizeTextFocusSlot(slot)
+        kind = H.NormalizeTextFocusKind(kind)
+        slot = H.NormalizeTextFocusSlot(slot)
         if not kind then
             self._msufMenuTextFocus = nil
         else
@@ -2853,36 +2858,36 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         textHandles.powerLeft._previewScale = previewScale
         textHandles.powerCenter._previewScale = previewScale
         textHandles.powerRight._previewScale = previewScale
-        if not GFPreviewPlaceHandleAroundRegions(textHandles.name, mock, { mock._nameFS }, 3) then
+        if not H.PlaceHandleAroundRegions(textHandles.name, mock, { mock._nameFS }, 3) then
             textHandles.name:Hide()
         end
-        if GFPreviewTextMovesTogether(kind, "hp") then
+        if H.TextMovesTogether(kind, "hp") then
             textHandles.hpLeft:Hide()
             textHandles.hpCenter:Hide()
             textHandles.hpRight:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpGroup, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then
+            if not H.PlaceHandleAroundRegions(textHandles.hpGroup, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then
                 textHandles.hpGroup:Hide()
             end
         else
             textHandles.hpGroup:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpLeft, mock, { mock._hpLeftFS }, 3) then textHandles.hpLeft:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpCenter, mock, { mock._hpCenterFS }, 3) then textHandles.hpCenter:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.hpRight, mock, { mock._hpRightFS }, 3) then textHandles.hpRight:Hide() end
+            if not H.PlaceHandleAroundRegions(textHandles.hpLeft, mock, { mock._hpLeftFS }, 3) then textHandles.hpLeft:Hide() end
+            if not H.PlaceHandleAroundRegions(textHandles.hpCenter, mock, { mock._hpCenterFS }, 3) then textHandles.hpCenter:Hide() end
+            if not H.PlaceHandleAroundRegions(textHandles.hpRight, mock, { mock._hpRightFS }, 3) then textHandles.hpRight:Hide() end
         end
-        if GFPreviewTextMovesTogether(kind, "power") then
+        if H.TextMovesTogether(kind, "power") then
             textHandles.powerLeft:Hide()
             textHandles.powerCenter:Hide()
             textHandles.powerRight:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerGroup, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then
+            if not H.PlaceHandleAroundRegions(textHandles.powerGroup, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then
                 textHandles.powerGroup:Hide()
             end
         else
             textHandles.powerGroup:Hide()
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerLeft, mock, { mock._powerLeftFS }, 3) then textHandles.powerLeft:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerCenter, mock, { mock._powerCenterFS }, 3) then textHandles.powerCenter:Hide() end
-            if not GFPreviewPlaceHandleAroundRegions(textHandles.powerRight, mock, { mock._powerRightFS }, 3) then textHandles.powerRight:Hide() end
+            if not H.PlaceHandleAroundRegions(textHandles.powerLeft, mock, { mock._powerLeftFS }, 3) then textHandles.powerLeft:Hide() end
+            if not H.PlaceHandleAroundRegions(textHandles.powerCenter, mock, { mock._powerCenterFS }, 3) then textHandles.powerCenter:Hide() end
+            if not H.PlaceHandleAroundRegions(textHandles.powerRight, mock, { mock._powerRightFS }, 3) then textHandles.powerRight:Hide() end
         end
-        GFPreviewApplyTextFocus(self, mock)
+        H.ApplyTextFocus(self, mock)
 
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
         buffHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(buffCfg.layer, 5))
