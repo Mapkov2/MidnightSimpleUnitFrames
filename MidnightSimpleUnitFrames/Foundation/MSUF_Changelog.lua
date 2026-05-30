@@ -4,10 +4,23 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "5.55",
+    currentVersion = "5.56",
     previousVersion = "5.41",
-    rangeLabel = "5.41 -> 5.55",
+    rangeLabel = "5.41 -> 5.56",
     entries = {
+        {
+            version = "5.56",
+            date = "2026-05-30",
+            sections = {
+                {
+                    title = "Critical Fixes",
+                    bullets = {
+                        "Fixed group-frame smooth health and power fill not animating because the group-frame runtime cache read an unset interpolation value instead of Blizzard's status-bar interpolation enum.",
+                        "Fixed Blizzard-rendered group-frame private aura cleanup during roster or instance transitions so Blizzard can remove stale private aura anchors even after its settings handler has already been cleared.",
+                    },
+                },
+            },
+        },
         {
             version = "5.55",
             date = "2026-05-29",

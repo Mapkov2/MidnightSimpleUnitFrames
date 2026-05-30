@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.56 - 2026-05-30
+
+### Critical Fixes
+
+- Fixed group-frame smooth health and power fill not animating because the group-frame runtime cache read an unset interpolation value instead of Blizzard's status-bar interpolation enum.
+- Fixed Blizzard-rendered group-frame private aura cleanup during roster or instance transitions so Blizzard can remove stale private aura anchors even after its settings handler has already been cleared.
+
 ## 5.55 - 2026-05-29
 
 ### Critical Fixes

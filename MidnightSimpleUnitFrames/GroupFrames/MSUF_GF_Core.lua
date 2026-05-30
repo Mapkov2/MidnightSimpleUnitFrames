@@ -48,6 +48,8 @@ local tostring = tostring
 local select = select
 local GetTime = _G.GetTime
 local GF_UNIT_BUTTON_TEMPLATE = "SecureUnitButtonTemplate,PingableUnitFrameTemplate"
+local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
+local _gfSmoothInterp = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 
 local function ResolvePowerBarColor(powerToken)
     local resolver = _G.MSUF_GetResolvedPowerColor
@@ -1514,7 +1516,8 @@ function GF.UpdateButton(f, unit)
         local hp    = UnitHealth(unit)
         local hpMax = UnitHealthMax(unit)
         f.health:SetMinMaxValues(0, hpMax)
-        f.health:SetValue(hp)
+        local interp = (f._c and f._c.smooth) or (conf.smoothFill ~= false and _gfSmoothInterp) or nil
+        if interp then f.health:SetValue(hp, interp) else f.health:SetValue(hp) end
         f._msufGFCachedHpMax = hpMax
         if GF.SyncPreserveMissingHP then
             GF.SyncPreserveMissingHP(f, kind, hp, hpMax)
@@ -1575,12 +1578,8 @@ function GF.UpdateButton(f, unit)
 
             if showPow then
                 f.power:SetMinMaxValues(0, pwMax)
-                if conf.powerSmoothFill then
-                    local interp = Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut
-                    if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
-                else
-                    f.power:SetValue(pw)
-                end
+                local interp = (f._c and f._c.powSmooth) or (conf.powerSmoothFill and _gfSmoothInterp) or nil
+                if interp then f.power:SetValue(pw, interp) else f.power:SetValue(pw) end
                 f.power:Show()
                 ApplyPowerColor(f, unit)
             else
