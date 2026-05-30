@@ -497,6 +497,43 @@ local function SetSectionHeaderStatus(sec, opts)
     end
 end
 
+local function SetSectionBadges(sec, specs)
+    if W and W.SetCollapsibleBadges then
+        W.SetCollapsibleBadges(sec, specs or {})
+    end
+end
+
+local function OnOffBadge(enabled, onText, offText)
+    return {
+        text = enabled and (onText or "Shown") or (offText or "Hidden"),
+        kind = enabled and "ok" or "muted",
+    }
+end
+
+local function BadgeNumber(value)
+    value = tonumber(value) or 0
+    if value == floor(value) then return tostring(floor(value)) end
+    return string.format("%.1f", value)
+end
+
+local function OptionText(values, value, fallback)
+    if type(values) == "function" then values = values() end
+    if type(values) == "table" then
+        for i = 1, #values do
+            local item = values[i]
+            if type(item) == "table" then
+                local itemValue = item.value
+                if itemValue == nil then itemValue = item.key or item[1] end
+                if tostring(itemValue) == tostring(value) then
+                    return item.text or item.label or tostring(value or fallback or "")
+                end
+            end
+        end
+    end
+    if value == nil or value == "" then return fallback or "" end
+    return tostring(value)
+end
+
 local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
     local notice = CreateFrame("Frame", nil, sec)
     notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, topY)
@@ -785,10 +822,12 @@ local function ScopeSection(ctx, builder)
             end
             copyPopup:EnableMouse(true)
             if copyPopup.SetBackdrop then
+                local glassBg = T.colors.glassPopup or { 0.014, 0.024, 0.050, 0.985 }
                 copyPopup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-                copyPopup:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
+                copyPopup:SetBackdropColor(glassBg[1], glassBg[2], glassBg[3], glassBg[4] or 0.985)
                 copyPopup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
             end
+            if T.ApplyGlass then T.ApplyGlass(copyPopup, "popup") end
 
             local title = T.Font(copyPopup, "GameFontNormal", "", T.colors.accent)
             title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
@@ -1796,4 +1835,8 @@ GroupPage.SetOptionEnabled = SetOptionEnabled
 GroupPage.SetOptionsEnabled = SetOptionsEnabled
 GroupPage.ApplyScopeEnabledGate = ApplyScopeEnabledGate
 GroupPage.SetSectionHeaderStatus = SetSectionHeaderStatus
+GroupPage.SetSectionBadges = SetSectionBadges
+GroupPage.OnOffBadge = OnOffBadge
+GroupPage.BadgeNumber = BadgeNumber
+GroupPage.OptionText = OptionText
 GroupPage.CreateSectionNotice = CreateSectionNotice

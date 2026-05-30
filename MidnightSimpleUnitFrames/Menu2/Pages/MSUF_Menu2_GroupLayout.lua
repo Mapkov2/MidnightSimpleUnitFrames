@@ -85,6 +85,10 @@ local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+local SetSectionBadges = GP.SetSectionBadges or function() end
+local OnOffBadge = GP.OnOffBadge or function(enabled, onText, offText) return { text = enabled and (onText or "Shown") or (offText or "Hidden"), kind = enabled and "ok" or "muted" } end
+local BadgeNumber = GP.BadgeNumber or function(value) return tostring(value or 0) end
+local OptionText = GP.OptionText or function(_, value, fallback) return tostring(value or fallback or "") end
 local CreateSectionNotice = GP.CreateSectionNotice
 
 local function ScopeLabel()
@@ -151,10 +155,15 @@ local function BuildGFLayout(ctx)
 
     local function RefreshHideOfflineState()
         local enabled = Bool(CurrentScope(), "hideOfflineEnabled", false)
+        local scopeEnabled = Bool(CurrentScope(), "enabled", false)
         SetOptionEnabled(hideOfflineCombat, enabled)
         SetOptionEnabled(hideOffline, enabled)
+        SetSectionBadges(general, {
+            OnOffBadge(scopeEnabled, "Enabled", "Disabled"),
+            { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden", kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" },
+            { text = enabled and ("Offline " .. BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)) .. "s") or "Offline visible", kind = enabled and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then
-            local scopeEnabled = Bool(CurrentScope(), "enabled", false)
             if not scopeEnabled then
                 SetSectionHeaderStatus(general, {
                     hint = "scope disabled",
@@ -219,6 +228,11 @@ local function BuildGFLayout(ctx)
     W.MoveWidget(maxColumnsSlider, gridCard, 16, -108, layoutSliderW, "LEFT")
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
+        SetSectionBadges(layout, {
+            { text = BadgeNumber(Num(CurrentScope(), "width", 120)) .. "x" .. BadgeNumber(Num(CurrentScope(), "height", 40)), kind = "info" },
+            { text = OptionText(GROWTH_VALUES, Val(CurrentScope(), "growth", "DOWN"), "Down"), kind = "accent" },
+            { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/" .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = CurrentScope() == "party" and "muted" or "info" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(layout, nil) end
     end
     M.AddRefresher(ctx, RefreshRaidGroupLayoutState)
@@ -292,6 +306,10 @@ local function BuildGFLayout(ctx)
             if roleRows.Refresh then roleRows.Refresh() end
             if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
         end
+        SetSectionBadges(sorting, {
+            { text = OptionText(SORT_MODES, currentMode, "Index"), kind = "info" },
+            { text = enabled and "Role order" or "Simple order", kind = enabled and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(sorting, nil) end
     end
     M.AddRefresher(ctx, refreshSortingControls)
@@ -416,6 +434,10 @@ local function BuildGFLayout(ctx)
             end
         end
         if scaleHint then scaleHint:SetAlpha((manualOn or autoOn) and 1 or 0.55) end
+        SetSectionBadges(scale, {
+            OnOffBadge(scalingOn, "Scaling", "Off"),
+            { text = manualOn and ("Manual " .. BadgeNumber(Num(CurrentScope(), "frameScaleManual", 100)) .. "%") or (autoOn and "Auto breakpoints" or "Native size"), kind = scalingOn and "info" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(scale, nil) end
     end
     M.AddRefresher(ctx, RefreshScalingState)
@@ -860,6 +882,10 @@ local function BuildGFLayout(ctx)
     M.AddRefresher(ctx, RefreshCustomAnchorBox)
     local function RefreshAnchorHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
+        SetSectionBadges(anchor, {
+            { text = OptionText(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame or "FREE", "Free"), kind = "info" },
+            { text = OptionText(GF_ANCHOR_POINTS, Val(CurrentScope(), "anchorPoint", "CENTER"), "CENTER"), kind = "accent" },
+        })
         SetSectionHeaderStatus(anchor, nil)
     end
     M.AddRefresher(ctx, RefreshAnchorHeader)
@@ -888,7 +914,13 @@ local function BuildGFLayout(ctx)
     local tooltipModifier = BindScopeDropdown(ctx, W.Dropdown(tooltip, "Modifier Key", TOOLTIP_MODIFIERS, tooltipRightW), "tooltipModifier", "ALT", "visual")
     W.MoveWidget(tooltipModifier, tooltip, tooltipRightX, -54, tooltipRightW, "LEFT")
     refreshTooltipState = function()
-        SetOptionEnabled(tooltipModifier, Val(CurrentScope(), "tooltipMode", "ALWAYS") == "MODIFIER")
+        local mode = Val(CurrentScope(), "tooltipMode", "ALWAYS")
+        local modifier = Val(CurrentScope(), "tooltipModifier", "ALT")
+        SetOptionEnabled(tooltipModifier, mode == "MODIFIER")
+        SetSectionBadges(tooltip, {
+            { text = OptionText(TOOLTIP_MODES, mode, "Always"), kind = mode == "NEVER" and "muted" or "info" },
+            { text = mode == "MODIFIER" and OptionText(TOOLTIP_MODIFIERS, modifier, "Alt") or TooltipModeHint(mode), kind = mode == "NEVER" and "muted" or "accent" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(tooltip, nil) end
     end
     M.AddRefresher(ctx, refreshTooltipState)

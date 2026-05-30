@@ -43,6 +43,9 @@ local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+local SetSectionBadges = GP.SetSectionBadges or function() end
+local OnOffBadge = GP.OnOffBadge or function(enabled, onText, offText) return { text = enabled and (onText or "Shown") or (offText or "Hidden"), kind = enabled and "ok" or "muted" } end
+local BadgeNumber = GP.BadgeNumber or function(value) return tostring(value or 0) end
 
 local function BuildGFAuras(ctx)
     local b = W.PageBuilder(ctx)
@@ -162,6 +165,12 @@ local function BuildGFAuras(ctx)
             local warningColor = T.colors.danger or { 0.88, 0.28, 0.28, 1 }
             SetOptionsEnabled(controls, groupEnabled and not nativeGroup)
             SetOptionEnabled(enable, true)
+            SetSectionBadges(section, {
+                OnOffBadge(groupEnabled, "Shown", "Hidden"),
+                { text = nativeGroup and Tr("Blizzard") or Tr("Custom"), kind = nativeGroup and "muted" or "accent" },
+                { text = "Max " .. BadgeNumber(cfg.max or def.max), kind = (groupEnabled and not nativeGroup) and "info" or "muted" },
+                { text = BadgeNumber(cfg.size or def.size) .. "px", kind = (groupEnabled and not nativeGroup) and "info" or "muted" },
+            })
             if type(SetSectionHeaderStatus) == "function" then
                 if nativeGroup then
                     SetSectionHeaderStatus(section, {
@@ -238,8 +247,16 @@ local function BuildGFAuras(ctx)
     W.MoveWidget(privY, priv, privRightX, -168, privRightControlW)
     local function RefreshPrivateAuraState()
         local nativePrivate = IsPrivateAurasRenderedByBlizzard()
-        SetOptionsEnabled(privControls, PrivateAuras(CurrentScope()).enabled ~= false and not nativePrivate)
+        local cfg = PrivateAuras(CurrentScope())
+        local enabled = cfg.enabled ~= false
+        SetOptionsEnabled(privControls, enabled and not nativePrivate)
         SetOptionEnabled(privEnable, true)
+        SetSectionBadges(priv, {
+            OnOffBadge(enabled, "Shown", "Hidden"),
+            { text = nativePrivate and Tr("Blizzard") or Tr("Custom"), kind = nativePrivate and "muted" or "accent" },
+            { text = "Max " .. BadgeNumber(cfg.max or 4), kind = (enabled and not nativePrivate) and "info" or "muted" },
+            { text = BadgeNumber(cfg.size or 20) .. "px", kind = (enabled and not nativePrivate) and "info" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then
             if nativePrivate then
                 SetSectionHeaderStatus(priv, {

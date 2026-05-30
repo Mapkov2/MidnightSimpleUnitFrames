@@ -95,6 +95,9 @@ local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+local SetSectionBadges = GP.SetSectionBadges or function() end
+local OnOffBadge = GP.OnOffBadge or function(enabled, onText, offText) return { text = enabled and (onText or "Shown") or (offText or "Hidden"), kind = enabled and "ok" or "muted" } end
+local OptionText = GP.OptionText or function(_, value, fallback) return tostring(value or fallback or "") end
 
 local function IconPackValues()
     local gf = GF()
@@ -246,6 +249,11 @@ local function BuildGFIndicators(ctx)
         local groupBorderEnabled = Bool(CurrentScope(), "groupBorderEnabled", false)
         SetOptionsEnabled(groupBorderControls, groupBorderEnabled)
         SetOptionEnabled(groupBorderToggle, true)
+        SetSectionBadges(indicators, {
+            { text = hoverEnabled and "Hover on" or "Hover off", kind = hoverEnabled and "info" or "muted" },
+            OnOffBadge(focusEnabled, "Focus on", "Focus off"),
+            { text = groupNumberEnabled and "Group #" or (groupBorderEnabled and "Group border" or "Clean"), kind = (groupNumberEnabled or groupBorderEnabled) and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(indicators, nil) end
     end
     M.AddRefresher(ctx, RefreshIndicatorsState)
@@ -361,7 +369,13 @@ local function BuildGFIndicators(ctx)
     local rfHealer = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "Healer", 16 + rfColW,     -26, rfLabelW), "roleIconShowHealer", true, "visual")
     local rfDPS    = BindScopeToggle(ctx, W.ToggleAt(roleFilterGroup, "DPS",    16 + rfColW * 2, -26, rfLabelW), "roleIconShowDPS",    true, "visual")
 
-    local previewCurrent = W.Button(previewCard, "Preview current", 142)
+    local previewInnerW = max(190, siconRightW - 32)
+    local previewButtonGap = 8
+    local previewCurrentW = min(142, max(112, floor(previewInnerW * 0.58)))
+    local previewAllW = min(112, max(76, previewInnerW - previewCurrentW - previewButtonGap))
+    previewCurrentW = max(96, previewInnerW - previewAllW - previewButtonGap)
+
+    local previewCurrent = W.Button(previewCard, "Preview current", previewCurrentW)
     previewCurrent:SetScript("OnClick", function()
         local gf = GF()
         if type(M.PersistMenuStateValue) == "function" then
@@ -376,9 +390,9 @@ local function BuildGFIndicators(ctx)
     end)
     previewCurrent:ClearAllPoints()
     previewCurrent:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -54)
-    previewCurrent:SetSize(142, 24)
+    previewCurrent:SetSize(previewCurrentW, 24)
 
-    local previewAll = W.Button(previewCard, "Show all", 112)
+    local previewAll = W.Button(previewCard, "Show all", previewAllW)
     previewAll:SetScript("OnClick", function()
         local gf = GF()
         if type(M.PersistMenuStateValue) == "function" then
@@ -391,10 +405,10 @@ local function BuildGFIndicators(ctx)
         if RefreshGFPreview then RefreshGFPreview() end
     end)
     previewAll:ClearAllPoints()
-    previewAll:SetPoint("LEFT", previewCurrent, "RIGHT", 10, 0)
-    previewAll:SetSize(112, 24)
+    previewAll:SetPoint("LEFT", previewCurrent, "RIGHT", previewButtonGap, 0)
+    previewAll:SetSize(previewAllW, 24)
 
-    local statusReset = W.Button(previewCard, "Reset selected", 160)
+    local statusReset = W.Button(previewCard, "Reset selected", min(160, previewInnerW))
     statusReset:SetScript("OnClick", function()
         local kind = CurrentScope()
         local spec = CurrentGFStatusSpec()
@@ -410,7 +424,7 @@ local function BuildGFIndicators(ctx)
     end)
     statusReset:ClearAllPoints()
     statusReset:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -86)
-    statusReset:SetSize(160, 24)
+    statusReset:SetSize(min(160, previewInnerW), 24)
 
     local statusSize = W.Slider(placementCard, "Size", 6, 40, 1, siconRightW)
     M.BindSlider(ctx, statusSize,
@@ -584,6 +598,11 @@ local function BuildGFIndicators(ctx)
             SetOptionEnabled(rfHealer, enabled)
             SetOptionEnabled(rfDPS,    enabled)
         end
+        SetSectionBadges(sicons, {
+            OnOffBadge(enabled, "Shown", "Hidden"),
+            { text = spec and (spec.text or spec.value) or "Selected", kind = enabled and "info" or "muted" },
+            { text = CurrentStatusIconTab() == "advanced" and "Advanced" or "Basic", kind = "accent" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(sicons, nil) end
     end
     M.AddRefresher(ctx, RefreshStatusIconState)
@@ -1267,6 +1286,11 @@ local function BuildGFIndicators(ctx)
         SetOptionEnabled(framePriority, hasFrame)
         SetOptionEnabled(frameAlpha, hasFrame and (frameKind == "healthtint" or frameKind == "pulse"))
         SetOptionEnabled(frameThickness, hasFrame and (frameKind == "border" or frameKind == "glow"))
+        SetSectionBadges(spells, {
+            OnOffBadge(indicatorsOn, "Enabled", "Disabled"),
+            { text = OptionText(SpellSpecValues, SpellIndicators(CurrentScope()).spec or "auto", "Auto"), kind = indicatorsOn and "info" or "muted" },
+            { text = hasSpell and tostring(CurrentSpellAura(CurrentScope()) or "") or "No spell", kind = hasSpell and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(spells, nil) end
     end
     M.AddRefresher(ctx, RefreshSpellIndicatorState)
@@ -1442,6 +1466,11 @@ local function BuildGFIndicators(ctx)
                 break
             end
         end
+        SetSectionBadges(corners, {
+            OnOffBadge(enabled, "Enabled", "Disabled"),
+            { text = slotLabel, kind = enabled and "info" or "muted" },
+            { text = OptionText(CICategoryValues, category, "None"), kind = showCustom and "accent" or (enabled and "info" or "muted") },
+        })
         if showCustom then
             customStatus:SetText(M.Format("%s is using Custom Spell. These settings are active.", slotLabel))
             customStatus:SetTextColor(T.colors.ok[1], T.colors.ok[2], T.colors.ok[3], 0.95)

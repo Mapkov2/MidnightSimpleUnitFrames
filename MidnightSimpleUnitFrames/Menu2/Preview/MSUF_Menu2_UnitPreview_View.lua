@@ -697,6 +697,148 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
     RefreshHandleSelectionVisuals(box)
 end
 
+local function NormalizePreviewTextFocusKind(kind)
+    if kind == "name" or kind == "hp" or kind == "power" then return kind end
+    return nil
+end
+
+local function NormalizePreviewTextFocusSlot(slot)
+    if slot == "left" or slot == "center" or slot == "right" then return slot end
+    return nil
+end
+
+local function PreviewTextFocusColor(kind)
+    if kind == "hp" then return { 0.28, 0.86, 0.45 } end
+    if kind == "power" then return { 0.95, 0.72, 0.18 } end
+    return { 0.30, 0.66, 1.00 }
+end
+
+local function EnsurePreviewTextFocusFrame(box, parent)
+    if not (box and parent) then return nil end
+    local f = box._msufMenuTextFocusFrame
+    if not f then
+        f = CreateFrame("Frame", nil, parent)
+        f:EnableMouse(false)
+        f.fill = f:CreateTexture(nil, "BACKGROUND")
+        f.fill:SetAllPoints()
+        f.lines = {}
+        for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+            local line = f:CreateTexture(nil, "OVERLAY")
+            f.lines[side] = line
+        end
+        f.lines.top:SetPoint("TOPLEFT")
+        f.lines.top:SetPoint("TOPRIGHT")
+        f.lines.bottom:SetPoint("BOTTOMLEFT")
+        f.lines.bottom:SetPoint("BOTTOMRIGHT")
+        f.lines.left:SetPoint("TOPLEFT")
+        f.lines.left:SetPoint("BOTTOMLEFT")
+        f.lines.right:SetPoint("TOPRIGHT")
+        f.lines.right:SetPoint("BOTTOMRIGHT")
+        box._msufMenuTextFocusFrame = f
+    elseif f.SetParent then
+        f:SetParent(parent)
+    end
+    if f.SetFrameLevel and parent.GetFrameLevel then
+        f:SetFrameLevel((parent:GetFrameLevel() or 0) + 85)
+    end
+    return f
+end
+
+local function PaintPreviewTextFocusFrame(frame, color, active)
+    if not (frame and color) then return end
+    local lineAlpha = active and 0.92 or 0.74
+    local fillAlpha = active and 0.10 or 0.065
+    local thickness = active and 2 or 1
+    if frame.fill then frame.fill:SetColorTexture(color[1], color[2], color[3], fillAlpha) end
+    if frame.lines then
+        frame.lines.top:SetHeight(thickness)
+        frame.lines.bottom:SetHeight(thickness)
+        frame.lines.left:SetWidth(thickness)
+        frame.lines.right:SetWidth(thickness)
+        for _, line in pairs(frame.lines) do
+            if line then line:SetColorTexture(color[1], color[2], color[3], lineAlpha) end
+        end
+    end
+end
+
+local function PreviewTextFocusRegions(mock, kind, slot)
+    if not mock then return nil end
+    if kind == "name" then
+        return { mock.nameText, mock.totInlineSep, mock.totInlineText, mock.raidGroupNameText }
+    elseif kind == "hp" then
+        if slot == "left" then return { mock.hpTextLeft } end
+        if slot == "center" then return { mock.hpTextCenter } end
+        if slot == "right" then return { mock.hpText } end
+        return { mock.hpTextLeft, mock.hpTextCenter, mock.hpText }
+    elseif kind == "power" then
+        if slot == "left" then return { mock.powerTextLeft } end
+        if slot == "center" then return { mock.powerTextCenter } end
+        if slot == "right" then return { mock.powerText } end
+        return { mock.powerTextLeft, mock.powerTextCenter, mock.powerText }
+    end
+    return nil
+end
+
+local function ApplyPreviewTextFocus(box, canvas, mock)
+    local focus = box and box._msufMenuTextFocus
+    local frame = box and box._msufMenuTextFocusFrame
+    if not (focus and canvas and mock) then
+        if frame and frame.Hide then frame:Hide() end
+        return
+    end
+    local regions = PreviewTextFocusRegions(mock, focus.kind, focus.slot)
+    if not regions then
+        if frame and frame.Hide then frame:Hide() end
+        return
+    end
+    frame = EnsurePreviewTextFocusFrame(box, canvas)
+    if not frame then return end
+    PaintPreviewTextFocusFrame(frame, PreviewTextFocusColor(focus.kind), focus.active == true)
+    if not UnitPreviewText.PlaceHandleAroundRegions(frame, canvas, regions, focus.active and 5 or 4) then
+        frame:Hide()
+    end
+end
+
+function Preview.FocusTextSlot(unitKey, kind, slot, active)
+    local box = Preview.active
+    if not (box and box.IsShown and box:IsShown()) then return false end
+    local targetKey = CanonKey(unitKey or box.key or "player")
+    local boxKey = CanonKey(box.key or targetKey)
+    if targetKey and boxKey and targetKey ~= boxKey then return false end
+
+    kind = NormalizePreviewTextFocusKind(kind)
+    slot = NormalizePreviewTextFocusSlot(slot)
+    if not kind then
+        box._msufMenuTextFocus = nil
+        if type(Preview.RequestRefresh) == "function" then
+            Preview.RequestRefresh("MENU_TEXT_CLEAR_FOCUS")
+        else
+            Preview.Refresh(box, "MENU_TEXT_CLEAR_FOCUS")
+        end
+        return true
+    end
+
+    box._msufMenuTextFocus = {
+        kind = kind,
+        slot = slot,
+        active = active == true,
+    }
+    if type(Preview.RequestRefresh) == "function" then
+        Preview.RequestRefresh("MENU_TEXT_FOCUS")
+    else
+        Preview.Refresh(box, "MENU_TEXT_FOCUS")
+    end
+    return true
+end
+
+_G.MSUF_UFPreview_FocusTextSlot = function(unitKey, kind, slot, active)
+    return Preview.FocusTextSlot(unitKey, kind, slot, active)
+end
+
+_G.MSUF_UFPreview_ClearTextFocus = function()
+    return Preview.FocusTextSlot(nil, nil, nil, false)
+end
+
 local function PreviewArrowKeyDown(self, keyName)
     local box = (self and self._preview) or self or Preview.active
     local dx, dy = 0, 0
@@ -1577,6 +1719,8 @@ function Preview.Refresh(box, reason)
         or reason == "UNIT_PREVIEW_ZOOM_STEP"
         or reason == "UNIT_PREVIEW_ZOOM_FIT"
         or reason == "UNIT_PREVIEW_ZOOM_1TO1"
+        or reason == "MENU_TEXT_FOCUS"
+        or reason == "MENU_TEXT_CLEAR_FOCUS"
     if panel and panel._msufRefreshUnitTextControls and not skipControlRefresh and not box._refreshingControls then
         box._refreshingControls = true
         panel._msufRefreshUnitTextControls()
@@ -2417,6 +2561,7 @@ function Preview.Refresh(box, reason)
         PlaceTextSlotHandle(box.handlePowerCenter, mock.powerTextCenter)
         PlaceTextSlotHandle(box.handlePowerRight, mock.powerText)
     end
+    ApplyPreviewTextFocus(box, canvas, mock)
     ApplyPreviewLayerVisibility(box)
     ApplyPreviewTransparency(box, conf)
     RefreshHandleSelectionVisuals(box)

@@ -84,6 +84,10 @@ local SetOptionEnabled = GP.SetOptionEnabled
 local SetOptionsEnabled = GP.SetOptionsEnabled
 local ApplyScopeEnabledGate = GP.ApplyScopeEnabledGate
 local SetSectionHeaderStatus = GP.SetSectionHeaderStatus
+local SetSectionBadges = GP.SetSectionBadges or function() end
+local OnOffBadge = GP.OnOffBadge or function(enabled, onText, offText) return { text = enabled and (onText or "Shown") or (offText or "Hidden"), kind = enabled and "ok" or "muted" } end
+local BadgeNumber = GP.BadgeNumber or function(value) return tostring(value or 0) end
+local OptionText = GP.OptionText or function(_, value, fallback) return tostring(value or fallback or "") end
 
 local function HeaderHintColor()
     return { 0.45, 0.52, 0.65, 1 }
@@ -145,6 +149,11 @@ local function BuildDispelOverlaySection(ctx, b)
         local overlayOn = Bool(CurrentScope(), "dispelOverlayEnabled", false)
         SetOptionsEnabled({ dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha }, overlayOn)
         SetOptionEnabled(dispelToggle, true)
+        SetSectionBadges(dispel, {
+            OnOffBadge(overlayOn, "Active", "Off"),
+            { text = OptionText(GF_DISPEL_OVERLAY_TRIGGERS, NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")), "Border"), kind = overlayOn and "info" or "muted" },
+            { text = OptionText(DISPEL_OVERLAY_STYLES, Val(CurrentScope(), "dispelOverlayStyle", "FULL"), "Full Frame"), kind = overlayOn and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(dispel, nil) end
     end
     M.AddRefresher(ctx, RefreshDispelState)
@@ -261,6 +270,10 @@ local function BuildGFBars(ctx)
         else
             colorHint:Hide()
         end
+        SetSectionBadges(hcolor, {
+            { text = OptionText(GF_BAR_MODES, m or "GLOBAL", "Global"), kind = editable and "accent" or "info" },
+            { text = HealthModeHint(m), kind = editable and "info" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(hcolor, nil) end
     end
     M.AddRefresher(ctx, RefreshHealthColorState)
@@ -339,6 +352,15 @@ local function BuildGFBars(ctx)
             local c = enabled and T.colors.accent or T.colors.dim
             roleLabel:SetTextColor(c[1], c[2], c[3], c[4] or 1)
         end
+        local roles = {}
+        if Bool(CurrentScope(), "powerShowTank", true) then roles[#roles + 1] = "Tank" end
+        if Bool(CurrentScope(), "powerShowHealer", true) then roles[#roles + 1] = "Healer" end
+        if Bool(CurrentScope(), "powerShowDamager", false) then roles[#roles + 1] = "DPS" end
+        SetSectionBadges(power, {
+            OnOffBadge(enabled, "Shown", "Hidden"),
+            { text = BadgeNumber(CurrentPowerHeight(CurrentScope())) .. "px", kind = enabled and "info" or "muted" },
+            { text = #roles > 0 and table.concat(roles, "/") or "No roles", kind = enabled and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) ~= "function" then return end
         SetSectionHeaderStatus(power, nil)
     end
@@ -465,6 +487,52 @@ local function BuildGFBars(ctx)
         local scope = CurrentScope()
         M.gfTextMoveTogether[scope] = M.gfTextMoveTogether[scope] or {}
         M.gfTextMoveTogether[scope][kind] = value ~= false
+    end
+    local refreshTextControls
+    local function FocusGFPreviewText(kind, slot, active)
+        if type(M.FocusGFPreviewTextSlot) == "function" then
+            M.FocusGFPreviewTextSlot(kind, slot, active == true)
+        end
+    end
+    local function FocusActiveGFPreviewText()
+        local tab = CurrentTextTab()
+        if tab == "name" then
+            FocusGFPreviewText("name", nil, true)
+        elseif tab == "hp" then
+            FocusGFPreviewText("hp", MoveTogether("hp") and nil or CurrentSlot("hp"), true)
+        elseif tab == "power" then
+            FocusGFPreviewText("power", MoveTogether("power") and nil or CurrentSlot("power"), true)
+        else
+            FocusGFPreviewText(nil, nil, false)
+        end
+    end
+    local function ResolveFocusSlot(slot)
+        if type(slot) == "function" then return slot() end
+        return slot
+    end
+    local function RestoreGFPreviewTextFocus()
+        if refreshTextControls then
+            refreshTextControls()
+        else
+            FocusActiveGFPreviewText()
+        end
+    end
+    local function ActivateGFPreviewText(kind, slot)
+        local resolvedSlot = ResolveFocusSlot(slot)
+        if (kind == "hp" or kind == "power") and resolvedSlot then
+            SetCurrentSlot(kind, resolvedSlot)
+        end
+        FocusGFPreviewText(kind, resolvedSlot, true)
+    end
+    local function HookGFPreviewTextFocus(widget, kind, slot)
+        if not (widget and widget.HookScript) then return end
+        widget:HookScript("OnEnter", function()
+            FocusGFPreviewText(kind, ResolveFocusSlot(slot), false)
+        end)
+        widget:HookScript("OnMouseDown", function()
+            ActivateGFPreviewText(kind, slot)
+        end)
+        widget:HookScript("OnLeave", RestoreGFPreviewTextFocus)
     end
 
     local function ScopeDisplayName()
@@ -616,11 +684,11 @@ local function BuildGFBars(ctx)
         end
     end
 
-    local refreshTextControls
     M.BindSegment(ctx, tabs,
         CurrentTextTab,
         function(v)
             M.gfTextTabSelection[CurrentScope()] = v or "name"
+            FocusActiveGFPreviewText()
             if refreshTextControls then refreshTextControls() end
         end)
 
@@ -673,6 +741,7 @@ local function BuildGFBars(ctx)
         function() return MoveTogether("hp") end,
         function(v)
             SetMoveTogether("hp", v)
+            FocusGFPreviewText("hp", v and nil or CurrentSlot("hp"), true)
             if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
             M.Refresh(ctx)
         end)
@@ -686,6 +755,7 @@ local function BuildGFBars(ctx)
         function() return CurrentSlot("hp") end,
         function(v)
             SetCurrentSlot("hp", v)
+            FocusGFPreviewText("hp", v, true)
             M.Refresh(ctx)
         end)
     local hpSlotX = W.Slider(hpPosition, "Slot X", -100, 100, 1, hpSliderW)
@@ -698,6 +768,7 @@ local function BuildGFBars(ctx)
         function(v)
             local xKey = SlotOffsetKeys("hp")
             Set(CurrentScope(), xKey, v, "geometry")
+            FocusGFPreviewText("hp", CurrentSlot("hp"), true)
         end)
     local hpSlotY = W.Slider(hpPosition, "Slot Y", -100, 100, 1, hpSliderW)
     PlaceSlider(hpPosition, hpSlotY, 16, -342, textRightW - 58)
@@ -709,6 +780,7 @@ local function BuildGFBars(ctx)
         function(v)
             local _, yKey = SlotOffsetKeys("hp")
             Set(CurrentScope(), yKey, v, "geometry")
+            FocusGFPreviewText("hp", CurrentSlot("hp"), true)
         end)
 
     local hpAppearance = TextCard(hpTab, "Appearance", nil, textLeftX, -310, textCardW, 144)
@@ -746,6 +818,7 @@ local function BuildGFBars(ctx)
         function() return MoveTogether("power") end,
         function(v)
             SetMoveTogether("power", v)
+            FocusGFPreviewText("power", v and nil or CurrentSlot("power"), true)
             if M.RefreshGFNativePreviews then M.RefreshGFNativePreviews() end
             M.Refresh(ctx)
         end)
@@ -759,6 +832,7 @@ local function BuildGFBars(ctx)
         function() return CurrentSlot("power") end,
         function(v)
             SetCurrentSlot("power", v)
+            FocusGFPreviewText("power", v, true)
             M.Refresh(ctx)
         end)
     local powerSlotX = W.Slider(powerPosition, "Slot X", -100, 100, 1, hpSliderW)
@@ -771,6 +845,7 @@ local function BuildGFBars(ctx)
         function(v)
             local xKey = SlotOffsetKeys("power")
             Set(CurrentScope(), xKey, v, "geometry")
+            FocusGFPreviewText("power", CurrentSlot("power"), true)
         end)
     local powerSlotY = W.Slider(powerPosition, "Slot Y", -100, 100, 1, hpSliderW)
     PlaceSlider(powerPosition, powerSlotY, 16, -342, textRightW - 58)
@@ -782,6 +857,7 @@ local function BuildGFBars(ctx)
         function(v)
             local _, yKey = SlotOffsetKeys("power")
             Set(CurrentScope(), yKey, v, "geometry")
+            FocusGFPreviewText("power", CurrentSlot("power"), true)
         end)
 
     local powerAppearance = TextCard(powerTab, "Appearance", nil, textLeftX, -310, textCardW, 144)
@@ -795,6 +871,43 @@ local function BuildGFBars(ctx)
     PlaceSlider(advancedLayers, nameLayer, 16, -76, textCardW - 72)
     PlaceSlider(advancedLayers, hpLayer, 16, -136, textCardW - 72)
     PlaceSlider(advancedLayers, powerLayer, 16, -196, textCardW - 72)
+
+    HookGFPreviewTextFocus(showName, "name")
+    HookGFPreviewTextFocus(hideNameOnStatus, "name")
+    HookGFPreviewTextFocus(nameAnchor, "name")
+    HookGFPreviewTextFocus(nameX, "name")
+    HookGFPreviewTextFocus(nameY, "name")
+    HookGFPreviewTextFocus(nameSize, "name")
+    HookGFPreviewTextFocus(nameLayer, "name")
+
+    HookGFPreviewTextFocus(showHP, "hp")
+    HookGFPreviewTextFocus(healthLeft, "hp", "left")
+    HookGFPreviewTextFocus(healthCenter, "hp", "center")
+    HookGFPreviewTextFocus(healthRight, "hp", "right")
+    HookGFPreviewTextFocus(healthDelimiter, "hp")
+    HookGFPreviewTextFocus(reverseHP, "hp")
+    HookGFPreviewTextFocus(healthX, "hp")
+    HookGFPreviewTextFocus(healthY, "hp")
+    HookGFPreviewTextFocus(hpMoveTogether, "hp")
+    HookGFPreviewTextFocus(hpSlot, "hp", function() return CurrentSlot("hp") end)
+    HookGFPreviewTextFocus(hpSlotX, "hp", function() return CurrentSlot("hp") end)
+    HookGFPreviewTextFocus(hpSlotY, "hp", function() return CurrentSlot("hp") end)
+    HookGFPreviewTextFocus(healthSize, "hp")
+    HookGFPreviewTextFocus(hpLayer, "hp")
+
+    HookGFPreviewTextFocus(powerText, "power")
+    HookGFPreviewTextFocus(powerLeft, "power", "left")
+    HookGFPreviewTextFocus(powerCenter, "power", "center")
+    HookGFPreviewTextFocus(powerRight, "power", "right")
+    HookGFPreviewTextFocus(powerDelimiter, "power")
+    HookGFPreviewTextFocus(powerX, "power")
+    HookGFPreviewTextFocus(powerY, "power")
+    HookGFPreviewTextFocus(powerMoveTogether, "power")
+    HookGFPreviewTextFocus(powerSlot, "power", function() return CurrentSlot("power") end)
+    HookGFPreviewTextFocus(powerSlotX, "power", function() return CurrentSlot("power") end)
+    HookGFPreviewTextFocus(powerSlotY, "power", function() return CurrentSlot("power") end)
+    HookGFPreviewTextFocus(powerSize, "power")
+    HookGFPreviewTextFocus(powerLayer, "power")
 
     refreshTextControls = function()
         local tab = CurrentTextTab()
@@ -829,6 +942,7 @@ local function BuildGFBars(ctx)
         end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(text, nil) end
+        FocusActiveGFPreviewText()
     end
     M.AddRefresher(ctx, refreshTextControls)
     refreshTextControls()
@@ -851,8 +965,14 @@ local function BuildGFBars(ctx)
     W.MoveWidget(stripeHeight, stripeCard, 16, -126, min(360, stripeCardW - 72), "CENTER")
     W.MoveWidget(stripeAlpha, stripeCard, 16, -174, min(360, stripeCardW - 72), "CENTER")
     local function RefreshStripeState()
-        SetOptionsEnabled({ stripeEdge, stripeHeight, stripeAlpha }, Bool(CurrentScope(), "debuffStripeEnabled", false))
+        local enabled = Bool(CurrentScope(), "debuffStripeEnabled", false)
+        SetOptionsEnabled({ stripeEdge, stripeHeight, stripeAlpha }, enabled)
         SetOptionEnabled(stripeToggle, true)
+        SetSectionBadges(stripe, {
+            OnOffBadge(enabled, "Active", "Off"),
+            { text = OptionText(DEBUFF_STRIPE_EDGES, Val(CurrentScope(), "debuffStripeEdge", "BOTTOM"), "Bottom Edge"), kind = enabled and "info" or "muted" },
+            { text = BadgeNumber(Num(CurrentScope(), "debuffStripeHeight", 3)) .. "px", kind = enabled and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(stripe, nil) end
     end
     M.AddRefresher(ctx, RefreshStripeState)
@@ -921,8 +1041,14 @@ local function BuildGFBars(ctx)
     PlaceRangeSlider(offlineAlpha, rangeAlphaCard, 16, -124, rangeRightWidth - 58)
 
     local function RefreshRangeState()
-        SetOptionsEnabled({ rangeMode, rangeAlpha, offlineAlpha }, Bool(CurrentScope(), "rangeFadeEnabled", false))
+        local enabled = Bool(CurrentScope(), "rangeFadeEnabled", false)
+        SetOptionsEnabled({ rangeMode, rangeAlpha, offlineAlpha }, enabled)
         SetOptionEnabled(rangeToggle, true)
+        SetSectionBadges(range, {
+            OnOffBadge(enabled, "Active", "Off"),
+            { text = Val(CurrentScope(), "rangeFadeLayerMode", "frame") == "health" and "HP only" or "Whole frame", kind = enabled and "info" or "muted" },
+            { text = tostring(floor(Num(CurrentScope(), "rangeFadeAlpha", 0.4) * 100 + 0.5)) .. "%", kind = enabled and "accent" or "muted" },
+        })
         if type(SetSectionHeaderStatus) == "function" then
             SetSectionHeaderStatus(range, nil)
         end

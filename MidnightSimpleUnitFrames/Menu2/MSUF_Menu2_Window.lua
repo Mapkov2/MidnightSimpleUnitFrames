@@ -1629,7 +1629,9 @@ local function BuildNav(parent)
         local intro = parent._msuf2SearchIntro
         if intro then return intro end
 
-        intro = T.Panel(parent, nil, { 0.030, 0.042, 0.085, 0.980 }, T.colors.accent)
+        local introBg = T.colors.glassPopup or { 0.030, 0.042, 0.085, 0.980 }
+        intro = T.Panel(parent, nil, introBg, T.colors.accent)
+        if T.ApplyMaterial then T.ApplyMaterial(intro, { bg = introBg, border = T.colors.accent, glass = "popup" }) elseif T.ApplyGlass then T.ApplyGlass(intro, "popup") end
         intro:SetPoint("TOPLEFT", search, "BOTTOMLEFT", -2, -6)
         intro:SetPoint("TOPRIGHT", search, "BOTTOMRIGHT", 2, -6)
         intro:SetHeight(96)
@@ -1990,7 +1992,8 @@ end
 
 local function CreateMinimizedBar(frame)
     if M.minimizedBar then return M.minimizedBar end
-    local bar = T.Panel(UIParent, "MSUF2_MinimizedWindow", T.colors.bg, T.colors.border)
+    local bar = T.Panel(UIParent, "MSUF2_MinimizedWindow", T.colors.glassShell or T.colors.bg, T.colors.border)
+    if T.ApplyMaterial then T.ApplyMaterial(bar, "shell") elseif T.ApplyGlass then T.ApplyGlass(bar, "shell") end
     bar:SetSize(MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H)
     bar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 18, 18)
     ApplyMenuFramePriority(bar)
@@ -2030,7 +2033,8 @@ local function BuildWindow()
 
     EnsurePersistentMenuState()
     SetWindowMetrics(ReadSavedWindowSize())
-    local f = T.Panel(UIParent, "MSUF2_Window", T.colors.bg, T.colors.border)
+    local f = T.Panel(UIParent, "MSUF2_Window", T.colors.glassShell or T.colors.bg, T.colors.border)
+    if T.ApplyMaterial then T.ApplyMaterial(f, "shell") elseif T.ApplyGlass then T.ApplyGlass(f, "shell") end
     _G.MSUF_StandaloneOptionsWindow = f
     f:SetSize(WINDOW_W, WINDOW_H)
     f:SetPoint("CENTER", UIParent, "CENTER", -60, 10)
@@ -2300,7 +2304,8 @@ local function BuildWindow()
     content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
     f.content = content
 
-    local nav = T.Panel(content, nil, T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
+    local nav = T.Panel(content, nil, T.colors.glassRail or T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
+    if T.ApplyMaterial then T.ApplyMaterial(nav, "rail") elseif T.ApplyGlass then T.ApplyGlass(nav, "rail") end
     nav:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     nav:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", 0, 0)
     nav:SetWidth(NAV_W)
@@ -2310,14 +2315,16 @@ local function BuildWindow()
     M.nav = nav
     BuildNav(nav)
 
-    local host = T.Panel(content, nil, T.colors.panel, T.colors.borderSoft)
+    local host = T.Panel(content, nil, T.colors.glassHost or T.colors.panel, T.colors.borderSoft)
+    if T.ApplyMaterial then T.ApplyMaterial(host, "host") elseif T.ApplyGlass then T.ApplyGlass(host, "host") end
     host:SetPoint("TOPLEFT", nav, "TOPRIGHT", 8, 0)
     host:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", 0, 0)
     f.host = host
     f._msufMirrorHost = host
     if T.ApplyMenuAtmosphere then T.ApplyMenuAtmosphere(f, host, nav) end
 
-    local status = T.Panel(host, nil, T.colors.header, T.colors.borderSoft)
+    local status = T.Panel(host, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
+    if T.ApplyMaterial then T.ApplyMaterial(status, "status") elseif T.ApplyGlass then T.ApplyGlass(status, "status") end
     status:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     status:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
     status:SetHeight(22)

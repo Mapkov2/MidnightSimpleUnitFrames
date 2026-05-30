@@ -50,6 +50,7 @@ local function NextRow(section, height)
 end
 
 local dropdownFrame, dropdownScroll, dropdownChild, dropdownOwner, dropdownSlider
+local dropdownClosing, dropdownClosingOwner
 local dropdownRows = {}
 local DROPDOWN_ROW_H = 24
 local DROPDOWN_ICON_SIZE = 18
@@ -57,6 +58,7 @@ local DROPDOWN_ICON_LEFT = 10
 local DROPDOWN_ICON_TEXT_LEFT = 34
 local DROPDOWN_SCROLLBAR_W = 10
 local CloseDropdown
+local IsDescendantOf
 
 local function PixelBarTexture(texture)
     if not texture then return texture end
@@ -97,6 +99,35 @@ local function SetDropdownOwnerMouseWheel(owner, enabled)
     end
 end
 
+local function IsDropdownClosingFor(owner)
+    return dropdownClosing
+        and owner ~= nil
+        and dropdownClosingOwner == owner
+        and dropdownFrame
+        and dropdownFrame.IsShown
+        and dropdownFrame:IsShown()
+end
+
+local function PlayMotion(frame, motion, opts)
+    if T.PlayMotion then
+        T.PlayMotion(frame, motion, opts)
+    else
+        opts = opts or {}
+        local toAlpha = opts.toAlpha
+        if toAlpha == nil then toAlpha = (motion == "dropdownOut") and 0 or 1 end
+        if frame and frame.SetAlpha then frame:SetAlpha(toAlpha) end
+        if type(opts.onFinished) == "function" then opts.onFinished(frame) end
+    end
+end
+
+local function ShowDropdownFocus(owner)
+    if M.ShowFocusVeil then M.ShowFocusVeil(owner, "dropdown", { referenceFrame = dropdownFrame }) end
+end
+
+local function HideDropdownFocus(animated)
+    if M.HideFocusVeil then M.HideFocusVeil("dropdown", { animated = animated ~= false }) end
+end
+
 local function DropdownMaxScroll()
     if not (dropdownScroll and dropdownChild) then return 0 end
     return math.max(0, (dropdownChild:GetHeight() or 0) - (dropdownScroll:GetHeight() or 0))
@@ -116,7 +147,7 @@ local function SetDropdownScroll(value)
     end
 end
 
-local function IsDescendantOf(frame, ancestor)
+IsDescendantOf = function(frame, ancestor)
     local current = frame
     while current do
         if current == ancestor then return true end
@@ -208,15 +239,40 @@ local function PositionDropdown(owner)
 end
 
 function CloseDropdown()
-    local owner = dropdownOwner
-    if dropdownFrame then dropdownFrame:Hide() end
+    if dropdownClosing and not dropdownOwner then return end
+    local owner = dropdownOwner or dropdownClosingOwner
+    dropdownClosing = true
+    dropdownClosingOwner = owner
+    dropdownOwner = nil
+
+    HideDropdownFocus(true)
+    if dropdownFrame and dropdownFrame:IsShown() then
+        if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(false) end
+        dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
+        local closeToken = dropdownFrame._msuf2CloseToken
+        PlayMotion(dropdownFrame, "dropdownOut", { fromAlpha = dropdownFrame.GetAlpha and dropdownFrame:GetAlpha() or 1, onFinished = function(self)
+            if dropdownOwner or self._msuf2CloseToken ~= closeToken then return end
+            dropdownClosing = nil
+            dropdownClosingOwner = nil
+            if self.EnableMouse then self:EnableMouse(true) end
+            self:Hide()
+            self:SetAlpha(1)
+        end })
+    elseif dropdownFrame then
+        dropdownClosing = nil
+        dropdownClosingOwner = nil
+        dropdownFrame:Hide()
+        dropdownFrame:SetAlpha(1)
+    else
+        dropdownClosing = nil
+        dropdownClosingOwner = nil
+    end
     if owner then
         SetDropdownOwnerMouseWheel(owner, false)
         owner._msuf2DropdownListSelect = nil
         owner._msuf2DropdownListValue = nil
         owner._msuf2DropdownOpenAbove = nil
     end
-    dropdownOwner = nil
 end
 W.CloseDropdown = CloseDropdown
 
@@ -225,10 +281,16 @@ local function EnsureDropdownFrame()
     local parent = _G.UIParent
     dropdownFrame = CreateFrame("Frame", "MSUF2NativeDropdownList", parent, T.Template and T.Template() or nil)
     dropdownFrame:SetFrameStrata("TOOLTIP")
+    if dropdownFrame.SetFrameLevel then dropdownFrame:SetFrameLevel((M.MENU_POPUP_FRAME_LEVEL or 120) + 20) end
     dropdownFrame:SetToplevel(true)
     dropdownFrame:EnableMouse(true)
     if dropdownFrame.SetClampedToScreen then dropdownFrame:SetClampedToScreen(true) end
-    T.ApplyBackdrop(dropdownFrame, { 0.010, 0.010, 0.018, 0.985 }, { 0.140, 0.220, 0.600, 0.88 })
+    if T.ApplyMaterial then
+        T.ApplyMaterial(dropdownFrame, "popup")
+    else
+        T.ApplyBackdrop(dropdownFrame, T.colors.glassPopup or { 0.010, 0.010, 0.018, 0.985 }, { 0.140, 0.220, 0.600, 0.88 })
+        if T.ApplyGlass then T.ApplyGlass(dropdownFrame, "popup") end
+    end
     dropdownFrame:Hide()
 
     dropdownScroll = CreateFrame("ScrollFrame", "MSUF2NativeDropdownScroll", dropdownFrame)
@@ -298,8 +360,13 @@ local function EnsureDropdownFrame()
     end)
 
     dropdownFrame:SetScript("OnHide", function()
-        SetDropdownOwnerMouseWheel(dropdownOwner, false)
+        HideDropdownFocus(true)
+        SetDropdownOwnerMouseWheel(dropdownOwner or dropdownClosingOwner, false)
         dropdownOwner = nil
+        dropdownClosing = nil
+        dropdownClosingOwner = nil
+        if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
+        if dropdownFrame.SetAlpha then dropdownFrame:SetAlpha(1) end
     end)
     dropdownFrame:SetScript("OnUpdate", function()
         if dropdownOwner then PositionDropdown(dropdownOwner) end
@@ -513,6 +580,9 @@ local function OpenDropdown(owner, valuesTable)
     EnsureDropdownFrame()
     valuesTable = (type(valuesTable) == "table") and valuesTable or {}
     if #valuesTable == 0 then return end
+    dropdownClosing = nil
+    dropdownClosingOwner = nil
+    dropdownFrame._msuf2CloseToken = (dropdownFrame._msuf2CloseToken or 0) + 1
 
     local hasIcons = false
     for i = 1, #valuesTable do
@@ -626,13 +696,18 @@ local function OpenDropdown(owner, valuesTable)
 
     dropdownOwner = owner
     SetDropdownOwnerMouseWheel(owner, true)
+    ShowDropdownFocus(owner)
+    if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
+    dropdownFrame:SetAlpha(0)
     dropdownFrame:Show()
     PositionDropdown(owner)
     SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * DROPDOWN_ROW_H) or 0)
+    PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })
 end
 
 function W.OpenDropdownList(owner, values, onSelect, selectedValue)
     if not owner then return end
+    if IsDropdownClosingFor(owner) then return end
     if dropdownOwner == owner and dropdownFrame and dropdownFrame:IsShown() then
         CloseDropdown()
         return
@@ -766,6 +841,7 @@ function W.Dropdown(section, label, values, width)
             CloseDropdown()
             return
         end
+        if IsDropdownClosingFor(self) then return end
         if dropdownOwner == self and dropdownFrame and dropdownFrame:IsShown() then
             CloseDropdown()
             return

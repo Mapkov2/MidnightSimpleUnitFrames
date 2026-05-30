@@ -518,6 +518,7 @@ local function BuildTopActions(ctx, builder, unit, label)
 
     local function MakeCopyPanel(parent)
         local panel = CreateFrame("Frame", nil, parent, T.Template and T.Template() or nil)
+        local glassBg = T.colors.glassPopup or { 0.014, 0.024, 0.050, 0.985 }
         if panel.SetBackdrop then
             panel:SetBackdrop({
                 bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -525,18 +526,19 @@ local function BuildTopActions(ctx, builder, unit, label)
                 edgeSize = 1,
                 insets = { left = 1, right = 1, top = 1, bottom = 1 },
             })
-            panel:SetBackdropColor(0.014, 0.024, 0.050, 0.985)
+            panel:SetBackdropColor(glassBg[1], glassBg[2], glassBg[3], glassBg[4] or 0.985)
             panel:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
         else
             local bg = panel:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints()
-            bg:SetColorTexture(0.014, 0.024, 0.050, 0.985)
+            bg:SetColorTexture(glassBg[1], glassBg[2], glassBg[3], glassBg[4] or 0.985)
             local edge = panel:CreateTexture(nil, "BORDER")
             edge:SetPoint("TOPLEFT")
             edge:SetPoint("TOPRIGHT")
             edge:SetHeight(1)
             edge:SetColorTexture(0.10, 0.22, 0.44, 0.80)
         end
+        if T.ApplyGlass then T.ApplyGlass(panel, "popup") end
         return panel
     end
 
@@ -1032,6 +1034,45 @@ local function BuildText(ctx, builder, unit)
         M.unitTextMoveTogether[unit] = M.unitTextMoveTogether[unit] or {}
         M.unitTextMoveTogether[unit][kind] = value ~= false
     end
+    local function FocusPreviewText(kind, slot, active)
+        local fn = _G.MSUF_UFPreview_FocusTextSlot
+        if type(fn) == "function" then
+            fn(unit, kind, slot, active == true)
+        end
+    end
+    local function FocusActivePreviewText()
+        local tab = CurrentTextTab()
+        if tab == "name" then
+            FocusPreviewText("name", nil, true)
+        elseif tab == "hp" then
+            FocusPreviewText("hp", MoveTogether("hp") and nil or CurrentSlot("hp"), true)
+        elseif tab == "power" then
+            FocusPreviewText("power", MoveTogether("power") and nil or CurrentSlot("power"), true)
+        else
+            FocusPreviewText(nil, nil, false)
+        end
+    end
+    local function ResolveFocusSlot(slot)
+        if type(slot) == "function" then return slot() end
+        return slot
+    end
+    local function RestorePreviewTextFocus()
+        if RefreshTextControlState then
+            RefreshTextControlState()
+        else
+            FocusActivePreviewText()
+        end
+    end
+    local function HookPreviewTextFocus(widget, kind, slot)
+        if not (widget and widget.HookScript) then return end
+        widget:HookScript("OnEnter", function()
+            FocusPreviewText(kind, ResolveFocusSlot(slot), false)
+        end)
+        widget:HookScript("OnMouseDown", function()
+            FocusPreviewText(kind, ResolveFocusSlot(slot), true)
+        end)
+        widget:HookScript("OnLeave", RestorePreviewTextFocus)
+    end
 
     local tabs = W.Segment(sec, "Text area", tabValues, math.min(520, sectionW - 48))
     W.MoveWidget(tabs, sec, 20, -68, math.min(520, sectionW - 48), "LEFT")
@@ -1039,6 +1080,7 @@ local function BuildText(ctx, builder, unit)
         CurrentTextTab,
         function(v)
             M.unitTextTabSelection[unit] = v or "name"
+            FocusActivePreviewText()
             if RefreshTextControlState then RefreshTextControlState() end
         end)
 
@@ -1208,6 +1250,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadText(unit, "nameTextAnchor", "LEFT") end,
         function(v)
             SetText(unit, "nameTextAnchor", v or "LEFT", "MSUF2_NAME_ANCHOR")
+            FocusPreviewText("name", nil, true)
             RefreshTextHeader()
         end)
 
@@ -1217,6 +1260,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "nameOffsetX", 4) end,
         function(v)
             SetNumber(unit, "nameOffsetX", v, "MSUF2_NAME_X", { text = true, preview = true })
+            FocusPreviewText("name", nil, true)
             RefreshTextHeader()
         end)
 
@@ -1226,6 +1270,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "nameOffsetY", -4) end,
         function(v)
             SetNumber(unit, "nameOffsetY", v, "MSUF2_NAME_Y", { text = true, preview = true })
+            FocusPreviewText("name", nil, true)
             RefreshTextHeader()
         end)
 
@@ -1253,6 +1298,8 @@ local function BuildText(ctx, builder, unit)
         function() return ReadSlot(unit, "textLeft", "hpTextMode", "NONE") end,
         function(v)
             SetText(unit, "textLeft", v or "NONE", "MSUF2_HP_LEFT")
+            SetCurrentSlot("hp", "left")
+            FocusPreviewText("hp", "left", true)
             RefreshTextHeader()
         end)
 
@@ -1262,6 +1309,8 @@ local function BuildText(ctx, builder, unit)
         function() return ReadSlot(unit, "textCenter", "hpTextMode", "NONE") end,
         function(v)
             SetText(unit, "textCenter", v or "NONE", "MSUF2_HP_CENTER")
+            SetCurrentSlot("hp", "center")
+            FocusPreviewText("hp", "center", true)
             RefreshTextHeader()
         end)
 
@@ -1271,6 +1320,8 @@ local function BuildText(ctx, builder, unit)
         function() return ReadSlot(unit, "textRight", "hpTextMode", "CURPERCENT") end,
         function(v)
             SetText(unit, "textRight", v or "NONE", "MSUF2_HP_RIGHT")
+            SetCurrentSlot("hp", "right")
+            FocusPreviewText("hp", "right", true)
             RefreshTextHeader()
         end)
 
@@ -1292,6 +1343,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "hpOffsetX", -4) end,
         function(v)
             SetNumber(unit, "hpOffsetX", v, "MSUF2_HP_X", { text = true, preview = true })
+            FocusPreviewText("hp", nil, true)
             RefreshTextHeader()
         end)
 
@@ -1301,6 +1353,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "hpOffsetY", -4) end,
         function(v)
             SetNumber(unit, "hpOffsetY", v, "MSUF2_HP_Y", { text = true, preview = true })
+            FocusPreviewText("hp", nil, true)
             RefreshTextHeader()
         end)
 
@@ -1309,6 +1362,7 @@ local function BuildText(ctx, builder, unit)
         function() return MoveTogether("hp") end,
         function(v)
             SetMoveTogether("hp", v)
+            FocusPreviewText("hp", v and nil or CurrentSlot("hp"), true)
             Call("MSUF_UFPreview_RequestRefresh", "MSUF2_HP_TEXT_MOVE_MODE")
             M.Refresh(ctx)
         end)
@@ -1322,6 +1376,7 @@ local function BuildText(ctx, builder, unit)
         function() return CurrentSlot("hp") end,
         function(v)
             SetCurrentSlot("hp", v)
+            FocusPreviewText("hp", v, true)
             M.Refresh(ctx)
         end)
 
@@ -1335,6 +1390,7 @@ local function BuildText(ctx, builder, unit)
         function(v)
             local xKey = SlotOffsetKeys("hp")
             SetNumber(unit, xKey, v, "MSUF2_HP_SLOT_X", { text = true, preview = true })
+            FocusPreviewText("hp", CurrentSlot("hp"), true)
         end)
 
     local hpSlotY = W.Slider(hpPosition, "Slot Y", -300, 300, 1, 260)
@@ -1347,6 +1403,7 @@ local function BuildText(ctx, builder, unit)
         function(v)
             local _, yKey = SlotOffsetKeys("hp")
             SetNumber(unit, yKey, v, "MSUF2_HP_SLOT_Y", { text = true, preview = true })
+            FocusPreviewText("hp", CurrentSlot("hp"), true)
         end)
 
     local hpAppearance = TextCard(hpTab, "Appearance", nil, leftX, -310, cardW, 144)
@@ -1373,6 +1430,8 @@ local function BuildText(ctx, builder, unit)
         function() return ReadSlot(unit, "powerTextLeft", "powerTextMode", "NONE") end,
         function(v)
             SetText(unit, "powerTextLeft", v or "NONE", "MSUF2_POWER_TEXT_LEFT")
+            SetCurrentSlot("power", "left")
+            FocusPreviewText("power", "left", true)
             RefreshTextHeader()
         end)
 
@@ -1382,6 +1441,8 @@ local function BuildText(ctx, builder, unit)
         function() return ReadSlot(unit, "powerTextCenter", "powerTextMode", "NONE") end,
         function(v)
             SetText(unit, "powerTextCenter", v or "NONE", "MSUF2_POWER_TEXT_CENTER")
+            SetCurrentSlot("power", "center")
+            FocusPreviewText("power", "center", true)
             RefreshTextHeader()
         end)
 
@@ -1391,6 +1452,8 @@ local function BuildText(ctx, builder, unit)
         function() return ReadSlot(unit, "powerTextRight", "powerTextMode", "CURPERCENT") end,
         function(v)
             SetText(unit, "powerTextRight", v or "NONE", "MSUF2_POWER_TEXT_RIGHT")
+            SetCurrentSlot("power", "right")
+            FocusPreviewText("power", "right", true)
             RefreshTextHeader()
         end)
 
@@ -1407,6 +1470,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "powerOffsetX", -4) end,
         function(v)
             SetNumber(unit, "powerOffsetX", v, "MSUF2_POWER_X", { text = true, preview = true })
+            FocusPreviewText("power", nil, true)
             RefreshTextHeader()
         end)
 
@@ -1416,6 +1480,7 @@ local function BuildText(ctx, builder, unit)
         function() return ReadNumber(unit, "powerOffsetY", 4) end,
         function(v)
             SetNumber(unit, "powerOffsetY", v, "MSUF2_POWER_Y", { text = true, preview = true })
+            FocusPreviewText("power", nil, true)
             RefreshTextHeader()
         end)
 
@@ -1424,6 +1489,7 @@ local function BuildText(ctx, builder, unit)
         function() return MoveTogether("power") end,
         function(v)
             SetMoveTogether("power", v)
+            FocusPreviewText("power", v and nil or CurrentSlot("power"), true)
             Call("MSUF_UFPreview_RequestRefresh", "MSUF2_POWER_TEXT_MOVE_MODE")
             M.Refresh(ctx)
         end)
@@ -1437,6 +1503,7 @@ local function BuildText(ctx, builder, unit)
         function() return CurrentSlot("power") end,
         function(v)
             SetCurrentSlot("power", v)
+            FocusPreviewText("power", v, true)
             M.Refresh(ctx)
         end)
 
@@ -1450,6 +1517,7 @@ local function BuildText(ctx, builder, unit)
         function(v)
             local xKey = SlotOffsetKeys("power")
             SetNumber(unit, xKey, v, "MSUF2_POWER_SLOT_X", { text = true, preview = true })
+            FocusPreviewText("power", CurrentSlot("power"), true)
         end)
 
     local pSlotY = W.Slider(powerPosition, "Slot Y", -300, 300, 1, 260)
@@ -1462,6 +1530,7 @@ local function BuildText(ctx, builder, unit)
         function(v)
             local _, yKey = SlotOffsetKeys("power")
             SetNumber(unit, yKey, v, "MSUF2_POWER_SLOT_Y", { text = true, preview = true })
+            FocusPreviewText("power", CurrentSlot("power"), true)
         end)
 
     local powerAppearance = TextCard(powerTab, "Appearance", nil, leftX, -310, cardW, 144)
@@ -1502,6 +1571,42 @@ local function BuildText(ctx, builder, unit)
             Call("MSUF_UpdateAllFonts_Immediate")
             RefreshTextHeader()
         end)
+
+    HookPreviewTextFocus(showNameText, "name")
+    HookPreviewTextFocus(nameAnchor, "name")
+    HookPreviewTextFocus(nameX, "name")
+    HookPreviewTextFocus(nameY, "name")
+    HookPreviewTextFocus(nameSize, "name")
+    HookPreviewTextFocus(advNameLayer, "name")
+
+    HookPreviewTextFocus(showHPText, "hp")
+    HookPreviewTextFocus(hpLeft, "hp", "left")
+    HookPreviewTextFocus(hpCenter, "hp", "center")
+    HookPreviewTextFocus(hpRight, "hp", "right")
+    HookPreviewTextFocus(hpSep, "hp")
+    HookPreviewTextFocus(hpReverse, "hp")
+    HookPreviewTextFocus(hpX, "hp")
+    HookPreviewTextFocus(hpY, "hp")
+    HookPreviewTextFocus(hpMoveTogether, "hp")
+    HookPreviewTextFocus(hpSlot, "hp", function() return CurrentSlot("hp") end)
+    HookPreviewTextFocus(hpSlotX, "hp", function() return CurrentSlot("hp") end)
+    HookPreviewTextFocus(hpSlotY, "hp", function() return CurrentSlot("hp") end)
+    HookPreviewTextFocus(hpSize, "hp")
+    HookPreviewTextFocus(advHpLayer, "hp")
+
+    HookPreviewTextFocus(showPowerText, "power")
+    HookPreviewTextFocus(pLeft, "power", "left")
+    HookPreviewTextFocus(pCenter, "power", "center")
+    HookPreviewTextFocus(pRight, "power", "right")
+    HookPreviewTextFocus(pSep, "power")
+    HookPreviewTextFocus(pX, "power")
+    HookPreviewTextFocus(pY, "power")
+    HookPreviewTextFocus(pMoveTogether, "power")
+    HookPreviewTextFocus(pSlot, "power", function() return CurrentSlot("power") end)
+    HookPreviewTextFocus(pSlotX, "power", function() return CurrentSlot("power") end)
+    HookPreviewTextFocus(pSlotY, "power", function() return CurrentSlot("power") end)
+    HookPreviewTextFocus(pSize, "power")
+    HookPreviewTextFocus(advPowerLayer, "power")
 
     RefreshTextControlState = function()
         local tab = CurrentTextTab()
@@ -1548,6 +1653,7 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(pSlotX, powerOn and not MoveTogether("power"))
         SetControlEnabled(pSlotY, powerOn and not MoveTogether("power"))
         SetControlEnabled(advPowerLayer, powerOn)
+        FocusActivePreviewText()
     end
     do
         local entry = sec and sec._msuf2CollapsibleEntry

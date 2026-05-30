@@ -51,6 +51,23 @@ local function NumValue(tbl, key, default)
     return tonumber(tbl and tbl[key]) or default or 0
 end
 
+local function AuraBadgeNumber(value)
+    value = tonumber(value) or 0
+    if value == floor(value) then return tostring(floor(value)) end
+    return string.format("%.1f", value)
+end
+
+local function SetAuraSectionBadges(section, specs)
+    if W and W.SetCollapsibleBadges then W.SetCollapsibleBadges(section, specs or {}) end
+end
+
+local function AuraOnOffBadge(enabled, onText, offText)
+    return {
+        text = enabled and (onText or "Shown") or (offText or "Hidden"),
+        kind = enabled and "ok" or "muted",
+    }
+end
+
 local function SetValue(tbl, key, value, apply)
     if not tbl or tbl[key] == value then return end
     local function Write()
@@ -919,7 +936,7 @@ local function BuildAuras(ctx)
         local advanced = mode == "advanced"
         local desired = {
             a2_display = true,
-            a2_layout = true,
+            a2_layout = advanced,
             a2_text_coloring = advanced,
             a2_private = advanced,
             a2_filters = advanced,
@@ -1462,7 +1479,7 @@ local function BuildAuras(ctx)
         end
     end)
 
-    local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 466, true)
+    local layout = b:CollapsibleSection("a2_layout", "Caps & Icons", 466, false)
     local layoutW = layout._msuf2Width or ctx.width or 900
     local layoutPad, layoutGap = 32, 26
     local layoutColW = floor((layoutW - layoutPad * 2 - layoutGap * 3) / 4)
@@ -1529,7 +1546,27 @@ local function BuildAuras(ctx)
         W.SetControlsEnabled(filterOverrideControls, sharedScope or UnitOverrideEnabled("overrideFilters"))
         W.SetControlsEnabled(capsOverrideControls, sharedScope or UnitOverrideEnabled("overrideSharedLayout"))
         W.SetControlsEnabled(layoutOverrideControls, sharedScope or UnitOverrideEnabled("overrideLayout"))
+        local shared = AuraShared()
+        local caps = AuraCaps()
+        local layoutCfg = AuraLayout()
+        local _, total = BudgetInfo()
+        local buffsOn = BoolValue(shared, "showBuffs", true)
+        local debuffsOn = BoolValue(shared, "showDebuffs", true)
+        local capsEditable = IsSharedScope() or UnitOverrideEnabled("overrideSharedLayout")
+        local layoutEditable = IsSharedScope() or UnitOverrideEnabled("overrideLayout")
+        SetAuraSectionBadges(master, {
+            AuraOnOffBadge(buffsOn, "Buffs on", "Buffs off"),
+            AuraOnOffBadge(debuffsOn, "Debuffs on", "Debuffs off"),
+            { text = AuraBadgeNumber(total) .. " icons", kind = total <= 18 and "ok" or (total <= 30 and "info" or "accent") },
+        })
+        SetAuraSectionBadges(layout, {
+            { text = "Buffs " .. AuraBadgeNumber(NumValue(caps, "maxBuffs", 8)), kind = capsEditable and "info" or "muted" },
+            { text = "Debuffs " .. AuraBadgeNumber(NumValue(caps, "maxDebuffs", 15)), kind = capsEditable and "info" or "muted" },
+            { text = AuraBadgeNumber(NumValue(layoutCfg, "iconSize", 26)) .. "px", kind = layoutEditable and "accent" or "muted" },
+            { text = SortLabel(NumValue(caps, "sortOrder", 0)), kind = capsEditable and "info" or "muted" },
+        })
     end)
+    if ctx.refreshers and ctx.refreshers[#ctx.refreshers] then ctx.refreshers[#ctx.refreshers]() end
 
     if IsAdvancedUXMode() then
     local visual = b:CollapsibleSection("a2_text_coloring", "Text Coloring", 520, false)
@@ -1727,7 +1764,33 @@ local function BuildAuras(ctx)
         for i = 1, #reminderControls do SetControlEnabled(reminderControls[i], remindersEnabled) end
         SetControlEnabled(expiry, remindersEnabled)
         SetControlEnabled(grow, remindersEnabled)
+        local key = AuraScope()
+        local ignoreEditable = key == "shared" or key == "boss1" or key == "boss2" or key == "boss3" or key == "boss4" or key == "boss5" or AurasUnit(key).overrideIgnore == true
+        local bossOnly = BoolValue(AuraFilters(), "onlyBossAuras", false)
+        SetAuraSectionBadges(visual, {
+            { text = BoolValue(shared, "useBlizzardTimerText", true) and "Blizzard text" or "Custom text", kind = sharedScope and "info" or "muted" },
+            { text = GetPandemicMode() ~= "OFF" and "Pandemic on" or "Pandemic off", kind = (sharedScope and GetPandemicMode() ~= "OFF") and "accent" or "muted" },
+        })
+        SetAuraSectionBadges(private, {
+            AuraOnOffBadge(privateEnabled, "Shown", "Hidden"),
+            { text = "Max " .. AuraBadgeNumber(NumValue(shared, "privateAuraMaxPlayer", 4)), kind = privateEnabled and "info" or "muted" },
+            { text = AuraBadgeNumber(NumValue(shared, "privateAuraBorderScale", 3)) .. " border", kind = privateEnabled and "accent" or "muted" },
+        })
+        SetAuraSectionBadges(filters, {
+            { text = bossOnly and "Boss only" or "Standard", kind = bossOnly and "accent" or "info" },
+            { text = SortLabel(NumValue(AuraCaps(), "sortOrder", 0)), kind = (sharedScope or UnitOverrideEnabled("overrideFilters")) and "info" or "muted" },
+        })
+        SetAuraSectionBadges(ignore, {
+            { text = ignoreEditable and "Editable" or "Inherits", kind = ignoreEditable and "info" or "muted" },
+            { text = AuraScopeLabel(), kind = key == "shared" and "accent" or "info" },
+        })
+        SetAuraSectionBadges(reminders, {
+            AuraOnOffBadge(remindersEnabled, "Enabled", "Disabled"),
+            { text = AuraBadgeNumber(NumValue(shared, "reminderThreshold", 0)) .. "s", kind = remindersEnabled and "info" or "muted" },
+            { text = tostring(shared.reminderGrowth or "RIGHT"), kind = remindersEnabled and "accent" or "muted" },
+        })
     end)
+    if ctx.refreshers and ctx.refreshers[#ctx.refreshers] then ctx.refreshers[#ctx.refreshers]() end
     end
 
     ctx:SetContentHeight(math.abs(b.y) + 42)

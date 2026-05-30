@@ -1134,6 +1134,108 @@ local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad)
     return true
 end
 
+local function GFPreviewNormalizeTextFocusKind(kind)
+    if kind == "name" or kind == "hp" or kind == "power" then return kind end
+    return nil
+end
+
+local function GFPreviewNormalizeTextFocusSlot(slot)
+    if slot == "left" or slot == "center" or slot == "right" then return slot end
+    return nil
+end
+
+local function GFPreviewTextFocusColor(kind)
+    if kind == "hp" then return { 0.25, 0.90, 0.42 } end
+    if kind == "power" then return { 0.95, 0.72, 0.18 } end
+    return { 0.30, 0.66, 1.00 }
+end
+
+local function GFPreviewEnsureTextFocusFrame(box, parent)
+    if not (box and parent) then return nil end
+    local f = box._msufMenuTextFocusFrame
+    if not f then
+        f = CreateFrame("Frame", nil, parent)
+        f:EnableMouse(false)
+        f.fill = f:CreateTexture(nil, "BACKGROUND")
+        f.fill:SetAllPoints()
+        f.lines = {}
+        for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+            local line = f:CreateTexture(nil, "OVERLAY")
+            f.lines[side] = line
+        end
+        f.lines.top:SetPoint("TOPLEFT")
+        f.lines.top:SetPoint("TOPRIGHT")
+        f.lines.bottom:SetPoint("BOTTOMLEFT")
+        f.lines.bottom:SetPoint("BOTTOMRIGHT")
+        f.lines.left:SetPoint("TOPLEFT")
+        f.lines.left:SetPoint("BOTTOMLEFT")
+        f.lines.right:SetPoint("TOPRIGHT")
+        f.lines.right:SetPoint("BOTTOMRIGHT")
+        box._msufMenuTextFocusFrame = f
+    elseif f.SetParent then
+        f:SetParent(parent)
+    end
+    if f.SetFrameLevel and parent.GetFrameLevel then
+        f:SetFrameLevel((parent:GetFrameLevel() or 0) + 85)
+    end
+    return f
+end
+
+local function GFPreviewPaintTextFocusFrame(frame, color, active)
+    if not (frame and color) then return end
+    local lineAlpha = active and 0.92 or 0.74
+    local fillAlpha = active and 0.10 or 0.065
+    local thickness = active and 2 or 1
+    if frame.fill then frame.fill:SetColorTexture(color[1], color[2], color[3], fillAlpha) end
+    if frame.lines then
+        frame.lines.top:SetHeight(thickness)
+        frame.lines.bottom:SetHeight(thickness)
+        frame.lines.left:SetWidth(thickness)
+        frame.lines.right:SetWidth(thickness)
+        for _, line in pairs(frame.lines) do
+            if line then line:SetColorTexture(color[1], color[2], color[3], lineAlpha) end
+        end
+    end
+end
+
+local function GFPreviewTextFocusRegions(mock, kind, slot)
+    if not mock then return nil end
+    if kind == "name" then
+        return { mock._nameFS }
+    elseif kind == "hp" then
+        if slot == "left" then return { mock._hpLeftFS } end
+        if slot == "center" then return { mock._hpCenterFS } end
+        if slot == "right" then return { mock._hpRightFS } end
+        return { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }
+    elseif kind == "power" then
+        if slot == "left" then return { mock._powerLeftFS } end
+        if slot == "center" then return { mock._powerCenterFS } end
+        if slot == "right" then return { mock._powerRightFS } end
+        return { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }
+    end
+    return nil
+end
+
+local function GFPreviewApplyTextFocus(box, mock)
+    local focus = box and box._msufMenuTextFocus
+    local frame = box and box._msufMenuTextFocusFrame
+    if not (focus and mock) then
+        if frame and frame.Hide then frame:Hide() end
+        return
+    end
+    local regions = GFPreviewTextFocusRegions(mock, focus.kind, focus.slot)
+    if not regions then
+        if frame and frame.Hide then frame:Hide() end
+        return
+    end
+    frame = GFPreviewEnsureTextFocusFrame(box, mock)
+    if not frame then return end
+    GFPreviewPaintTextFocusFrame(frame, GFPreviewTextFocusColor(focus.kind), focus.active == true)
+    if not GFPreviewPlaceHandleAroundRegions(frame, mock, regions, focus.active and 5 or 4) then
+        frame:Hide()
+    end
+end
+
 local function GFPreviewHandleOffsets(handle)
     if not handle then return nil end
     local conf = Conf(CurrentScope()) or {}
@@ -1960,6 +2062,25 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         powerCenter = powerCenterTextHandle,
         powerRight = powerRightTextHandle,
     }
+    function box:FocusTextSlot(kind, slot, active)
+        kind = GFPreviewNormalizeTextFocusKind(kind)
+        slot = GFPreviewNormalizeTextFocusSlot(slot)
+        if not kind then
+            self._msufMenuTextFocus = nil
+        else
+            self._msufMenuTextFocus = {
+                kind = kind,
+                slot = slot,
+                active = active == true,
+            }
+        end
+        if self.RequestRefresh then
+            self:RequestRefresh(kind and "GROUP_PREVIEW_TEXT_FOCUS" or "GROUP_PREVIEW_TEXT_CLEAR_FOCUS")
+        elseif self.Refresh then
+            self:Refresh()
+        end
+        return true
+    end
 
     local footer = T.Font(box, "GameFontDisableSmall", GFPreviewTr("Click a handle to select - drag custom layers - Ctrl+wheel zoom - Ctrl+left drag pans"), T.colors.muted)
     footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
@@ -2761,6 +2882,7 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if not GFPreviewPlaceHandleAroundRegions(textHandles.powerCenter, mock, { mock._powerCenterFS }, 3) then textHandles.powerCenter:Hide() end
             if not GFPreviewPlaceHandleAroundRegions(textHandles.powerRight, mock, { mock._powerRightFS }, 3) then textHandles.powerRight:Hide() end
         end
+        GFPreviewApplyTextFocus(self, mock)
 
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
         buffHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(buffCfg.layer, 5))
@@ -2913,3 +3035,16 @@ end
 M.GroupPreview = M.GroupPreview or {}
 M.GroupPreview.CreateNative = CreateNativeGFPreview
 M.GroupPreview.OpenSection = OpenGFSection
+
+function M.FocusGFPreviewTextSlot(kind, slot, active)
+    local previews = M._gfNativePreviews
+    if not previews then return false end
+    local focused = false
+    for i = 1, #previews do
+        local box = previews[i]
+        if box and not box._msufGFNativePreviewDisposed and box.FocusTextSlot and box.IsShown and box:IsShown() and (not box.IsVisible or box:IsVisible()) then
+            focused = box:FocusTextSlot(kind, slot, active) or focused
+        end
+    end
+    return focused
+end

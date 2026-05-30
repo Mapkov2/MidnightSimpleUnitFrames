@@ -156,6 +156,7 @@ function W.PageBuilder(ctx)
             entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
             entry.outer:SetHeight(entry.headerHeight + (open and entry.contentHeight or 0))
             entry.body:SetShown(open)
+            if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
             T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
             if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
             y = y - entry.outer:GetHeight() - 8
@@ -166,6 +167,7 @@ function W.PageBuilder(ctx)
 
     function b:Section(title, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+        if T.ApplyMaterial then T.ApplyMaterial(section, "card") elseif T.ApplyGlass then T.ApplyGlass(section, "card") end
         SetSearchTitle(section, title)
         RegisterSearchObject(section, title, "section")
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
@@ -198,6 +200,7 @@ function W.PageBuilder(ctx)
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
 
         local outer = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+        if T.ApplyMaterial then T.ApplyMaterial(outer, "card") elseif T.ApplyGlass then T.ApplyGlass(outer, "card") end
         SetSearchTitle(outer, title)
         RegisterSearchObject(outer, title, "section")
         outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
@@ -256,20 +259,44 @@ function W.PageBuilder(ctx)
             if not entry._msuf2ManualHintLayout then
                 local badges = entry._msuf2Badges
                 if badges and #badges > 0 then
-                    local right = -12
-                    local hasVisibleBadge = false
-                    for i = #badges, 1, -1 do
+                    local availableBadges = {}
+                    local availableW = headerW - 12 - 28 - (headerW < 520 and 96 or 136)
+                    local totalW = 0
+                    for i = 1, #badges do
                         local badge = badges[i]
-                        if badge and badge.IsShown and badge:IsShown() then
-                            hasVisibleBadge = true
+                        if badge and badge._msuf2BadgeWantedShown ~= false then
                             local bw = (badge.GetWidth and badge:GetWidth()) or 0
-                            badge:ClearAllPoints()
-                            badge:SetPoint("RIGHT", header, "RIGHT", right, 0)
-                            right = right - bw - 6
+                            if bw > 0 then
+                                totalW = totalW + bw + (#availableBadges > 0 and 6 or 0)
+                                availableBadges[#availableBadges + 1] = badge
+                            end
                         end
                     end
+                    availableW = max(0, availableW)
+                    while #availableBadges > 1 and totalW > availableW do
+                        local badge = availableBadges[#availableBadges]
+                        totalW = totalW - ((badge.GetWidth and badge:GetWidth()) or 0) - (#availableBadges > 1 and 6 or 0)
+                        availableBadges[#availableBadges] = nil
+                    end
+                    if #availableBadges == 1 and totalW > availableW then
+                        availableBadges[1] = nil
+                    end
 
-                    if hasVisibleBadge then
+                    local right = -12
+                    for i = #badges, 1, -1 do
+                        local badge = badges[i]
+                        if badge then badge:SetShown(false) end
+                    end
+                    for i = #availableBadges, 1, -1 do
+                        local badge = availableBadges[i]
+                        local bw = (badge.GetWidth and badge:GetWidth()) or 0
+                        badge:ClearAllPoints()
+                        badge:SetPoint("RIGHT", header, "RIGHT", right, 0)
+                        badge:SetShown(true)
+                        right = right - bw - 6
+                    end
+
+                    if #availableBadges > 0 then
                         if hint.Hide then hint:Hide() end
 
                         label:ClearAllPoints()
@@ -298,9 +325,44 @@ function W.PageBuilder(ctx)
         body._msuf2CollapsibleEntry = entry
         self.collapsibles[#self.collapsibles + 1] = entry
         header:SetScript("OnClick", function()
-            entry.open = not entry.open
-            M.accordionState[stateKey] = entry.open
-            self:RelayoutCollapsibles()
+            if entry._msuf2MotionActive then return end
+            local nextOpen = not entry.open
+            M.accordionState[stateKey] = nextOpen
+
+            if nextOpen then
+                entry.open = true
+                entry._msuf2MotionActive = true
+                if body.SetAlpha then body:SetAlpha(0) end
+                self:RelayoutCollapsibles()
+                if T.PlayMotion then
+                    T.PlayMotion(body, "accordionIn", { fromAlpha = 0, onFinished = function()
+                        entry._msuf2MotionActive = nil
+                        if body.SetAlpha then body:SetAlpha(1) end
+                    end })
+                else
+                    entry._msuf2MotionActive = nil
+                    if body.SetAlpha then body:SetAlpha(1) end
+                end
+                return
+            end
+
+            entry._msuf2MotionActive = true
+            T.ApplyCollapseVisual(entry.arrow, entry.hint, false)
+            if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
+            if body.Show then body:Show() end
+            if T.PlayMotion then
+                T.PlayMotion(body, "accordionOut", { fromAlpha = body.GetAlpha and body:GetAlpha() or 1, onFinished = function()
+                    entry.open = false
+                    entry._msuf2MotionActive = nil
+                    if body.SetAlpha then body:SetAlpha(1) end
+                    self:RelayoutCollapsibles()
+                end })
+            else
+                entry.open = false
+                entry._msuf2MotionActive = nil
+                if body.SetAlpha then body:SetAlpha(1) end
+                self:RelayoutCollapsibles()
+            end
         end)
         header:HookScript("OnSizeChanged", RefreshHeaderLayout)
 
@@ -571,12 +633,21 @@ function W.SetCollapsibleBadges(section, specs)
         if shown and (onlyWhenOpen or spec.onlyWhenOpen == true) then
             shown = entry.open == true
         end
+        badge._msuf2BadgeWantedShown = shown and true or false
+        if badge.text and badge.text.SetWidth then
+            badge.text:SetWidth(max(20, (badge.GetWidth and badge:GetWidth() or 54) - 10))
+        end
+        if badge.text and badge.text.SetMaxLines then badge.text:SetMaxLines(1) end
+        if badge.text and badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
         badge:SetShown(shown)
     end
 
     for i = #specs + 1, #entry._msuf2Badges do
         local badge = entry._msuf2Badges[i]
-        if badge then badge:SetShown(false) end
+        if badge then
+            badge._msuf2BadgeWantedShown = false
+            badge:SetShown(false)
+        end
     end
 
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
@@ -588,9 +659,40 @@ local function NextRow(section, height)
     return section._msuf2ContentX or 14, y
 end
 
+local function PlayWidgetMotion(region, motion, opts)
+    if T.PlayMotion then
+        T.PlayMotion(region, motion, opts)
+        return
+    end
+    opts = opts or {}
+    if region and region.SetAlpha then region:SetAlpha(opts.toAlpha or 0) end
+end
+
+local function ApplyControlCardChrome(card)
+    if not (card and card.CreateTexture) or card._msuf2ControlCardChrome then return end
+    card._msuf2ControlCardChrome = true
+
+    local top = card:CreateTexture(nil, "ARTWORK", nil, 4)
+    top:SetTexture("Interface\\Buttons\\WHITE8X8")
+    top:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -2)
+    top:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -2)
+    top:SetHeight(1)
+    top:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.075)
+    card._msuf2CardTopLine = top
+
+    local depth = card:CreateTexture(nil, "BORDER", nil, 4)
+    depth:SetTexture("Interface\\Buttons\\WHITE8X8")
+    depth:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 8, 2)
+    depth:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 2)
+    depth:SetHeight(1)
+    depth:SetColorTexture(0, 0, 0, 0.18)
+    card._msuf2CardDepthLine = depth
+end
+
 local function CreateToggle(section, label, x, y, labelWidth)
     local btn = CreateFrame("CheckButton", nil, section, "UICheckButtonTemplate")
     btn._msuf2ControlKind = "toggle"
+    btn._msuf2QuietCheckBox = true
     btn:SetPoint("TOPLEFT", x, y)
     btn:SetSize(24, 24)
 
@@ -606,6 +708,129 @@ local function CreateToggle(section, label, x, y, labelWidth)
     if T.StyleCheckmark then T.StyleCheckmark(btn) end
     btn:HookScript("OnShow", function(self)
         if T.StyleCheckmark then T.StyleCheckmark(self) end
+        if self._msuf2RefreshToggleFeedback then self:_msuf2RefreshToggleFeedback() end
+    end)
+
+    local boxFill = btn:CreateTexture(nil, "BACKGROUND", nil, -2)
+    boxFill:SetTexture("Interface\\Buttons\\WHITE8X8")
+    boxFill:SetSize(16, 16)
+    boxFill:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    btn._msuf2ToggleFill = boxFill
+
+    local hoverFill = btn:CreateTexture(nil, "BACKGROUND", nil, -1)
+    hoverFill:SetTexture("Interface\\Buttons\\WHITE8X8")
+    hoverFill:SetPoint("TOPLEFT", boxFill, "TOPLEFT", 1, -1)
+    hoverFill:SetPoint("BOTTOMRIGHT", boxFill, "BOTTOMRIGHT", -1, 1)
+    hoverFill:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
+    hoverFill:SetAlpha(0)
+    hoverFill:Hide()
+    btn._msuf2ToggleHoverFill = hoverFill
+
+    local boxTop = btn:CreateTexture(nil, "BORDER", nil, -1)
+    boxTop:SetTexture("Interface\\Buttons\\WHITE8X8")
+    boxTop:SetPoint("TOPLEFT", boxFill, "TOPLEFT", 0, 0)
+    boxTop:SetPoint("TOPRIGHT", boxFill, "TOPRIGHT", 0, 0)
+    boxTop:SetHeight(1)
+    local boxBottom = btn:CreateTexture(nil, "BORDER", nil, -1)
+    boxBottom:SetTexture("Interface\\Buttons\\WHITE8X8")
+    boxBottom:SetPoint("BOTTOMLEFT", boxFill, "BOTTOMLEFT", 0, 0)
+    boxBottom:SetPoint("BOTTOMRIGHT", boxFill, "BOTTOMRIGHT", 0, 0)
+    boxBottom:SetHeight(1)
+    local boxLeft = btn:CreateTexture(nil, "BORDER", nil, -1)
+    boxLeft:SetTexture("Interface\\Buttons\\WHITE8X8")
+    boxLeft:SetPoint("TOPLEFT", boxFill, "TOPLEFT", 0, 0)
+    boxLeft:SetPoint("BOTTOMLEFT", boxFill, "BOTTOMLEFT", 0, 0)
+    boxLeft:SetWidth(1)
+    local boxRight = btn:CreateTexture(nil, "BORDER", nil, -1)
+    boxRight:SetTexture("Interface\\Buttons\\WHITE8X8")
+    boxRight:SetPoint("TOPRIGHT", boxFill, "TOPRIGHT", 0, 0)
+    boxRight:SetPoint("BOTTOMRIGHT", boxFill, "BOTTOMRIGHT", 0, 0)
+    boxRight:SetWidth(1)
+    btn._msuf2ToggleEdges = { boxTop, boxBottom, boxLeft, boxRight }
+
+    local function PlayToggleHover(self, show, down)
+        local tex = self._msuf2ToggleHoverFill
+        if not tex then return end
+        local enabled = not (self.IsEnabled and not self:IsEnabled())
+        if not enabled then show = false end
+        local target = show and (down and 0.170 or 0.090) or 0
+        if target > 0 then
+            local c = T.colors.accent
+            tex:SetColorTexture(c[1], c[2], c[3], 1)
+            tex:Show()
+        end
+        PlayWidgetMotion(tex, target > 0 and "controlFocusIn" or "controlFocusOut", {
+            fromAlpha = tex.GetAlpha and tex:GetAlpha() or 0,
+            toAlpha = target,
+            onFinished = function(selfTex)
+                if target <= 0 and selfTex.Hide then selfTex:Hide() end
+            end,
+        })
+    end
+
+    local function RefreshToggleFeedback(self, hover, down)
+        local enabled = not (self.IsEnabled and not self:IsEnabled())
+        local checked = self.GetChecked and self:GetChecked()
+        local bg = checked and { 0.018, 0.075, 0.095, 0.92 } or { 0.010, 0.014, 0.030, 0.90 }
+        local br = checked and T.colors.accent or (T.colors.borderSoft or T.colors.border)
+        local bgMul = enabled and (down and 1.16 or hover and 1.08 or 1) or 1
+        local borderAlpha = enabled and (checked and (down and 0.68 or hover and 0.58 or 0.46) or (down and 0.66 or hover and 0.52 or 0.36)) or 0.24
+        local alpha = enabled and 1 or 0.45
+
+        if self._msuf2ToggleFill then
+            self._msuf2ToggleFill:SetVertexColor(min(bg[1] * bgMul, 1), min(bg[2] * bgMul, 1), min(bg[3] * bgMul, 1), (bg[4] or 1) * alpha)
+        end
+        local edges = self._msuf2ToggleEdges
+        if edges then
+            for i = 1, #edges do
+                edges[i]:SetVertexColor(br[1], br[2], br[3], borderAlpha)
+            end
+        end
+
+        local check = self.GetCheckedTexture and self:GetCheckedTexture()
+        if check and check.SetVertexColor then
+            check:SetVertexColor(0.900, 0.980, 1.000, enabled and 0.92 or 0.42)
+        end
+        if self._msuf2Label and self._msuf2Label.SetTextColor then
+            local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
+            self._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
+        end
+    end
+    btn._msuf2RefreshToggleFeedback = RefreshToggleFeedback
+
+    local rawSetChecked = btn.SetChecked
+    btn.SetChecked = function(self, value)
+        rawSetChecked(self, value and true or false)
+        RefreshToggleFeedback(self, self._msuf2ToggleHovered, self._msuf2TogglePressed)
+    end
+    btn:HookScript("OnEnter", function(self)
+        self._msuf2ToggleHovered = true
+        PlayToggleHover(self, true, self._msuf2TogglePressed)
+        RefreshToggleFeedback(self, true, self._msuf2TogglePressed)
+    end)
+    btn:HookScript("OnLeave", function(self)
+        self._msuf2ToggleHovered = nil
+        self._msuf2TogglePressed = nil
+        PlayToggleHover(self, false)
+        RefreshToggleFeedback(self)
+    end)
+    btn:HookScript("OnMouseDown", function(self)
+        self._msuf2TogglePressed = true
+        PlayToggleHover(self, true, true)
+        RefreshToggleFeedback(self, self._msuf2ToggleHovered, true)
+    end)
+    btn:HookScript("OnMouseUp", function(self)
+        self._msuf2TogglePressed = nil
+        PlayToggleHover(self, self._msuf2ToggleHovered)
+        RefreshToggleFeedback(self, self._msuf2ToggleHovered)
+    end)
+    btn:HookScript("OnClick", function(self)
+        RefreshToggleFeedback(self, self._msuf2ToggleHovered)
+    end)
+    btn:HookScript("OnEnable", function(self) RefreshToggleFeedback(self, self._msuf2ToggleHovered) end)
+    btn:HookScript("OnDisable", function(self)
+        PlayToggleHover(self, false)
+        RefreshToggleFeedback(self)
     end)
 
     local labelHit = CreateFrame("Button", nil, section)
@@ -617,9 +842,16 @@ local function CreateToggle(section, label, x, y, labelWidth)
         if btn.Click then btn:Click() end
     end)
     labelHit:SetScript("OnEnter", function()
+        btn._msuf2ToggleHovered = true
+        PlayToggleHover(btn, true)
+        RefreshToggleFeedback(btn, true)
         if btn.LockHighlight then btn:LockHighlight() end
     end)
     labelHit:SetScript("OnLeave", function()
+        btn._msuf2ToggleHovered = nil
+        btn._msuf2TogglePressed = nil
+        PlayToggleHover(btn, false)
+        RefreshToggleFeedback(btn)
         if btn.UnlockHighlight then btn:UnlockHighlight() end
     end)
     btn._msuf2LabelHit = labelHit
@@ -643,7 +875,11 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     width = width or 360
     height = height or 120
 
-    local card = T.Panel(parent, nil, { 0.018, 0.026, 0.052, 0.86 }, T.colors.cardBorder or T.colors.borderSoft)
+    local cardBg = { 0.018, 0.026, 0.052, 0.86 }
+    local cardBorder = T.colors.cardBorder or T.colors.borderSoft
+    local card = T.Panel(parent, nil, cardBg, cardBorder)
+    if T.ApplyMaterial then T.ApplyMaterial(card, { bg = cardBg, border = cardBorder, glass = "card" }) elseif T.ApplyGlass then T.ApplyGlass(card, "card") end
+    ApplyControlCardChrome(card)
     SetSearchTitle(card, title)
     RegisterSearchObject(card, title, "section")
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y or 0)
@@ -681,7 +917,11 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     x = floor((tonumber(x) or 0) + 0.5)
     y = floor((tonumber(y) or 0) + 0.5)
 
-    local card = T.Panel(parent, nil, bg or { 0.018, 0.026, 0.052, 0.86 }, border or T.colors.cardBorder or T.colors.borderSoft)
+    local cardBg = bg or { 0.018, 0.026, 0.052, 0.86 }
+    local cardBorder = border or T.colors.cardBorder or T.colors.borderSoft
+    local card = T.Panel(parent, nil, cardBg, cardBorder)
+    if T.ApplyMaterial then T.ApplyMaterial(card, { bg = cardBg, border = cardBorder, glass = "card" }) elseif T.ApplyGlass then T.ApplyGlass(card, "card") end
+    ApplyControlCardChrome(card)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     card:SetSize(width, height)
     PlaceBackdropFrameBehindControls(card, parent)
@@ -728,6 +968,15 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2SwitchFill = fill
     btn._msuf2SwitchEdge = edge
 
+    local flash = btn:CreateTexture(nil, "ARTWORK", nil, 2)
+    flash:SetTexture((T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
+    flash:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
+    flash:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
+    flash:SetTexCoord(0, 1, 0, 1)
+    flash:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0)
+    flash:SetAlpha(0)
+    btn._msuf2SwitchFlash = flash
+
     local knob = btn:CreateTexture(nil, "OVERLAY")
     knob:SetTexture((T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
     knob:SetTexCoord(0, 1, 0, 1)
@@ -753,13 +1002,24 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2Label = labelFS
     btn.text = labelFS
 
+    local function PlaySwitchFeedback(self)
+        if not self._msuf2SwitchFlash then return end
+        local checked = self.GetChecked and self:GetChecked()
+        local c = checked and T.colors.accent or (T.colors.borderSoft or T.colors.border)
+        self._msuf2SwitchFlash:SetVertexColor(c[1], c[2], c[3], checked and 0.28 or 0.18)
+        self._msuf2SwitchFlash:SetAlpha(checked and 0.28 or 0.18)
+        PlayWidgetMotion(self._msuf2SwitchFlash, "controlFeedback", { fromAlpha = checked and 0.28 or 0.18, toAlpha = 0 })
+    end
+
     local function Refresh(self, hover)
+        hover = hover or self._msuf2SwitchHovered
+        local pressed = self._msuf2SwitchPressed and true or false
         local checked = self.GetChecked and self:GetChecked()
         local enabled = not self.IsEnabled or self:IsEnabled()
         local bg = checked and { 0.020, 0.090, 0.135, 0.96 } or { 0.014, 0.022, 0.048, 0.96 }
         local br = checked and { 0.160, 0.560, 0.760, 0.86 } or { 0.095, 0.145, 0.255, 0.82 }
         local kb = checked and { 0.380, 0.760, 0.900, 1.00 } or { 0.680, 0.760, 0.940, 1.00 }
-        local mul = (hover and enabled) and 1.08 or 1
+        local mul = enabled and (pressed and 1.14 or hover and 1.08 or 1) or 1
         local alpha = enabled and 1 or 0.45
         if self._msuf2SwitchFill then self._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), (bg[4] or 1) * alpha) end
         if self._msuf2SwitchEdge then self._msuf2SwitchEdge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), (br[4] or 1) * alpha) end
@@ -767,23 +1027,49 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
             knob:ClearAllPoints()
             knob:SetTexture((T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8")
             knob:SetTexCoord(0, 1, 0, 1)
+            knob:SetSize(pressed and (knobSize + 1) or knobSize, pressed and (knobSize + 1) or knobSize)
             knob:SetPoint(checked and "RIGHT" or "LEFT", self, checked and "RIGHT" or "LEFT", checked and -knobPad or knobPad, 0)
             knob:SetVertexColor(kb[1], kb[2], kb[3], (kb[4] or 1) * alpha)
             if knob.SetAlpha then knob:SetAlpha(alpha) end
+        end
+        if self._msuf2Label and self._msuf2Label.SetTextColor then
+            local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
+            self._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
         end
     end
     btn._msuf2RefreshSwitchVisual = Refresh
 
     local rawSetChecked = btn.SetChecked
     btn.SetChecked = function(self, value)
+        local before = self.GetChecked and self:GetChecked()
         rawSetChecked(self, value and true or false)
+        if before ~= (value and true or false) then PlaySwitchFeedback(self) end
         Refresh(self)
     end
-    btn:HookScript("OnEnter", function(self) Refresh(self, true) end)
-    btn:HookScript("OnLeave", function(self) Refresh(self) end)
+    btn:HookScript("OnEnter", function(self)
+        self._msuf2SwitchHovered = true
+        Refresh(self, true)
+    end)
+    btn:HookScript("OnLeave", function(self)
+        self._msuf2SwitchHovered = nil
+        self._msuf2SwitchPressed = nil
+        Refresh(self)
+    end)
+    btn:HookScript("OnMouseDown", function(self)
+        self._msuf2SwitchPressed = true
+        Refresh(self)
+    end)
+    btn:HookScript("OnMouseUp", function(self)
+        self._msuf2SwitchPressed = nil
+        Refresh(self)
+    end)
     btn:HookScript("OnClick", function(self) Refresh(self) end)
     btn:HookScript("OnEnable", function(self) Refresh(self) end)
-    btn:HookScript("OnDisable", function(self) Refresh(self) end)
+    btn:HookScript("OnDisable", function(self)
+        self._msuf2SwitchHovered = nil
+        self._msuf2SwitchPressed = nil
+        Refresh(self)
+    end)
 
     if side ~= "HIDDEN" then
         local labelHit = CreateFrame("Button", nil, section)
@@ -795,10 +1081,13 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
             if btn.Click then btn:Click() end
         end)
         labelHit:SetScript("OnEnter", function()
+            btn._msuf2SwitchHovered = true
             Refresh(btn, true)
             if btn.LockHighlight then btn:LockHighlight() end
         end)
         labelHit:SetScript("OnLeave", function()
+            btn._msuf2SwitchHovered = nil
+            btn._msuf2SwitchPressed = nil
             Refresh(btn)
             if btn.UnlockHighlight then btn:UnlockHighlight() end
         end)

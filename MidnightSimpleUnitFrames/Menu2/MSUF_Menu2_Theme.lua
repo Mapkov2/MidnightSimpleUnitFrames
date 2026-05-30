@@ -71,6 +71,11 @@ T.colors = {
     navHeaderHover = { 0.780, 0.860, 1.000, 1.00 },
     navArrowOpen = { 1.000, 0.760, 0.250, 1.00 },
     navArrowClosed = { 1.000, 0.560, 0.060, 1.00 },
+    glassShell = { 0.040, 0.050, 0.095, 0.940 },
+    glassRail = { 0.040, 0.052, 0.100, 0.740 },
+    glassHost = { 0.045, 0.056, 0.105, 0.660 },
+    glassStatus = { 0.048, 0.060, 0.115, 0.560 },
+    glassPopup = { 0.010, 0.014, 0.026, 0.940 },
 }
 
 T.fontBump = T.fontBump or 1
@@ -376,6 +381,448 @@ function T.ApplyBackdrop(frame, bg, border)
     return frame
 end
 
+local GLASS_VARIANTS = {
+    shell = {
+        tint = { 0.026, 0.034, 0.068, 0.22 },
+        wash = { 0.080, 0.120, 0.220, 0.090 },
+        depth = { 0.015, 0.020, 0.050, 0.16 },
+        grain = { 0.070, 0.085, 0.145, 0.060 },
+        top = { 0.270, 0.720, 1.000, 0.24 },
+        bottom = { 0.000, 0.000, 0.000, 0.30 },
+    },
+    rail = {
+        tint = { 0.018, 0.026, 0.056, 0.18 },
+        wash = { 0.070, 0.100, 0.210, 0.085 },
+        grain = { 0.060, 0.070, 0.130, 0.055 },
+        top = { 0.260, 0.650, 1.000, 0.18 },
+        bottom = { 0.000, 0.000, 0.000, 0.24 },
+    },
+    host = {
+        tint = { 0.020, 0.030, 0.065, 0.160 },
+        wash = { 0.070, 0.110, 0.220, 0.075 },
+        depth = { 0.020, 0.018, 0.060, 0.120 },
+        grain = { 0.070, 0.065, 0.130, 0.045 },
+        top = { 0.260, 0.720, 1.000, 0.16 },
+        bottom = { 0.000, 0.000, 0.000, 0.26 },
+    },
+    status = {
+        tint = { 0.020, 0.030, 0.060, 0.20 },
+        wash = { 0.080, 0.120, 0.230, 0.080 },
+        top = { 0.300, 0.800, 1.000, 0.24 },
+        bottom = { 0.000, 0.000, 0.000, 0.20 },
+    },
+    popup = {
+        tint = { 0.010, 0.014, 0.026, 0.22 },
+        wash = { 0.060, 0.110, 0.220, 0.100 },
+        grain = { 0.070, 0.080, 0.130, 0.060 },
+        top = { 0.300, 0.820, 1.000, 0.26 },
+        bottom = { 0.000, 0.000, 0.000, 0.28 },
+    },
+    card = {
+        tint = { 0.014, 0.020, 0.040, 0.120 },
+        wash = { 0.045, 0.080, 0.160, 0.045 },
+        top = { 0.250, 0.640, 0.920, 0.12 },
+        bottom = { 0.000, 0.000, 0.000, 0.16 },
+    },
+}
+
+T.motion = T.motion or {}
+local function DefaultMotion(key, value)
+    if T.motion[key] == nil then T.motion[key] = value end
+end
+DefaultMotion("fast", 0.085)
+DefaultMotion("standard", 0.120)
+DefaultMotion("soft", 0.160)
+DefaultMotion("dropdownIn", 0.105)
+DefaultMotion("dropdownOut", 0.085)
+DefaultMotion("popupIn", 0.120)
+DefaultMotion("popupOut", 0.100)
+DefaultMotion("focusIn", 0.135)
+DefaultMotion("focusOut", 0.110)
+DefaultMotion("accordionIn", 0.120)
+DefaultMotion("accordionOut", 0.095)
+DefaultMotion("contentIn", 0.105)
+DefaultMotion("contentOut", 0.085)
+DefaultMotion("controlFocusIn", 0.085)
+DefaultMotion("controlFocusOut", 0.080)
+DefaultMotion("controlFeedback", 0.145)
+
+T.dropdownMotion = T.dropdownMotion or {}
+if T.dropdownMotion.listFadeIn == nil then T.dropdownMotion.listFadeIn = T.motion.dropdownIn end
+if T.dropdownMotion.listFadeOut == nil then T.dropdownMotion.listFadeOut = T.motion.dropdownOut end
+if T.dropdownMotion.focusFadeIn == nil then T.dropdownMotion.focusFadeIn = T.motion.focusIn end
+if T.dropdownMotion.focusFadeOut == nil then T.dropdownMotion.focusFadeOut = T.motion.focusOut end
+
+T.motionProfiles = T.motionProfiles or {}
+local function DefaultMotionProfile(key, spec)
+    if T.motionProfiles[key] == nil then T.motionProfiles[key] = spec end
+end
+DefaultMotionProfile("dropdownIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "dropdownIn", smoothing = "OUT" })
+DefaultMotionProfile("dropdownOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "dropdownOut", smoothing = "IN" })
+DefaultMotionProfile("popupIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "popupIn", smoothing = "OUT" })
+DefaultMotionProfile("popupOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "popupOut", smoothing = "IN" })
+DefaultMotionProfile("focusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "focusIn", smoothing = "OUT" })
+DefaultMotionProfile("focusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "focusOut", smoothing = "IN" })
+DefaultMotionProfile("accordionIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "accordionIn", smoothing = "OUT" })
+DefaultMotionProfile("accordionOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "accordionOut", smoothing = "IN" })
+DefaultMotionProfile("contentIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "contentIn", smoothing = "OUT" })
+DefaultMotionProfile("contentOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "contentOut", smoothing = "IN" })
+DefaultMotionProfile("controlFocusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "controlFocusIn", smoothing = "OUT" })
+DefaultMotionProfile("controlFocusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFocusOut", smoothing = "IN" })
+DefaultMotionProfile("controlFeedback", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFeedback", smoothing = "OUT" })
+
+T.materials = T.materials or {}
+local function DefaultMaterial(key, spec)
+    if T.materials[key] == nil then T.materials[key] = spec end
+end
+DefaultMaterial("shell", { bg = T.colors.glassShell, border = T.colors.border, glass = "shell" })
+DefaultMaterial("rail", { bg = T.colors.glassRail, border = T.colors.borderSoft, glass = "rail" })
+DefaultMaterial("host", { bg = T.colors.glassHost, border = T.colors.borderSoft, glass = "host" })
+DefaultMaterial("status", { bg = T.colors.glassStatus, border = T.colors.borderSoft, glass = "status" })
+DefaultMaterial("card", { bg = T.colors.panel2, border = T.colors.cardBorder or T.colors.borderSoft, glass = "card" })
+DefaultMaterial("popup", { bg = T.colors.glassPopup, border = { 0.140, 0.220, 0.600, 0.88 }, glass = "popup" })
+DefaultMaterial("focus", { veil = "dropdown" })
+
+-- WoW addon frames cannot blur what is already behind them, so dropdown focus uses
+-- a shared neutral veil instead of page-specific fake blur layers.
+T.focusVeils = T.focusVeils or {}
+T.focusVeils.dropdown = T.focusVeils.dropdown or {
+    { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.180 } },
+    { key = "_msuf2FocusHaze", layer = "BACKGROUND", subLevel = 1, color = { 0.010, 0.014, 0.026, 0.055 } },
+    { key = "_msuf2FocusSmearA", layer = "BORDER", subLevel = 0, texture = "bgSmooth", points = { -5, 5, 5, -5 }, color = { 0.018, 0.026, 0.052, 0.040 }, blend = "BLEND" },
+    { key = "_msuf2FocusSmearB", layer = "BORDER", subLevel = 1, texture = "bgSmooth", points = { 4, -4, -4, 4 }, texCoord = { 0, 0, 1, 0, 0, 1, 1, 1 }, color = { 0.014, 0.022, 0.046, 0.032 }, blend = "BLEND" },
+    { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 2, texture = "bgSmooth", color = { 0.024, 0.034, 0.068, 0.050 }, blend = "BLEND" },
+    { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 3, texture = "bgCharcoal", color = { 0.035, 0.040, 0.070, 0.070 }, blend = "BLEND" },
+}
+
+local function ColorTexture(tex, c)
+    if not (tex and c) then return end
+    if tex.SetColorTexture then
+        tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1)
+    else
+        tex:SetTexture("Interface\\Buttons\\WHITE8X8")
+        if tex.SetVertexColor then tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1) end
+    end
+end
+
+local function ApplyFocusVeilLayer(frame, spec)
+    if not (frame and frame.CreateTexture and type(spec) == "table" and type(spec.key) == "string") then return end
+    local tex = frame[spec.key]
+    if not tex then
+        tex = frame:CreateTexture(nil, spec.layer or "BORDER", nil, spec.subLevel or 0)
+        frame[spec.key] = tex
+    end
+
+    tex:ClearAllPoints()
+    local p = spec.points
+    if p then
+        tex:SetPoint("TOPLEFT", frame, "TOPLEFT", p[1] or 0, p[2] or 0)
+        tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", p[3] or 0, p[4] or 0)
+    else
+        tex:SetAllPoints()
+    end
+
+    local texture = spec.texture
+    if texture then
+        if T.media and T.media[texture] then texture = T.media[texture] end
+        tex:SetTexture(texture)
+        if spec.color and tex.SetVertexColor then
+            tex:SetVertexColor(spec.color[1], spec.color[2], spec.color[3], spec.color[4] or 1)
+        end
+    else
+        ColorTexture(tex, spec.color)
+    end
+
+    local tc = spec.texCoord
+    if tc and tex.SetTexCoord then
+        tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8])
+    end
+    if tex.SetBlendMode then tex:SetBlendMode(spec.blend or "BLEND") end
+    if tex.Show then tex:Show() end
+end
+
+function T.ApplyFocusVeil(frame, variant)
+    local veil = T.focusVeils and T.focusVeils[variant or "dropdown"]
+    if type(veil) ~= "table" then return frame end
+    for i = 1, #veil do
+        ApplyFocusVeilLayer(frame, veil[i])
+    end
+    return frame
+end
+
+function T.MotionDuration(name, fallback)
+    if type(name) == "number" then return name end
+    local profile = type(name) == "string" and T.motionProfiles and T.motionProfiles[name] or nil
+    local key = profile and profile.duration or name
+    local value = key and T.motion and T.motion[key]
+    return tonumber(value) or tonumber(fallback) or T.motion.standard or 0.120
+end
+
+function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
+    if not (frame and frame.SetAlpha and frame.CreateAnimationGroup) then
+        if frame and frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
+        if type(onFinished) == "function" then onFinished(frame) end
+        return
+    end
+
+    local group = frame._msuf2AlphaFade
+    local anim = frame._msuf2AlphaFadeAnim
+    if not group then
+        group = frame:CreateAnimationGroup()
+        anim = group:CreateAnimation("Alpha")
+        frame._msuf2AlphaFade = group
+        frame._msuf2AlphaFadeAnim = anim
+    elseif group.Stop then
+        group:SetScript("OnFinished", nil)
+        group:Stop()
+    end
+
+    if anim.SetFromAlpha then anim:SetFromAlpha(fromAlpha or 0) end
+    if anim.SetToAlpha then anim:SetToAlpha(toAlpha or 1) end
+    if anim.SetDuration then anim:SetDuration(tonumber(duration) or T.motion.standard or 0.12) end
+    if anim.SetSmoothing then pcall(anim.SetSmoothing, anim, smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
+    group:SetScript("OnFinished", function()
+        if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
+        if type(onFinished) == "function" then onFinished(frame) end
+    end)
+    frame:SetAlpha(fromAlpha or 0)
+    if frame.Show then frame:Show() end
+    group:Play()
+end
+
+function T.PlayMotion(frame, motion, opts)
+    opts = opts or {}
+    local profile = type(motion) == "table" and motion or (T.motionProfiles and T.motionProfiles[motion])
+    if type(profile) ~= "table" or (profile.type and profile.type ~= "alpha") then
+        local toAlpha = opts.toAlpha
+        if toAlpha == nil then toAlpha = 1 end
+        return T.PlayAlpha(frame, opts.fromAlpha or 0, toAlpha, opts.duration or T.MotionDuration(motion), opts.onFinished, opts.smoothing)
+    end
+
+    local fromAlpha = opts.fromAlpha
+    if fromAlpha == nil then
+        if profile.fromCurrent and frame and frame.GetAlpha then
+            fromAlpha = frame:GetAlpha()
+        else
+            fromAlpha = profile.fromAlpha
+        end
+    end
+    if fromAlpha == nil then fromAlpha = 0 end
+
+    local toAlpha = opts.toAlpha
+    if toAlpha == nil then toAlpha = profile.toAlpha end
+    if toAlpha == nil then toAlpha = 1 end
+
+    local duration = opts.duration or T.MotionDuration(profile.duration or motion)
+    local smoothing = opts.smoothing or profile.smoothing
+    return T.PlayAlpha(frame, fromAlpha, toAlpha, duration, opts.onFinished, smoothing)
+end
+
+local function IsDescendantOf(frame, ancestor)
+    local current = frame
+    while current do
+        if current == ancestor then return true end
+        current = current.GetParent and current:GetParent()
+    end
+    return false
+end
+
+local function FocusVeilRoot(owner, opts)
+    opts = opts or {}
+    if opts.root then return opts.root end
+    local frame = M.frame
+    if not (frame and frame.IsShown and frame:IsShown()) then return nil end
+    local host = frame.host or frame._msufMirrorHost
+    if host and owner and IsDescendantOf(owner, host) then return host end
+    return frame.content or frame
+end
+
+local function EnsureFocusVeilFrame()
+    if M._focusVeilFrame then return M._focusVeilFrame end
+    local overlay = CreateFrame("Frame", "MSUF2FocusVeil", _G.UIParent)
+    overlay:SetFrameStrata("TOOLTIP")
+    overlay:SetToplevel(false)
+    overlay:EnableMouse(false)
+    overlay:Hide()
+    M._focusVeilFrame = overlay
+    return overlay
+end
+
+function M.ShowFocusVeil(owner, variant, opts)
+    opts = opts or {}
+    variant = variant or "dropdown"
+    local root = FocusVeilRoot(owner, opts)
+    if not root then
+        if M.HideFocusVeil then M.HideFocusVeil(variant, { animated = true }) end
+        return nil
+    end
+
+    local overlay = EnsureFocusVeilFrame()
+    if T.ApplyMaterial and variant == "dropdown" then
+        T.ApplyMaterial(overlay, "focus")
+    elseif T.ApplyFocusVeil then
+        T.ApplyFocusVeil(overlay, variant)
+    end
+    overlay:ClearAllPoints()
+    overlay:SetPoint("TOPLEFT", root, "TOPLEFT", 0, 0)
+    overlay:SetPoint("BOTTOMRIGHT", root, "BOTTOMRIGHT", 0, 0)
+    if overlay.SetFrameLevel then
+        local ref = opts.referenceFrame
+        local refLevel = ref and ref.GetFrameLevel and ref:GetFrameLevel()
+        overlay:SetFrameLevel(math.max(0, (opts.frameLevel or (refLevel and refLevel - 1) or 119)))
+    end
+
+    local state = M._focusVeilState or {}
+    M._focusVeilState = state
+    state.owner = owner
+    state.variant = variant
+    state.hiding = nil
+    overlay._msuf2FocusToken = (overlay._msuf2FocusToken or 0) + 1
+
+    local fromAlpha = (overlay.IsShown and overlay:IsShown() and overlay.GetAlpha and overlay:GetAlpha()) or 0
+    T.PlayMotion(overlay, "focusIn", { fromAlpha = fromAlpha, duration = opts.duration })
+    return overlay
+end
+
+function M.HideFocusVeil(variant, opts)
+    opts = opts or {}
+    local overlay = M._focusVeilFrame
+    if not overlay then return end
+    local state = M._focusVeilState or {}
+    M._focusVeilState = state
+    if variant and state.variant and variant ~= state.variant and not opts.force then return end
+
+    if opts.animated == false then
+        state.hiding = nil
+        state.owner = nil
+        state.variant = nil
+        overlay:Hide()
+        overlay:SetAlpha(1)
+        return
+    end
+    if state.hiding then return end
+    if overlay.IsShown and not overlay:IsShown() then
+        state.hiding = nil
+        overlay:SetAlpha(1)
+        return
+    end
+
+    state.hiding = true
+    overlay._msuf2FocusToken = (overlay._msuf2FocusToken or 0) + 1
+    local closeToken = overlay._msuf2FocusToken
+    local fromAlpha = (overlay.GetAlpha and overlay:GetAlpha()) or 1
+    T.PlayMotion(overlay, "focusOut", { fromAlpha = fromAlpha, duration = opts.duration, onFinished = function(self)
+        if self._msuf2FocusToken ~= closeToken then return end
+        state.hiding = nil
+        state.owner = nil
+        state.variant = nil
+        self:Hide()
+        self:SetAlpha(1)
+    end })
+end
+
+local function GlassTexture(frame, key, layer, subLevel)
+    if not (frame and frame.CreateTexture) then return nil end
+    local tex = frame[key]
+    if not tex then
+        tex = frame:CreateTexture(nil, layer or "BACKGROUND", nil, subLevel or 0)
+        frame[key] = tex
+    end
+    return tex
+end
+
+local function PlaceGlassFill(tex, frame, inset)
+    if not tex then return end
+    inset = tonumber(inset) or 0
+    tex:ClearAllPoints()
+    tex:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+    tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+end
+
+local function PlaceGlassLine(tex, frame, point, height)
+    if not tex then return end
+    tex:ClearAllPoints()
+    if point == "BOTTOM" then
+        tex:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 3, 3)
+        tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 3)
+    else
+        tex:SetPoint("TOPLEFT", frame, "TOPLEFT", 3, -3)
+        tex:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -3, -3)
+    end
+    tex:SetHeight(height or 1)
+end
+
+function T.ApplyGlass(frame, variant)
+    if not (frame and frame.CreateTexture) then return frame end
+    local spec = GLASS_VARIANTS[variant or "card"] or GLASS_VARIANTS.card
+    if frame._msuf2GlassVariant == variant and frame._msuf2GlassApplied then return frame end
+    frame._msuf2GlassVariant = variant
+    frame._msuf2GlassApplied = true
+
+    local tint = GlassTexture(frame, "_msuf2GlassTint", "BORDER", 0)
+    PlaceGlassFill(tint, frame, 2)
+    ColorTexture(tint, spec.tint)
+    if tint and tint.Show then tint:Show() end
+
+    local wash = GlassTexture(frame, "_msuf2GlassWash", "BORDER", 1)
+    if spec.wash then
+        PlaceGlassFill(wash, frame, 3)
+        wash:SetTexture(T.media.bgSmooth or "Interface\\Buttons\\WHITE8X8")
+        if wash.SetVertexColor then wash:SetVertexColor(spec.wash[1], spec.wash[2], spec.wash[3], spec.wash[4] or 1) end
+        if wash.SetBlendMode then wash:SetBlendMode("ADD") end
+        if wash.Show then wash:Show() end
+    elseif wash.Hide then
+        wash:Hide()
+    end
+
+    local depth = GlassTexture(frame, "_msuf2GlassDepth", "BORDER", 2)
+    if spec.depth then
+        PlaceGlassFill(depth, frame, 3)
+        depth:SetTexture(T.media.bgSmooth or "Interface\\Buttons\\WHITE8X8")
+        depth:SetTexCoord(0, 0, 1, 0, 0, 1, 1, 1)
+        if depth.SetVertexColor then depth:SetVertexColor(spec.depth[1], spec.depth[2], spec.depth[3], spec.depth[4] or 1) end
+        if depth.SetBlendMode then depth:SetBlendMode("BLEND") end
+        if depth.Show then depth:Show() end
+    elseif depth.Hide then
+        depth:Hide()
+    end
+
+    local grain = GlassTexture(frame, "_msuf2GlassGrain", "BORDER", 3)
+    if spec.grain then
+        PlaceGlassFill(grain, frame, 2)
+        grain:SetTexture(T.media.bgCharcoal or "Interface\\Buttons\\WHITE8X8")
+        if grain.SetVertexColor then grain:SetVertexColor(spec.grain[1], spec.grain[2], spec.grain[3], spec.grain[4] or 1) end
+        if grain.SetBlendMode then grain:SetBlendMode("BLEND") end
+        if grain.Show then grain:Show() end
+    elseif grain.Hide then
+        grain:Hide()
+    end
+
+    local top = GlassTexture(frame, "_msuf2GlassTopLine", "ARTWORK", 0)
+    PlaceGlassLine(top, frame, "TOP", 1)
+    ColorTexture(top, spec.top)
+    if top and top.Show then top:Show() end
+
+    local bottom = GlassTexture(frame, "_msuf2GlassBottomLine", "ARTWORK", 0)
+    PlaceGlassLine(bottom, frame, "BOTTOM", 1)
+    ColorTexture(bottom, spec.bottom)
+    if bottom and bottom.Show then bottom:Show() end
+
+    return frame
+end
+
+function T.ApplyMaterial(frame, material)
+    if not frame then return frame end
+    local spec = type(material) == "table" and material or (T.materials and T.materials[material or "card"])
+    if type(spec) ~= "table" then return frame end
+    if spec.bg or spec.border then
+        T.ApplyBackdrop(frame, spec.bg or T.colors.panel, spec.border or T.colors.borderSoft)
+    end
+    if spec.glass and T.ApplyGlass then T.ApplyGlass(frame, spec.glass) end
+    if spec.veil and T.ApplyFocusVeil then T.ApplyFocusVeil(frame, spec.veil) end
+    return frame
+end
+
 function T.ApplyCollapseVisual(chevron, hint, open)
     if chevron then
         if chevron.SetRotation then chevron:SetRotation(open and (math.pi * 0.5) or 0) end
@@ -397,6 +844,16 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
     if not frame or frame._msuf2AtmosphereApplied then return end
     frame._msuf2AtmosphereApplied = true
     host = host or frame
+
+    if T.ApplyMaterial then
+        T.ApplyMaterial(frame, "shell")
+        if host and host ~= frame then T.ApplyMaterial(host, "host") end
+        if nav then T.ApplyMaterial(nav, "rail") end
+    elseif T.ApplyGlass then
+        T.ApplyGlass(frame, "shell")
+        if host and host ~= frame then T.ApplyGlass(host, "host") end
+        if nav then T.ApplyGlass(nav, "rail") end
+    end
 
     local wash = host:CreateTexture(nil, "BACKGROUND", nil, 1)
     wash:SetTexture(T.media.bgSmooth)
@@ -561,28 +1018,29 @@ function T.StyleSlider(slider)
 
     local enabled = not (slider.IsEnabled and not slider:IsEnabled())
     local hovered = slider._msuf2SliderHovered and true or false
+    local active = enabled and slider._msuf2SliderActive and true or false
     local alpha = enabled and 1 or 0.45
     local accent = T.colors.accent
     local edge = T.colors.border or T.colors.borderSoft
 
     if slider._msufTrack then
-        SetSliderTextureColor(slider._msufTrack, 0.035, 0.043, 0.078, 0.98 * alpha)
+        SetSliderTextureColor(slider._msufTrack, active and 0.045 or 0.035, active and 0.058 or 0.043, active and 0.098 or 0.078, 0.98 * alpha)
         if slider._msufTrack.Show then slider._msufTrack:Show() end
     end
     if slider._msufTrackTop then
-        SetSliderTextureColor(slider._msufTrackTop, edge[1], edge[2], edge[3], (hovered and 0.95 or 0.70) * alpha)
+        SetSliderTextureColor(slider._msufTrackTop, edge[1], edge[2], edge[3], (active and 1.00 or hovered and 0.88 or 0.58) * alpha)
         slider._msufTrackTop:Show()
     end
     if slider._msufTrackBottom then
-        SetSliderTextureColor(slider._msufTrackBottom, edge[1], edge[2], edge[3], 0.40 * alpha)
+        SetSliderTextureColor(slider._msufTrackBottom, edge[1], edge[2], edge[3], (active and 0.54 or 0.34) * alpha)
         slider._msufTrackBottom:Show()
     end
     if slider._msufFill then
-        SetSliderTextureColor(slider._msufFill, accent[1], accent[2], accent[3], (hovered and 0.95 or 0.78) * alpha)
+        SetSliderTextureColor(slider._msufFill, accent[1], accent[2], accent[3], (active and 1.00 or hovered and 0.92 or 0.76) * alpha)
         if slider._msufFill.Show then slider._msufFill:Show() end
     end
     if slider._msufFillGlow then
-        SetSliderTextureColor(slider._msufFillGlow, accent[1], accent[2], accent[3], (hovered and 0.18 or 0.10) * alpha)
+        SetSliderTextureColor(slider._msufFillGlow, accent[1], accent[2], accent[3], (active and 0.28 or hovered and 0.16 or 0.08) * alpha)
         slider._msufFillGlow:Show()
     end
 
@@ -590,8 +1048,11 @@ function T.StyleSlider(slider)
     if thumb then
         thumb:SetTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8")
         thumb:SetTexCoord(0, 1, 0, 1)
-        thumb:SetSize(18, 18)
-        if thumb.SetVertexColor then thumb:SetVertexColor(accent[1], accent[2], accent[3], alpha) end
+        thumb:SetSize(active and 20 or (hovered and 19 or 18), active and 20 or (hovered and 19 or 18))
+        if thumb.SetVertexColor then
+            local mul = active and 1.12 or hovered and 1.06 or 1
+            thumb:SetVertexColor(math.min(accent[1] * mul, 1), math.min(accent[2] * mul, 1), math.min(accent[3] * mul, 1), alpha)
+        end
         if thumb.SetAlpha then thumb:SetAlpha(alpha) end
         if thumb.Show then thumb:Show() end
     end
@@ -604,6 +1065,22 @@ function T.StyleSlider(slider)
         end)
         slider:HookScript("OnLeave", function(self)
             self._msuf2SliderHovered = nil
+            T.StyleSlider(self)
+        end)
+        slider:HookScript("OnMouseDown", function(self)
+            self._msuf2SliderActive = true
+            T.StyleSlider(self)
+        end)
+        slider:HookScript("OnMouseUp", function(self)
+            self._msuf2SliderActive = nil
+            T.StyleSlider(self)
+        end)
+        slider:HookScript("OnDisable", function(self)
+            self._msuf2SliderActive = nil
+            self._msuf2SliderHovered = nil
+            T.StyleSlider(self)
+        end)
+        slider:HookScript("OnEnable", function(self)
             T.StyleSlider(self)
         end)
         slider:HookScript("OnSizeChanged", function(self)
@@ -631,6 +1108,20 @@ function T.StyleCheckmark(checkButton)
     local styleText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI and UI.StyleToggleText)
     if type(styleText) == "function" then pcall(styleText, checkButton) end
 
+    local function HideQuietCheckboxTexture(texture)
+        if not texture then return end
+        if texture.SetAlpha then texture:SetAlpha(0) end
+        if texture.Hide then texture:Hide() end
+    end
+
+    local function HideQuietCheckboxNative()
+        if not checkButton._msuf2QuietCheckBox then return end
+        HideQuietCheckboxTexture(checkButton.GetNormalTexture and checkButton:GetNormalTexture())
+        HideQuietCheckboxTexture(checkButton.GetPushedTexture and checkButton:GetPushedTexture())
+        HideQuietCheckboxTexture(checkButton.GetHighlightTexture and checkButton:GetHighlightTexture())
+        HideQuietCheckboxTexture(checkButton.GetDisabledTexture and checkButton:GetDisabledTexture())
+    end
+
     if not checkButton._msuf2NativeCheckStyled then
         checkButton._msuf2NativeCheckStyled = true
         if checkButton.SetHitRectInsets then checkButton:SetHitRectInsets(0, 0, 0, 0) end
@@ -647,12 +1138,13 @@ function T.StyleCheckmark(checkButton)
         if type(oldStyle) == "function" then
             pcall(oldStyle, checkButton)
         end
+        HideQuietCheckboxNative()
 
         local check = checkButton.GetCheckedTexture and checkButton:GetCheckedTexture()
         if not check and checkButton.GetName and checkButton:GetName() then check = _G[checkButton:GetName() .. "Check"] end
         if check and check.SetTexture then
             local h = (checkButton.GetHeight and checkButton:GetHeight()) or 24
-            local sz = math.floor(h * 0.8 + 0.5)
+            local sz = checkButton._msuf2QuietCheckBox and 14 or math.floor(h * 0.8 + 0.5)
             if sz < 12 then sz = 12 end
             check:SetTexture(T.media.checkTick)
             check:SetTexCoord(0, 1, 0, 1)
@@ -668,12 +1160,14 @@ function T.StyleCheckmark(checkButton)
     end
 
     ApplyCheckTexture()
+    HideQuietCheckboxNative()
     if C_Timer and C_Timer.After then
         C_Timer.After(0, function()
             local UI2 = MSUF and MSUF.UI
             local laterText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI2 and UI2.StyleToggleText)
             if type(laterText) == "function" then pcall(laterText, checkButton) end
             ApplyCheckTexture()
+            HideQuietCheckboxNative()
         end)
     end
 end
