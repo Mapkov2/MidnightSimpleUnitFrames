@@ -13,10 +13,8 @@ local UnitGetTotalHealAbsorbs = _G.UnitGetTotalHealAbsorbs
 local math_floor = math.floor
 local math_max = math.max
 
--- Preserve the original Effects.lua lookup semantics: this was a global lookup,
--- not a local Enum binding. If an embedding environment provides it globally,
--- the cache keeps using it; otherwise smoothing remains nil as before.
-local _smoothInterp = _G._smoothInterp
+local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
+local _smoothInterp = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 
 local function _MSUF_ScheduleOnce(key, fn)
     local sched = _G.MSUF_ScheduleOnce

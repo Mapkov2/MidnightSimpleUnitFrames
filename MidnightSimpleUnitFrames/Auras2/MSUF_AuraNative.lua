@@ -137,6 +137,23 @@ function Native.ClearPrivateAuraSettingsHandler(frame)
     ClearPrivateAuraSettingsHandler(frame)
 end
 
+local function NoopPrivateAuraSettingsHandler()
+end
+
+-- Blizzard's container-anchor removal asserts if its settings handler has
+-- already disappeared. Restore a placeholder so RemovePrivateAuraAnchor can
+-- complete and clear it through Blizzard's normal path.
+local function EnsurePrivateAuraSettingsHandlerForRemove(frame)
+    if not (frame and frame.GetScript and frame.SetScript) then return false end
+    if frame:GetScript("OnAttributeChanged") then return false end
+    frame:SetScript("OnAttributeChanged", NoopPrivateAuraSettingsHandler)
+    return true
+end
+
+function Native.EnsurePrivateAuraSettingsHandlerForRemove(frame)
+    return EnsurePrivateAuraSettingsHandlerForRemove(frame)
+end
+
 local function Clamp(v, def, lo, hi)
     v = tonumber(v)
     if v == nil then v = def end
@@ -450,8 +467,13 @@ function Native.Clear(container)
         local CUA = _G.C_UnitAuras
         local removeFn = CUA and CUA.RemovePrivateAuraAnchor
         if type(removeFn) == "function" then
+            local removeParent = renderParent or container
+            local insertedHandler = EnsurePrivateAuraSettingsHandlerForRemove(removeParent)
             local ok, err = pcall(removeFn, id)
             if not ok then
+                if insertedHandler then
+                    ClearPrivateAuraSettingsHandler(removeParent)
+                end
                 container._msufNativeAuraLastError = err
                 return false
             end
