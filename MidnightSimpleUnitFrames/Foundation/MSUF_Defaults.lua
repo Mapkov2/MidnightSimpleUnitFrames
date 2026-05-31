@@ -1760,8 +1760,7 @@ end
     if gp.cooldownIcons == nil then gp.cooldownIcons = false end
     if gp.enableFirstDanceTimer == nil then gp.enableFirstDanceTimer = false end
     if gp.nameplateMeleeSpellID == nil then gp.nameplateMeleeSpellID = 0 end
-    --- Gameplay: Range fade for Target/Focus (default ON)
-    --- Dims Target/Focus unitframes to a fixed alpha when the unit is out of range.
+    --- Unitframe range-fade defaults are assigned with the unitframe defaults below.
 --- Gameplay: Crosshair melee range spell can optionally be stored per class.
     --- This lets users run a single profile across multiple characters without
     --- having to swap the spell whenever they change class.
@@ -2206,6 +2205,13 @@ local function fill(key, defaults)
     --- Range fade: also fade castbar / auras when boss is out of range (off by default).
     if MSUF_DB.boss.rangeFadeCastbar == nil then MSUF_DB.boss.rangeFadeCastbar = false end
     if MSUF_DB.boss.rangeFadeAuras   == nil then MSUF_DB.boss.rangeFadeAuras   = false end
+    if MSUF_DB.general.rangeFadeEnabled == nil then MSUF_DB.general.rangeFadeEnabled = true end
+    for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
+        MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
+        if MSUF_DB[unitKey].rangeFadeEnabled == nil then MSUF_DB[unitKey].rangeFadeEnabled = true end
+        if MSUF_DB[unitKey].rangeFadeAlpha == nil then MSUF_DB[unitKey].rangeFadeAlpha = 0.4 end
+        if MSUF_DB[unitKey].rangeFadeLayerMode == nil then MSUF_DB[unitKey].rangeFadeLayerMode = "frame" end
+    end
     do
         local bars = MSUF_DB.bars or {}
         local showKeys = {

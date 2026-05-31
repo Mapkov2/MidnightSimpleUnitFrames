@@ -8,6 +8,11 @@ MSUF.UF = MSUF.UF or {}
 local UF = MSUF.UF
 local Metadata = UF.Metadata or {}
 local wipe = wipe
+local tonumber = tonumber
+local type = type
+local floor = math.floor
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
 
 local EMPTY_METADATA_SET = {}
 local UPDATE_KEYS = UF._updateKeys or {}
@@ -15,6 +20,7 @@ local FrameIsElementEnabled = UF.FrameIsElementEnabled
 local RebuildHotEventState
 local DispatchFrameEvent
 local FrameRuntimeUpdate
+local RunCompiledPowerText
 
 local function OwnerModeIsUnitless(mode)
     return mode == "unitless" or mode == "both"
@@ -111,20 +117,125 @@ local function RunPowerHot(frame, owners, event, unit)
     if not updateFn then return end
     local power, maxPower = updateFn(frame, event, unit)
     local textFn = frame._msufUpdatePowerText
-    if textFn then
-        textFn(frame, event, unit, power, maxPower)
-    end
+    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower)
 end
 
 local HOT_EVENT_KIND = Metadata.hotEventKind or {}
 local HOT_STATE_SPECS = Metadata.hotStateSpecs or {}
 
-local function HotAdd(state, owners, name, fnKey, modeKey)
+local function PredictionMaskFromSpec(frame)
+    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.prediction
+    if not (cfg and cfg.enabled == true) then
+        return 0
+    end
+    return (cfg.heal == true and 1 or 0)
+        + (cfg.absorb == true and 2 or 0)
+        + (cfg.healAbsorb == true and 4 or 0)
+end
+
+local function PredictionTestMode(frame)
+    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.prediction
+    return cfg and cfg.enabled == true and cfg.test == true
+end
+
+local function PredictionNeedsHealth(frame)
+    if PredictionTestMode(frame) then
+        return true
+    end
+    if frame and frame._msufPredictionNeedsHealth ~= nil then
+        return frame._msufPredictionNeedsHealth == true
+    end
+    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.prediction
+    return cfg and cfg.heal == true and (tonumber(cfg.healAnchorMode) or 3) == 3
+end
+
+local function StatusTextConfig(frame)
+    local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
+    return status and status.runtimeStatusText == true and status.statusText or nil
+end
+
+local function IsGroupFrame(frame)
+    local spec = frame and frame.MSUFSpec
+    return frame and (frame._msufIsGroupFrame == true or frame._msufCoreScope == "group" or (spec and spec.scope == "group"))
+end
+
+local function PowerTextNeedsUpdate(frame, event, power, powerMax)
+    if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then
+        return true
+    end
+    local rt = frame and frame._msufTextRuntime
+    if not (rt and rt.powerPlain == true) then
+        return true
+    end
+    if power == nil or powerMax == nil or IsSecret(power) or IsSecret(powerMax) then
+        return true
+    end
+    local keyPower = rt.powerNeedsCurrent == true and power or false
+    local keyMax = rt.powerNeedsMax == true and powerMax or false
+    if rt.powerNeedsPercent == true and rt.powerNeedsCurrent ~= true then
+        if type(power) ~= "number" or type(powerMax) ~= "number" or powerMax <= 0 then
+            return true
+        end
+        keyPower = floor((power / powerMax) * 100 + 0.5)
+    end
+    if rt._dispatchPowerTextPower == keyPower and rt._dispatchPowerTextMax == keyMax then
+        return false
+    end
+    rt._dispatchPowerTextPower = keyPower
+    rt._dispatchPowerTextMax = keyMax
+    return true
+end
+
+RunCompiledPowerText = function(frame, fn, event, unit, power, powerMax)
+    if fn and PowerTextNeedsUpdate(frame, event, power, powerMax) then
+        fn(frame, event, unit, power, powerMax)
+    end
+end
+
+local function HotElementAllowed(frame, event, name)
+    if name == "Prediction" then
+        if event == "UNIT_HEALTH" then
+            return PredictionNeedsHealth(frame)
+        end
+        if PredictionTestMode(frame) then
+            return true
+        end
+        if frame and frame._msufPredictionMask ~= nil then
+            return frame._msufPredictionMask ~= 0
+        end
+        return PredictionMaskFromSpec(frame) ~= 0
+    elseif name == "HealthText" then
+        local rt = frame and frame._msufTextRuntime
+        return not rt or (rt.healthSlotCount or 0) > 0
+    elseif name == "PowerText" then
+        local rt = frame and frame._msufTextRuntime
+        return not rt or (rt.powerSlotCount or 0) > 0
+    elseif name == "StatusTextIndicator" and IsGroupFrame(frame) then
+        return false
+    elseif name == "NameText" and event == "UNIT_HEALTH" then
+        local text = frame and frame.MSUFSpec and frame.MSUFSpec.text
+        return text and text.hideNameOnDeadOffline == true
+    elseif name == "GroupStatusRuntime" then
+        local cfg = StatusTextConfig(frame)
+        if event == "UNIT_HEALTH" then
+            return cfg and (cfg.showDead == true or cfg.showGhost == true)
+        elseif event == "UNIT_CONNECTION" then
+            return cfg and cfg.showDead == true
+        elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
+            return cfg and (cfg.showAFK == true or cfg.showDND == true)
+        end
+    end
+    return true
+end
+
+local function HotAdd(frame, event, state, owners, name, fnKey, modeKey)
     local mode = owners[name]
     if mode == nil then return end
+    if HotElementAllowed(frame, event, name) ~= true then return end
     local element = UF.elements[name]
     local update = element and element.Update
     if not update then return end
+    state.hasWork = true
     state[fnKey] = update
     if modeKey then
         state[modeKey] = mode
@@ -153,6 +264,9 @@ local function HotTailAdd(state, owners, handled)
     end
     state.tail = tail
     state.tailCount = n
+    if tail then
+        state.hasWork = true
+    end
 end
 
 local function DispatchHotTail(frame, state, event, unit, a, b, c)
@@ -179,6 +293,312 @@ local function RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
     return textFn(frame, event, unit, hp, maxHP)
 end
 
+local function RunHotKindHealth(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then
+        if state.inlineUnitless then
+            local fn = state.inline
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if state.predictionUnitless then
+            local fn = state.prediction
+            if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
+                fn(frame, event, unit, a, b, c)
+            end
+        end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    end
+
+    local hp, maxHP, calc
+    if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+        local fn = state.health
+        if fn then
+            hp, maxHP, calc = fn(frame, event, unit)
+            RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+        else
+            RunCompiledHealthText(frame, state, event, unit)
+        end
+        fn = state.prediction
+        if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
+            fn(frame, event, unit, hp, maxHP, calc)
+        end
+        fn = state.name
+        if fn then fn(frame, event, unit) end
+        fn = state.statusText
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.groupVisuals
+        if fn then fn(frame, event, unit, hp, maxHP, c) end
+    else
+        local fn = state.health
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.name
+        if fn then fn(frame, event, unit) end
+        if event == "UNIT_FLAGS" then
+            fn = state.statusText
+            if fn then fn(frame, event, unit, a, b, c) end
+            fn = state.combat
+            if fn then fn(frame, event, unit, a, b, c) end
+            fn = state.groupVisuals
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+    end
+
+    local fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindPower(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    end
+    local fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        local textFn = state.powerText
+        RunCompiledPowerText(frame, textFn, event, unit, power, maxPower)
+    else
+        fn = state.powerText
+        if fn then fn(frame, event, unit) end
+    end
+    if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindConnection(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then
+        if state.inlineUnitless then
+            local fn = state.inline
+            if fn then fn(frame, event, unit) end
+        end
+        if state.predictionUnitless then
+            local fn = state.prediction
+            if fn then fn(frame, event, unit) end
+        end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    end
+
+    local hp, maxHP, calc
+    local fn = state.health
+    if fn then
+        hp, maxHP, calc = fn(frame, event, unit)
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    else
+        RunCompiledHealthText(frame, state, event, unit)
+    end
+    fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        local textFn = state.powerText
+        RunCompiledPowerText(frame, textFn, event, unit, power, maxPower)
+    else
+        fn = state.powerText
+        if fn then fn(frame, event, unit) end
+    end
+    fn = state.name
+    if fn then fn(frame, event, unit) end
+    fn = state.portrait
+    if fn then fn(frame, event, unit) end
+    fn = state.prediction
+    if fn then fn(frame, event, unit, hp, maxHP, calc) end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit) end
+    if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindAura(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    end
+    local fn = state.dispel
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupVisuals
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupCorners
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupSpells
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.borders
+    if fn then fn(frame, event, unit, a, b, c) end
+    if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindPrediction(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then
+        if state.predictionUnitless then
+            local fn = state.prediction
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+        return true
+    end
+    local fn = state.prediction
+    if fn then fn(frame, event, unit, a, b, c) end
+    if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindName(frame, state, event, unit)
+    local fn = state.name
+    if fn then fn(frame, event, unit) end
+    fn = state.inline
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotKindThreat(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then return true end
+    local fn = state.groupVisuals
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupCorners
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.borders
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindPortrait(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then return true end
+    local fn = state.portrait
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindClassification(frame, state, event, unit, sameUnit, a, b, c)
+    local fn
+    if event == "UNIT_LEVEL" then
+        fn = state.level
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.elite
+        if fn then fn(frame, event, unit, a, b, c) end
+    elseif event == "UNIT_CLASSIFICATION_CHANGED" then
+        fn = state.name
+        if fn then fn(frame, event, unit) end
+        fn = state.inline
+        if fn then fn(frame, event, unit, a, b, c) end
+        fn = state.elite
+        if fn then fn(frame, event, unit, a, b, c) end
+    elseif event == "INCOMING_RESURRECT_CHANGED" then
+        fn = state.incomingRes
+        if fn then fn(frame, event, unit, a, b, c) end
+    end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindCombat(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.alpha
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.combat
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.load
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindRaidTarget(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.raidMarker
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindGroupLeader(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.leader
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.raidGroup
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindLevel(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.level
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindStatus(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.statusText
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindResting(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.resting
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.alpha
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.load
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindTarget(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.inline
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.prediction
+    if fn then
+        local frameUnit = frame.unit
+        if (frameUnit == "targettarget" and unit == "target")
+            or (frameUnit == "focustarget" and unit == "focus") then
+            fn(frame, event, frameUnit, a, b, c)
+        end
+    end
+    fn = state.alpha
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotKindCooldown(frame, state, event, unit, sameUnit, a, b, c)
+    local fn = state.alpha
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.dispel
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupVisuals
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupCorners
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.borders
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local HOT_RUNNERS = {
+    [1] = RunHotKindHealth,
+    [2] = RunHotKindPower,
+    [3] = RunHotKindConnection,
+    [4] = RunHotKindName,
+    [5] = RunHotKindAura,
+    [6] = RunHotKindThreat,
+    [8] = RunHotKindPortrait,
+    [9] = RunHotKindPrediction,
+    [10] = RunHotKindClassification,
+    [11] = RunHotKindCombat,
+    [12] = RunHotKindRaidTarget,
+    [13] = RunHotKindGroupLeader,
+    [14] = RunHotKindLevel,
+    [15] = RunHotKindStatus,
+    [16] = RunHotKindResting,
+    [17] = RunHotKindTarget,
+    [18] = RunHotKindCooldown,
+}
+
 RebuildHotEventState = function(frame, event, owners)
     local kind = HOT_EVENT_KIND[event]
     local states = frame and frame._msufHotEventState
@@ -199,12 +619,13 @@ RebuildHotEventState = function(frame, event, owners)
         wipe(state)
     end
     state.kind = kind
+    state.runner = HOT_RUNNERS[kind]
 
     local spec = HOT_STATE_SPECS[kind]
     if spec then
         for i = 1, #spec do
             local item = spec[i]
-            HotAdd(state, owners, item[1], item[2], item[3])
+            HotAdd(frame, event, state, owners, item[1], item[2], item[3])
         end
         if spec.tailHandled then
             HotTailAdd(state, owners, spec.tailHandled)
@@ -217,274 +638,7 @@ RebuildHotEventState = function(frame, event, owners)
         local text = MSUF.UFText
         state.healthTextDirty = text and text.MarkHealthDirty or nil
     end
-end
-
-local function DispatchCompiledHotFrameEvent(frame, state, event, unit, a, b, c)
-    local kind = state and state.kind
-    if not kind then return false end
-
-    local sameUnit = (not unit) or unit == frame.unit
-    if sameUnit then
-        unit = unit or frame.unit
-    end
-
-    if kind == 1 then
-        if not sameUnit then
-            if state.inlineUnitless then
-                local fn = state.inline
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            if state.predictionUnitless then
-                local fn = state.prediction
-                if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                    fn(frame, event, unit, a, b, c)
-                end
-            end
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-
-        local hp, maxHP, calc
-        if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
-            local fn = state.health
-            if fn then
-                hp, maxHP, calc = fn(frame, event, unit)
-                RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
-            end
-            if not fn then
-                RunCompiledHealthText(frame, state, event, unit)
-            end
-            fn = state.prediction
-            if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                fn(frame, event, unit, hp, maxHP, calc)
-            end
-            fn = state.name
-            if fn then fn(frame, event, unit) end
-            fn = state.statusText
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.groupVisuals
-            if fn then fn(frame, event, unit, hp, maxHP, c) end
-        else
-            local fn = state.health
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.name
-            if fn then fn(frame, event, unit) end
-            if event == "UNIT_FLAGS" then
-                fn = state.statusText
-                if fn then fn(frame, event, unit, a, b, c) end
-                fn = state.combat
-                if fn then fn(frame, event, unit, a, b, c) end
-                fn = state.groupVisuals
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-        end
-
-        local fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 2 then
-        if not sameUnit then
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-        local fn = state.power
-        if fn then
-            local power, maxPower = fn(frame, event, unit)
-            local textFn = state.powerText
-            if textFn then textFn(frame, event, unit, power, maxPower) end
-        end
-        if not fn then
-            fn = state.powerText
-            if fn then fn(frame, event, unit) end
-        end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 3 then
-        if not sameUnit then
-            if state.inlineUnitless then
-                local fn = state.inline
-                if fn then fn(frame, event, unit) end
-            end
-            if state.predictionUnitless then
-                local fn = state.prediction
-                if fn then fn(frame, event, unit) end
-            end
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-
-        local hp, maxHP, calc
-        local fn = state.health
-        if fn then
-            hp, maxHP, calc = fn(frame, event, unit)
-            RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
-        else
-            RunCompiledHealthText(frame, state, event, unit)
-        end
-        fn = state.power
-        if fn then
-            local power, maxPower = fn(frame, event, unit)
-            local textFn = state.powerText
-            if textFn then textFn(frame, event, unit, power, maxPower) end
-        else
-            fn = state.powerText
-            if fn then fn(frame, event, unit) end
-        end
-        fn = state.name
-        if fn then fn(frame, event, unit) end
-        fn = state.portrait
-        if fn then fn(frame, event, unit) end
-        fn = state.prediction
-        if fn then fn(frame, event, unit, hp, maxHP, calc) end
-        fn = state.statusText
-        if fn then fn(frame, event, unit) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 5 then
-        if not sameUnit then
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-        local fn = state.dispel
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupVisuals
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupCorners
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupSpells
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.borders
-        if fn then fn(frame, event, unit, a, b, c) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 9 then
-        if not sameUnit then
-            if state.predictionUnitless then
-                local fn = state.prediction
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-        local fn = state.prediction
-        if fn then fn(frame, event, unit, a, b, c) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 4 then
-        local fn = state.name
-        if fn then fn(frame, event, unit) end
-        fn = state.inline
-        if fn then fn(frame, event, unit) end
-        return true
-    elseif kind == 6 then
-        if not sameUnit then return true end
-        local fn = state.groupVisuals
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupCorners
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.borders
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 8 then
-        if not sameUnit then return true end
-        local fn = state.portrait
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 10 then
-        local fn
-        if event == "UNIT_LEVEL" then
-            fn = state.level
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.elite
-            if fn then fn(frame, event, unit, a, b, c) end
-        elseif event == "UNIT_CLASSIFICATION_CHANGED" then
-            fn = state.name
-            if fn then fn(frame, event, unit) end
-            fn = state.inline
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.elite
-            if fn then fn(frame, event, unit, a, b, c) end
-        elseif event == "INCOMING_RESURRECT_CHANGED" then
-            fn = state.incomingRes
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 11 then
-        local fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.combat
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.load
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 12 then
-        local fn = state.raidMarker
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 13 then
-        local fn = state.leader
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.raidGroup
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 14 then
-        local fn = state.level
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 15 then
-        local fn = state.statusText
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 16 then
-        local fn = state.resting
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.load
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 17 then
-        local fn = state.inline
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.prediction
-        if fn then
-            local frameUnit = frame.unit
-            if (frameUnit == "targettarget" and unit == "target")
-                or (frameUnit == "focustarget" and unit == "focus") then
-                fn(frame, event, frameUnit, a, b, c)
-            end
-        end
-        fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 18 then
-        local fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.dispel
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupVisuals
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupCorners
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.borders
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    end
-
-    return false
+    state.empty = state.hasWork ~= true
 end
 
 function DispatchFrameEvent(frame, event, unit, ...)
@@ -509,24 +663,32 @@ function DispatchFrameEvent(frame, event, unit, ...)
         end
     end
 
-    frame._msufDispatchToken = frame._msufDispatchToken + 1
-    frame._msufDispatchActive = true
-
     local hotStates = frame._msufHotEventState
     local hotState = hotStates and hotStates[event]
-    if hotState and DispatchCompiledHotFrameEvent(frame, hotState, event, unit, ...) then
-        frame._msufDispatchActive = nil
+    if hotState and hotState.empty == true then
         return
+    end
+    local runner = hotState and hotState.runner
+    if runner then
+        frame._msufDispatchToken = frame._msufDispatchToken + 1
+        frame._msufDispatchActive = true
+        local sameUnit = (not unit) or unit == frame.unit
+        local eventUnit = sameUnit and (unit or frame.unit) or unit
+        if runner(frame, hotState, event, eventUnit, sameUnit, ...) then
+            frame._msufDispatchActive = nil
+            return
+        end
     end
 
     -- Safety fallback for events without a compiled state: walk the pre-built
-    -- flat list. Normal hot events use DispatchCompiledHotFrameEvent above.
+    -- flat list. Normal hot events use the compiled runner above.
     local lists = frame._msufEventElementLists
     local list = lists and lists[event]
     if not list then
-        frame._msufDispatchActive = nil
         return
     end
+    frame._msufDispatchToken = frame._msufDispatchToken + 1
+    frame._msufDispatchActive = true
     for i = 1, #list, 2 do
         local update = list[i]
         local eventUnit, ok = OwnerModeAllowsUnit(list[i + 1], frame, unit)
@@ -581,15 +743,10 @@ FrameRuntimeUpdate = function(frame, reason)
     end
     if not mask or mask.alpha then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Alpha", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RangeFade", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupRangeFade", reason, frame.unit)
     end
-    if not mask or mask.auras then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupVisuals", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupCornerIndicators", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupSpellIndicators", reason, frame.unit)
-    end
     if not mask or mask.borders then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "DispelOverlay", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Borders", reason, frame.unit)
     end
 end

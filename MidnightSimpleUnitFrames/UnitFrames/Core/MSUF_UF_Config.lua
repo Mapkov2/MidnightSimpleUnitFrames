@@ -69,6 +69,15 @@ local CASTBAR_KEYS = {
     boss = "enableBossCastbar",
 }
 
+local RANGE_KEYS = {
+    target = true,
+    targettarget = true,
+    focus = true,
+    focustarget = true,
+    pet = true,
+    boss = true,
+}
+
 local CLASS_TOKENS = {
     "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN",
     "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",
@@ -133,10 +142,6 @@ local function Clamp01(value, fallback)
 end
 
 local function NormalizeDispelDetectTrigger(value)
-    local ds = UF and UF.DispelState
-    if ds and type(ds.NormalizeDetectTrigger) == "function" then
-        return ds.NormalizeDetectTrigger(value)
-    end
     value = tostring(value or ""):upper()
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
         return "DISPEL_TYPE"
@@ -149,10 +154,6 @@ local function NormalizeDispelDetectTrigger(value)
 end
 
 local function NormalizeDispelOverlayTrigger(value)
-    local ds = UF and UF.DispelState
-    if ds and type(ds.NormalizeOverlayTrigger) == "function" then
-        return ds.NormalizeOverlayTrigger(value)
-    end
     value = tostring(value or ""):upper()
     if value == "BORDER" or value == "INHERIT" or value == "SAME" then
         return "BORDER"
@@ -582,6 +583,23 @@ local function NormalizeAlphaLayerMode(mode)
         return "health"
     end
     return "foreground"
+end
+
+local function NormalizeRangeFadeLayerMode(mode)
+    if mode == "health" or mode == "hp" or mode == "hpbar" or mode == 2 then
+        return "health"
+    end
+    return "frame"
+end
+
+local function CompileRange(out, conf, general, key)
+    local range = out.range or {}
+    out.range = range
+    local supported = RANGE_KEYS[key] == true
+    range.enabled = supported and conf.rangeFadeEnabled ~= false
+    range.active = out.enabled ~= false and range.enabled == true
+    range.alpha = Clamp01(conf.rangeFadeAlpha or general.rangeFadeAlpha, 0.4)
+    range.layerMode = NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode or general.rangeFadeLayerMode)
 end
 
 local function CompileAlpha(out, conf, general, key)
@@ -1201,6 +1219,7 @@ local function ResolveUnit(db, unit, out)
     out.prediction.healAbsorbA = Number(ScopedValue(conf, general, "healAbsorbBarOpacity", general.healAbsorbBarColorA), 1)
 
     CompileAlpha(out, conf, general, key)
+    CompileRange(out, conf, general, key)
 
     CompileLoadConditions(out, conf)
 
@@ -1316,8 +1335,8 @@ local function ResolveUnit(db, unit, out)
     CompileStatusEntry(status, "elite", conf, general, key, "showEliteIcon", true, "eliteIconSize", 20, "eliteIconAnchor", "TOPRIGHT", "eliteIconOffsetX", 2, "eliteIconOffsetY", 2, "eliteIconLayer", 7)
     local statusText = CompileStatusEntry(status, "statusText", conf, general, key, "statusTextEnabled", true, "statusTextSize", out.nameFontSize + 2, "statusTextAnchor", "CENTER", "statusTextOffsetX", 0, "statusTextOffsetY", 0, "statusTextLayer", 7)
     local statusIndicators = type(general.statusIndicators) == "table" and general.statusIndicators or nil
-    statusText.showAFK = statusIndicators == nil or statusIndicators.showAFK ~= false
-    statusText.showDND = statusIndicators == nil or statusIndicators.showDND ~= false
+    statusText.showAFK = statusIndicators ~= nil and statusIndicators.showAFK == true
+    statusText.showDND = statusIndicators ~= nil and statusIndicators.showDND == true
     statusText.showDead = statusIndicators == nil or statusIndicators.showDead ~= false
     statusText.showGhost = statusIndicators == nil or statusIndicators.showGhost ~= false
     local combat = CompileStatusEntry(status, "combat", conf, general, key, "showCombatStateIndicator", true, "combatStateIndicatorSize", 18, "combatStateIndicatorAnchor", "TOPLEFT", "combatStateIndicatorOffsetX", 0, "combatStateIndicatorOffsetY", 0, "combatStateIndicatorLayer", 7)

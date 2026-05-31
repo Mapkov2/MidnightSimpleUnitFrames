@@ -1,6 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
     <Script file="MSUF_Auras3_Core.lua"/>
-    <Script file="MSUF_Auras3_GroupFiltering.lua"/>
     <Script file="MSUF_Auras3_EditMode.lua"/>
     <Script file="MSUF_Auras3_Menu_Model.lua"/>
 </Ui>

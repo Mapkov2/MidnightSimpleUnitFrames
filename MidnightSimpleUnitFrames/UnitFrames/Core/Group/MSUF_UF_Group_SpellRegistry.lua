@@ -147,28 +147,3 @@ end
 function SI.InvalidateRuntimeCaches()
     SI.RefreshFromDB()
 end
-
-do
-    local frame = CreateFrame and CreateFrame("Frame")
-    if frame then
-        local pending
-        local function Refresh()
-            pending = nil
-            if SI.RefreshFromDB then SI.RefreshFromDB() end
-            if GF.RefreshAll then GF.RefreshAll() end
-        end
-        local function QueueRefresh()
-            if pending then return end
-            pending = true
-            if C_Timer and C_Timer.After then C_Timer.After(0, Refresh) else Refresh() end
-        end
-        frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
-        frame:RegisterEvent("ACTIVE_PLAYER_SPECIALIZATION_CHANGED")
-        frame:RegisterEvent("PLAYER_TALENT_UPDATE")
-        frame:RegisterEvent("TRAIT_CONFIG_UPDATED")
-        frame:SetScript("OnEvent", function(_, event, unit)
-            if event == "PLAYER_SPECIALIZATION_CHANGED" and unit and unit ~= "player" then return end
-            QueueRefresh()
-        end)
-    end
-end

@@ -10,7 +10,7 @@
     <Script file="Core\Elements\MSUF_UF_Visuals_Common.lua"/>
     <Script file="Core\Elements\MSUF_UF_Elements_Portrait.lua"/>
     <Script file="Core\Elements\MSUF_UF_Elements_Alpha.lua"/>
-    <Script file="Core\Elements\MSUF_UF_Elements_DispelOverlay.lua"/>
+    <Script file="Range\MSUF_UF_RangeFade.lua"/>
     <Script file="Core\Elements\MSUF_UF_Elements_Borders.lua"/>
     <Script file="Core\Elements\MSUF_UF_Elements_Status.lua"/>
     <Script file="Core\Elements\MSUF_UF_Elements_LoadConditions.lua"/>

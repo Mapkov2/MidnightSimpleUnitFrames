@@ -5,6 +5,5 @@
     <Script file="Core\MSUF_UF_Core.lua"/>
     <Script file="Core\MSUF_UF_Dispatch.lua"/>
     <Script file="Core\MSUF_UF_Runtime.lua"/>
-    <Script file="Core\MSUF_UF_DispelState.lua"/>
     <Script file="Core\MSUF_UF_Config.lua"/>
 </Ui>

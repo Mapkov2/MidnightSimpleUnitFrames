@@ -36,6 +36,18 @@ local UpdatePhase = statusRuntime.UpdatePhase
 local UpdateStatusText = statusRuntime.UpdateStatusText
 local UpdateRaidGroup = statusRuntime.UpdateRaidGroup
 local UpdateRole = statusRuntime.UpdateRole
+local UnitIsConnected = _G.UnitIsConnected
+local UnitIsGhost = _G.UnitIsGhost
+local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
+local UnitIsAFK = _G.UnitIsAFK
+local UnitIsDND = _G.UnitIsDND
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
+
+local function PlainTrue(value)
+    if IsSecret(value) then return nil end
+    return value == true or value == 1
+end
 
 local function BindStatusRuntime()
     statusRuntime = MSUF.UFStatusRuntime or statusRuntime
@@ -90,7 +102,91 @@ local function RunPhase(frame, status)
     UpdatePhase(frame, status)
 end
 
+local function StatusTextEventRelevant(cfg, event)
+    if event == "UNIT_HEALTH" then
+        return cfg.showDead == true or cfg.showGhost == true
+    elseif event == "UNIT_CONNECTION" then
+        return cfg.showDead == true
+    elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
+        return cfg.showAFK == true or cfg.showDND == true
+    end
+    return true
+end
+
+local function StatusTextHealthKey(frame, cfg)
+    local unit = frame and frame.unit
+    if not unit then return nil end
+    local key = 0
+    if cfg.showGhost == true and UnitIsGhost then
+        local ghost = UnitIsGhost(unit)
+        if IsSecret(ghost) then return nil end
+        if PlainTrue(ghost) then key = key + 2 end
+    end
+    if cfg.showDead == true and UnitIsDeadOrGhost then
+        local dead = UnitIsDeadOrGhost(unit)
+        if IsSecret(dead) then return nil end
+        if PlainTrue(dead) then key = key + 4 end
+    end
+    return key
+end
+
+local function StatusTextConnectionKey(frame, cfg)
+    local unit = frame and frame.unit
+    if not unit then return nil end
+    local key = 0
+    if cfg.showDead == true and UnitIsConnected then
+        local connected = UnitIsConnected(unit)
+        if IsSecret(connected) then return nil end
+        if connected == false or connected == 0 then key = key + 1 end
+    end
+    return key
+end
+
+local function StatusTextFlagsKey(frame, cfg)
+    local unit = frame and frame.unit
+    if not unit then return nil end
+    local key = 0
+    if cfg.showAFK == true and UnitIsAFK then
+        local afk = UnitIsAFK(unit)
+        if IsSecret(afk) then return nil end
+        if PlainTrue(afk) then key = key + 8 end
+    end
+    if cfg.showDND == true and UnitIsDND then
+        local dnd = UnitIsDND(unit)
+        if IsSecret(dnd) then return nil end
+        if PlainTrue(dnd) then key = key + 16 end
+    end
+    return key
+end
+
+local function StatusTextChanged(frame, status, event)
+    local cfg = status and status.statusText
+    if not (cfg and cfg.enabled == true) then return true end
+    if status.testMode == true then return true end
+    if not StatusTextEventRelevant(cfg, event) then return false end
+    local storeKey, key
+    if event == "UNIT_HEALTH" then
+        storeKey = "_msufGFStatusTextHealthKey"
+        key = StatusTextHealthKey(frame, cfg)
+    elseif event == "UNIT_CONNECTION" then
+        storeKey = "_msufGFStatusTextConnectionKey"
+        key = StatusTextConnectionKey(frame, cfg)
+    elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
+        storeKey = "_msufGFStatusTextFlagsKey"
+        key = StatusTextFlagsKey(frame, cfg)
+    else
+        return true
+    end
+    if key == nil then return true end
+    if frame[storeKey] == key then return false end
+    frame[storeKey] = key
+    return true
+end
+
 local function RunStatusText(frame, status, event)
+    if not StatusTextChanged(frame, status, event) then
+        return
+    end
     UpdateStatusText(frame, status, event)
 end
 
@@ -120,6 +216,9 @@ local function RunStatusApply(frame, status, event)
         UpdateRaidGroup(frame, status)
     end
     if status.runtimeStatusText == true then
+        frame._msufGFStatusTextHealthKey = nil
+        frame._msufGFStatusTextConnectionKey = nil
+        frame._msufGFStatusTextFlagsKey = nil
         UpdateStatusText(frame, status, event)
     end
 end
@@ -187,8 +286,16 @@ end
 function GroupStatusRuntime.Update(frame, event)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
     if not status then return end
-    if (not UpdateStatusText or not UpdateRole) and not BindStatusRuntime() then return end
     local kind = STATUS_EVENT_KIND[event]
+    if kind == 8 then
+        if status.runtimeStatusText ~= true or not StatusTextChanged(frame, status, event) then
+            return
+        end
+        if not UpdateStatusText and not BindStatusRuntime() then return end
+        UpdateStatusText(frame, status, event)
+        return
+    end
+    if (not UpdateStatusText or not UpdateRole) and not BindStatusRuntime() then return end
     local dispatch = CompileStatusDispatch(status)
     local runner = kind and dispatch[kind] or dispatch.apply
     if runner then

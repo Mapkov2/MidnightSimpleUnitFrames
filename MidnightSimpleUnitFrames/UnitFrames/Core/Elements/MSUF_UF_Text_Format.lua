@@ -40,7 +40,6 @@ local ValueOrDefault = Text.ValueOrDefault or function(value, fallback)
     if value == nil then return fallback end
     return value
 end
-local C_Timer = _G.C_Timer
 local pairs = pairs
 
 local INT_TEXT_0_100 = {}
@@ -120,6 +119,28 @@ local function ModeNeedsPercent(mode)
     return mode == "PERCENT"
         or mode == "CURPERCENT"
         or mode == "PERCENTCUR"
+        or mode == "CURMAXPERCENT"
+        or mode == "PERCENTMAXCUR"
+        or mode == "MAXPERCENT"
+        or mode == "PERCENTMAX"
+        or mode == "PERCENTCURMAX"
+end
+
+local function ModeNeedsCurrent(mode)
+    return mode == "CURRENT"
+        or mode == "CURMAX"
+        or mode == "MAXCUR"
+        or mode == "CURPERCENT"
+        or mode == "PERCENTCUR"
+        or mode == "CURMAXPERCENT"
+        or mode == "PERCENTMAXCUR"
+        or mode == "PERCENTCURMAX"
+end
+
+local function ModeNeedsMax(mode)
+    return mode == "MAX"
+        or mode == "CURMAX"
+        or mode == "MAXCUR"
         or mode == "CURMAXPERCENT"
         or mode == "PERCENTMAXCUR"
         or mode == "MAXPERCENT"
@@ -684,6 +705,9 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     if not (fs and mode and mode ~= "NONE") then
         return index, false, false
     end
+    if not MODE_WRITERS[mode] then
+        mode = "CURMAX"
+    end
     local needsPercent = ModeNeedsPercent(mode)
     local slot = slots[index]
     if not slot then
@@ -701,7 +725,7 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     slot.hidePercentSymbol = hidePercentSymbol == true
     slot.suffix = nil
     slot.canSecret = nil
-    return index + 1, needsPercent, mode == "DEFICIT"
+    return index + 1, needsPercent, mode == "DEFICIT", ModeNeedsCurrent(mode), ModeNeedsMax(mode)
 end
 
 local function TrimTextSlots(slots, firstDead)
@@ -792,20 +816,31 @@ local function CompileTextRuntime(frame, spec, text)
     local showPower = spec and spec.showPowerText ~= false and spec.power and spec.power.enabled == true
     nextIndex = 1
     needsPercent = false
+    local needsCurrent = false
+    local needsMax = false
+    local slotCurrent, slotMax, slotUnused
     if showPower and frame.powerTextLeft and frame.powerTextLeft:IsShown() then
-        nextIndex, slotNeeds = AddTextSlot(rt.powerSlots, nextIndex, frame.powerTextLeft, text.powerLeft, text.powerDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotUnused, slotCurrent, slotMax = AddTextSlot(rt.powerSlots, nextIndex, frame.powerTextLeft, text.powerLeft, text.powerDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
+        needsCurrent = needsCurrent or slotCurrent
+        needsMax = needsMax or slotMax
     end
     if showPower and frame.powerTextCenter and frame.powerTextCenter:IsShown() then
-        nextIndex, slotNeeds = AddTextSlot(rt.powerSlots, nextIndex, frame.powerTextCenter, text.powerCenter, text.powerDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotUnused, slotCurrent, slotMax = AddTextSlot(rt.powerSlots, nextIndex, frame.powerTextCenter, text.powerCenter, text.powerDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
+        needsCurrent = needsCurrent or slotCurrent
+        needsMax = needsMax or slotMax
     end
     if showPower and frame.powerTextRight and frame.powerTextRight:IsShown() then
-        nextIndex, slotNeeds = AddTextSlot(rt.powerSlots, nextIndex, frame.powerTextRight, text.powerRight, text.powerDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotUnused, slotCurrent, slotMax = AddTextSlot(rt.powerSlots, nextIndex, frame.powerTextRight, text.powerRight, text.powerDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
+        needsCurrent = needsCurrent or slotCurrent
+        needsMax = needsMax or slotMax
     end
     rt.powerSlotCount = nextIndex - 1
     rt.powerNeedsPercent = needsPercent
+    rt.powerNeedsCurrent = needsCurrent
+    rt.powerNeedsMax = needsMax
     rt.powerColorByType = text.powerColorByType == true
     rt.powerPlain = frame.unit == "player"
     rt._lastPowerTextPower = nil
@@ -1038,38 +1073,30 @@ end
 
 local ScheduleTextThrottleTimer
 
-local function TextThrottleTimerTick()
+local function TextThrottleOnUpdate(self)
+    local now = GetTime and GetTime() or 0
+    if textThrottleTimerAt and now < textThrottleTimerAt then
+        return
+    end
+
     textThrottleTimerActive = nil
     textThrottleTimerAt = nil
 
-    local now = GetTime and GetTime() or 0
     local active, nextAt = FlushTextQueues(now)
-    if active then
-        local delay = nextAt and nextAt > now and (nextAt - now) or TEXT_MIN_DELAY
-        ScheduleTextThrottleTimer(delay, now + delay)
-    end
-end
-
-local function TextThrottleOnUpdate(self)
-    local now = GetTime and GetTime() or 0
-    local active = FlushTextQueues(now)
     if not active then
         self:Hide()
+        return
     end
+
+    local delay = nextAt and nextAt > now and (nextAt - now) or TEXT_MIN_DELAY
+    ScheduleTextThrottleTimer(delay, now + delay)
 end
 
 ScheduleTextThrottleTimer = function(delay, when)
     delay = delay and delay > 0 and delay or TEXT_MIN_DELAY
     when = when or ((GetTime and GetTime() or 0) + delay)
 
-    local after = C_Timer and C_Timer.After
-    if after then
-        if textThrottleTimerActive and textThrottleTimerAt and textThrottleTimerAt <= when then
-            return
-        end
-        textThrottleTimerActive = true
-        textThrottleTimerAt = when
-        after(delay, TextThrottleTimerTick)
+    if textThrottleTimerActive and textThrottleTimerAt and textThrottleTimerAt <= when then
         return
     end
 
@@ -1078,6 +1105,8 @@ ScheduleTextThrottleTimer = function(delay, when)
         textThrottleFrame:SetScript("OnUpdate", TextThrottleOnUpdate)
         textThrottleFrame:Hide()
     end
+    textThrottleTimerActive = true
+    textThrottleTimerAt = when
     textThrottleFrame:Show()
 end
 

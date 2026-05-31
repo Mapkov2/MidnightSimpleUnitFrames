@@ -116,6 +116,8 @@ function GF.SetPreviewAnchor(kind, parent)
     return true
 end
 
+local PreviewsAllowed
+
 local function EnsureContainer(kind, parent)
     local desiredParent = parent or UIParent
     local container = GF._previewContainer[kind]
@@ -446,6 +448,7 @@ end
 
 function GF.ShowPreview(kind, count)
     if InCombat() then return false end
+    if type(PreviewsAllowed) == "function" and not PreviewsAllowed() then return false end
     kind = NormalizeKind(kind) or "party"
     count = floor((tonumber(count) or DefaultPreviewCount(kind)) + 0.5)
     if count < 1 then count = DefaultPreviewCount(kind) end
@@ -527,7 +530,7 @@ end
 
 GF.RefreshPreviewBox = GF.RefreshPreviewLayout
 
-local function PreviewsAllowed()
+PreviewsAllowed = function()
     if _G.MSUF_UnitEditModeActive == true then return true end
     if _G.MSUF2_GFPagePreviewActive == true then return true end
     local panel = _G.MSUF_GFOptionsPanel

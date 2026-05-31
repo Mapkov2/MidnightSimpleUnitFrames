@@ -32,13 +32,11 @@ Metadata.MASK_FONT = BuildNameSet({
 })
 Metadata.MASK_COLOR = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-    "StatusIndicators", "GroupVisuals", "GroupCornerIndicators", "GroupSpellIndicators",
+    "StatusIndicators", "GroupVisuals", "GroupCornerIndicators",
     "Borders",
 })
 Metadata.MASK_BORDER = BuildNameSet({ "Borders", "GroupVisuals" })
-Metadata.MASK_AURAS = BuildNameSet({
-    "Auras", "GroupVisuals", "GroupCornerIndicators", "GroupSpellIndicators", "Borders",
-})
+Metadata.MASK_AURAS = BuildNameSet({})
 Metadata.MASK_VISUAL = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
     "StatusIndicators", "Prediction", "Alpha", "GroupStatusRuntime", "GroupRangeFade",
@@ -46,8 +44,8 @@ Metadata.MASK_VISUAL = BuildNameSet({
 })
 Metadata.MASK_RUNTIME = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-    "StatusIndicators", "Prediction", "Alpha", "Auras", "Borders", "GroupStatusRuntime",
-    "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators", "GroupSpellIndicators",
+    "StatusIndicators", "Prediction", "Alpha", "Borders", "GroupStatusRuntime",
+    "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators",
 })
 
 Metadata.dirtyApplyMasks = {

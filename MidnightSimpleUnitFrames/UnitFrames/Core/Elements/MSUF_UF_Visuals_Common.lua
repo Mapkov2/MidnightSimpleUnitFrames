@@ -18,7 +18,6 @@ local pairs = pairs
 local max = math.max
 local abs = math.abs
 local floor = math.floor
-local DispelState = UF and UF.DispelState or {}
 
 -- WoW marks select unit-API returns as "secret values" when reading them
 -- would leak hidden combat info. Using a secret value in a comparison
@@ -31,31 +30,9 @@ local NotSecretValue = Secrets.NotSecret or function(_) return true end
 
 local EMPTY_EVENTS = {}
 local PORTRAIT_2D_EVENTS = { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
-local BORDER_AURA_EVENTS = { "UNIT_AURA" }
 local BORDER_THREAT_EVENTS = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" }
-local DISPEL_CAPABILITY_EVENTS = {
-    "PLAYER_SPECIALIZATION_CHANGED",
-    "ACTIVE_PLAYER_SPECIALIZATION_CHANGED",
-    "PLAYER_TALENT_UPDATE",
-    "TRAIT_CONFIG_UPDATED",
-    "SPELLS_CHANGED",
-}
-
-local function IsDispelCapabilityEvent(event)
-    return event == "PLAYER_SPECIALIZATION_CHANGED"
-        or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
-        or event == "PLAYER_TALENT_UPDATE"
-        or event == "TRAIT_CONFIG_UPDATED"
-        or event == "SPELLS_CHANGED"
-end
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local MEDIA_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\"
-local DISPEL_OVERLAY_TEXTURES = {
-    TOP = MEDIA_ROOT .. "MSUF_Grad_V.tga",
-    BOTTOM = MEDIA_ROOT .. "MSUF_Grad_V_Rev.tga",
-    LEFT = MEDIA_ROOT .. "MSUF_Grad_H.tga",
-    RIGHT = MEDIA_ROOT .. "MSUF_Grad_H_Rev.tga",
-}
 local QUESTION_MARK = "Interface\\ICONS\\INV_Misc_QuestionMark"
 local ADDON_PATH = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames")
 local PORTRAIT_MASKS = {
@@ -155,18 +132,13 @@ MSUF.UFVisuals = {
     pairs = pairs,
     max = max,
     floor = floor,
-    DispelState = DispelState,
     IsNil = IsNil,
     NotSecretValue = NotSecretValue,
     EMPTY_EVENTS = EMPTY_EVENTS,
     PORTRAIT_2D_EVENTS = PORTRAIT_2D_EVENTS,
-    BORDER_AURA_EVENTS = BORDER_AURA_EVENTS,
     BORDER_THREAT_EVENTS = BORDER_THREAT_EVENTS,
-    DISPEL_CAPABILITY_EVENTS = DISPEL_CAPABILITY_EVENTS,
-    IsDispelCapabilityEvent = IsDispelCapabilityEvent,
     WHITE = WHITE,
     MEDIA_ROOT = MEDIA_ROOT,
-    DISPEL_OVERLAY_TEXTURES = DISPEL_OVERLAY_TEXTURES,
     QUESTION_MARK = QUESTION_MARK,
     ADDON_PATH = ADDON_PATH,
     PORTRAIT_MASKS = PORTRAIT_MASKS,

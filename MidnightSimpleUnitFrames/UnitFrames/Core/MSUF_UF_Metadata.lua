@@ -53,7 +53,7 @@ Metadata.hotEventKind = BuildEventKindMap({
     },
     [3] = { "UNIT_CONNECTION" },
     [4] = { "UNIT_NAME_UPDATE" },
-    [5] = { "UNIT_AURA" },
+    [5] = {},
     [6] = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" },
     [8] = { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED" },
     [9] = { "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" },
@@ -100,13 +100,7 @@ Metadata.hotStateSpecs = {
         { "NameText", "name" },
         { "InlineToT", "inline", "inlineMode" },
     },
-    [5] = {
-        { "DispelOverlay", "dispel" },
-        { "GroupVisuals", "groupVisuals" },
-        { "GroupCornerIndicators", "groupCorners" },
-        { "GroupSpellIndicators", "groupSpells" },
-        { "Borders", "borders" },
-    },
+    [5] = {},
     [6] = {
         { "GroupVisuals", "groupVisuals" },
         { "GroupCornerIndicators", "groupCorners" },
@@ -160,9 +154,6 @@ Metadata.hotStateSpecs = {
     },
     [18] = {
         { "Alpha", "alpha" },
-        { "DispelOverlay", "dispel" },
-        { "GroupVisuals", "groupVisuals" },
-        { "GroupCornerIndicators", "groupCorners" },
         { "Borders", "borders" },
     },
 }
@@ -179,8 +170,8 @@ Metadata.runtimeUpdateOwners = BuildNameSet({
     "InlineToT", "Portrait", "Alpha", "StatusIndicators", "RaidMarkerIndicator",
     "LeaderIndicator", "LevelIndicator", "RaidGroupIndicator", "EliteIndicator",
     "StatusTextIndicator", "CombatIndicator", "RestingIndicator", "IncomingResIndicator",
-    "Prediction", "DispelOverlay", "Borders", "GroupStatusRuntime",
-    "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators", "GroupSpellIndicators",
+    "Prediction", "Borders", "GroupStatusRuntime",
+    "RangeFade", "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators",
 })
 
 local MASK_HEALTH = { health = true }
@@ -190,7 +181,7 @@ local MASK_BORDERS = { borders = true }
 local MASK_PREDICTION = { prediction = true }
 local MASK_FONT_RUNTIME = { health = true, power = true, name = true }
 local MASK_TEXT_STATUS_RUNTIME = { health = true, power = true, name = true, status = true }
-local MASK_AURAS_BORDERS = { auras = true, borders = true }
+local MASK_DISABLED = {}
 local MASK_CASTBAR_SYNC = { health = true, power = true, name = true, portrait = true, status = true, borders = true }
 local MASK_HEALTH_BORDERS = { health = true, borders = true }
 local MASK_UNIT_IDENTITY = {
@@ -202,7 +193,6 @@ local MASK_UNIT_IDENTITY = {
     status = true,
     prediction = true,
     alpha = true,
-    auras = true,
     borders = true,
 }
 
@@ -213,7 +203,7 @@ AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY, { "MSUF_UNIT_IDENT
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_ALPHA, { "MSUF_ALPHA" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BORDERS, { "MSUF_BORDER_LAYOUT", "MSUF2_BORDER", "MSUF2_BAR_OUTLINE" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BORDERS, { "MSUF_GF_DIRTY_BORDER" })
-AddRuntimeReasonMasks(runtimeReasonMasks, MASK_AURAS_BORDERS, { "MSUF_GF_DIRTY_AURAS" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_DISABLED, { "MSUF_GF_DIRTY_AURAS" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_TEXT_STATUS_RUNTIME, { "MSUF_GF_DIRTY_FONT" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_HEALTH_BORDERS, { "MSUF2_GRADIENT" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_PREDICTION, {
@@ -237,7 +227,8 @@ Metadata.runtimeReasonMasks = runtimeReasonMasks
 
 Metadata.defaultApplyMask = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-    "StatusIndicators", "Prediction", "DispelOverlay", "Borders",
+    "StatusIndicators", "Prediction", "Borders",
+    "RangeFade",
 })
 
 Metadata.refreshElementGroups = {
@@ -247,10 +238,11 @@ Metadata.refreshElementGroups = {
         "Portrait", "StatusIndicators", "RaidMarkerIndicator", "LeaderIndicator", "Prediction",
         "LevelIndicator", "RaidGroupIndicator", "EliteIndicator", "StatusTextIndicator",
         "CombatIndicator", "RestingIndicator", "IncomingResIndicator", "Alpha", "Borders",
+        "RangeFade",
     },
     powerText = { "Power", "Text", "PowerText" },
     text = { "Text", "NameText", "HealthText", "PowerText", "InlineToT" },
     borders = { "Borders" },
     reverseFill = { "Health", "Power", "Prediction" },
-    alpha = { "Alpha" },
+    alpha = { "Alpha", "RangeFade" },
 }

@@ -186,10 +186,6 @@ local function ResolveHealthVisual(conf)
 end
 
 local function NormalizeDispelOverlayTrigger(value)
-    local ds = UF and UF.DispelState
-    if ds and type(ds.NormalizeOverlayTrigger) == "function" then
-        return ds.NormalizeOverlayTrigger(value)
-    end
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
         return "DISPEL_TYPE"
     elseif value == "ANY_DEBUFF" or value == "DEBUFF" then
@@ -201,10 +197,6 @@ local function NormalizeDispelOverlayTrigger(value)
 end
 
 local function NormalizeDispelDetectTrigger(value)
-    local ds = UF and UF.DispelState
-    if ds and type(ds.NormalizeDetectTrigger) == "function" then
-        return ds.NormalizeDetectTrigger(value)
-    end
     value = tostring(value or ""):upper()
     if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then
         return "DISPEL_TYPE"

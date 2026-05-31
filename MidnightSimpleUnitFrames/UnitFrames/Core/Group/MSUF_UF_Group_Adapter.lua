@@ -42,9 +42,9 @@ local APPLY_MASK = {
     Health = true, Power = true, Text = true, NameText = true,
     HealthText = true, PowerText = true, StatusIndicators = true,
     GroupStatusRuntime = true, Prediction = true,
-    Alpha = true, Auras = true,
+    Alpha = true,
     Borders = true, GroupRangeFade = true, GroupVisuals = true,
-    GroupCornerIndicators = true, GroupSpellIndicators = true,
+    GroupCornerIndicators = true,
 }
 GF.GROUP_APPLY_MASK = APPLY_MASK
 

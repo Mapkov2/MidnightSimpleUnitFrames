@@ -311,10 +311,14 @@ function Text.MarkHealthDirty(frame, event, unit, hp, hpMax)
         return Text.UpdateHealth(frame, event, unit, hp, hpMax)
     end
 
-    local now = GetTime()
-    local nextTime = rt.nextHealthTextTime
     rt.pendingHP, rt.pendingHPMax = hp, hpMax
     rt.healthTextPending = true
+    if rt.healthTimerActive == true then
+        return
+    end
+
+    local now = GetTime()
+    local nextTime = rt.nextHealthTextTime
 
     if not nextTime or now >= nextTime then
         rt.nextHealthTextTime = now + throttle
@@ -341,11 +345,14 @@ function Text.UpdatePower(frame, event, unit, power, powerMax)
     if throttle > 0
         and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT")
         and GetTime then
+        rt.pendingPower, rt.pendingPowerMax = power, powerMax
+        rt.powerTextPending = true
+        if rt.powerTimerActive == true then
+            return
+        end
         local now = GetTime()
         local nextTime = rt.nextPowerTextTime
         if nextTime and now < nextTime then
-            rt.pendingPower, rt.pendingPowerMax = power, powerMax
-            rt.powerTextPending = true
             QueuePowerTextFlush(frame, rt, nextTime - now)
             return
         end
@@ -527,7 +534,10 @@ function HealthText.IsEnabled(frame, spec)
     return HealthTextEnabled(spec)
 end
 
-function HealthText.GetEvents()
+function HealthText.GetEvents(frame, spec)
+    if not HealthTextEnabled(spec) then
+        return EMPTY_EVENTS
+    end
     return HEALTH_TEXT_EVENTS
 end
 
@@ -553,6 +563,9 @@ function PowerText.IsEnabled(frame, spec)
 end
 
 function PowerText.GetEvents(frame, spec)
+    if not PowerTextEnabled(spec) then
+        return EMPTY_EVENTS
+    end
     return spec and spec.power and spec.power.frequent == true and POWER_EVENTS_FREQUENT or POWER_EVENTS
 end
 

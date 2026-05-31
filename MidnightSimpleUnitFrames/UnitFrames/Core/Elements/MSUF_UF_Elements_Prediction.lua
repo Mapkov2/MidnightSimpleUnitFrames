@@ -542,6 +542,10 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     frame._msufPredictionHealReverse = ReverseForMode(healMode, hpReverse)
     frame._msufPredictionAbsorbReverse = ReverseForMode(absorbMode, hpReverse)
     frame._msufPredictionMask = PredictionMask(cfg)
+    frame._msufPredictionHealActive = cfg.heal == true
+    frame._msufPredictionAbsorbActive = cfg.absorb == true
+    frame._msufPredictionHealAbsorbActive = cfg.healAbsorb == true
+    frame._msufPredictionAbsorbOnly = cfg.absorb == true and cfg.heal ~= true and cfg.healAbsorb ~= true
     frame._msufPredictionNeedsHealth = NeedsHealthEvent(cfg)
     frame._msufPredictionFollowAbsorb = followAbsorb
     frame._msufPredictionClampHealToMissing = cfg.heal == true and healMode == 3
@@ -555,7 +559,14 @@ local function EnsurePredictionRuntime(frame, cfg)
 end
 
 function Prediction.IsEnabled(frame, spec)
-    return spec and spec.prediction and spec.prediction.enabled == true
+    local cfg = spec and spec.prediction
+    if not (cfg and cfg.enabled == true) then
+        return false
+    end
+    if cfg.test == true then
+        return true
+    end
+    return PredictionMask(cfg) ~= 0
 end
 
 local function PredictionEventsForConfig(cfg, healthAware)
@@ -647,7 +658,55 @@ function Prediction.Disable(frame)
     HideBar(frame and frame.healAbsorbBar)
     ClearPredictionCache(frame)
     frame._msufPredictionNeedsHealth = nil
+    frame._msufPredictionHealActive = nil
+    frame._msufPredictionAbsorbActive = nil
+    frame._msufPredictionHealAbsorbActive = nil
+    frame._msufPredictionAbsorbOnly = nil
+    frame._msufPredictionMask = 0
     frame._msufPredictionDisabled = true
+end
+
+local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, absorbMode)
+    local bar = frame.absorbBar
+    if not bar then return end
+
+    local cacheReady = frame._msufPredictionCacheReady == true
+        and frame._msufPredictionCacheUnit == unit
+        and frame._msufPredictionCacheCfg == cfg
+    local refreshAbsorb = not cacheReady
+    local forceMax = not cacheReady
+
+    if event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+        refreshAbsorb = true
+    elseif event == "UNIT_MAXHEALTH" then
+        forceMax = true
+        refreshAbsorb = refreshAbsorb or frame._msufPredictionClampAbsorbToMissing == true
+    elseif event ~= "UNIT_CONNECTION" then
+        refreshAbsorb = true
+        forceMax = true
+    end
+
+    local hp, maxHP
+    if not IsNil(seedHP) then hp = seedHP end
+    if not IsNil(seedMaxHP) then maxHP = seedMaxHP end
+
+    local calc
+    if refreshAbsorb then
+        calc = UpdateCalc(frame, unit, cfg)
+        if not calc and frame._msufPredictionClampAbsorbToMissing == true then
+            if IsNil(hp) and UnitHealth then hp = UnitHealth(unit) end
+            if IsNil(maxHP) and UnitHealthMax then maxHP = UnitHealthMax(unit) end
+        end
+        frame._msufPredictionAbsorb = ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
+        frame._msufPredictionCacheReady = true
+        frame._msufPredictionCacheUnit = unit
+        frame._msufPredictionCacheCfg = cfg
+    end
+
+    if (forceMax == true or bar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
+        maxHP = UnitHealthMax(unit)
+    end
+    ShowValue(bar, maxHP, frame._msufPredictionAbsorb, forceMax)
 end
 
 function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
@@ -662,6 +721,22 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         Prediction.Disable(frame)
         return
     end
+    EnsurePredictionRuntime(frame, cfg)
+    if cfg.test ~= true and frame._msufPredictionMask == 0 then
+        Prediction.Disable(frame)
+        return
+    end
+    if cfg.test ~= true then
+        if event == "UNIT_HEAL_PREDICTION" and frame._msufPredictionHealActive ~= true then
+            return
+        elseif event == "UNIT_ABSORB_AMOUNT_CHANGED" and frame._msufPredictionAbsorbActive ~= true then
+            return
+        elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" and frame._msufPredictionHealAbsorbActive ~= true then
+            return
+        elseif event == "UNIT_HEALTH" and frame._msufPredictionNeedsHealth ~= true then
+            return
+        end
+    end
 
     if UnitMissing(unit) then
         Prediction.Disable(frame)
@@ -669,9 +744,12 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
     frame._msufPredictionDisabled = nil
 
-    EnsurePredictionRuntime(frame, cfg)
     local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
     local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+
+    if cfg.test ~= true and frame._msufPredictionAbsorbOnly == true then
+        return UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, absorbMode)
+    end
 
     if cfg.test == true then
         if cfg.heal == true and frame.incomingHealBar then

@@ -11,7 +11,6 @@ local UnitThreatSituation = V.UnitThreatSituation or UnitThreatSituation
 local UnitGroupRolesAssigned = V.UnitGroupRolesAssigned or UnitGroupRolesAssigned
 local tonumber = V.tonumber or tonumber
 local type = V.type or type
-local DispelState = V.DispelState or (UF and UF.DispelState) or {}
 local IsNil = V.IsNil or function(value) return value == nil end
 local NotSecretValue = V.NotSecretValue or function(_) return true end
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
@@ -220,7 +219,7 @@ local function BossTargetTestApplies(frame)
 end
 
 local function BorderHighlightEnabled(frame, cfg)
-    if cfg and (cfg.dispel == true or cfg.aggro == true or cfg.purge == true) then
+    if cfg and cfg.aggro == true then
         return true
     end
     if _G.MSUF_BorderTestModesActive ~= true then
@@ -272,26 +271,6 @@ local function SetBorder(frame, show, r, g, b, a)
             SetShown(edge, show)
         end
     end
-end
-
-local function AuraBorderState(frame)
-    local cfg = frame.MSUFSpec and frame.MSUFSpec.border
-    local wantsDispel = cfg and cfg.dispel == true
-    if frame._msufUFBorderAuraStateKnown == true and frame._msufUFBorderAuraEnabled == (wantsDispel and true or false) then
-        return frame._msufUFBorderAuraState,
-            frame._msufUFBorderAuraColorR,
-            frame._msufUFBorderAuraColorG,
-            frame._msufUFBorderAuraColorB,
-            frame._msufUFBorderAuraColorA
-    end
-    if frame._msufGFBorderAuraStateKnown == true and frame._msufGFBorderAuraEnabled == (wantsDispel and true or false) then
-        return frame._msufGFBorderAuraState,
-            frame._msufGFBorderAuraColorR,
-            frame._msufGFBorderAuraColorG,
-            frame._msufGFBorderAuraColorB,
-            frame._msufGFBorderAuraColorA
-    end
-    return nil
 end
 
 local function ThreatState(frame)
@@ -391,7 +370,7 @@ function Borders.Apply(frame, spec)
     if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
         LayoutBorder(frame, 1)
         SetBorder(frame, false)
-    elseif cfg.dispel == true or cfg.aggro == true or cfg.purge == true then
+    elseif cfg.aggro == true then
         LayoutBorder(frame, BorderHighlightThickness(cfg))
         Borders.Update(frame, "MSUF_BORDER_APPLY", frame.unit)
     else
@@ -417,15 +396,8 @@ function Borders.Update(frame)
         return
     end
     local testActive = _G.MSUF_BorderTestModesActive == true
-    local auraState, auraR, auraG, auraB, auraA = AuraBorderState(frame)
     if testActive and DispelTestApplies(frame) then
         local r, g, b, a = DispelTestColor(frame)
-        LayoutBorder(frame, BorderHighlightThickness(cfg))
-        SetBorder(frame, true, r, g, b, a)
-        return
-    end
-    if cfg.dispel and auraState == "dispel" then
-        local r, g, b, a = auraR or 0.25, auraG or 0.75, auraB or 1, auraA or 1
         LayoutBorder(frame, BorderHighlightThickness(cfg))
         SetBorder(frame, true, r, g, b, a)
         return
@@ -455,25 +427,9 @@ end
 
 UF.RegisterElement("Borders", Borders)
 
-local function RefreshUnitDispelFrame(frame)
-    if not frame then return end
-    local active = frame._msufActiveElements
-    if not active then return end
-    local unit = frame.unit
-    if not unit or unit == "" then return end
-    local event = "MSUF_DISPEL_REFRESH"
-    local dispel = UF.elements and UF.elements.DispelOverlay
-    if active.DispelOverlay == true and dispel and dispel.Update then
-        dispel.Update(frame, event, unit)
-    end
-    if active.Borders == true then
-        Borders.Update(frame, event, unit)
-    end
+local function RefreshUnitDispelFrame()
+    return false
 end
 
-_G.MSUF_RefreshUnitDispelOverlays = function()
-    if UF.ForEachFrame then
-        UF.ForEachFrame(RefreshUnitDispelFrame)
-    end
-end
+_G.MSUF_RefreshUnitDispelOverlays = RefreshUnitDispelFrame
 _G.MSUF_RefreshUnitDispelOverlay = RefreshUnitDispelFrame

@@ -149,7 +149,6 @@ local UNIT_EVENT_HAS_UNIT = {
     UNIT_CONNECTION = true,
     UNIT_NAME_UPDATE = true,
     UNIT_TARGET = true,
-    UNIT_AURA = true,
     UNIT_THREAT_SITUATION_UPDATE = true,
     UNIT_THREAT_LIST_UPDATE = true,
     UNIT_PORTRAIT_UPDATE = true,

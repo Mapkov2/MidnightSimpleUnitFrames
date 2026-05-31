@@ -201,6 +201,35 @@ local function CurrentAlpha(cfg, mode, event)
     return InCombatForEvent(event) and inAlpha or outAlpha
 end
 
+local function RangeLayerMode(frame)
+    local spec = frame and frame.MSUFSpec
+    local range = spec and spec.range
+    return range and range.layerMode == "health" and "health" or "frame"
+end
+
+local function RangeMul(frame)
+    local mul = tonumber(frame and frame._msufRangeMul)
+    if mul == nil then
+        return 1
+    elseif mul < 0 then
+        return 0
+    elseif mul > 1 then
+        return 1
+    end
+    return mul
+end
+
+local function ApplyRangeMul(frame, frameAlpha, hpAlpha, healthBgAlpha)
+    local mul = RangeMul(frame)
+    if mul == 1 then
+        return frameAlpha, hpAlpha, healthBgAlpha, false
+    end
+    if RangeLayerMode(frame) == "health" then
+        return frameAlpha, hpAlpha * mul, healthBgAlpha * mul, true
+    end
+    return frameAlpha * mul, hpAlpha, healthBgAlpha, false
+end
+
 local function AlphaNeedsCombatRefresh(cfg)
     return cfg and cfg.combatEvents == true
 end
@@ -300,24 +329,7 @@ local function ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, p
     frame._msufAlphaLayeredMode = true
 end
 
-local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
-    if not frame then
-        return
-    end
-    if not cfg then
-        SetFrameAlpha(frame, 1)
-        ResetLegacyLayerAlphas(frame, true)
-        return
-    end
-    local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_VISUALS"
-        or event == "MSUF_ALPHA"
-    local rt = CompileAlphaRuntime(frame, cfg, force)
-    if not rt then
-        return
-    end
-
-    RefreshAlphaBase(frame, rt, event, force)
-
+local function ApplyAlphaRuntime(frame, rt, force, resetLayers)
     local frameAlpha = rt.baseFrame or 1
     local fgAlpha = rt.baseFG or 1
     local bgAlpha = rt.baseBG or 1
@@ -327,11 +339,14 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
     local portraitAlpha = rt.basePortrait or 1
     local statusAlpha = rt.baseStatus or 1
 
+    local forceLayeredForRange
+    frameAlpha, hpAlpha, healthBgAlpha, forceLayeredForRange = ApplyRangeMul(frame, frameAlpha, hpAlpha, healthBgAlpha)
+
     if _G.MSUF_UnitEditModeActive == true and frameAlpha < 0.35 then
         frameAlpha = 0.35
     end
 
-    local useLayeredApply = rt.layered
+    local useLayeredApply = rt.layered or forceLayeredForRange == true
     if not force
         and frame._msufAlphaLastLayered == useLayeredApply
         and frame._msufAlphaLastFrame == frameAlpha
@@ -342,14 +357,14 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
         and frame._msufAlphaLastHealthBG == healthBgAlpha
         and frame._msufAlphaLastPortrait == portraitAlpha
         and frame._msufAlphaLastStatus == statusAlpha then
-        return
+        return true
     end
 
     if useLayeredApply then
         ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, powerAlpha, healthBgAlpha, portraitAlpha, statusAlpha, force)
     else
         SetFrameAlpha(frame, frameAlpha)
-        if frame._msufAlphaLayeredMode == true or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" then
+        if frame._msufAlphaLayeredMode == true or resetLayers == true then
             ResetLegacyLayerAlphas(frame, force)
         end
     end
@@ -364,6 +379,27 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
     frame._msufAlphaLastHealthBG = healthBgAlpha
     frame._msufAlphaLastPortrait = portraitAlpha
     frame._msufAlphaLastStatus = statusAlpha
+    return true
+end
+
+local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
+    if not frame then
+        return
+    end
+    if not cfg then
+        SetFrameAlpha(frame, 1)
+        ResetLegacyLayerAlphas(frame, true)
+        return
+    end
+    local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_VISUALS"
+        or event == "MSUF_ALPHA" or event == "MSUF_RANGE_FORCE"
+    local rt = CompileAlphaRuntime(frame, cfg, force)
+    if not rt then
+        return
+    end
+
+    RefreshAlphaBase(frame, rt, event, force)
+    ApplyAlphaRuntime(frame, rt, force, event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE")
 end
 
 function Alpha.IsEnabled(frame, spec)
@@ -488,6 +524,33 @@ _G.MSUF_ApplyUnitAlpha = function(frame, key)
     ApplyCompiledAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, "MSUF_ALPHA")
     return true
 end
+
+UF.ApplyRangeModifier = function(frame, mul, force)
+    if not frame then
+        return false
+    end
+    mul = Clamp01(mul, 1)
+    if force ~= true and frame._msufRangeMul == mul then
+        return true
+    end
+    frame._msufRangeMul = mul
+    local spec = frame.MSUFSpec
+    local cfg = spec and spec.alpha
+    if cfg then
+        TrackAlphaFrame(frame, cfg)
+        local rt = frame._msufAlphaRuntime
+        if rt and rt.baseReady == true and frame._msufAlphaRuntimeCfg == cfg then
+            ApplyAlphaRuntime(frame, rt, force == true, false)
+        else
+            ApplyCompiledAlpha(frame, cfg, force == true and "MSUF_RANGE_FORCE" or "MSUF_RANGE")
+        end
+    else
+        SetFrameAlpha(frame, mul)
+    end
+    return true
+end
+
+_G.MSUF_UF_ApplyRangeModifier = UF.ApplyRangeModifier
 
 UF.ApplyAlphaFrame = function(frame, event)
     if not frame then
