@@ -20,7 +20,10 @@ local UnitIsUnit = _G.UnitIsUnit
 local CreateColor = _G.CreateColor
 local C_CurveUtil = _G.C_CurveUtil
 local Enum = _G.Enum
-local issecretvalue = _G.issecretvalue
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
+local PlainTrue = Secrets.PlainTrue or function(value) return value == true or value == 1 end
+local PlainFalse = Secrets.PlainFalse or function(value) return value == false or value == 0 end
 local tonumber = tonumber
 local type = type
 local tostring = tostring
@@ -45,10 +48,6 @@ local TYPE_DEFAULTS = {
     Bleed = { 0.80, 0.10, 0.10 },
 }
 
-local function IsSecret(value)
-    return issecretvalue and issecretvalue(value) or false
-end
-
 local function Number(value, fallback)
     value = tonumber(value)
     if value == nil then return fallback end
@@ -61,16 +60,6 @@ local function Clamp01(value, fallback)
     if value < 0 then return 0 end
     if value > 1 then return 1 end
     return value
-end
-
-local function PlainTrue(value)
-    if IsSecret(value) then return false end
-    return value == true or value == 1
-end
-
-local function PlainFalse(value)
-    if IsSecret(value) then return false end
-    return value == false or value == 0
 end
 
 local function UnitIsFriendly(unit)
@@ -98,8 +87,11 @@ end
 local function AuraInstanceID(data)
     if not data then return nil end
     local auraInstanceID = data.auraInstanceID
+    if IsSecret(auraInstanceID) then return nil end
     if auraInstanceID ~= nil then return auraInstanceID end
-    return data.auraInstanceId
+    auraInstanceID = data.auraInstanceId
+    if IsSecret(auraInstanceID) then return nil end
+    return auraInstanceID
 end
 
 local function ValidDispelName(value)

@@ -376,7 +376,7 @@ local GF_COPY_EXCLUDE = {
 }
 
 local GF_COPY_CATEGORIES = {
-    { key = "general", label = "General", keys = { "enabled", "blizzardFallbackMode", "showPlayer", "showSolo", "clickCastEnabled", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "preserveRaidGroups", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineEnabled", "hideOfflineInCombat", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
+    { key = "general", label = "Basics", keys = { "enabled", "blizzardFallbackMode", "showPlayer", "showSolo", "clickCastEnabled", "width", "height", "spacing", "growth", "groupFilter", "sortMode", "sortByRole", "roleOrder", "playerFirstInRole", "unitsPerColumn", "maxColumns", "preserveRaidGroups", "reverseFill", "smoothFill", "hideInClientScene", "hideOfflineEnabled", "hideOfflineInCombat", "hideOfflineDelay", "tooltipMode", "tooltipModifier", "frameScaleMode", "frameScaleManual", "scaleAt10", "scaleAt20", "scaleAt25", "scaleOver25" } },
     { key = "health", label = "Health & Bars", keys = { "gfBarMode", "healthColorMode", "healthCustomR", "healthCustomG", "healthCustomB", "gfDarkR", "gfDarkG", "gfDarkB", "gfUnifiedR", "gfUnifiedG", "gfUnifiedB", "barTexture", "barBgTexture", "powerBarEnabled", "powerHeight", "showPower", "showPowerText", "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextDelimiter", "powerFontSize", "powerOffsetX", "powerOffsetY", "powerTextLayer", "powerSmoothFill", "powerShowTank", "powerShowHealer", "powerShowDamager", "dispelOverlayEnabled", "dispelOverlayStyle", "dispelOverlayOnHealth", "dispelOverlayAlpha", "dispelOverlayTrigger" } },
     { key = "text", label = "Text & Name", keys = { "showName", "hideNameOnDeadOffline", "nameFontSize", "nameAnchor", "nameOffsetX", "nameOffsetY", "nameTextLayer", "nameColorMode", "nameColorR", "nameColorG", "nameColorB", "nameShortenEnabled", "nameClipSide", "nameMaxChars", "nameNoEllipsis", "showHPText", "hpFontSize", "textLeft", "textCenter", "textRight", "textDelimiter", "hpTextReverse", "hpOffsetX", "hpOffsetY", "textLayer" } },
     { key = "font", label = "Font Override", keys = { "fontOverride", "fontOutline", "useGlobalFontColor", "fontR", "fontG", "fontB" } },
@@ -499,6 +499,7 @@ end
 
 local function SetSectionBadges(sec, specs)
     if W and W.SetCollapsibleBadges then
+        if sec then sec._msuf2CollapsibleBadgesOnlyWhenOpen = true end
         W.SetCollapsibleBadges(sec, specs or {})
     end
 end
@@ -592,9 +593,12 @@ local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
     return notice, text, button
 end
 
-local function ScopeSection(ctx, builder)
+local function ScopeSection(ctx, builder, opts)
+    opts = opts or {}
     local compactTop = (tonumber(builder.width) or 0) < 600
-    local h = compactTop and 72 or 40
+    local hasTopIntent = type(opts.buildTopIntent) == "function"
+    local wrapTopIntent = hasTopIntent and (tonumber(builder.width) or 0) < 900
+    local h = compactTop and (hasTopIntent and 104 or 72) or (wrapTopIntent and 72 or 40)
     local sec = CreateFrame("Frame", nil, builder.parent)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, h)
@@ -608,7 +612,10 @@ local function ScopeSection(ctx, builder)
         local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
         local tx = btn._msuf2TopActive and btn._msuf2TopActiveText or btn._msuf2TopText
         local mul = hover and 1.06 or 1
-        if btn._msuf2Fill then btn._msuf2Fill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 1) end
+        if btn._msuf2Fill then
+            local fill = { min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 1 }
+            if T.SetFillGradient then T.SetFillGradient(btn._msuf2Fill, fill, 0.12, -0.18) else btn._msuf2Fill:SetVertexColor(fill[1], fill[2], fill[3], fill[4]) end
+        end
         if btn._msuf2Edge then btn._msuf2Edge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 1) end
         if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
     end
@@ -670,22 +677,15 @@ local function ScopeSection(ctx, builder)
         end)
     end
 
-    local function ScopeTooltipText(kind)
-        if kind == "party" then
-            return "Use this scope for normal 5-player party layouts."
-        elseif kind == "raid" then
-            return "Use this scope for flexible raid layouts. Mythic Raid has its own scope."
-        elseif kind == "mythicraid" then
-            return "Use this scope for 20-player Mythic Raid layouts."
-        end
-        return ""
-    end
-
     local function SelectScope(kind)
+        local previousScope = M.gfScope
         if type(M.PersistMenuStateValue) == "function" then
             M.PersistMenuStateValue("gfScope", kind or "party")
         else
             M.gfScope = kind or "party"
+        end
+        if previousScope ~= M.gfScope and M.ShowStatusFeedback then
+            M.ShowStatusFeedback(ScopeShortLabel(M.gfScope) .. " scope", "info", 1.1)
         end
         local gf = GF()
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
@@ -697,9 +697,6 @@ local function ScopeSection(ctx, builder)
         end
         RefreshContext(ctx)
     end
-
-    local editing = T.Font(sec, "GameFontNormalSmall", M.Tr("Editing:"), { 0.72, 0.82, 1.00, 1 })
-    editing:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -15)
 
     local scopeBtns = {}
     local previous
@@ -713,20 +710,30 @@ local function ScopeSection(ctx, builder)
             activeBorder = { 0.200, 0.430, 0.850, 0.92 },
         })
         if previous then
-            btn:SetPoint("LEFT", previous, "RIGHT", 4, 0)
+            btn:SetPoint("LEFT", previous, "RIGHT", 6, 0)
         else
-            btn:SetPoint("LEFT", editing, "RIGHT", 8, 2)
+            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, -8)
         end
         btn:SetScript("OnClick", function() SelectScope(info.value) end)
-        AddScopeTooltip(btn, ScopeShortLabel(info.value), ScopeTooltipText(info.value))
         scopeBtns[info.value] = btn
         previous = btn
     end
 
-    local actionY = compactTop and -42 or -10
-    local copy = MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
+    if hasTopIntent then
+        opts.buildTopIntent(sec, {
+            MakeTopButton = MakeTopButton,
+            compact = compactTop,
+            wrapped = wrapTopIntent,
+            lastScopeButton = previous,
+            topY = -8,
+            intentY = wrapTopIntent and -42 or -8,
+        })
+    end
+
+    local actionY = compactTop and (hasTopIntent and -74 or -42) or -10
+    local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", compactTop and 82 or 86, 24)) or MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
-    local edit = MakeTopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128)
+    local edit = (W.RoleButton and W.RoleButton(sec, M.Tr("MSUF Edit Mode"), "primary", compactTop and 118 or 128, 24)) or MakeTopButton(sec, M.Tr("MSUF Edit Mode"), compactTop and 118 or 128)
     edit:SetPoint("RIGHT", copy, "LEFT", -8, 0)
     local reset = MakeTopButton(sec, M.Tr("Reset Scopes"), compactTop and 94 or 104, {
         bg = { 0.070, 0.026, 0.034, 0.94 },
@@ -768,7 +775,11 @@ local function ScopeSection(ctx, builder)
             if gf and type(gf.ResetAllToDefaults) == "function" and gf.ResetAllToDefaults() then
                 RefreshGFPreview()
                 RefreshContext(ctx)
-                print(M.Tr("|cffffd700MSUF:|r Group Frames reset to defaults."))
+                if M.ShowStatusFeedback then
+                    M.ShowStatusFeedback("Group frames reset", "ok", 1.4)
+                elseif print then
+                    print(M.Tr("|cffffd700MSUF:|r Group Frames reset to defaults."))
+                end
             end
         end
         if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
@@ -798,6 +809,7 @@ local function ScopeSection(ctx, builder)
                 _G.MSUF_EM2.State.Enter(key)
             end
         end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(active and "Edit mode off" or "Edit mode on", "info", 1.1) end
         local function RefreshAfterToggle()
             RefreshTop()
             if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
@@ -863,6 +875,9 @@ local function ScopeSection(ctx, builder)
                     local function RunCopy()
                         if CopyGroupSettings(CurrentScope(), info.value, M.gfCopyScopes) then
                             RefreshContext(ctx)
+                            if M.ShowStatusFeedback then
+                                M.ShowStatusFeedback("Copied to " .. ScopeShortLabel(info.value), "ok", 1.3)
+                            end
                         end
                     end
                     if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
@@ -897,6 +912,7 @@ local function ScopeSection(ctx, builder)
                     M.gfCopyScopes[cat.key] = true
                     if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(true) end
                 end
+                if M.ShowStatusFeedback then M.ShowStatusFeedback("All copy categories selected", "info", 1.1) end
             end)
             local noneBtn = MakeTopButton(copyPopup, M.Tr("None"), 58)
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
@@ -906,6 +922,7 @@ local function ScopeSection(ctx, builder)
                     M.gfCopyScopes[cat.key] = false
                     if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(false) end
                 end
+                if M.ShowStatusFeedback then M.ShowStatusFeedback("Copy categories cleared", "info", 1.1) end
             end)
         end
 
@@ -1691,10 +1708,6 @@ local function BindNestedToggle(ctx, widget, getTable, key, default, mode)
             if tbl[key] == (v and true or false) then return end
             tbl[key] = v and true or false
             QueueGF(CurrentScope(), mode or "visual")
-            local gp = M.GlobalPage
-            if gp and type(gp.StopGroupDispelGlowForBlizzardConflict) == "function" then
-                gp.StopGroupDispelGlowForBlizzardConflict(CurrentScope())
-            end
             if ctx and ctx.refreshers then
                 for i = 1, #ctx.refreshers do
                     local fn = ctx.refreshers[i]
@@ -1731,10 +1744,6 @@ local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
             local tbl = getTable()
             tbl[key] = v or default
             QueueGF(CurrentScope(), mode or "visual")
-            local gp = M.GlobalPage
-            if gp and type(gp.StopGroupDispelGlowForBlizzardConflict) == "function" then
-                gp.StopGroupDispelGlowForBlizzardConflict(CurrentScope())
-            end
         end)
     return widget
 end

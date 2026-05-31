@@ -223,16 +223,6 @@ local function NormalizeDispelOverlayStyle(value)
     return "FULL"
 end
 
-local function NormalizeDispelGlowStyle(value)
-    value = tostring(value or "PIXEL"):upper()
-    if value == "AUTOCAST" or value == "SHINE" or value == "AUTOCAST_SHINE" then
-        return "AUTOCAST"
-    elseif value == "PROC" or value == "PROC_GLOW" then
-        return "PROC"
-    end
-    return "PIXEL"
-end
-
 local function NormalizeRangeFadeLayerMode(value)
     if value == "health" or value == "hp" or value == "HP" then
         return "health"
@@ -625,11 +615,6 @@ local function CompileDispelVisual(kind, conf)
         typeBleedR = Num(general.dispelTypeBleedR, 0.80),
         typeBleedG = Num(general.dispelTypeBleedG, 0.10),
         typeBleedB = Num(general.dispelTypeBleedB, 0.10),
-        glowEnabled = GroupScopeValue(kind, conf, general, "hlDispelGlowEnabled", true) ~= false,
-        glowStyle = NormalizeDispelGlowStyle(GroupScopeValue(kind, conf, general, "hlDispelGlowStyle", "PIXEL")),
-        glowLines = Num(GroupScopeValue(kind, conf, general, "hlDispelGlowLines", 8), 8),
-        glowFrequency = Num(GroupScopeValue(kind, conf, general, "hlDispelGlowFrequency", 0.25), 0.25),
-        glowThickness = Num(GroupScopeValue(kind, conf, general, "hlDispelGlowThickness", 2), 2),
     }
 end
 
@@ -944,12 +929,14 @@ local compiledSpecCache = GF._compiledSpec or {}
 GF._compiledSpec = compiledSpecCache
 GF._compiledSpecSerial = GF._compiledSpecSerial or 1
 
-local function CompileSpecUncached(kind, frame, unit)
+local function CompileSpecUncached(kind, frame, unit, conf)
     kind = kind or "party"
-    if GF.EnsureDB then
-        GF.EnsureDB()
+    if not conf then
+        if GF.EnsureDB then
+            GF.EnsureDB()
+        end
+        conf = GF.GetConf and GF.GetConf(kind) or {}
     end
-    local conf = GF.GetConf and GF.GetConf(kind) or {}
     unit = unit or (frame and frame.unit)
 
     local w, h = 80, 32
@@ -1160,7 +1147,10 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
         spec = {}
         frame._msufGFSpec = spec
     end
-    CopyShallow(spec, base)
+    if frame._msufGFSpecBase ~= base then
+        CopyShallow(spec, base)
+        frame._msufGFSpecBase = base
+    end
     spec.unit = unit
     spec.key = "gf_" .. kind
     spec.groupKind = kind
@@ -1172,7 +1162,10 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
         power = {}
         frame._msufGFPowerSpec = power
     end
-    CopyShallow(power, base.power)
+    if frame._msufGFPowerSpecBase ~= base.power then
+        CopyShallow(power, base.power)
+        frame._msufGFPowerSpecBase = base.power
+    end
     power.enabled = powerHeight > 0
     power.height = powerHeight
     spec.power = power
@@ -1182,7 +1175,10 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
         status = {}
         frame._msufGFStatusSpec = status
     end
-    CopyShallow(status, base.status)
+    if frame._msufGFStatusSpecBase ~= base.status then
+        CopyShallow(status, base.status)
+        frame._msufGFStatusSpecBase = base.status
+    end
     status.roleValue = role
     spec.status = status
     return spec
@@ -1190,14 +1186,22 @@ end
 
 function GF.CompileSpec(kind, frame, unit)
     kind = kind or "party"
-    if GF.EnsureDB then
-        GF.EnsureDB()
-    end
-    local conf = GF.GetConf and GF.GetConf(kind) or {}
     local base = compiledSpecCache[kind]
+    local conf = base and base._msufGFConf
     if not base then
-        base = CompileSpecUncached(kind, nil, nil)
+        if GF.EnsureDB then
+            GF.EnsureDB()
+        end
+        conf = GF.GetConf and GF.GetConf(kind) or {}
+        base = CompileSpecUncached(kind, nil, nil, conf)
+        base._msufGFConf = conf
         compiledSpecCache[kind] = base
+    elseif not conf then
+        if GF.EnsureDB then
+            GF.EnsureDB()
+        end
+        conf = GF.GetConf and GF.GetConf(kind) or {}
+        base._msufGFConf = conf
     end
     unit = unit or (frame and frame.unit)
     if frame then

@@ -58,7 +58,7 @@ function Normalize-Version {
     $value = $RawVersion.Trim()
     $value = $value -replace '^refs/tags/', ''
     $value = $value -replace '^v(?=\d)', ''
-    if ($value -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+    if ($value -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|preview|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
         $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
         if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
         $number = ""

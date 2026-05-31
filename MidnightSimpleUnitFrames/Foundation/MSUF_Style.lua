@@ -610,13 +610,11 @@ local function _MSUF_LooksLikeEditModePopup(f)
   if f.GetObjectType and f:GetObjectType() ~= "Frame" then  return false end
   local n = f:GetName()
   if type(n) ~= "string" then  return false end
-  --- Hard allow-list (root popups)
-  if n == "MSUF_EditPositionPopup" then  return true end
-  if n == "MSUF_CastbarPositionPopup" or n == "MSUF_BossCastbarPositionPopup" then  return true end
-  --- Auras 2.0 Edit Mode popup (target auras, etc.)
-  if n == "MSUF_AuraPositionPopup" then  return true end
+  --- EM2 owns the edit-mode popup surface now.
+  if n == "MSUF_EM2_UnitPopup" or n == "MSUF_EM2_CastPopup" or n == "MSUF_EM2_AuraPopup" then return true end
+  if n:find("MSUF_EM2_GFPopup_", 1, true) then return true end
   --- Allow additional MSUF edit popups by prefix (but still require popup-ish names)
-  if n:find("MSUF_Edit", 1, true) then
+  if n:find("MSUF_EM2_", 1, true) or n:find("MSUF_Edit", 1, true) then
     if n:find("Popup", 1, true) or n:find("Position", 1, true) then
        return true
     end
@@ -625,17 +623,7 @@ local function _MSUF_LooksLikeEditModePopup(f)
 end
 function Style.ScanAndSkinEditMode()
   if not Style.IsEnabled() then  return end
-  --- Known globals (cheap)
-  local known = {
-    _G.MSUF_EditPositionPopup,
-    _G.MSUF_CastbarPositionPopup,
-    _G.MSUF_BossCastbarPositionPopup,
-    _G.MSUF_AuraPositionPopup,
-  }
-  for _, f in ipairs(known) do
-    if f then Style.SkinEditModePopupFrame(f) end
-  end
-  --- Fallback: enumerate frames to catch lazily created popups (bounded)
+  --- Enumerate frames to catch lazily created EM2 popups (bounded).
   if type(_G.EnumerateFrames) == "function" then
     local f = _G.EnumerateFrames()
     local safety = 0
@@ -674,8 +662,7 @@ function Style.InstallEditModeAutoSkin()
   HookIfExists("MSUF_ExitEditMode")
   HookIfExists("MSUF_OpenPositionPopup")
   HookIfExists("MSUF_OpenCastbarPositionPopup")
-  HookIfExists("MSUF_OpenBossCastbarPositionPopup")
-  HookIfExists("MSUF_OpenAuraPositionPopup")
+  HookIfExists("MSUF_OpenAuras3PositionPopup")
   --- Also retry on addon load (handles different load orders / LoD)
   local boot = CreateFrame("Frame")
   boot:RegisterEvent("ADDON_LOADED")
@@ -686,8 +673,7 @@ function Style.InstallEditModeAutoSkin()
     HookIfExists("MSUF_ExitEditMode")
     HookIfExists("MSUF_OpenPositionPopup")
     HookIfExists("MSUF_OpenCastbarPositionPopup")
-    HookIfExists("MSUF_OpenBossCastbarPositionPopup")
-    HookIfExists("MSUF_OpenAuraPositionPopup")
+    HookIfExists("MSUF_OpenAuras3PositionPopup")
     --- A couple of delayed passes to catch frames created after login/open
     if C_Timer and C_Timer.After then
       C_Timer.After(0, Style.ScanAndSkinEditMode)

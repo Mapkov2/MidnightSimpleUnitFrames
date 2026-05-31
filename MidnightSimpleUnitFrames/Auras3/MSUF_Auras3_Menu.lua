@@ -192,6 +192,7 @@ end
 
 local function BindSwitch(ctx, parent, label, x, y, width, getValue, setValue, unit, reason, refreshControls)
     local widget = W.SwitchAt(parent, label, x, y, width or 180)
+    if W.AttachEditFocus and unit then W.AttachEditFocus(widget, unit, "auras", nil, { source = "menu2-auras" }) end
     M.BindToggle(ctx, widget,
         function() return getValue() and true or false end,
         function(v)
@@ -204,6 +205,7 @@ end
 local function BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, getValue, setValue, unit, reason)
     local widget = W.Slider(parent, label, minVal, maxVal, step, width)
     W.MoveWidget(widget, parent, x, y, width)
+    if W.AttachEditFocus and unit then W.AttachEditFocus(widget, unit, "auras", nil, { source = "menu2-auras" }) end
     M.BindSlider(ctx, widget,
         function() return tonumber(getValue()) or 0 end,
         function(v)
@@ -216,6 +218,7 @@ end
 local function BindDropdown(ctx, parent, label, x, y, values, width, getValue, setValue, unit, reason, refreshControls)
     local widget = W.Dropdown(parent, label, values, width)
     W.MoveWidget(widget, parent, x, y, width)
+    if W.AttachEditFocus and unit then W.AttachEditFocus(widget, unit, "auras", nil, { source = "menu2-auras" }) end
     M.BindDropdown(ctx, widget,
         function() return getValue() end,
         function(v)
@@ -228,6 +231,7 @@ end
 local function BindTextInput(ctx, parent, label, x, y, width, getValue, setValue, unit, reason, refreshControls)
     local widget = W.TextInput(parent, label, width)
     W.MoveWidget(widget, parent, x, y, width)
+    if W.AttachEditFocus and unit then W.AttachEditFocus(widget, unit, "auras", nil, { source = "menu2-auras" }) end
     M.BindTextInput(ctx, widget,
         function() return getValue() or "" end,
         function(v)
@@ -1035,7 +1039,7 @@ local function BuildGroupFrameDisplayControls(ctx, parent, x, y, width)
         function() GFApplyBlizzardLayering(scope, true) end)
     AddTooltip(buffChk, "Use Blizzard: Buffs", "Off means MSUF Custom Buffs can run while Blizzard rendering is still active.")
     AddTooltip(debuffChk, "Use Blizzard: Debuffs", "When enabled, WoW owns debuff icons. MSUF custom filtering only applies to MSUF Custom icons.")
-    AddTooltip(dispelBorder, "MSUF Dispel Highlights", "Keeps Blizzard aura icons active, but lets MSUF draw dispel border, glow and overlay visuals.")
+    AddTooltip(dispelBorder, "MSUF Dispel Highlights", "Keeps Blizzard aura icons active, but lets MSUF draw dispel border and overlay visuals.")
 
     M.AddRefresher(ctx, function()
         local root = GFReadRoot(scope)

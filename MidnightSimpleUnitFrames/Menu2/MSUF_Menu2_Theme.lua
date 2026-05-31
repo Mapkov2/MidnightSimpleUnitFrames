@@ -32,50 +32,53 @@ T.media.gradV = T.media.gradV or ADDON_PATH .. "Media\\MSUF_Grad_V.tga"
 T.media.gradVRev = T.media.gradVRev or ADDON_PATH .. "Media\\MSUF_Grad_V_Rev.tga"
 
 T.colors = {
-    bg = { 0.080, 0.090, 0.160, 0.980 },
-    panel = { 0.080, 0.090, 0.160, 0.300 },
-    panelNav = { 0.080, 0.090, 0.160, 0.400 },
-    panel2 = { 0.065, 0.075, 0.140, 0.950 },
-    header = { 0.080, 0.090, 0.160, 0.300 },
-    border = { 0.120, 0.140, 0.280, 0.800 },
-    borderSoft = { 0.120, 0.140, 0.260, 0.400 },
-    cardBorder = { 0.120, 0.140, 0.260, 0.400 },
-    text = { 0.840, 0.880, 1.000, 1.00 },
-    title = { 0.800, 0.880, 1.000, 1.00 },
-    muted = { 0.700, 0.745, 0.860, 0.92 },
-    dim = { 0.570, 0.650, 0.800, 0.90 },
-    accent = { 0.220, 0.780, 0.940, 1.00 },
+    bg = { 0.040, 0.046, 0.064, 0.985 },
+    panel = { 0.040, 0.048, 0.070, 0.300 },
+    panelNav = { 0.038, 0.048, 0.076, 0.390 },
+    panel2 = { 0.038, 0.046, 0.072, 0.955 },
+    header = { 0.044, 0.052, 0.080, 0.280 },
+    border = { 0.105, 0.130, 0.220, 0.660 },
+    borderSoft = { 0.105, 0.130, 0.220, 0.300 },
+    cardBorder = { 0.105, 0.130, 0.220, 0.320 },
+    text = { 0.880, 0.910, 1.000, 1.00 },
+    title = { 0.890, 0.940, 1.000, 1.00 },
+    muted = { 0.690, 0.735, 0.840, 0.90 },
+    dim = { 0.500, 0.580, 0.720, 0.86 },
+    accent = { 0.180, 0.720, 0.900, 1.00 },
     accent2 = { 0.965, 0.760, 0.150, 1.00 },
     danger = { 0.880, 0.280, 0.280, 1.00 },
     ok = { 0.240, 0.820, 0.460, 1.00 },
-    pillBase = { 0.060, 0.070, 0.130, 0.88 },
-    pillBaseSolid = { 0.060, 0.070, 0.130, 0.92 },
-    pillHover = { 0.080, 0.090, 0.160, 0.95 },
-    pillActive = { 0.120, 0.150, 0.320, 0.95 },
-    pillEdge = { 0.150, 0.175, 0.330, 0.45 },
-    pillEdgeButton = { 0.150, 0.175, 0.330, 0.60 },
-    pillEdgeHover = { 0.140, 0.220, 0.600, 0.75 },
-    pillEdgeActive = { 0.200, 0.340, 0.800, 0.85 },
-    pillText = { 0.800, 0.880, 1.000, 0.94 },
+    pillBase = { 0.050, 0.062, 0.105, 0.88 },
+    pillBaseSolid = { 0.052, 0.066, 0.112, 0.92 },
+    pillHover = { 0.068, 0.084, 0.140, 0.95 },
+    pillActive = { 0.120, 0.185, 0.430, 0.95 },
+    pillEdge = { 0.130, 0.165, 0.290, 0.38 },
+    pillEdgeButton = { 0.130, 0.165, 0.290, 0.52 },
+    pillEdgeHover = { 0.150, 0.280, 0.540, 0.66 },
+    pillEdgeActive = { 0.210, 0.420, 0.860, 0.76 },
+    pillText = { 0.820, 0.890, 1.000, 0.94 },
     pillTextActive = { 0.920, 0.960, 1.000, 1.00 },
-    navPillBase = { 0.085, 0.115, 0.220, 0.92 },
-    navPillBaseSolid = { 0.095, 0.125, 0.240, 0.94 },
-    navPillHover = { 0.115, 0.155, 0.310, 0.96 },
-    navPillActive = { 0.255, 0.395, 0.960, 0.99 },
-    navPillEdge = { 0.160, 0.210, 0.410, 0.48 },
-    navPillEdgeHover = { 0.270, 0.420, 0.880, 0.72 },
-    navPillEdgeActive = { 0.430, 0.600, 1.000, 0.88 },
+    navPillBase = { 0.064, 0.088, 0.170, 0.92 },
+    navPillBaseSolid = { 0.072, 0.098, 0.188, 0.94 },
+    navPillHover = { 0.094, 0.128, 0.252, 0.96 },
+    navPillActive = { 0.235, 0.375, 0.920, 0.99 },
+    navPillEdge = { 0.135, 0.180, 0.350, 0.42 },
+    navPillEdgeHover = { 0.220, 0.350, 0.760, 0.62 },
+    navPillEdgeActive = { 0.380, 0.560, 0.960, 0.80 },
     navText = { 0.840, 0.900, 1.000, 0.96 },
     navTextActive = { 0.970, 0.990, 1.000, 1.00 },
     navHeaderText = { 0.680, 0.780, 1.000, 0.96 },
     navHeaderHover = { 0.780, 0.860, 1.000, 1.00 },
     navArrowOpen = { 1.000, 0.760, 0.250, 1.00 },
     navArrowClosed = { 1.000, 0.560, 0.060, 1.00 },
-    glassShell = { 0.040, 0.050, 0.095, 0.940 },
-    glassRail = { 0.040, 0.052, 0.100, 0.740 },
-    glassHost = { 0.045, 0.056, 0.105, 0.660 },
-    glassStatus = { 0.048, 0.060, 0.115, 0.560 },
-    glassPopup = { 0.010, 0.014, 0.026, 0.940 },
+    glassShell = { 0.026, 0.032, 0.052, 0.955 },
+    glassRail = { 0.028, 0.036, 0.064, 0.760 },
+    glassHost = { 0.030, 0.038, 0.066, 0.680 },
+    glassStatus = { 0.032, 0.040, 0.070, 0.560 },
+    glassPopup = { 0.008, 0.012, 0.022, 0.950 },
+    guide = { 0.180, 0.720, 0.900, 0.82 },
+    focus = { 0.115, 0.220, 0.460, 0.62 },
+    warning = { 0.920, 0.680, 0.250, 1.00 },
 }
 
 T.fontBump = T.fontBump or 1
@@ -222,11 +225,95 @@ local function SetColor(tex, c)
 end
 T.SetColor = SetColor
 
+local WHITE8 = "Interface\\Buttons\\WHITE8X8"
+
 local function SmoothTexture(tex)
     if not tex then return end
     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
+
+local function Clamp01(value)
+    value = tonumber(value) or 0
+    if value < 0 then return 0 end
+    if value > 1 then return 1 end
+    return value
+end
+
+local function ShadeColor(c, amount, alphaMul)
+    c = c or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
+    amount = tonumber(amount) or 0
+    local r, g, b = c[1] or 0, c[2] or 0, c[3] or 0
+    if amount >= 0 then
+        r = r + (1 - r) * amount
+        g = g + (1 - g) * amount
+        b = b + (1 - b) * amount
+    else
+        local f = 1 + amount
+        r, g, b = r * f, g * f, b * f
+    end
+    return {
+        Clamp01(r),
+        Clamp01(g),
+        Clamp01(b),
+        Clamp01((c[4] or 1) * (alphaMul or 1)),
+    }
+end
+T.ShadeColor = ShadeColor
+
+local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preserveTexture)
+    if not tex then return false end
+    fromColor = fromColor or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
+    toColor = toColor or fromColor
+    orientation = orientation or "VERTICAL"
+    if not preserveTexture and tex.SetTexture then
+        tex:SetTexture(WHITE8)
+        if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+    end
+    if tex.SetGradientAlpha then
+        local ok = pcall(tex.SetGradientAlpha, tex, orientation,
+            fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1,
+            toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1)
+        if ok then return true end
+    end
+    if tex.SetGradient and _G.CreateColor then
+        local ok = pcall(tex.SetGradient, tex, orientation,
+            _G.CreateColor(fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1),
+            _G.CreateColor(toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1))
+        if ok then return true end
+    end
+    if tex.SetVertexColor then
+        tex:SetVertexColor(
+            ((fromColor[1] or 0) + (toColor[1] or 0)) * 0.5,
+            ((fromColor[2] or 0) + (toColor[2] or 0)) * 0.5,
+            ((fromColor[3] or 0) + (toColor[3] or 0)) * 0.5,
+            ((fromColor[4] or 1) + (toColor[4] or 1)) * 0.5)
+    end
+    return false
+end
+T.ApplyTextureGradient = ApplyTextureGradient
+
+local function ApplyGradientToParts(parts, orientation, fromColor, toColor)
+    if not parts then return end
+    for i = 1, #parts do
+        ApplyTextureGradient(parts[i], orientation, fromColor, toColor, true)
+    end
+end
+
+local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMul)
+    if not fill then return end
+    baseColor = baseColor or T.colors.pillBase
+    local top = ShadeColor(baseColor, amountTop or 0.16, alphaMul)
+    local bottom = ShadeColor(baseColor, amountBottom or -0.20, alphaMul)
+    if fill._parts then
+        ApplyGradientToParts(fill._parts, "VERTICAL", top, bottom)
+    elseif fill.SetGradientAlpha or fill.SetGradient then
+        ApplyTextureGradient(fill, "VERTICAL", top, bottom, false)
+    elseif fill.SetVertexColor then
+        fill:SetVertexColor(baseColor[1], baseColor[2], baseColor[3], (baseColor[4] or 1) * (alphaMul or 1))
+    end
+end
+T.SetFillGradient = SetFillGradient
 
 function T.StyleFontString(fs, color, bump)
     if not fs then return fs end
@@ -383,27 +470,27 @@ end
 
 local GLASS_VARIANTS = {
     shell = {
-        tint = { 0.026, 0.034, 0.068, 0.22 },
-        wash = { 0.080, 0.120, 0.220, 0.090 },
-        depth = { 0.015, 0.020, 0.050, 0.16 },
-        grain = { 0.070, 0.085, 0.145, 0.060 },
-        top = { 0.270, 0.720, 1.000, 0.24 },
-        bottom = { 0.000, 0.000, 0.000, 0.30 },
-    },
-    rail = {
-        tint = { 0.018, 0.026, 0.056, 0.18 },
-        wash = { 0.070, 0.100, 0.210, 0.085 },
-        grain = { 0.060, 0.070, 0.130, 0.055 },
-        top = { 0.260, 0.650, 1.000, 0.18 },
+        tint = { 0.020, 0.026, 0.048, 0.18 },
+        wash = { 0.070, 0.105, 0.190, 0.070 },
+        depth = { 0.010, 0.014, 0.034, 0.14 },
+        grain = { 0.060, 0.070, 0.115, 0.046 },
+        top = { 0.220, 0.620, 0.900, 0.18 },
         bottom = { 0.000, 0.000, 0.000, 0.24 },
     },
+    rail = {
+        tint = { 0.016, 0.024, 0.048, 0.16 },
+        wash = { 0.058, 0.088, 0.180, 0.065 },
+        grain = { 0.050, 0.060, 0.108, 0.044 },
+        top = { 0.210, 0.560, 0.860, 0.14 },
+        bottom = { 0.000, 0.000, 0.000, 0.20 },
+    },
     host = {
-        tint = { 0.020, 0.030, 0.065, 0.160 },
-        wash = { 0.070, 0.110, 0.220, 0.075 },
-        depth = { 0.020, 0.018, 0.060, 0.120 },
-        grain = { 0.070, 0.065, 0.130, 0.045 },
-        top = { 0.260, 0.720, 1.000, 0.16 },
-        bottom = { 0.000, 0.000, 0.000, 0.26 },
+        tint = { 0.016, 0.024, 0.052, 0.135 },
+        wash = { 0.058, 0.094, 0.190, 0.058 },
+        depth = { 0.012, 0.014, 0.040, 0.105 },
+        grain = { 0.052, 0.058, 0.108, 0.036 },
+        top = { 0.210, 0.610, 0.900, 0.12 },
+        bottom = { 0.000, 0.000, 0.000, 0.21 },
     },
     status = {
         tint = { 0.020, 0.030, 0.060, 0.20 },
@@ -412,40 +499,64 @@ local GLASS_VARIANTS = {
         bottom = { 0.000, 0.000, 0.000, 0.20 },
     },
     popup = {
-        tint = { 0.010, 0.014, 0.026, 0.22 },
-        wash = { 0.060, 0.110, 0.220, 0.100 },
-        grain = { 0.070, 0.080, 0.130, 0.060 },
-        top = { 0.300, 0.820, 1.000, 0.26 },
-        bottom = { 0.000, 0.000, 0.000, 0.28 },
+        tint = { 0.008, 0.012, 0.024, 0.20 },
+        wash = { 0.050, 0.090, 0.180, 0.084 },
+        grain = { 0.060, 0.070, 0.115, 0.048 },
+        top = { 0.230, 0.680, 0.920, 0.20 },
+        bottom = { 0.000, 0.000, 0.000, 0.24 },
     },
     card = {
-        tint = { 0.014, 0.020, 0.040, 0.120 },
-        wash = { 0.045, 0.080, 0.160, 0.045 },
-        top = { 0.250, 0.640, 0.920, 0.12 },
-        bottom = { 0.000, 0.000, 0.000, 0.16 },
+        tint = { 0.012, 0.018, 0.034, 0.105 },
+        wash = { 0.038, 0.066, 0.132, 0.036 },
+        top = { 0.200, 0.560, 0.820, 0.08 },
+        bottom = { 0.000, 0.000, 0.000, 0.14 },
     },
 }
+
+T.gradients = T.gradients or {}
+local function DefaultGradient(key, spec)
+    if T.gradients[key] == nil then T.gradients[key] = spec end
+end
+DefaultGradient("shell", { orientation = "VERTICAL", from = { 0.070, 0.096, 0.170, 0.40 }, to = { 0.008, 0.012, 0.026, 0.58 }, inset = 3 })
+DefaultGradient("rail", { orientation = "VERTICAL", from = { 0.060, 0.088, 0.170, 0.32 }, to = { 0.010, 0.014, 0.030, 0.46 }, inset = 3 })
+DefaultGradient("host", { orientation = "VERTICAL", from = { 0.052, 0.080, 0.160, 0.28 }, to = { 0.008, 0.012, 0.028, 0.40 }, inset = 3 })
+DefaultGradient("status", { orientation = "VERTICAL", from = { 0.070, 0.110, 0.220, 0.34 }, to = { 0.010, 0.014, 0.030, 0.42 }, inset = 2 })
+DefaultGradient("card", { orientation = "VERTICAL", from = { 0.060, 0.080, 0.142, 0.22 }, to = { 0.006, 0.010, 0.024, 0.34 }, inset = 2 })
+DefaultGradient("popup", { orientation = "VERTICAL", from = { 0.055, 0.088, 0.175, 0.38 }, to = { 0.004, 0.006, 0.014, 0.54 }, inset = 2 })
+DefaultGradient("guide", { orientation = "VERTICAL", from = { 0.090, 0.220, 0.310, 0.24 }, to = { 0.006, 0.020, 0.035, 0.32 }, inset = 2 })
+DefaultGradient("warning", { orientation = "VERTICAL", from = { 0.260, 0.180, 0.080, 0.26 }, to = { 0.044, 0.028, 0.012, 0.36 }, inset = 2 })
+DefaultGradient("button", { orientation = "VERTICAL", amountTop = 0.16, amountBottom = -0.20 })
+DefaultGradient("sliderFill", { orientation = "HORIZONTAL", from = { 0.235, 0.820, 1.000, 0.96 }, to = { 0.115, 0.560, 0.760, 0.86 } })
 
 T.motion = T.motion or {}
 local function DefaultMotion(key, value)
     if T.motion[key] == nil then T.motion[key] = value end
 end
-DefaultMotion("fast", 0.085)
-DefaultMotion("standard", 0.120)
-DefaultMotion("soft", 0.160)
-DefaultMotion("dropdownIn", 0.105)
-DefaultMotion("dropdownOut", 0.085)
-DefaultMotion("popupIn", 0.120)
-DefaultMotion("popupOut", 0.100)
-DefaultMotion("focusIn", 0.135)
-DefaultMotion("focusOut", 0.110)
-DefaultMotion("accordionIn", 0.120)
-DefaultMotion("accordionOut", 0.095)
-DefaultMotion("contentIn", 0.105)
-DefaultMotion("contentOut", 0.085)
-DefaultMotion("controlFocusIn", 0.085)
-DefaultMotion("controlFocusOut", 0.080)
-DefaultMotion("controlFeedback", 0.145)
+DefaultMotion("fast", 0.075)
+DefaultMotion("standard", 0.105)
+DefaultMotion("soft", 0.150)
+DefaultMotion("dropdownIn", 0.095)
+DefaultMotion("dropdownOut", 0.075)
+DefaultMotion("popupIn", 0.105)
+DefaultMotion("popupOut", 0.085)
+DefaultMotion("focusIn", 0.095)
+DefaultMotion("focusOut", 0.080)
+DefaultMotion("accordionIn", 0.135)
+DefaultMotion("accordionOut", 0.105)
+DefaultMotion("contentIn", 0.095)
+DefaultMotion("contentOut", 0.075)
+DefaultMotion("controlFocusIn", 0.060)
+DefaultMotion("controlFocusOut", 0.055)
+DefaultMotion("controlFeedback", 0.100)
+
+T.motionPolicy = T.motionPolicy or {}
+local function DefaultMotionPolicy(key, value)
+    if T.motionPolicy[key] == nil then T.motionPolicy[key] = value end
+end
+DefaultMotionPolicy("min", 0.045)
+DefaultMotionPolicy("max", 0.160)
+DefaultMotionPolicy("popupScaleFrom", 0.988)
+DefaultMotionPolicy("popupScaleOut", 0.994)
 
 T.dropdownMotion = T.dropdownMotion or {}
 if T.dropdownMotion.listFadeIn == nil then T.dropdownMotion.listFadeIn = T.motion.dropdownIn end
@@ -459,8 +570,8 @@ local function DefaultMotionProfile(key, spec)
 end
 DefaultMotionProfile("dropdownIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "dropdownIn", smoothing = "OUT" })
 DefaultMotionProfile("dropdownOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "dropdownOut", smoothing = "IN" })
-DefaultMotionProfile("popupIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "popupIn", smoothing = "OUT" })
-DefaultMotionProfile("popupOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "popupOut", smoothing = "IN" })
+DefaultMotionProfile("popupIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "popupIn", smoothing = "OUT", scaleFrom = T.motionPolicy.popupScaleFrom, scaleTo = 1, scaleOrigin = "CENTER" })
+DefaultMotionProfile("popupOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "popupOut", smoothing = "IN", scaleFrom = 1, scaleTo = T.motionPolicy.popupScaleOut, scaleOrigin = "CENTER" })
 DefaultMotionProfile("focusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "focusIn", smoothing = "OUT" })
 DefaultMotionProfile("focusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "focusOut", smoothing = "IN" })
 DefaultMotionProfile("accordionIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "accordionIn", smoothing = "OUT" })
@@ -475,24 +586,32 @@ T.materials = T.materials or {}
 local function DefaultMaterial(key, spec)
     if T.materials[key] == nil then T.materials[key] = spec end
 end
-DefaultMaterial("shell", { bg = T.colors.glassShell, border = T.colors.border, glass = "shell" })
-DefaultMaterial("rail", { bg = T.colors.glassRail, border = T.colors.borderSoft, glass = "rail" })
-DefaultMaterial("host", { bg = T.colors.glassHost, border = T.colors.borderSoft, glass = "host" })
-DefaultMaterial("status", { bg = T.colors.glassStatus, border = T.colors.borderSoft, glass = "status" })
-DefaultMaterial("card", { bg = T.colors.panel2, border = T.colors.cardBorder or T.colors.borderSoft, glass = "card" })
-DefaultMaterial("popup", { bg = T.colors.glassPopup, border = { 0.140, 0.220, 0.600, 0.88 }, glass = "popup" })
+DefaultMaterial("shell", { bg = T.colors.glassShell, border = T.colors.border, glass = "shell", gradient = "shell" })
+DefaultMaterial("rail", { bg = T.colors.glassRail, border = T.colors.borderSoft, glass = "rail", gradient = "rail" })
+DefaultMaterial("host", { bg = T.colors.glassHost, border = T.colors.borderSoft, glass = "host", gradient = "host" })
+DefaultMaterial("status", { bg = T.colors.glassStatus, border = T.colors.borderSoft, glass = "status", gradient = "status" })
+DefaultMaterial("card", { bg = T.colors.panel2, border = T.colors.cardBorder or T.colors.borderSoft, glass = "card", gradient = "card" })
+DefaultMaterial("popup", { bg = T.colors.glassPopup, border = { 0.140, 0.220, 0.600, 0.88 }, glass = "popup", gradient = "popup" })
 DefaultMaterial("focus", { veil = "dropdown" })
+DefaultMaterial("guide", { bg = { 0.018, 0.052, 0.082, 0.28 }, border = T.colors.guide, glass = "card", gradient = "guide" })
+DefaultMaterial("warning", { bg = { 0.105, 0.082, 0.052, 0.34 }, border = { 0.480, 0.360, 0.200, 0.62 }, glass = "card", gradient = "warning" })
 
 -- WoW addon frames cannot blur what is already behind them, so dropdown focus uses
 -- a shared neutral veil instead of page-specific fake blur layers.
 T.focusVeils = T.focusVeils or {}
 T.focusVeils.dropdown = T.focusVeils.dropdown or {
-    { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.180 } },
-    { key = "_msuf2FocusHaze", layer = "BACKGROUND", subLevel = 1, color = { 0.010, 0.014, 0.026, 0.055 } },
-    { key = "_msuf2FocusSmearA", layer = "BORDER", subLevel = 0, texture = "bgSmooth", points = { -5, 5, 5, -5 }, color = { 0.018, 0.026, 0.052, 0.040 }, blend = "BLEND" },
-    { key = "_msuf2FocusSmearB", layer = "BORDER", subLevel = 1, texture = "bgSmooth", points = { 4, -4, -4, 4 }, texCoord = { 0, 0, 1, 0, 0, 1, 1, 1 }, color = { 0.014, 0.022, 0.046, 0.032 }, blend = "BLEND" },
-    { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 2, texture = "bgSmooth", color = { 0.024, 0.034, 0.068, 0.050 }, blend = "BLEND" },
-    { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 3, texture = "bgCharcoal", color = { 0.035, 0.040, 0.070, 0.070 }, blend = "BLEND" },
+    { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.145 } },
+    { key = "_msuf2FocusHaze", layer = "BACKGROUND", subLevel = 1, color = { 0.010, 0.014, 0.026, 0.045 } },
+    { key = "_msuf2FocusSmearA", layer = "BORDER", subLevel = 0, texture = "bgSmooth", points = { -5, 5, 5, -5 }, color = { 0.018, 0.026, 0.052, 0.032 }, blend = "BLEND" },
+    { key = "_msuf2FocusSmearB", layer = "BORDER", subLevel = 1, texture = "bgSmooth", points = { 4, -4, -4, 4 }, texCoord = { 0, 0, 1, 0, 0, 1, 1, 1 }, color = { 0.014, 0.022, 0.046, 0.026 }, blend = "BLEND" },
+    { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 2, texture = "bgSmooth", color = { 0.024, 0.034, 0.068, 0.040 }, blend = "BLEND" },
+    { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 3, texture = "bgCharcoal", color = { 0.035, 0.040, 0.070, 0.052 }, blend = "BLEND" },
+}
+T.focusVeils.edit = T.focusVeils.edit or {
+    { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.105 } },
+    { key = "_msuf2FocusHaze", layer = "BACKGROUND", subLevel = 1, color = { 0.010, 0.014, 0.026, 0.040 } },
+    { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 0, texture = "bgSmooth", color = { 0.018, 0.030, 0.060, 0.038 }, blend = "BLEND" },
+    { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 1, texture = "bgCharcoal", color = { 0.030, 0.035, 0.060, 0.042 }, blend = "BLEND" },
 }
 
 local function ColorTexture(tex, c)
@@ -550,12 +669,30 @@ function T.ApplyFocusVeil(frame, variant)
     return frame
 end
 
+local function ClampMotionDuration(value, fallback)
+    if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then return 0.001 end
+    value = tonumber(value) or tonumber(fallback) or T.motion.standard or 0.105
+    local policy = T.motionPolicy or {}
+    local minDur = tonumber(policy.min) or 0.045
+    local maxDur = tonumber(policy.max) or 0.160
+    if value < minDur then return minDur end
+    if value > maxDur then return maxDur end
+    return value
+end
+
+function T.ReducedMotionEnabled()
+    if T.reduceMotion == true or T.reducedMotion == true then return true end
+    local db = _G.MSUF_DB
+    local general = type(db) == "table" and db.general or nil
+    return type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) or false
+end
+
 function T.MotionDuration(name, fallback)
-    if type(name) == "number" then return name end
+    if type(name) == "number" then return ClampMotionDuration(name, fallback) end
     local profile = type(name) == "string" and T.motionProfiles and T.motionProfiles[name] or nil
     local key = profile and profile.duration or name
     local value = key and T.motion and T.motion[key]
-    return tonumber(value) or tonumber(fallback) or T.motion.standard or 0.120
+    return ClampMotionDuration(value, fallback)
 end
 
 function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
@@ -565,6 +702,10 @@ function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
         return
     end
 
+    if frame._msuf2AlphaScale and frame._msuf2AlphaScale.Stop then
+        frame._msuf2AlphaScale:SetScript("OnFinished", nil)
+        frame._msuf2AlphaScale:Stop()
+    end
     local group = frame._msuf2AlphaFade
     local anim = frame._msuf2AlphaFadeAnim
     if not group then
@@ -579,8 +720,59 @@ function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
 
     if anim.SetFromAlpha then anim:SetFromAlpha(fromAlpha or 0) end
     if anim.SetToAlpha then anim:SetToAlpha(toAlpha or 1) end
-    if anim.SetDuration then anim:SetDuration(tonumber(duration) or T.motion.standard or 0.12) end
+    if anim.SetDuration then anim:SetDuration(ClampMotionDuration(duration, T.motion.standard)) end
     if anim.SetSmoothing then pcall(anim.SetSmoothing, anim, smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
+    group:SetScript("OnFinished", function()
+        if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
+        if type(onFinished) == "function" then onFinished(frame) end
+    end)
+    frame:SetAlpha(fromAlpha or 0)
+    if frame.Show then frame:Show() end
+    group:Play()
+end
+
+function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, onFinished, smoothing, origin)
+    if not (frame and frame.SetAlpha and frame.CreateAnimationGroup) then
+        if frame and frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
+        if type(onFinished) == "function" then onFinished(frame) end
+        return
+    end
+
+    if frame._msuf2AlphaFade and frame._msuf2AlphaFade.Stop then
+        frame._msuf2AlphaFade:SetScript("OnFinished", nil)
+        frame._msuf2AlphaFade:Stop()
+    end
+    if frame._msuf2AlphaScale and frame._msuf2AlphaScale.Stop then
+        frame._msuf2AlphaScale:SetScript("OnFinished", nil)
+        frame._msuf2AlphaScale:Stop()
+    end
+
+    local group = frame:CreateAnimationGroup()
+    local alpha = group:CreateAnimation("Alpha")
+    local scale = group:CreateAnimation("Scale")
+    local dur = ClampMotionDuration(duration, T.motion.standard)
+    local ok = alpha and scale
+    if ok and alpha.SetFromAlpha then alpha:SetFromAlpha(fromAlpha or 0) end
+    if ok and alpha.SetToAlpha then alpha:SetToAlpha(toAlpha or 1) end
+    if ok and alpha.SetDuration then alpha:SetDuration(dur) end
+    if ok and alpha.SetOrder then alpha:SetOrder(1) end
+    if ok and alpha.SetSmoothing then pcall(alpha.SetSmoothing, alpha, smoothing or ((toAlpha or 1) > (fromAlpha or 0) and "OUT" or "IN")) end
+    if ok and scale.SetScaleFrom and scale.SetScaleTo then
+        ok = pcall(scale.SetScaleFrom, scale, scaleFrom or 1, scaleFrom or 1)
+        ok = ok and pcall(scale.SetScaleTo, scale, scaleTo or 1, scaleTo or 1)
+    else
+        ok = false
+    end
+    if ok and scale.SetDuration then scale:SetDuration(dur) end
+    if ok and scale.SetOrder then scale:SetOrder(1) end
+    if ok and scale.SetSmoothing then pcall(scale.SetSmoothing, scale, smoothing or "OUT") end
+    if ok and scale.SetOrigin then pcall(scale.SetOrigin, scale, origin or "CENTER", 0, 0) end
+    if not ok then
+        if group.Stop then group:Stop() end
+        return T.PlayAlpha(frame, fromAlpha, toAlpha, dur, onFinished, smoothing)
+    end
+
+    frame._msuf2AlphaScale = group
     group:SetScript("OnFinished", function()
         if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
         if type(onFinished) == "function" then onFinished(frame) end
@@ -615,6 +807,13 @@ function T.PlayMotion(frame, motion, opts)
 
     local duration = opts.duration or T.MotionDuration(profile.duration or motion)
     local smoothing = opts.smoothing or profile.smoothing
+    local scaleFrom = opts.scaleFrom
+    if scaleFrom == nil then scaleFrom = profile.scaleFrom end
+    local scaleTo = opts.scaleTo
+    if scaleTo == nil then scaleTo = profile.scaleTo end
+    if scaleFrom ~= nil and scaleTo ~= nil then
+        return T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, opts.onFinished, smoothing, opts.scaleOrigin or profile.scaleOrigin)
+    end
     return T.PlayAlpha(frame, fromAlpha, toAlpha, duration, opts.onFinished, smoothing)
 end
 
@@ -754,6 +953,9 @@ end
 
 function T.ApplyGlass(frame, variant)
     if not (frame and frame.CreateTexture) then return frame end
+    if T.ApplyGradient and T.gradients and T.gradients[variant or "card"] then
+        T.ApplyGradient(frame, variant or "card", { key = "_msuf2MaterialGradient" })
+    end
     local spec = GLASS_VARIANTS[variant or "card"] or GLASS_VARIANTS.card
     if frame._msuf2GlassVariant == variant and frame._msuf2GlassApplied then return frame end
     frame._msuf2GlassVariant = variant
@@ -811,12 +1013,61 @@ function T.ApplyGlass(frame, variant)
     return frame
 end
 
+local function ResolveGradientSpec(token)
+    if type(token) == "table" then return token end
+    return T.gradients and T.gradients[token or "card"] or nil
+end
+
+local function DynamicGradientFromColor(color)
+    color = color or T.colors.panel2
+    return {
+        orientation = "VERTICAL",
+        from = ShadeColor(color, 0.16, 0.42),
+        to = ShadeColor(color, -0.22, 0.58),
+        inset = 2,
+    }
+end
+
+function T.ApplyGradient(frame, token, opts)
+    if not (frame and frame.CreateTexture) then return frame end
+    opts = opts or {}
+    local spec = ResolveGradientSpec(token) or DynamicGradientFromColor(T.colors.panel2)
+    local key = opts.key or spec.key or "_msuf2MaterialGradient"
+    local tex = frame[key]
+    if not tex then
+        tex = frame:CreateTexture(nil, opts.layer or spec.layer or "BACKGROUND", nil, opts.subLevel or spec.subLevel or 1)
+        frame[key] = tex
+        SmoothTexture(tex)
+    end
+    tex:ClearAllPoints()
+    local inset = opts.inset
+    if inset == nil then inset = spec.inset or 0 end
+    if type(inset) == "table" then
+        tex:SetPoint("TOPLEFT", frame, "TOPLEFT", inset[1] or 0, inset[2] or 0)
+        tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", inset[3] or 0, inset[4] or 0)
+    else
+        inset = tonumber(inset) or 0
+        tex:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
+        tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
+    end
+    ApplyTextureGradient(tex, spec.orientation or "VERTICAL", spec.from, spec.to, false)
+    if tex.SetBlendMode then tex:SetBlendMode(spec.blend or "BLEND") end
+    if tex.SetAlpha then tex:SetAlpha((spec.alpha or 1) * (opts.alpha or 1)) end
+    if tex.Show then tex:Show() end
+    return frame
+end
+
 function T.ApplyMaterial(frame, material)
     if not frame then return frame end
     local spec = type(material) == "table" and material or (T.materials and T.materials[material or "card"])
     if type(spec) ~= "table" then return frame end
     if spec.bg or spec.border then
         T.ApplyBackdrop(frame, spec.bg or T.colors.panel, spec.border or T.colors.borderSoft)
+    end
+    if spec.gradient and T.ApplyGradient then
+        T.ApplyGradient(frame, spec.gradient, { key = "_msuf2MaterialGradient" })
+    elseif frame._msuf2MaterialGradient and frame._msuf2MaterialGradient.Hide then
+        frame._msuf2MaterialGradient:Hide()
     end
     if spec.glass and T.ApplyGlass then T.ApplyGlass(frame, spec.glass) end
     if spec.veil and T.ApplyFocusVeil then T.ApplyFocusVeil(frame, spec.veil) end
@@ -828,15 +1079,15 @@ function T.ApplyCollapseVisual(chevron, hint, open)
         if chevron.SetRotation then chevron:SetRotation(open and (math.pi * 0.5) or 0) end
         if chevron.SetVertexColor then
             if open then
-                chevron:SetVertexColor(1.00, 0.55, 0.12, 1)
+                chevron:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.86)
             else
-                chevron:SetVertexColor(1.00, 0.82, 0.00, 1)
+                chevron:SetVertexColor(T.colors.accent2[1], T.colors.accent2[2], T.colors.accent2[3], 0.74)
             end
         end
     end
     if hint and hint.SetText then
         hint:SetText(open and "" or Tr("click to expand"))
-        if hint.SetTextColor then hint:SetTextColor(0.45, 0.52, 0.65, 1) end
+        if hint.SetTextColor then hint:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.74) end
     end
 end
 
@@ -859,26 +1110,26 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
     wash:SetTexture(T.media.bgSmooth)
     wash:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     wash:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-    wash:SetVertexColor(0.14, 0.08, 0.30, 0.10)
+    wash:SetVertexColor(0.08, 0.11, 0.20, 0.065)
 
     local depth = host:CreateTexture(nil, "BACKGROUND", nil, 2)
     depth:SetTexture(T.media.bgSmooth)
     depth:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     depth:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
     depth:SetTexCoord(0, 0, 1, 0, 0, 1, 1, 1)
-    depth:SetVertexColor(0.08, 0.06, 0.20, 0.10)
+    depth:SetVertexColor(0.04, 0.05, 0.12, 0.085)
 
     local grain = host:CreateTexture(nil, "BACKGROUND", nil, 3)
     grain:SetTexture(T.media.bgCharcoal)
     grain:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     grain:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-    grain:SetVertexColor(0.10, 0.08, 0.20, 0.08)
+    grain:SetVertexColor(0.08, 0.08, 0.14, 0.055)
 
     local logo = host:CreateTexture(nil, "BORDER", nil, 0)
     logo:SetTexture(T.media.logo)
     logo:SetSize(120, 120)
     logo:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -12, 12)
-    logo:SetVertexColor(0.30, 0.22, 0.55, 0.035)
+    logo:SetVertexColor(0.22, 0.28, 0.42, 0.024)
     if logo.SetBlendMode then logo:SetBlendMode("ADD") end
 
     if nav then
@@ -887,7 +1138,7 @@ function T.ApplyMenuAtmosphere(frame, host, nav)
         navWash:SetPoint("TOPLEFT", nav, "TOPLEFT", 3, -3)
         navWash:SetPoint("BOTTOMRIGHT", nav, "BOTTOMRIGHT", -3, 3)
         navWash:SetTexCoord(0, 0, 1, 0, 0, 1, 1, 1)
-        navWash:SetVertexColor(0.10, 0.06, 0.24, 0.12)
+        navWash:SetVertexColor(0.06, 0.08, 0.18, 0.085)
     end
 end
 
@@ -1024,7 +1275,9 @@ function T.StyleSlider(slider)
     local edge = T.colors.border or T.colors.borderSoft
 
     if slider._msufTrack then
-        SetSliderTextureColor(slider._msufTrack, active and 0.045 or 0.035, active and 0.058 or 0.043, active and 0.098 or 0.078, 0.98 * alpha)
+        local trackBase = { active and 0.045 or 0.035, active and 0.058 or 0.043, active and 0.098 or 0.078, 0.98 * alpha }
+        SetSliderTextureColor(slider._msufTrack, trackBase[1], trackBase[2], trackBase[3], trackBase[4])
+        ApplyTextureGradient(slider._msufTrack, "VERTICAL", ShadeColor(trackBase, 0.10, 1), ShadeColor(trackBase, -0.18, 1), false)
         if slider._msufTrack.Show then slider._msufTrack:Show() end
     end
     if slider._msufTrackTop then
@@ -1036,7 +1289,12 @@ function T.StyleSlider(slider)
         slider._msufTrackBottom:Show()
     end
     if slider._msufFill then
-        SetSliderTextureColor(slider._msufFill, accent[1], accent[2], accent[3], (active and 1.00 or hovered and 0.92 or 0.76) * alpha)
+        local fillAlpha = (active and 1.00 or hovered and 0.92 or 0.76) * alpha
+        SetSliderTextureColor(slider._msufFill, accent[1], accent[2], accent[3], fillAlpha)
+        ApplyTextureGradient(slider._msufFill, "HORIZONTAL",
+            { math.min(accent[1] * 1.24, 1), math.min(accent[2] * 1.14, 1), math.min(accent[3] * 1.10, 1), fillAlpha },
+            { accent[1] * 0.72, accent[2] * 0.82, accent[3] * 0.90, fillAlpha * 0.88 },
+            false)
         if slider._msufFill.Show then slider._msufFill:Show() end
     end
     if slider._msufFillGlow then
@@ -1175,6 +1433,9 @@ end
 function T.Panel(parent, name, bg, border)
     local f = CreateFrame("Frame", name, parent, Template())
     T.ApplyBackdrop(f, bg or T.colors.panel, border or T.colors.borderSoft)
+    if T.ApplyGradient then
+        T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" })
+    end
     return f
 end
 
@@ -1234,7 +1495,7 @@ function T.SkinEditBox(editBox)
         local roundedEdge = self._msuf2RoundedEditEdge
         if roundedFill and roundedEdge then
             local bg = self._msuf2RoundedEditColor or { 0.018, 0.024, 0.050, 0.98 }
-            roundedFill:SetVertexColor(bg[1] or 0.018, bg[2] or 0.024, bg[3] or 0.050, (bg[4] or 0.98) * alpha)
+            SetFillGradient(roundedFill, { bg[1] or 0.018, bg[2] or 0.024, bg[3] or 0.050, (bg[4] or 0.98) * alpha }, 0.10, -0.16)
             local c = focused and T.colors.accent or T.colors.borderSoft
             local a = focused and 0.95 or 0.78
             roundedEdge:SetVertexColor(c[1], c[2], c[3], a * alpha)
@@ -1249,7 +1510,10 @@ function T.SkinEditBox(editBox)
             end
             return
         end
-        if self._msuf2EditBg then self._msuf2EditBg:SetColorTexture(0.018, 0.024, 0.050, 0.98 * alpha) end
+        if self._msuf2EditBg then
+            local bg = { 0.018, 0.024, 0.050, 0.98 * alpha }
+            ApplyTextureGradient(self._msuf2EditBg, "VERTICAL", ShadeColor(bg, 0.10, 1), ShadeColor(bg, -0.16, 1), false)
+        end
         local c = focused and T.colors.accent or T.colors.borderSoft
         local a = focused and 0.95 or 0.78
         local edges = self._msuf2EditEdges
@@ -1324,7 +1588,7 @@ local function ButtonVisual(btn, active, hover)
     local edge = btn._msuf2Edge
     local enabled = not (btn.IsEnabled and not btn:IsEnabled())
     if not enabled then
-        fill:SetVertexColor(0.075, 0.080, 0.105, 0.55)
+        SetFillGradient(fill, { 0.075, 0.080, 0.105, 0.55 }, 0.08, -0.14)
         edge:SetVertexColor(0.180, 0.210, 0.300, 0.45)
         btn._msuf2Label:SetTextColor(0.50, 0.52, 0.58, 0.95)
         return
@@ -1338,10 +1602,10 @@ local function ButtonVisual(btn, active, hover)
     end
     if btn._msuf2Danger then
         if active or hover then
-            fill:SetVertexColor(0.180, 0.040, 0.065, 0.97)
+            SetFillGradient(fill, { 0.180, 0.040, 0.065, 0.97 }, 0.18, -0.18)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.95)
         else
-            fill:SetVertexColor(0.140, 0.030, 0.050, 0.94)
+            SetFillGradient(fill, { 0.140, 0.030, 0.050, 0.94 }, 0.14, -0.20)
             edge:SetVertexColor(c.danger[1], c.danger[2], c.danger[3], 0.82)
         end
         btn._msuf2Label:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
@@ -1349,10 +1613,10 @@ local function ButtonVisual(btn, active, hover)
     end
     if btn._msuf2Primary then
         if active or hover then
-            fill:SetVertexColor(0.200, 0.640, 0.820, 0.99)
+            SetFillGradient(fill, { 0.200, 0.640, 0.820, 0.99 }, 0.18, -0.16)
             edge:SetVertexColor(0.260, 0.830, 1.000, 0.90)
         else
-            fill:SetVertexColor(0.160, 0.560, 0.720, 0.97)
+            SetFillGradient(fill, { 0.160, 0.560, 0.720, 0.97 }, 0.15, -0.18)
             edge:SetVertexColor(0.220, 0.720, 0.940, 0.85)
         end
         btn._msuf2Label:SetTextColor(1, 1, 1, 1)
@@ -1360,10 +1624,10 @@ local function ButtonVisual(btn, active, hover)
     end
     if btn._msuf2Success then
         if active or hover then
-            fill:SetVertexColor(0.060, 0.380, 0.180, 0.98)
+            SetFillGradient(fill, { 0.060, 0.380, 0.180, 0.98 }, 0.18, -0.18)
             edge:SetVertexColor(0.220, 0.860, 0.420, 0.90)
         else
-            fill:SetVertexColor(0.040, 0.280, 0.130, 0.95)
+            SetFillGradient(fill, { 0.040, 0.280, 0.130, 0.95 }, 0.14, -0.20)
             edge:SetVertexColor(0.140, 0.660, 0.310, 0.82)
         end
         btn._msuf2Label:SetTextColor(0.92, 1.00, 0.94, 1)
@@ -1373,14 +1637,14 @@ local function ButtonVisual(btn, active, hover)
         if active then
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             local bg, br, tx = c.navPillActive, c.navPillEdgeActive, c.navTextActive
-            fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+            SetFillGradient(fill, bg, 0.16, -0.15)
             edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
             btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
             if btn._msuf2NavIcon then btn._msuf2NavIcon:SetVertexColor(0.96, 0.99, 1.00, 1.00) end
         elseif hover then
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             local bg, br, tx = c.navPillHover, c.navPillEdgeHover, c.navText
-            fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+            SetFillGradient(fill, bg, 0.14, -0.18)
             edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
             btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], 1)
             if btn._msuf2NavIcon and btn._msuf2NavIconColor then
@@ -1390,7 +1654,7 @@ local function ButtonVisual(btn, active, hover)
         else
             if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
             local bg, br, tx = btn._msuf2SolidPill and c.navPillBaseSolid or c.navPillBase, c.navPillEdge, c.navText
-            fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+            SetFillGradient(fill, bg, 0.12, -0.20)
             edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
             btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
             if btn._msuf2NavIcon and btn._msuf2NavIconColor then
@@ -1403,7 +1667,7 @@ local function ButtonVisual(btn, active, hover)
     if active then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Show() end
         local bg, br, tx = c.pillActive, c.pillEdgeActive, c.pillTextActive
-        fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+        SetFillGradient(fill, bg, 0.16, -0.15)
         edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
         btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
         if btn._msuf2NavIcon and btn._msuf2NavIconColor then
@@ -1413,7 +1677,7 @@ local function ButtonVisual(btn, active, hover)
     elseif hover then
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br = c.pillHover, c.pillEdgeHover
-        fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+        SetFillGradient(fill, bg, 0.14, -0.18)
         edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
         btn._msuf2Label:SetTextColor(c.text[1], c.text[2], c.text[3], 1)
         if btn._msuf2NavIcon and btn._msuf2NavIconColor then
@@ -1424,7 +1688,7 @@ local function ButtonVisual(btn, active, hover)
         if btn._msuf2NavStripe then btn._msuf2NavStripe:Hide() end
         local bg, br, tx = c.pillBase, c.pillEdge, c.pillText
         if btn._msuf2SolidPill then bg = c.pillBaseSolid end
-        fill:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 1)
+        SetFillGradient(fill, bg, 0.12, -0.20)
         edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
         btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], 0.95)
         if btn._msuf2NavIcon and btn._msuf2NavIconColor then
@@ -1441,6 +1705,7 @@ end
 function T.Button(parent, text, width, height)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(width or 120, height or 24)
+    if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
 
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Btn", 2, "BACKGROUND", "BORDER")
     btn._msuf2Fill = fill
@@ -1573,6 +1838,39 @@ function T.SkinSuccessButton(btn)
     return btn
 end
 
+local BUTTON_ROLE_VARIANTS = {
+    primary = "primary",
+    destructive = "danger",
+    danger = "danger",
+    delete = "danger",
+    reset = "danger",
+    success = "success",
+    confirm = "success",
+}
+
+function T.ApplyButtonRole(btn, role)
+    if not btn then return btn end
+    role = tostring(role or "normal")
+    btn._msuf2Primary = nil
+    btn._msuf2Danger = nil
+    btn._msuf2Success = nil
+    local variant = BUTTON_ROLE_VARIANTS[role]
+    if variant == "primary" then
+        btn._msuf2Primary = true
+    elseif variant == "danger" then
+        btn._msuf2Danger = true
+    elseif variant == "success" then
+        btn._msuf2Success = true
+    end
+    btn._msuf2Role = role
+    if btn.RefreshVisual then btn:RefreshVisual() elseif btn.SetActive then btn:SetActive(btn._msuf2Active) end
+    return btn
+end
+
+function T.RoleButton(parent, text, role, width, height)
+    return T.ApplyButtonRole(T.Button(parent, text, width, height), role)
+end
+
 local function CloseButtonVisual(btn, hover, down)
     if not btn then return end
     local fill = btn._msuf2CloseFill
@@ -1584,11 +1882,11 @@ local function CloseButtonVisual(btn, hover, down)
 
     if fill and fill.SetVertexColor then
         if down then
-            fill:SetVertexColor(0.310, 0.050, 0.070, 0.98 * alpha)
+            SetFillGradient(fill, { 0.310, 0.050, 0.070, 0.98 * alpha }, 0.16, -0.18)
         elseif hover then
-            fill:SetVertexColor(0.230, 0.045, 0.065, 0.96 * alpha)
+            SetFillGradient(fill, { 0.230, 0.045, 0.065, 0.96 * alpha }, 0.14, -0.18)
         else
-            fill:SetVertexColor(0.075, 0.080, 0.125, 0.92 * alpha)
+            SetFillGradient(fill, { 0.075, 0.080, 0.125, 0.92 * alpha }, 0.10, -0.20)
         end
     end
     if edge and edge.SetVertexColor then
@@ -1698,7 +1996,7 @@ function T.StyleScrollFrame(scroll, anchor)
     track:SetPoint("TOP", bar, "TOP", 0, 0)
     track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
     track:SetWidth(2)
-    track:SetColorTexture(0.025, 0.030, 0.060, 0.82)
+    ApplyTextureGradient(track, "VERTICAL", { 0.042, 0.052, 0.095, 0.82 }, { 0.010, 0.014, 0.030, 0.82 }, true)
     bar._msuf2Track = track
 
     local trackEdge = PixelBarTexture(bar:CreateTexture(nil, "BORDER"))
@@ -1713,18 +2011,22 @@ function T.StyleScrollFrame(scroll, anchor)
 
     local thumb = PixelBarTexture(bar:CreateTexture(nil, "OVERLAY"))
     thumb:SetSize(5, 42)
-    thumb:SetColorTexture(thumbBase[1], thumbBase[2], thumbBase[3], 0.72)
+    ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
     bar:SetThumbTexture(thumb)
     bar._msuf2Thumb = thumb
 
     local function Paint(hover)
         local shown = bar.IsShown and bar:IsShown()
         local alpha = shown and 1 or 0
-        if track then track:SetColorTexture(0.025, 0.030, 0.060, (hover and 0.98 or 0.82) * alpha) end
+        if track then
+            local a = (hover and 0.98 or 0.82) * alpha
+            ApplyTextureGradient(track, "VERTICAL", { 0.042, 0.052, 0.095, a }, { 0.010, 0.014, 0.030, a }, true)
+        end
         if trackEdge then trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], (hover and 0.62 or 0.38) * alpha) end
         if thumb and thumb.SetColorTexture then
             local c = hover and thumbHover or thumbBase
-            thumb:SetColorTexture(c[1], c[2], c[3], (hover and 0.90 or 0.68) * alpha)
+            local a = (hover and 0.90 or 0.68) * alpha
+            ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
         end
     end
 
@@ -1814,4 +2116,9 @@ function T.StyleScrollFrame(scroll, anchor)
     Refresh()
     scroll._msuf2ScrollBar = bar
     return bar
+end
+
+if MSUF and MSUF.UI and MSUF.UI.BindMenu2Theme then
+    MSUF.UI.BindMenu2Theme(T)
+    M.UI = MSUF.UI
 end

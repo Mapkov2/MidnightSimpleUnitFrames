@@ -16,7 +16,8 @@ local table_insert = table.insert
 local table_concat = table.concat
 local table_sort = table.sort
 local UnitName = UnitName
-local UnitExists = UnitExists
+local Secrets = MSUF.Secrets or {}
+local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local UnitIsUnit = UnitIsUnit
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
@@ -325,7 +326,7 @@ local function IsPlayerUnit(unit)
 end
 
 local function AddNameListEntry(entries, unit, index, conf, raidIndex)
-    if UnitExists and not UnitExists(unit) then
+    if UnitMissing(unit) then
         return
     end
     if raidIndex and GetRaidRosterInfo then

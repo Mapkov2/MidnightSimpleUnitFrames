@@ -457,7 +457,9 @@ function Snap.SetThreshold(v) THRESH = max(2, min(20, tonumber(v) or 8)) end
 --- --- Guide line pool ---
 local guidePool = {}
 local activeGuides = {}
+local fadingGuides = {}
 local guideParent
+local guideFadeFrame
 
 local function GetGuide()
     if not guideParent then
@@ -469,30 +471,88 @@ local function GetGuide()
     local g = table.remove(guidePool)
     if not g then
         g = guideParent:CreateTexture(nil, "OVERLAY")
-        g:SetColorTexture(1.00, 0.55, 0.12, 0.50)
     end
+    g:SetColorTexture(0.30, 0.82, 1.00, 0.72)
+    g:SetAlpha(1)
+    g._msufGuideFade = nil
     g:Show()
     activeGuides[#activeGuides + 1] = g
     return g
 end
 
-function Snap.HideGuides()
+local function StartGuideFade()
+    if guideFadeFrame then
+        guideFadeFrame:Show()
+        return
+    end
+    guideFadeFrame = CreateFrame("Frame", "MSUF_EM2_SnapGuideFade", UIParent)
+    guideFadeFrame:SetScript("OnUpdate", function(self, elapsed)
+        local alive = false
+        for i = #fadingGuides, 1, -1 do
+            local g = fadingGuides[i]
+            if not g then
+                table.remove(fadingGuides, i)
+            else
+                g._msufGuideFade = (g._msufGuideFade or 0.12) - (elapsed or 0)
+                local a = max(0, min(1, g._msufGuideFade / 0.12))
+                g:SetAlpha(a)
+                if a <= 0 then
+                    g:Hide()
+                    g:ClearAllPoints()
+                    g:SetAlpha(1)
+                    g._msufGuideFade = nil
+                    guidePool[#guidePool + 1] = g
+                    table.remove(fadingGuides, i)
+                else
+                    alive = true
+                end
+            end
+        end
+        if not alive then self:Hide() end
+    end)
+end
+
+local function ReleaseGuide(g, fade)
+    if not g then return end
+    if fade then
+        g._msufGuideFade = 0.12
+        fadingGuides[#fadingGuides + 1] = g
+        StartGuideFade()
+    else
+        g:Hide()
+        g:ClearAllPoints()
+        g:SetAlpha(1)
+        g._msufGuideFade = nil
+        guidePool[#guidePool + 1] = g
+    end
+end
+
+local function ClearActiveGuides(fade)
     for i = #activeGuides, 1, -1 do
         local g = activeGuides[i]
-        g:Hide(); g:ClearAllPoints()
-        guidePool[#guidePool + 1] = g
+        ReleaseGuide(g, fade == true)
         activeGuides[i] = nil
     end
 end
 
+function Snap.HideGuides()
+    ClearActiveGuides(true)
+end
+
 local function ShowVGuide(x)
+    x = floor((tonumber(x) or 0) + 0.5)
+    x = max(0, min(UIParent:GetWidth() or x, x))
     local g = GetGuide()
+    g:ClearAllPoints()
     g:SetSize(1, UIParent:GetHeight())
     g:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, 0)
 end
 
 local function ShowHGuide(y)
+    y = floor((tonumber(y) or 0) + 0.5)
+    y = max(0, min(UIParent:GetHeight() or y, y))
     local g = GetGuide()
+    g:ClearAllPoints()
     g:SetSize(UIParent:GetWidth(), 1)
     g:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, y)
 end
@@ -503,6 +563,20 @@ local function GetEdges(l, b, w, h)
     return l, l + w * 0.5, l + w, b, b + h * 0.5, b + h
 end
 
+local function GetFrameEdgesUI(frame)
+    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
+        return nil
+    end
+    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (l and r and t and b) then return nil end
+    local uiScale = UIParent:GetEffectiveScale() or 1
+    if uiScale == 0 then uiScale = 1 end
+    local frameScale = frame.GetEffectiveScale and (frame:GetEffectiveScale() or uiScale) or uiScale
+    local ratio = frameScale / uiScale
+    l, r, t, b = l * ratio, r * ratio, t * ratio, b * ratio
+    return l, (l + r) * 0.5, r, b, (b + t) * 0.5, t
+end
+
 --- --- Core snap logic ---
 --- cx, cy = center of dragged mover (screen space)
 --- hw, hh = half width/height of dragged mover
@@ -510,7 +584,7 @@ end
 function Snap.Apply(cx, cy, hw, hh, dragKey)
     if not enabled then return cx, cy end
 
-    Snap.HideGuides()
+    ClearActiveGuides(false)
 
     local movers = EM2.Movers and EM2.Movers.All()
     if not movers then return cx, cy end
@@ -548,34 +622,28 @@ function Snap.Apply(cx, cy, hw, hh, dragKey)
     --- Check all other movers
     for key, mover in pairs(movers) do
         if key ~= dragKey and mover:IsShown() then
-            local tL = mover:GetLeft() or 0
-            local tB = mover:GetBottom() or 0
-            local tW = mover:GetWidth() or 1
-            local tH = mover:GetHeight() or 1
-            local tR = tL + tW
-            local tT = tB + tH
-            local tCX = tL + tW * 0.5
-            local tCY = tB + tH * 0.5
-
-            local targetXEdges = { tL, tCX, tR }
-            local targetYEdges = { tB, tCY, tT }
+            local tL, tCX, tR, tB, tCY, tT = GetFrameEdgesUI(mover)
 
             --- 3?3 X edge pairs
-            for _, de in ipairs(dxEdges) do
-                for _, te in ipairs(targetXEdges) do
-                    local d = abs(de - te)
-                    if d < bestDistX then
-                        bestDistX = d; bestDX = te - de; snapEdgeX = te
+            if tL then
+                local targetXEdges = { tL, tCX, tR }
+                local targetYEdges = { tB, tCY, tT }
+                for _, de in ipairs(dxEdges) do
+                    for _, te in ipairs(targetXEdges) do
+                        local d = abs(de - te)
+                        if d < bestDistX then
+                            bestDistX = d; bestDX = te - de; snapEdgeX = te
+                        end
                     end
                 end
-            end
 
-            --- 3?3 Y edge pairs
-            for _, de in ipairs(dyEdges) do
-                for _, te in ipairs(targetYEdges) do
-                    local d = abs(de - te)
-                    if d < bestDistY then
-                        bestDistY = d; bestDY = te - de; snapEdgeY = te
+                --- 3?3 Y edge pairs
+                for _, de in ipairs(dyEdges) do
+                    for _, te in ipairs(targetYEdges) do
+                        local d = abs(de - te)
+                        if d < bestDistY then
+                            bestDistY = d; bestDY = te - de; snapEdgeY = te
+                        end
                     end
                 end
             end
@@ -807,6 +875,7 @@ local function NudgeTarget(dx, dy)
     if previewTarget then
         previewTarget:Nudge(ndx, ndy)
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(nil, true) end
         return
     end
 
@@ -838,6 +907,7 @@ local function NudgeTarget(dx, dy)
             end
         end
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        if EM2.Focus and EM2.Focus.NotifyPositionChanged and unit then EM2.Focus.NotifyPositionChanged("castbar_" .. tostring(unit), true) end
         RefreshUFPreview("EM2_CASTBAR_NUDGE", unit)
         return
     end
@@ -902,12 +972,18 @@ local function NudgeTarget(dx, dy)
         return
     end
 
-    --- Priority 3: current unit frame
+    --- Priority 3: focused inspector selection (works without a legacy popup).
+    if EM2.Focus and EM2.Focus.NudgeSelection and EM2.Focus.NudgeSelection(ndx, ndy) then
+        return
+    end
+
+    --- Priority 4: current unit frame
     local key = EM2.State.GetUnitKey() or "player"
     if (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid")
         and type(_G.MSUF_GF_EM2_NudgePreview) == "function"
         and _G.MSUF_GF_EM2_NudgePreview(key, ndx, ndy)
     then
+        if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
         return
     end
 
@@ -923,6 +999,7 @@ local function NudgeTarget(dx, dy)
     end
     if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
     RefreshUFPreview("EM2_UNIT_NUDGE", key)
 end
 
@@ -1070,6 +1147,17 @@ local function SyncUnitPopupDuringDrag(d, elapsed)
     end
 end
 
+local function SyncGFPopupDuringDrag(d, elapsed)
+    if not d then return end
+    d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
+    if d.popupSyncAcc >= 0.05 then
+        d.popupSyncAcc = 0
+        if type(_G.MSUF_EM2_SyncGFPopups) == "function" then
+            _G.MSUF_EM2_SyncGFPopups()
+        end
+    end
+end
+
 local function CastbarDefaultOffsets(unit)
     local fn = _G.MSUF_GetCastbarDefaultOffsets
     if type(fn) == "function" then
@@ -1172,6 +1260,7 @@ local function OnUpdate(self, elapsed)
         if d.isCastbar then
             ApplyCastbarDragPosition(d, snapCX, snapCY)
             SyncCastbarPopupDuringDrag(d, elapsed)
+            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, false) end
             return
         end
 
@@ -1190,23 +1279,25 @@ local function OnUpdate(self, elapsed)
             if d.isGroupFrame then
                 local bw = bar:GetWidth() or 0
                 local bh = bar:GetHeight() or 0
+                local gridDX = tonumber(bar._msufGFDragCenterToGridX) or 0
+                local gridDY = tonumber(bar._msufGFDragCenterToGridY) or 0
                 if conf.positionMode == "TOPLEFT_V2" then
-                    local nextX = round(snapCX - d.screenW * 0.5 - bw * 0.5)
-                    local nextY = round(snapCY - d.screenH * 0.5 + bh * 0.5)
+                    local nextX = round(snapCX - d.screenW * 0.5 - bw * 0.5 + gridDX)
+                    local nextY = round(snapCY - d.screenH * 0.5 + bh * 0.5 + gridDY)
                     if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
                         conf.offsetX = nextX
                         conf.offsetY = nextY
                         bar:ClearAllPoints()
-                        bar:SetPoint("TOPLEFT", UIParent, "CENTER", conf.offsetX, conf.offsetY)
+                        bar:SetPoint("TOPLEFT", UIParent, "CENTER", conf.offsetX - gridDX, conf.offsetY - gridDY)
                     end
                 else
-                    local nextX = round(snapCX - d.screenW * 0.5)
-                    local nextY = round(snapCY - d.screenH * 0.5)
+                    local nextX = round(snapCX - d.screenW * 0.5 + gridDX)
+                    local nextY = round(snapCY - d.screenH * 0.5 + gridDY)
                     if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
                         conf.offsetX = nextX
                         conf.offsetY = nextY
                         bar:ClearAllPoints()
-                        bar:SetPoint("CENTER", UIParent, "CENTER", conf.offsetX, conf.offsetY)
+                        bar:SetPoint("CENTER", UIParent, "CENTER", conf.offsetX - gridDX, conf.offsetY - gridDY)
                     end
                 end
                 bar._msufDragActive = true
@@ -1229,9 +1320,12 @@ local function OnUpdate(self, elapsed)
                     local fs = d.frameScale or bar:GetEffectiveScale() or 1
                     if as == 0 then as = 1 end; if fs == 0 then fs = 1 end
 
+                    local desiredBarCX = snapCX + (d.barCenterDX or 0)
+                    local desiredBarCY = snapCY + (d.barCenterDY or 0)
+
                     --- Desired bar center in absolute screen pixels
-                    local barScreenCX = snapCX * sc  --- sc = UIParent:GetEffectiveScale()
-                    local barScreenCY = snapCY * sc
+                    local barScreenCX = desiredBarCX * sc  --- sc = UIParent:GetEffectiveScale()
+                    local barScreenCY = desiredBarCY * sc
                     --- Anchor center in absolute screen pixels
                     local ancScreenCX = ax * as
                     local ancScreenCY = ay * as
@@ -1283,7 +1377,12 @@ local function OnUpdate(self, elapsed)
             end
         end
 
-        SyncUnitPopupDuringDrag(d, elapsed)
+        if d.isGroupFrame then
+            SyncGFPopupDuringDrag(d, elapsed)
+        else
+            SyncUnitPopupDuringDrag(d, elapsed)
+        end
+        if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, false) end
     else
         idleSyncAcc = idleSyncAcc + elapsed
         if idleSyncAcc >= 0.2 then
@@ -1304,10 +1403,13 @@ function Ticker.BeginDrag(mover, key, cfg)
     local curX, curY = GetCursorPosition()
     curX = curX / sc; curY = curY / sc
 
-    local mL = mover:GetLeft() or 0; local mR = mover:GetRight() or 0
-    local mT = mover:GetTop() or 0; local mB = mover:GetBottom() or 0
-    local mCX = (mL + mR) * 0.5
-    local mCY = (mT + mB) * 0.5
+    local mL, mCX, mR, mB, mCY, mT = GetFrameEdgesUI(mover)
+    if not mL then
+        mL = mover:GetLeft() or 0; mR = mover:GetRight() or 0
+        mT = mover:GetTop() or 0; mB = mover:GetBottom() or 0
+        mCX = (mL + mR) * 0.5
+        mCY = (mT + mB) * 0.5
+    end
 
     local isCastbar = (cfg.popupType == "castbar") or (type(key) == "string" and key:sub(1, 8) == "castbar_")
     local castbarUnit = cfg.castbarUnit
@@ -1352,6 +1454,14 @@ function Ticker.BeginDrag(mover, key, cfg)
     local frameScale = (bar and bar.GetEffectiveScale and bar:GetEffectiveScale()) or 1
     local barW = (bar and bar.GetWidth and bar:GetWidth()) or (mR - mL)
     local barH = (bar and bar.GetHeight and bar:GetHeight()) or (mT - mB)
+    local barCenterDX, barCenterDY = 0, 0
+    if bar then
+        local _, bCX, _, _, bCY = GetFrameEdgesUI(bar)
+        if bCX and bCY then
+            barCenterDX = bCX - mCX
+            barCenterDY = bCY - mCY
+        end
+    end
     local ecvAnchorX, ecvAnchorY
     local ecvRule = ECV_ANCHORS[key]
     local usesECV = false
@@ -1428,6 +1538,8 @@ function Ticker.BeginDrag(mover, key, cfg)
         frameScale   = frameScale,
         barW         = barW,
         barH         = barH,
+        barCenterDX  = barCenterDX,
+        barCenterDY  = barCenterDY,
         usesECV      = usesECV,
         ecvFrame     = ecvFrame,
         ecvAnchorX   = ecvAnchorX,
@@ -1444,9 +1556,12 @@ function Ticker.EndDrag()
     if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
 
     local mover = d.mover
-    local mL = mover:GetLeft() or 0; local mR = mover:GetRight() or 0
-    local mT = mover:GetTop() or 0; local mB = mover:GetBottom() or 0
-    local cx = (mL + mR) * 0.5; local cy = (mT + mB) * 0.5
+    local mL, cx, mR, mB, cy, mT = GetFrameEdgesUI(mover)
+    if not mL then
+        mL = mover:GetLeft() or 0; mR = mover:GetRight() or 0
+        mT = mover:GetTop() or 0; mB = mover:GetBottom() or 0
+        cx = (mL + mR) * 0.5; cy = (mT + mB) * 0.5
+    end
     local moved = abs(cx - d.startCX) > 0.5 or abs(cy - d.startCY) > 0.5
 
     if moved then
@@ -1468,13 +1583,15 @@ function Ticker.EndDrag()
             if C_Timer and C_Timer.After then C_Timer.After(0.08, RefreshHomeDashboard) else RefreshHomeDashboard() end
         end
         if d.isGroupFrame and d.conf then
-            d.conf.offsetX = round(cx - d.screenW * 0.5)
-            d.conf.offsetY = round(cy - d.screenH * 0.5)
+            local gridDX = tonumber(d.bar and d.bar._msufGFDragCenterToGridX) or 0
+            local gridDY = tonumber(d.bar and d.bar._msufGFDragCenterToGridY) or 0
+            d.conf.offsetX = round(cx - d.screenW * 0.5 + gridDX)
+            d.conf.offsetY = round(cy - d.screenH * 0.5 + gridDY)
             if d.bar and not IsConfigCombatLocked() then
                 pcall(function()
                     d.bar._msufDragActive = false
                     d.bar:ClearAllPoints()
-                    d.bar:SetPoint("CENTER", UIParent, "CENTER", d.conf.offsetX, d.conf.offsetY)
+                    d.bar:SetPoint("CENTER", UIParent, "CENTER", d.conf.offsetX - gridDX, d.conf.offsetY - gridDY)
                 end)
                 d.bar._msufDragActive = false
             end
@@ -1492,7 +1609,19 @@ function Ticker.EndDrag()
             if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
                 _G.MSUF_SyncCastbarPositionPopup(d.castbarUnit)
             end
+            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
             RefreshUFPreview("EM2_CASTBAR_DRAG_END", d.castbarUnit)
+        elseif d.isGroupFrame then
+            if type(_G.MSUF_GF_RefreshAll) == "function" and not IsConfigCombatLocked() then
+                _G.MSUF_GF_RefreshAll()
+            end
+            C_Timer.After(0.06, function()
+                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+            end)
+            if type(_G.MSUF_EM2_SyncGFPopups) == "function" then
+                _G.MSUF_EM2_SyncGFPopups()
+            end
+            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
         else
             ApplySettingsForKeySafe(d.key)
             C_Timer.After(0.06, function()
@@ -1500,6 +1629,7 @@ function Ticker.EndDrag()
             end)
             if _G.MSUF_SyncUnitPositionPopup then _G.MSUF_SyncUnitPositionPopup() end
             if EM2.UnitPopup and EM2.UnitPopup.IsOpen() then EM2.UnitPopup.Sync() end
+            if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(d.key, true) end
             RefreshUFPreview("EM2_UNIT_DRAG_END", d.key)
         end
     end

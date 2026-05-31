@@ -86,6 +86,10 @@ local function RefreshAfterProfileChange(ctx)
 end
 
 local function PrintProfileMessage(color, message)
+    if M.ShowStatusFeedback then
+        local kind = tostring(color or ""):find("ff0000", 1, true) and "danger" or "info"
+        M.ShowStatusFeedback(tostring(message or ""), kind, kind == "danger" and 2.0 or 1.7)
+    end
     print((color or "|cffffd700") .. "MSUF:|r " .. tostring(message or ""))
 end
 
@@ -417,7 +421,15 @@ local function BuildProfiles(ctx)
         local fn = _G.MSUF_ExportSelectionToString
         if type(fn) == "function" then
             local ok, value = pcall(fn, M.profileExportKind or "all")
-            if ok and type(value) == "string" then blob:SetText(value); blob:HighlightText() end
+            if ok and type(value) == "string" then
+                blob:SetText(value)
+                blob:HighlightText()
+                if M.ShowStatusFeedback then M.ShowStatusFeedback("Profile string exported", "ok", 1.5) end
+            elseif M.ShowStatusFeedback then
+                M.ShowStatusFeedback("Export failed", "danger", 1.8)
+            end
+        elseif M.ShowStatusFeedback then
+            M.ShowStatusFeedback("Export unavailable", "danger", 1.8)
         end
     end)
     local import = T.Button(io, "Import to current profile", buttonW, buttonH)
@@ -533,6 +545,9 @@ local function BuildProfiles(ctx)
             M.profileImportCreateNew = not (M.profileImportCreateNew == true)
         end
         self:SetChecked(M.profileImportCreateNew == true)
+        if M.ShowStatusFeedback then
+            M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2)
+        end
         if M.Refresh then M.Refresh(ctx) end
     end)
     local legacy = T.Button(io, "Import Legacy", buttonW, buttonH)
@@ -544,6 +559,9 @@ local function BuildProfiles(ctx)
             if M.ClearHistory then M.ClearHistory() end
             M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true })
             RefreshAfterProfileChange(ctx)
+            if M.ShowStatusFeedback then M.ShowStatusFeedback("Legacy profile imported", "ok", 1.7) end
+        elseif M.ShowStatusFeedback then
+            M.ShowStatusFeedback("Legacy import unavailable", "danger", 1.8)
         end
     end)
     local wago = T.Button(io, "Browse Wago Profiles", buttonW, buttonH)

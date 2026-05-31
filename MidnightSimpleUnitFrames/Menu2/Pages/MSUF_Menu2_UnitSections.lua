@@ -260,7 +260,24 @@ local function BuildPreview(ctx, builder, unit)
             if UF and UF.Apply then UF.Apply(key) end
         end,
     }
-    panel._msufOpenUnitSection = function() end
+    panel._msufOpenUnitSection = function(sectionId)
+        sectionId = sectionId or "text"
+        local req = _G.MSUF_EM2_MenuFocusRequest
+        local activeReq = type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit
+        local component = (activeReq and req.component) or sectionId
+        local slot = (activeReq and req.slot) or nil
+        _G.MSUF_EM2_MenuFocusRequest = {
+            key = unit,
+            component = component,
+            slot = slot,
+            pageKey = ctx.key,
+            sectionId = sectionId,
+            source = "unit-preview",
+            explicit = true,
+            changedAt = GetTime and GetTime() or 0,
+        }
+        if type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(ctx.key, { flash = true }) end
+    end
 
     local box = createPreview(sec, panel, ctx.width - 28, 292)
     box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
@@ -444,7 +461,11 @@ local function BuildTopActions(ctx, builder, unit, label)
     end
 
     edit:SetScript("OnClick", function()
+        local wasActive = IsEditModeActive()
         ToggleEditMode(unit)
+        if M.ShowStatusFeedback then
+            M.ShowStatusFeedback(wasActive and M.Tr("Edit mode off") or M.Tr("Edit mode on"), "info", 1.2)
+        end
         if C_Timer and C_Timer.After then
             C_Timer.After(0, RefreshEditButton)
         else
@@ -613,6 +634,9 @@ local function BuildTopActions(ctx, builder, unit, label)
                     copyScopes[cat.key] = true
                     if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(true) end
                 end
+                if M.ShowStatusFeedback then
+                    M.ShowStatusFeedback(M.Tr("All copy categories selected"), "info", 1.15)
+                end
             end)
 
             local noneBtn = MakePopupButton(copyPopup, M.Tr("None"), 58, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
@@ -622,18 +646,25 @@ local function BuildTopActions(ctx, builder, unit, label)
                     copyScopes[cat.key] = false
                     if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(false) end
                 end
+                if M.ShowStatusFeedback then
+                    M.ShowStatusFeedback(M.Tr("Copy categories cleared"), "info", 1.15)
+                end
             end)
 
             local runBtn = MakePopupButton(copyPopup, M.Tr("Copy Selected"), 128, { 0.050, 0.125, 0.270, 0.98 }, { 0.170, 0.350, 0.610, 0.86 }, { 0.88, 0.96, 1, 1 }, { 0.060, 0.150, 0.320, 0.98 }, { 0.210, 0.420, 0.720, 0.90 })
             runBtn:SetPoint("BOTTOMRIGHT", copyPopup, "BOTTOMRIGHT", -14, 11)
             runBtn:SetScript("OnClick", function()
+                local dest = NormalizeCopyDest(unit)
                 local function RunCopy()
-                    CopyUnitSettings(unit, NormalizeCopyDest(unit), copyScopes)
+                    CopyUnitSettings(unit, dest, copyScopes)
                 end
                 if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
                     M.CaptureHistory("Copy Unit Settings", "unit:copy:" .. tostring(unit), RunCopy)
                 else
                     RunCopy()
+                end
+                if M.ShowStatusFeedback then
+                    M.ShowStatusFeedback(M.Format(M.Tr("Copied to %s"), UnitTopLabel(dest)), "ok", 1.35)
                 end
                 copyPopup:Hide()
             end)
@@ -694,6 +725,11 @@ local function BuildBasics(ctx, builder, unit, label)
     M.BindToggle(ctx, smooth,
         function() return ReadBool(unit, "smoothFill", true) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end)
+    if W.AttachEditFocus then
+        W.AttachEditFocus(enable, unit, "frame", nil, { source = "menu2-unit" })
+        W.AttachEditFocus(reverse, unit, "frame", nil, { source = "menu2-unit" })
+        W.AttachEditFocus(smooth, unit, "frame", nil, { source = "menu2-unit" })
+    end
 
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local badge
@@ -877,6 +913,7 @@ local function BuildLayout(ctx, builder, unit)
     anchorTo:ClearAllPoints()
     anchorTo:SetPoint("TOPLEFT", sec, "TOPLEFT", 110, -30)
     anchorTo:SetSize(230, 22)
+    if W.AttachEditFocus then W.AttachEditFocus(anchorTo, unit, "anchoring", nil, { source = "menu2-unit" }) end
     M.BindDropdown(ctx, anchorTo,
         AnchorValue,
         function(v)
@@ -892,6 +929,7 @@ local function BuildLayout(ctx, builder, unit)
 
     local pick = T.Button(sec, "Pick frame (CTRL+Click)", 170, 22)
     pick:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -88)
+    if W.AttachEditFocus then W.AttachEditFocus(pick, unit, "anchoring", nil, { source = "menu2-unit" }) end
     pick:SetScript("OnClick", function()
         local ensure = _G.MSUF_EnsureAnchorPicker
         local overlay = type(ensure) == "function" and ensure()
@@ -945,6 +983,26 @@ end
 local function BuildText(ctx, builder, unit)
     local sec = builder:CollapsibleSection("text", "Text", 620, false)
     sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
+    do
+        local req = _G.MSUF_EM2_MenuFocusRequest
+        if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit and (req.component == "name" or req.component == "hp" or req.component == "power") then
+            _G.MSUF_EM2_MenuFocusSection = sec
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0, function()
+                    if _G.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
+                    local entry = sec and sec._msuf2CollapsibleEntry
+                    local outer = entry and entry.outer
+                    local scroll = M.scrollFrame
+                    local child = M.scrollChild
+                    if not (outer and scroll and child and outer.GetTop and child.GetTop and scroll.SetVerticalScroll) then return end
+                    local childTop = child:GetTop()
+                    local outerTop = outer:GetTop()
+                    if not (childTop and outerTop) then return end
+                    scroll:SetVerticalScroll(max(0, floor((childTop - outerTop) + 0.5) - 12))
+                end)
+            end
+        end
+    end
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 24
     local cardW = math.min(520, math.max(360, sectionW - 48))
@@ -1004,6 +1062,19 @@ local function BuildText(ctx, builder, unit)
     end
     M.unitTextSlotSelection = M.unitTextSlotSelection or {}
     M.unitTextMoveTogether = M.unitTextMoveTogether or {}
+    do
+        local req = _G.MSUF_EM2_MenuFocusRequest
+        if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit then
+            local component = req.component
+            if component == "health" or component == "healthText" or component == "hpText" then component = "hp" end
+            if component == "powerText" then component = "power" end
+            if component == "name" or component == "hp" or component == "power" then
+                M.unitTextTabSelection[unit] = component
+                M.unitTextSlotSelection[unit] = M.unitTextSlotSelection[unit] or {}
+                if req.slot then M.unitTextSlotSelection[unit][component] = req.slot end
+            end
+        end
+    end
     local function CurrentSlot(kind)
         local unitSlots = M.unitTextSlotSelection[unit]
         local slot = unitSlots and unitSlots[kind] or "center"
@@ -1038,6 +1109,18 @@ local function BuildText(ctx, builder, unit)
         local fn = _G.MSUF_UFPreview_FocusTextSlot
         if type(fn) == "function" then
             fn(unit, kind, slot, active == true)
+        end
+        if kind then
+            if active == true then
+                local set = _G.MSUF_EM2_SetFocusSelection
+                if type(set) == "function" then set(unit, kind, slot, { source = "menu2", clearHover = true }) end
+            else
+                local hover = _G.MSUF_EM2_SetFocusHover
+                if type(hover) == "function" then hover(unit, kind, slot, { source = "menu2" }) end
+            end
+        else
+            local clear = _G.MSUF_EM2_ClearFocusHover
+            if type(clear) == "function" then clear() end
         end
     end
     local function FocusActivePreviewText()
@@ -1776,8 +1859,7 @@ local function BuildInlineText(ctx, builder, unit)
 end
 
 local function BuildAlpha(ctx, builder, unit)
-    local rangeSupported = unit ~= "player"
-    local sec = builder:CollapsibleSection("transparency", "Transparency", rangeSupported and 578 or 328, false)
+    local sec = builder:CollapsibleSection("transparency", "Transparency", 328, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local gap = 16
     local leftX = 20
@@ -1788,10 +1870,6 @@ local function BuildAlpha(ctx, builder, unit)
 
     local opacityCard = W.ControlCard(sec, "Opacity", "Combat state alpha.", leftX, -38, leftW, 250)
     local layerCard = W.ControlCard(sec, "Fade target", "Whole frame or one visual layer.", rightX, -38, rightW, 250)
-    local rangeCard
-    if rangeSupported then
-        rangeCard = W.ControlCard(sec, "Range", "Unhalted-style spell and interact range fading.", leftX, -314, innerW, 220)
-    end
 
     local function PercentValue(value)
         return tostring(floor((tonumber(value) or 0) * 100 + 0.5)) .. "%"
@@ -1967,70 +2045,6 @@ local function BuildAlpha(ctx, builder, unit)
     end
     M.AddRefresher(ctx, RefreshAlphaLayerHelp)
     RefreshAlphaLayerHelp()
-
-    if not rangeCard then
-        return
-    end
-
-    local rangeW = innerW
-
-    local rangeToggle = W.ToggleAt(rangeCard, "Enable Range Fading", 16, -62, rangeW - 32)
-    M.BindToggle(ctx, rangeToggle,
-        function() return ReadBool(unit, "rangeFadeEnabled", false) == true end,
-        function(v)
-            SetBool(unit, "rangeFadeEnabled", v and true or false, "MSUF2_RANGE_FADE_" .. tostring(unit or "unit"), { alpha = true, preview = true })
-            M.Refresh(ctx)
-        end)
-
-    local function ReadRangeAlpha(inRange)
-        if inRange then
-            return ReadNumber(unit, "rangeFadeInAlpha", 1)
-        end
-        local conf = GetConf(unit)
-        local value = tonumber(conf and conf.rangeFadeOutAlpha)
-        if value ~= nil then return value end
-        return ReadNumber(unit, "rangeFadeAlpha", 0.5)
-    end
-
-    local function BindRangeSlider(widget, inRange, label)
-        M.BindSlider(ctx, widget,
-            function() return ReadRangeAlpha(inRange) end,
-            function(v)
-                if inRange then
-                    SetNumber(unit, "rangeFadeInAlpha", v, "MSUF2_RANGE_FADE_IN", { alpha = true, preview = true })
-                else
-                    SetNumber(unit, "rangeFadeOutAlpha", v, "MSUF2_RANGE_FADE_OUT", { alpha = true, preview = true })
-                    SetNumber(unit, "rangeFadeAlpha", v, "MSUF2_RANGE_FADE_OUT_LEGACY", { alpha = true, preview = true })
-                end
-            end)
-        UsePercentInput(widget)
-        local function RefreshLabel()
-            if widget and widget._msuf2Title then
-                widget._msuf2Title:SetText(AlphaLabel(label, ReadRangeAlpha(inRange)))
-            end
-        end
-        widget:HookScript("OnValueChanged", function(_, value)
-            if widget and widget._msuf2Title then
-                widget._msuf2Title:SetText(AlphaLabel(label, value))
-            end
-        end)
-        M.AddRefresher(ctx, RefreshLabel)
-        RefreshLabel()
-        return widget
-    end
-
-    local inRangeAlpha = BindRangeSlider(W.Slider(rangeCard, "", 0, 1, 0.05, rangeW), true, "In Range Alpha")
-    W.MoveWidget(inRangeAlpha, rangeCard, 16, -114, rangeW - 58, "LEFT")
-
-    local outRangeAlpha = BindRangeSlider(W.Slider(rangeCard, "", 0, 1, 0.05, rangeW), false, "Out of Range Alpha")
-    W.MoveWidget(outRangeAlpha, rangeCard, 16, -182, rangeW - 58, "LEFT")
-
-    M.AddRefresher(ctx, function()
-        local enabled = ReadBool(unit, "rangeFadeEnabled", false) == true
-        SetControlEnabled(rangeToggle, true)
-        SetControlEnabled(inRangeAlpha, enabled)
-        SetControlEnabled(outRangeAlpha, enabled)
-    end)
 end
 local function BuildPortrait(ctx, builder, unit)
     local sec = builder:CollapsibleSection("portrait", "Portrait", 558, false)
@@ -2210,6 +2224,7 @@ local function BuildPower(ctx, builder, unit)
     local detachedControls = {}
     local function AddPowerControl(control)
         powerControls[#powerControls + 1] = control
+        if W.AttachEditFocus then W.AttachEditFocus(control, unit, "powerbar", nil, { source = "menu2-unit" }) end
         return control
     end
     local function AddDetachedControl(control)
@@ -2230,6 +2245,7 @@ local function BuildPower(ctx, builder, unit)
     local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
 
     local show = W.SwitchAt(mainCard, "Show power bar", cardW - 62, -24, 0, "HIDDEN")
+    if W.AttachEditFocus then W.AttachEditFocus(show, unit, "powerbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, show,
         function() return ReadBool(unit, "showPowerBar", true) end,
         function(v)
@@ -2468,6 +2484,7 @@ local function BuildCastbar(ctx, builder, unit)
     end
 
     local enabled = W.SwitchAt(sec, "Enable Castbar", leftX, -42, 240)
+    if W.AttachEditFocus then W.AttachEditFocus(enabled, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, enabled,
         function() return ReadCastbarBackend() ~= "HIDE" end,
         SetCastbarEnabled)
@@ -2476,27 +2493,32 @@ local function BuildCastbar(ctx, builder, unit)
     if canUseBlizzardProvider then
         provider = W.Dropdown(sec, "Castbar provider", CASTBAR_BACKEND_VALUES, 220)
         W.MoveWidget(provider, sec, rightX, -42, 220)
+        if W.AttachEditFocus then W.AttachEditFocus(provider, unit, "castbar", nil, { source = "menu2-unit" }) end
         M.BindDropdown(ctx, provider,
             ReadCastbarProvider,
             SetCastbarProvider)
     end
 
     local time = W.ToggleAt(sec, timeLabel, leftX, -72, 240)
+    if W.AttachEditFocus then W.AttachEditFocus(time, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, time,
         function() return ReadGeneralBool(fields.time, true) end,
         function(v) SetGeneralBool(fields.time, v, "MSUF2_CASTBAR_TIME", { castbar = true, preview = true }) end)
 
     local interrupt = W.ToggleAt(sec, "Show interrupt", leftX, -102, 240)
+    if W.AttachEditFocus then W.AttachEditFocus(interrupt, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, interrupt,
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end)
 
     local icon = W.ToggleAt(sec, "Icon", rightX, -102, 70)
+    if W.AttachEditFocus then W.AttachEditFocus(icon, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, icon,
         function() return ReadGeneralBool(fields.icon, true) end,
         function(v) SetGeneralBool(fields.icon, v, "MSUF2_CASTBAR_ICON", { castbar = true, preview = true }) end)
 
     local text = W.ToggleAt(sec, "Text", textX, -102, 70)
+    if W.AttachEditFocus then W.AttachEditFocus(text, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, text,
         function() return ReadGeneralBool(fields.text, true) end,
         function(v) SetGeneralBool(fields.text, v, "MSUF2_CASTBAR_TEXT", { castbar = true, preview = true }) end)

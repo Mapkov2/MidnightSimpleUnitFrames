@@ -6,6 +6,7 @@ _G.MSUF = MSUF
 local GF = MSUF.GF or {}
 MSUF.GF = GF
 local UF = MSUF.UF
+local Metadata = GF.Metadata or {}
 
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
@@ -20,15 +21,6 @@ local rosterRebuildQueued = false
 local nameEventsRegistered = false
 local lastInRaid
 
-GF.DIRTY_GEOMETRY = GF.DIRTY_GEOMETRY or 0x01
-GF.DIRTY_VISUAL = GF.DIRTY_VISUAL or 0x02
-GF.DIRTY_FONT = GF.DIRTY_FONT or 0x04
-GF.DIRTY_COLOR = GF.DIRTY_COLOR or 0x08
-GF.DIRTY_BORDER = GF.DIRTY_BORDER or 0x10
-GF.DIRTY_LAYOUT = GF.DIRTY_LAYOUT or 0x20
-GF.DIRTY_AURAS = GF.DIRTY_AURAS or 0x40
-GF.DIRTY_ALL = GF.DIRTY_ALL or 0x7F
-
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
 end
@@ -40,47 +32,30 @@ local function Has(mask, flag)
     return mask % (flag * 2) >= flag
 end
 
-local MASK_FONT = {
-    Text = true, NameText = true, HealthText = true, PowerText = true,
-    StatusIndicators = true, GroupStatusRuntime = true,
-}
-local MASK_COLOR = {
-    Health = true, Power = true, Text = true, NameText = true,
-    HealthText = true, PowerText = true, StatusIndicators = true,
-    GroupVisuals = true, GroupCornerIndicators = true, GroupSpellIndicators = true,
-    Borders = true,
-}
-local MASK_BORDER = {
-    Borders = true, GroupVisuals = true,
-}
-local MASK_AURAS = {
-    Auras = true, GroupVisuals = true, GroupCornerIndicators = true,
-    GroupSpellIndicators = true, Borders = true,
-}
-local MASK_VISUAL = {
-    Health = true, Power = true, Text = true, NameText = true,
-    HealthText = true, PowerText = true, StatusIndicators = true,
-    Prediction = true, Alpha = true, GroupStatusRuntime = true,
-    GroupRangeFade = true, GroupVisuals = true, Borders = true,
-}
-local MASK_RUNTIME = {
-    Health = true, Power = true, Text = true, NameText = true,
-    HealthText = true, PowerText = true, StatusIndicators = true,
-    Prediction = true, Alpha = true, Auras = true, Borders = true,
-    GroupStatusRuntime = true, GroupRangeFade = true, GroupVisuals = true,
-    GroupCornerIndicators = true, GroupSpellIndicators = true,
-}
+local MASK_RUNTIME = Metadata.MASK_RUNTIME or {}
+local DIRTY_APPLY_MASKS = Metadata.dirtyApplyMasks or {}
 
 local function DirtyApplyMask(mask)
     if not mask or mask == GF.DIRTY_ALL or Has(mask, GF.DIRTY_GEOMETRY) or Has(mask, GF.DIRTY_LAYOUT) then
         return nil
     end
-    if mask == GF.DIRTY_FONT then return MASK_FONT end
-    if mask == GF.DIRTY_COLOR then return MASK_COLOR end
-    if mask == GF.DIRTY_BORDER then return MASK_BORDER end
-    if mask == GF.DIRTY_AURAS then return MASK_AURAS end
-    if mask == GF.DIRTY_VISUAL then return MASK_VISUAL end
-    return MASK_RUNTIME
+    return DIRTY_APPLY_MASKS[mask] or MASK_RUNTIME
+end
+
+local function DirtyRuntimeReason(mask, reason)
+    if reason ~= nil and reason ~= "MSUF_GF_REFRESH_VISUALS" and reason ~= "MSUF_GF_MARK_DIRTY" then
+        return reason
+    end
+    if mask == GF.DIRTY_FONT then
+        return "MSUF_GF_DIRTY_FONT"
+    end
+    if mask == GF.DIRTY_BORDER then
+        return "MSUF_GF_DIRTY_BORDER"
+    end
+    if mask == GF.DIRTY_AURAS then
+        return "MSUF_GF_DIRTY_AURAS"
+    end
+    return reason or "MSUF_GF_DIRTY"
 end
 
 local function InvalidateSpecs(kind)
@@ -98,7 +73,7 @@ local function ApplyFrameDirty(frame, kind, mask, reason)
         return GF.ApplyButton and GF.ApplyButton(frame, kind, reason or "MSUF_GF_DIRTY_FALLBACK")
     end
     local spec = GF.CompileSpec(kind, frame, frame and frame.unit)
-    return UF.ApplySpec(frame, spec, reason or "MSUF_GF_DIRTY", applyMask)
+    return UF.ApplySpec(frame, spec, DirtyRuntimeReason(mask, reason), applyMask)
 end
 
 function GF.DeferGroupRuntime(reason)
@@ -240,11 +215,23 @@ end
 local function HideOrRetireHeader(key)
     local header = GF.headers and GF.headers[key]
     if not header then return end
-    if GF._forceRecreateHeaders == true and GF.RetireHeader then
+    if GF.RetireHeader then
         GF.RetireHeader(key)
     else
         header:Hide()
     end
+end
+
+local function PreviewSuppressesHeader(key)
+    local active = GF._previewActive
+    if not active then return false end
+    if key == "party" then
+        return active.party == true
+    end
+    if key == "raid" then
+        return active.raid == true or active.mythicraid == true
+    end
+    return false
 end
 
 function GF.UpdateGroupVisibility()
@@ -255,7 +242,7 @@ function GF.UpdateGroupVisibility()
     if GF.EnsureDB then GF.EnsureDB() end
 
     local party = GF.headers and GF.headers.party
-    if ShouldShowParty() then
+    if ShouldShowParty() and not PreviewSuppressesHeader("party") then
         party = party or (GF.SetupHeader and GF.SetupHeader("party", "party"))
         if party then party:Show() end
     elseif party then
@@ -266,7 +253,7 @@ function GF.UpdateGroupVisibility()
     local raidKind = LiveRaidKind()
     local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
     local raid = GF.headers and GF.headers.raid
-    if ShouldShowRaid() and raidConf.enabled == true then
+    if ShouldShowRaid() and raidConf.enabled == true and not PreviewSuppressesHeader("raid") then
         if (not raid or raid._msufGFKind ~= raidKind) and GF.SetupHeader then
             raid = GF.SetupHeader("raid", raidKind) or raid
         end
@@ -288,13 +275,13 @@ function GF.RebuildAll()
     end
     InvalidateSpecs()
     if GF.EnsureDB then GF.EnsureDB() end
-    if ShouldShowParty() and GF.SetupHeader then
+    if ShouldShowParty() and not PreviewSuppressesHeader("party") and GF.SetupHeader then
         local party = GF.SetupHeader("party", "party")
         if party then party:Show() end
     elseif GF.headers and GF.headers.party then
         HideOrRetireHeader("party")
     end
-    if ShouldShowRaid() and GF.SetupHeader then
+    if ShouldShowRaid() and not PreviewSuppressesHeader("raid") and GF.SetupHeader then
         local raid = GF.SetupHeader("raid", LiveRaidKind())
         if raid then raid:Show() end
     elseif GF.headers and GF.headers.raid then
@@ -369,11 +356,6 @@ end
 
 function GF.BuildFrameCache(frame)
     return frame and frame.MSUFSpec
-end
-
-function GF.StopDispelGlow(frame)
-    if frame and frame.MSUFGFDispelOverlay then frame.MSUFGFDispelOverlay:Hide() end
-    return true
 end
 
 function GF.EM2_SetActivePreviewKind(kind)
@@ -492,6 +474,5 @@ _G.MSUF_GF_ForceCooldownTextRecolor = function()
     return GF.RefreshVisuals()
 end
 _G.MSUF_GF_ForceAuraTextColorRefresh = function() return GF.RefreshVisuals() end
-_G.MSUF_GF_StopDispelGlow = function(frame) return GF.StopDispelGlow(frame) end
 _G.MSUF_GF_EM2_SetActivePreviewKind = function(kind) return GF.EM2_SetActivePreviewKind(kind) end
 _G.MSUF_GF_EM2_NudgePreview = function(key, dx, dy) return GF.EM2_NudgePreview(key, dx, dy) end

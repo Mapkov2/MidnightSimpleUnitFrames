@@ -81,15 +81,25 @@ local function PaintDropdownScrollbar(hover)
     local thumbBase = bar._msuf2ThumbBase or { 0.240, 0.300, 0.430 }
     local thumbHover = bar._msuf2ThumbHover or { 0.320, 0.420, 0.560 }
 
-    if track and track.SetColorTexture then
-        track:SetColorTexture(0.025, 0.030, 0.060, (hover and 0.98 or 0.82) * alpha)
+    if track then
+        local a = (hover and 0.98 or 0.82) * alpha
+        if T.ApplyTextureGradient then
+            T.ApplyTextureGradient(track, "VERTICAL", { 0.042, 0.052, 0.095, a }, { 0.010, 0.014, 0.030, a }, true)
+        elseif track.SetColorTexture then
+            track:SetColorTexture(0.025, 0.030, 0.060, a)
+        end
     end
     if edge and edge.SetColorTexture then
         edge:SetColorTexture(soft[1], soft[2], soft[3], (hover and 0.62 or 0.38) * alpha)
     end
-    if thumb and thumb.SetColorTexture then
+    if thumb then
         local c = hover and thumbHover or thumbBase
-        thumb:SetColorTexture(c[1], c[2], c[3], (hover and 0.90 or 0.68) * alpha)
+        local a = (hover and 0.90 or 0.68) * alpha
+        if T.ApplyTextureGradient then
+            T.ApplyTextureGradient(thumb, "VERTICAL", { min(c[1] * 1.22, 1), min(c[2] * 1.18, 1), min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
+        elseif thumb.SetColorTexture then
+            thumb:SetColorTexture(c[1], c[2], c[3], a)
+        end
     end
 end
 
@@ -206,6 +216,10 @@ local function DropdownVisibleRows(owner, rowCount, preferred)
     return max(1, preferred), openAbove
 end
 
+local function DropdownAnchorCoord(v)
+    return floor((tonumber(v) or 0) + 0.5)
+end
+
 local function PositionDropdown(owner)
     if not (dropdownFrame and owner and dropdownFrame:IsShown()) then return false end
     if not DropdownOwnerVisible(owner) then
@@ -213,9 +227,11 @@ local function PositionDropdown(owner)
         return false
     end
 
-    dropdownFrame:ClearAllPoints()
     local frameH = dropdownFrame:GetHeight() or 0
     local frameW = dropdownFrame:GetWidth() or 0
+    local ownerLeft = owner.GetLeft and owner:GetLeft()
+    local ownerRight = owner.GetRight and owner:GetRight()
+    local ownerTop = owner.GetTop and owner:GetTop()
     local ownerBottom = owner.GetBottom and owner:GetBottom()
     local screenBottom = _G.UIParent and _G.UIParent.GetBottom and _G.UIParent:GetBottom() or 0
     local openAbove = owner._msuf2DropdownOpenAbove
@@ -223,17 +239,28 @@ local function PositionDropdown(owner)
         openAbove = ownerBottom and ownerBottom - frameH - 2 < screenBottom + 8
     end
 
-    local ownerLeft = owner.GetLeft and owner:GetLeft()
     local screenRight = _G.UIParent and _G.UIParent.GetRight and _G.UIParent:GetRight()
     local anchorRight = ownerLeft and screenRight and ownerLeft + frameW > screenRight - 8
+    local point, relPoint, xOff, yOff
     if openAbove and anchorRight then
-        dropdownFrame:SetPoint("BOTTOMRIGHT", owner, "TOPRIGHT", 0, 2)
+        point, relPoint, xOff, yOff = "BOTTOMRIGHT", "TOPRIGHT", 0, 2
     elseif openAbove then
-        dropdownFrame:SetPoint("BOTTOMLEFT", owner, "TOPLEFT", 0, 2)
+        point, relPoint, xOff, yOff = "BOTTOMLEFT", "TOPLEFT", 0, 2
     elseif anchorRight then
-        dropdownFrame:SetPoint("TOPRIGHT", owner, "BOTTOMRIGHT", 0, -2)
+        point, relPoint, xOff, yOff = "TOPRIGHT", "BOTTOMRIGHT", 0, -2
     else
-        dropdownFrame:SetPoint("TOPLEFT", owner, "BOTTOMLEFT", 0, -2)
+        point, relPoint, xOff, yOff = "TOPLEFT", "BOTTOMLEFT", 0, -2
+    end
+
+    local anchorKey = point .. ":" .. relPoint .. ":" ..
+        DropdownAnchorCoord(ownerLeft) .. ":" .. DropdownAnchorCoord(ownerRight) .. ":" ..
+        DropdownAnchorCoord(ownerTop) .. ":" .. DropdownAnchorCoord(ownerBottom) .. ":" ..
+        DropdownAnchorCoord(frameW) .. ":" .. DropdownAnchorCoord(frameH) .. ":" ..
+        DropdownAnchorCoord(screenRight) .. ":" .. DropdownAnchorCoord(screenBottom)
+    if dropdownFrame._msuf2AnchorKey ~= anchorKey then
+        dropdownFrame._msuf2AnchorKey = anchorKey
+        dropdownFrame:ClearAllPoints()
+        dropdownFrame:SetPoint(point, owner, relPoint, xOff, yOff)
     end
     return true
 end
@@ -255,12 +282,14 @@ function CloseDropdown()
             dropdownClosing = nil
             dropdownClosingOwner = nil
             if self.EnableMouse then self:EnableMouse(true) end
+            self._msuf2AnchorKey = nil
             self:Hide()
             self:SetAlpha(1)
         end })
     elseif dropdownFrame then
         dropdownClosing = nil
         dropdownClosingOwner = nil
+        dropdownFrame._msuf2AnchorKey = nil
         dropdownFrame:Hide()
         dropdownFrame:SetAlpha(1)
     else
@@ -368,8 +397,12 @@ local function EnsureDropdownFrame()
         if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
         if dropdownFrame.SetAlpha then dropdownFrame:SetAlpha(1) end
     end)
-    dropdownFrame:SetScript("OnUpdate", function()
-        if dropdownOwner then PositionDropdown(dropdownOwner) end
+    dropdownFrame:SetScript("OnUpdate", function(self, elapsed)
+        if not dropdownOwner then return end
+        self._msuf2PositionElapsed = (self._msuf2PositionElapsed or 0) + (elapsed or 0)
+        if self._msuf2PositionElapsed < 0.03 then return end
+        self._msuf2PositionElapsed = 0
+        PositionDropdown(dropdownOwner)
     end)
     return dropdownFrame
 end
@@ -501,7 +534,14 @@ local function DropdownRow(index)
 
     local hover = row:CreateTexture(nil, "HIGHLIGHT")
     hover:SetAllPoints()
-    hover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.18)
+    if T.ApplyTextureGradient then
+        T.ApplyTextureGradient(hover, "HORIZONTAL",
+            { T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.18 },
+            { T.colors.accent[1] * 0.55, T.colors.accent[2] * 0.60, T.colors.accent[3] * 0.75, 0.08 },
+            false)
+    else
+        hover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.18)
+    end
 
     local selected = row:CreateTexture(nil, "OVERLAY")
     selected:SetPoint("LEFT", row, "LEFT", 2, 0)
@@ -700,6 +740,7 @@ local function OpenDropdown(owner, valuesTable)
     if dropdownFrame.EnableMouse then dropdownFrame:EnableMouse(true) end
     dropdownFrame:SetAlpha(0)
     dropdownFrame:Show()
+    dropdownFrame._msuf2AnchorKey = nil
     PositionDropdown(owner)
     SetDropdownScroll((selectedIndex > visible) and ((selectedIndex - visible) * DROPDOWN_ROW_H) or 0)
     PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })

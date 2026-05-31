@@ -12,7 +12,8 @@ local SecureCmdOptionParse = _G.SecureCmdOptionParse
 local InCombatLockdown = _G.InCombatLockdown
 local UnitAffectingCombat = _G.UnitAffectingCombat
 local IsInInstance = _G.IsInInstance
-local UnitExists = _G.UnitExists
+local Secrets = MSUF.Secrets or {}
+local UnitExistsPlain = Secrets.UnitExistsPlain or function(_) return true end
 local type = type
 local tonumber = tonumber
 
@@ -145,12 +146,7 @@ local function RegisterVisibility(frame, spec)
     if visibility ~= "hide" and SecureCmdOptionParse then
         show = SecureCmdOptionParse(visibility) == "show"
     elseif visibility ~= "hide" then
-        if UnitExists then
-            local exists = UnitExists(frame.unit)
-            show = exists == true or exists == 1
-        else
-            show = true
-        end
+        show = UnitExistsPlain(frame.unit)
     end
     if frame._msufLoadShown ~= show then
         frame:SetShown(show)

@@ -80,6 +80,28 @@ local function ShouldCacheScreenPosition(spec, requestedAnchor)
     return COOLDOWN_ANCHORS[requestedAnchor] == true
 end
 
+local function DeferApply(unit)
+    if unit then
+        local units = UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
+        if units then
+            for i = 1, #units do
+                UF.pendingApply[units[i]] = true
+            end
+        else
+            UF.pendingApply[unit] = true
+        end
+    else
+        for i = 1, #UF.unitOrder do
+            UF.pendingApply[UF.unitOrder[i]] = true
+        end
+    end
+    if UF.Config then
+        UF.Config.dirty = true
+    end
+    Factory.EnsureDeferredDriver()
+    return false
+end
+
 local function ApplyPosition(frame, spec)
     if frame._msufDragActive == true then
         return true
@@ -144,39 +166,18 @@ local function ApplySize(frame, spec)
     return true
 end
 
-local function ApplyElements(frame, spec)
-    for i = 1, #UF.elementOrder do
-        local name = UF.elementOrder[i]
-        local element = UF.elements[name]
-        local enabled = UF.ElementEnabled(element, frame, spec)
-        if not enabled then
-            if not frame:DisableElement(name) and element and element.Disable then
-                element.Disable(frame)
-            end
-        else
-            if element and element.Create and not frame._msufCreatedElements[name] then
-                element.Create(frame, spec)
-                frame._msufCreatedElements[name] = true
-            end
-            if element and element.Apply then
-                element.Apply(frame, spec)
-            end
-            frame:EnableElement(name)
-        end
-    end
-end
-
 local function ApplyFrame(frame, spec)
     if not (frame and spec) then
         return false
     end
-    frame.MSUFSpec = spec
-    frame.cachedConfig = spec
-    frame.configKey = spec.key
-    frame.unitKey = spec.unit
-    ApplySize(frame, spec)
-    ApplyPosition(frame, spec)
-    ApplyElements(frame, spec)
+    if InCombatLockdown and InCombatLockdown() then
+        return DeferApply(frame.unit)
+    end
+    UF.SetFrameSpec(frame, spec, frame.unit)
+    if ApplySize(frame, spec) == false or ApplyPosition(frame, spec) == false then
+        return false
+    end
+    UF.ApplySpec(frame, spec, nil, true)
 
     if frame._msufVisibilityManaged == true then
         -- Secure visibility is owned by the LoadConditions element.
@@ -318,6 +319,9 @@ function Factory.Apply(unit)
     if not UF.spawned then
         return Factory.SpawnAll()
     end
+    if InCombatLockdown and InCombatLockdown() then
+        return DeferApply(unit)
+    end
     if unit then
         local units = UF.UnitsForConfigKey(unit)
         if not units then
@@ -354,12 +358,18 @@ local function DeferredOnEvent(self)
         Factory.SpawnAll()
         return
     end
+    if UF.Config and UF.Config.dirty == true and UF.Config.Refresh then
+        UF.Config.Refresh()
+    end
     for unit in pairs(UF.pendingApply) do
         UF.pendingApply[unit] = nil
         local frame = UF.frames[unit]
         if frame then
             ApplyFrame(frame, UF.Config.GetSpec(unit))
         end
+    end
+    if UF.FlushDeferredRefreshes then
+        UF.FlushDeferredRefreshes()
     end
 end
 

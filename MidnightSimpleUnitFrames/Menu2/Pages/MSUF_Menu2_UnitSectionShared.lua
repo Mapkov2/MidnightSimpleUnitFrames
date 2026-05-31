@@ -55,7 +55,7 @@ function Shared.SetSectionHeaderStatus(sec, opts)
     if T.ApplyCollapseVisual then T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open) end
 
     if entry.headerBg and entry.headerBg.SetColorTexture then
-        entry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
+        entry.headerBg:SetColorTexture(0.040, 0.050, 0.088, entry.open and 0.40 or 0.34)
     end
     if entry.label and entry.label.SetTextColor and T and T.colors and T.colors.text then
         local c = T.colors.text

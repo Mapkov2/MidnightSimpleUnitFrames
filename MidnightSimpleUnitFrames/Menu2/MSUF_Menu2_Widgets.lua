@@ -57,6 +57,120 @@ local function RegisterSearchObject(object, label, kind, opts)
     return object
 end
 
+local function ResolveFocusValue(value)
+    if type(value) == "function" then return value() end
+    return value
+end
+
+local UNIT_FOCUS_KEYS = {
+    player = true,
+    target = true,
+    targettarget = true,
+    focustarget = true,
+    focus = true,
+    pet = true,
+    boss = true,
+}
+
+local GROUP_FOCUS_KIND = {
+    gf_party = "party",
+    gf_raid = "raid",
+    gf_mythicraid = "mythicraid",
+    party = "party",
+    raid = "raid",
+    mythicraid = "mythicraid",
+}
+
+local function NormalizeFocusKey(key)
+    if type(key) ~= "string" or key == "" then return nil end
+    key = key:lower()
+    if key == "tot" then return "targettarget" end
+    if key == "focus_target" then return "focustarget" end
+    if key == "uf_player" then return "player" end
+    if key == "uf_target" then return "target" end
+    if key == "uf_targettarget" then return "targettarget" end
+    if key == "uf_focustarget" then return "focustarget" end
+    if key == "uf_focus" then return "focus" end
+    if key == "uf_pet" then return "pet" end
+    if key == "uf_boss" then return "boss" end
+    if key:match("^boss%d+$") then return "boss" end
+    return key
+end
+
+local function NormalizeFocusComponent(component)
+    if type(component) ~= "string" or component == "" then return nil end
+    component = component:lower()
+    if component == "health" or component == "healthtext" or component == "hptext" then return "hp" end
+    if component == "powertext" then return "power" end
+    if component == "aura" or component == "buff" or component == "buffs" or component == "debuff" or component == "debuffs" then return "auras" end
+    if component == "cast" then return "castbar" end
+    return component
+end
+
+local function NormalizeFocusSlot(slot)
+    if type(slot) ~= "string" or slot == "" then return nil end
+    slot = slot:lower()
+    if slot == "l" then return "left" end
+    if slot == "c" then return "center" end
+    if slot == "r" then return "right" end
+    return slot
+end
+
+function W.SetPreviewFocus(key, component, slot, active)
+    key = NormalizeFocusKey(ResolveFocusValue(key))
+    component = NormalizeFocusComponent(ResolveFocusValue(component))
+    slot = NormalizeFocusSlot(ResolveFocusValue(slot))
+    local textComponent = (component == "name" or component == "hp" or component == "power")
+    local didFocus = false
+
+    if (not key) or (not component) then
+        local clearUnit = _G.MSUF_UFPreview_ClearFocus
+        if type(clearUnit) == "function" then didFocus = clearUnit() or didFocus end
+        if type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(nil, nil, false) or didFocus end
+        return didFocus
+    end
+
+    if textComponent and UNIT_FOCUS_KEYS[key] then
+        local fn = _G.MSUF_UFPreview_FocusTextSlot
+        if type(fn) == "function" then
+            didFocus = fn(key, component, slot, active == true) or didFocus
+        end
+    end
+
+    if textComponent and GROUP_FOCUS_KIND[key] and type(M.FocusGFPreviewTextSlot) == "function" then
+        didFocus = M.FocusGFPreviewTextSlot(component, slot, active == true) or didFocus
+    end
+
+    return didFocus
+end
+
+function W.AttachEditFocus(widget, key, component, slot, opts)
+    if not (widget and widget.HookScript) then return widget end
+    opts = opts or {}
+    widget:HookScript("OnEnter", function()
+        W.SetPreviewFocus(key, component, slot, false)
+        local fn = _G.MSUF_EM2_SetFocusHover
+        if type(fn) == "function" then
+            fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" })
+        end
+    end)
+    widget:HookScript("OnLeave", function()
+        W.SetPreviewFocus(nil, nil, nil, false)
+        local fn = _G.MSUF_EM2_ClearFocusHover
+        if type(fn) == "function" then fn() end
+    end)
+    if opts.selectOnDown ~= false then
+        widget:HookScript("OnMouseDown", function()
+            W.SetPreviewFocus(key, component, slot, true)
+            local fn = _G.MSUF_EM2_SetFocusSelection
+            if type(fn) == "function" then
+                fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" })
+            end
+        end)
+    end
+    return widget
+end
+
 local function IsMSUFEditModeActive()
     local st = rawget(_G, "MSUF_EditState")
     if type(st) == "table" and st.active ~= nil then
@@ -79,6 +193,164 @@ local function IsMSUFEditModeActive()
 
     return rawget(_G, "MSUF_UnitEditModeActive") == true
         or rawget(_G, "MSUF_EDITMODE_ACTIVE") == true
+end
+
+local function MenuFocusRequestMatches(pageKey, sectionId)
+    local req = _G.MSUF_EM2_MenuFocusRequest
+    if type(req) ~= "table" or not req.sectionId then return nil end
+    if req.explicit ~= true then return nil end
+    if req.consumed == true then return nil end
+    if tostring(req.sectionId) ~= tostring(sectionId or "") then return nil end
+    if req.pageKey and tostring(req.pageKey) ~= tostring(pageKey or "") then return nil end
+    return req
+end
+
+local function ConsumeMenuFocusRequest(req)
+    if type(req) == "table" and _G.MSUF_EM2_MenuFocusRequest == req then
+        req.consumed = true
+    end
+end
+
+local function CloseAutoFocusedSections(pageKey)
+    local entry = M.cache and M.cache[pageKey]
+    local sections = entry and entry.sections
+    if type(sections) ~= "table" then return false end
+    local changed
+    local relayout
+    for _, section in pairs(sections) do
+        local collapsible = section and section._msuf2CollapsibleEntry
+        if collapsible and collapsible._msuf2AutoOpened == true then
+            collapsible._msuf2AutoOpened = nil
+            collapsible._msuf2Closing = nil
+            collapsible._msuf2MotionActive = nil
+            collapsible.open = false
+            if M.accordionState and collapsible.stateKey then M.accordionState[collapsible.stateKey] = nil end
+            if collapsible.body then
+                if collapsible.body.SetAlpha then collapsible.body:SetAlpha(1) end
+                if collapsible.body.Hide then collapsible.body:Hide() end
+            end
+            if collapsible._msuf2RefreshHeaderTone then collapsible._msuf2RefreshHeaderTone(false) end
+            if T.ApplyCollapseVisual then T.ApplyCollapseVisual(collapsible.arrow, collapsible.hint, false) end
+            relayout = relayout or collapsible.builder
+            changed = true
+        end
+    end
+    if changed and relayout and relayout.RelayoutCollapsibles then relayout:RelayoutCollapsibles() end
+    return changed and true or false
+end
+
+local function ScrollToCollapsibleEntry(entry)
+    local outer = entry and entry.outer
+    local scroll = M.scrollFrame
+    local child = M.scrollChild
+    if not (outer and scroll and child and outer.GetTop and child.GetTop and scroll.SetVerticalScroll) then return false end
+    local childTop = child:GetTop()
+    local outerTop = outer:GetTop()
+    if not (childTop and outerTop) then return false end
+    scroll:SetVerticalScroll(max(0, floor((childTop - outerTop) + 0.5) - 12))
+    if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+    return true
+end
+
+local function FlashCollapsibleHeader(entry)
+    local header = entry and entry.header
+    if not header then return end
+    if not entry._msuf2FocusFlash then
+        local flash = header:CreateTexture(nil, "OVERLAY")
+        flash:SetAllPoints()
+        local c = T.colors.accent or { 0.18, 0.72, 0.90, 1 }
+        flash:SetColorTexture(c[1], c[2], c[3], 0.18)
+        flash:SetAlpha(0)
+        flash:Hide()
+        entry._msuf2FocusFlash = flash
+    end
+    local flash = entry._msuf2FocusFlash
+    entry._msuf2FocusToken = (entry._msuf2FocusToken or 0) + 1
+    local token = entry._msuf2FocusToken
+    flash:SetAlpha(0.72)
+    flash:Show()
+    local function FadeOut()
+        if entry._msuf2FocusToken ~= token then return end
+        if T.PlayMotion then
+            T.PlayMotion(flash, "controlFocusOut", {
+                fromAlpha = flash.GetAlpha and flash:GetAlpha() or 0.72,
+                toAlpha = 0,
+                duration = 0.18,
+                onFinished = function()
+                    if entry._msuf2FocusToken ~= token then return end
+                    flash:Hide()
+                    flash:SetAlpha(0)
+                end,
+            })
+        else
+            flash:Hide()
+            flash:SetAlpha(0)
+        end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0.14, FadeOut) else FadeOut() end
+end
+
+function W.FocusCollapsibleSection(section, opts)
+    local entry = section and section._msuf2CollapsibleEntry
+    if not entry then return false end
+    opts = opts or {}
+    entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
+    if entry._msuf2MotionActive then
+        entry._msuf2MotionActive = nil
+    end
+    entry.open = true
+    entry._msuf2Closing = nil
+    if opts.persist == true then
+        entry._msuf2AutoOpened = nil
+        if M.accordionState and entry.stateKey then M.accordionState[entry.stateKey] = true end
+    else
+        entry._msuf2AutoOpened = true
+    end
+    if entry.body then
+        entry.body:Show()
+        if entry.body.SetAlpha then entry.body:SetAlpha(1) end
+    end
+    if entry.builder and entry.builder.RelayoutCollapsibles then entry.builder:RelayoutCollapsibles() end
+
+    local function FinishFocus()
+        ScrollToCollapsibleEntry(entry)
+        if opts.flash ~= false then FlashCollapsibleHeader(entry) end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(0, FinishFocus) else FinishFocus() end
+    return true
+end
+
+function M.FocusRequestedSection(pageKey, opts)
+    local req = _G.MSUF_EM2_MenuFocusRequest
+    if type(req) ~= "table" or not req.sectionId then
+        CloseAutoFocusedSections(pageKey or M.activeKey)
+        return false
+    end
+    if req.consumed == true then return false end
+    if req.explicit ~= true then
+        CloseAutoFocusedSections(pageKey or req.pageKey or M.activeKey)
+        return false
+    end
+    pageKey = pageKey or req.pageKey or M.activeKey
+    if req.pageKey and tostring(req.pageKey) ~= tostring(pageKey or "") then
+        CloseAutoFocusedSections(pageKey)
+        return false
+    end
+    local entry = M.cache and M.cache[pageKey]
+    local sections = entry and entry.sections
+    local section = sections and sections[tostring(req.sectionId)]
+    if not section then
+        CloseAutoFocusedSections(pageKey)
+        return false
+    end
+    _G.MSUF_EM2_MenuFocusSection = section
+    local focused = W.FocusCollapsibleSection(section, opts)
+    if focused then ConsumeMenuFocusRequest(req) end
+    return focused
+end
+
+function M.CloseAutoFocusedSections(pageKey)
+    return CloseAutoFocusedSections(pageKey or M.activeKey)
 end
 
 local function IsEditModeCombatLocked()
@@ -158,6 +430,7 @@ function W.PageBuilder(ctx)
             entry.body:SetShown(open)
             if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
             T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
+            if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
             if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
             y = y - entry.outer:GetHeight() - 8
         end
@@ -192,7 +465,8 @@ function W.PageBuilder(ctx)
         else
             M.accordionState = M.accordionState or {}
         end
-        local stateKey = tostring(ctx.key or "page") .. ":" .. tostring(id or title or "section")
+        local sectionId = tostring(id or title or "section")
+        local stateKey = tostring(ctx.key or "page") .. ":" .. sectionId
         local saved = M.accordionState[stateKey]
         local open = (saved == nil) and (defaultOpen and true or false) or (saved and true or false)
         local headerH = 28
@@ -213,10 +487,10 @@ function W.PageBuilder(ctx)
         header:SetHeight(headerH)
         local headerBg = header:CreateTexture(nil, "BACKGROUND")
         headerBg:SetAllPoints()
-        headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
+        headerBg:SetColorTexture(0.040, 0.050, 0.088, 0.34)
         local headerHover = header:CreateTexture(nil, "HIGHLIGHT")
         headerHover:SetAllPoints()
-        headerHover:SetColorTexture(1, 1, 1, 0.03)
+        headerHover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.045)
 
         local arrow = header:CreateTexture(nil, "OVERLAY")
         arrow:SetSize(10, 10)
@@ -249,6 +523,9 @@ function W.PageBuilder(ctx)
             label = label,
             hint = hint,
             open = open,
+            builder = self,
+            pageKey = tostring(ctx.key or ""),
+            sectionId = sectionId,
             headerHeight = headerH,
             contentHeight = height or 120,
             stateKey = stateKey,
@@ -323,11 +600,30 @@ function W.PageBuilder(ctx)
         entry._msuf2RefreshLayout = RefreshHeaderLayout
         outer._msuf2CollapsibleEntry = entry
         body._msuf2CollapsibleEntry = entry
+        body._msuf2SectionId = sectionId
+        body._msuf2PageKey = tostring(ctx.key or "")
+        if ctx.entry then
+            ctx.entry.sections = ctx.entry.sections or {}
+            ctx.entry.sections[sectionId] = body
+        end
         self.collapsibles[#self.collapsibles + 1] = entry
+        local function RefreshHeaderTone(hover)
+            if not headerBg.SetColorTexture then return end
+            if entry.open then
+                headerBg:SetColorTexture(0.048, 0.060, 0.105, hover and 0.48 or 0.40)
+            elseif hover then
+                headerBg:SetColorTexture(0.050, 0.064, 0.110, 0.42)
+            else
+                headerBg:SetColorTexture(0.040, 0.050, 0.088, 0.34)
+            end
+        end
+        entry._msuf2RefreshHeaderTone = RefreshHeaderTone
         header:SetScript("OnClick", function()
             if entry._msuf2MotionActive then return end
             local nextOpen = not entry.open
             M.accordionState[stateKey] = nextOpen
+            entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
+            local motionSerial = entry._msuf2MotionSerial
 
             if nextOpen then
                 entry.open = true
@@ -336,6 +632,7 @@ function W.PageBuilder(ctx)
                 self:RelayoutCollapsibles()
                 if T.PlayMotion then
                     T.PlayMotion(body, "accordionIn", { fromAlpha = 0, onFinished = function()
+                        if entry._msuf2MotionSerial ~= motionSerial then return end
                         entry._msuf2MotionActive = nil
                         if body.SetAlpha then body:SetAlpha(1) end
                     end })
@@ -347,28 +644,42 @@ function W.PageBuilder(ctx)
             end
 
             entry._msuf2MotionActive = true
+            entry._msuf2Closing = true
             T.ApplyCollapseVisual(entry.arrow, entry.hint, false)
             if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
             if body.Show then body:Show() end
             if T.PlayMotion then
                 T.PlayMotion(body, "accordionOut", { fromAlpha = body.GetAlpha and body:GetAlpha() or 1, onFinished = function()
+                    if entry._msuf2MotionSerial ~= motionSerial then return end
                     entry.open = false
                     entry._msuf2MotionActive = nil
+                    entry._msuf2Closing = nil
                     if body.SetAlpha then body:SetAlpha(1) end
                     self:RelayoutCollapsibles()
                 end })
             else
                 entry.open = false
                 entry._msuf2MotionActive = nil
+                entry._msuf2Closing = nil
                 if body.SetAlpha then body:SetAlpha(1) end
                 self:RelayoutCollapsibles()
             end
         end)
+        header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
+        header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)
         header:HookScript("OnSizeChanged", RefreshHeaderLayout)
 
         self.y = self.y - outer:GetHeight() - 8
         RefreshHeaderLayout()
+        RefreshHeaderTone(false)
         self:RelayoutCollapsibles()
+        local focusReq = MenuFocusRequestMatches(ctx.key, sectionId)
+        if focusReq then
+            _G.MSUF_EM2_MenuFocusSection = body
+            if W.FocusCollapsibleSection(body, { flash = true }) then
+                ConsumeMenuFocusRequest(focusReq)
+            end
+        end
         return body
     end
 
@@ -444,7 +755,10 @@ local function ApplyTopActionButtonVisual(btn, hover)
     local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
     local tx = btn._msuf2TopActive and btn._msuf2TopActiveText or btn._msuf2TopText
     local mul = hover and 1.06 or 1
-    if btn._msuf2Fill then btn._msuf2Fill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 1) end
+    if btn._msuf2Fill then
+        local fill = { min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] or 1 }
+        if T.SetFillGradient then T.SetFillGradient(btn._msuf2Fill, fill, 0.12, -0.18) else btn._msuf2Fill:SetVertexColor(fill[1], fill[2], fill[3], fill[4]) end
+    end
     if btn._msuf2Edge then btn._msuf2Edge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] or 1) end
     if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
 end
@@ -501,6 +815,21 @@ local function StyleTopSuccessButton(btn)
     return StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE)
 end
 W.StyleTopSuccessButton = StyleTopSuccessButton
+
+function W.RoleButton(parent, label, role, width, height)
+    local btn = (T.RoleButton and T.RoleButton(parent, label, role, width, height)) or T.Button(parent, label, width, height)
+    role = tostring(role or "normal")
+    if role == "primary" then
+        btn = StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE)
+    elseif role == "destructive" or role == "danger" or role == "reset" or role == "delete" then
+        btn = StyleTopButton(btn, TOP_DANGER_BUTTON_STYLE)
+    elseif role == "success" or role == "confirm" then
+        btn = StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE)
+    else
+        btn = StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE)
+    end
+    return btn
+end
 
 function W.CreatePageResetButton(ctx, parent, anchor, opts)
     opts = opts or {}
@@ -594,8 +923,11 @@ function W.SetCollapsibleBadges(section, specs)
 
     entry._msuf2Badges = entry._msuf2Badges or {}
     specs = specs or {}
-    local onlyWhenOpen = section._msuf2CollapsibleBadgesOnlyWhenOpen == true
-        or entry._msuf2CollapsibleBadgesOnlyWhenOpen == true
+    local showAllWhenClosed = section._msuf2CollapsibleBadgesShowWhenClosed == true
+        or entry._msuf2CollapsibleBadgesShowWhenClosed == true
+        or section._msuf2CollapsibleBadgesOnlyWhenOpen == false
+        or entry._msuf2CollapsibleBadgesOnlyWhenOpen == false
+    local badgesOpen = entry.open == true and entry._msuf2Closing ~= true
 
     for i = 1, #specs do
         local spec = specs[i] or {}
@@ -623,15 +955,29 @@ function W.SetCollapsibleBadges(section, specs)
         end
         if badge._msuf2Fill then
             local c = style.bg
-            badge._msuf2Fill:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+            if T.SetFillGradient then
+                T.SetFillGradient(badge._msuf2Fill, c, 0.12, -0.18)
+            else
+                badge._msuf2Fill:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
+            end
         end
         if badge._msuf2Edge then
             local c = style.border
             badge._msuf2Edge:SetVertexColor(c[1], c[2], c[3], c[4] or 1)
         end
         local shown = text ~= ""
-        if shown and (onlyWhenOpen or spec.onlyWhenOpen == true) then
-            shown = entry.open == true
+        if shown then
+            local allowCollapsed = showAllWhenClosed
+                or spec.showWhenClosed == true
+                or spec.showCollapsed == true
+                or spec.important == true
+                or spec.alwaysShow == true
+            if not badgesOpen and not allowCollapsed then
+                shown = false
+            end
+            if spec.onlyWhenOpen == true and not badgesOpen then
+                shown = false
+            end
         end
         badge._msuf2BadgeWantedShown = shown and true or false
         if badge.text and badge.text.SetWidth then
@@ -677,7 +1023,7 @@ local function ApplyControlCardChrome(card)
     top:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -2)
     top:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -2)
     top:SetHeight(1)
-    top:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.075)
+    top:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.050)
     card._msuf2CardTopLine = top
 
     local depth = card:CreateTexture(nil, "BORDER", nil, 4)
@@ -685,7 +1031,7 @@ local function ApplyControlCardChrome(card)
     depth:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 8, 2)
     depth:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -8, 2)
     depth:SetHeight(1)
-    depth:SetColorTexture(0, 0, 0, 0.18)
+    depth:SetColorTexture(0, 0, 0, 0.14)
     card._msuf2CardDepthLine = depth
 end
 

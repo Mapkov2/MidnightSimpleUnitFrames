@@ -689,6 +689,26 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
             menu.unitTextTabSelection = menu.unitTextTabSelection or {}
             menu.unitTextTabSelection[box.key or "player"] = "power"
         end
+        do
+            local focus = _G.MSUF_EM2_SetFocusSelection
+            if type(focus) == "function" then
+                local kind, slot
+                if handle._key == "name" then
+                    kind = "name"
+                elseif handle._key == "hp" then
+                    kind = "hp"
+                elseif handle._key == "hpLeft" or handle._key == "hpCenter" or handle._key == "hpRight" then
+                    kind = "hp"
+                    slot = (handle._key == "hpLeft" and "left") or (handle._key == "hpRight" and "right") or "center"
+                elseif handle._key == "power" then
+                    kind = "power"
+                elseif handle._key == "powerLeft" or handle._key == "powerCenter" or handle._key == "powerRight" then
+                    kind = "power"
+                    slot = (handle._key == "powerLeft" and "left") or (handle._key == "powerRight" and "right") or "center"
+                end
+                if kind then focus(box.key or "player", kind, slot, { source = "unit-preview", clearHover = true }) end
+            end
+        end
         if not skipSectionOpen and p and type(p._msufOpenUnitSection) == "function" then
             p._msufOpenUnitSection(fields.section or "text")
         end

@@ -122,7 +122,7 @@ local function BuildSearchPage(ctx)
         end
     end
     local quick = b:Section("Support Search Examples", 206)
-    local shortcutDispel = "dispel border glow any debuff"
+    local shortcutDispel = "dispel border overlay any debuff"
     local shortcutStripe = "where is debuff stripe"
     local shortcutHighlights = "highlight priority dispel aggro target"
     local shortcuts = {

@@ -2,38 +2,101 @@ local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
 
+local Apply = MSUF.Apply or {}
+local luaType = type
 local CreateFrame = Text.CreateFrame
+local UnitHealth = Text.UnitHealth
+local UnitHealthMax = Text.UnitHealthMax
+local UnitPower = Text.UnitPower
+local UnitPowerMax = Text.UnitPowerMax
+local UnitPowerType = Text.UnitPowerType
 local UnitHealthPercent = Text.UnitHealthPercent
 local UnitPowerPercent = Text.UnitPowerPercent
-local AbbreviateNumbers = Text.AbbreviateNumbers
-local AbbreviateLargeNumbers = Text.AbbreviateLargeNumbers
+local AbbreviateSecretNumber = _G.AbbreviateLargeNumbers
 local tonumber = Text.tonumber
+local type = Text.type or luaType
 local format = Text.format
 local floor = Text.floor
 local max = Text.max
 local GetTime = Text.GetTime
 local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
-local issecretvalue = _G.issecretvalue
+local IsSecret = Text.IsSecret or function(_) return false end
+local IsNil = Text.IsNil or function(value) return value == nil end
+local ApplyText = Apply.Text or function(fs, text)
+    if not fs then return end
+    if IsSecret(text) then
+        fs._aText = nil
+        fs:SetText(text)
+        return
+    end
+    text = text or ""
+    if fs._aText ~= text then
+        fs:SetText(text)
+        fs._aText = text
+    end
+end
+local ValueOrDefault = Text.ValueOrDefault or function(value, fallback)
+    if value == nil then return fallback end
+    return value
+end
 local C_Timer = _G.C_Timer
 local pairs = pairs
 
-local function IsSecret(value)
-    return issecretvalue and issecretvalue(value) == true
+local INT_TEXT_0_100 = {}
+local PERCENT_TEXT_0_100 = {}
+for i = 0, 100 do
+    local text = format("%d", i)
+    INT_TEXT_0_100[i] = text
+    PERCENT_TEXT_0_100[i] = text .. "%"
 end
 
-local function IsNil(value)
-    if IsSecret(value) then
-        return false
+local function SmallIntegerText(value)
+    if type(value) == "number" and value >= 0 and value <= 100 then
+        local n = floor(value)
+        if n == value then
+            return INT_TEXT_0_100[n]
+        end
     end
-    return value == nil
+    return nil
+end
+
+local function CompactNumber(value)
+    if type(value) ~= "number" then
+        value = tonumber(value) or 0
+    end
+    local sign = ""
+    if value < 0 then
+        sign = "-"
+        value = -value
+    end
+    if value >= 1000000000 then
+        local n = floor((value / 100000000) + 0.5) / 10
+        if n >= 10 or n == floor(n) then
+            return sign .. format("%dB", floor(n + 0.5))
+        end
+        return sign .. format("%.1fB", n)
+    elseif value >= 1000000 then
+        local n = floor((value / 100000) + 0.5) / 10
+        if n >= 10 or n == floor(n) then
+            return sign .. format("%dM", floor(n + 0.5))
+        end
+        return sign .. format("%.1fM", n)
+    elseif value >= 1000 then
+        local n = floor((value / 100) + 0.5) / 10
+        if n >= 10 or n == floor(n) then
+            return sign .. format("%dK", floor(n + 0.5))
+        end
+        return sign .. format("%.1fK", n)
+    end
+    return SmallIntegerText(value) or format("%d", value or 0)
 end
 
 local function ValueArg(value, canSecret)
     if IsSecret(value) then
         return value
     end
-    return value or 0
+    return ValueOrDefault(value, 0)
 end
 
 local function HealthPercent(unit)
@@ -66,22 +129,15 @@ end
 
 local function FormatValue(value, short, canSecret)
     if IsSecret(value) then
-        if short then
-            local abbreviate = AbbreviateNumbers or AbbreviateLargeNumbers
-            if abbreviate then
-                return abbreviate(value)
-            end
+        if short and AbbreviateSecretNumber then
+            return AbbreviateSecretNumber(value)
         end
         return value
     end
     if not short then
-        return format("%d", value or 0)
+        return SmallIntegerText(value) or format("%d", value or 0)
     end
-    local abbreviate = AbbreviateNumbers or AbbreviateLargeNumbers
-    if abbreviate then
-        return abbreviate(value or 0)
-    end
-    return format("%d", value or 0)
+    return CompactNumber(value)
 end
 
 local function FormatPercentValue(value, hideSymbol, canSecret)
@@ -91,28 +147,32 @@ local function FormatPercentValue(value, hideSymbol, canSecret)
     if value == nil then
         return nil
     end
-    local text = format("%d", value or 0)
+    local text = SmallIntegerText(value) or format("%d", value or 0)
     if hideSymbol then
         return text
+    end
+    if type(value) == "number" and value >= 0 and value <= 100 then
+        local n = floor(value)
+        if n == value then
+            return PERCENT_TEXT_0_100[n]
+        end
     end
     return text .. "%"
 end
 
 local function SetTextCached(fs, text)
+    ApplyText(fs, text)
+end
+
+local function SetTextPlainCached(fs, text)
     if not fs then
         return
     end
-    if IsSecret(text) then
-        fs._msufTextLastPlain = nil
-        fs:SetText(text)
-        return
-    end
     text = text or ""
-    if fs._msufTextLastPlain == text then
-        return
+    if fs._aText ~= text then
+        fs:SetText(text)
+        fs._aText = text
     end
-    fs._msufTextLastPlain = text
-    fs:SetText(text)
 end
 
 local function AddSuffix(text, suffix)
@@ -126,12 +186,16 @@ local function SlotText(slot, text)
     SetTextCached(slot.fs, AddSuffix(text, slot.suffix))
 end
 
+local function SlotTextPlain(slot, text)
+    SetTextPlainCached(slot.fs, AddSuffix(text, slot.suffix))
+end
+
 local function SlotFormatted(slot, pattern, ...)
     local fs = slot and slot.fs
     if not fs then
         return
     end
-    fs._msufTextLastPlain = nil
+    fs._aText = nil
     fs:SetFormattedText(pattern, ...)
 end
 
@@ -143,15 +207,33 @@ local function SlotPercent(slot, pct)
     return FormatPercentValue(pct, slot.hidePercentSymbol, slot.canSecret)
 end
 
+local function SlotValuePlain(slot, value)
+    if not slot.short then
+        return SmallIntegerText(value) or format("%d", value or 0)
+    end
+    return CompactNumber(value)
+end
+
+local function SlotPercentPlain(slot, pct)
+    if pct == nil then
+        return nil
+    end
+    if not slot.hidePercentSymbol and type(pct) == "number" and pct >= 0 and pct <= 100 then
+        local n = floor(pct)
+        if n == pct then
+            return PERCENT_TEXT_0_100[n]
+        end
+    end
+    local text = SmallIntegerText(pct) or format("%d", pct or 0)
+    return slot.hidePercentSymbol and text or (text .. "%")
+end
+
 local function SlotFormattedValue(slot, value)
     if IsSecret(value) then
-        if slot.short then
-            local abbreviate = AbbreviateNumbers or AbbreviateLargeNumbers
-            if abbreviate then
-                return abbreviate(value), "%s"
-            end
+        if slot.short and AbbreviateSecretNumber then
+            return AbbreviateSecretNumber(value), "%s"
         end
-        return ValueArg(value, slot.canSecret), "%d"
+        return value, "%d"
     end
     return SlotValue(slot, value), "%s"
 end
@@ -359,6 +441,194 @@ local MODE_WRITERS = {
     DEFICIT = WriteDeficit,
 }
 
+local function PlainWriteCurrent(slot, cur)
+    SlotTextPlain(slot, SlotValuePlain(slot, cur))
+end
+
+local function PlainWriteMax(slot, cur, maxValue)
+    SlotTextPlain(slot, SlotValuePlain(slot, maxValue))
+end
+
+local function PlainWriteCurMax(slot, cur, maxValue)
+    SlotTextPlain(slot, SlotValuePlain(slot, cur) .. slot.delimiter .. SlotValuePlain(slot, maxValue))
+end
+
+local function PlainWriteMaxCur(slot, cur, maxValue)
+    SlotTextPlain(slot, SlotValuePlain(slot, maxValue) .. slot.delimiter .. SlotValuePlain(slot, cur))
+end
+
+local function PlainWritePercent(slot, cur, maxValue, pct, pctKnown)
+    SlotTextPlain(slot, pctKnown and SlotPercentPlain(slot, pct) or "")
+end
+
+local function PlainWriteCurPercent(slot, cur, maxValue, pct, pctKnown)
+    local c = SlotValuePlain(slot, cur)
+    local p = pctKnown and SlotPercentPlain(slot, pct) or nil
+    SlotTextPlain(slot, p and (c .. slot.delimiter .. p) or c)
+end
+
+local function PlainWritePercentCur(slot, cur, maxValue, pct, pctKnown)
+    local c = SlotValuePlain(slot, cur)
+    local p = pctKnown and SlotPercentPlain(slot, pct) or nil
+    SlotTextPlain(slot, p and (p .. slot.delimiter .. c) or c)
+end
+
+local function PlainWriteCurMaxPercent(slot, cur, maxValue, pct, pctKnown)
+    local c = SlotValuePlain(slot, cur)
+    local m = SlotValuePlain(slot, maxValue)
+    local p = pctKnown and SlotPercentPlain(slot, pct) or nil
+    SlotTextPlain(slot, p and (c .. slot.delimiter .. m .. slot.delimiter .. p) or (c .. slot.delimiter .. m))
+end
+
+local function PlainWritePercentMaxCur(slot, cur, maxValue, pct, pctKnown)
+    local c = SlotValuePlain(slot, cur)
+    local m = SlotValuePlain(slot, maxValue)
+    local p = pctKnown and SlotPercentPlain(slot, pct) or nil
+    SlotTextPlain(slot, p and (p .. slot.delimiter .. m .. slot.delimiter .. c) or (m .. slot.delimiter .. c))
+end
+
+local function PlainWriteMaxPercent(slot, cur, maxValue, pct, pctKnown)
+    local m = SlotValuePlain(slot, maxValue)
+    local p = pctKnown and SlotPercentPlain(slot, pct) or nil
+    SlotTextPlain(slot, p and (m .. slot.delimiter .. p) or m)
+end
+
+local function PlainWritePercentMax(slot, cur, maxValue, pct, pctKnown)
+    local m = SlotValuePlain(slot, maxValue)
+    local p = pctKnown and SlotPercentPlain(slot, pct) or nil
+    SlotTextPlain(slot, p and (p .. slot.delimiter .. m) or m)
+end
+
+local function PlainWritePercentCurMax(slot, cur, maxValue, pct, pctKnown)
+    local c = SlotValuePlain(slot, cur)
+    local m = SlotValuePlain(slot, maxValue)
+    local p = pctKnown and SlotPercentPlain(slot, pct) or nil
+    SlotTextPlain(slot, p and (p .. slot.delimiter .. c .. slot.delimiter .. m) or (c .. slot.delimiter .. m))
+end
+
+local function PlainWriteDeficit(slot, cur, maxValue, pct, pctKnown, rt)
+    local missing = rt and rt.healthMissing
+    if missing ~= nil then
+        SlotTextPlain(slot, "-" .. (SlotValuePlain(slot, missing) or "0"))
+        return
+    end
+    SlotTextPlain(slot, "")
+end
+
+local MODE_PLAIN_WRITERS = {
+    CURRENT = PlainWriteCurrent,
+    MAX = PlainWriteMax,
+    CURMAX = PlainWriteCurMax,
+    MAXCUR = PlainWriteMaxCur,
+    PERCENT = PlainWritePercent,
+    CURPERCENT = PlainWriteCurPercent,
+    PERCENTCUR = PlainWritePercentCur,
+    CURMAXPERCENT = PlainWriteCurMaxPercent,
+    PERCENTMAXCUR = PlainWritePercentMaxCur,
+    MAXPERCENT = PlainWriteMaxPercent,
+    PERCENTMAX = PlainWritePercentMax,
+    PERCENTCURMAX = PlainWritePercentCurMax,
+    DEFICIT = PlainWriteDeficit,
+}
+
+local function SecretSlotValue(slot, value)
+    if slot.short and AbbreviateSecretNumber then
+        return AbbreviateSecretNumber(value), "%s"
+    end
+    return value, "%d"
+end
+
+local function SecretSlotPercent(slot, pct)
+    return pct, slot.hidePercentSymbol and "%d" or "%d%%"
+end
+
+local function SecretWriteCurrent(slot, cur)
+    local c, cf = SecretSlotValue(slot, cur)
+    SlotFormatted(slot, cf, c)
+end
+
+local function SecretWriteMax(slot, cur, maxValue)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    SlotFormatted(slot, mf, m)
+end
+
+local function SecretWriteCurMax(slot, cur, maxValue)
+    local c, cf = SecretSlotValue(slot, cur)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    SlotFormatted(slot, cf .. "%s" .. mf, c, slot.delimiter, m)
+end
+
+local function SecretWriteMaxCur(slot, cur, maxValue)
+    local c, cf = SecretSlotValue(slot, cur)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    SlotFormatted(slot, mf .. "%s" .. cf, m, slot.delimiter, c)
+end
+
+local function SecretWritePercent(slot, cur, maxValue, pct)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, pf, p)
+end
+
+local function SecretWriteCurPercent(slot, cur, maxValue, pct)
+    local c, cf = SecretSlotValue(slot, cur)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, cf .. "%s" .. pf, c, slot.delimiter, p)
+end
+
+local function SecretWritePercentCur(slot, cur, maxValue, pct)
+    local c, cf = SecretSlotValue(slot, cur)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, pf .. "%s" .. cf, p, slot.delimiter, c)
+end
+
+local function SecretWriteCurMaxPercent(slot, cur, maxValue, pct)
+    local c, cf = SecretSlotValue(slot, cur)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, cf .. "%s" .. mf .. "%s" .. pf, c, slot.delimiter, m, slot.delimiter, p)
+end
+
+local function SecretWritePercentMaxCur(slot, cur, maxValue, pct)
+    local c, cf = SecretSlotValue(slot, cur)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, pf .. "%s" .. mf .. "%s" .. cf, p, slot.delimiter, m, slot.delimiter, c)
+end
+
+local function SecretWriteMaxPercent(slot, cur, maxValue, pct)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, mf .. "%s" .. pf, m, slot.delimiter, p)
+end
+
+local function SecretWritePercentMax(slot, cur, maxValue, pct)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, pf .. "%s" .. mf, p, slot.delimiter, m)
+end
+
+local function SecretWritePercentCurMax(slot, cur, maxValue, pct)
+    local c, cf = SecretSlotValue(slot, cur)
+    local m, mf = SecretSlotValue(slot, maxValue)
+    local p, pf = SecretSlotPercent(slot, pct)
+    SlotFormatted(slot, pf .. "%s" .. cf .. "%s" .. mf, p, slot.delimiter, c, slot.delimiter, m)
+end
+
+local MODE_SECRET_WRITERS = {
+    CURRENT = SecretWriteCurrent,
+    MAX = SecretWriteMax,
+    CURMAX = SecretWriteCurMax,
+    MAXCUR = SecretWriteMaxCur,
+    PERCENT = SecretWritePercent,
+    CURPERCENT = SecretWriteCurPercent,
+    PERCENTCUR = SecretWritePercentCur,
+    CURMAXPERCENT = SecretWriteCurMaxPercent,
+    PERCENTMAXCUR = SecretWritePercentMaxCur,
+    MAXPERCENT = SecretWriteMaxPercent,
+    PERCENTMAX = SecretWritePercentMax,
+    PERCENTCURMAX = SecretWritePercentCurMax,
+}
+
 local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short, hidePercentSymbol, pctOverride, pctOverrideSet, suffix, canSecret)
     if not fs then
         return
@@ -412,7 +682,7 @@ end
 
 local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercentSymbol)
     if not (fs and mode and mode ~= "NONE") then
-        return index, false
+        return index, false, false
     end
     local needsPercent = ModeNeedsPercent(mode)
     local slot = slots[index]
@@ -423,13 +693,15 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     slot.fs = fs
     slot.mode = mode
     slot.writer = MODE_WRITERS[mode] or WriteCurMax
+    slot.plainWriter = MODE_PLAIN_WRITERS[mode] or PlainWriteCurMax
+    slot.secretWriter = MODE_SECRET_WRITERS[mode]
     slot.needsPercent = needsPercent
     slot.delimiter = delimiter or " - "
     slot.short = short == true
     slot.hidePercentSymbol = hidePercentSymbol == true
     slot.suffix = nil
     slot.canSecret = nil
-    return index + 1, needsPercent
+    return index + 1, needsPercent, mode == "DEFICIT"
 end
 
 local function TrimTextSlots(slots, firstDead)
@@ -447,7 +719,6 @@ local function CompileTextRuntime(frame, spec, text)
     text = text or {}
     rt.showName = spec and spec.showName ~= false and frame.nameText ~= nil or false
     rt.hideNameOnDeadOffline = text.hideNameOnDeadOffline == true
-    rt.canHaveSecretValues = false
     rt.nameShortenMax = text.nameShorten == true and (tonumber(text.nameShortenMax) or 6) or 0
     if rt.nameShortenMax > 0 then
         rt.nameShortenMax = floor(max(4, rt.nameShortenMax) + 0.5)
@@ -487,27 +758,35 @@ local function CompileTextRuntime(frame, spec, text)
     end
     rt.healthSlots = rt.healthSlots or {}
     rt.powerSlots = rt.powerSlots or {}
-
     local showHealth = spec and spec.showHealthText ~= false
     local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
 
     local nextIndex = 1
     local needsPercent = false
+    local needsMissing = false
     local slotNeeds
+    local slotMissing
     if showHealth and frame.hpTextLeft and frame.hpTextLeft:IsShown() then
-        nextIndex, slotNeeds = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextLeft, healthLeft, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotMissing = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextLeft, healthLeft, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
+        needsMissing = needsMissing or slotMissing
     end
     if showHealth and frame.hpTextCenter and frame.hpTextCenter:IsShown() then
-        nextIndex, slotNeeds = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextCenter, healthCenter, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotMissing = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextCenter, healthCenter, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
+        needsMissing = needsMissing or slotMissing
     end
     if showHealth and frame.hpTextRight and frame.hpTextRight:IsShown() then
-        nextIndex, slotNeeds = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextRight, healthRight, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotMissing = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextRight, healthRight, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
+        needsMissing = needsMissing or slotMissing
     end
     rt.healthSlotCount = nextIndex - 1
     rt.healthNeedsPercent = needsPercent
+    rt.healthNeedsMissing = needsMissing
+    rt.healthPlain = frame.unit == "player"
+    rt._lastHealthTextHP = nil
+    rt._lastHealthTextMax = nil
     TrimTextSlots(rt.healthSlots, nextIndex)
 
     local showPower = spec and spec.showPowerText ~= false and spec.power and spec.power.enabled == true
@@ -528,12 +807,18 @@ local function CompileTextRuntime(frame, spec, text)
     rt.powerSlotCount = nextIndex - 1
     rt.powerNeedsPercent = needsPercent
     rt.powerColorByType = text.powerColorByType == true
+    rt.powerPlain = frame.unit == "player"
+    rt._lastPowerTextPower = nil
+    rt._lastPowerTextMax = nil
+    frame._msufTextPowerType = nil
+    frame._msufTextPowerTypeKnown = nil
+    frame._msufTextPowerMax = nil
     rt.powerThrottle = tonumber(text.powerThrottle) or 0.1
-    if rt.powerSlotCount <= 0 or spec and spec.key == "player" then
+    if rt.powerSlotCount <= 0 then
         rt.powerThrottle = 0
     end
     rt.healthThrottle = tonumber(text.healthThrottle) or 0.1
-    if rt.healthSlotCount <= 0 or spec and spec.key == "player" then
+    if rt.healthSlotCount <= 0 then
         rt.healthThrottle = 0
     end
     rt.healthTextPending = nil
@@ -563,7 +848,6 @@ local function UpdateTextSlots(slots, count, cur, max, unit, percentFn, needsPer
     for i = 1, count do
         local slot = slots[i]
         if slot then
-            slot.canSecret = rt and rt.canHaveSecretValues
             local writer = slot.writer
             if writer then
                 writer(slot, cur, max, pct, pctKnown, rt)
@@ -572,7 +856,111 @@ local function UpdateTextSlots(slots, count, cur, max, unit, percentFn, needsPer
     end
 end
 
+local UpdateTextSlotsSecret
+
+local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+    if not slots or not count or count <= 0 then
+        return
+    end
+    if IsSecret(cur) or IsSecret(max) or (rt and IsSecret(rt.healthMissing)) then
+        return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+    end
+    local pct
+    local pctKnown = false
+    if needsPercent == true and percentFn then
+        pct = percentFn(unit)
+        if IsSecret(pct) then
+            return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+        end
+        pctKnown = pct ~= nil
+    end
+    for i = 1, count do
+        local slot = slots[i]
+        if slot then
+            local writer = slot.plainWriter
+            if writer then
+                writer(slot, cur, max, pct, pctKnown, rt)
+            end
+        end
+    end
+end
+
+UpdateTextSlotsSecret = function(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+    if not slots or not count or count <= 0 then
+        return
+    end
+    local pct
+    if needsPercent == true and percentFn then
+        pct = percentFn(unit)
+    end
+    for i = 1, count do
+        local slot = slots[i]
+        if slot then
+            local writer = slot.secretWriter
+            if writer then
+                writer(slot, cur, max, pct, true, rt)
+            else
+                writer = slot.writer
+                if writer then
+                    writer(slot, cur, max, pct, false, rt)
+                end
+            end
+        end
+    end
+end
+
 local FlushPendingPowerText
+
+local function ResolvePendingHealth(frame, rt, hp, hpMax)
+    local unit = frame and frame.unit
+    if unit then
+        if not hp and UnitHealth then
+            hp = UnitHealth(unit)
+        end
+        if not hpMax and UnitHealthMax then
+            hpMax = UnitHealthMax(unit)
+        end
+    end
+    if rt.healthNeedsMissing == true then
+        local calc = frame and frame._msufHealthCalc
+        rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+    else
+        rt.healthMissing = nil
+    end
+    return hp, hpMax
+end
+
+local function ResolvePendingPower(frame, rt, power, powerMax)
+    local unit = frame and frame.unit
+    if unit and (not power or not powerMax) then
+        local powerType = frame._msufTextPowerType
+        if frame._msufTextPowerTypeKnown ~= true and UnitPowerType then
+            local rawType = UnitPowerType(unit)
+            if not IsSecret(rawType) then
+                powerType = rawType
+                frame._msufTextPowerType = powerType
+            end
+            frame._msufTextPowerTypeKnown = true
+        end
+
+        if not power and UnitPower then
+            if powerType ~= nil then
+                power = UnitPower(unit, powerType)
+            else
+                power = UnitPower(unit)
+            end
+        end
+        if not powerMax and UnitPowerMax then
+            if powerType ~= nil then
+                powerMax = UnitPowerMax(unit, powerType)
+            else
+                powerMax = UnitPowerMax(unit)
+            end
+        end
+    end
+    rt.healthMissing = nil
+    return power, powerMax
+end
 
 local function FlushPendingHealthText(frame)
     local rt = frame and frame._msufTextRuntime
@@ -591,7 +979,12 @@ local function FlushPendingHealthText(frame)
     local now = GetTime and GetTime() or 0
     local throttle = rt.healthThrottle or 0
     rt.nextHealthTextTime = throttle > 0 and (now + throttle) or nil
-    UpdateTextSlots(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, HealthPercent, rt.healthNeedsPercent, rt)
+    hp, hpMax = ResolvePendingHealth(frame, rt, hp, hpMax)
+    if rt.healthPlain == true then
+        UpdateTextSlotsPlain(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, HealthPercent, rt.healthNeedsPercent, rt)
+    else
+        UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, HealthPercent, rt.healthNeedsPercent, rt)
+    end
 end
 
 local textThrottleFrame
@@ -721,8 +1114,12 @@ FlushPendingPowerText = function(frame)
     local now = GetTime and GetTime() or 0
     local throttle = rt.powerThrottle or 0
     rt.nextPowerTextTime = throttle > 0 and (now + throttle) or nil
-    rt.healthMissing = nil
-    UpdateTextSlots(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PowerPercent, rt.powerNeedsPercent, rt)
+    power, powerMax = ResolvePendingPower(frame, rt, power, powerMax)
+    if rt.powerPlain == true then
+        UpdateTextSlotsPlain(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PowerPercent, rt.powerNeedsPercent, rt)
+    else
+        UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PowerPercent, rt.powerNeedsPercent, rt)
+    end
 end
 
 local function QueuePowerTextFlush(frame, rt, remaining)
@@ -745,5 +1142,7 @@ Text.AddTextSlot = AddTextSlot
 Text.TrimTextSlots = TrimTextSlots
 Text.CompileTextRuntime = CompileTextRuntime
 Text.UpdateTextSlots = UpdateTextSlots
+Text.UpdateTextSlotsPlain = UpdateTextSlotsPlain
+Text.UpdateTextSlotsSecret = UpdateTextSlotsSecret
 Text.QueueHealthTextFlush = QueueHealthTextFlush
 Text.QueuePowerTextFlush = QueuePowerTextFlush

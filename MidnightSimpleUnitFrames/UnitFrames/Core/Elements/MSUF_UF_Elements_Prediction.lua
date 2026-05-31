@@ -5,7 +5,6 @@ _G.MSUF_NS = MSUF
 
 local UF = MSUF.UF
 local CreateFrame = CreateFrame
-local UnitExists = UnitExists
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitGetIncomingHeals = _G.UnitGetIncomingHeals
@@ -15,8 +14,11 @@ local CreateUnitHealPredictionCalculator = _G.CreateUnitHealPredictionCalculator
 local UnitGetDetailedHealPrediction = _G.UnitGetDetailedHealPrediction
 local tonumber = tonumber
 local type = type
-local issecretvalue = _G.issecretvalue
 local Enum = _G.Enum
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
+local IsNil = Secrets.IsNil or function(value) return value == nil end
+local UnitMissing = Secrets.UnitMissing or function(_) return false end
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local UnitIncomingHealClampMode = Enum and Enum.UnitIncomingHealClampMode
@@ -62,6 +64,7 @@ local function SetTextureCached(bar, texture)
         bar:SetStatusBarTexture(texture)
         bar._msufTexture = texture
         bar.MSUF_cachedStatusbarTexture = texture
+        bar._msufPredictionStatusTexture = nil
     end
 end
 
@@ -119,28 +122,24 @@ local function HideBar(bar)
     if not bar then
         return
     end
-    if bar._msufMax ~= 1 then
-        bar:SetMinMaxValues(0, 1)
-        bar._msufMax = 1
-        bar._msufValue = nil
-    end
-    if bar._msufValue ~= 0 then
-        bar:SetValue(0)
-        bar._msufValue = 0
-    end
+    bar:SetMinMaxValues(0, 1)
+    bar._msufMax = 1
+    bar._msufMaxReady = nil
+    bar:SetValue(0)
+    bar._msufValue = 0
     if bar._msufShown ~= false then
         bar:SetShown(false)
         bar._msufShown = false
     end
 end
 
-local function ShowValue(bar, maxValue, value)
-    if not bar or type(value) == "nil" then
+local function ShowValue(bar, maxValue, value, forceMax)
+    if not bar or IsNil(value) then
         HideBar(bar)
         return
     end
 
-    local valueSecret = issecretvalue and issecretvalue(value)
+    local valueSecret = IsSecret(value)
     if not valueSecret then
         local valueType = type(value)
         if valueType == "number" then
@@ -154,18 +153,26 @@ local function ShowValue(bar, maxValue, value)
         end
     end
 
-    if type(maxValue) == "nil" then
-        maxValue = 1
-    end
-
-    local maxCacheable = not (issecretvalue and issecretvalue(maxValue))
-    if (not maxCacheable) or bar._msufMax ~= maxValue then
-        bar:SetMinMaxValues(0, maxValue)
-        bar._msufMax = maxCacheable and maxValue or nil
+    local maxReady = bar._msufMaxReady == true
+    local needMax = forceMax == true or not maxReady
+    if not IsNil(maxValue) then
+        local maxCacheable = not IsSecret(maxValue)
+        local cachedMax = bar._msufMax
+        if needMax or (maxCacheable and (IsSecret(cachedMax) or cachedMax ~= maxValue)) then
+            bar:SetMinMaxValues(0, maxValue)
+            bar._msufMax = maxCacheable and maxValue or nil
+            bar._msufMaxReady = true
+            bar._msufValue = nil
+        end
+    elseif needMax then
+        bar:SetMinMaxValues(0, 1)
+        bar._msufMax = 1
+        bar._msufMaxReady = true
         bar._msufValue = nil
     end
 
-    if valueSecret or bar._msufValue ~= value then
+    local cachedValue = bar._msufValue
+    if valueSecret or IsSecret(cachedValue) or cachedValue ~= value then
         bar:SetValue(value)
         bar._msufValue = valueSecret and nil or value
     end
@@ -228,16 +235,28 @@ local function ConfigureCalc(calc, cfg)
     calc._msufPredictionCfg = cfg
 end
 
+local function UpdateCalc(frame, unit, cfg)
+    local calc = EnsureCalc(frame)
+    if not calc then
+        return nil
+    end
+    if calc._msufPredictionCfg ~= cfg then
+        ConfigureCalc(calc, cfg)
+    end
+    UnitGetDetailedHealPrediction(unit, nil, calc)
+    return calc
+end
+
 local function CalcIncomingHeals(calc, unit)
     if calc and calc.GetIncomingHeals then
         local value = calc:GetIncomingHeals()
-        if type(value) ~= "nil" then
+        if not IsNil(value) then
             return value
         end
     end
     if calc and calc.GetTotalIncomingHeals then
         local value = calc:GetTotalIncomingHeals()
-        if type(value) ~= "nil" then
+        if not IsNil(value) then
             return value
         end
     end
@@ -248,11 +267,11 @@ local function CalcDamageAbsorbs(calc, unit)
     if calc then
         if calc.GetDamageAbsorbs then
             local value = calc:GetDamageAbsorbs()
-            if type(value) ~= "nil" then return value end
+            if not IsNil(value) then return value end
         end
         if calc.GetTotalDamageAbsorbs then
             local value = calc:GetTotalDamageAbsorbs()
-            if type(value) ~= "nil" then return value end
+            if not IsNil(value) then return value end
         end
     end
     return UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or nil
@@ -262,21 +281,21 @@ local function CalcHealAbsorbs(calc, unit)
     if calc then
         if calc.GetHealAbsorbs then
             local value = calc:GetHealAbsorbs()
-            if type(value) ~= "nil" then return value end
+            if not IsNil(value) then return value end
         end
         if calc.GetTotalHealAbsorbs then
             local value = calc:GetTotalHealAbsorbs()
-            if type(value) ~= "nil" then return value end
+            if not IsNil(value) then return value end
         end
     end
     return UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or nil
 end
 
 local function ClampIncomingToMissing(value, hp, maxHP)
-    if type(value) ~= "number" or type(hp) ~= "number" or type(maxHP) ~= "number" then
+    if IsSecret(value) or IsSecret(hp) or IsSecret(maxHP) then
         return value
     end
-    if issecretvalue and (issecretvalue(value) or issecretvalue(hp) or issecretvalue(maxHP)) then
+    if type(value) ~= "number" or type(hp) ~= "number" or type(maxHP) ~= "number" then
         return value
     end
     local missing = maxHP - hp
@@ -289,27 +308,27 @@ local function ClampIncomingToMissing(value, hp, maxHP)
     return value
 end
 
-local function ReadIncomingHeals(unit, hp, maxHP, healMode)
-    local value = UnitGetIncomingHeals and UnitGetIncomingHeals(unit) or nil
-    if healMode == 3 then
+local function ReadIncomingHeals(calc, unit, hp, maxHP, healMode)
+    local value = CalcIncomingHeals(calc, unit)
+    if not calc and healMode == 3 then
         value = ClampIncomingToMissing(value, hp, maxHP)
     end
     return value
 end
 
-local function ReadDamageAbsorbs(unit, hp, maxHP, absorbMode)
-    local value = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or nil
-    if absorbMode == 3 then
+local function ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
+    local value = CalcDamageAbsorbs(calc, unit)
+    if not calc and absorbMode == 3 then
         value = ClampIncomingToMissing(value, hp, maxHP)
     end
     return value
 end
 
 local function ClampToValue(value, maxValue)
-    if type(value) ~= "number" or type(maxValue) ~= "number" then
+    if IsSecret(value) or IsSecret(maxValue) then
         return value
     end
-    if issecretvalue and (issecretvalue(value) or issecretvalue(maxValue)) then
+    if type(value) ~= "number" or type(maxValue) ~= "number" then
         return value
     end
     if value > maxValue then
@@ -318,8 +337,12 @@ local function ClampToValue(value, maxValue)
     return value
 end
 
-local function ReadHealAbsorbs(unit, hp)
-    return ClampToValue(UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or nil, hp)
+local function ReadHealAbsorbs(calc, unit, hp)
+    local value = CalcHealAbsorbs(calc, unit)
+    if not calc then
+        value = ClampToValue(value, hp)
+    end
+    return value
 end
 
 local function ResolveTexture(key, fallback)
@@ -375,7 +398,15 @@ local function SyncBarLayer(frame, hpBar, bar, levelOffset)
 end
 
 local function StatusTexture(bar)
-    return bar and bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+    if not (bar and bar.GetStatusBarTexture) then
+        return nil
+    end
+    local tex = bar._msufPredictionStatusTexture
+    if not tex then
+        tex = bar:GetStatusBarTexture()
+        bar._msufPredictionStatusTexture = tex
+    end
+    return tex
 end
 
 local function VisibleFollowBar(cfg, bar)
@@ -490,6 +521,9 @@ local function ClearPredictionCache(frame)
     frame._msufPredictionIncoming = nil
     frame._msufPredictionAbsorb = nil
     frame._msufPredictionHealAbsorb = nil
+    if frame.incomingHealBar then frame.incomingHealBar._msufMaxReady = nil end
+    if frame.absorbBar then frame.absorbBar._msufMaxReady = nil end
+    if frame.healAbsorbBar then frame.healAbsorbBar._msufMaxReady = nil end
 end
 
 local function CompilePredictionRuntime(frame, cfg, spec)
@@ -500,6 +534,7 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     local hpReverse = spec and spec.health and spec.health.reverse == true
     local healMode = NormalizeAnchorMode(cfg.healAnchorMode, 3)
     local absorbMode = NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+    local followAbsorb = cfg.absorb == true and (absorbMode == 3 or absorbMode == 4)
     frame._msufPredictionRuntimeCfg = cfg
     frame._msufPredictionHpReverse = hpReverse
     frame._msufPredictionHealMode = healMode
@@ -508,6 +543,9 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     frame._msufPredictionAbsorbReverse = ReverseForMode(absorbMode, hpReverse)
     frame._msufPredictionMask = PredictionMask(cfg)
     frame._msufPredictionNeedsHealth = NeedsHealthEvent(cfg)
+    frame._msufPredictionFollowAbsorb = followAbsorb
+    frame._msufPredictionClampHealToMissing = cfg.heal == true and healMode == 3
+    frame._msufPredictionClampAbsorbToMissing = cfg.absorb == true and absorbMode == 3
 end
 
 local function EnsurePredictionRuntime(frame, cfg)
@@ -568,8 +606,13 @@ function Prediction.Apply(frame, spec)
     frame._msufPredictionDisabled = nil
     ClearPredictionCache(frame)
     CompilePredictionRuntime(frame, cfg, spec)
-    if frame._msufPredictionCalc and frame._msufPredictionCalc._msufPredictionCfg ~= cfg then
-        ConfigureCalc(frame._msufPredictionCalc, cfg)
+    if frame._msufPredictionMask ~= 0 and cfg.test ~= true then
+        local calc = EnsureCalc(frame)
+        if calc then
+            ConfigureCalc(calc, cfg)
+        end
+    elseif frame._msufPredictionCalc then
+        frame._msufPredictionCalc._msufPredictionCfg = nil
     end
     local healMode = frame._msufPredictionHealMode or NormalizeAnchorMode(cfg.healAnchorMode, 3)
     local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
@@ -620,8 +663,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         return
     end
 
-    local exists = UnitExists and UnitExists(unit)
-    if not exists then
+    if UnitMissing(unit) then
         Prediction.Disable(frame)
         return
     end
@@ -655,27 +697,46 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         return
     end
 
-    local followAbsorb = cfg.absorb == true and (absorbMode == 3 or absorbMode == 4)
+    local followAbsorb = frame._msufPredictionFollowAbsorb == true
     local cacheReady = frame._msufPredictionCacheReady == true
         and frame._msufPredictionCacheUnit == unit
         and frame._msufPredictionCacheCfg == cfg
     local fullRefresh = not cacheReady
     local refreshHeal, refreshAbsorb, refreshHealAbsorb
     local showHeal, showAbsorb, showHealAbsorb
+    local forceMax = not cacheReady
+    local needHP, needMaxHP
 
     if event == "UNIT_HEAL_PREDICTION" then
         refreshHeal = cfg.heal == true
         showHeal = refreshHeal
         showAbsorb = followAbsorb and cfg.heal == true
+        needHP = refreshHeal and frame._msufPredictionClampHealToMissing == true
+        needMaxHP = needHP
     elseif event == "UNIT_ABSORB_AMOUNT_CHANGED" then
         refreshAbsorb = cfg.absorb == true
         showAbsorb = refreshAbsorb
+        needHP = refreshAbsorb and frame._msufPredictionClampAbsorbToMissing == true
+        needMaxHP = needHP
     elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
         refreshHealAbsorb = cfg.healAbsorb == true
         showHealAbsorb = refreshHealAbsorb
+        needHP = refreshHealAbsorb
     elseif event == "UNIT_HEALTH" then
         showHeal = cfg.heal == true and healMode == 3
         showAbsorb = followAbsorb and showHeal
+        needHP = showHeal or showAbsorb
+        needMaxHP = showHeal or showAbsorb
+    elseif event == "UNIT_MAXHEALTH" then
+        forceMax = true
+        refreshHeal = cfg.heal == true and frame._msufPredictionClampHealToMissing == true
+        refreshAbsorb = cfg.absorb == true and frame._msufPredictionClampAbsorbToMissing == true
+        refreshHealAbsorb = false
+        showHeal = cfg.heal == true
+        showAbsorb = cfg.absorb == true
+        showHealAbsorb = cfg.healAbsorb == true
+        needHP = refreshHeal or refreshAbsorb or showHealAbsorb
+        needMaxHP = showHeal or showAbsorb or showHealAbsorb or needHP
     else
         fullRefresh = true
         refreshHeal = cfg.heal == true
@@ -684,6 +745,11 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         showHeal = refreshHeal
         showAbsorb = refreshAbsorb
         showHealAbsorb = refreshHealAbsorb
+        forceMax = true
+        needHP = refreshHealAbsorb
+            or (refreshHeal and frame._msufPredictionClampHealToMissing == true)
+            or (refreshAbsorb and frame._msufPredictionClampAbsorbToMissing == true)
+        needMaxHP = showHeal or showAbsorb or showHealAbsorb or needHP
     end
 
     if fullRefresh then
@@ -693,32 +759,41 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         showHeal = cfg.heal == true or showHeal
         showAbsorb = cfg.absorb == true or showAbsorb
         showHealAbsorb = cfg.healAbsorb == true or showHealAbsorb
+        forceMax = true
+        needHP = refreshHealAbsorb
+            or (refreshHeal and frame._msufPredictionClampHealToMissing == true)
+            or (refreshAbsorb and frame._msufPredictionClampAbsorbToMissing == true)
+        needMaxHP = showHeal or showAbsorb or showHealAbsorb or needHP
     end
 
     if not (refreshHeal or refreshAbsorb or refreshHealAbsorb or showHeal or showAbsorb or showHealAbsorb) then
         return
     end
 
-    local needAmountRefresh = refreshHeal or refreshAbsorb or refreshHealAbsorb
     local hp, maxHP
-    local canUseSeed = type(seedHP) ~= "nil"
-        and type(seedMaxHP) ~= "nil"
+    local canUseSeed = not IsNil(seedHP)
+        and not IsNil(seedMaxHP)
     if canUseSeed then
         hp, maxHP = seedHP, seedMaxHP
     end
-    if type(hp) == "nil" and UnitHealth then hp = UnitHealth(unit) end
-    if type(maxHP) == "nil" and UnitHealthMax then maxHP = UnitHealthMax(unit) end
+    if (needHP or needMaxHP) and IsNil(hp) and UnitHealth then hp = UnitHealth(unit) end
+    if needMaxHP and IsNil(maxHP) and UnitHealthMax then maxHP = UnitHealthMax(unit) end
+
+    local calc
+    if refreshHeal or refreshAbsorb or refreshHealAbsorb then
+        calc = UpdateCalc(frame, unit, cfg)
+    end
     if refreshHeal then
-        local incoming = ReadIncomingHeals(unit, hp, maxHP, healMode)
+        local incoming = ReadIncomingHeals(calc, unit, hp, maxHP, healMode)
         frame._msufPredictionIncoming = incoming
     end
     if refreshAbsorb then
-        frame._msufPredictionAbsorb = ReadDamageAbsorbs(unit, hp, maxHP, absorbMode)
+        frame._msufPredictionAbsorb = ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
     end
     if refreshHealAbsorb then
-        frame._msufPredictionHealAbsorb = ReadHealAbsorbs(unit, hp)
+        frame._msufPredictionHealAbsorb = ReadHealAbsorbs(calc, unit, hp)
     end
-    if needAmountRefresh then
+    if refreshHeal or refreshAbsorb or refreshHealAbsorb then
         frame._msufPredictionCacheReady = true
         frame._msufPredictionCacheUnit = unit
         frame._msufPredictionCacheCfg = cfg
@@ -726,7 +801,10 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
 
     if showHeal and frame.incomingHealBar then
         local incoming = frame._msufPredictionIncoming
-        ShowValue(frame.incomingHealBar, maxHP, incoming)
+        if (forceMax == true or frame.incomingHealBar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
+            maxHP = UnitHealthMax(unit)
+        end
+        ShowValue(frame.incomingHealBar, maxHP, incoming, forceMax)
     end
 
     if showAbsorb and frame.absorbBar then
@@ -734,11 +812,17 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
             local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
             LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
         end
-        ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb)
+        if (forceMax == true or frame.absorbBar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
+            maxHP = UnitHealthMax(unit)
+        end
+        ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb, forceMax)
     end
 
     if showHealAbsorb and frame.healAbsorbBar then
-        ShowValue(frame.healAbsorbBar, maxHP, frame._msufPredictionHealAbsorb)
+        if (forceMax == true or frame.healAbsorbBar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
+            maxHP = UnitHealthMax(unit)
+        end
+        ShowValue(frame.healAbsorbBar, maxHP, frame._msufPredictionHealAbsorb, forceMax)
     end
 end
 

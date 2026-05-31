@@ -8,13 +8,13 @@
 --- * Subtle & fast: professional feel, never delays user interaction
 --- Usage:
 --- local T = MSUF.MSUF_Transitions
---- T.FadeIn(frame, 0.15) --- simple fade in
---- T.FadeOut(frame, 0.12, function() end) --- fade out with onFinish
---- T.CrossFade(oldFrame, newFrame, 0.18) --- page switch transition
---- T.ScaleReveal(frame, 0.15) - scale 0.97-.0 + fade in
---- T.SlideIn(frame, "LEFT", 20, 0.18) --- slide from offset + fade
---- T.Dismiss(frame, 0.12) --- fade out then :Hide()
---- All durations are in seconds. Recommended range: 0.10 - 0.22s
+--- T.FadeIn(frame, 0.10) --- simple fade in
+--- T.FadeOut(frame, 0.08, function() end) --- fade out with onFinish
+--- T.CrossFade(oldFrame, newFrame, 0.10) --- page switch transition
+--- T.ScaleReveal(frame, 0.10) - tiny scale + fade in
+--- T.SlideIn(frame, "LEFT", 10, 0.12) --- reserved for panels where direction matters
+--- T.Dismiss(frame, 0.08) --- fade out then :Hide()
+--- All durations are in seconds. Recommended range: 0.06 - 0.16s
 --- Anything longer feels sluggish in a game UI.
 
 local addonName, MSUF = ...
@@ -31,12 +31,12 @@ MSUF.MSUF_Transitions = T
 _G.MSUF_Transitions = T
 
 --- Constants - tweak these for global feel
-T.DURATION_FAST   = 0.10   --- micro-interactions (tooltip, highlight)
-T.DURATION_NORMAL = 0.15   --- standard panel open/close
-T.DURATION_SLOW   = 0.22   --- emphasis (first-open, edit mode overlay)
+T.DURATION_FAST   = 0.075  --- micro-interactions (tooltip, highlight)
+T.DURATION_NORMAL = 0.105  --- standard panel open/close
+T.DURATION_SLOW   = 0.160  --- rare emphasis, still below input-lag territory
 
 --- Scale reveal parameters
-local SCALE_REVEAL_FROM = 0.97   --- subtle: almost full size already
+local SCALE_REVEAL_FROM = 0.988  --- subtle: orientation, not decoration
 local SCALE_REVEAL_TO   = 1.0
 
 --- Internal: AnimationGroup pool
@@ -181,8 +181,8 @@ function T.Dismiss(frame, duration, onFinish)
     end)
 end
 
---- ScaleReveal: Show with subtle scale-up + fade. Premium open feel.
---- Scale goes from 0.97 - 1.0 (barely perceptible, but feels "alive").
+--- ScaleReveal: Show with subtle scale-up + fade.
+--- Scale goes from 0.988 - 1.0 so popups orient without jumping.
 ---@param frame table
 ---@param duration number?
 ---@param onFinish function?
@@ -237,7 +237,7 @@ function T.ScaleDismiss(frame, duration, onFinish)
     ag:Play()
 end
 
---- SlideIn: Show with directional slide + fade. Good for side panels.
+--- SlideIn: Show with directional slide + fade. Use only when direction has meaning.
 ---@param frame table
 ---@param direction string "LEFT"|"RIGHT"|"TOP"|"BOTTOM"
 ---@param offset number? pixels to slide (default 20)
@@ -246,7 +246,7 @@ end
 function T.SlideIn(frame, direction, offset, duration, onFinish)
     if not frame then return end
     direction = direction or "LEFT"
-    offset    = offset or 20
+    offset    = offset or 10
     duration  = duration or T.DURATION_NORMAL
 
     local ox, oy = 0, 0
@@ -295,12 +295,12 @@ end
 --- Pulse: Brief scale-up and back. "Confirm" or "attention" micro-animation.
 --- Does not change visibility.
 ---@param frame table
----@param intensity number? scale factor (default 1.03)
----@param duration number? total pulse time (default 0.20)
+---@param intensity number? scale factor (default 1.015)
+---@param duration number? total pulse time (default 0.14)
 function T.Pulse(frame, intensity, duration)
     if not frame then return end
-    intensity = intensity or 1.03
-    duration  = duration or 0.20
+    intensity = intensity or 1.015
+    duration  = duration or 0.14
     local half = duration * 0.5
 
     local ag = GetOrCreateGroup(frame)
@@ -322,12 +322,12 @@ end
 
 --- Flash: Brief alpha dip and back. Subtle "I heard you" feedback.
 ---@param frame table
----@param depth number? alpha dip target (default 0.6)
----@param duration number? total flash time (default 0.18)
+---@param depth number? alpha dip target (default 0.75)
+---@param duration number? total flash time (default 0.12)
 function T.Flash(frame, depth, duration)
     if not frame then return end
-    depth    = depth or 0.6
-    duration = duration or 0.18
+    depth    = depth or 0.75
+    duration = duration or 0.12
     local half = duration * 0.5
 
     local ag = GetOrCreateGroup(frame)

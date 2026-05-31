@@ -806,7 +806,9 @@ _G.MSUF_OpenAuras3PositionPopup = function(unit, parent)
         _G.MSUF_EM2_ActiveAuraUnit = unit
     end
     local EM2 = _G.MSUF_EM2
-    if EM2 and EM2.AuraPopup then
+    if EM2 and EM2.Popups then
+        return EM2.Popups.Open("aura_" .. tostring(unit or ""), parent)
+    elseif EM2 and EM2.AuraPopup then
         return EM2.AuraPopup.Open(unit, parent)
     end
 end

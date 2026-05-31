@@ -740,10 +740,16 @@ do
             local msg = "|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF."
             local tr = MSUF and MSUF.Translate
             if type(tr) == "function" then msg = tr(msg) or msg end
+            local shownInline = false
+            local m2 = (MSUF and MSUF.MSUF2) or _G.MSUF2
+            if m2 and type(m2.ShowStatusFeedback) == "function" then
+                m2.ShowStatusFeedback("Combat locked", "combat", 1.6)
+                shownInline = true
+            end
             if _G.UIErrorsFrame and _G.UIErrorsFrame.AddMessage then
                 _G.UIErrorsFrame:AddMessage(msg, 1, 0.82, 0.1)
             end
-            if print then print(msg) end
+            if (not shownInline) and print then print(msg) end
         end
     end
 

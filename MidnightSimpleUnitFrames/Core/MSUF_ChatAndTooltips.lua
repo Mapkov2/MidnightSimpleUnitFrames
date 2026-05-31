@@ -823,7 +823,9 @@ MSUF.MSUF_UpdateAllFonts = MSUF.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts
 do
     local tooltipDragHandle          --- overlay frame (lazy-created)
     local tooltipSettingsHandle      --- click-through-to-settings frame for non-draggable states
+    local tooltipMiniPopup
     local tooltipEditPreviewActive = false
+    local W8 = "Interface/Buttons/WHITE8X8"
 
     local function MSUF_Tooltip_IsSettingsOnlyPreview()
         local g = MSUF_GetTooltipGeneral()
@@ -832,8 +834,6 @@ do
     end
 
     local function MSUF_Tooltip_OpenTooltipSettings()
-        if not MSUF_Tooltip_IsSettingsOnlyPreview() then return end
-
         local menu = _G.MSUF2
         if menu and type(menu.Open) == "function" then
             menu.Open("opt_misc")
@@ -859,6 +859,19 @@ do
             C_Timer.After(0, OpenSection)
         else
             OpenSection()
+        end
+    end
+
+    local function MSUF_Tooltip_OpenMiscSettings()
+        local menu = _G.MSUF2
+        if menu and type(menu.Open) == "function" then
+            menu.Open("opt_misc")
+        elseif type(_G.MSUF2_Open) == "function" then
+            _G.MSUF2_Open("opt_misc")
+        elseif type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+            _G.MSUF_OpenStandaloneOptionsWindow("opt_misc")
+        elseif type(_G.MSUF_OpenPage) == "function" then
+            _G.MSUF_OpenPage("opt_misc")
         end
     end
 
@@ -912,6 +925,103 @@ do
     end
     _G.MSUF_Tooltip_ResetPosition = MSUF_Tooltip_ResetPosition
 
+    local function MSUF_Tooltip_HideMiniPopup()
+        if tooltipMiniPopup then tooltipMiniPopup:Hide() end
+    end
+
+    local function MSUF_Tooltip_MiniButton(parent, text, y, onClick)
+        local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+        b:SetPoint("TOPLEFT", parent, "TOPLEFT", 10, y)
+        b:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -10, y)
+        b:SetHeight(24)
+        b:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+        b:SetBackdropColor(0.055, 0.075, 0.14, 0.92)
+        b:SetBackdropBorderColor(0.10, 0.20, 0.42, 0.72)
+        local hl = b:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(0.20, 0.40, 0.80, 0.14)
+        local fs = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        fs:SetPoint("CENTER")
+        fs:SetText(Tr(text))
+        fs:SetTextColor(0.86, 0.92, 1.00, 0.95)
+        b._label = fs
+        b:SetScript("OnClick", function()
+            MSUF_Tooltip_HideMiniPopup()
+            if onClick then onClick() end
+        end)
+        return b
+    end
+
+    local function MSUF_Tooltip_EnsureMiniPopup()
+        if tooltipMiniPopup then return tooltipMiniPopup end
+
+        local p = CreateFrame("Frame", "MSUF_TooltipMiniSettingsPopup", UIParent, "BackdropTemplate")
+        p:SetSize(184, 132)
+        p:SetFrameStrata("TOOLTIP")
+        p:SetFrameLevel(940)
+        p:SetClampedToScreen(true)
+        p:EnableMouse(true)
+        p:SetBackdrop({
+            bgFile = W8,
+            edgeFile = W8,
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        p:SetBackdropColor(0.03, 0.05, 0.12, 0.97)
+        p:SetBackdropBorderColor(0.10, 0.20, 0.45, 0.92)
+        local S = _G.MSUF_EM2_Menu2Style
+        if S and S.Shell then S.Shell(p) end
+
+        local title = p:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        title:SetPoint("TOPLEFT", p, "TOPLEFT", 10, -10)
+        title:SetText(Tr("Tooltip"))
+        title:SetTextColor(0.75, 0.88, 1.00, 1)
+
+        local close = CreateFrame("Button", nil, p)
+        close:SetSize(22, 22)
+        close:SetPoint("TOPRIGHT", p, "TOPRIGHT", -6, -5)
+        local x = close:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        x:SetPoint("CENTER", 0, 0)
+        x:SetText("x")
+        x:SetTextColor(0.55, 0.62, 0.78, 0.85)
+        close:SetScript("OnEnter", function() x:SetTextColor(1.00, 0.42, 0.42, 1) end)
+        close:SetScript("OnLeave", function() x:SetTextColor(0.55, 0.62, 0.78, 0.85) end)
+        close:SetScript("OnClick", MSUF_Tooltip_HideMiniPopup)
+
+        MSUF_Tooltip_MiniButton(p, "Tooltip settings", -36, MSUF_Tooltip_OpenTooltipSettings)
+        MSUF_Tooltip_MiniButton(p, "Miscellaneous", -64, MSUF_Tooltip_OpenMiscSettings)
+        MSUF_Tooltip_MiniButton(p, "Reset position", -92, function()
+            MSUF_Tooltip_ResetPosition()
+            if _G.MSUF_Tooltip_ShowEditPreview then _G.MSUF_Tooltip_ShowEditPreview() end
+        end)
+
+        p:Hide()
+        tooltipMiniPopup = p
+        return p
+    end
+
+    local function MSUF_Tooltip_ShowMiniPopup(anchor)
+        local p = MSUF_Tooltip_EnsureMiniPopup()
+        if p:IsShown() then
+            p:Hide()
+            return
+        end
+        p:ClearAllPoints()
+        if anchor and anchor.GetRight and anchor:GetRight() then
+            local anchorRight = anchor:GetRight()
+            local screenRight = UIParent and UIParent.GetRight and UIParent:GetRight()
+            local popupW = p:GetWidth() or 184
+            if anchorRight and screenRight and anchorRight + popupW + 12 > screenRight then
+                p:SetPoint("TOPRIGHT", anchor, "TOPLEFT", -6, 0)
+            else
+                p:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 6, 0)
+            end
+        else
+            p:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        end
+        p:Show()
+    end
+
     --- --- drag handle (lazy) ---
     local function MSUF_Tooltip_EnsureDragHandle(parent)
         if tooltipDragHandle then
@@ -941,8 +1051,33 @@ do
         label:SetTextColor(0.4, 0.8, 1.0, 0.9)
         dh._label = label
 
+        local settings = CreateFrame("Button", nil, dh, "BackdropTemplate")
+        settings:SetSize(24, 18)
+        settings:SetPoint("TOPRIGHT", dh, "TOPRIGHT", -6, -3)
+        settings:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+        settings:SetBackdropColor(0.03, 0.05, 0.12, 0.72)
+        settings:SetBackdropBorderColor(0.10, 0.35, 0.65, 0.70)
+        local shl = settings:CreateTexture(nil, "HIGHLIGHT")
+        shl:SetAllPoints()
+        shl:SetColorTexture(0.20, 0.60, 1.00, 0.14)
+        local sfs = settings:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        sfs:SetPoint("CENTER", 0, 1)
+        sfs:SetText("...")
+        sfs:SetTextColor(0.60, 0.86, 1.00, 0.95)
+        settings:SetScript("OnEnter", function()
+            sfs:SetTextColor(1, 1, 1, 1)
+        end)
+        settings:SetScript("OnLeave", function()
+            sfs:SetTextColor(0.60, 0.86, 1.00, 0.95)
+        end)
+        settings:SetScript("OnClick", function(self)
+            MSUF_Tooltip_ShowMiniPopup(self)
+        end)
+        dh._settingsButton = settings
+
         dh:SetScript("OnDragStart", function(self)
             if InCombatLockdown and InCombatLockdown() then return end
+            MSUF_Tooltip_HideMiniPopup()
             MSUF_Tooltip_SetNudgeTarget(self)
             local p = self:GetParent()
             if p then
@@ -991,7 +1126,9 @@ do
         hover:SetColorTexture(0.2, 0.6, 1.0, 0.08)
         h._hover = hover
 
-        h:SetScript("OnClick", MSUF_Tooltip_OpenTooltipSettings)
+        h:SetScript("OnClick", function(self)
+            MSUF_Tooltip_ShowMiniPopup(self)
+        end)
         tooltipSettingsHandle = h
         return h
     end
@@ -1052,6 +1189,7 @@ do
     end
 
     local function MSUF_Tooltip_HideEditPreview()
+        MSUF_Tooltip_HideMiniPopup()
         if tooltipDragHandle then
             tooltipDragHandle:Hide()
         end

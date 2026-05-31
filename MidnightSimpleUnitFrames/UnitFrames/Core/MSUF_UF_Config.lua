@@ -13,6 +13,7 @@ local tostring = tostring
 local pairs = pairs
 local byte, sub = string.byte, string.sub
 local max, abs, floor = math.max, math.abs, math.floor
+local InCombatLockdown = _G.InCombatLockdown
 local wipe = _G.wipe or table.wipe or function(t)
     for k in pairs(t) do
         t[k] = nil
@@ -164,16 +165,6 @@ local function NormalizeDispelOverlayStyle(value)
         return value
     end
     return "FULL"
-end
-
-local function NormalizeDispelGlowStyle(value)
-    value = tostring(value or "PIXEL"):upper()
-    if value == "AUTOCAST" or value == "SHINE" or value == "AUTOCAST_SHINE" then
-        return "AUTOCAST"
-    elseif value == "PROC" or value == "PROC_GLOW" then
-        return "PROC"
-    end
-    return "PIXEL"
 end
 
 local function OutlineModeEnabled(value, fallback)
@@ -593,12 +584,6 @@ local function NormalizeAlphaLayerMode(mode)
     return "foreground"
 end
 
-local function NormalizeRangeLayerMode(mode)
-    return NormalizeAlphaLayerMode(mode) == "health" and "health" or "frame"
-end
-
-local RangeFadeAllowed
-
 local function CompileAlpha(out, conf, general, key)
     local alpha = out.alpha or {}
     out.alpha = alpha
@@ -649,15 +634,7 @@ local function CompileAlpha(out, conf, general, key)
         or (layered and (fgIn ~= fgOut or bgIn ~= bgOut or hpIn ~= hpOut))
     alpha.opacityActive = frameIn ~= 1 or frameOut ~= 1
         or (layered and (fgIn ~= 1 or fgOut ~= 1 or bgIn ~= 1 or bgOut ~= 1 or hpIn ~= 1 or hpOut ~= 1))
-    alpha.rangeEnabled = RangeFadeAllowed(key) and general.rangeFadeEnabled ~= false and conf.rangeFadeEnabled == true
-    alpha.rangeIn = Clamp01(conf.rangeFadeInAlpha or general.rangeFadeInAlpha, 1)
-    alpha.rangeOut = Clamp01(conf.rangeFadeOutAlpha or conf.rangeFadeAlpha or general.rangeFadeOutAlpha or general.rangeFadeAlpha, 0.5)
-    alpha.rangeLayerMode = NormalizeRangeLayerMode(conf.rangeFadeLayerMode or general.rangeFadeLayerMode)
-    alpha.rangePortrait = conf.rangeFadePortrait == true or general.rangeFadePortrait == true
-    alpha.active = alpha.opacityActive == true or alpha.rangeEnabled == true
-    if alpha.rangeEnabled == true then
-        alpha.active = true
-    end
+    alpha.active = alpha.opacityActive == true
 end
 
 local function ClampStatusLayer(value, fallback)
@@ -727,15 +704,6 @@ local function StatusAllowed(key, id)
         return key == "target" or key == "focus" or key == "targettarget" or key == "focustarget" or key == "boss"
     end
     return true
-end
-
-function RangeFadeAllowed(key)
-    return key == "target"
-        or key == "focus"
-        or key == "targettarget"
-        or key == "focustarget"
-        or key == "pet"
-        or key == "boss"
 end
 
 local function ResetList(list)
@@ -1074,12 +1042,12 @@ local function ResolveUnit(db, unit, out)
     if powerThrottle ~= nil then
         powerThrottle = powerThrottle / 1000
     else
-        powerThrottle = Number(conf.powerTextThrottle or general.powerTextThrottle, key == "player" and 0 or 0.10)
+        powerThrottle = Number(conf.powerTextThrottle or general.powerTextThrottle, key == "player" and 0.05 or 0.10)
         if powerThrottle > 10 then
             powerThrottle = powerThrottle / 1000
         end
     end
-    if key == "player" or conf.powerTextThrottleEnabled == false or general.powerTextThrottleEnabled == false then
+    if conf.powerTextThrottleEnabled == false or general.powerTextThrottleEnabled == false then
         powerThrottle = 0
     elseif powerThrottle < 0 then
         powerThrottle = 0
@@ -1258,12 +1226,6 @@ local function ResolveUnit(db, unit, out)
     out.dispel.typeBleedR = Number(general.dispelTypeBleedR, 0.80)
     out.dispel.typeBleedG = Number(general.dispelTypeBleedG, 0.10)
     out.dispel.typeBleedB = Number(general.dispelTypeBleedB, 0.10)
-    out.dispel.glowEnabled = ScopedValue(conf, general, "hlDispelGlowEnabled", true) ~= false
-    out.dispel.glowStyle = NormalizeDispelGlowStyle(ScopedValue(conf, general, "hlDispelGlowStyle", "PIXEL"))
-    out.dispel.glowLines = Number(ScopedValue(conf, general, "hlDispelGlowLines", 8), 8)
-    out.dispel.glowFrequency = Number(ScopedValue(conf, general, "hlDispelGlowFrequency", 0.25), 0.25)
-    out.dispel.glowThickness = Number(ScopedValue(conf, general, "hlDispelGlowThickness", 2), 2)
-
     out.dispelOverlay = out.dispelOverlay or {}
     out.dispelOverlay.enabled = ScopedValue(conf, general, "unitDispelOverlayEnabled", false) == true
     out.dispelOverlay.trigger = NormalizeDispelOverlayTrigger(ScopedValue(conf, general, "unitDispelOverlayTrigger", "BORDER"))
@@ -1409,6 +1371,10 @@ end
 
 Config.specs = Config.specs or {}
 
+local function ConfigInCombat()
+    return InCombatLockdown and InCombatLockdown()
+end
+
 function Config.BossLayoutDelta(conf, index)
     return BossLayoutDelta(conf, index, DEFAULTS.boss)
 end
@@ -1418,12 +1384,17 @@ function Config.BossLayoutOffset(conf, index)
 end
 
 function Config.Refresh()
+    if ConfigInCombat() then
+        Config.dirty = true
+        return Config.specs
+    end
     local db = EnsureDB()
     for i = 1, #UF.unitOrder do
         local unit = UF.unitOrder[i]
         Config.specs[unit] = ResolveUnit(db, unit, Config.specs[unit])
     end
     Config.serial = (Config.serial or 0) + 1
+    Config.dirty = nil
     return Config.specs
 end
 
@@ -1437,6 +1408,10 @@ function Config.RefreshUnit(unit)
     if not (unit and UF.IsManagedUnit and UF.IsManagedUnit(unit)) then
         return nil
     end
+    if ConfigInCombat() then
+        Config.dirty = true
+        return Config.specs[unit]
+    end
     local db = EnsureDB()
     Config.specs[unit] = ResolveUnit(db, unit, Config.specs[unit])
     Config.serial = (Config.serial or 0) + 1
@@ -1444,6 +1419,9 @@ function Config.RefreshUnit(unit)
 end
 
 function Config.GetSpec(unit)
+    if Config.dirty == true and not ConfigInCombat() then
+        Config.Refresh()
+    end
     if not Config.specs[unit] then
         Config.Refresh()
     end
@@ -1541,6 +1519,9 @@ end
 function Config.GetSettingsCache()
     local db = EnsureDB()
     local cache = Config.settingsCache
+    if Config.dirty == true and ConfigInCombat() and cache.dbRef ~= nil then
+        return cache
+    end
     if cache.dbRef == db and cache.settingsSerial == (Config.serial or 0) then
         return cache
     end
@@ -1550,6 +1531,10 @@ end
 _G.MSUF_UFCore_GetSettingsCache = Config.GetSettingsCache
 
 function Config.RefreshSettingsCache()
+    if ConfigInCombat() then
+        Config.dirty = true
+        return Config.settingsCache
+    end
     Config.Refresh()
     return Config.GetSettingsCache()
 end

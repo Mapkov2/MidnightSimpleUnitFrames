@@ -489,9 +489,27 @@ local function BuildGFBars(ctx)
         M.gfTextMoveTogether[scope][kind] = value ~= false
     end
     local refreshTextControls
+    local function CurrentScopeKey()
+        local scope = CurrentScope()
+        if scope == "raid" then return "gf_raid" end
+        if scope == "mythicraid" then return "gf_mythicraid" end
+        return "gf_party"
+    end
     local function FocusGFPreviewText(kind, slot, active)
         if type(M.FocusGFPreviewTextSlot) == "function" then
             M.FocusGFPreviewTextSlot(kind, slot, active == true)
+        end
+        if kind then
+            if active == true then
+                local set = _G.MSUF_EM2_SetFocusSelection
+                if type(set) == "function" then set(CurrentScopeKey(), kind, slot, { source = "menu2", clearHover = true }) end
+            else
+                local hover = _G.MSUF_EM2_SetFocusHover
+                if type(hover) == "function" then hover(CurrentScopeKey(), kind, slot, { source = "menu2" }) end
+            end
+        else
+            local clear = _G.MSUF_EM2_ClearFocusHover
+            if type(clear) == "function" then clear() end
         end
     end
     local function FocusActiveGFPreviewText()

@@ -38,6 +38,9 @@ local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
 local SMOOTH_INTERP = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut or nil
 local C_CurveUtil = _G.C_CurveUtil
 local CreateColor = _G.CreateColor
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
+local IsNil = Secrets.IsNil or function(value) return value == nil end
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local SCALE_100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
@@ -291,16 +294,12 @@ local function UnitNPCKind(frame, unit, spec, forText, keyOverride)
     return "enemy"
 end
 
-local function UnitCanHaveSecretValues(unit)
-    return false
-end
-
-local function ReadUnitBool(api, unit, canSecret, defaultValue)
+local function ReadUnitBool(api, unit, defaultValue)
     if not api then
         return defaultValue, false
     end
     local value = api(unit)
-    if value == nil then
+    if IsSecret(value) or value == nil then
         return defaultValue, false
     end
     return value == true or value == 1, true
@@ -327,26 +326,21 @@ local function RefreshUnitState(frame, unit, spec, event)
             -- connection or NPC-kind state.
         else
             -- High-frequency value ticks cannot change unit identity, existence,
-            -- death, connection or NPC-kind -- those arrive on their own events and
-            -- refresh the cache then. 5.54's _HealthValueFast/_PowerFrequent skipped
-            -- this recompute entirely; reusing the cached state matches that and
-            -- drops ~7 C calls (UnitCanHaveSecretValues + 5x ReadUnitBool +
-            -- UnitNPCKind) per power tick on the player frame.
+            -- death, connection or NPC-kind; those arrive on their own events and
+            -- refresh the cache then. Reusing the cached state drops several C
+            -- calls per health/power tick on the player frame.
             return state
         end
     end
 
     local dispatchToken = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
-    local canSecret = UnitCanHaveSecretValues(unit)
-    frame._msufCanHaveSecretValues = canSecret
     state.unit = unit
     state.dispatchToken = dispatchToken
     state.ready = true
-    state.canHaveSecretValues = canSecret
-    state.exists, state.existsKnown = ReadUnitBool(UnitExists, unit, canSecret, true)
-    state.dead, state.deadKnown = ReadUnitBool(UnitIsDeadOrGhost, unit, canSecret, false)
-    state.connected, state.connectedKnown = ReadUnitBool(UnitIsConnected, unit, canSecret, true)
-    state.isPlayer, state.isPlayerKnown = ReadUnitBool(UnitIsPlayer, unit, canSecret, false)
+    state.exists, state.existsKnown = ReadUnitBool(UnitExists, unit, true)
+    state.dead, state.deadKnown = ReadUnitBool(UnitIsDeadOrGhost, unit, false)
+    state.connected, state.connectedKnown = ReadUnitBool(UnitIsConnected, unit, true)
+    state.isPlayer, state.isPlayerKnown = ReadUnitBool(UnitIsPlayer, unit, false)
     state.npcKind = nil
     state.npcKindKnown = false
     if state.isPlayerKnown and not state.isPlayer then
@@ -502,13 +496,15 @@ local function PowerColor(frame, unit)
     end
 
     local powerType, token = UnitPowerType(unit)
-    local override = powerSpec.colors and token ~= nil and powerSpec.colors[token] or nil
+    local tokenKey = not IsSecret(token) and token or nil
+    local powerTypeKey = not IsSecret(powerType) and powerType or nil
+    local override = powerSpec.colors and tokenKey ~= nil and powerSpec.colors[tokenKey] or nil
     if override then
         return override.r, override.g, override.b
     end
-    local c = token ~= nil and PowerBarColor and PowerBarColor[token]
-    if not c and powerType ~= nil then
-        c = PowerBarColor and PowerBarColor[powerType]
+    local c = tokenKey ~= nil and PowerBarColor and PowerBarColor[tokenKey]
+    if not c and powerTypeKey ~= nil then
+        c = PowerBarColor and PowerBarColor[powerTypeKey]
     end
     if not c then
         c = PowerBarColor and PowerBarColor["MANA"]
@@ -564,7 +560,8 @@ MSUF.UFBarTextCommon = {
     ClampFrameLayer = ClampFrameLayer,
     DrawSubLayer = DrawSubLayer,
     GetLayerBaseLevel = GetLayerBaseLevel,
-    UnitCanHaveSecretValues = UnitCanHaveSecretValues,
+    IsSecret = IsSecret,
+    IsNil = IsNil,
     RefreshUnitState = RefreshUnitState,
     SetStatusTexture = SetStatusTexture,
     ApplyStatusColor = ApplyStatusColor,

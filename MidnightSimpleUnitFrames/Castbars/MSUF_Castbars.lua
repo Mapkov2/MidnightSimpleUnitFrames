@@ -41,10 +41,25 @@ if type(MSUF_GetCastbarTexture) ~= "function" then
 local ROOT_G = (getfenv and getfenv(0)) or _G
 
 if type(MSUF_SetTextIfChanged) ~= "function" then
+    local _issecretvalue = _G.issecretvalue
     function MSUF_SetTextIfChanged(fs, txt)
         if not fs then return end
-        -- Secret-safe: avoid comparing existing text; just set.
-        fs:SetText(txt or "")
+        local v = txt
+        if v == nil then v = "" end
+        if _issecretvalue and _issecretvalue(v) == true then
+            fs._msufLastText = nil
+            fs:SetText(v)
+            return
+        end
+        local tv = type(v)
+        if tv == "string" or tv == "number" or tv == "boolean" then
+            if fs._msufLastText == v then return end
+            fs._msufLastText = v
+            fs:SetText(v)
+            return
+        end
+        fs._msufLastText = nil
+        fs:SetText(v)
     end
 end
 

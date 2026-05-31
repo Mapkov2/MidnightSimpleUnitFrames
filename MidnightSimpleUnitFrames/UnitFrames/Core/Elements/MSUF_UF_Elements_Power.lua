@@ -8,83 +8,44 @@ if not C then return end
 
 local UF = C.UF
 local CreateFrame = C.CreateFrame
-local UnitClass = C.UnitClass
-local UnitExists = C.UnitExists
-local UnitHealth = C.UnitHealth
-local UnitHealthMax = C.UnitHealthMax
-local UnitGetTotalAbsorbs = C.UnitGetTotalAbsorbs
 local UnitPower = C.UnitPower
 local UnitPowerMax = C.UnitPowerMax
 local UnitPowerType = C.UnitPowerType
-local UnitHealthPercent = C.UnitHealthPercent
-local UnitPowerPercent = C.UnitPowerPercent
-local AbbreviateNumbers = C.AbbreviateNumbers
-local AbbreviateLargeNumbers = C.AbbreviateLargeNumbers
-local InCombatLockdown = C.InCombatLockdown
-local UnitName = C.UnitName
-local UnitIsPlayer = C.UnitIsPlayer
-local UnitIsDeadOrGhost = C.UnitIsDeadOrGhost
-local UnitIsConnected = C.UnitIsConnected
-local UnitReaction = C.UnitReaction
-local UnitSelectionColor = C.UnitSelectionColor
-local GetUnitClassification = C.GetUnitClassification
-local PowerBarColor = C.PowerBarColor
-local RAID_CLASS_COLORS = C.RAID_CLASS_COLORS
-local type = C.type
 local tonumber = C.tonumber
-local format = C.format
-local byte = C.byte
-local sub = C.sub
-local abs = C.abs
 local floor = C.floor
-local max = C.max
-local GetTime = C.GetTime
-local C_Timer = C.C_Timer
-local StatusBarInterpolation = C.StatusBarInterpolation
-local SMOOTH_INTERP = C.SMOOTH_INTERP
 local WHITE = C.WHITE
-local SCALE_100 = C.SCALE_100
-local REVERSE_HEALTH_MODE = C.REVERSE_HEALTH_MODE
-local EMPTY_EVENTS = C.EMPTY_EVENTS
 local POWER_EVENTS = C.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = C.POWER_EVENTS_FREQUENT
-local TEXT_EVENT_SETS = C.TEXT_EVENT_SETS
-local TEXT_EVENT_SETS_ABSORB = C.TEXT_EVENT_SETS_ABSORB
-local ClampFrameLayer = C.ClampFrameLayer
-local DrawSubLayer = C.DrawSubLayer
-local GetLayerBaseLevel = C.GetLayerBaseLevel
 local SetStatusTexture = C.SetStatusTexture
 local ApplyStatusColor = C.ApplyStatusColor
 local SetBarMinMax = C.SetBarMinMax
 local SetBarValue = C.SetBarValue
 local SnapBarInterpolation = C.SnapBarInterpolation
 local SetBarSmoothing = C.SetBarSmoothing
-local ApplyTextureColor = C.ApplyTextureColor
 local SetShownCached = C.SetShownCached
 local SetFrameLevelCached = C.SetFrameLevelCached
 local ExternalFrameWidth = C.ExternalFrameWidth
-local ClassColor = C.ClassColor
-local UnitNPCKind = C.UnitNPCKind
-local NPCColor = C.NPCColor
-local GradientColor = C.GradientColor
-local HealthColor = C.HealthColor
 local ApplyBackgrounds = C.ApplyBackgrounds
 local PowerColor = C.PowerColor
 local RefreshUnitState = C.RefreshUnitState
+local IsNil = C.IsNil or function(value) return value == nil end
 local Power = {}
 
 local function ReadPowerValues(unit)
-    local powerType = UnitPowerType and UnitPowerType(unit) or nil
+    local powerType
+    if UnitPowerType then
+        powerType = UnitPowerType(unit)
+    end
     local power, maxPower
-    if powerType ~= nil then
+    if not IsNil(powerType) then
         power = UnitPower(unit, powerType)
         maxPower = UnitPowerMax(unit, powerType)
     else
         power = UnitPower(unit)
         maxPower = UnitPowerMax(unit)
     end
-    if power == nil then power = 0 end
-    if maxPower == nil then maxPower = 1 end
+    if IsNil(power) then power = 0 end
+    if IsNil(maxPower) then maxPower = 1 end
     return power, maxPower, powerType
 end
 

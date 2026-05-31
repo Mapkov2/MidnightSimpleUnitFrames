@@ -68,6 +68,7 @@ local ApplyBackgrounds = C.ApplyBackgrounds
 local PowerColor = C.PowerColor
 local Text = MSUF.UFText or {}
 MSUF.UFText = Text
+local Secrets = MSUF.Secrets or {}
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
@@ -227,6 +228,13 @@ local function InlineTextColor(frame, unit, inline)
 end
 Text.C = C
 Text.UF = UF
+Text.Secrets = Secrets
+Text.IsSecret = Secrets.IsSecret or function(_) return false end
+Text.IsNil = Secrets.IsNil or function(value) return value == nil end
+Text.ValueOrDefault = Secrets.ValueOrDefault or function(value, fallback)
+    if value == nil then return fallback end
+    return value
+end
 Text.CreateFrame = CreateFrame
 Text.UnitClass = UnitClass
 Text.UnitExists = UnitExists

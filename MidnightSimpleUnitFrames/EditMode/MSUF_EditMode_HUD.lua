@@ -15,12 +15,20 @@ local function ApplyAllSettingsSafe()
     if UF and UF.Apply then UF.Apply(nil); return true end
     return false
 end
+local function ApplySettingsForKeySafe(key)
+    local UF = MSUF and MSUF.UF
+    if UF and UF.Apply then return UF.Apply(key) == true end
+    return false
+end
 
 local hudFrame, row2Frame
-local previewBtn, auraBtn, snapToggle, cdmBtn, anchorBtn
+local previewBtn, auraBtn, snapToggle, resetBtn, cdmBtn, anchorBtn
 local previewAddonSlot
 local undoBtn, redoBtn, cancelAllBtn, exitBtn
 local alphaFS, stepFS
+local selectionFS, hintFS
+local hudStatusText, hudStatusKind, hudStatusUntil
+local selectionLastText, hintLastText, hintLastR, hintLastG, hintLastB, hintLastA
 local helpBtn, tutorialPanel, tourState
 local bgWidget, gridWidget
 local HelpText
@@ -33,16 +41,26 @@ local BTN_GAP = 5
 local SEP_W   = 16
 
 local TH = {
-    r1Bg   = { 0.045, 0.05, 0.07, 0.95 },
-    r2Bg   = { 0.035, 0.04, 0.06, 0.90 },
-    edge   = { 0.20, 0.22, 0.28, 0.45 },
-    titleR=0.50, titleG=0.53, titleB=0.60,
-    textR=0.72, textG=0.74, textB=0.80,
-    mutedR=0.52, mutedG=0.54, mutedB=0.60,
-    onR=0.38, onG=0.65, onB=1.00,
-    offR=0.40, offG=0.42, offB=0.50,
+    r1Bg   = { 0.026, 0.032, 0.052, 0.94 },
+    r2Bg   = { 0.022, 0.028, 0.046, 0.88 },
+    edge   = { 0.105, 0.130, 0.220, 0.38 },
+    titleR=0.56, titleG=0.63, titleB=0.76,
+    textR=0.78, textG=0.82, textB=0.92,
+    mutedR=0.50, mutedG=0.56, mutedB=0.68,
+    onR=0.18, onG=0.72, onB=0.90,
+    offR=0.40, offG=0.44, offB=0.54,
     exitR=0.90, exitG=0.32, exitB=0.32,
 }
+
+local function SharedUI()
+    return (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+end
+
+local function ApplyHUDMaterial(frame, material)
+    local ui = SharedUI()
+    if ui and ui.ApplyMaterial then return ui.ApplyMaterial(frame, material or "card") end
+    return frame
+end
 
 local function MakeFS(p, sz, r, g, b, a)
     local fs = p:CreateFontString(nil, "OVERLAY")
@@ -71,20 +89,184 @@ local function SetTip(widget, text)
     widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
+local UNIT_KEYS = {
+    player = true, target = true, focus = true, focustarget = true,
+    targettarget = true, pet = true, boss = true,
+}
+
+local GROUP_KEY_TO_KIND = {
+    gf_party = "party",
+    gf_raid = "raid",
+    gf_mythicraid = "mythicraid",
+}
+
+local LABEL_BY_KEY = {
+    player = "Player",
+    target = "Target",
+    focus = "Focus",
+    focustarget = "Focus Target",
+    targettarget = "ToT",
+    pet = "Pet",
+    boss = "Boss",
+    gf_party = "Party Frames",
+    gf_raid = "Raid Frames",
+    gf_mythicraid = "Mythic Raid Frames",
+}
+
+local function CurrentSelectionKey()
+    local key = (EM2.State and EM2.State.GetUnitKey and EM2.State.GetUnitKey()) or _G.MSUF_CurrentEditUnitKey
+    if not key and EM2.Focus and EM2.Focus.GetSelection then
+        key = EM2.Focus.GetSelection()
+    end
+    return key
+end
+
+local function SelectionSummary()
+    local key = CurrentSelectionKey()
+    if not key then return HelpText("No selection") end
+    local db = _G.MSUF_DB
+    local conf
+    local groupKind = GROUP_KEY_TO_KIND[key]
+    if groupKind then
+        conf = db and db[key]
+    elseif UNIT_KEYS[key] then
+        conf = db and db[key]
+    end
+
+    local label = HelpText(LABEL_BY_KEY[key] or key)
+    if not conf then return label end
+    local x = floor((tonumber(conf.offsetX) or 0) + 0.5)
+    local y = floor((tonumber(conf.offsetY) or 0) + 0.5)
+    local w = tonumber(conf.width)
+    local h = tonumber(conf.height)
+    if w and h then
+        return string.format("%s   X %d   Y %d   W %d   H %d", label, x, y, floor(w + 0.5), floor(h + 0.5))
+    end
+    return string.format("%s   X %d   Y %d", label, x, y)
+end
+
+local function SetHint(text, r, g, b, a)
+    if not hintFS then return end
+    text = text or ""
+    r, g, b, a = r or TH.mutedR, g or TH.mutedG, b or TH.mutedB, a or 0.78
+    if hintLastText ~= text then
+        hintFS:SetText(text)
+        hintLastText = text
+    end
+    if hintLastR ~= r or hintLastG ~= g or hintLastB ~= b or hintLastA ~= a then
+        hintFS:SetTextColor(r, g, b, a)
+        hintLastR, hintLastG, hintLastB, hintLastA = r, g, b, a
+    end
+end
+
+function HUD.SetStatus(text, kind, seconds)
+    seconds = seconds or 1.6
+    hudStatusText = text
+    hudStatusKind = kind
+    hudStatusUntil = (GetTime and GetTime() or 0) + seconds
+    HUD.RefreshControls()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(seconds, function()
+            if HUD.IsShown and HUD.IsShown() then HUD.RefreshControls() end
+        end)
+    end
+end
+
+local function BlockHUDConfigLocked()
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+        return true
+    end
+    return false
+end
+
+function HUD.ResetCurrentPosition()
+    if BlockHUDConfigLocked() then return end
+
+    local key = CurrentSelectionKey()
+    if not key then return end
+    local groupKind = GROUP_KEY_TO_KIND[key]
+    if groupKind then
+        if type(_G.MSUF_GF_EM2_ResetPosition) == "function" then
+            _G.MSUF_GF_EM2_ResetPosition(groupKind)
+        else
+            local db = _G.MSUF_DB
+            local conf = db and db[key]
+            if conf then
+                if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+                    _G.MSUF_EM_UndoBeforeChange("gf", groupKind)
+                end
+                conf.offsetX = (groupKind == "party") and -400 or -500
+                conf.offsetY = 0
+                if type(_G.MSUF_GF_RefreshAll) == "function" then
+                    _G.MSUF_GF_RefreshAll()
+                elseif type(_G.MSUF_GF_RebuildAll) == "function" then
+                    _G.MSUF_GF_RebuildAll()
+                end
+                if type(_G.MSUF_EM2_SyncGFPopups) == "function" then _G.MSUF_EM2_SyncGFPopups() end
+                if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+            end
+        end
+        if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
+        if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(key, "layout", nil, { source = "hud-reset", duration = 0.32 }) end
+        HUD.SetStatus(HelpText("Reset") .. " " .. HelpText(LABEL_BY_KEY[key] or key), "ok")
+        HUD.RefreshControls()
+        return
+    end
+
+    if not UNIT_KEYS[key] then return end
+    local db = _G.MSUF_DB
+    local conf = db and db[key]
+    if not conf then return end
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+        _G.MSUF_EM_UndoBeforeChange("unit", key)
+    end
+    conf.offsetX = 0
+    conf.offsetY = 0
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate) == "function" then
+        _G.MSUF_ApplyUnitFrameKey_Immediate(key)
+    elseif not ApplySettingsForKeySafe(key) then
+        ApplyAllSettingsSafe()
+    end
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey) == "function" then
+        _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
+    elseif type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
+        _G.MSUF_ApplyPowerBarEmbedLayout_All()
+    end
+    if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
+    if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(key, "frame", nil, { source = "hud-reset", duration = 0.32 }) end
+    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("EM2_HUD_RESET_POSITION") end
+    HUD.SetStatus(HelpText("Reset") .. " " .. HelpText(LABEL_BY_KEY[key] or key), "ok")
+    HUD.RefreshControls()
+end
+
 local function MakeBtn(parent, text, w, h, fontSize, onClick)
-    local btn = CreateFrame("Button", nil, parent)
     w = w or (#text * 8 + 18); h = h or BTN_H
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    local btn = ui and ui.Button and ui.Button(parent, HelpText(text), w, h, {
+        align = "CENTER",
+        skipHistory = true,
+        onClick = onClick,
+    }) or CreateFrame("Button", nil, parent)
     btn:SetSize(w, h)
-    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
-    hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
-    local label = MakeFS(btn, fontSize or 12, TH.textR, TH.textG, TH.textB, 0.92)
-    label:SetPoint("CENTER"); label:SetText(HelpText(text))
+    local label = btn._msuf2Label or btn._label
+    if not label then
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.05)
+        label = MakeFS(btn, fontSize or 12, TH.textR, TH.textG, TH.textB, 0.92)
+        label:SetPoint("CENTER"); label:SetText(HelpText(text))
+    end
     btn._label = label
     local dot = btn:CreateTexture(nil, "OVERLAY")
     dot:SetSize(w - 8, 2); dot:SetPoint("BOTTOM", btn, "BOTTOM", 0, 2)
     dot:SetColorTexture(TH.onR, TH.onG, TH.onB, 0.90); dot:Hide()
     btn._dot = dot
-    if onClick then btn:SetScript("OnClick", onClick) end
+    if onClick and not (ui and ui.Button) then btn:SetScript("OnClick", onClick) end
     return btn
 end
 
@@ -204,6 +386,7 @@ local function EnsureTutorialPanel()
                     insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     p:SetBackdropColor(0.03, 0.05, 0.12, 0.97)
     p:SetBackdropBorderColor(0.10, 0.20, 0.45, 0.90)
+    ApplyHUDMaterial(p, "popup")
     p:EnableMouse(true); p:Hide()
 
     p:EnableKeyboard(true)
@@ -377,6 +560,8 @@ local function EnsureTourFrames()
     ts.card:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1,
                           insets = { left = 1, right = 1, top = 1, bottom = 1 } })
     ts.card:SetBackdropColor(0.03, 0.05, 0.12, 0.97)
+    ts.card:SetBackdropBorderColor(1.00, 0.82, 0.00, 0.70)
+    ApplyHUDMaterial(ts.card, "popup")
     ts.card:SetBackdropBorderColor(1.00, 0.82, 0.00, 0.70)
     ts.card:EnableMouse(true); ts.card:Hide()
 
@@ -574,6 +759,7 @@ local function EnsureHUD()
     hudFrame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=0,right=0,top=0,bottom=0} })
     hudFrame:SetBackdropColor(unpack(TH.r1Bg))
     hudFrame:SetBackdropBorderColor(unpack(TH.edge))
+    ApplyHUDMaterial(hudFrame, "status")
     hudFrame:EnableMouse(true); hudFrame:Hide()
 
     local title = MakeFS(hudFrame, 11, TH.titleR, TH.titleG, TH.titleB, 0.50)
@@ -649,6 +835,8 @@ local function EnsureHUD()
         cf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
         cf:SetBackdropColor(0.03, 0.05, 0.12, 0.97)
         cf:SetBackdropBorderColor(0.90, 0.70, 0.30, 0.80)
+        ApplyHUDMaterial(cf, "popup")
+        cf:SetBackdropBorderColor(0.90, 0.70, 0.30, 0.80)
         cf:EnableMouse(true)
         local msg = MakeFS(cf, 13, TH.textR, TH.textG, TH.textB, 1)
         msg:SetPoint("TOP", cf, "TOP", 0, -18)
@@ -720,6 +908,12 @@ local function EnsureHUD()
     SetTip(snapToggle, "Snap frames to edges of\nother frames while dragging.")
     r1[#r1+1] = snapToggle
 
+    resetBtn = MakeBtn(c1, "Reset", 52, BTN_H, 12, function()
+        HUD.ResetCurrentPosition()
+    end)
+    SetTip(resetBtn, "Reset the selected frame position.\nSize stays unchanged.")
+    r1[#r1+1] = resetBtn
+
     do local s = MakeSep(c1, BTN_H); s._isSep = true; r1[#r1+1] = s end
 
     cdmBtn = MakeBtn(c1, "CDM", 46, BTN_H, 12, function()
@@ -765,7 +959,20 @@ local function EnsureHUD()
     row2Frame:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=0,right=0,top=0,bottom=0} })
     row2Frame:SetBackdropColor(unpack(TH.r2Bg))
     row2Frame:SetBackdropBorderColor(unpack(TH.edge))
+    ApplyHUDMaterial(row2Frame, "status")
     row2Frame:EnableMouse(true)
+
+    selectionFS = MakeFS(row2Frame, 11, TH.textR, TH.textG, TH.textB, 0.88)
+    selectionFS:SetPoint("LEFT", row2Frame, "LEFT", 14, 0)
+    selectionFS:SetWidth(420)
+    selectionFS:SetJustifyH("LEFT")
+    selectionFS:SetText("")
+
+    hintFS = MakeFS(row2Frame, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.78)
+    hintFS:SetPoint("RIGHT", row2Frame, "RIGHT", -14, 0)
+    hintFS:SetWidth(420)
+    hintFS:SetJustifyH("RIGHT")
+    hintFS:SetText("")
 
     local c2 = CreateFrame("Frame", nil, row2Frame)
     c2:SetSize(1, BTN_H2); c2:SetPoint("CENTER", row2Frame, "CENTER", 0, 0)
@@ -835,9 +1042,35 @@ local function EnsureHUD()
     LayoutCenter(c2, r2, BTN_GAP, SEP_W)
 end
 
-function HUD.RefreshUnitSelector() end
+function HUD.RefreshUnitSelector()
+    HUD.RefreshControls()
+end
 
 function HUD.RefreshControls()
+    if selectionFS then
+        local text = SelectionSummary()
+        if selectionLastText ~= text then
+            selectionFS:SetText(text)
+            selectionLastText = text
+        end
+    end
+    if hintFS then
+        local now = GetTime and GetTime() or 0
+        if InCombatLockdown and InCombatLockdown() then
+            SetHint(HelpText("Combat locked"), 0.95, 0.38, 0.38, 0.95)
+        elseif hudStatusText and hudStatusUntil and now <= hudStatusUntil then
+            if hudStatusKind == "ok" then
+                SetHint(hudStatusText, 0.45, 0.95, 0.55, 0.95)
+            elseif hudStatusKind == "warn" then
+                SetHint(hudStatusText, 0.95, 0.72, 0.30, 0.95)
+            else
+                SetHint(hudStatusText, TH.onR, TH.onG, TH.onB, 0.95)
+            end
+        else
+            hudStatusText, hudStatusKind, hudStatusUntil = nil, nil, nil
+            SetHint(HelpText("Shift 5   Ctrl 10   Alt Grid"), TH.mutedR, TH.mutedG, TH.mutedB, 0.78)
+        end
+    end
     if alphaFS and EM2.Grid then alphaFS:SetText(HelpText("BG") .. " " .. floor(EM2.Grid.GetBgAlpha() * 100 + 0.5) .. "%") end
     if stepFS and EM2.Grid then
         local enabled = not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()
@@ -851,6 +1084,17 @@ function HUD.RefreshControls()
         end
     end
     if snapToggle and EM2.Snap then SetActive(snapToggle, EM2.Snap.IsEnabled()) end
+    if resetBtn and resetBtn._label then
+        local key = CurrentSelectionKey()
+        local canReset = key and ((UNIT_KEYS[key] == true) or (GROUP_KEY_TO_KIND[key] ~= nil)) or false
+        resetBtn:SetAlpha(canReset and 1 or 0.45)
+        resetBtn._label:SetTextColor(
+            canReset and TH.textR or TH.offR,
+            canReset and TH.textG or TH.offG,
+            canReset and TH.textB or TH.offB,
+            canReset and 0.92 or 0.55
+        )
+    end
     if previewBtn then SetActive(previewBtn, _G.MSUF_UnitPreviewActive and true or false) end
     if cdmBtn then
         local db = _G.MSUF_DB
@@ -899,3 +1143,7 @@ function HUD.Hide()
 end
 
 function HUD.IsShown() return hudFrame and hudFrame:IsShown() or false end
+
+function _G.MSUF_EM2_SetHUDStatus(text, kind, seconds)
+    return HUD.SetStatus(text, kind, seconds)
+end

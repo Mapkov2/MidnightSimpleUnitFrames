@@ -8,15 +8,12 @@ MSUF.UF.Elements = MSUF.UF.Elements or {}
 
 local UF = MSUF.UF
 local Elements = UF.Elements
+local Metadata = UF.Metadata or {}
 local type = type
-local ipairs = ipairs
 local pairs = pairs
 local tostring = tostring
-local tonumber = tonumber
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
-local math_floor = math.floor
-local debugprofilestop = debugprofilestop
 
 UF.version = "6.0-clean-core"
 UF.frames = UF.frames or {}
@@ -27,6 +24,7 @@ UF.dirtyQueues = UF.dirtyQueues or {}
 UF.elements = UF.elements or {}
 UF.elementOrder = UF.elementOrder or {}
 UF.pendingApply = UF.pendingApply or {}
+UF.pendingElementRefreshes = UF.pendingElementRefreshes or {}
 UF.visualRefreshCallbacks = UF.visualRefreshCallbacks or {}
 UF.initialized = UF.initialized or false
 
@@ -102,7 +100,7 @@ end
 -- in the hot dispatch path do a string concat per call (and the result is GC'd
 -- soon after). Element names are fixed and registered via UF.RegisterElement,
 -- which pre-bakes every key as a plain table entry. A defensive __index keeps
--- the table correct if some caller uses an unregistered name — but the hot path
+-- the table correct if some caller uses an unregistered name, but the hot path
 -- never triggers it because RegisterElement has already populated every key.
 local UPDATE_KEYS = UF._updateKeys or setmetatable({}, {
     __index = function(t, name)
@@ -117,8 +115,6 @@ UF._updateKeys = UPDATE_KEYS
 local function GetUpdateKey(name)
     return UPDATE_KEYS[name]
 end
-
-local DispatchFrameEvent
 
 function UF.ElementEnabled(element, frame, spec)
     return not element or type(element.IsEnabled) ~= "function" or element.IsEnabled(frame, spec) ~= false
@@ -236,6 +232,10 @@ local function EventDriverOnEvent(_, event, unit, ...)
     if not frames then
         return
     end
+    local dispatch = UF.DispatchFrameEvent
+    if not dispatch then
+        return
+    end
 
     if UNIT_EVENT_HAS_UNIT[event] then
         -- UNIT_* events are only useful when Blizzard provides the unit token.
@@ -248,7 +248,7 @@ local function EventDriverOnEvent(_, event, unit, ...)
         local unitlessFrames = UnitEventAllowsUnitless(event) and eventUnitlessFrames[event] or nil
         if unitlessFrames then
             for ownerFrame in pairs(unitlessFrames) do
-                DispatchFrameEvent(ownerFrame, event, unit, ...)
+                dispatch(ownerFrame, event, unit, ...)
             end
         end
         local unitFrames = eventUnitFrames[event]
@@ -258,7 +258,7 @@ local function EventDriverOnEvent(_, event, unit, ...)
                 if not FrameUnitMatches(frame, unit) then
                     RemoveEventUnitFrame(frame, event, frame._msufDriverEventUnits and frame._msufDriverEventUnits[event] or unit)
                 elseif not (unitlessFrames and unitlessFrames[frame]) then
-                    DispatchFrameEvent(frame, event, unit, ...)
+                    dispatch(frame, event, unit, ...)
                 end
             end
         else
@@ -267,14 +267,14 @@ local function EventDriverOnEvent(_, event, unit, ...)
             local frame = UF.frames[unit]
             if frame and frames[frame] and not (unitlessFrames and unitlessFrames[frame])
                 and not (frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event]) then
-                DispatchFrameEvent(frame, event, unit, ...)
+                dispatch(frame, event, unit, ...)
             end
         end
         return
     end
 
     for frame in pairs(frames) do
-        DispatchFrameEvent(frame, event, unit, ...)
+        dispatch(frame, event, unit, ...)
     end
 end
 
@@ -445,8 +445,8 @@ end
 
 -- Per-frame unit-event filter. For events that take a unit parameter we install
 -- RegisterUnitEvent on the frame itself. Blizzard's C side filters the event by
--- unit, so the frame's own OnEvent (FrameOnEvent → DispatchFrameEvent) is called
--- directly — no central-driver pairs() loop, no eventFrames/eventUnitFrames hash
+-- unit, so the frame's own OnEvent (FrameOnEvent to DispatchFrameEvent) is called
+-- directly: no central-driver pairs() loop, no eventFrames/eventUnitFrames hash
 -- lookups, no fan-out. This is the 5.5 group-frame dispatch shape.
 ApplyFrameUnitFilter = function(frame, event, unit)
     if not (frame and event and unit and UNIT_EVENT_HAS_UNIT[event]) then
@@ -462,6 +462,10 @@ ApplyFrameUnitFilter = function(frame, event, unit)
     end
     if registered[event] == unit then
         return
+    end
+    if registered[event] ~= nil and frame.UnregisterEvent then
+        frame:UnregisterEvent(event)
+        registered[event] = nil
     end
     frame:RegisterUnitEvent(event, unit)
     registered[event] = unit
@@ -589,8 +593,6 @@ local function ClearArray(t)
     wipe(t)
 end
 
-local RebuildHotEventState
-
 local function RebuildFrameEventList(frame, event)
     local owners = frame and frame._msufEventOwners and frame._msufEventOwners[event]
     local lists = frame and frame._msufEventElementLists
@@ -628,8 +630,9 @@ local function RebuildFrameEventList(frame, event)
             end
         end
     end
-    if RebuildHotEventState then
-        RebuildHotEventState(frame, event, owners)
+    local rebuild = UF.RebuildHotEventState
+    if rebuild then
+        rebuild(frame, event, owners)
     end
 end
 
@@ -802,1237 +805,13 @@ end
 local function FrameIsElementEnabled(frame, name)
     return frame and frame._msufActiveElements and frame._msufActiveElements[name] == true
 end
+UF.FrameIsElementEnabled = FrameIsElementEnabled
 
-local FrameRuntimeUpdate
-
-local function OwnerModeIsUnitless(mode)
-    return mode == "unitless" or mode == "both"
-end
-
-local function OwnerModeAllowsUnit(mode, frame, unit)
-    if mode == nil then
-        return nil, false
-    end
-    if unit and unit ~= frame.unit then
-        if OwnerModeIsUnitless(mode) then
-            return unit, true
-        end
-        return nil, false
-    end
-    return unit or frame.unit, true
-end
-
-local function FrameForceUpdate(frame, reason)
-    if not frame then
-        return
-    end
-    if FrameRuntimeUpdate then
-        return FrameRuntimeUpdate(frame, reason or "MSUF_FORCE_UPDATE")
-    end
-    reason = reason or "MSUF_FORCE_UPDATE"
-    for i = 1, #UF.elementOrder do
-        local name = UF.elementOrder[i]
-        if FrameIsElementEnabled(frame, name) then
-            local element = UF.elements[name]
-            if element and element.Update then
-                element.Update(frame, reason, frame.unit)
-            end
-        end
-    end
-end
-
-local function RunElementUpdate(frame, owners, name, event, unit, ...)
-    if owners then
-        local mode = owners[name]
-        if mode == nil then return nil end
-        if unit and unit ~= frame.unit then
-            if mode ~= "unitless" and mode ~= "both" then return nil end
-        else
-            unit = unit or frame.unit
-        end
-    else
-        unit = unit or frame.unit
-    end
-    local updateFn = frame[UPDATE_KEYS[name]]
-    if updateFn then
-        return updateFn(frame, event, unit, ...)
-    end
-    return nil
-end
-
-local function RunTextName(frame, owners, event, unit)
-    if owners then
-        local mode = owners["NameText"]
-        if mode == nil then return end
-        if unit and unit ~= frame.unit and mode ~= "unitless" and mode ~= "both" then
-            return
-        end
-    end
-    local updateFn = frame._msufUpdateNameText
-    if updateFn then
-        return updateFn(frame, event, unit or frame.unit)
-    end
-end
-
--- Hot helper used by kind=1/3 same-unit branches. Caller has already verified
--- `unit == frame.unit` (or unit is nil), so the owner-mode unit check is skipped.
-local function RunHealthHot(frame, owners, event, unit)
-    if owners and owners["Health"] == nil then
-        return
-    end
-    unit = unit or frame.unit
-    local updateFn = frame._msufUpdateHealth
-    if not updateFn then return end
-    local hp, maxHP, calc = updateFn(frame, event, unit)
-    local textFn = frame._msufUpdateHealthText
-    if textFn then
-        textFn(frame, event, unit, hp, maxHP)
-    end
-    return hp, maxHP, calc
-end
-
-local function RunPowerHot(frame, owners, event, unit)
-    if owners and owners["Power"] == nil then
-        return
-    end
-    unit = unit or frame.unit
-    local updateFn = frame._msufUpdatePower
-    if not updateFn then return end
-    local power, maxPower = updateFn(frame, event, unit)
-    local textFn = frame._msufUpdatePowerText
-    if textFn then
-        textFn(frame, event, unit, power, maxPower)
-    end
-end
-
-local HOT_EVENT_KIND = {
-    UNIT_HEALTH = 1,
-    UNIT_MAXHEALTH = 1,
-    UNIT_FLAGS = 1,
-    UNIT_FACTION = 1,
-    UNIT_POWER_UPDATE = 2,
-    UNIT_POWER_FREQUENT = 2,
-    UNIT_MAXPOWER = 2,
-    UNIT_DISPLAYPOWER = 2,
-    UNIT_POWER_BAR_SHOW = 2,
-    UNIT_POWER_BAR_HIDE = 2,
-    UNIT_CONNECTION = 3,
-    UNIT_NAME_UPDATE = 4,
-    UNIT_AURA = 5,
-    UNIT_THREAT_SITUATION_UPDATE = 6,
-    UNIT_THREAT_LIST_UPDATE = 6,
-    UNIT_PORTRAIT_UPDATE = 8,
-    UNIT_MODEL_CHANGED = 8,
-    UNIT_HEAL_PREDICTION = 9,
-    UNIT_ABSORB_AMOUNT_CHANGED = 9,
-    UNIT_HEAL_ABSORB_AMOUNT_CHANGED = 9,
-    UNIT_LEVEL = 10,
-    UNIT_CLASSIFICATION_CHANGED = 10,
-    INCOMING_RESURRECT_CHANGED = 10,
-    PLAYER_REGEN_DISABLED = 11,
-    PLAYER_REGEN_ENABLED = 11,
-    RAID_TARGET_UPDATE = 12,
-    GROUP_ROSTER_UPDATE = 13,
-    PARTY_LEADER_CHANGED = 13,
-    PLAYER_LEVEL_UP = 14,
-    PLAYER_LEVEL_CHANGED = 14,
-    PLAYER_FLAGS_CHANGED = 15,
-    PLAYER_UPDATE_RESTING = 16,
-    PLAYER_ENTERING_WORLD = 16,
-    UNIT_TARGET = 17,
-    SPELL_UPDATE_COOLDOWN = 18,
-    SPELLS_CHANGED = 18,
-}
-
-local function HotAdd(state, owners, name, fnKey, modeKey)
-    local mode = owners[name]
-    if mode == nil then return end
-    local element = UF.elements[name]
-    local update = element and element.Update
-    if not update then return end
-    state[fnKey] = update
-    if modeKey then
-        state[modeKey] = mode
-    end
-end
-
-local HOT_HANDLED_1 = {
-    InlineToT = true,
-    Prediction = true,
-    Health = true,
-    HealthText = true,
-    NameText = true,
-    StatusTextIndicator = true,
-    CombatIndicator = true,
-    GroupVisuals = true,
-    GroupStatusRuntime = true,
-}
-
-local HOT_HANDLED_2 = {
-    Power = true,
-    PowerText = true,
-}
-
-local HOT_HANDLED_3 = {
-    InlineToT = true,
-    Prediction = true,
-    Health = true,
-    HealthText = true,
-    Power = true,
-    PowerText = true,
-    NameText = true,
-    Portrait = true,
-    StatusTextIndicator = true,
-    GroupStatusRuntime = true,
-}
-
-local HOT_HANDLED_5 = {
-    Auras = true,
-    DispelOverlay = true,
-    GroupVisuals = true,
-    GroupCornerIndicators = true,
-    GroupSpellIndicators = true,
-    Borders = true,
-}
-
-local HOT_HANDLED_9 = {
-    Prediction = true,
-}
-
-local function HotTailAdd(state, owners, handled)
-    local tail, n
-    for i = 1, #UF.elementOrder do
-        local name = UF.elementOrder[i]
-        local mode = owners[name]
-        if mode ~= nil and not handled[name] then
-            local element = UF.elements[name]
-            local update = element and element.Update
-            if update then
-                if not tail then
-                    tail = {}
-                    n = 0
-                end
-                n = n + 1
-                tail[n] = update
-                n = n + 1
-                tail[n] = mode
-            end
-        end
-    end
-    state.tail = tail
-    state.tailCount = n
-end
-
-local function DispatchHotTail(frame, state, event, unit, a, b, c)
-    local tail = state.tail
-    if not tail then return end
-    for i = 1, state.tailCount, 2 do
-        local update = tail[i]
-        local eventUnit, ok = OwnerModeAllowsUnit(tail[i + 1], frame, unit)
-        if ok then
-            update(frame, event, eventUnit, a, b, c)
-        end
-    end
-end
-
-RebuildHotEventState = function(frame, event, owners)
-    local kind = HOT_EVENT_KIND[event]
-    local states = frame and frame._msufHotEventState
-    if not kind or not owners then
-        if states then states[event] = nil end
-        return
-    end
-    if not states then
-        states = {}
-        frame._msufHotEventState = states
-    end
-
-    local state = states[event]
-    if not state then
-        state = {}
-        states[event] = state
-    else
-        wipe(state)
-    end
-    state.kind = kind
-
-    if kind == 1 then
-        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
-        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
-        HotAdd(state, owners, "Health", "health")
-        HotAdd(state, owners, "HealthText", "healthText")
-        HotAdd(state, owners, "NameText", "name")
-        HotAdd(state, owners, "StatusTextIndicator", "statusText")
-        HotAdd(state, owners, "CombatIndicator", "combat")
-        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
-        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
-        HotTailAdd(state, owners, HOT_HANDLED_1)
-    elseif kind == 2 then
-        HotAdd(state, owners, "Power", "power")
-        HotAdd(state, owners, "PowerText", "powerText")
-        HotTailAdd(state, owners, HOT_HANDLED_2)
-    elseif kind == 3 then
-        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
-        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
-        HotAdd(state, owners, "Health", "health")
-        HotAdd(state, owners, "HealthText", "healthText")
-        HotAdd(state, owners, "Power", "power")
-        HotAdd(state, owners, "PowerText", "powerText")
-        HotAdd(state, owners, "NameText", "name")
-        HotAdd(state, owners, "Portrait", "portrait")
-        HotAdd(state, owners, "StatusTextIndicator", "statusText")
-        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
-        HotTailAdd(state, owners, HOT_HANDLED_3)
-    elseif kind == 5 then
-        HotAdd(state, owners, "Auras", "auras")
-        HotAdd(state, owners, "DispelOverlay", "dispel")
-        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
-        HotAdd(state, owners, "GroupCornerIndicators", "groupCorners")
-        HotAdd(state, owners, "GroupSpellIndicators", "groupSpells")
-        HotAdd(state, owners, "Borders", "borders")
-        HotTailAdd(state, owners, HOT_HANDLED_5)
-    elseif kind == 9 then
-        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
-        HotTailAdd(state, owners, HOT_HANDLED_9)
-    elseif kind == 4 then
-        HotAdd(state, owners, "NameText", "name")
-        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
-    elseif kind == 6 then
-        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
-        HotAdd(state, owners, "GroupCornerIndicators", "groupCorners")
-        HotAdd(state, owners, "Borders", "borders")
-    elseif kind == 8 then
-        HotAdd(state, owners, "Portrait", "portrait")
-    elseif kind == 10 then
-        HotAdd(state, owners, "LevelIndicator", "level")
-        HotAdd(state, owners, "EliteIndicator", "elite")
-        HotAdd(state, owners, "NameText", "name")
-        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
-        HotAdd(state, owners, "IncomingResIndicator", "incomingRes")
-        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
-    elseif kind == 11 then
-        HotAdd(state, owners, "Alpha", "alpha")
-        HotAdd(state, owners, "CombatIndicator", "combat")
-        HotAdd(state, owners, "LoadConditions", "load")
-    elseif kind == 12 then
-        HotAdd(state, owners, "RaidMarkerIndicator", "raidMarker")
-        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
-    elseif kind == 13 then
-        HotAdd(state, owners, "LeaderIndicator", "leader")
-        HotAdd(state, owners, "RaidGroupIndicator", "raidGroup")
-        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
-    elseif kind == 14 then
-        HotAdd(state, owners, "LevelIndicator", "level")
-    elseif kind == 15 then
-        HotAdd(state, owners, "StatusTextIndicator", "statusText")
-        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
-    elseif kind == 16 then
-        HotAdd(state, owners, "RestingIndicator", "resting")
-        HotAdd(state, owners, "Alpha", "alpha")
-        HotAdd(state, owners, "LoadConditions", "load")
-        HotAdd(state, owners, "GroupStatusRuntime", "groupStatus")
-    elseif kind == 17 then
-        HotAdd(state, owners, "InlineToT", "inline", "inlineMode")
-        HotAdd(state, owners, "Prediction", "prediction", "predictionMode")
-        HotAdd(state, owners, "Alpha", "alpha")
-    elseif kind == 18 then
-        HotAdd(state, owners, "Alpha", "alpha")
-        HotAdd(state, owners, "DispelOverlay", "dispel")
-        HotAdd(state, owners, "GroupVisuals", "groupVisuals")
-        HotAdd(state, owners, "GroupCornerIndicators", "groupCorners")
-        HotAdd(state, owners, "Borders", "borders")
-    end
-
-    state.inlineUnitless = OwnerModeIsUnitless(state.inlineMode)
-    state.predictionUnitless = OwnerModeIsUnitless(state.predictionMode)
-end
-
-local function DispatchCompiledHotFrameEvent(frame, state, event, unit, a, b, c)
-    local kind = state and state.kind
-    if not kind then return false end
-
-    local sameUnit = (not unit) or unit == frame.unit
-    if sameUnit then
-        unit = unit or frame.unit
-    end
-
-    if kind == 1 then
-        if not sameUnit then
-            if state.inlineUnitless then
-                local fn = state.inline
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            if state.predictionUnitless then
-                local fn = state.prediction
-                if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                    fn(frame, event, unit, a, b, c)
-                end
-            end
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-
-        local hp, maxHP, calc
-        if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
-            local fn = state.health
-            if fn then
-                hp, maxHP, calc = fn(frame, event, unit)
-                local textFn = state.healthText
-                if textFn then textFn(frame, event, unit, hp, maxHP) end
-            end
-            if not fn then
-                fn = state.healthText
-                if fn then fn(frame, event, unit) end
-            end
-            fn = state.prediction
-            if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                fn(frame, event, unit, hp, maxHP, calc)
-            end
-            fn = state.name
-            if fn then fn(frame, event, unit) end
-            fn = state.statusText
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.groupVisuals
-            if fn then fn(frame, event, unit, a, b, c) end
-        else
-            local fn = state.health
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.name
-            if fn then fn(frame, event, unit) end
-            if event == "UNIT_FLAGS" then
-                fn = state.statusText
-                if fn then fn(frame, event, unit, a, b, c) end
-                fn = state.combat
-                if fn then fn(frame, event, unit, a, b, c) end
-                fn = state.groupVisuals
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-        end
-
-        local fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 2 then
-        if not sameUnit then
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-        local fn = state.power
-        if fn then
-            local power, maxPower = fn(frame, event, unit)
-            local textFn = state.powerText
-            if textFn then textFn(frame, event, unit, power, maxPower) end
-        end
-        if not fn then
-            fn = state.powerText
-            if fn then fn(frame, event, unit) end
-        end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 3 then
-        if not sameUnit then
-            if state.inlineUnitless then
-                local fn = state.inline
-                if fn then fn(frame, event, unit) end
-            end
-            if state.predictionUnitless then
-                local fn = state.prediction
-                if fn then fn(frame, event, unit) end
-            end
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-
-        local hp, maxHP, calc
-        local fn = state.health
-        if fn then
-            hp, maxHP, calc = fn(frame, event, unit)
-            local textFn = state.healthText
-            if textFn then textFn(frame, event, unit, hp, maxHP) end
-        else
-            fn = state.healthText
-            if fn then fn(frame, event, unit) end
-        end
-        fn = state.power
-        if fn then
-            local power, maxPower = fn(frame, event, unit)
-            local textFn = state.powerText
-            if textFn then textFn(frame, event, unit, power, maxPower) end
-        else
-            fn = state.powerText
-            if fn then fn(frame, event, unit) end
-        end
-        fn = state.name
-        if fn then fn(frame, event, unit) end
-        fn = state.portrait
-        if fn then fn(frame, event, unit) end
-        fn = state.prediction
-        if fn then fn(frame, event, unit, hp, maxHP, calc) end
-        fn = state.statusText
-        if fn then fn(frame, event, unit) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 5 then
-        if not sameUnit then
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-        local fn = state.auras
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.dispel
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupVisuals
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupCorners
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupSpells
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.borders
-        if fn then fn(frame, event, unit, a, b, c) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 9 then
-        if not sameUnit then
-            if state.predictionUnitless then
-                local fn = state.prediction
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-            return true
-        end
-        local fn = state.prediction
-        if fn then fn(frame, event, unit, a, b, c) end
-        if state.tail then DispatchHotTail(frame, state, event, unit, a, b, c) end
-        return true
-    elseif kind == 4 then
-        local fn = state.name
-        if fn then fn(frame, event, unit) end
-        fn = state.inline
-        if fn then fn(frame, event, unit) end
-        return true
-    elseif kind == 6 then
-        if not sameUnit then return true end
-        local fn = state.groupVisuals
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupCorners
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.borders
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 8 then
-        if not sameUnit then return true end
-        local fn = state.portrait
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 10 then
-        local fn
-        if event == "UNIT_LEVEL" then
-            fn = state.level
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.elite
-            if fn then fn(frame, event, unit, a, b, c) end
-        elseif event == "UNIT_CLASSIFICATION_CHANGED" then
-            fn = state.name
-            if fn then fn(frame, event, unit) end
-            fn = state.inline
-            if fn then fn(frame, event, unit, a, b, c) end
-            fn = state.elite
-            if fn then fn(frame, event, unit, a, b, c) end
-        elseif event == "INCOMING_RESURRECT_CHANGED" then
-            fn = state.incomingRes
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 11 then
-        local fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.combat
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.load
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 12 then
-        local fn = state.raidMarker
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 13 then
-        local fn = state.leader
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.raidGroup
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 14 then
-        local fn = state.level
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 15 then
-        local fn = state.statusText
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 16 then
-        local fn = state.resting
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.load
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupStatus
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 17 then
-        local fn = state.inline
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.prediction
-        if fn then
-            local frameUnit = frame.unit
-            if (frameUnit == "targettarget" and unit == "target")
-                or (frameUnit == "focustarget" and unit == "focus") then
-                fn(frame, event, frameUnit, a, b, c)
-            end
-        end
-        fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    elseif kind == 18 then
-        local fn = state.alpha
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.dispel
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupVisuals
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.groupCorners
-        if fn then fn(frame, event, unit, a, b, c) end
-        fn = state.borders
-        if fn then fn(frame, event, unit, a, b, c) end
-        return true
-    end
-
-    return false
-end
-
--- Hot-path dispatch: hard-codes element names per event "kind" instead of
--- walking the generic element list, to keep the busiest events cheap.
---
--- Each branch directly does `owners[name]` + `frame._msufUpdateName` rather than
--- routing through RunElementUpdate. That removes one Lua function call and one
--- UPDATE_KEYS hash lookup per element. The kind=1/2/5 branches are the highest
--- volume (UNIT_HEALTH, UNIT_POWER_*, UNIT_AURA), so this matters a lot.
---
--- The "cross-unit" branches (unit ~= frame.unit) handle ToT/Prediction unitless
--- mode. Same-unit branches assume `unit == frame.unit`, so no per-element unit
--- gating is needed.
---
--- The cost is coupling — adding an element that must react to a hot event means
--- updating HOT_EVENT_KIND, this switch, and RUNTIME_UPDATE_OWNERS/masks.
-local function DispatchHotFrameEvent(frame, owners, event, unit, a, b, c)
-    local kind = HOT_EVENT_KIND[event]
-    if not kind then return false end
-
-    local sameUnit = (not unit) or unit == frame.unit
-    if sameUnit then
-        unit = unit or frame.unit
-    end
-
-    if kind == 1 then
-        -- UNIT_HEALTH, UNIT_MAXHEALTH, UNIT_FLAGS, UNIT_FACTION
-        if not sameUnit then
-            local imode = owners["InlineToT"]
-            if imode == "unitless" or imode == "both" then
-                local fn = frame._msufUpdateInlineToT
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            local pmode = owners["Prediction"]
-            if pmode == "unitless" or pmode == "both" then
-                local fn = frame._msufUpdatePrediction
-                if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                    fn(frame, event, unit, a, b, c)
-                end
-            end
-            return true
-        end
-        local hp, maxHP, calc
-        if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
-            if owners["Health"] then
-                local fn = frame._msufUpdateHealth
-                if fn then
-                    hp, maxHP, calc = fn(frame, event, unit)
-                    local textFn = frame._msufUpdateHealthText
-                    if textFn then textFn(frame, event, unit, hp, maxHP) end
-                end
-            end
-            if owners["Prediction"] then
-                local fn = frame._msufUpdatePrediction
-                if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                    fn(frame, event, unit, hp, maxHP, calc)
-                end
-            end
-        else
-            -- UNIT_FLAGS / UNIT_FACTION
-            if owners["Health"] then
-                local fn = frame._msufUpdateHealth
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            if owners["NameText"] then
-                local fn = frame._msufUpdateNameText
-                if fn then fn(frame, event, unit) end
-            end
-            if event == "UNIT_FLAGS" then
-                if owners["StatusTextIndicator"] then
-                    local fn = frame._msufUpdateStatusTextIndicator
-                    if fn then fn(frame, event, unit, a, b, c) end
-                end
-                if owners["CombatIndicator"] then
-                    local fn = frame._msufUpdateCombatIndicator
-                    if fn then fn(frame, event, unit, a, b, c) end
-                end
-                if owners["GroupVisuals"] then
-                    local fn = frame._msufUpdateGroupVisuals
-                    if fn then fn(frame, event, unit, a, b, c) end
-                end
-            end
-        end
-        if owners["GroupStatusRuntime"] then
-            local fn = frame._msufUpdateGroupStatusRuntime
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 2 then
-        -- UNIT_POWER_UPDATE / UNIT_POWER_FREQUENT / UNIT_MAXPOWER / UNIT_DISPLAYPOWER /
-        -- UNIT_POWER_BAR_SHOW / UNIT_POWER_BAR_HIDE
-        if not sameUnit then return true end
-        if owners["Power"] then
-            local fn = frame._msufUpdatePower
-            if fn then
-                local power, maxPower = fn(frame, event, unit)
-                local textFn = frame._msufUpdatePowerText
-                if textFn then textFn(frame, event, unit, power, maxPower) end
-            end
-        end
-        return true
-    elseif kind == 5 then
-        -- UNIT_AURA (highest-volume in 40-man)
-        if not sameUnit then return true end
-        if owners["Auras"] then
-            local fn = frame._msufUpdateAuras
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["DispelOverlay"] then
-            local fn = frame._msufUpdateDispelOverlay
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupVisuals"] then
-            local fn = frame._msufUpdateGroupVisuals
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupCornerIndicators"] then
-            local fn = frame._msufUpdateGroupCornerIndicators
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupSpellIndicators"] then
-            local fn = frame._msufUpdateGroupSpellIndicators
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["Borders"] then
-            local fn = frame._msufUpdateBorders
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 3 then
-        -- UNIT_CONNECTION
-        if not sameUnit then
-            local mode = owners["InlineToT"]
-            if mode == "unitless" or mode == "both" then
-                local fn = frame._msufUpdateInlineToT
-                if fn then fn(frame, event, unit) end
-            end
-            local pmode = owners["Prediction"]
-            if pmode == "unitless" or pmode == "both" then
-                local fn = frame._msufUpdatePrediction
-                if fn then fn(frame, event, unit) end
-            end
-            return true
-        end
-        local hp, maxHP, calc
-        if owners["Health"] then
-            local fn = frame._msufUpdateHealth
-            if fn then
-                hp, maxHP, calc = fn(frame, event, unit)
-                local textFn = frame._msufUpdateHealthText
-                if textFn then textFn(frame, event, unit, hp, maxHP) end
-            end
-        end
-        if owners["Power"] then
-            local fn = frame._msufUpdatePower
-            if fn then
-                local power, maxPower = fn(frame, event, unit)
-                local textFn = frame._msufUpdatePowerText
-                if textFn then textFn(frame, event, unit, power, maxPower) end
-            end
-        end
-        if owners["NameText"] then
-            local fn = frame._msufUpdateNameText
-            if fn then fn(frame, event, unit) end
-        end
-        if owners["Portrait"] then
-            local fn = frame._msufUpdatePortrait
-            if fn then fn(frame, event, unit) end
-        end
-        if owners["Prediction"] then
-            local fn = frame._msufUpdatePrediction
-            if fn then fn(frame, event, unit, hp, maxHP, calc) end
-        end
-        if owners["StatusTextIndicator"] then
-            local fn = frame._msufUpdateStatusTextIndicator
-            if fn then fn(frame, event, unit) end
-        end
-        if owners["GroupStatusRuntime"] then
-            local fn = frame._msufUpdateGroupStatusRuntime
-            if fn then fn(frame, event, unit) end
-        end
-        return true
-    elseif kind == 4 then
-        -- UNIT_NAME_UPDATE
-        if owners["NameText"] then
-            local fn = frame._msufUpdateNameText
-            if fn then fn(frame, event, unit) end
-        end
-        if owners["InlineToT"] then
-            local fn = frame._msufUpdateInlineToT
-            if fn then fn(frame, event, unit) end
-        end
-        return true
-    elseif kind == 6 then
-        -- UNIT_THREAT_SITUATION_UPDATE / UNIT_THREAT_LIST_UPDATE
-        if not sameUnit then return true end
-        if owners["GroupVisuals"] then
-            local fn = frame._msufUpdateGroupVisuals
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupCornerIndicators"] then
-            local fn = frame._msufUpdateGroupCornerIndicators
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["Borders"] then
-            local fn = frame._msufUpdateBorders
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 8 then
-        -- UNIT_PORTRAIT_UPDATE / UNIT_MODEL_CHANGED
-        if not sameUnit then return true end
-        if owners["Portrait"] then
-            local fn = frame._msufUpdatePortrait
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 9 then
-        -- UNIT_HEAL_PREDICTION / UNIT_ABSORB_AMOUNT_CHANGED / UNIT_HEAL_ABSORB_AMOUNT_CHANGED
-        if not sameUnit then
-            local pmode = owners["Prediction"]
-            if pmode == "unitless" or pmode == "both" then
-                local fn = frame._msufUpdatePrediction
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            return true
-        end
-        if owners["Prediction"] then
-            local fn = frame._msufUpdatePrediction
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 10 then
-        if event == "UNIT_LEVEL" then
-            if owners["LevelIndicator"] then
-                local fn = frame._msufUpdateLevelIndicator
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            if owners["EliteIndicator"] then
-                local fn = frame._msufUpdateEliteIndicator
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-        elseif event == "UNIT_CLASSIFICATION_CHANGED" then
-            if owners["NameText"] then
-                local fn = frame._msufUpdateNameText
-                if fn then fn(frame, event, unit) end
-            end
-            if owners["InlineToT"] then
-                local fn = frame._msufUpdateInlineToT
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-            if owners["EliteIndicator"] then
-                local fn = frame._msufUpdateEliteIndicator
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-        elseif event == "INCOMING_RESURRECT_CHANGED" then
-            if owners["IncomingResIndicator"] then
-                local fn = frame._msufUpdateIncomingResIndicator
-                if fn then fn(frame, event, unit, a, b, c) end
-            end
-        end
-        if owners["GroupStatusRuntime"] then
-            local fn = frame._msufUpdateGroupStatusRuntime
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 11 then
-        -- PLAYER_REGEN_DISABLED / PLAYER_REGEN_ENABLED
-        if owners["Alpha"] then
-            local fn = frame._msufUpdateAlpha
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["CombatIndicator"] then
-            local fn = frame._msufUpdateCombatIndicator
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["LoadConditions"] then
-            local fn = frame._msufUpdateLoadConditions
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 12 then
-        -- RAID_TARGET_UPDATE
-        if owners["RaidMarkerIndicator"] then
-            local fn = frame._msufUpdateRaidMarkerIndicator
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupStatusRuntime"] then
-            local fn = frame._msufUpdateGroupStatusRuntime
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 13 then
-        -- GROUP_ROSTER_UPDATE / PARTY_LEADER_CHANGED
-        if owners["LeaderIndicator"] then
-            local fn = frame._msufUpdateLeaderIndicator
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["RaidGroupIndicator"] then
-            local fn = frame._msufUpdateRaidGroupIndicator
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupStatusRuntime"] then
-            local fn = frame._msufUpdateGroupStatusRuntime
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 14 then
-        -- PLAYER_LEVEL_UP / PLAYER_LEVEL_CHANGED
-        if owners["LevelIndicator"] then
-            local fn = frame._msufUpdateLevelIndicator
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 15 then
-        -- PLAYER_FLAGS_CHANGED
-        if owners["StatusTextIndicator"] then
-            local fn = frame._msufUpdateStatusTextIndicator
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupStatusRuntime"] then
-            local fn = frame._msufUpdateGroupStatusRuntime
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 16 then
-        -- PLAYER_UPDATE_RESTING / PLAYER_ENTERING_WORLD
-        if owners["RestingIndicator"] then
-            local fn = frame._msufUpdateRestingIndicator
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["Alpha"] then
-            local fn = frame._msufUpdateAlpha
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["LoadConditions"] then
-            local fn = frame._msufUpdateLoadConditions
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupStatusRuntime"] then
-            local fn = frame._msufUpdateGroupStatusRuntime
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 17 then
-        -- UNIT_TARGET
-        if owners["InlineToT"] then
-            local fn = frame._msufUpdateInlineToT
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["Prediction"] then
-            local frameUnit = frame.unit
-            if (frameUnit == "targettarget" and unit == "target")
-                or (frameUnit == "focustarget" and unit == "focus") then
-                local fn = frame._msufUpdatePrediction
-                if fn then fn(frame, event, frameUnit, a, b, c) end
-            end
-        end
-        if owners["Alpha"] then
-            local fn = frame._msufUpdateAlpha
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    elseif kind == 18 then
-        -- SPELL_UPDATE_COOLDOWN / SPELLS_CHANGED
-        if owners["Alpha"] then
-            local fn = frame._msufUpdateAlpha
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["DispelOverlay"] then
-            local fn = frame._msufUpdateDispelOverlay
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupVisuals"] then
-            local fn = frame._msufUpdateGroupVisuals
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["GroupCornerIndicators"] then
-            local fn = frame._msufUpdateGroupCornerIndicators
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        if owners["Borders"] then
-            local fn = frame._msufUpdateBorders
-            if fn then fn(frame, event, unit, a, b, c) end
-        end
-        return true
-    end
-    return false
-end
-
-function DispatchFrameEvent(frame, event, unit, ...)
-    -- Called directly as the frame's OnEvent script. `frame` is guaranteed
-    -- non-nil; the outer `frame._msufEventOwners` table is created on first
-    -- element registration, so a frame that gets here without owners (e.g.,
-    -- because a stale event registration survived a detach) just returns.
-    local allOwners = frame._msufEventOwners
-    if not allOwners then return end
-    local owners = allOwners[event]
-    if not owners then return end
-
-    -- Cross-unit (ToT-style) gating: when the event's unit isn't this frame's
-    -- unit, dispatch only if the frame has at least one element in "unitless"
-    -- mode for this event. Per-frame RegisterUnitEvent already filters at the C
-    -- side for the common same-unit path, so this check is just a safety net
-    -- for central-driver delivery.
-    if unit and unit ~= frame.unit then
-        local unitless = frame._msufEventUnitless
-        if not (unitless and unitless[event]) then
-            return
-        end
-    end
-
-    frame._msufDispatchToken = frame._msufDispatchToken + 1
-    frame._msufDispatchActive = true
-
-    local hotStates = frame._msufHotEventState
-    local hotState = hotStates and hotStates[event]
-    if hotState and DispatchCompiledHotFrameEvent(frame, hotState, event, unit, ...) then
-        frame._msufDispatchActive = nil
-        return
-    end
-
-    if DispatchHotFrameEvent(frame, owners, event, unit, ...) then
-        frame._msufDispatchActive = nil
-        return
-    end
-
-    -- Fallback for events not in HOT_EVENT_KIND: walk the pre-built flat list.
-    local lists = frame._msufEventElementLists
-    local list = lists and lists[event]
-    if not list then
-        frame._msufDispatchActive = nil
-        return
-    end
-    for i = 1, #list, 2 do
-        local update = list[i]
-        local eventUnit, ok = OwnerModeAllowsUnit(list[i + 1], frame, unit)
-        if ok then
-            update(frame, event, eventUnit, ...)
-        end
-    end
-    frame._msufDispatchActive = nil
-end
-UF.DispatchFrameEvent = DispatchFrameEvent
-
-local RUNTIME_UPDATE_OWNERS = {
-    Health = true,
-    Power = true,
-    Text = true,
-    NameText = true,
-    HealthText = true,
-    PowerText = true,
-    InlineToT = true,
-    Portrait = true,
-    Alpha = true,
-    StatusIndicators = true,
-    RaidMarkerIndicator = true,
-    LeaderIndicator = true,
-    LevelIndicator = true,
-    RaidGroupIndicator = true,
-    EliteIndicator = true,
-    StatusTextIndicator = true,
-    CombatIndicator = true,
-    RestingIndicator = true,
-    IncomingResIndicator = true,
-    Prediction = true,
-    Auras = true,
-    DispelOverlay = true,
-    Borders = true,
-    GroupStatusRuntime = true,
-    GroupRangeFade = true,
-    GroupVisuals = true,
-    GroupCornerIndicators = true,
-    GroupSpellIndicators = true,
-}
-
-local MASK_HEALTH = { health = true }
-local MASK_POWER = { power = true }
-local MASK_ALPHA = { alpha = true }
-local MASK_BORDERS = { borders = true }
-local MASK_PREDICTION = { prediction = true }
-local MASK_FONT_RUNTIME = { health = true, power = true, name = true }
-local MASK_CASTBAR_SYNC = { health = true, power = true, name = true, portrait = true, status = true, borders = true }
-local MASK_HEALTH_BORDERS = { health = true, borders = true }
-local MASK_UNIT_IDENTITY = {
-    health = true,
-    power = true,
-    name = true,
-    inline = true,
-    portrait = true,
-    status = true,
-    prediction = true,
-    alpha = true,
-    auras = true,
-    borders = true,
-}
-
-local RUNTIME_REASON_MASKS = {
-    FONT_RUNTIME = MASK_FONT_RUNTIME,
-    CASTBAR_SYNC = MASK_CASTBAR_SYNC,
-    MSUF_UNIT_IDENTITY = MASK_UNIT_IDENTITY,
-    MSUF_UNIT_IDENTITY_SOFT = MASK_UNIT_IDENTITY,
-    MSUF_ALPHA = MASK_ALPHA,
-    MSUF_BORDER_LAYOUT = MASK_BORDERS,
-    MSUF2_BORDER = MASK_BORDERS,
-    MSUF2_BAR_OUTLINE = MASK_BORDERS,
-    MSUF2_GRADIENT = MASK_HEALTH_BORDERS,
-    MSUF2_ABSORB_MODE = MASK_PREDICTION,
-    MSUF2_ABSORB = MASK_PREDICTION,
-    MSUF2_ABSORB_ANCHOR = MASK_PREDICTION,
-    MSUF2_ABSORB_OPACITY = MASK_PREDICTION,
-    MSUF2_ABSORB_TEXTURE = MASK_PREDICTION,
-    MSUF2_ABSORB_TEST = MASK_PREDICTION,
-    MSUF2_ABSORB_TEST_CLEAR = MASK_PREDICTION,
-    MSUF2_HEAL_ABSORB = MASK_PREDICTION,
-    MSUF2_HEAL_ABSORB_OPACITY = MASK_PREDICTION,
-    MSUF2_HEAL_ABSORB_TEXTURE = MASK_PREDICTION,
-    MSUF2_HEALPRED_ANCHOR = MASK_PREDICTION,
-    MSUF2_SELF_HEAL = MASK_PREDICTION,
-    MSUF2_GF_HEALPRED = MASK_PREDICTION,
-    MSUF_POWER_LAYOUT = MASK_POWER,
-    MSUF_POWER_TEXT_COLORS = MASK_POWER,
-    MSUF2_POWER_SHOW = MASK_POWER,
-    MSUF2_POWER_BORDER = MASK_POWER,
-    MSUF2_POWER_BORDER_SIZE = MASK_POWER,
-    MSUF2_POWER_HEIGHT = MASK_POWER,
-    MSUF2_POWER_EMBED = MASK_POWER,
-    MSUF2_POWER_SMOOTH = MASK_POWER,
-    MSUF2_POWER_DETACHED = MASK_POWER,
-    MSUF2_POWER_DETACHED_TEXT = MASK_POWER,
-    MSUF2_POWER_DETACHED_SYNC = MASK_POWER,
-    MSUF2_POWER_DETACHED_ANCHOR = MASK_POWER,
-    MSUF2_POWER_DETACHED_X = MASK_POWER,
-    MSUF2_POWER_DETACHED_Y = MASK_POWER,
-    MSUF2_POWER_DETACHED_W = MASK_POWER,
-    MSUF2_POWER_DETACHED_H = MASK_POWER,
-    MSUF2_POWER_DETACHED_LAYER = MASK_POWER,
-    MSUF_REVERSE_FILL = MASK_HEALTH,
-}
-
-FrameRuntimeUpdate = function(frame, reason)
-    if not frame then
-        return
-    end
-    reason = reason or "MSUF_FORCE_UPDATE"
-    frame._msufDispatchToken = (frame._msufDispatchToken or 0) + 1
-    local mask = RUNTIME_REASON_MASKS[reason]
-    local hp, maxHP, calc
-    if not mask or mask.health then
-        hp, maxHP, calc = RunHealthHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
-    end
-    if not mask or mask.power then
-        RunPowerHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
-    end
-    if not mask or mask.name then
-        RunTextName(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
-    end
-    if not mask or mask.inline then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "InlineToT", reason, frame.unit)
-    end
-    if not mask or mask.portrait then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Portrait", reason, frame.unit)
-    end
-    if not mask or mask.status then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RaidMarkerIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LeaderIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LevelIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RaidGroupIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "EliteIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "StatusTextIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "CombatIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RestingIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "IncomingResIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, frame.unit)
-    end
-    if not mask or mask.prediction then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Prediction", reason, frame.unit, hp, maxHP, calc)
-    end
-    if not mask or mask.alpha then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Alpha", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupRangeFade", reason, frame.unit)
-    end
-    if not mask or mask.auras then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Auras", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupVisuals", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupCornerIndicators", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupSpellIndicators", reason, frame.unit)
-    end
-    if not mask or mask.borders then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "DispelOverlay", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Borders", reason, frame.unit)
-    end
-end
-
-function UF.UpdateRuntime(unit, reason)
-    if unit then
-        local units = UF.UnitsForConfigKey(unit)
-        if not units then
-            return false
-        end
-        for i = 1, #units do
-            FrameRuntimeUpdate(UF.frames[units[i]], reason)
-        end
-        return true
-    end
-    UF.ForEachFrame(function(frame)
-        FrameRuntimeUpdate(frame, reason)
-    end)
-    return true
-end
+-- Hot dispatch and runtime update execution live in Core/MSUF_UF_Dispatch.lua.
 
 -- DispatchFrameEvent is bound directly as the frame's OnEvent handler below.
 -- WoW's SetScript calls `fn(frame, event, ...)`; DispatchFrameEvent's matching
--- `(frame, event, unit, ...)` signature means no wrapper closure is needed —
+-- `(frame, event, unit, ...)` signature means no wrapper closure is needed:
 -- saves one function call per event.
 
 function UF.AttachFrameMethods(frame, opts)
@@ -2045,8 +824,8 @@ function UF.AttachFrameMethods(frame, opts)
     -- opts.ownEvents flag is preserved for callers that still read it, but no
     -- longer gates SetScript.
     if frame._msufCleanCoreMethods then
-        if frame:GetScript("OnEvent") ~= DispatchFrameEvent then
-            frame:SetScript("OnEvent", DispatchFrameEvent)
+        if frame:GetScript("OnEvent") ~= UF.DispatchFrameEvent then
+            frame:SetScript("OnEvent", UF.DispatchFrameEvent)
         end
         frame._msufCleanCoreOwnEvents = true
         return frame
@@ -2057,10 +836,10 @@ function UF.AttachFrameMethods(frame, opts)
     frame.EnableElement = FrameEnableElement
     frame.DisableElement = FrameDisableElement
     frame.IsElementEnabled = FrameIsElementEnabled
-    frame.ForceUpdate = FrameForceUpdate
+    frame.ForceUpdate = UF.FrameForceUpdate
     frame.RegisterElementEvent = RegisterElementEvent
     frame.UnregisterElementEvents = UnregisterElementEvents
-    frame:SetScript("OnEvent", DispatchFrameEvent)
+    frame:SetScript("OnEvent", UF.DispatchFrameEvent)
     frame._msufCleanCoreOwnEvents = true
     return frame
 end
@@ -2116,6 +895,17 @@ function UF.ForEachAttachedFrame(fn, scope)
             fn(frame, frame.unit)
         end
     end
+end
+
+function UF.SetFrameSpec(frame, spec, unitFallback)
+    if not (frame and spec) then
+        return frame
+    end
+    frame.MSUFSpec = spec
+    frame.cachedConfig = spec
+    frame.configKey = spec.key
+    frame.unitKey = spec.unit or unitFallback or frame.unit
+    return frame
 end
 
 function UF.DetachFrame(frame)
@@ -2175,6 +965,14 @@ function UF.Apply(unit)
 end
 
 function UF.ForceUpdate(unit)
+    if InCombatLockdown and InCombatLockdown() then
+        UF.MarkDirty(unit)
+        local factory = UF.Factory
+        if factory and factory.EnsureDeferredDriver then
+            factory.EnsureDeferredDriver()
+        end
+        return false
+    end
     if unit then
         local units = UF.UnitsForConfigKey(unit)
         if not units then
@@ -2183,13 +981,13 @@ function UF.ForceUpdate(unit)
         for i = 1, #units do
             local frame = UF.frames[units[i]]
             if frame then
-                FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
+                UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
             end
         end
         return true
     end
     UF.ForEachFrame(function(frame)
-        FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
+        UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
     end)
     return true
 end
@@ -2199,11 +997,10 @@ local function ApplyElementToFrame(frame, name, spec, updateReason)
     if not (frame and element) then
         return false
     end
-    frame.MSUFSpec = spec or frame.MSUFSpec
-    frame.cachedConfig = frame.MSUFSpec
-    if frame.MSUFSpec then
-        frame.configKey = frame.MSUFSpec.key
-        frame.unitKey = frame.MSUFSpec.unit
+    if spec then
+        UF.SetFrameSpec(frame, spec)
+    elseif frame.MSUFSpec then
+        UF.SetFrameSpec(frame, frame.MSUFSpec)
     end
     local enabled = ElementEnabled(element, frame, frame.MSUFSpec)
     if not enabled then
@@ -2226,19 +1023,9 @@ local function ApplyElementToFrame(frame, name, spec, updateReason)
     return true
 end
 
-local DEFAULT_APPLY_MASK = {
-    Health = true,
-    Power = true,
-    Text = true,
-    NameText = true,
-    HealthText = true,
-    PowerText = true,
-    StatusIndicators = true,
-    Prediction = true,
-    Auras = true,
-    DispelOverlay = true,
-    Borders = true,
-}
+UF.ApplyElementToFrame = ApplyElementToFrame
+
+local DEFAULT_APPLY_MASK = Metadata.defaultApplyMask or EMPTY_METADATA_SET
 
 function UF.ApplySpec(frame, spec, reason, mask)
     if not (frame and spec) then
@@ -2249,559 +1036,20 @@ function UF.ApplySpec(frame, spec, reason, mask)
         visualRoot = frame._msufVisualRoot,
         ownEvents = frame._msufCoreOwnEvents,
     })
-    frame.MSUFSpec = spec
-    frame.cachedConfig = spec
-    frame.configKey = spec.key
-    frame.unitKey = spec.unit or frame.unit
+    UF.SetFrameSpec(frame, spec)
     mask = mask or DEFAULT_APPLY_MASK
     for i = 1, #UF.elementOrder do
         local name = UF.elementOrder[i]
         if mask == true or mask[name] == true then
-            ApplyElementToFrame(frame, name, spec, nil)
+            ApplyElementToFrame(frame, name, nil, nil)
         end
     end
     if reason then
-        FrameRuntimeUpdate(frame, reason)
+        UF.FrameRuntimeUpdate(frame, reason)
     end
     return true
 end
 
-local dirtyQueueMethods = {}
-local dirtyQueueMeta = { __index = dirtyQueueMethods }
-local dirtyQueues = UF.dirtyQueues
-local bit_bor = (bit and bit.bor) or function(a, b)
-    if type(a) ~= "number" then return b end
-    if type(b) ~= "number" then return a end
-    local res, bitValue = 0, 1
-    while a > 0 or b > 0 do
-        local aa = a % 2
-        local bb = b % 2
-        if aa == 1 or bb == 1 then
-            res = res + bitValue
-        end
-        a = (a - aa) / 2
-        b = (b - bb) / 2
-        bitValue = bitValue * 2
-    end
-    return res
-end
-
-local function DirtyQueueValue(value, queue, fallback)
-    if type(value) == "function" then
-        value = value(queue)
-    end
-    value = tonumber(value) or fallback
-    return value
-end
-
-function dirtyQueueMethods:Schedule()
-    if self.flushQueued then
-        return
-    end
-    self.flushQueued = true
-    local sched = _G.MSUF_ScheduleOnce
-    if type(sched) == "function" then
-        sched(self.scheduleKey, self.flushCallback)
-        return
-    end
-    local timer = _G.C_Timer
-    if timer and type(timer.After) == "function" then
-        timer.After(0, self.flushCallback)
-        return
-    end
-    self.flushCallback()
-end
-
-function dirtyQueueMethods:Mark(frame, bits, deferSchedule)
-    if not frame then
-        return false
-    end
-    local runtimeEnabled = self.runtimeEnabled
-    if runtimeEnabled and runtimeEnabled(frame) == false then
-        return false
-    end
-    bits = bits or self.defaultBits
-    local prev = self.bits[frame]
-    if prev ~= nil then
-        if type(prev) == "number" and type(bits) == "number" then
-            self.bits[frame] = bit_bor(prev, bits)
-        else
-            self.bits[frame] = bits
-        end
-    else
-        self.bits[frame] = bits
-    end
-    if not self.queued[frame] then
-        local tail = self.tail + 1
-        self.tail = tail
-        self.queue[tail] = frame
-        self.queued[frame] = true
-    end
-    if not deferSchedule then
-        self:Schedule()
-    end
-    return true
-end
-
-function dirtyQueueMethods:Retire(frame)
-    if not frame then
-        return
-    end
-    self.bits[frame] = nil
-    self.queued[frame] = nil
-end
-
-function dirtyQueueMethods:Clear()
-    local queue = self.queue
-    for i = self.head, self.tail do
-        queue[i] = nil
-    end
-    self.bits = {}
-    self.queued = {}
-    self.head = 1
-    self.tail = 0
-    self.flushQueued = false
-end
-
-function dirtyQueueMethods:Flush()
-    self.flushQueued = false
-
-    local process = self.process
-    if type(process) ~= "function" then
-        return false
-    end
-
-    local maxPerFlush = DirtyQueueValue(self.maxPerFlush, self, 8)
-    if maxPerFlush < 1 then
-        maxPerFlush = 1
-    end
-    local budgetMs = DirtyQueueValue(self.budgetMs, self, 0.35)
-    local endAt
-    if debugprofilestop and budgetMs and budgetMs > 0 then
-        endAt = debugprofilestop() + budgetMs
-    end
-
-    local bitsMap = self.bits
-    local queued = self.queued
-    local queue = self.queue
-    local runtimeEnabled = self.runtimeEnabled
-    local anyFlushed = false
-    local processed = 0
-
-    while self.head <= self.tail do
-        local head = self.head
-        local frame = queue[head]
-        queue[head] = nil
-        self.head = head + 1
-
-        if frame then
-            local bits = bitsMap[frame]
-            bitsMap[frame] = nil
-            queued[frame] = nil
-            if bits ~= nil and (not runtimeEnabled or runtimeEnabled(frame) ~= false) then
-                if process(frame, bits, self) ~= false then
-                    anyFlushed = true
-                end
-            end
-        end
-
-        processed = processed + 1
-        if processed >= maxPerFlush then
-            self:Schedule()
-            return anyFlushed
-        end
-        if endAt and processed % 4 == 0 and debugprofilestop() > endAt then
-            self:Schedule()
-            return anyFlushed
-        end
-    end
-
-    self.head = 1
-    self.tail = 0
-    if anyFlushed and type(self.onAnyFlushed) == "function" then
-        self.onAnyFlushed(self)
-    end
-    return anyFlushed
-end
-
-function UF.CreateDirtyQueue(name, opts)
-    if type(name) ~= "string" or name == "" then
-        return nil
-    end
-    opts = opts or {}
-    local queue = dirtyQueues[name]
-    if not queue then
-        queue = setmetatable({
-            name = name,
-            bits = {},
-            queued = {},
-            queue = {},
-            head = 1,
-            tail = 0,
-            defaultBits = true,
-        }, dirtyQueueMeta)
-        queue.flushCallback = function()
-            queue:Flush()
-        end
-        dirtyQueues[name] = queue
-    end
-    queue.scheduleKey = opts.scheduleKey or queue.scheduleKey or ("MSUF_UF_DIRTY_" .. name)
-    queue.process = opts.process or queue.process
-    queue.runtimeEnabled = opts.runtimeEnabled
-    queue.onAnyFlushed = opts.onAnyFlushed
-    queue.maxPerFlush = opts.maxPerFlush or queue.maxPerFlush or 8
-    queue.budgetMs = opts.budgetMs or queue.budgetMs or 0.35
-    queue.defaultBits = opts.defaultBits or queue.defaultBits or true
-    return queue
-end
-
-function UF.RefreshElements(unit, names, updateReason)
-    if type(names) ~= "table" then
-        return false
-    end
-    local refreshedAll = false
-    if not unit and UF.Config and UF.Config.Refresh then
-        UF.Config.Refresh()
-        refreshedAll = true
-    end
-    local function refreshFrame(frame)
-        if not frame then
-            return
-        end
-        local spec
-        if refreshedAll and UF.Config and UF.Config.GetSpec then
-            spec = UF.Config.GetSpec(frame.unit)
-        elseif UF.Config and UF.Config.RefreshUnit then
-            spec = UF.Config.RefreshUnit(frame.unit)
-        elseif UF.Config and UF.Config.GetSpec then
-            spec = UF.Config.GetSpec(frame.unit)
-        else
-            spec = frame.MSUFSpec
-        end
-        for i = 1, #names do
-            ApplyElementToFrame(frame, names[i], spec, updateReason or "MSUF_ELEMENT_REFRESH")
-        end
-    end
-    if unit then
-        local units = UF.UnitsForConfigKey(unit)
-        if not units then
-            return false
-        end
-        for i = 1, #units do
-            refreshFrame(UF.frames[units[i]])
-        end
-        return true
-    end
-    UF.ForEachFrame(refreshFrame)
-    return true
-end
-
-function UF.MarkDirty(unit)
-    if unit then
-        local units = UF.UnitsForConfigKey(unit)
-        if not units then
-            return
-        end
-        for i = 1, #units do
-            UF.pendingApply[units[i]] = true
-        end
-        return
-    end
-    for i = 1, #UF.unitOrder do
-        UF.pendingApply[UF.unitOrder[i]] = true
-    end
-end
-
-function UF.ApplyDirty()
-    local factory = UF.Factory
-    if not (factory and factory.Apply) then
-        return false
-    end
-    for unit in pairs(UF.pendingApply) do
-        UF.pendingApply[unit] = nil
-        factory.Apply(unit)
-    end
-    return true
-end
-
-function UF.RequestReanchorAfterCombat()
-    if InCombatLockdown and InCombatLockdown() then
-        UF.MarkDirty(nil)
-        local factory = UF.Factory
-        if factory and factory.EnsureDeferredDriver then
-            factory.EnsureDeferredDriver()
-        end
-        return false
-    end
-    return UF.Apply(nil)
-end
-
-function _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
-    local k = tostring(key or "")
-    local u = tostring(unit or "")
-    if k == "" then return u ~= "" and u or nil end
-    if k == "boss" and u ~= "" then return k .. ":" .. u end
-    return k
-end
-
-function _G.MSUF_GetUnitFrameScreenCacheBucket()
-    local fn = _G.MSUF_GetProfileScopedCache
-    if type(fn) ~= "function" then return nil end
-    return fn("unitFrameScreenCache")
-end
-
-local function GetFramePoint(frame, point)
-    if not frame then return nil, nil, nil end
-    point = point or "CENTER"
-    if point == "CENTER" and frame.GetCenter then
-        local x, y = frame:GetCenter()
-        return x, y, "CENTER"
-    end
-    if not frame.GetLeft or not frame.GetRight or not frame.GetTop or not frame.GetBottom then
-        if frame.GetCenter then
-            local x, y = frame:GetCenter()
-            return x, y, "CENTER"
-        end
-        return nil, nil, nil
-    end
-
-    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-    if not l or not r or not t or not b then
-        if frame.GetCenter then
-            local x, y = frame:GetCenter()
-            return x, y, "CENTER"
-        end
-        return nil, nil, nil
-    end
-
-    local cx = (l + r) * 0.5
-    local cy = (t + b) * 0.5
-    if point == "TOPLEFT" then return l, t, point end
-    if point == "TOP" then return cx, t, point end
-    if point == "TOPRIGHT" then return r, t, point end
-    if point == "LEFT" then return l, cy, point end
-    if point == "RIGHT" then return r, cy, point end
-    if point == "BOTTOMLEFT" then return l, b, point end
-    if point == "BOTTOM" then return cx, b, point end
-    if point == "BOTTOMRIGHT" then return r, b, point end
-    return cx, cy, "CENTER"
-end
-
-function _G.MSUF_CacheUnitFrameScreenPosition(frame, key, unit, point, allowLocked)
-    local uiParent = _G.UIParent
-    if not frame or not key or not uiParent or not uiParent.GetCenter then return false end
-    if allowLocked ~= true and InCombatLockdown and InCombatLockdown() then return false end
-
-    point = point or frame._msufHardLockPoint or "CENTER"
-    local fx, fy, usedPoint = GetFramePoint(frame, point)
-    local ux, uy = uiParent:GetCenter()
-    if not fx or not fy or not ux or not uy then return false end
-
-    local fs = (frame.GetEffectiveScale and frame:GetEffectiveScale()) or 1
-    local us = (uiParent.GetEffectiveScale and uiParent:GetEffectiveScale()) or 1
-    if fs == 0 then fs = 1 end
-    if us == 0 then us = 1 end
-
-    local id = _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
-    local bucket = _G.MSUF_GetUnitFrameScreenCacheBucket()
-    if not id or not bucket then return false end
-
-    local w = frame.GetWidth and frame:GetWidth() or nil
-    local h = frame.GetHeight and frame:GetHeight() or nil
-    bucket[id] = {
-        v = 3,
-        x = math_floor(((fx * fs - ux * us) / us) + 0.5),
-        y = math_floor(((fy * fs - uy * us) / us) + 0.5),
-        w = w,
-        h = h,
-        scale = frame.GetScale and frame:GetScale() or nil,
-        point = usedPoint or point or "CENTER",
-    }
-    return true
-end
-
-function _G.MSUF_ApplyCachedUnitFrameScreenPosition(frame, key, unit)
-    local uiParent = _G.UIParent
-    if not frame or not key or not uiParent then return false end
-    local bucket = _G.MSUF_GetUnitFrameScreenCacheBucket()
-    local id = _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
-    local cached = bucket and id and bucket[id]
-    if type(cached) ~= "table" or (cached.v ~= 2 and cached.v ~= 3) then return false end
-    local x, y = tonumber(cached.x), tonumber(cached.y)
-    if not x or not y then return false end
-
-    if cached.v == 3 and frame.SetScale and tonumber(cached.scale) then
-        frame:SetScale(tonumber(cached.scale))
-    end
-
-    local point = cached.point
-    if type(point) ~= "string" or point == "" then point = "CENTER" end
-    frame:ClearAllPoints()
-    frame:SetPoint(point, uiParent, "CENTER", math_floor(x + 0.5), math_floor(y + 0.5))
-    frame._msufPositionInitialized = true
-    frame._msufHardLockedToUIParent = true
-    frame._msufHardLockPoint = point
-    frame._msufLoadedFromScreenCache = true
-    return true
-end
-
-local function ForceUnits(reason, ...)
-    for i = 1, select("#", ...) do
-        local unit = select(i, ...)
-        if unit then
-            UF.UpdateRuntime(unit, reason or "MSUF_FORCE_UPDATE")
-        end
-    end
-end
-
-local function DriverOnEvent(self, event, unit)
-    if event == "PLAYER_TARGET_CHANGED" then
-        UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY")
-        UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
-    elseif event == "PLAYER_FOCUS_CHANGED" then
-        UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY")
-        UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
-    elseif event == "UNIT_TARGET" then
-        if unit == "target" then
-            UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY")
-        elseif unit == "focus" then
-            UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY")
-        elseif unit and BOSS_UNITS[unit] then
-            UF.UpdateRuntime(unit, "MSUF_UNIT_IDENTITY")
-        end
-    elseif event == "UNIT_PET" then
-        if unit == "player" then
-            UF.UpdateRuntime("pet", "MSUF_UNIT_IDENTITY")
-        end
-    elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-        ForceUnits("MSUF_UNIT_IDENTITY", "boss1", "boss2", "boss3", "boss4", "boss5")
-    else
-        UF.UpdateRuntime(nil, "MSUF_FORCE_UPDATE")
-    end
-end
-
-if CreateFrame and not UF.driver then
-    UF.driver = CreateFrame("Frame")
-    UF.driver:SetScript("OnEvent", DriverOnEvent)
-    UF.driver:RegisterEvent("PLAYER_ENTERING_WORLD")
-    UF.driver:RegisterEvent("PLAYER_TARGET_CHANGED")
-    UF.driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
-    UF.driver:RegisterEvent("UNIT_PET")
-    UF.driver:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
-    if UF.driver.RegisterUnitEvent then
-        UF.driver:RegisterUnitEvent("UNIT_TARGET", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5")
-    else
-        UF.driver:RegisterEvent("UNIT_TARGET")
-    end
-end
-
-local HEALTH_TEXT_BORDER_ELEMENTS = { "Health", "Text", "NameText", "HealthText", "InlineToT", "Borders" }
-local VISUAL_ELEMENTS = {
-    "Health", "Power", "Text", "NameText", "HealthText", "PowerText", "InlineToT",
-    "Portrait", "StatusIndicators", "RaidMarkerIndicator", "LeaderIndicator", "Prediction",
-    "LevelIndicator", "RaidGroupIndicator", "EliteIndicator", "StatusTextIndicator",
-    "CombatIndicator", "RestingIndicator", "IncomingResIndicator", "Alpha", "Borders",
-}
-local POWER_TEXT_ELEMENTS = { "Power", "Text", "PowerText" }
-local TEXT_ELEMENTS = { "Text", "NameText", "HealthText", "PowerText", "InlineToT" }
-local BORDER_ELEMENTS = { "Borders" }
-local REVERSE_FILL_ELEMENTS = { "Health", "Power", "Prediction" }
-local ALPHA_ELEMENTS = { "Alpha" }
-
-function UF.NotifyConfigChanged(unit, applyNow, forceUpdate)
-    if applyNow ~= false then
-        UF.Apply(unit)
-    elseif forceUpdate ~= false then
-        if UF.Config then
-            if unit and UF.Config.RefreshUnit then
-                local units = UF.UnitsForConfigKey(unit)
-                if units then
-                    for i = 1, #units do
-                        UF.Config.RefreshUnit(units[i])
-                    end
-                end
-            elseif UF.Config.Refresh then
-                UF.Config.Refresh()
-            end
-        end
-        UF.ForceUpdate(unit)
-    end
-    return true
-end
-
-function UF.RegisterVisualRefreshCallback(key, fn)
-    if type(fn) ~= "function" then
-        return false
-    end
-    UF.visualRefreshCallbacks[key or fn] = fn
-    return true
-end
-
-local function RunVisualRefreshCallbacks(unit)
-    for _, fn in pairs(UF.visualRefreshCallbacks) do
-        fn(unit)
-    end
-end
-
-function UF.RefreshVisuals(unit)
-    local ok = UF.RefreshElements(unit, VISUAL_ELEMENTS, "MSUF_VISUALS")
-    RunVisualRefreshCallbacks(unit)
-    return ok
-end
-
-function UF.RefreshIdentityColors()
-    return UF.RefreshElements(nil, HEALTH_TEXT_BORDER_ELEMENTS, "MSUF_IDENTITY_COLORS")
-end
-
-function UF.RefreshPowerTextColors()
-    return UF.RefreshElements(nil, TEXT_ELEMENTS, "MSUF_POWER_TEXT_COLORS")
-end
-
-function UF.RefreshAlphas()
-    return UF.RefreshElements(nil, ALPHA_ELEMENTS, "MSUF_ALPHA")
-end
-
-function UF.RefreshBorders()
-    return UF.RefreshElements(nil, BORDER_ELEMENTS, "MSUF_BORDER_LAYOUT")
-end
-
-function UF.RefreshHealthLayout()
-    return UF.RefreshElements(nil, REVERSE_FILL_ELEMENTS, "MSUF_REVERSE_FILL")
-end
-
-function UF.RefreshPowerLayout(unit)
-    return UF.RefreshElements(unit, POWER_TEXT_ELEMENTS, "MSUF_POWER_LAYOUT")
-end
-
-function UF.RefreshPowerLayoutForFrame(frame)
-    if frame and frame.unit then
-        return UF.RefreshPowerLayout(frame.unit)
-    end
-    return UF.RefreshPowerLayout(nil)
-end
-
-function UF.RefreshTextLayout(unit)
-    return UF.RefreshElements(unit, TEXT_ELEMENTS, "MSUF_TEXT_LAYOUT")
-end
-
-UF.ApplyUnitFrameKey = UF.Apply
-
-_G.MSUF_UnitFrames = UF.frames
-_G.MSUF_UnitFramesList = UF.frameList
-_G.MSUF_ForEachUnitFrame = UF.ForEachFrame
-_G.MSUF_UFCore_NotifyConfigChanged = UF.NotifyConfigChanged
-_G.MSUF_RefreshAllFrames = UF.RefreshVisuals
-MSUF.MSUF_RefreshAllFrames = UF.RefreshVisuals
-_G.MSUF_RefreshAllIdentityColors = UF.RefreshIdentityColors
-_G.MSUF_RefreshAllPowerTextColors = UF.RefreshPowerTextColors
-_G.MSUF_ForceTextLayoutForUnitKey = UF.RefreshTextLayout
-_G.MSUF_RefreshAllUnitAlphas = UF.RefreshAlphas
-_G.MSUF_ApplyBarOutlineThickness_All = UF.RefreshBorders
-_G.MSUF_ApplyPowerBarBorder_All = UF.RefreshBorders
-_G.MSUF_ApplyReverseFillBars = UF.RefreshHealthLayout
-_G.MSUF_ApplyAllAlpha = UF.RefreshAlphas
-_G.MSUF_ApplyPowerBarEmbedLayout_All = UF.RefreshPowerLayout
-_G.MSUF_ApplyPowerBarEmbedLayout = UF.RefreshPowerLayoutForFrame
-_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = UF.RefreshPowerLayout
-_G.MSUF_ApplyUnitFrameKey_Immediate = UF.ApplyUnitFrameKey
-_G.MSUF_RequestUnitFrameReanchorAfterCombat = UF.RequestReanchorAfterCombat
+-- Dirty queues, refresh helpers, driver events, screen-cache helpers, and
+-- global compatibility aliases live in the small Core/MSUF_UF_* modules loaded
+-- after this file.

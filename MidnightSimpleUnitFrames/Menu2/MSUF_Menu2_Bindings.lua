@@ -298,6 +298,18 @@ local function NotifyHistoryChanged()
     QueueMenuRefresh()
 end
 
+local function FeedbackLabel(text, limit)
+    text = tostring(text or "")
+    limit = tonumber(limit) or 34
+    if #text <= limit then return text end
+    return text:sub(1, math.max(1, limit - 3)) .. "..."
+end
+
+local function CommandFeedback(text, kind, seconds)
+    local fn = M.ShowStatusFeedback or M.ShowInlineFeedback
+    if type(fn) == "function" then fn(text, kind or "info", seconds or 1.25) end
+end
+
 local function PushHistory(label, source, before, after)
     if DeepEqual(before, after) then return false end
 
@@ -404,6 +416,7 @@ function M.CaptureHistory(label, source, fn)
     local ok, result = pcall(fn)
     historyDepth = historyDepth - 1
     if not ok then
+        CommandFeedback("Action failed", "danger", 1.8)
         local handler = _G.geterrorhandler and _G.geterrorhandler()
         if type(handler) == "function" then handler(result) else print(result) end
         return nil
@@ -482,6 +495,7 @@ function M.ResetHistorySession()
     if not historySessionActive or type(historySessionBaseSnapshot) ~= "table" then return false end
     local ok = ApplyHistorySnapshot(historySessionBaseSnapshot, "MSUF2_HISTORY_RESET_SESSION")
     if ok then M.ClearHistory() end
+    if ok then CommandFeedback("Session changes reset", "ok", 1.4) end
     return ok
 end
 
@@ -524,6 +538,7 @@ function M.Undo()
     local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO")
     if ok and historySessionActive then historySessionDirty = #M.historyUndo > 0 end
     NotifyHistoryChanged()
+    if ok then CommandFeedback("Undid " .. FeedbackLabel(entry.label), "info", 1.25) end
     return ok
 end
 
@@ -537,6 +552,7 @@ function M.Redo()
     local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO")
     if ok and historySessionActive then historySessionDirty = true end
     NotifyHistoryChanged()
+    if ok then CommandFeedback("Redid " .. FeedbackLabel(entry.label), "info", 1.25) end
     return ok
 end
 
@@ -814,11 +830,6 @@ local BARS_SCOPE_KEYS = {
     dispelBorderColorG = true,
     dispelBorderColorB = true,
     purgeOutlineMode = true,
-    hlDispelGlowEnabled = true,
-    hlDispelGlowStyle = true,
-    hlDispelGlowLines = true,
-    hlDispelGlowFrequency = true,
-    hlDispelGlowThickness = true,
     hlPrioEnabled = true,
     hlPrioOrder = true,
     enableGradient = true,
@@ -904,15 +915,9 @@ local MISC_GENERAL_KEYS = {
     hardKillBlizzardPlayerFrame = true,
     showMinimapIcon = true,
     playTargetSelectLostSounds = true,
-    rangeFadeEnabled = true,
 }
 
-local MISC_UNIT_KEYS = {
-    rangeFadeEnabled = true,
-    rangeFadeInAlpha = true,
-    rangeFadeOutAlpha = true,
-    rangeFadeAlpha = true,
-}
+local MISC_UNIT_KEYS = {}
 
 local CASTBAR_GENERAL_KEYS = {
     empowerColorStages = true,
@@ -1302,7 +1307,11 @@ local function ResetPageImpl(pageKey)
 
     local defaults = FactoryDefaults()
     if type(defaults) ~= "table" then
-        print("|cffff0000MSUF:|r Reset failed: factory defaults are not available yet.")
+        if M.ShowStatusFeedback then
+            M.ShowStatusFeedback("Reset failed: defaults unavailable", "danger", 1.8)
+        elseif print then
+            print("|cffff0000MSUF:|r Reset failed: factory defaults are not available yet.")
+        end
         return false
     end
 
@@ -1335,7 +1344,11 @@ local function ResetPageImpl(pageKey)
 
     EnsureTargetTargetAlias(db)
     ApplyAfterPageReset(pageKey, info)
-    print("|cffffd700MSUF:|r " .. tostring(info.label or pageKey) .. " reset to defaults.")
+    if M.ShowStatusFeedback then
+        M.ShowStatusFeedback(tostring(info.label or pageKey) .. " reset", "ok", 1.4)
+    elseif print then
+        print("|cffffd700MSUF:|r " .. tostring(info.label or pageKey) .. " reset to defaults.")
+    end
     return true
 end
 

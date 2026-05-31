@@ -20,71 +20,121 @@ local addonName, ns = ...
 -- =====================================================================
 
 if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
-  -- Secret-safe validity check for size/scale values.
-  -- IMPORTANT: never do numeric comparisons (>, <, ==) on values that might be secret.
-  -- We only need to reject nil/false; 0 is truthy in Lua and won't crash us.
-  local function _ssPos(v)
-    -- Secret-safe truthiness check:
-    -- - nil/false -> invalid
-    -- - 0 is truthy in Lua, and GetSize/GetScale should not return falsey values
-    -- Avoid ANY numeric comparisons/arithmetic on potentially secret numbers.
-    if v then return true end
-    return false
+  local function _MSUF_IsSecretValue(v)
+    local fn = _G.issecretvalue
+    if type(fn) ~= "function" then
+      return false
+    end
+
+    local ok, secret = pcall(fn, v)
+    return ok and secret == true
+  end
+
+  local function _MSUF_CanAccessSecretValue(v)
+    local fn = _G.canaccessvalue
+    if type(fn) ~= "function" then
+      return true
+    end
+
+    local ok, access = pcall(fn, v)
+    return ok and access == true
+  end
+
+  local function _MSUF_ToPlainPositiveNumber(v)
+    local tv = type(v)
+    if tv ~= "number" and tv ~= "string" then
+      return nil
+    end
+
+    if _MSUF_IsSecretValue(v) and not _MSUF_CanAccessSecretValue(v) then
+      return nil
+    end
+
+    -- Midnight/Beta can tag Frame API numbers as secret. Rebuilding through a
+    -- string produces a plain Lua number when Blizzard exposes the value.
+    local ok, text = pcall(tostring, v)
+    if not ok then
+      return nil
+    end
+
+    local textType = type(text)
+    if textType ~= "string" and textType ~= "number" then
+      return nil
+    end
+
+    local okNumber, n = pcall(tonumber, text)
+    if not okNumber then
+      return nil
+    end
+    if type(n) ~= "number" then
+      return nil
+    end
+    if _MSUF_IsSecretValue(n) then
+      return nil
+    end
+    local okPositive, positive = pcall(function() return n > 0 end)
+    if not okPositive or not positive then
+      return nil
+    end
+
+    return n
   end
 
   function _G.MSUF_HardSyncCastbarPreview(preview, real)
-    -- IMPORTANT: This function runs during Edit Mode preview build/sync. In Midnight/Beta,
-    -- various frame APIs can return "secret" numbers; ANY numeric comparisons/arithmetic
-    -- on such values can throw and would otherwise break Edit Mode entry.
+    -- Edit Mode can be entered right after combat, while Frame API size/scale
+    -- reads from protected castbars may still be secret-tagged. Never pass such
+    -- values directly into SetSize/SetWidth/SetScale; sanitize first or skip.
     if not preview or not real then return end
 
-    -- NOTE: Frame size (SetSize on the outer frame) is intentionally NOT synced
-    -- here. Frame size is always authoritative from the DB via
-    -- MSUF_ApplyPlayerCastbarSizeAndLayout. Copying the real bar's runtime size
-    -- would override DB values and cause the preview to jump on first interaction.
+    -- NOTE: Outer frame size remains DB/layout authoritative through
+    -- MSUF_ApplyPlayerCastbarSizeAndLayout. This helper only mirrors safe
+    -- child footprint data to avoid transient preview drift.
 
     -- Frame scale
     if real.GetScale and preview.SetScale then
-      local s = real:GetScale()
-      if _ssPos(s) then
+      local s = _MSUF_ToPlainPositiveNumber(real:GetScale())
+      if s then
         preview:SetScale(s)
       end
     end
 
     -- StatusBar footprint (preview StatusBar is NOT SetAllPoints; must be resized too)
-      if preview.statusBar and preview.statusBar.SetSize then
-        if real.statusBar and real.statusBar.GetSize then
-          local sw, sh = real.statusBar:GetSize()
-          if _ssPos(sw) and _ssPos(sh) then
-            preview.statusBar:SetSize(sw, sh)
-          end
-        else
-          -- Best-effort fallback based on outer frame size.
-          -- Secret-safe: no numeric comparisons or arithmetic.
-          if preview.GetSize then
-            local w, h = preview:GetSize()
-            if w and h then
-              preview.statusBar:SetSize(w, h)
-            end
-          end
+    if preview.statusBar and preview.statusBar.SetSize then
+      if real.statusBar and real.statusBar.GetSize then
+        local sw, sh = real.statusBar:GetSize()
+        sw = _MSUF_ToPlainPositiveNumber(sw)
+        sh = _MSUF_ToPlainPositiveNumber(sh)
+        if sw and sh then
+          preview.statusBar:SetSize(sw, sh)
+        end
+      elseif preview.GetSize then
+        -- Best-effort fallback based on the preview frame's own public size.
+        local w, h = preview:GetSize()
+        w = _MSUF_ToPlainPositiveNumber(w)
+        h = _MSUF_ToPlainPositiveNumber(h)
+        if w and h then
+          preview.statusBar:SetSize(w, h)
         end
       end
+    end
 
     -- Icon size
-      if preview.icon and preview.icon.SetSize and real.icon and real.icon.GetSize then
-        local iw, ih = real.icon:GetSize()
-        if _ssPos(iw) and _ssPos(ih) then
-          preview.icon:SetSize(iw, ih)
-        end
+    if preview.icon and preview.icon.SetSize and real.icon and real.icon.GetSize then
+      local iw, ih = real.icon:GetSize()
+      iw = _MSUF_ToPlainPositiveNumber(iw)
+      ih = _MSUF_ToPlainPositiveNumber(ih)
+      if iw and ih then
+        preview.icon:SetSize(iw, ih)
       end
+    end
 
     -- Player latency bar width (preview-only element)
-      if preview.latencyBar and preview.latencyBar.SetWidth and real.latencyBar and real.latencyBar.GetWidth then
-        local lw = real.latencyBar:GetWidth()
-        if _ssPos(lw) then
-          preview.latencyBar:SetWidth(lw)
-        end
+    if preview.latencyBar and preview.latencyBar.SetWidth and real.latencyBar and real.latencyBar.GetWidth then
+      local lw = _MSUF_ToPlainPositiveNumber(real.latencyBar:GetWidth())
+      if lw then
+        preview.latencyBar:SetWidth(lw)
       end
+    end
   end
 end
 

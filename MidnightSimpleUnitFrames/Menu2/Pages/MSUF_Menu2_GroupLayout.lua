@@ -105,12 +105,175 @@ local function TooltipModeHint(mode)
     if mode == "MODIFIER" then return "hold modifier to show" end
     return "tooltip always visible"
 end
+
+local function CurrentEditFocusKey()
+    local scope = CurrentScope() or "party"
+    return "gf_" .. tostring(scope)
+end
+
+local function AttachGroupFocus(widget, component)
+    if W.AttachEditFocus then
+        W.AttachEditFocus(widget, CurrentEditFocusKey, component or "layout", nil, { source = "menu2-group" })
+    end
+    return widget
+end
+
+local LAYOUT_PRESET_VALUES = {
+    { value = "PARTY", text = "5-Player" },
+    { value = "RAID_GRID", text = "Raid Grid" },
+    { value = "COMPACT_RAID", text = "Compact Raid" },
+}
+
+local LAYOUT_PRESETS = {
+    PARTY = {
+        label = "5-Player",
+        intent = "Bigger rows for a five-player group.",
+        width = 184,
+        height = 49,
+        spacing = 2,
+        unitsPerColumn = 5,
+        maxColumns = 1,
+        growth = "DOWN",
+        preserveRaidGroups = false,
+        frameScaleMode = "off",
+    },
+    RAID_GRID = {
+        label = "Raid Grid",
+        intent = "Clear raid columns with readable names and status.",
+        width = 100,
+        height = 40,
+        spacing = 2,
+        unitsPerColumn = 5,
+        maxColumns = 8,
+        growth = "RIGHT",
+        preserveRaidGroups = false,
+        frameScaleMode = "off",
+    },
+    COMPACT_RAID = {
+        label = "Compact Raid",
+        intent = "Dense grid for larger raids and limited screen space.",
+        width = 80,
+        height = 32,
+        spacing = 1,
+        unitsPerColumn = 5,
+        maxColumns = 8,
+        growth = "RIGHT",
+        preserveRaidGroups = false,
+        frameScaleMode = "auto",
+        scaleAt10 = 100,
+        scaleAt20 = 90,
+        scaleAt25 = 84,
+        scaleOver25 = 76,
+    },
+}
+
+local function RefreshPageControls(ctx)
+    if not (ctx and ctx.refreshers) then return end
+    for i = 1, #ctx.refreshers do
+        local fn = ctx.refreshers[i]
+        if type(fn) == "function" then pcall(fn) end
+    end
+end
+
+local function CurrentLayoutPreset(scope)
+    local conf = Conf(scope)
+    local preset = conf and conf.layoutIntentPreset
+    if LAYOUT_PRESETS[preset] then return preset end
+    local width = Num(scope, "width", scope == "party" and 184 or 100)
+    local height = Num(scope, "height", scope == "party" and 49 or 40)
+    local columns = Num(scope, "maxColumns", scope == "party" and 1 or 8)
+    local scaleMode = Val(scope, "frameScaleMode", "off")
+    if width <= 88 and height <= 34 and columns >= 5 then return "COMPACT_RAID" end
+    if scope ~= "party" or columns > 1 or scaleMode == "auto" then return "RAID_GRID" end
+    return "PARTY"
+end
+
+local function ApplyLayoutPreset(ctx, presetKey)
+    local preset = LAYOUT_PRESETS[presetKey] or LAYOUT_PRESETS.PARTY
+    local scope = CurrentScope()
+    local conf = Conf(scope)
+    if not conf then return end
+
+    conf.layoutIntentPreset = presetKey
+    conf.width = preset.width
+    conf.height = preset.height
+    conf.spacing = preset.spacing
+    conf.unitsPerColumn = preset.unitsPerColumn
+    conf.maxColumns = preset.maxColumns
+    conf.growth = preset.growth
+    conf.preserveRaidGroups = preset.preserveRaidGroups == true
+    if preset.frameScaleMode then conf.frameScaleMode = preset.frameScaleMode end
+    if preset.scaleAt10 then conf.scaleAt10 = preset.scaleAt10 end
+    if preset.scaleAt20 then conf.scaleAt20 = preset.scaleAt20 end
+    if preset.scaleAt25 then conf.scaleAt25 = preset.scaleAt25 end
+    if preset.scaleOver25 then conf.scaleOver25 = preset.scaleOver25 end
+
+    QueueGF(scope, "rebuild")
+    RefreshPageControls(ctx)
+end
+
+local function BuildTopLayoutIntent(ctx, sec, helpers)
+    if not (sec and helpers and helpers.MakeTopButton) then return end
+    local buttons = {}
+    local previous = helpers.wrapped and nil or helpers.lastScopeButton
+    for i = 1, #LAYOUT_PRESET_VALUES do
+        local info = LAYOUT_PRESET_VALUES[i]
+        local width = info.value == "COMPACT_RAID" and 104 or (info.value == "RAID_GRID" and 82 or 76)
+        local btn = helpers.MakeTopButton(sec, info.text, width, {
+            bg = { 0.026, 0.040, 0.084, 0.95 },
+            border = { 0.095, 0.165, 0.330, 0.62 },
+            activeBg = { 0.055, 0.125, 0.300, 0.98 },
+            activeBorder = { 0.220, 0.470, 0.900, 0.92 },
+        })
+        if previous then
+            btn:SetPoint("LEFT", previous, "RIGHT", previous == helpers.lastScopeButton and 16 or 6, 0)
+        elseif helpers.wrapped then
+            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, helpers.intentY or -42)
+        else
+            btn:SetPoint("TOPLEFT", sec, "TOPLEFT", 8, helpers.topY or -8)
+        end
+        btn:SetScript("OnClick", function()
+            if CurrentLayoutPreset(CurrentScope()) == info.value then
+                RefreshPageControls(ctx)
+                return
+            end
+            local function ApplyPreset()
+                ApplyLayoutPreset(ctx, info.value)
+            end
+            if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+                M.CaptureHistory("Layout Preset", "group:layout:preset:" .. tostring(CurrentScope()), ApplyPreset)
+            else
+                ApplyPreset()
+            end
+            if M.ShowStatusFeedback then M.ShowStatusFeedback((info.text or "") .. " layout applied", "ok", 1.2) end
+        end)
+        AttachGroupFocus(btn, "layout")
+        buttons[info.value] = btn
+        previous = btn
+    end
+
+    local function RefreshTopIntent()
+        local current = CurrentLayoutPreset(CurrentScope())
+        for i = 1, #LAYOUT_PRESET_VALUES do
+            local value = LAYOUT_PRESET_VALUES[i].value
+            local btn = buttons[value]
+            if btn and btn.SetActive then btn:SetActive(current == value) end
+        end
+    end
+    M.AddRefresher(ctx, RefreshTopIntent)
+    RefreshTopIntent()
+end
+
 local function BuildGFLayout(ctx)
     local b = W.PageBuilder(ctx)
-    ScopeSection(ctx, b)
+    ScopeSection(ctx, b, {
+        buildTopIntent = function(sec, helpers)
+            BuildTopLayoutIntent(ctx, sec, helpers)
+        end,
+    })
     M.GroupPreview.Add(ctx, b)
 
-    local general = b:CollapsibleSection("general", "General", 430, false)
+    local general = b:CollapsibleSection("general", "Availability", 430, false)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
     local generalRightX = min(max(430, floor(generalW * 0.52)), max(360, generalW - 360))
@@ -122,19 +285,20 @@ local function BuildGFLayout(ctx)
 
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
-    local enableGroup = BindScopeToggle(ctx, W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "enabled", false, "rebuild")
+    local enableGroup = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "layout"), "enabled", false, "rebuild")
     enableGroup._msuf2GroupFrameGateAlwaysEnabled = true
-    BindScopeToggle(ctx, W.ToggleAt(general, "Show player", generalLeftX, -94, generalLeftToggleW), "showPlayer", true, "rebuild")
-    BindScopeToggle(ctx, W.ToggleAt(general, "Show while solo", generalLeftX, -124, generalLeftToggleW), "showSolo", false, "rebuild")
-    BindScopeToggle(ctx, W.ToggleAt(general, "Smooth health fill", generalRightX, -64, generalRightToggleW), "smoothFill", true, "visual")
-    BindScopeToggle(ctx, W.ToggleAt(general, "Reverse fill direction", generalRightX, -94, generalRightToggleW), "reverseFill", false, "visual")
-    BindScopeToggle(ctx, W.ToggleAt(general, "Hide during client scene", generalRightX, -124, generalRightToggleW), "hideInClientScene", true, "visual")
-    BindScopeToggle(ctx, W.ToggleAt(general, "Click casting / Clique", generalRightX, -154, generalRightToggleW), "clickCastEnabled", true, "rebuild")
+    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Show player", generalLeftX, -94, generalLeftToggleW), "layout"), "showPlayer", true, "rebuild")
+    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Show while solo", generalLeftX, -124, generalLeftToggleW), "layout"), "showSolo", false, "rebuild")
+    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Smooth health fill", generalRightX, -64, generalRightToggleW), "bars"), "smoothFill", true, "visual")
+    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Reverse fill direction", generalRightX, -94, generalRightToggleW), "bars"), "reverseFill", false, "visual")
+    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide during client scene", generalRightX, -124, generalRightToggleW), "layout"), "hideInClientScene", true, "visual")
+    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Click casting / Clique", generalRightX, -154, generalRightToggleW), "layout"), "clickCastEnabled", true, "rebuild")
 
     local fallbackModeW = min(260, generalLeftW)
     local fallbackMode = W.Dropdown(general, "If this switch is off", BLIZZARD_FALLBACK_VALUES, fallbackModeW)
     fallbackMode._msuf2GroupFrameGateAlwaysEnabled = true
     W.MoveWidget(fallbackMode, general, generalLeftX, -196, fallbackModeW, "LEFT")
+    AttachGroupFocus(fallbackMode, "layout")
     BindScopeDropdown(ctx, fallbackMode, "blizzardFallbackMode", "AUTO", "rebuild")
 
     local fallbackHelp = W.Text(general, "Blizzard default is the simple off-state when no MSUF group-frame scope is active. If any MSUF group frames are on, Auto keeps Blizzard group frames hidden to avoid duplicates.", generalRightX, -184, generalRightW, T.colors.muted)
@@ -142,9 +306,9 @@ local function BuildGFLayout(ctx)
 
     W.DividerAt(general, -256, generalLeftX, 32)
     W.LabelAt(general, "Offline Members", generalLeftX, -274, generalLeftW, "GameFontNormalSmall", T.colors.accent)
-    local hideOfflineEnabled = BindScopeToggle(ctx, W.SwitchAt(general, "Offline Members", generalLeftX, -300, generalLeftW), "hideOfflineEnabled", false, "visual")
-    local hideOfflineCombat = BindScopeToggle(ctx, W.ToggleAt(general, "Hide offline in combat", generalRightX, -300, generalRightToggleW), "hideOfflineInCombat", false, "visual")
-    local hideOffline = BindScopeSlider(ctx, W.Slider(general, "Hide offline after", 0, 120, 1, offlineSliderW), "hideOfflineDelay", 0, "visual")
+    local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -300, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
+    local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -300, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
+    local hideOffline = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(general, "Hide offline after", 0, 120, 1, offlineSliderW), "layout"), "hideOfflineDelay", 0, "visual")
     W.MoveWidget(hideOffline, general, generalLeftX, -334, offlineSliderW, "LEFT")
     local generalNotice, _, generalNoticeButton = CreateSectionNotice and CreateSectionNotice(general, -374, "Enable Scope", 104)
     if generalNoticeButton then
@@ -198,47 +362,47 @@ local function BuildGFLayout(ctx)
         if entry then entry._msuf2RefreshState = RefreshHideOfflineState end
     end
 
-    local layout = b:CollapsibleSection("layout", "Layout", 430, false)
-    local layoutW = layout._msuf2Width or b.width or 720
+    local advancedLayout = b:CollapsibleSection("layout_advanced", "Geometry", 430, false)
+    local advancedLayoutW = advancedLayout._msuf2Width or b.width or 720
     local layoutGap = 16
-    local layoutLeftX = 20
-    local layoutInnerW = max(320, layoutW - 40)
-    local layoutLeftW = floor((layoutInnerW - layoutGap) * 0.52)
-    local layoutRightX = layoutLeftX + layoutLeftW + layoutGap
-    local layoutRightW = layoutInnerW - layoutLeftW - layoutGap
-    local layoutSliderW = max(180, min(360, layoutLeftW - 64))
+    local advancedLeftX = 20
+    local advancedInnerW = max(320, advancedLayoutW - 40)
+    local advancedLeftW = floor((advancedInnerW - layoutGap) * 0.52)
+    local advancedRightX = advancedLeftX + advancedLeftW + layoutGap
+    local advancedRightW = advancedInnerW - advancedLeftW - layoutGap
+    local layoutSliderW = max(180, min(360, advancedLeftW - 64))
 
-    local sizeCard = W.ControlCard(layout, "Frame size", "Dimensions and spacing for each group member.", layoutLeftX, -38, layoutLeftW, 188)
-    local gridCard = W.ControlCard(layout, "Raid grid", "Column behavior for raid-like scopes.", layoutLeftX, -244, layoutLeftW, 158)
-    local growthCard = W.ControlCard(layout, "Growth Direction", "How new members fill the group frame.", layoutRightX, -38, layoutRightW, 188)
+    local sizeCard = W.ControlCard(advancedLayout, "Size", "Dimensions and spacing for each group member.", advancedLeftX, -38, advancedLeftW, 188)
+    local gridCard = W.ControlCard(advancedLayout, "Columns", "Column behavior for raid-like scopes.", advancedLeftX, -244, advancedLeftW, 158)
+    local growthCard = W.ControlCard(advancedLayout, "Growth", "How new members fill the group frame.", advancedRightX, -38, advancedRightW, 188)
 
-    local widthSlider = BindScopeSlider(ctx, W.Slider(sizeCard, "Width", 40, 300, 1, layoutSliderW), "width", 120, "rebuild")
-    local heightSlider = BindScopeSlider(ctx, W.Slider(sizeCard, "Height", 16, 120, 1, layoutSliderW), "height", 40, "rebuild")
-    local spacingSlider = BindScopeSlider(ctx, W.Slider(sizeCard, "Spacing", 0, 20, 1, layoutSliderW), "spacing", 1, "rebuild")
+    local widthSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(sizeCard, "Width", 40, 300, 1, layoutSliderW), "layout"), "width", 120, "rebuild")
+    local heightSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(sizeCard, "Height", 16, 120, 1, layoutSliderW), "layout"), "height", 40, "rebuild")
+    local spacingSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(sizeCard, "Spacing", 0, 20, 1, layoutSliderW), "layout"), "spacing", 1, "rebuild")
     W.MoveWidget(widthSlider, sizeCard, 16, -66, layoutSliderW, "LEFT")
     W.MoveWidget(heightSlider, sizeCard, 16, -114, layoutSliderW, "LEFT")
     W.MoveWidget(spacingSlider, sizeCard, 16, -162, layoutSliderW, "LEFT")
 
     BuildGrowthDirectionTiles(ctx, growthCard, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
 
-    local unitsSlider = BindScopeSlider(ctx, W.Slider(gridCard, "Units per column", 1, 40, 1, layoutSliderW), "unitsPerColumn", 5, "rebuild")
-    local maxColumnsSlider = BindScopeSlider(ctx, W.Slider(gridCard, "Max columns", 1, 8, 1, layoutSliderW), "maxColumns", 8, "rebuild")
-    local preserveRaidGroups = BindScopeToggle(ctx, W.ToggleAt(gridCard, "Preserve raid groups", 16, -138, layoutLeftW - 32), "preserveRaidGroups", false, "rebuild")
+    local unitsSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(gridCard, "Units per column", 1, 40, 1, layoutSliderW), "layout"), "unitsPerColumn", 5, "rebuild")
+    local maxColumnsSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(gridCard, "Max columns", 1, 8, 1, layoutSliderW), "layout"), "maxColumns", 8, "rebuild")
+    local preserveRaidGroups = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(gridCard, "Preserve raid groups", 16, -138, advancedLeftW - 32), "layout"), "preserveRaidGroups", false, "rebuild")
     W.MoveWidget(unitsSlider, gridCard, 16, -62, layoutSliderW, "LEFT")
     W.MoveWidget(maxColumnsSlider, gridCard, 16, -108, layoutSliderW, "LEFT")
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
-        SetSectionBadges(layout, {
+        SetSectionBadges(advancedLayout, {
             { text = BadgeNumber(Num(CurrentScope(), "width", 120)) .. "x" .. BadgeNumber(Num(CurrentScope(), "height", 40)), kind = "info" },
             { text = OptionText(GROWTH_VALUES, Val(CurrentScope(), "growth", "DOWN"), "Down"), kind = "accent" },
             { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/" .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = CurrentScope() == "party" and "muted" or "info" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(layout, nil) end
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(advancedLayout, nil) end
     end
     M.AddRefresher(ctx, RefreshRaidGroupLayoutState)
     RefreshRaidGroupLayoutState()
     do
-        local entry = layout and layout._msuf2CollapsibleEntry
+        local entry = advancedLayout and advancedLayout._msuf2CollapsibleEntry
         if entry then entry._msuf2RefreshState = RefreshRaidGroupLayoutState end
     end
 
@@ -938,4 +1102,4 @@ local function BuildGFLayout(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 14 })
+M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 17 })

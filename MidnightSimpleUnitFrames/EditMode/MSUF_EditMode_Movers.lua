@@ -78,17 +78,66 @@ local function BlockConfigCombatLocked()
     return false
 end
 
-local function SyncMoverToFrame(mover, frame)
-    if not frame then return end
+local function FrameRectToUI(frame)
+    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
+        return nil
+    end
+    if frame.IsShown and not frame:IsShown() then return nil end
     local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
-    if not (l and r and t and b) then return end
-    local fS = frame:GetEffectiveScale()
-    local uiS = UIParent:GetEffectiveScale()
+    if not (l and r and t and b) then return nil end
+    local fS = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+    local uiS = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+    if not fS or fS == 0 then fS = 1 end
+    if not uiS or uiS == 0 then uiS = 1 end
     local ratio = fS / uiS
-    local w = round((r - l) * ratio)
-    local h = round((t - b) * ratio)
-    local x = round(l * ratio)
-    local y = round(t * ratio - UIParent:GetHeight())
+    return l * ratio, r * ratio, t * ratio, b * ratio
+end
+
+local function ExpandRect(bounds, region)
+    local l, r, t, b = FrameRectToUI(region)
+    if not l then return bounds end
+    if not bounds then
+        return { l = l, r = r, t = t, b = b }
+    end
+    if l < bounds.l then bounds.l = l end
+    if r > bounds.r then bounds.r = r end
+    if t > bounds.t then bounds.t = t end
+    if b < bounds.b then bounds.b = b end
+    return bounds
+end
+
+local function UnitVisualBounds(frame)
+    --- Unitframes can draw important parts outside the root frame
+    --- (portrait, detached powerbar). The edit overlay should match what the
+    --- user actually sees, while drag math keeps the root-frame offset stable.
+    local bounds = ExpandRect(nil, frame)
+    bounds = ExpandRect(bounds, frame and (frame.hpBar or frame.Health))
+
+    local power = frame and (frame.targetPowerBar or frame.powerBar or frame.Power)
+    if power and power.IsShown and power:IsShown() then
+        bounds = ExpandRect(bounds, power)
+    end
+
+    bounds = ExpandRect(bounds, frame and frame.MSUFPortraitHolder)
+    bounds = ExpandRect(bounds, frame and frame.MSUFBorderOverlay)
+
+    if not bounds then return nil end
+    return bounds.l, bounds.r, bounds.t, bounds.b
+end
+
+local function SyncMoverToFrame(mover, frame, cfg)
+    if not frame then return end
+    local l, r, t, b
+    if cfg and cfg.popupType == "unit" then
+        l, r, t, b = UnitVisualBounds(frame)
+    else
+        l, r, t, b = FrameRectToUI(frame)
+    end
+    if not (l and r and t and b) then return end
+    local w = max(2, round(r - l))
+    local h = max(2, round(t - b))
+    local x = round(l)
+    local y = round(t - UIParent:GetHeight())
     mover:ClearAllPoints()
     mover:SetSize(w, h)
     mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
@@ -102,6 +151,7 @@ local function CreateMover(key, cfg)
     mover:SetFrameStrata("FULLSCREEN")
     mover:SetFrameLevel(cfg.popupType == "castbar" and 340 or 300)
     mover:SetMovable(true); mover:RegisterForDrag("LeftButton")
+    if mover.RegisterForClicks then mover:RegisterForClicks("LeftButtonUp", "RightButtonUp") end
     mover:EnableMouse(true); mover:SetClampedToScreen(true)
     mover._barKey = key
 
@@ -131,6 +181,9 @@ local function CreateMover(key, cfg)
         self._bg:SetColorTexture(t.bgR+0.05, t.bgG+0.05, t.bgB+0.08, 0.75)
         self._brd:SetBackdropBorderColor(t.titleR, t.titleG, t.titleB, 0.80)
         if self._label:IsShown() then self._label:SetTextColor(1, 1, 1, 1) end
+        if EM2.Focus and EM2.Focus.SetHover then
+            EM2.Focus.SetHover(key, nil, nil, { source = "mover" })
+        end
     end)
     mover:SetScript("OnLeave", function(self)
         if self._dragging then return end
@@ -138,6 +191,9 @@ local function CreateMover(key, cfg)
         self._bg:SetColorTexture(t.bgR, t.bgG, t.bgB, 0.55)
         self._brd:SetBackdropBorderColor(t.edgeR, t.edgeG, t.edgeB, 0.60)
         if self._label:IsShown() then self._label:SetTextColor(t.textR, t.textG, t.textB, 0.85) end
+        if EM2.Focus and EM2.Focus.ClearHover then
+            EM2.Focus.ClearHover("mover")
+        end
     end)
 
     --- Hide label when preview is active (preview frame already shows unit name)
@@ -159,6 +215,7 @@ local function CreateMover(key, cfg)
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         self._dragging = true
         self._coordFS:Show()
+        if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("drag") end
 
         if _G.MSUF_EM_UndoBeforeChange then
             if cfg.popupType == "castbar" then
@@ -169,6 +226,7 @@ local function CreateMover(key, cfg)
         end
 
         if EM2.Ticker then EM2.Ticker.BeginDrag(self, key, cfg) end
+        if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "drag" }) end
     end)
 
     mover:SetScript("OnDragStop", function(self)
@@ -185,20 +243,29 @@ local function CreateMover(key, cfg)
         self._bg:SetColorTexture(t.bgR, t.bgG, t.bgB, 0.55)
         self._brd:SetBackdropBorderColor(t.edgeR, t.edgeG, t.edgeB, 0.60)
         self._label:SetTextColor(t.textR, t.textG, t.textB, 0.85)
+        if EM2.Focus and EM2.Focus.SetHover and self:IsMouseOver() then
+            EM2.Focus.SetHover(key, nil, nil, { source = "mover", force = true })
+        end
     end)
 
-    --- Click ? popup
+    --- Click keeps the legacy edit-mode behavior: select the item and open
+    --- its popup. Focus visuals are handled separately by the popup veil.
     mover:SetScript("OnClick", function(self, button)
-        if button ~= "LeftButton" then return end
+        if button ~= "LeftButton" and button ~= "RightButton" then return end
         if _G.MSUF_EM2_SetPreviewNudgeTarget then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         if EM2.State then EM2.State.SetUnitKey(key) end
         if EM2.HUD then EM2.HUD.RefreshUnitSelector() end
-        if EM2.Popups and EM2.Popups.Open then EM2.Popups.Open(key, self) end
+        if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "mover" }) end
+        if EM2.Popups and EM2.Popups.Open then
+            EM2.Popups.Open(key, self)
+        elseif EM2.Focus and EM2.Focus.NotifyPositionChanged then
+            EM2.Focus.NotifyPositionChanged(key)
+        end
     end)
 
     movers[key] = mover
     local frame = cfg.getFrame and cfg.getFrame()
-    if frame then SyncMoverToFrame(mover, frame) end
+    if frame then SyncMoverToFrame(mover, frame, cfg) end
     return mover
 end
 
@@ -214,7 +281,7 @@ function Movers.Show()
         if not movers[k] then CreateMover(k, c) end
         local m = movers[k]
         local f = c.getFrame and c.getFrame()
-        if f then SyncMoverToFrame(m, f); m:Show(); m:UpdateLabelVisibility() else m:Hide() end
+        if f then SyncMoverToFrame(m, f, c); m:Show(); m:UpdateLabelVisibility() else m:Hide() end
     end
 end
 
@@ -237,7 +304,7 @@ function Movers.SyncAll()
             local m = movers[k]
             local f = c.getFrame and c.getFrame()
             if f then
-                SyncMoverToFrame(m, f)
+                SyncMoverToFrame(m, f, c)
                 m:Show()
                 m:UpdateLabelVisibility()
             elseif m then
@@ -552,12 +619,20 @@ end
 
 --- --- MSUF_OpenCastbarPositionPopup ---
 _G.MSUF_OpenCastbarPositionPopup = function(unit, parent)
-    if EM2.CastPopup then EM2.CastPopup.Open(unit, parent) end
+    if EM2.Popups then
+        EM2.Popups.Open("castbar_" .. tostring(unit or ""), parent)
+    elseif EM2.CastPopup then
+        EM2.CastPopup.Open(unit, parent)
+    end
 end
 
 --- --- MSUF_OpenAuras3PositionPopup ---
 _G.MSUF_OpenAuras3PositionPopup = function(unit, parent)
-    if EM2.AuraPopup then EM2.AuraPopup.Open(unit, parent) end
+    if EM2.Popups then
+        EM2.Popups.Open("aura_" .. tostring(unit or ""), parent)
+    elseif EM2.AuraPopup then
+        EM2.AuraPopup.Open(unit, parent)
+    end
 end
 
 --- --- MSUF_SyncUnitPositionPopup ---
@@ -616,6 +691,16 @@ _G.MSUF_EM2_ReforcePreviewFrames = function()
             frame:Show()
             if frame.SetAlpha then frame:SetAlpha(1) end
             if frame.EnableMouse then frame:EnableMouse(true) end
+        end
+    end
+    if EM2.Movers and EM2.Movers.SyncAll then
+        EM2.Movers.SyncAll()
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function()
+                if _G.MSUF_PreviewTestMode and EM2.Movers and EM2.Movers.SyncAll then
+                    EM2.Movers.SyncAll()
+                end
+            end)
         end
     end
 end

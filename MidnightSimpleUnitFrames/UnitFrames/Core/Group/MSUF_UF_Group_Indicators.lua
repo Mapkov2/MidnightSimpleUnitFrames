@@ -12,7 +12,6 @@ if not (UF and UF.RegisterElement) then return end
 local AuraCache = GF.AuraCache or {}
 local SetShown = AuraCache.SetShown or function(region, show) if region then region:SetShown(show) end end
 local DispelState = UF and UF.DispelState or {}
-local UnitExists = UnitExists
 local UnitThreatSituation = UnitThreatSituation
 local CreateFrame = CreateFrame
 local tonumber = tonumber
@@ -20,7 +19,51 @@ local type = type
 local pairs = pairs
 local floor = math.floor
 local max = math.max
-local issecretvalue = _G.issecretvalue
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
+local IsNil = Secrets.IsNil or function(value) return value == nil end
+local UnitMissing = Secrets.UnitMissing or function(_) return false end
+local Apply = MSUF.Apply or {}
+local ApplyColorTexture = Apply.ColorTexture or function(tex, r, g, b, a)
+    if not tex then return end
+    a = a or 1
+    if tex._aColorTexture ~= true or tex._aCTR ~= r or tex._aCTG ~= g
+        or tex._aCTB ~= b or tex._aCTA ~= a then
+        tex:SetColorTexture(r, g, b, a)
+        tex._aColorTexture = true
+        tex._aCTR = r
+        tex._aCTG = g
+        tex._aCTB = b
+        tex._aCTA = a
+        tex._aTex = nil
+    end
+end
+local ApplyTexture = Apply.Texture or function(tex, texture)
+    if not tex then return end
+    if tex and IsSecret(texture) then
+        tex._aTex = nil
+        tex._aColorTexture = nil
+        tex:SetTexture(texture)
+        return
+    end
+    if tex._aTex ~= texture then
+        tex:SetTexture(texture)
+        tex._aTex = texture
+        tex._aColorTexture = nil
+    end
+end
+local ApplyText = Apply.Text or function(fs, text)
+    if fs and IsSecret(text) then
+        fs._aText = nil
+        fs:SetText(text)
+        return
+    end
+    text = text or ""
+    if fs and fs._aText ~= text then
+        fs:SetText(text)
+        fs._aText = text
+    end
+end
 
 local EMPTY = AuraCache.EMPTY or {}
 local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -66,6 +109,21 @@ local function EnsureHolder(frame, key, layer)
     return holder
 end
 
+local function SetAllPointsCached(region, target)
+    if not region then return end
+    target = target or true
+    if region._msufGFAllPointsTarget == target then
+        return
+    end
+    region:ClearAllPoints()
+    if target == true then
+        region:SetAllPoints()
+    else
+        region:SetAllPoints(target)
+    end
+    region._msufGFAllPointsTarget = target
+end
+
 local function SetPointCached(region, point, relativeTo, relativePoint, x, y)
     x, y = x or 0, y or 0
     relativePoint = relativePoint or point
@@ -87,17 +145,11 @@ local function SetSizeCached(region, w, h)
 end
 
 local function SetColorTextureCached(tex, r, g, b, a)
-    if tex and (tex._msufGFR ~= r or tex._msufGFG ~= g or tex._msufGFB ~= b or tex._msufGFA ~= a) then
-        tex:SetColorTexture(r, g, b, a)
-        tex._msufGFR, tex._msufGFG, tex._msufGFB, tex._msufGFA = r, g, b, a
-    end
+    ApplyColorTexture(tex, r, g, b, a)
 end
 
 local function SetTextureCached(tex, texture)
-    if tex and tex._msufGFTexture ~= texture then
-        tex:SetTexture(texture)
-        tex._msufGFTexture = texture
-    end
+    ApplyTexture(tex, texture)
 end
 
 local function SetDesaturatedCached(tex, desaturated)
@@ -111,16 +163,13 @@ local function SetDesaturatedCached(tex, desaturated)
 end
 
 local function SetTextCached(fs, text)
-    if fs and fs._msufGFText ~= text then
-        fs:SetText(text)
-        fs._msufGFText = text
-    end
+    ApplyText(fs, text)
 end
 
 local function HasThreat(unit)
     if not UnitThreatSituation or not unit then return false end
     local status = UnitThreatSituation(unit)
-    if status == nil or (issecretvalue and issecretvalue(status)) then return false end
+    if IsNil(status) or IsSecret(status) then return false end
     status = tonumber(status)
     return status ~= nil and status >= 1
 end
@@ -165,7 +214,7 @@ local function UpdateCornerIndicators(frame)
     local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
     if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
     local unit = frame.unit
-    if UnitExists and unit and UnitExists(unit) == false then HideCorners(frame); return end
+    if unit and UnitMissing(unit) then HideCorners(frame); return end
     local snapshot = AuraCache.GetSnapshot and AuraCache.GetSnapshot(frame)
     local threat = HasThreat(unit)
     local slots = cfg.slots or EMPTY
@@ -220,6 +269,7 @@ local function ApplyCooldown(ind, item, data, numberOnly)
     local cd = ind and ind.cooldown
     local placed = item and item.placed
     if not (cd and placed and data) then ClearCooldown(ind); return end
+    if IsSecret(data.duration) or IsSecret(data.expirationTime) then ClearCooldown(ind); return end
     local duration = tonumber(data.duration)
     local expiration = tonumber(data.expirationTime)
     if not (duration and duration > 0 and expiration and expiration > 0) then ClearCooldown(ind); return end
@@ -361,8 +411,13 @@ local function ApplyPlaced(frame, index, item, present, data, layer)
         SetDesaturatedCached(ind.texture, not present)
         if ind.texture and ind.texture.SetAlpha then ind.texture:SetAlpha(present and 1 or 0.35) end
         ApplyCooldown(ind, item, present and data or nil, false)
-        local applications = data and tonumber(data.applications) or nil
-        if applications and applications > 1 then
+        local rawApplications = data and data.applications or nil
+        local applications = not IsSecret(rawApplications) and tonumber(rawApplications) or nil
+        if IsSecret(rawApplications) then
+            ApplyFont(ind.count, max(7, floor((placed.size or 18) * 0.48 + 0.5)))
+            SetTextCached(ind.count, rawApplications)
+            SetShown(ind.count, true)
+        elseif applications and applications > 1 then
             ApplyFont(ind.count, max(7, floor((placed.size or 18) * 0.48 + 0.5)))
             SetTextCached(ind.count, tostring(applications))
             SetShown(ind.count, true)
@@ -374,8 +429,9 @@ local function ApplyPlaced(frame, index, item, present, data, layer)
         ApplyFont(ind.numberText, placed.cooldownSize or placed.size or 10)
         ApplyCooldown(ind, item, present and data or nil, true)
         if present then
-            local applications = data and tonumber(data.applications) or nil
-            SetTextCached(ind.numberText, applications and applications > 1 and tostring(applications) or "")
+            local rawApplications = data and data.applications or nil
+            local applications = not IsSecret(rawApplications) and tonumber(rawApplications) or nil
+            SetTextCached(ind.numberText, IsSecret(rawApplications) and rawApplications or (applications and applications > 1 and tostring(applications) or ""))
         else
             ClearCooldown(ind)
             SetTextCached(ind.numberText, "0")
@@ -408,6 +464,13 @@ local function EnsureTextureOverlay(frame, key, parent)
         frame[key] = tex
     end
     return tex
+end
+
+local function ClearEffectSet(active)
+    if not active then return end
+    for i = 1, #EFFECT_TYPES do
+        active[EFFECT_TYPES[i]] = nil
+    end
 end
 
 local function HideEffect(frame, key)
@@ -453,7 +516,14 @@ local function ResetFrameEffects(frame, active)
 end
 
 local function ApplyFrameEffects(frame, best)
-    local active = {}
+    if not frame then return end
+    local active = frame._msufSIActiveEffects
+    if active then
+        ClearEffectSet(active)
+    else
+        active = {}
+        frame._msufSIActiveEffects = active
+    end
     for i = 1, #EFFECT_TYPES do
         local effectType = EFFECT_TYPES[i]
         local item = best[effectType]
@@ -465,13 +535,13 @@ local function ApplyFrameEffects(frame, best)
             if effectType == "healthtint" then
                 local bar = frame.hpBar or frame.Health or frame
                 local tex = EnsureTextureOverlay(frame, "MSUFGFSIHealthTint", bar)
-                tex:SetAllPoints(bar)
+                SetAllPointsCached(tex, bar)
                 tex:SetBlendMode("ADD")
                 SetColorTextureCached(tex, r, g, b, a)
                 SetShown(tex, true)
             elseif effectType == "border" then
                 local overlay = EnsureOverlay(frame, "MSUFGFSIBorder", frame)
-                overlay:SetAllPoints(frame)
+                SetAllPointsCached(overlay, frame)
                 if overlay._msufGFThickness ~= thickness then
                     overlay:SetBackdrop({ edgeFile = WHITE, edgeSize = thickness })
                     overlay:SetBackdropColor(0, 0, 0, 0)
@@ -488,7 +558,7 @@ local function ApplyFrameEffects(frame, best)
             elseif effectType == "pulse" then
                 local bar = frame.hpBar or frame.Health or frame
                 local tex = EnsureTextureOverlay(frame, "MSUFGFSIPulse", bar)
-                tex:SetAllPoints(bar)
+                SetAllPointsCached(tex, bar)
                 tex:SetBlendMode("ADD")
                 SetColorTextureCached(tex, r, g, b, a)
                 if not tex._animGroup then
@@ -549,7 +619,7 @@ local function UpdateSpellIndicators(frame)
     local cfg = frame.MSUFSpec and frame.MSUFSpec.spellIndicators
     if not (cfg and cfg.enabled == true) then HideSpellIndicators(frame); return end
     local unit = frame.unit
-    if UnitExists and unit and UnitExists(unit) == false then HideSpellIndicators(frame); return end
+    if unit and UnitMissing(unit) then HideSpellIndicators(frame); return end
     local items = cfg.items or EMPTY
     frame._msufSIGrowthCounters = frame._msufSIGrowthCounters or {}
     for k in pairs(frame._msufSIGrowthCounters) do frame._msufSIGrowthCounters[k] = nil end

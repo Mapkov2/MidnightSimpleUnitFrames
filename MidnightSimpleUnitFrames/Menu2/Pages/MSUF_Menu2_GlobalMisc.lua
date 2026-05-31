@@ -27,7 +27,6 @@ local Call = GP.Call
 local DB = GP.DB
 local G = GP.G
 local Bars = GP.Bars
-local Unit = GP.Unit
 local ReadG = GP.ReadG
 local Targeted = GP.Targeted
 local SetG = GP.SetG
@@ -35,7 +34,6 @@ local ReadGBool = GP.ReadGBool
 local SetGBool = GP.SetGBool
 local ReadB = GP.ReadB
 local SetB = GP.SetB
-local SetUBool = GP.SetUBool
 local NormalizeScopeKey = GP.NormalizeScopeKey
 local ScopeDBKeys = GP.ScopeDBKeys
 local ScopeHasOverride = GP.ScopeHasOverride
@@ -76,7 +74,6 @@ local SetPriorityOrder = GP.SetPriorityOrder
 local RefreshBorderTestModes = GP.RefreshBorderTestModes
 local SetAbsorbTextureTest = GP.SetAbsorbTextureTest
 local ClearAbsorbTextureTest = GP.ClearAbsorbTextureTest
-local NormalizeGlowStyle = GP.NormalizeGlowStyle
 local SetControlEnabled = GP.SetControlEnabled
 
 local function ReadTooltipProvider()
@@ -123,21 +120,12 @@ local function WriteTooltipSettings(provider, anchor)
         _G.MSUF_Tooltip_ShowEditPreview()
     end
 end
-local SetControlsEnabled = GP.SetControlsEnabled
 local ApplyFonts = GP.ApplyFonts
 local ApplyBars = GP.ApplyBars
 local ApplyCastbars = GP.ApplyCastbars
 local function BuildMisc(ctx)
     local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Miscellaneous", "Update pacing, tooltips, Blizzard frames and range fade.", 72)
-
-    local function RefreshUnitRangeFade()
-        if type(_G.MSUF_RefreshAllUnitAlphas) == "function" then
-            _G.MSUF_RefreshAllUnitAlphas()
-        elseif MSUF and MSUF.UF and MSUF.UF.ForceUpdate then
-            MSUF.UF.ForceUpdate()
-        end
-    end
+    b:GlobalStyleHeader("Miscellaneous", "Update pacing, tooltips and Blizzard frames.", 72)
 
     if _G.StaticPopupDialogs and not _G.StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] then
         _G.StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] = {
@@ -182,7 +170,7 @@ local function BuildMisc(ctx)
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
 
-    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 158, true)
+    local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 194, true)
     local menuSnap = W.Toggle(menuBehavior, "Enable Windows-style edge snap for this menu")
     M.BindToggle(ctx, menuSnap,
         function() return ReadGBool("slashMenuSnapEnabled", true) end,
@@ -197,6 +185,12 @@ local function BuildMisc(ctx)
             if M.RefreshAdvancedNavVisibility then M.RefreshAdvancedNavVisibility() end
         end)
     W.MoveWidget(advancedHidden, menuBehavior, 14, -118, 280, "LEFT")
+
+    local reduceMotion = W.Toggle(menuBehavior, "Reduce menu motion")
+    M.BindToggle(ctx, reduceMotion,
+        function() return ReadGBool("reduceMotion", false) end,
+        function(v) SetGBool("reduceMotion", v, "MSUF2_REDUCE_MOTION", { preview = false, applyAll = false, notify = false }) end)
+    W.MoveWidget(reduceMotion, menuBehavior, 14, -148, 280, "LEFT")
 
     local unitInterval, castInterval, budget, urgent
     local updates = b:CollapsibleSection("misc_updates", "Update intervals", 402, true)
@@ -314,105 +308,6 @@ local function BuildMisc(ctx)
             Call("MSUF_TargetSoundDriver_ResetState")
             if v then Call("MSUF_TargetSoundDriver_Ensure") end
         end)
-
-    local range = b:CollapsibleSection("misc_range_fade", "Unit Range Fade", 282, false)
-    local rangeW = range._msuf2Width or ctx.width or 720
-    local rangeGap = 16
-    local rangeLeftX = 20
-    local rangeInnerW = max(620, rangeW - 40)
-    local rangeLeftW = floor((rangeInnerW - rangeGap) * 0.48)
-    local rangeRightX = rangeLeftX + rangeLeftW + rangeGap
-    local rangeRightW = rangeInnerW - rangeLeftW - rangeGap
-    local rangeUnitsCard = W.ControlCard(range, "Unit frames", nil, rangeLeftX, -38, rangeLeftW, 220)
-    local rangeEffectCard = W.ControlCard(range, "Default alpha", nil, rangeRightX, -38, rangeRightW, 220)
-
-    local rangeMaster = W.SwitchAt(rangeUnitsCard, "Enable Range Fade", rangeLeftW - 62, -24, 0, "HIDDEN")
-    M.BindToggle(ctx, rangeMaster,
-        function() return ReadGBool("rangeFadeEnabled", true) end,
-        function(v)
-            SetGBool("rangeFadeEnabled", v, "MSUF2_RANGE_FADE_MASTER", { alpha = true, preview = true })
-            RefreshUnitRangeFade()
-        end)
-
-    local rangeUnitToggles = {}
-    local rangeToggleSpecs = {
-        { unit = "target", label = "Target" },
-        { unit = "focus", label = "Focus" },
-        { unit = "targettarget", label = "Target of Target" },
-        { unit = "focustarget", label = "Focus Target" },
-        { unit = "pet", label = "Pet" },
-        { unit = "boss", label = "Boss" },
-    }
-    local toggleColW = max(120, floor((rangeLeftW - 48) / 2))
-    for i = 1, #rangeToggleSpecs do
-        local spec = rangeToggleSpecs[i]
-        local toggle = W.Toggle(rangeUnitsCard, spec.label)
-        local col = (i - 1) % 2
-        local row = floor((i - 1) / 2)
-        local x = col == 0 and 16 or (24 + toggleColW)
-        local y = -72 - row * 34
-        W.MoveWidget(toggle, rangeUnitsCard, x, y, toggleColW, "LEFT")
-        M.BindToggle(ctx, toggle,
-            function() return Unit(spec.unit).rangeFadeEnabled == true end,
-            function(v)
-                SetUBool(spec.unit, "rangeFadeEnabled", v, "MSUF2_" .. spec.unit .. "_RANGE_FADE", { alpha = true, preview = true })
-                RefreshUnitRangeFade()
-            end)
-        rangeUnitToggles[#rangeUnitToggles + 1] = toggle
-    end
-
-    local function ReadGlobalRangeAlpha(key, fallback)
-        local g = G()
-        local value = tonumber(g and g[key])
-        if value ~= nil then return value end
-        if key == "rangeFadeOutAlpha" then
-            value = tonumber(g and g.rangeFadeAlpha)
-            if value ~= nil then return value end
-        end
-        return fallback
-    end
-
-    local function BindRangeAlphaSlider(widget, key, fallback, label)
-        M.BindSlider(ctx, widget,
-            function() return ReadGlobalRangeAlpha(key, fallback) end,
-            function(v)
-                v = tonumber(v) or fallback
-                local g = G()
-                if key == "rangeFadeOutAlpha" then
-                    g.rangeFadeAlpha = v
-                end
-                if M.SetGeneralValue then
-                    M.SetGeneralValue(key, v, "MSUF2_RANGE_ALPHA", { alpha = true, preview = true })
-                else
-                    g[key] = v
-                    M.RequestGeneralApply("MSUF2_RANGE_ALPHA", { alpha = true, preview = true })
-                end
-                RefreshUnitRangeFade()
-            end)
-        local function RefreshLabel(value)
-            if widget and widget._msuf2Title then
-                widget._msuf2Title:SetText(string.format("%s: %.0f%%", label, (tonumber(value) or ReadGlobalRangeAlpha(key, fallback)) * 100))
-            end
-        end
-        widget:HookScript("OnValueChanged", function(_, value) RefreshLabel(value) end)
-        M.AddRefresher(ctx, function() RefreshLabel() end)
-        RefreshLabel()
-        return widget
-    end
-
-    local inAlpha = BindRangeAlphaSlider(W.Slider(rangeEffectCard, "", 0, 1, 0.05, rangeRightW), "rangeFadeInAlpha", 1, "In range alpha")
-    W.MoveWidget(inAlpha, rangeEffectCard, 16, -62, rangeRightW - 58, "CENTER")
-
-    local outAlpha = BindRangeAlphaSlider(W.Slider(rangeEffectCard, "", 0, 1, 0.05, rangeRightW), "rangeFadeOutAlpha", 0.5, "Out of range alpha")
-    W.MoveWidget(outAlpha, rangeEffectCard, 16, -130, rangeRightW - 58, "CENTER")
-
-    M.AddRefresher(ctx, function()
-        local masterEnabled = ReadGBool("rangeFadeEnabled", true)
-        for i = 1, #rangeUnitToggles do
-            SetControlEnabled(rangeUnitToggles[i], masterEnabled)
-        end
-        SetControlsEnabled({ inAlpha, outAlpha }, masterEnabled)
-    end)
 
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

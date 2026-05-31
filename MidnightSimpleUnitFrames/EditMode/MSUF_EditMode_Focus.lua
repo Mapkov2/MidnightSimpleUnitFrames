@@ -1,0 +1,622 @@
+--- EditMode/MSUF_EditMode_Focus.lua - shared Edit Mode focus, hover, and Menu2 state.
+local addonName, MSUF = ...
+
+local EM2 = _G.MSUF_EM2
+if not EM2 then return end
+
+local Focus = EM2.Focus or {}
+EM2.Focus = Focus
+
+local max = math.max
+local floor = math.floor
+local W8 = "Interface/Buttons/WHITE8X8"
+
+local function Menu2Theme()
+    local M2 = (type(MSUF) == "table" and MSUF.MSUF2) or _G.MSUF2
+    return (type(M2) == "table" and type(M2.Theme) == "table") and M2.Theme or nil
+end
+
+local function PlayFocusMotion(frame, motion, opts)
+    local T = Menu2Theme()
+    if T and T.PlayMotion then
+        return T.PlayMotion(frame, motion, opts)
+    end
+    opts = opts or {}
+    if frame and frame.SetAlpha then frame:SetAlpha(opts.toAlpha or 1) end
+    if type(opts.onFinished) == "function" then opts.onFinished(frame) end
+end
+
+local state = {
+    active = false,
+    key = nil,
+    component = nil,
+    slot = nil,
+    popupKey = nil,
+    hoverKey = nil,
+    hoverComponent = nil,
+    hoverSlot = nil,
+    nextHUDRefresh = 0,
+}
+
+local veilParent
+local veilByKey = {}
+local hoverFrame
+
+local UNIT_PAGE_KEYS = {
+    player = "uf_player",
+    target = "uf_target",
+    targettarget = "uf_targettarget",
+    focustarget = "uf_focustarget",
+    focus = "uf_focus",
+    pet = "uf_pet",
+    boss = "uf_boss",
+}
+
+local GROUP_KIND_BY_KEY = {
+    gf_party = "party",
+    gf_raid = "raid",
+    gf_mythicraid = "mythicraid",
+}
+
+local function NormalizeKey(key)
+    if type(key) ~= "string" or key == "" then return nil end
+    key = key:lower()
+    if key == "tot" then return "targettarget" end
+    if key == "focus_target" then return "focustarget" end
+    if key == "uf_player" then return "player" end
+    if key == "uf_target" then return "target" end
+    if key == "uf_targettarget" then return "targettarget" end
+    if key == "uf_focustarget" then return "focustarget" end
+    if key == "uf_focus" then return "focus" end
+    if key == "uf_pet" then return "pet" end
+    if key == "uf_boss" then return "boss" end
+    if key:match("^boss%d+$") then return "boss" end
+    return key
+end
+
+local function NormalizeComponent(component)
+    if type(component) ~= "string" or component == "" then return nil end
+    component = component:lower()
+    if component == "health" or component == "healthtext" or component == "hptext" then return "hp" end
+    if component == "powertext" then return "power" end
+    if component == "aura" or component == "buff" or component == "buffs" or component == "debuff" or component == "debuffs" then return "auras" end
+    if component == "cast" then return "castbar" end
+    return component
+end
+
+local function NormalizeSlot(slot)
+    if type(slot) ~= "string" or slot == "" then return nil end
+    slot = slot:lower()
+    if slot == "l" then return "left" end
+    if slot == "c" then return "center" end
+    if slot == "r" then return "right" end
+    return slot
+end
+
+local function IsEditActive()
+    return EM2.State and EM2.State.IsActive and EM2.State.IsActive()
+end
+
+local function IsPopupOpen()
+    if EM2.Popups and EM2.Popups.IsAnyOpen then
+        return EM2.Popups.IsAnyOpen() == true
+    end
+    local st = _G.MSUF_EditState
+    return st and st.popupOpen == true or false
+end
+
+local function EnsureVeilParent()
+    if veilParent then return veilParent end
+    veilParent = CreateFrame("Frame", "MSUF_EM2_PopupFocusVeil", UIParent)
+    veilParent:SetAllPoints(UIParent)
+    veilParent:SetFrameStrata("FULLSCREEN")
+    veilParent:SetFrameLevel(508)
+    veilParent:EnableMouse(false)
+    veilParent:Hide()
+    return veilParent
+end
+
+local function HideLegacyInspector()
+    local inspector = _G.MSUF_EM2_Inspector
+    if inspector and inspector.Hide then
+        inspector:Hide()
+        if inspector.SetAlpha then inspector:SetAlpha(0) end
+    end
+end
+
+local function HideOldFocusLayer()
+    local old = _G.MSUF_EM2_FocusLayer
+    if old and old.Hide then old:Hide() end
+end
+
+local function Menu2()
+    return _G.MSUF2 or (MSUF and MSUF.MSUF2)
+end
+
+local function PersistMenuValue(M, key, value)
+    if M and type(M.PersistMenuStateValue) == "function" then
+        M.PersistMenuStateValue(key, value)
+    end
+end
+
+local function UnitSectionForComponent(component)
+    if not component or component == "frame" or component == "layout" or component == "bounds" or component == "size" then return "frame_basics" end
+    if component == "name" or component == "hp" or component == "power" or component == "text" then return "text" end
+    if component == "auras" then return "auras3" end
+    if component == "castbar" then return "castbar" end
+    if component == "powerbar" or component == "power_bar" or component == "detached" or component == "detachedpowerbar" then return "power_bar" end
+    if component == "anchor" or component == "anchoring" then return "anchoring" end
+    if component == "portrait" then return "portrait" end
+    if component == "alpha" or component == "transparency" then return "transparency" end
+    if component == "status" or component == "status_icons" then return "status_icons" end
+    return "frame_basics"
+end
+
+local function GroupPageForComponent(component)
+    if component == "bars" or component == "hp" or component == "power" or component == "name" or component == "text" then return "gf_bars" end
+    if component == "auras" then return "gf_auras" end
+    if component == "status" or component == "indicators" or component == "sicons" then return "gf_indicators" end
+    return "gf_layout"
+end
+
+local function GroupSectionForComponent(pageKey, component)
+    pageKey = pageKey or GroupPageForComponent(component)
+    if pageKey == "gf_bars" then
+        if component == "power" then return "power" end
+        if component == "name" or component == "hp" or component == "text" then return "text" end
+        if component == "dispel" then return "dispel" end
+        if component == "range" then return "range" end
+        if component == "stripe" or component == "dstripe" then return "dstripe" end
+        return "bars"
+    elseif pageKey == "gf_auras" then
+        if component == "debuffs" or component == "debuff" then return "debuffs" end
+        if component == "ext" or component == "externals" or component == "external" then return "ext" end
+        if component == "private" or component == "priv" then return "priv" end
+        return "buffs"
+    elseif pageKey == "gf_indicators" then
+        if component == "status" or component == "sicons" then return "sicons" end
+        if component == "spells" or component == "si" then return "si" end
+        if component == "corners" or component == "ci" then return "ci" end
+        return "indicators"
+    end
+    if component == "anchor" or component == "anchoring" then return "anchor" end
+    if component == "tooltip" then return "tooltip" end
+    if component == "sorting" or component == "sort" then return "sorting" end
+    if component == "scale" or component == "scaling" then return "scaling" end
+    if component == "border" or component == "alpha" or component == "transparency" then return "border" end
+    if component == "general" then return "general" end
+    return "layout"
+end
+
+local function ClearPassiveMenuFocusRequest()
+    local req = _G.MSUF_EM2_MenuFocusRequest
+    if type(req) == "table" and req.explicit ~= true then
+        _G.MSUF_EM2_MenuFocusRequest = nil
+    end
+end
+
+local function ApplyMenuSelection(key, component, slot, opts)
+    opts = opts or {}
+    key = NormalizeKey(key)
+    component = NormalizeComponent(component)
+    slot = NormalizeSlot(slot)
+    if not key then return nil end
+
+    local M = Menu2()
+    local pageKey
+    local sectionId
+    local unitPage = UNIT_PAGE_KEYS[key]
+    if unitPage then
+        pageKey = unitPage
+        sectionId = UnitSectionForComponent(component)
+    else
+        local groupKind = GROUP_KIND_BY_KEY[key]
+        if groupKind then
+            pageKey = GroupPageForComponent(component)
+            sectionId = GroupSectionForComponent(pageKey, component)
+        end
+    end
+
+    if opts.focusRequest == true then
+        _G.MSUF_EM2_MenuFocusRequest = {
+            key = key,
+            component = component,
+            slot = slot,
+            pageKey = pageKey,
+            sectionId = sectionId,
+            source = opts.source,
+            explicit = true,
+            changedAt = GetTime and GetTime() or 0,
+        }
+    else
+        ClearPassiveMenuFocusRequest()
+    end
+
+    if not M then return pageKey end
+
+    M.editModeSelection = {
+        key = key,
+        component = component,
+        slot = slot,
+        pageKey = pageKey,
+        sectionId = sectionId,
+    }
+
+    if unitPage then
+        if component == "name" or component == "hp" or component == "power" then
+            if opts.focusRequest == true or opts.syncTextState == true then
+                M.unitTextTabSelection = M.unitTextTabSelection or {}
+                M.unitTextTabSelection[key] = component
+                if slot then
+                    M.unitTextSlotSelection = M.unitTextSlotSelection or {}
+                    M.unitTextSlotSelection[key] = M.unitTextSlotSelection[key] or {}
+                    M.unitTextSlotSelection[key][component] = slot
+                end
+            end
+        end
+        return pageKey
+    end
+
+    local groupKind = GROUP_KIND_BY_KEY[key]
+    if groupKind then
+        if opts.focusRequest == true or opts.syncGroupScope == true then
+            M.gfScope = groupKind
+            PersistMenuValue(M, "gfScope", groupKind)
+        end
+        return pageKey
+    end
+
+    return nil
+end
+
+local function OpenMenuPage(pageKey)
+    local M = Menu2()
+    if M and pageKey and type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
+    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+        _G.MSUF_OpenStandaloneOptionsWindow(pageKey)
+        return true
+    elseif type(_G.MSUF_OpenPage) == "function" then
+        _G.MSUF_OpenPage(pageKey)
+        return true
+    elseif M and type(M.Open) == "function" then
+        M.Open(pageKey)
+        return true
+    elseif M and type(M.SelectPage) == "function" then
+        M.SelectPage(pageKey)
+        return true
+    end
+    return false
+end
+
+local function GetVeil(key)
+    local veil = veilByKey[key]
+    if veil then return veil end
+    veil = CreateFrame("Frame", nil, EnsureVeilParent())
+    veil:SetFrameLevel(509)
+    veil:EnableMouse(false)
+    veil:SetAlpha(1)
+    veil:Hide()
+    veil.fill = veil:CreateTexture(nil, "OVERLAY")
+    veil.fill:SetAllPoints()
+    veil.fill:SetColorTexture(0, 0, 0, 0.10)
+    local T = Menu2Theme()
+    if T and T.ApplyFocusVeil then T.ApplyFocusVeil(veil, "edit") end
+    veilByKey[key] = veil
+    return veil
+end
+
+local function PlaceAroundFrame(veil, frame)
+    if not (veil and frame and frame.GetLeft) then return false end
+    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (l and r and t and b) then return false end
+    local uiScale = UIParent:GetEffectiveScale() or 1
+    if uiScale == 0 then uiScale = 1 end
+    local frameScale = frame.GetEffectiveScale and (frame:GetEffectiveScale() or uiScale) or uiScale
+    local ratio = frameScale / uiScale
+    local x = floor(l * ratio + 0.5)
+    local y = floor(t * ratio - UIParent:GetHeight() + 0.5)
+    local w = max(2, floor((r - l) * ratio + 0.5))
+    local h = max(2, floor((t - b) * ratio + 0.5))
+    veil:ClearAllPoints()
+    veil:SetSize(w, h)
+    veil:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+    return true
+end
+
+local function HideVeils()
+    for _, veil in pairs(veilByKey) do
+        veil:Hide()
+        veil:ClearAllPoints()
+    end
+    if veilParent then veilParent:Hide() end
+    HideLegacyInspector()
+end
+
+local function EnsureHoverFrame()
+    if hoverFrame then return hoverFrame end
+    hoverFrame = CreateFrame("Frame", "MSUF_EM2_HoverPreviewRing", UIParent, "BackdropTemplate")
+    hoverFrame:SetFrameStrata("FULLSCREEN")
+    hoverFrame:SetFrameLevel(512)
+    hoverFrame:EnableMouse(false)
+    hoverFrame:SetBackdrop({ edgeFile = W8, edgeSize = 1 })
+    hoverFrame:SetBackdropBorderColor(0.18, 0.72, 0.90, 0.50)
+    hoverFrame:SetAlpha(0)
+    hoverFrame:Hide()
+
+    hoverFrame.fill = hoverFrame:CreateTexture(nil, "BACKGROUND")
+    hoverFrame.fill:SetPoint("TOPLEFT", 1, -1)
+    hoverFrame.fill:SetPoint("BOTTOMRIGHT", -1, 1)
+    hoverFrame.fill:SetColorTexture(0.08, 0.26, 0.42, 0.040)
+    return hoverFrame
+end
+
+local function HideHover()
+    if hoverFrame then
+        if hoverFrame.IsShown and not hoverFrame:IsShown() then
+            hoverFrame._msufHiding = nil
+            hoverFrame:ClearAllPoints()
+            hoverFrame:SetAlpha(0)
+            return
+        end
+        hoverFrame._msufFocusToken = (hoverFrame._msufFocusToken or 0) + 1
+        local token = hoverFrame._msufFocusToken
+        hoverFrame._msufHiding = true
+        PlayFocusMotion(hoverFrame, "controlFocusOut", {
+            fromAlpha = hoverFrame.GetAlpha and hoverFrame:GetAlpha() or 1,
+            toAlpha = 0,
+            duration = 0.080,
+            onFinished = function(frame)
+                if frame._msufFocusToken ~= token then return end
+                frame._msufHiding = nil
+                frame:Hide()
+                frame:SetAlpha(0)
+                frame:ClearAllPoints()
+            end,
+        })
+    end
+end
+
+local function SyncVeil()
+    HideLegacyInspector()
+    HideOldFocusLayer()
+
+    if not (IsEditActive() and state.popupKey and IsPopupOpen()) then
+        HideVeils()
+        return false
+    end
+
+    local movers = EM2.Movers and EM2.Movers.All and EM2.Movers.All()
+    if not movers then
+        HideVeils()
+        return false
+    end
+
+    local activeKey = NormalizeKey(state.popupKey)
+    EnsureVeilParent():Show()
+    local seen = {}
+    for key, mover in pairs(movers) do
+        seen[key] = true
+        local veil = GetVeil(key)
+        if key ~= activeKey and mover and mover.IsShown and mover:IsShown() and PlaceAroundFrame(veil, mover) then
+            veil:Show()
+        else
+            veil:Hide()
+        end
+    end
+    for key, veil in pairs(veilByKey) do
+        if not seen[key] then veil:Hide() end
+    end
+    return true
+end
+
+function Focus.GetSelection()
+    return state.key, state.component, state.slot
+end
+
+function Focus.SetSelection(key, component, slot, opts)
+    opts = opts or {}
+    state.key = NormalizeKey(key)
+    state.component = NormalizeComponent(component)
+    state.slot = NormalizeSlot(slot)
+    _G.MSUF_EM2_Selection = {
+        key = state.key,
+        component = state.component,
+        slot = state.slot,
+        source = opts.source,
+        changedAt = GetTime and GetTime() or 0,
+    }
+    if opts.menu ~= false then
+        ApplyMenuSelection(state.key, state.component, state.slot, {
+            source = opts.source,
+            focusRequest = opts.menuFocus == true or opts.openSettings == true,
+        })
+    else
+        ClearPassiveMenuFocusRequest()
+    end
+    HideLegacyInspector()
+    if EM2.HUD and EM2.HUD.RefreshControls then EM2.HUD.RefreshControls() end
+    return state.key ~= nil
+end
+
+function Focus.SetHover(key, component, slot, opts)
+    opts = opts or {}
+    if not IsEditActive() then
+        HideHover()
+        return false
+    end
+    state.hoverKey = NormalizeKey(key)
+    state.hoverComponent = NormalizeComponent(component)
+    state.hoverSlot = NormalizeSlot(slot)
+    HideLegacyInspector()
+    if not state.hoverKey then
+        HideHover()
+        return false
+    end
+
+    local mover = EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(state.hoverKey)
+    if not (mover and mover.IsShown and mover:IsShown()) then
+        HideHover()
+        return false
+    end
+
+    local ring = EnsureHoverFrame()
+    if not opts.force
+        and ring:IsShown()
+        and ring._msufKey == state.hoverKey
+        and ring._msufComponent == state.hoverComponent
+        and ring._msufSlot == state.hoverSlot
+        and not ring._msufHiding
+    then
+        return true
+    end
+    if PlaceAroundFrame(ring, mover) then
+        local wasShown = ring.IsShown and ring:IsShown()
+        ring._msufFocusToken = (ring._msufFocusToken or 0) + 1
+        ring._msufHiding = nil
+        ring._msufKey = state.hoverKey
+        ring._msufComponent = state.hoverComponent
+        ring._msufSlot = state.hoverSlot
+        if not wasShown and ring.SetAlpha then ring:SetAlpha(0) end
+        ring:Show()
+        PlayFocusMotion(ring, "controlFocusIn", {
+            fromAlpha = ring.GetAlpha and ring:GetAlpha() or 0,
+            toAlpha = 1,
+            duration = 0.085,
+        })
+        return true
+    end
+    HideHover()
+    return false
+end
+
+function Focus.ClearHover()
+    state.hoverKey = nil
+    state.hoverComponent = nil
+    state.hoverSlot = nil
+    HideLegacyInspector()
+    if hoverFrame then
+        hoverFrame._msufKey = nil
+        hoverFrame._msufComponent = nil
+        hoverFrame._msufSlot = nil
+    end
+    HideHover()
+end
+
+function Focus.Pulse(key, component, slot, opts)
+    opts = opts or {}
+    key = NormalizeKey(key)
+    component = NormalizeComponent(component)
+    slot = NormalizeSlot(slot)
+    if not key then return false end
+    local ok = Focus.SetHover(key, component, slot, {
+        source = opts.source or "pulse",
+        force = true,
+    })
+    if not ok then return false end
+    state.pulseToken = (state.pulseToken or 0) + 1
+    local token = state.pulseToken
+    local duration = tonumber(opts.duration) or 0.30
+    local function ClearPulse()
+        if state.pulseToken ~= token then return end
+        if state.hoverKey == key and state.hoverComponent == component and state.hoverSlot == slot then
+            Focus.ClearHover()
+        end
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(duration, ClearPulse) else ClearPulse() end
+    return true
+end
+
+function Focus.SetPopupFocus(key)
+    state.popupKey = NormalizeKey(key)
+    return SyncVeil()
+end
+
+function Focus.ClearPopupFocus()
+    state.popupKey = nil
+    HideVeils()
+end
+
+function Focus.RefreshPopupFocus()
+    if not IsPopupOpen() then state.popupKey = nil end
+    return SyncVeil()
+end
+
+function Focus.NotifyPositionChanged(_, immediate)
+    local now = GetTime and GetTime() or 0
+    if EM2.HUD and EM2.HUD.RefreshControls and (immediate == true or now >= (state.nextHUDRefresh or 0)) then
+        state.nextHUDRefresh = now + 0.05
+        EM2.HUD.RefreshControls()
+    end
+    if immediate == true or (state.popupKey and IsPopupOpen()) then
+        return SyncVeil()
+    end
+    return false
+end
+
+function Focus.Show(key)
+    state.active = true
+    if key then state.key = NormalizeKey(key) end
+    return SyncVeil()
+end
+
+function Focus.Hide()
+    state.active = false
+    state.popupKey = nil
+    Focus.ClearHover()
+    HideVeils()
+end
+
+function Focus.Sync()
+    state.active = IsEditActive()
+    return SyncVeil()
+end
+
+function Focus.NudgeSelection()
+    return false
+end
+
+function Focus.ResetPosition()
+    return false
+end
+
+function Focus.OpenFullSettings(pageKey)
+    local key = state.key or state.popupKey
+    if not key and EM2.State and EM2.State.GetUnitKey then key = EM2.State.GetUnitKey() end
+    local resolvedPage = ApplyMenuSelection(key, state.component, state.slot, { source = "open-settings", focusRequest = true })
+    return OpenMenuPage(pageKey or resolvedPage or "uf_player")
+end
+
+function _G.MSUF_EM2_SetFocusSelection(key, component, slot, opts)
+    return Focus.SetSelection(key, component, slot, opts)
+end
+
+function _G.MSUF_EM2_SetFocusHover(key, component, slot, opts)
+    return Focus.SetHover(key, component, slot, opts)
+end
+
+function _G.MSUF_EM2_ClearFocusHover()
+    return Focus.ClearHover()
+end
+
+function _G.MSUF_EM2_PulseFocus(key, component, slot, opts)
+    return Focus.Pulse(key, component, slot, opts)
+end
+
+function _G.MSUF_EM2_SetPopupFocus(key)
+    return Focus.SetPopupFocus(key)
+end
+
+function _G.MSUF_EM2_ClearPopupFocus()
+    return Focus.ClearPopupFocus()
+end
+
+function _G.MSUF_EM2_SyncFocusInspector()
+    return Focus.RefreshPopupFocus()
+end
+
+function _G.MSUF_EM2_OpenFocusSettings(pageKey)
+    return Focus.OpenFullSettings(pageKey)
+end
+
+HideLegacyInspector()
+HideOldFocusLayer()

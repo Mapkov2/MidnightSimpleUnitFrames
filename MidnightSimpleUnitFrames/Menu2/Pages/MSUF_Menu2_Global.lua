@@ -605,118 +605,6 @@ local function SetPriorityOrder(order)
     end
 end
 
-local GF_RENDERER_CONFLICT_SCOPES = {
-    { kind = "party", db = "gf_party", label = "Party" },
-    { kind = "raid", db = "gf_raid", label = "Raid" },
-    { kind = "mythicraid", db = "gf_mythicraid", label = "Mythic Raid" },
-}
-
-local function GroupScopeConf(info)
-    local gf = MSUF and MSUF.GF
-    local conf = gf and gf.GetConf and gf.GetConf(info.kind)
-    if not conf then
-        local db = DB()
-        conf = db and db[info.db]
-    end
-    return conf, gf
-end
-
-local function GroupScopeUsesBlizzardRenderer(info)
-    local conf, gf = GroupScopeConf(info)
-    if not conf then return false end
-    if gf and type(gf.GetBlizzardAuraTypeFlags) == "function" then
-        local buffs, debuffs, dispels, externals, privateAuras = gf.GetBlizzardAuraTypeFlags(conf)
-        return buffs or debuffs or dispels or externals or privateAuras
-    end
-    local auras = conf.auras
-    if not auras or auras.enabled == false then return false end
-    return (auras.renderer or "BLIZZARD") ~= "CUSTOM"
-end
-
-local function GroupScopeBlocksDispelGlow(info)
-    return false
-end
-
-local function GroupBlizzardRendererActiveForKind(kind)
-    kind = tostring(kind or ""):lower()
-    if kind == "gf_party" then kind = "party" end
-    if kind == "gf_raid" then kind = "raid" end
-    if kind == "gf_mythicraid" then kind = "mythicraid" end
-    for i = 1, #GF_RENDERER_CONFLICT_SCOPES do
-        local info = GF_RENDERER_CONFLICT_SCOPES[i]
-        if info.kind == kind or info.db == kind then
-            return GroupScopeUsesBlizzardRenderer(info)
-        end
-    end
-    return false
-end
-
-local function GroupBlizzardRendererBlocksDispelGlowForKind(kind)
-    kind = tostring(kind or ""):lower()
-    if kind == "gf_party" then kind = "party" end
-    if kind == "gf_raid" then kind = "raid" end
-    if kind == "gf_mythicraid" then kind = "mythicraid" end
-    for i = 1, #GF_RENDERER_CONFLICT_SCOPES do
-        local info = GF_RENDERER_CONFLICT_SCOPES[i]
-        if info.kind == kind or info.db == kind then
-            return GroupScopeBlocksDispelGlow(info)
-        end
-    end
-    return false
-end
-
-local function GroupBlizzardRendererConflictLabels(scope)
-    scope = NormalizeScopeKey(scope or "shared")
-    local labels = {}
-    for i = 1, #GF_RENDERER_CONFLICT_SCOPES do
-        local info = GF_RENDERER_CONFLICT_SCOPES[i]
-        if scope == "gf_party" and info.db ~= "gf_party" then
-            --- skip
-        elseif scope == "gf_raid" and info.db == "gf_party" then
-            --- skip
-        elseif scope ~= "shared" and scope ~= "gf_party" and scope ~= "gf_raid" then
-            --- UnitFrame scopes are not blocked by GroupFrame Blizzard rendering.
-        elseif GroupScopeBlocksDispelGlow(info) then
-            labels[#labels + 1] = info.label
-        end
-    end
-    return labels
-end
-
-local function HasGroupBlizzardRendererConflict(scope)
-    return #GroupBlizzardRendererConflictLabels(scope) > 0
-end
-
-local function GroupBlizzardRendererConflictText(scope)
-    scope = NormalizeScopeKey(scope or "shared")
-    local labels = GroupBlizzardRendererConflictLabels(scope)
-    if #labels == 0 then return nil end
-    if scope == "gf_party" or scope == "gf_raid" then
-        return "Dispel Glow is unavailable for this Group Frame scope while Blizzard owns dispel icons (" .. table.concat(labels, ", ") .. "). Enable Group Frames > Auras > MSUF Dispel Highlights or switch the renderer to Custom."
-    end
-    return "Unit Frames and Custom Group Frames can still use Dispel Glow. Group Frames where Blizzard owns dispel icons (" .. table.concat(labels, ", ") .. ") need Group Frames > Auras > MSUF Dispel Highlights enabled, or a Custom renderer."
-end
-
-local function NotifyDispelGlowBlizzardConflict(scope)
-    local text = GroupBlizzardRendererConflictText(scope)
-    if print and text then print("|cffffd700MSUF:|r " .. text) end
-end
-
-local function StopGroupDispelGlowForBlizzardConflict(scope)
-    if not HasGroupBlizzardRendererConflict(scope) then return false end
-    local gf = MSUF and MSUF.GF
-    local stopGlow = _G.MSUF_GF_StopDispelGlow
-    if gf and gf.frames and type(stopGlow) == "function" then
-        for frame in pairs(gf.frames) do
-            local kind = frame and frame._msufGFKind
-            if GroupBlizzardRendererBlocksDispelGlowForKind(kind) then
-                stopGlow(frame)
-            end
-        end
-    end
-    return true
-end
-
 local function RefreshBorderTestModes()
     if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then
         return
@@ -768,15 +656,6 @@ local function ClearAbsorbTextureTest()
             ApplyBars("MSUF2_ABSORB_TEST_CLEAR")
         end
     end
-end
-
-local function NormalizeGlowStyle(value)
-    value = tostring(value or "PIXEL")
-    if value == "pixel" then return "PIXEL" end
-    if value == "auto" then return "AUTOCAST" end
-    if value == "button" then return "PROC" end
-    if value == "AUTOCAST" or value == "PROC" then return value end
-    return "PIXEL"
 end
 
 local function SetControlEnabled(control, enabled)
@@ -884,23 +763,11 @@ GlobalPage.PriorityAllowed = PriorityAllowed
 GlobalPage.PriorityOrder = PriorityOrder
 GlobalPage.PriorityColor = PriorityColor
 GlobalPage.SetPriorityOrder = SetPriorityOrder
-GlobalPage.GroupBlizzardRendererConflictLabels = GroupBlizzardRendererConflictLabels
-GlobalPage.GroupBlizzardRendererActiveForKind = GroupBlizzardRendererActiveForKind
-GlobalPage.GroupBlizzardRendererBlocksDispelGlowForKind = GroupBlizzardRendererBlocksDispelGlowForKind
-GlobalPage.HasGroupBlizzardRendererConflict = HasGroupBlizzardRendererConflict
-GlobalPage.GroupBlizzardRendererConflictText = GroupBlizzardRendererConflictText
-GlobalPage.NotifyDispelGlowBlizzardConflict = NotifyDispelGlowBlizzardConflict
-GlobalPage.StopGroupDispelGlowForBlizzardConflict = StopGroupDispelGlowForBlizzardConflict
 GlobalPage.RefreshBorderTestModes = RefreshBorderTestModes
 GlobalPage.SetAbsorbTextureTest = SetAbsorbTextureTest
 GlobalPage.ClearAbsorbTextureTest = ClearAbsorbTextureTest
-GlobalPage.NormalizeGlowStyle = NormalizeGlowStyle
 GlobalPage.SetControlEnabled = SetControlEnabled
 GlobalPage.SetControlsEnabled = SetControlsEnabled
 GlobalPage.ApplyFonts = ApplyFonts
 GlobalPage.ApplyBars = ApplyBars
 GlobalPage.ApplyCastbars = ApplyCastbars
-
-_G.MSUF_HasGroupBlizzardAuraRenderingConflict = HasGroupBlizzardRendererConflict
-_G.MSUF_GroupBlizzardAuraRenderingBlocksDispelGlow = GroupBlizzardRendererBlocksDispelGlowForKind
-_G.MSUF_StopGroupDispelGlowForBlizzardRendererConflict = StopGroupDispelGlowForBlizzardConflict

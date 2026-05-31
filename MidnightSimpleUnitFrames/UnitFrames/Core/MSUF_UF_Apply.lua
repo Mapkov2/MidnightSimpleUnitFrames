@@ -6,9 +6,9 @@ _G.MSUF = MSUF
 -- =============================================================================
 -- MSUF.Apply -- idempotent paint-layer backbone (shared by UF + GF).
 --
--- 6.0's data layer already only computes what changed (dirty queues, the
--- delta-consuming AuraCache). The regression vs 5.54 was that the *paint* layer
--- re-issued C setters on every event regardless of whether the input changed.
+-- The data layer already only computes what changed (dirty queues, the
+-- delta-consuming AuraCache). The old paint-layer problem was re-issuing C
+-- setters on every event regardless of whether the input changed.
 -- oUF / Unhalted avoid this by construction: static styling is applied once at
 -- build/config time and the per-event path touches only the changing value.
 -- 6.0 has a unified runtime that re-derives, so it gets the same property by
@@ -28,10 +28,8 @@ _G.MSUF = MSUF
 local Apply = MSUF.Apply or {}
 MSUF.Apply = Apply
 
-local issecretvalue = _G.issecretvalue
-local function IsSecret(v)
-    return issecretvalue ~= nil and issecretvalue(v) == true
-end
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
 Apply.IsSecret = IsSecret
 
 -- Texture (file ID or path). Aura icons are pre-filtered non-secret upstream,
@@ -41,11 +39,37 @@ function Apply.Texture(region, tex)
     if IsSecret(tex) then
         region:SetTexture(tex)
         region._aTex = nil
+        region._aColorTexture = nil
         return
     end
     if region._aTex ~= tex then
         region:SetTexture(tex)
         region._aTex = tex
+        region._aColorTexture = nil
+    end
+end
+
+-- Solid colour texture. Kept separate from Texture() so callers that switch
+-- between file textures and generated colour textures never trust stale memo
+-- state from the previous texture kind.
+function Apply.ColorTexture(region, r, g, b, a)
+    if not region then return end
+    a = a or 1
+    if IsSecret(r) or IsSecret(g) or IsSecret(b) or IsSecret(a) then
+        region:SetColorTexture(r, g, b, a)
+        region._aColorTexture = nil
+        region._aTex = nil
+        return
+    end
+    if region._aColorTexture ~= true or region._aCTR ~= r or region._aCTG ~= g
+        or region._aCTB ~= b or region._aCTA ~= a then
+        region:SetColorTexture(r, g, b, a)
+        region._aColorTexture = true
+        region._aCTR = r
+        region._aCTG = g
+        region._aCTB = b
+        region._aCTA = a
+        region._aTex = nil
     end
 end
 
@@ -83,6 +107,23 @@ function Apply.Shown(region, show)
     if region._aShown ~= show then
         region:SetShown(show)
         region._aShown = show
+    end
+end
+
+-- FontString text. Secret strings/numbers are passed straight to the C-side
+-- FontString sink and poison the plain-text memo. Plain text is deduped before
+-- SetText to avoid C calls and string churn on unchanged text updates.
+function Apply.Text(region, text)
+    if not region then return end
+    if IsSecret(text) then
+        region:SetText(text)
+        region._aText = nil
+        return
+    end
+    text = text or ""
+    if region._aText ~= text then
+        region:SetText(text)
+        region._aText = text
     end
 end
 
@@ -129,6 +170,12 @@ end
 function Apply.Invalidate(region)
     if not region then return end
     region._aTex = nil
+    region._aColorTexture = nil
+    region._aCTR = nil
+    region._aCTG = nil
+    region._aCTB = nil
+    region._aCTA = nil
+    region._aText = nil
     region._aW = nil
     region._aH = nil
     region._aPt = nil

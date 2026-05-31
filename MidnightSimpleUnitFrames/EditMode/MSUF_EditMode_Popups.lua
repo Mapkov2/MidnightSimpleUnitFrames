@@ -82,6 +82,74 @@ local function FS(parent, size, color)
     return fs
 end
 
+local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+local Menu2Style = _G.MSUF_EM2_Menu2Style
+if type(Menu2Style) ~= "table" or Menu2Style == SharedUI then Menu2Style = {} end
+_G.MSUF_EM2_Menu2Style = Menu2Style
+
+function Menu2Style.Color(key, fallback)
+    return SharedUI and SharedUI.Color and SharedUI.Color(key, fallback) or fallback
+end
+
+function Menu2Style.SetButtonText(btn, text)
+    if SharedUI and SharedUI.SetButtonText then return SharedUI.SetButtonText(btn, text) end
+    local label = btn and (btn._msuf2Label or btn._label)
+    if label and label.SetText then label:SetText(Tr(text or "")) end
+end
+
+function Menu2Style.Shell(frame)
+    if SharedUI and SharedUI.ApplyMaterial then return SharedUI.ApplyMaterial(frame, "popup") end
+    return frame
+end
+
+function Menu2Style.Card(frame)
+    if SharedUI and SharedUI.ApplyMaterial then return SharedUI.ApplyMaterial(frame, "card") end
+    return frame
+end
+
+function Menu2Style.Button(parent, text, width, height, onClick)
+    if SharedUI and SharedUI.Button then
+        return SharedUI.Button(parent, text, width or 66, height or 24, {
+            onClick = onClick,
+            align = "CENTER",
+            skipHistory = true,
+        })
+    end
+    local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    b:SetSize(width or 66, height or 24)
+    b:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
+    b:SetBackdropColor(C.btnBg[1], C.btnBg[2], C.btnBg[3], 0.88)
+    b:SetBackdropBorderColor(C.btnEdge[1], C.btnEdge[2], C.btnEdge[3], 0.82)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.18)
+    local fs = FS(b, 11, C.white)
+    fs:SetPoint("CENTER")
+    fs:SetText(Tr(text or ""))
+    b._label = fs
+    if onClick then b:SetScript("OnClick", onClick) end
+    return b
+end
+
+function Menu2Style.Step(parent, text, width, height)
+    if SharedUI and SharedUI.StepperButton then return SharedUI.StepperButton(parent, text, width or STEP_W, height or BOX_H) end
+    return Menu2Style.Button(parent, text, width or STEP_W, height or BOX_H)
+end
+
+function Menu2Style.EditBox(editBox)
+    if SharedUI and SharedUI.EditBox then return SharedUI.EditBox(editBox) end
+    return editBox
+end
+
+function Menu2Style.CloseButton(parent, onClick)
+    if SharedUI and SharedUI.CloseButton then return SharedUI.CloseButton(parent, onClick) end
+    return Menu2Style.Button(parent, "x", 24, 24, onClick)
+end
+
+function Menu2Style.FadeIn(frame, duration, fromAlpha, toAlpha)
+    if SharedUI and SharedUI.FadeIn then return SharedUI.FadeIn(frame, duration, fromAlpha, toAlpha) end
+end
+
 local function GetStep()
     local s = 1
     if IsShiftKeyDown and IsShiftKeyDown() then s = 5
@@ -124,6 +192,7 @@ function Factory.Panel(name, width, visibleH, title)
     pf:SetFrameStrata("DIALOG"); pf:SetFrameLevel(200)
     pf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
     pf:SetBackdropColor(unpack(C.panelBg)); pf:SetBackdropBorderColor(unpack(C.panelEdge))
+    Menu2Style.Shell(pf)
     pf:EnableMouse(true); pf:SetMovable(true); pf:SetClampedToScreen(true)
     pf:RegisterForDrag("LeftButton")
     pf:SetScript("OnDragStart", function(s)
@@ -136,13 +205,8 @@ function Factory.Panel(name, width, visibleH, title)
     titleFS:SetPoint("LEFT", pf, "TOPLEFT", PAD, -TITLE_H / 2)
     titleFS:SetText(Tr(title or "Edit")); pf._titleFS = titleFS
 
-    local closeBtn = CreateFrame("Button", nil, pf)
-    closeBtn:SetSize(24, 24)
+    local closeBtn = Menu2Style.CloseButton(pf, function() pf:Hide() end)
     closeBtn:SetPoint("RIGHT", pf, "TOPRIGHT", -12, -TITLE_H / 2)
-    local xFS = FS(closeBtn, 16, C.muted); xFS:SetPoint("CENTER", 0, 1); xFS:SetText("x")
-    closeBtn:SetScript("OnClick", function() pf:Hide() end)
-    closeBtn:SetScript("OnEnter", function() xFS:SetTextColor(1, 0.4, 0.4, 1) end)
-    closeBtn:SetScript("OnLeave", function() xFS:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end)
 
     local function MakeDiv(yRef, yOff)
         local d = pf:CreateTexture(nil, "ARTWORK"); d:SetHeight(1)
@@ -242,6 +306,19 @@ function Factory.Panel(name, width, visibleH, title)
     end)
     pf:SetScript("OnShow", function(self)
         if self.UpdateScrollIndicator then self:UpdateScrollIndicator() end
+        if Menu2Style.FadeIn then Menu2Style.FadeIn(self, 0.12, 0.86, 1) end
+    end)
+    pf:HookScript("OnHide", function()
+        local function RefreshPopupFocus()
+            local anyOpen = EM2.Popups and EM2.Popups.IsAnyOpen and EM2.Popups.IsAnyOpen()
+            if not anyOpen then
+                if EM2.State and EM2.State.SetPopupOpen then EM2.State.SetPopupOpen(false) end
+                if EM2.Focus and EM2.Focus.ClearPopupFocus then EM2.Focus.ClearPopupFocus() end
+            elseif EM2.Focus and EM2.Focus.RefreshPopupFocus then
+                EM2.Focus.RefreshPopupFocus()
+            end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshPopupFocus) else RefreshPopupFocus() end
     end)
 
     local anchor = sc:CreateFontString(nil, "OVERLAY")
@@ -355,12 +432,7 @@ end
 
 --- Stepper + EditBox helpers
 local function MakeStep(parent, text)
-    local b = CreateFrame("Button", nil, parent)
-    b:SetSize(STEP_W, BOX_H)
-    local bg = b:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(unpack(C.stepBg))
-    local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(unpack(C.stepHover))
-    local fs = FS(b, 14, C.white); fs:SetPoint("CENTER", 0, 1); fs:SetText(text)
-    return b
+    return Menu2Style.Step(parent, text, STEP_W, BOX_H)
 end
 
 local function MakeBox(parent, w)
@@ -371,6 +443,7 @@ local function MakeBox(parent, w)
     b:SetBackdrop({bgFile=W8, edgeFile=W8, edgeSize=1})
     b:SetBackdropColor(unpack(C.inputBg)); b:SetBackdropBorderColor(unpack(C.inputEdge))
     b:SetScript("OnEscapePressed", function(s) s:ClearFocus() end)
+    Menu2Style.EditBox(b)
     return b
 end
 
@@ -533,14 +606,7 @@ end
 --- FooterButtons
 function Factory.FooterButtons(pf)
     local function MakeBtn(text, w)
-        local b = CreateFrame("Button", nil, pf); b:SetSize(w or 80, 28)
-        local bg = b:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(unpack(C.btnBg))
-        local brd = CreateFrame("Frame", nil, b, "BackdropTemplate"); brd:SetAllPoints()
-        brd:SetFrameLevel(max(0, b:GetFrameLevel()-1))
-        brd:SetBackdrop({edgeFile=W8, edgeSize=1}); brd:SetBackdropBorderColor(unpack(C.btnEdge))
-        local hl = b:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(unpack(C.btnHover))
-        local fs = FS(b, 12, C.white); fs:SetPoint("CENTER"); fs:SetText(Tr(text))
-        b._label = fs; return b
+        return Menu2Style.Button(pf, text, w or 80, 28)
     end
     local ok = MakeBtn("OK", 80); local cancel = MakeBtn("Cancel", 80)
     ok:SetPoint("BOTTOMLEFT", pf, "BOTTOM", -84, 10)
@@ -556,6 +622,28 @@ function Factory.EnableStepper(box, m, p, on)
     if p then p:EnableMouse(on); p:SetAlpha(a) end
 end
 function Factory.EnableLabel(l, on) if l then l:SetAlpha(on and 1 or 0.25) end end
+
+function Factory.ActionRow(pf, body, opts)
+    if not pf or not body then return end
+    opts = opts or {}
+    local row = CreateFrame("Frame", nil, body)
+    row:SetHeight(opts.height or 26)
+    row:SetPoint("TOPLEFT", opts.anchorTo or body, "BOTTOMLEFT", 0, opts.yOff or -6)
+    row:SetPoint("TOPRIGHT", opts.anchorTo or body, "BOTTOMRIGHT", 0, opts.yOff or -6)
+
+    local buttons = {}
+    local prev
+    local gap = opts.gap or 8
+    for i, spec in ipairs(opts.buttons or {}) do
+        local b = Menu2Style.Button(row, spec.label or "", spec.width or 120, opts.buttonHeight or 22, spec.onClick)
+        if prev then b:SetPoint("LEFT", prev, "RIGHT", gap, 0)
+        else b:SetPoint("LEFT", row, "LEFT", 4, 0) end
+        buttons[i] = b
+        prev = b
+    end
+    row.buttons = buttons
+    return row, buttons
+end
 
 --- SelectRow: "Label: [ Current Value ▾ ]" (popup menu, not cycle-click)
 function Factory.SelectRow(pf, body, card, opts)
@@ -663,13 +751,14 @@ function Factory.SelectRow(pf, body, card, opts)
 end
 
 --- ── Copy Settings Dropdown ──────────────────────────────────────────────
---- Creates a "Copy From" dropdown button in a popup.
+--- Creates a "Copy To" dropdown button in a popup.
 --- opts.sources = { {key="player", label="Player"}, ... }
---- opts.onCopy = function(sourceKey) --- called when user picks a source
+--- opts.onCopy = function(targetKey) --- called when user picks a target
 --- opts.anchorTo = widget to anchor below
 function Factory.CopyDropdown(pf, body, card, opts)
     if not pf or not body or not opts then return end
     local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
+    local placeholder = opts.placeholder or "Select..."
 
     local row = CreateFrame("Frame", nil, body)
     row:SetHeight(24)
@@ -680,7 +769,7 @@ function Factory.CopyDropdown(pf, body, card, opts)
     label:SetFont(FONT, 11, ""); label:SetShadowOffset(1, -1)
     label:SetTextColor(0.55, 0.62, 0.78, 0.85)
     label:SetPoint("LEFT", 4, 0)
-    label:SetText(Tr("Copy To"))
+    label:SetText(Tr(opts.label or "Copy To"))
 
     local btn = CreateFrame("Button", nil, row)
     btn:SetSize(140, 20)
@@ -697,7 +786,7 @@ function Factory.CopyDropdown(pf, body, card, opts)
     local btnText = btn:CreateFontString(nil, "OVERLAY")
     btnText:SetFont(FONT, 10, ""); btnText:SetShadowOffset(1, -1)
     btnText:SetPoint("CENTER"); btnText:SetTextColor(0.75, 0.88, 1.00, 1)
-    btnText:SetText(Tr("Select..."))
+    btnText:SetText(Tr(placeholder))
 
     local menu = CreateFrame("Frame", nil, UIParent)
     menu:SetFrameStrata("TOOLTIP"); menu:SetFrameLevel(950)
@@ -744,7 +833,7 @@ function Factory.CopyDropdown(pf, body, card, opts)
             menu:Hide()
             btnText:SetText(Tr(src.label or src.key))
             if opts.onCopy then opts.onCopy(src.key) end
-            C_Timer.After(1.5, function() btnText:SetText(Tr("Select...")) end)
+            C_Timer.After(1.5, function() btnText:SetText(Tr(placeholder)) end)
         end)
     end
 
@@ -799,15 +888,23 @@ function Popups.CloseAll()
         _G.MSUF_EM2_HideGFPopup("mythicraid")
     end
     if EM2.State then EM2.State.SetPopupOpen(false) end
+    if EM2.Focus and EM2.Focus.ClearPopupFocus then EM2.Focus.ClearPopupFocus() end
 end
 
 function Popups.Open(key, anchorFrame)
+    if type(key) ~= "string" or key == "" then return end
     local cfg = EM2.Registry and EM2.Registry.Get(key)
     local pType = cfg and cfg.popupType
 
     if not pType then
         if key == "player" or key == "target" or key == "focus" or key == "focustarget" or key == "targettarget" or key == "pet" or key:match("^boss%d") then
             pType = "unit"
+        elseif key:sub(1, 8) == "castbar_" then
+            pType = "castbar"
+        elseif key:sub(1, 5) == "aura_" then
+            pType = "aura"
+        elseif key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" then
+            pType = key
         end
     end
 
@@ -844,6 +941,10 @@ function Popups.Open(key, anchorFrame)
             if EM2.State then EM2.State.SetPopupOpen(true) end
         end
     end
+    if Popups.IsAnyOpen and Popups.IsAnyOpen() then
+        if EM2.State then EM2.State.SetPopupOpen(true) end
+        if EM2.Focus and EM2.Focus.SetPopupFocus then EM2.Focus.SetPopupFocus(key, anchorFrame) end
+    end
 end
 
 function Popups.IsAnyOpen()
@@ -869,8 +970,31 @@ local function CK(u) if not u then return nil end; if u=="targettarget" or u=="t
     if u=="focustarget" or u=="focus_target" or u=="focustargettarget" then return "focustarget" end
     if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(u) then return "boss" end; return u end
 local LABELS = { player="Player", target="Target", focus="Focus", focustarget="Focus Target", targettarget="ToT", pet="Pet", boss="Boss" }
+local UNIT_PAGE_KEYS = { player="uf_player", target="uf_target", focus="uf_focus", focustarget="uf_focustarget", targettarget="uf_targettarget", pet="uf_pet", boss="uf_boss" }
+local UNIT_COPY_TARGETS = {
+    { key="player", label="Player" },
+    { key="target", label="Target" },
+    { key="focus", label="Focus" },
+    { key="focustarget", label="Focus Target" },
+    { key="targettarget", label="ToT" },
+    { key="pet", label="Pet" },
+    { key="boss", label="Boss" },
+}
 local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
+local function CanDetachPower(key) return key=="player" or key=="target" or key=="focus" end
 local pf
+
+local function UnitSectionForComponent(component)
+    if component == "name" or component == "hp" or component == "power" or component == "text" then return "text" end
+    if component == "auras" then return "auras3" end
+    if component == "castbar" or component == "cast" then return "castbar" end
+    if component == "powerbar" or component == "power_bar" or component == "detached" then return "power_bar" end
+    if component == "anchor" or component == "anchoring" then return "anchoring" end
+    if component == "portrait" then return "portrait" end
+    if component == "alpha" or component == "transparency" then return "transparency" end
+    if component == "status" or component == "status_icons" then return "status_icons" end
+    return "frame_basics"
+end
 
 local function Apply()
     if BlockConfigCombatLocked() then return end
@@ -880,27 +1004,16 @@ local function Apply()
     conf.offsetX=San(pf.xBox and tonumber(pf.xBox:GetText()),0); conf.offsetY=San(pf.yBox and tonumber(pf.yBox:GetText()),0)
     local w=pf.wBox and tonumber(pf.wBox:GetText()); if w then conf.width=floor(max(40,min(800,w))+0.5) end
     local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then conf.height=floor(max(8,min(200,h))+0.5) end
-    if pf.nameShowCB then conf.showName=pf.nameShowCB:GetChecked() and true or false end
-    conf.nameOffsetX=San(pf.nameXBox and tonumber(pf.nameXBox:GetText()),0); conf.nameOffsetY=San(pf.nameYBox and tonumber(pf.nameYBox:GetText()),0)
-    if pf._msufNameAnchorVal then conf.nameTextAnchor=pf._msufNameAnchorVal end
-    if pf.nameSizeBox then local sz=tonumber(pf.nameSizeBox:GetText()); if sz then conf.nameFontSize=floor(max(6,min(48,sz))+0.5) end end
-    if pf.hpShowCB then conf.showHP=pf.hpShowCB:GetChecked() and true or false end
-    conf.hpOffsetX=San(pf.hpXBox and tonumber(pf.hpXBox:GetText()),0); conf.hpOffsetY=San(pf.hpYBox and tonumber(pf.hpYBox:GetText()),0)
-    if pf.hpSizeBox then local sz=tonumber(pf.hpSizeBox:GetText()); if sz then conf.hpFontSize=floor(max(6,min(48,sz))+0.5) end end
-    if pf.powerShowCB then conf.showPower=pf.powerShowCB:GetChecked() and true or false end
-    conf.powerOffsetX=San(pf.powerXBox and tonumber(pf.powerXBox:GetText()),0); conf.powerOffsetY=San(pf.powerYBox and tonumber(pf.powerYBox:GetText()),0)
-    if pf.powerSizeBox then local sz=tonumber(pf.powerSizeBox:GetText()); if sz then conf.powerFontSize=floor(max(6,min(48,sz))+0.5) end end
-    if pf.detachCB and (pf.unit=="player" or pf.unit=="target" or pf.unit=="focus") then
-        conf.powerBarDetached=pf.detachCB:GetChecked() and true or false
-        if conf.powerBarDetached then
-            local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText()); if dw then conf.detachedPowerBarWidth=floor(max(20,min(800,dw))+0.5) end
-            local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText()); if dh then conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5) end
-            local dx=pf.dpbXBox and tonumber(pf.dpbXBox:GetText()); if dx then conf.detachedPowerBarOffsetX=floor(dx+0.5) end
-            local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText()); if dy then conf.detachedPowerBarOffsetY=floor(dy+0.5) end
-            local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText()); if dl then conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(30,dl))+0.5) end
-            if pf.syncCPCB and pf.unit=="player" then conf.detachedPowerBarSyncClassPower=pf.syncCPCB:GetChecked() and true or false end
-            if pf.anchorCPCB and pf.unit=="player" then conf.detachedPowerBarAnchorToClassPower=pf.anchorCPCB:GetChecked() and true or false end
-            if pf.textOnBarCB then conf.detachedPowerBarTextOnBar=pf.textOnBarCB:GetChecked() and true or false end
+    if conf.powerBarDetached and CanDetachPower(key) then
+        local dx=pf.dpbXBox and tonumber(pf.dpbXBox:GetText()); if dx then conf.detachedPowerBarOffsetX=San(dx,0) end
+        local dy=pf.dpbYBox and tonumber(pf.dpbYBox:GetText()); if dy then conf.detachedPowerBarOffsetY=San(dy,-4) end
+        local dw=pf.dpbWBox and tonumber(pf.dpbWBox:GetText()); if dw then conf.detachedPowerBarWidth=floor(max(20,min(800,dw))+0.5) end
+        local dh=pf.dpbHBox and tonumber(pf.dpbHBox:GetText()); if dh then conf.detachedPowerBarHeight=floor(max(2,min(80,dh))+0.5) end
+        local dl=pf.dpbLevelBox and tonumber(pf.dpbLevelBox:GetText()); if dl then conf.detachedPowerBarFrameLevelOffset=floor(max(0,min(20,dl))+0.5) end
+        if pf.dpbTextBtn then conf.detachedPowerBarTextOnBar = pf.dpbTextBtn._checked and true or false end
+        if key == "player" then
+            if pf.dpbSyncBtn then conf.detachedPowerBarSyncClassPower = pf.dpbSyncBtn._checked and true or false end
+            if pf.dpbAnchorBtn then conf.detachedPowerBarAnchorToClassPower = pf.dpbAnchorBtn._checked and true or false end
         end
     end
     if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
@@ -921,172 +1034,446 @@ local function Apply()
     if pf._refreshVisibility then pf._refreshVisibility() end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     RefreshUFPreview("EM2_UNIT_POPUP_APPLY", key)
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
 end
 
 local function Sync()
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
     local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
-    local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
-    if pf._titleFS then pf._titleFS:SetText(Tr(LABELS[key] or key or "")) end
+    if pf._titleFS then pf._titleFS:SetText(Tr((LABELS[key] or key or "") .. " - Frame")) end
     S(pf.xBox,San(conf.offsetX,0)); S(pf.yBox,San(conf.offsetY,0))
     S(pf.wBox,conf.width or (pf.parent and pf.parent:GetWidth()) or 250)
     S(pf.hBox,conf.height or (pf.parent and pf.parent:GetHeight()) or 40)
-    SC(pf.nameShowCB, conf.showName~=false)
-    S(pf.nameXBox,conf.nameOffsetX or 0); S(pf.nameYBox,conf.nameOffsetY or 0)
-    local db=DB(); local g=db and db.general or {}
-    S(pf.nameSizeBox,conf.nameFontSize or g.nameFontSize or g.fontSize or 14)
-    pf._msufNameAnchorVal=conf.nameTextAnchor or "LEFT"
-    if pf.nameAnchorDrop then pf.nameAnchorDrop:SetValue(pf._msufNameAnchorVal) end
-    SC(pf.hpShowCB, conf.showHP~=false)
-    S(pf.hpXBox,conf.hpOffsetX or 0); S(pf.hpYBox,conf.hpOffsetY or 0)
-    S(pf.hpSizeBox,conf.hpFontSize or g.hpFontSize or g.fontSize or 14)
-    SC(pf.powerShowCB, (key ~= "focustarget" and conf.showPower ~= false) or conf.showPower == true)
-    S(pf.powerXBox,conf.powerOffsetX or 0); S(pf.powerYBox,conf.powerOffsetY or 0)
-    S(pf.powerSizeBox,conf.powerFontSize or g.powerFontSize or g.fontSize or 14)
-    SC(pf.detachCB,conf.powerBarDetached); SC(pf.syncCPCB,conf.detachedPowerBarSyncClassPower)
-    SC(pf.anchorCPCB,conf.detachedPowerBarAnchorToClassPower); SC(pf.textOnBarCB,conf.detachedPowerBarTextOnBar)
-    S(pf.dpbWBox,conf.detachedPowerBarWidth or 150); S(pf.dpbHBox,conf.detachedPowerBarHeight or 6)
-    S(pf.dpbXBox,conf.detachedPowerBarOffsetX or 0); S(pf.dpbYBox,conf.detachedPowerBarOffsetY or 0)
-    S(pf.dpbLevelBox,conf.detachedPowerBarFrameLevelOffset or 6)
-    pf.MSUF_prev = {}; for k,v in pairs(conf) do if type(v)~="table" then pf.MSUF_prev[k]=v end end; pf.MSUF_prev.key=key
-    --- Refresh dependent gray-out state
-    if pf.nameShowCB and pf.nameShowCB.UpdateDependents then pf.nameShowCB:UpdateDependents() end
-    if pf.hpShowCB and pf.hpShowCB.UpdateDependents then pf.hpShowCB:UpdateDependents() end
-    if pf.powerShowCB and pf.powerShowCB.UpdateDependents then pf.powerShowCB:UpdateDependents() end
-    if pf._refreshVisibility then pf._refreshVisibility() end
+    if pf.detachBtn and pf.detachBtn.SetCheckedVisual then
+        local canDetach = CanDetachPower(key)
+        local detachedOn = canDetach and conf.powerBarDetached == true
+        pf.detachBtn:SetShown(canDetach)
+        pf.detachBtn:SetCheckedVisual(detachedOn)
+        if pf.dpbPanel then
+            pf.dpbPanel:SetShown(detachedOn)
+            pf:SetHeight(detachedOn and (key == "player" and 526 or 488) or (canDetach and 292 or 244))
+            if detachedOn then pf.dpbPanel:SetHeight(key == "player" and 220 or 184) end
+        end
+        if detachedOn then
+            local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
+            S(pf.dpbXBox, San(conf.detachedPowerBarOffsetX, 0))
+            S(pf.dpbYBox, San(conf.detachedPowerBarOffsetY, -4))
+            S(pf.dpbWBox, conf.detachedPowerBarWidth or conf.width or 250)
+            S(pf.dpbHBox, conf.detachedPowerBarHeight or 6)
+            S(pf.dpbLevelBox, conf.detachedPowerBarFrameLevelOffset or 6)
+            if pf.dpbTextBtn and pf.dpbTextBtn.SetCheckedVisual then
+                pf.dpbTextBtn:SetCheckedVisual(conf.detachedPowerBarTextOnBar == true)
+            end
+            local isPlayer = key == "player"
+            if pf.dpbSyncBtn then
+                pf.dpbSyncBtn:SetShown(isPlayer)
+                if pf.dpbSyncBtn.SetCheckedVisual then pf.dpbSyncBtn:SetCheckedVisual(isPlayer and conf.detachedPowerBarSyncClassPower ~= false) end
+            end
+            if pf.dpbAnchorBtn then
+                pf.dpbAnchorBtn:SetShown(isPlayer)
+                if pf.dpbAnchorBtn.SetCheckedVisual then pf.dpbAnchorBtn:SetCheckedVisual(isPlayer and conf.detachedPowerBarAnchorToClassPower == true) end
+            end
+            local firstY = isPlayer and -92 or -62
+            if pf.dpbXYRow then
+                pf.dpbXYRow:ClearAllPoints()
+                pf.dpbXYRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY)
+            end
+            if pf.dpbWHRow then
+                pf.dpbWHRow:ClearAllPoints()
+                pf.dpbWHRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY - 34)
+            end
+            if pf.dpbLayerRow then
+                pf.dpbLayerRow:ClearAllPoints()
+                pf.dpbLayerRow:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, firstY - 68)
+            end
+        end
+    end
+end
+
+local function SetHUDStatus(text, kind)
+    if type(_G.MSUF_EM2_SetHUDStatus) == "function" then
+        _G.MSUF_EM2_SetHUDStatus(Tr(text), kind)
+    end
+end
+
+local function ApplyMenu2UnitSelection(component, slot)
+    if not pf or not pf.unit then return nil end
+    local key = CK(pf.unit)
+    if not key then return nil end
+    local pageKey = UNIT_PAGE_KEYS[key] or "uf_player"
+    local sectionId = UnitSectionForComponent(component)
+
+    if EM2.Focus and EM2.Focus.SetSelection then
+        EM2.Focus.SetSelection(key, component, slot, { source = "unit-popup", menu = false })
+    end
+
+    _G.MSUF_EM2_MenuFocusRequest = {
+        key = key,
+        component = component,
+        slot = slot,
+        pageKey = pageKey,
+        sectionId = sectionId,
+        source = "unit-popup",
+        explicit = true,
+        changedAt = GetTime and GetTime() or 0,
+    }
+
+    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    if M then
+        M.editModeSelection = {
+            key = key,
+            component = component,
+            slot = slot,
+            pageKey = pageKey,
+            sectionId = sectionId,
+        }
+    end
+    if M and (component == "name" or component == "hp" or component == "power") then
+        M.unitTextTabSelection = M.unitTextTabSelection or {}
+        M.unitTextTabSelection[key] = component
+        if slot then
+            M.unitTextSlotSelection = M.unitTextSlotSelection or {}
+            M.unitTextSlotSelection[key] = M.unitTextSlotSelection[key] or {}
+            M.unitTextSlotSelection[key][component] = slot
+        end
+    end
+
+    return key
+end
+
+local function OpenMenu2Page(pageKey, component, slot)
+    if not pf or not pf.unit then return end
+    Apply()
+    local key = ApplyMenu2UnitSelection(component, slot)
+    pageKey = pageKey or UNIT_PAGE_KEYS[key or CK(pf.unit)] or "uf_player"
+    if _G.MSUF2 and pageKey and type(_G.MSUF2.InvalidatePage) == "function" then _G.MSUF2.InvalidatePage(pageKey) end
+    pf:Hide()
+    if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
+        _G.MSUF_OpenStandaloneOptionsWindow(pageKey)
+    elseif type(_G.MSUF_OpenPage) == "function" then
+        _G.MSUF_OpenPage(pageKey)
+    elseif _G.MSUF2 and type(_G.MSUF2.Open) == "function" then
+        _G.MSUF2.Open(pageKey)
+    elseif _G.MSUF2 and type(_G.MSUF2.SelectPage) == "function" then
+        _G.MSUF2.SelectPage(pageKey)
+    end
+end
+
+local function OpenMenu2Settings()
+    OpenMenu2Page(nil, "frame")
+end
+
+local function ApplyDetachPower(checked)
+    if BlockConfigCombatLocked() then return end
+    if not pf or not pf.unit then return end
+    local key = CK(pf.unit)
+    if not CanDetachPower(key) then return end
+    local conf = key and Conf(key)
+    if not conf then return end
+    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
+    conf.powerBarDetached = checked and true or false
+    if conf.powerBarDetached then
+        conf.detachedPowerBarOffsetX = tonumber(conf.detachedPowerBarOffsetX) or 0
+        conf.detachedPowerBarOffsetY = tonumber(conf.detachedPowerBarOffsetY) or -4
+        conf.detachedPowerBarWidth = tonumber(conf.detachedPowerBarWidth) or tonumber(conf.width) or 250
+        conf.detachedPowerBarHeight = tonumber(conf.detachedPowerBarHeight) or 6
+        conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
+        if key == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
+    end
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
+    if type(_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey)=="function" then
+        _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
+    elseif type(_G.MSUF_ApplyPowerBarEmbedLayout_All)=="function" then
+        _G.MSUF_ApplyPowerBarEmbedLayout_All()
+    elseif type(_G.MSUF_ApplyPowerBarEmbedLayout)=="function" and pf.parent then
+        _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent)
+    end
+    if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_DETACH") end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshUFPreview("EM2_UNIT_POPUP_DETACH", key)
+    SetHUDStatus(checked and "Detached powerbar" or "Embedded powerbar", "ok")
+    Sync()
+end
+
+local function CopyBoundsTo(targetKey)
+    if BlockConfigCombatLocked() then return end
+    if not pf or not pf.unit or not targetKey then return end
+    local db = DB()
+    if not db then return end
+    Apply()
+    local srcKey = CK(pf.unit)
+    local src = srcKey and db[srcKey]
+    if not src or targetKey == srcKey then return end
+    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
+    local dst = db[targetKey]
+    if not dst then db[targetKey] = {}; dst = db[targetKey] end
+    dst.offsetX = San(src.offsetX, 0)
+    dst.offsetY = San(src.offsetY, 0)
+    if src.width ~= nil then dst.width = floor(max(40, min(800, tonumber(src.width) or 250)) + 0.5) end
+    if src.height ~= nil then dst.height = floor(max(8, min(200, tonumber(src.height) or 40)) + 0.5) end
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(targetKey) end
+    if not ApplyAllSettingsSafe() and type(_G.MSUF_UpdateAllFrames)=="function" then _G.MSUF_UpdateAllFrames() end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshUFPreview("EM2_UNIT_POPUP_COPY_BOUNDS", targetKey)
+    if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(targetKey, "frame", nil, { source = "unit-copy", duration = 0.32 }) end
+    SetHUDStatus("Copied frame bounds", "ok")
+    Sync()
 end
 
 local function Build()
     if pf then return pf end
-    pf = F.Panel("MSUF_EM2_UnitPopup", 380, 540, "Player")
-    local ANCH = { {"LEFT","Left"}, {"RIGHT","Right"}, {"CENTER","Center"} }
-    local top = pf._contentTop
+    pf = CreateFrame("Frame", "MSUF_EM2_UnitPopup", UIParent, "BackdropTemplate")
+    pf:SetSize(440, 292)
+    pf:SetPoint("CENTER", UIParent, "CENTER", 250, 0)
+    pf:SetFrameStrata("DIALOG")
+    pf:SetFrameLevel(220)
+    pf:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+    pf:SetBackdropColor(C.panelBg[1], C.panelBg[2], C.panelBg[3], 0.96)
+    pf:SetBackdropBorderColor(C.panelEdge[1], C.panelEdge[2], C.panelEdge[3], 0.95)
+    Menu2Style.Shell(pf)
+    pf:EnableMouse(true)
+    pf:SetMovable(true)
+    pf:SetClampedToScreen(true)
+    pf:RegisterForDrag("LeftButton")
+    pf:SetScript("OnDragStart", function(s) if not BlockConfigCombatLocked() then s:StartMoving() end end)
+    pf:SetScript("OnDragStop", function(s) s:StopMovingOrSizing() end)
 
-    --- Frame
-    local fC, fB = F.Card(pf, top, "Position & Size", -2, true)
-    local fXY = F.PairRow(pf, fB, fC, { label1="X:", label2="Y:", key1="xBox", key2="yBox", onChanged=Apply })
-    local fWH = F.PairRow(pf, fB, fC, { label1="W:", label2="H:", key1="wBox", key2="hBox", anchorTo=fXY, onChanged=Apply })
-    fC:RecalcHeight()
+    local title = FS(pf, 15, C.white)
+    title:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -18)
+    title:SetText("Frame")
+    pf._titleFS = title
 
-    --- Name
-    local nC, nB = F.Card(pf, fC, "Name", -6, true)
-    local nShow = F.CheckRow(pf, nB, nC, { label="Show Name", cbKey="nameShowCB", onChanged=function() Apply() end })
-    local nXY = F.PairRow(pf, nB, nC, { label1="X:", label2="Y:", key1="nameXBox", key2="nameYBox", anchorTo=nShow, onChanged=Apply })
-    local nSA = F.SizeAnchorRow(pf, nB, nC, { sizeKey="nameSizeBox", anchorKey="nameAnchorDrop", stateKey="_msufNameAnchorVal", options=ANCH, anchorTo=nXY, onChanged=Apply })
-    nC:RecalcHeight()
-    pf.nameShowCB:SetDependentRows(nXY, nSA)
+    local closeBtn = Menu2Style.CloseButton(pf, function() pf:Hide() end)
+    closeBtn:SetPoint("TOPRIGHT", pf, "TOPRIGHT", -10, -10)
 
-    --- HP
-    local hC, hB = F.Card(pf, nC, "HP", -6, true)
-    local hShow = F.CheckRow(pf, hB, hC, { label="Show HP", cbKey="hpShowCB", onChanged=function() Apply() end })
-    local hXY = F.PairRow(pf, hB, hC, { label1="X:", label2="Y:", key1="hpXBox", key2="hpYBox", anchorTo=hShow, onChanged=Apply })
-    local hSA = F.SingleRow(pf, hB, hC, { label="Size:", boxKey="hpSizeBox", anchorTo=hXY, onChanged=Apply })
-    hC:RecalcHeight()
-    pf.hpShowCB:SetDependentRows(hXY, hSA)
+    local subtitle = FS(pf, 12, C.muted)
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    subtitle:SetText(Tr("Frame bounds"))
 
-    --- Power
-    local pC, pB = F.Card(pf, hC, "Power", -6, true)
-    local pShow = F.CheckRow(pf, pB, pC, { label="Show Power", cbKey="powerShowCB", onChanged=function() Apply() end })
-    local pXY = F.PairRow(pf, pB, pC, { label1="X:", label2="Y:", key1="powerXBox", key2="powerYBox", anchorTo=pShow, onChanged=Apply })
-    local pSA = F.SingleRow(pf, pB, pC, { label="Size:", boxKey="powerSizeBox", anchorTo=pXY, onChanged=Apply })
-    pC:RecalcHeight()
-    pf.powerShowCB:SetDependentRows(pXY, pSA)
-
-    --- Detach
-    local dC, dB = F.Card(pf, pC, "Detached Power Bar", -6, false)
-    pf._dpbCard = dC
-    local dToggle = F.CheckRow(pf, dB, dC, { label="Detach from frame", cbKey="detachCB", onChanged=function() Apply() end })
-    local dSync = F.CheckRow(pf, dB, dC, { label="Sync width to Resource Bar", cbKey="syncCPCB", anchorTo=dToggle, onChanged=function() Apply() end })
-    local dAnch = F.CheckRow(pf, dB, dC, { label="Anchor to Resource Bar", cbKey="anchorCPCB", anchorTo=dSync, onChanged=function() Apply() end })
-    local dText = F.CheckRow(pf, dB, dC, { label="Power text on bar", cbKey="textOnBarCB", anchorTo=dAnch, onChanged=function() Apply() end })
-    local dWH = F.PairRow(pf, dB, dC, { label1="W:", label2="H:", key1="dpbWBox", key2="dpbHBox", anchorTo=dText, onChanged=Apply })
-    local dXY = F.PairRow(pf, dB, dC, { label1="X:", label2="Y:", key1="dpbXBox", key2="dpbYBox", anchorTo=dWH, onChanged=Apply })
-    local dLevel = F.SingleRow(pf, dB, dC, { label="Level:", boxKey="dpbLevelBox", anchorTo=dXY, onChanged=Apply })
-    dC:RecalcHeight()
-
-    pf._allCards = { fC, nC, hC, pC, dC }
-
-    --- Copy Settings dropdown
-    local UNIT_SOURCES = {
-        { key = "player", label = "Player" },
-        { key = "target", label = "Target" },
-        { key = "focus",  label = "Focus"  },
-        { key = "focustarget", label = "Focus Target" },
-        { key = "targettarget", label = "ToT" },
-        { key = "pet",    label = "Pet"    },
-        { key = "boss",   label = "Boss"   },
-    }
-    local SKIP_COPY = { offsetX=true, offsetY=true, anchorFrameName=true, anchorToUnitframe=true }
-    local copyRow = F.CopyDropdown(pf, pf._scrollChild, nil, {
-        anchorTo = dC,
-        sources = UNIT_SOURCES,
-        onCopy = function(targetKey)
-            local db = _G.MSUF_DB; if not db then return end
-            local srcKey = pf.unit; if not srcKey then return end
-            local src = db[srcKey]; if not src then return end
-            if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("unit", targetKey) end
-            local dst = db[targetKey]; if not dst then db[targetKey] = {}; dst = db[targetKey] end
-            --- Copy all keys FROM current unit TO selected target (except position)
-            for k, v in pairs(src) do
-                if not SKIP_COPY[k] then
-                    if type(v) == "table" then
-                        dst[k] = _G.MSUF_DeepCopy and _G.MSUF_DeepCopy(v) or v
-                    else
-                        dst[k] = v
-                    end
-                end
-            end
-            --- Apply + resync
-            ApplyAllSettingsSafe()
-            if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
-            RefreshUFPreview("EM2_UNIT_POPUP_COPY", CK(pf.unit))
-            C_Timer.After(0.1, function() Sync() end)
-        end,
-    })
-
-    --- Visibility refresh
-    pf._refreshVisibility = function()
-        local u = pf.unit
-        local canDetach = (u == "player" or u == "target" or u == "focus")
-        local isPlayer = (u == "player")
-        dC:SetShown(canDetach)
-        --- Sync/Anchor to Resource Bar: only meaningful for player
-        if pf.syncCPCB then pf.syncCPCB:SetShown(isPlayer) end
-        if pf.anchorCPCB then pf.anchorCPCB:SetShown(isPlayer) end
-        --- Recalc scroll
-        C_Timer.After(0, function()
-            local t = pf._scrollChild and pf._scrollChild:GetTop()
-            local last = copyRow or (canDetach and dC or pC)
-            local b = last and last.GetBottom and last:GetBottom()
-            if t and b then pf:UpdateScrollHeight(t - b + 30) else pf:UpdateScrollHeight(640) end
-        end)
+    local function MakeButtonIn(parent, text, x, y, w, onClick)
+        local b = Menu2Style.Button(parent, text, w or 66, 30, onClick)
+        b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+        return b
     end
 
-    pf._recalcScroll = pf._refreshVisibility
+    local function MakeTinyButton(text, x, y, w, onClick)
+        return MakeButtonIn(pf, text, x, y, w, onClick)
+    end
 
-    local ok, cancel = F.FooterButtons(pf)
-    ok:SetScript("OnClick", function() Apply(); pf:Hide() end)
-    cancel:SetScript("OnClick", function()
-        if pf.MSUF_prev and pf.MSUF_prev.key then
-            local conf=Conf(pf.MSUF_prev.key)
-            if conf then for k,v in pairs(pf.MSUF_prev) do if k~="key" then conf[k]=v end end
-                ApplyAllSettingsSafe()
-                if type(_G.MSUF_UpdateAllFonts)=="function" then _G.MSUF_UpdateAllFonts() end
-                RefreshUFPreview("EM2_UNIT_POPUP_CANCEL", pf.MSUF_prev.key)
+    local function WirePopupFocus(btn, component, slot)
+        if not (btn and btn.HookScript) then return btn end
+        btn:HookScript("OnEnter", function()
+            local key = pf and pf.unit and CK(pf.unit)
+            if key and EM2.Focus and EM2.Focus.SetHover then
+                EM2.Focus.SetHover(key, component, slot, { source = "unit-popup" })
+            end
+        end)
+        btn:HookScript("OnLeave", function()
+            if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("unit-popup") end
+        end)
+        return btn
+    end
+
+    local function MakeToggleButtonIn(parent, text, x, y, w, onClick)
+        local b = MakeButtonIn(parent, text, x, y, w, nil)
+        function b:SetCheckedVisual(checked)
+            self._checked = checked and true or false
+            if self.SetActive then
+                self:SetActive(self._checked)
+                return
+            end
+            if self._checked then
+                self:SetBackdropColor(0.08, 0.16, 0.28, 0.96)
+                self:SetBackdropBorderColor(C.title[1], C.title[2], C.title[3], 0.95)
+                if self._label then self._label:SetTextColor(C.title[1], C.title[2], C.title[3], 1) end
+            else
+                self:SetBackdropColor(C.btnBg[1], C.btnBg[2], C.btnBg[3], 0.88)
+                self:SetBackdropBorderColor(C.btnEdge[1], C.btnEdge[2], C.btnEdge[3], 0.82)
+                if self._label then self._label:SetTextColor(C.white[1], C.white[2], C.white[3], C.white[4] or 1) end
             end
         end
-        pf:Hide()
-    end)
+        b:SetScript("OnClick", function(s)
+            s:SetCheckedVisual(not s._checked)
+            if onClick then onClick(s._checked) end
+            if pf and pf:IsShown() then Sync() end
+        end)
+        b:SetCheckedVisual(false)
+        return b
+    end
+
+    local function MakeToggleButton(text, x, y, w, onClick)
+        return MakeToggleButtonIn(pf, text, x, y, w, onClick)
+    end
+
+    local function MakeCopyButton(x, y, w)
+        local b = MakeTinyButton("Copy to", x, y, w, nil)
+        local menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        menu:SetFrameStrata("TOOLTIP")
+        menu:SetFrameLevel(960)
+        menu:SetClampedToScreen(true)
+        menu:EnableMouse(true)
+        menu:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
+        menu:SetBackdropColor(C.panelBg[1], C.panelBg[2], C.panelBg[3], 0.98)
+        menu:SetBackdropBorderColor(C.panelEdge[1], C.panelEdge[2], C.panelEdge[3], 0.95)
+        Menu2Style.Shell(menu)
+        menu:Hide()
+
+        local itemH = 22
+        menu:SetSize(w, #UNIT_COPY_TARGETS * itemH + 6)
+        for i, src in ipairs(UNIT_COPY_TARGETS) do
+            local item = CreateFrame("Button", nil, menu)
+            item:SetSize(w - 4, itemH)
+            item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (i - 1) * itemH))
+            local bg = item:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(0, 0, 0, 0)
+            local fs = FS(item, 10, C.white)
+            fs:SetPoint("LEFT", 8, 0)
+            fs:SetText(Tr(src.label))
+            item:SetScript("OnEnter", function()
+                bg:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.22)
+            end)
+            item:SetScript("OnLeave", function() bg:SetColorTexture(0, 0, 0, 0) end)
+            item:SetScript("OnClick", function()
+                menu:Hide()
+                CopyBoundsTo(src.key)
+                if b then
+                    Menu2Style.SetButtonText(b, src.label)
+                    C_Timer.After(1.2, function() Menu2Style.SetButtonText(b, "Copy to") end)
+                end
+            end)
+        end
+        b:SetScript("OnClick", function()
+            if menu:IsShown() then menu:Hide(); return end
+            menu:ClearAllPoints()
+            menu:SetPoint("TOP", b, "BOTTOM", 0, -3)
+            menu:Show()
+        end)
+        menu:SetScript("OnUpdate", function(self)
+            if not self:IsShown() then return end
+            if b:IsMouseOver() or self:IsMouseOver() then
+                self._closeTimer = nil
+            else
+                if not self._closeTimer then self._closeTimer = GetTime() + 0.35
+                elseif GetTime() >= self._closeTimer then self:Hide() end
+            end
+        end)
+        pf:HookScript("OnHide", function() menu:Hide() end)
+        return b
+    end
+
+    local function MakeValuePairIn(parent, x, y, label1, key1, label2, key2)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetSize(400, 24)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y)
+
+        local l1 = FS(row, 11, C.white)
+        l1:SetPoint("LEFT", row, "LEFT", 0, 0)
+        l1:SetText(label1)
+        local m1 = MakeStep(row, "-")
+        m1:SetPoint("LEFT", l1, "RIGHT", 6, 0)
+        local b1 = MakeBox(row, 52)
+        b1:SetPoint("LEFT", m1, "RIGHT", 1)
+        local p1 = MakeStep(row, "+")
+        p1:SetPoint("LEFT", b1, "RIGHT", 1)
+        WireStepper(m1, b1, p1, Apply)
+        b1:SetScript("OnEditFocusLost", Apply)
+        pf[key1] = b1
+
+        local l2 = FS(row, 11, C.white)
+        l2:SetPoint("LEFT", p1, "RIGHT", 18, 0)
+        l2:SetText(label2)
+        local m2 = MakeStep(row, "-")
+        m2:SetPoint("LEFT", l2, "RIGHT", 6, 0)
+        local b2 = MakeBox(row, 52)
+        b2:SetPoint("LEFT", m2, "RIGHT", 1)
+        local p2 = MakeStep(row, "+")
+        p2:SetPoint("LEFT", b2, "RIGHT", 1)
+        WireStepper(m2, b2, p2, Apply)
+        b2:SetScript("OnEditFocusLost", Apply)
+        pf[key2] = b2
+        return row
+    end
+
+    local function MakeValuePair(y, label1, key1, label2, key2)
+        return MakeValuePairIn(pf, 20, y, label1, key1, label2, key2)
+    end
+
+    local function MakeSingleValueIn(parent, x, y, label, key)
+        local row = CreateFrame("Frame", nil, parent)
+        row:SetSize(360, 24)
+        row:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 0, y)
+        local l = FS(row, 11, C.white)
+        l:SetPoint("LEFT", row, "LEFT", 0, 0)
+        l:SetText(label)
+        local m = MakeStep(row, "-")
+        m:SetPoint("LEFT", l, "RIGHT", 6, 0)
+        local b = MakeBox(row, 52)
+        b:SetPoint("LEFT", m, "RIGHT", 1)
+        local p = MakeStep(row, "+")
+        p:SetPoint("LEFT", b, "RIGHT", 1)
+        WireStepper(m, b, p, Apply)
+        b:SetScript("OnEditFocusLost", Apply)
+        pf[key] = b
+        return row
+    end
+
+    MakeValuePair(-72, "X", "xBox", "Y", "yBox")
+    MakeValuePair(-102, "Width", "wBox", "Height", "hBox")
+
+    WirePopupFocus(MakeTinyButton("Name", 20, -140, 58, function() OpenMenu2Page(nil, "name") end), "name")
+    WirePopupFocus(MakeTinyButton("HP", 90, -140, 58, function() OpenMenu2Page(nil, "hp") end), "hp")
+    WirePopupFocus(MakeTinyButton("Power", 160, -140, 72, function() OpenMenu2Page(nil, "power") end), "power")
+    WirePopupFocus(MakeTinyButton("Auras", 244, -140, 68, function() OpenMenu2Page(nil, "auras") end), "auras")
+    WirePopupFocus(MakeTinyButton("Cast", 324, -140, 58, function() OpenMenu2Page(nil, "castbar") end), "castbar")
+
+    MakeTinyButton("Open settings", 20, -190, 190, OpenMenu2Settings)
+    MakeCopyButton(224, -190, 190)
+    pf.detachBtn = MakeToggleButton("Detach powerbar", 20, -238, 394, ApplyDetachPower)
+
+    pf.dpbPanel = CreateFrame("Frame", nil, pf, "BackdropTemplate")
+    pf.dpbPanel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -282)
+    pf.dpbPanel:SetSize(394, 220)
+    pf.dpbPanel:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1, insets={left=1,right=1,top=1,bottom=1} })
+    pf.dpbPanel:SetBackdropColor(C.cardBg[1], C.cardBg[2], C.cardBg[3], 0.58)
+    pf.dpbPanel:SetBackdropBorderColor(C.cardEdge[1], C.cardEdge[2], C.cardEdge[3], 0.72)
+    Menu2Style.Card(pf.dpbPanel)
+    local dpbTitle = FS(pf.dpbPanel, 12, C.white)
+    dpbTitle:SetPoint("TOPLEFT", pf.dpbPanel, "TOPLEFT", 16, -12)
+    dpbTitle:SetText(Tr("Detached power bar"))
+    local dpbHint = FS(pf.dpbPanel, 10, C.muted)
+    dpbHint:SetPoint("LEFT", dpbTitle, "RIGHT", 10, 0)
+    dpbHint:SetText(Tr("position, size, and layer"))
+    pf.dpbTextBtn = MakeToggleButtonIn(pf.dpbPanel, "Text on bar", 16, -36, 112, Apply)
+    pf.dpbSyncBtn = MakeToggleButtonIn(pf.dpbPanel, "Sync class", 140, -36, 112, Apply)
+    pf.dpbAnchorBtn = MakeToggleButtonIn(pf.dpbPanel, "Anchor class", 264, -36, 114, Apply)
+    pf.dpbXYRow = MakeValuePairIn(pf.dpbPanel, 16, -92, "X", "dpbXBox", "Y", "dpbYBox")
+    pf.dpbWHRow = MakeValuePairIn(pf.dpbPanel, 16, -126, "Width", "dpbWBox", "Height", "dpbHBox")
+    pf.dpbLayerRow = MakeSingleValueIn(pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox")
+    pf.dpbPanel:Hide()
+
     pf:EnableKeyboard(true)
-    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
-    pf:HookScript("OnHide", function(s) if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end end)
-    pf:UpdateScrollHeight(600)
+    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); s:Hide() else s:SetPropagateKeyboardInput(true) end end)
+    pf:HookScript("OnHide", function(s)
+        if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end
+        local function RefreshPopupFocus()
+            local anyOpen = EM2.Popups and EM2.Popups.IsAnyOpen and EM2.Popups.IsAnyOpen()
+            if not anyOpen then
+                if EM2.State and EM2.State.SetPopupOpen then EM2.State.SetPopupOpen(false) end
+                if EM2.Focus and EM2.Focus.ClearPopupFocus then EM2.Focus.ClearPopupFocus() end
+            elseif EM2.Focus and EM2.Focus.RefreshPopupFocus then
+                EM2.Focus.RefreshPopupFocus()
+            end
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, RefreshPopupFocus) else RefreshPopupFocus() end
+    end)
+    pf:Hide()
     return pf
 end
 
 local UnitPopup = {}; EM2.UnitPopup = UnitPopup
-function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); return true end
+function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); if Menu2Style.FadeIn then Menu2Style.FadeIn(pf, 0.12, 0.86, 1) end; return true end
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end

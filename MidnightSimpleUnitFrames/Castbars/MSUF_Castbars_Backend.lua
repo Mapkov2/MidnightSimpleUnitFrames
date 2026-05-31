@@ -31,6 +31,47 @@ local LEGACY_ENABLE_KEYS = {
     boss = "enableBossCastbar",
 }
 
+local getCacheByGeneral = setmetatable({}, { __mode = "k" })
+
+local function ReadCache(g, unit, backendKey, enableKey)
+    local byUnit = getCacheByGeneral[g]
+    local entry = byUnit and byUnit[unit]
+    if entry
+        and entry.backendValue == g[backendKey]
+        and entry.enableValue == (enableKey and g[enableKey] or nil) then
+        return entry.result
+    end
+    return nil
+end
+
+local function WriteCache(g, unit, backendKey, enableKey, result)
+    local byUnit = getCacheByGeneral[g]
+    if not byUnit then
+        byUnit = {}
+        getCacheByGeneral[g] = byUnit
+    end
+    byUnit[unit] = {
+        backendValue = g[backendKey],
+        enableValue = enableKey and g[enableKey] or nil,
+        result = result,
+    }
+end
+
+local function ClearCache(g, unit)
+    if not g then
+        return
+    end
+    local byUnit = getCacheByGeneral[g]
+    if not byUnit then
+        return
+    end
+    if unit then
+        byUnit[unit] = nil
+    else
+        getCacheByGeneral[g] = nil
+    end
+end
+
 local function CanonUnit(unit)
     if type(unit) ~= "string" then return nil end
     unit = unit:lower()
@@ -92,6 +133,11 @@ function Backend.Get(unit, g)
     g = General(g)
     if not g then return BACKEND_MSUF end
 
+    local cached = ReadCache(g, u, backendKey, enableKey)
+    if cached then
+        return cached
+    end
+
     local backend = Backend.NormalizeForUnit(u, g[backendKey])
     if not backend then
         backend = (enableKey and g[enableKey] == false)
@@ -113,6 +159,7 @@ function Backend.Get(unit, g)
     if enableKey then
         g[enableKey] = (backend == BACKEND_MSUF)
     end
+    WriteCache(g, u, backendKey, enableKey, backend)
     return backend
 end
 
@@ -130,6 +177,7 @@ function Backend.Set(unit, value, g)
     if enableKey then
         g[enableKey] = (backend == BACKEND_MSUF)
     end
+    ClearCache(g, u)
     return backend
 end
 
@@ -140,6 +188,7 @@ function Backend.Sync(g)
     Backend.Get("target", g)
     Backend.Get("focus", g)
     Backend.Get("boss", g)
+    ClearCache(g)
     return g
 end
 

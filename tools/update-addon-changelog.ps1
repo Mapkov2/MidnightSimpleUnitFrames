@@ -45,7 +45,7 @@ function Normalize-VersionKey {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
-    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|preview|rc|pre)[\s._-]*(?<number>\d+(?:\.\d+)*))?\s*$') {
         $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "x"
         if ([string]::IsNullOrWhiteSpace($Matches["channel"])) { return $base }
         $number = ""
@@ -64,7 +64,7 @@ function Get-PrereleaseFallbackKey {
     $v = $Value.Trim()
     $v = $v -replace '^refs/tags/', ''
     $v = $v -replace '^v(?=\d)', ''
-    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
+    if ($v -match '^(?<base>\d+(?:\.\d+)*)(?:[\s._-]*(?<channel>alpha|beta|preview|rc|pre)[\s._-]*(?<number>\d+)\.\d+(?:\.\d+)*)\s*$') {
         $base = (($Matches["base"] -split '\.') | ForEach-Object { [int]$_ }) -join "."
         return Normalize-VersionKey ($base + " " + $Matches["channel"] + " " + $Matches["number"])
     }
@@ -197,7 +197,7 @@ for ($i = $startIndex; $i -lt $releases.Count -and $selected.Count -lt $ReleaseC
 }
 
 $currentVersion = $selected[0].version
-$currentVersionIsPrerelease = $currentVersion -match '(?i)(alpha|beta|rc|pre)'
+$currentVersionIsPrerelease = $currentVersion -match '(?i)(alpha|beta|preview|rc|pre)'
 $previousVersion = if (-not [string]::IsNullOrWhiteSpace($PreviousVersion)) {
     Convert-ToAsciiText $PreviousVersion
 } elseif ($currentVersionIsPrerelease -and $selected.Count -gt 1) {

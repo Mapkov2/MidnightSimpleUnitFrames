@@ -76,7 +76,6 @@ local SetPriorityOrder = GP.SetPriorityOrder
 local RefreshBorderTestModes = GP.RefreshBorderTestModes
 local SetAbsorbTextureTest = GP.SetAbsorbTextureTest
 local ClearAbsorbTextureTest = GP.ClearAbsorbTextureTest
-local NormalizeGlowStyle = GP.NormalizeGlowStyle
 local SetControlEnabled = GP.SetControlEnabled
 local SetControlsEnabled = GP.SetControlsEnabled
 local ApplyFonts = GP.ApplyFonts

@@ -1994,7 +1994,7 @@ local function SearchRouteGroupPage(route, pageKey, normalized)
         SearchRouteTextState(route, "gfTextTabSelection", "gfTextSlotSelection", scope or M.gfScope or "party", normalized)
     elseif pageKey == "gf_auras" then
         SearchRouteApplySectionSpecs(route, pageKey, normalized, {
-            { id = "blizzrenderer", terms = { "aura display mode", "blizzard dispels", "blizzard mode", "msuf dispel border glow", "native dispel icons" } },
+            { id = "blizzrenderer", terms = { "aura display mode", "blizzard dispels", "blizzard mode", "msuf dispel border overlay", "native dispel icons" } },
             { id = "buffs", terms = { "buffs", "buff", "hots", "own buffs", "healer buffs" } },
             { id = "debuffs", terms = { "debuffs", "debuff", "boss debuff", "raid debuff", "magic", "curse", "poison", "disease" } },
             { id = "ext", terms = { "externals", "defensives", "external cooldowns" } },
@@ -2065,7 +2065,7 @@ local function SearchRouteGlobalPage(route, pageKey, normalized)
             { id = "bars_absorb", terms = { "absorb", "heal prediction", "incoming heals", "shield" } },
             { id = "bars_outline", terms = { "frame outline", "outline", "bar outline", "border thickness" } },
             { id = "bars_rounded", terms = { "rounded", "round corners", "rounded texture", "rounded frames" } },
-            { id = "bars_highlight", terms = { "highlight borders", "highlight border", "dispel border", "dispel glow", "aggro border", "purge border", "boss target border", "priority order" } },
+            { id = "bars_highlight", terms = { "highlight borders", "highlight border", "dispel border", "dispel overlay", "aggro border", "purge border", "boss target border", "priority order" } },
             { id = "bars_unit_dispel_overlay", terms = { "unitframe dispel overlay", "unit frame dispel overlay", "overlay detects", "overlay priority", "unit dispel overlay" } },
             { id = "bars_power", terms = { "bar animation", "text accuracy", "smooth fill", "power animation" } },
         })

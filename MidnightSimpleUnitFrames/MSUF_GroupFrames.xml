@@ -6,10 +6,14 @@
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Config_Indicators.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Config.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Status.lua"/>
+    <Script file="UnitFrames\Range\MSUF_UF_Group_RangeFade.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Visuals.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Indicators.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Headers.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Adapter.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Blizzard.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Metadata.lua"/>
     <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Runtime.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_Preview.lua"/>
+    <Script file="UnitFrames\Core\Group\MSUF_UF_Group_EM2.lua"/>
 </Ui>

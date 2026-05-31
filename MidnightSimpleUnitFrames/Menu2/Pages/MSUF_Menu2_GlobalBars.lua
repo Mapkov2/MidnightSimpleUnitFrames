@@ -72,14 +72,9 @@ local PriorityOrder = GP.PriorityOrder
 local PriorityColor = GP.PriorityColor
 local SetPriorityOrder = GP.SetPriorityOrder
 local NormalizePriorityKey = GP.NormalizePriorityKey or function(key) return key end
-local HasGroupBlizzardRendererConflict = GP.HasGroupBlizzardRendererConflict
-local GroupBlizzardRendererConflictText = GP.GroupBlizzardRendererConflictText
-local NotifyDispelGlowBlizzardConflict = GP.NotifyDispelGlowBlizzardConflict
-local StopGroupDispelGlowForBlizzardConflict = GP.StopGroupDispelGlowForBlizzardConflict
 local RefreshBorderTestModes = GP.RefreshBorderTestModes
 local SetAbsorbTextureTest = GP.SetAbsorbTextureTest
 local ClearAbsorbTextureTest = GP.ClearAbsorbTextureTest
-local NormalizeGlowStyle = GP.NormalizeGlowStyle
 local SetControlEnabled = GP.SetControlEnabled
 local SetControlsEnabled = GP.SetControlsEnabled
 local ApplyFonts = GP.ApplyFonts
@@ -391,27 +386,6 @@ local function BuildBars(ctx)
         end
         card:RefreshRoundedPreview()
         return card
-    end
-
-    local function CurrentGroupGlowBlocked()
-        local scope = CurrentBarsScope()
-        if scope ~= "gf_party" and scope ~= "gf_raid" then return false end
-        return type(HasGroupBlizzardRendererConflict) == "function" and HasGroupBlizzardRendererConflict(scope) == true
-    end
-
-    local function GlowConflictTextForCurrentScope()
-        if type(GroupBlizzardRendererConflictText) ~= "function" then return nil end
-        local scope = CurrentBarsScope()
-        if scope == "gf_party" or scope == "gf_raid" then
-            return GroupBlizzardRendererConflictText(scope)
-        end
-        return GroupBlizzardRendererConflictText("shared")
-    end
-
-    local function StopGroupGlowForCurrentConflict()
-        if type(StopGroupDispelGlowForBlizzardConflict) == "function" then
-            StopGroupDispelGlowForBlizzardConflict(CurrentBarsScope())
-        end
     end
 
     local dispelTriggers = {
@@ -1040,7 +1014,6 @@ local function BuildBars(ctx)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
     local priorityCard = W.ControlCard(highlights, "Priority Order", nil, hlLeftX - 14, -492, priorityCardW, 296)
     W.ControlCard(highlights, "Preview", nil, hlRightX - 14, -38, hlRightW + 28, 248)
-    W.ControlCard(highlights, "Dispel Glow", nil, hlRightX - 14, -308, hlRightW + 28, 352)
 
     local highlight = W.Slider(highlights, "Highlight border thickness", 1, 30, 1, hlLeftW)
     M.BindSlider(ctx, highlight,
@@ -1217,69 +1190,6 @@ local function BuildBars(ctx)
         end
     end)
 
-    local glowConflictHint = W.Text(highlights, "", hlRightX, -336, hlRightW, { 1.00, 0.72, 0.25, 1 })
-    if glowConflictHint.SetWordWrap then glowConflictHint:SetWordWrap(true) end
-    local enabled = W.ToggleAt(highlights, "Dispel glow effect", hlRightX, -382, hlRightW)
-    M.BindToggle(ctx, enabled,
-        function()
-            if CurrentGroupGlowBlocked() then return false end
-            return BarScopeGet("hlDispelGlowEnabled", true) ~= false
-        end,
-        function(v)
-            if v and CurrentGroupGlowBlocked() then
-                if type(NotifyDispelGlowBlizzardConflict) == "function" then NotifyDispelGlowBlizzardConflict(CurrentBarsScope()) end
-                StopGroupGlowForCurrentConflict()
-                M.Refresh(ctx)
-                return
-            end
-            BarScopeSet("hlDispelGlowEnabled", v and true or false, "MSUF2_DISPEL_GLOW")
-            ApplyBars("MSUF2_DISPEL_GLOW")
-            ApplyDispelPurgeBorderRuntime()
-        end)
-    local style = W.Segment(highlights, "Glow style", {
-        { value = "PIXEL", text = "Pixel" },
-        { value = "AUTOCAST", text = "AutoCast" },
-        { value = "PROC", text = "Proc" },
-    }, hlRightW)
-    M.BindSegment(ctx, style,
-        function() return NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) end,
-        function(v)
-            BarScopeSet("hlDispelGlowStyle", NormalizeGlowStyle(v), "MSUF2_DISPEL_STYLE")
-            ApplyBars("MSUF2_DISPEL_STYLE")
-            ApplyDispelPurgeBorderRuntime()
-        end)
-    W.MoveWidget(style, highlights, hlRightX, -430, hlRightW, "LEFT")
-
-    local lines = W.Slider(highlights, "Glow lines / particles", 2, 16, 1, hlRightW)
-    M.BindSlider(ctx, lines,
-        function() return tonumber(BarScopeGet("hlDispelGlowLines", 8)) or 8 end,
-        function(v)
-            BarScopeSet("hlDispelGlowLines", floor((tonumber(v) or 8) + 0.5), "MSUF2_DISPEL_GLOW_LINES")
-            ApplyBars("MSUF2_DISPEL_GLOW_LINES")
-            ApplyDispelPurgeBorderRuntime()
-        end)
-    W.MoveWidget(lines, highlights, hlRightX, -484, hlRightW, "LEFT")
-
-    local speed = W.Slider(highlights, "Glow speed", 0.05, 1, 0.05, hlRightW)
-    M.BindSlider(ctx, speed,
-        function() return tonumber(BarScopeGet("hlDispelGlowFrequency", 0.25)) or 0.25 end,
-        function(v)
-            BarScopeSet("hlDispelGlowFrequency", tonumber(v) or 0.25, "MSUF2_DISPEL_GLOW_SPEED")
-            ApplyBars("MSUF2_DISPEL_GLOW_SPEED")
-            ApplyDispelPurgeBorderRuntime()
-        end)
-    W.MoveWidget(speed, highlights, hlRightX, -538, hlRightW, "LEFT")
-
-    local thickness = W.Slider(highlights, "Glow thickness (Pixel)", 1, 5, 1, hlRightW)
-    M.BindSlider(ctx, thickness,
-        function() return tonumber(BarScopeGet("hlDispelGlowThickness", 2)) or 2 end,
-        function(v)
-            BarScopeSet("hlDispelGlowThickness", floor((tonumber(v) or 2) + 0.5), "MSUF2_DISPEL_THICKNESS")
-            ApplyBars("MSUF2_DISPEL_THICKNESS")
-            ApplyDispelPurgeBorderRuntime()
-        end)
-    W.MoveWidget(thickness, highlights, hlRightX, -592, hlRightW, "LEFT")
-
     M.AddRefresher(ctx, function()
         local scopedActive = HighlightControlsActive()
         local sharedActive = SharedBarsControlsActive()
@@ -1299,31 +1209,6 @@ local function BuildBars(ctx)
         if _G.MSUF_BossTargetBorderTestMode and (not sharedActive or not bossTargetOn) and type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then
             _G.MSUF_SetBossTargetBorderTestMode(false)
         end
-        local groupGlowBlocked = CurrentGroupGlowBlocked()
-        if groupGlowBlocked then StopGroupGlowForCurrentConflict() end
-        local glowOn = (not groupGlowBlocked) and BarScopeGet("hlDispelGlowEnabled", true) ~= false
-        local pixelGlow = NormalizeGlowStyle(BarScopeGet("hlDispelGlowStyle", "PIXEL")) == "PIXEL"
-        local conflictText = GlowConflictTextForCurrentScope()
-        local glowHintText = conflictText
-        if not glowHintText and scopedActive then
-            local scope = CurrentBarsScope()
-            if scope == "gf_raid" then
-                glowHintText = "Dispel Glow works on Raid frames. It is animated and can cost FPS when many raid members glow at once; BY_ME is the cheapest detect mode."
-            elseif scope == "gf_party" then
-                glowHintText = "Dispel Glow works on Party frames. It is animated; BY_ME is the cheapest detect mode."
-            else
-                glowHintText = "Dispel Glow is animated. For the lowest combat overhead, use BY_ME or disable glow."
-            end
-        end
-        if glowHintText then
-            glowConflictHint:SetText(glowHintText)
-            glowConflictHint:Show()
-            local color = groupGlowBlocked and { 1.00, 0.55, 0.20, 1 } or T.colors.muted
-            glowConflictHint:SetTextColor(color[1], color[2], color[3], color[4] or 1)
-        else
-            glowConflictHint:SetText("")
-            glowConflictHint:Hide()
-        end
         SetControlEnabled(highlight, scopedActive)
         SetControlEnabled(aggro, scopedActive)
         SetControlEnabled(dispelBorder, scopedActive)
@@ -1335,11 +1220,6 @@ local function BuildBars(ctx)
         SetControlEnabled(dispelType, scopedActive and dispelOn)
         SetControlEnabled(purgeTest, scopedActive and purgeOn)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
-        SetControlEnabled(enabled, scopedActive and not groupGlowBlocked)
-        SetControlEnabled(style, scopedActive and glowOn)
-        SetControlEnabled(lines, scopedActive and glowOn)
-        SetControlEnabled(speed, scopedActive and glowOn)
-        SetControlEnabled(thickness, scopedActive and glowOn and pixelGlow)
         local hintColor = sharedActive and T.colors.dim or T.colors.muted
         bossSharedHint:SetTextColor(hintColor[1], hintColor[2], hintColor[3], sharedActive and 0.75 or 1)
     end)

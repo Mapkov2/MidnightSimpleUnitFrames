@@ -166,35 +166,6 @@ local NAV = {
 }
 M.navItems = NAV
 
-M.navHelp = M.navHelp or {
-    home = "Start here for setup, scaling, support, changelog, and safe recovery actions.",
-    uf_player = "Tune your own unit frame, including basics, text, portrait, bars, castbar, and status icons.",
-    uf_target = "Configure the target frame and keep layout-related options visible while tuning.",
-    uf_boss = "Configure boss frames and use the preview to test encounter-only frames safely.",
-    uf_focus = "Set up the focus frame for interrupt, targeting, and encounter workflows.",
-    uf_pet = "Tune the pet frame without mixing it into player or target options.",
-    uf_targettarget = "Configure target-of-target behavior and inline target text.",
-    uf_focustarget = "Configure the focus target frame, which follows the Focus frame and updates from focus target changes.",
-    gf_layout = "Choose party, raid, and mythic raid layout behavior before tuning details.",
-    gf_bars = "Configure group frame health colors, bars, power bar, text, Dispel Overlay, Debuff Stripe, and Range Fade.",
-    gf_indicators = "Set status icons, class resources, and group indicators.",
-    gf_auras = "Configure group buffs, debuffs, and aura display behavior.",
-    auras3 = "Choose the aura scope and open the dedicated Aura subsections.",
-    auras3_rendering = "Configure aura renderer ownership, Blizzard routing, and unit-frame aura enablement.",
-    auras3_filters = "Configure custom aura filters, unit-frame blacklists, and group-frame category blacklists.",
-    auras3_styling = "Configure timer colors, stack text, and custom group-frame aura text styling.",
-    auras3_private = "Configure player private auras and group-frame private aura ownership rules.",
-    opt_bars = "Shared bar textures, gradients, colors, outlines, and frame visuals.",
-    opt_castbar = "Shared castbar settings, ticks, interrupt helpers, and focus cast tools.",
-    opt_colors = "Shared color choices and state color behavior.",
-    opt_fonts = "Shared font choices, sizes, outlines, and text shortening.",
-    opt_misc = "General behavior, minimap, version checks, sounds, and Blizzard frame options.",
-    classpower = "Configure class resources and detached class bars.",
-    gameplay = "Mouseover, click-cast, targeting, combat crosshair, and gameplay helpers.",
-    profiles = "Manage, duplicate, import, export, and back up profiles.",
-    modules = "Advanced module switches and expert options.",
-}
-
 local ALIASES = {
     [""] = "home",
     home = "home",
@@ -250,7 +221,7 @@ local ALIASES = {
     search = "search",
 }
 
-local MENU_STATE_VERSION = 1
+local MENU_STATE_VERSION = 2
 local MENU_STATE_TABLE_FIELDS = {
     "accordionState",
     "previewPinState",
@@ -307,6 +278,17 @@ local function CopyMissingStateValues(dst, src)
     end
 end
 
+local function MigrateMenuState(state, oldVersion)
+    oldVersion = tonumber(oldVersion) or 0
+    if oldVersion >= 2 then return end
+    local accordion = type(state) == "table" and state.accordionState
+    if type(accordion) ~= "table" then return end
+    for key in pairs(accordion) do
+        local textKey = type(key) == "string" and (key == "gf_bars:text" or key:match("^uf_[^:]+:text$"))
+        if textKey then accordion[key] = nil end
+    end
+end
+
 local function EnsurePersistentMenuState()
     _G.MSUF_GlobalDB = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {}
     local gdb = _G.MSUF_GlobalDB
@@ -318,6 +300,7 @@ local function EnsurePersistentMenuState()
 
     local state = type(charDB.menu2State) == "table" and charDB.menu2State or {}
     charDB.menu2State = state
+    local oldVersion = tonumber(state.version) or 0
     state.version = MENU_STATE_VERSION
     local firstLoad = M._persistentMenuState ~= state or M._persistentMenuStateLoaded ~= true
 
@@ -333,6 +316,7 @@ local function EnsurePersistentMenuState()
         end
         M[field] = saved
     end
+    if firstLoad then MigrateMenuState(state, oldVersion) end
 
     for field, defaultValue in pairs(MENU_STATE_SCALAR_DEFAULTS) do
         if firstLoad and state[field] ~= nil then
@@ -1162,6 +1146,7 @@ local function CreateContext(key, wrapper, entry)
     local ctx = {
         key = key,
         wrapper = wrapper,
+        entry = entry,
         refreshers = entry.refreshers,
         width = CONTENT_W - 34,
     }
@@ -1266,6 +1251,16 @@ function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
+    do
+        local req = _G.MSUF_EM2_MenuFocusRequest
+        local hasPendingFocus = type(req) == "table"
+            and req.explicit == true
+            and req.consumed ~= true
+            and (not req.pageKey or tostring(req.pageKey) == tostring(key))
+        if not hasPendingFocus and type(M.CloseAutoFocusedSections) == "function" then
+            M.CloseAutoFocusedSections(key)
+        end
+    end
     if key ~= "search" and M.activeKey == "search" then
         BumpSearchInputSerial()
         CancelSearchBackgroundIndex()
@@ -1283,6 +1278,7 @@ function M.SelectPage(key)
         RunRefreshers(cached)
         SyncBossPagePreviewForKey(key)
         SyncGroupPagePreviewForKey(key)
+        if type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
         return true
     end
 
@@ -1317,21 +1313,8 @@ function M.SelectPage(key)
     UpdateNav(key)
     SyncBossPagePreviewForKey(key)
     SyncGroupPagePreviewForKey(key)
+    if type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
     return true
-end
-
-function M.AttachNavTooltip(frame, title, text)
-    if not (frame and frame.HookScript) then return end
-    frame:HookScript("OnEnter", function(self)
-        if not GameTooltip then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:AddLine(M.Tr(title or ""), 1, 1, 1)
-        if text and text ~= "" then GameTooltip:AddLine(M.Tr(text), 0.72, 0.78, 0.92, true) end
-        GameTooltip:Show()
-    end)
-    frame:HookScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-    end)
 end
 
 local function CreateNavButton(parent, key, label, indent)
@@ -1342,7 +1325,6 @@ local function CreateNavButton(parent, key, label, indent)
     btn._msuf2NavIndent = indent or 0
     btn._msuf2RawLabel = label
     if T.AttachNavIcon then T.AttachNavIcon(btn, key, (indent or 0) > 0) end
-    M.AttachNavTooltip(btn, label, M.navHelp and M.navHelp[key])
     M.navButtons[key] = btn
     if btn.RefreshVisual then btn:RefreshVisual() end
     return btn
@@ -2348,13 +2330,60 @@ local function BuildWindow()
     sbVersion:SetPoint("RIGHT", status, "RIGHT", -10, 0)
     sbVersion:SetJustifyH("RIGHT")
     sbVersion:SetAlpha(0.50)
+    local sbFeedback = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
+    sbFeedback:SetPoint("RIGHT", sbVersion, "LEFT", -18, 0)
+    sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 0)
+    sbFeedback:SetJustifyH("RIGHT")
+    sbFeedback:SetAlpha(0)
 
     status.profileText = sbProfile
     status.editText = sbEdit
     status.combatText = sbCombat
     status.versionText = sbVersion
+    status.feedbackText = sbFeedback
     status.text = sbProfile
     f.status = status
+    function M.ShowStatusFeedback(text, kind, seconds)
+        if not (f and f.status and f.status.feedbackText and text and text ~= "") then return end
+        local feedback = f.status.feedbackText
+        local color = T.colors.muted
+        if kind == "ok" or kind == "success" then
+            color = T.colors.ok or color
+        elseif kind == "warning" or kind == "combat" then
+            color = T.colors.accent2 or color
+        elseif kind == "danger" or kind == "error" then
+            color = T.colors.danger or color
+        elseif kind == "info" then
+            color = T.colors.accent or color
+        end
+        f.status._msuf2FeedbackSerial = (f.status._msuf2FeedbackSerial or 0) + 1
+        local serial = f.status._msuf2FeedbackSerial
+        feedback:SetText(M.Tr(tostring(text)))
+        if feedback.SetTextColor then feedback:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
+        feedback:SetAlpha(1)
+        if T.PlayMotion then T.PlayMotion(feedback, "controlFocusIn", { fromAlpha = 0.25, toAlpha = 1, duration = 0.10 }) end
+        local delay = tonumber(seconds) or 1.4
+        if C_Timer and C_Timer.After then
+            C_Timer.After(delay, function()
+                if not (f and f.status and f.status.feedbackText) then return end
+                if f.status._msuf2FeedbackSerial ~= serial then return end
+                if T.PlayMotion then
+                    T.PlayMotion(feedback, "controlFocusOut", {
+                        fromAlpha = feedback.GetAlpha and feedback:GetAlpha() or 1,
+                        toAlpha = 0,
+                        duration = 0.16,
+                        onFinished = function()
+                            if f.status and f.status._msuf2FeedbackSerial == serial then feedback:SetText("") end
+                        end,
+                    })
+                else
+                    feedback:SetAlpha(0)
+                    feedback:SetText("")
+                end
+            end)
+        end
+    end
+    M.ShowInlineFeedback = M.ShowStatusFeedback
     function f:RefreshStatus()
         local profile = tostring(_G.MSUF_ActiveProfile or "Default")
         local edit = IsEditModeActive() and "On" or "Off"

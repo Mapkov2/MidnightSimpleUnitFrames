@@ -110,7 +110,20 @@ end
 local function OpenGFSection(sectionKey)
     M.gfPreviewFocus = sectionKey
     local pageKey = PageForGFSection(sectionKey)
-    if pageKey and M.SelectPage then M.SelectPage(pageKey) end
+    if pageKey and M.SelectPage then
+        local scope = CurrentScope()
+        _G.MSUF_EM2_MenuFocusRequest = {
+            key = (scope == "raid" and "gf_raid") or (scope == "mythicraid" and "gf_mythicraid") or "gf_party",
+            component = sectionKey,
+            pageKey = pageKey,
+            sectionId = sectionKey,
+            source = "group-preview",
+            explicit = true,
+            changedAt = GetTime and GetTime() or 0,
+        }
+        if M.InvalidatePage then M.InvalidatePage(pageKey) end
+        M.SelectPage(pageKey)
+    end
 end
 
 local function PreviewScopeLabel(kind)

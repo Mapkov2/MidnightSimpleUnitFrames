@@ -137,8 +137,9 @@ local function MSUF_PulseCastbarPreview(kind)
             end
 
             -- If the edit popup for this castbar is open, keep animating and check again shortly.
-            local popup = _G.MSUF_CastbarPositionPopup
-            if popup and popup.IsShown and popup:IsShown() and popup.unit == kind then
+            local em2 = _G.MSUF_EM2
+            local popup = em2 and em2.CastPopup
+            if popup and popup.IsOpen and popup:IsOpen() then
                 ScheduleStop(2)
                 return
             end
@@ -359,7 +360,6 @@ else
                 local snapDX, snapDY = dx, dy
                 local EM2Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
                 if EM2Snap and EM2Snap.IsEnabled and EM2Snap.IsEnabled() and EM2Snap.Apply then
-                    EM2Snap.HideGuides()
                     local rawCX = (self._snapStartCX or 0) + dx
                     local rawCY = (self._snapStartCY or 0) + dy
                     local hw = self._snapHW or 0

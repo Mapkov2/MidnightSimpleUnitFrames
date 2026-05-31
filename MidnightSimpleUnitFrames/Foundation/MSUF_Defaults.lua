@@ -602,24 +602,6 @@ end
 if g.showMinimapIcon == nil then
     g.showMinimapIcon = true
 end
-if g.rangeFadeEnabled == nil then
-    g.rangeFadeEnabled = true
-end
-if g.rangeFadeInAlpha == nil then
-    g.rangeFadeInAlpha = 1
-end
-if g.rangeFadeOutAlpha == nil then
-    g.rangeFadeOutAlpha = tonumber(g.rangeFadeAlpha) or 0.5
-end
-if g.rangeFadeAlpha == nil then
-    g.rangeFadeAlpha = g.rangeFadeOutAlpha
-end
-if g.rangeFadeLayerMode == nil then
-    g.rangeFadeLayerMode = "frame"
-end
-if g.rangeFadePortrait == nil then
-    g.rangeFadePortrait = false
-end
 if g.dropdownStyleMode == nil then
     g.dropdownStyleMode = "msuf"
 elseif g.dropdownStyleMode ~= "old" and g.dropdownStyleMode ~= "msuf" and g.dropdownStyleMode ~= "blizzard" and g.dropdownStyleMode ~= "legacy" then

@@ -202,6 +202,9 @@ function State.GetUnitKey()    return unitKey end
 function State.SetUnitKey(key)
     unitKey = key
     SyncLegacy()
+    if EM2.Focus and EM2.Focus.SetSelection then
+        EM2.Focus.SetSelection(key, nil, nil, { source = "state", syncState = false })
+    end
 end
 
 function State.SetPopupOpen(open)
@@ -210,7 +213,10 @@ function State.SetPopupOpen(open)
 end
 
 --- Global snapshot for Cancel All (restore pre-edit-mode state)
-local SNAPSHOT_KEYS = {"player","target","focus","focustarget","targettarget","pet","boss","general","auras3"}
+local SNAPSHOT_KEYS = {
+    "player", "target", "focus", "focustarget", "targettarget", "pet", "boss",
+    "general", "auras3", "gf_party", "gf_raid", "gf_mythicraid",
+}
 local _snapshot = nil
 
 local function GetDeepCopy()
@@ -343,6 +349,7 @@ function State.Enter(key)
     if EM2.Grid   and EM2.Grid.Show   then EM2.Grid.Show()   end
     if EM2.HUD    and EM2.HUD.Show    then EM2.HUD.Show()    end
     if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
+    if EM2.Focus  and EM2.Focus.Show   then EM2.Focus.Show(unitKey) end
 end
 
 --- EXIT Edit Mode
@@ -356,6 +363,7 @@ function State.Exit(source)
     if EM2.Movers and EM2.Movers.Hide then EM2.Movers.Hide() end
     if EM2.HUD    and EM2.HUD.Hide    then EM2.HUD.Hide()    end
     if EM2.Grid   and EM2.Grid.Hide   then EM2.Grid.Hide()   end
+    if EM2.Focus  and EM2.Focus.Hide   then EM2.Focus.Hide()  end
 
     --- Close all popups
     if EM2.Popups and EM2.Popups.CloseAll then
@@ -415,6 +423,7 @@ function State.CancelAll()
     if EM2.Movers and EM2.Movers.Hide then EM2.Movers.Hide() end
     if EM2.HUD    and EM2.HUD.Hide    then EM2.HUD.Hide()    end
     if EM2.Grid   and EM2.Grid.Hide   then EM2.Grid.Hide()   end
+    if EM2.Focus  and EM2.Focus.Hide   then EM2.Focus.Hide()  end
     if EM2.Popups and EM2.Popups.CloseAll then EM2.Popups.CloseAll() end
 
     active  = false
@@ -472,6 +481,7 @@ State.EnsureCombatListener()
 function EM2.OnUnitChanged(key)
     if EM2.HUD    and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
     if EM2.Movers and EM2.Movers.RefreshSelection then EM2.Movers.RefreshSelection(key) end
+    if EM2.Focus  and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "state", syncState = false }) end
 end
 
 --- MSUF_EM2_Undo.lua
@@ -514,6 +524,14 @@ local function DeepRestore(dst, src)
     end
 end
 
+local function ResolveGFDBKey(key)
+    if key == "party" then return "gf_party" end
+    if key == "raid" then return "gf_raid" end
+    if key == "mythicraid" then return "gf_mythicraid" end
+    if key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid" then return key end
+    return nil
+end
+
 local function CaptureState(category, key)
     local db = _G.MSUF_DB
     if not db then return nil end
@@ -524,6 +542,11 @@ local function CaptureState(category, key)
         snap.data = DeepCopy(db.general or {})
     elseif category == "aura" then
         snap.data = DeepCopy(db.auras3 or {})
+    elseif category == "gf" then
+        local dbKey = ResolveGFDBKey(key)
+        if not dbKey then return nil end
+        snap.dbKey = dbKey
+        snap.data = DeepCopy(db[dbKey] or {})
     end
     return snap
 end
@@ -547,6 +570,18 @@ local function RestoreState(snap)
         db.auras3 = db.auras3 or {}
         DeepRestore(db.auras3, snap.data)
         if _G.MSUF_Auras3_RefreshAll then _G.MSUF_Auras3_RefreshAll() end
+    elseif snap.category == "gf" then
+        local dbKey = snap.dbKey or ResolveGFDBKey(snap.key)
+        if dbKey then
+            db[dbKey] = db[dbKey] or {}
+            DeepRestore(db[dbKey], snap.data)
+            if _G.MSUF_GF_RefreshAll then
+                _G.MSUF_GF_RefreshAll()
+            elseif _G.MSUF_GF_RebuildAll then
+                _G.MSUF_GF_RebuildAll()
+            end
+            if _G.MSUF_EM2_SyncGFPopups then _G.MSUF_EM2_SyncGFPopups() end
+        end
     end
 
     if _G.MSUF_UpdateAllFonts then _G.MSUF_UpdateAllFonts() end
