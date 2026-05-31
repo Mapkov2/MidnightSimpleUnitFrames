@@ -1,5 +1,54 @@
 # Midnight Simple Unit Frames Changelog
 
+## 6.0 Preview 2 - 2026-06-01
+
+### Preview Channel
+- Local preview package for the second 6.0 Menu2/Edit Mode test build.
+- Version metadata is prepared as `6.0-preview2` for local install testing.
+- This remains a preview-only build and is not a stable public release.
+
+### Menu2 Architecture
+- Split the large Unit Frame page into focused lazy-loaded sections for text, range fade, alpha, and frame visuals.
+- Split group-frame preview rendering, handles, rounded masks, text focus, zoom, pan, and specs into dedicated Menu2 modules.
+- Added shared Menu2 theme tokens and control gates so dense settings pages can share consistent enabled, disabled, locked, and preview-only states.
+- Added group specs and advanced aura specs modules so repeated dropdown, texture, and aura option data is maintained in one place.
+- Reworked Menu2 XML load order for the new page, preview, search, and theme modules.
+
+### Search And Guidance
+- Rebuilt Menu2 search around smaller keyword, alias, routing, and FAQ catalog modules.
+- Added FAQ search coverage for common setup, layout, unit, group, aura, visibility, and troubleshooting questions.
+- Reduced the large generated search data surface by moving reusable query text and routing behavior into focused files.
+
+### Preview And Interaction
+- Added reusable zoom and pan helpers for unit and group previews.
+- Moved unit-preview runtime and rendering work out of the view shell so preview refreshes are easier to reason about.
+- Added dedicated group-preview handle rendering and text-focus helpers for clearer direct manipulation.
+- Improved live preview/status rendering for selected unit-frame and group-frame controls.
+
+### Edit Mode
+- Split Edit Mode popup scale, castbar, and aura popup behavior into dedicated modules.
+- Reworked the tooltip edit popup to use the Menu2 visual style, larger action layout, draggable placement, and shared popup scaling.
+- Refined Edit Mode HUD, focus, layout, and mover behavior around the slimmer popup model.
+- Kept edit popups closer to the same visual and interaction language as Menu2.
+
+### Runtime And Defaults
+- Added the unit-frame range-fade runtime element and defaulted range fade settings for supported unit frames.
+- Removed old dispel overlay/state load paths that no longer match the paused 6.0 aura backend.
+- Removed the old Auras3 group-filtering runtime path while keeping the remaining menu/model surfaces.
+- Cleaned group indicator, status, visual, spell-registry, metadata, and preview paths around the current 6.0 runtime shape.
+- Updated unit-frame alpha, border, prediction, text, metadata, config, and dispatch paths for the new range/visual split.
+
+### Visual Assets And Docs
+- Added Menu2 HIG and checkbox preview mockups under `docs/`.
+- Added checkbox edge/fill media assets used by the updated Menu2 checkbox treatment.
+- Refreshed the minimap icon asset for the preview package.
+
+### Fixes
+- Fixed range-fade defaults so existing profiles receive the expected per-unit fallback values.
+- Fixed tooltip edit popup placement and resizing behavior for the new Edit Mode popup style.
+- Fixed Menu2 preview module boundaries so rendering helpers can be reused without rebuilding full page shells.
+- Fixed stale load references to removed aura and dispel runtime files.
+
 ## 6.0 Preview 1 - 2026-05-31
 
 ### Preview Channel

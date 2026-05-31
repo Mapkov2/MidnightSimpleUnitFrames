@@ -4,10 +4,87 @@ local _, ns = ...
 ns = ns or {}
 
 local data = {
-    currentVersion = "6.0 Preview 1",
-    previousVersion = "6.0 Alpha 4",
-    rangeLabel = "6.0 Alpha 4 -> 6.0 Preview 1",
+    currentVersion = "6.0 Preview 2",
+    previousVersion = "6.0 Preview 1",
+    rangeLabel = "6.0 Preview 1 -> 6.0 Preview 2",
     entries = {
+        {
+            version = "6.0 Preview 2",
+            date = "2026-06-01",
+            sections = {
+                {
+                    title = "Preview Channel",
+                    bullets = {
+                        "Local preview package for the second 6.0 Menu2/Edit Mode test build.",
+                        "Version metadata is prepared as 6.0-preview2 for local install testing.",
+                        "This remains a preview-only build and is not a stable public release.",
+                    },
+                },
+                {
+                    title = "Menu2 Architecture",
+                    bullets = {
+                        "Split the large Unit Frame page into focused lazy-loaded sections for text, range fade, alpha, and frame visuals.",
+                        "Split group-frame preview rendering, handles, rounded masks, text focus, zoom, pan, and specs into dedicated Menu2 modules.",
+                        "Added shared Menu2 theme tokens and control gates so dense settings pages can share consistent enabled, disabled, locked, and preview-only states.",
+                        "Added group specs and advanced aura specs modules so repeated dropdown, texture, and aura option data is maintained in one place.",
+                        "Reworked Menu2 XML load order for the new page, preview, search, and theme modules.",
+                    },
+                },
+                {
+                    title = "Search And Guidance",
+                    bullets = {
+                        "Rebuilt Menu2 search around smaller keyword, alias, routing, and FAQ catalog modules.",
+                        "Added FAQ search coverage for common setup, layout, unit, group, aura, visibility, and troubleshooting questions.",
+                        "Reduced the large generated search data surface by moving reusable query text and routing behavior into focused files.",
+                    },
+                },
+                {
+                    title = "Preview And Interaction",
+                    bullets = {
+                        "Added reusable zoom and pan helpers for unit and group previews.",
+                        "Moved unit-preview runtime and rendering work out of the view shell so preview refreshes are easier to reason about.",
+                        "Added dedicated group-preview handle rendering and text-focus helpers for clearer direct manipulation.",
+                        "Improved live preview/status rendering for selected unit-frame and group-frame controls.",
+                    },
+                },
+                {
+                    title = "Edit Mode",
+                    bullets = {
+                        "Split Edit Mode popup scale, castbar, and aura popup behavior into dedicated modules.",
+                        "Reworked the tooltip edit popup to use the Menu2 visual style, larger action layout, draggable placement, and shared popup scaling.",
+                        "Refined Edit Mode HUD, focus, layout, and mover behavior around the slimmer popup model.",
+                        "Kept edit popups closer to the same visual and interaction language as Menu2.",
+                    },
+                },
+                {
+                    title = "Runtime And Defaults",
+                    bullets = {
+                        "Added the unit-frame range-fade runtime element and defaulted range fade settings for supported unit frames.",
+                        "Removed old dispel overlay/state load paths that no longer match the paused 6.0 aura backend.",
+                        "Removed the old Auras3 group-filtering runtime path while keeping the remaining menu/model surfaces.",
+                        "Cleaned group indicator, status, visual, spell-registry, metadata, and preview paths around the current 6.0 runtime shape.",
+                        "Updated unit-frame alpha, border, prediction, text, metadata, config, and dispatch paths for the new range/visual split.",
+                    },
+                },
+                {
+                    title = "Visual Assets And Docs",
+                    bullets = {
+                        "Added Menu2 HIG and checkbox preview mockups under docs/.",
+                        "Added checkbox edge/fill media assets used by the updated Menu2 checkbox treatment.",
+                        "Refreshed the minimap icon asset for the preview package.",
+                    },
+                },
+                {
+                    title = "Fixes",
+                    bullets = {
+                        "Fixed range-fade defaults so existing profiles receive the expected per-unit fallback values.",
+                        "Fixed tooltip edit popup placement and resizing behavior for the new Edit Mode popup style.",
+                        "Fixed Menu2 preview module boundaries so rendering helpers can be reused without rebuilding full page shells.",
+                        "Fixed stale load references to removed aura and dispel runtime files.",
+                    },
+                },
+            },
+        },
         {
             version = "6.0 Preview 1",
             date = "2026-05-31",
@@ -161,65 +238,6 @@ local data = {
                         "Removed custom unit-frame aura rendering, group aura cache snapshots, group custom aura lanes, Blizzard/private aura anchoring, and aura cooldown text runtime management.",
                         "Kept Auras3 profile data, menu surfaces, edit-mode handles, and unit/group preview configuration so user settings can survive until a new supported backend is ready.",
                         "Group aura-dependent spell indicators, custom corner aura indicators, dispel overlays, and dispel aura borders no longer register live aura runtime work while the backend is disabled.",
-                    },
-                },
-            },
-        },
-        {
-            version = "6.0 Alpha 2",
-            date = "2026-05-27",
-            sections = {
-                {
-                    title = "Release Channel",
-                    bullets = {
-                        "Alpha-only release for CurseForge and Wago.",
-                        "Wago stability must be alpha; this build is not stable.",
-                        "CurseForge release type must be alpha.",
-                        "The 6.0 line is still a complete backend rewrite from the 5.54/5.x runtime stack, with group frames, unit frame core, Auras3, and castbar integration running through the new backend.",
-                    },
-                },
-                {
-                    title = "Backend Rewrite Follow-Up",
-                    bullets = {
-                        "Folded the separate castbar addon tree into the core addon package so the 6.0 backend ships as one coordinated addon instead of a split runtime.",
-                        "Kept the castbar runtime, boss castbar preview, channel ticks, empower handling, focus kick state, and player castbar bridge in the core package load order.",
-                        "Trimmed unit frame hot paths in health, prediction, text formatting, group aura cache, core dispatch, and frame factory code.",
-                        "Reduced disabled-feature overhead further after Alpha 1, especially around group aura cache scans and repeated unit-frame update paths.",
-                        "Added MSUF_UF_DispelState as the shared state resolver for dispel overlays, glow, border, and group-frame visual consumers.",
-                    },
-                },
-                {
-                    title = "Fixes",
-                    bullets = {
-                        "Fixed absorb, heal prediction, and heal absorb placement so bars use safer resolved anchors and avoid secret-value comparison failures.",
-                        "Restored scoped dispel glow and aggro border behavior for the rewritten visual backend.",
-                        "Fixed group frame visual config paths for dispel borders, glow, and indicator consumers.",
-                        "Optimized 2D portrait refresh so portrait visuals avoid unnecessary rebuild work when the visual state did not change.",
-                        "Fixed texture/runtime handling used by bars and prediction previews after the backend rewrite.",
-                    },
-                },
-                {
-                    title = "Group Frame Preview",
-                    bullets = {
-                        "Added the same preview controls used by Unit Frame Preview: zoom buttons, Fit, 1:1, Ctrl + mouse wheel zoom, and canvas panning.",
-                        "Added Ctrl + left-drag, right-drag, and middle-drag panning for the group preview canvas.",
-                        "Kept handle dragging stable while the preview refreshes by freezing preview scale during drag.",
-                        "Updated preview hints and tooltips so zoom, pan, arrow nudging, Shift nudging, and Ctrl nudging are visible in the UI.",
-                    },
-                },
-                {
-                    title = "Menu And Aura Editing",
-                    bullets = {
-                        "Split Auras3 options into scoped menu sections instead of one overloaded page.",
-                        "Updated menu search data and search indexing for the new aura and group-frame sections.",
-                        "Improved group aura menu bindings for the rewritten group backend.",
-                    },
-                },
-                {
-                    title = "Known Alpha Notes",
-                    bullets = {
-                        "This is still an alpha build. Test profile migration, group frame layout, castbars, aura rendering, dispel overlays, aggro borders, prediction bars, click-casting, Clique, and Wago/CurseForge channel handling.",
-                        "The release tag for this build is 6.0-alpha2; alpha tags are expected to publish to Wago as alpha, never stable.",
                     },
                 },
             },
