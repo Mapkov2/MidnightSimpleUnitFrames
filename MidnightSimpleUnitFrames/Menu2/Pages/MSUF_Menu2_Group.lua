@@ -7,245 +7,48 @@ _G.MSUF2 = M
 
 local W = M.Widgets
 local T = M.Theme
+local ControlGates = M.ControlGates or {}
 
 local floor = math.floor
 local ceil = math.ceil
 local max = math.max
 local min = math.min
-local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
-local WARNING_BG = { 0.105, 0.082, 0.052, 0.44 }
-local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
-local WARNING_NOTICE_BG = { 0.105, 0.082, 0.052, 0.34 }
-local WARNING_NOTICE_TOP = { 0.48, 0.36, 0.20, 0.55 }
-local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
+local Specs = M.GroupSpecs or {}
+local WARNING_HINT = Specs.WARNING_HINT or { 0.90, 0.84, 0.76, 1 }
+local WARNING_BG = Specs.WARNING_BG or { 0.105, 0.082, 0.052, 0.44 }
+local WARNING_ARROW = Specs.WARNING_ARROW or { 0.88, 0.62, 0.22, 1 }
+local WARNING_NOTICE_BG = Specs.WARNING_NOTICE_BG or { 0.105, 0.082, 0.052, 0.34 }
+local WARNING_NOTICE_TOP = Specs.WARNING_NOTICE_TOP or { 0.48, 0.36, 0.20, 0.55 }
+local WARNING_NOTICE_BOTTOM = Specs.WARNING_NOTICE_BOTTOM or { 0.28, 0.21, 0.12, 0.48 }
 
-local SCOPE_VALUES = {
-    { value = "party", text = "Party" },
-    { value = "raid", text = "Raid" },
-    { value = "mythicraid", text = "Mythic Raid" },
-}
-
-local GROWTH_VALUES = {
-    { value = "DOWN", text = "Down" },
-    { value = "UP", text = "Up" },
-    { value = "RIGHT", text = "Right" },
-    { value = "LEFT", text = "Left" },
-}
-
-local BLIZZARD_FALLBACK_VALUES = {
-    { value = "AUTO", text = "Blizzard default" },
-    { value = "SHOW", text = "Force Blizzard frames" },
-    { value = "NONE", text = "Hide all frames" },
-}
-
-local HEALTH_MODES = {
-    { value = "CLASS", text = "Class" },
-    { value = "GRADIENT", text = "Gradient" },
-    { value = "CUSTOM", text = "Custom" },
-}
-
-local TEXT_MODES = {
-    { value = "NONE", text = "None" },
-    { value = "PERCENT", text = "Percent" },
-    { value = "CURRENT", text = "Current" },
-    { value = "MAX", text = "Max" },
-    { value = "DEFICIT", text = "Deficit" },
-    { value = "CURMAX", text = "Current / Max" },
-    { value = "CURPERCENT", text = "Current / Percent" },
-    { value = "CURMAXPERCENT", text = "Current / Max / Percent" },
-    { value = "MAXPERCENT", text = "Max / Percent" },
-    { value = "PERCENTCUR", text = "Percent / Current" },
-    { value = "PERCENTMAX", text = "Percent / Max" },
-    { value = "PERCENTCURMAX", text = "Percent / Current / Max" },
-}
-
-local DELIMITER_VALUES = {
-    { value = " ", text = "Space" },
-    { value = "  ", text = "Double Space" },
-    { value = " / ", text = "/" },
-    { value = " - ", text = "-" },
-    { value = " : ", text = ":" },
-    { value = " | ", text = "|" },
-}
-
-local ANCHORS = {
-    { value = "LEFT", text = "Left" },
-    { value = "CENTER", text = "Center" },
-    { value = "RIGHT", text = "Right" },
-}
-
-local AURA_ANCHORS = {
-    { value = "TOPLEFT", text = "Top Left" },
-    { value = "TOPRIGHT", text = "Top Right" },
-    { value = "BOTTOMLEFT", text = "Bottom Left" },
-    { value = "BOTTOMRIGHT", text = "Bottom Right" },
-}
-
-local GF_RENDERERS = {
-    { value = "BLIZZARD", text = "Blizzard" },
-    { value = "CUSTOM", text = "Custom" },
-}
-
-local GF_AURA_FILTERS = {
-    { value = "RAID", text = "Raid helpful" },
-    { value = "ALL", text = "All" },
-    { value = "PLAYER", text = "Mine only" },
-}
-
-local GF_AURA_ORG = {
-    { value = "default", text = "Default" },
-    { value = "BUFFS_TOP_DEBUFFS_BOTTOM", text = "Buffs Top / Debuffs Bottom" },
-    { value = "BUFFS_RIGHT_DEBUFFS_LEFT", text = "Buffs Right / Debuffs Left" },
-}
-
-local SORT_MODES = {
-    { value = "INDEX", text = "Index (Default)" },
-    { value = "ROLE", text = "By Role" },
-    { value = "GROUP", text = "By Raid Group" },
-    { value = "GROUP_ROLE", text = "Group + Role" },
-    { value = "NAME", text = "Alphabetical" },
-}
-
-local GF_BAR_MODES = {
-    { value = "GLOBAL", text = "Follow Global Style" },
-    { value = "CLASS", text = "Class Color" },
-    { value = "dark", text = "Dark Mode" },
-    { value = "unified", text = "Unified Color" },
-    { value = "GRADIENT", text = "Health Gradient" },
-    { value = "CUSTOM", text = "Custom Color" },
-}
-
-local function SIMPLE_TEXTURES()
-    local ui = MSUF and MSUF.UI
-    if ui and type(ui.StatusBarTextureItems) == "function" then
-        return ui.StatusBarTextureItems("Follow Global Style")
-    end
-    return {
-        { value = "", text = "Follow Global Style" },
-        { value = "Blizzard", text = "Blizzard", texture = "Interface\\TargetingFrame\\UI-StatusBar" },
-        { value = "Solid", text = "Solid", texture = "Interface\\Buttons\\WHITE8X8" },
-        { value = "Flat", text = "Flat", texture = "Interface\\Buttons\\WHITE8X8" },
-        { value = "MSUF Smooth v2", text = "MSUF Smooth v2", texture = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Bars\\Smoothv2.tga" },
-    }
-end
-
-local GF_ANCHOR_TO = {
-    { value = "FREE", text = "Free (UIParent)" },
-    { value = "player", text = "Player Frame" },
-    { value = "target", text = "Target Frame" },
-    { value = "targettarget", text = "Target of Target" },
-    { value = "focustarget", text = "Focus Target" },
-    { value = "focus", text = "Focus Frame" },
-}
-
-local GF_ANCHOR_POINTS = {
-    { value = "TOPLEFT", text = "TOPLEFT" },
-    { value = "TOP", text = "TOP" },
-    { value = "TOPRIGHT", text = "TOPRIGHT" },
-    { value = "LEFT", text = "LEFT" },
-    { value = "CENTER", text = "CENTER" },
-    { value = "RIGHT", text = "RIGHT" },
-    { value = "BOTTOMLEFT", text = "BOTTOMLEFT" },
-    { value = "BOTTOM", text = "BOTTOM" },
-    { value = "BOTTOMRIGHT", text = "BOTTOMRIGHT" },
-}
-
-local TOOLTIP_MODES = {
-    { value = "ALWAYS", text = "Always" },
-    { value = "OOC", text = "Out of Combat" },
-    { value = "MODIFIER", text = "Modifier Key" },
-    { value = "NEVER", text = "Never" },
-}
-
-local TOOLTIP_MODIFIERS = {
-    { value = "ALT", text = "Alt" },
-    { value = "CTRL", text = "Ctrl" },
-    { value = "SHIFT", text = "Shift" },
-}
-
-local STATUS_ICON_ANCHORS = {
-    { value = "TOPLEFT", text = "Top Left" },
-    { value = "TOPRIGHT", text = "Top Right" },
-    { value = "BOTTOMLEFT", text = "Bottom Left" },
-    { value = "BOTTOMRIGHT", text = "Bottom Right" },
-    { value = "CENTER", text = "Center" },
-    { value = "TOP", text = "Top" },
-    { value = "BOTTOM", text = "Bottom" },
-    { value = "LEFT", text = "Left" },
-    { value = "RIGHT", text = "Right" },
-}
-
-local GF_STATUS_ICON_SPECS = {
-    { value = "roleIcon", text = "Role Icon", enabled = "roleIcon", iconStyle = "roleIconStyle", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1 },
-    { value = "leaderIcon", text = "Leader", enabled = "leaderIcon", iconStyle = "leaderIconStyle", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
-    { value = "assistIcon", text = "Assist", enabled = "assistIcon", iconStyle = "assistIconStyle", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
-    { value = "raidMarker", text = "Raid Marker", enabled = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 3 },
-    { value = "readyCheckIcon", text = "Ready Check", enabled = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
-    { value = "summonIcon", text = "Summon", enabled = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
-    { value = "resurrectIcon", text = "Resurrect", enabled = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
-    { value = "phaseIcon", text = "Phase", enabled = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3 },
-    { value = "statusText", text = "Dead Text", enabled = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusOffsetX", y = "statusOffsetY", layer = "statusTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
-    { value = "statusGhostText", text = "Ghost Text", enabled = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", x = "statusGhostOffsetX", y = "statusGhostOffsetY", layer = "statusGhostTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
-    { value = "statusAFKText", text = "AFK / DND Text", enabled = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", x = "statusAFKOffsetX", y = "statusAFKOffsetY", layer = "statusAFKTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
-}
-
-local GF_STATUS_ICON_VALUES = {}
-for i = 1, #GF_STATUS_ICON_SPECS do
-    GF_STATUS_ICON_VALUES[i] = { value = GF_STATUS_ICON_SPECS[i].value, text = GF_STATUS_ICON_SPECS[i].text }
-end
-
-local PLACED_INDICATOR_TYPES = {
-    { value = "none", text = "None" },
-    { value = "icon", text = "Icon" },
-    { value = "square", text = "Square" },
-    { value = "bar", text = "Bar" },
-    { value = "number", text = "Number" },
-}
-
-local FRAME_EFFECT_TYPES = {
-    { value = "none", text = "None" },
-    { value = "healthtint", text = "Health Tint" },
-    { value = "border", text = "Border" },
-    { value = "glow", text = "Glow" },
-    { value = "pulse", text = "Pulse" },
-    { value = "namecolor", text = "Name Color" },
-}
-
-local SPELL_GROWTH_VALUES = {
-    { value = "RIGHTDOWN", text = "Right then Down" },
-    { value = "LEFTDOWN", text = "Left then Down" },
-    { value = "RIGHTUP", text = "Right then Up" },
-    { value = "LEFTUP", text = "Left then Up" },
-}
-
-local CI_SLOT_VALUES = {
-    { value = "TL", text = "Top Left" },
-    { value = "TR", text = "Top Right" },
-    { value = "BL", text = "Bottom Left" },
-    { value = "BR", text = "Bottom Right" },
-    { value = "C", text = "Center" },
-}
-
-local CI_SLOT_DEFAULTS = {
-    TL = "dispel",
-    TR = "aggro",
-    BL = "none",
-    BR = "none",
-    C = "none",
-}
-
-local DISPEL_OVERLAY_STYLES = {
-    { value = "FULL", text = "Full Frame" },
-    { value = "BOTTOM", text = "Bottom Edge" },
-    { value = "TOP", text = "Top Edge" },
-    { value = "LEFT", text = "Left Edge" },
-    { value = "RIGHT", text = "Right Edge" },
-}
-
-local DEBUFF_STRIPE_EDGES = {
-    { value = "BOTTOM", text = "Bottom Edge" },
-    { value = "TOP", text = "Top Edge" },
-}
+local SCOPE_VALUES = Specs.SCOPE_VALUES or {}
+local GROWTH_VALUES = Specs.GROWTH_VALUES or {}
+local BLIZZARD_FALLBACK_VALUES = Specs.BLIZZARD_FALLBACK_VALUES or {}
+local HEALTH_MODES = Specs.HEALTH_MODES or {}
+local TEXT_MODES = Specs.TEXT_MODES or {}
+local DELIMITER_VALUES = Specs.DELIMITER_VALUES or {}
+local ANCHORS = Specs.ANCHORS or {}
+local AURA_ANCHORS = Specs.AURA_ANCHORS or {}
+local GF_RENDERERS = Specs.GF_RENDERERS or {}
+local GF_AURA_FILTERS = Specs.GF_AURA_FILTERS or {}
+local GF_AURA_ORG = Specs.GF_AURA_ORG or {}
+local SORT_MODES = Specs.SORT_MODES or {}
+local GF_BAR_MODES = Specs.GF_BAR_MODES or {}
+local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
+local GF_ANCHOR_TO = Specs.GF_ANCHOR_TO or {}
+local GF_ANCHOR_POINTS = Specs.GF_ANCHOR_POINTS or {}
+local TOOLTIP_MODES = Specs.TOOLTIP_MODES or {}
+local TOOLTIP_MODIFIERS = Specs.TOOLTIP_MODIFIERS or {}
+local STATUS_ICON_ANCHORS = Specs.STATUS_ICON_ANCHORS or {}
+local GF_STATUS_ICON_SPECS = Specs.GF_STATUS_ICON_SPECS or {}
+local GF_STATUS_ICON_VALUES = Specs.GF_STATUS_ICON_VALUES or {}
+local PLACED_INDICATOR_TYPES = Specs.PLACED_INDICATOR_TYPES or {}
+local FRAME_EFFECT_TYPES = Specs.FRAME_EFFECT_TYPES or {}
+local SPELL_GROWTH_VALUES = Specs.SPELL_GROWTH_VALUES or {}
+local CI_SLOT_VALUES = Specs.CI_SLOT_VALUES or {}
+local CI_SLOT_DEFAULTS = Specs.CI_SLOT_DEFAULTS or {}
+local DISPEL_OVERLAY_STYLES = Specs.DISPEL_OVERLAY_STYLES or {}
+local DEBUFF_STRIPE_EDGES = Specs.DEBUFF_STRIPE_EDGES or {}
 
 local pendingGF = {}
 local gfFlushQueued = false
@@ -386,7 +189,7 @@ local GF_COPY_CATEGORIES = {
     { key = "auras", label = "Auras", tables = { "auras" } },
     { key = "highlight", label = "Highlight & Aggro", prefix = { "hl", "dispel" } },
     { key = "dstripe", label = "Debuff Stripe", prefix = { "debuffStripe" } },
-    { key = "features", label = "Corner/Spell/Private", keys = { "ciEnabled", "ciAlpha" }, tables = { "spellIndicators", "privateAuras" }, prefix = { "ci" } },
+    { key = "features", label = "Corner/Spell", keys = { "ciEnabled", "ciAlpha" }, tables = { "spellIndicators" }, prefix = { "ci" } },
 }
 
 local function DeepCopy(value)
@@ -1450,12 +1253,6 @@ local function AuraGroup(kind, groupKey)
     return root[groupKey]
 end
 
-local function PrivateAuras(kind)
-    local conf = Conf(kind)
-    conf.privateAuras = conf.privateAuras or {}
-    return conf.privateAuras
-end
-
 local function SpellIndicators(kind)
     local conf = Conf(kind)
     if type(conf.spellIndicators) ~= "table" then
@@ -1774,6 +1571,13 @@ local function ApplyScopeEnabledGate(ctx)
     local scope = CurrentScope()
     local enabled = Bool(scope, "enabled", false)
     local gateKey = "groupFrameEnabled"
+    if ControlGates.Apply then
+        ControlGates.Apply(wrapper, gateKey, enabled, { alwaysEnabledFlag = "_msuf2GroupFrameGateAlwaysEnabled" })
+        return
+    end
+    if wrapper._msuf2GroupFrameGateKey == gateKey and wrapper._msuf2GroupFrameGateEnabled == enabled then return end
+    wrapper._msuf2GroupFrameGateKey = gateKey
+    wrapper._msuf2GroupFrameGateEnabled = enabled
     ForEachGroupPageControl(wrapper, function(control)
         W.SetControlGateEnabled(control, gateKey, enabled)
     end)
@@ -1818,7 +1622,6 @@ GroupPage.BuildGrowthDirectionTiles = BuildGrowthDirectionTiles
 GroupPage.BuildRoleOrderRows = BuildRoleOrderRows
 GroupPage.AurasRoot = AurasRoot
 GroupPage.AuraGroup = AuraGroup
-GroupPage.PrivateAuras = PrivateAuras
 GroupPage.SpellIndicators = SpellIndicators
 GroupPage.IconStyleValues = IconStyleValues
 GroupPage.CurrentGFStatusSpec = CurrentGFStatusSpec

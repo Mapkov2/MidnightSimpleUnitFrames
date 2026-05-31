@@ -69,7 +69,6 @@ local BuildGrowthDirectionTiles = GP.BuildGrowthDirectionTiles
 local BuildRoleOrderRows = GP.BuildRoleOrderRows
 local AurasRoot = GP.AurasRoot
 local AuraGroup = GP.AuraGroup
-local PrivateAuras = GP.PrivateAuras
 local SpellIndicators = GP.SpellIndicators
 local IconStyleValues = GP.IconStyleValues
 local CurrentGFStatusSpec = GP.CurrentGFStatusSpec
@@ -303,6 +302,13 @@ local function BuildGFIndicators(ctx)
     local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 258)
     local previewCard = W.ControlCard(siconBasicTab, "Status Preview", nil, siconRightX, -38, siconRightW, 118)
     local placementCard = W.ControlCard(siconBasicTab, "Placement", nil, siconRightX, -174, siconRightW, 322)
+    local function RefreshStatusIconMenu()
+        if M.Refresh then
+            M.Refresh(ctx)
+        elseif M.SelectPage then
+            M.SelectPage(ctx.key)
+        end
+    end
 
     local iconStyle = BindScopeDropdown(ctx, W.Dropdown(styleCard, "Icon style", IconStyleValues, siconLeftW), "iconStyle", "BLIZZARD", "visual")
     W.MoveWidget(iconStyle, styleCard, 16, -56, siconLeftW - 32, "LEFT")
@@ -321,7 +327,7 @@ local function BuildGFIndicators(ctx)
                     end
                     local gf = GF()
                     if gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(value) end
-                    if M.SelectPage then M.SelectPage(ctx.key) end
+                    RefreshStatusIconMenu()
                     return
                 end
             end
@@ -338,7 +344,7 @@ local function BuildGFIndicators(ctx)
         function(value)
             local spec = CurrentGFStatusSpec()
             Set(CurrentScope(), spec.enabled, value and true or false, "visual")
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshStatusIconMenu()
         end)
 
     local iconPack = W.Dropdown(selectedCard, "Icon pack", IconPackValues, siconLeftW)
@@ -420,7 +426,7 @@ local function BuildGFIndicators(ctx)
             end
         end
         QueueGF(kind, "visual")
-        if M.SelectPage then M.SelectPage(ctx.key) end
+        RefreshStatusIconMenu()
     end)
     statusReset:ClearAllPoints()
     statusReset:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -86)

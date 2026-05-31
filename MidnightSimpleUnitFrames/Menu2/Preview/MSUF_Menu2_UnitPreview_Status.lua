@@ -15,91 +15,48 @@ local FontColor = PreviewModel.FontColor
 local Status = MSUF.UFPreviewStatus or {}
 MSUF.UFPreviewStatus = Status
 
-function Status.PositionFromAnchor(frame, anchor, x, y, target, size)
-    frame:ClearAllPoints()
-    size = tonumber(size) or 14
+local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)
+    if not (region and frame) then return end
     x = tonumber(x) or 0
     y = tonumber(y) or 0
     anchor = tostring(anchor or "TOPLEFT")
-    if anchor == "TOPRIGHT" then frame:SetPoint("CENTER", target, "TOPRIGHT", x - size * 0.5, y - size * 0.5)
-    elseif anchor == "NAMERIGHT" then frame:SetPoint("LEFT", target, "TOPLEFT", x + 44, y - 8)
-    elseif anchor == "NAMELEFT" then frame:SetPoint("RIGHT", target, "TOPLEFT", x + 2, y - 8)
-    elseif anchor == "TOP" then frame:SetPoint("CENTER", target, "TOP", x, y - size * 0.5)
-    elseif anchor == "BOTTOM" then frame:SetPoint("CENTER", target, "BOTTOM", x, y + size * 0.5)
-    elseif anchor == "LEFT" then frame:SetPoint("CENTER", target, "LEFT", x + size * 0.5, y)
-    elseif anchor == "RIGHT" then frame:SetPoint("CENTER", target, "RIGHT", x - size * 0.5, y)
-    elseif anchor == "BOTTOMLEFT" then frame:SetPoint("CENTER", target, "BOTTOMLEFT", x + size * 0.5, y + size * 0.5)
-    elseif anchor == "BOTTOMRIGHT" then frame:SetPoint("CENTER", target, "BOTTOMRIGHT", x - size * 0.5, y + size * 0.5)
-    elseif anchor == "CENTER" then frame:SetPoint("CENTER", target, "CENTER", x, y)
-    else frame:SetPoint("CENTER", target, "TOPLEFT", x + size * 0.5, y - size * 0.5) end
+    local target, point, relPoint = frame, anchor, anchor
+    if anchor == "NAMERIGHT" then
+        if nameText then
+            target, point, relPoint = nameText, "LEFT", "RIGHT"
+        else
+            point, relPoint = "RIGHT", "RIGHT"
+        end
+    elseif anchor == "NAMELEFT" then
+        if nameText then
+            target, point, relPoint = nameText, "RIGHT", "LEFT"
+        else
+            point, relPoint = "LEFT", "LEFT"
+        end
+    end
+    region:ClearAllPoints()
+    region:SetPoint(point, target, relPoint, x, y)
 end
 
-local function ResolveRuntimeIconLayoutAnchor(anchor, allowCenter)
-    if allowCenter and anchor == "CENTER" then return "CENTER", "CENTER" end
-    if anchor == "TOPRIGHT" then return "RIGHT", "TOPRIGHT" end
-    if anchor == "BOTTOMLEFT" then return "LEFT", "BOTTOMLEFT" end
-    if anchor == "BOTTOMRIGHT" then return "RIGHT", "BOTTOMRIGHT" end
-    return "LEFT", "TOPLEFT"
+function Status.PositionFromAnchor(frame, anchor, x, y, target)
+    AnchorLikeRuntime(frame, anchor, x, y, target)
 end
 
 function Status.PositionRuntimeLayoutIconPreview(frame, anchor, x, y, target, allowCenter)
-    if not frame or not target then return end
-    frame:ClearAllPoints()
-    local point, relPoint = ResolveRuntimeIconLayoutAnchor(tostring(anchor or "TOPLEFT"), allowCenter)
-    frame:SetPoint(point, target, relPoint, tonumber(x) or 0, tonumber(y) or 0)
+    AnchorLikeRuntime(frame, anchor, x, y, target)
 end
 
 function Status.PositionStatusCornerPreview(frame, anchor, x, y, target, pad)
-    if not frame or not target then return end
-    frame:ClearAllPoints()
-    anchor = tostring(anchor or "TOPLEFT")
-    x = tonumber(x) or 0
-    y = tonumber(y) or 0
-    pad = tonumber(pad) or 2
-    if anchor == "CENTER" then
-        frame:SetPoint("CENTER", target, "CENTER", x, y)
-    elseif anchor == "TOPRIGHT" then
-        frame:SetPoint("TOPRIGHT", target, "TOPRIGHT", -pad + x, -pad + y)
-    elseif anchor == "BOTTOMLEFT" then
-        frame:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", pad + x, pad + y)
-    elseif anchor == "BOTTOMRIGHT" then
-        frame:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", -pad + x, pad + y)
-    elseif anchor == "TOP" then
-        frame:SetPoint("TOP", target, "TOP", x, -pad + y)
-    elseif anchor == "BOTTOM" then
-        frame:SetPoint("BOTTOM", target, "BOTTOM", x, pad + y)
-    elseif anchor == "LEFT" then
-        frame:SetPoint("LEFT", target, "LEFT", pad + x, y)
-    elseif anchor == "RIGHT" then
-        frame:SetPoint("RIGHT", target, "RIGHT", -pad + x, y)
-    else
-        frame:SetPoint("TOPLEFT", target, "TOPLEFT", pad + x, -pad + y)
-    end
+    AnchorLikeRuntime(frame, anchor, x, y, target)
 end
 
 function Status.PositionSameAnchorPreview(frame, anchor, x, y, target)
-    if not frame or not target then return end
-    frame:ClearAllPoints()
-    anchor = tostring(anchor or "CENTER")
-    x = tonumber(x) or 0
-    y = tonumber(y) or 0
-    frame:SetPoint(anchor, target, anchor, x, y)
+    AnchorLikeRuntime(frame, anchor, x, y, target)
 end
 
 function Status.PositionLevelPreview(frame, anchor, x, y, mock, gap)
     if not (frame and mock) then return end
-    anchor = tostring(anchor or "NAMERIGHT")
-    gap = tonumber(gap) or 6
-    local nameVisible = mock.nameText and (not mock.nameText.IsShown or mock.nameText:IsShown())
-    if anchor == "NAMELEFT" and nameVisible then
-        frame:SetPoint("RIGHT", mock.nameText, "LEFT", -gap + x, y)
-    elseif anchor == "NAMERIGHT" and nameVisible then
-        frame:SetPoint("LEFT", mock.nameText, "RIGHT", gap + x, y)
-    elseif anchor == "NAMELEFT" or anchor == "NAMERIGHT" then
-        Status.PositionSameAnchorPreview(frame, "CENTER", x, y, mock.textFrame or mock)
-    else
-        Status.PositionSameAnchorPreview(frame, anchor, x, y, mock.textFrame or mock)
-    end
+    AnchorLikeRuntime(frame, anchor or "NAMERIGHT", x, y, mock, mock.nameText)
 end
 
 local function StatusSymbolTexture(symbolKey)
@@ -113,6 +70,24 @@ local function StatusSymbolTexture(symbolKey)
         folder, suffix = "Ress", mid and "_midnight_64.tga" or "_classic_64.tga"
     end
     return SYMBOL_MEDIA .. folder .. "\\" .. symbolKey .. suffix
+end
+
+function Status.StatusTextPreviewText(source)
+    local cfg
+    if type(source) == "table" and (source.showDead ~= nil or source.showGhost ~= nil or source.showAFK ~= nil or source.showDND ~= nil) then
+        cfg = source
+    else
+        cfg = type(source) == "table" and type(source.statusIndicators) == "table" and source.statusIndicators or nil
+    end
+    local showDead = cfg == nil or cfg.showDead ~= false
+    local showGhost = cfg == nil or cfg.showGhost ~= false
+    local showAFK = cfg ~= nil and cfg.showAFK == true
+    local showDND = cfg ~= nil and cfg.showDND == true
+    if showDead then return "DEAD" end
+    if showGhost then return "GHOST" end
+    if showAFK then return "AFK" end
+    if showDND then return "DND" end
+    return nil
 end
 
 function Status.CreateIcon(parent, color, text)
@@ -130,7 +105,7 @@ function Status.CreateIcon(parent, color, text)
     return f
 end
 
-function Status.SetIconTexture(icon, spec, conf, g, key, data)
+function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
     if not icon or not spec then return end
     local tex, txt = icon.tex, icon.txt
     if tex then
@@ -148,7 +123,7 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data)
         if tex then
             local isAssist = key == "target"
             local path = isAssist and "Interface\\GroupFrame\\UI-Group-AssistantIcon" or "Interface\\GroupFrame\\UI-Group-LeaderIcon"
-            local style = (conf and conf.leaderIconStyle) or (g and g.leaderIconStyle) or "BLIZZARD"
+            local style = (runtimeCfg and runtimeCfg.style) or (conf and conf.leaderIconStyle) or (g and g.leaderIconStyle) or "BLIZZARD"
             if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
                 local resolver = isAssist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
                 if type(resolver) == "function" then
@@ -168,7 +143,7 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data)
             tex:SetTexture("Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
         end
     elseif spec.id == "statusCombat" then
-        local path = StatusSymbolTexture(conf.combatStateIndicatorSymbol or g.combatStateIndicatorSymbol)
+        local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.combatStateIndicatorSymbol or g.combatStateIndicatorSymbol)
         if tex and path then
             tex:SetTexture(path)
         elseif tex and tex.SetAtlas then
@@ -178,7 +153,7 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data)
             if tex.SetTexCoord then tex:SetTexCoord(0.5, 1, 0, 0.5) end
         end
     elseif spec.id == "statusResting" then
-        local path = StatusSymbolTexture(conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol)
+        local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.restedStateIndicatorSymbol or conf.restingStateIndicatorSymbol or g.restedStateIndicatorSymbol or g.restingStateIndicatorSymbol)
         if tex and path then
             tex:SetTexture(path)
         elseif tex and tex.SetAtlas then
@@ -188,12 +163,12 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data)
             if tex.SetTexCoord then tex:SetTexCoord(0, 0.5, 0, 0.5) end
         end
     elseif spec.id == "statusIncomingRes" then
-        local path = StatusSymbolTexture(conf.incomingResIndicatorSymbol or g.incomingResIndicatorSymbol)
+        local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.incomingResIndicatorSymbol or g.incomingResIndicatorSymbol)
         if tex then tex:SetTexture(path or "Interface\\RaidFrame\\Raid-Icon-Rez") end
     elseif spec.id == "level" or spec.id == "statusText" then
         if tex then tex:Hide() end
         if txt then
-            txt:SetText(spec.id == "level" and (data.level or "80") or "DEAD")
+            txt:SetText(spec.id == "level" and (data.level or "80") or (Status.StatusTextPreviewText(runtimeCfg or g) or ""))
             txt:SetTextColor(FontColor())
             txt:Show()
         end

@@ -422,6 +422,7 @@ local COPY_FRAME_BASIC_FIELDS = {
 
 local COPY_TRANSPARENCY_FIELDS = {
     "alphaInCombat", "alphaOutOfCombat", "alphaSync", "alphaSyncBoth",
+    "rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode",
 }
 
 local COPY_LOAD_CONDITION_FIELDS = {

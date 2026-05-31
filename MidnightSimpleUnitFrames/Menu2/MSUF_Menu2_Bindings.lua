@@ -398,6 +398,7 @@ local function ApplyHistorySnapshot(snapshot, reason)
         if type(MSUF.GF.RefreshVisuals) == "function" then pcall(MSUF.GF.RefreshVisuals) end
     end
     if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
+    if M.MarkMenuDataDirty then M.MarkMenuDataDirty(reason or "history") end
     RebuildActivePage()
     return true
 end
@@ -409,7 +410,11 @@ end
 function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
-    if historyDepth > 0 or historyRestoring then return fn() end
+    if historyDepth > 0 or historyRestoring then
+        local result = fn()
+        if result ~= false and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
+        return result
+    end
 
     local before = CurrentHistorySnapshot()
     historyDepth = historyDepth + 1
@@ -422,7 +427,8 @@ function M.CaptureHistory(label, source, fn)
         return nil
     end
     if result == false then return result end
-    PushHistory(label, source, before, SnapshotDB())
+    local pushed = PushHistory(label, source, before, SnapshotDB())
+    if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return result
 end
 
@@ -459,7 +465,9 @@ function M.CheckpointHistory(label, source)
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
     local before = CurrentHistorySnapshot()
     local after = SnapshotDB()
-    return PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
+    local pushed = PushHistory(label or "MSUF2 change", source or "menu:checkpoint", before, after)
+    if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
+    return pushed
 end
 
 function M.BeginHistoryTransaction(label, source)
@@ -479,7 +487,9 @@ function M.CommitHistoryTransaction()
     if not tx then return false end
     historyTransaction = nil
     historyDepth = math.max(0, historyDepth - 1)
-    return PushHistory(tx.label, tx.source, tx.before, SnapshotDB())
+    local pushed = PushHistory(tx.label, tx.source, tx.before, SnapshotDB())
+    if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
+    return pushed
 end
 
 function M.CancelHistoryTransaction()
@@ -702,27 +712,22 @@ local PAGE_RESET_INFO = {
     auras3 = {
         label = "Auras",
         kind = "auras",
-        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout, timer text and private aura settings",
+        summary = "scope-aware Buff and Debuff visibility for unit and group frames",
     },
     auras3_rendering = {
-        label = "Aura Rendering",
+        label = "Auras",
         kind = "auras",
-        summary = "Auras3 shared settings, per-unit aura overrides, renderer state, filters, caps, layout and timer text",
+        summary = "scope-aware Buff and Debuff visibility for unit and group frames",
     },
     auras3_filters = {
-        label = "Aura Filters & Blacklist",
+        label = "Aura Filters",
         kind = "auras",
-        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout and timer text",
+        summary = "scope-aware Buff and Debuff filters and blacklists",
     },
     auras3_styling = {
-        label = "Aura Styling",
+        label = "Aura Style",
         kind = "auras",
-        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout and timer text",
-    },
-    auras3_private = {
-        label = "Private Auras",
-        kind = "auras",
-        summary = "Auras3 shared settings, per-unit aura overrides, filters, caps, layout and timer text",
+        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
     },
     opt_castbar = {
         label = "Castbar",
@@ -1432,11 +1437,17 @@ function M.AddRefresher(ctx, fn)
 end
 
 function M.Refresh(ctx)
-    local refreshers = ctx and ctx.refreshers
-    if not refreshers then
-        local entry = M.activeKey and M.cache and M.cache[M.activeKey]
-        refreshers = entry and entry.refreshers
+    if M.MarkMenuDataDirty then M.MarkMenuDataDirty("refresh") end
+    local entry = ctx and ctx.entry
+    if not entry then
+        entry = M.activeKey and M.cache and M.cache[M.activeKey]
     end
+    if entry and M.RunEntryRefreshers then
+        M.RunEntryRefreshers(entry, { force = true })
+        return
+    end
+    local refreshers = ctx and ctx.refreshers
+    if not refreshers then refreshers = entry and entry.refreshers end
     if not refreshers then return end
     for i = 1, #refreshers do
         local fn = refreshers[i]

@@ -237,7 +237,8 @@ local function LaneBounds(cfg, kind, frameW, frameH)
     }
 end
 
-function Auras.BuildState(key, frameW, frameH)
+function Auras.BuildState(key, frameW, frameH, runtimeSpec)
+    local runtimeAuras = runtimeSpec and runtimeSpec.auras
     local model = MenuModel()
     key = Auras.PreviewUnitKey(key)
     if not (key and model and type(model.ReadPreviewConfig) == "function") then return nil end
@@ -246,7 +247,7 @@ function Auras.BuildState(key, frameW, frameH)
     local buff = LaneBounds(cfg, "buff", frameW, frameH)
     local debuff = LaneBounds(cfg, "debuff", frameW, frameH)
     if not buff and not debuff then return nil end
-    return { unit = key, cfg = cfg, buff = buff, debuff = debuff }
+    return { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
 end
 
 function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)

@@ -8,103 +8,7 @@ _G.MSUF2 = M
 local T = M.Theme or {}
 M.Theme = T
 
-local ADDON = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
-local ADDON_PATH = "Interface\\AddOns\\" .. ADDON .. "\\"
-T.media = T.media or {
-    superellipse = ADDON_PATH .. "Media\\superellipse.tga",
-    checkTick = ADDON_PATH .. "Media\\msuf_check_tick_bold.tga",
-    checkRim = ADDON_PATH .. "Media\\msuf_check_superellipse_hole.tga",
-    dropdownChevron = ADDON_PATH .. "Media\\msuf_dropdown_chevron_down.tga",
-    collapseArrow = "Interface\\ChatFrame\\ChatFrameExpandArrow",
-    sliderThumb = ADDON_PATH .. "Media\\msuf_slider_thumb.tga",
-    switchTrack = ADDON_PATH .. "Media\\msuf_switch_track.tga",
-    switchKnob = ADDON_PATH .. "Media\\msuf_switch_knob.tga",
-    bgSmooth = ADDON_PATH .. "Media\\Bars\\Smoothv2.tga",
-    bgCharcoal = ADDON_PATH .. "Media\\Bars\\Charcoal.tga",
-    logo = ADDON_PATH .. "Media\\MSUF_MinimapIcon.tga",
-    navIcons = ADDON_PATH .. "Media\\msuf_nav_icons",
-    historyUndo = ADDON_PATH .. "Media\\msuf_history_undo_red.png",
-    historyRedo = ADDON_PATH .. "Media\\msuf_history_redo_green.png",
-}
-T.media.gradH = T.media.gradH or ADDON_PATH .. "Media\\MSUF_Grad_H.tga"
-T.media.gradHRev = T.media.gradHRev or ADDON_PATH .. "Media\\MSUF_Grad_H_Rev.tga"
-T.media.gradV = T.media.gradV or ADDON_PATH .. "Media\\MSUF_Grad_V.tga"
-T.media.gradVRev = T.media.gradVRev or ADDON_PATH .. "Media\\MSUF_Grad_V_Rev.tga"
-
-T.colors = {
-    bg = { 0.040, 0.046, 0.064, 0.985 },
-    panel = { 0.040, 0.048, 0.070, 0.300 },
-    panelNav = { 0.038, 0.048, 0.076, 0.390 },
-    panel2 = { 0.038, 0.046, 0.072, 0.955 },
-    header = { 0.044, 0.052, 0.080, 0.280 },
-    border = { 0.105, 0.130, 0.220, 0.660 },
-    borderSoft = { 0.105, 0.130, 0.220, 0.300 },
-    cardBorder = { 0.105, 0.130, 0.220, 0.320 },
-    text = { 0.880, 0.910, 1.000, 1.00 },
-    title = { 0.890, 0.940, 1.000, 1.00 },
-    muted = { 0.690, 0.735, 0.840, 0.90 },
-    dim = { 0.500, 0.580, 0.720, 0.86 },
-    accent = { 0.180, 0.720, 0.900, 1.00 },
-    accent2 = { 0.965, 0.760, 0.150, 1.00 },
-    danger = { 0.880, 0.280, 0.280, 1.00 },
-    ok = { 0.240, 0.820, 0.460, 1.00 },
-    pillBase = { 0.050, 0.062, 0.105, 0.88 },
-    pillBaseSolid = { 0.052, 0.066, 0.112, 0.92 },
-    pillHover = { 0.068, 0.084, 0.140, 0.95 },
-    pillActive = { 0.120, 0.185, 0.430, 0.95 },
-    pillEdge = { 0.130, 0.165, 0.290, 0.38 },
-    pillEdgeButton = { 0.130, 0.165, 0.290, 0.52 },
-    pillEdgeHover = { 0.150, 0.280, 0.540, 0.66 },
-    pillEdgeActive = { 0.210, 0.420, 0.860, 0.76 },
-    pillText = { 0.820, 0.890, 1.000, 0.94 },
-    pillTextActive = { 0.920, 0.960, 1.000, 1.00 },
-    navPillBase = { 0.064, 0.088, 0.170, 0.92 },
-    navPillBaseSolid = { 0.072, 0.098, 0.188, 0.94 },
-    navPillHover = { 0.094, 0.128, 0.252, 0.96 },
-    navPillActive = { 0.235, 0.375, 0.920, 0.99 },
-    navPillEdge = { 0.135, 0.180, 0.350, 0.42 },
-    navPillEdgeHover = { 0.220, 0.350, 0.760, 0.62 },
-    navPillEdgeActive = { 0.380, 0.560, 0.960, 0.80 },
-    navText = { 0.840, 0.900, 1.000, 0.96 },
-    navTextActive = { 0.970, 0.990, 1.000, 1.00 },
-    navHeaderText = { 0.680, 0.780, 1.000, 0.96 },
-    navHeaderHover = { 0.780, 0.860, 1.000, 1.00 },
-    navArrowOpen = { 1.000, 0.760, 0.250, 1.00 },
-    navArrowClosed = { 1.000, 0.560, 0.060, 1.00 },
-    glassShell = { 0.026, 0.032, 0.052, 0.955 },
-    glassRail = { 0.028, 0.036, 0.064, 0.760 },
-    glassHost = { 0.030, 0.038, 0.066, 0.680 },
-    glassStatus = { 0.032, 0.040, 0.070, 0.560 },
-    glassPopup = { 0.008, 0.012, 0.022, 0.950 },
-    guide = { 0.180, 0.720, 0.900, 0.82 },
-    focus = { 0.115, 0.220, 0.460, 0.62 },
-    warning = { 0.920, 0.680, 0.250, 1.00 },
-}
-
-T.fontBump = T.fontBump or 1
-
-T.navIconGrid = {
-    home = { 0, 0 },
-    uf_player = { 1, 0 }, uf_target = { 3, 0 }, uf_targettarget = { 2, 0 }, uf_focustarget = { 2, 0 },
-    uf_focus = { 2, 0 }, uf_boss = { 6, 2 }, uf_pet = { 6, 0 },
-    opt_bars = { 7, 0 }, opt_fonts = { 0, 1 }, auras3 = { 3, 1 },
-    opt_castbar = { 2, 1 }, opt_misc = { 4, 2 }, opt_colors = { 4, 1 },
-    classpower = { 0, 2 }, gameplay = { 7, 1 },
-    groupframes = { 1, 2 }, gf_layout = { 2, 2 }, gf_bars = { 3, 2 }, gf_auras = { 3, 1 }, gf_indicators = { 6, 1 },
-    modules = { 4, 2 }, profiles = { 5, 2 },
-}
-
-T.navIconColors = {
-    home = { 0.30, 0.60, 1.00 },
-    uf_player = { 0.40, 0.78, 0.98 }, uf_target = { 0.40, 0.78, 0.98 }, uf_targettarget = { 0.40, 0.78, 0.98 }, uf_focustarget = { 0.40, 0.78, 0.98 },
-    uf_focus = { 0.40, 0.78, 0.98 }, uf_boss = { 0.40, 0.78, 0.98 }, uf_pet = { 0.40, 0.78, 0.98 },
-    opt_bars = { 0.88, 0.74, 0.36 }, opt_fonts = { 0.88, 0.74, 0.36 }, auras3 = { 0.88, 0.74, 0.36 },
-    opt_castbar = { 0.88, 0.74, 0.36 }, opt_misc = { 0.88, 0.74, 0.36 }, opt_colors = { 0.88, 0.74, 0.36 },
-    classpower = { 0.35, 0.82, 0.50 }, gameplay = { 0.72, 0.50, 0.92 },
-    groupframes = { 0.45, 0.75, 0.88 }, gf_layout = { 0.45, 0.75, 0.88 }, gf_bars = { 0.45, 0.75, 0.88 },
-    gf_auras = { 0.45, 0.75, 0.88 }, gf_indicators = { 0.45, 0.75, 0.88 },
-    modules = { 0.40, 0.80, 0.75 }, profiles = { 0.90, 0.62, 0.30 },
-}
+local GLASS_VARIANTS = T.glassVariants or {}
 
 local function Template()
     return _G.BackdropTemplateMixin and "BackdropTemplate" or nil
@@ -467,152 +371,6 @@ function T.ApplyBackdrop(frame, bg, border)
     end
     return frame
 end
-
-local GLASS_VARIANTS = {
-    shell = {
-        tint = { 0.020, 0.026, 0.048, 0.18 },
-        wash = { 0.070, 0.105, 0.190, 0.070 },
-        depth = { 0.010, 0.014, 0.034, 0.14 },
-        grain = { 0.060, 0.070, 0.115, 0.046 },
-        top = { 0.220, 0.620, 0.900, 0.18 },
-        bottom = { 0.000, 0.000, 0.000, 0.24 },
-    },
-    rail = {
-        tint = { 0.016, 0.024, 0.048, 0.16 },
-        wash = { 0.058, 0.088, 0.180, 0.065 },
-        grain = { 0.050, 0.060, 0.108, 0.044 },
-        top = { 0.210, 0.560, 0.860, 0.14 },
-        bottom = { 0.000, 0.000, 0.000, 0.20 },
-    },
-    host = {
-        tint = { 0.016, 0.024, 0.052, 0.135 },
-        wash = { 0.058, 0.094, 0.190, 0.058 },
-        depth = { 0.012, 0.014, 0.040, 0.105 },
-        grain = { 0.052, 0.058, 0.108, 0.036 },
-        top = { 0.210, 0.610, 0.900, 0.12 },
-        bottom = { 0.000, 0.000, 0.000, 0.21 },
-    },
-    status = {
-        tint = { 0.020, 0.030, 0.060, 0.20 },
-        wash = { 0.080, 0.120, 0.230, 0.080 },
-        top = { 0.300, 0.800, 1.000, 0.24 },
-        bottom = { 0.000, 0.000, 0.000, 0.20 },
-    },
-    popup = {
-        tint = { 0.008, 0.012, 0.024, 0.20 },
-        wash = { 0.050, 0.090, 0.180, 0.084 },
-        grain = { 0.060, 0.070, 0.115, 0.048 },
-        top = { 0.230, 0.680, 0.920, 0.20 },
-        bottom = { 0.000, 0.000, 0.000, 0.24 },
-    },
-    card = {
-        tint = { 0.012, 0.018, 0.034, 0.105 },
-        wash = { 0.038, 0.066, 0.132, 0.036 },
-        top = { 0.200, 0.560, 0.820, 0.08 },
-        bottom = { 0.000, 0.000, 0.000, 0.14 },
-    },
-}
-
-T.gradients = T.gradients or {}
-local function DefaultGradient(key, spec)
-    if T.gradients[key] == nil then T.gradients[key] = spec end
-end
-DefaultGradient("shell", { orientation = "VERTICAL", from = { 0.070, 0.096, 0.170, 0.40 }, to = { 0.008, 0.012, 0.026, 0.58 }, inset = 3 })
-DefaultGradient("rail", { orientation = "VERTICAL", from = { 0.060, 0.088, 0.170, 0.32 }, to = { 0.010, 0.014, 0.030, 0.46 }, inset = 3 })
-DefaultGradient("host", { orientation = "VERTICAL", from = { 0.052, 0.080, 0.160, 0.28 }, to = { 0.008, 0.012, 0.028, 0.40 }, inset = 3 })
-DefaultGradient("status", { orientation = "VERTICAL", from = { 0.070, 0.110, 0.220, 0.34 }, to = { 0.010, 0.014, 0.030, 0.42 }, inset = 2 })
-DefaultGradient("card", { orientation = "VERTICAL", from = { 0.060, 0.080, 0.142, 0.22 }, to = { 0.006, 0.010, 0.024, 0.34 }, inset = 2 })
-DefaultGradient("popup", { orientation = "VERTICAL", from = { 0.055, 0.088, 0.175, 0.38 }, to = { 0.004, 0.006, 0.014, 0.54 }, inset = 2 })
-DefaultGradient("guide", { orientation = "VERTICAL", from = { 0.090, 0.220, 0.310, 0.24 }, to = { 0.006, 0.020, 0.035, 0.32 }, inset = 2 })
-DefaultGradient("warning", { orientation = "VERTICAL", from = { 0.260, 0.180, 0.080, 0.26 }, to = { 0.044, 0.028, 0.012, 0.36 }, inset = 2 })
-DefaultGradient("button", { orientation = "VERTICAL", amountTop = 0.16, amountBottom = -0.20 })
-DefaultGradient("sliderFill", { orientation = "HORIZONTAL", from = { 0.235, 0.820, 1.000, 0.96 }, to = { 0.115, 0.560, 0.760, 0.86 } })
-
-T.motion = T.motion or {}
-local function DefaultMotion(key, value)
-    if T.motion[key] == nil then T.motion[key] = value end
-end
-DefaultMotion("fast", 0.075)
-DefaultMotion("standard", 0.105)
-DefaultMotion("soft", 0.150)
-DefaultMotion("dropdownIn", 0.095)
-DefaultMotion("dropdownOut", 0.075)
-DefaultMotion("popupIn", 0.105)
-DefaultMotion("popupOut", 0.085)
-DefaultMotion("focusIn", 0.095)
-DefaultMotion("focusOut", 0.080)
-DefaultMotion("accordionIn", 0.135)
-DefaultMotion("accordionOut", 0.105)
-DefaultMotion("contentIn", 0.095)
-DefaultMotion("contentOut", 0.075)
-DefaultMotion("controlFocusIn", 0.060)
-DefaultMotion("controlFocusOut", 0.055)
-DefaultMotion("controlFeedback", 0.100)
-
-T.motionPolicy = T.motionPolicy or {}
-local function DefaultMotionPolicy(key, value)
-    if T.motionPolicy[key] == nil then T.motionPolicy[key] = value end
-end
-DefaultMotionPolicy("min", 0.045)
-DefaultMotionPolicy("max", 0.160)
-DefaultMotionPolicy("popupScaleFrom", 0.988)
-DefaultMotionPolicy("popupScaleOut", 0.994)
-
-T.dropdownMotion = T.dropdownMotion or {}
-if T.dropdownMotion.listFadeIn == nil then T.dropdownMotion.listFadeIn = T.motion.dropdownIn end
-if T.dropdownMotion.listFadeOut == nil then T.dropdownMotion.listFadeOut = T.motion.dropdownOut end
-if T.dropdownMotion.focusFadeIn == nil then T.dropdownMotion.focusFadeIn = T.motion.focusIn end
-if T.dropdownMotion.focusFadeOut == nil then T.dropdownMotion.focusFadeOut = T.motion.focusOut end
-
-T.motionProfiles = T.motionProfiles or {}
-local function DefaultMotionProfile(key, spec)
-    if T.motionProfiles[key] == nil then T.motionProfiles[key] = spec end
-end
-DefaultMotionProfile("dropdownIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "dropdownIn", smoothing = "OUT" })
-DefaultMotionProfile("dropdownOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "dropdownOut", smoothing = "IN" })
-DefaultMotionProfile("popupIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "popupIn", smoothing = "OUT", scaleFrom = T.motionPolicy.popupScaleFrom, scaleTo = 1, scaleOrigin = "CENTER" })
-DefaultMotionProfile("popupOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "popupOut", smoothing = "IN", scaleFrom = 1, scaleTo = T.motionPolicy.popupScaleOut, scaleOrigin = "CENTER" })
-DefaultMotionProfile("focusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "focusIn", smoothing = "OUT" })
-DefaultMotionProfile("focusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "focusOut", smoothing = "IN" })
-DefaultMotionProfile("accordionIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "accordionIn", smoothing = "OUT" })
-DefaultMotionProfile("accordionOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "accordionOut", smoothing = "IN" })
-DefaultMotionProfile("contentIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "contentIn", smoothing = "OUT" })
-DefaultMotionProfile("contentOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "contentOut", smoothing = "IN" })
-DefaultMotionProfile("controlFocusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "controlFocusIn", smoothing = "OUT" })
-DefaultMotionProfile("controlFocusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFocusOut", smoothing = "IN" })
-DefaultMotionProfile("controlFeedback", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFeedback", smoothing = "OUT" })
-
-T.materials = T.materials or {}
-local function DefaultMaterial(key, spec)
-    if T.materials[key] == nil then T.materials[key] = spec end
-end
-DefaultMaterial("shell", { bg = T.colors.glassShell, border = T.colors.border, glass = "shell", gradient = "shell" })
-DefaultMaterial("rail", { bg = T.colors.glassRail, border = T.colors.borderSoft, glass = "rail", gradient = "rail" })
-DefaultMaterial("host", { bg = T.colors.glassHost, border = T.colors.borderSoft, glass = "host", gradient = "host" })
-DefaultMaterial("status", { bg = T.colors.glassStatus, border = T.colors.borderSoft, glass = "status", gradient = "status" })
-DefaultMaterial("card", { bg = T.colors.panel2, border = T.colors.cardBorder or T.colors.borderSoft, glass = "card", gradient = "card" })
-DefaultMaterial("popup", { bg = T.colors.glassPopup, border = { 0.140, 0.220, 0.600, 0.88 }, glass = "popup", gradient = "popup" })
-DefaultMaterial("focus", { veil = "dropdown" })
-DefaultMaterial("guide", { bg = { 0.018, 0.052, 0.082, 0.28 }, border = T.colors.guide, glass = "card", gradient = "guide" })
-DefaultMaterial("warning", { bg = { 0.105, 0.082, 0.052, 0.34 }, border = { 0.480, 0.360, 0.200, 0.62 }, glass = "card", gradient = "warning" })
-
--- WoW addon frames cannot blur what is already behind them, so dropdown focus uses
--- a shared neutral veil instead of page-specific fake blur layers.
-T.focusVeils = T.focusVeils or {}
-T.focusVeils.dropdown = T.focusVeils.dropdown or {
-    { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.145 } },
-    { key = "_msuf2FocusHaze", layer = "BACKGROUND", subLevel = 1, color = { 0.010, 0.014, 0.026, 0.045 } },
-    { key = "_msuf2FocusSmearA", layer = "BORDER", subLevel = 0, texture = "bgSmooth", points = { -5, 5, 5, -5 }, color = { 0.018, 0.026, 0.052, 0.032 }, blend = "BLEND" },
-    { key = "_msuf2FocusSmearB", layer = "BORDER", subLevel = 1, texture = "bgSmooth", points = { 4, -4, -4, 4 }, texCoord = { 0, 0, 1, 0, 0, 1, 1, 1 }, color = { 0.014, 0.022, 0.046, 0.026 }, blend = "BLEND" },
-    { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 2, texture = "bgSmooth", color = { 0.024, 0.034, 0.068, 0.040 }, blend = "BLEND" },
-    { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 3, texture = "bgCharcoal", color = { 0.035, 0.040, 0.070, 0.052 }, blend = "BLEND" },
-}
-T.focusVeils.edit = T.focusVeils.edit or {
-    { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.105 } },
-    { key = "_msuf2FocusHaze", layer = "BACKGROUND", subLevel = 1, color = { 0.010, 0.014, 0.026, 0.040 } },
-    { key = "_msuf2FocusWash", layer = "BORDER", subLevel = 0, texture = "bgSmooth", color = { 0.018, 0.030, 0.060, 0.038 }, blend = "BLEND" },
-    { key = "_msuf2FocusGrain", layer = "BORDER", subLevel = 1, texture = "bgCharcoal", color = { 0.030, 0.035, 0.060, 0.042 }, blend = "BLEND" },
-}
 
 local function ColorTexture(tex, c)
     if not (tex and c) then return end
@@ -1383,10 +1141,11 @@ function T.StyleCheckmark(checkButton)
     if not checkButton._msuf2NativeCheckStyled then
         checkButton._msuf2NativeCheckStyled = true
         if checkButton.SetHitRectInsets then checkButton:SetHitRectInsets(0, 0, 0, 0) end
-        checkButton:SetSize(24, 24)
+        local buttonSize = checkButton._msuf2QuietCheckBox and 28 or 24
+        checkButton:SetSize(buttonSize, buttonSize)
         if checkButton.text then
             checkButton.text:ClearAllPoints()
-            checkButton.text:SetPoint("LEFT", checkButton, "RIGHT", 4, 0)
+            checkButton.text:SetPoint("LEFT", checkButton, "RIGHT", checkButton._msuf2QuietCheckBox and 8 or 4, 0)
             checkButton.text:SetJustifyH("LEFT")
         end
     end
@@ -1402,9 +1161,9 @@ function T.StyleCheckmark(checkButton)
         if not check and checkButton.GetName and checkButton:GetName() then check = _G[checkButton:GetName() .. "Check"] end
         if check and check.SetTexture then
             local h = (checkButton.GetHeight and checkButton:GetHeight()) or 24
-            local sz = checkButton._msuf2QuietCheckBox and 14 or math.floor(h * 0.8 + 0.5)
-            if sz < 12 then sz = 12 end
-            check:SetTexture(T.media.checkTick)
+            local sz = checkButton._msuf2QuietCheckBox and 15 or math.floor(h * 0.8 + 0.5)
+            if sz < 11 then sz = 11 end
+            check:SetTexture((checkButton._msuf2QuietCheckBox and T.media.checkTickMedium) or T.media.checkTick)
             check:SetTexCoord(0, 1, 0, 1)
             if check.SetBlendMode then check:SetBlendMode("BLEND") end
             if check.ClearAllPoints then

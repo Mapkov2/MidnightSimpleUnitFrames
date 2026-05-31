@@ -28,8 +28,15 @@ local STATUS_ICON_TAB_VALUES = {
     { value = "basic", text = "Basic" },
     { value = "advanced", text = "Advanced" },
 }
+local STATUS_TEXT_STATE_TOGGLES = {
+    { key = "showDead", text = "Dead", default = true },
+    { key = "showGhost", text = "Ghost", default = true },
+    { key = "showAFK", text = "AFK", default = false },
+    { key = "showDND", text = "DND", default = false },
+}
 
 local GetConf = UP.GetConf
+local GetGeneral = UP.GetGeneral
 local Call = UP.Call
 local UnitTopLabel = UP.UnitTopLabel
 local ReadBool = UP.ReadBool
@@ -118,6 +125,37 @@ local function BuildStatus(ctx, builder, unit)
             control._msuf2Label:SetJustifyH("CENTER")
         end
     end
+    local function RefreshStatusMenu()
+        if M.Refresh then
+            M.Refresh(ctx)
+        elseif M.SelectPage then
+            M.SelectPage(ctx.key)
+        end
+    end
+    local function StatusTextStateTable()
+        local g = GetGeneral and GetGeneral() or nil
+        if type(g) ~= "table" then return nil end
+        if type(g.statusIndicators) ~= "table" then g.statusIndicators = {} end
+        return g.statusIndicators
+    end
+    local function ReadStatusTextState(key, default)
+        local state = StatusTextStateTable()
+        local value = state and state[key]
+        if value == nil then return default and true or false end
+        return value and true or false
+    end
+    local function SetStatusTextState(key, value)
+        local state = StatusTextStateTable()
+        if not state then return end
+        value = value and true or false
+        if state[key] == value then return end
+        state[key] = value
+        if M.RequestGeneralApply then
+            M.RequestGeneralApply("MSUF2_STATUS_TEXT_STATE", { preview = true, applyAll = true })
+        end
+        Call("MSUF_RequestStatusTextRefresh")
+        RefreshStatusMenu()
+    end
 
     local unitLabel = UnitTopLabel(unit)
     local unitLabelLower = string.lower(unitLabel or tostring(unit or "unit"))
@@ -167,7 +205,7 @@ local function BuildStatus(ctx, builder, unit)
             M.unitStatusSelection = M.unitStatusSelection or {}
             M.unitStatusSelection[unit] = spec.value
             Call("MSUF_UFPreview_SelectStatusIcon", spec.value)
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshStatusMenu()
         end)
     RegisterStatusSearch(selector, "Status indicator selector", {
         "indicator dropdown", "select level", "choose level", "status icon dropdown", "level dropdown",
@@ -199,7 +237,7 @@ local function BuildStatus(ctx, builder, unit)
             if not spec then return end
             SetBool(unit, spec.show, value, "MSUF2_STATUS_ENABLED", { preview = true })
             RefreshStatusRuntime(unit, spec)
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshStatusMenu()
         end)
     RegisterStatusSearch(enabled, "Status indicator enabled", {
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
@@ -245,6 +283,26 @@ local function BuildStatus(ctx, builder, unit)
     RegisterStatusSearch(iconPack, "Status indicator icon pack", {
         "icon pack", "leader icon pack", "assist icon pack", "role icon pack", "status icon pack",
     }, StatusIconPackValues)
+
+    local statusTextStates = CreateFrame("Frame", nil, placementCard)
+    statusTextStates:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX, -48)
+    statusTextStates:SetSize(placeRightW, 72)
+    W.LabelAt(statusTextStates, "Show text for", 0, -2, placeRightW, "GameFontHighlightSmall", T.colors.text)
+    local statusTextStateControls = {}
+    for i = 1, #STATUS_TEXT_STATE_TOGGLES do
+        local info = STATUS_TEXT_STATE_TOGGLES[i]
+        local col = (i - 1) % 2
+        local row = floor((i - 1) / 2)
+        local toggle = W.ToggleAt(statusTextStates, info.text, col * max(84, floor(placeRightW * 0.44)), -24 - row * 28, 72)
+        statusTextStateControls[#statusTextStateControls + 1] = toggle
+        M.BindToggle(ctx, toggle,
+            function() return ReadStatusTextState(info.key, info.default) end,
+            function(value) SetStatusTextState(info.key, value) end)
+        RegisterStatusSearch(toggle, "Dead text state " .. tostring(info.text), {
+            "dead text", "status text", "afk", "dnd", "ghost", "dead", "offline text",
+        })
+    end
+    statusTextStates:Hide()
 
     local raidGroupStyle = W.Dropdown(placementCard, "Style", RAID_GROUP_NAME_STYLES, 180)
     PlaceDropdown(raidGroupStyle, placementCard, placeRightX, -54, min(180, placeRightW))
@@ -378,7 +436,7 @@ local function BuildStatus(ctx, builder, unit)
                 if spec.iconStyle then conf[spec.iconStyle] = nil end
             end
             RefreshStatusRuntime(unit, spec)
-            if M.SelectPage then M.SelectPage(ctx.key) end
+            RefreshStatusMenu()
         end
         if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
             M.CaptureHistory("Reset: " .. tostring(spec.text or spec.value or "Status icon"), "status:reset:" .. tostring(unit) .. ":" .. tostring(spec.value), ResetSelectedStatus)
@@ -546,6 +604,7 @@ local function BuildStatus(ctx, builder, unit)
         local inlineName = spec and spec.inlineName == true
         local hasSymbol = spec and spec.symbol
         local hasIconPack = spec and spec.iconStyle
+        local isStatusText = spec and spec.value == "statusText"
         local showStateStyle = hasSymbol and true or false
         local showTestMode = spec and spec.statusRuntime and true or false
         LayoutStatusControls(inlineName)
@@ -553,6 +612,7 @@ local function BuildStatus(ctx, builder, unit)
             W.SetControlShown(midnight, showStateStyle)
             W.SetControlShown(symbol, hasSymbol)
             W.SetControlShown(iconPack, hasIconPack)
+            W.SetControlShown(statusTextStates, isStatusText)
             W.SetControlShown(raidGroupStyle, inlineName)
             W.SetControlShown(test, showTestMode)
             W.SetControlShown(size, not inlineName)
@@ -577,6 +637,7 @@ local function BuildStatus(ctx, builder, unit)
             if symbol then symbol:SetShown(hasSymbol and true or false) end
             if iconPack then iconPack:SetShown(hasIconPack and true or false) end
             if iconPack and iconPack._msuf2Title then iconPack._msuf2Title:SetShown(hasIconPack and true or false) end
+            if statusTextStates then statusTextStates:SetShown(isStatusText) end
             if raidGroupStyle then raidGroupStyle:SetShown(inlineName) end
             if test then test:SetShown(showTestMode) end
             if size then size:SetShown(not inlineName) end
@@ -600,6 +661,11 @@ local function BuildStatus(ctx, builder, unit)
         local isEnabled = spec and ReadStatusBool(unit, spec.show, spec.defaultShow)
         SetControlEnabled(symbol, hasSymbol and isEnabled)
         SetControlEnabled(iconPack, hasIconPack and isEnabled)
+        if statusTextStateControls then
+            for i = 1, #statusTextStateControls do
+                SetControlEnabled(statusTextStateControls[i], isStatusText and isEnabled)
+            end
+        end
         SetControlEnabled(raidGroupStyle, inlineName and isEnabled)
         SetControlEnabled(size, (not inlineName) and isEnabled)
         SetControlEnabled(anchor, isEnabled)

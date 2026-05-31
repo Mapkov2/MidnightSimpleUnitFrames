@@ -1,0 +1,121 @@
+local addonName, MSUF = ...
+MSUF = MSUF or {}
+
+local M = MSUF.MSUF2 or {}
+MSUF.MSUF2 = M
+_G.MSUF2 = M
+
+local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
+
+M.GroupPreviewSpecs = {
+    SECTION_PAGE = {
+        general = "gf_layout",
+        layout = "gf_layout",
+        sorting = "gf_layout",
+        scaling = "gf_layout",
+        border = "gf_layout",
+        anchor = "gf_layout",
+        tooltip = "gf_layout",
+
+        hcolor = "gf_bars",
+        bars = "gf_bars",
+        power = "gf_bars",
+        text = "gf_bars",
+        dispel = "gf_bars",
+        dstripe = "gf_bars",
+        range = "gf_bars",
+
+        buffs = "gf_auras",
+        debuffs = "gf_auras",
+        textcolor = "gf_auras",
+        masque = "gf_auras",
+        autil = "gf_auras",
+
+        indicators = "gf_indicators",
+        sicons = "gf_indicators",
+        si = "gf_indicators",
+        ci = "gf_indicators",
+    },
+
+    PAGE_FOCUS = {
+        gf_layout = "layout",
+        gf_bars = "text",
+        gf_auras = "buffs",
+        gf_indicators = "indicators",
+    },
+
+    WHITE8X8 = "Interface\\Buttons\\WHITE8X8",
+    ROUNDED_MASK = maskRoot .. "rounded_bar_4x.tga",
+    ROUNDED_EDGE = maskRoot .. "rounded_bar_edge_4x.tga",
+    MIN_W = 380,
+    MIN_H = 130,
+    ROLE = "HEALER",
+    ZOOM_MIN = 0.35,
+    ZOOM_MAX = 4.0,
+    ZOOM_STEPS = { 0.35, 0.50, 0.75, 1.00, 1.25, 1.50, 2.00, 3.00, 4.00 },
+    AUTO_ZOOM_MIN = 0.75,
+    AUTO_ZOOM_MAX = 1.65,
+    AUTO_ZOOM_STAGE_PAD_X = 48,
+    AUTO_ZOOM_STAGE_PAD_Y = 72,
+
+    CLASSES = {
+        "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT",
+        "SHAMAN", "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",
+    },
+
+    NAMES = {
+        "Thrall", "Jaina", "Sylvanas", "Anduin", "Tyrande", "Arthas",
+        "Garrosh", "Yrel", "Vol'jin", "Chen", "Malfurion", "Illidan", "Alexstrasza",
+    },
+
+    ANCHOR_FRAC = {
+        TOPLEFT = { 0, 1 }, TOP = { 0.5, 1 }, TOPRIGHT = { 1, 1 },
+        LEFT = { 0, 0.5 }, CENTER = { 0.5, 0.5 }, RIGHT = { 1, 0.5 },
+        BOTTOMLEFT = { 0, 0 }, BOTTOM = { 0.5, 0 }, BOTTOMRIGHT = { 1, 0 },
+    },
+
+    AURA_MOCK_ICON_IDS = {
+        buff = { 774, 17, 139, 33076, 33763, 81749 },
+        debuff = { 589, 980, 172, 12294, 1943, 5782 },
+    },
+
+    AURA_GROWTH_TABLE = {
+        RIGHTDOWN = { px =  1, py =  0, sx =  0, sy = -1 },
+        RIGHTUP   = { px =  1, py =  0, sx =  0, sy =  1 },
+        LEFTDOWN  = { px = -1, py =  0, sx =  0, sy = -1 },
+        LEFTUP    = { px = -1, py =  0, sx =  0, sy =  1 },
+        DOWNRIGHT = { px =  0, py = -1, sx =  1, sy =  0 },
+        DOWNLEFT  = { px =  0, py = -1, sx = -1, sy =  0 },
+        UPRIGHT   = { px =  0, py =  1, sx =  1, sy =  0 },
+        UPLEFT    = { px =  0, py =  1, sx = -1, sy =  0 },
+        CENTER_H  = { px =  1, py =  0, sx =  0, sy = -1, centered = true },
+        CENTER_V  = { px =  0, py = -1, sx =  1, sy =  0, centered = true },
+    },
+
+    STATUS_RUNTIME_KEYS = {
+        roleIcon = "role",
+        leaderIcon = "leader",
+        assistIcon = "assist",
+        raidMarker = "raidMarker",
+        readyCheckIcon = "readyCheck",
+        summonIcon = "summon",
+        resurrectIcon = "incomingRes",
+        phaseIcon = "phase",
+    },
+
+    OUTLINE_KEYS = { "top", "bottom", "left", "right" },
+
+    STATUS_PREVIEW_FALLBACK_SPECS = {
+        { value = "roleIcon", text = "Role Icon", enabled = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1 },
+        { value = "leaderIcon", text = "Leader", enabled = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
+        { value = "assistIcon", text = "Assist", enabled = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2 },
+        { value = "raidMarker", text = "Raid Marker", enabled = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 3 },
+        { value = "readyCheckIcon", text = "Ready Check", enabled = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
+        { value = "summonIcon", text = "Summon", enabled = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
+        { value = "resurrectIcon", text = "Resurrect", enabled = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4 },
+        { value = "phaseIcon", text = "Phase", enabled = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3 },
+        { value = "statusText", text = "Dead Text", enabled = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusOffsetX", y = "statusOffsetY", layer = "statusTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
+        { value = "statusGhostText", text = "Ghost Text", enabled = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", x = "statusGhostOffsetX", y = "statusGhostOffsetY", layer = "statusGhostTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
+        { value = "statusAFKText", text = "AFK / DND Text", enabled = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", x = "statusAFKOffsetX", y = "statusAFKOffsetY", layer = "statusAFKTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7 },
+    },
+}

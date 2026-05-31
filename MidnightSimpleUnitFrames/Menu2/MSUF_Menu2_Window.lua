@@ -75,6 +75,11 @@ local MENU_NORMAL_FRAME_LEVEL = 10
 local MENU_EDIT_FRAME_LEVEL = 900
 local MENU_NORMAL_POPUP_FRAME_LEVEL = 120
 local MENU_EDIT_POPUP_FRAME_LEVEL = 980
+local PAGE_PREWARM_ENABLED = false
+local PAGE_PREWARM_INITIAL_DELAY = 1.10
+local PAGE_PREWARM_STEP_SEC = 0.70
+local PAGE_PREWARM_COMBAT_RETRY_SEC = 1.25
+local PAGE_PREWARM_IDLE_AFTER_SELECT_SEC = 0.90
 
 local function IsMenuEditPriorityActive()
     if type(IsEditModeActive) ~= "function" then return false end
@@ -145,13 +150,11 @@ local NAV = {
     { key = "gf_layout", label = "Layout", group = "groupframes" },
     { key = "gf_bars", label = "Health & Text", group = "groupframes" },
     { key = "gf_indicators", label = "Indicators", group = "groupframes" },
-    { key = "gf_auras", label = "Buffs & Debuffs", group = "groupframes" },
+    { key = "gf_auras", label = "Auras", group = "groupframes" },
     { header = "Auras", id = "auras", defaultOpen = true },
-    { key = "auras3", label = "Overview", group = "auras" },
-    { key = "auras3_rendering", label = "Rendering", group = "auras" },
-    { key = "auras3_filters", label = "Filters & Blacklist", group = "auras" },
-    { key = "auras3_styling", label = "Styling", group = "auras" },
-    { key = "auras3_private", label = "Private Auras", group = "auras" },
+    { key = "auras3", label = "Auras", group = "auras" },
+    { key = "auras3_styling", label = "Style", group = "auras" },
+    { key = "auras3_filters", label = "Filters", group = "auras" },
     { header = "Appearance", id = "globalstyle", defaultOpen = true },
     { key = "opt_bars", label = "Bars", group = "globalstyle" },
     { key = "opt_castbar", label = "Castbars", group = "globalstyle" },
@@ -191,10 +194,10 @@ local ALIASES = {
     aura_style = "auras3_styling",
     aurastyle = "auras3_styling",
     auras3 = "auras3",
-    aura_rendering = "auras3_rendering",
-    aurarendering = "auras3_rendering",
-    aura_renderer = "auras3_rendering",
-    aurarenderer = "auras3_rendering",
+    aura_rendering = "auras3",
+    aurarendering = "auras3",
+    aura_renderer = "auras3",
+    aurarenderer = "auras3",
     aura_filters = "auras3_filters",
     aurafilters = "auras3_filters",
     aura_filter = "auras3_filters",
@@ -203,8 +206,6 @@ local ALIASES = {
     aurablacklist = "auras3_filters",
     aura_styling = "auras3_styling",
     aurastyling = "auras3_styling",
-    private_auras = "auras3_private",
-    privateauras = "auras3_private",
     castbar = "opt_castbar",
     colors = "opt_colors",
     colours = "opt_colors",
@@ -703,6 +704,7 @@ function M.RegisterPage(key, spec)
 end
 
 local function HideAllCachedPages()
+    if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("HIDE_ALL_PAGES", nil) end
     for _, entry in pairs(M.cache) do
         if entry.wrapper and entry.wrapper.Hide then entry.wrapper:Hide() end
     end
@@ -775,6 +777,16 @@ local function BumpSearchInputSerial()
     local api = SearchAPI()
     if api and type(api.BumpInputSerial) == "function" then api.BumpInputSerial() end
 end
+
+local function MenuNow()
+    if type(_G.GetTime) == "function" then return _G.GetTime() end
+    return 0
+end
+
+local function IsMenuCombatLocked()
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
 local function CurrentMenuLocaleKey()
     if type(MSUF.GetEffectiveLocale) == "function" then
         local ok, locale = pcall(MSUF.GetEffectiveLocale)
@@ -822,13 +834,31 @@ local function UpdateNav(key)
     end
 end
 
-local function RunRefreshers(entry)
+local function CurrentMenuDataRevision()
+    return tonumber(M._msuf2MenuDataRevision) or 0
+end
+
+function M.MarkMenuDataDirty(reason)
+    M._msuf2MenuDataRevision = CurrentMenuDataRevision() + 1
+    M._msuf2MenuDataDirtyReason = reason
+    return M._msuf2MenuDataRevision
+end
+
+local function RunRefreshers(entry, opts)
     if not entry or not entry.refreshers then return end
+    opts = opts or {}
+    local revision = CurrentMenuDataRevision()
+    if opts.force ~= true and entry._msuf2RefreshRevision == revision then
+        return false
+    end
     for i = 1, #entry.refreshers do
         local fn = entry.refreshers[i]
         if type(fn) == "function" then pcall(fn) end
     end
+    entry._msuf2RefreshRevision = revision
+    return true
 end
+M.RunEntryRefreshers = RunRefreshers
 
 local function BossPagePreviewInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
@@ -955,6 +985,11 @@ local function CurrentGFMenuScope()
     return "party"
 end
 
+local function ClearGFPagePreviewFlag()
+    _G.MSUF2_GFPagePreviewActive = nil
+    _G.MSUF2_GFPagePreviewKind = nil
+end
+
 local function GFPreviewCount(kind)
     if kind == "mythicraid" then return 20 end
     if kind == "raid" then return 30 end
@@ -990,6 +1025,28 @@ local function RestoreGFHeaders(gf)
     if gf and type(gf.UpdateGroupVisibility) == "function" then gf.UpdateGroupVisibility() end
 end
 
+local function GFPreviewRuntimeActive(gf)
+    if _G.MSUF2_GFPagePreviewActive == true then return true end
+    local active = gf and gf._previewActive
+    return active and (active.party or active.raid or active.mythicraid) and true or false
+end
+
+local function HideGFRuntimePreviews(gf, restoreHeaders)
+    if not (gf and type(gf.HidePreview) == "function") then return end
+    SetGFPagePreviewFlag(false)
+    gf.HidePreview("party")
+    gf.HidePreview("raid")
+    gf.HidePreview("mythicraid")
+    if gf.SetPreviewAnchor then
+        gf.SetPreviewAnchor("party", nil)
+        gf.SetPreviewAnchor("raid", nil)
+        gf.SetPreviewAnchor("mythicraid", nil)
+    end
+    if restoreHeaders ~= false then
+        RestoreGFHeaders(gf)
+    end
+end
+
 local lastGFPreviewActive
 local lastGFPreviewKind
 local lastGFPreviewEditMode
@@ -1017,7 +1074,9 @@ local function SyncGroupPagePreviewForKey(key, force)
         and lastGFPreviewEditMode == editMode
         and lastGFPreviewRuntime == hasRuntime
     then
-        return
+        if active or not GFPreviewRuntimeActive(gf) then
+            return
+        end
     end
     lastGFPreviewActive = active
     lastGFPreviewKind = kind
@@ -1029,7 +1088,11 @@ local function SyncGroupPagePreviewForKey(key, force)
     end
 
     if editMode then
-        SetGFPagePreviewFlag(false)
+        if hasRuntime then
+            HideGFRuntimePreviews(gf, false)
+        else
+            SetGFPagePreviewFlag(false)
+        end
         return
     end
 
@@ -1039,18 +1102,9 @@ local function SyncGroupPagePreviewForKey(key, force)
     end
 
     if not active then
-        SetGFPagePreviewFlag(false)
         local classicPanel = _G.MSUF_GFOptionsPanel
         if classicPanel and classicPanel.IsShown and classicPanel:IsShown() then return end
-        gf.HidePreview("party")
-        gf.HidePreview("raid")
-        gf.HidePreview("mythicraid")
-        if gf.SetPreviewAnchor then
-            gf.SetPreviewAnchor("party", nil)
-            gf.SetPreviewAnchor("raid", nil)
-            gf.SetPreviewAnchor("mythicraid", nil)
-        end
-        RestoreGFHeaders(gf)
+        HideGFRuntimePreviews(gf, true)
         return
     end
 
@@ -1235,6 +1289,141 @@ local function BuildPageEntry(key, hidden)
 end
 M.BuildPageEntry = BuildPageEntry
 
+local function StopPagePrewarm()
+    M._msuf2PagePrewarmActive = nil
+    M._msuf2PagePrewarmQueue = nil
+    M._msuf2PagePrewarmTimer = nil
+    M._msuf2PagePrewarmSerial = (tonumber(M._msuf2PagePrewarmSerial) or 0) + 1
+end
+
+local function PagePrewarmAllowed()
+    if not (_G.C_Timer and _G.C_Timer.After) then return false, "timer" end
+    if IsMenuCombatLocked() then return false, "combat" end
+    if not (M.frame and M.frame.IsShown and M.frame:IsShown()) then return false, "hidden" end
+    if not (M.scrollChild and M.pages and M.cache) then return false, "missing" end
+    if M.activeKey == "search" then return false, "search" end
+    return true
+end
+
+local function AddPagePrewarmKey(queue, seen, key)
+    key = ALIASES[key or ""] or key
+    if type(key) ~= "string" or key == "" or key == "search" then return end
+    if seen[key] or not M.pages[key] then return end
+    local cached = M.cache and M.cache[key]
+    if cached and cached.wrapper then return end
+    seen[key] = true
+    queue[#queue + 1] = key
+end
+
+local function BuildPagePrewarmQueue(priorityKey)
+    local queue, seen = {}, {}
+    local priorityGroup = priorityKey and M.navGroupForKey and M.navGroupForKey[priorityKey]
+    if priorityGroup then
+        for i = 1, #NAV do
+            local item = NAV[i]
+            if item.key and item.group == priorityGroup then AddPagePrewarmKey(queue, seen, item.key) end
+        end
+    end
+    for i = 1, #NAV do
+        local item = NAV[i]
+        if item.key then AddPagePrewarmKey(queue, seen, item.key) end
+    end
+    for i = 1, #(M.pageOrder or {}) do
+        AddPagePrewarmKey(queue, seen, M.pageOrder[i])
+    end
+    return queue
+end
+
+local RunPagePrewarmStep
+
+local function SchedulePagePrewarm(delay)
+    if M._msuf2PagePrewarmTimer then return end
+    if not (_G.C_Timer and _G.C_Timer.After) then return end
+    local serial = tonumber(M._msuf2PagePrewarmSerial) or 0
+    M._msuf2PagePrewarmTimer = true
+    _G.C_Timer.After(delay or PAGE_PREWARM_STEP_SEC, function()
+        if serial ~= (tonumber(M._msuf2PagePrewarmSerial) or 0) then return end
+        M._msuf2PagePrewarmTimer = nil
+        if RunPagePrewarmStep then RunPagePrewarmStep() end
+    end)
+end
+
+RunPagePrewarmStep = function()
+    if not M._msuf2PagePrewarmActive then return end
+
+    local allowed, reason = PagePrewarmAllowed()
+    if not allowed then
+        if reason == "combat" then
+            SchedulePagePrewarm(PAGE_PREWARM_COMBAT_RETRY_SEC)
+        else
+            StopPagePrewarm()
+        end
+        return
+    end
+
+    local lastSelect = tonumber(M._msuf2PagePrewarmLastSelectAt) or 0
+    local wait = (lastSelect + PAGE_PREWARM_IDLE_AFTER_SELECT_SEC) - MenuNow()
+    if wait > 0 then
+        SchedulePagePrewarm(wait)
+        return
+    end
+
+    local queue = M._msuf2PagePrewarmQueue
+    if type(queue) ~= "table" or #queue == 0 then
+        StopPagePrewarm()
+        return
+    end
+
+    local key
+    repeat
+        key = table.remove(queue, 1)
+    until not key or (M.pages[key] and not (M.cache[key] and M.cache[key].wrapper))
+
+    if not key then
+        StopPagePrewarm()
+        return
+    end
+
+    local activeKey = M.activeKey
+    local activeEntry = activeKey and M.cache and M.cache[activeKey]
+    local activeHeight = activeEntry and activeEntry.height
+    local ok, entry = pcall(BuildPageEntry, key, true)
+    if ok and entry then
+        entry._msuf2Prewarmed = true
+        if entry.wrapper and entry.wrapper.Hide then entry.wrapper:Hide() end
+    end
+    if M.scrollChild and activeHeight then
+        M.scrollChild:SetHeight(math.max(CONTENT_H, activeHeight))
+    end
+
+    if type(queue) == "table" and #queue > 0 then
+        SchedulePagePrewarm(PAGE_PREWARM_STEP_SEC)
+    else
+        StopPagePrewarm()
+    end
+end
+
+local function StartPagePrewarm(reason)
+    if not PAGE_PREWARM_ENABLED and M._msuf2EnablePagePrewarm ~= true then return end
+    if M._msuf2DisablePagePrewarm then return end
+    local allowed = PagePrewarmAllowed()
+    if not allowed then return end
+    local queue = BuildPagePrewarmQueue(M.activeKey)
+    if #queue == 0 then
+        StopPagePrewarm()
+        return
+    end
+    M._msuf2PagePrewarmTimer = nil
+    M._msuf2PagePrewarmActive = true
+    M._msuf2PagePrewarmSerial = (tonumber(M._msuf2PagePrewarmSerial) or 0) + 1
+    M._msuf2PagePrewarmReason = reason
+    M._msuf2PagePrewarmQueue = queue
+    SchedulePagePrewarm(PAGE_PREWARM_INITIAL_DELAY)
+end
+
+M.StartPagePrewarm = StartPagePrewarm
+M.StopPagePrewarm = StopPagePrewarm
+
 local function TrimText(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -1250,10 +1439,13 @@ end
 function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
+    M._msuf2PagePrewarmLastSelectAt = MenuNow()
     key = ALIASES[key or ""] or key or "home"
+    if key == "search" then StopPagePrewarm() end
+    local hasPendingFocus = false
     do
         local req = _G.MSUF_EM2_MenuFocusRequest
-        local hasPendingFocus = type(req) == "table"
+        hasPendingFocus = type(req) == "table"
             and req.explicit == true
             and req.consumed ~= true
             and (not req.pageKey or tostring(req.pageKey) == tostring(key))
@@ -1275,15 +1467,18 @@ function M.SelectPage(key)
         if M.activeKey == key then M.activeKey = nil end
     end
     if key == M.activeKey and cached then
+        if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("SELECT_CACHED", key) end
         RunRefreshers(cached)
         SyncBossPagePreviewForKey(key)
         SyncGroupPagePreviewForKey(key)
-        if type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+        if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+        if key ~= "search" then StartPagePrewarm("select-cached") end
         return true
     end
 
     local previousKey = M.activeKey
     local previous = previousKey and M.cache and M.cache[previousKey]
+    if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("SELECT_PAGE", key) end
     if previous and previous.wrapper and previous.wrapper.Hide then
         previous.wrapper:Hide()
     else
@@ -1313,7 +1508,8 @@ function M.SelectPage(key)
     UpdateNav(key)
     SyncBossPagePreviewForKey(key)
     SyncGroupPagePreviewForKey(key)
-    if type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+    if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
+    if key ~= "search" then StartPagePrewarm("select") end
     return true
 end
 
@@ -1344,78 +1540,9 @@ local function ApplyNavHeaderVisual(btn, open)
 end
 
 local function AttachNavHoverGrow(btn)
-    if not (btn and btn.HookScript) or btn._msuf2NavHoverGrow then return end
+    if not btn or btn._msuf2NavHoverGrow then return end
     btn._msuf2NavHoverGrow = true
-    local baseScale, hoverScale = 1, 1.018
-    if btn.SetScale then btn:SetScale(baseScale) end
-
-    local function LayoutPillParts(parts, inset, lift)
-        if not (parts and parts.L and parts.M and parts.R and btn.GetWidth and btn.GetHeight) then return end
-        local w = btn:GetWidth() or 120
-        local h = btn:GetHeight() or NAV_BUTTON_H
-        local innerW = max(1, w - inset * 2)
-        local innerH = max(1, h - inset * 2)
-        local capW = min(floor(innerH * 0.5 + 0.5), floor(innerW * 0.5))
-        local midW = max(1, innerW - capW * 2)
-        lift = tonumber(lift) or 0
-
-        parts.L:ClearAllPoints()
-        parts.M:ClearAllPoints()
-        parts.R:ClearAllPoints()
-        parts.L:SetPoint("TOPLEFT", btn, "TOPLEFT", inset, -inset + lift)
-        parts.L:SetPoint("BOTTOMLEFT", btn, "BOTTOMLEFT", inset, inset + lift)
-        parts.L:SetWidth(capW)
-        parts.R:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -inset, -inset + lift)
-        parts.R:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -inset, inset + lift)
-        parts.R:SetWidth(capW)
-        parts.M:SetPoint("TOPLEFT", parts.L, "TOPRIGHT", 0, 0)
-        parts.M:SetPoint("BOTTOMRIGHT", parts.R, "BOTTOMLEFT", 0, 0)
-        parts.M:SetWidth(midW)
-    end
-
-    local function LayoutPillVisual(hovering)
-        if hovering then
-            LayoutPillParts(btn._msuf2Fill, 0, 1)
-            LayoutPillParts(btn._msuf2Edge, -1, 1)
-        else
-            LayoutPillParts(btn._msuf2Fill, 2, 0)
-            LayoutPillParts(btn._msuf2Edge, 1, 0)
-        end
-    end
-
-    local function OffsetRegion(region, lift)
-        if not (region and region.GetNumPoints and region.GetPoint and region.ClearAllPoints and region.SetPoint) then return end
-        if not region._msuf2NavBasePoints then
-            local points = {}
-            for i = 1, region:GetNumPoints() do
-                local point, relativeTo, relativePoint, xOfs, yOfs = region:GetPoint(i)
-                points[#points + 1] = { point, relativeTo, relativePoint, xOfs or 0, yOfs or 0 }
-            end
-            region._msuf2NavBasePoints = points
-        end
-        region:ClearAllPoints()
-        local points = region._msuf2NavBasePoints
-        for i = 1, #points do
-            local p = points[i]
-            region:SetPoint(p[1], p[2], p[3], p[4], p[5] + (lift or 0))
-        end
-    end
-
-    local function SetVisualScale(self, hovering)
-        if self.IsEnabled and not self:IsEnabled() then hovering = false end
-        local scale = hovering and hoverScale or baseScale
-        if self.SetScale then self:SetScale(baseScale) end
-        LayoutPillVisual(hovering)
-        if self._msuf2Label and self._msuf2Label.SetScale then self._msuf2Label:SetScale(scale) end
-        if self._msuf2NavIcon and self._msuf2NavIcon.SetScale then self._msuf2NavIcon:SetScale(scale) end
-        if self._msuf2NavArrow and self._msuf2NavArrow.SetScale then self._msuf2NavArrow:SetScale(scale) end
-        OffsetRegion(self._msuf2Label, hovering and 1 or 0)
-        OffsetRegion(self._msuf2NavIcon, hovering and 1 or 0)
-        OffsetRegion(self._msuf2NavArrow, hovering and 1 or 0)
-    end
-    btn:HookScript("OnEnter", function(self) SetVisualScale(self, true) end)
-    btn:HookScript("OnLeave", function(self) SetVisualScale(self, false) end)
-    btn:HookScript("OnHide", function(self) SetVisualScale(self, false) end)
+    if btn.SetScale then btn:SetScale(1) end
 end
 
 local function AttachHistoryTooltip(btn, getTitle, getText)
@@ -2479,6 +2606,7 @@ local function BuildWindow()
     f:SetScript("OnHide", function()
         if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
         if FinishResizeProxy then FinishResizeProxy(false) end
+        StopPagePrewarm()
         CancelSearchBackgroundIndex()
         UnregisterStatusEvents()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
@@ -2486,6 +2614,7 @@ local function BuildWindow()
         ResetStatusIndicatorTestModeOnMenuExit()
         SavePersistentMenuState()
         lastBossPreviewActive = nil
+        if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("WINDOW_HIDE", nil) end
         SyncBossPagePreviewForKey(nil)
         SyncGroupPagePreviewForKey(nil)
     end)
@@ -2554,6 +2683,7 @@ end
 function M.InvalidatePage(key)
     if key then
         if key ~= "search" then MarkSearchIndexDirty() end
+        if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("INVALIDATE_PAGE", nil) end
         ClearSearchRegistryPage(key)
         if key == "home" then M.dashboardEditModeButton = nil end
         local entry = M.cache[key]

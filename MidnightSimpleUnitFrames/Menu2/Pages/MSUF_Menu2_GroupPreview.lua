@@ -14,7 +14,7 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 
-local GF_PREVIEW_NOTE = "Preview updates live here. Enter MSUF Edit Mode to drag the group container. Blizzard-controlled aura blocks can be previewed but not dragged."
+local GF_PREVIEW_NOTE = "Preview updates live here. Enter MSUF Edit Mode to drag the group container. Buff and Debuff handles can be adjusted in Group Frames > Auras."
 
 local function Tr(text)
     return (M.Tr and M.Tr(text)) or text
@@ -76,6 +76,21 @@ local function RegisterNativePreview(box, ctx)
 end
 
 M._gfNativePreviews = M._gfNativePreviews or {}
+function M.ReleaseGFNativePreviews(reason, keepKey)
+    local previews = M._gfNativePreviews
+    if not previews then return end
+
+    for i = 1, #previews do
+        local box = previews[i]
+        if box and (not keepKey or box._msufGFNativePreviewPageKey ~= keepKey) then
+            local record = box._msuf2PinnedPreviewRecord
+            if record and type(record.restore) == "function" then record.restore() end
+            if box.ReleaseRuntimePreview then box:ReleaseRuntimePreview() end
+            if box.Hide then box:Hide() end
+        end
+    end
+end
+
 function M.RefreshGFNativePreviews(reason)
     local previews = M._gfNativePreviews
     if not previews then return end
@@ -89,6 +104,8 @@ function M.RefreshGFNativePreviews(reason)
             if (not box.IsVisible or box:IsVisible()) and box.IsShown and box:IsShown() then
                 RequestPreviewRefresh(box, reason or "GROUP_PREVIEW_REFRESH_ALL")
             end
+        elseif box and box.ReleaseRuntimePreview then
+            box:ReleaseRuntimePreview()
         end
     end
     for i = writeIndex, #previews do
@@ -117,6 +134,8 @@ local function AddGFPreview(ctx, builder)
     local missingText
 
     local function PreviewHostShown()
+        if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return false end
+        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
         if body and body.IsShown and not body:IsShown() then return false end
         if body and body.IsVisible and not body:IsVisible() then return false end
         if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
@@ -124,7 +143,12 @@ local function AddGFPreview(ctx, builder)
     end
 
     local function EnsurePreview()
-        if box then return box end
+        if box then
+            box._msufGFPreviewHostShown = PreviewHostShown
+            if not PreviewHostShown() then return nil end
+            if box.Show then box:Show() end
+            return box
+        end
         if not PreviewHostShown() then return nil end
 
         box = CreateNativeGFPreview(body, ctx)
@@ -137,12 +161,13 @@ local function AddGFPreview(ctx, builder)
         end
 
         if missingText and missingText.Hide then missingText:Hide() end
+        box._msufGFPreviewHostShown = PreviewHostShown
         box:SetPoint("TOPLEFT", body, "TOPLEFT", 14, boxY)
         RegisterNativePreview(box, ctx)
         box:Show()
 
         if W.AttachPinnedPreview then
-            W.AttachPinnedPreview(body, box, { stateKey = "groupFramePreview", title = box._title, hint = box._hint, left = 14, right = 14, top = -8 })
+            W.AttachPinnedPreview(body, box, { stateKey = "groupFramePreview", title = box._title, hint = box._hint, left = 14, right = 14, top = -8, pageKey = ctx and ctx.key, wrapper = ctx and ctx.wrapper })
         end
 
         return box
@@ -159,6 +184,12 @@ local function AddGFPreview(ctx, builder)
     local entry = body and body._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshThisPreview end
     if body.HookScript then body:HookScript("OnShow", RefreshThisPreview) end
+    if body.HookScript then
+        body:HookScript("OnHide", function()
+            if box and box.ReleaseRuntimePreview then box:ReleaseRuntimePreview() end
+            if box and box.Hide then box:Hide() end
+        end)
+    end
     M.AddRefresher(ctx, RefreshThisPreview)
     RefreshThisPreview()
 end

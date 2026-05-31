@@ -7,6 +7,7 @@ _G.MSUF2 = M
 
 local W = M.Widgets
 local T = M.Theme
+local ControlGates = M.ControlGates or {}
 local UP = M.UnitPage or {}
 
 local floor = math.floor
@@ -14,18 +15,16 @@ local max = math.max
 local min = math.min
 
 local UNIT_PAGES = UP.UNIT_PAGES or {}
-local POWER_UNITS = UP.POWER_UNITS or {}
-local CASTBAR_FIELDS = UP.CASTBAR_FIELDS or {}
+local UNIT_AURAS_MENU_UNITS = {
+    player = true,
+    target = true,
+    focus = true,
+    boss = true,
+}
 local LOAD_CONDITIONS = UP.LOAD_CONDITIONS or {}
-local TEXT_ANCHORS = UP.TEXT_ANCHORS or {}
-local HP_MODES = UP.HP_MODES or {}
-local POWER_MODES = UP.POWER_MODES or {}
 local BOSS_LAYOUT_OPTIONS = UP.BOSS_LAYOUT_OPTIONS or {}
 local BOSS_LAYOUT_VALID = UP.BOSS_LAYOUT_VALID or {}
 local SEPARATORS = UP.SEPARATORS or {}
-local PORTRAIT_RENDER = UP.PORTRAIT_RENDER or {}
-local PORTRAIT_SHAPES = UP.PORTRAIT_SHAPES or {}
-local PORTRAIT_BORDERS = UP.PORTRAIT_BORDERS or {}
 local UF_COPY_CATEGORIES = UP.UF_COPY_CATEGORIES or {}
 
 local TOT_INLINE_CUSTOM_SEPARATOR = "__CUSTOM__"
@@ -41,10 +40,6 @@ local TOT_INLINE_COLOR_VALUES = {
     [TOT_INLINE_COLOR_TARGET_NAME] = true,
     [TOT_INLINE_COLOR_NPC] = true,
     [TOT_INLINE_COLOR_DEFAULT] = true,
-}
-local CASTBAR_BACKEND_VALUES = {
-    { value = "MSUF", text = "MSUF castbar" },
-    { value = "BLIZZARD", text = "Blizzard castbar" },
 }
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
@@ -116,34 +111,8 @@ local function ToTInlineColorDropdownValue(conf)
     return NormalizeToTInlineColorMode(conf and conf.totInlineColorMode)
 end
 
-local function PortraitClassStyleValues()
-    local PM = MSUF and MSUF.PortraitMedia
-    local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {
-        { value = "BLIZZARD", text = "Blizzard Class Icon" },
-    }
-    local values = {}
-    for i = 1, #opts do
-        local item = opts[i]
-        values[#values + 1] = {
-            value = item.value or item.key,
-            text = item.text or item.label or item.value or item.key,
-        }
-    end
-    return values
-end
-
-local function NormalizePortraitClassStyle(value)
-    local fn = _G.MSUF_NormalizePortraitClassStyleValue
-    if type(fn) == "function" then return fn(value) end
-    local PM = MSUF and MSUF.PortraitMedia
-    if PM and type(PM.NormalizeClassPack) == "function" then return PM.NormalizeClassPack(value) end
-    if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then return value end
-    return "BLIZZARD"
-end
-
 local GetConf = UP.GetConf
 local GetGeneral = UP.GetGeneral
-local GetBars = UP.GetBars
 local Call = UP.Call
 local DefaultCopyTarget = UP.DefaultCopyTarget
 local UnitTopLabel = UP.UnitTopLabel
@@ -157,16 +126,7 @@ local SetBool = UP.SetBool
 local ReadNumber = UP.ReadNumber
 local SetNumber = UP.SetNumber
 local ReadGeneralBool = UP.ReadGeneralBool
-local SetGeneralBool = UP.SetGeneralBool
-local ReadStatusBool = UP.ReadStatusBool
 local SetControlEnabled = UP.SetControlEnabled
-local SeedText = UP.SeedText
-local ReadText = UP.ReadText
-local SetText = UP.SetText
-local NormalizePortrait = UP.NormalizePortrait
-local SetPortraitValue = UP.SetPortraitValue
-local NormalizeAlphaMode = UP.NormalizeAlphaMode
-local AlphaModeValue = UP.AlphaModeValue
 local NormalizeBossLayoutMode = UP.NormalizeBossLayoutMode
 local UpdateLoadActive = UP.UpdateLoadActive
 
@@ -217,6 +177,13 @@ local function ApplyUnitFrameEnabledGate(ctx, unit)
     if not wrapper then return end
     local enabled = ReadBool(unit, "enabled", true)
     local gateKey = "unitFrameEnabled:" .. tostring(unit)
+    if ControlGates.Apply then
+        ControlGates.Apply(wrapper, gateKey, enabled, { alwaysEnabledFlag = "_msuf2UnitFrameGateAlwaysEnabled" })
+        return
+    end
+    if wrapper._msuf2UnitFrameGateKey == gateKey and wrapper._msuf2UnitFrameGateEnabled == enabled then return end
+    wrapper._msuf2UnitFrameGateKey = gateKey
+    wrapper._msuf2UnitFrameGateEnabled = enabled
     ForEachPageControl(wrapper, function(control)
         W.SetControlGateEnabled(control, gateKey, enabled)
     end)
@@ -224,7 +191,6 @@ end
 
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
-local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
 local function BuildPreview(ctx, builder, unit)
     local sec = builder:CollapsibleSection("preview", "Hide Preview", 378, true)
     if W.SetCollapsibleToggleText then W.SetCollapsibleToggleText(sec, "Hide Preview", "Show Preview") end
@@ -249,85 +215,142 @@ local function BuildPreview(ctx, builder, unit)
         return
     end
 
-    local panel = CreateFrame("Frame", nil, sec)
-    panel._msufLastApplyKey = unit
-    panel._msufGetCurrentKey = function() return unit end
-    panel._msufIsFramesTab = function() return true end
-    panel._msufAPI = {
-        ApplySettingsForKey = function(key)
-            key = key or unit
-            local UF = MSUF and MSUF.UF
-            if UF and UF.Apply then UF.Apply(key) end
-        end,
-    }
-    panel._msufOpenUnitSection = function(sectionId)
-        sectionId = sectionId or "text"
-        local req = _G.MSUF_EM2_MenuFocusRequest
-        local activeReq = type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit
-        local component = (activeReq and req.component) or sectionId
-        local slot = (activeReq and req.slot) or nil
-        _G.MSUF_EM2_MenuFocusRequest = {
-            key = unit,
-            component = component,
-            slot = slot,
-            pageKey = ctx.key,
-            sectionId = sectionId,
-            source = "unit-preview",
-            explicit = true,
-            changedAt = GetTime and GetTime() or 0,
-        }
-        if type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(ctx.key, { flash = true }) end
+    local panel, box
+    local initialPreviewQueued
+    local previewQueueSerial = 0
+
+    local function PreviewHostShown()
+        if ctx and ctx.key and M.activeKey and M.activeKey ~= ctx.key then return false end
+        if M.frame and M.frame.IsShown and not M.frame:IsShown() then return false end
+        if sec and sec.IsShown and not sec:IsShown() then return false end
+        if sec and sec.IsVisible and not sec:IsVisible() then return false end
+        if ctx and ctx.wrapper and ctx.wrapper.IsShown and not ctx.wrapper:IsShown() then return false end
+        return true
     end
 
-    local box = createPreview(sec, panel, ctx.width - 28, 292)
-    box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
-    box:Show()
-    if box.title and box.title.SetTextColor then
-        local c = T.colors.accent
-        box.title:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+    local function EnsurePreview()
+        if box and box.GetParent and box:GetParent() == sec then
+            if not PreviewHostShown() then return nil end
+            if box.Show then box:Show() end
+            return box
+        end
+        if not PreviewHostShown() then return nil end
+
+        if not panel then
+            panel = CreateFrame("Frame", nil, sec)
+        elseif panel.SetParent then
+            panel:SetParent(sec)
+        end
+        panel._msufLastApplyKey = unit
+        panel._msufGetCurrentKey = function() return unit end
+        panel._msufIsFramesTab = function() return true end
+        panel._msufAPI = {
+            ApplySettingsForKey = function(key)
+                key = key or unit
+                local UF = MSUF and MSUF.UF
+                if UF and UF.Apply then UF.Apply(key) end
+            end,
+        }
+        panel._msufOpenUnitSection = function() end
+
+        box = UP._sharedUnitPreviewBox
+        if box and box.Hide then box:Hide() end
+        if not box then
+            box = createPreview(sec, panel, ctx.width - 28, 292)
+            if not box then return nil end
+            UP._sharedUnitPreviewBox = box
+        else
+            box:SetParent(sec)
+            box:ClearAllPoints()
+            box:SetSize(ctx.width - 28, 292)
+            box._msufPanel = panel
+        end
+        box._msufPanel = panel
+        box._msuf2UnitPageHostShown = PreviewHostShown
+        box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
+        box:Show()
+        if box.title and box.title.SetTextColor then
+            local c = T.colors.accent
+            box.title:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        panel.unitPreviewBox = box
+
+        if box.HookScript and not box._msuf2UnitPageShowHooked then
+            box._msuf2UnitPageShowHooked = true
+            box:HookScript("OnShow", function()
+                local hostShown = box._msuf2UnitPageHostShown
+                if type(hostShown) == "function" and not hostShown() then return end
+                local preview = MSUF.UFPreview
+                if type(preview) == "table" and type(preview.RequestRefreshForBox) == "function" then
+                    preview.RequestRefreshForBox(box, "MSUF2_UNIT_PAGE_SHOW")
+                else
+                    Call("MSUF_UFPreview_RequestRefresh", "MSUF2_UNIT_PAGE_SHOW")
+                end
+            end)
+        end
+
+        if W and W.AttachPinnedPreview then
+            W.AttachPinnedPreview(sec, box, { stateKey = "unitFramePreview", title = box.title, hint = box.hint, left = 14, right = 14, top = -8 })
+        end
+
+        return box
     end
-    panel.unitPreviewBox = box
 
     local function RefreshThisPreview(reason)
+        local currentBox = EnsurePreview()
+        if not currentBox then return end
         panel._msufLastApplyKey = unit
         local preview = MSUF.UFPreview
         if type(preview) == "table" then
-            preview.active = box
-            if type(preview.Refresh) == "function" and box:IsShown() then
-                preview.Refresh(box, reason or "MSUF2_UNIT_PAGE")
+            if type(preview.RequestRefreshForBox) == "function" then
+                preview.RequestRefreshForBox(currentBox, reason or "MSUF2_UNIT_PAGE")
                 return
             end
             if type(preview.RequestRefresh) == "function" then
+                preview.active = currentBox
                 preview.RequestRefresh(reason or "MSUF2_UNIT_PAGE")
+                return
+            end
+            preview.active = currentBox
+            if type(preview.Refresh) == "function" and currentBox:IsShown() then
+                preview.Refresh(currentBox, reason or "MSUF2_UNIT_PAGE")
                 return
             end
         end
         Call("MSUF_UFPreview_RequestRefresh", reason or "MSUF2_UNIT_PAGE")
     end
 
-    if box.HookScript then
-        box:HookScript("OnShow", function()
-            RefreshThisPreview("MSUF2_UNIT_PAGE_SHOW")
-        end)
-    end
-    RefreshThisPreview("MSUF2_UNIT_PAGE_BUILD")
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            if box and box:IsShown() then RefreshThisPreview("MSUF2_UNIT_PAGE_DEFERRED") end
-        end)
-    end
-
     local function RefreshPreviewState()
         SetSectionHeaderStatus(sec, nil)
-        if box:IsShown() then RefreshThisPreview("MSUF2_UNIT_PAGE") end
+        if not PreviewHostShown() then
+            previewQueueSerial = previewQueueSerial + 1
+            initialPreviewQueued = nil
+            return
+        end
+        if not box and not initialPreviewQueued and _G.C_Timer and _G.C_Timer.After then
+            initialPreviewQueued = true
+            previewQueueSerial = previewQueueSerial + 1
+            local serial = previewQueueSerial
+            _G.C_Timer.After(0, function()
+                if serial ~= previewQueueSerial then return end
+                initialPreviewQueued = nil
+                if PreviewHostShown() then RefreshThisPreview("MSUF2_UNIT_PAGE_INITIAL") end
+            end)
+            return
+        end
+        RefreshThisPreview("MSUF2_UNIT_PAGE")
     end
     local entry = sec and sec._msuf2CollapsibleEntry
     if entry then entry._msuf2RefreshState = RefreshPreviewState end
+    if sec.HookScript then
+        sec:HookScript("OnShow", RefreshPreviewState)
+        sec:HookScript("OnHide", function()
+            previewQueueSerial = previewQueueSerial + 1
+            initialPreviewQueued = nil
+        end)
+    end
     M.AddRefresher(ctx, RefreshPreviewState)
     RefreshPreviewState()
-    if W and W.AttachPinnedPreview then
-        W.AttachPinnedPreview(sec, box, { stateKey = "unitFramePreview", title = box.title, hint = box.hint, left = 14, right = 14, top = -8 })
-    end
 end
 
 local function BuildTopActions(ctx, builder, unit, label)
@@ -980,772 +1003,6 @@ local function BuildLayout(ctx, builder, unit)
     RefreshLayoutState()
 end
 
-local function BuildText(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("text", "Text", 620, false)
-    sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
-    do
-        local req = _G.MSUF_EM2_MenuFocusRequest
-        if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit and (req.component == "name" or req.component == "hp" or req.component == "power") then
-            _G.MSUF_EM2_MenuFocusSection = sec
-            if C_Timer and C_Timer.After then
-                C_Timer.After(0, function()
-                    if _G.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
-                    local entry = sec and sec._msuf2CollapsibleEntry
-                    local outer = entry and entry.outer
-                    local scroll = M.scrollFrame
-                    local child = M.scrollChild
-                    if not (outer and scroll and child and outer.GetTop and child.GetTop and scroll.SetVerticalScroll) then return end
-                    local childTop = child:GetTop()
-                    local outerTop = outer:GetTop()
-                    if not (childTop and outerTop) then return end
-                    scroll:SetVerticalScroll(max(0, floor((childTop - outerTop) + 0.5) - 12))
-                end)
-            end
-        end
-    end
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 24
-    local cardW = math.min(520, math.max(360, sectionW - 48))
-    local rightX = leftX + cardW + 28
-    local colW = cardW
-    local rightW = math.min(360, math.max(260, sectionW - rightX - 28))
-    local sliderW = math.min(310, math.max(230, colW))
-    local rightSliderW = math.min(310, math.max(230, rightW))
-    local dropdownW = math.min(310, math.max(220, colW))
-    local smallDropdownW = math.min(220, math.max(150, colW - 48))
-    local halfDropdownW = floor((cardW - 44) / 2)
-    local RefreshTextControlState
-
-    W.Text(sec, "Font style is shared in |cff38c7f0Global Style > Fonts|r. Position can be adjusted here or dragged in |cff38c7f0Edit Mode|r.", 14, -38, sectionW - 210, T.colors.muted)
-    local scope = T.Font(sec, "GameFontDisableSmall", M.Format(M.Tr("Editing %s"), UnitTopLabel(unit)), T.colors.dim)
-    scope:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -16, -38)
-    scope:SetJustifyH("RIGHT")
-    scope:SetWidth(170)
-    sec._msuf2CursorY = -62
-
-    local tabValues = {
-        { value = "name", text = "Name" },
-        { value = "hp", text = "HP Text" },
-        { value = "power", text = "Power Text" },
-        { value = "advanced", text = "Advanced" },
-    }
-    local sampleNames = {
-        player = "Mapko",
-        target = "Astral Warden",
-        targettarget = "Moonlit Tank",
-        focustarget = "Marked Add",
-        focus = "Voidcaller",
-        boss = "Boss Preview",
-        pet = "Companion",
-    }
-    local function RaidGroupNameAllowed(unitKey)
-        return unitKey == "player" or unitKey == "target" or unitKey == "targettarget" or unitKey == "focustarget" or unitKey == "focus"
-    end
-    local function RaidGroupNamePreviewValue()
-        local style = ReadText(unit, "raidGroupNameStyle", "PAREN")
-        if style == "BRACKET" then return "[2]" end
-        if style == "NONE" then return "2" end
-        return "(2)"
-    end
-    local function NamePreviewText()
-        local text = sampleNames[unit] or UnitTopLabel(unit)
-        if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then
-            text = text .. " " .. RaidGroupNamePreviewValue()
-        end
-        return text
-    end
-    M.unitTextTabSelection = M.unitTextTabSelection or {}
-    local function CurrentTextTab()
-        local key = M.unitTextTabSelection[unit] or "name"
-        if key ~= "name" and key ~= "hp" and key ~= "power" and key ~= "advanced" then key = "name" end
-        return key
-    end
-    M.unitTextSlotSelection = M.unitTextSlotSelection or {}
-    M.unitTextMoveTogether = M.unitTextMoveTogether or {}
-    do
-        local req = _G.MSUF_EM2_MenuFocusRequest
-        if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit then
-            local component = req.component
-            if component == "health" or component == "healthText" or component == "hpText" then component = "hp" end
-            if component == "powerText" then component = "power" end
-            if component == "name" or component == "hp" or component == "power" then
-                M.unitTextTabSelection[unit] = component
-                M.unitTextSlotSelection[unit] = M.unitTextSlotSelection[unit] or {}
-                if req.slot then M.unitTextSlotSelection[unit][component] = req.slot end
-            end
-        end
-    end
-    local function CurrentSlot(kind)
-        local unitSlots = M.unitTextSlotSelection[unit]
-        local slot = unitSlots and unitSlots[kind] or "center"
-        if slot ~= "left" and slot ~= "center" and slot ~= "right" then slot = "center" end
-        return slot
-    end
-    local function SetCurrentSlot(kind, slot)
-        M.unitTextSlotSelection[unit] = M.unitTextSlotSelection[unit] or {}
-        M.unitTextSlotSelection[unit][kind] = slot or "center"
-    end
-    local function SlotOffsetKeys(kind)
-        local slot = CurrentSlot(kind)
-        local prefix
-        if kind == "hp" then
-            prefix = (slot == "left" and "hpTextLeft") or (slot == "right" and "hpTextRight") or "hpTextCenter"
-        else
-            prefix = (slot == "left" and "powerTextLeft") or (slot == "right" and "powerTextRight") or "powerTextCenter"
-        end
-        return prefix .. "OffsetX", prefix .. "OffsetY"
-    end
-    local function MoveTogether(kind)
-        local byUnit = M.unitTextMoveTogether[unit]
-        local value = byUnit and byUnit[kind]
-        if value == nil then return true end
-        return value == true
-    end
-    local function SetMoveTogether(kind, value)
-        M.unitTextMoveTogether[unit] = M.unitTextMoveTogether[unit] or {}
-        M.unitTextMoveTogether[unit][kind] = value ~= false
-    end
-    local function FocusPreviewText(kind, slot, active)
-        local fn = _G.MSUF_UFPreview_FocusTextSlot
-        if type(fn) == "function" then
-            fn(unit, kind, slot, active == true)
-        end
-        if kind then
-            if active == true then
-                local set = _G.MSUF_EM2_SetFocusSelection
-                if type(set) == "function" then set(unit, kind, slot, { source = "menu2", clearHover = true }) end
-            else
-                local hover = _G.MSUF_EM2_SetFocusHover
-                if type(hover) == "function" then hover(unit, kind, slot, { source = "menu2" }) end
-            end
-        else
-            local clear = _G.MSUF_EM2_ClearFocusHover
-            if type(clear) == "function" then clear() end
-        end
-    end
-    local function FocusActivePreviewText()
-        local tab = CurrentTextTab()
-        if tab == "name" then
-            FocusPreviewText("name", nil, true)
-        elseif tab == "hp" then
-            FocusPreviewText("hp", MoveTogether("hp") and nil or CurrentSlot("hp"), true)
-        elseif tab == "power" then
-            FocusPreviewText("power", MoveTogether("power") and nil or CurrentSlot("power"), true)
-        else
-            FocusPreviewText(nil, nil, false)
-        end
-    end
-    local function ResolveFocusSlot(slot)
-        if type(slot) == "function" then return slot() end
-        return slot
-    end
-    local function RestorePreviewTextFocus()
-        if RefreshTextControlState then
-            RefreshTextControlState()
-        else
-            FocusActivePreviewText()
-        end
-    end
-    local function HookPreviewTextFocus(widget, kind, slot)
-        if not (widget and widget.HookScript) then return end
-        widget:HookScript("OnEnter", function()
-            FocusPreviewText(kind, ResolveFocusSlot(slot), false)
-        end)
-        widget:HookScript("OnMouseDown", function()
-            FocusPreviewText(kind, ResolveFocusSlot(slot), true)
-        end)
-        widget:HookScript("OnLeave", RestorePreviewTextFocus)
-    end
-
-    local tabs = W.Segment(sec, "Text area", tabValues, math.min(520, sectionW - 48))
-    W.MoveWidget(tabs, sec, 20, -68, math.min(520, sectionW - 48), "LEFT")
-    M.BindSegment(ctx, tabs,
-        CurrentTextTab,
-        function(v)
-            M.unitTextTabSelection[unit] = v or "name"
-            FocusActivePreviewText()
-            if RefreshTextControlState then RefreshTextControlState() end
-        end)
-
-    local tabFrames = {}
-    local function MakeTabFrame(key)
-        local frame = CreateFrame("Frame", nil, sec)
-        frame:SetPoint("TOPLEFT", sec, "TOPLEFT", 0, -118)
-        frame:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 12)
-        frame._msuf2Width = sectionW
-        tabFrames[key] = frame
-        return frame
-    end
-
-    local function TextCard(parent, title, subtitle, x, y, width, height)
-        return W.ControlCard(parent, title, subtitle, x, y, width, height)
-    end
-
-    local function PlaceDropdown(parent, control, x, y, width)
-        W.MoveWidget(control, parent, x, y, width or dropdownW)
-    end
-
-    local function PlaceSlider(parent, control, x, y, width)
-        W.MoveWidget(control, parent, x, y, width or sliderW, "CENTER")
-    end
-
-    local function SectionLabel(parent, text, x, y)
-        local fs = T.Font(parent, "GameFontNormalSmall", text, T.colors.accent)
-        fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-        return fs
-    end
-
-    local function ReadSlot(unitKey, slotKey, legacyKey, fallback)
-        local value = ReadText(unitKey, slotKey, nil)
-        if value == nil or value == "" then value = ReadText(unitKey, legacyKey, fallback) end
-        return value or fallback
-    end
-
-    local function EffectiveTextSize(unitKey, generalKey)
-        local conf = GetConf(unit)
-        local value = tonumber(conf and conf[unitKey])
-        if value ~= nil then return value end
-        local g = GetGeneral()
-        value = tonumber(g and g[generalKey])
-        if value ~= nil then return value end
-        return tonumber(g and g.fontSize) or 14
-    end
-
-    local function PreviewText(parent, text, x, y, width)
-        local label = W.Text(parent, "Preview", x, y, width, T.colors.accent)
-        local value = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
-        value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 20)
-        value:SetWidth(width or 220)
-        value:SetJustifyH("LEFT")
-        return label, value
-    end
-
-    local function SwitchOrToggle(parent, label, x, y, labelWidth)
-        return W.ToggleAt(parent, label, x, y, labelWidth)
-    end
-
-    local function OptionText(values, value)
-        value = value or ""
-        for i = 1, #(values or {}) do
-            local item = values[i]
-            if item and item.value == value then
-                return item.text or item.label or tostring(value)
-            end
-        end
-        return tostring(value)
-    end
-
-    local function BadgeValue(value)
-        return tostring(value or ""):gsub("%s*/%s*", " + ")
-    end
-
-    local function BadgeNumber(value)
-        value = tonumber(value) or 0
-        if value == floor(value) then return tostring(floor(value)) end
-        return string.format("%.1f", value)
-    end
-
-    local function RefreshTextHeader()
-        if RefreshTextControlState then RefreshTextControlState() end
-    end
-
-    local function TextSlotSummary(kind)
-        local values = kind == "power" and POWER_MODES or HP_MODES
-        local slots
-        if kind == "power" then
-            slots = {
-                { "right", "powerTextRight", "powerTextMode", "CURPERCENT" },
-                { "center", "powerTextCenter", "powerTextMode", "NONE" },
-                { "left", "powerTextLeft", "powerTextMode", "NONE" },
-            }
-        else
-            slots = {
-                { "right", "textRight", "hpTextMode", "CURPERCENT" },
-                { "center", "textCenter", "hpTextMode", "NONE" },
-                { "left", "textLeft", "hpTextMode", "NONE" },
-            }
-        end
-
-        for i = 1, #slots do
-            local slot = slots[i]
-            local value = ReadSlot(unit, slot[2], slot[3], slot[4])
-            if value and value ~= "NONE" then
-                local slotText = slot[1]:sub(1, 1):upper() .. slot[1]:sub(2)
-                return slotText .. ": " .. BadgeValue(OptionText(values, value))
-            end
-        end
-        return "No slot text"
-    end
-
-    local function UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
-        if not W.SetCollapsibleBadges then return end
-        if tab == "hp" then
-            W.SetCollapsibleBadges(sec, {
-                { text = hpOn and "Shown" or "Hidden", kind = hpOn and "ok" or "muted" },
-                { text = TextSlotSummary("hp"), kind = hpOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(ReadNumber(unit, "hpOffsetX", -4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "hpOffsetY", -4)), kind = hpOn and "accent" or "muted" },
-            })
-        elseif tab == "power" then
-            W.SetCollapsibleBadges(sec, {
-                { text = powerOn and "Shown" or "Hidden", kind = powerOn and "ok" or "muted" },
-                { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(ReadNumber(unit, "powerOffsetX", -4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "powerOffsetY", 4)), kind = powerOn and "accent" or "muted" },
-            })
-        elseif tab == "advanced" then
-            W.SetCollapsibleBadges(sec, {
-                { text = "Name " .. BadgeNumber(ReadNumber(unit, "nameTextLayer", 5)), kind = nameOn and "info" or "muted" },
-                { text = "HP " .. BadgeNumber(ReadNumber(unit, "hpTextLayer", 5)), kind = hpOn and "info" or "muted" },
-                { text = "Power " .. BadgeNumber(ReadNumber(unit, "powerTextLayer", 2)), kind = powerOn and "info" or "muted" },
-            })
-        else
-            local anchor = BadgeValue(OptionText(TEXT_ANCHORS, ReadText(unit, "nameTextAnchor", "LEFT")))
-            if RaidGroupNameAllowed(unit) and ReadStatusBool(unit, "showRaidGroupInName", false) then
-                anchor = anchor .. " + Group"
-            end
-            W.SetCollapsibleBadges(sec, {
-                { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
-                { text = anchor, kind = nameOn and "info" or "muted" },
-                { text = "X " .. BadgeNumber(ReadNumber(unit, "nameOffsetX", 4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "nameOffsetY", -4)), kind = nameOn and "accent" or "muted" },
-            })
-        end
-    end
-
-    local nameTab = MakeTabFrame("name")
-    local hpTab = MakeTabFrame("hp")
-    local powerTab = MakeTabFrame("power")
-    local advancedTab = MakeTabFrame("advanced")
-
-    local nameContent = TextCard(nameTab, "Name text", "Controls whether the unit name is shown on this frame.", leftX, -4, cardW, 116)
-    local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
-
-    local showNameText = W.SwitchAt(nameContent, "Show Name", cardW - 62, -24, 0, "HIDDEN")
-    M.BindToggle(ctx, showNameText,
-        function() return ReadBool(unit, "showName", true) end,
-        function(v)
-            SetBool(unit, "showName", v, "MSUF2_SHOW_NAME_TEXT", { text = true, preview = true })
-            if RefreshTextControlState then RefreshTextControlState() end
-        end)
-
-    local namePosition = TextCard(nameTab, "Position", nil, leftX, -136, cardW, 260)
-    local nameAnchor = W.Dropdown(namePosition, "Anchor", TEXT_ANCHORS, 210)
-    PlaceDropdown(namePosition, nameAnchor, 16, -48, cardW - 32)
-    M.BindDropdown(ctx, nameAnchor,
-        function() return ReadText(unit, "nameTextAnchor", "LEFT") end,
-        function(v)
-            SetText(unit, "nameTextAnchor", v or "LEFT", "MSUF2_NAME_ANCHOR")
-            FocusPreviewText("name", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local nameX = W.Slider(namePosition, "X Offset", -300, 300, 1, 260)
-    PlaceSlider(namePosition, nameX, 16, -112, cardW - 72)
-    M.BindSlider(ctx, nameX,
-        function() return ReadNumber(unit, "nameOffsetX", 4) end,
-        function(v)
-            SetNumber(unit, "nameOffsetX", v, "MSUF2_NAME_X", { text = true, preview = true })
-            FocusPreviewText("name", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local nameY = W.Slider(namePosition, "Y Offset", -300, 300, 1, 260)
-    PlaceSlider(namePosition, nameY, 16, -174, cardW - 72)
-    M.BindSlider(ctx, nameY,
-        function() return ReadNumber(unit, "nameOffsetY", -4) end,
-        function(v)
-            SetNumber(unit, "nameOffsetY", v, "MSUF2_NAME_Y", { text = true, preview = true })
-            FocusPreviewText("name", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local nameAppearance = TextCard(nameTab, "Appearance", nil, rightX, -4, rightW, 150)
-    local nameSize = W.Slider(nameAppearance, "Size", 6, 48, 1, 260)
-    PlaceSlider(nameAppearance, nameSize, 16, -58, rightW - 58)
-    M.BindSlider(ctx, nameSize,
-        function() return EffectiveTextSize("nameFontSize", "nameFontSize") end,
-        function(v) SetNumber(unit, "nameFontSize", v, "MSUF2_NAME_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
-
-    local hpContent = TextCard(hpTab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 286)
-    PreviewText(hpContent, "630.0k - 63%", 16, -54, cardW - 32)
-
-    local showHPText = W.SwitchAt(hpContent, "Show HP Text", cardW - 62, -24, 0, "HIDDEN")
-    M.BindToggle(ctx, showHPText,
-        function() return ReadBool(unit, "showHP", true) end,
-        function(v)
-            SetBool(unit, "showHP", v, "MSUF2_SHOW_HP_TEXT", { text = true, preview = true })
-            if RefreshTextControlState then RefreshTextControlState() end
-        end)
-
-    local hpLeft = W.Dropdown(hpContent, "Left slot", HP_MODES, 260)
-    PlaceDropdown(hpContent, hpLeft, 16, -150, halfDropdownW)
-    M.BindDropdown(ctx, hpLeft,
-        function() return ReadSlot(unit, "textLeft", "hpTextMode", "NONE") end,
-        function(v)
-            SetText(unit, "textLeft", v or "NONE", "MSUF2_HP_LEFT")
-            SetCurrentSlot("hp", "left")
-            FocusPreviewText("hp", "left", true)
-            RefreshTextHeader()
-        end)
-
-    local hpCenter = W.Dropdown(hpContent, "Center slot", HP_MODES, 260)
-    PlaceDropdown(hpContent, hpCenter, 28 + halfDropdownW, -150, halfDropdownW)
-    M.BindDropdown(ctx, hpCenter,
-        function() return ReadSlot(unit, "textCenter", "hpTextMode", "NONE") end,
-        function(v)
-            SetText(unit, "textCenter", v or "NONE", "MSUF2_HP_CENTER")
-            SetCurrentSlot("hp", "center")
-            FocusPreviewText("hp", "center", true)
-            RefreshTextHeader()
-        end)
-
-    local hpRight = W.Dropdown(hpContent, "Right slot", HP_MODES, 260)
-    PlaceDropdown(hpContent, hpRight, 16, -96, cardW - 32)
-    M.BindDropdown(ctx, hpRight,
-        function() return ReadSlot(unit, "textRight", "hpTextMode", "CURPERCENT") end,
-        function(v)
-            SetText(unit, "textRight", v or "NONE", "MSUF2_HP_RIGHT")
-            SetCurrentSlot("hp", "right")
-            FocusPreviewText("hp", "right", true)
-            RefreshTextHeader()
-        end)
-
-    local hpSep = W.Dropdown(hpContent, "Delimiter", SEPARATORS, 160)
-    PlaceDropdown(hpContent, hpSep, 16, -206, halfDropdownW)
-    M.BindDropdown(ctx, hpSep,
-        function() return ReadText(unit, "hpTextSeparator", "") end,
-        function(v) SetText(unit, "hpTextSeparator", v or "", "MSUF2_HP_SEPARATOR") end)
-
-    local hpReverse = SwitchOrToggle(hpContent, "Reverse order", 28 + halfDropdownW, -228, halfDropdownW)
-    M.BindToggle(ctx, hpReverse,
-        function() return ReadText(unit, "hpTextReverse", false) == true end,
-        function(v) SetText(unit, "hpTextReverse", v and true or false, "MSUF2_HP_REVERSE") end)
-
-    local hpPosition = TextCard(hpTab, "Position", "Move all HP text together or adjust a selected slot.", rightX, -4, rightW, 410)
-    local hpX = W.Slider(hpPosition, "X Offset", -300, 300, 1, 260)
-    PlaceSlider(hpPosition, hpX, 16, -64, rightW - 58)
-    M.BindSlider(ctx, hpX,
-        function() return ReadNumber(unit, "hpOffsetX", -4) end,
-        function(v)
-            SetNumber(unit, "hpOffsetX", v, "MSUF2_HP_X", { text = true, preview = true })
-            FocusPreviewText("hp", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local hpY = W.Slider(hpPosition, "Y Offset", -300, 300, 1, 260)
-    PlaceSlider(hpPosition, hpY, 16, -122, rightW - 58)
-    M.BindSlider(ctx, hpY,
-        function() return ReadNumber(unit, "hpOffsetY", -4) end,
-        function(v)
-            SetNumber(unit, "hpOffsetY", v, "MSUF2_HP_Y", { text = true, preview = true })
-            FocusPreviewText("hp", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local hpMoveTogether = SwitchOrToggle(hpPosition, "Move text as one group", 16, -176, rightW - 32)
-    M.BindToggle(ctx, hpMoveTogether,
-        function() return MoveTogether("hp") end,
-        function(v)
-            SetMoveTogether("hp", v)
-            FocusPreviewText("hp", v and nil or CurrentSlot("hp"), true)
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_HP_TEXT_MOVE_MODE")
-            M.Refresh(ctx)
-        end)
-    local hpSlot = W.Segment(hpTab, "Slot", {
-        { value = "left", text = "Left" },
-        { value = "center", text = "Center" },
-        { value = "right", text = "Right" },
-    }, rightSliderW)
-    W.MoveWidget(hpSlot, hpPosition, 16, -220, rightW - 32, "LEFT")
-    M.BindSegment(ctx, hpSlot,
-        function() return CurrentSlot("hp") end,
-        function(v)
-            SetCurrentSlot("hp", v)
-            FocusPreviewText("hp", v, true)
-            M.Refresh(ctx)
-        end)
-
-    local hpSlotX = W.Slider(hpPosition, "Slot X", -300, 300, 1, 260)
-    PlaceSlider(hpPosition, hpSlotX, 16, -284, rightW - 58)
-    M.BindSlider(ctx, hpSlotX,
-        function()
-            local xKey = SlotOffsetKeys("hp")
-            return ReadNumber(unit, xKey, 0)
-        end,
-        function(v)
-            local xKey = SlotOffsetKeys("hp")
-            SetNumber(unit, xKey, v, "MSUF2_HP_SLOT_X", { text = true, preview = true })
-            FocusPreviewText("hp", CurrentSlot("hp"), true)
-        end)
-
-    local hpSlotY = W.Slider(hpPosition, "Slot Y", -300, 300, 1, 260)
-    PlaceSlider(hpPosition, hpSlotY, 16, -342, rightW - 58)
-    M.BindSlider(ctx, hpSlotY,
-        function()
-            local _, yKey = SlotOffsetKeys("hp")
-            return ReadNumber(unit, yKey, 0)
-        end,
-        function(v)
-            local _, yKey = SlotOffsetKeys("hp")
-            SetNumber(unit, yKey, v, "MSUF2_HP_SLOT_Y", { text = true, preview = true })
-            FocusPreviewText("hp", CurrentSlot("hp"), true)
-        end)
-
-    local hpAppearance = TextCard(hpTab, "Appearance", nil, leftX, -310, cardW, 144)
-    local hpSize = W.Slider(hpAppearance, "Size", 6, 48, 1, 260)
-    PlaceSlider(hpAppearance, hpSize, 16, -58, cardW - 72)
-    M.BindSlider(ctx, hpSize,
-        function() return EffectiveTextSize("hpFontSize", "hpFontSize") end,
-        function(v) SetNumber(unit, "hpFontSize", v, "MSUF2_HP_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
-
-    local powerContent = TextCard(powerTab, "What text appears", "Slots are explained before advanced position controls.", leftX, -4, cardW, 286)
-    PreviewText(powerContent, "100 Energy", 16, -54, cardW - 32)
-
-    local showPowerText = W.SwitchAt(powerContent, "Show Power Text", cardW - 62, -24, 0, "HIDDEN")
-    M.BindToggle(ctx, showPowerText,
-        function() return ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget") end,
-        function(v)
-            SetBool(unit, "showPower", v, "MSUF2_SHOW_POWER_TEXT", { text = true, preview = true })
-            if RefreshTextControlState then RefreshTextControlState() end
-        end)
-
-    local pLeft = W.Dropdown(powerContent, "Left slot", POWER_MODES, 260)
-    PlaceDropdown(powerContent, pLeft, 16, -150, halfDropdownW)
-    M.BindDropdown(ctx, pLeft,
-        function() return ReadSlot(unit, "powerTextLeft", "powerTextMode", "NONE") end,
-        function(v)
-            SetText(unit, "powerTextLeft", v or "NONE", "MSUF2_POWER_TEXT_LEFT")
-            SetCurrentSlot("power", "left")
-            FocusPreviewText("power", "left", true)
-            RefreshTextHeader()
-        end)
-
-    local pCenter = W.Dropdown(powerContent, "Center slot", POWER_MODES, 260)
-    PlaceDropdown(powerContent, pCenter, 28 + halfDropdownW, -150, halfDropdownW)
-    M.BindDropdown(ctx, pCenter,
-        function() return ReadSlot(unit, "powerTextCenter", "powerTextMode", "NONE") end,
-        function(v)
-            SetText(unit, "powerTextCenter", v or "NONE", "MSUF2_POWER_TEXT_CENTER")
-            SetCurrentSlot("power", "center")
-            FocusPreviewText("power", "center", true)
-            RefreshTextHeader()
-        end)
-
-    local pRight = W.Dropdown(powerContent, "Right slot", POWER_MODES, 260)
-    PlaceDropdown(powerContent, pRight, 16, -96, cardW - 32)
-    M.BindDropdown(ctx, pRight,
-        function() return ReadSlot(unit, "powerTextRight", "powerTextMode", "CURPERCENT") end,
-        function(v)
-            SetText(unit, "powerTextRight", v or "NONE", "MSUF2_POWER_TEXT_RIGHT")
-            SetCurrentSlot("power", "right")
-            FocusPreviewText("power", "right", true)
-            RefreshTextHeader()
-        end)
-
-    local pSep = W.Dropdown(powerContent, "Delimiter", SEPARATORS, 160)
-    PlaceDropdown(powerContent, pSep, 16, -206, halfDropdownW)
-    M.BindDropdown(ctx, pSep,
-        function() return ReadText(unit, "powerTextSeparator", ReadText(unit, "hpTextSeparator", "")) end,
-        function(v) SetText(unit, "powerTextSeparator", v or "", "MSUF2_POWER_TEXT_SEPARATOR") end)
-
-    local powerPosition = TextCard(powerTab, "Position", "Move all power text together or adjust a selected slot.", rightX, -4, rightW, 410)
-    local pX = W.Slider(powerPosition, "X Offset", -300, 300, 1, 260)
-    PlaceSlider(powerPosition, pX, 16, -64, rightW - 58)
-    M.BindSlider(ctx, pX,
-        function() return ReadNumber(unit, "powerOffsetX", -4) end,
-        function(v)
-            SetNumber(unit, "powerOffsetX", v, "MSUF2_POWER_X", { text = true, preview = true })
-            FocusPreviewText("power", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local pY = W.Slider(powerPosition, "Y Offset", -300, 300, 1, 260)
-    PlaceSlider(powerPosition, pY, 16, -122, rightW - 58)
-    M.BindSlider(ctx, pY,
-        function() return ReadNumber(unit, "powerOffsetY", 4) end,
-        function(v)
-            SetNumber(unit, "powerOffsetY", v, "MSUF2_POWER_Y", { text = true, preview = true })
-            FocusPreviewText("power", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local pMoveTogether = SwitchOrToggle(powerPosition, "Move text as one group", 16, -176, rightW - 32)
-    M.BindToggle(ctx, pMoveTogether,
-        function() return MoveTogether("power") end,
-        function(v)
-            SetMoveTogether("power", v)
-            FocusPreviewText("power", v and nil or CurrentSlot("power"), true)
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_POWER_TEXT_MOVE_MODE")
-            M.Refresh(ctx)
-        end)
-    local pSlot = W.Segment(powerTab, "Slot", {
-        { value = "left", text = "Left" },
-        { value = "center", text = "Center" },
-        { value = "right", text = "Right" },
-    }, rightSliderW)
-    W.MoveWidget(pSlot, powerPosition, 16, -220, rightW - 32, "LEFT")
-    M.BindSegment(ctx, pSlot,
-        function() return CurrentSlot("power") end,
-        function(v)
-            SetCurrentSlot("power", v)
-            FocusPreviewText("power", v, true)
-            M.Refresh(ctx)
-        end)
-
-    local pSlotX = W.Slider(powerPosition, "Slot X", -300, 300, 1, 260)
-    PlaceSlider(powerPosition, pSlotX, 16, -284, rightW - 58)
-    M.BindSlider(ctx, pSlotX,
-        function()
-            local xKey = SlotOffsetKeys("power")
-            return ReadNumber(unit, xKey, 0)
-        end,
-        function(v)
-            local xKey = SlotOffsetKeys("power")
-            SetNumber(unit, xKey, v, "MSUF2_POWER_SLOT_X", { text = true, preview = true })
-            FocusPreviewText("power", CurrentSlot("power"), true)
-        end)
-
-    local pSlotY = W.Slider(powerPosition, "Slot Y", -300, 300, 1, 260)
-    PlaceSlider(powerPosition, pSlotY, 16, -342, rightW - 58)
-    M.BindSlider(ctx, pSlotY,
-        function()
-            local _, yKey = SlotOffsetKeys("power")
-            return ReadNumber(unit, yKey, 0)
-        end,
-        function(v)
-            local _, yKey = SlotOffsetKeys("power")
-            SetNumber(unit, yKey, v, "MSUF2_POWER_SLOT_Y", { text = true, preview = true })
-            FocusPreviewText("power", CurrentSlot("power"), true)
-        end)
-
-    local powerAppearance = TextCard(powerTab, "Appearance", nil, leftX, -310, cardW, 144)
-    local pSize = W.Slider(powerAppearance, "Size", 6, 48, 1, 260)
-    PlaceSlider(powerAppearance, pSize, 16, -58, cardW - 72)
-    M.BindSlider(ctx, pSize,
-        function() return EffectiveTextSize("powerFontSize", "powerFontSize") end,
-        function(v) SetNumber(unit, "powerFontSize", v, "MSUF2_POWER_TEXT_SIZE", { text = true, preview = true }); Call("MSUF_UpdateAllFonts_Immediate") end)
-
-    local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
-
-    local advNameLayer = W.Slider(advancedLayers, "Name layer", 0, 30, 1, 260)
-    PlaceSlider(advancedLayers, advNameLayer, 16, -76, cardW - 72)
-    M.BindSlider(ctx, advNameLayer,
-        function() return ReadNumber(unit, "nameTextLayer", 5) end,
-        function(v)
-            SetNumber(unit, "nameTextLayer", v, "MSUF2_NAME_TEXT_LAYER_ADV", { text = true, preview = true })
-            Call("MSUF_UpdateAllFonts_Immediate")
-            RefreshTextHeader()
-        end)
-
-    local advHpLayer = W.Slider(advancedLayers, "HP layer", 0, 30, 1, 260)
-    PlaceSlider(advancedLayers, advHpLayer, 16, -136, cardW - 72)
-    M.BindSlider(ctx, advHpLayer,
-        function() return ReadNumber(unit, "hpTextLayer", 5) end,
-        function(v)
-            SetNumber(unit, "hpTextLayer", v, "MSUF2_HP_TEXT_LAYER_ADV", { text = true, preview = true })
-            Call("MSUF_UpdateAllFonts_Immediate")
-            RefreshTextHeader()
-        end)
-
-    local advPowerLayer = W.Slider(advancedLayers, "Power layer", 0, 30, 1, 260)
-    PlaceSlider(advancedLayers, advPowerLayer, 16, -196, cardW - 72)
-    M.BindSlider(ctx, advPowerLayer,
-        function() return ReadNumber(unit, "powerTextLayer", 2) end,
-        function(v)
-            SetNumber(unit, "powerTextLayer", v, "MSUF2_POWER_TEXT_LAYER_ADV", { text = true, preview = true })
-            Call("MSUF_UpdateAllFonts_Immediate")
-            RefreshTextHeader()
-        end)
-
-    HookPreviewTextFocus(showNameText, "name")
-    HookPreviewTextFocus(nameAnchor, "name")
-    HookPreviewTextFocus(nameX, "name")
-    HookPreviewTextFocus(nameY, "name")
-    HookPreviewTextFocus(nameSize, "name")
-    HookPreviewTextFocus(advNameLayer, "name")
-
-    HookPreviewTextFocus(showHPText, "hp")
-    HookPreviewTextFocus(hpLeft, "hp", "left")
-    HookPreviewTextFocus(hpCenter, "hp", "center")
-    HookPreviewTextFocus(hpRight, "hp", "right")
-    HookPreviewTextFocus(hpSep, "hp")
-    HookPreviewTextFocus(hpReverse, "hp")
-    HookPreviewTextFocus(hpX, "hp")
-    HookPreviewTextFocus(hpY, "hp")
-    HookPreviewTextFocus(hpMoveTogether, "hp")
-    HookPreviewTextFocus(hpSlot, "hp", function() return CurrentSlot("hp") end)
-    HookPreviewTextFocus(hpSlotX, "hp", function() return CurrentSlot("hp") end)
-    HookPreviewTextFocus(hpSlotY, "hp", function() return CurrentSlot("hp") end)
-    HookPreviewTextFocus(hpSize, "hp")
-    HookPreviewTextFocus(advHpLayer, "hp")
-
-    HookPreviewTextFocus(showPowerText, "power")
-    HookPreviewTextFocus(pLeft, "power", "left")
-    HookPreviewTextFocus(pCenter, "power", "center")
-    HookPreviewTextFocus(pRight, "power", "right")
-    HookPreviewTextFocus(pSep, "power")
-    HookPreviewTextFocus(pX, "power")
-    HookPreviewTextFocus(pY, "power")
-    HookPreviewTextFocus(pMoveTogether, "power")
-    HookPreviewTextFocus(pSlot, "power", function() return CurrentSlot("power") end)
-    HookPreviewTextFocus(pSlotX, "power", function() return CurrentSlot("power") end)
-    HookPreviewTextFocus(pSlotY, "power", function() return CurrentSlot("power") end)
-    HookPreviewTextFocus(pSize, "power")
-    HookPreviewTextFocus(advPowerLayer, "power")
-
-    RefreshTextControlState = function()
-        local tab = CurrentTextTab()
-        for key, frame in pairs(tabFrames) do
-            frame:SetShown(key == tab)
-        end
-        if tabs and tabs.SetValue then tabs:SetValue(tab) end
-
-        local nameOn = ReadBool(unit, "showName", true)
-        local hpOn = ReadBool(unit, "showHP", true)
-        local powerOn = ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
-        if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
-        UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
-        SetControlEnabled(showNameText, true)
-        SetControlEnabled(nameAnchor, nameOn)
-        SetControlEnabled(nameSize, nameOn)
-        SetControlEnabled(nameX, nameOn)
-        SetControlEnabled(nameY, nameOn)
-        SetControlEnabled(advNameLayer, nameOn)
-        SetControlEnabled(showHPText, true)
-        SetControlEnabled(hpLeft, hpOn)
-        SetControlEnabled(hpCenter, hpOn)
-        SetControlEnabled(hpRight, hpOn)
-        SetControlEnabled(hpSep, hpOn)
-        SetControlEnabled(hpReverse, hpOn)
-        SetControlEnabled(hpSize, hpOn)
-        SetControlEnabled(hpX, hpOn)
-        SetControlEnabled(hpY, hpOn)
-        SetControlEnabled(hpMoveTogether, hpOn)
-        SetControlEnabled(hpSlot, hpOn and not MoveTogether("hp"))
-        SetControlEnabled(hpSlotX, hpOn and not MoveTogether("hp"))
-        SetControlEnabled(hpSlotY, hpOn and not MoveTogether("hp"))
-        SetControlEnabled(advHpLayer, hpOn)
-        SetControlEnabled(showPowerText, true)
-        SetControlEnabled(pLeft, powerOn)
-        SetControlEnabled(pCenter, powerOn)
-        SetControlEnabled(pRight, powerOn)
-        SetControlEnabled(pSep, powerOn)
-        SetControlEnabled(pSize, powerOn)
-        SetControlEnabled(pX, powerOn)
-        SetControlEnabled(pY, powerOn)
-        SetControlEnabled(pMoveTogether, powerOn)
-        SetControlEnabled(pSlot, powerOn and not MoveTogether("power"))
-        SetControlEnabled(pSlotX, powerOn and not MoveTogether("power"))
-        SetControlEnabled(pSlotY, powerOn and not MoveTogether("power"))
-        SetControlEnabled(advPowerLayer, powerOn)
-        FocusActivePreviewText()
-    end
-    do
-        local entry = sec and sec._msuf2CollapsibleEntry
-        if entry then entry._msuf2RefreshState = RefreshTextControlState end
-    end
-    M.AddRefresher(ctx, RefreshTextControlState)
-    RefreshTextControlState()
-end
-
 local function BuildInlineText(ctx, builder, unit)
     if unit ~= "target" then return end
 
@@ -1858,703 +1115,17 @@ local function BuildInlineText(ctx, builder, unit)
     RefreshInlineControlState()
 end
 
-local function BuildAlpha(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("transparency", "Transparency", 328, false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local gap = 16
-    local leftX = 20
-    local innerW = max(320, sectionW - 40)
-    local leftW = floor((innerW - gap) * 0.48)
-    local rightX = leftX + leftW + gap
-    local rightW = innerW - leftW - gap
-
-    local opacityCard = W.ControlCard(sec, "Opacity", "Combat state alpha.", leftX, -38, leftW, 250)
-    local layerCard = W.ControlCard(sec, "Fade target", "Whole frame or one visual layer.", rightX, -38, rightW, 250)
-
-    local function PercentValue(value)
-        return tostring(floor((tonumber(value) or 0) * 100 + 0.5)) .. "%"
-    end
-
-    local function ParsePercentValue(text)
-        local raw = tostring(text or "")
-        local value = tonumber((raw:gsub("%%", ""):gsub(",", ".")))
-        if value == nil then return nil end
-        if raw:find("%%") or value > 1 then
-            return value / 100
-        end
-        return value
-    end
-
-    local function UsePercentInput(widget)
-        if widget and widget.SetValueFormatter then widget:SetValueFormatter(PercentValue) end
-        if widget and widget.SetValueParser then widget:SetValueParser(ParsePercentValue) end
-    end
-
-    local function AlphaLabel(label, value)
-        return label .. ": " .. PercentValue(value)
-    end
-
-    local function CurrentOpacityMode()
-        if ReadBool(unit, "alphaExcludeTextPortrait", false) ~= true then
-            return "frame"
-        end
-        return NormalizeAlphaMode(GetConf(unit).alphaLayerMode)
-    end
-
-    local function AlphaKeysForMode(modeKey)
-        if modeKey == "background" then
-            return "alphaBGInCombat", "alphaBGOutOfCombat"
-        elseif modeKey == "health" then
-            return "alphaHPInCombat", "alphaHPOutOfCombat"
-        elseif modeKey == "foreground" then
-            return "alphaFGInCombat", "alphaFGOutOfCombat"
-        end
-        return "alphaInCombat", "alphaOutOfCombat"
-    end
-
-    local function CurrentAlphaKeys()
-        return AlphaKeysForMode(CurrentOpacityMode())
-    end
-
-    local function ReadAlphaValue(inCombat)
-        local conf = GetConf(unit)
-        local inKey, outKey = CurrentAlphaKeys()
-        local key = inCombat and inKey or outKey
-        local value = tonumber(conf and conf[key])
-        if value ~= nil then return value end
-        if key == "alphaHPInCombat" then
-            value = tonumber(conf and conf.alphaFGInCombat)
-        elseif key == "alphaHPOutOfCombat" then
-            value = tonumber(conf and conf.alphaFGOutOfCombat)
-        end
-        if value ~= nil then return value end
-        return ReadNumber(unit, inCombat and "alphaInCombat" or "alphaOutOfCombat", 1)
-    end
-
-    local function BindAlphaSlider(widget, inCombat, label)
-        M.BindSlider(ctx, widget,
-            function() return ReadAlphaValue(inCombat) end,
-            function(v)
-                local inKey, outKey = CurrentAlphaKeys()
-                if inCombat then
-                    SetNumber(unit, inKey, v, "MSUF2_ALPHA_IN", { alpha = true, preview = true })
-                    if ReadBool(unit, "alphaSync", false) then
-                        SetNumber(unit, outKey, v, "MSUF2_ALPHA_SYNC", { alpha = true, preview = true })
-                        M.Refresh(ctx)
-                    end
-                else
-                    SetNumber(unit, outKey, v, "MSUF2_ALPHA_OUT", { alpha = true, preview = true })
-                end
-            end)
-        UsePercentInput(widget)
-        local function RefreshLabel()
-            if widget and widget._msuf2Title then
-                widget._msuf2Title:SetText(AlphaLabel(label, ReadAlphaValue(inCombat)))
-            end
-        end
-        widget:HookScript("OnValueChanged", function(_, value)
-            if widget and widget._msuf2Title then
-                widget._msuf2Title:SetText(AlphaLabel(label, value))
-            end
-        end)
-        M.AddRefresher(ctx, RefreshLabel)
-        RefreshLabel()
-        return widget
-    end
-
-    local inCombat = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, leftW), true, "In combat")
-    W.MoveWidget(inCombat, opacityCard, 16, -62, leftW - 58, "LEFT")
-
-    local outCombat = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, leftW), false, "Out of combat")
-    W.MoveWidget(outCombat, opacityCard, 16, -130, leftW - 58, "LEFT")
-
-    local sync = W.ToggleAt(opacityCard, "Sync both", 16, -194, leftW - 32)
-    M.BindToggle(ctx, sync,
-        function() return ReadBool(unit, "alphaSync", false) end,
-        function(v)
-            SetBool(unit, "alphaSync", v, "MSUF2_ALPHA_SYNC_TOGGLE", { alpha = true, preview = true })
-            if v then
-                local _, outKey = CurrentAlphaKeys()
-                SetNumber(unit, outKey, ReadAlphaValue(true), "MSUF2_ALPHA_SYNC_VALUE", { alpha = true, preview = true })
-            end
-            M.Refresh(ctx)
-        end)
-
-    local mode = W.Segment(layerCard, "Affects", {
-        { value = "frame", text = "Whole" },
-        { value = "foreground", text = "Bars" },
-        { value = "health", text = "HP" },
-        { value = "background", text = "Backdrop" },
-    }, rightW - 32)
-    W.MoveWidget(mode, layerCard, 16, -62, rightW - 32, "LEFT")
-    do
-        local buttons = mode.buttons or {}
-        local count = #buttons
-        local buttonGap = 8
-        local bw = count > 0 and floor((mode:GetWidth() - buttonGap * (count - 1)) / count) or 120
-        for i = 1, count do
-            local btn = buttons[i]
-            btn:ClearAllPoints()
-            btn:SetPoint("LEFT", mode, "LEFT", (i - 1) * (bw + buttonGap), 0)
-            btn:SetSize(bw, 22)
-        end
-    end
-
-    local function SetOpacityMode(value)
-        local inValue = ReadAlphaValue(true)
-        local outValue = ReadAlphaValue(false)
-        if value == "frame" then
-            SetBool(unit, "alphaExcludeTextPortrait", false, "MSUF2_ALPHA_MODE_FRAME", { alpha = true, preview = true })
-        else
-            SetBool(unit, "alphaExcludeTextPortrait", true, "MSUF2_ALPHA_MODE_LAYER", { alpha = true, preview = true })
-            SetNumber(unit, "alphaLayerMode", AlphaModeValue and AlphaModeValue(value) or 0, "MSUF2_ALPHA_LAYER", { alpha = true, preview = true })
-            local syncedOut = ReadBool(unit, "alphaSync", false) and inValue or outValue
-            local fgIn, fgOut = AlphaKeysForMode("foreground")
-            local hpIn, hpOut = AlphaKeysForMode("health")
-            local bgIn, bgOut = AlphaKeysForMode("background")
-            SetNumber(unit, fgIn, value == "foreground" and inValue or 1, "MSUF2_ALPHA_LAYER_FG_IN", { alpha = true, preview = true })
-            SetNumber(unit, fgOut, value == "foreground" and syncedOut or 1, "MSUF2_ALPHA_LAYER_FG_OUT", { alpha = true, preview = true })
-            SetNumber(unit, hpIn, value == "health" and inValue or 1, "MSUF2_ALPHA_LAYER_HP_IN", { alpha = true, preview = true })
-            SetNumber(unit, hpOut, value == "health" and syncedOut or 1, "MSUF2_ALPHA_LAYER_HP_OUT", { alpha = true, preview = true })
-            SetNumber(unit, bgIn, value == "background" and inValue or 1, "MSUF2_ALPHA_LAYER_BG_IN", { alpha = true, preview = true })
-            SetNumber(unit, bgOut, value == "background" and syncedOut or 1, "MSUF2_ALPHA_LAYER_BG_OUT", { alpha = true, preview = true })
-        end
-        M.Refresh(ctx)
-    end
-
-    M.BindSegment(ctx, mode,
-        function() return CurrentOpacityMode() end,
-        SetOpacityMode)
-
-    local preserve = W.ToggleAt(layerCard, "Preserve HP color", 16, -124, rightW - 32)
-    M.BindToggle(ctx, preserve,
-        function() return ReadBool(unit, "alphaPreserveHPColor", false) end,
-        function(v)
-            SetBool(unit, "alphaPreserveHPColor", v and true or false, "MSUF2_ALPHA_HP_COLOR", { alpha = true, preview = true })
-            if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
-        end)
-
-    local function RefreshAlphaLayerHelp()
-        local showPreserve = CurrentOpacityMode() == "health"
-        if W.SetControlShown then
-            W.SetControlShown(preserve, showPreserve)
-        elseif preserve and preserve.SetShown then
-            preserve:SetShown(showPreserve)
-        end
-        SetControlEnabled(preserve, showPreserve)
-    end
-    M.AddRefresher(ctx, RefreshAlphaLayerHelp)
-    RefreshAlphaLayerHelp()
-end
-local function BuildPortrait(ctx, builder, unit)
-    local sec = builder:CollapsibleSection("portrait", "Portrait", 558, false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 16
-    local cardGap = 28
-    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
-    leftW = max(310, min(430, leftW))
-    local rightX = leftX + leftW + cardGap
-    local rightW = max(310, min(430, sectionW - rightX - 16))
-    local leftSliderW = max(240, min(300, leftW - 58))
-    local function PlaceDropdown(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or leftW)
-    end
-    local function PlaceSlider(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or rightW, "CENTER")
-    end
-    local RefreshPortraitControls
-
-    M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
-    local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
-    local geometryCard = W.ControlCard(sec, "Geometry", "Size and local offset.", rightX, -38, rightW, 224)
-    local borderCard = W.ControlCard(sec, "Shape & Border", nil, leftX, -224, leftW, 312)
-    local styleCard = W.ControlCard(sec, "Class & Background", nil, rightX, -284, rightW, 166)
-
-    local portraitEnable = W.SwitchAt(mainCard, "Portrait", leftW - 62, -24, 0, "HIDDEN")
-    M.BindToggle(ctx, portraitEnable,
-        function() return NormalizePortrait(unit) ~= "OFF" end,
-        function(v)
-            if v then
-                SetPortraitValue(unit, "portraitMode", M._msuf2LastPortraitSide[unit] or "LEFT", "MSUF2_PORTRAIT_MODE")
-            else
-                local mode = NormalizePortrait(unit)
-                if mode == "LEFT" or mode == "RIGHT" then M._msuf2LastPortraitSide[unit] = mode end
-                SetPortraitValue(unit, "portraitMode", "OFF", "MSUF2_PORTRAIT_MODE")
-            end
-            if RefreshPortraitControls then RefreshPortraitControls() end
-        end)
-
-    local portrait = W.Segment(mainCard, "Position", {
-        { value = "LEFT", text = "Left" },
-        { value = "RIGHT", text = "Right" },
-    }, min(220, rightW))
-    W.MoveWidget(portrait, mainCard, 16, -62, min(220, leftW - 32))
-    M.BindSegment(ctx, portrait,
-        function()
-            local mode = NormalizePortrait(unit)
-            return mode == "RIGHT" and "RIGHT" or "LEFT"
-        end,
-        function(v)
-            M._msuf2LastPortraitSide[unit] = v == "RIGHT" and "RIGHT" or "LEFT"
-            SetPortraitValue(unit, "portraitMode", v or "LEFT", "MSUF2_PORTRAIT_MODE")
-            if RefreshPortraitControls then RefreshPortraitControls() end
-        end)
-
-    local render = W.Dropdown(mainCard, "Render", PORTRAIT_RENDER, 220)
-    W.MoveWidget(render, mainCard, 16, -116, min(220, leftW - 32))
-    M.BindDropdown(ctx, render,
-        function() return GetConf(unit).portraitRender or "2D" end,
-        function(v)
-            SetPortraitValue(unit, "portraitRender", v or "2D", "MSUF2_PORTRAIT_RENDER")
-            if RefreshPortraitControls then RefreshPortraitControls() end
-        end)
-
-    local shape = W.Dropdown(borderCard, "Shape", PORTRAIT_SHAPES, 220)
-    W.MoveWidget(shape, borderCard, 16, -58, min(220, leftW - 32))
-    M.BindDropdown(ctx, shape,
-        function() return GetConf(unit).portraitShape or "SQUARE" end,
-        function(v) SetPortraitValue(unit, "portraitShape", v or "SQUARE", "MSUF2_PORTRAIT_SHAPE") end)
-
-    local size = W.Slider(geometryCard, "Size override", 0, 128, 1, 280)
-    W.MoveWidget(size, geometryCard, 16, -62, rightW - 58, "CENTER")
-    M.BindSlider(ctx, size,
-        function() return ReadNumber(unit, "portraitSizeOverride", 0) end,
-        function(v) SetNumber(unit, "portraitSizeOverride", v, "MSUF2_PORTRAIT_SIZE", { preview = true }) end)
-
-    local x = W.Slider(geometryCard, "Portrait X", -120, 120, 1, 280)
-    W.MoveWidget(x, geometryCard, 16, -116, rightW - 58, "CENTER")
-    M.BindSlider(ctx, x,
-        function() return ReadNumber(unit, "portraitOffsetX", 0) end,
-        function(v) SetNumber(unit, "portraitOffsetX", v, "MSUF2_PORTRAIT_X", { preview = true }) end)
-
-    local y = W.Slider(geometryCard, "Portrait Y", -120, 120, 1, 280)
-    W.MoveWidget(y, geometryCard, 16, -170, rightW - 58, "CENTER")
-    M.BindSlider(ctx, y,
-        function() return ReadNumber(unit, "portraitOffsetY", 0) end,
-        function(v) SetNumber(unit, "portraitOffsetY", v, "MSUF2_PORTRAIT_Y", { preview = true }) end)
-
-    local classStyle = W.Dropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 220)
-    classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
-    W.MoveWidget(classStyle, styleCard, 16, -58, min(220, rightW - 32))
-    M.BindDropdown(ctx, classStyle,
-        function() return NormalizePortraitClassStyle(GetConf(unit).portraitClassStyle or "BLIZZARD") end,
-        function(v) SetPortraitValue(unit, "portraitClassStyle", NormalizePortraitClassStyle(v), "MSUF2_PORTRAIT_CLASS_STYLE") end)
-
-    local border = W.Dropdown(borderCard, "Border", PORTRAIT_BORDERS, 220)
-    W.MoveWidget(border, borderCard, 16, -112, min(220, leftW - 32))
-    M.BindDropdown(ctx, border,
-        function() return GetConf(unit).portraitBorderStyle or "NONE" end,
-        function(v)
-            SetPortraitValue(unit, "portraitBorderStyle", v or "NONE", "MSUF2_PORTRAIT_BORDER")
-            if RefreshPortraitControls then RefreshPortraitControls() end
-        end)
-
-    local borderSize = W.Slider(borderCard, "Border thickness", 1, 12, 1, 280)
-    W.MoveWidget(borderSize, borderCard, 16, -170, leftW - 58, "CENTER")
-    M.BindSlider(ctx, borderSize,
-        function() return ReadNumber(unit, "portraitBorderThickness", 2) end,
-        function(v) SetNumber(unit, "portraitBorderThickness", v, "MSUF2_PORTRAIT_BORDER_SIZE", { preview = true }) end)
-
-    local fillBorder = W.ToggleAt(borderCard, "Fill border into frame gap", 16, -238, leftW - 32)
-    M.BindToggle(ctx, fillBorder,
-        function() return ReadBool(unit, "portraitFillBorder", false) end,
-        function(v) SetPortraitValue(unit, "portraitFillBorder", v and true or false, "MSUF2_PORTRAIT_FILL_BORDER") end)
-
-    local portraitBg = W.ToggleAt(styleCard, "Portrait background", 16, -112, rightW - 32)
-    M.BindToggle(ctx, portraitBg,
-        function() return ReadBool(unit, "portraitBgEnabled", false) end,
-        function(v) SetPortraitValue(unit, "portraitBgEnabled", v and true or false, "MSUF2_PORTRAIT_BG") end)
-
-    RefreshPortraitControls = function()
-        local conf = GetConf(unit)
-        local active = NormalizePortrait(unit) ~= "OFF"
-        local classRender = active and ((conf.portraitRender or "2D") == "CLASS")
-        local hasBorder = active and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
-
-        SetControlEnabled(portraitEnable, true)
-        SetControlEnabled(portrait, active)
-        SetControlEnabled(render, active)
-        SetControlEnabled(shape, active)
-        SetControlEnabled(size, active)
-        SetControlEnabled(x, active)
-        SetControlEnabled(y, active)
-        SetControlEnabled(border, active)
-        SetControlEnabled(borderSize, hasBorder)
-        SetControlEnabled(fillBorder, hasBorder)
-        SetControlEnabled(classStyle, classRender)
-        SetControlEnabled(portraitBg, active)
-
-        SetSectionHeaderStatus(sec, nil)
-    end
-    local entry = sec and sec._msuf2CollapsibleEntry
-    if entry then entry._msuf2RefreshState = RefreshPortraitControls end
-    M.AddRefresher(ctx, RefreshPortraitControls)
-    RefreshPortraitControls()
-end
-
-local function BuildPower(ctx, builder, unit)
-    if not POWER_UNITS[unit] then return end
-    local isPlayer = unit == "player"
-    local detachedCardY = -254
-    local detachedCardHeight = isPlayer and 336 or 304
-    local powerSectionHeight = math.abs(detachedCardY) + detachedCardHeight + 52
-    local powerNoticeY = detachedCardY - detachedCardHeight - 12
-    local sec = builder:CollapsibleSection("power_bar", "Power Bar", powerSectionHeight, false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 16
-    local cardGap = 28
-    local availableW = max(340, sectionW - (leftX * 2))
-    local cardW = max(260, min(460, floor((availableW - cardGap) * 0.5)))
-    local rightX = leftX + cardW + cardGap
-    local rightW = max(240, min(460, sectionW - rightX - leftX))
-    local fullW = max(300, min(sectionW - (leftX * 2), cardW + cardGap + rightW))
-    local detachedGap = 28
-    local detachedLeftW = max(190, min(320, floor((fullW - 32 - detachedGap) * 0.5)))
-    local detachedRightX = 16 + detachedLeftW + detachedGap
-    local detachedRightW = max(180, min(320, fullW - detachedRightX - 16))
-    local detachedSliderW = max(170, min(300, min(detachedLeftW, detachedRightW) - 42))
-    local function PlaceSlider(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or rightW, "CENTER")
-    end
-    local function PowerCard(title, subtitle, x, y, width, height)
-        return W.ControlCard(sec, title, subtitle, x, y, width, height)
-    end
-    local RefreshPowerEnabled
-    local powerControls = {}
-    local detachedControls = {}
-    local function AddPowerControl(control)
-        powerControls[#powerControls + 1] = control
-        if W.AttachEditFocus then W.AttachEditFocus(control, unit, "powerbar", nil, { source = "menu2-unit" }) end
-        return control
-    end
-    local function AddDetachedControl(control)
-        detachedControls[#detachedControls + 1] = control
-        return AddPowerControl(control)
-    end
-
-    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 104)
-    if powerNoticeButton then
-        powerNoticeButton:SetScript("OnClick", function()
-            SetBool(unit, "showPowerBar", true, "MSUF2_POWER_SHOW", { power = true, preview = true })
-            if RefreshPowerEnabled then RefreshPowerEnabled() end
-        end)
-    end
-
-    local mainCard = PowerCard("Power bar", "Main visibility and size for this unit.", leftX, -38, cardW, 190)
-    local borderCard = PowerCard("Border & fill", "Outline and fill behavior.", rightX, -38, rightW, 190)
-    local detachedCard = PowerCard("Detached placement", "Used only when the power bar is detached from the unit frame.", leftX, detachedCardY, fullW, detachedCardHeight)
-
-    local show = W.SwitchAt(mainCard, "Show power bar", cardW - 62, -24, 0, "HIDDEN")
-    if W.AttachEditFocus then W.AttachEditFocus(show, unit, "powerbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, show,
-        function() return ReadBool(unit, "showPowerBar", true) end,
-        function(v)
-            SetBool(unit, "showPowerBar", v, "MSUF2_POWER_SHOW", { power = true, preview = true })
-            if RefreshPowerEnabled then RefreshPowerEnabled() end
-        end)
-
-    local border = AddPowerControl(W.ToggleAt(borderCard, "Power bar border", 16, -62, rightW - 32))
-    M.BindToggle(ctx, border,
-        function()
-            local conf = GetConf(unit)
-            if conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
-            return GetBars().powerBarBorderEnabled == true
-        end,
-        function(v)
-            SetBool(unit, "powerBarBorderEnabled", v, "MSUF2_POWER_BORDER", { power = true, preview = true })
-            if RefreshPowerEnabled then RefreshPowerEnabled() end
-        end)
-
-    local height = AddPowerControl(W.Slider(mainCard, "Power bar height", 1, 20, 1, 300))
-    W.MoveWidget(height, mainCard, 16, -76, cardW - 72, "CENTER")
-    M.BindSlider(ctx, height,
-        function()
-            local conf = GetConf(unit)
-            return tonumber(conf.powerBarHeight) or tonumber(GetBars().powerBarHeight) or 3
-        end,
-        function(v) SetNumber(unit, "powerBarHeight", v, "MSUF2_POWER_HEIGHT", { power = true, preview = true }) end)
-
-    local borderSize = AddPowerControl(W.Slider(borderCard, "Border thickness", 0, 6, 1, 300))
-    W.MoveWidget(borderSize, borderCard, 16, -108, rightW - 72, "CENTER")
-    M.BindSlider(ctx, borderSize,
-        function()
-            local conf = GetConf(unit)
-            return tonumber(conf.powerBarBorderThickness) or tonumber(GetBars().powerBarBorderThickness or GetBars().powerBarBorderSize) or 1
-        end,
-        function(v) SetNumber(unit, "powerBarBorderThickness", v, "MSUF2_POWER_BORDER_SIZE", { power = true, preview = true }) end)
-
-    local embed = AddPowerControl(W.ToggleAt(mainCard, "Embed into health", 16, -138, cardW - 32))
-    M.BindToggle(ctx, embed,
-        function()
-            local conf = GetConf(unit)
-            if conf.embedPowerBarIntoHealth ~= nil then return conf.embedPowerBarIntoHealth == true end
-            return GetBars().embedPowerBarIntoHealth == true
-        end,
-        function(v) SetBool(unit, "embedPowerBarIntoHealth", v, "MSUF2_POWER_EMBED", { power = true, preview = true }) end)
-
-    local smooth = AddPowerControl(W.ToggleAt(borderCard, "Smooth fill", 16, -158, rightW - 32))
-    M.BindToggle(ctx, smooth,
-        function() return ReadBool(unit, "powerSmoothFill", unit == "player") end,
-        function(v) SetBool(unit, "powerSmoothFill", v, "MSUF2_POWER_SMOOTH", { power = true, preview = true }) end)
-
-    local detached = AddPowerControl(W.ToggleAt(mainCard, "Detach from frame", 16, -166, cardW - 32))
-    M.BindToggle(ctx, detached,
-        function() return ReadBool(unit, "powerBarDetached", false) end,
-        function(v)
-            local conf = GetConf(unit)
-            conf.powerBarDetached = v and true or false
-            if conf.powerBarDetached then
-                conf.detachedPowerBarOffsetX = tonumber(conf.detachedPowerBarOffsetX) or 0
-                conf.detachedPowerBarOffsetY = tonumber(conf.detachedPowerBarOffsetY) or -4
-                conf.detachedPowerBarWidth = tonumber(conf.detachedPowerBarWidth) or tonumber(conf.width) or (unit == "focus" and 180 or 275)
-                conf.detachedPowerBarHeight = tonumber(conf.detachedPowerBarHeight) or 6
-                conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
-                if isPlayer and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
-            end
-            M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", { power = true, preview = true })
-            if RefreshPowerEnabled then RefreshPowerEnabled() end
-        end)
-
-    local textOnBar = AddDetachedControl(W.ToggleAt(detachedCard, "Text on detached bar", 16, -62, detachedLeftW))
-    M.BindToggle(ctx, textOnBar,
-        function() return ReadBool(unit, "detachedPowerBarTextOnBar", false) end,
-        function(v) SetBool(unit, "detachedPowerBarTextOnBar", v, "MSUF2_POWER_DETACHED_TEXT", { power = true, text = true, preview = true }) end)
-
-    local sliderTop = -116
-    if isPlayer then
-        sliderTop = -148
-        local sync = AddDetachedControl(W.ToggleAt(detachedCard, "Sync width to Class Resource", 16, -94, detachedLeftW))
-        M.BindToggle(ctx, sync,
-            function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end,
-            function(v) SetBool(unit, "detachedPowerBarSyncClassPower", v, "MSUF2_POWER_DETACHED_SYNC", { power = true, preview = true }) end)
-
-        local anchor = AddDetachedControl(W.ToggleAt(detachedCard, "Anchor to Class Resource", detachedRightX, -94, detachedRightW))
-        M.BindToggle(ctx, anchor,
-            function() return ReadBool(unit, "detachedPowerBarAnchorToClassPower", false) end,
-            function(v) SetBool(unit, "detachedPowerBarAnchorToClassPower", v, "MSUF2_POWER_DETACHED_ANCHOR", { power = true, preview = true }) end)
-    end
-
-    local dx = AddDetachedControl(W.Slider(detachedCard, "Detached X", -1000, 1000, 1, 300))
-    W.MoveWidget(dx, detachedCard, 16, sliderTop, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dx,
-        function() return ReadNumber(unit, "detachedPowerBarOffsetX", 0) end,
-        function(v) SetNumber(unit, "detachedPowerBarOffsetX", v, "MSUF2_POWER_DETACHED_X", { power = true, preview = true }) end)
-
-    local dy = AddDetachedControl(W.Slider(detachedCard, "Detached Y", -1000, 1000, 1, 300))
-    W.MoveWidget(dy, detachedCard, detachedRightX, sliderTop, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dy,
-        function() return ReadNumber(unit, "detachedPowerBarOffsetY", -4) end,
-        function(v) SetNumber(unit, "detachedPowerBarOffsetY", v, "MSUF2_POWER_DETACHED_Y", { power = true, preview = true }) end)
-
-    local dw = AddDetachedControl(W.Slider(detachedCard, "Detached width", 20, 800, 1, 300))
-    W.MoveWidget(dw, detachedCard, 16, sliderTop - 66, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dw,
-        function() return ReadNumber(unit, "detachedPowerBarWidth", ReadNumber(unit, "width", 250)) end,
-        function(v) SetNumber(unit, "detachedPowerBarWidth", v, "MSUF2_POWER_DETACHED_W", { power = true, preview = true }) end)
-
-    local dh = AddDetachedControl(W.Slider(detachedCard, "Detached height", 2, 80, 1, 300))
-    W.MoveWidget(dh, detachedCard, detachedRightX, sliderTop - 66, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dh,
-        function() return ReadNumber(unit, "detachedPowerBarHeight", 6) end,
-        function(v) SetNumber(unit, "detachedPowerBarHeight", v, "MSUF2_POWER_DETACHED_H", { power = true, preview = true }) end)
-
-    local layer = AddDetachedControl(W.Slider(detachedCard, "Detached layer", 0, 20, 1, 300))
-    W.MoveWidget(layer, detachedCard, 16, sliderTop - 132, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, layer,
-        function() return ReadNumber(unit, "detachedPowerBarFrameLevelOffset", 6) end,
-        function(v) SetNumber(unit, "detachedPowerBarFrameLevelOffset", v, "MSUF2_POWER_DETACHED_LAYER", { power = true, preview = true }) end)
-
-    RefreshPowerEnabled = function()
-        local powerOn = ReadBool(unit, "showPowerBar", true)
-        local detachedOn = powerOn and ReadBool(unit, "powerBarDetached", false)
-        for i = 1, #powerControls do SetControlEnabled(powerControls[i], powerOn) end
-        for i = 1, #detachedControls do SetControlEnabled(detachedControls[i], detachedOn) end
-        SetControlEnabled(borderSize, powerOn and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true))
-        SetControlEnabled(show, true)
-
-        if not powerOn then
-            powerNotice:SetMessage(UnitTopLabel(unit) .. " power bar is hidden. Turn it on to configure size, embed, or detached settings.", "warning")
-            powerNotice:Show()
-        else
-            powerNotice:Hide()
-        end
-        SetSectionHeaderStatus(sec, nil)
-    end
-    local entry = sec and sec._msuf2CollapsibleEntry
-    if entry then entry._msuf2RefreshState = RefreshPowerEnabled end
-    M.AddRefresher(ctx, RefreshPowerEnabled)
-    RefreshPowerEnabled()
-end
-
-local function BuildCastbar(ctx, builder, unit)
-    local fields = CASTBAR_FIELDS[unit]
-    if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", 210, false)
-    local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 14
-    local rightX = math.max(340, sectionW - 236)
-    local textX = rightX + 86
-    local RefreshCastbarEnabled
-    local providerMemoryKey = fields.providerMemory or (fields.backend and (fields.backend .. "BeforeHide") or nil)
-    local canUseBlizzardProvider = (unit == "player")
-
-    local function NormalizeBackend(value)
-        local fnUnit = _G.MSUF_NormalizeCastbarBackendForUnit
-        if type(fnUnit) == "function" then return fnUnit(unit, value) or "MSUF" end
-        local fn = _G.MSUF_NormalizeCastbarBackend
-        if type(fn) == "function" then
-            local backend = fn(value) or "MSUF"
-            if backend == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
-            return backend
-        end
-        if value == "BLIZZARD" and not canUseBlizzardProvider then return "HIDE" end
-        if value == "BLIZZARD" or value == "HIDE" or value == "MSUF" then return value end
-        return "MSUF"
-    end
-
-    local function ReadCastbarBackend()
-        local fn = _G.MSUF_GetCastbarBackend
-        if type(fn) == "function" then
-            return NormalizeBackend(fn(unit, GetGeneral()))
-        end
-        local g = GetGeneral()
-        local value = fields.backend and g[fields.backend]
-        if value == nil then
-            return ReadGeneralBool(fields.enable, true) and "MSUF" or (canUseBlizzardProvider and "BLIZZARD" or "HIDE")
-        end
-        return NormalizeBackend(value)
-    end
-
-    local function SetCastbarBackend(value)
-        local backend = NormalizeBackend(value)
-        local g = GetGeneral()
-        if providerMemoryKey and backend ~= "HIDE" then
-            g[providerMemoryKey] = backend
-        end
-        local fn = _G.MSUF_SetCastbarBackend
-        if type(fn) == "function" then
-            fn(unit, backend, g)
-        else
-            if fields.backend then g[fields.backend] = backend end
-            g[fields.enable] = (backend == "MSUF")
-        end
-        M.RequestGeneralApply("MSUF2_CASTBAR_BACKEND", { castbar = true, preview = true, applyAll = false })
-        Call("MSUF_Castbars_OnSettingsChanged", "menu2_backend")
-        if unit == "player" and type(_G.MSUF_SuppressBlizzardPlayerCastbars) == "function" then
-            _G.MSUF_SuppressBlizzardPlayerCastbars()
-        end
-        if RefreshCastbarEnabled then RefreshCastbarEnabled() end
-    end
-
-    local function ReadCastbarProvider()
-        if not canUseBlizzardProvider then return "MSUF" end
-        local backend = ReadCastbarBackend()
-        if backend == "BLIZZARD" then return "BLIZZARD" end
-        if backend == "MSUF" then return "MSUF" end
-        local remembered = providerMemoryKey and NormalizeBackend(GetGeneral()[providerMemoryKey]) or nil
-        if remembered == "BLIZZARD" then return "BLIZZARD" end
-        return "MSUF"
-    end
-
-    local function SetCastbarProvider(value)
-        if not canUseBlizzardProvider then return end
-        local backend = NormalizeBackend(value)
-        if backend == "HIDE" then backend = "MSUF" end
-        SetCastbarBackend(backend)
-    end
-
-    local function SetCastbarEnabled(enabled)
-        if enabled then
-            SetCastbarBackend(canUseBlizzardProvider and ReadCastbarProvider() or "MSUF")
-        else
-            local backend = ReadCastbarBackend()
-            if providerMemoryKey and backend ~= "HIDE" then
-                GetGeneral()[providerMemoryKey] = backend
-            end
-            SetCastbarBackend("HIDE")
-        end
-    end
-
-    local timeLabel = (unit == "boss") and "Show boss cast time" or ("Show " .. UnitTopLabel(unit):lower() .. " cast time")
-    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(sec, -160, "Use MSUF", 96)
-    if castbarNoticeButton then
-        castbarNoticeButton:SetScript("OnClick", function()
-            SetCastbarBackend("MSUF")
-        end)
-    end
-
-    local enabled = W.SwitchAt(sec, "Enable Castbar", leftX, -42, 240)
-    if W.AttachEditFocus then W.AttachEditFocus(enabled, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, enabled,
-        function() return ReadCastbarBackend() ~= "HIDE" end,
-        SetCastbarEnabled)
-
-    local provider
-    if canUseBlizzardProvider then
-        provider = W.Dropdown(sec, "Castbar provider", CASTBAR_BACKEND_VALUES, 220)
-        W.MoveWidget(provider, sec, rightX, -42, 220)
-        if W.AttachEditFocus then W.AttachEditFocus(provider, unit, "castbar", nil, { source = "menu2-unit" }) end
-        M.BindDropdown(ctx, provider,
-            ReadCastbarProvider,
-            SetCastbarProvider)
-    end
-
-    local time = W.ToggleAt(sec, timeLabel, leftX, -72, 240)
-    if W.AttachEditFocus then W.AttachEditFocus(time, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, time,
-        function() return ReadGeneralBool(fields.time, true) end,
-        function(v) SetGeneralBool(fields.time, v, "MSUF2_CASTBAR_TIME", { castbar = true, preview = true }) end)
-
-    local interrupt = W.ToggleAt(sec, "Show interrupt", leftX, -102, 240)
-    if W.AttachEditFocus then W.AttachEditFocus(interrupt, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, interrupt,
-        function() return ReadBool(unit, "showInterrupt", true) end,
-        function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end)
-
-    local icon = W.ToggleAt(sec, "Icon", rightX, -102, 70)
-    if W.AttachEditFocus then W.AttachEditFocus(icon, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, icon,
-        function() return ReadGeneralBool(fields.icon, true) end,
-        function(v) SetGeneralBool(fields.icon, v, "MSUF2_CASTBAR_ICON", { castbar = true, preview = true }) end)
-
-    local text = W.ToggleAt(sec, "Text", textX, -102, 70)
-    if W.AttachEditFocus then W.AttachEditFocus(text, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, text,
-        function() return ReadGeneralBool(fields.text, true) end,
-        function(v) SetGeneralBool(fields.text, v, "MSUF2_CASTBAR_TEXT", { castbar = true, preview = true }) end)
-
-    RefreshCastbarEnabled = function()
-        local backend = ReadCastbarBackend()
-        local enabledOn = (backend ~= "HIDE")
-        local msufOn = (backend == "MSUF")
-        SetControlEnabled(time, msufOn)
-        SetControlEnabled(interrupt, msufOn)
-        SetControlEnabled(icon, msufOn)
-        SetControlEnabled(text, msufOn)
-        SetControlEnabled(enabled, true)
-        if provider then SetControlEnabled(provider, enabledOn) end
-
-        if not msufOn then
-            if backend == "HIDE" then
-                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is off. Turn it on to use the MSUF castbar.", "warning")
-            else
-                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar uses Blizzard. Select MSUF to adjust time, interrupt, icon, and text behavior.", "warning")
-            end
-            castbarNotice:Show()
-        else
-            castbarNotice:Hide()
-        end
-        SetSectionHeaderStatus(sec, nil)
-    end
-    local entry = sec and sec._msuf2CollapsibleEntry
-    if entry then entry._msuf2RefreshState = RefreshCastbarEnabled end
-    M.AddRefresher(ctx, RefreshCastbarEnabled)
-    RefreshCastbarEnabled()
-end
-
 local function BuildStatus(ctx, builder, unit)
     local fn = M.BuildUnitStatusSection
     if type(fn) == "function" then
+        if UP.BuildSectionLazy then
+            return UP.BuildSectionLazy(ctx, builder, unit, {
+                id = "status_icons",
+                build = function(lazyCtx, lazyBuilder, lazyUnit)
+                    return fn(lazyCtx, lazyBuilder, lazyUnit)
+                end,
+            })
+        end
         return fn(ctx, builder, unit)
     end
 end
@@ -2640,6 +1211,17 @@ local function BuildBossLayout(ctx, builder, unit)
         end)
 end
 
+local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn)
+    if UP.BuildSectionLazy then
+        return UP.BuildSectionLazy(ctx, builder, unit, {
+            build = function(lazyCtx, lazyBuilder, lazyUnit)
+                return buildFn(lazyCtx, lazyBuilder, lazyUnit)
+            end,
+        })
+    end
+    return buildFn(ctx, builder, unit)
+end
+
 local function BuildUnitPage(info)
     return function(ctx)
         if info.unit == "boss" and ctx and ctx.wrapper then
@@ -2672,20 +1254,35 @@ local function BuildUnitPage(info)
         local builder = W.PageBuilder(ctx)
         BuildTopActions(ctx, builder, info.unit, info.label)
         BuildPreview(ctx, builder, info.unit)
-        BuildBasics(ctx, builder, info.unit, info.label)
-        if type(M.BuildAuras3UnitSection) == "function" then
-            M.BuildAuras3UnitSection(ctx, builder, info.unit)
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, function(lazyCtx, lazyBuilder, lazyUnit)
+            return BuildBasics(lazyCtx, lazyBuilder, lazyUnit, info.label)
+        end)
+        if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
+            if UP.BuildSectionLazy then
+                UP.BuildSectionLazy(ctx, builder, info.unit, {
+                    id = "auras3",
+                    build = function(lazyCtx, lazyBuilder, lazyUnit)
+                        return M.BuildAuras3UnitSection(lazyCtx, lazyBuilder, lazyUnit)
+                    end,
+                })
+            else
+                M.BuildAuras3UnitSection(ctx, builder, info.unit)
+            end
         end
-        BuildText(ctx, builder, info.unit)
-        BuildInlineText(ctx, builder, info.unit)
-        BuildPortrait(ctx, builder, info.unit)
-        BuildPower(ctx, builder, info.unit)
-        BuildCastbar(ctx, builder, info.unit)
+        if UP.BuildRegisteredSections then
+            UP.BuildRegisteredSections(ctx, builder, info.unit, "after_auras")
+        end
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildInlineText)
+        if UP.BuildRegisteredSections then
+            UP.BuildRegisteredSections(ctx, builder, info.unit, "after_inline_text")
+        end
         BuildStatus(ctx, builder, info.unit)
-        BuildBossLayout(ctx, builder, info.unit)
-        BuildLoadConditions(ctx, builder, info.unit)
-        BuildAlpha(ctx, builder, info.unit)
-        BuildLayout(ctx, builder, info.unit)
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildBossLayout)
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLoadConditions)
+        if UP.BuildRegisteredSections then
+            UP.BuildRegisteredSections(ctx, builder, info.unit, "after_load_conditions")
+        end
+        BuildUnitSectionMaybeLazy(ctx, builder, info.unit, BuildLayout)
         M.AddRefresher(ctx, function()
             ApplyUnitFrameEnabledGate(ctx, info.unit)
         end)
@@ -2698,7 +1295,7 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 19,
+        version = 20,
     })
 end
 

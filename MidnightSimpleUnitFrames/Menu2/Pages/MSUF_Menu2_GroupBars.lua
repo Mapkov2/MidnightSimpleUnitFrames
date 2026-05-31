@@ -58,7 +58,6 @@ local BuildGrowthDirectionTiles = GP.BuildGrowthDirectionTiles
 local BuildRoleOrderRows = GP.BuildRoleOrderRows
 local AurasRoot = GP.AurasRoot
 local AuraGroup = GP.AuraGroup
-local PrivateAuras = GP.PrivateAuras
 local SpellIndicators = GP.SpellIndicators
 local IconStyleValues = GP.IconStyleValues
 local CurrentGFStatusSpec = GP.CurrentGFStatusSpec

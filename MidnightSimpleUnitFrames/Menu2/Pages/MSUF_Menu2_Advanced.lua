@@ -7,6 +7,7 @@ _G.MSUF2 = M
 
 local W = M.Widgets
 local T = M.Theme
+local AuraSpecs = M.AdvancedAurasSpecs or {}
 
 local floor = math.floor
 local abs = math.abs
@@ -238,17 +239,7 @@ local function AurasUnit(key)
     return u
 end
 
-local AURA_SCOPES = {
-    { value = "shared", text = "Shared" },
-    { value = "player", text = "Player" },
-    { value = "target", text = "Target" },
-    { value = "focus", text = "Focus" },
-    { value = "boss1", text = "Boss 1" },
-    { value = "boss2", text = "Boss 2" },
-    { value = "boss3", text = "Boss 3" },
-    { value = "boss4", text = "Boss 4" },
-    { value = "boss5", text = "Boss 5" },
-}
+local AURA_SCOPES = AuraSpecs.AURA_SCOPES or {}
 
 local function AuraScope()
     return M.auraScope or "shared"
@@ -347,7 +338,7 @@ local function ForceAuraCapsOverride()
     local layout = u.layoutShared
     for _, key in ipairs({
         "maxBuffs", "maxDebuffs", "maxIcons", "perRow", "layoutMode", "growth",
-        "buffGrowth", "debuffGrowth", "privateGrowth", "rowWrap", "buffRowWrap",
+        "buffGrowth", "debuffGrowth", "rowWrap", "buffRowWrap",
         "debuffRowWrap", "buffDebuffAnchor", "splitSpacing", "stackCountAnchor",
         "sortOrder",
     }) do
@@ -388,65 +379,13 @@ local function MarkReminderDirty()
     if reminder and type(reminder.MarkDirty) == "function" then pcall(reminder.MarkDirty) end
 end
 
-local AURA_GROWTH = {
-    { value = "RIGHT", text = "Grow Right" },
-    { value = "LEFT", text = "Grow Left" },
-    { value = "UP", text = "Vertical Up" },
-    { value = "DOWN", text = "Vertical Down" },
-}
-
-local AURA_ROW_WRAP = {
-    { value = "DOWN", text = "2nd row down" },
-    { value = "UP", text = "2nd row up" },
-}
-
-local AURA_STACK_ANCHORS = {
-    { value = "TOPLEFT", text = "Top Left" },
-    { value = "TOPRIGHT", text = "Top Right" },
-    { value = "BOTTOMLEFT", text = "Bottom Left" },
-    { value = "BOTTOMRIGHT", text = "Bottom Right" },
-}
-
-local AURA_IGNORE_CATEGORIES = {
-    { key = "RAID_BUFFS", label = "Raid Buffs" },
-    { key = "BLESSING_BRONZE", label = "Blessing of the Bronze" },
-    { key = "HEALER_HOTS", label = "Healer HoTs" },
-    { key = "ROGUE_POISONS", label = "Rogue Poisons" },
-    { key = "SHAMAN_IMBUE", label = "Shaman Imbuements" },
-    { key = "DESERTER", label = "Deserter" },
-    { key = "SKYRIDING", label = "Skyriding" },
-    { key = "SELF_BUFFS", label = "Long-term Self Buffs" },
-    { key = "RESOURCE_AURAS", label = "Resource-like Auras" },
-    { key = "COOLDOWNS", label = "Cooldowns" },
-}
-
-local AURA_REMINDERS = {
-    { key = "FORTITUDE", label = "Power Word: Fortitude" },
-    { key = "ARCANE_INTELLECT", label = "Arcane Intellect" },
-    { key = "MARK_OF_WILD", label = "Mark of the Wild" },
-    { key = "BATTLE_SHOUT", label = "Battle Shout" },
-    { key = "SKYFURY", label = "Skyfury" },
-    { key = "SOURCE_OF_MAGIC", label = "Source of Magic" },
-    { key = "BLESSING_BRONZE", label = "Blessing of the Bronze" },
-    { key = "ROGUE_LETHAL", label = "Lethal Poison (Rogue)" },
-    { key = "ROGUE_NONLETHAL", label = "Non-Lethal Poison (Rogue)" },
-}
-
-local AURA_SORT_ORDER = {
-    { value = 0, text = "Unsorted (default)" },
-    { value = 1, text = "Default (player > canApply > ID)" },
-    { value = 2, text = "Big Defensive (longest first)" },
-    { value = 3, text = "Expiration (soonest first)" },
-    { value = 4, text = "Expiration only" },
-    { value = 5, text = "Name (alphabetical)" },
-    { value = 6, text = "Name only" },
-}
-
-local PANDEMIC_MODES = {
-    { value = "BORDER", text = "Border" },
-    { value = "PULSE", text = "Pulse" },
-    { value = "GLOW", text = "Glow" },
-}
+local AURA_GROWTH = AuraSpecs.AURA_GROWTH or {}
+local AURA_ROW_WRAP = AuraSpecs.AURA_ROW_WRAP or {}
+local AURA_STACK_ANCHORS = AuraSpecs.AURA_STACK_ANCHORS or {}
+local AURA_IGNORE_CATEGORIES = AuraSpecs.AURA_IGNORE_CATEGORIES or {}
+local AURA_REMINDERS = AuraSpecs.AURA_REMINDERS or {}
+local AURA_SORT_ORDER = AuraSpecs.AURA_SORT_ORDER or {}
+local PANDEMIC_MODES = AuraSpecs.PANDEMIC_MODES or {}
 
 local function MoveWidget(widget, parent, x, y)
     return W.MoveWidget(widget, parent, x, y)
@@ -799,7 +738,7 @@ local function BuildAuras(ctx)
         clean = {
             label = "Clean",
             maxBuffs = 6, maxDebuffs = 12, perRow = 10, splitSpacing = 4, iconSize = 24, spacing = 2, sortOrder = 0,
-            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", privateGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
             hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = true,
             includeDispellable = true, onlyMineBuffs = false, onlyMineDebuffs = false,
             highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
@@ -807,7 +746,7 @@ local function BuildAuras(ctx)
         focused = {
             label = "Focused",
             maxBuffs = 10, maxDebuffs = 16, perRow = 10, splitSpacing = 6, iconSize = 26, spacing = 2, sortOrder = 3,
-            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", privateGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
             hidePermanent = false, buffIncludeBoss = true, debuffIncludeBoss = true, includeStealable = true,
             includeDispellable = true, onlyMineBuffs = true, onlyMineDebuffs = true,
             highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
@@ -815,7 +754,7 @@ local function BuildAuras(ctx)
         performance = {
             label = "Fast",
             maxBuffs = 4, maxDebuffs = 8, perRow = 8, splitSpacing = 2, iconSize = 22, spacing = 1, sortOrder = 0,
-            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", privateGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
             hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = false,
             includeDispellable = false, onlyMineBuffs = false, onlyMineDebuffs = false,
             highlightOwnBuffs = false, highlightOwnDebuffs = false, showCooldownSwipe = false, showCooldownText = true, showStackCount = false, useBlizzardTimerText = true,
@@ -826,14 +765,12 @@ local function BuildAuras(ctx)
     local function EffectiveCapsValues()
         local p = previewPreset and QUICK_PRESETS[previewPreset]
         local caps = AuraCaps()
-        local shared = AuraShared()
         return {
             maxBuffs = p and p.maxBuffs or NumValue(caps, "maxBuffs", 8),
             maxDebuffs = p and p.maxDebuffs or NumValue(caps, "maxDebuffs", 15),
             perRow = p and p.perRow or NumValue(caps, "perRow", 11),
             iconSize = p and p.iconSize or NumValue(AuraLayout(), "iconSize", 26),
             spacing = p and p.spacing or NumValue(AuraLayout(), "spacing", 2),
-            privateMax = NumValue(shared, "privateAuraMaxPlayer", 4),
             sortOrder = p and p.sortOrder or NumValue(caps, "sortOrder", 0),
         }
     end
@@ -843,7 +780,6 @@ local function BuildAuras(ctx)
         local shared = AuraShared()
         local total = (BoolValue(shared, "showBuffs", true) and v.maxBuffs or 0)
             + (BoolValue(shared, "showDebuffs", true) and v.maxDebuffs or 0)
-            + ((BoolValue(shared, "privateAurasEnabled", true) and BoolValue(shared, "showPrivateAurasPlayer", true)) and v.privateMax or 0)
         if total <= 18 then return "Light", total, T.colors.ok end
         if total <= 30 then return "Medium", total, T.colors.accent2 end
         return "Heavy", total, T.colors.danger end
@@ -872,7 +808,7 @@ local function BuildAuras(ctx)
         caps.maxBuffs, caps.maxDebuffs, caps.perRow = p.maxBuffs, p.maxDebuffs, p.perRow
         caps.splitSpacing, caps.sortOrder = p.splitSpacing, p.sortOrder
         caps.layoutMode = p.layoutMode or caps.layoutMode or "SEPARATE"
-        caps.buffGrowth, caps.debuffGrowth, caps.privateGrowth = p.buffGrowth, p.debuffGrowth, p.privateGrowth
+        caps.buffGrowth, caps.debuffGrowth = p.buffGrowth, p.debuffGrowth
         caps.buffRowWrap, caps.debuffRowWrap = p.buffRowWrap, p.debuffRowWrap
         layout.iconSize, layout.spacing = p.iconSize, p.spacing
         filters.hidePermanent = p.hidePermanent
@@ -938,7 +874,6 @@ local function BuildAuras(ctx)
             a2_display = true,
             a2_layout = advanced,
             a2_text_coloring = advanced,
-            a2_private = advanced,
             a2_filters = advanced,
             a2_ignore = advanced,
             a2_reminders = advanced,
@@ -974,7 +909,6 @@ local function BuildAuras(ctx)
         local prefix = tostring(ctx.key or "page") .. ":"
         return state[prefix .. "a2_filters"] == true
             or state[prefix .. "a2_text_coloring"] == true
-            or state[prefix .. "a2_private"] == true
             or state[prefix .. "a2_ignore"] == true
             or state[prefix .. "a2_reminders"] == true
     end
@@ -1201,11 +1135,10 @@ local function BuildAuras(ctx)
     local groupLabels = {
         buffs = LabelAt(stage, "", 10, -10, previewW - 48, "GameFontNormalSmall", T.colors.text),
         debuffs = LabelAt(stage, "", 10, -78, previewW - 48, "GameFontNormalSmall", T.colors.text),
-        private = LabelAt(stage, "", 10, -146, previewW - 48, "GameFontNormalSmall", T.colors.text),
     }
     local previewMeta = LabelAt(preview, "", 14, -previewH + 60, previewW - 28, "GameFontDisableSmall", T.colors.muted)
     if previewMeta.SetWordWrap then previewMeta:SetWordWrap(true) end
-    local iconPools = { buffs = {}, debuffs = {}, private = {} }
+    local iconPools = { buffs = {}, debuffs = {} }
     local function PreviewIconSet(globalName, fallback)
         local icons = _G and _G[globalName]
         if type(icons) == "table" and #icons > 0 then return icons end
@@ -1214,7 +1147,6 @@ local function BuildAuras(ctx)
     local PREVIEW_AURA_ICONS = {
         buff = PreviewIconSet("MSUF_A3_PREVIEW_BUFF_TEXTURES", { 136116, 135932, 135987, 136085, 135915, 132333, 136075, 135981, 136076, 135964, 136048, 132316 }),
         debuff = PreviewIconSet("MSUF_A3_PREVIEW_DEBUFF_TEXTURES", { 136118, 136139, 136197, 135817, 132851, 135813, 136188, 136186, 135975, 132337, 136093, 136170 }),
-        private = { 136177, 134400, 135894, 136116, 135987, 136085, 132333, 135932, 136075, 135981, 136048, 132316 },
     }
     local DEBUFF_BORDER_COLORS = {
         { 0.32, 0.58, 1.00, 0.96 },
@@ -1274,10 +1206,6 @@ local function BuildAuras(ctx)
         f.stack:SetPoint("TOPRIGHT", f, "TOPRIGHT", -2, -1)
         if f.stack.SetShadowColor then f.stack:SetShadowColor(0, 0, 0, 1) end
         if f.stack.SetShadowOffset then f.stack:SetShadowOffset(1, -1) end
-        f.privateLock = f:CreateTexture(nil, "OVERLAY")
-        f.privateLock:SetTexture(134400)
-        f.privateLock:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 1, 1)
-        f.privateLock:Hide()
         f._kind = kind
         return f
     end
@@ -1285,7 +1213,6 @@ local function BuildAuras(ctx)
         iconPools.buffs[i] = CreatePreviewIcon("buff")
         iconPools.debuffs[i] = CreatePreviewIcon("debuff")
     end
-    for i = 1, 12 do iconPools.private[i] = CreatePreviewIcon("private") end
 
     local function DrawIconPool(pool, count, startX, startY, iconSize, spacing, perRow, kind)
         perRow = max(1, perRow)
@@ -1303,21 +1230,11 @@ local function BuildAuras(ctx)
                     local shade = BoolValue(AuraShared(), "showCooldownSwipe", true) and (i % 3 == 0 and 0.34 or 0.16) or 0
                     icon.cooldownShade:SetVertexColor(0, 0, 0, shade)
                 end
-                if icon.privateLock then
-                    if kind == "private" then
-                        local lockSize = max(9, floor(iconSize * 0.38))
-                        icon.privateLock:SetSize(lockSize, lockSize)
-                        icon.privateLock:Show()
-                    else
-                        icon.privateLock:Hide()
-                    end
-                end
                 if kind == "debuff" and BoolValue(AuraShared(), "useDebuffTypeBorders", false) then
                     local d = DEBUFF_BORDER_COLORS[((i - 1) % #DEBUFF_BORDER_COLORS) + 1]
                     PaintPreviewBorder(icon, d[1], d[2], d[3], d[4])
                 elseif (icon._kind == "buff" and BoolValue(AuraShared(), "highlightOwnBuffs", false) and i % 4 == 1)
-                    or (icon._kind == "debuff" and BoolValue(AuraShared(), "highlightOwnDebuffs", false) and i % 5 == 1)
-                    or icon._kind == "private" then
+                    or (icon._kind == "debuff" and BoolValue(AuraShared(), "highlightOwnDebuffs", false) and i % 5 == 1) then
                     PaintPreviewBorder(icon, 0.96, 0.76, 0.22, 0.96)
                 elseif kind == "buff" then
                     PaintPreviewBorder(icon, 0.18, 0.66, 0.36, 0.82)
@@ -1326,7 +1243,7 @@ local function BuildAuras(ctx)
                 else
                     PaintPreviewBorder(icon, 0.58, 0.38, 0.96, 0.92)
                 end
-                icon.timer:SetText(BoolValue(AuraShared(), "showCooldownText", true) and (icon._kind == "buff" and (i % 3 == 0 and "2m" or "42") or icon._kind == "private" and "P" or tostring(({ 8, 14, 22, 4 })[((i - 1) % 4) + 1])) or "")
+                icon.timer:SetText(BoolValue(AuraShared(), "showCooldownText", true) and (icon._kind == "buff" and (i % 3 == 0 and "2m" or "42") or tostring(({ 8, 14, 22, 4 })[((i - 1) % 4) + 1])) or "")
                 icon.stack:SetText(BoolValue(AuraShared(), "showStackCount", true) and (i % 3 == 1 and "2" or "") or "")
                 icon:Show()
             else
@@ -1345,7 +1262,6 @@ local function BuildAuras(ctx)
         local perRow = max(1, min(caps.perRow, floor((stageW - 22) / (iconSize + spacing))))
         local buffCount = BoolValue(shared, "showBuffs", true) and max(0, min(40, caps.maxBuffs)) or 0
         local debuffCount = BoolValue(shared, "showDebuffs", true) and max(0, min(40, caps.maxDebuffs)) or 0
-        local privateCount = (BoolValue(shared, "privateAurasEnabled", true) and BoolValue(shared, "showPrivateAurasPlayer", true)) and max(0, min(12, caps.privateMax)) or 0
         local budget, total, budgetColor = BudgetInfo()
         previewChips[1]:SetText("Auras only")
         previewChips[2]:SetText("Scope: " .. AuraScopeLabel())
@@ -1353,7 +1269,6 @@ local function BuildAuras(ctx)
         if previewChips[3].SetTextColor and budgetColor then previewChips[3]:SetTextColor(budgetColor[1], budgetColor[2], budgetColor[3], 1) end
         groupLabels.buffs:SetText("Buffs  " .. buffCount .. "/" .. caps.maxBuffs .. " shown")
         groupLabels.debuffs:SetText("Debuffs  " .. debuffCount .. "/" .. caps.maxDebuffs .. " shown")
-        groupLabels.private:SetText("Private  " .. privateCount .. "/" .. caps.privateMax .. " shown")
         local function RowsFor(count)
             return max(1, floor((max(0, count) + perRow - 1) / perRow))
         end
@@ -1367,14 +1282,10 @@ local function BuildAuras(ctx)
         local buffIconsY = buffY - 20
         local debuffY = buffIconsY - buffRows * (iconSize + spacing) - 14
         local debuffIconsY = debuffY - 20
-        local privateY = debuffIconsY - debuffRows * (iconSize + spacing) - 14
-        local privateIconsY = privateY - 20
         MoveGroupLabel(groupLabels.buffs, buffY)
         MoveGroupLabel(groupLabels.debuffs, debuffY)
-        MoveGroupLabel(groupLabels.private, privateY)
         DrawIconPool(iconPools.buffs, buffCount, 10, buffIconsY, iconSize, spacing, perRow, "buff")
         DrawIconPool(iconPools.debuffs, debuffCount, 10, debuffIconsY, iconSize, spacing, perRow, "debuff")
-        DrawIconPool(iconPools.private, privateCount, 10, privateIconsY, iconSize, spacing, perRow, "private")
         previewMeta:SetText("Icon " .. caps.iconSize .. "px   Per row " .. caps.perRow .. "   Total " .. total .. "   Sort " .. SortLabel(caps.sortOrder))
     end
     M.AddRefresher(ctx, RefreshPreview)
@@ -1518,9 +1429,6 @@ local function BuildAuras(ctx)
     Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Debuff Growth", layoutCol2, -308, AURA_GROWTH, layoutDropdownW,
         function() local c = AuraCaps(); return c.debuffGrowth or c.growth or "RIGHT" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().debuffGrowth = v or "RIGHT"; ApplyAuras() end))
-    Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Private Growth", layoutCol1, -392, AURA_GROWTH, layoutDropdownW,
-        function() local c = AuraCaps(); return c.privateGrowth or c.growth or "RIGHT" end,
-        function(v) ForceAuraCapsOverride(); AuraCaps().privateGrowth = v or "RIGHT"; ApplyAuras() end))
     Track(capsOverrideControls, ValueDropdownAt(ctx, layout, "Buff wrap rows", layoutCol3, -308, AURA_ROW_WRAP, layoutDropdownW,
         function() local c = AuraCaps(); return c.buffRowWrap or c.rowWrap or "DOWN" end,
         function(v) ForceAuraCapsOverride(); AuraCaps().buffRowWrap = v or "DOWN"; ApplyAuras() end))
@@ -1643,13 +1551,6 @@ local function BuildAuras(ctx)
         function(v) SetPandemicMode(v or "PULSE") end)
     W.Text(visual, "Best-effort: fixed 30% remaining-duration threshold for all auras. Color is configured in Global Style > Colors.", 12, -468, 650, T.colors.muted)
 
-    local private = b:CollapsibleSection("a2_private", "Private Auras", 168, false)
-    Track(sharedOnlyControls, SwitchAt(ctx, private, "Enable Private Auras", 12, -10, 220, AuraShared, "privateAurasEnabled", true, ApplyAuras))
-    local privateShow = ToggleAt(ctx, private, "Show (Player)", 12, -40, AuraShared, "showPrivateAurasPlayer", true, ApplyAuras)
-    local privateMax = SliderAt(ctx, private, "Max", 340, -34, 0, 12, 1, 150, AuraShared, "privateAuraMaxPlayer", 4, ApplyAuras)
-    local privateBorder = SliderAt(ctx, private, "Border thickness", 520, -34, 0, 10, 0.5, 150, AuraShared, "privateAuraBorderScale", 3, ApplyAuras)
-    local privateGrow = DropdownAt(ctx, private, "Grow Direction", 12, -92, AURA_GROWTH, 220, AuraShared, "privateGrowth", "RIGHT", ApplyAuras)
-
     local filters = b:CollapsibleSection("a2_filters", "Aura Filters & Sorting", 300, false)
     LabelAt(filters, "Include", 12, -10, 140, "GameFontNormal", T.colors.accent)
     Track(filterOverrideControls, ScopedToggleAt(ctx, filters, "Include boss buffs", 12, -34, AuraBuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras))
@@ -1752,13 +1653,6 @@ local function BuildAuras(ctx)
         SetControlEnabled(pandemicDD, sharedScope and GetPandemicMode() ~= "OFF")
 
         local shared = AuraShared()
-        local privateEnabled = sharedScope and shared.privateAurasEnabled ~= false
-        local privatePlayer = privateEnabled and shared.showPrivateAurasPlayer == true
-        SetControlEnabled(privateShow, privateEnabled)
-        SetControlEnabled(privateMax, privatePlayer)
-        SetControlEnabled(privateBorder, privatePlayer)
-        SetControlEnabled(privateGrow, privateEnabled)
-
         local remindersEnabled = sharedScope and shared.showReminders ~= false
         SetControlEnabled(remMaster, sharedScope)
         for i = 1, #reminderControls do SetControlEnabled(reminderControls[i], remindersEnabled) end
@@ -1770,11 +1664,6 @@ local function BuildAuras(ctx)
         SetAuraSectionBadges(visual, {
             { text = BoolValue(shared, "useBlizzardTimerText", true) and "Blizzard text" or "Custom text", kind = sharedScope and "info" or "muted" },
             { text = GetPandemicMode() ~= "OFF" and "Pandemic on" or "Pandemic off", kind = (sharedScope and GetPandemicMode() ~= "OFF") and "accent" or "muted" },
-        })
-        SetAuraSectionBadges(private, {
-            AuraOnOffBadge(privateEnabled, "Shown", "Hidden"),
-            { text = "Max " .. AuraBadgeNumber(NumValue(shared, "privateAuraMaxPlayer", 4)), kind = privateEnabled and "info" or "muted" },
-            { text = AuraBadgeNumber(NumValue(shared, "privateAuraBorderScale", 3)) .. " border", kind = privateEnabled and "accent" or "muted" },
         })
         SetAuraSectionBadges(filters, {
             { text = bossOnly and "Boss only" or "Standard", kind = bossOnly and "accent" or "info" },
