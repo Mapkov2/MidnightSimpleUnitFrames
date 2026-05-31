@@ -516,4 +516,3 @@ Data.QUERY_ALIASES = {
     eclipse = { "eclipse", "class resources", "druid" },
     stagger = { "stagger", "class resources", "brewmaster" },
 }
-

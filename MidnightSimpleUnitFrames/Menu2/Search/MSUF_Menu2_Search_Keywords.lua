@@ -116,4 +116,3 @@ Data.EASTER_EGGS = {
     { name = "Unhalted", result = "South Africa ftw" },
     { name = "Hayato", result = "forgot to bind his heal spells" },
 }
-

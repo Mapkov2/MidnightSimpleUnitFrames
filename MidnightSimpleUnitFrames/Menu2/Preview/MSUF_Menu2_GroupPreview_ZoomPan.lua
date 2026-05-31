@@ -176,4 +176,3 @@ function ZoomPan.CreateButton(parent, text, width, tooltip, onClick)
     end)
     return btn
 end
-
