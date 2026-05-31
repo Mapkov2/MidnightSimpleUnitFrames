@@ -39,12 +39,27 @@ local function Tr(text)
     return text
 end
 
+local function SharedUI()
+    return (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+end
+
+local function ThemeColor(key, fallback)
+    local ui = SharedUI()
+    if ui and ui.Color then return ui.Color(key, fallback) end
+    return fallback
+end
+
 local function T()
-    return _G.MSUF_THEME or {
-        bgR=0.08, bgG=0.09, bgB=0.10,
-        edgeR=0.20, edgeG=0.30, edgeB=0.50,
-        textR=0.92, textG=0.94, textB=1.00,
-        titleR=1.00, titleG=0.82, titleB=0.00,
+    local legacy = _G.MSUF_THEME or {}
+    local bg = ThemeColor("card", { legacy.bgR or 0.08, legacy.bgG or 0.09, legacy.bgB or 0.10, legacy.bgA or 0.55 })
+    local edge = ThemeColor("borderSoft", { legacy.edgeR or 0.20, legacy.edgeG or 0.30, legacy.edgeB or 0.50, legacy.edgeA or 0.60 })
+    local text = ThemeColor("text", { legacy.textR or 0.92, legacy.textG or 0.94, legacy.textB or 1.00, legacy.textA or 1.00 })
+    local accent = ThemeColor("accent", { legacy.titleR or 1.00, legacy.titleG or 0.82, legacy.titleB or 0.00, 1 })
+    return {
+        bgR = bg[1], bgG = bg[2], bgB = bg[3],
+        edgeR = edge[1], edgeG = edge[2], edgeB = edge[3],
+        textR = text[1], textG = text[2], textB = text[3],
+        titleR = accent[1], titleG = accent[2], titleB = accent[3],
     }
 end
 
@@ -1045,6 +1060,13 @@ do
         ov:EnableMouse(false); ov:EnableKeyboard(true)
         if ov.SetPropagateKeyboardInput then ov:SetPropagateKeyboardInput(true) end
         ov:Hide(); ov._onPick = nil
+        local panelBg = ThemeColor("popup", { 0.01, 0.015, 0.025, 0.96 })
+        local panelEdge = ThemeColor("borderSoft", { 1.00, 0.82, 0.00, 0.75 })
+        local accent = ThemeColor("accent2", { 1.00, 0.88, 0.22, 1 })
+        local text = ThemeColor("text", { 1, 1, 1, 1 })
+        local muted = ThemeColor("muted", { 0.9, 0.9, 0.9, 1 })
+        local ok = ThemeColor("ok", { 0.2, 1, 0.2, 1 })
+        local danger = ThemeColor("danger", { 1, 0.3, 0.3, 1 })
         local bg = ov:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints(); bg:SetColorTexture(0, 0, 0, 0.12)
         local topPanel = CreateFrame("Frame", nil, ov, "BackdropTemplate")
         topPanel:SetPoint("TOP", ov, "TOP", 0, -92)
@@ -1055,15 +1077,15 @@ do
             edgeSize = 1,
             insets = { left = 1, right = 1, top = 1, bottom = 1 },
         })
-        topPanel:SetBackdropColor(0.01, 0.015, 0.025, 0.96)
-        topPanel:SetBackdropBorderColor(1, 0.82, 0, 0.75)
+        topPanel:SetBackdropColor(panelBg[1], panelBg[2], panelBg[3], panelBg[4] or 0.96)
+        topPanel:SetBackdropBorderColor(panelEdge[1], panelEdge[2], panelEdge[3], 0.75)
         ov._topPanel = topPanel
         local font = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
         local info = topPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
         info:SetPoint("TOP", topPanel, "TOP", 0, -8)
         info:SetJustifyH("CENTER")
         info:SetFont(font, 15, "OUTLINE")
-        info:SetTextColor(1.00, 0.88, 0.22, 1)
+        info:SetTextColor(accent[1], accent[2], accent[3], 1)
         info:SetShadowColor(0, 0, 0, 1)
         info:SetShadowOffset(1, -1)
         ov._info = info
@@ -1072,17 +1094,17 @@ do
         sub:SetJustifyH("CENTER")
         sub:SetWidth(720)
         sub:SetFont(font, 12, "OUTLINE")
-        sub:SetTextColor(1, 1, 1, 1)
+        sub:SetTextColor(text[1], text[2], text[3], 1)
         sub:SetShadowColor(0, 0, 0, 1)
         sub:SetShadowOffset(1, -1)
         ov._sub = sub
         local hover = ov:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        hover:SetPoint("BOTTOMLEFT", ov, "BOTTOMLEFT", 24, 24); hover:SetTextColor(0.9, 0.9, 0.9); ov._hover = hover
+        hover:SetPoint("BOTTOMLEFT", ov, "BOTTOMLEFT", 24, 24); hover:SetTextColor(muted[1], muted[2], muted[3], muted[4] or 1); ov._hover = hover
         local ctrl = ov:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         ctrl:SetPoint("BOTTOM", ov, "BOTTOM", 0, 54); ctrl:SetJustifyH("CENTER"); ov._ctrlHint = ctrl
         local hl = CreateFrame("Frame", "MSUF_AnchorPickerHighlight", ov, "BackdropTemplate")
         hl:SetBackdrop({ edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", edgeSize = 12 })
-        hl:SetBackdropBorderColor(0, 1, 0, 0.95); hl:Hide(); ov._highlight = hl
+        hl:SetBackdropBorderColor(ok[1], ok[2], ok[3], 0.95); hl:Hide(); ov._highlight = hl
 
         ov:SetScript("OnShow", function(self)
             if type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
@@ -1099,7 +1121,7 @@ do
             self._info:SetText(Tr("Anchor Picker"))
             self._sub:SetText(Tr("|cffffffffHover a frame, then hold |r|cff55ff55CTRL + Left-Click|r|cffffffff to anchor.  |  Right-Click or Escape cancels.|r"))
             self._hover:SetText(self._lHoverNone)
-            self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(1, 0.3, 0.3)
+            self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(danger[1], danger[2], danger[3], 1)
             self._highlight:Hide()
             if self.RegisterEvent then self:RegisterEvent("GLOBAL_MOUSE_DOWN") end
             if self.RegisterEvent then self:RegisterEvent("PLAYER_REGEN_DISABLED") end
@@ -1113,15 +1135,17 @@ do
         ov:SetScript("OnUpdate", function(self, elapsed)
             self._elapsed = (self._elapsed or 0) + elapsed; if self._elapsed < 0.03 then return end; self._elapsed = 0
             local cd = IsControlKeyDown and IsControlKeyDown()
-            if cd then self._ctrlHint:SetText(self._lCtrlHeld); self._ctrlHint:SetTextColor(0.2, 1, 0.2)
-            else self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(1, 0.3, 0.3) end
+            if cd then self._ctrlHint:SetText(self._lCtrlHeld); self._ctrlHint:SetTextColor(ok[1], ok[2], ok[3], 1)
+            else self._ctrlHint:SetText(self._lCtrlNotHeld); self._ctrlHint:SetTextColor(danger[1], danger[2], danger[3], 1) end
             local f, n = _GetNamed(); self._pickedFrame = f; self._pickedName = n
             if n then
                 self._hover:SetText(string.format(self._lHoverFmt, n))
                 local l, b, w, h = _SafeGetRect(f)
                 if l then
                     self._highlight:ClearAllPoints(); self._highlight:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", l, b); self._highlight:SetSize(w, h)
-                    self._highlight:SetBackdropBorderColor(cd and 0 or 1, cd and 1 or 1, 0, cd and 0.95 or 0.6); self._highlight:Show()
+                    if cd then self._highlight:SetBackdropBorderColor(ok[1], ok[2], ok[3], 0.95)
+                    else self._highlight:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.60) end
+                    self._highlight:Show()
                 else self._highlight:Hide() end
             else self._hover:SetText(self._lHoverNone); self._highlight:Hide() end
         end)

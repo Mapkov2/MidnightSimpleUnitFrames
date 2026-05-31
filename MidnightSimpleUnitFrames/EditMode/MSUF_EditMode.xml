@@ -3,6 +3,9 @@
     <Script file="MSUF_EditMode_Layout.lua"/>
     <Script file="MSUF_EditMode_Movers.lua"/>
     <Script file="MSUF_EditMode_Popups.lua"/>
+    <Script file="MSUF_EditMode_PopupScale.lua"/>
+    <Script file="MSUF_EditMode_CastPopup.lua"/>
+    <Script file="MSUF_EditMode_AuraPopup.lua"/>
     <Script file="MSUF_EditMode_HUD.lua"/>
     <Script file="MSUF_EditMode_Focus.lua"/>
 </Ui>

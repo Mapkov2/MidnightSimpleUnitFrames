@@ -54,12 +54,26 @@ local function BlockConfigCombatLocked()
     return false
 end
 
---- Theme (read from MSUF_THEME, fall back to Midnight defaults)
+--- Theme (prefer shared Menu2/UI tokens, fall back to legacy Midnight defaults)
+local function SharedUI()
+    return (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+end
+
+local function ThemeColor(key, fallback)
+    local ui = SharedUI()
+    if ui and ui.Color then return ui.Color(key, fallback) end
+    return fallback
+end
+
 local function T()
-    return _G.MSUF_THEME or {
-        bgR = 0.08, bgG = 0.09, bgB = 0.10, bgA = 0.94,
-        edgeR = 0.20, edgeG = 0.30, edgeB = 0.50,
-        titleR = 1.00, titleG = 0.82, titleB = 0.00,
+    local legacy = _G.MSUF_THEME or {}
+    local bg = ThemeColor("bg", { legacy.bgR or 0.08, legacy.bgG or 0.09, legacy.bgB or 0.10, legacy.bgA or 0.94 })
+    local edge = ThemeColor("borderSoft", { legacy.edgeR or 0.20, legacy.edgeG or 0.30, legacy.edgeB or 0.50, 1 })
+    local accent = ThemeColor("accent", { legacy.titleR or 1.00, legacy.titleG or 0.82, legacy.titleB or 0.00, 1 })
+    return {
+        bgR = bg[1], bgG = bg[2], bgB = bg[3], bgA = bg[4] or 0.94,
+        edgeR = edge[1], edgeG = edge[2], edgeB = edge[3],
+        titleR = accent[1], titleG = accent[2], titleB = accent[3],
     }
 end
 
@@ -189,7 +203,8 @@ local function EnsureGridFrame()
     --- Background overlay
     bgTex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -8)
     bgTex:SetAllPoints()
-    bgTex:SetColorTexture(0.02, 0.03, 0.04, GetBgAlpha())
+    local th = T()
+    bgTex:SetColorTexture(th.bgR, th.bgG, th.bgB, GetBgAlpha())
 
     --- Center crosshair (accent colored, full screen length)
     crossVShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
@@ -383,7 +398,8 @@ end
 --- Public API
 function Grid.Show()
     EnsureGridFrame()
-    bgTex:SetColorTexture(0.02, 0.03, 0.04, GetBgAlpha())
+    local th = T()
+    bgTex:SetColorTexture(th.bgR, th.bgG, th.bgB, GetBgAlpha())
     RebuildLines()
     gridFrame:Show()
     if C_Timer and C_Timer.After then
@@ -404,7 +420,10 @@ end
 function Grid.SetBgAlpha(v)
     v = max(0.05, min(0.85, v))
     SetBgAlpha(v)
-    if bgTex then bgTex:SetColorTexture(0.02, 0.03, 0.04, v) end
+    if bgTex then
+        local th = T()
+        bgTex:SetColorTexture(th.bgR, th.bgG, th.bgB, v)
+    end
     ApplyGridVisibility()
     if gridFrame and gridFrame:IsShown() then RebuildLines() end
 end
@@ -472,7 +491,8 @@ local function GetGuide()
     if not g then
         g = guideParent:CreateTexture(nil, "OVERLAY")
     end
-    g:SetColorTexture(0.30, 0.82, 1.00, 0.72)
+    local th = T()
+    g:SetColorTexture(th.titleR, th.titleG, th.titleB, 0.72)
     g:SetAlpha(1)
     g._msufGuideFade = nil
     g:Show()
@@ -884,7 +904,7 @@ local function NudgeTarget(dx, dy)
         db.general = db.general or {}
         local g = db.general
         local castPF = _G.MSUF_EM2_CastPopup
-        local unit = castPF and castPF.unit
+        local unit = (EM2.CastPopup.GetUnit and EM2.CastPopup.GetUnit()) or (castPF and castPF.unit)
         if unit then
             local xKey, yKey = GetCastbarOffsetKeys(unit)
             if xKey and yKey then

@@ -16,6 +16,13 @@ local function Menu2Theme()
     return (type(M2) == "table" and type(M2.Theme) == "table") and M2.Theme or nil
 end
 
+local function ThemeColor(key, fallback)
+    local ui = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+    if ui and ui.Color then return ui.Color(key, fallback) end
+    local T = Menu2Theme()
+    return (T and T.colors and T.colors[key]) or fallback
+end
+
 local function PlayFocusMotion(frame, motion, opts)
     local T = Menu2Theme()
     if T and T.PlayMotion then
@@ -61,6 +68,7 @@ local GROUP_KIND_BY_KEY = {
 local function NormalizeKey(key)
     if type(key) ~= "string" or key == "" then return nil end
     key = key:lower()
+    if key:sub(1, 5) == "aura_" then return NormalizeKey(key:sub(6)) end
     if key == "tot" then return "targettarget" end
     if key == "focus_target" then return "focustarget" end
     if key == "uf_player" then return "player" end
@@ -109,8 +117,8 @@ local function EnsureVeilParent()
     if veilParent then return veilParent end
     veilParent = CreateFrame("Frame", "MSUF_EM2_PopupFocusVeil", UIParent)
     veilParent:SetAllPoints(UIParent)
-    veilParent:SetFrameStrata("FULLSCREEN")
-    veilParent:SetFrameLevel(508)
+    veilParent:SetFrameStrata("DIALOG")
+    veilParent:SetFrameLevel(160)
     veilParent:EnableMouse(false)
     veilParent:Hide()
     return veilParent
@@ -171,7 +179,6 @@ local function GroupSectionForComponent(pageKey, component)
     elseif pageKey == "gf_auras" then
         if component == "debuffs" or component == "debuff" then return "debuffs" end
         if component == "ext" or component == "externals" or component == "external" then return "ext" end
-        if component == "private" or component == "priv" then return "priv" end
         return "buffs"
     elseif pageKey == "gf_indicators" then
         if component == "status" or component == "sicons" then return "sicons" end
@@ -299,8 +306,6 @@ local function GetVeil(key)
     veil.fill = veil:CreateTexture(nil, "OVERLAY")
     veil.fill:SetAllPoints()
     veil.fill:SetColorTexture(0, 0, 0, 0.10)
-    local T = Menu2Theme()
-    if T and T.ApplyFocusVeil then T.ApplyFocusVeil(veil, "edit") end
     veilByKey[key] = veil
     return veil
 end
@@ -317,6 +322,11 @@ local function PlaceAroundFrame(veil, frame)
     local y = floor(t * ratio - UIParent:GetHeight() + 0.5)
     local w = max(2, floor((r - l) * ratio + 0.5))
     local h = max(2, floor((t - b) * ratio + 0.5))
+    local uiW = UIParent:GetWidth() or 0
+    local uiH = UIParent:GetHeight() or 0
+    if uiW > 0 and uiH > 0 and (w > uiW * 0.70 or h > uiH * 0.70 or (w * h) > (uiW * uiH * 0.35)) then
+        return false
+    end
     veil:ClearAllPoints()
     veil:SetSize(w, h)
     veil:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
@@ -339,14 +349,15 @@ local function EnsureHoverFrame()
     hoverFrame:SetFrameLevel(512)
     hoverFrame:EnableMouse(false)
     hoverFrame:SetBackdrop({ edgeFile = W8, edgeSize = 1 })
-    hoverFrame:SetBackdropBorderColor(0.18, 0.72, 0.90, 0.50)
+    local accent = ThemeColor("accent", { 0.18, 0.72, 0.90, 1 })
+    hoverFrame:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.50)
     hoverFrame:SetAlpha(0)
     hoverFrame:Hide()
 
     hoverFrame.fill = hoverFrame:CreateTexture(nil, "BACKGROUND")
     hoverFrame.fill:SetPoint("TOPLEFT", 1, -1)
     hoverFrame.fill:SetPoint("BOTTOMRIGHT", -1, 1)
-    hoverFrame.fill:SetColorTexture(0.08, 0.26, 0.42, 0.040)
+    hoverFrame.fill:SetColorTexture(accent[1], accent[2], accent[3], 0.040)
     return hoverFrame
 end
 
@@ -379,34 +390,8 @@ end
 local function SyncVeil()
     HideLegacyInspector()
     HideOldFocusLayer()
-
-    if not (IsEditActive() and state.popupKey and IsPopupOpen()) then
-        HideVeils()
-        return false
-    end
-
-    local movers = EM2.Movers and EM2.Movers.All and EM2.Movers.All()
-    if not movers then
-        HideVeils()
-        return false
-    end
-
-    local activeKey = NormalizeKey(state.popupKey)
-    EnsureVeilParent():Show()
-    local seen = {}
-    for key, mover in pairs(movers) do
-        seen[key] = true
-        local veil = GetVeil(key)
-        if key ~= activeKey and mover and mover.IsShown and mover:IsShown() and PlaceAroundFrame(veil, mover) then
-            veil:Show()
-        else
-            veil:Hide()
-        end
-    end
-    for key, veil in pairs(veilByKey) do
-        if not seen[key] then veil:Hide() end
-    end
-    return true
+    HideVeils()
+    return false
 end
 
 function Focus.GetSelection()

@@ -18,6 +18,11 @@ local max, min = math.max, math.min
 local W8 = "Interface/Buttons/WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"
 local CHEVRON = "Interface\\ChatFrame\\ChatFrameExpandArrow"
+local ADDON = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
+local ADDON_PATH = "Interface\\AddOns\\" .. ADDON .. "\\"
+local CHECK_BOX_FILL_TEX = ADDON_PATH .. "Media\\msuf_checkbox_fill.tga"
+local CHECK_BOX_EDGE_TEX = ADDON_PATH .. "Media\\msuf_checkbox_edge.tga"
+local CHECK_TICK_TEX = ADDON_PATH .. "Media\\msuf_check_tick_medium.tga"
 local function ApplyAllSettingsSafe()
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then UF.Apply(nil); return true end
@@ -43,7 +48,8 @@ local C = {
     btnBg     = { 0.09, 0.10, 0.14, 0.90 },
     btnEdge   = { 0.10, 0.20, 0.42, 0.65 },
     btnHover  = { 0.20, 0.40, 0.80, 0.12 },
-    checkFill = { 0.90, 0.55, 0.15, 1.00 },
+    checkFill = { 0.055, 0.145, 0.350, 1.00 },
+    checkEdge = { 0.255, 0.455, 0.835, 0.90 },
 }
 
 local PW       = 380
@@ -91,6 +97,26 @@ function Menu2Style.Color(key, fallback)
     return SharedUI and SharedUI.Color and SharedUI.Color(key, fallback) or fallback
 end
 
+local function RefreshPalette()
+    C.panelBg = Menu2Style.Color("popup", C.panelBg)
+    C.panelEdge = Menu2Style.Color("borderSoft", C.panelEdge)
+    C.cardBg = Menu2Style.Color("card", C.cardBg)
+    C.cardEdge = Menu2Style.Color("borderSoft", C.cardEdge)
+    C.divider = Menu2Style.Color("borderSoft", C.divider)
+    C.gold = Menu2Style.Color("accent2", C.gold)
+    C.orange = Menu2Style.Color("accent2", C.orange)
+    C.title = Menu2Style.Color("accent", C.title)
+    C.white = Menu2Style.Color("text", C.white)
+    C.muted = Menu2Style.Color("muted", C.muted)
+    C.inputBg = Menu2Style.Color("card", C.inputBg)
+    C.inputEdge = Menu2Style.Color("borderSoft", C.inputEdge)
+    C.stepBg = Menu2Style.Color("pillBase", C.stepBg)
+    C.btnBg = Menu2Style.Color("pillBase", C.btnBg)
+    C.btnEdge = Menu2Style.Color("pillEdge", C.btnEdge)
+    C.checkFill = Menu2Style.Color("checkActive", C.checkFill)
+    C.checkEdge = Menu2Style.Color("checkActiveEdge", C.checkEdge)
+end
+
 function Menu2Style.SetButtonText(btn, text)
     if SharedUI and SharedUI.SetButtonText then return SharedUI.SetButtonText(btn, text) end
     local label = btn and (btn._msuf2Label or btn._label)
@@ -107,13 +133,20 @@ function Menu2Style.Card(frame)
     return frame
 end
 
+local function KeepMenu2Skin(widget)
+    if widget then
+        widget._msufNoSlashSkin = true
+    end
+    return widget
+end
+
 function Menu2Style.Button(parent, text, width, height, onClick)
     if SharedUI and SharedUI.Button then
-        return SharedUI.Button(parent, text, width or 66, height or 24, {
+        return KeepMenu2Skin(SharedUI.Button(parent, text, width or 66, height or 24, {
             onClick = onClick,
             align = "CENTER",
             skipHistory = true,
-        })
+        }))
     end
     local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
     b:SetSize(width or 66, height or 24)
@@ -128,21 +161,22 @@ function Menu2Style.Button(parent, text, width, height, onClick)
     fs:SetText(Tr(text or ""))
     b._label = fs
     if onClick then b:SetScript("OnClick", onClick) end
-    return b
+    return KeepMenu2Skin(b)
 end
 
 function Menu2Style.Step(parent, text, width, height)
-    if SharedUI and SharedUI.StepperButton then return SharedUI.StepperButton(parent, text, width or STEP_W, height or BOX_H) end
+    if SharedUI and SharedUI.StepperButton then return KeepMenu2Skin(SharedUI.StepperButton(parent, text, width or STEP_W, height or BOX_H)) end
     return Menu2Style.Button(parent, text, width or STEP_W, height or BOX_H)
 end
 
 function Menu2Style.EditBox(editBox)
-    if SharedUI and SharedUI.EditBox then return SharedUI.EditBox(editBox) end
-    return editBox
+    local box = (SharedUI and SharedUI.EditBox and SharedUI.EditBox(editBox)) or editBox
+    if box then box.__msufPeelEditSkinned = true end
+    return box
 end
 
 function Menu2Style.CloseButton(parent, onClick)
-    if SharedUI and SharedUI.CloseButton then return SharedUI.CloseButton(parent, onClick) end
+    if SharedUI and SharedUI.CloseButton then return KeepMenu2Skin(SharedUI.CloseButton(parent, onClick)) end
     return Menu2Style.Button(parent, "x", 24, 24, onClick)
 end
 
@@ -184,6 +218,7 @@ end
 
 --- Panel
 function Factory.Panel(name, width, visibleH, title)
+    RefreshPalette()
     width = width or PW; visibleH = visibleH or 540
 
     local pf = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
@@ -553,23 +588,54 @@ function Factory.CheckRow(pf, body, card, opts)
     local cbKey = opts.cbKey; local cb = opts.onChanged; local anchorTo = opts.anchorTo
 
     local row = CreateFrame("Frame", nil, body)
-    row:SetHeight(20)
+    row:SetHeight(24)
     if anchorTo then row:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, (opts.yOff or -ROW_GAP))
     else row:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0) end
     row:SetPoint("RIGHT", body, "RIGHT", 0, 0)
 
     local chk = CreateFrame("CheckButton", nil, row)
-    chk:SetSize(16, 16); chk:SetPoint("LEFT", 0, 0)
-    local bg = chk:CreateTexture(nil, "BACKGROUND"); bg:SetAllPoints()
-    bg:SetColorTexture(C.inputBg[1], C.inputBg[2], C.inputBg[3], C.inputBg[4])
-    local brd = CreateFrame("Frame", nil, chk, "BackdropTemplate"); brd:SetAllPoints()
-    brd:SetFrameLevel(max(0, chk:GetFrameLevel()-1))
-    brd:SetBackdrop({edgeFile=W8, edgeSize=1}); brd:SetBackdropBorderColor(unpack(C.inputEdge))
-    local ck = chk:CreateTexture(nil, "OVERLAY"); ck:SetSize(10, 10); ck:SetPoint("CENTER")
-    ck:SetColorTexture(unpack(C.checkFill)); chk:SetCheckedTexture(ck)
+    chk:SetSize(22, 22); chk:SetPoint("LEFT", 0, 0)
+
+    local edge = chk:CreateTexture(nil, "BACKGROUND", nil, -3)
+    edge:SetTexture(CHECK_BOX_EDGE_TEX); edge:SetTexCoord(0, 1, 0, 1)
+    edge:SetSize(22, 22); edge:SetPoint("CENTER")
+    if edge.SetSnapToPixelGrid then edge:SetSnapToPixelGrid(false) end
+    if edge.SetTexelSnappingBias then edge:SetTexelSnappingBias(0) end
+    chk._msufCheckEdge = edge
+
+    local bg = chk:CreateTexture(nil, "BACKGROUND", nil, -2)
+    bg:SetTexture(CHECK_BOX_FILL_TEX); bg:SetTexCoord(0, 1, 0, 1)
+    bg:SetSize(20, 20); bg:SetPoint("CENTER")
+    if bg.SetSnapToPixelGrid then bg:SetSnapToPixelGrid(false) end
+    if bg.SetTexelSnappingBias then bg:SetTexelSnappingBias(0) end
+    chk._msufCheckFill = bg
+
+    local ck = chk:CreateTexture(nil, "OVERLAY")
+    ck:SetTexture(CHECK_TICK_TEX); ck:SetTexCoord(0, 1, 0, 1)
+    ck:SetSize(15, 15); ck:SetPoint("CENTER")
+    ck:SetVertexColor(1, 1, 1, 0.96)
+    chk:SetCheckedTexture(ck)
+
+    function chk:RefreshCheckVisual()
+        local on = self:GetChecked() and true or false
+        if self._msufCheckFill then
+            local c = on and C.checkFill or C.inputBg
+            self._msufCheckFill:SetVertexColor(c[1], c[2], c[3], on and 0.96 or (c[4] or 1))
+        end
+        if self._msufCheckEdge then
+            local c = on and C.checkEdge or C.inputEdge
+            self._msufCheckEdge:SetVertexColor(c[1], c[2], c[3], on and 0.86 or 0.46)
+        end
+    end
+    local rawSetChecked = chk.SetChecked
+    chk.SetChecked = function(self, value)
+        rawSetChecked(self, value and true or false)
+        self:RefreshCheckVisual()
+    end
+    chk:RefreshCheckVisual()
 
     local lbl = FS(row, 12, C.white)
-    lbl:SetPoint("LEFT", chk, "RIGHT", 8, 0); lbl:SetText(Tr(opts.label or ""))
+    lbl:SetPoint("LEFT", chk, "RIGHT", 10, 0); lbl:SetText(Tr(opts.label or ""))
     chk._label = lbl; chk.Text = lbl
 
     --- Dependent rows: grayed out when unchecked, enabled when checked
@@ -592,11 +658,15 @@ function Factory.CheckRow(pf, body, card, opts)
 
     if cb then
         chk:SetScript("OnClick", function(s)
+            s:RefreshCheckVisual()
             s:UpdateDependents()
             cb(s:GetChecked())
         end)
     else
-        chk:SetScript("OnClick", function(s) s:UpdateDependents() end)
+        chk:SetScript("OnClick", function(s)
+            s:RefreshCheckVisual()
+            s:UpdateDependents()
+        end)
     end
     if cbKey then pf[cbKey] = chk end
     card._rowCount = card._rowCount + 1; card._rows[card._rowCount] = row
@@ -925,6 +995,7 @@ function Popups.Open(key, anchorFrame)
         _G.MSUF_EM2_ActiveAuraUnit  = nil
         local unit = key
         if key:sub(1, 8) == "castbar_" then unit = key:sub(9) end
+        if type(unit) == "string" and unit:match("^boss%d+$") then unit = "boss" end
         local frame = cfg and cfg.getFrame and cfg.getFrame()
         if EM2.CastPopup then EM2.CastPopup.Open(unit, frame or anchorFrame) end
     elseif pType == "aura" then
@@ -983,6 +1054,7 @@ local UNIT_COPY_TARGETS = {
 local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
 local function CanDetachPower(key) return key=="player" or key=="target" or key=="focus" end
 local pf
+local Sync
 
 local function UnitSectionForComponent(component)
     if component == "name" or component == "hp" or component == "power" or component == "text" then return "text" end
@@ -1035,12 +1107,17 @@ local function Apply()
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     RefreshUFPreview("EM2_UNIT_POPUP_APPLY", key)
     if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
+    if pf and pf:IsShown() then Sync() end
 end
 
-local function Sync()
+function Sync()
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
-    local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
+    local function S(b,v)
+        if not (b and b.SetText) then return end
+        if b.HasFocus and b:HasFocus() then return end
+        b:SetText(tostring(v or 0))
+    end
     if pf._titleFS then pf._titleFS:SetText(Tr((LABELS[key] or key or "") .. " - Frame")) end
     S(pf.xBox,San(conf.offsetX,0)); S(pf.yBox,San(conf.offsetY,0))
     S(pf.wBox,conf.width or (pf.parent and pf.parent:GetWidth()) or 250)
@@ -1056,7 +1133,11 @@ local function Sync()
             if detachedOn then pf.dpbPanel:SetHeight(key == "player" and 220 or 184) end
         end
         if detachedOn then
-            local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
+            local function S(b,v)
+                if not (b and b.SetText) then return end
+                if b.HasFocus and b:HasFocus() then return end
+                b:SetText(tostring(v or 0))
+            end
             S(pf.dpbXBox, San(conf.detachedPowerBarOffsetX, 0))
             S(pf.dpbYBox, San(conf.detachedPowerBarOffsetY, -4))
             S(pf.dpbWBox, conf.detachedPowerBarWidth or conf.width or 250)
@@ -1147,16 +1228,17 @@ local function OpenMenu2Page(pageKey, component, slot)
     Apply()
     local key = ApplyMenu2UnitSelection(component, slot)
     pageKey = pageKey or UNIT_PAGE_KEYS[key or CK(pf.unit)] or "uf_player"
-    if _G.MSUF2 and pageKey and type(_G.MSUF2.InvalidatePage) == "function" then _G.MSUF2.InvalidatePage(pageKey) end
+    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    if M and pageKey and type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
     pf:Hide()
     if type(_G.MSUF_OpenStandaloneOptionsWindow) == "function" then
         _G.MSUF_OpenStandaloneOptionsWindow(pageKey)
     elseif type(_G.MSUF_OpenPage) == "function" then
         _G.MSUF_OpenPage(pageKey)
-    elseif _G.MSUF2 and type(_G.MSUF2.Open) == "function" then
-        _G.MSUF2.Open(pageKey)
-    elseif _G.MSUF2 and type(_G.MSUF2.SelectPage) == "function" then
-        _G.MSUF2.SelectPage(pageKey)
+    elseif M and type(M.Open) == "function" then
+        M.Open(pageKey)
+    elseif M and type(M.SelectPage) == "function" then
+        M.SelectPage(pageKey)
     end
 end
 
@@ -1223,6 +1305,7 @@ end
 
 local function Build()
     if pf then return pf end
+    RefreshPalette()
     pf = CreateFrame("Frame", "MSUF_EM2_UnitPopup", UIParent, "BackdropTemplate")
     pf:SetSize(440, 292)
     pf:SetPoint("CENTER", UIParent, "CENTER", 250, 0)
@@ -1453,10 +1536,13 @@ local function Build()
     pf.dpbLayerRow = MakeSingleValueIn(pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox")
     pf.dpbPanel:Hide()
 
+    if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
+
     pf:EnableKeyboard(true)
     pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); s:Hide() else s:SetPropagateKeyboardInput(true) end end)
     pf:HookScript("OnHide", function(s)
         if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end
+        if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("unit-popup") end
         local function RefreshPopupFocus()
             local anyOpen = EM2.Popups and EM2.Popups.IsAnyOpen and EM2.Popups.IsAnyOpen()
             if not anyOpen then
@@ -1477,707 +1563,3 @@ function UnitPopup.Open(u, parent) if BlockConfigCombatLocked() then return fals
 function UnitPopup.Close() if pf then pf:Hide() end end
 function UnitPopup.IsOpen() return pf and pf:IsShown() or false end
 function UnitPopup.Sync() if pf and pf:IsShown() then Sync() end end
-
---- MSUF_EM2_Popup_Cast.lua
-
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 or not EM2.PopupFactory then return end
-local F = EM2.PopupFactory
-local floor = math.floor
-local max, min = math.max, math.min
-local function G() local db=_G.MSUF_DB; return db and db.general or {} end
-local function EG() local db=_G.MSUF_DB; if db then db.general=db.general or {} end; return db and db.general end
-local function GP(u) local fn=_G.MSUF_GetCastbarPrefix; return type(fn)=="function" and fn(u) or nil end
-local function GD(u) local fn=_G.MSUF_GetCastbarDefaultOffsets; if type(fn)=="function" then return fn(u) end; return 0,0 end
-local function GST(u) local fn=_G.MSUF_GetCastbarShowTimeKey; return type(fn)=="function" and fn(u) or nil end
-local function GTF(u)
-    local fn = _G.MSUF_GetCastbarTimeFormatDBKey
-    if type(fn) == "function" then
-        local key = fn(u)
-        if key then return key end
-    end
-    if u == "player" then return "castbarPlayerTimeFormat" end
-    if u == "target" then return "castbarTargetTimeFormat" end
-    if u == "focus" then return "castbarFocusTimeFormat" end
-    if u == "boss" then return "bossCastTimeFormat" end
-end
-local function NTF(v)
-    local fn = _G.MSUF_NormalizeCastbarTimeFormat
-    if type(fn) == "function" then return fn(v) end
-    return (type(v) == "string" and v ~= "" and v) or "CURRENT"
-end
-local TIME_FORMAT_ITEMS = {
-    { key = "CURRENT",     label = "Current only" },
-    { key = "CURRENT_MAX", label = "Current / max" },
-    { key = "MAX_CURRENT", label = "Max / current" },
-    { key = "ELAPSED_MAX", label = "Elapsed / max" },
-    { key = "MAX_ELAPSED", label = "Max / elapsed" },
-}
-local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
-local pf
-local TF = { player="MSUF_SetPlayerCastbarTestMode", target="MSUF_SetTargetCastbarTestMode", focus="MSUF_SetFocusCastbarTestMode", boss="MSUF_SetBossCastbarTestMode" }
-local function SetTest(u,on) for k,fn in pairs(TF) do local f=_G[fn]; if type(f)=="function" then f(k==u and on, true) end end end
-
-local function WidthSourceUnitLabel(u)
-    if u == "player" then return "MSUF Player Frame" end
-    if u == "target" then return "MSUF Target Frame" end
-    if u == "focus" then return "MSUF Focus Frame" end
-    if u == "boss" then return "MSUF Boss Frame" end
-    return "MSUF Unit Frame"
-end
-local function WidthSourceItems()
-    local u = pf and pf.unit
-    return {
-        { key = "manual",    label = "Manual" },
-        { key = "unitframe", label = WidthSourceUnitLabel(u) },
-        { key = "essential", label = "Essential Cooldown Row" },
-        { key = "utility",   label = "Utility Cooldown Bar" },
-    }
-end
-local function NormalizeWidthSource(v)
-    local fn = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
-    if type(fn) == "function" then return fn(v) end
-    if v == "unitframe" or v == "essential" or v == "utility" then return v end
-    return nil
-end
-local function WidthSourceDBKey(u)
-    local fn = _G.MSUF_GetCastbarWidthSourceKey
-    if type(fn) == "function" then
-        local key = fn(u)
-        if key then return key end
-    end
-    if u == "player" then return "castbarPlayerMatchWidth" end
-    if u == "target" then return "castbarTargetMatchWidth" end
-    if u == "focus" then return "castbarFocusMatchWidth" end
-    if u == "boss" then return "bossCastbarMatchWidth" end
-end
-local function WidthSourceKey(g, u)
-    local dbKey = WidthSourceDBKey(u)
-    return NormalizeWidthSource(dbKey and g and g[dbKey]) or "manual"
-end
-local function SetBoxText(box, value)
-    if box and box.SetText then box:SetText(tostring(value or 0)) end
-end
-local function ManualWidthValue(g, u)
-    if u == "boss" then
-        return tonumber(g and g.bossCastbarWidth) or 176
-    end
-    local pre = GP(u)
-    if not pre then return tonumber(g and g.castbarGlobalWidth) or 271 end
-    return tonumber(g and g[pre .. "BarWidth"]) or tonumber(g and g.castbarGlobalWidth) or 271
-end
-local function GetCastbarFrameForWidth(u)
-    if u == "player" then return _G.MSUF_PlayerCastbarPreview or _G.MSUF_PlayerCastbar end
-    if u == "target" then return _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar end
-    if u == "focus" then return _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar end
-    if u == "boss" then return _G.MSUF_BossCastbarPreview or _G["MSUF_BossCastbarPreview1"] end
-end
-local function GetUnitframeWidthFallback(u)
-    local unitKey = (u == "boss") and "boss1" or u
-    local frames = _G.MSUF_UnitFrames
-    local unitFrame = (frames and frames[unitKey]) or _G["MSUF_" .. tostring(unitKey or "")]
-    local hp = unitFrame and (unitFrame.hpBar or unitFrame.healthBar or unitFrame.health)
-    if hp and hp.GetWidth then
-        local w = hp:GetWidth()
-        if w and w > 0 then return floor(w + 0.5) end
-    end
-    if unitFrame and unitFrame.GetWidth then
-        local w = unitFrame:GetWidth()
-        if w and w > 0 then return floor(w + 0.5) end
-    end
-end
-local function GetEffectiveWidth(g, u)
-    local fn = _G.MSUF_GetCastbarDesiredSize
-    if type(fn) == "function" then
-        local frame = GetCastbarFrameForWidth(u)
-        local w = fn(u, g, frame, ManualWidthValue(g, u), 18)
-        if w and w > 0 then return floor(w + 0.5) end
-    end
-    if WidthSourceKey(g, u) == "unitframe" then
-        local w = GetUnitframeWidthFallback(u)
-        if w and w > 0 then return w end
-    end
-    return floor(ManualWidthValue(g, u) + 0.5)
-end
-local function SetManualWidthControlsEnabled(enabled)
-    if not pf then return end
-    F.EnableStepper(pf.wBox, pf.wBoxMinus, pf.wBoxPlus, enabled)
-    F.EnableLabel(pf.wBoxLabel, enabled)
-    if not enabled and pf.wBox and pf.wBox.ClearFocus then pf.wBox:ClearFocus() end
-end
-local function RefreshWidthSourceControls(g, u, syncDropdown)
-    if not pf then return end
-    local dbKey = WidthSourceDBKey(u)
-    if pf.widthSourceRow then pf.widthSourceRow:SetShown(dbKey ~= nil) end
-    if not dbKey then
-        SetManualWidthControlsEnabled(true)
-    end
-
-    local sourceKey = WidthSourceKey(g, u)
-    if syncDropdown and pf.widthSourceDrop and pf.widthSourceDrop.SetValue then
-        pf.widthSourceDrop:SetValue(sourceKey)
-    end
-    local manual = (sourceKey == "manual")
-    SetManualWidthControlsEnabled(manual)
-    if manual then
-        SetBoxText(pf.wBox, floor(ManualWidthValue(g, u) + 0.5))
-    else
-        SetBoxText(pf.wBox, GetEffectiveWidth(g, u))
-    end
-    if pf._sizeCard and pf._sizeCard.RecalcHeight then pf._sizeCard:RecalcHeight() end
-    if pf._recalcScroll then pf._recalcScroll() end
-end
-local function ReanchorCastbarUnit(u)
-    local ra = (u=="player" and "MSUF_ReanchorPlayerCastBar")
-        or (u=="target" and "MSUF_ReanchorTargetCastBar")
-        or (u=="focus" and "MSUF_ReanchorFocusCastBar")
-        or (u=="boss" and "MSUF_ReanchorBossCastBar")
-    if type(_G[ra])=="function" then _G[ra]() end
-    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
-        _G.MSUF_PositionCastbarPreviewUnit(u)
-    end
-end
-local function ApplyWidthSource()
-    if BlockConfigCombatLocked() then return end
-    if not pf or not pf.unit then return end
-    local g = EG(); if not g then return end
-    local u = pf.unit
-    local dbKey = WidthSourceDBKey(u); if not dbKey then return end
-    local nextSource = NormalizeWidthSource(pf.widthSourceDrop and pf.widthSourceDrop.GetValue and pf.widthSourceDrop:GetValue())
-    if g[dbKey] ~= nextSource and type(_G.MSUF_EM_UndoBeforeChange) == "function" then
-        _G.MSUF_EM_UndoBeforeChange("castbar", u)
-    end
-    g[dbKey] = nextSource
-    if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then _G.MSUF_UpdateCastbarWidthSourceSync(g, u) end
-    local applied = false
-    if type(_G.MSUF_ApplyCastbarEffectiveSizeUnit) == "function" then
-        applied = _G.MSUF_ApplyCastbarEffectiveSizeUnit(u, g) and true or false
-    end
-    if not applied then
-        ReanchorCastbarUnit(u)
-        if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
-    end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-    RefreshWidthSourceControls(g, u, false)
-    RefreshUFPreview("EM2_CASTBAR_WIDTH_SOURCE", u)
-end
-
-local function Apply()
-    if BlockConfigCombatLocked() then return end
-    if not pf or not pf.unit then return end; local g=EG(); if not g then return end; local u=pf.unit
-    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("castbar", u) end
-    if u=="boss" then
-        local widthSource
-        local widthSourceKey = WidthSourceDBKey(u)
-        if widthSourceKey then
-            local selected = pf.widthSourceDrop and pf.widthSourceDrop.GetValue and pf.widthSourceDrop:GetValue()
-            widthSource = NormalizeWidthSource(selected or g[widthSourceKey])
-            g[widthSourceKey] = widthSource
-        end
-        g.bossCastbarOffsetX=San(pf.xBox and tonumber(pf.xBox:GetText()),0); g.bossCastbarOffsetY=San(pf.yBox and tonumber(pf.yBox:GetText()),0)
-        local w=pf.wBox and tonumber(pf.wBox:GetText()); if w and not widthSource then g.bossCastbarWidth=floor(max(50,min(600,w))+0.5) end
-        local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then g.bossCastbarHeight=floor(max(8,min(100,h))+0.5) end
-        if pf.spellShowCB then g.showBossCastName=pf.spellShowCB:GetChecked() and true or false end
-        if pf.iconShowCB then g.showBossCastIcon=pf.iconShowCB:GetChecked() and true or false end
-        if pf.timeShowCB then g.showBossCastTime=pf.timeShowCB:GetChecked() and true or false end
-        if pf.timeFormatDrop then g.bossCastTimeFormat=NTF(pf.timeFormatDrop:GetValue()) end
-        g.bossCastTextOffsetX=San(pf.spellXBox and tonumber(pf.spellXBox:GetText()),0); g.bossCastTextOffsetY=San(pf.spellYBox and tonumber(pf.spellYBox:GetText()),0)
-        if pf.spellSizeBox then local sz=tonumber(pf.spellSizeBox:GetText()); if sz then g.bossCastSpellNameFontSize=floor(max(6,min(72,sz))+0.5) end end
-        if pf.iconSizeBox then local sz=tonumber(pf.iconSizeBox:GetText()); if sz then g.bossCastIconSize=floor(max(6,min(128,sz))+0.5) end end
-        if pf.timeSizeBox then local sz=tonumber(pf.timeSizeBox:GetText()); if sz then g.bossCastTimeFontSize=floor(max(6,min(72,sz))+0.5) end end
-        if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then _G.MSUF_UpdateCastbarWidthSourceSync(g, u) end
-        if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
-            and type(_G.MSUF_UpdateBossCastbarPreview)=="function"
-        then
-            _G.MSUF_UpdateBossCastbarPreview()
-        end
-        RefreshWidthSourceControls(g, u, false)
-    else
-        local pre=GP(u); if not pre then return end; local dx,dy=GD(u)
-        local widthSource
-        local widthSourceKey = WidthSourceDBKey(u)
-        if widthSourceKey then
-            local selected = pf.widthSourceDrop and pf.widthSourceDrop.GetValue and pf.widthSourceDrop:GetValue()
-            widthSource = NormalizeWidthSource(selected or g[widthSourceKey])
-            g[widthSourceKey] = widthSource
-        end
-        g[pre.."OffsetX"]=San(pf.xBox and tonumber(pf.xBox:GetText()),dx); g[pre.."OffsetY"]=San(pf.yBox and tonumber(pf.yBox:GetText()),dy)
-        local w=pf.wBox and tonumber(pf.wBox:GetText()); if w and not widthSource then g[pre.."BarWidth"]=floor(max(50,min(600,w))+0.5) end
-        local h=pf.hBox and tonumber(pf.hBox:GetText()); if h then g[pre.."BarHeight"]=floor(max(8,min(100,h))+0.5) end
-        if pf.spellShowCB then g[pre.."ShowSpellName"]=pf.spellShowCB:GetChecked() and true or false end
-        if pf.iconShowCB then g[pre.."ShowIcon"]=pf.iconShowCB:GetChecked() and true or false end
-        local stk=GST(u); if stk and pf.timeShowCB then g[stk]=pf.timeShowCB:GetChecked() and true or false end
-        local tfk=GTF(u); if tfk and pf.timeFormatDrop then g[tfk]=NTF(pf.timeFormatDrop:GetValue()) end
-        g[pre.."TextOffsetX"]=San(pf.spellXBox and tonumber(pf.spellXBox:GetText()),0); g[pre.."TextOffsetY"]=San(pf.spellYBox and tonumber(pf.spellYBox:GetText()),0)
-        if pf.spellSizeBox then local sz=tonumber(pf.spellSizeBox:GetText()); if sz then g[pre.."SpellNameFontSize"]=floor(max(6,min(48,sz))+0.5) end end
-        if pf.iconSizeBox then local sz=tonumber(pf.iconSizeBox:GetText()); if sz then g[pre.."IconSize"]=floor(max(6,min(128,sz))+0.5) end end
-        if pf.timeSizeBox then local sz=tonumber(pf.timeSizeBox:GetText()); if sz then g[pre.."TimeFontSize"]=floor(max(6,min(48,sz))+0.5) end end
-        if type(_G.MSUF_UpdateCastbarWidthSourceSync) == "function" then _G.MSUF_UpdateCastbarWidthSourceSync(g, u) end
-        ReanchorCastbarUnit(u)
-        RefreshWidthSourceControls(g, u, false)
-    end
-    if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-    RefreshUFPreview("EM2_CASTBAR_POPUP_APPLY", u)
-end
-
-local BOSS_KEYS = {
-    "bossCastbarOffsetX","bossCastbarOffsetY","bossCastbarWidth","bossCastbarHeight",
-    "showBossCastName","showBossCastIcon","showBossCastTime","bossCastTimeFormat",
-    "bossCastTextOffsetX","bossCastTextOffsetY",
-    "bossCastSpellNameFontSize","bossCastIconSize","bossCastTimeFontSize",
-    "bossCastbarDetached",
-}
-local function SnapshotCast(u)
-    local g=G(); if not g then return nil end; local snap={}
-    if u=="boss" then
-        for _,k in ipairs(BOSS_KEYS) do snap[k]=g[k] end
-        local wk = WidthSourceDBKey(u); if wk then snap[wk]=g[wk] end
-    else
-        local pre=GP(u); if not pre then return nil end
-        local stk=GST(u)
-        local suffixes={"OffsetX","OffsetY","BarWidth","BarHeight","ShowSpellName","ShowIcon",
-            "TextOffsetX","TextOffsetY","SpellNameFontSize","IconSize","TimeFontSize","TimeFormat","Detached"}
-        for _,s in ipairs(suffixes) do snap[pre..s]=g[pre..s] end
-        if stk then snap[stk]=g[stk] end
-        local wk = WidthSourceDBKey(u); if wk then snap[wk]=g[wk] end
-    end
-    return snap
-end
-local function RestoreCast(snap)
-    if not snap then return end; local g=EG(); if not g then return end
-    for k,v in pairs(snap) do g[k]=v end
-end
-
-local function Sync()
-    if not pf or not pf.unit then return end; local g=G(); local u=pf.unit
-    pf._castSnap = SnapshotCast(u)
-    local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
-    local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
-    local lbl=(u=="player" and "Player") or (u=="target" and "Target") or (u=="focus" and "Focus") or (u=="boss" and "Boss") or u
-    if pf._titleFS then pf._titleFS:SetText(Tr(lbl) .. " " .. Tr("Castbar")) end
-    if u=="boss" then
-        S(pf.xBox,floor((g.bossCastbarOffsetX or 0)+0.5)); S(pf.yBox,floor((g.bossCastbarOffsetY or 0)+0.5))
-        local widthValue = g.bossCastbarWidth or 176
-        if NormalizeWidthSource(g[WidthSourceDBKey(u) or ""]) then
-            widthValue = GetEffectiveWidth(g, u)
-        end
-        S(pf.wBox,floor((widthValue or 176)+0.5)); S(pf.hBox,floor((g.bossCastbarHeight or 12)+0.5))
-        SC(pf.spellShowCB,g.showBossCastName~=false); SC(pf.iconShowCB,g.showBossCastIcon~=false); SC(pf.timeShowCB,g.showBossCastTime~=false)
-        if pf.timeFormatDrop then pf.timeFormatDrop:SetValue(NTF(g.bossCastTimeFormat)) end
-        S(pf.spellXBox,g.bossCastTextOffsetX or 0); S(pf.spellYBox,g.bossCastTextOffsetY or 0)
-        S(pf.spellSizeBox,g.bossCastSpellNameFontSize or g.fontSize or 14)
-        S(pf.iconSizeBox,g.bossCastIconSize or g.bossCastbarHeight or 18)
-        S(pf.timeSizeBox,g.bossCastTimeFontSize or g.fontSize or 14)
-    else
-        local pre=GP(u); if not pre then return end; local dx,dy=GD(u)
-        S(pf.xBox,floor((g[pre.."OffsetX"] or dx)+0.5)); S(pf.yBox,floor((g[pre.."OffsetY"] or dy)+0.5))
-        local widthValue = g[pre.."BarWidth"] or g.castbarGlobalWidth or 271
-        if NormalizeWidthSource(g[WidthSourceDBKey(u) or ""]) then
-            widthValue = GetEffectiveWidth(g, u)
-        end
-        S(pf.wBox,floor((widthValue or 271)+0.5)); S(pf.hBox,floor((g[pre.."BarHeight"] or g.castbarGlobalHeight or 18)+0.5))
-        SC(pf.spellShowCB,g[pre.."ShowSpellName"]~=false); SC(pf.iconShowCB,g[pre.."ShowIcon"]~=false)
-        local stk=GST(u); SC(pf.timeShowCB,stk and g[stk]~=false)
-        local tfk=GTF(u); if pf.timeFormatDrop then pf.timeFormatDrop:SetValue(NTF(tfk and g[tfk])) end
-        S(pf.spellXBox,g[pre.."TextOffsetX"] or 0); S(pf.spellYBox,g[pre.."TextOffsetY"] or 0)
-        S(pf.spellSizeBox,g[pre.."SpellNameFontSize"] or g.fontSize or 14)
-        S(pf.iconSizeBox,g[pre.."IconSize"] or g[pre.."BarHeight"] or 18)
-        S(pf.timeSizeBox,g[pre.."TimeFontSize"] or g.fontSize or 14)
-    end
-    --- Anchor to unitframe checkbox
-    if pf.anchorToUnitCB then
-        local detachedKey
-        if u == "boss" then
-            detachedKey = "bossCastbarDetached"
-        else
-            local pre2 = GP(u)
-            if pre2 then detachedKey = pre2 .. "Detached" end
-        end
-        local isDetached = detachedKey and g[detachedKey] == true
-        SC(pf.anchorToUnitCB, not isDetached)
-    end
-    RefreshWidthSourceControls(g, u, true)
-    --- Refresh dependent gray-out state
-    if pf.spellShowCB and pf.spellShowCB.UpdateDependents then pf.spellShowCB:UpdateDependents() end
-    if pf.iconShowCB and pf.iconShowCB.UpdateDependents then pf.iconShowCB:UpdateDependents() end
-    if pf.timeShowCB and pf.timeShowCB.UpdateDependents then pf.timeShowCB:UpdateDependents() end
-end
-
-local function Build()
-    if pf then return pf end
-    pf = F.Panel("MSUF_EM2_CastPopup", 380, 460, "Castbar")
-    local top=pf._contentTop
-
-    local fC,fB = F.Card(pf, top, "Position & Size", -2, true)
-    pf._sizeCard = fC
-    local fXY = F.PairRow(pf, fB, fC, { label1="X:", label2="Y:", key1="xBox", key2="yBox", onChanged=Apply })
-    local fWH = F.PairRow(pf, fB, fC, { label1="W:", label2="H:", key1="wBox", key2="hBox", anchorTo=fXY, onChanged=Apply })
-    pf.widthSourceRow = F.SelectRow(pf, fB, fC, {
-        label = "Width source:",
-        selectKey = "widthSourceDrop",
-        stateKey = "widthSource",
-        anchorTo = fWH,
-        width = 178,
-        menuWidth = 210,
-        items = WidthSourceItems,
-        onChanged = ApplyWidthSource,
-    })
-    fC:RecalcHeight()
-
-    local sC,sB = F.Card(pf, fC, "Spell Name", -6, true)
-    local sSh = F.CheckRow(pf, sB, sC, { label="Show", cbKey="spellShowCB", onChanged=function() Apply() end })
-    local sXY = F.PairRow(pf, sB, sC, { label1="X:", label2="Y:", key1="spellXBox", key2="spellYBox", anchorTo=sSh, onChanged=Apply })
-    local sSz = F.SingleRow(pf, sB, sC, { label="Size:", boxKey="spellSizeBox", anchorTo=sXY, onChanged=Apply })
-    sC:RecalcHeight()
-    pf.spellShowCB:SetDependentRows(sXY, sSz)
-
-    local iC,iB = F.Card(pf, sC, "Icon", -6, true)
-    local iSh = F.CheckRow(pf, iB, iC, { label="Show", cbKey="iconShowCB", onChanged=function() Apply() end })
-    local iSz = F.SingleRow(pf, iB, iC, { label="Size:", boxKey="iconSizeBox", anchorTo=iSh, onChanged=Apply })
-    iC:RecalcHeight()
-    pf.iconShowCB:SetDependentRows(iSz)
-
-    local tC,tB = F.Card(pf, iC, "Duration", -6, true)
-    local tSh = F.CheckRow(pf, tB, tC, { label="Show", cbKey="timeShowCB", onChanged=function() Apply() end })
-    local tFmt = F.SelectRow(pf, tB, tC, {
-        label = "Format:",
-        selectKey = "timeFormatDrop",
-        stateKey = "timeFormat",
-        anchorTo = tSh,
-        width = 150,
-        menuWidth = 170,
-        items = TIME_FORMAT_ITEMS,
-        onChanged = Apply,
-    })
-    local tSz = F.SingleRow(pf, tB, tC, { label="Size:", boxKey="timeSizeBox", anchorTo=tFmt, onChanged=Apply })
-    tC:RecalcHeight()
-    pf.timeShowCB:SetDependentRows(tFmt, tSz)
-
-    --- Castbar anchor toggle
-    local aC,aB = F.Card(pf, tC, "Anchor", -6, true)
-    local aAnch = F.CheckRow(pf, aB, aC, { label="Anchor to unitframe", cbKey="anchorToUnitCB", onChanged=function()
-        if not pf or not pf.unit then return end
-        local anchored = pf.anchorToUnitCB and pf.anchorToUnitCB:GetChecked() and true or false
-        local fn = _G.MSUF_EM_SetCastbarAnchoredToUnit
-        if type(fn) == "function" then
-            fn(pf.unit, anchored)
-        end
-        Apply()
-    end })
-    aC:RecalcHeight()
-
-    pf._recalcScroll = function()
-        C_Timer.After(0, function()
-            local t=pf._scrollChild and pf._scrollChild:GetTop(); local b=pf._lastCard and pf._lastCard.GetBottom and pf._lastCard:GetBottom()
-            if t and b then pf:UpdateScrollHeight(t-b+30) else pf:UpdateScrollHeight(540) end
-        end)
-    end
-
-    --- Copy castbar settings (all except X/Y position)
-    local CAST_SOURCES = {
-        { key = "player", label = "Player" },
-        { key = "target", label = "Target" },
-        { key = "focus",  label = "Focus"  },
-        { key = "boss",   label = "Boss"   },
-    }
-    --- Keys to copy (semantic) -> per-unit reader/writer
-    local function ReadCastbarSettings(u)
-        local g = G(); if not g then return nil end
-        local r = {}
-        if u == "boss" then
-            r.w = g.bossCastbarWidth; r.h = g.bossCastbarHeight
-            local wk = WidthSourceDBKey(u); r.widthSource = wk and g[wk]
-            r.showSpell = g.showBossCastName; r.showIcon = g.showBossCastIcon; r.showTime = g.showBossCastTime
-            r.timeFormat = g.bossCastTimeFormat
-            r.textX = g.bossCastTextOffsetX; r.textY = g.bossCastTextOffsetY
-            r.spellSize = g.bossCastSpellNameFontSize; r.iconSize = g.bossCastIconSize; r.timeSize = g.bossCastTimeFontSize
-        else
-            local pre = GP(u); if not pre then return nil end
-            r.w = g[pre.."BarWidth"]; r.h = g[pre.."BarHeight"]
-            local wk = WidthSourceDBKey(u); r.widthSource = wk and g[wk]
-            r.showSpell = g[pre.."ShowSpellName"]; r.showIcon = g[pre.."ShowIcon"]
-            local stk = GST(u); r.showTime = stk and g[stk]
-            local tfk = GTF(u); r.timeFormat = tfk and g[tfk]
-            r.textX = g[pre.."TextOffsetX"]; r.textY = g[pre.."TextOffsetY"]
-            r.spellSize = g[pre.."SpellNameFontSize"]; r.iconSize = g[pre.."IconSize"]; r.timeSize = g[pre.."TimeFontSize"]
-        end
-        return r
-    end
-    local function WriteCastbarSettings(u, r)
-        local g = EG(); if not g or not r then return end
-        if u == "boss" then
-            g.bossCastbarWidth = r.w; g.bossCastbarHeight = r.h
-            local wk = WidthSourceDBKey(u); if wk then g[wk] = NormalizeWidthSource(r.widthSource) end
-            g.showBossCastName = r.showSpell; g.showBossCastIcon = r.showIcon; g.showBossCastTime = r.showTime
-            g.bossCastTimeFormat = NTF(r.timeFormat)
-            g.bossCastTextOffsetX = r.textX; g.bossCastTextOffsetY = r.textY
-            g.bossCastSpellNameFontSize = r.spellSize; g.bossCastIconSize = r.iconSize; g.bossCastTimeFontSize = r.timeSize
-        else
-            local pre = GP(u); if not pre then return end
-            g[pre.."BarWidth"] = r.w; g[pre.."BarHeight"] = r.h
-            local wk = WidthSourceDBKey(u); if wk then g[wk] = NormalizeWidthSource(r.widthSource) end
-            g[pre.."ShowSpellName"] = r.showSpell; g[pre.."ShowIcon"] = r.showIcon
-            local stk = GST(u); if stk then g[stk] = r.showTime end
-            local tfk = GTF(u); if tfk then g[tfk] = NTF(r.timeFormat) end
-            g[pre.."TextOffsetX"] = r.textX; g[pre.."TextOffsetY"] = r.textY
-            g[pre.."SpellNameFontSize"] = r.spellSize; g[pre.."IconSize"] = r.iconSize; g[pre.."TimeFontSize"] = r.timeSize
-        end
-    end
-
-    local copyRow = F.CopyDropdown(pf, pf._scrollChild, nil, {
-        anchorTo = aC,
-        sources = CAST_SOURCES,
-        onCopy = function(targetKey)
-            local r = ReadCastbarSettings(pf.unit)
-            if not r or not targetKey then return end
-            if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("castbar", targetKey) end
-            WriteCastbarSettings(targetKey, r)
-            if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
-            ApplyAllSettingsSafe()
-            RefreshUFPreview("EM2_CASTBAR_POPUP_COPY", targetKey)
-            C_Timer.After(0.1, function() Sync() end)
-        end,
-    })
-    pf._lastCard = copyRow or aC
-
-    local ok,cancel = F.FooterButtons(pf)
-    ok:SetScript("OnClick", function() Apply(); pf:Hide() end)
-    cancel:SetScript("OnClick", function()
-        RestoreCast(pf._castSnap)
-        if type(_G.MSUF_UpdateCastbarVisuals)=="function" then _G.MSUF_UpdateCastbarVisuals() end
-        ApplyAllSettingsSafe()
-        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        RefreshUFPreview("EM2_CASTBAR_POPUP_CANCEL", pf and pf.unit)
-        pf:Hide()
-    end)
-    pf:EnableKeyboard(true)
-    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
-    pf:HookScript("OnHide", function(s) if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end end)
-    pf:UpdateScrollHeight(500)
-    return pf
-end
-
-local CastPopup = {}; EM2.CastPopup = CastPopup
-function CastPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); SetTest(u, true)
-    pf:SetScript("OnHide", function()
-        if pf.unit and not _G.MSUF_UnitPreviewActive then SetTest(pf.unit, false) end
-    end); return true end
-function CastPopup.Close() if pf then
-    if pf.unit and not _G.MSUF_UnitPreviewActive then SetTest(pf.unit, false) end
-    pf:Hide() end end
-function CastPopup.IsOpen() return pf and pf:IsShown() or false end
-function CastPopup.Sync() if pf and pf:IsShown() then Sync() end end
-
---- MSUF_EM2_Popup_Aura.lua
-
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 or not EM2.PopupFactory then return end
-local F = EM2.PopupFactory
-local floor = math.floor
-local max, min = math.max, math.min
-local function A2() local db=_G.MSUF_DB; return db and db.auras3 end
-local function Sh() local a=A2(); return a and a.shared or {} end
-local function Lay(k) local a=A2(); if not a then return {} end; a.perUnit=a.perUnit or {}; a.perUnit[k]=a.perUnit[k] or {}; a.perUnit[k].layout=a.perUnit[k].layout or {}; return a.perUnit[k].layout end
-local function San(v,d) v=tonumber(v) or d or 0; if v~=v or v>2000 or v<-2000 then v=d or 0 end; return floor(v+0.5) end
-local function IsBoss(u) return type(u)=="string" and u:match("^boss%d+$") end
-local pf
-
-local function SetPopupObjectEnabled(obj, enabled)
-    if not obj then return end
-    enabled=enabled and true or false
-    if obj.EnableMouse then obj:EnableMouse(enabled) end
-    if obj.SetEnabled then
-        obj:SetEnabled(enabled)
-    elseif obj.Enable and obj.Disable then
-        if enabled then obj:Enable() else obj:Disable() end
-    end
-    if obj.SetAlpha then obj:SetAlpha(enabled and 1 or 0.35) end
-end
-local function SetPopupKeyEnabled(key, enabled)
-    if not (pf and key) then return end
-    SetPopupObjectEnabled(pf[key], enabled)
-    SetPopupObjectEnabled(pf[key.."Minus"], enabled)
-    SetPopupObjectEnabled(pf[key.."Plus"], enabled)
-    SetPopupObjectEnabled(pf[key.."Label"], enabled)
-end
-local function SetPopupRowEnabled(row, enabled)
-    SetPopupObjectEnabled(row, enabled)
-    if not (row and row.GetChildren) then return end
-    local kids={row:GetChildren()}
-    for i=1,#kids do SetPopupObjectEnabled(kids[i], enabled) end
-end
-local function ApplyNativePopupState()
-    if not (pf and pf.unit) then return end
-    local rows=pf._auraCustomTextRows
-    if rows then for i=1,#rows do SetPopupRowEnabled(rows[i], true) end end
-    SetPopupKeyEnabled("stSzBox", true)
-    SetPopupKeyEnabled("stXBox", true)
-    SetPopupKeyEnabled("stYBox", true)
-    SetPopupKeyEnabled("cdSzBox", true)
-    SetPopupKeyEnabled("cdXBox", true)
-    SetPopupKeyEnabled("cdYBox", true)
-    if pf._auraNativeHint then
-        pf._auraNativeHint:Hide()
-    end
-end
-
-local function Apply()
-    if BlockConfigCombatLocked() then return end
-    if not pf or not pf.unit then return end; local a2=A2(); if not a2 then return end
-    a2.shared=a2.shared or {}; a2.perUnit=a2.perUnit or {}; local uk=pf.unit
-    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("aura", uk) end
-    local boss=IsBoss(uk)
-    if boss and pf.bossTogetherCB then a2.shared.bossEditTogether=pf.bossTogetherCB:GetChecked() and true or false end
-    local keys=(boss and a2.shared.bossEditTogether~=false) and {"boss1","boss2","boss3","boss4","boss5"} or {uk}
-    local function R(b,fb) return San(b and tonumber(b:GetText()),fb) end
-    local sp=max(0,min(30,R(pf.spacingBox,2)))
-    local stSz=max(6,min(40,R(pf.stSzBox,14))); local stX=R(pf.stXBox,0); local stY=R(pf.stYBox,0)
-    local cdSz=max(6,min(40,R(pf.cdSzBox,14))); local cdX=R(pf.cdXBox,0); local cdY=R(pf.cdYBox,0)
-    local bX=R(pf.bXBox,0); local bY=R(pf.bYBox,0); local bSz=max(10,min(80,R(pf.bSzBox,26)))
-    local dX=R(pf.dXBox,0); local dY=R(pf.dYBox,0); local dSz=max(10,min(80,R(pf.dSzBox,26)))
-    local prX=R(pf.prXBox,0); local prY=R(pf.prYBox,0); local prSz=max(10,min(80,R(pf.prSzBox,26)))
-    if pf.prPreviewCB then a2.shared.highlightPrivateAuras=pf.prPreviewCB:GetChecked() and true or false end
-    for _,k in ipairs(keys) do
-        a2.perUnit[k]=a2.perUnit[k] or {}; local uc=a2.perUnit[k]; uc.layout=uc.layout or {}; uc.overrideLayout=true; local l=uc.layout
-        l.spacing=sp; l.stackTextSize=stSz; l.stackTextOffsetX=stX; l.stackTextOffsetY=stY
-        l.cooldownTextSize=cdSz; l.cooldownTextOffsetX=cdX; l.cooldownTextOffsetY=cdY
-        l.buffGroupOffsetX=bX; l.buffGroupOffsetY=bY; l.buffGroupIconSize=bSz
-        l.debuffGroupOffsetX=dX; l.debuffGroupOffsetY=dY; l.debuffGroupIconSize=dSz
-        l.privateOffsetX=prX; l.privateOffsetY=prY; l.privateSize=prSz; l.width=nil; l.height=nil
-    end
-    if type(_G.MSUF_Auras3_RefreshUnit)=="function" then for _,k in ipairs(keys) do _G.MSUF_Auras3_RefreshUnit(k) end
-    elseif type(_G.MSUF_Auras3_RefreshAll)=="function" then _G.MSUF_Auras3_RefreshAll() end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-end
-
-local SHARED_SNAP_KEYS = {"bossEditTogether","highlightPrivateAuras"}
-local LAYOUT_KEYS = {
-    "spacing","stackTextSize","stackTextOffsetX","stackTextOffsetY",
-    "cooldownTextSize","cooldownTextOffsetX","cooldownTextOffsetY",
-    "buffGroupOffsetX","buffGroupOffsetY","buffGroupIconSize",
-    "debuffGroupOffsetX","debuffGroupOffsetY","debuffGroupIconSize",
-    "privateOffsetX","privateOffsetY","privateSize",
-}
-local function SnapshotAura(uk)
-    local a2=A2(); if not a2 then return nil end; local snap={shared={},units={}}
-    local sh=a2.shared or {}
-    for _,k in ipairs(SHARED_SNAP_KEYS) do snap.shared[k]=sh[k] end
-    local boss=IsBoss(uk)
-    local keys=(boss and sh.bossEditTogether~=false) and {"boss1","boss2","boss3","boss4","boss5"} or {uk}
-    for _,k in ipairs(keys) do
-        snap.units[k]={}
-        local pu=a2.perUnit and a2.perUnit[k]; local l=pu and pu.layout or {}
-        for _,lk in ipairs(LAYOUT_KEYS) do snap.units[k][lk]=l[lk] end
-        snap.units[k]._overrideLayout=pu and pu.overrideLayout
-    end
-    return snap
-end
-local function RestoreAura(snap)
-    if not snap then return end; local a2=A2(); if not a2 then return end
-    a2.shared=a2.shared or {}
-    for k,v in pairs(snap.shared) do a2.shared[k]=v end
-    a2.perUnit=a2.perUnit or {}
-    for uk,vals in pairs(snap.units) do
-        a2.perUnit[uk]=a2.perUnit[uk] or {}; local pu=a2.perUnit[uk]
-        pu.overrideLayout=vals._overrideLayout; pu.layout=pu.layout or {}
-        for _,lk in ipairs(LAYOUT_KEYS) do pu.layout[lk]=vals[lk] end
-    end
-end
-
-local function Sync()
-    if not pf or not pf.unit then return end; local sh=Sh(); local uk=pf.unit; local ek=uk
-    pf._auraSnap = SnapshotAura(uk)
-    if IsBoss(uk) and sh.bossEditTogether~=false then ek="boss1" end; local l=Lay(ek)
-    local function V(lk,sk,d) return (l[lk]~=nil and l[lk]) or (sh[sk]~=nil and sh[sk]) or d end
-    local function S(b,v) if b and b.SetText then b:SetText(tostring(v or 0)) end end
-    local function SC(c,v) if c and c.SetChecked then c:SetChecked(v and true or false) end end
-    local lbl=uk; if IsBoss(uk) then lbl="Boss "..(uk:match("%d+") or "1") end
-    if pf._titleFS then pf._titleFS:SetText(Tr(lbl) .. " " .. Tr("Auras")) end
-    S(pf.spacingBox,V("spacing","spacing",2))
-    S(pf.stSzBox,V("stackTextSize","stackTextSize",14)); S(pf.stXBox,V("stackTextOffsetX","stackTextOffsetX",0)); S(pf.stYBox,V("stackTextOffsetY","stackTextOffsetY",0))
-    S(pf.cdSzBox,V("cooldownTextSize","cooldownTextSize",14)); S(pf.cdXBox,V("cooldownTextOffsetX","cooldownTextOffsetX",0)); S(pf.cdYBox,V("cooldownTextOffsetY","cooldownTextOffsetY",0))
-    S(pf.bXBox,V("buffGroupOffsetX","buffGroupOffsetX",0)); S(pf.bYBox,V("buffGroupOffsetY","buffGroupOffsetY",0)); S(pf.bSzBox,V("buffGroupIconSize","buffGroupIconSize",26))
-    S(pf.dXBox,V("debuffGroupOffsetX","debuffGroupOffsetX",0)); S(pf.dYBox,V("debuffGroupOffsetY","debuffGroupOffsetY",0)); S(pf.dSzBox,V("debuffGroupIconSize","debuffGroupIconSize",26))
-    S(pf.prXBox,V("privateOffsetX","privateOffsetX",0)); S(pf.prYBox,V("privateOffsetY","privateOffsetY",0)); S(pf.prSzBox,V("privateSize","privateSize",26))
-    SC(pf.prPreviewCB,sh.highlightPrivateAuras); SC(pf.bossTogetherCB,sh.bossEditTogether~=false)
-    if pf._bossRow then pf._bossRow:SetShown(IsBoss(uk)) end
-    ApplyNativePopupState()
-end
-
-local function Build()
-    if pf then return pf end
-    pf = F.Panel("MSUF_EM2_AuraPopup", 380, 520, "Auras")
-    local top=pf._contentTop
-
-    local fC,fB = F.Card(pf, top, "Layout", -2, true)
-    local fSp = F.SingleRow(pf, fB, fC, { label="Spacing:", boxKey="spacingBox", onChanged=Apply })
-    local fBoss = F.CheckRow(pf, fB, fC, { label="Boss 1-5 edit together", cbKey="bossTogetherCB", anchorTo=fSp, onChanged=function() Apply() end })
-    pf._bossRow = fBoss; fC:RecalcHeight()
-
-    local tC,tB = F.Card(pf, fC, "Text Overlays", -6, true)
-    local tStSz = F.SingleRow(pf, tB, tC, { label="Stack size:", boxKey="stSzBox", onChanged=Apply })
-    local tStXY = F.PairRow(pf, tB, tC, { label1="St X:", label2="St Y:", key1="stXBox", key2="stYBox", anchorTo=tStSz, onChanged=Apply })
-    local tCdSz = F.SingleRow(pf, tB, tC, { label="CD size:", boxKey="cdSzBox", anchorTo=tStXY, yOff=-8, onChanged=Apply })
-    local tCdXY = F.PairRow(pf, tB, tC, { label1="CD X:", label2="CD Y:", key1="cdXBox", key2="cdYBox", anchorTo=tCdSz, onChanged=Apply })
-    pf._auraCustomTextRows = { tStSz, tStXY, tCdSz, tCdXY }
-    local tHintRow = CreateFrame("Frame", nil, tB)
-    tHintRow:SetHeight(26)
-    tHintRow:SetPoint("TOPLEFT", tCdXY, "BOTTOMLEFT", 0, -4)
-    tHintRow:SetPoint("RIGHT", tB, "RIGHT", 0, 0)
-    local tHint = tHintRow:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    tHint:SetPoint("LEFT", tHintRow, "LEFT", 0, 0)
-    tHint:SetPoint("RIGHT", tHintRow, "RIGHT", -4, 0)
-    tHint:SetJustifyH("LEFT")
-    tHint:SetText(Tr("Blizzard renders cooldown/stack text for native Buffs and Debuffs. These text overlay fields only affect custom icons."))
-    tHint:Hide()
-    pf._auraNativeHint = tHint
-    tC._rowCount = tC._rowCount + 1
-    tC._rows[tC._rowCount] = tHintRow
-    tC:RecalcHeight()
-
-    local bC,bB = F.Card(pf, tC, "Buffs", -6, true)
-    local bXY = F.PairRow(pf, bB, bC, { label1="X:", label2="Y:", key1="bXBox", key2="bYBox", onChanged=Apply })
-    local bSz = F.SingleRow(pf, bB, bC, { label="Icon size:", boxKey="bSzBox", anchorTo=bXY, onChanged=Apply })
-    bC:RecalcHeight()
-
-    local dC,dB = F.Card(pf, bC, "Debuffs", -6, true)
-    local dXY = F.PairRow(pf, dB, dC, { label1="X:", label2="Y:", key1="dXBox", key2="dYBox", onChanged=Apply })
-    local dSz = F.SingleRow(pf, dB, dC, { label="Icon size:", boxKey="dSzBox", anchorTo=dXY, onChanged=Apply })
-    dC:RecalcHeight()
-
-    local prC,prB = F.Card(pf, dC, "Private Auras", -6, true)
-    local prPv = F.CheckRow(pf, prB, prC, { label="Preview (highlight)", cbKey="prPreviewCB", onChanged=function() Apply() end })
-    local prXY = F.PairRow(pf, prB, prC, { label1="X:", label2="Y:", key1="prXBox", key2="prYBox", anchorTo=prPv, onChanged=Apply })
-    local prSz = F.SingleRow(pf, prB, prC, { label="Icon size:", boxKey="prSzBox", anchorTo=prXY, onChanged=Apply })
-    prC:RecalcHeight()
-
-    pf._recalcScroll = function()
-        C_Timer.After(0, function()
-            local t=pf._scrollChild and pf._scrollChild:GetTop(); local b=prC and prC.GetBottom and prC:GetBottom()
-            if t and b then pf:UpdateScrollHeight(t-b+20) else pf:UpdateScrollHeight(700) end
-        end)
-    end
-
-    local ok,cancel = F.FooterButtons(pf)
-    ok:SetScript("OnClick", function() Apply(); pf:Hide() end)
-    cancel:SetScript("OnClick", function()
-        RestoreAura(pf._auraSnap)
-        if type(_G.MSUF_Auras3_RefreshAll)=="function" then _G.MSUF_Auras3_RefreshAll() end
-        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        pf:Hide()
-    end)
-    pf:EnableKeyboard(true)
-    pf:SetScript("OnKeyDown", function(s,k) if k=="ESCAPE" then s:SetPropagateKeyboardInput(false); cancel:Click() else s:SetPropagateKeyboardInput(true) end end)
-    pf:HookScript("OnHide", function(s) if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(true) end end)
-    pf:UpdateScrollHeight(700)
-    return pf
-end
-
-local AuraPopup = {}; EM2.AuraPopup = AuraPopup
-function AuraPopup.Open(u, parent) if BlockConfigCombatLocked() then return false end; Build(); pf.unit=u; pf.parent=parent; Sync(); pf:Show(); return true end
-function AuraPopup.Close() if pf then pf:Hide() end end
-function AuraPopup.IsOpen() return pf and pf:IsShown() or false end
-function AuraPopup.Sync() if pf and pf:IsShown() then Sync() end end
