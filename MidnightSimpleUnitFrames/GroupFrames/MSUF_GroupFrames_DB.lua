@@ -290,9 +290,6 @@ local PARTY_DEFAULTS = {
     healPredEnabled      = false,
     healPredAnchorMode   = 3,
     --- (absorbEnabled, healAbsorbEnabled are resolved at runtime)
-    --- Tooltip
-    tooltipMode           = "ALWAYS",  --- ALWAYS / OOC / MODIFIER / NEVER
-    tooltipModifier       = "ALT",     --- ALT / CTRL / SHIFT
     --- Group number (raid subgroup on frame)
     showGroupNumber       = false,
     groupNumberSize       = 10,
@@ -832,6 +829,11 @@ local function RemoveGroupPetFrameConfig(conf)
     end
 end
 
+local function RemoveLayoutPresetState(conf)
+    if type(conf) ~= "table" then return end
+    conf.layoutIntentPreset = nil
+end
+
 local function ResolveLegacyHealPredictionEnabled()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if type(gen) ~= "table" then return false end
@@ -920,6 +922,9 @@ function GF.EnsureDB()
     RemoveGroupPetFrameConfig(db.gf_party)
     RemoveGroupPetFrameConfig(db.gf_raid)
     RemoveGroupPetFrameConfig(db.gf_mythicraid)
+    RemoveLayoutPresetState(db.gf_party)
+    RemoveLayoutPresetState(db.gf_raid)
+    RemoveLayoutPresetState(db.gf_mythicraid)
     MigrateHealPredictionOwnership(db.gf_party)
     MigrateHealPredictionOwnership(db.gf_raid)
     MigrateHealPredictionOwnership(db.gf_mythicraid)
@@ -1487,7 +1492,8 @@ end
 --- Resolve bar background texture path
 function GF.ResolveBarBgTexture(kind)
     local conf = GF.GetConf(kind)
-    local key = conf.barBgTexture
+    local key = conf.barBackgroundTexture
+    if key == nil then key = conf.barBgTexture end
     if key and key ~= "" then
         local resolve = _G.MSUF_ResolveStatusbarTextureKey
         if type(resolve) == "function" then return resolve(key) end
