@@ -1,918 +1,263 @@
--- Castbars/MSUF_PlayerCastbarRuntime.lua
---  extraction: Player castbar runtime (latency, color, interrupt, cast, OnEvent).
--- Loaded AFTER Empower + ChannelTicks (needs _G exports from those files).
-
-local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
-    if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
-end
-local MSUF_PlayerCastbar_ToPlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(v)
-    if v == nil then return nil end
-    local toPlain = _G.ToPlain
-    if type(toPlain) == "function" then
-        local pv = toPlain(v)
-        local pn = tonumber(tostring(pv))
-        if pn ~= nil then return pn end
-    end
-    local t = type(v)
-    if t == "number" or t == "string" then
-        return tonumber(tostring(v))
-    end
-    return nil
-end
-
--- Cross-file refs (call-time resolved, set by earlier TOC files)
-local MSUF_PlayerCastbar_EmpowerStart       = function(s, id) local fn = _G.MSUF_PlayerCastbar_EmpowerStart; if fn then fn(s, id) end end
-local MSUF_PlayerCastbar_ClearEmpower       = function(s, h) local fn = _G.MSUF_PlayerCastbar_ClearEmpower; if fn then fn(s, h) end end
-local MSUF_PlayerChannelHasteMarkers_Update = function(s, f) local fn = _G.MSUF_PlayerChannelHasteMarkers_Update; if fn then fn(s, f) end end
-local MSUF_PlayerChannelHasteMarkers_Hide   = function(s) local fn = _G.MSUF_PlayerChannelHasteMarkers_Hide; if fn then fn(s) end end
-
-local function MSUF_PlayerCastbar_ApplyLatencyZone(frame, pct, isChanneled)
-    if not frame or not frame.latencyBar or not frame.statusBar then
-        return
-    end
-
-    local bw = frame.statusBar:GetWidth() or 0
-    local ww = bw * (pct or 0)
-    local reverse = _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false)
-    local anchorOnLeft = reverse and true or false  -- finish edge (value always increases)
-
-    frame.latencyBar:ClearAllPoints()
-    if anchorOnLeft then
-        frame.latencyBar:SetPoint("TOPLEFT", frame.statusBar, "TOPLEFT", 0, 0)
-        frame.latencyBar:SetPoint("BOTTOMLEFT", frame.statusBar, "BOTTOMLEFT", 0, 0)
-    else
-        frame.latencyBar:SetPoint("TOPRIGHT", frame.statusBar, "TOPRIGHT", 0, 0)
-        frame.latencyBar:SetPoint("BOTTOMRIGHT", frame.statusBar, "BOTTOMRIGHT", 0, 0)
-    end
-
-    frame.latencyBar:SetWidth(ww)
-    if ww and ww > 0 then
-        frame.latencyBar:Show()
-    else
-        frame.latencyBar:Hide()
-    end
-end
-
-local function MSUF_PlayerCastbar_ApplyPendingLatencyZone(frame, generation)
-    if not frame then
-        return
-    end
-
-    local pending = frame._msufLatencyPending
-    if not pending then
-        return
-    end
-
-    if generation and pending.generation ~= generation then
-        return
-    end
-
-    MSUF_PlayerCastbar_ApplyLatencyZone(frame, pending.pct or 0, pending.isChanneled and true or false)
-end
-
-local MSUF_PlayerCastbar_LatencyZoneTimerQueue = {}
-
-local function MSUF_PlayerCastbar_RunQueuedLatencyZoneCallbacks()
-    local queue = MSUF_PlayerCastbar_LatencyZoneTimerQueue
-    local count = #queue
-    if count <= 0 then
-        return
-    end
-
-    local i = 1
-    while i <= count do
-        local frame = queue[i]
-        local generation = queue[i + 1]
-        MSUF_PlayerCastbar_ApplyPendingLatencyZone(frame, generation)
-        queue[i] = nil
-        queue[i + 1] = nil
-        i = i + 2
-    end
-end
-
-local function MSUF_PlayerCastbar_UpdateLatencyZone(self, isChanneled, durSec)
-    if not self or not self.latencyBar or not self.statusBar then
-        return
-    end
-    durSec = MSUF_PlayerCastbar_ToPlainNumber(durSec)
-
-    -- Honor Options -> Castbars -> Style -> Show latency indicator (default ON)
-    _EnsureDBLazy()  -- P3 Fix #14: lazy guard
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    if g.castbarShowLatency == false then
-        self.latencyBar:Hide()
-        return
-    end
-
-    -- For Edit Mode previews / dummy casts: show the indicator only while MSUF Edit Mode is active.
-    if (self.MSUF_testMode or self._msufIsPreview) and not MSUF_UnitEditModeActive then
-        self.latencyBar:Hide()
-        return
-    end
-
-    if not durSec or type(durSec) ~= "number" or durSec <= 0 then
-        self.latencyBar:Hide()
-        return
-    end
-
-    local _, _, homeMS, worldMS = GetNetStats()
-    local latencyMS = math.max(homeMS or 0, worldMS or 0)
-    local queueMS = tonumber(GetCVar("SpellQueueWindow") or "0") or 0
-    local tolMS = math.max(latencyMS, queueMS)
-
-    local durationMS = durSec * 1000
-    local pct = 0
-    if durationMS > 0 then
-        pct = tolMS / durationMS
-    end
-    if pct > 1 then pct = 1 end
-    if pct < 0 then pct = 0 end
-
-    self.MSUF_latencyLastPct = pct
-    self.MSUF_latencyLastIsChanneled = isChanneled and true or false
-    self.MSUF_latencyLastDurSec = durSec
-
-    local barW = self.statusBar:GetWidth() or 0
-
-    local pending = self._msufLatencyPending
-    if not pending then
-        pending = {}
-        self._msufLatencyPending = pending
-    end
-    pending.pct = pct
-    pending.isChanneled = isChanneled and true or false
-    pending.generation = (pending.generation or 0) + 1
-    local generation = pending.generation
-
-    if (not barW or barW <= 1) and C_Timer and C_Timer.After then
-        local queue = MSUF_PlayerCastbar_LatencyZoneTimerQueue
-        queue[#queue + 1] = self
-        queue[#queue + 1] = generation
-        C_Timer.After(0, MSUF_PlayerCastbar_RunQueuedLatencyZoneCallbacks)
-        return
-    end
-
-    MSUF_PlayerCastbar_ApplyPendingLatencyZone(self, generation)
-end
-
-local function MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
-    if not self or not self.statusBar then
-        return
-    end
-
-    _EnsureDBLazy()  -- P3 Fix #14: lazy guard
-    local g = MSUF_DB and MSUF_DB.general or {}
-
-    -- Optional player castbar color override (normal casts/channels).
-    -- This overrides interruptible + non-interruptible colors for the player castbar.
-    -- Interrupt feedback ("Interrupted") still uses the interrupt feedback color.
-    if g.playerCastbarOverrideEnabled then
-        -- If interrupt feedback is active, keep the interrupt feedback color.
-        if not (self.interruptFeedbackEndTime and GetTime() < self.interruptFeedbackEndTime) then
-            local mode = g.playerCastbarOverrideMode
-            local orr, org, orb
-            if mode == "CUSTOM" then
-                orr = tonumber(g.playerCastbarOverrideR)
-                org = tonumber(g.playerCastbarOverrideG)
-                orb = tonumber(g.playerCastbarOverrideB)
-            else
-                local _, classToken = UnitClass("player")
-                if classToken then
-                    if type(MSUF_GetClassBarColor) == "function" then
-                        orr, org, orb = MSUF_GetClassBarColor(classToken)
-                    end
-                    if (not orr) and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken] then
-                        local c = RAID_CLASS_COLORS[classToken]
-                        orr, org, orb = c.r, c.g, c.b
-                    end
-                end
-            end
-
-            if orr and org and orb then
-                if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-                    _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, orr, org, orb, 1)
-                else
-                    self.statusBar:SetStatusBarColor(orr, org, orb, 1)
-                end
-                return
-            end
-        end
-    end
-
-    local nonInterruptibleKey = g.castbarNonInterruptibleColor or "red"
-
-    local isNonInterruptible = false
-
-    local unit = self.unit or "player"
-    local nameplate = C_NamePlate
-        and C_NamePlate.GetNamePlateForUnit
-        and C_NamePlate.GetNamePlateForUnit(unit, issecure())
-
-    if nameplate then
-        local bar = (nameplate.UnitFrame and nameplate.UnitFrame.castBar)
-            or nameplate.castBar
-            or nameplate.CastBar
-
-        local barType = bar and bar.barType
-        if barType == "uninterruptable"
-            or barType == "uninterruptible"
-            or barType == "uninterruptibleSpell"
-            or barType == "shield"
-        then
-            isNonInterruptible = true
-        end
-    end
-
-    if self.isNotInterruptible then
-        isNonInterruptible = true
-    end
-
-    local r, gCol, b, a
-
-    if isNonInterruptible then
-        if MSUF_GetNonInterruptibleCastColor then
-            r, gCol, b = MSUF_GetNonInterruptibleCastColor()
-            a = 1
-        end
-
-        if not r or not gCol or not b then
-            local nonKey = g.castbarNonInterruptibleColor or "red"
-            if MSUF_GetColorFromKey then
-                local color = MSUF_GetColorFromKey(nonKey)
-                if color then
-                    r, gCol, b, a = color:GetRGBA()
-                end
-            end
-        end
-
-        if not r or not gCol or not b then
-            r, gCol, b, a = 0.4, 0.01, 0.01, 1
-        end
-    else
-        if MSUF_GetInterruptibleCastColor then
-            r, gCol, b = MSUF_GetInterruptibleCastColor()
-            a = 1
-        end
-
-        if not r or not gCol or not b then
-            local interruptibleKey = g.castbarInterruptibleColor or "turquoise"
-            if MSUF_GetColorFromKey then
-                local color = MSUF_GetColorFromKey(interruptibleKey)
-                if color then
-                    r, gCol, b, a = color:GetRGBA()
-                end
-            end
-        end
-
-        if not r or not gCol or not b then
-            r, gCol, b, a = 0, 1, 0.9, 1
-        end
-    end
-
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(self.statusBar, r, gCol, b, a or 1)
-    else
-        self.statusBar:SetStatusBarColor(r, gCol, b, a or 1)
-    end
-end
-local function MSUF_GetInterruptFeedbackColor()
-    _EnsureDBLazy()  -- P3 Fix #14: lazy guard
-    local g = MSUF_DB and MSUF_DB.general or {}
-
-    local r    = tonumber(g.castbarInterruptR)
-    local gCol = tonumber(g.castbarInterruptG)
-    local b    = tonumber(g.castbarInterruptB)
-
-    if r and gCol and b then
-        return r, gCol, b, 1
-    end
-
-    local key = g.castbarInterruptColor or "red"
-
-    if MSUF_GetColorFromKey then
-        local color = MSUF_GetColorFromKey(key)
-        if color then
-            return color:GetRGBA()
-        end
-    end
-
-    return 0.8, 0.1, 0.1, 1
-end
-local MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION = (_G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
-
-local function MSUF_PlayerCastbar_HideIfNoLongerCasting(timer)
-    local self = timer and timer.msuCastbarFrame
-    if not self or not self.unit then
-        return
-    end
-
-    if self.MSUF_testMode then
-        return
-    end
-
-    local unit = self.unit or "player"
-    if unit == "player" and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") then
-        if type(UnitExists) == "function" and UnitExists("vehicle") then
-            if (type(UnitCastingInfo) == "function" and UnitCastingInfo("vehicle"))
-            or (type(UnitChannelInfo) == "function" and UnitChannelInfo("vehicle")) then
-                unit = "vehicle"
-            end
-        end
-    end
-    local castName = UnitCastingInfo(unit)
-    local chanName = UnitChannelInfo(unit)
-
-    if castName or chanName then
-        if MSUF_PlayerCastbar_Cast then
-            MSUF_PlayerCastbar_Cast(self)
-        end
-        return
-    end
-
-    self:SetScript("OnUpdate", nil)
-    if self.timeText then
-        MSUF_SetTextIfChanged(self.timeText, "")
-    end
-    if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-    self._msufActiveCastGUID = nil
-    self._msufActiveSpellID = nil
-    self._msufActiveCastBarID = nil
-    self._msufActiveCastUnit = nil
-    self:Hide()
-end
-
-local function MSUF_PlayerCastbar_ShowInterruptFeedback(self, label)
-    if not self or not self.statusBar then
-        return
-    end
-
-    _EnsureDBLazy()  -- P3 Fix #14: lazy guard
-    local p = (MSUF_DB and MSUF_DB.player) or {}
-    if p.showInterrupt == false then
-        -- Option disabled: no red 'Interrupted' feedback, just hide immediately.
-        self:SetScript("OnUpdate", nil)
-        self.interruptFeedbackEndTime = nil
-        if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
-        if self.statusBar and self.statusBar.SetValue then self.statusBar:SetValue(0) end
-        self:Hide()
-        return
-    end
-
-    if self.hideTimer then
-        self.hideTimer:Cancel()
-        self.hideTimer = nil
-    end
-
-    self:SetScript("OnUpdate", nil)
-
-    if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-    self.MSUF_durationObj = nil
-    self.MSUF_channelDirect = nil
-    self.MSUF_timerDriven = nil
-    self.MSUF_timerRangeSet = nil
-    if _G.MSUF_ClearCastbarTimerDuration and self.statusBar then
-        _G.MSUF_ClearCastbarTimerDuration(self.statusBar)
-    end
-
-    self._msufActiveCastUnit = nil
-    self._msufActiveCastGUID = nil
-    self._msufActiveSpellID = nil
-    self._msufActiveCastBarID = nil
-    self._msufChanNilSince = nil
-    self.interruptFeedbackEndTime = GetTime() + MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION
-
-    -- Phase 2A: Use shared interrupt bar visuals (replaces ~25 lines of inline setup).
-    local rf = _G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(self, false) or false
-    _G.MSUF_ApplyInterruptBarVisuals(self, {
-        -- Player interrupt feedback should fully fill the bar (matches target/focus/boss).
-        barValue = 1,
-        colorR = 0.8, colorG = 0.1, colorB = 0.1,
-        reverseFill = rf,
-        label = label or INTERRUPTED,
-    })
-
-    local grace = MSUF_PLAYER_INTERRUPT_FEEDBACK_DURATION
-    if type(grace) ~= 'number' then grace = 0.5 end
-    if grace < 0 then grace = 0 end
-
-    self.hideTimer = C_Timer.NewTimer(grace, MSUF_PlayerCastbar_HideIfNoLongerCasting)
-    self.hideTimer.msuCastbarFrame = self
-end
-
-local function MSUF_PlayerCastbar_GetEffectiveUnit(self)
-    local u = (self and self.unit) or "player"
-    if u == "player" and type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") then
-        if type(UnitExists) == "function" and UnitExists("vehicle") then
-            -- Prefer vehicle only if it actually has an active cast/channel.
-            if (type(UnitCastingInfo) == "function" and UnitCastingInfo("vehicle"))
-            or (type(UnitChannelInfo) == "function" and UnitChannelInfo("vehicle")) then
-                return "vehicle"
-            end
-        end
-    end
-    return u
-end
-
-local function MSUF_PlayerCastbar_ClearActiveIdentifiers(self)
-    if not self then return end
-    self._msufActiveCastGUID = nil
-    self._msufActiveSpellID = nil
-    self._msufActiveCastBarID = nil
-end
-
-local function MSUF_PlayerCastbar_SetActiveIdentifiers(self, castGUID, spellID, castBarID)
-    if not self then return end
-    self._msufActiveCastGUID = castGUID
-    self._msufActiveSpellID = spellID
-    self._msufActiveCastBarID = castBarID
-end
-
-local function MSUF_PlayerCastbar_EventMatchesActiveUnit(self, unitToken)
-    if not self then return false end
-    if not unitToken then return true end
-    if not self._msufActiveCastUnit then return true end
-    return unitToken == self._msufActiveCastUnit
-end
-
-local function MSUF_PlayerCastbar_EventMatchesCastBarID(self, castBarID)
-    if not self then return false end
-    if not castBarID then return true end
-    if not self._msufActiveCastBarID then return true end
-    return castBarID == self._msufActiveCastBarID
-end
-
-local function MSUF_PlayerCastbar_ShouldIgnoreFail(self, castGUID, spellID, castBarID)
-    if not self then return false end
-    if castBarID and self._msufActiveCastBarID and castBarID ~= self._msufActiveCastBarID then
-        return true
-    end
-    if castGUID and self._msufActiveCastGUID and castGUID ~= self._msufActiveCastGUID then
-        return true
-    end
-    if spellID and self._msufActiveSpellID and spellID ~= self._msufActiveSpellID then
-        return true
-    end
-    return false
-end
-
-local function MSUF_PlayerCastbar_ResetPlainTiming(self)
-    if not self then return end
-    self.endTime = nil
-    self._msufPlainEndTime = nil
-    self._msufPlainTotal = nil
-    self._msufRemaining = nil
-    self._msufLastTimeDecimal = nil
-    self._msufZeroCount = nil
-    self._msufLastDurationObj = nil
-    self._msufTimerAssumeCountdown = nil
-end
-
-local function MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
-    if not self then return end
-    MSUF_PlayerCastbar_ResetPlainTiming(self)
-
-    startTimeMS = MSUF_PlayerCastbar_ToPlainNumber(startTimeMS)
-    endTimeMS = MSUF_PlayerCastbar_ToPlainNumber(endTimeMS)
-
-    local now = GetTime()
-    if type(endTimeMS) == "number" then
-        local endSec = endTimeMS / 1000
-        local r = endSec - now
-        self.endTime = endSec
-        if type(r) == "number" and r > 0 then
-            self._msufPlainEndTime = endSec
-            self._msufRemaining = r
-        end
-    end
-    if type(startTimeMS) == "number" and type(endTimeMS) == "number" then
-        local tot = (endTimeMS - startTimeMS) / 1000
-        if type(tot) == "number" and tot > 0 then
-            self._msufPlainTotal = tot
-        end
-    end
-end
-
-local function MSUF_PlayerCastbar_ApplyManualTimerFallback(self, totalSec, remSec, reverseFill)
-    if not (self and self.statusBar and self.statusBar.SetMinMaxValues and self.statusBar.SetValue) then return end
-
-    local total = MSUF_PlayerCastbar_ToPlainNumber(totalSec) or 0
-    local rem = MSUF_PlayerCastbar_ToPlainNumber(remSec) or total
-    if total < 0 then total = 0 end
-    if rem < 0 then rem = 0 end
-    if rem > total then rem = total end
-
-    local span = total
-    if span <= 0 then span = 0.001 end
-
-    self.statusBar:SetMinMaxValues(0, span)
-    if reverseFill then
-        self.statusBar:SetValue(rem)
-    else
-        self.statusBar:SetValue(span - rem)
-    end
-end
-
-local function MSUF_PlayerCastbar_StartDuration(self, unit, castType, name, text, tex, startTimeMS, endTimeMS, rawNotInterruptible, spellID, castGUID, castBarID, durationObj)
-    local isChanneled = (castType == "CHANNEL")
-
-    self.interruptFeedbackEndTime = nil
-    self.interrupted = nil
-    self.MSUF_castActive = true
-    self._msufActiveCastUnit = unit
-    self._msufChanNilSince = nil
-    self._msufCastNilSince = nil
-    self._msufHardStopNilSince = nil
-    MSUF_PlayerCastbar_SetActiveIdentifiers(self, isChanneled and nil or castGUID, spellID, castBarID)
-
-    self.MSUF_castDuration = isChanneled and nil or durationObj
-    self.MSUF_channelDuration = isChanneled and durationObj or nil
-    self.MSUF_channelTotal = nil
-
-    local rf = _G.MSUF_GetReverseFillSafe(self, isChanneled)
-    local timerDriven = false
-
-    if durationObj then
-        local state = self._msufPlayerState or {}
-        self._msufPlayerState = state
-        state.active = true
-        state.unit = unit
-        state.castType = castType
-        state.spellName = name
-        state.text = text or name
-        state.icon = tex
-        state.spellId = spellID
-        state.startTimeMS = startTimeMS
-        state.endTimeMS = endTimeMS
-        state.durationObj = durationObj
-        state.reverseFill = rf
-
-        timerDriven = _G.MSUF_Castbar_ApplyActiveDuration(self, state, {
-            skipColor = true,
-            skipRegister = true,
-            skipTimeText = true,
-            skipShow = true,
-        }) and true or false
-    else
-        self.MSUF_durationObj = nil
-        self.MSUF_isChanneled = isChanneled
-        self.MSUF_timerDriven = nil
-        if self.icon then self.icon:SetTexture(tex or nil) end
-        if self.castText then MSUF_SetTextIfChanged(self.castText, name or "") end
-    end
-
-    self._msufStripeReverseFill = (rf and true or false)
-    if isChanneled then
-        self.MSUF_channelDirect = nil
-    else
-        MSUF_PlayerChannelHasteMarkers_Hide(self)
-    end
-
-    local apiNI = false
-    if rawNotInterruptible then apiNI = true end
-    self.isNotInterruptible = apiNI
-
-    MSUF_PlayerCastbar_SetPlainTiming(self, startTimeMS, endTimeMS)
-    if (not timerDriven) and self._msufPlainTotal and self._msufRemaining then
-        MSUF_PlayerCastbar_ApplyManualTimerFallback(self, self._msufPlainTotal, self._msufRemaining, rf)
-    end
-
-    MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
-
-    local durSec = nil
-    if durationObj and durationObj.GetTotalDuration then
-        durSec = MSUF_PlayerCastbar_ToPlainNumber(durationObj:GetTotalDuration())
-    end
-    if (not isChanneled) and durSec == nil and durationObj and durationObj.GetRemainingDuration then
-        durSec = MSUF_PlayerCastbar_ToPlainNumber(durationObj:GetRemainingDuration())
-    end
-    if durSec == nil then durSec = self._msufPlainTotal end
-    if isChanneled then
-        self.MSUF_channelTotal = durSec
-    end
-    MSUF_PlayerCastbar_UpdateLatencyZone(self, isChanneled, durSec)
-
-    self:SetScript("OnUpdate", nil)
-    self.MSUF_durationObj = durationObj
-    self.MSUF_timerDriven = timerDriven and true or nil
-    MSUF_EnsureCastbarManager()
-    if MSUF_RegisterCastbar then
-        MSUF_RegisterCastbar(self)
-    end
-    if _G.MSUF_UpdateCastbarFrame then
-        local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-        _G.MSUF_UpdateCastbarFrame(self, 0, now)
-    end
-
-    self:Show()
-    if isChanneled then
-        MSUF_PlayerChannelHasteMarkers_Update(self, true)
-    end
-end
-
-
-
-
--- Quick Win #1: Lookup tables hoisted to file-level upvalues (previously allocated per-call inside the function).
-local _MSUF_UNHALTED_CAST_START = {
-    UNIT_SPELLCAST_START = true,
-    UNIT_SPELLCAST_INTERRUPTIBLE = true,
-    UNIT_SPELLCAST_NOT_INTERRUPTIBLE = true,
-    UNIT_SPELLCAST_SENT = true,
-}
-local _MSUF_UNHALTED_CAST_STOP = {
-    UNIT_SPELLCAST_STOP = true,
-    UNIT_SPELLCAST_CHANNEL_STOP = true,
-}
-local _MSUF_UNHALTED_CHANNEL_START = {
-    UNIT_SPELLCAST_CHANNEL_START = true,
-}
-
--- Unhalted-style non-empower player castbar (cast/channel): self-driven via OnUpdate and hard-stops when the cast/channel is gone.
-local function MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
-    if not self or not self.unit or not self.statusBar then return end
-    if self.isEmpower then return end
-
-    local CAST_START = _MSUF_UNHALTED_CAST_START
-    local CAST_STOP = _MSUF_UNHALTED_CAST_STOP
-    local CHANNEL_START = _MSUF_UNHALTED_CHANNEL_START
-
-    local unit = MSUF_PlayerCastbar_GetEffectiveUnit(self)
-
-    if CAST_START[event] then
-        local castName, castText, castTex, startTimeMS, endTimeMS, _, castGUID, notInterruptible, spellID, castBarID = UnitCastingInfo(unit)
-        if not castName then
-            if UnitChannelInfo(unit) then
-                return MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_CHANNEL_START")
-            end
-            return MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_STOP")
-        end
-
-        local castDuration = nil
-        if type(UnitCastingDuration) == "function" then
-            castDuration = UnitCastingDuration(unit)
-        end
-
-        MSUF_PlayerCastbar_StartDuration(self, unit, "CAST", castName, castText, castTex, startTimeMS, endTimeMS, notInterruptible, spellID, castGUID, castBarID, castDuration)
-        return
-    end
-
-    if CHANNEL_START[event] then
-        local chanName, chanText, chanTex, startTimeMS, endTimeMS, _, notInterruptible, spellID, isEmpowered, numEmpowerStages, castBarID = UnitChannelInfo(unit)
-        if not chanName then
-            if UnitCastingInfo(unit) then
-                return MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_START")
-            end
-            return MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_STOP")
-        end
-
-        local channelDuration = nil
-        if type(UnitChannelDuration) == "function" then
-            channelDuration = UnitChannelDuration(unit)
-        end
-
-        MSUF_PlayerCastbar_StartDuration(self, unit, "CHANNEL", chanName, chanText, chanTex, startTimeMS, endTimeMS, notInterruptible, spellID, nil, castBarID, channelDuration)
-        return
-    end
-
-    if CAST_STOP[event] then
-        self._msufChanNilSince = nil
-        self._msufCastNilSince = nil
-        self._msufHardStopNilSince = nil
-        self.MSUF_channelDuration = nil
-        self.MSUF_castDuration = nil
-        self.MSUF_channelTotal = nil
-        MSUF_PlayerCastbar_ResetPlainTiming(self)
-        MSUF_PlayerCastbar_ClearActiveIdentifiers(self)
-        self._msufActiveCastUnit = nil
-        MSUF_PlayerChannelHasteMarkers_Hide(self)
-        if _G.MSUF_CB_ResetStateOnStop then
-            _G.MSUF_CB_ResetStateOnStop(self, "STOPPED")
-        else
-            self:SetScript("OnUpdate", nil)
-            if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-            if self.latencyBar then self.latencyBar:Hide() end
-            if self.timeText then MSUF_SetTextIfChanged(self.timeText, "") end
-            self:Hide()
-        end
-        if self.statusBar and self.statusBar.SetValue then self.statusBar:SetValue(0) end
-        return
-    end
-end
-
-
-local function MSUF_PlayerCastbar_Cast(self)
-    if not self or not self.unit or not self.statusBar then return end
-    if self.isEmpower then return end
-    if self.MSUF_testMode then return end
-
-    local unit = MSUF_PlayerCastbar_GetEffectiveUnit(self)
-
-    if UnitCastingInfo(unit) then
-        MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_START")
-    elseif UnitChannelInfo(unit) then
-        MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_CHANNEL_START")
-    else
-        MSUF_PlayerCastbar_UnhaltedUpdate(self, "UNIT_SPELLCAST_STOP")
-    end
-end
-
-local function MSUF_PlayerCastbar_QueueSoftStateResync(self)
-    if not self then return end
-
-    local token = (self._msufSoftResyncToken or 0) + 1
-    self._msufSoftResyncToken = token
-
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            if not self or self._msufSoftResyncToken ~= token then return end
-            if self.isEmpower or self.MSUF_testMode then return end
-            MSUF_PlayerCastbar_Cast(self)
-        end)
-    else
-        MSUF_PlayerCastbar_Cast(self)
-    end
-end
-
-function _G.MSUF_UpdateCastbarLatencyIndicator()
-    local f = _G.MSUF_PlayerCastBar or _G.MSUF_PlayerCastbar
-    if not f or not f.latencyBar or not f.statusBar then return end
-
-    EnsureDB()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    if g.castbarShowLatency == false then
-        f.latencyBar:Hide()
-        return
-    end
-
-    if (f.MSUF_testMode or f._msufIsPreview) and not MSUF_UnitEditModeActive then
-        f.latencyBar:Hide()
-        return
-    end
-
-    local unit = (type(MSUF_PlayerCastbar_GetEffectiveUnit) == "function" and MSUF_PlayerCastbar_GetEffectiveUnit(f)) or f.unit or "player"
-    if UnitChannelInfo(unit) then
-        local durSec = f.MSUF_channelTotal
-        local obj = f.MSUF_channelDuration
-        if durSec == nil and obj and obj.GetTotalDuration then
-            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetTotalDuration())
-        end
-        if durSec == nil and obj and obj.GetRemainingDuration then
-            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetRemainingDuration())
-        end
-        if durSec == nil then durSec = f._msufPlainTotal end
-        MSUF_PlayerCastbar_UpdateLatencyZone(f, true, durSec)
-        return
-    end
-
-    if UnitCastingInfo(unit) then
-        local durSec = nil
-        local obj = f.MSUF_castDuration
-        if obj and obj.GetTotalDuration then
-            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetTotalDuration())
-        end
-        if durSec == nil and obj and obj.GetRemainingDuration then
-            durSec = MSUF_PlayerCastbar_ToPlainNumber(obj:GetRemainingDuration())
-        end
-        if durSec == nil then durSec = f._msufPlainTotal end
-        MSUF_PlayerCastbar_UpdateLatencyZone(f, false, durSec)
-        return
-    end
-
-    f.latencyBar:Hide()
-end
-
-local function MSUF_PlayerCastbar_OnEvent(self, event, ...)
-    if not MSUF_IsCastbarEnabledForUnit("player") then
-        self:SetScript("OnUpdate", nil)
-        if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(self) end
-        self.interruptFeedbackEndTime = nil
-        MSUF_PlayerCastbar_ClearActiveIdentifiers(self)
-        self._msufActiveCastUnit = nil
-        if self.timeText then
-            MSUF_SetTextIfChanged(self.timeText, "")
-        end
-        if self.latencyBar then
-            self.latencyBar:Hide()
-        end
-        self:Hide()
-        return
-    end
-
-    if self.MSUF_testMode then
-        return
-    end
-
-    local unitToken = select(1, ...)
-
-    if event == "UNIT_SPELLCAST_EMPOWER_START" or event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
-        MSUF_PlayerCastbar_EmpowerStart(self, select(3, ...))
-        return
-    elseif event == "UNIT_SPELLCAST_EMPOWER_STOP" then
-        MSUF_PlayerCastbar_ClearEmpower(self, true)
-        return
-    end
-
-    if self.isEmpower then
-        if event == "UNIT_SPELLCAST_INTERRUPTED" then
-            if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback) == "function" then
-                _G.MSUF_PlayerCastbar_ShowInterruptFeedback(self, "Interrupted")
-            else
-                MSUF_PlayerCastbar_ClearEmpower(self, true)
-            end
-            return
-        elseif event == "UNIT_SPELLCAST_STOP"
-            or event == "UNIT_SPELLCAST_FAILED"
-            or event == "UNIT_SPELLCAST_SUCCEEDED" then
-            MSUF_PlayerCastbar_ClearEmpower(self, true)
-            return
-        end
-    end
-
-    if event == "UNIT_SPELLCAST_INTERRUPTED" then
-        if not MSUF_PlayerCastbar_EventMatchesActiveUnit(self, unitToken) then
-            return
-        end
-
-        local castGUID = select(2, ...)
-        local spellID = select(3, ...)
-        local castBarID = select(5, ...)
-        if MSUF_PlayerCastbar_ShouldIgnoreFail(self, castGUID, spellID, castBarID) then
-            return
-        end
-
-        MSUF_PlayerCastbar_ClearActiveIdentifiers(self)
-        MSUF_PlayerCastbar_ShowInterruptFeedback(self, INTERRUPTED)
-        return
-    end
-
-    if not self.isEmpower then
-        if event == "UNIT_SPELLCAST_START"
-        or event == "UNIT_SPELLCAST_SENT"
-        or event == "UNIT_SPELLCAST_CHANNEL_START"
-        or event == "UNIT_SPELLCAST_INTERRUPTIBLE"
-        or event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
-            MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
-            return
-        elseif event == "UNIT_SPELLCAST_CHANNEL_UPDATE" or event == "UNIT_SPELLCAST_DELAYED" then
-            if not MSUF_PlayerCastbar_EventMatchesActiveUnit(self, unitToken) then
-                return
-            end
-            local castBarID = select(4, ...)
-            if not MSUF_PlayerCastbar_EventMatchesCastBarID(self, castBarID) then return end
-            MSUF_PlayerCastbar_Cast(self)
-            return
-        elseif event == "UNIT_SPELLCAST_STOP" then
-            if not MSUF_PlayerCastbar_EventMatchesActiveUnit(self, unitToken) then
-                return
-            end
-            local castBarID = select(4, ...)
-            if not MSUF_PlayerCastbar_EventMatchesCastBarID(self, castBarID) then return end
-            MSUF_PlayerCastbar_UnhaltedUpdate(self, event)
-            return
-        elseif event == "UNIT_SPELLCAST_CHANNEL_STOP" then
-            if not MSUF_PlayerCastbar_EventMatchesActiveUnit(self, unitToken) then
-                return
-            end
-            local castBarID = select(5, ...)
-            if not MSUF_PlayerCastbar_EventMatchesCastBarID(self, castBarID) then return end
-            MSUF_PlayerCastbar_QueueSoftStateResync(self)
-            return
-        elseif event == "UNIT_SPELLCAST_FAILED" then
-            if not MSUF_PlayerCastbar_EventMatchesActiveUnit(self, unitToken) then
-                return
-            end
-            local castGUID = select(2, ...)
-            local spellID = select(3, ...)
-            local castBarID = select(4, ...)
-            if MSUF_PlayerCastbar_ShouldIgnoreFail(self, castGUID, spellID, castBarID) then
-                return
-            end
-            MSUF_PlayerCastbar_QueueSoftStateResync(self)
-            return
-        end
-    end
-
-    if event == "UNIT_SPELLCAST_INTERRUPTIBLE" then
-        self.isNotInterruptible = false
-        MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
-        return
-    elseif event == "UNIT_SPELLCAST_NOT_INTERRUPTIBLE" then
-        self.isNotInterruptible = true
-        MSUF_PlayerCastbar_UpdateColorForInterruptible(self)
-        return
-    end
-end
-
----------------------------------------------------------------------------
--- _G exports
----------------------------------------------------------------------------
-_G.MSUF_PlayerCastbar_UpdateLatencyZone           = MSUF_PlayerCastbar_UpdateLatencyZone
-_G.MSUF_PlayerCastbar_UpdateColorForInterruptible = MSUF_PlayerCastbar_UpdateColorForInterruptible
-_G.MSUF_GetInterruptFeedbackColor                 = MSUF_GetInterruptFeedbackColor
-_G.MSUF_PlayerCastbar_HideIfNoLongerCasting       = MSUF_PlayerCastbar_HideIfNoLongerCasting
-_G.MSUF_PlayerCastbar_ShowInterruptFeedback       = MSUF_PlayerCastbar_ShowInterruptFeedback
-_G.MSUF_PlayerCastbar_GetEffectiveUnit            = MSUF_PlayerCastbar_GetEffectiveUnit
-_G.MSUF_PlayerCastbar_UnhaltedUpdate              = MSUF_PlayerCastbar_UnhaltedUpdate
-_G.MSUF_PlayerCastbar_Cast                        = MSUF_PlayerCastbar_Cast
-_G.MSUF_PlayerCastbar_OnEvent                     = MSUF_PlayerCastbar_OnEvent
--- MSUF_UpdateCastbarLatencyIndicator is already defined directly on _G
+local s=_G.MSUF_EnsureDBLazy or function()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end
+end local l=_G.MSUF_CastbarRuntime_PlainNumber or function(e)if e==nil then return nil end local n=_G.ToPlain
+if type(n)=="function"then local e=n(e)local e=tonumber(tostring(e))if e~=nil then return e end
+end local n=type(e)if n=="number"or n=="string"then return tonumber(tostring(e))end return nil
+end local m=function(t,n)local e=_G.MSUF_PlayerCastbar_EmpowerStart;if e then e(t,n)end end
+local f=function(t,n)local e=_G.MSUF_PlayerCastbar_ClearEmpower;if e then e(t,n)end end local M=function(t,n)local e=_G.MSUF_PlayerChannelHasteMarkers_Update;if e then e(t,n)end end
+local S=function(n)local e=_G.MSUF_PlayerChannelHasteMarkers_Hide;if e then e(n)end end local function r(e,r,t)if not e or not e.latencyBar or not e.statusBar then return
+end local n=e.statusBar:GetWidth()or 0
+local n=n*(r or 0)local t=_G.MSUF_GetReverseFillSafe(e,t and true or false)local t=t and true or false e.latencyBar:ClearAllPoints()if t then e.latencyBar:SetPoint("TOPLEFT",e.statusBar,"TOPLEFT",0,0)e.latencyBar:SetPoint("BOTTOMLEFT",e.statusBar,"BOTTOMLEFT",0,0)else
+e.latencyBar:SetPoint("TOPRIGHT",e.statusBar,"TOPRIGHT",0,0)e.latencyBar:SetPoint("BOTTOMRIGHT",e.statusBar,"BOTTOMRIGHT",0,0)end e.latencyBar:SetWidth(n)if n and n>0 then e.latencyBar:Show()else e.latencyBar:Hide()end end
+local function o(n,t)if not n then
+return end
+local e=n._msufLatencyPending if not e then
+return end
+if t and e.generation~=t then return
+end r(n,e.pct or 0,e.isChanneled and true or false)end local a={}local function u()local n=a
+local t=#n if t<=0 then
+return end
+local e=1 while e<=t do
+local t=n[e]local r=n[e+1]o(t,r)n[e]=nil
+n[e+1]=nil e=e+2
+end end
+local function U(e,i,n)if not e or not e.latencyBar or not e.statusBar then
+return end
+n=l(n)s()local t=(MSUF_DB and MSUF_DB.general)or{}if t.castbarShowLatency==false then
+e.latencyBar:Hide()return
+end if(e.MSUF_testMode or e._msufIsPreview)and not MSUF_UnitEditModeActive then
+e.latencyBar:Hide()return
+end if not n or type(n)~="number"or n<=0 then
+e.latencyBar:Hide()return
+end local l,l,r,t=GetNetStats()local t=math.max(r or 0,t or 0)local r=tonumber(GetCVar("SpellQueueWindow")or"0")or 0
+local l=math.max(t,r)local r=n*1000
+local t=0 if r>0 then
+t=l/r end
+if t>1 then t=1 end if t<0 then t=0 end
+e.MSUF_latencyLastPct=t e.MSUF_latencyLastIsChanneled=i and true or false
+e.MSUF_latencyLastDurSec=n local r=e.statusBar:GetWidth()or 0
+local n=e._msufLatencyPending if not n then
+n={}e._msufLatencyPending=n
+end n.pct=t
+n.isChanneled=i and true or false n.generation=(n.generation or 0)+1
+local t=n.generation if(not r or r<=1)and C_Timer and C_Timer.After then
+local n=a n[#n+1]=e
+n[#n+1]=t C_Timer.After(0,u)return end
+o(e,t)end
+local function o(r)if not r or not r.statusBar then
+return end
+s()local i=MSUF_DB and MSUF_DB.general or{}if i.playerCastbarOverrideEnabled then if not(r.interruptFeedbackEndTime and GetTime()<r.interruptFeedbackEndTime)then
+local a=i.playerCastbarOverrideMode local e,n,t
+if a=="CUSTOM"then e=tonumber(i.playerCastbarOverrideR)n=tonumber(i.playerCastbarOverrideG)t=tonumber(i.playerCastbarOverrideB)else local a,r=UnitClass("player")if r then if type(MSUF_GetClassBarColor)=="function"then
+e,n,t=MSUF_GetClassBarColor(r)end
+if(not e)and RAID_CLASS_COLORS and RAID_CLASS_COLORS[r]then local r=RAID_CLASS_COLORS[r]e,n,t=r.r,r.g,r.b end
+end end
+if e and n and t then if type(_G.MSUF_SetStatusBarColorIfChanged)=="function"then
+_G.MSUF_SetStatusBarColorIfChanged(r.statusBar,e,n,t,1)else
+r.statusBar:SetStatusBarColor(e,n,t,1)end
+return end
+end end
+local e=i.castbarNonInterruptibleColor or"red"local l=false
+local e=r.unit or"player"local e=C_NamePlate
+and C_NamePlate.GetNamePlateForUnit and C_NamePlate.GetNamePlateForUnit(e,issecure())if e then local e=(e.UnitFrame and e.UnitFrame.castBar)or e.castBar or e.CastBar
+local e=e and e.barType if e=="uninterruptable"or e=="uninterruptible"or e=="uninterruptibleSpell"or e=="shield"then
+l=true end
+end if r.isNotInterruptible then
+l=true end
+local n,t,e,a if l then
+if MSUF_GetNonInterruptibleCastColor then n,t,e=MSUF_GetNonInterruptibleCastColor()a=1 end
+if not n or not t or not e then local r=i.castbarNonInterruptibleColor or"red"if MSUF_GetColorFromKey then local r=MSUF_GetColorFromKey(r)if r then n,t,e,a=r:GetRGBA()end end
+end if not n or not t or not e then
+n,t,e,a=0.4,0.01,0.01,1 end
+else if MSUF_GetInterruptibleCastColor then
+n,t,e=MSUF_GetInterruptibleCastColor()a=1
+end if not n or not t or not e then
+local r=i.castbarInterruptibleColor or"turquoise"if MSUF_GetColorFromKey then
+local r=MSUF_GetColorFromKey(r)if r then
+n,t,e,a=r:GetRGBA()end
+end end
+if not n or not t or not e then n,t,e,a=0,1,0.9,1
+end end
+if type(_G.MSUF_SetStatusBarColorIfChanged)=="function"then _G.MSUF_SetStatusBarColorIfChanged(r.statusBar,n,t,e,a or 1)else r.statusBar:SetStatusBarColor(n,t,e,a or 1)end end
+local function I()s()local e=MSUF_DB and MSUF_DB.general or{}local r=tonumber(e.castbarInterruptR)local n=tonumber(e.castbarInterruptG)local t=tonumber(e.castbarInterruptB)if r and n and t then return r,n,t,1
+end local e=e.castbarInterruptColor or"red"if MSUF_GetColorFromKey then local e=MSUF_GetColorFromKey(e)if e then return e:GetRGBA()end end
+return 0.8,0.1,0.1,1 end
+local t=(_G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)local function T(e)local e=e and e.msuCastbarFrame if not e or not e.unit then
+return end
+if e.MSUF_testMode then return
+end local n=e.unit or"player"if n=="player"and type(UnitHasVehicleUI)=="function"and UnitHasVehicleUI("player")then if type(UnitExists)=="function"and UnitExists("vehicle")then
+if(type(UnitCastingInfo)=="function"and UnitCastingInfo("vehicle"))or(type(UnitChannelInfo)=="function"and UnitChannelInfo("vehicle"))then
+n="vehicle"end
+end end
+local t=UnitCastingInfo(n)local n=UnitChannelInfo(n)if t or n then if MSUF_PlayerCastbar_Cast then
+MSUF_PlayerCastbar_Cast(e)end
+return end
+e:SetScript("OnUpdate",nil)if e.timeText then
+MSUF_SetTextIfChanged(e.timeText,"")end
+if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(e)end e._msufActiveCastGUID=nil
+e._msufActiveSpellID=nil e._msufActiveCastBarID=nil
+e._msufActiveCastUnit=nil e:Hide()end local function C(e,n)if not e or not e.statusBar then return
+end s()local r=(MSUF_DB and MSUF_DB.player)or{}if r.showInterrupt==false then
+e:SetScript("OnUpdate",nil)e.interruptFeedbackEndTime=nil
+if e.timeText then MSUF_SetTextIfChanged(e.timeText,"")end if e.statusBar and e.statusBar.SetValue then e.statusBar:SetValue(0)end
+e:Hide()return
+end if e.hideTimer then
+e.hideTimer:Cancel()e.hideTimer=nil
+end e:SetScript("OnUpdate",nil)if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(e)end e.MSUF_durationObj=nil
+e.MSUF_channelDirect=nil e.MSUF_timerDriven=nil
+e.MSUF_timerRangeSet=nil if _G.MSUF_ClearCastbarTimerDuration and e.statusBar then
+_G.MSUF_ClearCastbarTimerDuration(e.statusBar)end
+e._msufActiveCastUnit=nil e._msufActiveCastGUID=nil
+e._msufActiveSpellID=nil e._msufActiveCastBarID=nil
+e._msufChanNilSince=nil e.interruptFeedbackEndTime=GetTime()+t
+local r=_G.MSUF_GetReverseFillSafe and _G.MSUF_GetReverseFillSafe(e,false)or false _G.MSUF_ApplyInterruptBarVisuals(e,{barValue=1,colorR=0.8,colorG=0.1,colorB=0.1,reverseFill=r,label=n or INTERRUPTED,})local n=t
+if type(n)~='number'then n=0.5 end if n<0 then n=0 end
+e.hideTimer=C_Timer.NewTimer(n,T)e.hideTimer.msuCastbarFrame=e
+end local function d(e)local e=(e and e.unit)or"player"if e=="player"and type(UnitHasVehicleUI)=="function"and UnitHasVehicleUI("player")then
+if type(UnitExists)=="function"and UnitExists("vehicle")then if(type(UnitCastingInfo)=="function"and UnitCastingInfo("vehicle"))or(type(UnitChannelInfo)=="function"and UnitChannelInfo("vehicle"))then return"vehicle"end end
+end return e
+end local function s(e)if not e then return end e._msufActiveCastGUID=nil
+e._msufActiveSpellID=nil e._msufActiveCastBarID=nil
+end local function i(e,n,r,t)if not e then return end e._msufActiveCastGUID=n
+e._msufActiveSpellID=r e._msufActiveCastBarID=t
+end local function a(e,n)if not e then return false end if not n then return true end
+if not e._msufActiveCastUnit then return true end return n==e._msufActiveCastUnit
+end local function u(e,n)if not e then return false end if not n then return true end
+if not e._msufActiveCastBarID then return true end return n==e._msufActiveCastBarID
+end local function c(e,n,r,t)if not e then return false end if t and e._msufActiveCastBarID and t~=e._msufActiveCastBarID then
+return true end
+if n and e._msufActiveCastGUID and n~=e._msufActiveCastGUID then return true
+end if r and e._msufActiveSpellID and r~=e._msufActiveSpellID then
+return true end
+return false end
+local function h(e)if not e then return end
+e.endTime=nil e._msufPlainEndTime=nil
+e._msufPlainTotal=nil e._msufRemaining=nil
+e._msufLastTimeDecimal=nil e._msufZeroCount=nil
+e._msufLastDurationObj=nil e._msufTimerAssumeCountdown=nil
+end local function p(e,t,n)if not e then return end h(e)t=l(t)n=l(n)local r=GetTime()if type(n)=="number"then
+local n=n/1000 local t=n-r
+e.endTime=n if type(t)=="number"and t>0 then
+e._msufPlainEndTime=n e._msufRemaining=t
+end end
+if type(t)=="number"and type(n)=="number"then local n=(n-t)/1000
+if type(n)=="number"and n>0 then e._msufPlainTotal=n
+end end
+end local function F(e,t,n,r)if not(e and e.statusBar and e.statusBar.SetMinMaxValues and e.statusBar.SetValue)then return end local t=l(t)or 0
+local n=l(n)or t if t<0 then t=0 end
+if n<0 then n=0 end if n>t then n=t end
+local t=t if t<=0 then t=0.001 end
+e.statusBar:SetMinMaxValues(0,t)if r then
+e.statusBar:SetValue(n)else
+e.statusBar:SetValue(t-n)end
+end local function B(e)if e==nil then return false end local t=_G.ToPlain
+if type(t)=="function"then local n=t(e)if n~=nil then e=n end end
+local n=_G.issecretvalue if type(n)=="function"and n(e)==true then return false end
+return e==true
+end local function _(e,c,_,s,T,h,d,u,C,f,a,n,t)local r=(_=="CHANNEL")e.interruptFeedbackEndTime=nil
+e.interrupted=nil e.MSUF_castActive=true
+e._msufActiveCastUnit=c e._msufChanNilSince=nil
+e._msufCastNilSince=nil e._msufHardStopNilSince=nil
+i(e,r and nil or a,f,n)e.MSUF_castDuration=r and nil or t
+e.MSUF_channelDuration=r and t or nil e.MSUF_channelTotal=nil
+local i=_G.MSUF_GetReverseFillSafe(e,r)local a=false
+if t then local n=e._msufPlayerState or{}e._msufPlayerState=n n.active=true
+n.unit=c n.castType=_
+n.spellName=s n.text=T or s
+n.icon=h n.spellId=f
+n.startTimeMS=d n.endTimeMS=u
+n.durationObj=t n.reverseFill=i
+a=_G.MSUF_Castbar_ApplyActiveDuration(e,n,{skipColor=true,skipRegister=true,skipTimeText=true,skipShow=true,})and true or false
+else e.MSUF_durationObj=nil
+e.MSUF_isChanneled=r e.MSUF_timerDriven=nil
+if e.icon then e.icon:SetTexture(h or nil)end if e.castText then MSUF_SetTextIfChanged(e.castText,s or"")end
+end e._msufStripeReverseFill=(i and true or false)if r then e.MSUF_channelDirect=nil
+else S(e)end local n=(e.isNotInterruptible==true)if B(C)then n=true end e.isNotInterruptible=n
+p(e,d,u)if(not a)and e._msufPlainTotal and e._msufRemaining then
+F(e,e._msufPlainTotal,e._msufRemaining,i)end
+o(e)local n=nil
+if t and t.GetTotalDuration then n=l(t:GetTotalDuration())end if(not r)and n==nil and t and t.GetRemainingDuration then
+n=l(t:GetRemainingDuration())end
+if n==nil then n=e._msufPlainTotal end if r then
+e.MSUF_channelTotal=n end
+U(e,r,n)e:SetScript("OnUpdate",nil)e.MSUF_durationObj=t e.MSUF_timerDriven=a and true or nil
+MSUF_EnsureCastbarManager()if MSUF_RegisterCastbar then
+MSUF_RegisterCastbar(e)end
+if _G.MSUF_UpdateCastbarFrame then local n=(GetTimePreciseSec and GetTimePreciseSec())or GetTime()_G.MSUF_UpdateCastbarFrame(e,0,n)end
+e:Show()if r then
+M(e,true)end
+end local n={UNIT_SPELLCAST_START=true,UNIT_SPELLCAST_INTERRUPTIBLE=true,UNIT_SPELLCAST_NOT_INTERRUPTIBLE=true,UNIT_SPELLCAST_SENT=true,}local i={UNIT_SPELLCAST_STOP=true,UNIT_SPELLCAST_CHANNEL_STOP=true,}local l={UNIT_SPELLCAST_CHANNEL_START=true,}local function t(e,r)if not e or not e.unit or not e.statusBar then return end
+if e.isEmpower then return end local a=n
+local i=i local u=l
+local n=d(e)if r=="UNIT_SPELLCAST_INTERRUPTIBLE"then e.isNotInterruptible=false elseif r=="UNIT_SPELLCAST_NOT_INTERRUPTIBLE"then e.isNotInterruptible=true elseif r=="UNIT_SPELLCAST_START"or r=="UNIT_SPELLCAST_SENT"or r=="UNIT_SPELLCAST_CHANNEL_START"then e.isNotInterruptible=false end if a[r]then
+local r,d,u,f,s,c,o,l,i,a=UnitCastingInfo(n)if not r then
+if UnitChannelInfo(n)then return t(e,"UNIT_SPELLCAST_CHANNEL_START")end return t(e,"UNIT_SPELLCAST_STOP")end local t=nil
+if type(UnitCastingDuration)=="function"then t=UnitCastingDuration(n)end _(e,n,"CAST",r,d,u,f,s,l,i,o,a,t)return end
+if u[r]then local r,s,o,u,a,f,d,l,f,f,i=UnitChannelInfo(n)if not r then if UnitCastingInfo(n)then
+return t(e,"UNIT_SPELLCAST_START")end
+return t(e,"UNIT_SPELLCAST_STOP")end
+local t=nil if type(UnitChannelDuration)=="function"then
+t=UnitChannelDuration(n)end
+_(e,n,"CHANNEL",r,s,o,u,a,d,l,nil,i,t)return
+end if i[r]then
+e._msufChanNilSince=nil e._msufCastNilSince=nil
+e._msufHardStopNilSince=nil e.MSUF_channelDuration=nil
+e.MSUF_castDuration=nil e.MSUF_channelTotal=nil
+h(e)s(e)e._msufActiveCastUnit=nil S(e)if _G.MSUF_CB_ResetStateOnStop then _G.MSUF_CB_ResetStateOnStop(e,"STOPPED")else e:SetScript("OnUpdate",nil)if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(e)end if e.latencyBar then e.latencyBar:Hide()end
+if e.timeText then MSUF_SetTextIfChanged(e.timeText,"")end e:Hide()end if e.statusBar and e.statusBar.SetValue then e.statusBar:SetValue(0)end
+return end
+end local function i(e)if not e or not e.unit or not e.statusBar then return end if e.isEmpower then return end
+if e.MSUF_testMode then return end local n=d(e)if UnitCastingInfo(n)then t(e,"UNIT_SPELLCAST_START")elseif UnitChannelInfo(n)then t(e,"UNIT_SPELLCAST_CHANNEL_START")else t(e,"UNIT_SPELLCAST_STOP")end end
+local function l(e)if not e then return end
+local n=(e._msufSoftResyncToken or 0)+1 e._msufSoftResyncToken=n
+if C_Timer and C_Timer.After then C_Timer.After(0,function()if not e or e._msufSoftResyncToken~=n then return end if e.isEmpower or e.MSUF_testMode then return end
+i(e)end)else i(e)end end
+local function _(e,n,...)if not MSUF_IsCastbarEnabledForUnit("player")then
+e:SetScript("OnUpdate",nil)if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(e)end
+e.interruptFeedbackEndTime=nil s(e)e._msufActiveCastUnit=nil if e.timeText then
+MSUF_SetTextIfChanged(e.timeText,"")end
+if e.latencyBar then e.latencyBar:Hide()end e:Hide()return end
+if e.MSUF_testMode then return
+end local r=select(1,...)if n=="UNIT_SPELLCAST_EMPOWER_START"or n=="UNIT_SPELLCAST_EMPOWER_UPDATE"then m(e,select(3,...))return elseif n=="UNIT_SPELLCAST_EMPOWER_STOP"then
+f(e,true)return
+end if e.isEmpower then
+if n=="UNIT_SPELLCAST_INTERRUPTED"then if type(_G.MSUF_PlayerCastbar_ShowInterruptFeedback)=="function"then
+_G.MSUF_PlayerCastbar_ShowInterruptFeedback(e,"Interrupted")else
+f(e,true)end
+return elseif n=="UNIT_SPELLCAST_STOP"or n=="UNIT_SPELLCAST_FAILED"or n=="UNIT_SPELLCAST_SUCCEEDED"then
+f(e,true)return
+end end
+if n=="UNIT_SPELLCAST_INTERRUPTED"then if not a(e,r)then
+return end
+local t=select(2,...)local n=select(3,...)local r=select(5,...)if c(e,t,n,r)then
+return end
+s(e)C(e,INTERRUPTED)return end
+if not e.isEmpower then if n=="UNIT_SPELLCAST_START"or n=="UNIT_SPELLCAST_SENT"or n=="UNIT_SPELLCAST_CHANNEL_START"or n=="UNIT_SPELLCAST_INTERRUPTIBLE"or n=="UNIT_SPELLCAST_NOT_INTERRUPTIBLE"then
+t(e,n)return
+elseif n=="UNIT_SPELLCAST_CHANNEL_UPDATE"or n=="UNIT_SPELLCAST_DELAYED"then if not a(e,r)then
+return end
+local n=select(4,...)if not u(e,n)then return end
+i(e)return
+elseif n=="UNIT_SPELLCAST_STOP"then if not a(e,r)then
+return end
+local r=select(4,...)if not u(e,r)then return end
+t(e,n)return
+elseif n=="UNIT_SPELLCAST_CHANNEL_STOP"then if not a(e,r)then
+return end
+local n=select(5,...)if not u(e,n)then return end
+l(e)return
+elseif n=="UNIT_SPELLCAST_FAILED"then if not a(e,r)then
+return end
+local n=select(2,...)local t=select(3,...)local r=select(4,...)if c(e,n,t,r)then
+return end
+l(e)return
+end end
+if n=="UNIT_SPELLCAST_INTERRUPTIBLE"then e.isNotInterruptible=false
+o(e)return
+elseif n=="UNIT_SPELLCAST_NOT_INTERRUPTIBLE"then e.isNotInterruptible=true
+o(e)return
+end end
+_G.MSUF_PlayerCastbar_UpdateLatencyZone=U _G.MSUF_PlayerCastbar_UpdateColorForInterruptible=o
+_G.MSUF_GetInterruptFeedbackColor=I _G.MSUF_PlayerCastbar_HideIfNoLongerCasting=T
+_G.MSUF_PlayerCastbar_ShowInterruptFeedback=C _G.MSUF_PlayerCastbar_GetEffectiveUnit=d
+_G.MSUF_PlayerCastbar_UnhaltedUpdate=t _G.MSUF_PlayerCastbar_Cast=i
+_G.MSUF_PlayerCastbar_OnEvent=_

@@ -1,245 +1,49 @@
---- MSUF_Castbars_Backend.lua
---- Compatibility adapter for per-unit castbar ownership.
---- Keeps legacy enable*Castbar keys in sync while exposing MSUF/BLIZZARD/HIDE backends.
-
-local _, MSUF = ...
-MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
-
-local Backend = MSUF.MSUF_CastbarBackend or {}
-MSUF.MSUF_CastbarBackend = Backend
-
-local BACKEND_MSUF = "MSUF"
-local BACKEND_BLIZZARD = "BLIZZARD"
-local BACKEND_HIDE = "HIDE"
-
-local BACKEND_KEYS = {
-    player = "castbarPlayerBackend",
-    target = "castbarTargetBackend",
-    focus = "castbarFocusBackend",
-    boss = "bossCastbarBackend",
-}
-
-local BLIZZARD_BACKEND_UNITS = {
-    player = true,
-}
-
-local LEGACY_ENABLE_KEYS = {
-    player = "enablePlayerCastbar",
-    target = "enableTargetCastbar",
-    focus = "enableFocusCastbar",
-    boss = "enableBossCastbar",
-}
-
-local getCacheByGeneral = setmetatable({}, { __mode = "k" })
-
-local function ReadCache(g, unit, backendKey, enableKey)
-    local byUnit = getCacheByGeneral[g]
-    local entry = byUnit and byUnit[unit]
-    if entry
-        and entry.backendValue == g[backendKey]
-        and entry.enableValue == (enableKey and g[enableKey] or nil) then
-        return entry.result
-    end
-    return nil
+local e,n=...n=n or _G.MSUF_NS or{}_G.MSUF_NS=n
+local e={}n.MSUF_CastbarBackend=e
+local l={player="castbarPlayerBackend",target="castbarTargetBackend",focus="castbarFocusBackend",boss="bossCastbarBackend"}local o={player="enablePlayerCastbar",target="enableTargetCastbar",focus="enableFocusCastbar",boss="enableBossCastbar"}local s={player=true}local function r(e)if type(e)~="string"then return nil end
+e=e:lower()if e:match("^boss%d*$")or e=="bosscastbar"or e=="msuf_bosscastbar"then return"boss"end
+if e=="playercastbar"or e=="msuf_playercastbar"then return"player"end
+if e=="targetcastbar"or e=="msuf_targetcastbar"then return"target"end
+if e=="focuscastbar"or e=="msuf_focuscastbar"then return"focus"end
+return e
 end
-
-local function WriteCache(g, unit, backendKey, enableKey, result)
-    local byUnit = getCacheByGeneral[g]
-    if not byUnit then
-        byUnit = {}
-        getCacheByGeneral[g] = byUnit
-    end
-    byUnit[unit] = {
-        backendValue = g[backendKey],
-        enableValue = enableKey and g[enableKey] or nil,
-        result = result,
-    }
+local function a(e)if type(e)=="table"then return e end
+return _G.MSUF_DB and _G.MSUF_DB.general or nil
 end
-
-local function ClearCache(g, unit)
-    if not g then
-        return
-    end
-    local byUnit = getCacheByGeneral[g]
-    if not byUnit then
-        return
-    end
-    if unit then
-        byUnit[unit] = nil
-    else
-        getCacheByGeneral[g] = nil
-    end
+function e.Normalize(e)if e==true then return"MSUF"elseif e==false then return"BLIZZARD"end
+if type(e)~="string"then return nil end
+e=e:upper()if e=="MSUF"then return"MSUF"end
+if e=="BLIZZARD"or e=="BLIZZ"or e=="DEFAULT"or e=="SHOW"then return"BLIZZARD"end
+if e=="HIDE"or e=="HIDDEN"or e=="NONE"or e=="DISABLED"then return"HIDE"end
+return nil
 end
-
-local function CanonUnit(unit)
-    if type(unit) ~= "string" then return nil end
-    unit = unit:lower()
-    if unit:match("^boss%d*$") then return "boss" end
-    if unit == "playercastbar" or unit == "msuf_playercastbar" then return "player" end
-    if unit == "targetcastbar" or unit == "msuf_targetcastbar" then return "target" end
-    if unit == "focuscastbar" or unit == "msuf_focuscastbar" then return "focus" end
-    if unit == "bosscastbar" or unit == "msuf_bosscastbar" then return "boss" end
-    return unit
+function e.NormalizeForUnit(t,n)local n,e=r(t),e.Normalize(n)if e=="BLIZZARD"and not s[n]then return"HIDE"end
+return e
 end
-
-local function General(g)
-    if type(g) == "table" then return g end
-    local db = _G.MSUF_DB
-    if type(db) == "table" and type(db.general) == "table" then
-        return db.general
-    end
-    return nil
+function e.Unit(e)return r(e)end
+function e.BackendKey(e)return l[r(e)]end
+function e.LegacyEnableKey(e)return o[r(e)]end
+function e.Get(t,n)local r=r(t)local t,o=l[r],o[r]if not t then return nil end
+n=a(n)if not n then return"MSUF"end
+local e=e.NormalizeForUnit(r,n[t])if not e then e=(n[o]==false)and(s[r]and"BLIZZARD"or"HIDE")or"MSUF"end
+n[t],n[o]=e,e=="MSUF"return e
 end
-
-function Backend.Normalize(value)
-    if value == true then return BACKEND_MSUF end
-    if value == false then return BACKEND_BLIZZARD end
-    if type(value) ~= "string" then return nil end
-
-    local v = value:upper()
-    if v == BACKEND_MSUF then return BACKEND_MSUF end
-    if v == BACKEND_BLIZZARD or v == "BLIZZ" or v == "DEFAULT" or v == "SHOW" then return BACKEND_BLIZZARD end
-    if v == BACKEND_HIDE or v == "HIDDEN" or v == "NONE" or v == "DISABLED" then return BACKEND_HIDE end
-    return nil
+function e.Set(t,s,n)local r=r(t)local t,o=l[r],o[r]n=t and a(n)if not n then return nil end
+local e=e.NormalizeForUnit(r,s)or"MSUF"n[t],n[o]=e,e=="MSUF"return e
 end
-
-function Backend.NormalizeForUnit(unit, value)
-    local backend = Backend.Normalize(value)
-    if backend == BACKEND_BLIZZARD and not BLIZZARD_BACKEND_UNITS[CanonUnit(unit)] then
-        return BACKEND_HIDE
-    end
-    return backend
+function e.Sync(n)n=a(n)if not n then return nil end
+e.Get("player",n);e.Get("target",n);e.Get("focus",n);e.Get("boss",n)return n
 end
-
-function Backend.Unit(unit)
-    return CanonUnit(unit)
-end
-
-function Backend.BackendKey(unit)
-    return BACKEND_KEYS[CanonUnit(unit)]
-end
-
-function Backend.LegacyEnableKey(unit)
-    return LEGACY_ENABLE_KEYS[CanonUnit(unit)]
-end
-
-function Backend.Get(unit, g)
-    local u = CanonUnit(unit)
-    local backendKey = BACKEND_KEYS[u]
-    local enableKey = LEGACY_ENABLE_KEYS[u]
-    if not backendKey then return nil end
-
-    g = General(g)
-    if not g then return BACKEND_MSUF end
-
-    local cached = ReadCache(g, u, backendKey, enableKey)
-    if cached then
-        return cached
-    end
-
-    local backend = Backend.NormalizeForUnit(u, g[backendKey])
-    if not backend then
-        backend = (enableKey and g[enableKey] == false)
-            and (BLIZZARD_BACKEND_UNITS[u] and BACKEND_BLIZZARD or BACKEND_HIDE)
-            or BACKEND_MSUF
-        g[backendKey] = backend
-    elseif g[backendKey] ~= backend then
-        g[backendKey] = backend
-    elseif enableKey and g[enableKey] ~= nil then
-        if g[enableKey] == false and backend == BACKEND_MSUF then
-            backend = BLIZZARD_BACKEND_UNITS[u] and BACKEND_BLIZZARD or BACKEND_HIDE
-            g[backendKey] = backend
-        elseif g[enableKey] == true and backend ~= BACKEND_MSUF then
-            backend = BACKEND_MSUF
-            g[backendKey] = backend
-        end
-    end
-
-    if enableKey then
-        g[enableKey] = (backend == BACKEND_MSUF)
-    end
-    WriteCache(g, u, backendKey, enableKey, backend)
-    return backend
-end
-
-function Backend.Set(unit, value, g)
-    local u = CanonUnit(unit)
-    local backendKey = BACKEND_KEYS[u]
-    local enableKey = LEGACY_ENABLE_KEYS[u]
-    if not backendKey then return nil end
-
-    g = General(g)
-    if not g then return nil end
-
-    local backend = Backend.NormalizeForUnit(u, value) or BACKEND_MSUF
-    g[backendKey] = backend
-    if enableKey then
-        g[enableKey] = (backend == BACKEND_MSUF)
-    end
-    ClearCache(g, u)
-    return backend
-end
-
-function Backend.Sync(g)
-    g = General(g)
-    if not g then return nil end
-    Backend.Get("player", g)
-    Backend.Get("target", g)
-    Backend.Get("focus", g)
-    Backend.Get("boss", g)
-    ClearCache(g)
-    return g
-end
-
-function Backend.IsMSUF(unit, g)
-    return Backend.Get(unit, g) == BACKEND_MSUF
-end
-
-function Backend.IsBlizzard(unit, g)
-    return Backend.Get(unit, g) == BACKEND_BLIZZARD
-end
-
-function Backend.IsHide(unit, g)
-    return Backend.Get(unit, g) == BACKEND_HIDE
-end
-
-function _G.MSUF_NormalizeCastbarBackend(value)
-    return Backend.Normalize(value)
-end
-
-function _G.MSUF_NormalizeCastbarBackendForUnit(unit, value)
-    return Backend.NormalizeForUnit(unit, value)
-end
-
-function _G.MSUF_GetCastbarBackendKey(unit)
-    return Backend.BackendKey(unit)
-end
-
-function _G.MSUF_GetCastbarEnableKey(unit)
-    return Backend.LegacyEnableKey(unit)
-end
-
-function _G.MSUF_GetCastbarBackend(unit, g)
-    return Backend.Get(unit, g)
-end
-
-function _G.MSUF_SetCastbarBackend(unit, value, g)
-    return Backend.Set(unit, value, g)
-end
-
-function _G.MSUF_SyncCastbarBackendLegacyFlags(g)
-    return Backend.Sync(g)
-end
-
-function _G.MSUF_ShouldUseMSUFCastbar(unit, g)
-    return Backend.IsMSUF(unit, g)
-end
-
-function _G.MSUF_ShouldUseBlizzardCastbar(unit, g)
-    return Backend.IsBlizzard(unit, g)
-end
-
-function _G.MSUF_ShouldHideCastbar(unit, g)
-    return Backend.IsHide(unit, g)
-end
+function e.IsMSUF(r,n)return e.Get(r,n)=="MSUF"end
+function e.IsBlizzard(r,n)return e.Get(r,n)=="BLIZZARD"end
+function e.IsHide(r,n)return e.Get(r,n)=="HIDE"end
+_G.MSUF_NormalizeCastbarBackend=e.Normalize
+_G.MSUF_NormalizeCastbarBackendForUnit=e.NormalizeForUnit
+_G.MSUF_GetCastbarBackendKey=e.BackendKey
+_G.MSUF_GetCastbarEnableKey=e.LegacyEnableKey
+_G.MSUF_GetCastbarBackend=e.Get
+_G.MSUF_SetCastbarBackend=e.Set
+_G.MSUF_SyncCastbarBackendLegacyFlags=e.Sync
+_G.MSUF_ShouldUseMSUFCastbar=e.IsMSUF
+_G.MSUF_ShouldUseBlizzardCastbar=e.IsBlizzard
+_G.MSUF_ShouldHideCastbar=e.IsHide

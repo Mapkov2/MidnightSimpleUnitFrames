@@ -1,6 +1,6 @@
 --- MSUF_CP_Constants.lua
 --- Phase 1 ClassPower split: shared constants/data extracted from the core file.
---- Loaded before Core/MSUF_ClassPower.lua.
+--- Loaded before the ClassPower controller.
 
 _G.MSUF_CP_CONST = _G.MSUF_CP_CONST or {}
 local K = _G.MSUF_CP_CONST
@@ -178,7 +178,7 @@ K.CDM_HOOK_DEFS = {
 --- Profiles (from MSUF_CP_Profiles.lua)
 --- MSUF_CP_Profiles.lua
 --- Phase 1 ClassPower split: data-only event profiles for active render modes.
---- Loaded before Core/MSUF_ClassPower.lua.
+--- Loaded before the ClassPower controller.
 
 local K = _G.MSUF_CP_CONST or {}
 local CPK = K.CPK or {}

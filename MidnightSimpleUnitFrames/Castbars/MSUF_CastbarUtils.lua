@@ -1,845 +1,182 @@
--- Castbars/MSUF_CastbarUtils.lua
---
--- This file intentionally defines GLOBAL helpers because multiple MSUF modules
--- (Edit Mode, Boss, Options) may call into castbar helpers across files.
--- Keeping these helpers in one place prevents future drift.
-
-local addonName, ns = ...
-
--- =====================================================================
--- Edit Mode Preview Hard-Sync
---
--- After profile reset/import/load (and /reload), DB values can be transient
--- while the *real* castbar has already resolved its final runtime size
--- (auto-width, unitframe-driven width, detach, scale). Previews that compute
--- size from DB/defaults can drift from the real bar.
---
--- Fix: In MSUF Edit Mode, always hard-sync preview size/scale directly from
--- the real castbar when the preview is positioned/shown.
--- Preview-only: does not affect real castbar sizing.
--- =====================================================================
-
-if type(_G.MSUF_HardSyncCastbarPreview) ~= "function" then
-  local function _MSUF_IsSecretValue(v)
-    local fn = _G.issecretvalue
-    if type(fn) ~= "function" then
-      return false
-    end
-
-    local ok, secret = pcall(fn, v)
-    return ok and secret == true
-  end
-
-  local function _MSUF_CanAccessSecretValue(v)
-    local fn = _G.canaccessvalue
-    if type(fn) ~= "function" then
-      return true
-    end
-
-    local ok, access = pcall(fn, v)
-    return ok and access == true
-  end
-
-  local function _MSUF_ToPlainPositiveNumber(v)
-    local tv = type(v)
-    if tv ~= "number" and tv ~= "string" then
-      return nil
-    end
-
-    if _MSUF_IsSecretValue(v) and not _MSUF_CanAccessSecretValue(v) then
-      return nil
-    end
-
-    -- Midnight/Beta can tag Frame API numbers as secret. Rebuilding through a
-    -- string produces a plain Lua number when Blizzard exposes the value.
-    local ok, text = pcall(tostring, v)
-    if not ok then
-      return nil
-    end
-
-    local textType = type(text)
-    if textType ~= "string" and textType ~= "number" then
-      return nil
-    end
-
-    local okNumber, n = pcall(tonumber, text)
-    if not okNumber then
-      return nil
-    end
-    if type(n) ~= "number" then
-      return nil
-    end
-    if _MSUF_IsSecretValue(n) then
-      return nil
-    end
-    local okPositive, positive = pcall(function() return n > 0 end)
-    if not okPositive or not positive then
-      return nil
-    end
-
-    return n
-  end
-
-  function _G.MSUF_HardSyncCastbarPreview(preview, real)
-    -- Edit Mode can be entered right after combat, while Frame API size/scale
-    -- reads from protected castbars may still be secret-tagged. Never pass such
-    -- values directly into SetSize/SetWidth/SetScale; sanitize first or skip.
-    if not preview or not real then return end
-
-    -- NOTE: Outer frame size remains DB/layout authoritative through
-    -- MSUF_ApplyPlayerCastbarSizeAndLayout. This helper only mirrors safe
-    -- child footprint data to avoid transient preview drift.
-
-    -- Frame scale
-    if real.GetScale and preview.SetScale then
-      local s = _MSUF_ToPlainPositiveNumber(real:GetScale())
-      if s then
-        preview:SetScale(s)
-      end
-    end
-
-    -- StatusBar footprint (preview StatusBar is NOT SetAllPoints; must be resized too)
-    if preview.statusBar and preview.statusBar.SetSize then
-      if real.statusBar and real.statusBar.GetSize then
-        local sw, sh = real.statusBar:GetSize()
-        sw = _MSUF_ToPlainPositiveNumber(sw)
-        sh = _MSUF_ToPlainPositiveNumber(sh)
-        if sw and sh then
-          preview.statusBar:SetSize(sw, sh)
-        end
-      elseif preview.GetSize then
-        -- Best-effort fallback based on the preview frame's own public size.
-        local w, h = preview:GetSize()
-        w = _MSUF_ToPlainPositiveNumber(w)
-        h = _MSUF_ToPlainPositiveNumber(h)
-        if w and h then
-          preview.statusBar:SetSize(w, h)
-        end
-      end
-    end
-
-    -- Icon size
-    if preview.icon and preview.icon.SetSize and real.icon and real.icon.GetSize then
-      local iw, ih = real.icon:GetSize()
-      iw = _MSUF_ToPlainPositiveNumber(iw)
-      ih = _MSUF_ToPlainPositiveNumber(ih)
-      if iw and ih then
-        preview.icon:SetSize(iw, ih)
-      end
-    end
-
-    -- Player latency bar width (preview-only element)
-    if preview.latencyBar and preview.latencyBar.SetWidth and real.latencyBar and real.latencyBar.GetWidth then
-      local lw = _MSUF_ToPlainPositiveNumber(real.latencyBar:GetWidth())
-      if lw then
-        preview.latencyBar:SetWidth(lw)
-      end
-    end
-  end
-end
-
--- =====================================================================
--- Phase 1A: Canonical lazy EnsureDB  single definition for all files.
--- After PLAYER_LOGIN, MSUF_DB is always populated; the nil-guard short-circuits.
--- =====================================================================
-local function _EnsureDBLazy()
-    if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
-end
--- Export for cross-file use (Engine, Driver, Boss, Castbars).
-_G.MSUF_EnsureDBLazy = _EnsureDBLazy
-
--- Global: used by castbar positioning logic.
-function _G.MSUF_GetAnchorFrame()
-    _EnsureDBLazy()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-
-    if g.anchorToCooldown then
-        local ecv = _G["EssentialCooldownViewer"]
-        if ecv and ecv.IsShown and ecv:IsShown() then
-            return ecv
-        end
-        return UIParent
-    end
-
-    local anchorName = g.anchorName
-    if anchorName and anchorName ~= "" and anchorName ~= "EssentialCooldownViewer" then
-        local f = _G[anchorName]
-        if f and f.IsShown and f:IsShown() then
-            return f
-        end
-    end
-
-    return UIParent
-end
-
--- -------------------------------------------------
--- Secret-safe interruptible vs. non-interruptible coloring
---
--- On Midnight/Beta, the notInterruptible flag returned by UnitCastingInfo/UnitChannelInfo can be a
--- *secret value*. Lua must NEVER do boolean logic on it (no `if flag then`, no `not flag`, no
--- `flag and ...`, etc.). However, C methods can safely consume it.
---
--- Trick: use StatusBarTexture:SetVertexColorFromBoolean(flag, nonInterruptibleColor, interruptibleColor).
--- -------------------------------------------------
-
-local function _MSUF_SetSBColorCached(bar, r, g, b, a)
-  if not (bar and bar.SetStatusBarColor) then return end
-  a = a or 1
-
-  -- Keep both cache schemes in sync to avoid "2nd interrupt" color regressions
-  -- when some paths use the newer _msufLastColor* keys.
-  local lr, lg, lb, la = bar._msufLastColorR, bar._msufLastColorG, bar._msufLastColorB, bar._msufLastColorA
-  if (lr == r and lg == g and lb == b and la == a) or (bar._msufLastR == r and bar._msufLastG == g and bar._msufLastB == b and bar._msufLastA == a) then
-    return
-  end
-
-  bar._msufLastColorR, bar._msufLastColorG, bar._msufLastColorB, bar._msufLastColorA = r, g, b, a
-  bar._msufLastR, bar._msufLastG, bar._msufLastB, bar._msufLastA = r, g, b, a
-  bar:SetStatusBarColor(r, g, b, a)
-end
-
-
--- Legacy/global helper used across Driver/Visuals. Provide it here (LoD) to avoid nil regressions.
--- IMPORTANT: Do not override if core already defines it.
-if type(_G.MSUF_SetStatusBarColorIfChanged) ~= "function" then
-  function _G.MSUF_SetStatusBarColorIfChanged(bar, r, g, b, a)
-    _MSUF_SetSBColorCached(bar, r, g, b, a)
-  end
-end
-
-
--- Quick Win #13: Cached CreateColor objects for ApplyNonInterruptibleTint.
--- These colors only change when the user modifies settings, not per-cast.
-local _tintCacheNonInt = { r = nil, g = nil, b = nil, a = nil, obj = nil }
-local _tintCacheInt    = { r = nil, g = nil, b = nil, a = nil, obj = nil }
-
-local function _GetCachedColor(cache, r, g, b, a)
-  if cache.r == r and cache.g == g and cache.b == b and cache.a == a and cache.obj then
-    return cache.obj
-  end
-  cache.r, cache.g, cache.b, cache.a = r, g, b, a
-  cache.obj = CreateColor(r, g, b, a)
-  return cache.obj
-end
-
--- Applies the correct tint without ever boolean-testing `rawNotInterruptible` (may be secret).
--- `fallbackIsNonInterruptible` is a NORMAL Lua boolean (event-driven) used only when the C helper is unavailable.
-function _G.MSUF_Castbar_ApplyNonInterruptibleTint(frame, rawNotInterruptible,
-  nonIntR, nonIntG, nonIntB, nonIntA,
-  intR, intG, intB, intA,
-  fallbackIsNonInterruptible)
-
-  local sb = frame and frame.statusBar
-  if not sb then return false end
-
-  local wantNI = (fallbackIsNonInterruptible == true)
-
-  local ar = wantNI and nonIntR or intR
-  local ag = wantNI and nonIntG or intG
-  local ab = wantNI and nonIntB or intB
-  local aa = wantNI and (nonIntA or 1) or (intA or 1)
-
-  local tex = sb.GetStatusBarTexture and sb:GetStatusBarTexture()
-  local usedC = false
-
-  if tex and tex.SetVertexColorFromBoolean and CreateColor then
-    -- IMPORTANT (Midnight/Beta, secret-safe):
-    --  - Never boolean-test `rawNotInterruptible` in Lua (may be secret).
-    --  - Never pass nil into SetVertexColorFromBoolean (hard error).
-    -- We pass the raw value straight into the C method when present; otherwise we use a normal Lua boolean fallback.
-    -- Quick Win #13: reuse cached color objects (only re-created when RGBA changes).
-    local nonCol = _GetCachedColor(_tintCacheNonInt, nonIntR, nonIntG, nonIntB, nonIntA or 1)
-    local intCol = _GetCachedColor(_tintCacheInt, intR, intG, intB, intA or 1)
-
-    local v = rawNotInterruptible
-    if v == nil then
-      v = (wantNI == true)
-    end
-
-    tex:SetVertexColorFromBoolean(v, nonCol, intCol)
-    usedC = true
-  end
-
-  if not usedC then
-    -- Pure StatusBar color fallback.
-    _MSUF_SetSBColorCached(sb, ar, ag, ab, aa)
-  else
-    -- IMPORTANT (0-regression fix): keep the StatusBar color caches in sync even when
-    -- we color via vertex tint. Otherwise later calls that rely on cached colors
-    -- (e.g. interrupt feedback) may early-return and skip applying red on "2nd interrupt".
-    sb._msufLastColorR, sb._msufLastColorG, sb._msufLastColorB, sb._msufLastColorA = ar, ag, ab, aa
-    sb._msufLastR, sb._msufLastG, sb._msufLastB, sb._msufLastA = ar, ag, ab, aa
-  end
-
-  -- Also keep glow-base tracking stable across both tint paths.
-  if not sb._msufGlowSkipBase then
-    local br, bg, bb, ba = sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA
-    if br ~= ar or bg ~= ag or bb ~= ab or ba ~= aa then
-      sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA = ar, ag, ab, aa
-      sb._msufGlowLastP = nil
-    end
-  end
-
-  return usedC
-end
-
-
--- -------------------------------------------------
--- Shared castbar APPLY helper (maintainability + less drift)
--- Single place to:
---  - set icon/text
---  - apply durationObj to StatusBar via SetTimerDuration (and direction)
---  - set MSUF_isChanneled/MSUF_durationObj flags
---  - register + update time text (when available)
---
--- IMPORTANT: This helper is SECRET-SAFE:
---  - it does not compare spellId / castGUID / spellName
---  - it only consumes the provided state and writes it to the frame
--- -------------------------------------------------
-
--- PERF: Resolve once at load, re-resolve after all files loaded.
-local _cachedSetTextIfChanged = _G.MSUF_SetTextIfChanged
-
-local function _MSUF_SetTextIfChanged(fs, s)
-    if not (fs and fs.SetText) then return end
-    if _cachedSetTextIfChanged then
-        _cachedSetTextIfChanged(fs, s or "")
-    else
-        fs:SetText(s or "")
-    end
-end
--- Deferred re-cache after all addons loaded.
-if _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(0, function()
-        _cachedSetTextIfChanged = _G.MSUF_SetTextIfChanged or _cachedSetTextIfChanged
-    end)
-end
-
-local function _MSUF_GetReverseFill(frame, state, isChanneled)
-    -- Prefer the engine/state-provided reverseFill when present.
-    if state and state.reverseFill ~= nil then
-        return (state.reverseFill == true)
-    end
-    -- Otherwise defer to the user setting logic.
-    local fn = _G.MSUF_GetCastbarReverseFillForFrame
-    if type(fn) == "function" then
-        -- This is trusted internal code; pcall overhead is unnecessary.
-        local rev = fn(frame, isChanneled and true or false)
-        if rev ~= nil then
-            return (rev == true)
-        end
-    end
-    return false
-end
-
--- Phase 1C: Global export  simplified 2-arg form for callers that don't have a state table.
--- Returns a plain boolean (true/false, never nil).
-function _G.MSUF_GetReverseFillSafe(frame, isChanneled)
-    return _MSUF_GetReverseFill(frame, nil, isChanneled)
-end
--- =====================================================================
--- Phase 1C: Canonical reverse-fill resolution (single source of truth)
---
--- This MUST return a plain Lua boolean. It is used by:
---   * Driver Cast() (timer direction + stripe/latency anchoring)
---   * Frame builders (previews)
---
--- Rules:
---   * base direction from MSUF_DB.general.castbarFillDirection ("LTR"/"RTL")
---   * if castbarOpositeDirectionTarget == true => invert ONLY for target (and target preview)
---   * if castbarUnifiedDirection ~= true and isChanneled => invert (channels drain opposite)
--- =====================================================================
-local function _MSUF_ResolveCastbarUnitKey(frame)
-    if not frame then return nil end
-
-    local u = frame.unit or frame.MSUF_unit or frame._msufUnit or frame.unitKey
-    if type(u) == "string" and u ~= "" then
-        return u
-    end
-
-    local k = frame._msufBarKey or frame.barKey or frame.key
-    if type(k) == "string" and k ~= "" then
-        if k == "player" or k == "target" or k == "focus" then return k end
-        if k == "boss" or k:sub(1, 4) == "boss" then return k end
-    end
-
-    if frame == _G.MSUF_PlayerCastbar or frame == _G.MSUF_PlayerCastbarPreview then return "player" end
-    if frame == _G.MSUF_TargetCastbar or frame == _G.MSUF_TargetCastbarPreview then return "target" end
-    if frame == _G.MSUF_FocusCastbar  or frame == _G.MSUF_FocusCastbarPreview  then return "focus" end
-
-    local n = frame.GetName and frame:GetName() or nil
-    if type(n) == "string" then
-        if n:find("Target", 1, true) then return "target" end
-        if n:find("Focus", 1, true) then return "focus" end
-        if n:find("Player", 1, true) then return "player" end
-        if n:find("boss", 1, true) or n:find("Boss", 1, true) then return "boss" end
-    end
-
-    return nil
-end
-
-function _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled)
-    _EnsureDBLazy()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-
-    local baseReverse = (g.castbarFillDirection == "RTL") and true or false
-
-    if g.castbarOpositeDirectionTarget == true then
-        local unitKey = _MSUF_ResolveCastbarUnitKey(frame)
-        if unitKey == "target" then
-            baseReverse = not baseReverse
-        end
-    end
-
-    if isChanneled == true then
-        if g.castbarUnifiedDirection ~= true then
-            return not baseReverse
-        end
-    end
-
-    return baseReverse
-end
-
--- =====================================================================
--- Phase 1D: Canonical color resolution for interruptible / non-interruptible.
--- Returns: ir, ig, ib, nr, ng, nb  (interruptible RGB, non-interruptible RGB)
--- =====================================================================
-function _G.MSUF_ResolveCastbarColors()
-    _EnsureDBLazy()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-
-    -- Interruptible color
-    local ir, ig, ib
-    if type(_G.MSUF_GetInterruptibleCastColor) == "function" then
-        ir, ig, ib = _G.MSUF_GetInterruptibleCastColor()
-    end
-    if not (ir and ig and ib) then
-        local key = g.castbarInterruptibleColor or "teal"
-        local c = (type(_G.MSUF_GetColorFromKey) == "function") and _G.MSUF_GetColorFromKey(key) or nil
-        if c and c.GetRGB then
-            ir, ig, ib = c:GetRGB()
-        end
-    end
-    if not (ir and ig and ib) then
-        ir, ig, ib = 0, 0.85, 0.85
-    end
-
-    -- Non-interruptible color
-    local nr, ng, nb
-    if type(_G.MSUF_GetNonInterruptibleCastColor) == "function" then
-        nr, ng, nb = _G.MSUF_GetNonInterruptibleCastColor()
-    end
-    if not (nr and ng and nb) then
-        local key = g.castbarNonInterruptibleColor or "red"
-        local c = (type(_G.MSUF_GetColorFromKey) == "function") and _G.MSUF_GetColorFromKey(key) or nil
-        if c and c.GetRGB then
-            nr, ng, nb = c:GetRGB()
-        end
-    end
-    if not (nr and ng and nb) then
-        nr, ng, nb = 0.9, 0.1, 0.1
-    end
-
-    return ir, ig, ib, nr, ng, nb
-end
-
-local function MSUF_EnsureCastbarShakeAnimation(frame)
-    if not frame or frame.MSUF_ShakeGroup then
-        return
-    end
-
-    local group = frame:CreateAnimationGroup("MSUF_ShakeGroup")
-    group:SetLooping("NONE")
-
-    local a1 = group:CreateAnimation("Translation")
-    a1:SetOffset(4, 0)
-    a1:SetDuration(0.05)
-    a1:SetOrder(1)
-
-    local a2 = group:CreateAnimation("Translation")
-    a2:SetOffset(-8, 0)
-    a2:SetDuration(0.10)
-    a2:SetOrder(2)
-
-    local a3 = group:CreateAnimation("Translation")
-    a3:SetOffset(4, 0)
-    a3:SetDuration(0.05)
-    a3:SetOrder(3)
-
-    frame.MSUF_ShakeGroup = group
-    frame.MSUF_ShakeA1 = a1
-    frame.MSUF_ShakeA2 = a2
-    frame.MSUF_ShakeA3 = a3
-end
-
--- Fallback shake implementation (boss castbars can suppress Translation animations on some clients).
--- This nudges the frame's anchor points briefly and then restores them.
-local function MSUF_PlayCastbarShake_Manual(frame, strength)
-    if not frame or type(frame.GetNumPoints) ~= "function" or type(frame.GetPoint) ~= "function" then
-        return
-    end
-    if frame._msufShakeManualActive then
-        return
-    end
-    if not _G.C_Timer or not _G.C_Timer.After then
-        return
-    end
-
-    frame._msufShakeManualActive = true
-
-    local points = frame._msufShakePoints
-    if not points then
-        points = {}
-        frame._msufShakePoints = points
-    else
-        -- wipe without requiring global wipe()
-        for k in pairs(points) do points[k] = nil end
-    end
-
-    local num = frame:GetNumPoints() or 0
-    if num < 1 then
-        points[1] = { "CENTER", UIParent, "CENTER", 0, 0 }
-    else
-        for i = 1, num do
-            local p, rel, rp, x, y = frame:GetPoint(i)
-            points[i] = { p, rel, rp, x or 0, y or 0 }
-        end
-    end
-
-    local function Apply(dx)
-        if not frame or not frame.SetPoint then return end
-        frame:ClearAllPoints()
-        for i = 1, #points do
-            local pt = points[i]
-            if pt and pt[1] then
-                frame:SetPoint(pt[1], pt[2], pt[3], (pt[4] or 0) + dx, pt[5] or 0)
-            end
-        end
-    end
-
-    -- Temporarily disable clamping if needed (clamping can counteract point nudges).
-    local wasClamped = nil
-    if frame.IsClampedToScreen and frame.SetClampedToScreen then
-        wasClamped = frame:IsClampedToScreen()
-        if wasClamped then frame:SetClampedToScreen(false) end
-    end
-
-    local half = strength / 2
-    Apply(half)
-    _G.C_Timer.After(0.05, function() Apply(-strength) end)
-    _G.C_Timer.After(0.15, function() Apply(half) end)
-    _G.C_Timer.After(0.20, function()
-        Apply(0)
-        if frame and wasClamped ~= nil and frame.SetClampedToScreen then
-            frame:SetClampedToScreen(wasClamped)
-        end
-        if frame then frame._msufShakeManualActive = nil end
-    end)
-end
-
-function _G.MSUF_PlayCastbarShake(frame)
-    if not frame then
-        return
-    end
-
-    _EnsureDBLazy()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-
-    if g.castbarInterruptShake == false then
-        return
-    end
-
-    local strength = tonumber(g.castbarShakeStrength) or 8
-    if strength < 0 then strength = 0 end
-    if strength > 30 then strength = 30 end
-    if strength <= 0 then
-        return
-    end
-    local half = strength / 2
-
-    -- IMPORTANT: In Midnight/Beta some clients suppress Translation animations on clamped UI frames.
-    -- Our castbars (Target/Focus/Boss + previews) are clamped, so we prefer the deterministic manual shake
-    -- whenever the frame is clamped (or explicitly marked for manual shake).
-    local isBoss = (frame.unit and type(frame.unit) == "string" and frame.unit:match("^boss"))
-    local isClamped = (frame.IsClampedToScreen and frame.SetClampedToScreen and frame:IsClampedToScreen())
-    if frame.MSUF_forceManualShake or isBoss or isClamped then
-        MSUF_PlayCastbarShake_Manual(frame, strength)
-        return
-    end
-
-    MSUF_EnsureCastbarShakeAnimation(frame)
-
-    -- Apply current strength to the translation animations (so the slider is live).
-    if frame.MSUF_ShakeA1 and frame.MSUF_ShakeA1.SetOffset then
-        frame.MSUF_ShakeA1:SetOffset(half, 0)
-    end
-    if frame.MSUF_ShakeA2 and frame.MSUF_ShakeA2.SetOffset then
-        frame.MSUF_ShakeA2:SetOffset(-strength, 0)
-    end
-    if frame.MSUF_ShakeA3 and frame.MSUF_ShakeA3.SetOffset then
-        frame.MSUF_ShakeA3:SetOffset(half, 0)
-    end
-
-    if frame.MSUF_ShakeGroup then
-        frame.MSUF_ShakeGroup:Stop()
-        frame.MSUF_ShakeGroup:Play()
-    end
-end
-function _G.MSUF_GetInterruptibleCastColor()
-    _EnsureDBLazy()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    local r = tonumber(g.castbarInterruptibleR)
-    local gg = tonumber(g.castbarInterruptibleG)
-    local b = tonumber(g.castbarInterruptibleB)
-    if r and gg and b then
-        return r, gg, b, 1
-    end
-end
-
-function _G.MSUF_GetNonInterruptibleCastColor()
-    _EnsureDBLazy()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    local r = tonumber(g.castbarNonInterruptibleR)
-    local gg = tonumber(g.castbarNonInterruptibleG)
-    local b = tonumber(g.castbarNonInterruptibleB)
-    if r and gg and b then
-        return r, gg, b, 1
-    end
-end
-
--- "Glow effect" (Options -> Castbars -> Behavior): end-of-cast fade to white.
--- NOTE: This is intentionally texture-agnostic and does not rely on background/foreground textures matching.
--- It simply blends the current fill color towards white as the cast approaches completion.
-
--- Fix 3: Fast-path for plain numbers (callers already pass converted values).
-local function _MSUF_ToPlainNumber(x)
-    if type(x) == "number" then return tonumber(tostring(x)) end
-    local fn = _G.MSUF_ToPlainNumber
-    if type(fn) == "function" then
-        local v = fn(x)
-        if type(v) == "number" then
-            return tonumber(tostring(v))
-        end
-        return v
-    end
-    local t = type(x)
-    if t == "number" or t == "string" then
-        return tonumber(tostring(x))
-    end
-    return nil
-end
-
--- Fix 4: Cache IsGlowFadeEnabled per style rev (avoids DB lookup every call).
-local _glowEnabledCache = nil
-local _glowEnabledCacheRev = -1
-
-local function _MSUF_IsGlowFadeEnabled()
-    local rev = _G.MSUF__castTimeGlobalRev or 1
-    if _glowEnabledCacheRev == rev and _glowEnabledCache ~= nil then
-        return _glowEnabledCache
-    end
-    _EnsureDBLazy()
-    local g = (MSUF_DB and MSUF_DB.general) or nil
-    if g and g.castbarShowGlow == false then
-        _glowEnabledCache = false
-    else
-        _glowEnabledCache = true
-    end
-    _glowEnabledCacheRev = rev
-    return _glowEnabledCache
-end
-
-function _G.MSUF_ResetCastbarGlowFade(frame)
-    if not frame or not frame.statusBar then return end
-    local sb = frame.statusBar
-    if not sb._msufGlowApplied then
-        return
-    end
-    local br, bg, bb, ba = sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA
-    if type(br) ~= "number" or type(bg) ~= "number" or type(bb) ~= "number" then
-        sb._msufGlowApplied = nil
-        sb._msufGlowLastP = nil
-        return
-    end
-    if ba == nil then ba = 1 end
-
-    sb._msufGlowSkipBase = true
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(sb, br, bg, bb, ba)
-    else
-        sb:SetStatusBarColor(br, bg, bb, ba)
-    end
-    sb._msufGlowSkipBase = nil
-
-    sb._msufGlowApplied = nil
-    sb._msufGlowLastP = nil
-end
-
-function _G.MSUF_ApplyCastbarGlowFade(frame, remaining, total)
-    if not frame or not frame.statusBar then return end
-
-    -- Real casts: always apply (when enabled).
-    -- Edit Mode previews / dummy casts: also apply while MSUF Edit Mode is active.
-    if (frame._msufIsPreview or frame.MSUF_testMode) and not _G.MSUF_UnitEditModeActive then
-        return
-    end
-    if frame.interrupted then
-        return
-    end
-    if frame.interruptFeedbackEndTime then
-        local now = (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
-        if now < frame.interruptFeedbackEndTime then
-            return
-        end
-    end
-
-    if not _MSUF_IsGlowFadeEnabled() then
-        _G.MSUF_ResetCastbarGlowFade(frame)
-        return
-    end
-
-    local rem = _MSUF_ToPlainNumber(remaining)
-    local tot = _MSUF_ToPlainNumber(total)
-    if type(rem) ~= "number" or type(tot) ~= "number" or tot <= 0 then
-        return
-    end
-
-    if rem < 0 then rem = 0 end
-    if rem > tot then rem = tot end
-
-    local p = 1 - (rem / tot)
-    if p < 0 then p = 0 elseif p > 1 then p = 1 end
-    -- Ease-in so the bar only becomes noticeably white near the end.
-    p = p * p
-
-    local sb = frame.statusBar
-    -- Throttle updates (performance): only recolor when the blend factor changes enough.
-    local lastP = sb._msufGlowLastP
-    if type(lastP) == "number" then
-        local d = p - lastP
-        if d < 0 then d = -d end
-        if d < 0.02 then
-            return
-        end
-    end
-    sb._msufGlowLastP = p
-
-    local br, bg, bb, ba = sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA
-    if type(br) ~= "number" or type(bg) ~= "number" or type(bb) ~= "number" then
-        -- Fallback: capture current color as base (best-effort).
-        if sb.GetStatusBarColor then
-            local rr, gg, bb2, aa2 = sb:GetStatusBarColor()
-            br, bg, bb, ba = rr, gg, bb2, aa2
-            sb._msufGlowBaseR, sb._msufGlowBaseG, sb._msufGlowBaseB, sb._msufGlowBaseA = br, bg, bb, ba
-        end
-    end
-    if type(br) ~= "number" or type(bg) ~= "number" or type(bb) ~= "number" then
-        return
-    end
-    if ba == nil then ba = 1 end
-
-    local rr = br + (1 - br) * p
-    local gg = bg + (1 - bg) * p
-    local bb3 = bb + (1 - bb) * p
-
-    sb._msufGlowSkipBase = true
-    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
-        _G.MSUF_SetStatusBarColorIfChanged(sb, rr, gg, bb3, ba)
-    else
-        sb:SetStatusBarColor(rr, gg, bb3, ba)
-    end
-    sb._msufGlowSkipBase = nil
-
-    sb._msufGlowApplied = true
-end
-
-
--- ============================================================================
--- Phase 2.1 (Scaffolding): Apply-Layer wrappers (wrapper-only, ultra low risk)
--- ----------------------------------------------------------------------------
--- Intent:
---   Provide a clear, single "apply surface" that callsites can use without
---   changing behavior. These wrappers MUST stay thin pass-throughs for now.
---   No reordering, no new logic, no new state.
---
--- Notes:
---   - `state` is currently optional and may be nil. It exists to support future
---     gradual migration to a clearer Snapshot/Apply split.
---   - To avoid hot-path allocations, wrappers accept optional positional args.
--- ============================================================================
-
-function _G.MSUF_CB_ApplyColor(frame, state)
-    if frame and frame.UpdateColorForInterruptible then
-        -- Keep existing SSoT for interrupt/color caches inside UpdateColorForInterruptible().
-        local r = frame:UpdateColorForInterruptible()
-        -- Refresh the Interrupt Ready Indicator dot whenever interruptibility
-        -- color is reapplied. Cheap when no dot exists or feature is disabled.
-        if _G.MSUF_KickReady_RefreshFrame then
-            _G.MSUF_KickReady_RefreshFrame(frame, state)
-        end
-        return r
-    end
-end
-
-function _G.MSUF_CB_ApplyTexts(frame, state, castText, timeText)
-    if not frame then return end
-
-    -- Optional state support (no allocations required).
-    if state ~= nil then
-        if castText == nil then castText = state.castText end
-        if timeText == nil then timeText = state.timeText end
-    end
-
-    if castText ~= nil and frame.castText then
-        _MSUF_SetTextIfChanged(frame.castText, castText)
-    end
-    if timeText ~= nil and frame.timeText then
-        _MSUF_SetTextIfChanged(frame.timeText, timeText)
-    end
-end
-
-
--- =====================================================================
--- Cluster A: Canonical ClearEmpowerState  single definition for all files.
--- Clears all empower-related frame fields and hides tick/segment overlays.
--- Previously duplicated identically in Driver and Boss.
--- =====================================================================
-function _G.MSUF_ClearEmpowerState(frame)
-    if not frame then return end
-    frame.isEmpower = nil
-    frame.empowerStartTime = nil
-    frame.empowerStageEnds = nil
-    frame.empowerTotalBase = nil
-    frame.empowerTotalWithGrace = nil
-    frame.empowerNextStage = nil
-    frame.MSUF_empowerLayoutPending = nil
-    frame.MSUF_wantsEmpower = nil
-    frame.MSUF_empowerRetryCount = nil
-    frame.MSUF_empowerRetryActive = nil
-
-    -- Clear cached plain-number conversions.
-    frame._msufEmpowerTotalNum = nil
-    frame._msufEmpowerStartNum = nil
-    frame._msufEmpowerBaseNum = nil
-    frame._msufEmpowerStageEndsNum = nil
-    frame._msufEmpowerMinMaxSet = nil
-    frame._msufEmpowerElapsed = nil
-    frame._msufEmpowerTimerDriven = nil
-
-    if frame.empowerTicks then
-        for i = 1, #frame.empowerTicks do
-            local t = frame.empowerTicks[i]
-            if t then
-                t:Hide()
-                if t.MSUF_glow then t.MSUF_glow:Hide() end
-                if t.MSUF_flash then t.MSUF_flash:Hide() end
-            end
-        end
-    end
-    if frame.empowerSegments then
-        for i = 1, #frame.empowerSegments do
-            local s = frame.empowerSegments[i]
-            if s then s:Hide() end
-        end
-    end
+local e,e=...if type(_G.MSUF_HardSyncCastbarPreview)~="function"then
+local function t(e)e=tonumber(e)return e and e>0 and e or nil end
+function _G.MSUF_HardSyncCastbarPreview(e,n)if not e or not n then return end
+if n.GetScale and e.SetScale then local n=t(n:GetScale())if n then e:SetScale(n)end end
+if e.statusBar and e.statusBar.SetSize then if n.statusBar and n.statusBar.GetSize then
+local n,r=n.statusBar:GetSize()n=t(n)r=t(r)if n and r then
+e.statusBar:SetSize(n,r)end
+elseif e.GetSize then local n,r=e:GetSize()n=t(n)r=t(r)if n and r then e.statusBar:SetSize(n,r)end end
+end if e.icon and e.icon.SetSize and n.icon and n.icon.GetSize then
+local n,r=n.icon:GetSize()n=t(n)r=t(r)if n and r then
+e.icon:SetSize(n,r)end
+end if e.latencyBar and e.latencyBar.SetWidth and n.latencyBar and n.latencyBar.GetWidth then
+local n=t(n.latencyBar:GetWidth())if n then
+e.latencyBar:SetWidth(n)end
+end end
+end local function t()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end end
+_G.MSUF_EnsureDBLazy=t function _G.MSUF_GetAnchorFrame()t()local n=(MSUF_DB and MSUF_DB.general)or{}if n.anchorToCooldown then local e=_G["EssentialCooldownViewer"]if e and e.IsShown and e:IsShown()then return e
+end return UIParent
+end local e=n.anchorName
+if e and e~=""and e~="EssentialCooldownViewer"then local e=_G[e]if e and e.IsShown and e:IsShown()then return e
+end end
+return UIParent end
+local function m(e,t,r,a,n)if not(e and e.SetStatusBarColor)then return end
+n=n or 1 local i,d,l,o=e._msufLastColorR,e._msufLastColorG,e._msufLastColorB,e._msufLastColorA
+if(i==t and d==r and l==a and o==n)or(e._msufLastR==t and e._msufLastG==r and e._msufLastB==a and e._msufLastA==n)then return
+end e._msufLastColorR,e._msufLastColorG,e._msufLastColorB,e._msufLastColorA=t,r,a,n
+e._msufLastR,e._msufLastG,e._msufLastB,e._msufLastA=t,r,a,n e:SetStatusBarColor(t,r,a,n)end if type(_G.MSUF_SetStatusBarColorIfChanged)~="function"then
+function _G.MSUF_SetStatusBarColorIfChanged(a,n,e,t,r)m(a,n,e,t,r)end end
+local p={r=nil,g=nil,b=nil,a=nil,obj=nil}local F={r=nil,g=nil,b=nil,a=nil,obj=nil}local function h(e,t,r,a,n)if e.r==t and e.g==r and e.b==a and e.a==n and e.obj then
+return e.obj end
+e.r,e.g,e.b,e.a=t,r,a,n e.obj=CreateColor(t,r,a,n)return e.obj end
+function _G.MSUF_Castbar_ApplyNonInterruptibleTint(e,C,c,S,u,s,d,f,_,G,n)local e=e and e.statusBar if not e then return false end
+local t=(n==true)local n=t and c or d
+local r=t and S or f local a=t and u or _
+local o=t and(s or 1)or(G or 1)local i=e.GetStatusBarTexture and e:GetStatusBarTexture()local l=false if i and i.SetVertexColorFromBoolean and CreateColor then
+local r=h(p,c,S,u,s or 1)local n=h(F,d,f,_,G or 1)local e=C if e==nil then
+e=(t==true)end
+i:SetVertexColorFromBoolean(e,r,n)l=true
+end if not l then
+m(e,n,r,a,o)else
+e._msufLastColorR,e._msufLastColorG,e._msufLastColorB,e._msufLastColorA=n,r,a,o e._msufLastR,e._msufLastG,e._msufLastB,e._msufLastA=n,r,a,o
+end if not e._msufGlowSkipBase then
+local d,i,l,t=e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBaseA if d~=n or i~=r or l~=a or t~=o then
+e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBaseA=n,r,a,o e._msufGlowLastP=nil
+end end
+return l end
+local n=_G.MSUF_SetTextIfChanged local function i(e,t)if not(e and e.SetText)then return end if n then
+n(e,t or"")else
+e:SetText(t or"")end
+end if _G.C_Timer and _G.C_Timer.After then
+_G.C_Timer.After(0,function()n=_G.MSUF_SetTextIfChanged or n
+end)end
+local function n(n,e,t)if e and e.reverseFill~=nil then
+return(e.reverseFill==true)end
+local e=_G.MSUF_GetCastbarReverseFillForFrame if type(e)=="function"then
+local e=e(n,t and true or false)if e~=nil then
+return(e==true)end
+end return false
+end function _G.MSUF_GetReverseFillSafe(t,e)return n(t,nil,e)end
+local function r(e)if not e then return nil end
+local n=e.unit or e.MSUF_unit or e._msufUnit or e.unitKey if type(n)=="string"and n~=""then
+return n end
+local n=e._msufBarKey or e.barKey or e.key if type(n)=="string"and n~=""then
+if n=="player"or n=="target"or n=="focus"then return n end if n=="boss"or n:sub(1,4)=="boss"then return n end
+end if e==_G.MSUF_PlayerCastbar or e==_G.MSUF_PlayerCastbarPreview then return"player"end
+if e==_G.MSUF_TargetCastbar or e==_G.MSUF_TargetCastbarPreview then return"target"end if e==_G.MSUF_FocusCastbar or e==_G.MSUF_FocusCastbarPreview then return"focus"end
+local e=e.GetName and e:GetName()or nil if type(e)=="string"then
+if e:find("Target",1,true)then return"target"end if e:find("Focus",1,true)then return"focus"end
+if e:find("Player",1,true)then return"player"end if e:find("boss",1,true)or e:find("Boss",1,true)then return"boss"end
+end return nil
+end function _G.MSUF_GetCastbarReverseFillForFrame(o,a)t()local n=(MSUF_DB and MSUF_DB.general)or{}local e=(n.castbarFillDirection=="RTL")and true or false if n.castbarOpositeDirectionTarget==true then
+local n=r(o)if n=="target"then
+e=not e end
+end if a==true then
+if n.castbarUnifiedDirection~=true then return not e
+end end
+return e end
+function _G.MSUF_ResolveCastbarColors()t()local l=(MSUF_DB and MSUF_DB.general)or{}local n,r,o
+if type(_G.MSUF_GetInterruptibleCastColor)=="function"then n,r,o=_G.MSUF_GetInterruptibleCastColor()end if not(n and r and o)then
+local e=l.castbarInterruptibleColor or"teal"local e=(type(_G.MSUF_GetColorFromKey)=="function")and _G.MSUF_GetColorFromKey(e)or nil
+if e and e.GetRGB then n,r,o=e:GetRGB()end end
+if not(n and r and o)then n,r,o=0,0.85,0.85
+end local a,e,t
+if type(_G.MSUF_GetNonInterruptibleCastColor)=="function"then a,e,t=_G.MSUF_GetNonInterruptibleCastColor()end if not(a and e and t)then
+local n=l.castbarNonInterruptibleColor or"red"local n=(type(_G.MSUF_GetColorFromKey)=="function")and _G.MSUF_GetColorFromKey(n)or nil
+if n and n.GetRGB then a,e,t=n:GetRGB()end end
+if not(a and e and t)then a,e,t=0.9,0.1,0.1
+end return n,r,o,a,e,t
+end local function d(e)if not e or e.MSUF_ShakeGroup then return
+end local n=e:CreateAnimationGroup("MSUF_ShakeGroup")n:SetLooping("NONE")local r=n:CreateAnimation("Translation")r:SetOffset(4,0)r:SetDuration(0.05)r:SetOrder(1)local a=n:CreateAnimation("Translation")a:SetOffset(-8,0)a:SetDuration(0.10)a:SetOrder(2)local t=n:CreateAnimation("Translation")t:SetOffset(4,0)t:SetDuration(0.05)t:SetOrder(3)e.MSUF_ShakeGroup=n
+e.MSUF_ShakeA1=r e.MSUF_ShakeA2=a
+e.MSUF_ShakeA3=t end
+function _G.MSUF_PlayCastbarShake(e)if not e then
+return end
+t()local n=(MSUF_DB and MSUF_DB.general)or{}if n.castbarInterruptShake==false then return
+end local n=tonumber(n.castbarShakeStrength)or 8
+if n<0 then n=0 end if n>30 then n=30 end
+if n<=0 then return
+end local t=n/2
+d(e)if e.MSUF_ShakeA1 and e.MSUF_ShakeA1.SetOffset then
+e.MSUF_ShakeA1:SetOffset(t,0)end
+if e.MSUF_ShakeA2 and e.MSUF_ShakeA2.SetOffset then e.MSUF_ShakeA2:SetOffset(-n,0)end if e.MSUF_ShakeA3 and e.MSUF_ShakeA3.SetOffset then
+e.MSUF_ShakeA3:SetOffset(t,0)end
+if e.MSUF_ShakeGroup then e.MSUF_ShakeGroup:Stop()e.MSUF_ShakeGroup:Play()end
+end function _G.MSUF_GetInterruptibleCastColor()t()local e=(MSUF_DB and MSUF_DB.general)or{}local t=tonumber(e.castbarInterruptibleR)local n=tonumber(e.castbarInterruptibleG)local e=tonumber(e.castbarInterruptibleB)if t and n and e then
+return t,n,e,1 end
+end function _G.MSUF_GetNonInterruptibleCastColor()t()local e=(MSUF_DB and MSUF_DB.general)or{}local t=tonumber(e.castbarNonInterruptibleR)local n=tonumber(e.castbarNonInterruptibleG)local e=tonumber(e.castbarNonInterruptibleB)if t and n and e then
+return t,n,e,1 end
+end local function o(e)if type(e)=="number"then return tonumber(tostring(e))end local n=_G.MSUF_ToPlainNumber
+if type(n)=="function"then local e=n(e)if type(e)=="number"then return tonumber(tostring(e))end return e
+end local n=type(e)if n=="number"or n=="string"then return tonumber(tostring(e))end return nil
+end local e=nil
+local r=-1 local function l()local n=_G.MSUF__castTimeGlobalRev or 1 if r==n and e~=nil then
+return e end
+t()local t=(MSUF_DB and MSUF_DB.general)or nil
+if t and t.castbarShowGlow==false then e=false
+else e=true
+end r=n
+return e end
+function _G.MSUF_ResetCastbarGlowFade(e)if not e or not e.statusBar then return end
+local e=e.statusBar if not e._msufGlowApplied then
+return end
+local t,r,a,n=e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBaseA if type(t)~="number"or type(r)~="number"or type(a)~="number"then
+e._msufGlowApplied=nil e._msufGlowLastP=nil
+return end
+if n==nil then n=1 end e._msufGlowSkipBase=true
+if type(_G.MSUF_SetStatusBarColorIfChanged)=="function"then _G.MSUF_SetStatusBarColorIfChanged(e,t,r,a,n)else e:SetStatusBarColor(t,r,a,n)end e._msufGlowSkipBase=nil
+e._msufGlowApplied=nil e._msufGlowLastP=nil
+end function _G.MSUF_ApplyCastbarGlowFade(e,r,t)if not e or not e.statusBar then return end if(e._msufIsPreview or e.MSUF_testMode)and not _G.MSUF_UnitEditModeActive then
+return end
+if e.interrupted then return
+end if e.interruptFeedbackEndTime then
+local n=(GetTimePreciseSec and GetTimePreciseSec())or GetTime()if n<e.interruptFeedbackEndTime then
+return end
+end if not l()then
+_G.MSUF_ResetCastbarGlowFade(e)return
+end local n=o(r)local t=o(t)if type(n)~="number"or type(t)~="number"or t<=0 then
+return end
+if n<0 then n=0 end if n>t then n=t end
+local n=1-(n/t)if n<0 then n=0 elseif n>1 then n=1 end
+n=n*n local e=e.statusBar
+local t=e._msufGlowLastP if type(t)=="number"then
+local e=n-t if e<0 then e=-e end
+if e<0.02 then return
+end end
+e._msufGlowLastP=n local t,r,a,o=e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBaseA
+if type(t)~="number"or type(r)~="number"or type(a)~="number"then if e.GetStatusBarColor then
+local l,n,i,d=e:GetStatusBarColor()t,r,a,o=l,n,i,d
+e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBaseA=t,r,a,o end
+end if type(t)~="number"or type(r)~="number"or type(a)~="number"then
+return end
+if o==nil then o=1 end local l=t+(1-t)*n
+local t=r+(1-r)*n local n=a+(1-a)*n
+e._msufGlowSkipBase=true if type(_G.MSUF_SetStatusBarColorIfChanged)=="function"then
+_G.MSUF_SetStatusBarColorIfChanged(e,l,t,n,o)else
+e:SetStatusBarColor(l,t,n,o)end
+e._msufGlowSkipBase=nil e._msufGlowApplied=true
+end function _G.MSUF_CB_ApplyColor(e,t)if e and e.UpdateColorForInterruptible then local n=e:UpdateColorForInterruptible()if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(e,t)end return n
+end end
+function _G.MSUF_CB_ApplyTexts(e,r,n,t)if not e then return end
+if r~=nil then if n==nil then n=r.castText end
+if t==nil then t=r.timeText end end
+if n~=nil and e.castText then i(e.castText,n)end if t~=nil and e.timeText then
+i(e.timeText,t)end
+end function _G.MSUF_ClearEmpowerState(e)if not e then return end e.isEmpower=nil
+e.empowerStartTime=nil e.empowerStageEnds=nil
+e.empowerTotalBase=nil e.empowerTotalWithGrace=nil
+e.empowerNextStage=nil e.MSUF_empowerLayoutPending=nil
+e.MSUF_wantsEmpower=nil e.MSUF_empowerRetryCount=nil
+e.MSUF_empowerRetryActive=nil e._msufEmpowerTotalNum=nil
+e._msufEmpowerStartNum=nil e._msufEmpowerBaseNum=nil
+e._msufEmpowerStageEndsNum=nil e._msufEmpowerMinMaxSet=nil
+e._msufEmpowerElapsed=nil e._msufEmpowerTimerDriven=nil
+if e.empowerTicks then for n=1,#e.empowerTicks do
+local e=e.empowerTicks[n]if e then
+e:Hide()if e.MSUF_glow then e.MSUF_glow:Hide()end
+if e.MSUF_flash then e.MSUF_flash:Hide()end end
+end end
+if e.empowerSegments then for n=1,#e.empowerSegments do
+local e=e.empowerSegments[n]if e then e:Hide()end
+end end
 end
