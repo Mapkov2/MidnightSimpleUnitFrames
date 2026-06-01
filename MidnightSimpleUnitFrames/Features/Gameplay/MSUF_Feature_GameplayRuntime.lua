@@ -1,0 +1,1494 @@
+local _, MSUF = ...
+MSUF = MSUF or {}
+
+local CreateFrame   = CreateFrame
+local UIParent      = UIParent
+local C_Spell       = C_Spell
+local UnitExists    = UnitExists
+local UnitCanAttack = UnitCanAttack
+local GetTime             = GetTime
+local UnitAffectingCombat = UnitAffectingCombat
+local string_format       = string.format
+local GetCVar    = GetCVar
+local GetCVarBool = GetCVarBool
+local math_min     = math.min
+local math_max     = math.max
+local IsAltKeyDown  = IsAltKeyDown
+local tonumber            = tonumber
+local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
+
+local function Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
+    local locale = MSUF.L or _G.MSUF_L
+    return (type(locale) == "table" and rawget(locale, text)) or text
+end
+
+local L_FIRST_DANCE_READY
+local L_FIRST_DANCE_FORMAT
+
+local function RefreshLocaleText()
+    L_FIRST_DANCE_READY = Tr("First Dance!")
+    L_FIRST_DANCE_FORMAT = Tr("First Dance: %.1f")
+end
+
+RefreshLocaleText()
+if type(MSUF.RegisterLocaleCallback) == "function" then
+    MSUF.RegisterLocaleCallback("MSUF_Gameplay", RefreshLocaleText)
+end
+
+local GameplayHelpers = MSUF.Gameplay or {}
+local GetPlayerSpecID, UpdateSubRogueCache = GameplayHelpers.GetPlayerSpecID, GameplayHelpers.UpdateSubRogueCache
+local Clamp, RoundInt = GameplayHelpers.Clamp or _G._MSUF_Clamp, GameplayHelpers.RoundInt or _G._MSUF_RoundInt
+local CheckpointHistory, BeginHistory, CommitHistory = GameplayHelpers.CheckpointHistory, GameplayHelpers.BeginHistory, GameplayHelpers.CommitHistory
+local SelectNudgeFrame, SetupArrowNudge = GameplayHelpers.SelectNudgeFrame, GameplayHelpers.SetupArrowNudge
+local function MSUF_IsSubRogueCached()
+    return GameplayHelpers.IsSubRogueCached and GameplayHelpers.IsSubRogueCached() or false
+end
+
+local C_Timer_After = C_Timer and C_Timer.After
+local ScheduleOnce = _G.MSUF_ScheduleOnce
+local EventBus_Register = _G.MSUF_EventBus_Register
+local EventBus_Unregister = _G.MSUF_EventBus_Unregister
+local RegisterModule = MSUF.MSUF_RegisterModule
+local ApplyGameplayNow
+
+local function BusRegister(...)
+    if type(EventBus_Register) == "function" then EventBus_Register(...) end
+end
+
+local function BusUnregister(...)
+    if type(EventBus_Unregister) == "function" then EventBus_Unregister(...) end
+end
+
+do
+    local _applyPending = false
+
+    local function _DoGameplayApply()
+        if ApplyGameplayNow then ApplyGameplayNow() end
+        _applyPending = false
+    end
+
+    function MSUF.MSUF_RequestGameplayApply()
+        if _applyPending then return end
+        _applyPending = true
+
+        if type(ScheduleOnce) == "function" then
+            ScheduleOnce("MSUF_GAMEPLAY_APPLY", _DoGameplayApply)
+        elseif C_Timer_After then
+            C_Timer_After(0, _DoGameplayApply)
+        else
+            _DoGameplayApply()
+        end
+    end
+end
+
+local UnitIsDeadOrGhost = UnitIsDeadOrGhost
+local GetCameraZoom = GetCameraZoom
+
+local LibStub       = LibStub
+
+local GameplayDefaults = MSUF.MSUF_EnsureGameplayDefaults
+local GetGameplayDB = MSUF.MSUF_GetGameplayDBFast
+local GetGameplayFont = MSUF.MSUF_GetGameplayFontSettings
+local NormalizeRGB = MSUF.MSUF_NormalizeRGB
+local MSUF_GetCombatStateColors = MSUF.MSUF_GetCombatStateColors
+
+local ApplyCombatStateDynamicColor
+local StartFirstDanceWindow
+local ApplyFirstDanceMasque
+
+local function SetTextShadow(fs, enabled)
+    if not fs then return end
+    if enabled then
+        fs:SetShadowOffset(1, -1)
+        fs:SetShadowColor(0, 0, 0, 1)
+    else
+        fs:SetShadowOffset(0, 0)
+    end
+end
+
+local function SetAltDragMouse(frame, enabled, locked, clickThrough)
+    if not frame then return end
+    if frame._msufDragging then
+        frame:EnableMouse(true)
+    elseif not enabled or locked then
+        frame:EnableMouse(false)
+    elseif clickThrough ~= false then
+        frame:EnableMouse((IsAltKeyDown and IsAltKeyDown()) and true or false)
+    else
+        frame:EnableMouse(true)
+    end
+end
+
+local function EnsureAltDragWatcher(key, frame, enabledKey, lockKey, clickThroughKey)
+    if MSUF[key] then return end
+    local f = CreateFrame("Frame")
+    MSUF[key] = f
+    f:RegisterEvent("MODIFIER_STATE_CHANGED")
+    f:SetScript("OnEvent", function()
+        local gd = GetGameplayDB()
+        SetAltDragMouse(frame, gd and gd[enabledKey], gd and gd[lockKey], gd and gd[clickThroughKey])
+    end)
+end
+
+local function SyncGameplayPanel(method)
+    local panel = _G.MSUF_GameplayPanel
+    local fn = panel and panel[method]
+    if fn then fn(panel) end
+end
+
+local function StoreCenteredOffset(frame, db, xKey, yKey, anchor, roundValues)
+    local x, y = frame:GetCenter()
+    if not (x and y) then return end
+
+    local ax, ay = UIParent:GetCenter()
+    if anchor and anchor.GetCenter then
+        local tx, ty = anchor:GetCenter()
+        if tx and ty then
+            ax, ay = tx, ty
+        end
+    end
+    if not (ax and ay) then return end
+
+    local dx, dy = x - ax, y - ay
+    if roundValues ~= false then
+        dx, dy = RoundInt(dx), RoundInt(dy)
+    end
+    db[xKey], db[yKey] = dx, dy
+end
+
+local function BeginGameplayDrag(frame, label, source)
+    SelectNudgeFrame(frame, true)
+    BeginHistory(frame, label, source)
+    frame._msufDragging = true
+    frame:StartMoving()
+end
+
+local function CanAltDrag(g, lockKey, clickThroughKey)
+    if g[lockKey] then return false end
+    return g[clickThroughKey] == false or not IsAltKeyDown or IsAltKeyDown()
+end
+
+local function CreateMovableGameplayFrame(name, width, height)
+    local frame = CreateFrame("Frame", name, UIParent)
+    frame:SetSize(width, height)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    return frame
+end
+
+local combatFrame
+local timerText
+local stateFrame
+local stateText
+local CombatStateOnEvent
+local crosshairFrame
+local crosshairEventFrame
+local danceFrame
+local danceText
+local danceIcon
+local danceCooldown
+local danceCDText
+
+local _FIRST_DANCE_ICON_ID = 236279
+
+local RequestCrosshairRangeRefresh
+local function ResolveCrosshairRangeSpellID(g)
+    if not g then return 0 end
+
+    local spellID = tonumber(g.crosshairRangeSpellID) or 0
+    if spellID > 0 then return spellID end
+
+    spellID = tonumber(g.meleeRangeSpellID) or 0
+    if spellID > 0 then return spellID end
+
+    if g.meleeSpellPerSpec and type(g.nameplateMeleeSpellIDBySpec) == "table" then
+        local specID = GetPlayerSpecID()
+        if specID then
+            spellID = tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0
+            if spellID > 0 then return spellID end
+        end
+    end
+
+    if g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+        local _, class = UnitClass("player")
+        if class then
+            spellID = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0
+            if spellID > 0 then return spellID end
+        end
+    end
+
+    spellID = tonumber(g.nameplateMeleeSpellID) or 0
+    if spellID > 0 then return spellID end
+
+    return (MSUF_DB and type(MSUF_DB.general) == "table" and tonumber(MSUF_DB.general.meleeRangeSpellID)) or 0
+end
+
+local function SyncCrosshairRangeCache(g)
+    if not crosshairFrame then return end
+
+    crosshairFrame._msufCrosshairEnabled = (g and g.enableCombatCrosshair) and true or false
+
+    local spellID = ResolveCrosshairRangeSpellID(g)
+    crosshairFrame._msufRangeSpellID = spellID
+
+    crosshairFrame._msufUseRangeColor = (g and g.enableCombatCrosshairMeleeRangeColor) and (spellID > 0) or false
+
+    crosshairFrame._msufInRangeR, crosshairFrame._msufInRangeG, crosshairFrame._msufInRangeB =
+        NormalizeRGB(g and g.crosshairInRangeColor, 0, 1, 0)
+    crosshairFrame._msufOutRangeR, crosshairFrame._msufOutRangeG, crosshairFrame._msufOutRangeB =
+        NormalizeRGB(g and g.crosshairOutRangeColor, 1, 0, 0)
+end
+
+local combatStartTime = nil
+local lastTimerText = ""
+local combatTimerLoop
+
+local function SetCombatTimerText(text)
+    if text ~= lastTimerText then
+        lastTimerText = text
+        timerText:SetText(text)
+    end
+end
+
+local function SetCombatTimerShown(shown)
+    if combatFrame then combatFrame:SetShown(shown) end
+end
+
+local function TickCombatTimer()
+    if not timerText then return end
+
+    local gNow = GetGameplayDB()
+    if not gNow or not gNow.enableCombatTimer then
+        SetCombatTimerText("")
+        SetCombatTimerShown(false)
+        combatStartTime = nil
+        return
+    end
+
+    local inCombat = (UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true)
+
+    if not inCombat then
+        SetCombatTimerShown(not gNow.lockCombatTimer)
+        SetCombatTimerText(gNow.lockCombatTimer and "" or "0:00")
+        combatStartTime = nil
+        return
+    end
+
+    SetCombatTimerShown(true)
+    local now = GetTime()
+    combatStartTime = combatStartTime or now
+    local elapsedCombat = math_max(now - combatStartTime, 0)
+    SetCombatTimerText(string_format("%d:%02d", math.floor(elapsedCombat / 60), math.floor(elapsedCombat % 60)))
+end
+
+local function _StartCombatTimerTick()
+    if not C_Timer_After then return end
+    if combatTimerLoop then return end
+    local loop = {}
+    loop.step = function()
+        if combatTimerLoop ~= loop or MSUF._MSUF_CombatTimerLoopActive ~= loop then return end
+        TickCombatTimer()
+        if combatTimerLoop == loop and MSUF._MSUF_CombatTimerLoopActive == loop then
+            C_Timer_After(1.0, loop.step)
+        end
+    end
+    combatTimerLoop = loop
+    MSUF._MSUF_CombatTimerLoopActive = loop
+    C_Timer_After(1.0, loop.step)
+end
+
+local function _StopCombatTimerTick()
+    combatTimerLoop = nil
+    MSUF._MSUF_CombatTimerLoopActive = nil
+end
+
+local FIRST_DANCE_WINDOW = 6
+local firstDanceActive = false
+local firstDanceEndTime = 0
+local firstDanceLastText = nil
+local firstDanceReady = false
+local firstDanceTickElapsed = 0
+
+local _TickFirstDance
+local UnregisterShadowDanceWatch
+
+local function ResetFirstDanceDisplay()
+    if danceText then danceText:SetText("") end
+    if danceCDText then danceCDText:SetText("") end
+    if danceCooldown and danceCooldown.SetCooldown then danceCooldown:SetCooldown(0, 0) end
+end
+
+local function StopFirstDanceTick()
+    firstDanceActive = false
+    firstDanceEndTime = 0
+    firstDanceLastText = nil
+    firstDanceTickElapsed = 0
+    if danceFrame then danceFrame:SetScript("OnUpdate", nil) end
+    ResetFirstDanceDisplay()
+end
+
+local function HideFirstDanceReady()
+    if UnregisterShadowDanceWatch then UnregisterShadowDanceWatch() end
+    firstDanceReady = false
+    if danceFrame then danceFrame:Hide() end
+    ResetFirstDanceDisplay()
+end
+
+local _SHADOW_DANCE_SPELL_ID = 185313
+local _fdShadowDanceFrame
+
+UnregisterShadowDanceWatch = function()
+    if _fdShadowDanceFrame then
+        _fdShadowDanceFrame:UnregisterAllEvents()
+    end
+end
+
+local function RegisterShadowDanceWatch()
+    if not MSUF_IsSubRogueCached() then return end
+    if not _fdShadowDanceFrame then
+        _fdShadowDanceFrame = CreateFrame("Frame")
+        _fdShadowDanceFrame:SetScript("OnEvent", function(_, _, _, _, spellID)
+            if spellID == _SHADOW_DANCE_SPELL_ID then
+                UnregisterShadowDanceWatch()
+                HideFirstDanceReady()
+                if not UnitAffectingCombat("player") then
+                    local gd = GetGameplayDB()
+                    if gd and gd.enableFirstDanceTimer then
+                        StartFirstDanceWindow()
+                    end
+                end
+            end
+        end)
+    end
+    _fdShadowDanceFrame:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+end
+
+local function SetCombatStateClickThrough(active)
+    if not stateFrame then return end
+
+    if active then
+        stateFrame._msufClickThroughActive = true
+        stateFrame:EnableMouse(false)
+        stateFrame:Show()
+        return
+    end
+
+    stateFrame._msufClickThroughActive = nil
+    local g = GetGameplayDB()
+    if g and not g.lockCombatState and stateText and stateText:IsShown() then
+        stateFrame:EnableMouse(true)
+        stateFrame:Show()
+    else
+        stateFrame:EnableMouse(false)
+        if not stateText or not stateText:IsShown() then
+            stateFrame:Hide()
+        end
+    end
+end
+
+local function TextOrDefault(text, fallback)
+    if type(text) ~= "string" or text == "" then return fallback end
+    return text
+end
+
+local function ShowCombatStateText(state, text, r, g, b, clickThrough)
+    stateText._msufLastState = state
+    stateText:SetTextColor(r, g, b, 1)
+    stateText:SetText(text)
+    if clickThrough then
+        SetCombatStateClickThrough(true)
+    else
+        stateFrame:Show()
+        stateFrame:EnableMouse(true)
+    end
+    stateText:Show()
+end
+
+local function ClearCombatStateText()
+    if stateText then
+        stateText:SetText("")
+        stateText:Hide()
+    end
+end
+
+local function ScheduleCombatStateClear(duration)
+    if not C_Timer_After then return end
+    C_Timer_After(duration, function()
+        local g = GetGameplayDB()
+        if stateText and g and g.enableCombatStateText then
+            ClearCombatStateText()
+            SetCombatStateClickThrough(false)
+        end
+    end)
+end
+
+local function ApplyFirstDanceLockState()
+    if not danceFrame then return end
+    local g = GetGameplayDB()
+    SetAltDragMouse(danceFrame, g and g.enableFirstDanceTimer, g and g.lockFirstDance, g and g.firstDanceClickThrough)
+end
+
+local function EnsureFirstDanceFrame()
+    if danceFrame then return danceFrame end
+    local g = GameplayDefaults()
+
+    danceFrame = CreateMovableGameplayFrame("MSUF_FirstDanceFrame", 220, 60)
+    danceFrame:SetPoint("CENTER", UIParent, "CENTER", tonumber(g.firstDanceOffsetX) or 0, tonumber(g.firstDanceOffsetY) or 80)
+    SetupArrowNudge(danceFrame,
+        function(self, dx, dy)
+            local db = GameplayDefaults()
+            if db.lockFirstDance then return false end
+            db.firstDanceOffsetX = Clamp(RoundInt((tonumber(db.firstDanceOffsetX) or 0) + (dx or 0)), -800, 800)
+            db.firstDanceOffsetY = Clamp(RoundInt((tonumber(db.firstDanceOffsetY) or 80) + (dy or 0)), -800, 800)
+            self:ClearAllPoints()
+            self:SetPoint("CENTER", UIParent, "CENTER", db.firstDanceOffsetX, db.firstDanceOffsetY)
+            SyncGameplayPanel("MSUF_SyncFirstDanceOffsetSliders")
+            ApplyFirstDanceLockState()
+            CheckpointHistory("First Dance position", "gameplay:firstDance:position")
+            return true
+        end,
+        function(self)
+            local gd = GameplayDefaults()
+            return gd.enableFirstDanceTimer and not gd.lockFirstDance and self.IsShown and self:IsShown()
+        end)
+
+    danceFrame:SetScript("OnDragStart", function(self)
+        local gd = GameplayDefaults()
+        if CanAltDrag(gd, "lockFirstDance", "firstDanceClickThrough") then
+            BeginGameplayDrag(self, "First Dance position", "gameplay:firstDance:position")
+        end
+    end)
+
+    danceFrame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        self._msufDragging = nil
+        local db = GameplayDefaults()
+        StoreCenteredOffset(self, db, "firstDanceOffsetX", "firstDanceOffsetY")
+        SyncGameplayPanel("MSUF_SyncFirstDanceOffsetSliders")
+        SelectNudgeFrame(self, true)
+        ApplyFirstDanceLockState()
+        CommitHistory(self)
+    end)
+
+    danceText = danceFrame:CreateFontString(nil, "OVERLAY")
+    danceText:SetPoint("CENTER")
+
+    local iconSz = g.firstDanceIconSize or 40
+    danceIcon = danceFrame:CreateTexture(nil, "ARTWORK")
+    MSUF_SetIconTexture(danceIcon, _FIRST_DANCE_ICON_ID, "")
+    danceIcon:SetSize(iconSz, iconSz)
+    danceIcon:SetPoint("CENTER")
+
+    danceCooldown = CreateFrame("Cooldown", "MSUF_FirstDanceCooldown", danceFrame, "CooldownFrameTemplate")
+    danceCooldown:SetAllPoints(danceIcon)
+    danceCooldown:SetDrawEdge(true)
+    danceCooldown:SetDrawSwipe(true)
+    danceCooldown:SetReverse(true)
+    danceCooldown:SetHideCountdownNumbers(true)
+
+    danceCDText = danceCooldown:CreateFontString(nil, "OVERLAY")
+    danceCDText:SetPoint("CENTER", danceCooldown, "CENTER", 0, 0)
+
+    ApplyFirstDanceLockState()
+
+    EnsureAltDragWatcher("_MSUF_FirstDanceModifierFrame", danceFrame, "enableFirstDanceTimer", "lockFirstDance", "firstDanceClickThrough")
+
+    return danceFrame
+end
+
+local function ApplyFirstDanceDisplayMode()
+    if not danceFrame then return end
+    local g = GetGameplayDB()
+    local iconMode = (g.firstDanceShowIcon ~= false)
+    local iconSz = g.firstDanceIconSize or 40
+
+    if iconMode then
+        danceText:Hide()
+        danceIcon:SetSize(iconSz, iconSz)
+        danceIcon:Show()
+        danceCooldown:Show()
+        danceCDText:Show()
+        danceFrame:SetSize(iconSz + 4, iconSz + 4)
+        local applyMasque = MSUF.MSUF_FirstDance_ApplyMasque or ApplyFirstDanceMasque
+        if applyMasque then applyMasque() end
+    else
+        danceIcon:Hide()
+        danceCooldown:Hide()
+        danceCDText:Hide()
+        danceText:Show()
+        danceFrame:SetSize(220, 60)
+    end
+end
+
+do
+    local _fdMasqueGroup
+    local _fdMasqueRegistered = false
+
+    local function _FD_IsMasqueEnabled()
+        local shared = MSUF_DB and MSUF_DB.auras3 and MSUF_DB.auras3.shared
+        return shared and shared.masqueEnabled == true
+    end
+
+    local function _FD_EnsureMasqueGroup()
+        if _fdMasqueGroup then return _fdMasqueGroup end
+        local ok, lib = pcall(LibStub, "Masque", true)
+        if not ok or not lib then return nil end
+        local ok2, grp = pcall(lib.Group, lib, "Midnight Simple Unit Frames", "First Dance")
+        if not ok2 or not grp then return nil end
+        _fdMasqueGroup = grp
+        return grp
+    end
+
+    ApplyFirstDanceMasque = function()
+        if not _FD_IsMasqueEnabled() then
+            if _fdMasqueRegistered and _fdMasqueGroup then
+                pcall(_fdMasqueGroup.RemoveButton, _fdMasqueGroup, danceFrame)
+                _fdMasqueRegistered = false
+            end
+            return
+        end
+
+        local grp = _FD_EnsureMasqueGroup()
+        if not grp then return end
+
+        if _fdMasqueRegistered then return end
+
+        local ok = pcall(grp.AddButton, grp, danceFrame, { Icon = danceIcon, Cooldown = danceCooldown })
+        if ok then
+            _fdMasqueRegistered = true
+            if grp.ReSkin then pcall(grp.ReSkin, grp) end
+            local base = danceCooldown.GetFrameLevel and danceCooldown:GetFrameLevel() or 0
+            local overlay = CreateFrame("Frame", nil, danceCooldown)
+            overlay:SetAllPoints()
+            overlay:SetFrameLevel(base + 5)
+            danceCDText:SetParent(overlay)
+            danceCDText:ClearAllPoints()
+            danceCDText:SetPoint("CENTER")
+        end
+    end
+    MSUF.MSUF_FirstDance_ApplyMasque = ApplyFirstDanceMasque
+end
+
+local function ApplyFirstDanceFont()
+    local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFont("state")
+    local g = GetGameplayDB()
+    local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
+
+    if not danceText then return end
+    danceText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+    danceText:SetTextColor(lr, lg, lb, 1)
+    SetTextShadow(danceText, useShadow)
+
+    local iconSz = (g and g.firstDanceIconSize) or 40
+    danceCDText:SetFont(path or "Fonts/FRIZQT__.TTF", math_max(10, math.floor(iconSz * 0.45 + 0.5)), "OUTLINE")
+    danceCDText:SetTextColor(1, 1, 1, 1)
+    SetTextShadow(danceCDText, useShadow)
+end
+
+local function ApplyFontToCounter()
+    if not timerText and not stateText and not danceText then return end
+    if timerText then
+        local path, flags, r, g, b, size, useShadow = GetGameplayFont("timer")
+        timerText:SetFont(path or "Fonts/FRIZQT__.TTF", size or 20, flags or "OUTLINE")
+        local gdb = GetGameplayDB()
+        local tr, tg, tb = NormalizeRGB(gdb and gdb.combatTimerColor, r or 1, g or 1, b or 1)
+        timerText:SetTextColor(tr, tg, tb, 1)
+        SetTextShadow(timerText, useShadow)
+    end
+
+    if stateText then
+        local path, flags, r, g, b, size, useShadow = GetGameplayFont("state")
+        stateText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+        stateText:SetTextColor(r or 1, g or 1, b or 1, 1)
+        SetTextShadow(stateText, useShadow)
+        ApplyCombatStateDynamicColor()
+    end
+
+    ApplyFirstDanceFont()
+end
+
+local EnsureCombatStateText
+
+ApplyCombatStateDynamicColor = function()
+    if not stateText then EnsureCombatStateText() end
+
+    if not stateText then return end
+    local g = GetGameplayDB()
+    local er, eg, eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
+
+    local st = stateText._msufLastState
+    if st == "leave" or st == "dance" then
+        stateText:SetTextColor(lr, lg, lb, 1)
+    else
+        stateText:SetTextColor(er, eg, eb, 1)
+    end
+end
+
+StartFirstDanceWindow = function()
+    if not MSUF_IsSubRogueCached() then return end
+    local g = GetGameplayDB()
+
+    if not g or not g.enableFirstDanceTimer then
+        StopFirstDanceTick()
+        HideFirstDanceReady()
+        return
+    end
+
+    if not danceFrame then EnsureFirstDanceFrame() end
+
+    firstDanceEndTime = GetTime() + FIRST_DANCE_WINDOW
+    firstDanceActive = true
+    firstDanceReady = false
+    firstDanceLastText = nil
+    firstDanceTickElapsed = 0
+
+    ApplyFirstDanceFont()
+    ApplyFirstDanceDisplayMode()
+
+    if g.firstDanceShowIcon ~= false then
+        danceCooldown:SetCooldown(GetTime(), FIRST_DANCE_WINDOW)
+    end
+
+    danceFrame:Show()
+
+    danceFrame:SetScript("OnUpdate", function(self, elapsed)
+        firstDanceTickElapsed = firstDanceTickElapsed + (elapsed or 0)
+        if firstDanceTickElapsed < 0.05 then return end
+        firstDanceTickElapsed = 0
+        _TickFirstDance()
+    end)
+
+end
+MSUF._MSUF_StartFirstDanceWindow = StartFirstDanceWindow
+
+CombatStateOnEvent = function(event)
+    local g = GetGameplayDB()
+    if not g or (not g.enableCombatStateText and not (g.enableFirstDanceTimer and MSUF_IsSubRogueCached())) then
+        ClearCombatStateText()
+        SetCombatStateClickThrough(false)
+        StopFirstDanceTick()
+        HideFirstDanceReady()
+        return
+    end
+
+    local wantState = (g.enableCombatStateText == true)
+    local wantDance = (g.enableFirstDanceTimer == true) and MSUF_IsSubRogueCached()
+    local duration = math_max(g.combatStateDuration or 1.5, 0.1)
+
+    if event == "PLAYER_REGEN_DISABLED" then
+        local wasActive = firstDanceActive
+        StopFirstDanceTick()
+        if wasActive and not firstDanceReady and danceFrame then danceFrame:Hide() end
+
+        if not wantState then
+            ClearCombatStateText()
+            SetCombatStateClickThrough(false)
+            return
+        end
+        if not stateText then EnsureCombatStateText() end
+        local er, eg, eb = MSUF_GetCombatStateColors(g)
+        ShowCombatStateText("enter", TextOrDefault(g.combatStateEnterText, "+Combat"), er, eg, eb, true)
+        ScheduleCombatStateClear(duration)
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        StopFirstDanceTick()
+        if wantDance and not firstDanceReady then StartFirstDanceWindow() end
+
+        if not wantState then
+            ClearCombatStateText()
+            SetCombatStateClickThrough(false)
+            return
+        end
+        if not stateText then EnsureCombatStateText() end
+        local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
+        ShowCombatStateText("leave", TextOrDefault(g.combatStateLeaveText, "-Combat"), lr, lg, lb, true)
+        ScheduleCombatStateClear(duration)
+    end
+end
+
+EnsureCombatStateText = function()
+    if stateText then return end
+
+    local g = GetGameplayDB()
+
+    if not stateFrame then
+        stateFrame = CreateMovableGameplayFrame("MSUF_CombatStateFrame", 220, 60)
+        stateFrame:SetPoint("CENTER", UIParent, "CENTER", g.combatStateOffsetX or 0, g.combatStateOffsetY or 80)
+        SetupArrowNudge(stateFrame,
+            function(self, dx, dy)
+                local db = GameplayDefaults()
+                if db.lockCombatState then return false end
+                db.combatStateOffsetX = RoundInt((tonumber(db.combatStateOffsetX) or 0) + (dx or 0))
+                db.combatStateOffsetY = RoundInt((tonumber(db.combatStateOffsetY) or 80) + (dy or 0))
+                self:ClearAllPoints()
+                self:SetPoint("CENTER", UIParent, "CENTER", db.combatStateOffsetX, db.combatStateOffsetY)
+                CheckpointHistory("Combat enter/leave position", "gameplay:combatState:position")
+                return true
+            end,
+            function(self)
+                local gd = GameplayDefaults()
+                return gd.enableCombatStateText and not gd.lockCombatState and self.IsShown and self:IsShown()
+            end)
+
+        stateFrame:SetScript("OnDragStart", function(self)
+            local gd = GameplayDefaults()
+            if gd.lockCombatState then return end
+            SelectNudgeFrame(self, true)
+            BeginHistory(self, "Combat enter/leave position", "gameplay:combatState:position")
+            self:StartMoving()
+        end)
+
+        stateFrame:SetScript("OnDragStop", function(self)
+            self:StopMovingOrSizing()
+            StoreCenteredOffset(self, GameplayDefaults(), "combatStateOffsetX", "combatStateOffsetY", nil, false)
+            SelectNudgeFrame(self, true)
+            CommitHistory(self)
+        end)
+    end
+
+    stateText = stateFrame:CreateFontString("MSUF_CombatStateText", "OVERLAY")
+    stateText:SetPoint("CENTER")
+
+    local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFont("state")
+    stateText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+    local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
+    stateText._msufLastState = "dance"
+    stateText:SetTextColor(lr, lg, lb, 1)
+    SetTextShadow(stateText, useShadow)
+
+    ClearCombatStateText()
+end
+
+_TickFirstDance = function()
+    if not firstDanceActive then return end
+
+    local gFD = GetGameplayDB()
+    if not gFD or not gFD.enableFirstDanceTimer then
+        StopFirstDanceTick()
+        HideFirstDanceReady()
+        return
+    end
+
+    if not danceFrame then EnsureFirstDanceFrame() end
+
+    local now = GetTime()
+    local remaining = firstDanceEndTime - now
+    if remaining <= 0 then
+        StopFirstDanceTick()
+
+        if gFD.firstDanceShowReady then
+            firstDanceReady = true
+            RegisterShadowDanceWatch()
+            local iconMode = (gFD.firstDanceShowIcon ~= false)
+            if iconMode then
+                danceCDText:SetText("")
+                danceCooldown:SetCooldown(0, 0)
+                danceIcon:SetDesaturated(false)
+            else
+                danceText:SetText(L_FIRST_DANCE_READY)
+            end
+        else
+            if danceFrame then danceFrame:Hide() end
+        end
+        return
+    end
+
+    local iconMode = (gFD.firstDanceShowIcon ~= false)
+    if iconMode then
+        local text = string_format("%.1f", remaining)
+        if text ~= firstDanceLastText then
+            firstDanceLastText = text
+            danceCDText:SetText(text)
+        end
+    else
+        local text = string_format(L_FIRST_DANCE_FORMAT, remaining)
+        if text ~= firstDanceLastText then
+            firstDanceLastText = text
+            danceText:SetText(text)
+        end
+    end
+end
+
+local function MSUF_ShouldCrosshairFollowCamera()
+    if not GetCVar then return false end
+    if (tonumber(GetCVar("findYourselfMode") or "0") or 0) > 0 then return true end
+
+    if GetCVarBool and (
+        GetCVarBool("findYourselfModeAll")
+        or GetCVarBool("findYourselfModeAlways")
+        or GetCVarBool("findYourselfModeCombat")
+        or GetCVarBool("nameplateShowSelf")
+        or GetCVarBool("nameplateShowAll")) then
+        return true
+    end
+
+    local personal = _G.NamePlatePersonalFrame
+    return personal and personal.IsShown and personal:IsShown() or false
+end
+
+local function AnchorCombatCrosshair()
+    if not crosshairFrame then return end
+
+    local parent   = UIParent
+    local anchorTo = UIParent
+    local offsetY  = -20
+
+    if MSUF_ShouldCrosshairFollowCamera() then
+        local personal = _G.NamePlatePersonalFrame
+        if personal then
+            parent   = personal
+            anchorTo = personal.UnitFrame or personal
+
+            local zoom = GetCameraZoom and GetCameraZoom() or 0
+            local maxFactor = tonumber(GetCVar and GetCVar("cameraDistanceMaxZoomFactor") or "1") or 1
+            local maxDist = 15 * maxFactor
+
+            local close = maxDist > 0 and (1 - math_min(zoom / maxDist, 1)) or 0
+            local base = (personal:GetHeight() or 0) * 0.6
+            offsetY = -(base + base * 0.6 * close)
+        end
+    end
+
+    if crosshairFrame._msufAnchorParent ~= parent
+        or crosshairFrame._msufAnchorTo ~= anchorTo
+        or crosshairFrame._msufAnchorOffsetX ~= 0
+        or crosshairFrame._msufAnchorOffsetY ~= offsetY then
+
+        crosshairFrame._msufAnchorParent = parent
+        crosshairFrame._msufAnchorTo = anchorTo
+        crosshairFrame._msufAnchorOffsetX = 0
+        crosshairFrame._msufAnchorOffsetY = offsetY
+
+        crosshairFrame:ClearAllPoints()
+        crosshairFrame:SetParent(parent)
+        crosshairFrame:SetPoint("CENTER", anchorTo, "CENTER", 0, offsetY)
+    end
+end
+
+local UpdateCrosshairRangeColor
+
+local function ScheduleCombatCrosshairAnchor()
+    if not crosshairFrame or crosshairFrame._msufAnchorPending then return end
+    crosshairFrame._msufAnchorPending = true
+    if C_Timer_After then
+        C_Timer_After(0, function()
+            if crosshairFrame then crosshairFrame._msufAnchorPending = nil end
+            AnchorCombatCrosshair()
+        end)
+    else
+        crosshairFrame._msufAnchorPending = nil
+        AnchorCombatCrosshair()
+    end
+end
+
+local function EnsureCombatCrosshair()
+    local g = GameplayDefaults()
+
+    if not crosshairFrame then
+        crosshairFrame = CreateFrame("Frame", "MSUF_CombatCrosshairFrame", UIParent)
+        crosshairFrame:SetSize(40, 40)
+        AnchorCombatCrosshair()
+        crosshairFrame:SetFrameStrata("BACKGROUND")
+        crosshairFrame:SetClampedToScreen(true)
+        crosshairFrame:EnableMouse(false)
+
+        local horiz = crosshairFrame:CreateTexture(nil, "ARTWORK")
+        horiz:SetPoint("CENTER")
+
+        local vert = crosshairFrame:CreateTexture(nil, "ARTWORK")
+        vert:SetPoint("CENTER")
+
+        crosshairFrame.horiz = horiz
+        crosshairFrame.vert  = vert
+
+        crosshairFrame:Hide()
+
+        if not crosshairEventFrame then
+            crosshairEventFrame = CreateFrame("Frame", "MSUF_CombatCrosshairEventFrame", UIParent)
+            crosshairEventFrame:UnregisterAllEvents()
+
+            local function MSUF_CombatCrosshair_OnEvent(_, event, ...)
+                local arg1 = ...
+                local g2 = GetGameplayDB()
+                if not g2.enableCombatCrosshair then
+                    crosshairFrame:Hide()
+                    return
+                end
+
+                if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+                    crosshairFrame:SetShown(event == "PLAYER_REGEN_DISABLED")
+                    RequestCrosshairRangeRefresh()
+                elseif event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_LOGIN" then
+                    AnchorCombatCrosshair()
+                    crosshairFrame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true))
+                    RequestCrosshairRangeRefresh()
+                elseif (event == "NAME_PLATE_UNIT_REMOVED" and arg1 == "player") or event == "DISPLAY_SIZE_CHANGED" then
+                    AnchorCombatCrosshair()
+                elseif event == "SPELL_RANGE_CHECK_UPDATE" then
+                    RequestCrosshairRangeRefresh()
+                elseif event == "CVAR_UPDATE" and arg1 == "nameplateShowSelf" then
+                    ScheduleCombatCrosshairAnchor()
+                end
+            end
+
+            crosshairEventFrame:SetScript("OnEvent", MSUF_CombatCrosshair_OnEvent)
+        end
+    end
+
+    local thickness = Clamp(g.crosshairThickness or 2, 1, 10)
+    local size = Clamp(g.crosshairSize or 40, 20, 80)
+
+    if crosshairFrame and crosshairFrame._msufLastSize ~= size then
+        crosshairFrame._msufLastSize = size
+        crosshairFrame:SetSize(size, size)
+    end
+
+    if crosshairFrame.horiz and crosshairFrame.vert then
+        if crosshairFrame._msufLastThickness ~= thickness or crosshairFrame._msufLastSizeForLines ~= size then
+            crosshairFrame._msufLastThickness = thickness
+            crosshairFrame._msufLastSizeForLines = size
+            crosshairFrame.horiz:SetSize(size, thickness)
+            crosshairFrame.vert:SetSize(thickness, size)
+        end
+
+        SyncCrosshairRangeCache(g)
+        UpdateCrosshairRangeColor()
+
+        RequestCrosshairRangeRefresh()
+    end
+
+    return crosshairFrame
+end
+
+local function ApplyLockState()
+    local g = GameplayDefaults()
+    if combatFrame then
+        SetAltDragMouse(combatFrame, g.enableCombatTimer, g.lockCombatTimer, g.combatTimerClickThrough)
+    end
+
+    if stateFrame then
+        if stateFrame._msufClickThroughActive then
+            stateFrame:EnableMouse(false)
+        elseif g.lockCombatState then
+            stateFrame:EnableMouse(false)
+        elseif stateText and stateText:IsShown() then
+            stateFrame:EnableMouse(true)
+        else
+            stateFrame:EnableMouse(false)
+        end
+    end
+
+    ApplyFirstDanceLockState()
+end
+
+local function ValidateCombatTimerAnchor(v)
+    if v == "player" or v == "target" or v == "focus" then
+        return v
+    end
+    return "none"
+end
+
+local function GetCombatTimerAnchorFrame(g)
+    local key = ValidateCombatTimerAnchor(g and g.combatTimerAnchor)
+    if key == "none" then
+        return UIParent
+    end
+    local list = _G.MSUF_UnitFrames
+    return (list and list[key]) or (_G and _G["MSUF_" .. key]) or UIParent
+end
+
+local function ApplyCombatTimerAnchor(g)
+    if not combatFrame then return end
+
+    if combatFrame._msufDragging then return end
+
+    g = g or GameplayDefaults()
+    local anchor = GetCombatTimerAnchorFrame(g)
+
+    combatFrame:ClearAllPoints()
+    combatFrame:SetPoint("CENTER", anchor, "CENTER", tonumber(g.combatOffsetX) or 0, tonumber(g.combatOffsetY) or 0)
+
+    local want = ValidateCombatTimerAnchor(g.combatTimerAnchor)
+    if want ~= "none" and anchor == UIParent then
+        if not combatFrame._msufAnchorRetryPending and C_Timer_After then
+            combatFrame._msufAnchorRetryPending = true
+            C_Timer_After(0.2, function()
+                if combatFrame then
+                    combatFrame._msufAnchorRetryPending = nil
+                    ApplyCombatTimerAnchor()
+                end
+            end)
+        end
+    end
+end
+
+MSUF.MSUF_ApplyGameplayFontFromGlobal = ApplyFontToCounter
+
+local function CreateCombatTimerFrame()
+    if combatFrame then
+        return combatFrame
+    end
+
+    local g = GameplayDefaults()
+
+    combatFrame = CreateMovableGameplayFrame("MSUF_CombatTimerFrame", 220, 60)
+    ApplyCombatTimerAnchor(g)
+    SetupArrowNudge(combatFrame,
+        function(self, dx, dy)
+            local db = GameplayDefaults()
+            if db.lockCombatTimer then return false end
+            db.combatOffsetX = Clamp(RoundInt((tonumber(db.combatOffsetX) or 0) + (dx or 0)), -800, 800)
+            db.combatOffsetY = Clamp(RoundInt((tonumber(db.combatOffsetY) or 0) + (dy or 0)), -800, 800)
+            ApplyCombatTimerAnchor(db)
+            TickCombatTimer()
+            SyncGameplayPanel("MSUF_SyncCombatTimerOffsetSliders")
+            ApplyLockState()
+            CheckpointHistory("Combat timer position", "gameplay:combatTimer:position")
+            return true
+        end,
+        function(self)
+            local gd = GameplayDefaults()
+            return gd.enableCombatTimer and not gd.lockCombatTimer and self.IsShown and self:IsShown()
+        end)
+
+    combatFrame:SetScript("OnDragStart", function(self)
+        local gd = GameplayDefaults()
+        if CanAltDrag(gd, "lockCombatTimer", "combatTimerClickThrough") then
+            BeginGameplayDrag(self, "Combat timer position", "gameplay:combatTimer:position")
+        end
+    end)
+
+    combatFrame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        self._msufDragging = nil
+
+        local db = GameplayDefaults()
+        StoreCenteredOffset(self, db, "combatOffsetX", "combatOffsetY", GetCombatTimerAnchorFrame(db))
+
+        SyncGameplayPanel("MSUF_SyncCombatTimerOffsetSliders")
+
+        SelectNudgeFrame(self, true)
+        ApplyLockState()
+        CommitHistory(self)
+    end)
+
+    timerText = combatFrame:CreateFontString(nil, "OVERLAY")
+    timerText:SetPoint("CENTER")
+
+    ApplyFontToCounter()
+    timerText:SetText("")
+
+    ApplyLockState()
+
+    EnsureAltDragWatcher("_MSUF_CombatTimerModifierFrame", combatFrame, "enableCombatTimer", "lockCombatTimer", "combatTimerClickThrough")
+
+    return combatFrame
+end
+
+local MSUF_LastEnabledMeleeRangeSpellID = 0
+local MSUF_LastEnabledMeleeRangeSpellID_Override = 0
+
+local function GetOverrideSpellID(spellID)
+    if not (C_Spell and C_Spell.GetOverrideSpell) then
+        return 0
+    end
+    local overrideID = C_Spell.GetOverrideSpell(spellID)
+    if type(overrideID) == "number" and overrideID > 0 and overrideID ~= spellID then
+        return overrideID
+    end
+    return 0
+end
+
+local function SetEnabledMeleeRangeCheck(spellID)
+    if not (C_Spell and C_Spell.EnableSpellRangeCheck) then return end
+
+    spellID = tonumber(spellID) or 0
+    local overrideID = 0
+    if spellID > 0 then
+        overrideID = GetOverrideSpellID(spellID)
+    end
+
+    if spellID == MSUF_LastEnabledMeleeRangeSpellID and overrideID == MSUF_LastEnabledMeleeRangeSpellID_Override then return end
+
+    if MSUF_LastEnabledMeleeRangeSpellID_Override > 0 then C_Spell.EnableSpellRangeCheck(MSUF_LastEnabledMeleeRangeSpellID_Override, false) end
+    if MSUF_LastEnabledMeleeRangeSpellID > 0 then C_Spell.EnableSpellRangeCheck(MSUF_LastEnabledMeleeRangeSpellID, false) end
+
+    MSUF_LastEnabledMeleeRangeSpellID = spellID
+    MSUF_LastEnabledMeleeRangeSpellID_Override = overrideID
+
+    if spellID > 0 then C_Spell.EnableSpellRangeCheck(spellID, true) end
+    if overrideID > 0 then C_Spell.EnableSpellRangeCheck(overrideID, true) end
+end
+
+local function IsUnitInMeleeRange(unit, spellID)
+    spellID = tonumber(spellID) or 0
+    if spellID <= 0 then
+        return false
+    end
+    if not (C_Spell and C_Spell.IsSpellInRange) then
+        return false
+    end
+
+    local overrideID = GetOverrideSpellID(spellID)
+    if overrideID and overrideID > 0 then
+        local okOverride = C_Spell.IsSpellInRange(overrideID, unit)
+        if okOverride == true or okOverride == 1 then
+            return true
+        end
+    end
+
+    local ok = C_Spell.IsSpellInRange(spellID, unit)
+    return ok == true or ok == 1
+end
+
+local function CrosshairHasValidTarget()
+    return UnitExists and UnitExists("target")
+        and UnitCanAttack and UnitCanAttack("player", "target")
+        and UnitIsDeadOrGhost and (not UnitIsDeadOrGhost("target"))
+end
+
+local function DisableCrosshairRangeCheck()
+    if not crosshairFrame then return end
+    local lastEnabled = crosshairFrame._msufRangeCheckEnabledSpellID or 0
+    if lastEnabled > 0 then
+        SetEnabledMeleeRangeCheck(0)
+        crosshairFrame._msufRangeCheckEnabledSpellID = 0
+    end
+end
+
+local function RunCrosshairRangeRefresh()
+    MSUF._MSUF_CrosshairRangeRefreshPending = nil
+
+    if not crosshairFrame or not crosshairFrame.IsShown or (not crosshairFrame:IsShown()) then
+        DisableCrosshairRangeCheck()
+        return
+    end
+
+    UpdateCrosshairRangeColor()
+end
+
+RequestCrosshairRangeRefresh = function()
+    if MSUF._MSUF_CrosshairRangeRefreshPending then return end
+    if not crosshairFrame or not crosshairFrame:IsShown() then
+        DisableCrosshairRangeCheck()
+        return
+    end
+    MSUF._MSUF_CrosshairRangeRefreshPending = true
+    if C_Timer_After then
+        C_Timer_After(0, RunCrosshairRangeRefresh)
+    else
+        RunCrosshairRangeRefresh()
+    end
+end
+
+UpdateCrosshairRangeColor = function()
+    local f = crosshairFrame
+    if not f or not f.horiz or not f.vert or not f._msufCrosshairEnabled then return end
+
+    local spellID = f._msufRangeSpellID or 0
+    local checkingRange = f._msufUseRangeColor and spellID > 0 and CrosshairHasValidTarget()
+    local desiredInRange
+    if checkingRange then
+        local lastEnabled = f._msufRangeCheckEnabledSpellID or 0
+        if lastEnabled ~= spellID then
+            SetEnabledMeleeRangeCheck(spellID)
+            f._msufRangeCheckEnabledSpellID = spellID
+        end
+        desiredInRange = IsUnitInMeleeRange("target", spellID)
+    else
+        DisableCrosshairRangeCheck()
+    end
+
+    local desiredMode = checkingRange and spellID or 0
+    local lastMode = f._msufLastRangeMode
+    local lastInRange = f._msufLastInRange
+
+    if desiredMode ~= lastMode or (checkingRange and desiredInRange ~= lastInRange) then
+        local r, g, b = f._msufInRangeR or 0, f._msufInRangeG or 1, f._msufInRangeB or 0
+        if checkingRange and desiredInRange == false then
+            r, g, b = f._msufOutRangeR or 1, f._msufOutRangeG or 0, f._msufOutRangeB or 0
+        end
+        f.horiz:SetColorTexture(r, g, b, 0.9)
+        f.vert:SetColorTexture(r, g, b, 0.9)
+
+        f._msufLastRangeMode = desiredMode
+        f._msufLastInRange = checkingRange and desiredInRange or nil
+    end
+end
+
+local function ApplyCombatStateText(g)
+    UpdateSubRogueCache()
+    local wantState = (g.enableCombatStateText == true)
+    local wantDance = (g.enableFirstDanceTimer == true) and MSUF_IsSubRogueCached()
+
+    if wantState then
+        EnsureCombatStateText()
+    end
+
+    if wantState or wantDance then
+        BusRegister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE", CombatStateOnEvent)
+        BusRegister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_STATE", CombatStateOnEvent)
+    else
+        BusUnregister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE")
+        BusUnregister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_STATE")
+    end
+
+    if wantState then
+        SetCombatStateClickThrough(false)
+
+        if not g.lockCombatState and stateText then
+            local er, eg, eb = MSUF_GetCombatStateColors(g)
+            ShowCombatStateText("enter", TextOrDefault(g.combatStateEnterText, "+Combat"), er, eg, eb, false)
+        elseif stateText then
+            ClearCombatStateText()
+            stateFrame:Hide()
+        end
+    else
+        ClearCombatStateText()
+        SetCombatStateClickThrough(false)
+    end
+
+    if wantDance then
+        EnsureFirstDanceFrame()
+        ApplyFirstDanceFont()
+        ApplyFirstDanceDisplayMode()
+
+        if not g.lockFirstDance and danceFrame and not firstDanceActive and not firstDanceReady then
+            local iconMode = (g.firstDanceShowIcon ~= false)
+            if iconMode then
+                danceCDText:SetText("6.0")
+            else
+                danceText:SetText(string_format(L_FIRST_DANCE_FORMAT, 6.0))
+            end
+            danceFrame:Show()
+        elseif danceFrame and not firstDanceActive and not firstDanceReady then
+            danceText:SetText("")
+            danceCDText:SetText("")
+            danceFrame:Hide()
+        end
+        ApplyFirstDanceLockState()
+    else
+        StopFirstDanceTick()
+        HideFirstDanceReady()
+    end
+end
+
+local function ApplyCombatCrosshair(g)
+
+    if g.enableCombatCrosshair then
+        local frame = EnsureCombatCrosshair()
+        SyncCrosshairRangeCache(g)
+        crosshairEventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+        crosshairEventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        crosshairEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        crosshairEventFrame:RegisterEvent("PLAYER_LOGIN")
+        BusRegister("PLAYER_TARGET_CHANGED", "MSUF_CROSSHAIR", RequestCrosshairRangeRefresh)
+        if crosshairFrame._msufUseRangeColor then
+            crosshairEventFrame:RegisterEvent("SPELL_RANGE_CHECK_UPDATE")
+        else
+            crosshairEventFrame:UnregisterEvent("SPELL_RANGE_CHECK_UPDATE")
+        end
+        crosshairEventFrame:RegisterEvent("CVAR_UPDATE")
+        crosshairEventFrame:RegisterEvent("DISPLAY_SIZE_CHANGED")
+
+        frame:SetShown((UnitAffectingCombat and UnitAffectingCombat("player")) or (_G.MSUF_InCombat == true))
+        RequestCrosshairRangeRefresh()
+    else
+        if crosshairEventFrame then
+            crosshairEventFrame:UnregisterAllEvents()
+        end
+        BusUnregister("PLAYER_TARGET_CHANGED", "MSUF_CROSSHAIR")
+
+        DisableCrosshairRangeCheck()
+
+        if crosshairFrame then
+            crosshairFrame:Hide()
+        end
+    end
+end
+
+local function ApplyCombatTimer(g)
+    if g.enableCombatTimer and not combatFrame then
+        CreateCombatTimerFrame()
+    end
+
+    ApplyFontToCounter()
+    ApplyLockState()
+    if combatFrame then
+        ApplyCombatTimerAnchor(g)
+        combatFrame:SetShown(g.enableCombatTimer)
+    end
+end
+
+local function MSUF_CombatTimer_OnRegenDisabled()
+    local gd = GetGameplayDB()
+    if not gd or not gd.enableCombatTimer then return end
+    combatStartTime = GetTime()
+    lastTimerText = ""
+    TickCombatTimer()
+    _StartCombatTimerTick()
+end
+
+local function MSUF_CombatTimer_OnRegenEnabled()
+    local gd = GetGameplayDB()
+    if not gd or not gd.enableCombatTimer then return end
+    _StopCombatTimerTick()
+    combatStartTime = nil
+    lastTimerText = ""
+    TickCombatTimer()
+end
+
+local function MSUF_CombatTimer_OnEnteringWorld()
+    local gd = GetGameplayDB()
+    if not gd or not gd.enableCombatTimer then return end
+    lastTimerText = ""
+    if UnitAffectingCombat and UnitAffectingCombat("player") then
+        if not combatStartTime then
+            combatStartTime = GetTime()
+        end
+        TickCombatTimer()
+        _StartCombatTimerTick()
+    else
+        _StopCombatTimerTick()
+        combatStartTime = nil
+    end
+    TickCombatTimer()
+end
+
+local function UnregisterGameplayEventBus(timer, state)
+    if timer then
+        BusUnregister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_TIMER")
+        BusUnregister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_TIMER")
+        BusUnregister("PLAYER_ENTERING_WORLD", "MSUF_COMBAT_TIMER")
+    end
+    if state then
+        BusUnregister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_STATE")
+        BusUnregister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_STATE")
+    end
+end
+
+ApplyGameplayNow = function()
+    local g = GameplayDefaults()
+
+    ApplyCombatTimer(g)
+    ApplyCombatStateText(g)
+    ApplyCombatCrosshair(g)
+    local applyTotems = MSUF.MSUF_Gameplay_PlayerTotems_Apply
+    if applyTotems then applyTotems(g) end
+
+    UnregisterGameplayEventBus(true, false)
+    _StopCombatTimerTick()
+
+    if g.enableCombatTimer then
+        BusRegister("PLAYER_REGEN_DISABLED", "MSUF_COMBAT_TIMER", MSUF_CombatTimer_OnRegenDisabled)
+        BusRegister("PLAYER_REGEN_ENABLED", "MSUF_COMBAT_TIMER", MSUF_CombatTimer_OnRegenEnabled)
+        BusRegister("PLAYER_ENTERING_WORLD", "MSUF_COMBAT_TIMER", MSUF_CombatTimer_OnEnteringWorld)
+
+        if UnitAffectingCombat and UnitAffectingCombat("player") then
+            if not combatStartTime then
+                combatStartTime = GetTime()
+            end
+            lastTimerText = ""
+            TickCombatTimer()
+            _StartCombatTimerTick()
+        end
+    else
+        combatStartTime = nil
+        lastTimerText = ""
+    end
+end
+
+MSUF.MSUF_ApplyGameplayVisuals = ApplyGameplayNow
+
+MSUF.MSUF_GameplayShared = MSUF.MSUF_GameplayShared or {}
+do
+    local S = MSUF.MSUF_GameplayShared
+    S.EnsureGameplayDefaults = GameplayDefaults
+    S.GetPlayerSpecID = GetPlayerSpecID
+    S.Clamp = Clamp
+    S.RoundInt = RoundInt
+    S.SetupArrowNudge = SetupArrowNudge
+    S.BeginHistory = BeginHistory
+    S.CommitHistory = CommitHistory
+    S.CheckpointHistory = CheckpointHistory
+    S.SelectNudgeFrame = SelectNudgeFrame
+end
+
+do
+    local meleeCache = {}
+    MSUF.MSUF_GetCombatTimerFrame = function() return combatFrame end
+    MSUF.MSUF_Gameplay_ApplyFontToCounter = ApplyFontToCounter
+    MSUF.MSUF_Gameplay_ApplyLockState = ApplyLockState
+    MSUF.MSUF_Gameplay_ApplyCombatTimerAnchorFn = ApplyCombatTimerAnchor
+    MSUF.MSUF_Gameplay_TickCombatTimer = TickCombatTimer
+    MSUF.MSUF_GetCombatTimerAnchorFrame = GetCombatTimerAnchorFrame
+    MSUF.MSUF_SetEnabledMeleeRangeCheck = SetEnabledMeleeRangeCheck
+    MSUF.MSUF_BuildMeleeSpellCache = function() end
+    MSUF.MSUF_GetMeleeSpellCache = function() return meleeCache end
+    MSUF.MSUF_GetFirstDanceFrame = function() return danceFrame end
+    MSUF.MSUF_ApplyFirstDanceLockState = ApplyFirstDanceLockState
+    MSUF.MSUF_ApplyFirstDanceDisplayMode = ApplyFirstDanceDisplayMode
+end
+
+do
+    local _specChangeFrame = CreateFrame("Frame")
+    _specChangeFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+    _specChangeFrame:RegisterEvent("PLAYER_LOGIN")
+    _specChangeFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    _specChangeFrame:SetScript("OnEvent", function()
+        if UpdateSubRogueCache then UpdateSubRogueCache() end
+        if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
+    end)
+end
+
+do
+    local didApply = false
+
+    local function AutoApplyOnce()
+        if didApply then return end
+        didApply = true
+
+        if type(MSUF.MSUF_RequestGameplayApply) == "function" then
+            _G.MSUF_RequestGameplayApply = MSUF.MSUF_RequestGameplayApply
+        end
+        if type(GameplayDefaults) == "function" then GameplayDefaults() end
+        if UpdateSubRogueCache then UpdateSubRogueCache() end
+        if MSUF.MSUF_RequestGameplayApply then MSUF.MSUF_RequestGameplayApply() end
+    end
+
+    if C_Timer_After then
+        C_Timer_After(0, AutoApplyOnce)
+    else
+        AutoApplyOnce()
+    end
+
+    local f = CreateFrame("Frame")
+    f:RegisterEvent("PLAYER_LOGIN")
+    f:RegisterEvent("PLAYER_ENTERING_WORLD")
+    f:SetScript("OnEvent", function()
+        AutoApplyOnce()
+        f:UnregisterAllEvents()
+        f:SetScript("OnEvent", nil)
+    end)
+end
+
+local function StopGameplayModule()
+    _StopCombatTimerTick()
+    UnregisterGameplayEventBus(true, true)
+end
+
+local reg = RegisterModule or _G.MSUF_RegisterModule
+if type(reg) == "function" then
+    reg("Gameplay", {
+        order = 50,
+        IsEnabled = function() return true end,
+        Init = GameplayDefaults,
+        Enable = MSUF.MSUF_RequestGameplayApply,
+        Disable = StopGameplayModule,
+        RefreshSettings = MSUF.MSUF_RequestGameplayApply,
+        Shutdown = StopGameplayModule,
+    })
+end
