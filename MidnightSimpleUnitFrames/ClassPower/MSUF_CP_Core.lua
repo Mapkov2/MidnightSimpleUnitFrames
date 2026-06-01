@@ -602,7 +602,7 @@ end
 --- MSUF_CP_Runtime.lua
 
 --- MSUF_CP_Runtime.lua ? hot-path runtime/light-refresh handlers for the CP core
---- Loaded before Core/MSUF_ClassPower.lua and exposes lightweight runtime builders.
+--- Loaded before the ClassPower controller and exposes lightweight runtime builders.
 local builders = _G.MSUF_CP_FEATURE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
@@ -844,7 +844,7 @@ end
 --- MSUF_CP_Specials.lua
 
 --- MSUF_CP_Specials.lua ? class/resource special handlers for the CP core
---- Loaded before Core/MSUF_ClassPower.lua and exposes lightweight feature builders.
+--- Loaded before the ClassPower controller and exposes lightweight feature builders.
 local builders = _G.MSUF_CP_FEATURE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}

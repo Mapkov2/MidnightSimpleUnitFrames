@@ -1,672 +1,186 @@
--- Castbars/MSUF_CastbarEmpower.lua
--- All public functions exported to _G for cross-file resolution.
-
-local _EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
-    if not MSUF_DB and type(EnsureDB) == "function" then EnsureDB() end
-end
-local MSUF_Empower_ToPlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(v)
-    if v == nil then return nil end
-    local toPlain = _G.ToPlain
-    if type(toPlain) == "function" then
-        local pv = toPlain(v)
-        local pn = tonumber(tostring(pv))
-        if pn ~= nil then return pn end
-    end
-    local t = type(v)
-    if t == "number" or t == "string" then
-        return tonumber(tostring(v))
-    end
-    return nil
-end
-
-local function MSUF_Empower_NormalizeSeconds(v)
-    v = MSUF_Empower_ToPlainNumber(v)
-    if not v then return nil end
-    if v > 20 then
-        v = v / 1000
-    end
-    return v
-end
-
-local function MSUF_BuildEmpowerTimeline(unit)
-    local stageEnds = {}
-    local totalStage = 0
-
-    local function getStageDur(idx)
-        if type(GetUnitEmpowerStageDuration) ~= "function" then return nil end
-        local raw = GetUnitEmpowerStageDuration(unit, idx)
-        local d = MSUF_Empower_NormalizeSeconds(raw)
-        if not d or d <= 0 then return nil end
-        return d
-    end
-
-    local stageCount = nil
-    if type(GetUnitEmpowerStageCount) == "function" then
-        local c = MSUF_Empower_ToPlainNumber(GetUnitEmpowerStageCount(unit))
-        if c and c > 0 then stageCount = c end
-    end
-
-    local zeroBased = (getStageDur(0) ~= nil)
-    local base = zeroBased and 0 or 1
-
-    if stageCount then
-        for stage = 1, stageCount do
-            local idx = zeroBased and (stage - 1) or stage
-            local d = getStageDur(idx)
-            if not d then break end
-            totalStage = totalStage + d
-            stageEnds[#stageEnds + 1] = totalStage
-        end
-    else
-        for i = base, base + 9 do
-            local d = getStageDur(i)
-            if not d then break end
-            totalStage = totalStage + d
-            stageEnds[#stageEnds + 1] = totalStage
-        end
-    end
-
-    local maxHold = 0
-    if type(GetUnitEmpowerHoldAtMaxTime) == "function" then
-        local raw = GetUnitEmpowerHoldAtMaxTime(unit)
-        maxHold = MSUF_Empower_NormalizeSeconds(raw) or 0
-        if maxHold < 0 then maxHold = 0 end
-    end
-
-    local castTotal, castStartSec, castEndSec = nil, nil, nil
-    if type(UnitCastingInfo) == "function" then
-        local _, _, _, startMS, endMS = UnitCastingInfo(unit)
-        startMS = MSUF_Empower_ToPlainNumber(startMS)
-        endMS = MSUF_Empower_ToPlainNumber(endMS)
-        if startMS and endMS and endMS > startMS then
-            castStartSec = startMS / 1000
-            castEndSec   = endMS / 1000
-            castTotal    = (endMS - startMS) / 1000
-        end
-    end
-
-    local totalBase = totalStage + maxHold
-
-    if castTotal and castTotal > 0 then
-        if totalBase <= 0 then
-            totalBase = castTotal
-        else
-            if castTotal > totalBase then
-                totalBase = castTotal
-            end
-        end
-
-        if totalStage > 0 then
-            local inferredHold = castTotal - totalStage
-            if inferredHold < 0 then inferredHold = 0 end
-            if maxHold <= 0 or math.abs((maxHold or 0) - inferredHold) > 0.15 then
-                maxHold = inferredHold
-            end
-        end
-    end
-
-    if not totalBase or totalBase <= 0 then
-        totalBase = 3.0
-    end
-
-    local grace = 0
-    local totalWithGrace = totalBase
-    if totalWithGrace <= 0 then totalWithGrace = 0.01 end
-
-    return {
-        stageEnds      = stageEnds,     -- lines for each stage end (includes max stage as last entry)
-        totalStage     = totalStage,    -- end of last stage (without hold)
-        maxHold        = maxHold,       -- hold at max stage (api or inferred)
-        totalBase      = totalBase,     -- bar length (>= real cast window)
-        totalWithGrace = totalWithGrace,
-        grace          = grace,
-        castStartSec   = castStartSec,
-        castEndSec     = castEndSec,
-        castTotal      = castTotal,
-        zeroBased      = zeroBased,
-        stageCount     = stageCount,
-    }
-end
-
-local MSUF_EMPOWER_TICK_BASE_ALPHA        = 0.85  -- normal tick alpha
-local MSUF_EMPOWER_TICK_BLINK_PEAK_ALPHA  = 1.00  -- tick alpha during blink (peak)
-local MSUF_EMPOWER_TICK_BLINK_IN          = 0.06  -- seconds (fade in)
-local MSUF_EMPOWER_TICK_BLINK_OUT         = 0.14  -- seconds (fade out)
-
-local MSUF_EMPOWER_TICK_GLOW_WIDTH        = 12    -- px width of glow overlay
-local MSUF_EMPOWER_TICK_GLOW_PEAK_ALPHA   = 0.90  -- glow alpha at peak
-local MSUF_EMPOWER_TICK_FLASH_WIDTH        = 4     -- px width during flash (tick thickens)
-local MSUF_EMPOWER_TICK_FLASH_TIME_DEFAULT      = 0.14  -- default seconds the red flash stays visible
-local MSUF_EMPOWER_TICK_GLOW_COLOR        = {1.00, 0.85, 0.25} -- warm yellow
-
-local function MSUF_GetEmpowerStageBlinkTime()
-    _EnsureDBLazy()  -- P3 Fix #14: lazy guard
-    local g = MSUF_DB and MSUF_DB.general
-    local v = g and g.empowerStageBlinkTime
-    if type(v) ~= "number" then
-        v = MSUF_EMPOWER_TICK_FLASH_TIME_DEFAULT or 0.14
-    end
-    if v < 0.05 then v = 0.05 end
-    if v > 1.00 then v = 1.00 end
-    return v
-end
-
-local function MSUF_IsEmpowerStageBlinkEnabled()
-    _EnsureDBLazy()  -- P3 Fix #14: lazy guard
-    local g = MSUF_DB and MSUF_DB.general
-    return (not g) or (g.empowerStageBlink ~= false)
-end
-
-local function MSUF_EnsureEmpowerTicks(frame, count)
-    if not frame or not frame.statusBar then return end
-    frame.empowerTicks = frame.empowerTicks or {}
-
-    local h = frame.statusBar:GetHeight() or 18
-
-    for i = 1, count do
-        local tick = frame.empowerTicks[i]
-        if not tick then
-            tick = frame.statusBar:CreateTexture(nil, "OVERLAY")
-            tick:SetTexture("Interface/Buttons/WHITE8x8")
-            tick:SetVertexColor(1, 1, 1, MSUF_EMPOWER_TICK_BASE_ALPHA)
-            tick:SetWidth(2)
-            tick.MSUF_baseAlpha = MSUF_EMPOWER_TICK_BASE_ALPHA
-            tick.MSUF_baseWidth = 2
-            frame.empowerTicks[i] = tick
-        end
-
-        tick:SetHeight(h)
-        tick:Show()
-
-        if not tick.MSUF_flash then
-            local flash = frame.statusBar:CreateTexture(nil, "OVERLAY")
-            flash:SetTexture("Interface/Buttons/WHITE8x8")
-            flash:SetBlendMode("ADD")
-            flash:SetVertexColor(1.0, 0.10, 0.10, 0.0) -- start hidden
-            flash:Hide()
-            tick.MSUF_flash = flash
-
-            local g = flash:CreateAnimationGroup()
-            local a = g:CreateAnimation("Alpha")
-            a:SetFromAlpha(1.0)
-            a:SetToAlpha(0.0)
-            a:SetDuration(MSUF_GetEmpowerStageBlinkTime())
-            tick.MSUF_flashAnim = a
-            g:SetScript("OnFinished", function()
-                if flash then
-                    flash:Hide()
-                    flash:SetAlpha(0.0)
-                end
-            end)
-            tick.MSUF_flashGroup = g
-        end
-
-        if tick.MSUF_flash then
-            tick.MSUF_flash:SetHeight(h)
-        end
-
-        if tick.MSUF_glow then
-            tick.MSUF_glow:SetHeight(h)
-        end
-    end
-
-    for i = count + 1, #frame.empowerTicks do
-        local t = frame.empowerTicks[i]
-        if t then
-            t:Hide()
-            if t.MSUF_glow then t.MSUF_glow:Hide() end
-            if t.MSUF_flash then t.MSUF_flash:Hide() end
-        end
-    end
-end
-
-local MSUF_EMPOWER_STAGE_COLORS = {
-    {0.20, 0.90, 0.20, 0.18}, -- Stage 1 (green)
-    {0.95, 0.80, 0.20, 0.18}, -- Stage 2 (yellow)
-    {1.00, 0.55, 0.20, 0.18}, -- Stage 3 (orange)
-    {1.00, 0.25, 0.25, 0.18}, -- Stage 4 (red)
-}
-
-local function MSUF_EnsureEmpowerStageSegments(frame, count)
-    if not frame or not frame.statusBar then return end
-    frame.empowerSegments = frame.empowerSegments or {}
-
-    for i = 1, count do
-        local seg = frame.empowerSegments[i]
-        if not seg then
-            seg = frame.statusBar:CreateTexture(nil, "ARTWORK")
-            seg:SetColorTexture(1, 1, 1, 0.18)
-            seg:SetBlendMode("ADD")
-            frame.empowerSegments[i] = seg
-        end
-        seg:Show()
-    end
-
-    for i = count + 1, #frame.empowerSegments do
-        frame.empowerSegments[i]:Hide()
-    end
-end
-
-
-local _msufUnifiedDirectionCache = nil
-
--- Unified fill direction is a GLOBAL setting. We keep it cheap here:
--- 1) Prefer reading MSUF_DB directly (no EnsureDB spam in layout paths).
--- 2) Fall back to EnsureDB only once if we somehow run before DB exists.
-local function MSUF_GetUnifiedDirection()
-    local db = _G.MSUF_DB
-    if db and db.general ~= nil then
-        local v = (db.general.castbarUnifiedDirection and true or false)
-        _msufUnifiedDirectionCache = v
-        return v
-    end
-
-    -- If DB isn't ready yet, return cached value if we have one.
-    if _msufUnifiedDirectionCache ~= nil then
-        return _msufUnifiedDirectionCache
-    end
-
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-        db = _G.MSUF_DB
-    end
-
-    local v = (db and db.general and db.general.castbarUnifiedDirection) and true or false
-    _msufUnifiedDirectionCache = v
-    return v
-end
-
-local function MSUF_GetUnifiedFillEnabled(frame)
-    local v = MSUF_GetUnifiedDirection()
-    if frame then
-        frame.MSUF_cachedUnifiedDirection = v
-    end
-    return v
-end
-
-local _msufEmpowerColorStagesCache = nil
-
--- Empower stage coloring is a GLOBAL setting. Keep it cheap (no EnsureDB spam).
-local function MSUF_IsEmpowerColorStagesEnabled()
-    local db = _G.MSUF_DB
-    if db and db.general ~= nil then
-        local v = not (db.general.empowerColorStages == false)
-        _msufEmpowerColorStagesCache = v
-        return v
-    end
-
-    if _msufEmpowerColorStagesCache ~= nil then
-        return _msufEmpowerColorStagesCache
-    end
-
-    if type(_G.MSUF_EnsureDB) == "function" then
-        _G.MSUF_EnsureDB()
-        db = _G.MSUF_DB
-    end
-
-    local v = not (db and db.general and db.general.empowerColorStages == false)
-    _msufEmpowerColorStagesCache = v
-    return v
-end
-
-
-local function MSUF_LayoutEmpowerStageSegments(frame)
-    if not frame or not frame.isEmpower or not frame.statusBar then return end
-    if not frame.empowerStageEnds or not frame.empowerTotalWithGrace then return end
-    if not MSUF_IsEmpowerColorStagesEnabled() then
-        if frame.empowerSegments then
-            for i = 1, #frame.empowerSegments do
-                local seg = frame.empowerSegments[i]
-                if seg then seg:Hide() end
-            end
-        end
-        return
-    end
-
-    local w = frame.statusBar:GetWidth() or 0
-    if w <= 1 then
-        frame.MSUF_empowerLayoutPending = true
-        return
-    end
-
-    local total = frame.empowerTotalWithGrace
-    local stageEnds = frame.empowerStageEnds
-    local h = frame.statusBar:GetHeight() or 18
-    local reverse = (frame.statusBar.GetReverseFill and frame.statusBar:GetReverseFill()) or false
-
-    -- Tick positions must match the *visual* progression.
-    -- When unified fill direction is OFF, empower uses "remaining" (total-elapsed), so stage markers need to be mirrored.
-    local unified = MSUF_GetUnifiedFillEnabled(frame)
-    local useRemaining = not unified
-    local segCount = #stageEnds
-    local lastEnd = stageEnds[#stageEnds] or 0
-    local hasHold = (total and lastEnd and total > lastEnd + 0.001)
-    if hasHold then
-        segCount = segCount + 1
-    end
-
-    MSUF_EnsureEmpowerStageSegments(frame, segCount)
-
-    local function setSeg(i, startT, endT, color)
-        if not total or total <= 0 then return end
-        local seg = frame.empowerSegments[i]
-        if not seg then return end
-
-        local startFrac = startT / total
-        local endFrac = endT / total
-        if startFrac < 0 then startFrac = 0 elseif startFrac > 1 then startFrac = 1 end
-        if endFrac < 0 then endFrac = 0 elseif endFrac > 1 then endFrac = 1 end
-        if endFrac < startFrac then endFrac = startFrac end
-
-        local posStart = startFrac
-        local posEnd = endFrac
-        if useRemaining then
-            -- Mirror the timeline so stage blocks align with a draining empower bar (remaining value).
-            posStart = 1 - endFrac
-            posEnd = 1 - startFrac
-            if posStart < 0 then posStart = 0 elseif posStart > 1 then posStart = 1 end
-            if posEnd < 0 then posEnd = 0 elseif posEnd > 1 then posEnd = 1 end
-            if posEnd < posStart then posEnd = posStart end
-        end
-
-        local x0 = w * posStart
-        local x1 = w * posEnd
-        local segW = x1 - x0
-        if segW < 0 then segW = 0 end
-
-        local r,g,b,a = 1,1,1,0.18
-        if color then r,g,b,a = color[1],color[2],color[3],color[4] end
-        seg:SetColorTexture(r,g,b,a)
-        seg:SetHeight(h)
-
-        seg:ClearAllPoints()
-        if reverse then
-            seg:SetPoint("TOPRIGHT", frame.statusBar, "TOPRIGHT", -x0, 0)
-            seg:SetPoint("BOTTOMRIGHT", frame.statusBar, "BOTTOMRIGHT", -x0, 0)
-            seg:SetWidth(segW)
-        else
-            seg:SetPoint("TOPLEFT", frame.statusBar, "TOPLEFT", x0, 0)
-            seg:SetPoint("BOTTOMLEFT", frame.statusBar, "BOTTOMLEFT", x0, 0)
-            seg:SetWidth(segW)
-        end
-    end
-
-    local prev = 0
-    for i = 1, #stageEnds do
-        local endT = stageEnds[i] or prev
-        local col = MSUF_EMPOWER_STAGE_COLORS[i] or MSUF_EMPOWER_STAGE_COLORS[#MSUF_EMPOWER_STAGE_COLORS]
-        setSeg(i, prev, endT, col)
-        prev = endT
-    end
-
-    if hasHold then
-        setSeg(#stageEnds + 1, prev, total, {1,1,1,0.10})
-    end
-
-    frame.MSUF_empowerLayoutPending = false
-end
-
-local function MSUF_BlinkEmpowerTick(frame, idx)
-    if not frame or not frame.empowerTicks then return end
-    local tick = frame.empowerTicks[idx]
-    if not tick then return end
-
-    local flash = tick.MSUF_flash
-    local g = tick.MSUF_flashGroup
-
-    local baseAlpha = tick.MSUF_baseAlpha or MSUF_EMPOWER_TICK_BASE_ALPHA or 0.85
-    local baseW = tick.MSUF_baseWidth or 2
-    tick.MSUF_baseWidth = baseW
-
-    tick.MSUF_blinkToken = (tick.MSUF_blinkToken or 0) + 1
-    local token = tick.MSUF_blinkToken
-
-    if flash then
-        flash:SetVertexColor(1.0, 0.10, 0.10, 1.0)
-        flash:SetAlpha(1.0)
-        flash:Show()
-        if g then
-            if tick.MSUF_flashAnim then
-                tick.MSUF_flashAnim:SetDuration(MSUF_GetEmpowerStageBlinkTime())
-            end
-            g:Stop()
-            g:Play()
-        end
-    end
-
-    if tick.SetWidth then tick:SetWidth(MSUF_EMPOWER_TICK_FLASH_WIDTH or 4) end
-    if tick.SetVertexColor then
-        tick:SetVertexColor(1.0, 0.10, 0.10, 1.0)
-    elseif tick.SetColorTexture then
-        tick:SetColorTexture(1.0, 0.10, 0.10, 1.0)
-    end
-
-    if C_Timer and C_Timer.After then
-        local _dur = MSUF_GetEmpowerStageBlinkTime()
-        C_Timer.After(_dur, function()
-            if not tick or token ~= tick.MSUF_blinkToken then return end
-            if tick.SetWidth then tick:SetWidth(baseW) end
-            if tick.SetVertexColor then
-                tick:SetVertexColor(1.0, 1.0, 1.0, baseAlpha)
-            elseif tick.SetColorTexture then
-                tick:SetColorTexture(1.0, 1.0, 1.0, baseAlpha)
-            elseif tick.SetAlpha then
-                tick:SetAlpha(baseAlpha)
-            end
-        end)
-    end
-end
-
-
-local function MSUF_LayoutEmpowerTicks(frame)
-    if not frame or not frame.isEmpower or not frame.statusBar then return end
-    if not frame.empowerStageEnds or not frame.empowerTotalWithGrace then return end
-
-    local w = frame.statusBar:GetWidth() or 0
-    if w <= 1 then
-        frame.MSUF_empowerLayoutPending = true
-        return
-    end
-
-    local total = frame.empowerTotalWithGrace
-    local stageEnds = frame.empowerStageEnds
-    local reverse = (frame.statusBar.GetReverseFill and frame.statusBar:GetReverseFill()) or false
-
-    -- Tick positions must match the *visual* progression.
-    -- When unified fill direction is OFF, empower uses "remaining" (total-elapsed), so stage markers need to be mirrored.
-    local unified = MSUF_GetUnifiedFillEnabled(frame)
-    local useRemaining = not unified
-
-    MSUF_LayoutEmpowerStageSegments(frame)
-
-    MSUF_EnsureEmpowerTicks(frame, #stageEnds)
-
-    for i = 1, #stageEnds do
-        local tEnd = stageEnds[i]
-        local frac = tEnd / total
-        if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-        local posFrac = frac
-        local x = w * posFrac
-
-        local tick = frame.empowerTicks[i]
-        tick:ClearAllPoints()
-        if reverse then
-            tick:SetPoint("CENTER", frame.statusBar, "RIGHT", -x, 0)
-        else
-            tick:SetPoint("CENTER", frame.statusBar, "LEFT", x, 0)
-        end
-
-        local glow = tick.MSUF_glow
-        if glow then
-            glow:ClearAllPoints()
-            glow:SetPoint("CENTER", tick, "CENTER", 0, 0)
-            glow:SetWidth(MSUF_EMPOWER_TICK_GLOW_WIDTH or 12)
-            glow:SetHeight(frame.statusBar:GetHeight() or 18)
-        end
-
-        local flash = tick.MSUF_flash
-        if flash then
-            flash:ClearAllPoints()
-            flash:SetPoint("CENTER", tick, "CENTER", 0, 0)
-            local fw = (MSUF_EMPOWER_TICK_FLASH_WIDTH or 4) * 3
-            if fw < 10 then fw = 10 end
-            flash:SetWidth(fw)
-            flash:SetHeight(frame.statusBar:GetHeight() or 18)
-        end
-    end
-
-    frame.MSUF_empowerLayoutPending = false
-end
-
-
-local function MSUF_PlayerCastbar_EmpowerStart(self, spellID)
-    if not self or not self.statusBar then
-        return
-    end
-
-    self.isEmpower = true
-    self.interruptFeedbackEndTime = nil
-    if self.latencyBar then self.latencyBar:Hide() end
-
-    local name, text, texture = UnitCastingInfo("player")
-    if not name then
-        name, text, texture = UnitChannelInfo("player")
-    end
-    if self.icon and texture then
-        self.icon:SetTexture(texture)
-    end
-    if self.castText then
-        MSUF_SetTextIfChanged(self.castText, name or "")
-    end
-
-    local tl = MSUF_BuildEmpowerTimeline("player")
-    local now = ((GetTimePreciseSec and GetTimePreciseSec()) or GetTime())
-    self.empowerStartTime     = tl.castStartSec or now
-    self.empowerStageEnds     = tl.stageEnds
-    self.empowerTotalBase     = tl.totalBase
-    self.empowerTotalWithGrace= tl.totalWithGrace
-    self.empowerNextStage     = 1
-
-    -- Quick Win #3: Pre-cache plain numbers so the per-tick update path never calls ToPlain().
-    -- MSUF_BuildEmpowerTimeline already returns plain Lua numbers, but we tonumber() for safety.
-    self._msufEmpowerStartNum    = MSUF_Empower_ToPlainNumber(self.empowerStartTime) or now
-    self._msufEmpowerTotalNum    = MSUF_Empower_ToPlainNumber(self.empowerTotalWithGrace) or 0
-    self._msufEmpowerBaseNum     = MSUF_Empower_ToPlainNumber(self.empowerTotalBase) or self._msufEmpowerTotalNum
-    if tl.stageEnds then
-        local nums = {}
-        for i = 1, #tl.stageEnds do
-            nums[i] = MSUF_Empower_ToPlainNumber(tl.stageEnds[i])
-        end
-        self._msufEmpowerStageEndsNum = nums
-    else
-        self._msufEmpowerStageEndsNum = nil
-    end
-    local rf = _G.MSUF_GetReverseFillSafe(self, true)
-    local empDObj = nil
-    if type(UnitCastingDuration) == "function" then
-        empDObj = UnitCastingDuration("player")
-    end
-    _G.MSUF_ApplyTimerAndFill(self.statusBar, empDObj, rf, false)
-
-    self.statusBar:SetMinMaxValues(0, self.empowerTotalWithGrace)
-    local elapsed0 = now - (self.empowerStartTime or now)
-    if elapsed0 < 0 then elapsed0 = 0 end
-    if elapsed0 > self.empowerTotalWithGrace then elapsed0 = self.empowerTotalWithGrace end
-    self.statusBar:SetValue(elapsed0)
-
-    self.MSUF_empowerLayoutPending = false
-    MSUF_LayoutEmpowerTicks(self)
-
-    if not self.MSUF_empowerSizeHooked and self.statusBar and self.statusBar.HookScript then
-        self.MSUF_empowerSizeHooked = true
-        self.statusBar:HookScript("OnSizeChanged", function()
-            if self.isEmpower and self.MSUF_empowerLayoutPending then
-                MSUF_LayoutEmpowerTicks(self)
-            end
-        end)
-    end
-
-    self:SetScript("OnUpdate", nil)
-    if type(_G.MSUF_EnsureCastbarManager) == "function" then _G.MSUF_EnsureCastbarManager() end
-    if type(_G.MSUF_RegisterCastbar) == "function" then _G.MSUF_RegisterCastbar(self) end
-    if type(_G.MSUF_UpdateCastbarFrame) == "function" then _G.MSUF_UpdateCastbarFrame(self, 0) end
-
-    local _UpdateColor = _G.MSUF_PlayerCastbar_UpdateColorForInterruptible
-    if type(_UpdateColor) == "function" then _UpdateColor(self) end
-    self:Show()
-end
-
-
--- Clear empower state + visuals (called on STOP/SUCCEEDED/FAILED/INTERRUPTED).
--- Keep it small and safe: we only hide our textures and unregister from the CastbarManager.
-local function MSUF_PlayerCastbar_ClearEmpower(self, hideNow)
-    if not self then return end
-
-    self.isEmpower = nil
-    self.empowerStartTime = nil
-    self.empowerStageEnds = nil
-    self.empowerTotalBase = nil
-    self.empowerTotalWithGrace = nil
-    self.empowerNextStage = nil
-
-    -- Cached plain numbers (avoid stale data + secret-safe).
-    self._msufEmpowerStartNum = nil
-    self._msufEmpowerTotalNum = nil
-    self._msufEmpowerBaseNum = nil
-    self._msufEmpowerStageEndsNum = nil
-
-    self.MSUF_empowerLayoutPending = false
-
-    if self.empowerTicks then
-        for i = 1, #self.empowerTicks do
-            local t = self.empowerTicks[i]
-            if t then
-                if t.Hide then t:Hide() end
-                if t.MSUF_glow and t.MSUF_glow.Hide then t.MSUF_glow:Hide() end
-                if t.MSUF_flash and t.MSUF_flash.Hide then t.MSUF_flash:Hide() end
-            end
-        end
-    end
-
-    if self.empowerSegments then
-        for i = 1, #self.empowerSegments do
-            local seg = self.empowerSegments[i]
-            if seg and seg.Hide then seg:Hide() end
-        end
-    end
-
-    if hideNow then
-        if self.SetScript then self:SetScript("OnUpdate", nil) end
-        if type(_G.MSUF_UnregisterCastbar) == "function" then _G.MSUF_UnregisterCastbar(self) end
-        if self.timeText then
-            MSUF_SetTextIfChanged(self.timeText, "")
-        end
-        if self.latencyBar and self.latencyBar.Hide then
-            self.latencyBar:Hide()
-        end
-        if self.Hide then
-            self:Hide()
-        end
-    end
-end
-
-
-
--------------------------------------------------------------------------------
-
----------------------------------------------------------------------------
--- _G exports
----------------------------------------------------------------------------
-_G.MSUF_BuildEmpowerTimeline           = MSUF_BuildEmpowerTimeline
-_G.MSUF_BlinkEmpowerTick               = MSUF_BlinkEmpowerTick
-_G.MSUF_LayoutEmpowerTicks             = MSUF_LayoutEmpowerTicks
-_G.MSUF_EnsureEmpowerTicks             = MSUF_EnsureEmpowerTicks
-_G.MSUF_EnsureEmpowerStageSegments     = MSUF_EnsureEmpowerStageSegments
-_G.MSUF_LayoutEmpowerStageSegments     = MSUF_LayoutEmpowerStageSegments
-_G.MSUF_GetUnifiedDirection            = MSUF_GetUnifiedDirection
-_G.MSUF_GetUnifiedFillEnabled          = MSUF_GetUnifiedFillEnabled
-_G.MSUF_IsEmpowerColorStagesEnabled    = MSUF_IsEmpowerColorStagesEnabled
-_G.MSUF_GetEmpowerStageBlinkTime       = MSUF_GetEmpowerStageBlinkTime
-_G.MSUF_IsEmpowerStageBlinkEnabled     = MSUF_IsEmpowerStageBlinkEnabled
-_G.MSUF_PlayerCastbar_EmpowerStart     = MSUF_PlayerCastbar_EmpowerStart
-_G.MSUF_PlayerCastbar_ClearEmpower     = MSUF_PlayerCastbar_ClearEmpower
+local s=_G.MSUF_EnsureDBLazy or function()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end
+end local r=_G.MSUF_CastbarRuntime_PlainNumber or function(e)if e==nil then return nil end local t=_G.ToPlain
+if type(t)=="function"then local e=t(e)local e=tonumber(tostring(e))if e~=nil then return e end
+end local t=type(e)if t=="number"or t=="string"then return tonumber(tostring(e))end return nil
+end local function d(e)e=r(e)if not e then return nil end
+if e>20 then e=e/1000
+end return e
+end local function h(t)local a={}local e=0
+local function n(e)if type(GetUnitEmpowerStageDuration)~="function"then return nil end
+local e=GetUnitEmpowerStageDuration(t,e)local e=d(e)if not e or e<=0 then return nil end return e
+end local l=nil
+if type(GetUnitEmpowerStageCount)=="function"then local e=r(GetUnitEmpowerStageCount(t))if e and e>0 then l=e end end
+local i=(n(0)~=nil)local o=i and 0 or 1
+if l then for t=1,l do
+local t=i and(t-1)or t local t=n(t)if not t then break end e=e+t
+a[#a+1]=e end
+else for t=o,o+9 do
+local t=n(t)if not t then break end
+e=e+t a[#a+1]=e
+end end
+local n=0 if type(GetUnitEmpowerHoldAtMaxTime)=="function"then
+local e=GetUnitEmpowerHoldAtMaxTime(t)n=d(e)or 0
+if n<0 then n=0 end end
+local o,d,s=nil,nil,nil if type(UnitCastingInfo)=="function"then
+local n,n,n,t,e=UnitCastingInfo(t)t=r(t)e=r(e)if t and e and e>t then
+d=t/1000 s=e/1000
+o=(e-t)/1000 end
+end local t=e+n
+if o and o>0 then if t<=0 then
+t=o else
+if o>t then t=o
+end end
+if e>0 then local e=o-e
+if e<0 then e=0 end if n<=0 or math.abs((n or 0)-e)>0.15 then
+n=e end
+end end
+if not t or t<=0 then t=3.0
+end local c=0
+local r=t if r<=0 then r=0.01 end
+return{stageEnds=a,totalStage=e,maxHold=n,totalBase=t,totalWithGrace=r,grace=c,castStartSec=d,castEndSec=s,castTotal=o,zeroBased=i,stageCount=l,}end
+local f=0.85 local e=1.00
+local e=0.06 local e=0.14
+local T=12 local e=0.90
+local p=4 local t=0.14
+local e={1.00,0.85,0.25}local function d()s()local e=MSUF_DB and MSUF_DB.general
+local e=e and e.empowerStageBlinkTime if type(e)~="number"then
+e=t or 0.14 end
+if e<0.05 then e=0.05 end if e>1.00 then e=1.00 end
+return e end
+local function w()s()local e=MSUF_DB and MSUF_DB.general return(not e)or(e.empowerStageBlink~=false)end local function u(t,l)if not t or not t.statusBar then return end t.empowerTicks=t.empowerTicks or{}local a=t.statusBar:GetHeight()or 18 for n=1,l do
+local e=t.empowerTicks[n]if not e then
+e=t.statusBar:CreateTexture(nil,"OVERLAY")e:SetTexture("Interface/Buttons/WHITE8x8")e:SetVertexColor(1,1,1,f)e:SetWidth(2)e.MSUF_baseAlpha=f e.MSUF_baseWidth=2
+t.empowerTicks[n]=e end
+e:SetHeight(a)e:Show()if not e.MSUF_flash then local t=t.statusBar:CreateTexture(nil,"OVERLAY")t:SetTexture("Interface/Buttons/WHITE8x8")t:SetBlendMode("ADD")t:SetVertexColor(1.0,0.10,0.10,0.0)t:Hide()e.MSUF_flash=t local o=t:CreateAnimationGroup()local n=o:CreateAnimation("Alpha")n:SetFromAlpha(1.0)n:SetToAlpha(0.0)n:SetDuration(d())e.MSUF_flashAnim=n o:SetScript("OnFinished",function()if t then t:Hide()t:SetAlpha(0.0)end
+end)e.MSUF_flashGroup=o
+end if e.MSUF_flash then
+e.MSUF_flash:SetHeight(a)end
+if e.MSUF_glow then e.MSUF_glow:SetHeight(a)end end
+for e=l+1,#t.empowerTicks do local e=t.empowerTicks[e]if e then e:Hide()if e.MSUF_glow then e.MSUF_glow:Hide()end if e.MSUF_flash then e.MSUF_flash:Hide()end
+end end
+end local s={{0.20,0.90,0.20,0.18},{0.95,0.80,0.20,0.18},{1.00,0.55,0.20,0.18},{1.00,0.25,0.25,0.18},}local function S(e,o)if not e or not e.statusBar then return end e.empowerSegments=e.empowerSegments or{}for n=1,o do local t=e.empowerSegments[n]if not t then t=e.statusBar:CreateTexture(nil,"ARTWORK")t:SetColorTexture(1,1,1,0.18)t:SetBlendMode("ADD")e.empowerSegments[n]=t end
+t:Show()end
+for t=o+1,#e.empowerSegments do e.empowerSegments[t]:Hide()end end
+local t=nil local function m()local e=_G.MSUF_DB if e and e.general~=nil then
+local e=(e.general.castbarUnifiedDirection and true or false)t=e
+return e end
+if t~=nil then return t
+end if type(_G.MSUF_EnsureDB)=="function"then
+_G.MSUF_EnsureDB()e=_G.MSUF_DB
+end local e=(e and e.general and e.general.castbarUnifiedDirection)and true or false
+t=e return e
+end local function c(e)local t=m()if e then
+e.MSUF_cachedUnifiedDirection=t end
+return t end
+local t=nil local function U()local e=_G.MSUF_DB if e and e.general~=nil then
+local e=not(e.general.empowerColorStages==false)t=e
+return e end
+if t~=nil then return t
+end if type(_G.MSUF_EnsureDB)=="function"then
+_G.MSUF_EnsureDB()e=_G.MSUF_DB
+end local e=not(e and e.general and e.general.empowerColorStages==false)t=e return e
+end local function _(e)if not e or not e.isEmpower or not e.statusBar then return end if not e.empowerStageEnds or not e.empowerTotalWithGrace then return end
+if not U()then if e.empowerSegments then
+for t=1,#e.empowerSegments do local e=e.empowerSegments[t]if e then e:Hide()end end
+end return
+end local d=e.statusBar:GetWidth()or 0
+if d<=1 then e.MSUF_empowerLayoutPending=true
+return end
+local r=e.empowerTotalWithGrace local i=e.empowerStageEnds
+local u=e.statusBar:GetHeight()or 18 local m=(e.statusBar.GetReverseFill and e.statusBar:GetReverseFill())or false
+local t=c(e)local h=not t
+local t=#i local n=i[#i]or 0
+local c=(r and n and r>n+0.001)if c then
+t=t+1 end
+S(e,t)local function f(t,o,n,i)if not r or r<=0 then return end local t=e.empowerSegments[t]if not t then return end local l=o/r
+local n=n/r if l<0 then l=0 elseif l>1 then l=1 end
+if n<0 then n=0 elseif n>1 then n=1 end if n<l then n=l end
+local a=l local o=n
+if h then a=1-n
+o=1-l if a<0 then a=0 elseif a>1 then a=1 end
+if o<0 then o=0 elseif o>1 then o=1 end if o<a then o=a end
+end local n=d*a
+local o=d*o local o=o-n
+if o<0 then o=0 end local l,d,r,a=1,1,1,0.18
+if i then l,d,r,a=i[1],i[2],i[3],i[4]end t:SetColorTexture(l,d,r,a)t:SetHeight(u)t:ClearAllPoints()if m then t:SetPoint("TOPRIGHT",e.statusBar,"TOPRIGHT",-n,0)t:SetPoint("BOTTOMRIGHT",e.statusBar,"BOTTOMRIGHT",-n,0)t:SetWidth(o)else t:SetPoint("TOPLEFT",e.statusBar,"TOPLEFT",n,0)t:SetPoint("BOTTOMLEFT",e.statusBar,"BOTTOMLEFT",n,0)t:SetWidth(o)end end
+local t=0 for e=1,#i do
+local n=i[e]or t local o=s[e]or s[#s]f(e,t,n,o)t=n
+end if c then
+f(#i+1,t,r,{1,1,1,0.10})end
+e.MSUF_empowerLayoutPending=false end
+local function i(e,t)if not e or not e.empowerTicks then return end
+local e=e.empowerTicks[t]if not e then return end
+local t=e.MSUF_flash local o=e.MSUF_flashGroup
+local n=e.MSUF_baseAlpha or f or 0.85 local a=e.MSUF_baseWidth or 2
+e.MSUF_baseWidth=a e.MSUF_blinkToken=(e.MSUF_blinkToken or 0)+1
+local l=e.MSUF_blinkToken if t then
+t:SetVertexColor(1.0,0.10,0.10,1.0)t:SetAlpha(1.0)t:Show()if o then
+if e.MSUF_flashAnim then e.MSUF_flashAnim:SetDuration(d())end o:Stop()o:Play()end
+end if e.SetWidth then e:SetWidth(p or 4)end
+if e.SetVertexColor then e:SetVertexColor(1.0,0.10,0.10,1.0)elseif e.SetColorTexture then e:SetColorTexture(1.0,0.10,0.10,1.0)end if C_Timer and C_Timer.After then
+local t=d()C_Timer.After(t,function()if not e or l~=e.MSUF_blinkToken then return end if e.SetWidth then e:SetWidth(a)end
+if e.SetVertexColor then e:SetVertexColor(1.0,1.0,1.0,n)elseif e.SetColorTexture then e:SetColorTexture(1.0,1.0,1.0,n)elseif e.SetAlpha then e:SetAlpha(n)end end)end end
+local function o(e)if not e or not e.isEmpower or not e.statusBar then return end
+if not e.empowerStageEnds or not e.empowerTotalWithGrace then return end local n=e.statusBar:GetWidth()or 0
+if n<=1 then e.MSUF_empowerLayoutPending=true
+return end
+local l=e.empowerTotalWithGrace local t=e.empowerStageEnds
+local a=(e.statusBar.GetReverseFill and e.statusBar:GetReverseFill())or false local o=c(e)local o=not o _(e)u(e,#t)for o=1,#t do
+local t=t[o]local t=t/l
+if t<0 then t=0 elseif t>1 then t=1 end local t=t
+local n=n*t local t=e.empowerTicks[o]t:ClearAllPoints()if a then
+t:SetPoint("CENTER",e.statusBar,"RIGHT",-n,0)else
+t:SetPoint("CENTER",e.statusBar,"LEFT",n,0)end
+local n=t.MSUF_glow if n then
+n:ClearAllPoints()n:SetPoint("CENTER",t,"CENTER",0,0)n:SetWidth(T or 12)n:SetHeight(e.statusBar:GetHeight()or 18)end local n=t.MSUF_flash
+if n then n:ClearAllPoints()n:SetPoint("CENTER",t,"CENTER",0,0)local t=(p or 4)*3
+if t<10 then t=10 end n:SetWidth(t)n:SetHeight(e.statusBar:GetHeight()or 18)end
+end e.MSUF_empowerLayoutPending=false
+end local function a(e,t)if not e or not e.statusBar then return
+end e.isEmpower=true
+e.interruptFeedbackEndTime=nil if e.latencyBar then e.latencyBar:Hide()end
+local n,a,t=UnitCastingInfo("player")if not n then
+n,a,t=UnitChannelInfo("player")end
+if e.icon and t then e.icon:SetTexture(t)end if e.castText then
+MSUF_SetTextIfChanged(e.castText,n or"")end
+local t=h("player")local n=((GetTimePreciseSec and GetTimePreciseSec())or GetTime())e.empowerStartTime=t.castStartSec or n e.empowerStageEnds=t.stageEnds
+e.empowerTotalBase=t.totalBase e.empowerTotalWithGrace=t.totalWithGrace
+e.empowerNextStage=1 e._msufEmpowerStartNum=r(e.empowerStartTime)or n
+e._msufEmpowerTotalNum=r(e.empowerTotalWithGrace)or 0 e._msufEmpowerBaseNum=r(e.empowerTotalBase)or e._msufEmpowerTotalNum
+if t.stageEnds then local o={}for n=1,#t.stageEnds do o[n]=r(t.stageEnds[n])end e._msufEmpowerStageEndsNum=o
+else e._msufEmpowerStageEndsNum=nil
+end local a=_G.MSUF_GetReverseFillSafe(e,true)local t=nil if type(UnitCastingDuration)=="function"then
+t=UnitCastingDuration("player")end
+_G.MSUF_ApplyTimerAndFill(e.statusBar,t,a,false)e.statusBar:SetMinMaxValues(0,e.empowerTotalWithGrace)local t=n-(e.empowerStartTime or n)if t<0 then t=0 end
+if t>e.empowerTotalWithGrace then t=e.empowerTotalWithGrace end e.statusBar:SetValue(t)e.MSUF_empowerLayoutPending=false o(e)if not e.MSUF_empowerSizeHooked and e.statusBar and e.statusBar.HookScript then e.MSUF_empowerSizeHooked=true
+e.statusBar:HookScript("OnSizeChanged",function()if e.isEmpower and e.MSUF_empowerLayoutPending then
+o(e)end
+end)end
+e:SetScript("OnUpdate",nil)if type(_G.MSUF_EnsureCastbarManager)=="function"then _G.MSUF_EnsureCastbarManager()end
+if type(_G.MSUF_RegisterCastbar)=="function"then _G.MSUF_RegisterCastbar(e)end if type(_G.MSUF_UpdateCastbarFrame)=="function"then _G.MSUF_UpdateCastbarFrame(e,0)end
+local t=_G.MSUF_PlayerCastbar_UpdateColorForInterruptible if type(t)=="function"then t(e)end
+e:Show()end
+local function n(e,t)if not e then return end
+e.isEmpower=nil e.empowerStartTime=nil
+e.empowerStageEnds=nil e.empowerTotalBase=nil
+e.empowerTotalWithGrace=nil e.empowerNextStage=nil
+e._msufEmpowerStartNum=nil e._msufEmpowerTotalNum=nil
+e._msufEmpowerBaseNum=nil e._msufEmpowerStageEndsNum=nil
+e.MSUF_empowerLayoutPending=false if e.empowerTicks then
+for t=1,#e.empowerTicks do local e=e.empowerTicks[t]if e then if e.Hide then e:Hide()end
+if e.MSUF_glow and e.MSUF_glow.Hide then e.MSUF_glow:Hide()end if e.MSUF_flash and e.MSUF_flash.Hide then e.MSUF_flash:Hide()end
+end end
+end if e.empowerSegments then
+for t=1,#e.empowerSegments do local e=e.empowerSegments[t]if e and e.Hide then e:Hide()end end
+end if t then
+if e.SetScript then e:SetScript("OnUpdate",nil)end if type(_G.MSUF_UnregisterCastbar)=="function"then _G.MSUF_UnregisterCastbar(e)end
+if e.timeText then MSUF_SetTextIfChanged(e.timeText,"")end if e.latencyBar and e.latencyBar.Hide then
+e.latencyBar:Hide()end
+if e.Hide then e:Hide()end end
+end _G.MSUF_BuildEmpowerTimeline=h
+_G.MSUF_BlinkEmpowerTick=i _G.MSUF_LayoutEmpowerTicks=o
+_G.MSUF_EnsureEmpowerTicks=u _G.MSUF_EnsureEmpowerStageSegments=S
+_G.MSUF_LayoutEmpowerStageSegments=_ _G.MSUF_GetUnifiedDirection=m
+_G.MSUF_GetUnifiedFillEnabled=c _G.MSUF_IsEmpowerColorStagesEnabled=U
+_G.MSUF_GetEmpowerStageBlinkTime=d _G.MSUF_IsEmpowerStageBlinkEnabled=w
+_G.MSUF_PlayerCastbar_EmpowerStart=a _G.MSUF_PlayerCastbar_ClearEmpower=n
