@@ -71,16 +71,16 @@
 - Added smoother dropdown fade behavior and fixed close-state flicker from the global dropdown focus handling.
 - Added a shared motion layer for short, purposeful transitions: dropdown fade, accordion open/close, popup fade/scale, control hover, and command feedback.
 - Added Menu2 header inline feedback for commands, avoiding unnecessary chat spam and interruptive popups.
-- Added inline feedback for page reset, group reset, copy actions, copy category selection, profile export/import, edit-mode toggles, layout preset changes, undo, redo, session reset, and combat-locked actions.
+- Added inline feedback for page reset, group reset, copy actions, copy category selection, profile export/import, edit-mode toggles, layout changes, undo, redo, session reset, and combat-locked actions.
 - Added command failure feedback for captured Menu2 actions.
 - Added safer menu-state migration so old auto-opened text sections from earlier Edit Mode focus requests do not keep reopening.
 
 ### Progressive Disclosure
 - Reworked large Unit Frame and Group Frame sections so common controls appear first and advanced geometry or detail controls stay behind collapsible sections.
 - Reduced closed-section clutter by hiding most badges unless the section is open or the badge is decision-critical.
-- Reworked Group Frame layout setup around intent-first presets: `5-Player`, `Raid Grid`, and `Compact Raid`.
-- Moved Group Frame layout intent into the top scope bar and removed the redundant extra Layout Intent section.
-- Renamed advanced layout details to Geometry so users choose the intent first and tune exact size/spacing only when needed.
+- Reworked Group Frame layout setup around direct geometry controls.
+- Removed the redundant extra Layout Intent section.
+- Renamed advanced layout details to Geometry so users can tune exact size/spacing when needed.
 - Kept status summaries near active/open sections instead of showing every setting as a permanent pill.
 
 ### Menu2 Preview And Direct Manipulation
@@ -105,12 +105,12 @@
 - Stabilized the Edit Mode inspector so it no longer jumps around while the user is working.
 
 ### Group Frame Menu And Preview
-- Reworked Group Frame top controls to reduce redundancy between scope selection, layout intent, and geometry details.
+- Reworked Group Frame top controls to reduce redundancy between scope selection and geometry details.
 - Added clearer scope switching feedback for Party, Raid, and Mythic Raid without adding explanatory tooltips.
 - Improved Group Frame preview/dummy anchoring so preview blocks match live frame positioning more closely.
 - Fixed raid-frame anchor positioning issues where the raid dummy preview could align differently from the live frame anchor.
 - Added preview/live parity work for raid and party layouts, including correct behavior while already inside a real raid group.
-- Kept group-frame layout presets separate from advanced geometry so users can choose a desired result first and tune details later.
+- Kept group-frame geometry in its own section so size, spacing, growth, and columns stay easy to tune.
 - Cleaned closed Group Frame section headers so they show title and important state only, reducing badge clutter.
 
 ### Unit Frame Menu
