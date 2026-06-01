@@ -149,9 +149,12 @@ local t=t if t<=0 then t=0.001 end
 e.statusBar:SetMinMaxValues(0,t)if r then
 e.statusBar:SetValue(n)else
 e.statusBar:SetValue(t-n)end
-end local function B(e)if e==nil then return false end local t=_G.ToPlain
-if type(t)=="function"then local n=t(e)if n~=nil then e=n end end
-local n=_G.issecretvalue if type(n)=="function"and n(e)==true then return false end
+end local function B(e)local n=_G.issecretvalue if type(n)=="function"and n(e)==true then
+local t=_G.ToPlain if type(t)~="function"then return false end
+local r=t(e)if type(n)=="function"and n(r)==true then return false end
+e=r
+end
+if e==nil then return false end
 return e==true
 end local function _(e,c,_,s,T,h,d,u,C,f,a,n,t)local r=(_=="CHANNEL")e.interruptFeedbackEndTime=nil
 e.interrupted=nil e.MSUF_castActive=true

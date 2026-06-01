@@ -61,6 +61,10 @@ local function f(r,n,o,t)if not(e and e.edges)then return end
 t=t or 1
 for i=1,#e.edges do e.edges[i]:SetVertexColor(r,n,o,t)end
 end
+local function g(e)local n=_G.issecretvalue
+if type(n)=="function"and n(e)==true then return true end
+return e~=nil
+end
 local function h(n,t)if not e then return end
 if type(_G.MSUF_KickReady_Init)=="function"then _G.MSUF_KickReady_Init()end
 if e.icon and e.icon.SetDesaturated then e.icon:SetDesaturated(n==true)end
@@ -68,7 +72,7 @@ if n==true then f(0.6,0.6,0.6,1);return end
 local e
 if type(_G.MSUF_KickReady_IsReady)=="function"and type(_G.MSUF_KickReady_EvaluateColor)=="function"then
 e=_G.MSUF_KickReady_EvaluateColor(_G.MSUF_KickReady_IsReady())end
-if t~=nil and e and _G.CreateColor and _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorFromBoolean then
+if g(t)and e and _G.CreateColor and _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorFromBoolean then
 e=_G.C_CurveUtil.EvaluateColorFromBoolean(t,_G.CreateColor(0.6,0.6,0.6,1),e)end
 if e and e.GetRGBA then f(e:GetRGBA())else f(1,0.2,0.2,1)end
 end

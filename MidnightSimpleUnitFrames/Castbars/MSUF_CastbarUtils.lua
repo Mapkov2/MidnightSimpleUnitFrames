@@ -29,11 +29,15 @@ function _G.MSUF_SetStatusBarColorIfChanged(a,n,e,t,r)m(a,n,e,t,r)end end
 local p={r=nil,g=nil,b=nil,a=nil,obj=nil}local F={r=nil,g=nil,b=nil,a=nil,obj=nil}local function h(e,t,r,a,n)if e.r==t and e.g==r and e.b==a and e.a==n and e.obj then
 return e.obj end
 e.r,e.g,e.b,e.a=t,r,a,n e.obj=CreateColor(t,r,a,n)return e.obj end
+local function v(e)local n=_G.issecretvalue
+if type(n)=="function"and n(e)==true then return true end
+return e~=nil
+end
 function _G.MSUF_Castbar_ApplyNonInterruptibleTint(e,C,c,S,u,s,d,f,_,G,n)local e=e and e.statusBar if not e then return false end
 local t=(n==true)local n=t and c or d
 local r=t and S or f local a=t and u or _
 local o=t and(s or 1)or(G or 1)local i=e.GetStatusBarTexture and e:GetStatusBarTexture()local l=false if i and i.SetVertexColorFromBoolean and CreateColor then
-local r=h(p,c,S,u,s or 1)local n=h(F,d,f,_,G or 1)local e=C if e==nil then
+local r=h(p,c,S,u,s or 1)local n=h(F,d,f,_,G or 1)local e=C if not v(e)then
 e=(t==true)end
 i:SetVertexColorFromBoolean(e,r,n)l=true
 end if not l then

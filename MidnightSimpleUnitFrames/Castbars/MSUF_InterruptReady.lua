@@ -61,14 +61,18 @@ local function u(e)if not(e and e._kickReadyBorderTinted)then return end
 e._kickReadyBorderTinted=nil
 if type(_G.MSUF_ApplyCastbarOutline)=="function"then _G.MSUF_ApplyCastbarOutline(e,true)end
 end
+local function A(e)local n=_G.issecretvalue
+if type(n)=="function"and n(e)==true then return true end
+return e~=nil
+end
 local function S(e,n)if n then local t=n.apiNotInterruptibleRaw
-if t~=nil then return t end end
+if A(t)then return t end end
 if e then local n=e._msufApiNotInterruptibleRaw
-if n~=nil then return n end
+if A(n)then return n end
 return e.MSUF_apiNotInterruptibleRaw end
 return nil
 end
-local function G(n,t)local e=s(n)if t~=nil and _G.CreateColor and _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorFromBoolean then
+local function G(n,t)local e=s(n)if A(t)and _G.CreateColor and _G.C_CurveUtil and _G.C_CurveUtil.EvaluateColorFromBoolean then
 e=_G.C_CurveUtil.EvaluateColorFromBoolean(t,_G.CreateColor(0.6,0.6,0.6,1),e)end
 if e and e.GetRGBA then return e:GetRGBA()end
 return n and 0 or 1,n and 1 or 0,0,1
@@ -82,7 +86,7 @@ if e.isNotInterruptible==true or e.MSUF_kickInterruptibleConfirmed==false or(n a
 local o=c()local n=S(e,n)local r,a,o,l=G(o,n)if k(t)=="border"then
 if e.kickReadyBox then e.kickReadyBox:Hide();e.kickReadyBox._kickReadyShown=nil end
 C(e,r,a,o,l)else
-u(e)local e=_(e)e.fill:SetVertexColor(r,a,o,l)if n~=nil and e.SetAlphaFromBoolean then e:SetAlphaFromBoolean(n,0,1)else e:SetAlpha(1)end
+u(e)local e=_(e)e.fill:SetVertexColor(r,a,o,l)if A(n)and e.SetAlphaFromBoolean then e:SetAlphaFromBoolean(n,0,1)else e:SetAlpha(1)end
 e:Show();e._kickReadyShown=true
 end
 end
