@@ -1,0 +1,1224 @@
+--- MSUF2 support features split out of the legacy standalone slash menu.
+--- Keep this file free of page/UI construction so the old SlashMenu file can be
+--- removed from the TOC without losing shared runtime helpers.
+
+local addonName, MSUF = ...
+MSUF = MSUF or {}
+
+local M = MSUF.MSUF2 or {}
+MSUF.MSUF2 = M
+_G.MSUF2 = M
+local unpack = table.unpack or unpack
+
+local floor = math.floor
+local abs = math.abs
+
+local function Clamp(value, minValue, maxValue)
+    value = tonumber(value) or minValue
+    if value < minValue then return minValue end
+    if value > maxValue then return maxValue end
+    return value
+end
+
+local function Print(msg)
+    if type(print) == "function" then
+        print("|cff00ff00MSUF:|r " .. tostring(msg or ""))
+    end
+end
+
+local function Tr(text)
+    if type(M.Tr) == "function" then
+        local translated = M.Tr(text)
+        if translated ~= nil then return translated end
+    end
+    if type(MSUF.Translate) == "function" then return MSUF.Translate(text) end
+    if type(MSUF.TR) == "function" then
+        local translated = MSUF.TR(text)
+        if translated ~= nil then return translated end
+    end
+    local locale = MSUF.L or _G.MSUF_L
+    if type(locale) == "table" and locale[text] ~= nil then return locale[text] end
+    return text
+end
+M.TranslateText = M.TranslateText or Tr
+
+local function IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then return true end
+    return (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false
+end
+
+local function ShowConfigCombatLockMessage()
+    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+        _G.MSUF_ShowConfigCombatLockMessage()
+    else
+        Print("Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
+    end
+end
+
+local function BlockConfigCombatLocked(silent)
+    if not IsConfigCombatLocked() then return false end
+    if not silent then ShowConfigCombatLockMessage() end
+    return true
+end
+M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
+
+local function EnsureGeneral()
+    local ensureDB = _G.MSUF_EnsureDB
+    if type(ensureDB) == "function" then pcall(ensureDB) end
+    _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+    _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
+    return _G.MSUF_DB.general
+end
+
+local function AddTooltip(widget, title, body, opts)
+    if not (widget and (widget.SetScript or widget.HookScript)) then return widget end
+    opts = opts or {}
+    local owner = opts.owner or "ANCHOR_RIGHT"
+    local titleColor = opts.titleColor or { 1, 1, 1 }
+    local bodyColor = opts.bodyColor or { 0.80, 0.86, 1.00 }
+    local function ShowTooltip(self)
+        if not _G.GameTooltip then return end
+        _G.GameTooltip:SetOwner(self, owner)
+        if title and title ~= "" then
+            if opts.titleAsLine then
+                _G.GameTooltip:AddLine(Tr(title), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
+            else
+                _G.GameTooltip:SetText(Tr(title), titleColor[1] or 1, titleColor[2] or 1, titleColor[3] or 1, titleColor[4])
+            end
+        end
+        if body and body ~= "" then _G.GameTooltip:AddLine(Tr(body), bodyColor[1] or 0.80, bodyColor[2] or 0.86, bodyColor[3] or 1.00, true) end
+        _G.GameTooltip:Show()
+    end
+    local function HideTooltip()
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+    end
+    local function Wire(target)
+        if opts.hook and target.HookScript then
+            target:HookScript("OnEnter", ShowTooltip)
+            target:HookScript("OnLeave", HideTooltip)
+        elseif target.SetScript then
+            target:SetScript("OnEnter", ShowTooltip)
+            target:SetScript("OnLeave", HideTooltip)
+        end
+    end
+    Wire(widget)
+    if opts.labelHit and widget._msuf2LabelHit and widget._msuf2LabelHit ~= widget then Wire(widget._msuf2LabelHit) end
+    return widget
+end
+
+_G.MSUF_AddTooltip = _G.MSUF_AddTooltip or AddTooltip
+M.AddTooltip = M.AddTooltip or AddTooltip
+
+local function LeftJustifyButtonText(btn, leftPad)
+    leftPad = leftPad or 10
+    if not (btn and btn.GetFontString) then return end
+    local fontString = btn:GetFontString()
+    if not fontString then return end
+    if fontString.SetJustifyH then fontString:SetJustifyH("LEFT") end
+    if fontString.ClearAllPoints and fontString.SetPoint then
+        fontString:ClearAllPoints()
+        fontString:SetPoint("LEFT", btn, "LEFT", leftPad, 0)
+        fontString:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+    end
+end
+
+_G.MSUF_LeftJustifyButtonText = _G.MSUF_LeftJustifyButtonText or LeftJustifyButtonText
+
+function M.ValueTextList(...)
+    local out = {}
+    local n = select("#", ...)
+    for i = 1, n, 2 do
+        local value = select(i, ...)
+        local text = select(i + 1, ...)
+        out[#out + 1] = { value = value, text = text ~= nil and text or value }
+    end
+    return out
+end
+
+function M.ValueTextFrom(items)
+    local out = {}
+    if type(items) ~= "table" then return out end
+    for i = 1, #items do
+        local item = items[i]
+        if type(item) == "table" then
+            out[#out + 1] = { value = item[1], text = item[2] or item[1] }
+        else
+            out[#out + 1] = { value = item, text = item }
+        end
+    end
+    return out
+end
+
+function M.ValueTextRows(rows)
+    local out = {}
+    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+        local value, text = line:match("^(.-)=(.*)$")
+        if value then out[#out + 1] = { value = value, text = text ~= "" and text or value } end
+    end
+    return out
+end
+
+function M.KeyLabelList(...)
+    local out = {}
+    local n = select("#", ...)
+    for i = 1, n, 2 do
+        local key = select(i, ...)
+        local label = select(i + 1, ...)
+        out[#out + 1] = { key = key, label = label ~= nil and label or key }
+    end
+    return out
+end
+
+function M.KeyLabelRows(rows)
+    local out = {}
+    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+        local key, label = line:match("^(.-)=(.*)$")
+        if key then out[#out + 1] = { key = key, label = label ~= "" and label or key } end
+    end
+    return out
+end
+
+function M.KeySet(...)
+    local out = {}
+    for i = 1, select("#", ...) do
+        out[select(i, ...)] = true
+    end
+    return out
+end
+
+function M.KeySetFromWords(text)
+    local out = {}
+    for key in tostring(text or ""):gmatch("%S+") do out[key] = true end
+    return out
+end
+
+function M.WordList(text)
+    local out = {}
+    for value in tostring(text or ""):gmatch("%S+") do out[#out + 1] = value end
+    return out
+end
+
+function M.TextSlotOffsetKeys(kind, slot)
+    if kind == "name" then return "nameOffsetX", "nameOffsetY" end
+    if kind == "hp" and not slot then return "hpOffsetX", "hpOffsetY" end
+    if kind == "power" and not slot then return "powerOffsetX", "powerOffsetY" end
+    local prefix
+    if kind == "hp" then
+        prefix = (slot == "left" and "hpTextLeft") or (slot == "right" and "hpTextRight") or "hpTextCenter"
+    elseif kind == "power" then
+        prefix = (slot == "left" and "powerTextLeft") or (slot == "right" and "powerTextRight") or "powerTextCenter"
+    end
+    if not prefix then return "nameOffsetX", "nameOffsetY" end
+    return prefix .. "OffsetX", prefix .. "OffsetY"
+end
+
+function M.DeepCopy(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local out = {}
+    seen[value] = out
+    for k, v in pairs(value) do
+        out[M.DeepCopy(k, seen)] = M.DeepCopy(v, seen)
+    end
+    return out
+end
+
+function M.Pick(source, names)
+    local values, count = {}, 0
+    for name in tostring(names or ""):gmatch("%S+") do
+        count = count + 1
+        values[count] = source and source[name]
+    end
+    return unpack(values, 1, count)
+end
+
+function M.TableDefaults(...)
+    local values, count = {}, select("#", ...)
+    for i = 1, count do values[i] = select(i, ...) or {} end
+    return unpack(values, 1, count)
+end
+
+function M.PickDefaults(source, names)
+    local values, count = {}, 0
+    for name in tostring(names or ""):gmatch("%S+") do
+        count = count + 1
+        values[count] = (source and source[name]) or {}
+    end
+    return unpack(values, 1, count)
+end
+
+function M.NormalizeHpMode(mode)
+    if type(_G.MSUF_NormalizeHpTextMode) == "function" then return _G.MSUF_NormalizeHpTextMode(mode) end
+    if mode == nil then return "CURPERCENT" end
+    if mode == "FULL_ONLY" then return "CURRENT" end
+    if mode == "PERCENT_ONLY" then return "PERCENT" end
+    if mode == "FULL_PLUS_PERCENT" then return "CURPERCENT" end
+    if mode == "PERCENT_PLUS_FULL" then return "PERCENTCUR" end
+    return mode
+end
+
+function M.NormalizePowerMode(mode)
+    if type(_G.MSUF_NormalizePowerTextMode) == "function" then return _G.MSUF_NormalizePowerTextMode(mode) end
+    if mode == nil then return "CURPERCENT" end
+    if mode == "FULL_SLASH_MAX" then return "CURMAX" end
+    if mode == "FULL_ONLY" then return "CURRENT" end
+    if mode == "PERCENT_ONLY" then return "PERCENT" end
+    if mode == "FULL_PLUS_PERCENT" or mode == "PERCENT_PLUS_FULL" then return "CURPERCENT" end
+    return mode
+end
+
+function M.ApplyGameplay()
+    if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
+        return pcall(MSUF.MSUF_RequestGameplayApply)
+    end
+    if MSUF and type(MSUF.MSUF_ApplyGameplayVisuals) == "function" then
+        return pcall(MSUF.MSUF_ApplyGameplayVisuals)
+    end
+    return false
+end
+
+function M.StatusBarTextureItems(followText)
+    local ui = MSUF and MSUF.UI
+    if ui and type(ui.StatusBarTextureItems) == "function" then
+        return ui.StatusBarTextureItems(followText)
+    end
+    local out = {}
+    if followText then out[#out + 1] = { value = "", text = followText } end
+    for _, name in ipairs({ "Blizzard", "Flat", "RaidHP", "RaidPower", "Skills", "Outline" }) do
+        out[#out + 1] = { value = name, text = name }
+    end
+    return out
+end
+
+function M.PercentValue(value)
+    return tostring(floor((tonumber(value) or 0) * 100 + 0.5)) .. "%"
+end
+
+function M.ParsePercentValue(text)
+    local raw = tostring(text or "")
+    local value = tonumber((raw:gsub("%%", ""):gsub(",", ".")))
+    if value == nil then return nil end
+    if raw:find("%%") or value > 1 then return value / 100 end
+    return value
+end
+
+function M.UsePercentInput(widget)
+    if widget and widget.SetValueFormatter then widget:SetValueFormatter(M.PercentValue) end
+    if widget and widget.SetValueParser then widget:SetValueParser(M.ParsePercentValue) end
+end
+
+function M.Clamp01(value, fallback)
+    value = tonumber(value)
+    if value == nil then return fallback or 0 end
+    if value < 0 then return 0 end
+    if value > 1 then return 1 end
+    return value
+end
+
+function M.AlphaLabel(label, value)
+    return tostring(label or "") .. ": " .. M.PercentValue(value)
+end
+
+function M.AlphaKeysForMode(modeKey)
+    if modeKey == "background" then return "alphaBGInCombat", "alphaBGOutOfCombat" end
+    if modeKey == "health" then return "alphaHPInCombat", "alphaHPOutOfCombat" end
+    if modeKey == "foreground" then return "alphaFGInCombat", "alphaFGOutOfCombat" end
+    return "alphaInCombat", "alphaOutOfCombat"
+end
+
+function M.LayoutSegmentButtons(segment, gap, fallbackWidth, height)
+    local buttons = segment and segment.buttons or {}
+    local count = #buttons
+    if count <= 0 then return end
+    gap = gap or 8
+    local width = segment.GetWidth and segment:GetWidth() or 0
+    local buttonW = width > 0 and floor((width - gap * (count - 1)) / count) or (fallbackWidth or 120)
+    for i = 1, count do
+        local btn = buttons[i]
+        btn:ClearAllPoints()
+        btn:SetPoint("LEFT", segment, "LEFT", (i - 1) * (buttonW + gap), 0)
+        btn:SetSize(buttonW, height or 22)
+    end
+end
+
+function M.BindSliderLiveLabel(ctx, widget, readValue, labelFn, percentInput)
+    if percentInput then M.UsePercentInput(widget) end
+    local function SetLabel(value)
+        if widget and widget._msuf2Title then widget._msuf2Title:SetText(labelFn(value)) end
+    end
+    widget:HookScript("OnValueChanged", function(_, value) SetLabel(value) end)
+    local function RefreshLabel() SetLabel(readValue()) end
+    M.AddRefresher(ctx, RefreshLabel)
+    RefreshLabel()
+    return widget
+end
+
+function M.TruncateUtf8Chars(value, maxChars)
+    value = tostring(value or "")
+    maxChars = tonumber(maxChars) or 0
+    if maxChars <= 0 or value == "" then return "" end
+
+    local bytePos, valueLen, chars = 1, #value, 0
+    while bytePos <= valueLen and chars < maxChars do
+        local b = string.byte(value, bytePos)
+        if not b then break end
+        if b < 128 then
+            bytePos = bytePos + 1
+        elseif b < 224 then
+            bytePos = bytePos + 2
+        elseif b < 240 then
+            bytePos = bytePos + 3
+        else
+            bytePos = bytePos + 4
+        end
+        chars = chars + 1
+    end
+    return string.sub(value, 1, bytePos - 1)
+end
+
+function M.CleanToTInlineCustomSeparator(value, maxChars)
+    value = tostring(value or ""):gsub("[%c]", " ")
+    return M.TruncateUtf8Chars(value, maxChars or 5)
+end
+
+function M.ApplyPopupFramePriority(frame)
+    if not frame then return end
+    if type(M.ApplyMenuPopupFramePriority) == "function" then
+        M.ApplyMenuPopupFramePriority(frame)
+    elseif type(M.ApplyMenuFramePriority) == "function" then
+        M.ApplyMenuFramePriority(frame, M.MENU_POPUP_FRAME_LEVEL or 120)
+    else
+        if frame.SetFrameStrata then frame:SetFrameStrata("FULLSCREEN_DIALOG") end
+        if frame.SetFrameLevel then frame:SetFrameLevel(120) end
+    end
+end
+
+M.Noop = M.Noop or function() end
+
+function M.OnOffBadge(enabled, onText, offText)
+    return {
+        text = enabled and (onText or "Shown") or (offText or "Hidden"),
+        kind = enabled and "ok" or "muted",
+    }
+end
+
+function M.BadgeNumber(value)
+    value = tonumber(value) or 0
+    if value == math.floor(value) then return tostring(math.floor(value)) end
+    return string.format("%.1f", value)
+end
+
+function M.OptionText(values, value, fallback)
+    if type(values) == "function" then values = values() end
+    if type(values) == "table" then
+        for i = 1, #values do
+            local item = values[i]
+            if type(item) == "table" then
+                local itemValue = item.value
+                if itemValue == nil then itemValue = item.key or item[1] end
+                if tostring(itemValue) == tostring(value) then
+                    return item.text or item.label or tostring(value or fallback or "")
+                end
+            end
+        end
+    end
+    if value == nil or value == "" then return fallback or "" end
+    return tostring(value)
+end
+
+function M.NormalizePortraitClassStyle(value)
+    if value == "class_colored_border" or value == "colored" then return "RONDO_COLOR" end
+    if value == "wow_icon_border" or value == "wow" then return "RONDO_WOW" end
+    local fn = _G.MSUF_NormalizePortraitClassStyleValue
+    if type(fn) == "function" then return fn(value) end
+    local PM = MSUF and MSUF.PortraitMedia
+    if PM and type(PM.NormalizeClassPack) == "function" then return PM.NormalizeClassPack(value) end
+    if value == "RONDO_COLOR" or value == "RONDO_WOW" or value == "BLIZZARD" then return value end
+    return "BLIZZARD"
+end
+
+function M.IsMSUFEditModeActive(includeBlizzard)
+    local st = rawget(_G, "MSUF_EditState")
+    if type(st) == "table" and st.active ~= nil then return st.active == true end
+    local em2 = rawget(_G, "MSUF_EM2")
+    local state = em2 and em2.State
+    if state and type(state.IsActive) == "function" then return state.IsActive() and true or false end
+    local fn = rawget(_G, "MSUF_IsMSUFEditModeActive")
+        or rawget(_G, "MSUF_IsInEditMode")
+        or rawget(_G, "MSUF_IsEditModeActive")
+        or (includeBlizzard and rawget(_G, "IsEditModeActive") or nil)
+    if type(fn) == "function" then
+        local ok, active = pcall(fn)
+        if ok then return active and true or false end
+    end
+    return rawget(_G, "MSUF_UnitEditModeActive") == true
+        or rawget(_G, "MSUF_EDITMODE_ACTIVE") == true
+end
+
+function M.IsEditModeCombatLocked(includeBlizzard)
+    local fn = includeBlizzard and rawget(_G, "IsEditModeCombatLocked") or nil
+    if type(fn) == "function" then
+        local ok, locked = pcall(fn)
+        if ok then return locked and true or false end
+    end
+    return (_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+end
+
+function M.WireEditModeButton(ctx, button, opts)
+    if not button then return nil end
+    opts = opts or {}
+    local function Refresh()
+        local active = M.IsMSUFEditModeActive(opts.includeBlizzard)
+        if button.SetText then button:SetText(active and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
+        if button.SetActive then button:SetActive(false) end
+        if button.SetEnabled then button:SetEnabled(active or not M.IsEditModeCombatLocked(opts.includeBlizzard)) end
+    end
+    button:SetScript("OnClick", function()
+        if opts.blockConfig and type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then
+            Refresh()
+            return
+        end
+        local active = M.IsMSUFEditModeActive(opts.includeBlizzard)
+        if (not active) and M.IsEditModeCombatLocked(opts.includeBlizzard) then
+            if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
+            Refresh()
+            return
+        end
+        local nextActive = not active
+        local unit = type(opts.unit) == "function" and opts.unit() or opts.unit
+        local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
+        if type(fn) == "function" then
+            pcall(fn, nextActive, unit)
+        else
+            local em2 = rawget(_G, "MSUF_EM2")
+            local state = em2 and em2.State
+            if state then
+                if active and type(state.Exit) == "function" then
+                    state.Exit(opts.source or "msuf2_menu")
+                elseif nextActive and type(state.Enter) == "function" then
+                    state.Enter(unit)
+                end
+            end
+        end
+        if opts.defer and C_Timer and C_Timer.After then C_Timer.After(0, Refresh) else Refresh() end
+        if type(opts.afterClick) == "function" then opts.afterClick(nextActive, active) end
+    end)
+    if ctx and type(M.AddRefresher) == "function" then M.AddRefresher(ctx, Refresh) end
+    Refresh()
+    return Refresh
+end
+
+function M.SetCollapsibleRefreshState(section, refresh)
+    local entry = section and section._msuf2CollapsibleEntry
+    if entry then entry._msuf2RefreshState = refresh end
+    return refresh
+end
+
+local GROUP_KEYS_A = "SCOPE_VALUES GROWTH_VALUES "
+local GROUP_KEYS_B = "HEALTH_MODES TEXT_MODES "
+local GROUP_KEYS_C = "ANCHORS AURA_ANCHORS SORT_MODES GF_BAR_MODES "
+local GROUP_KEYS_D = "GF_ANCHOR_TO GF_ANCHOR_POINTS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES"
+M.GROUP_SPEC_TABLE_KEYS = GROUP_KEYS_A .. "BLIZZARD_FALLBACK_VALUES " .. GROUP_KEYS_B .. "DELIMITER_VALUES " .. GROUP_KEYS_C .. GROUP_KEYS_D
+
+local tips = {
+    "Bigger steps: Hold SHIFT while adjusting sliders to change values faster.",
+    "Fine tuning: Hold CTRL while adjusting sliders for smaller steps.",
+    "Quick reset: If something feels off, try /msuf reset for frame positions.",
+    "Factory reset: Use Menu > Advanced > Factory Reset or /msuf fullreset confirm + /reload.",
+    "Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.",
+    "Profiles safety: Create a new profile before big experiments so you can switch back instantly.",
+    "Colors: The Colors tab lets you customize fonts, bars, castbars and highlights.",
+    "Gameplay: The Gameplay tab contains extra UI tools and warnings you can enable or disable.",
+    "Recommended: Sensei Resource Bar pairs well with MSUF for clean resource tracking.",
+    "UI scale tip: MSUF has its own UI scale, separate from Blizzard global UI scale.",
+    "Troubleshoot: If visuals do not update, a quick /reload fixes most UI state issues.",
+    "Readability: Slightly larger fonts often help more than bigger frames.",
+    "During development of MSUF Unhalted, R41z0r and other addon developers helped out.",
+    "Danders is a strong Party/Raidframe addon and works well with MSUF.",
+    "Community: If you like MSUF, share it with a friend.",
+}
+
+function _G.MSUF_GetNextTip()
+    local g = EnsureGeneral()
+    local count = #tips
+    if count == 0 then return nil, 0, 0 end
+    local index = tonumber(g.tipCycleIndex) or 1
+    index = floor(index)
+    if index < 1 or index > count then index = 1 end
+    local tip = tips[index]
+    local nextIndex = index + 1
+    if nextIndex > count then nextIndex = 1 end
+    g.tipCycleIndex = nextIndex
+    return tip, index, count
+end
+
+local pendingReloadRecommendedLabel
+
+function _G.MSUF_ShowReloadRecommendedPopup(label)
+    if BlockConfigCombatLocked(false) then
+        return
+    end
+    if not _G.StaticPopupDialogs then return end
+
+    pendingReloadRecommendedLabel = tostring(label or "")
+    if pendingReloadRecommendedLabel == "" then pendingReloadRecommendedLabel = "these changes" end
+    pendingReloadRecommendedLabel = Tr(pendingReloadRecommendedLabel)
+
+    if not _G.StaticPopupDialogs.MSUF_RELOAD_RECOMMENDED then
+        _G.StaticPopupDialogs.MSUF_RELOAD_RECOMMENDED = {
+            text = Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
+            button1 = _G.RELOAD or Tr("Reload"),
+            button2 = _G.CANCEL or Tr("Not now"),
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function()
+                pendingReloadRecommendedLabel = nil
+                if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+            end,
+            OnCancel = function()
+                pendingReloadRecommendedLabel = nil
+            end,
+        }
+    end
+
+    _G.StaticPopup_Show("MSUF_RELOAD_RECOMMENDED", pendingReloadRecommendedLabel)
+end
+
+local copyLinkPopup
+local copyLinkPopupSerial = 0
+
+local function EnsureCopyLinkPopup()
+    if not _G.CreateFrame then return nil end
+    if copyLinkPopup then
+        copyLinkPopup:Hide()
+        copyLinkPopup = nil
+    end
+    copyLinkPopupSerial = copyLinkPopupSerial + 1
+
+    local frame = _G.CreateFrame("Frame", "MSUF_CopyLinkPopup" .. tostring(copyLinkPopupSerial), _G.UIParent, "BackdropTemplate")
+    frame:SetSize(420, 150)
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetFrameLevel(100)
+    frame:SetClampedToScreen(true)
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    if frame.SetBackdrop then
+        frame:SetBackdrop({
+            bgFile = "Interface/Tooltips/UI-Tooltip-Background",
+            edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
+            tile = true,
+            tileSize = 16,
+            edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        frame:SetBackdropColor(0, 0, 0, 0.90)
+        frame:SetBackdropBorderColor(0.10, 0.10, 0.10, 0.90)
+    end
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", frame, "TOP", 0, -14)
+    title:SetText(Tr("Link"))
+    frame._msufTitleFS = title
+
+    local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    hint:SetPoint("TOP", title, "BOTTOM", 0, -6)
+    hint:SetText(Tr("Press Ctrl+C to copy:"))
+    hint:SetTextColor(0.90, 0.90, 0.90, 1)
+
+    local editBox = _G.CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    editBox:EnableMouse(true)
+    editBox:SetAutoFocus(false)
+    editBox:SetSize(360, 32)
+    editBox:SetPoint("TOP", hint, "BOTTOM", 0, -10)
+    if editBox.SetTextInsets then editBox:SetTextInsets(8, 8, 0, 0) end
+    editBox:SetScript("OnEscapePressed", function() frame:Hide() end)
+    editBox:SetScript("OnEnterPressed", function() frame:Hide() end)
+    frame._msufEditBox = editBox
+
+    local ok = _G.CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    ok:EnableMouse(true)
+    ok:Enable()
+    ok:SetSize(120, 24)
+    ok:SetPoint("BOTTOM", frame, "BOTTOM", 0, 12)
+    ok:SetText(_G.OKAY or Tr("Okay"))
+    ok:RegisterForClicks("LeftButtonUp")
+    ok:SetScript("OnClick", function() frame:Hide() end)
+    frame._msufOkButton = ok
+    if type(_G.MSUF_SkinButton) == "function" then pcall(_G.MSUF_SkinButton, ok) end
+
+    frame:SetScript("OnShow", function(self)
+        if self._msufTitleFS then self._msufTitleFS:SetText(Tr(self._msufTitle or "Link")) end
+        if self._msufEditBox then
+            self._msufEditBox:SetText(self._msufUrl or "")
+            self._msufEditBox:HighlightText()
+            self._msufEditBox:SetFocus()
+        end
+    end)
+    frame:SetScript("OnHide", function(self)
+        if self._msufEditBox then
+            self._msufEditBox:SetText("")
+            self._msufEditBox:ClearFocus()
+        end
+        if copyLinkPopup == self then copyLinkPopup = nil end
+        self._msufTitle = nil
+        self._msufUrl = nil
+    end)
+    frame:Hide()
+
+    copyLinkPopup = frame
+    return frame
+end
+
+function _G.MSUF_ShowCopyLink(title, url)
+    local frame = EnsureCopyLinkPopup()
+    if not frame then return end
+    if frame.SetFrameStrata then frame:SetFrameStrata("FULLSCREEN_DIALOG") end
+    if frame.SetFrameLevel then frame:SetFrameLevel(100) end
+    frame._msufTitle = tostring(title or "Link")
+    frame._msufUrl = tostring(url or "")
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", _G.UIParent, "CENTER", 0, 0)
+    frame:Show()
+    if frame.Raise then frame:Raise() end
+    if frame._msufEditBox and frame._msufEditBox.EnableMouse then frame._msufEditBox:EnableMouse(true) end
+    if frame._msufEditBox and frame._msufEditBox.SetFocus then frame._msufEditBox:SetFocus() end
+    if frame._msufEditBox and frame._msufEditBox.HighlightText then frame._msufEditBox:HighlightText() end
+    if frame._msufOkButton and frame._msufOkButton.EnableMouse then frame._msufOkButton:EnableMouse(true) end
+    if frame._msufOkButton and frame._msufOkButton.Enable then frame._msufOkButton:Enable() end
+    if frame._msufOkButton and frame._msufOkButton.Raise then frame._msufOkButton:Raise() end
+end
+
+do
+    local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
+        and _G.C_AddOns.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version")
+    local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
+    if isAlpha and _G.StaticPopupDialogs and not _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD then
+        _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD = {
+            text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
+            button1 = Tr("Copy Discord Link"),
+            button2 = _G.CLOSE or Tr("Close"),
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function()
+                if type(_G.MSUF_ShowCopyLink) == "function" then
+                    _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz")
+                end
+            end,
+        }
+    end
+end
+
+local pendingMsufScale
+local pendingGlobalScale
+local pendingDisableScaling
+local pendingReloadOnScalingOff
+local scaleApplyWatcher
+local lastGlobalUiParentScale
+local blizzardUiParentScale
+
+local UI_SCALE_1080 = 768 / 1080
+local UI_SCALE_1440 = 768 / 1440
+local UI_SCALE_4K = 768 / 2160
+
+local function IsGroupFrameUnitKey(unitKey)
+    if type(unitKey) ~= "string" then return false end
+    return unitKey:sub(1, 5) == "party" or unitKey:sub(1, 4) == "raid"
+end
+
+local function IsGroupFrameScaleEnabled(frame, unitKey)
+    if not (frame and (frame._msufGFBuilt or frame._msufGFKind or IsGroupFrameUnitKey(unitKey))) then
+        return true
+    end
+
+    local kind = frame._msufGFKind
+    if not kind and IsGroupFrameUnitKey(unitKey) then
+        kind = unitKey:sub(1, 4) == "raid" and "raid" or "party"
+    end
+
+    local gf = MSUF and MSUF.GF
+    local conf = gf and type(gf.GetConf) == "function" and gf.GetConf(kind) or nil
+    local mode = conf and conf.frameScaleMode or "off"
+    return mode == "manual" or mode == "auto"
+end
+
+local function CollectMsufScaleFrames()
+    local frames, seen = {}, {}
+    local function add(frame, unitKey)
+        if not frame or seen[frame] then return end
+        if not IsGroupFrameScaleEnabled(frame, unitKey) then return end
+        if type(frame) == "table" and type(frame.SetScale) == "function" then
+            seen[frame] = true
+            frames[#frames + 1] = frame
+        end
+    end
+
+    if type(_G.MSUF_UnitFrames) == "table" then
+        for unitKey, frame in pairs(_G.MSUF_UnitFrames) do add(frame, unitKey) end
+    end
+    add(_G.MSUF_PlayerCastbar)
+    add(_G.MSUF_TargetCastbar)
+    add(_G.MSUF_FocusCastbar)
+    add(_G.MSUF_PlayerCastbarPreview)
+    add(_G.MSUF_TargetCastbarPreview)
+    add(_G.MSUF_FocusCastbarPreview)
+    add(_G.MSUF_BossCastbar)
+    add(_G.MSUF_BossCastbarPreview)
+    if type(_G.MSUF_BossCastbars) == "table" then
+        for i = 1, 5 do add(_G.MSUF_BossCastbars[i]) end
+    end
+    for i = 1, 5 do
+        add(_G["MSUF_boss" .. i .. "CastBar"])
+        add(_G["MSUF_BossCastbarPreview" .. (i == 1 and "" or i)])
+    end
+    return frames
+end
+
+local function GetSavedMsufScale()
+    local g = EnsureGeneral()
+    return Clamp(tonumber(g.msufUiScale) or tonumber(g.uiScale) or 1, 0.25, 1.5)
+end
+
+local function ScheduleUnitframeReanchorAfterScale()
+    if _G.MSUF_ScaleReanchorPending then return end
+    _G.MSUF_ScaleReanchorPending = true
+
+    local function flush()
+        _G.MSUF_ScaleReanchorPending = false
+        if _G.InCombatLockdown and _G.InCombatLockdown() then
+            local UF = _G.MSUF_NS and _G.MSUF_NS.UF
+            if UF and UF.RequestReanchorAfterCombat then
+                UF.RequestReanchorAfterCombat()
+            end
+            return
+        end
+        if type(_G.MSUF_UpdateAllExternalAnchorProxies) == "function" then
+            _G.MSUF_UpdateAllExternalAnchorProxies()
+        end
+        if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
+            local previous = _G.MSUF_ExternalAnchorForceReanchor
+            _G.MSUF_ExternalAnchorForceReanchor = true
+            pcall(_G.MSUF_ForceReanchorAllUnitFrames_Once, true)
+            _G.MSUF_ExternalAnchorForceReanchor = previous
+        end
+    end
+
+    if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, flush) else flush() end
+end
+
+local EnsureScaleApplyAfterCombat
+local ResetGlobalUiScale
+
+local function ApplyMsufScale(scale)
+    scale = tonumber(scale)
+    if not scale then return end
+    scale = Clamp(scale, 0.25, 1.5)
+
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        pendingMsufScale = scale
+        if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
+        return
+    end
+
+    local frames = CollectMsufScaleFrames()
+    for i = 1, #frames do
+        pcall(frames[i].SetScale, frames[i], scale)
+    end
+    if type(_G.MSUF_Auras3_RefreshEditPreview) == "function" then
+        pcall(_G.MSUF_Auras3_RefreshEditPreview)
+    end
+    ScheduleUnitframeReanchorAfterScale()
+end
+
+local function GetCurrentGlobalUiScale()
+    if _G.UIParent and _G.UIParent.GetScale then return tonumber(_G.UIParent:GetScale()) end
+    return nil
+end
+
+local function GetPixelPerfectScale()
+    if type(_G.GetPhysicalScreenSize) == "function" then
+        local _, height = _G.GetPhysicalScreenSize()
+        height = tonumber(height)
+        if height and height > 0 then return Clamp(768 / height, 0.3, 2.0) end
+    end
+    return UI_SCALE_1440
+end
+
+local function ResolveGlobalPresetScale(preset, scale)
+    if preset == "1080p" then return UI_SCALE_1080 end
+    if preset == "1440p" then return UI_SCALE_1440 end
+    if preset == "4k" then return UI_SCALE_4K end
+    if preset == "pixel" then return GetPixelPerfectScale() end
+    return tonumber(scale)
+end
+
+local function EnsureGlobalUiScaleTable(g)
+    if not g then return nil end
+    local ui = type(g.UIScale) == "table" and g.UIScale or nil
+    if not ui then
+        ui = {}
+        g.UIScale = ui
+        local preset = g.globalUiScalePreset
+        local scale = ResolveGlobalPresetScale(preset, g.globalUiScaleValue) or 1.0
+        ui.Enabled = preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom"
+        ui.Scale = scale
+        ui._migratedFromGlobalPreset_v1 = true
+    end
+    if ui.Enabled == nil then
+        local preset = g.globalUiScalePreset
+        ui.Enabled = preset == "1080p" or preset == "1440p" or preset == "4k" or preset == "pixel" or preset == "custom"
+    end
+    ui.Enabled = ui.Enabled == true
+    ui.Scale = Clamp(tonumber(ui.Scale) or ResolveGlobalPresetScale(g.globalUiScalePreset, g.globalUiScaleValue) or 1.0, 0.3, 1.5)
+    g.disableScaling = false
+    return ui
+end
+
+local function SetGlobalUiScaleState(enabled, scale, preset)
+    local g = EnsureGeneral()
+    local ui = EnsureGlobalUiScaleTable(g)
+    if not ui then return end
+
+    enabled = enabled == true
+    ui.Enabled = enabled
+    if scale ~= nil then ui.Scale = Clamp(tonumber(scale) or ui.Scale or 1.0, 0.3, 1.5) end
+
+    if enabled then
+        g.globalUiScalePreset = preset or g.globalUiScalePreset or "custom"
+        g.globalUiScaleValue = ui.Scale
+    else
+        g.globalUiScalePreset = preset or "auto"
+        g.globalUiScaleValue = nil
+    end
+end
+
+local function CaptureBlizzardUiScale()
+    if blizzardUiParentScale then return end
+    local current = GetCurrentGlobalUiScale()
+    if current and current > 0 then blizzardUiParentScale = current end
+end
+
+local function GetBlizzardCVarScale()
+    local useUiScale
+    if type(_G.GetCVarBool) == "function" then
+        local ok, value = pcall(_G.GetCVarBool, "useUiScale")
+        if ok then useUiScale = value end
+    end
+    if useUiScale == nil and type(_G.GetCVar) == "function" then
+        local ok, value = pcall(_G.GetCVar, "useUiScale")
+        if ok then useUiScale = tostring(value) == "1" end
+    end
+    if useUiScale and type(_G.GetCVar) == "function" then
+        local ok, value = pcall(_G.GetCVar, "uiScale")
+        value = ok and tonumber(value) or nil
+        if value and value > 0 then return Clamp(value, 0.3, 2.0) end
+    end
+    if type(_G.GetPhysicalScreenSize) == "function" then
+        local _, height = _G.GetPhysicalScreenSize()
+        height = tonumber(height)
+        if height and height > 0 then return Clamp(768 / height, 0.3, 2.0) end
+    end
+    if blizzardUiParentScale and blizzardUiParentScale > 0 then
+        return Clamp(blizzardUiParentScale, 0.3, 2.0)
+    end
+    return nil
+end
+
+local function RestoreBlizzardUiScaleOnce()
+    if type(_G.UIParent_UpdateScale) == "function" then
+        local ok = pcall(_G.UIParent_UpdateScale)
+        if ok then return true end
+    end
+    local scale = GetBlizzardCVarScale()
+    if scale and _G.UIParent and _G.UIParent.SetScale then
+        pcall(_G.UIParent.SetScale, _G.UIParent, scale)
+        return true
+    end
+    return false
+end
+
+local function RestoreBlizzardUiScale(silent)
+    if BlockConfigCombatLocked(silent) then
+        return false
+    end
+
+    RestoreBlizzardUiScaleOnce()
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, RestoreBlizzardUiScaleOnce)
+        _G.C_Timer.After(0.25, RestoreBlizzardUiScaleOnce)
+        _G.C_Timer.After(1.0, RestoreBlizzardUiScaleOnce)
+    end
+    lastGlobalUiParentScale = nil
+    if not silent then Print("Global UI scale restored to Blizzard settings.") end
+    return true
+end
+
+local function WriteBlizzardUiScaleCVar(scale)
+    scale = tonumber(scale)
+    if not scale or scale <= 0 then return false end
+    scale = Clamp(scale, 0.3, 1.5)
+    local value = string.format("%.6f", scale)
+    local ok = false
+    if _G.C_CVar and type(_G.C_CVar.SetCVar) == "function" then
+        pcall(_G.C_CVar.SetCVar, "useUiScale", "1")
+        pcall(_G.C_CVar.SetCVar, "uiScale", value)
+        ok = true
+    end
+    if type(_G.SetCVar) == "function" then
+        pcall(_G.SetCVar, "useUiScale", "1")
+        pcall(_G.SetCVar, "uiScale", value)
+        ok = true
+    end
+    return ok
+end
+
+local function GetGlobalUiScaleHandoffValue(g, ui)
+    local current = tonumber(GetCurrentGlobalUiScale())
+    if current and current > 0 then return Clamp(current, 0.3, 1.5) end
+    if not ui and g then ui = EnsureGlobalUiScaleTable(g) end
+    local saved = ui and tonumber(ui.Scale)
+    if saved and saved > 0 then return Clamp(saved, 0.3, 1.5) end
+    if lastGlobalUiParentScale and lastGlobalUiParentScale > 0 then return Clamp(lastGlobalUiParentScale, 0.3, 1.5) end
+    return 1.0
+end
+
+local function HandOffGlobalUiScaleToBlizzard(scale)
+    scale = tonumber(scale)
+    if not scale or scale <= 0 then return false end
+    scale = Clamp(scale, 0.3, 1.5)
+    WriteBlizzardUiScaleCVar(scale)
+    if type(_G.UIParent_UpdateScale) == "function" then pcall(_G.UIParent_UpdateScale) end
+    if _G.UIParent and _G.UIParent.SetScale then pcall(_G.UIParent.SetScale, _G.UIParent, scale) end
+    blizzardUiParentScale = scale
+    lastGlobalUiParentScale = nil
+    return true
+end
+
+local function EnforceUIParentScale(scale)
+    scale = tonumber(scale)
+    if not scale or scale <= 0 then return end
+    scale = Clamp(scale, 0.3, 1.5)
+    if not (_G.UIParent and _G.UIParent.SetScale) then return end
+
+    local current = _G.UIParent.GetScale and tonumber(_G.UIParent:GetScale()) or 0
+    if abs((current or 0) - scale) > 0.001 then
+        pcall(_G.UIParent.SetScale, _G.UIParent, scale)
+    end
+    lastGlobalUiParentScale = scale
+end
+
+local function SetGlobalUiScale(scale, silent)
+    scale = tonumber(scale)
+    if not scale or scale <= 0 then return end
+    scale = Clamp(scale, 0.3, 1.5)
+
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        pendingGlobalScale = scale
+        if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
+        if not silent then ShowConfigCombatLockMessage() end
+        return
+    end
+
+    CaptureBlizzardUiScale()
+    EnforceUIParentScale(scale)
+    ScheduleUnitframeReanchorAfterScale()
+    if not silent then Print(string.format("Global UI scale set to %.4f", scale)) end
+end
+
+ResetGlobalUiScale = function(silent)
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        pendingDisableScaling = true
+        pendingGlobalScale = nil
+        if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
+        if not silent then ShowConfigCombatLockMessage() end
+        return false
+    end
+
+    local g = EnsureGeneral()
+    local ui = EnsureGlobalUiScaleTable(g)
+    local handoff = GetGlobalUiScaleHandoffValue(g, ui)
+    HandOffGlobalUiScaleToBlizzard(handoff)
+    SetGlobalUiScaleState(false, nil, "auto")
+    pendingGlobalScale = nil
+    if not silent then
+        Print(string.format("Global UI scale disabled. Blizzard UI scale kept at %d%%.", floor(handoff * 100 + 0.5)))
+    end
+    ScheduleUnitframeReanchorAfterScale()
+    return true
+end
+
+EnsureScaleApplyAfterCombat = function()
+    if scaleApplyWatcher or not _G.CreateFrame then return end
+    local frame = _G.CreateFrame("Frame")
+    scaleApplyWatcher = frame
+    frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    frame:SetScript("OnEvent", function()
+        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
+
+        if pendingDisableScaling then
+            pendingDisableScaling = nil
+            pendingGlobalScale = nil
+            ResetGlobalUiScale(true)
+        else
+            local msufScale = pendingMsufScale
+            local globalScale = pendingGlobalScale
+            pendingMsufScale = nil
+            pendingGlobalScale = nil
+            if msufScale then ApplyMsufScale(msufScale) end
+            if globalScale then SetGlobalUiScale(globalScale, true) end
+        end
+
+        if pendingReloadOnScalingOff then
+            pendingReloadOnScalingOff = nil
+            if type(_G.ReloadUI) == "function" then
+                _G.ReloadUI()
+                return
+            end
+        end
+
+        if not pendingDisableScaling and not pendingMsufScale and not pendingGlobalScale then
+            frame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+            frame:SetScript("OnEvent", nil)
+            scaleApplyWatcher = nil
+        end
+    end)
+end
+
+local function SetScalingDisabled(disable, silent)
+    local g = EnsureGeneral()
+    disable = disable == true
+    g.disableScaling = false
+    if not disable then
+        pendingDisableScaling = nil
+        return
+    end
+    if _G.InCombatLockdown and _G.InCombatLockdown() then
+        pendingDisableScaling = true
+        if EnsureScaleApplyAfterCombat then EnsureScaleApplyAfterCombat() end
+        if not silent then ShowConfigCombatLockMessage() end
+        return
+    end
+    ResetGlobalUiScale(true)
+    pendingDisableScaling = nil
+    pendingGlobalScale = nil
+    if not silent then Print("Global UI scale disabled. Blizzard keeps the current UI size.") end
+end
+
+local function GetDesiredGlobalScaleFromDB()
+    local g = EnsureGeneral()
+    local ui = EnsureGlobalUiScaleTable(g)
+    if ui and ui.Enabled then return tonumber(ui.Scale) end
+    return nil
+end
+
+local function EnsureGlobalUiScaleApplied(silent)
+    local want = tonumber(GetDesiredGlobalScaleFromDB())
+    if want and want > 0 then SetGlobalUiScale(want, silent) end
+end
+
+local function ResetStandaloneWindowGeometry(frame, silent)
+    local g = EnsureGeneral()
+    g.flashFullW = 900
+    g.flashFullH = 700
+    g.flashFullPoint = "CENTER"
+    g.flashFullRelPoint = "CENTER"
+    g.flashFullX = -60
+    g.flashFullY = 10
+    local uiScale = (_G.UIParent and _G.UIParent.GetScale and _G.UIParent:GetScale()) or 1
+    if not uiScale or uiScale == 0 then uiScale = 1 end
+    g.flashFullXpx = -60 * uiScale
+    g.flashFullYpx = 10 * uiScale
+    g.msuf2WindowW = 900
+    g.msuf2WindowH = 700
+    g.slashMenuScale = 1.0
+
+    local win = frame or _G.MSUF_StandaloneOptionsWindow or (_G.MSUF2 and _G.MSUF2.frame)
+    if win then
+        local scale = 1.0
+        if _G.MSUF2 and type(_G.MSUF2.GetEffectiveMenuScale) == "function" then
+            scale = _G.MSUF2.GetEffectiveMenuScale(1.0)
+        end
+        if win.SetScale then pcall(win.SetScale, win, scale) end
+        if win.SetSize then pcall(win.SetSize, win, 900, 700) end
+        if win.ClearAllPoints then pcall(win.ClearAllPoints, win) end
+        if win.SetPoint then pcall(win.SetPoint, win, "CENTER", _G.UIParent, "CENTER", -60, 10) end
+    end
+    if not silent then Print("MSUF menu size reset to default.") end
+end
+
+_G.MSUF_ApplyMsufScale = ApplyMsufScale
+_G.MSUF_GetSavedMsufScale = GetSavedMsufScale
+_G.MSUF_SetScalingDisabled = SetScalingDisabled
+if type(_G.MSUF_SetGlobalUiScale_GATED) == "function" then
+    _G.MSUF_SetGlobalUiScale_RAW = SetGlobalUiScale
+    _G.MSUF_SetGlobalUiScale = _G.MSUF_SetGlobalUiScale_GATED
+else
+    _G.MSUF_SetGlobalUiScale = SetGlobalUiScale
+end
+_G.MSUF_ResetGlobalUiScale = ResetGlobalUiScale
+_G.MSUF_RestoreBlizzardUiScale = RestoreBlizzardUiScale
+_G.MSUF_ResetStandaloneWindowGeometry = ResetStandaloneWindowGeometry
+_G.MSUF_GetPixelPerfectScale = GetPixelPerfectScale
+
+if type(_G.MSUF_InstallGlobalScaleGate) == "function" then
+    _G.MSUF_InstallGlobalScaleGate()
+end
+
+local function ApplySavedScaleState(applyGlobalCVar)
+    ApplyMsufScale(GetSavedMsufScale())
+    local want = GetDesiredGlobalScaleFromDB()
+    if want then
+        if applyGlobalCVar then SetGlobalUiScale(want, true) end
+        EnsureGlobalUiScaleApplied(true)
+    end
+end
+
+local startupScaleApplyQueued
+local startupScaleNeedsGlobalCVar
+local function QueueStartupScaleApply(applyGlobalCVar)
+    startupScaleNeedsGlobalCVar = startupScaleNeedsGlobalCVar or applyGlobalCVar == true
+    if startupScaleApplyQueued then return end
+    startupScaleApplyQueued = true
+
+    local function flush()
+        local needsGlobalCVar = startupScaleNeedsGlobalCVar
+        startupScaleApplyQueued = nil
+        startupScaleNeedsGlobalCVar = nil
+        ApplySavedScaleState(needsGlobalCVar)
+    end
+
+    if _G.C_Timer and _G.C_Timer.After then
+        _G.C_Timer.After(0, flush)
+    else
+        flush()
+    end
+end
+
+local scaleEvents = _G.CreateFrame and _G.CreateFrame("Frame")
+if scaleEvents then
+    scaleEvents:RegisterEvent("PLAYER_LOGIN")
+    scaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
+    scaleEvents:RegisterEvent("DISPLAY_SIZE_CHANGED")
+    scaleEvents:SetScript("OnEvent", function(_, event)
+        if event == "DISPLAY_SIZE_CHANGED" then
+            ApplySavedScaleState(false)
+        else
+            QueueStartupScaleApply(event == "PLAYER_LOGIN")
+        end
+    end)
+end
+
+if _G.C_Timer and _G.C_Timer.After then
+    QueueStartupScaleApply(true)
+end

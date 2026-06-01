@@ -1,0 +1,142 @@
+local _, MSUF = ...
+
+MSUF = MSUF or _G.MSUF_NS or {}
+_G.MSUF_NS = MSUF
+
+local C = MSUF.UFBarTextCommon
+if not C then return end
+
+local UF = C.UF
+local CreateFrame = C.CreateFrame
+local UnitHealth = C.UnitHealth
+local UnitHealthMax = C.UnitHealthMax
+local WHITE = C.WHITE
+local SetStatusTexture = C.SetStatusTexture
+local SetBarMinMax = C.SetBarMinMax
+local SnapBarInterpolation = C.SnapBarInterpolation
+local SetBarSmoothing = C.SetBarSmoothing
+local ApplyHealthStatusColor = C.ApplyHealthStatusColor
+local ApplyBackgrounds = C.ApplyBackgrounds
+local RefreshUnitState = C.RefreshUnitState
+local ApplyBarGradient = C.ApplyBarGradient
+local IsNil = C.IsNil or function(value) return value == nil end
+local Health = {
+    events = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION" },
+}
+local GROUP_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
+
+function Health.Create(frame, spec)
+    if frame.hpBar then
+        return
+    end
+    local bg = frame:CreateTexture(nil, "BACKGROUND", nil, -7)
+    bg:SetAllPoints(frame)
+    bg:SetColorTexture(0.02, 0.02, 0.025, spec and spec.backgroundAlpha or 0.72)
+    frame.bg = bg
+    frame.hpBarBG = bg
+    frame.healthBg = bg
+
+    local bar = CreateFrame("StatusBar", nil, frame)
+    bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    bar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    bar:SetMinMaxValues(0, 1)
+    bar:SetValue(1)
+    bar:SetStatusBarTexture((spec and spec.texture) or WHITE)
+    frame.hpBar = bar
+    frame.Health = bar
+    frame.health = bar
+end
+
+function Health.Apply(frame, spec)
+    if not frame.hpBar then
+        Health.Create(frame, spec)
+    end
+    frame.Health = frame.hpBar
+    frame.health = frame.hpBar
+    frame.healthBg = frame.hpBarBG or frame.bg
+    frame._msufIsGroupFrame = spec and spec.scope == "group"
+    frame._msufHealthColorByHealth = spec and spec.health and spec.health.mode == "gradient"
+    frame._msufHealthBgDynamic = spec and spec.health and spec.health.backgroundMatchHealth == true
+    frame._msufPowerBgDynamic = spec and spec.power and spec.power.backgroundMatchHealth == true
+    frame._msufHealthColdColor = frame._msufIsGroupFrame
+        and frame._msufHealthColorByHealth ~= true
+        or nil
+    SetStatusTexture(frame.hpBar, spec and spec.health and spec.health.texture or spec and spec.texture or WHITE)
+    if frame.hpBar.SetReverseFill then
+        local reverse = spec and spec.health and spec.health.reverse == true
+        if frame.hpBar._msufReverseFill ~= reverse then
+            frame.hpBar:SetReverseFill(reverse)
+            frame.hpBar._msufReverseFill = reverse
+        end
+    end
+    SetBarSmoothing(frame.hpBar, spec and spec.health and spec.health.smooth == true)
+    ApplyBackgrounds(frame)
+    if ApplyBarGradient then
+        ApplyBarGradient(frame, frame.hpBar, spec and spec.health and spec.health.barGradient, "hpGradients")
+    end
+end
+
+function Health.GetEvents(frame, spec)
+    if frame._msufIsGroupFrame then
+        return GROUP_HEALTH_EVENTS
+    end
+    return Health.events
+end
+
+function Health.Update(frame, event, unit)
+    unit = unit or frame.unit
+    local bar = frame.hpBar
+    if not bar then
+        return
+    end
+    local spec = frame.MSUFSpec
+    local coldColor = frame._msufHealthColdColor == true
+    if RefreshUnitState and not (coldColor and event == "UNIT_HEALTH") then
+        RefreshUnitState(frame, unit, spec, event)
+    end
+
+    local hp = UnitHealth(unit)
+    if IsNil(hp) then hp = 0 end
+    local maxHP = UnitHealthMax(unit)
+    if IsNil(maxHP) then maxHP = 1 end
+    local animate = event == "UNIT_HEALTH"
+
+    -- Max health only changes on UNIT_MAXHEALTH (and forced applies); skip the
+    -- SetMinMaxValues C call on the high-frequency UNIT_HEALTH tick. Gated on the
+    -- plain event string, so the (possibly secret) max is never compared.
+    if not animate or bar._msufMinMaxInit ~= true then
+        SetBarMinMax(bar, maxHP, true)
+        bar._msufMinMaxInit = true
+    end
+    local interp = animate and bar._msufSmoothInterp or nil
+    if interp then
+        bar:SetValue(hp, interp)
+        bar._msufInterpolating = true
+    else
+        bar:SetValue(hp)
+    end
+    bar._msufValue = nil
+    if not animate then
+        SnapBarInterpolation(bar)
+    end
+
+    local updateColor
+    if coldColor then
+        updateColor = bar._msufStatusR == nil or (event ~= "UNIT_HEALTH" and event ~= "UNIT_MAXHEALTH")
+    else
+        updateColor = frame._msufHealthColorByHealth == true
+            or event ~= "UNIT_HEALTH"
+            or bar._msufStatusR == nil
+    end
+
+    local rawHealthColor
+    if updateColor then
+        rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP)
+    end
+    if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
+        ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
+    end
+    return hp, maxHP
+end
+
+UF.RegisterElement("Health", Health)

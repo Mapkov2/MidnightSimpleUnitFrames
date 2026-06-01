@@ -21,14 +21,14 @@
 
 
 # ---------------------------------------------------------------
-# LIBS
+# BOOTSTRAP / VENDOR LIBS
 # ---------------------------------------------------------------
 Libs\LibStub\LibStub.lua
 Libs\WagoAnalyticsShim\Shim.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibSharedMedia-3.0\LibSharedMedia-3.0.lua
-Core\MSUF_Bootstrap.lua
-Foundation\MSUF_Libs.lua
+Kernel\MSUF_Bootstrap.lua
+Kernel\MSUF_Libs.lua
 
 # ---------------------------------------------------------------
 # LOCALES
@@ -49,38 +49,38 @@ Locales\ruRU.lua
 Locales\MSUF_RuntimeLocalization.lua
 
 # ---------------------------------------------------------------
-# FOUNDATION
+# KERNEL / STATE / UI PRIMITIVES
 # ---------------------------------------------------------------
-Foundation\MSUF_Util.lua
-Foundation\MSUF_Changelog.lua
-Foundation\MSUF_Transitions.lua
-Foundation\MSUF_Defaults.lua
-Foundation\MSUF_Profiles.lua
-Foundation\MSUF_Style.lua
-Foundation\MSUF_Modules.lua
-Foundation\MSUF_EventBus.lua
-Foundation\MSUF_Scheduler.lua
-Foundation\MSUF_Widgets.lua
+Kernel\MSUF_Util.lua
+State\MSUF_Changelog.lua
+Shell\UI\MSUF_Transitions.lua
+State\MSUF_Defaults.lua
+State\MSUF_Profiles.lua
+Shell\UI\MSUF_Style.lua
+Kernel\MSUF_Modules.lua
+Kernel\MSUF_EventBus.lua
+Kernel\MSUF_Scheduler.lua
+Shell\UI\MSUF_Widgets.lua
 
 # ---------------------------------------------------------------
-# EDIT MODE 2
+# SHELL
 # ---------------------------------------------------------------
-EditMode\MSUF_EditMode.xml
+Shell\EditMode\MSUF_EditMode.xml
 
 # ---------------------------------------------------------------
-# CORE (pre-main)
+# RUNTIME SERVICES (pre-unitframe engine)
 # ---------------------------------------------------------------
 Castbars\MSUF_Castbars_Backend.lua
 Castbars\MSUF_Castbars_Bridge.lua
-UI\MidnightSimpleUnitFrames_MinimapButton.lua
-UI\MSUF_AddonCompartment.lua
+Shell\MSUF_MinimapButton.lua
+Shell\MSUF_AddonCompartment.lua
 Media\MSUF_Media.lua
-Core\MSUF_PortraitMedia.lua
-Core\MSUF_ProfileIO.lua
-Core\MSUF_ChatAndTooltips.lua
-UnitFrames\MSUF_UnitFrameCore_PreMain.xml
-Core\MSUF_ColorsCore.lua
-Foundation\MSUF_BlizzardFrames.lua
+Runtime\MSUF_PortraitMedia.lua
+State\MSUF_ProfileIO.lua
+Runtime\MSUF_ChatAndTooltips.lua
+UnitFrames\MSUF_UnitFrames_Engine.xml
+Runtime\MSUF_Colors.lua
+Kernel\MSUF_BlizzardFrames.lua
 
 # ---------------------------------------------------------------
 # AURAS
@@ -90,33 +90,31 @@ Auras3\MSUF_Auras3_Runtime.xml
 # ---------------------------------------------------------------
 # FEATURES
 # ---------------------------------------------------------------
-Features\MSUF_Feature_GameplayHelpers.lua
-Features\MSUF_Feature_GameplayConfig.lua
-Features\MSUF_Feature_GameplayRuntime.lua
-Features\MSUF_Feature_TargetSound.lua
-Features\MSUF_Feature_TotemPreview.lua
-Features\MSUF_Analytics.lua
-Features\MSUF_VersionCheck.lua
+Features\Gameplay\MSUF_Feature_GameplayHelpers.lua
+Features\Gameplay\MSUF_Feature_GameplayConfig.lua
+Features\Gameplay\MSUF_Feature_GameplayRuntime.lua
+Features\Gameplay\MSUF_Feature_TargetSound.lua
+Features\Gameplay\MSUF_Feature_TotemPreview.lua
+Features\Telemetry\MSUF_Analytics.lua
+Features\Versioning\MSUF_VersionCheck.lua
 
 # ---------------------------------------------------------------
-# BACKBONE
+# UNITFRAME BACKBONE
 # ---------------------------------------------------------------
-Core\MSUF_BarBackgroundRuntime.lua
-Core\MSUF_IconLayoutRuntime.lua
-Core\MSUF_FontRegistry.lua
-UnitFrames\MSUF_UnitFrameCore_PreRuntime.xml
+Runtime\MSUF_BarBackgroundRuntime.lua
+Runtime\MSUF_IconLayoutRuntime.lua
+Runtime\MSUF_FontRegistry.lua
+UnitFrames\MSUF_UnitFrames_Elements.xml
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
-MidnightSimpleUnitFrames.lua
-UnitFrames\MSUF_UnitFrameCore_Runtime.xml
-Core\MSUF_SwapRecolor.lua
-Core\MSUF_FontRuntime.lua
-Core\MSUF_TextureRuntime.lua
-Features\MSUF_Feature_DebugPosition.lua
+UnitFrames\MSUF_UnitFrames_Factory.xml
+Runtime\MSUF_SwapRecolor.lua
+Runtime\MSUF_FontRuntime.lua
+Runtime\MSUF_TextureRuntime.lua
+Features\Diagnostics\MSUF_Feature_DebugPosition.lua
 
 # ---------------------------------------------------------------
-# CORE (post-main)
+# CASTBARS / CLASS POWER
 # ---------------------------------------------------------------
-UnitFrames\MSUF_UnitFrameCore_PostMain.xml
 Castbars\MSUF_Castbars_Core.lua
 Castbars\MSUF_CastbarRegistry.lua
 Castbars\MSUF_CastbarStyle.lua
@@ -130,23 +128,18 @@ Castbars\MSUF_PlayerCastbarRuntime.lua
 Castbars\MSUF_CastbarPreviewEdit.lua
 Castbars\MSUF_CastbarPreviews.lua
 Castbars\MSUF_CastbarVisuals.lua
-Castbars\MSUF_BossPreviewTextHook.lua
 Castbars\MSUF_CastbarEngine.lua
 Castbars\MSUF_CastbarDriver.lua
 Castbars\MSUF_FocusKick_StateDriver.lua
-Modules\MidnightSimpleUnitFrames_BossCastbars.lua
-Modules\BossCastbars_Preview.lua
+Castbars\MSUF_BossCastbars.lua
+Castbars\MSUF_BossCastbars_Preview.lua
 Castbars\MSUF_Castbars.lua
-UnitFrames\MSUF_UnitFrameCore_Visuals.xml
-Borders\MSUF_Borders.xml
-UnitFrames\MSUF_UnitFrameCore_AfterBorders.xml
 ClassPower\MSUF_CP_Constants.lua
 ClassPower\MSUF_CP_Modes.lua
 ClassPower\MSUF_CP_Core.lua
 ClassPower\MSUF_CP_AltMana.lua
 ClassPower\MSUF_CP_BalanceDruid.lua
 ClassPower\MSUF_CP_Controller.lua
-Core\MSUF_ClassPower.lua
 
 # ---------------------------------------------------------------
 # GROUP FRAMES
@@ -157,12 +150,11 @@ MSUF_GroupFrames.xml
 # OPTIONS
 # ---------------------------------------------------------------
 # MENU2
-Menu2\MSUF_Menu2.xml
-Auras3\MSUF_Auras3_Menu.xml
+Shell\Menu2\MSUF_Menu2.xml
 
 # ---------------------------------------------------------------
-# MODULES
+# OPTIONAL VISUAL / CASTBAR FEATURES
 # ---------------------------------------------------------------
-Modules\MSUF_InterruptReady.lua
-Modules\MidnightSimpleUnitFrames_FocusKickIcon.lua
-Modules\MSUF_RoundedUnitframes.lua
+Castbars\MSUF_InterruptReady.lua
+Castbars\MSUF_FocusKickIcon.lua
+UnitFrames\Effects\MSUF_UF_RoundedFrames.lua
