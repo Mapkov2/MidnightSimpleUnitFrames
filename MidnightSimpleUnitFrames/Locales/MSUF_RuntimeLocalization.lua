@@ -4924,7 +4924,7 @@ local MSUF2_53_VISIBLE_zhTW = {
 AddMissing("zhTW", MSUF2_53_VISIBLE_zhTW)
 
 --- MSUF 5.3 dashboard changelog localization. These keys are read dynamically
---- from Foundation/MSUF_Changelog.lua, so the literal-audit script cannot see them.
+--- from State/MSUF_Changelog.lua, so the literal-audit script cannot see them.
 local MSUF2_53_CHANGELOG_es = {
     ["Highlights"] = "Destacados",
     ["Performance"] = "Rendimiento",
@@ -5575,7 +5575,6 @@ SetLocale("ptBR", MSUF_FORCE_RELOAD_PROMPTS_pt)
 
 SetLocale("ruRU", {
     ["Castbar Colors"] = "Цвета полосы заклинаний",
-    ["Castbar update interval"] = "Интервал обновления полосы заклинаний",
     ["Castbars"] = "Полосы заклинаний",
     ["Castbar border"] = "Граница полосы заклинаний",
     ["Class Color Mode (color HP bars)"] = "Режим цвета класса (окрашивает полосы здоровья)",
@@ -5607,7 +5606,6 @@ SetLocale("koKR", {
     ["Castbar Colors"] = "시전바 색상",
     ["Castbar background texture"] = "시전바 배경 텍스처",
     ["Castbar texture"] = "시전바 텍스처",
-    ["Castbar update interval"] = "시전바 업데이트 간격",
     ["Castbars"] = "시전바",
     ["Castbar border"] = "시전바 테두리",
     ["Class Resources were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"] = "직업 자원이 활성화 또는 비활성화되었습니다.\n\n이 변경 사항을 완전히 적용하려면 UI를 다시 불러와야 합니다.\n\n지금 다시 불러올까요?",
@@ -5633,7 +5631,6 @@ local MSUF_FORCE_ZH_CN = {
     ["Castbar Colors"] = "施法条颜色",
     ["Castbar background texture"] = "施法条背景材质",
     ["Castbar texture"] = "施法条材质",
-    ["Castbar update interval"] = "施法条更新间隔",
     ["Castbars"] = "施法条",
     ["casts"] = "施法",
     ["Class Color Mode (color HP bars)"] = "职业颜色模式（为生命条着色）",
@@ -5677,7 +5674,6 @@ local MSUF_FORCE_ZH_TW = {
     ["Castbar Colors"] = "施法條顏色",
     ["Castbar background texture"] = "施法條背景材質",
     ["Castbar texture"] = "施法條材質",
-    ["Castbar update interval"] = "施法條更新間隔",
     ["Castbars"] = "施法條",
     ["casts"] = "施法",
     ["Class Color"] = "職業顏色",
