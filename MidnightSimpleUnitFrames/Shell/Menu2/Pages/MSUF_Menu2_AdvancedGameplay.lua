@@ -40,99 +40,27 @@ local function BuildGameplay(ctx)
     local anchorValues = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
     local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
 
-    local function PlayerSpecID()
-        if MSUF and type(MSUF.MSUF_GetPlayerSpecID) == "function" then
-            local ok, value = pcall(MSUF.MSUF_GetPlayerSpecID)
-            if ok then return value end
-        end
-        if GetSpecialization and GetSpecializationInfo then
-            local spec = GetSpecialization()
-            if spec then
-                local id = GetSpecializationInfo(spec)
-                return id
-            end
-        end
-        return nil
-    end
-
     local function CurrentMeleeSpellID()
-        local g = Gameplay()
-        local id = 0
-        if g.meleeSpellPerSpec and type(g.nameplateMeleeSpellIDBySpec) == "table" then
-            local specID = PlayerSpecID()
-            if specID then id = tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0 end
-        end
-        if id <= 0 and g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
-            local _, class = UnitClass("player")
-            if class then id = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0 end
-        end
-        if id <= 0 then id = tonumber(g.nameplateMeleeSpellID) or 0 end
-        return id
+        if type(M.GetGameplayMeleeSpellID) == "function" then return M.GetGameplayMeleeSpellID(Gameplay()) end
+        return tonumber(Gameplay().nameplateMeleeSpellID) or 0
     end
 
     local function SpellName(id)
-        id = tonumber(id) or 0
-        if id <= 0 then return nil end
-        if C_Spell and type(C_Spell.GetSpellInfo) == "function" then
-            local info = C_Spell.GetSpellInfo(id)
-            if type(info) == "table" and info.name then return info.name end
-        end
-        if GetSpellInfo then
-            local name = GetSpellInfo(id)
-            return name
-        end
+        if type(M.GetGameplaySpellName) == "function" then return M.GetGameplaySpellName(id) end
         return nil
     end
 
-    local function SpellIDFromInput(value)
-        local text = tostring(value or ""):match("^%s*(.-)%s*$")
-        local asNumber = tonumber(text)
-        if asNumber then return floor(asNumber + 0.5) end
-        if text ~= "" and C_Spell and type(C_Spell.GetSpellInfo) == "function" then
-            local ok, info = pcall(C_Spell.GetSpellInfo, text)
-            if not ok then info = nil end
-            if type(info) == "table" and info.spellID then return tonumber(info.spellID) or 0 end
-        end
-        if text ~= "" and GetSpellInfo then
-            local _, _, _, _, _, _, spellID = GetSpellInfo(text)
-            return tonumber(spellID) or 0
-        end
-        return 0
-    end
-
     local function SeedMeleeClass()
-        local g = Gameplay()
-        if type(g.nameplateMeleeSpellIDByClass) ~= "table" then g.nameplateMeleeSpellIDByClass = {} end
-        if UnitClass then
-            local _, class = UnitClass("player")
-            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0) <= 0 then
-                g.nameplateMeleeSpellIDByClass[class] = CurrentMeleeSpellID()
-            end
-        end
+        if type(M.SeedGameplayMeleeSpellScope) == "function" then M.SeedGameplayMeleeSpellScope("class") end
     end
 
     local function SeedMeleeSpec()
-        local g = Gameplay()
-        if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
-        local specID = PlayerSpecID()
-        if specID and (tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0) <= 0 then
-            g.nameplateMeleeSpellIDBySpec[specID] = CurrentMeleeSpellID()
-        end
+        if type(M.SeedGameplayMeleeSpellScope) == "function" then M.SeedGameplayMeleeSpellScope("spec") end
     end
 
     local function SetMeleeSpellID(value)
-        local spellID = SpellIDFromInput(value)
-        local g = Gameplay()
-        if g.meleeSpellPerSpec then
-            if type(g.nameplateMeleeSpellIDBySpec) ~= "table" then g.nameplateMeleeSpellIDBySpec = {} end
-            local specID = PlayerSpecID()
-            if specID then g.nameplateMeleeSpellIDBySpec[specID] = spellID end
-        elseif g.meleeSpellPerClass and UnitClass then
-            if type(g.nameplateMeleeSpellIDByClass) ~= "table" then g.nameplateMeleeSpellIDByClass = {} end
-            local _, class = UnitClass("player")
-            if class then g.nameplateMeleeSpellIDByClass[class] = spellID end
-        end
-        g.nameplateMeleeSpellID = spellID
+        if type(M.SetGameplayMeleeSpellID) == "function" then return M.SetGameplayMeleeSpellID(value) end
+        Gameplay().nameplateMeleeSpellID = floor((tonumber(value) or 0) + 0.5)
     end
 
     local timerControls = {}

@@ -611,11 +611,19 @@ local function GFWriteConfValue(scope, key, value, mode)
 end
 
 local function GFReadBlacklistCat(scope, groupKey, catKey)
+    if Model and type(Model.ReadGroupBlacklistCategory) == "function" then
+        return Model.ReadGroupBlacklistCategory(scope, groupKey, catKey)
+    end
     local g = GFReadGroup(scope, groupKey)
     return type(g.blacklistCats) == "table" and g.blacklistCats[catKey] == true
 end
 
 local function GFWriteBlacklistCat(scope, groupKey, catKey, value)
+    if Model and type(Model.WriteGroupBlacklistCategory) == "function" then
+        local changed = Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, value)
+        if changed then GFQueue(scope, "visual") end
+        return
+    end
     local changed = false
     local a, b = GroupScopeKinds(scope)
     local function write(kind)

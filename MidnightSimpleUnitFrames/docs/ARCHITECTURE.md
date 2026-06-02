@@ -16,7 +16,8 @@ subsystems own the frames players see.
   tooltip behavior.
 - `Shell/`: user-facing shell and launcher UI. `Shell/EditMode` and
   `Shell/Menu2` are the primary configuration surfaces; `Shell/UI` is the
-  shared UI kit used by both.
+  shared UI kit used by both, including heavier EditMode UI installers under
+  `Shell/UI/EditMode` that are invoked by the small EditMode loader files.
 - `UnitFrames/`: the unit-frame subsystem. `UnitFrames/Engine` is the new
   frame engine; `Elements` are per-frame capabilities; `Group` is the party and
   raid engine; `Effects` contains optional visual add-ons such as rounded frames.

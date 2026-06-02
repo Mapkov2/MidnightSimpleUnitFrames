@@ -144,6 +144,14 @@ function M.BlockCombatAction()
     return true
 end
 
+function M.StageFactoryReset()
+    if M.BlockCombatAction and M.BlockCombatAction() then return false end
+    local fn = _G.MSUF_DoFullReset
+    if type(fn) ~= "function" then return false end
+    fn({ skipReload = true })
+    return true
+end
+
 local function BlockCombatAndRefresh(ctx)
     if not M.BlockCombatAction() then return false end
     if M.Refresh then M.Refresh(ctx) end
@@ -1302,8 +1310,53 @@ function M.Refresh(ctx)
     end
 end
 
+local function MarkCommandSearchDirty()
+    if M.SearchBridge and type(M.SearchBridge.MarkSearchIndexDirty) == "function" then
+        M.SearchBridge.MarkSearchIndexDirty()
+    elseif M.Search and type(M.Search.MarkIndexDirty) == "function" then
+        M.Search.MarkIndexDirty()
+    end
+end
+
+local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
+    if not widget then return end
+    opts = opts or {}
+    local minValue, maxValue
+    if kind == "slider" and widget.GetMinMaxValues then
+        minValue, maxValue = widget:GetMinMaxValues()
+    end
+    widget._msuf2CommandAction = {
+        kind = kind,
+        ctxKey = ctx and ctx.key,
+        get = getValue,
+        set = setValue,
+        values = opts.values or widget.values,
+        getValues = function()
+            return widget.values
+        end,
+        min = opts.min or minValue,
+        max = opts.max or maxValue,
+        step = opts.step or widget._msuf2Step,
+        label = opts.label,
+        labelFn = function()
+            return WidgetHistoryLabel(ctx, widget, opts.label)
+        end,
+        sourceFn = function(label)
+            return WidgetHistorySource(ctx, widget, label)
+        end,
+        refresh = function()
+            if M.Refresh then M.Refresh(ctx) end
+        end,
+        blockCombat = function()
+            return BlockCombatAndRefresh(ctx)
+        end,
+    }
+    MarkCommandSearchDirty()
+end
+
 function M.BindToggle(ctx, widget, getValue, setValue)
     if not widget then return end
+    AttachCommandAction(ctx, widget, "toggle", getValue, setValue)
     local function SyncFromValue(self)
         local value = getValue() and true or false
         self:SetChecked(value)
@@ -1328,6 +1381,13 @@ end
 
 function M.BindSlider(ctx, slider, getValue, setValue)
     if not slider then return end
+    local minValue, maxValue
+    if slider.GetMinMaxValues then minValue, maxValue = slider:GetMinMaxValues() end
+    AttachCommandAction(ctx, slider, "slider", getValue, setValue, {
+        min = minValue,
+        max = maxValue,
+        step = slider._msuf2Step,
+    })
     local function BeginSliderHistory(self)
         if BlockCombatAndRefresh(ctx) then return end
         if self._msuf2Refreshing or self._msuf2HistoryTransaction then return end
@@ -1382,6 +1442,7 @@ end
 
 function M.BindSegment(ctx, segment, getValue, setValue)
     if not segment then return end
+    AttachCommandAction(ctx, segment, "segment", getValue, setValue, { values = segment.values })
     for i = 1, #(segment.buttons or {}) do
         local btn = segment.buttons[i]
         btn:SetScript("OnClick", function(self)
@@ -1404,6 +1465,7 @@ end
 
 function M.BindDropdown(ctx, dropdown, getValue, setValue)
     if not dropdown then return end
+    AttachCommandAction(ctx, dropdown, "dropdown", getValue, setValue, { values = dropdown.values })
     dropdown:SetOnValueChanged(function(value)
         if BlockCombatAndRefresh(ctx) then
             if type(getValue) == "function" then dropdown:SetValue(getValue()) end
@@ -1430,6 +1492,7 @@ end
 
 function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
     if not editBox then return end
+    AttachCommandAction(ctx, editBox, "textinput", getValue, setValue)
     editBox._msuf2CommitOnBlur = commitOnBlur and true or false
     editBox:SetOnValueCommitted(function(value)
         if BlockCombatAndRefresh(ctx) then return end
@@ -1447,6 +1510,7 @@ end
 
 function M.BindColor(ctx, colorButton, getRGB, setRGB)
     if not colorButton then return end
+    AttachCommandAction(ctx, colorButton, "color", getRGB, setRGB)
     local function RefreshColor()
         if type(getRGB) ~= "function" then return end
         local r, g, b = getRGB()

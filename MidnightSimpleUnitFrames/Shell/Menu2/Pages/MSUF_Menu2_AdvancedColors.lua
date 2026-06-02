@@ -8,14 +8,12 @@ _G.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
-local GP = M.GlobalPage or {}
 
 local floor = math.floor
 local max = math.max
 local min = math.min
 
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
-local NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentBarsScope, BarScopeGet, BuildScopeOverrideSection, ApplyBars, RefreshBorderTestModes = M.Pick(GP, [[NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentBarsScope BarScopeGet BuildScopeOverrideSection ApplyBars RefreshBorderTestModes]])
 local VTR = M.ValueTextRows
 local KLR = M.KeyLabelRows
 
@@ -272,153 +270,10 @@ local function SetGeneralRGBAlias(primaryPrefix, legacyPrefix, r, gCol, b)
     ApplyColors()
 end
 
-local function CurrentColorBarsScope()
-    return type(CurrentBarsScope) == "function" and CurrentBarsScope() or "shared"
-end
-
-local function BarsScopeActive()
-    local scope = CurrentColorBarsScope()
-    return scope == "shared" or (type(ScopeHasOverride) == "function" and ScopeHasOverride(scope, "hlOverride"))
-end
-
-local function ForEachLegacyPrefix(legacyPrefixes, fn)
-    if type(fn) ~= "function" then return end
-    if type(legacyPrefixes) == "table" then
-        for i = 1, #legacyPrefixes do
-            if legacyPrefixes[i] then fn(legacyPrefixes[i]) end
-        end
-    elseif legacyPrefixes then
-        fn(legacyPrefixes)
-    end
-end
-
-local function GeneralRGBAliasMulti(primaryPrefix, legacyPrefixes, dr, dg, db)
-    local g = G()
-    local r = tonumber(g[primaryPrefix .. "R"])
-    local gg = tonumber(g[primaryPrefix .. "G"])
-    local b = tonumber(g[primaryPrefix .. "B"])
-    ForEachLegacyPrefix(legacyPrefixes, function(prefix)
-        r = r or tonumber(g[prefix .. "R"])
-        gg = gg or tonumber(g[prefix .. "G"])
-        b = b or tonumber(g[prefix .. "B"])
-    end)
-    return r or dr, gg or dg, b or db
-end
-
-local function ScopedRGBAlias(primaryPrefix, legacyPrefixes, dr, dg, db)
-    local fr, fg, fb = GeneralRGBAliasMulti(primaryPrefix, legacyPrefixes, dr, dg, db)
-    if type(BarScopeGet) ~= "function" then return fr, fg, fb end
-    return tonumber(BarScopeGet(primaryPrefix .. "R", fr)) or dr,
-        tonumber(BarScopeGet(primaryPrefix .. "G", fg)) or dg,
-        tonumber(BarScopeGet(primaryPrefix .. "B", fb)) or db
-end
-
-local function SetScopedRGBAlias(primaryPrefix, legacyPrefixes, r, gCol, b, opts)
-    r, gCol, b = tonumber(r) or 0, tonumber(gCol) or 0, tonumber(b) or 0
-    local scope = CurrentColorBarsScope()
-    local setEntry = function(entry)
-        local changed = entry[primaryPrefix .. "R"] ~= r or entry[primaryPrefix .. "G"] ~= gCol or entry[primaryPrefix .. "B"] ~= b
-        entry[primaryPrefix .. "R"], entry[primaryPrefix .. "G"], entry[primaryPrefix .. "B"] = r, gCol, b
-        ForEachLegacyPrefix(legacyPrefixes, function(prefix)
-            changed = changed or entry[prefix .. "R"] ~= r or entry[prefix .. "G"] ~= gCol or entry[prefix .. "B"] ~= b
-            entry[prefix .. "R"], entry[prefix .. "G"], entry[prefix .. "B"] = r, gCol, b
-        end)
-        if opts and opts.alphaKey then
-            changed = changed or entry[opts.alphaKey] ~= opts.alphaValue
-            entry[opts.alphaKey] = opts.alphaValue
-        end
-        if opts and opts.clearModeKey then
-            changed = changed or entry[opts.clearModeKey] ~= nil
-            entry[opts.clearModeKey] = nil
-        end
-        return changed
-    end
-
-    if scope == "shared" or type(ScopeDBKeys) ~= "function" then
-        local changed = setEntry(G())
-        if changed then ApplyColors() end
-        return changed
-    end
-
-    local keys = ScopeDBKeys(scope)
-    if not keys then
-        local changed = setEntry(G())
-        if changed then ApplyColors() end
-        return changed
-    end
-
-    if type(ScopeSetOverride) == "function" then ScopeSetOverride(scope, "hlOverride", true) end
-    local db = DB()
-    local changed = false
-    for i = 1, #keys do
-        local key = keys[i]
-        db[key] = db[key] or {}
-        changed = setEntry(db[key]) or changed
-    end
-    return changed
-end
-
-local function ClearScopedRGBAlias(primaryPrefix, legacyPrefixes, opts)
-    local scope = CurrentColorBarsScope()
-    local clearEntry = function(entry)
-        if not entry then return false end
-        local changed = entry[primaryPrefix .. "R"] ~= nil or entry[primaryPrefix .. "G"] ~= nil or entry[primaryPrefix .. "B"] ~= nil
-        entry[primaryPrefix .. "R"], entry[primaryPrefix .. "G"], entry[primaryPrefix .. "B"] = nil, nil, nil
-        ForEachLegacyPrefix(legacyPrefixes, function(prefix)
-            changed = changed or entry[prefix .. "R"] ~= nil or entry[prefix .. "G"] ~= nil or entry[prefix .. "B"] ~= nil
-            entry[prefix .. "R"], entry[prefix .. "G"], entry[prefix .. "B"] = nil, nil, nil
-        end)
-        if opts and opts.alphaKey then
-            changed = changed or entry[opts.alphaKey] ~= nil
-            entry[opts.alphaKey] = nil
-        end
-        if opts and opts.clearModeKey then
-            changed = changed or entry[opts.clearModeKey] ~= nil
-            entry[opts.clearModeKey] = nil
-        end
-        return changed
-    end
-
-    if scope == "shared" or type(ScopeDBKeys) ~= "function" then
-        return clearEntry(G())
-    end
-
-    local keys = ScopeDBKeys(scope)
-    if not keys then return clearEntry(G()) end
-    local db = DB()
-    local changed = false
-    for i = 1, #keys do
-        changed = clearEntry(db[keys[i]]) or changed
-    end
-    return changed
-end
-
-local function ApplyScopedBarColors(reason)
-    if type(ApplyBars) == "function" then
-        ApplyBars(reason or "MSUF2_BAR_COLORS")
-    else
-        ApplyColors()
-        CallGlobal("MSUF_RefreshAllFrames")
-    end
-    CallGlobal("MSUF_UFCore_RefreshSettingsCache", reason or "MSUF2_BAR_COLORS")
-    CallGlobal("MSUF_PrioRows_Reinit")
-    CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "MSUF2_BAR_COLORS")
-end
-
-local function ApplyScopedOutlineColor(reason)
-    ApplyScopedBarColors(reason or "MSUF2_BAR_OUTLINE_COLOR")
+local function ApplyGlobalOutlineColor()
+    ApplyColors()
     CallGlobal("MSUF_ApplyBarOutlineThickness_All")
     CallGlobal("MSUF_ApplyRoundedUnitframes")
-end
-
-local function ScopedColorAt(ctx, section, label, x, y, primaryPrefix, legacyPrefixes, dr, dg, db, reason, opts, apply)
-    return ColorValueAt(ctx, section, label, x, y,
-        function() return ScopedRGBAlias(primaryPrefix, legacyPrefixes, dr, dg, db) end,
-        function(r, g, c)
-            if SetScopedRGBAlias(primaryPrefix, legacyPrefixes, r, g, c, opts) then
-                if type(apply) == "function" then apply(reason) else ApplyScopedBarColors(reason) end
-            end
-        end)
 end
 
 local function TableRGB(tbl, key, dr, dg, db)
@@ -1029,55 +884,6 @@ gradient=Color Gradient
     end)
     M.AddRefresher(ctx, RefreshNPCTypeControls)
 
-    local scopeValues = GP.SCOPE_VALUES
-    if type(BuildScopeOverrideSection) == "function" and type(scopeValues) == "table" then
-        BuildScopeOverrideSection(ctx, b, {
-            values = scopeValues,
-            getValue = function() return CurrentColorBarsScope() end,
-            setValue = function(v)
-                local normalize = type(NormalizeScopeKey) == "function" and NormalizeScopeKey or function(value) return value or "shared" end
-                G().hpPowerTextSelectedKey = normalize(v)
-                if type(RefreshBorderTestModes) == "function" then RefreshBorderTestModes() end
-                if M.SelectPage then M.SelectPage(ctx.key) end
-            end,
-            hasOverride = function(value)
-                return value ~= "shared" and type(ScopeHasOverride) == "function" and ScopeHasOverride(value, "hlOverride")
-            end,
-            getOverride = function()
-                local key = CurrentColorBarsScope()
-                return type(ScopeHasOverride) == "function" and ScopeHasOverride(key, "hlOverride")
-            end,
-            setOverride = function(v)
-                local key = CurrentColorBarsScope()
-                if key ~= "shared" and type(ScopeSetOverride) == "function" then
-                    ScopeSetOverride(key, "hlOverride", v)
-                    ApplyScopedBarColors("MSUF2_COLOR_BARS_OVERRIDE")
-                end
-                if M.SelectPage then M.SelectPage(ctx.key) end
-            end,
-            reset = function()
-                if type(ScopeSetOverride) == "function" then
-                    for i = 1, #scopeValues do
-                        local key = scopeValues[i].value
-                        if key ~= "shared" then ScopeSetOverride(key, "hlOverride", false) end
-                    end
-                end
-                ApplyScopedBarColors("MSUF2_COLOR_BARS_RESET_OVERRIDES")
-                if M.SelectPage then M.SelectPage(ctx.key) end
-            end,
-            hint = "Select which Unit Frame or Group Frame scope the Frame Outline color should edit.",
-            updateHint = function(hint, current, active, shared)
-                if shared then
-                    hint:SetText("Shared edits global bar colors. Only Frame Outline color can use a custom scope.")
-                elseif BarsScopeActive() then
-                    hint:SetText("This scope is using custom Bars settings. Frame Outline color here applies only to this scope.")
-                else
-                    hint:SetText("This scope follows Shared. Turn on custom settings before editing Frame Outline color.")
-                end
-            end,
-        })
-    end
-
     local barColors = b:CollapsibleSection("colors_bar_colors", "Bar Colors", 240, false)
     local barLeftX = 30
     local barRightX = max(430, floor((barColors._msuf2Width or ctx.width or 720) * 0.50))
@@ -1090,9 +896,15 @@ gradient=Color Gradient
     ColorValueAt(ctx, barColors, "Purge Border Color", barRightX, -74,
         function() return GeneralRGBAlias("hlPurgeColor", "purgeBorderColor", 1.00, 0.85, 0.00) end,
         function(r, g, c) SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, c) end)
-    local outlineBorder = ScopedColorAt(ctx, barColors, "Bar Outline Color", barRightX, -110,
-        "barOutlineColor", nil, 0, 0, 0, "MSUF2_BAR_OUTLINE_COLOR",
-        { alphaKey = "barOutlineColorA", alphaValue = 1, clearModeKey = "barOutlineColorMode" }, ApplyScopedOutlineColor)
+    ColorValueAt(ctx, barColors, "Bar Outline Color", barRightX, -110,
+        function() return GeneralRGB("barOutlineColor", 0, 0, 0) end,
+        function(r, g, c)
+            local general = G()
+            general.barOutlineColorR, general.barOutlineColorG, general.barOutlineColorB = r, g, c
+            general.barOutlineColorA = 1
+            general.barOutlineColorMode = nil
+            ApplyGlobalOutlineColor()
+        end)
     local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -148,
         function()
             local fn = ColorAPI().GetPowerBarBackgroundMatchHP
@@ -1106,24 +918,18 @@ gradient=Color Gradient
             SetControlEnabled(powerBg, not (v and true or false))
         end)
     CH.ButtonAt(barColors, "Reset Bar Colors", barLeftX, -194, 160, function()
-        if CurrentColorBarsScope() ~= "shared" and BarsScopeActive() then
-            local changed = ClearScopedRGBAlias("barOutlineColor", nil, { alphaKey = "barOutlineColorA", clearModeKey = "barOutlineColorMode" })
-            if changed then ApplyScopedOutlineColor("MSUF2_BAR_COLOR_RESET") end
-            return
-        end
         local g = G()
         for _, prefix in ipairs({ "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor", "barOutlineColor" }) do
             g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"], g[prefix .. "A"] = nil, nil, nil, nil
         end
+        g.barOutlineColorMode = nil
         g.hlAggroColorR, g.hlAggroColorG, g.hlAggroColorB = nil, nil, nil
         g.hlPurgeColorR, g.hlPurgeColorG, g.hlPurgeColorB = nil, nil, nil
         g.aggroBorderColorR, g.aggroBorderColorG, g.aggroBorderColorB = nil, nil, nil
         g.powerBarBgMatchBarColor = nil
-        ApplyColors()
+        ApplyGlobalOutlineColor()
     end)
     M.AddRefresher(ctx, function()
-        local active = BarsScopeActive()
-        SetControlEnabled(outlineBorder, active)
         SetControlEnabled(powerBg, not (powerBgMatch:GetChecked() and true or false))
     end)
 

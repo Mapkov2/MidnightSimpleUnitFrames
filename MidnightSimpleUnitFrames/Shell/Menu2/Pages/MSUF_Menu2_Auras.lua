@@ -1383,6 +1383,9 @@ local function BuildUnitBlacklist(ctx, b, scope)
 end
 
 local function GFReadBlacklistCat(scope, groupKey, catKey)
+    if Model and type(Model.ReadGroupBlacklistCategory) == "function" then
+        return Model.ReadGroupBlacklistCategory(scope, groupKey, catKey)
+    end
     local group = GFReadGroup(scope, groupKey)
     return type(group.blacklistCats) == "table" and group.blacklistCats[catKey] == true
 end
@@ -1396,6 +1399,11 @@ local function GFInvalidateBlacklist(scope, groupKey)
 end
 
 local function GFWriteBlacklistCat(scope, groupKey, catKey, value)
+    if Model and type(Model.WriteGroupBlacklistCategory) == "function" then
+        local changed = Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, value)
+        if changed then QueueGroupScope(scope, "visual") end
+        return
+    end
     local changed
     local a, b = GroupScopeKinds(scope)
     local function write(kind)

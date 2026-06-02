@@ -281,6 +281,120 @@ function M.ApplyGameplay()
     return false
 end
 
+local function GameplayDB()
+    local db
+    if type(M.EnsureDB) == "function" then
+        db = M.EnsureDB()
+    end
+    if type(db) ~= "table" then
+        _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+        db = _G.MSUF_DB
+    end
+    db.gameplay = type(db.gameplay) == "table" and db.gameplay or {}
+    return db.gameplay
+end
+
+function M.GetGameplayPlayerSpecID()
+    if MSUF and type(MSUF.MSUF_GetPlayerSpecID) == "function" then
+        local ok, value = pcall(MSUF.MSUF_GetPlayerSpecID)
+        if ok then return value end
+    end
+    if type(_G.MSUF_GetPlayerSpecID) == "function" then
+        local ok, value = pcall(_G.MSUF_GetPlayerSpecID)
+        if ok then return value end
+    end
+    if GetSpecialization and GetSpecializationInfo then
+        local spec = GetSpecialization()
+        if spec then
+            local id = GetSpecializationInfo(spec)
+            return id
+        end
+    end
+    return nil
+end
+
+function M.ResolveGameplaySpellInput(value)
+    local text = tostring(value or ""):match("^%s*(.-)%s*$")
+    if text == "" then return 0 end
+    local linkID = text:match("[Ss][Pp][Ee][Ll][Ll]:(%d+)")
+    if linkID then return tonumber(linkID) or 0 end
+    local asNumber = tonumber(text)
+    if asNumber then return floor(asNumber + 0.5) end
+    if C_Spell and type(C_Spell.GetSpellInfo) == "function" then
+        local ok, info = pcall(C_Spell.GetSpellInfo, text)
+        if ok and type(info) == "table" and info.spellID then return tonumber(info.spellID) or 0 end
+    end
+    if text ~= "" and GetSpellInfo then
+        local _, _, _, _, _, _, spellID = GetSpellInfo(text)
+        return tonumber(spellID) or 0
+    end
+    return 0
+end
+
+function M.GetGameplaySpellName(id)
+    id = tonumber(id) or 0
+    if id <= 0 then return nil end
+    if C_Spell and type(C_Spell.GetSpellInfo) == "function" then
+        local info = C_Spell.GetSpellInfo(id)
+        if type(info) == "table" and info.name then return info.name end
+    end
+    if GetSpellInfo then
+        local name = GetSpellInfo(id)
+        return name
+    end
+    return nil
+end
+
+function M.GetGameplayMeleeSpellID(g)
+    g = g or GameplayDB()
+    local id = 0
+    if g.meleeSpellPerSpec and type(g.nameplateMeleeSpellIDBySpec) == "table" then
+        local specID = M.GetGameplayPlayerSpecID()
+        if specID then id = tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0 end
+    end
+    if id <= 0 and g.meleeSpellPerClass and type(g.nameplateMeleeSpellIDByClass) == "table" and UnitClass then
+        local _, class = UnitClass("player")
+        if class then id = tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0 end
+    end
+    if id <= 0 then id = tonumber(g.nameplateMeleeSpellID) or 0 end
+    return id
+end
+
+function M.SeedGameplayMeleeSpellScope(scope)
+    local g = GameplayDB()
+    if scope == "spec" then
+        g.nameplateMeleeSpellIDBySpec = type(g.nameplateMeleeSpellIDBySpec) == "table" and g.nameplateMeleeSpellIDBySpec or {}
+        local specID = M.GetGameplayPlayerSpecID()
+        if specID and (tonumber(g.nameplateMeleeSpellIDBySpec[specID]) or 0) <= 0 then
+            g.nameplateMeleeSpellIDBySpec[specID] = M.GetGameplayMeleeSpellID(g)
+        end
+    elseif scope == "class" then
+        g.nameplateMeleeSpellIDByClass = type(g.nameplateMeleeSpellIDByClass) == "table" and g.nameplateMeleeSpellIDByClass or {}
+        if UnitClass then
+            local _, class = UnitClass("player")
+            if class and (tonumber(g.nameplateMeleeSpellIDByClass[class]) or 0) <= 0 then
+                g.nameplateMeleeSpellIDByClass[class] = M.GetGameplayMeleeSpellID(g)
+            end
+        end
+    end
+end
+
+function M.SetGameplayMeleeSpellID(value)
+    local spellID = M.ResolveGameplaySpellInput(value)
+    local g = GameplayDB()
+    if g.meleeSpellPerSpec then
+        g.nameplateMeleeSpellIDBySpec = type(g.nameplateMeleeSpellIDBySpec) == "table" and g.nameplateMeleeSpellIDBySpec or {}
+        local specID = M.GetGameplayPlayerSpecID()
+        if specID then g.nameplateMeleeSpellIDBySpec[specID] = spellID end
+    elseif g.meleeSpellPerClass and UnitClass then
+        g.nameplateMeleeSpellIDByClass = type(g.nameplateMeleeSpellIDByClass) == "table" and g.nameplateMeleeSpellIDByClass or {}
+        local _, class = UnitClass("player")
+        if class then g.nameplateMeleeSpellIDByClass[class] = spellID end
+    end
+    g.nameplateMeleeSpellID = spellID
+    return spellID
+end
+
 function M.StatusBarTextureItems(followText)
     local ui = MSUF and MSUF.UI
     if ui and type(ui.StatusBarTextureItems) == "function" then
@@ -469,6 +583,99 @@ function M.IsEditModeCombatLocked(includeBlizzard)
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
 
+local function EditModeState()
+    local em2 = rawget(_G, "MSUF_EM2")
+    local state = type(em2) == "table" and em2.State or nil
+    return type(state) == "table" and state or nil
+end
+
+local function RefreshEditModeSurfaces()
+    if type(M.RefreshMenuFramePriority) == "function" then M.RefreshMenuFramePriority() end
+    if type(M.RefreshDashboardEditModeButton) == "function" then M.RefreshDashboardEditModeButton() end
+    if M.frame and type(M.frame.RefreshStatus) == "function" then M.frame:RefreshStatus() end
+end
+
+function M.EditModeLifecycleStatus(includeBlizzard)
+    local state = EditModeState()
+    local setFn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
+    local unitKey = rawget(_G, "MSUF_CurrentEditUnitKey")
+    if state and type(state.GetUnitKey) == "function" then
+        unitKey = state.GetUnitKey() or unitKey
+    end
+    return {
+        active = M.IsMSUFEditModeActive(includeBlizzard) and true or false,
+        combatLocked = M.IsEditModeCombatLocked(includeBlizzard) and true or false,
+        unitKey = unitKey,
+        hasDirectHelper = type(setFn) == "function",
+        hasStateEnter = state and type(state.Enter) == "function" or false,
+        hasStateExit = state and type(state.Exit) == "function" or false,
+        hasStateCancel = state and type(state.CancelAll) == "function" or false,
+    }
+end
+
+function M.SetMSUFEditModeActive(active, unitKey, opts)
+    opts = opts or {}
+    active = active and true or false
+    local before = M.EditModeLifecycleStatus(opts.includeBlizzard)
+    if before.active == active then
+        return true, active and "already_enabled" or "already_disabled", before
+    end
+    if active and before.combatLocked then
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+            _G.MSUF_ShowConfigCombatLockMessage()
+        elseif type(M.ShowConfigCombatLockMessage) == "function" then
+            M.ShowConfigCombatLockMessage()
+        end
+        return false, "combat_locked", before
+    end
+
+    local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
+    if type(fn) == "function" then
+        local ok, result = pcall(fn, active, unitKey)
+        if not ok or result == false then return false, "helper_failed", before end
+        RefreshEditModeSurfaces()
+        local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
+        if after.active == active then return true, active and "enabled" or "disabled", after end
+        return false, "helper_failed", after
+    end
+
+    local state = EditModeState()
+    if active and state and type(state.Enter) == "function" then
+        state.Enter(unitKey)
+    elseif (not active) and state and type(state.Exit) == "function" then
+        state.Exit(opts.source or "msuf2_menu")
+    else
+        return false, active and "missing_enter_helper" or "missing_exit_helper", before
+    end
+
+    RefreshEditModeSurfaces()
+    local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
+    if after.active == active then return true, active and "enabled" or "disabled", after end
+    return false, "helper_failed", after
+end
+
+function M.CancelMSUFEditMode(opts)
+    opts = opts or {}
+    local before = M.EditModeLifecycleStatus(opts.includeBlizzard)
+    if not before.active then return true, "already_disabled", before end
+    local state = EditModeState()
+    if not (state and type(state.CancelAll) == "function") then
+        return false, "missing_cancel_helper", before
+    end
+    local ok, result = pcall(state.CancelAll)
+    if not ok or result == false then return false, "helper_failed", before end
+    RefreshEditModeSurfaces()
+    local after = M.EditModeLifecycleStatus(opts.includeBlizzard)
+    if not after.active then return true, "canceled", after end
+    return false, "helper_failed", after
+end
+
+function M.ToggleMSUFEditMode(unitKey, opts)
+    opts = opts or {}
+    local status = M.EditModeLifecycleStatus(opts.includeBlizzard)
+    return M.SetMSUFEditModeActive(not status.active, unitKey, opts)
+end
+
 function M.WireEditModeButton(ctx, button, opts)
     if not button then return nil end
     opts = opts or {}
@@ -489,22 +696,9 @@ function M.WireEditModeButton(ctx, button, opts)
             Refresh()
             return
         end
-        local nextActive = not active
         local unit = type(opts.unit) == "function" and opts.unit() or opts.unit
-        local fn = rawget(_G, "MSUF_SetMSUFEditModeDirect") or rawget(_G, "MSUF_SetEditMode")
-        if type(fn) == "function" then
-            pcall(fn, nextActive, unit)
-        else
-            local em2 = rawget(_G, "MSUF_EM2")
-            local state = em2 and em2.State
-            if state then
-                if active and type(state.Exit) == "function" then
-                    state.Exit(opts.source or "msuf2_menu")
-                elseif nextActive and type(state.Enter) == "function" then
-                    state.Enter(unit)
-                end
-            end
-        end
+        local nextActive = not active
+        M.ToggleMSUFEditMode(unit, { includeBlizzard = opts.includeBlizzard, source = opts.source or "msuf2_menu" })
         if opts.defer and C_Timer and C_Timer.After then C_Timer.After(0, Refresh) else Refresh() end
         if type(opts.afterClick) == "function" then opts.afterClick(nextActive, active) end
     end)
