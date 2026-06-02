@@ -3,7 +3,7 @@
 ## Notes: Lightweight unitframes with MSUF Edit Mode.
 ## Author: Mapko
 ## Category: Combat
-## Version: 6.0-preview2
+## Version: 6.0-preview3
 ## SavedVariables: MSUF_DB, MSUF_GlobalDB
 ## IconTexture: Interface\AddOns\MidnightSimpleUnitFrames\Media\MSUF_MinimapIcon.tga
 ## OptionalDeps: Masque, LibSharedMedia-3.0, Clique, WagoAnalytics
@@ -61,6 +61,10 @@ Kernel\MSUF_Modules.lua
 Kernel\MSUF_EventBus.lua
 Kernel\MSUF_Scheduler.lua
 Shell\UI\MSUF_Widgets.lua
+Shell\UI\MSUF_AnchorPicker.lua
+Shell\UI\MSUF_EditPopupUI.lua
+Shell\UI\EditMode\MSUF_EditMode_Layout.lua
+Shell\UI\EditMode\MSUF_EditMode_HUD.lua
 
 # ---------------------------------------------------------------
 # SHELL
