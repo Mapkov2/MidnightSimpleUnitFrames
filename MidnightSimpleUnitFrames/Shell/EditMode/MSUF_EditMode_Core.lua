@@ -11,6 +11,105 @@ local addonName, MSUF = ...
 _G.MSUF_EM2 = _G.MSUF_EM2 or {}
 local EM2 = _G.MSUF_EM2
 
+local Util = EM2.Util
+if type(Util) ~= "table" then Util = {} end
+EM2.Util = Util
+
+function Util.ApplyAllSettingsSafe()
+    local UF = MSUF and MSUF.UF
+    if UF and UF.Apply then UF.Apply(nil); return true end
+    return false
+end
+
+function Util.ApplySettingsForKeySafe(key)
+    local UF = MSUF and MSUF.UF
+    if UF and UF.Apply then return UF.Apply(key) == true end
+    return false
+end
+
+function Util.Tr(text)
+    if type(text) ~= "string" then return text end
+    if type(MSUF) == "table" and type(MSUF.Translate) == "function" then
+        return MSUF.Translate(text)
+    end
+    local locale = (type(MSUF) == "table" and MSUF.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if translated ~= nil then return translated end
+    end
+    return text
+end
+
+function Util.SharedUI()
+    return (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
+end
+
+function Util.ThemeColor(key, fallback)
+    local ui = Util.SharedUI()
+    if ui and ui.Color then return ui.Color(key, fallback) end
+    return fallback
+end
+
+function Util.IsConfigCombatLocked()
+    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
+        return _G.MSUF_IsConfigCombatLocked() and true or false
+    end
+    if InCombatLockdown and InCombatLockdown() then return true end
+    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+end
+
+function Util.ShowConfigCombatLockMessage()
+    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+        _G.MSUF_ShowConfigCombatLockMessage()
+    elseif print then
+        print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
+    end
+end
+
+function Util.BlockConfigCombatLocked()
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+        return _G.MSUF_BlockConfigCombatLocked() and true or false
+    end
+    if Util.IsConfigCombatLocked() then
+        Util.ShowConfigCombatLockMessage()
+        return true
+    end
+    return false
+end
+
+function Util.RefreshUFPreview(reason)
+    local fn = _G.MSUF_UFPreview_RequestRefresh
+    if type(fn) == "function" then fn(reason or "EM2") end
+end
+
+function Util.Round(n)
+    return n + (2^52 + 2^51) - (2^52 + 2^51)
+end
+
+function Util.UnitSectionForComponent(component)
+    if not component or component == "frame" or component == "layout" or component == "bounds" or component == "size" then return "frame_basics" end
+    if component == "name" or component == "hp" or component == "power" or component == "text" then return "text" end
+    if component == "auras" then return "auras3" end
+    if component == "castbar" or component == "cast" then return "castbar" end
+    if component == "powerbar" or component == "power_bar" or component == "detached" or component == "detachedpowerbar" then return "power_bar" end
+    if component == "anchor" or component == "anchoring" then return "anchoring" end
+    if component == "portrait" then return "portrait" end
+    if component == "alpha" or component == "transparency" then return "transparency" end
+    if component == "status" or component == "status_icons" then return "status_icons" end
+    return "frame_basics"
+end
+
+function Util.SyncUnitTextMenuState(M, key, component, slot)
+    if not (M and key and (component == "name" or component == "hp" or component == "power")) then return end
+    M.unitTextTabSelection = M.unitTextTabSelection or {}
+    M.unitTextTabSelection[key] = component
+    if slot then
+        M.unitTextSlotSelection = M.unitTextSlotSelection or {}
+        M.unitTextSlotSelection[key] = M.unitTextSlotSelection[key] or {}
+        M.unitTextSlotSelection[key][component] = slot
+    end
+end
+
 local Registry = {}
 EM2.Registry = Registry
 
@@ -91,11 +190,6 @@ end
 --- State machine for Edit Mode 2.
 --- Manages: enter/exit lifecycle, combat lockdown, AnyEditMode listeners,
 --- boss preview, Blizzard EM sync, and keeps all legacy globals in sync.
-local addonName, MSUF = ...
-
-local EM2 = _G.MSUF_EM2
-if not EM2 then return end
-
 local State = {}
 EM2.State = State
 
@@ -104,21 +198,8 @@ local active      = false
 local unitKey     = nil
 local combatFrame = nil
 
-local function IsConfigCombatLocked()
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
-        return _G.MSUF_IsConfigCombatLocked() and true or false
-    end
-    if InCombatLockdown and InCombatLockdown() then return true end
-    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
-end
-
-local function ShowConfigCombatLockMessage()
-    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-        _G.MSUF_ShowConfigCombatLockMessage()
-    elseif print then
-        print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
-    end
-end
+local IsConfigCombatLocked = Util.IsConfigCombatLocked
+local ShowConfigCombatLockMessage = Util.ShowConfigCombatLockMessage
 
 --- Legacy global sync (contract with 30+ external files)
 local function SyncLegacy()
@@ -185,16 +266,8 @@ local function EnsureDB()
     if type(nsEnsureDB) == "function" then nsEnsureDB(); return _G.MSUF_DB ~= nil end
     return false
 end
-local function ApplyAllSettingsSafe()
-    local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then UF.Apply(nil); return true end
-    return false
-end
-local function ApplySettingsForKeySafe(key)
-    local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then return UF.Apply(key) == true end
-    return false
-end
+local ApplyAllSettingsSafe = Util.ApplyAllSettingsSafe
+local ApplySettingsForKeySafe = Util.ApplySettingsForKeySafe
 --- Public read-only accessors
 function State.IsActive()      return active end
 function State.GetUnitKey()    return unitKey end
@@ -489,10 +562,6 @@ end
 --- MSUF_EM2_Undo.lua
 --- Undo/redo for Edit Mode 2.
 --- Captures DB snapshots before changes, restores on undo.
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 then return end
-
 local Undo = {}
 EM2.Undo = Undo
 
@@ -650,10 +719,6 @@ _G.MSUF_EM_UndoRedo = function() Undo.DoRedo() end
 --- MSUF_EM2_Init.lua
 --- Loads last. Compat.lua already provides all legacy globals.
 --- This file ensures combat listener and exposes version tag.
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 then return end
-
 if EM2.State and EM2.State.EnsureCombatListener then
     EM2.State.EnsureCombatListener()
 end

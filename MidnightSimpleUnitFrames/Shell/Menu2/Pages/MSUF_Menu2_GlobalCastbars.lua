@@ -17,6 +17,60 @@ local min = math.min
 local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnabled, SetControlsEnabled, ApplyCastbars = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool TextureValues SetControlEnabled SetControlsEnabled ApplyCastbars]])
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 
+local CASTBAR_PREVIEW_UNITS = { player = true, target = true, focus = true, boss = true }
+local CASTBAR_PREVIEW_TYPES = { normal = true, channel = true, empowered = true }
+
+local function NormalizeCastbarPreviewUnit(unit)
+    unit = tostring(unit or ""):lower()
+    if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
+    return CASTBAR_PREVIEW_UNITS[unit] and unit or "player"
+end
+
+local function NormalizeCastbarPreviewType(kind)
+    kind = tostring(kind or ""):lower()
+    if kind == "channeled" or kind == "channelled" then kind = "channel" end
+    if kind == "empower" or kind == "empowerment" then kind = "empowered" end
+    return CASTBAR_PREVIEW_TYPES[kind] and kind or "normal"
+end
+
+function M.SetCastbarPreviewUnit(unit)
+    unit = NormalizeCastbarPreviewUnit(unit)
+    M._msuf2CastbarPreviewUnit = unit
+    local preview = M._msuf2CastbarPreview
+    if preview then
+        preview.layoutUnit = unit
+        if preview.Refresh then preview:Refresh() end
+    end
+    return true, unit
+end
+
+function M.SetCastbarPreviewType(kind, progress)
+    kind = NormalizeCastbarPreviewType(kind)
+    M._msuf2CastbarPreviewType = kind
+    local preview = M._msuf2CastbarPreview
+    if preview then
+        preview.castType = kind
+        preview.progress = tonumber(progress) or 0
+        preview._stageFlashStart = {}
+        preview._stageFlashUntil = {}
+        preview._lastEmpowerStageTick = nil
+        preview._lastEmpowerProgress = nil
+        if preview.Refresh then preview:Refresh() end
+    end
+    return true, kind
+end
+
+function M.PlayCastbarPreviewInterrupt()
+    M._msuf2CastbarPreviewInterruptPending = true
+    local preview = M._msuf2CastbarPreview
+    if preview and preview.PlayShake then
+        M._msuf2CastbarPreviewInterruptPending = nil
+        preview:PlayShake(tonumber(ReadG("castbarShakeStrength", 8)) or 8, true)
+        return true
+    end
+    return false
+end
+
 local function BuildCastbars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
@@ -35,8 +89,8 @@ local function BuildCastbars(ctx)
         local sectionW = section._msuf2Width or b.width or ctx.width or 720
         local innerW = max(360, sectionW - 28)
         local preview = {
-            castType = "normal",
-            layoutUnit = M._msuf2CastbarPreviewUnit or "player",
+            castType = NormalizeCastbarPreviewType(M._msuf2CastbarPreviewType or "normal"),
+            layoutUnit = NormalizeCastbarPreviewUnit(M._msuf2CastbarPreviewUnit or "player"),
             progress = 0,
             interruptUntil = 0,
             shakeUntil = 0,
@@ -163,9 +217,7 @@ local function BuildCastbars(ctx)
             btn._msuf2SkipHistoryCheckpoint = true
             btn:SetPoint("LEFT", unitBox, "LEFT", 6 + ((i - 1) * 56), 0)
             btn:SetScript("OnClick", function()
-                preview.layoutUnit = layoutUnit
-                M._msuf2CastbarPreviewUnit = layoutUnit
-                if preview.Refresh then preview:Refresh() end
+                M.SetCastbarPreviewUnit(layoutUnit)
             end)
             unitButtons[layoutUnit] = btn
         end
@@ -188,9 +240,7 @@ local function BuildCastbars(ctx)
             btn._msuf2SkipHistoryCheckpoint = true
             btn:SetPoint("LEFT", typeBox, "LEFT", 6 + ((i - 1) * (buttonW + buttonGap)), 0)
             btn:SetScript("OnClick", function()
-                preview.castType = castType
-                preview.progress = 0
-                if preview.Refresh then preview:Refresh() end
+                M.SetCastbarPreviewType(castType)
             end)
             typeButtons[castType] = btn
         end
@@ -200,7 +250,7 @@ local function BuildCastbars(ctx)
         interrupt._msuf2SkipHistoryCheckpoint = true
         interrupt:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, -17)
         interrupt:SetScript("OnClick", function()
-            if preview.PlayShake then preview:PlayShake(tonumber(ReadG("castbarShakeStrength", 8)) or 8, true) end
+            M.PlayCastbarPreviewInterrupt()
         end)
 
         local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
@@ -927,6 +977,10 @@ local function BuildCastbars(ctx)
             preview:Refresh()
         end)
 
+        M._msuf2CastbarPreview = preview
+        if M._msuf2CastbarPreviewUnit then M.SetCastbarPreviewUnit(M._msuf2CastbarPreviewUnit) end
+        if M._msuf2CastbarPreviewType then M.SetCastbarPreviewType(M._msuf2CastbarPreviewType) end
+        if M._msuf2CastbarPreviewInterruptPending then M.PlayCastbarPreviewInterrupt() end
         preview:Refresh()
         M.AddRefresher(ctx, function() preview:Refresh() end)
         return preview
@@ -940,14 +994,7 @@ local function BuildCastbars(ctx)
         if castPreview and castPreview.PlayShake then castPreview:PlayShake(strength, false) end
     end
     local function ShowEmpoweredPreview()
-        if not castPreview then return end
-        castPreview.castType = "empowered"
-        castPreview.progress = 0.62
-        castPreview._stageFlashStart = {}
-        castPreview._stageFlashUntil = {}
-        castPreview._lastEmpowerStageTick = nil
-        castPreview._lastEmpowerProgress = nil
-        if castPreview.Refresh then castPreview:Refresh() end
+        M.SetCastbarPreviewType("empowered", 0.62)
     end
     local function MoveToggle(toggle, parent, x, y, labelWidth)
         W.MoveWidget(toggle, parent, x, y)

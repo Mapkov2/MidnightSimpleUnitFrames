@@ -6,6 +6,7 @@
 --- Edit Mode 2 grid overlay.
 --- Midnight-styled background, pooled grid lines, accent-colored crosshair.
 --- Zero overhead when hidden (no OnUpdate, no timers).
+local function InstallEditLayoutUI(...)
 local addonName, MSUF = ...
 
 local EM2 = _G.MSUF_EM2
@@ -17,53 +18,16 @@ EM2.Grid = Grid
 local floor = math.floor
 local max   = math.max
 local min   = math.min
+local abs   = math.abs
+local U     = EM2.Util or {}
+local round = U.Round
 
-local function RefreshUFPreview(reason)
-    local fn = _G.MSUF_UFPreview_RequestRefresh
-    if type(fn) == "function" then fn(reason or "EM2_LAYOUT") end
-end
-local function ApplySettingsForKeySafe(key)
-    local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then return UF.Apply(key) == true end
-    return false
-end
-local function ApplyAllSettingsSafe()
-    local UF = MSUF and MSUF.UF
-    if UF and UF.Apply then UF.Apply(nil); return true end
-    return false
-end
-
-local function IsConfigCombatLocked()
-    if type(_G.MSUF_IsConfigCombatLocked) == "function" then
-        return _G.MSUF_IsConfigCombatLocked() and true or false
-    end
-    if InCombatLockdown and InCombatLockdown() then return true end
-    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
-end
-
-local function BlockConfigCombatLocked()
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-        return _G.MSUF_BlockConfigCombatLocked() and true or false
-    end
-    if IsConfigCombatLocked() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-            _G.MSUF_ShowConfigCombatLockMessage()
-        end
-        return true
-    end
-    return false
-end
-
---- Theme (prefer shared Menu2/UI tokens, fall back to legacy Midnight defaults)
-local function SharedUI()
-    return (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
-end
-
-local function ThemeColor(key, fallback)
-    local ui = SharedUI()
-    if ui and ui.Color then return ui.Color(key, fallback) end
-    return fallback
-end
+local RefreshUFPreview       = U.RefreshUFPreview
+local ApplySettingsForKeySafe = U.ApplySettingsForKeySafe
+local ApplyAllSettingsSafe   = U.ApplyAllSettingsSafe
+local IsConfigCombatLocked   = U.IsConfigCombatLocked
+local BlockConfigCombatLocked = U.BlockConfigCombatLocked
+local ThemeColor             = U.ThemeColor
 
 local function T()
     local legacy = _G.MSUF_THEME or {}
@@ -281,6 +245,35 @@ local function HideGridLines()
     end
 end
 
+local function DrawGridLine(idx, vertical, pos, lineR, lineG, lineB, lineAlpha, shadowAlpha)
+    local shadow = GetLineShadow(idx)
+    shadow:ClearAllPoints()
+    shadow:SetColorTexture(0, 0, 0, shadowAlpha)
+
+    local tex = GetLine(idx)
+    tex:ClearAllPoints()
+    tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
+
+    if vertical then
+        shadow:SetWidth(3)
+        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", pos - 1, 0)
+        shadow:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", pos - 1, 0)
+        tex:SetWidth(1)
+        tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", pos, 0)
+        tex:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", pos, 0)
+    else
+        shadow:SetHeight(3)
+        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -pos + 1)
+        shadow:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -pos + 1)
+        tex:SetHeight(1)
+        tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -pos)
+        tex:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -pos)
+    end
+
+    shadow:Show()
+    tex:Show()
+end
+
 function RebuildLines()
     if not gridFrame then return end
 
@@ -308,87 +301,32 @@ function RebuildLines()
     local cx = floor(w / 2)
     local cy = floor(h / 2)
 
+    local function AddLine(vertical, pos)
+        idx = idx + 1
+        DrawGridLine(idx, vertical, pos, lineR, lineG, lineB, lineAlpha, shadowAlpha)
+    end
+
     --- Vertical lines from center outward
     local x = cx - step
     while x > 0 do
-        idx = idx + 1
-        local shadow = GetLineShadow(idx)
-        shadow:ClearAllPoints()
-        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
-        shadow:SetWidth(3)
-        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x - 1, 0)
-        shadow:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x - 1, 0)
-        shadow:Show()
-
-        local tex = GetLine(idx)
-        tex:ClearAllPoints()
-        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
-        tex:SetWidth(1)
-        tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x, 0)
-        tex:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x, 0)
-        tex:Show()
+        AddLine(true, x)
         x = x - step
     end
     x = cx + step
     while x < w do
-        idx = idx + 1
-        local shadow = GetLineShadow(idx)
-        shadow:ClearAllPoints()
-        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
-        shadow:SetWidth(3)
-        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x - 1, 0)
-        shadow:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x - 1, 0)
-        shadow:Show()
-
-        local tex = GetLine(idx)
-        tex:ClearAllPoints()
-        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
-        tex:SetWidth(1)
-        tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", x, 0)
-        tex:SetPoint("BOTTOMLEFT", gridFrame, "BOTTOMLEFT", x, 0)
-        tex:Show()
+        AddLine(true, x)
         x = x + step
     end
 
     --- Horizontal lines from center outward
     local y = cy - step
     while y > 0 do
-        idx = idx + 1
-        local shadow = GetLineShadow(idx)
-        shadow:ClearAllPoints()
-        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
-        shadow:SetHeight(3)
-        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y + 1)
-        shadow:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y + 1)
-        shadow:Show()
-
-        local tex = GetLine(idx)
-        tex:ClearAllPoints()
-        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
-        tex:SetHeight(1)
-        tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y)
-        tex:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y)
-        tex:Show()
+        AddLine(false, y)
         y = y - step
     end
     y = cy + step
     while y < h do
-        idx = idx + 1
-        local shadow = GetLineShadow(idx)
-        shadow:ClearAllPoints()
-        shadow:SetColorTexture(0, 0, 0, shadowAlpha)
-        shadow:SetHeight(3)
-        shadow:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y + 1)
-        shadow:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y + 1)
-        shadow:Show()
-
-        local tex = GetLine(idx)
-        tex:ClearAllPoints()
-        tex:SetColorTexture(lineR, lineG, lineB, lineAlpha)
-        tex:SetHeight(1)
-        tex:SetPoint("TOPLEFT", gridFrame, "TOPLEFT", 0, -y)
-        tex:SetPoint("TOPRIGHT", gridFrame, "TOPRIGHT", 0, -y)
-        tex:Show()
+        AddLine(false, y)
         y = y + step
     end
 
@@ -453,16 +391,10 @@ function Grid.Rebuild()       RebuildLines() end
 --- MSUF_EM2_Snap.lua ? Phase 3: Full 9+9 edge-pair snap + alignment guides
 --- For each axis: 3 edges (min, center, max) ? 3 edges on target = 9 pairs.
 --- Snaps independently per axis. Shows 1px guide lines at snap points.
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 then return end
 
 local Snap = {}
 EM2.Snap = Snap
 
-local floor = math.floor
-local abs = math.abs
-local max, min = math.max, math.min
 local W8 = "Interface/Buttons/WHITE8X8"
 
 local enabled = false
@@ -691,14 +623,8 @@ end
 --- When element A moves, all elements anchored to A follow with same delta.
 --- Chains propagate recursively (A?B?C: moving A moves B and C).
 --- Width/height binding: child.width can track parent.width.
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 then return end
-
 local Anchors = {}
 EM2.Anchors = Anchors
-
-local floor = math.floor
 
 --- chains[childKey] = { parent = parentKey, bindWidth = bool, bindHeight = bool }
 local chains = {}
@@ -832,14 +758,9 @@ end
 --- MSUF_EM2_Nudge.lua
 --- Arrow key nudge system. Override bindings for UP/DOWN/LEFT/RIGHT.
 --- Shift=5px, Ctrl=10px, Alt=grid step. Targets open popup or current unit.
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 then return end
-
 local Nudge = {}
 EM2.Nudge = Nudge
 
-local floor = math.floor
 local owner
 
 local function GetPreviewNudgeTarget()
@@ -1081,16 +1002,9 @@ end
 --- During drag: computes DB offset from cursor, then positions bar with the
 --- EXACT same SetPoint("CENTER", anchor, "CENTER", ...) that PositionUnitFrame
 --- uses. Zero TOPLEFT. Zero conversion error. One positioning code path.
-local addonName, MSUF = ...
-local EM2 = _G.MSUF_EM2
-if not EM2 then return end
-
 local Ticker = {}
 EM2.Ticker = Ticker
 
-local round = function(n) return n + (2^52 + 2^51) - (2^52 + 2^51) end
-local abs   = math.abs
-local max, min = math.max, math.min
 local format = string.format
 
 local ECV_ANCHORS = {
@@ -1676,3 +1590,7 @@ function Ticker.Stop()
         tickerFrame:Hide()
     end
 end
+
+end
+
+_G.MSUF_InstallEditLayoutUI = InstallEditLayoutUI

@@ -363,23 +363,36 @@ function W.PageBuilder(ctx)
         y = -12,
         width = ctx.width or 720,
         collapsibles = {},
+        layoutEntries = {},
     }
 
     function b:RelayoutCollapsibles()
         if not self._collapsibleStartY then return end
         local y = self._collapsibleStartY
-        for i = 1, #self.collapsibles do
-            local entry = self.collapsibles[i]
-            local open = entry.open and true or false
-            entry.outer:ClearAllPoints()
-            entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
-            entry.outer:SetHeight(entry.headerHeight + (open and entry.contentHeight or 0))
-            entry.body:SetShown(open)
-            if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
-            T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
-            if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
-            if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
-            y = y - entry.outer:GetHeight() - 8
+        local entries = (#self.layoutEntries > 0) and self.layoutEntries or self.collapsibles
+        for i = 1, #entries do
+            local entry = entries[i]
+            if entry.kind == "section" then
+                local section = entry.frame
+                if section then
+                    section:ClearAllPoints()
+                    section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
+                    y = y - ((section.GetHeight and section:GetHeight()) or entry.height or 120) - (entry.gap or 12)
+                end
+            elseif entry.kind == "spacer" then
+                y = y - (entry.height or 10)
+            else
+                local open = entry.open and true or false
+                entry.outer:ClearAllPoints()
+                entry.outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, y)
+                entry.outer:SetHeight(entry.headerHeight + (open and entry.contentHeight or 0))
+                entry.body:SetShown(open)
+                if entry.body.SetAlpha and not entry._msuf2MotionActive then entry.body:SetAlpha(1) end
+                T.ApplyCollapseVisual(entry.arrow, entry.hint, open)
+                if entry._msuf2RefreshHeaderTone then entry._msuf2RefreshHeaderTone(false) end
+                if entry._msuf2RefreshState then pcall(entry._msuf2RefreshState, entry) end
+                y = y - entry.outer:GetHeight() - 8
+            end
         end
         self.y = y
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(y) + 42) end
@@ -403,6 +416,14 @@ function W.PageBuilder(ctx)
 
         self.y = self.y - (height or 120) - 12
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
+        if self._collapsibleStartY then
+            self.layoutEntries[#self.layoutEntries + 1] = {
+                kind = "section",
+                frame = section,
+                height = height or 120,
+                gap = 12,
+            }
+        end
         return section
     end
 
@@ -565,6 +586,7 @@ function W.PageBuilder(ctx)
             end
         end
         entry._msuf2RefreshHeaderTone = RefreshHeaderTone
+        entry.kind = "collapsible"
         header:SetScript("OnClick", function()
             if entry._msuf2MotionActive then return end
             local nextOpen = not entry.open
@@ -619,6 +641,7 @@ function W.PageBuilder(ctx)
         self.y = self.y - outer:GetHeight() - 8
         RefreshHeaderLayout()
         RefreshHeaderTone(false)
+        self.layoutEntries[#self.layoutEntries + 1] = entry
         self:RelayoutCollapsibles()
         local focusReq = MenuFocusRequestMatches(ctx.key, sectionId)
         if focusReq then
@@ -649,6 +672,14 @@ function W.PageBuilder(ctx)
         end
         self.y = self.y - (height or 78) - 12
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
+        if self._collapsibleStartY then
+            self.layoutEntries[#self.layoutEntries + 1] = {
+                kind = "section",
+                frame = section,
+                height = height or 78,
+                gap = 12,
+            }
+        end
         return section
     end
 
@@ -659,6 +690,12 @@ function W.PageBuilder(ctx)
     function b:Spacer(height)
         self.y = self.y - (height or 10)
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
+        if self._collapsibleStartY then
+            self.layoutEntries[#self.layoutEntries + 1] = {
+                kind = "spacer",
+                height = height or 10,
+            }
+        end
     end
 
     return b

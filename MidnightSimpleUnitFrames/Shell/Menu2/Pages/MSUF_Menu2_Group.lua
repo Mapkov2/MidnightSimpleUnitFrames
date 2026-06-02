@@ -579,6 +579,9 @@ GroupPage.Set = Set
 GroupPage.Bool = Bool
 GroupPage.Num = Num
 GroupPage.CurrentScope = CurrentScope
+GroupPage.GF_COPY_CATEGORIES = GF_COPY_CATEGORIES
+GroupPage.NewGFCopyScopes = NewGFCopyScopes
+GroupPage.CopyGroupSettings = CopyGroupSettings
 local function BindScopeToggle(ctx, widget, key, default, mode)
     M.BindToggle(ctx, widget,
         function() return Bool(CurrentScope(), key, default) end,

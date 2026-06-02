@@ -602,6 +602,79 @@ local function RefreshAurasPage(ctx)
     if M.Refresh then M.Refresh(ctx) end
 end
 
+local AURA_QUICK_PRESETS = {
+    clean = {
+        label = "Clean",
+        maxBuffs = 6, maxDebuffs = 12, perRow = 10, splitSpacing = 4, iconSize = 24, spacing = 2, sortOrder = 0,
+        layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = true,
+        includeDispellable = true, onlyMineBuffs = false, onlyMineDebuffs = false,
+        highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
+    },
+    focused = {
+        label = "Focused",
+        maxBuffs = 10, maxDebuffs = 16, perRow = 10, splitSpacing = 6, iconSize = 26, spacing = 2, sortOrder = 3,
+        layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+        hidePermanent = false, buffIncludeBoss = true, debuffIncludeBoss = true, includeStealable = true,
+        includeDispellable = true, onlyMineBuffs = true, onlyMineDebuffs = true,
+        highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
+    },
+    performance = {
+        label = "Fast",
+        maxBuffs = 4, maxDebuffs = 8, perRow = 8, splitSpacing = 2, iconSize = 22, spacing = 1, sortOrder = 0,
+        layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
+        hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = false,
+        includeDispellable = false, onlyMineBuffs = false, onlyMineDebuffs = false,
+        highlightOwnBuffs = false, highlightOwnDebuffs = false, showCooldownSwipe = false, showCooldownText = true, showStackCount = false, useBlizzardTimerText = true,
+    },
+}
+
+function M.GetAuraQuickPresetMeta(name)
+    return AURA_QUICK_PRESETS[name]
+end
+
+function M.ApplyAuraQuickPreset(scope, name, opts)
+    local p = AURA_QUICK_PRESETS[name]
+    if not p then return false end
+    scope = scope or AuraScope()
+    local previousScope = M.auraScope
+    M.auraScope = scope
+    local sharedScope = AuraScope() == "shared"
+    if not sharedScope then
+        ForceAuraFilterOverride()
+        ForceAuraCapsOverride()
+        ForceAuraLayoutOverride()
+    end
+    local caps = AuraCaps()
+    local layout = AuraLayout()
+    local filters = AuraFilters()
+    local buffs = AuraBuffFilters()
+    local debuffs = AuraDebuffFilters()
+    caps.maxBuffs, caps.maxDebuffs, caps.perRow = p.maxBuffs, p.maxDebuffs, p.perRow
+    caps.splitSpacing, caps.sortOrder = p.splitSpacing, p.sortOrder
+    caps.layoutMode = p.layoutMode or caps.layoutMode or "SEPARATE"
+    caps.buffGrowth, caps.debuffGrowth = p.buffGrowth, p.debuffGrowth
+    caps.buffRowWrap, caps.debuffRowWrap = p.buffRowWrap, p.debuffRowWrap
+    layout.iconSize, layout.spacing = p.iconSize, p.spacing
+    filters.hidePermanent = p.hidePermanent
+    buffs.includeBoss, debuffs.includeBoss = p.buffIncludeBoss, p.debuffIncludeBoss
+    buffs.includeStealable, debuffs.includeDispellable = p.includeStealable, p.includeDispellable
+    buffs.onlyMine, debuffs.onlyMine = p.onlyMineBuffs, p.onlyMineDebuffs
+    if sharedScope then
+        local shared = AuraShared()
+        shared.highlightOwnBuffs = p.highlightOwnBuffs
+        shared.highlightOwnDebuffs = p.highlightOwnDebuffs
+        shared.showCooldownSwipe = p.showCooldownSwipe
+        shared.showCooldownText = p.showCooldownText
+        shared.showStackCount = p.showStackCount
+        shared.useBlizzardTimerText = p.useBlizzardTimerText
+    end
+    M.auraScope = previousScope
+    ApplyAuras()
+    if opts and opts.refresh == true then RefreshAurasPage(opts.ctx) end
+    return true, p.label
+end
+
 local function BuildAuras(ctx)
     local AO = AURA_OPTIONS
     local b = W.PageBuilder(ctx)
@@ -657,36 +730,10 @@ local function BuildAuras(ctx)
         return count
     end
 
-    local QUICK_PRESETS = {
-        clean = {
-            label = "Clean",
-            maxBuffs = 6, maxDebuffs = 12, perRow = 10, splitSpacing = 4, iconSize = 24, spacing = 2, sortOrder = 0,
-            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-            hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = true,
-            includeDispellable = true, onlyMineBuffs = false, onlyMineDebuffs = false,
-            highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
-        },
-        focused = {
-            label = "Focused",
-            maxBuffs = 10, maxDebuffs = 16, perRow = 10, splitSpacing = 6, iconSize = 26, spacing = 2, sortOrder = 3,
-            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-            hidePermanent = false, buffIncludeBoss = true, debuffIncludeBoss = true, includeStealable = true,
-            includeDispellable = true, onlyMineBuffs = true, onlyMineDebuffs = true,
-            highlightOwnBuffs = true, highlightOwnDebuffs = true, showCooldownSwipe = true, showCooldownText = true, showStackCount = true, useBlizzardTimerText = true,
-        },
-        performance = {
-            label = "Fast",
-            maxBuffs = 4, maxDebuffs = 8, perRow = 8, splitSpacing = 2, iconSize = 22, spacing = 1, sortOrder = 0,
-            layoutMode = "SEPARATE", buffGrowth = "RIGHT", debuffGrowth = "RIGHT", buffRowWrap = "DOWN", debuffRowWrap = "DOWN",
-            hidePermanent = true, buffIncludeBoss = false, debuffIncludeBoss = true, includeStealable = false,
-            includeDispellable = false, onlyMineBuffs = false, onlyMineDebuffs = false,
-            highlightOwnBuffs = false, highlightOwnDebuffs = false, showCooldownSwipe = false, showCooldownText = true, showStackCount = false, useBlizzardTimerText = true,
-        },
-    }
     local previewPreset
 
     local function EffectiveCapsValues()
-        local p = previewPreset and QUICK_PRESETS[previewPreset]
+        local p = previewPreset and AURA_QUICK_PRESETS[previewPreset]
         local caps = AuraCaps()
         return {
             maxBuffs = p and p.maxBuffs or NumValue(caps, "maxBuffs", 8),
@@ -712,43 +759,6 @@ local function BuildAuras(ctx)
             if tostring(AO.SORT_ORDER[i].value) == tostring(value) then return AO.SORT_ORDER[i].text or tostring(value) end
         end
         return tostring(value or 0)
-    end
-
-    local function ApplyQuickPreset(name)
-        local p = QUICK_PRESETS[name]
-        if not p then return end
-        local sharedScope = AuraScope() == "shared"
-        if not sharedScope then
-            ForceAuraFilterOverride()
-            ForceAuraCapsOverride()
-            ForceAuraLayoutOverride()
-        end
-        local caps = AuraCaps()
-        local layout = AuraLayout()
-        local filters = AuraFilters()
-        local buffs = AuraBuffFilters()
-        local debuffs = AuraDebuffFilters()
-        caps.maxBuffs, caps.maxDebuffs, caps.perRow = p.maxBuffs, p.maxDebuffs, p.perRow
-        caps.splitSpacing, caps.sortOrder = p.splitSpacing, p.sortOrder
-        caps.layoutMode = p.layoutMode or caps.layoutMode or "SEPARATE"
-        caps.buffGrowth, caps.debuffGrowth = p.buffGrowth, p.debuffGrowth
-        caps.buffRowWrap, caps.debuffRowWrap = p.buffRowWrap, p.debuffRowWrap
-        layout.iconSize, layout.spacing = p.iconSize, p.spacing
-        filters.hidePermanent = p.hidePermanent
-        buffs.includeBoss, debuffs.includeBoss = p.buffIncludeBoss, p.debuffIncludeBoss
-        buffs.includeStealable, debuffs.includeDispellable = p.includeStealable, p.includeDispellable
-        buffs.onlyMine, debuffs.onlyMine = p.onlyMineBuffs, p.onlyMineDebuffs
-        if sharedScope then
-            local shared = AuraShared()
-            shared.highlightOwnBuffs = p.highlightOwnBuffs
-            shared.highlightOwnDebuffs = p.highlightOwnDebuffs
-            shared.showCooldownSwipe = p.showCooldownSwipe
-            shared.showCooldownText = p.showCooldownText
-            shared.showStackCount = p.showStackCount
-            shared.useBlizzardTimerText = p.useBlizzardTimerText
-        end
-        ApplyAuras()
-        RefreshAurasPage(ctx)
     end
 
     local function ResetSelectedScope()
@@ -1008,13 +1018,15 @@ local function BuildAuras(ctx)
     local quickIndex = 0
     local function QuickButton(name, label)
         quickIndex = quickIndex + 1
-        local p = QUICK_PRESETS[name]
+        local p = AURA_QUICK_PRESETS[name]
         local pos = quickPos[quickIndex]
         local btn = T.Button(presetCard, label or p.label, pos.width or 102, 24)
         btn:SetPoint("TOPLEFT", presetCard, "TOPLEFT", pos.x, pos.y)
         btn:SetScript("OnClick", function()
             previewPreset = nil
-            M.CaptureHistory("Apply aura preset " .. p.label, "auras3:preset:" .. name, function() ApplyQuickPreset(name) end)
+            M.CaptureHistory("Apply aura preset " .. p.label, "auras3:preset:" .. name, function()
+                M.ApplyAuraQuickPreset(AuraScope(), name, { refresh = true, ctx = ctx })
+            end)
         end)
         btn:HookScript("OnEnter", function()
             previewPreset = name
@@ -1188,7 +1200,7 @@ local function BuildAuras(ctx)
         local budget, total, budgetColor = BudgetInfo()
         previewChips[1]:SetText("Auras only")
         previewChips[2]:SetText("Scope: " .. AuraScopeLabel())
-        previewChips[3]:SetText((previewPreset and (QUICK_PRESETS[previewPreset].label .. " preview") or ("Budget: " .. budget)))
+        previewChips[3]:SetText((previewPreset and (AURA_QUICK_PRESETS[previewPreset].label .. " preview") or ("Budget: " .. budget)))
         if previewChips[3].SetTextColor and budgetColor then previewChips[3]:SetTextColor(budgetColor[1], budgetColor[2], budgetColor[3], 1) end
         groupLabels.buffs:SetText("Buffs  " .. buffCount .. "/" .. caps.maxBuffs .. " shown")
         groupLabels.debuffs:SetText("Debuffs  " .. debuffCount .. "/" .. caps.maxDebuffs .. " shown")
@@ -1233,8 +1245,8 @@ local function BuildAuras(ctx)
             end
         end
         if presetHint then
-            if previewPreset and QUICK_PRESETS[previewPreset] then
-                local p = QUICK_PRESETS[previewPreset]
+            if previewPreset and AURA_QUICK_PRESETS[previewPreset] then
+                local p = AURA_QUICK_PRESETS[previewPreset]
                 presetHint:SetText(M.Tr(p.label) .. ": " .. tostring(p.maxBuffs) .. M.Tr(" buffs, ") .. tostring(p.maxDebuffs) .. M.Tr(" debuffs, ") .. tostring(p.iconSize) .. "px")
             else
                 presetHint:SetText(tostring(ActiveAuraUnitCount()) .. M.Tr(" visible groups, ") .. budget .. M.Tr(" budget, ") .. tostring(total) .. M.Tr(" max icons"))

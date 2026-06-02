@@ -896,11 +896,13 @@ function M.RegisterSearchWidget(widget, meta)
 
     local entry = {
         id = id,
+        widget = widget,
         pageKey = pageKey,
         label = label,
         kind = meta.kind or widget._msuf2ControlKind or "control",
         anchor = meta.anchor or widget._msuf2Title or widget._msuf2Label or widget,
         values = CopyStaticSearchValues(meta.values or widget.values),
+        command = meta.command or widget._msuf2CommandAction,
         keywords = meta.keywords,
         help = meta.help or meta.description,
     }
@@ -980,6 +982,45 @@ local function AddSearchRecord(records, seenRecords, pageInfo, label, anchor, ki
     return record
 end
 
+local function BuildButtonCommandAction(widget, entry)
+    if not (widget and type(entry) == "table" and entry.kind == "button") then return nil end
+    local function ReadClickHandler()
+        if type(widget.GetScript) ~= "function" then return nil end
+        local ok, handler = pcall(widget.GetScript, widget, "OnClick")
+        if ok and type(handler) == "function" then return handler end
+        return nil
+    end
+    if not ReadClickHandler() then return nil end
+    return {
+        kind = "button",
+        label = entry.label,
+        set = function()
+            local handler = ReadClickHandler()
+            if not handler then return false end
+            if type(widget.IsEnabled) == "function" then
+                local ok, enabled = pcall(widget.IsEnabled, widget)
+                if ok and enabled == false then return false end
+            end
+            if type(widget.Click) == "function" then
+                widget:Click("LeftButton", true)
+            else
+                handler(widget, "LeftButton", true)
+            end
+            return true
+        end,
+        labelFn = function()
+            if widget.GetText then
+                local ok, text = pcall(widget.GetText, widget)
+                if ok and text and text ~= "" then return text end
+            end
+            return entry.label or "Button"
+        end,
+        sourceFn = function(label)
+            return tostring(entry.pageKey or "page") .. ":button:" .. tostring(label or entry.label or "button")
+        end,
+    }
+end
+
 BuildRegistrySearchRecord = function(entry)
     if type(entry) ~= "table" then return nil end
     local info = BuildSearchPageInfoForKey(entry.pageKey)
@@ -996,6 +1037,12 @@ BuildRegistrySearchRecord = function(entry)
     local rec = AddSearchRecord(tempRecords, seenRecords, info, entry.label, entry.anchor, entry.kind or "control", extra)
     if rec then
         rec.answer = entry.help
+        local widget = entry.widget
+        local command = entry.command or (widget and widget._msuf2CommandAction) or BuildButtonCommandAction(widget, entry)
+        if command then
+            rec.command = command
+            rec.widget = widget
+        end
     end
     return rec
 end

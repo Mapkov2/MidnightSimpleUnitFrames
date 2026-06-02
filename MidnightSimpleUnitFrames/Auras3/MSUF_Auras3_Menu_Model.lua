@@ -415,6 +415,18 @@ local function NormalizeKind(kind)
     return kind
 end
 
+local function NormalizeGroupScope(scope)
+    scope = tostring(scope or "raid"):lower()
+    if scope == "party" then return "party" end
+    return "raid"
+end
+
+local function GroupScopeKinds(scope)
+    scope = NormalizeGroupScope(scope)
+    if scope == "party" then return "party" end
+    return "raid", "mythicraid"
+end
+
 local function AuraFilter()
     return _G.MSUF_GF_AuraFilter
 end
@@ -427,6 +439,41 @@ end
 local function PublicAuraPresetMeta()
     local af = AuraFilter()
     return (af and (af.PUBLIC_AURA_PRESET_META or af.DECLASSIFIED_META)) or FALLBACK_PUBLIC_AURA_META
+end
+
+local function GroupConf(kind)
+    local db = _G.MSUF_DB
+    if type(db) ~= "table" then db = {}; _G.MSUF_DB = db end
+    local key = kind == "raid" and "gf_raid" or (kind == "mythicraid" and "gf_mythicraid" or "gf_party")
+    if type(db[key]) ~= "table" then db[key] = {} end
+    return db[key]
+end
+
+local function GroupAuraRoot(kind)
+    local conf = GroupConf(kind)
+    if type(conf.auras) ~= "table" then conf.auras = {} end
+    if type(conf.auras.buff) ~= "table" then conf.auras.buff = {} end
+    if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = {} end
+    return conf.auras
+end
+
+local function GroupAuraGroup(kind, groupKey)
+    groupKey = NormalizeKind(groupKey)
+    local root = GroupAuraRoot(kind)
+    if type(root[groupKey]) ~= "table" then root[groupKey] = {} end
+    return root[groupKey]
+end
+
+local function InvalidateGroupBlacklist(scope, groupKey)
+    local af = AuraFilter()
+    if not (af and type(af.InvalidateBlacklistHash) == "function") then return end
+    local a, b = GroupScopeKinds(scope)
+    af.InvalidateBlacklistHash(GroupAuraGroup(a, groupKey))
+    if b then af.InvalidateBlacklistHash(GroupAuraGroup(b, groupKey)) end
+end
+
+local function CompactKey(value)
+    return tostring(value or ""):lower():gsub("[^%w]+", "")
 end
 
 local function SpellInfo(spellID)
@@ -1148,6 +1195,152 @@ function Model.AddBlacklistPresetGroup(scope, presetKey)
         end
     end
     return count
+end
+
+function Model.GroupBlacklistCategoryValues()
+    local meta = PublicAuraPresetMeta()
+    local values = {}
+    if type(meta) ~= "table" then return values end
+    for i = 1, #meta do
+        local item = meta[i]
+        if item and item.key then
+            values[#values + 1] = {
+                key = item.key,
+                value = item.key,
+                label = item.label or item.key,
+                text = item.label or item.key,
+                category = item.category,
+                tooltip = item.tooltip,
+            }
+        end
+    end
+    return values
+end
+
+function Model.GroupBlacklistCategoryLabel(catKey)
+    if catKey == "RAID_BUFFS" then return "Raid / Mythic Buffs" end
+    local values = Model.GroupBlacklistCategoryValues()
+    for i = 1, #values do
+        local item = values[i]
+        if item.key == catKey then return item.label or item.key end
+    end
+    return tostring(catKey or "")
+end
+
+function Model.ResolveGroupBlacklistCategory(value)
+    local compact = CompactKey(value)
+    if compact == "" then return nil end
+    local values = Model.GroupBlacklistCategoryValues()
+    local bestKey, bestLen
+    for i = 1, #values do
+        local item = values[i]
+        local key = item.key
+        local keyCompact = CompactKey(key)
+        local labelCompact = CompactKey(item.label or item.text or key)
+        local categoryCompact = CompactKey(item.category)
+        local matchLen
+        if compact == keyCompact or compact == labelCompact then
+            matchLen = math.max(#keyCompact, #labelCompact)
+        elseif #labelCompact >= 5 and compact:find(labelCompact, 1, true) then
+            matchLen = #labelCompact
+        elseif #keyCompact >= 5 and compact:find(keyCompact, 1, true) then
+            matchLen = #keyCompact
+        elseif #categoryCompact >= 5 and compact == categoryCompact then
+            matchLen = #categoryCompact
+        end
+        if matchLen and (not bestLen or matchLen > bestLen) then
+            bestKey, bestLen = key, matchLen
+        end
+    end
+    return bestKey
+end
+
+function Model.ReadGroupBlacklistCategory(scope, groupKey, catKey)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    catKey = Model.ResolveGroupBlacklistCategory(catKey) or catKey
+    if type(catKey) ~= "string" or catKey == "" then return false end
+    local a = GroupScopeKinds(scope)
+    local group = GroupAuraGroup(a, groupKey)
+    return type(group.blacklistCats) == "table" and group.blacklistCats[catKey] == true
+end
+
+function Model.ReadGroupBlacklistCategoryState(scope, groupKey, catKey)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    catKey = Model.ResolveGroupBlacklistCategory(catKey) or catKey
+    local a, b = GroupScopeKinds(scope)
+    if type(catKey) ~= "string" or catKey == "" then
+        if b then return { raid = false, mythicraid = false } end
+        return { party = false }
+    end
+    local function read(kind)
+        local group = GroupAuraGroup(kind, groupKey)
+        return type(group.blacklistCats) == "table" and group.blacklistCats[catKey] == true
+    end
+    if b then
+        return { raid = read(a), mythicraid = read(b) }
+    end
+    return { party = read(a) }
+end
+
+function Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, value)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    catKey = Model.ResolveGroupBlacklistCategory(catKey) or catKey
+    if type(catKey) ~= "string" or catKey == "" then return false end
+    local changed = false
+    local a, b = GroupScopeKinds(scope)
+    local function write(kind)
+        local group = GroupAuraGroup(kind, groupKey)
+        if type(group.blacklistCats) ~= "table" then group.blacklistCats = {} end
+        local nextValue = value and true or nil
+        if group.blacklistCats[catKey] == nextValue then return end
+        group.blacklistCats[catKey] = nextValue
+        changed = true
+    end
+    write(a)
+    if b then write(b) end
+    if changed then InvalidateGroupBlacklist(scope, groupKey) end
+    return changed
+end
+
+function Model.WriteGroupBlacklistCategoryState(scope, groupKey, catKey, state)
+    if type(state) ~= "table" then return Model.WriteGroupBlacklistCategory(scope, groupKey, catKey, state) end
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    catKey = Model.ResolveGroupBlacklistCategory(catKey) or catKey
+    if type(catKey) ~= "string" or catKey == "" then return false end
+    local changed = false
+    local a, b = GroupScopeKinds(scope)
+    local function write(kind)
+        local group = GroupAuraGroup(kind, groupKey)
+        if type(group.blacklistCats) ~= "table" then group.blacklistCats = {} end
+        local nextValue = state[kind] == true and true or nil
+        if group.blacklistCats[catKey] == nextValue then return end
+        group.blacklistCats[catKey] = nextValue
+        changed = true
+    end
+    write(a)
+    if b then write(b) end
+    if changed then InvalidateGroupBlacklist(scope, groupKey) end
+    return changed
+end
+
+function Model.GroupBlacklistCategorySummary(scope, groupKey)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    local a = GroupScopeKinds(scope)
+    local group = GroupAuraGroup(a, groupKey)
+    local cats = type(group.blacklistCats) == "table" and group.blacklistCats or nil
+    if type(cats) ~= "table" then return "No blacklisted aura categories." end
+    local out = {}
+    for key, enabled in pairs(cats) do
+        if enabled == true then out[#out + 1] = Model.GroupBlacklistCategoryLabel(key) end
+    end
+    table_sort(out)
+    if #out == 0 then return "No blacklisted aura categories." end
+    return table.concat(out, "\n")
 end
 
 function Model.ReadSharedBool(key, defaultValue)

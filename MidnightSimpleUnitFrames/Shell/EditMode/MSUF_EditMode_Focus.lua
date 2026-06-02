@@ -10,6 +10,7 @@ EM2.Focus = Focus
 local max = math.max
 local floor = math.floor
 local W8 = "Interface/Buttons/WHITE8X8"
+local U = EM2.Util or {}
 
 local function Menu2Theme()
     local M2 = (type(MSUF) == "table" and MSUF.MSUF2) or _G.MSUF2
@@ -147,18 +148,7 @@ local function PersistMenuValue(M, key, value)
     end
 end
 
-local function UnitSectionForComponent(component)
-    if not component or component == "frame" or component == "layout" or component == "bounds" or component == "size" then return "frame_basics" end
-    if component == "name" or component == "hp" or component == "power" or component == "text" then return "text" end
-    if component == "auras" then return "auras3" end
-    if component == "castbar" then return "castbar" end
-    if component == "powerbar" or component == "power_bar" or component == "detached" or component == "detachedpowerbar" then return "power_bar" end
-    if component == "anchor" or component == "anchoring" then return "anchoring" end
-    if component == "portrait" then return "portrait" end
-    if component == "alpha" or component == "transparency" then return "transparency" end
-    if component == "status" or component == "status_icons" then return "status_icons" end
-    return "frame_basics"
-end
+local UnitSectionForComponent = U.UnitSectionForComponent
 
 local function GroupPageForComponent(component)
     if component == "bars" or component == "hp" or component == "power" or component == "name" or component == "text" then return "gf_bars" end
@@ -252,13 +242,7 @@ local function ApplyMenuSelection(key, component, slot, opts)
     if unitPage then
         if component == "name" or component == "hp" or component == "power" then
             if opts.focusRequest == true or opts.syncTextState == true then
-                M.unitTextTabSelection = M.unitTextTabSelection or {}
-                M.unitTextTabSelection[key] = component
-                if slot then
-                    M.unitTextSlotSelection = M.unitTextSlotSelection or {}
-                    M.unitTextSlotSelection[key] = M.unitTextSlotSelection[key] or {}
-                    M.unitTextSlotSelection[key][component] = slot
-                end
+                U.SyncUnitTextMenuState(M, key, component, slot)
             end
         end
         return pageKey
