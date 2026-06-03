@@ -358,6 +358,64 @@ local function RegisterCastbarNumericBoolean(dbKey, attr, label, defaultValue, a
     })
 end
 
+local function RegisterCastbarDetailNumbers()
+    RegisterCastbarNumber("castbarIconSize", "iconSize", "Castbar Icon Size", 0, 0, 128, CastbarAliases("icon size", "castbar icon size", "spell icon size"), {
+        reason = "MSUF2_CASTBAR_ICON_SIZE",
+        apply = ApplyCastbarTextures,
+        description = "Global castbar icon size override. 0 uses the castbar height fallback.",
+    })
+    RegisterCastbarNumber("castbarIconOffsetX", "iconOffsetX", "Castbar Icon X Offset", 0, -300, 300, CastbarAliases("icon x", "icon x offset", "castbar icon x", "castbar icon x offset"), {
+        reason = "MSUF2_CASTBAR_ICON_X",
+        apply = ApplyCastbarTextures,
+    })
+    RegisterCastbarNumber("castbarIconOffsetY", "iconOffsetY", "Castbar Icon Y Offset", 0, -300, 300, CastbarAliases("icon y", "icon y offset", "castbar icon y", "castbar icon y offset"), {
+        reason = "MSUF2_CASTBAR_ICON_Y",
+        apply = ApplyCastbarTextures,
+    })
+    RegisterCastbarNumber("castbarSpellNameFontSize", "spellNameFontSize", "Castbar Spell Name Font Size", 0, 0, 48, CastbarAliases("spell name font size", "castbar text font size", "castbar spell text font size", "spell text size"), {
+        reason = "MSUF2_CASTBAR_SPELL_FONT_SIZE",
+        apply = ApplyCastbar,
+        description = "Global castbar spell-name font override. 0 uses the global font size fallback.",
+    })
+    RegisterCastbarNumber("castbarTimeFontSize", "timeFontSize", "Castbar Time Font Size", 0, 0, 48, CastbarAliases("time font size", "castbar time font size", "castbar timer font size", "castbar time text size"), {
+        reason = "MSUF2_CASTBAR_TIME_FONT_SIZE",
+        apply = ApplyCastbar,
+        description = "Global castbar time font override. 0 uses the spell-name/global font size fallback.",
+    })
+
+    local detail = {
+        player = { prefix = "castbarPlayer", iconDefault = 0, textX = 0, textY = 0, timeX = -2, timeY = 0 },
+        target = { prefix = "castbarTarget", iconDefault = 0, textX = 0, textY = 0, timeX = -2, timeY = 0 },
+        focus = { prefix = "castbarFocus", iconDefault = 0, textX = 0, textY = 0, timeX = -2, timeY = 0 },
+        boss = { prefix = "bossCast", iconDefault = 0, textX = 0, textY = 0, timeX = 0, timeY = 0 },
+    }
+    for unit, spec in pairs(detail) do
+        local aliases
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon size"); AddAliasesForUnit(aliases, unit, "castbar spell icon size")
+        RegisterGeneralNumber(spec.prefix .. "IconSize", unit, "castbar", "iconSize", "Castbar Icon Size", spec.iconDefault, 0, 128, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon x"); AddAliasesForUnit(aliases, unit, "castbar icon x offset")
+        RegisterGeneralNumber(spec.prefix .. "IconOffsetX", unit, "castbar", "iconOffsetX", "Castbar Icon X Offset", 0, -300, 300, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon y"); AddAliasesForUnit(aliases, unit, "castbar icon y offset")
+        RegisterGeneralNumber(spec.prefix .. "IconOffsetY", unit, "castbar", "iconOffsetY", "Castbar Icon Y Offset", 0, -300, 300, aliases)
+
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar text x"); AddAliasesForUnit(aliases, unit, "castbar spell name x"); AddAliasesForUnit(aliases, unit, "castbar spell text x"); AddAliasesForUnit(aliases, unit, "castbar text x offset")
+        RegisterGeneralNumber(spec.prefix .. "TextOffsetX", unit, "castbar", "textOffsetX", "Castbar Spell Text X Offset", spec.textX, -300, 300, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar text y"); AddAliasesForUnit(aliases, unit, "castbar spell name y"); AddAliasesForUnit(aliases, unit, "castbar spell text y"); AddAliasesForUnit(aliases, unit, "castbar text y offset")
+        RegisterGeneralNumber(spec.prefix .. "TextOffsetY", unit, "castbar", "textOffsetY", "Castbar Spell Text Y Offset", spec.textY, -300, 300, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar spell name font size"); AddAliasesForUnit(aliases, unit, "castbar text font size"); AddAliasesForUnit(aliases, unit, "castbar spell text size")
+        RegisterGeneralNumber(spec.prefix .. "SpellNameFontSize", unit, "castbar", "spellNameFontSize", "Castbar Spell Name Font Size", 0, 0, 48, aliases)
+
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar time x"); AddAliasesForUnit(aliases, unit, "castbar time text x"); AddAliasesForUnit(aliases, unit, "castbar timer x"); AddAliasesForUnit(aliases, unit, "castbar time x offset")
+        RegisterGeneralNumber(spec.prefix .. "TimeOffsetX", unit, "castbar", "timeOffsetX", "Castbar Time Text X Offset", spec.timeX, -300, 300, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar time y"); AddAliasesForUnit(aliases, unit, "castbar time text y"); AddAliasesForUnit(aliases, unit, "castbar timer y"); AddAliasesForUnit(aliases, unit, "castbar time y offset")
+        RegisterGeneralNumber(spec.prefix .. "TimeOffsetY", unit, "castbar", "timeOffsetY", "Castbar Time Text Y Offset", spec.timeY, -300, 300, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar time font size"); AddAliasesForUnit(aliases, unit, "castbar timer font size"); AddAliasesForUnit(aliases, unit, "castbar time text size")
+        RegisterGeneralNumber(spec.prefix .. "TimeFontSize", unit, "castbar", "timeFontSize", "Castbar Time Font Size", 0, 0, 48, aliases)
+    end
+end
+
+RegisterCastbarDetailNumbers()
+
 RegisterCastbarBoolean("castbarInterruptShake", "interruptShake", "Shake on Interrupt", false, CastbarAliases("interrupt shake", "shake on interrupt"), {
     reason = "MSUF2_CASTBAR_SHAKE",
 })
@@ -391,7 +449,7 @@ RegisterCastbarString("castbarTexture", "texture", "Castbar Texture", "Blizzard"
     apply = ApplyCastbarTextures,
     description = "SharedMedia texture name; values are provided dynamically by the UI.",
 })
-RegisterCastbarString("castbarBackgroundTexture", "backgroundTexture", "Castbar Background Texture", "Blizzard", CastbarAliases("background texture", "bg texture"), {
+RegisterCastbarString("castbarBackgroundTexture", "backgroundTexture", "Castbar Background Texture", "Blizzard", CastbarAliases("background texture", "background texture", "bg texture"), {
     reason = "MSUF2_CASTBAR_BG_TEXTURE",
     apply = ApplyCastbarTextures,
     description = "SharedMedia texture name; values are provided dynamically by the UI.",

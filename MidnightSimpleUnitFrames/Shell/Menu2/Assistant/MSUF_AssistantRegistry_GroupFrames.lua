@@ -125,6 +125,7 @@ local function RegisterGroupString(scope, attr, dbKey, label, defaultValue, mode
         type = "string",
         aliases = aliases,
         valuePrefixes = opts.valuePrefixes or aliases,
+        mediaType = opts.mediaType,
         get = function()
             if opts.get then return opts.get(scope) end
             local value = GroupDB(scope)[dbKey]

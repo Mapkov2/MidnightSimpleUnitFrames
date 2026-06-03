@@ -47,6 +47,21 @@ local function ShortLabel(text, limit)
     return text:sub(1, max(1, limit - 3)) .. "..."
 end
 
+local function AssistantAPI()
+    return (MSUF and MSUF.Assistant) or M.Assistant
+end
+
+local function SubmitAssistantQuery(query)
+    query = TrimText(query)
+    if query == "" then return false end
+    local A = AssistantAPI()
+    if not (A and type(A.Submit) == "function") then return false end
+    if type(M.SelectPage) == "function" and M.activeKey ~= "home" then M.SelectPage("home") end
+    A.Submit(query)
+    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    return true
+end
+
 local function CreateNavButton(parent, key, label, indent)
     local btn = T.Button(parent, M.Tr(label), NAV_W - 38 - (indent or 0), NAV_BUTTON_H)
     btn:SetScript("OnClick", function() M.SelectPage(key) end)
@@ -283,7 +298,7 @@ local function BuildNavRail(parent)
         intro:EnableMouse(true)
         intro:Hide()
 
-        local title = T.Font(intro, "GameFontNormalSmall", "Ask questions here too", T.colors.text)
+        local title = T.Font(intro, "GameFontNormalSmall", "Ask MSUF", T.colors.text)
         title:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -10)
         title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -26, -10)
         title:SetJustifyH("LEFT")
@@ -294,7 +309,7 @@ local function BuildNavRail(parent)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
 
-        local foot = T.Font(intro, "GameFontDisableSmall", "Press Enter to open the best match.", T.colors.dim)
+        local foot = T.Font(intro, "GameFontDisableSmall", "Press Enter to ask the Assistant.", T.colors.dim)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 10, 10)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -10, 10)
         foot:SetJustifyH("LEFT")
@@ -341,7 +356,7 @@ local function BuildNavRail(parent)
         if self._msuf2SearchInternal then return end
         local query = TrimText(self:GetText() or "")
         if query ~= "" then HideSearchIntro() end
-        ScheduleSearchInputQuery(self, query)
+        if not AssistantAPI() then ScheduleSearchInputQuery(self, query) end
     end)
     search:SetScript("OnEnterPressed", function(self)
         HideSearchIntro()
@@ -351,6 +366,13 @@ local function BuildNavRail(parent)
             return
         end
         BumpSearchInputSerial()
+        if SubmitAssistantQuery(query) then
+            self._msuf2SearchInternal = true
+            self:SetText("")
+            self._msuf2SearchInternal = nil
+            self:ClearFocus()
+            return
+        end
         RunSearchInputQuery(query, false)
         if M.searchResults and M.searchResults[1] then
             local first = M.searchResults[1]
@@ -370,7 +392,7 @@ local function BuildNavRail(parent)
         self._msuf2SearchInternal = nil
         self:ClearFocus()
         BumpSearchInputSerial()
-        RunSearchInputQuery("", true)
+        if not AssistantAPI() then RunSearchInputQuery("", true) end
     end)
 
     local clear = CreateFrame("Button", nil, parent)
@@ -386,7 +408,7 @@ local function BuildNavRail(parent)
         search:SetText("")
         search._msuf2SearchInternal = nil
         BumpSearchInputSerial()
-        RunSearchInputQuery("", true)
+        if not AssistantAPI() then RunSearchInputQuery("", true) end
         clear:Hide()
         search:SetFocus()
     end)

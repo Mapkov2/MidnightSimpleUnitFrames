@@ -454,6 +454,7 @@ local function RegisterUnitString(unit, attr, dbKey, label, defaultValue, aliase
         type = "string",
         aliases = aliases,
         valuePrefixes = opts.valuePrefixes or aliases,
+        mediaType = opts.mediaType,
         get = function()
             local value = UnitDB(unit)[dbKey]
             if type(value) ~= "string" or value == "" then return defaultValue or "" end
@@ -925,6 +926,14 @@ for i = 1, #UNIT_KEYS do
             hide = "OFF",
             hidden = "OFF",
             disabled = "OFF",
+            disable = "OFF",
+            aus = "OFF",
+            on = "LEFT",
+            enable = "LEFT",
+            enabled = "LEFT",
+            show = "LEFT",
+            visible = "LEFT",
+            an = "LEFT",
             left = "LEFT",
             right = "RIGHT",
         },
@@ -964,6 +973,17 @@ for i = 1, #UNIT_KEYS do
         valueAliases = {
             none = "NONE",
             off = "NONE",
+            hide = "NONE",
+            hidden = "NONE",
+            disable = "NONE",
+            disabled = "NONE",
+            aus = "NONE",
+            on = "SOLID",
+            enable = "SOLID",
+            enabled = "SOLID",
+            show = "SOLID",
+            visible = "SOLID",
+            an = "SOLID",
             solid = "SOLID",
             class = "CLASS_COLOR",
             ["class color"] = "CLASS_COLOR",
@@ -973,7 +993,7 @@ for i = 1, #UNIT_KEYS do
             ["custom color"] = "CUSTOM",
         },
     })
-    RegisterUnitNumberSetting(unit, "portraitBorderThickness", "portraitBorderThickness", "Portrait Border Thickness", 2, 1, 12, MakeAliases(unit, "portrait border thickness", "portrait border size"), { category = "Portrait" })
+    RegisterUnitNumberSetting(unit, "portraitBorderThickness", "portraitBorderThickness", "Portrait Border Thickness", 2, 1, 12, MakeAliases(unit, "portrait border thickness", "portrait border size", "portrait border thicker", "portrait border thinner"), { category = "Portrait" })
     RegisterUnitBooleanSetting(unit, "portraitFillBorder", "portraitFillBorder", "Portrait Fill Border Gap", false, MakeAliases(unit, "portrait fill border", "fill portrait border gap"), { category = "Portrait" })
     RegisterUnitBooleanSetting(unit, "portraitBgEnabled", "portraitBgEnabled", "Portrait Background", false, MakeAliases(unit, "portrait background", "portrait bg"), { category = "Portrait" })
 

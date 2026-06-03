@@ -47,8 +47,13 @@ end
 local function ChoiceText(choices)
     local lines = { "I found multiple matches:" }
     for i = 1, #choices do
-        local setting = choices[i].setting
-        lines[#lines + 1] = tostring(i) .. ". " .. tostring(setting and setting.label or "Option")
+        local choice = choices[i]
+        local setting = choice and choice.setting
+        local label = choice and (choice.label or choice.valueLabel) or nil
+        if not label or label == "" then
+            label = tostring(setting and setting.label or "Option")
+        end
+        lines[#lines + 1] = tostring(i) .. ". " .. tostring(label)
     end
     lines[#lines + 1] = "Please choose one."
     return table.concat(lines, "\n")
@@ -64,6 +69,9 @@ local function SerializeChoices(choices)
             value = choice and choice.value,
             relativeDelta = choice and choice.relativeDelta,
             direction = choice and choice.direction,
+            label = choice and choice.label,
+            valueLabel = choice and choice.valueLabel,
+            mediaType = choice and choice.mediaType,
         }
     end
     return out
@@ -81,6 +89,9 @@ local function RehydrateChoices(serialized)
                 value = item.value,
                 relativeDelta = item.relativeDelta,
                 direction = item.direction,
+                label = item.label,
+                valueLabel = item.valueLabel,
+                mediaType = item.mediaType,
             }
         end
     end
@@ -232,6 +243,7 @@ local function ExecuteChanges(plan)
                     key = setting.key,
                     oldValue = oldValue,
                     newValue = newValue,
+                    valueLabel = item.valueLabel,
                 }
                 item.newValue = newValue
                 changedSettings[#changedSettings + 1] = setting
@@ -269,7 +281,7 @@ local function ExecuteChanges(plan)
     local first = changedSettings[1]
     local text
     if #undoChanges == 1 and first then
-        text = "Done. " .. tostring(first.label) .. " " .. SettingValueLabel(first, undoChanges[1].newValue) .. "."
+        text = "Done. " .. tostring(first.label) .. " " .. tostring(undoChanges[1].valueLabel or SettingValueLabel(first, undoChanges[1].newValue)) .. "."
     else
         text = "Done. Applied " .. tostring(#undoChanges) .. " changes."
     end
@@ -340,6 +352,10 @@ function A.ExecutePlan(plan, opts)
 end
 
 local function HandlePending(text)
+    if type(A.HandlePendingFlow) == "function" then
+        local flowResult = A.HandlePendingFlow(text)
+        if flowResult then return flowResult end
+    end
     if A.pendingConfirmation then
         if IsCancel(text) then
             A.pendingConfirmation = nil
@@ -370,7 +386,7 @@ local function HandlePending(text)
     return nil
 end
 
-function A.HandleInput(text)
+function A.HandleCommandInput(text)
     local pending = HandlePending(text)
     if pending then return pending end
 
@@ -393,9 +409,16 @@ function A.HandleInput(text)
         return { text = ChoiceText(A.pendingChoices), status = "ambiguous", summary = parsed.summary }
     end
     if parsed.kind == "unknown" then
-        return { text = parsed.text or "I do not know that setting yet.", status = parsed.status or "failed" }
+        return { text = parsed.text or "I do not know that setting yet.", status = parsed.status or "failed", kind = "unknown" }
     end
     return A.ExecutePlan(parsed)
+end
+
+function A.HandleInput(text)
+    if type(A.RouteInput) == "function" then
+        return A.RouteInput(text, A.HandleCommandInput)
+    end
+    return A.HandleCommandInput(text)
 end
 
 function A.Submit(text)

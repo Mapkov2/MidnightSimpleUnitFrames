@@ -634,6 +634,7 @@ function Registry:RegisterSetting(spec)
     spec.aliases = type(spec.aliases) == "table" and spec.aliases or {}
     self.settings[#self.settings + 1] = spec
     self.settingsByKey[spec.key] = spec
+    if A.Knowledge and type(A.Knowledge.MarkDirty) == "function" then A.Knowledge.MarkDirty() end
     return spec
 end
 
@@ -673,11 +674,16 @@ function Registry:RegisterAction(spec)
     spec.aliases = type(spec.aliases) == "table" and spec.aliases or {}
     self.actions[#self.actions + 1] = spec
     self.actionsByKey[spec.key] = spec
+    if A.Knowledge and type(A.Knowledge.MarkDirty) == "function" then A.Knowledge.MarkDirty() end
     return spec
 end
 
 function Registry:GetAction(key)
     return self.actionsByKey[key]
+end
+
+function Registry:AllActions()
+    return self.actions
 end
 
 function Registry:RegisterTodo(text)
@@ -906,6 +912,7 @@ local function RegisterGeneralString(dbKey, attr, label, defaultValue, aliases, 
         type = "string",
         aliases = aliases,
         valuePrefixes = opts.valuePrefixes or aliases,
+        mediaType = opts.mediaType,
         get = function()
             local value = GeneralDB()[dbKey]
             if type(value) ~= "string" or value == "" then return defaultValue or "" end
@@ -1018,6 +1025,7 @@ local function RegisterBarsString(dbKey, attr, label, defaultValue, aliases, opt
         type = "string",
         aliases = aliases,
         valuePrefixes = opts.valuePrefixes or aliases,
+        mediaType = opts.mediaType,
         get = function()
             local value = BarsDB()[dbKey]
             if type(value) ~= "string" or value == "" then return defaultValue or "" end
