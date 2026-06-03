@@ -176,7 +176,12 @@ RegisterBarsNumber("classPowerBgAlpha", "backgroundAlpha", "Class Resource Backg
 RegisterBarsNumber("classPowerTickWidth", "separator", "Class Resource Separator Width", 1, 0, 4, ClassPowerAliases("separator", "separator width", "tick width", "pip separator"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_SEPARATOR",
 })
-RegisterBarsNumber("classPowerOutline", "outline", "Class Resource Outline", 1, 0, 4, ClassPowerAliases("outline", "border", "outline width", "border width"), {
+RegisterBarsNumber("classPowerOutline", "outline", "Class Resource Outline", 1, 0, 4, ClassPowerAliases(
+    "outline", "border", "outline width", "border width",
+    "outline thickness", "border thickness", "class resource outline thickness", "class resource border thickness",
+    "make outline bigger", "make outline smaller", "make class resource outline bigger", "make class resource outline smaller",
+    "turn off outline", "turn on outline", "turn off class resource outline", "turn on class resource outline"
+), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_OUTLINE",
 })
 RegisterBarsNumber("classPowerFilledAlpha", "filledAlpha", "Class Resource Filled Opacity", 1.0, 0, 1, ClassPowerAliases("filled opacity", "filled alpha", "active opacity"), {

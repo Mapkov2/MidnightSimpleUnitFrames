@@ -38,6 +38,9 @@ local function Normalize(text)
     text = text:gsub("castbars", "castbar")
     text = text:gsub("unit%s+frames", "unitframes")
     text = text:gsub("gruppen%s+frames", "gruppenframes")
+    text = text:gsub("status%s+icons", "status icon")
+    text = text:gsub("incoming%s+res%s+", "incoming rez ")
+    text = text:gsub("incoming%s+res$", "incoming rez")
     return Trim(text)
 end
 A.Normalize = Normalize
@@ -193,6 +196,32 @@ local function Compact(text)
     return Normalize(text):gsub("%s+", "")
 end
 
+local aliasRelationCacheText
+local aliasRelationCacheValue
+local function AliasRelationText(text)
+    text = Normalize(text)
+    if text == aliasRelationCacheText then return aliasRelationCacheValue end
+    local padded = " " .. text .. " "
+    if not (padded:find(" for ", 1, true) or padded:find(" on ", 1, true) or padded:find(" of ", 1, true)
+        or padded:find(" vom ", 1, true) or padded:find(" von ", 1, true) or padded:find(" fuer ", 1, true) or padded:find(" für ", 1, true)) then
+        aliasRelationCacheText = text
+        aliasRelationCacheValue = text
+        return text
+    end
+    local t = padded
+    local rel = { "for", "on", "of", "vom", "von", "fuer", "für" }
+    for i = 1, #rel do
+        t = t:gsub("%f[%w]" .. rel[i] .. "%f[%W]", " ")
+    end
+    aliasRelationCacheText = text
+    aliasRelationCacheValue = Trim(t:gsub("%s+", " "))
+    return aliasRelationCacheValue
+end
+
+local function TextMatchesAlias(text, relationText, alias)
+    return HasPhrase(text, alias) or HasPhrase(relationText or AliasRelationText(text), alias)
+end
+
 local function ExtractColor(raw, text)
     local hex = tostring(raw or ""):match("#(%x%x%x%x%x%x)") or tostring(raw or ""):match("0x(%x%x%x%x%x%x)")
     if hex and A.HexToColor then
@@ -258,7 +287,9 @@ local function DetectAttribute(text, frameType)
     if ContainsAny(text, { "name text", "unit name", "name", "namen" }) then return "name" end
     if ContainsAny(text, { "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler" }) then return "width" end
     if ContainsAny(text, { "height", "tall", "taller", "shorter", "hoehe", "hoeher", "kleiner" }) then return "height" end
-    if ContainsAny(text, { "enable", "disable", "show", "hide", "on", "off", "an", "aus" }) and ContainsAny(text, { "frame", "frames", "unitframe", "unitframes", "group", "gruppe" }) then
+    if ContainsAny(text, { "enable", "disable", "show", "hide", "on", "off", "an", "aus" })
+        and ContainsAny(text, { "frame", "frames", "unitframe", "unitframes", "group", "gruppe" })
+        and not ContainsAny(text, { "border", "outline", "portrait", "alpha", "opacity", "texture", "font", "text", "color", "farbe" }) then
         return "enabled"
     end
     return nil
@@ -581,6 +612,51 @@ local function BuildSpecProfileAction(text)
     return nil
 end
 
+
+local function ParseWorkflowLifecycle(text)
+    if ContainsAny(text, { "workflow status", "assistant workflow status", "pending workflow", "pending flow", "active workflow", "what workflow", "what is pending" }) then
+        local action = Registry and Registry:GetAction("assistant.workflow.status")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Show Assistant workflow status",
+            summary = "Shows pending confirmations, panels, flows, and Edit Mode lifecycle status.",
+        } or nil
+    end
+    if text == "back" or ContainsAny(text, { "go back", "open previous page", "previous page", "return to previous page", "back to previous page" }) then
+        local action = Registry and Registry:GetAction("dashboard_page_back")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Open previous Dashboard page",
+            summary = "Uses the Assistant page stack when available.",
+        } or nil
+    end
+    if text == "cancel" or ContainsAny(text, { "cancel workflow", "cancel current workflow", "cancel assistant workflow", "stop assistant workflow", "abort workflow" }) then
+        local action = Registry and Registry:GetAction("assistant.workflow.cancel")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Cancel active Assistant workflow",
+            summary = "Cancels the active Assistant confirmation, flow, panel, or guide when available.",
+        } or nil
+    end
+    if ContainsAny(text, { "close import", "cancel import", "close export", "close assistant panel", "close profile import", "cancel profile import", "close profile export" }) then
+        local action = Registry and Registry:GetAction("assistant.panel.close")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Close Assistant panel",
+            summary = "Closes the current Assistant import/export/text panel.",
+        } or nil
+    end
+    return nil
+end
+
 local function ParseProfile(text, raw)
     local rawText = tostring(raw or "")
     local startIndex, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
@@ -699,11 +775,69 @@ local function ParseProfile(text, raw)
         end
     end
 
+    if ContainsAny(text, { "rename", "umbenennen", "profile rename" }) then
+        local source, dest = text:match("rename%s+profile%s+(.+)%s+to%s+(.+)$")
+        if not source then source, dest = text:match("rename%s+(.+)%s+profile%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("rename%s+(.+)%s+to%s+(.+)$") end
+        if not source then dest = text:match("rename%s+current%s+profile%s+to%s+(.+)$") or text:match("rename%s+profile%s+to%s+(.+)$") end
+        source = CleanProfileName(source)
+        dest = CleanProfileName(dest)
+        if dest then
+            local action = Registry and Registry:GetAction("rename_profile")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = source, name = dest },
+                confirmRequired = true,
+                label = "Rename profile",
+                summary = "Renames a profile through a shared helper if one exists.",
+            } or nil
+        end
+        if source then
+            local action = Registry and Registry:GetAction("start_profile_rename_flow")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = source },
+                label = "Start profile rename flow",
+                summary = "Asks for the missing destination profile name.",
+            } or nil
+        end
+    end
+
     if ContainsAny(text, { "copy", "duplicate", "duplizieren" }) then
-        local name = RawCopyProfileName(rawText)
+        local source, dest = text:match("copy%s+profile%s+(.+)%s+to%s+(.+)$")
+        if not source then source, dest = text:match("copy%s+(.+)%s+profile%s+to%s+(.+)$") end
+        source = CleanProfileName(source)
+        dest = CleanProfileName(dest)
+        if source and dest then
+            local action = Registry and Registry:GetAction("copy_profile_from_to")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = source, name = dest },
+                confirmRequired = true,
+                label = "Copy profile " .. tostring(source) .. " to " .. tostring(dest),
+                summary = "Copies a named source profile to a destination profile.",
+            } or nil
+        end
+
+        local sourceOnly = text:match("^copy%s+profile%s+(.+)$") or text:match("^duplicate%s+profile%s+(.+)$")
+        sourceOnly = CleanProfileName(sourceOnly)
+        if sourceOnly and not text:match("%s+to%s+") then
+            local action = Registry and Registry:GetAction("start_profile_copy_flow")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = sourceOnly },
+                label = "Start profile copy flow",
+                summary = "Asks for the missing destination profile name.",
+            } or nil
+        end
+
+        local name = RawAfterPrefix(rawText, { "copy current profile to ", "copy profile to " })
             or text:match("copy%s+current%s+profile%s+to%s+(.+)$")
             or text:match("copy%s+profile%s+to%s+(.+)$")
-            or text:match("duplicate%s+profile%s+(.+)$")
             or text:match("duplicate%s+(.+)%s+profile$")
         name = CleanProfileName(name)
         if name then
@@ -1316,6 +1450,82 @@ local function ParseUnitStatusPreview(text, ctx)
     } or nil
 end
 
+
+local function ParseUnitStatusIndicatorMove(text)
+    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) then return nil end
+    local direction = DetectDirection(text)
+    if not direction then return nil end
+    if not ContainsAny(text, UNIT_STATUS_RESET_TERMS) then return nil end
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local currentUnit = CurrentPageUnit and CurrentPageUnit() or nil
+        if currentUnit then units = { currentUnit } end
+    end
+    if #units == 0 then return nil end
+    local unit = units[1]
+    local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
+    if not spec then return nil end
+    local key = (direction == "left" or direction == "right") and spec.x or spec.y
+    if type(key) ~= "string" or key == "" then return nil end
+    local setting = Registry and Registry:GetSetting(unit .. "." .. key)
+    if not setting then return nil end
+    local amount = FirstNumber(text) or 10
+    if direction == "left" or direction == "down" then amount = -amount end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, relativeDelta = amount, direction = direction } },
+        label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Position",
+        summary = "Moves a unit-frame status indicator through its real X/Y offset setting.",
+    }
+end
+
+local function ParseCustomAnchorWorkflow(text)
+    if not ContainsAny(text, { "custom anchor", "custom anchor picker", "anchor picker", "anchor frame picker" }) then return nil end
+    if ContainsAny(text, { "cancel", "close", "stop", "abort" }) then
+        local action = Registry and Registry:GetAction("cancel_custom_anchor_picker")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Cancel custom anchor picker",
+            summary = "Closes the shared custom anchor picker overlay if it is active.",
+        } or nil
+    end
+    if ContainsAny(text, { "status", "active", "is picker", "show picker" }) then
+        local action = Registry and Registry:GetAction("custom_anchor_picker_status")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Show custom anchor picker status",
+            summary = "Reports whether the custom anchor picker overlay is active.",
+        } or nil
+    end
+    if not ContainsAny(text, { "pick", "picker", "start", "open", "select", "choose" }) then return nil end
+    local groups = DetectGroups(text)
+    if groups[1] then
+        local action = Registry and Registry:GetAction("start_group_custom_anchor_picker")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = groups[1] },
+            label = "Start group custom anchor picker",
+            summary = "Starts the shared custom anchor picker overlay for a group frame.",
+        } or nil
+    end
+    local units = DetectUnits(text)
+    local unit = units[1]
+    if not unit then return nil end
+    local action = Registry and Registry:GetAction("start_unit_custom_anchor_picker")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { unit = unit },
+        label = "Start unit custom anchor picker",
+        summary = "Starts the shared custom anchor picker overlay for a unit frame.",
+    } or nil
+end
+
 local function ParseCustomAnchorClear(text)
     if not ContainsAny(text, { "clear", "remove", "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
     if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
@@ -1515,11 +1725,12 @@ local function SettingMatchesText(setting, text)
         end
         if wantedGroup and setting.unit ~= wantedGroup then return false end
     end
+    local relationText = AliasRelationText(text)
     local aliases = setting.aliases or {}
     for i = 1, #aliases do
-        if HasPhrase(text, aliases[i]) then return true end
+        if TextMatchesAlias(text, relationText, aliases[i]) then return true end
     end
-    if setting.matchLabel ~= false and setting.label and HasPhrase(text, setting.label) then return true end
+    if setting.matchLabel ~= false and setting.label and TextMatchesAlias(text, relationText, setting.label) then return true end
     return false
 end
 
@@ -1529,6 +1740,9 @@ local function SettingMatchScore(setting, text)
         return 0
     end
     if setting.frameType == "classPower" and ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) and not ContainsAny(text, CLASS_POWER_TERMS) then
+        return 0
+    end
+    if setting.frameType == "classPower" and ContainsAny(text, { "portrait", "portrait border" }) and not ContainsAny(text, CLASS_POWER_TERMS) then
         return 0
     end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
@@ -1544,14 +1758,15 @@ local function SettingMatchScore(setting, text)
     end
 
     local best = 0
+    local relationText = AliasRelationText(text)
     local aliases = setting.aliases or {}
     for i = 1, #aliases do
-        if HasPhrase(text, aliases[i]) then
+        if TextMatchesAlias(text, relationText, aliases[i]) then
             local score = #Compact(aliases[i])
             if score > best then best = score end
         end
     end
-    if setting.matchLabel ~= false and setting.label and HasPhrase(text, setting.label) then
+    if setting.matchLabel ~= false and setting.label and TextMatchesAlias(text, relationText, setting.label) then
         local score = #Compact(setting.label)
         if score > best then best = score end
     end
@@ -1616,12 +1831,12 @@ local function StringValueForText(setting, text, raw)
 end
 
 local RELATIVE_INCREASE_TERMS = {
-    "increase", "raise", "bump up", "more", "higher", "larger", "bigger", "wider", "taller", "grow", "add",
-    "erhoehe", "erhoehen", "hoeher", "groesser", "mehr", "breiter",
+    "increase", "raise", "bump up", "more", "higher", "larger", "bigger", "wider", "taller", "thicker", "grow", "add",
+    "erhoehe", "erhoehen", "hoeher", "groesser", "mehr", "breiter", "dicker",
 }
 local RELATIVE_DECREASE_TERMS = {
-    "decrease", "reduce", "lower", "less", "smaller", "narrower", "shorter", "shrink", "subtract", "down",
-    "verringere", "reduziere", "tiefer", "niedriger", "kleiner", "weniger", "schmaler", "runter",
+    "decrease", "reduce", "lower", "less", "smaller", "narrower", "shorter", "thinner", "shrink", "subtract", "down",
+    "verringere", "reduziere", "tiefer", "niedriger", "kleiner", "weniger", "schmaler", "duenner", "runter",
 }
 
 local function RelativeNumberDeltaForText(setting, text, fallbackAmount)
@@ -1637,6 +1852,33 @@ local function RelativeNumberDeltaForText(setting, text, fallbackAmount)
     end
     if setting and setting.percent == true and amount > 1 then amount = amount / 100 end
     return amount * sign
+end
+
+local function NumberSettingSupportsBooleanToggle(setting)
+    if type(setting) ~= "table" then return false end
+    local hay = (tostring(setting.key or "") .. " " .. tostring(setting.label or "") .. " " .. tostring(setting.attribute or "")):lower()
+    return hay:find("outline", 1, true) ~= nil
+        or hay:find("border", 1, true) ~= nil
+        or hay:find("thickness", 1, true) ~= nil
+end
+
+local function BooleanValueForNumberSetting(setting, text)
+    if not NumberSettingSupportsBooleanToggle(setting) then return nil end
+    if not ContainsAny(text, { "on", "off", "enable", "disable", "show", "hide", "an", "aus", "aktivieren", "deaktivieren" }) then return nil end
+    local bool = DetectBoolean(text)
+    if bool == nil then return nil end
+    if bool == false then
+        local minValue = tonumber(setting.min)
+        if minValue ~= nil then return minValue end
+        return 0
+    end
+    local step = tonumber(setting.step) or 1
+    local minValue = tonumber(setting.min)
+    local maxValue = tonumber(setting.max)
+    local value = step
+    if minValue ~= nil and value < minValue then value = minValue end
+    if maxValue ~= nil and value > maxValue then value = maxValue end
+    return value
 end
 
 local function ValueForRegistrySetting(setting, text, raw)
@@ -1656,6 +1898,8 @@ local function ValueForRegistrySetting(setting, text, raw)
         return DetectBoolean(text)
     end
     if setting.type == "number" then
+        local boolValue = BooleanValueForNumberSetting(setting, text)
+        if boolValue ~= nil then return boolValue end
         local value = FirstNumber(text)
         if value and setting.percent == true and value > 1 then value = value / 100 end
         return value
@@ -1669,6 +1913,50 @@ local function ValueForRegistrySetting(setting, text, raw)
     return nil
 end
 
+local function AddMediaResolverChanges(changes, setting, text, raw, score)
+    local resolver = A.MediaResolver
+    if not (resolver and type(resolver.ResolveSetting) == "function") then return false end
+    local media = resolver.ResolveSetting(setting, text, raw)
+    if not media then return false end
+    if media.status == "exact" and media.value ~= nil then
+        changes[#changes + 1] = {
+            setting = setting,
+            value = media.value,
+            matchScore = score,
+            valueLabel = media.label or media.value,
+            label = tostring(setting.label or "Setting") .. " → " .. tostring(media.label or media.value),
+            mediaType = media.mediaType,
+        }
+        return true
+    end
+    if media.status == "choices" and type(media.choices) == "table" and #media.choices > 0 then
+        for i = 1, #media.choices do
+            local item = media.choices[i]
+            changes[#changes + 1] = {
+                setting = setting,
+                value = item.value,
+                matchScore = score,
+                valueLabel = item.label or item.value,
+                label = tostring(setting.label or "Setting") .. " → " .. tostring(item.label or item.value),
+                mediaType = media.mediaType,
+            }
+        end
+        return true
+    end
+    if media.status == "none" then
+        changes[#changes + 1] = {
+            setting = setting,
+            value = nil,
+            matchScore = score,
+            mediaNoMatch = true,
+            mediaType = media.mediaType,
+            mediaQuery = media.query,
+        }
+        return true
+    end
+    return false
+end
+
 local function ParseRegistryAlias(text, raw)
     local settings = Registry and Registry:AllSettings() or {}
     local changes = {}
@@ -1676,15 +1964,38 @@ local function ParseRegistryAlias(text, raw)
     for i = 1, #settings do
         local setting = settings[i]
         local score = SettingMatchScore(setting, text)
+        if score > 0 and A.Knowledge and type(A.Knowledge.SettingPageBoost) == "function" then
+            score = score + A.Knowledge.SettingPageBoost(setting)
+        end
         if score > 0 then
-            local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText(setting, text) or nil
-            local value = relativeDelta == nil and ValueForRegistrySetting(setting, text, raw) or nil
-            if value ~= nil or relativeDelta ~= nil then
-                changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, matchScore = score }
+            local handledMedia = false
+            if setting.type == "string" then
+                handledMedia = AddMediaResolverChanges(changes, setting, text, raw, score)
+            end
+            if not handledMedia then
+                local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText(setting, text) or nil
+                local value
+                if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
+                if value ~= nil or relativeDelta ~= nil then
+                    changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, matchScore = score }
+                    if score > bestScore then bestScore = score end
+                end
+            else
                 if score > bestScore then bestScore = score end
             end
         end
     end
+    if #changes == 0 then return nil end
+    if #changes == 1 and changes[1].mediaNoMatch then
+        local resolver = A.MediaResolver
+        local textOut = resolver and resolver.NoMatchMessage and resolver.NoMatchMessage(changes[1].mediaType, changes[1].mediaQuery) or "I could not find that media entry."
+        return { kind = "unknown", text = textOut, status = "failed" }
+    end
+    local usable = {}
+    for i = 1, #changes do
+        if not changes[i].mediaNoMatch then usable[#usable + 1] = changes[i] end
+    end
+    changes = usable
     if #changes == 0 then return nil end
     if #changes > 1 and bestScore > 0 then
         local filtered = {}
@@ -1753,7 +2064,8 @@ local function ParseScopedOnlyOverride(text, raw)
             local score = math.max(SettingMatchScore(setting, text), SettingMatchScore(setting, matchText))
             if score > 0 then
                 local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText(setting, matchText) or nil
-                local value = relativeDelta == nil and ValueForRegistrySetting(setting, matchText, raw) or nil
+                local value
+                if relativeDelta == nil then value = ValueForRegistrySetting(setting, matchText, raw) end
                 if value ~= nil or relativeDelta ~= nil then
                     changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, matchScore = score }
                     if score > bestScore then bestScore = score end
@@ -2009,7 +2321,7 @@ local function ParseColorAction(text)
     if ContainsAny(text, { "bar background", "background tint", "bar tint" }) then
         return BuildColorResetAction("reset_bar_background_color", "Reset bar background tint", "Resets the global bar background tint.")
     end
-    if ContainsAny(text, { "bar color", "bar colors", "absorb", "aggro", "purge", "outline" }) then
+    if ContainsAny(text, { "bar color", "bar colors", "absorb", "aggro", "purge", "outline", "border" }) then
         return BuildColorResetAction("reset_bar_colors", "Reset bar colors", "Resets bar overlay and border colors.")
     end
     if ContainsAny(text, { "dispel", "debuff type" }) then
@@ -2616,6 +2928,114 @@ local function BuildChanges(settings, value, relativeDelta, direction)
     return changes
 end
 
+local function ParseUnsupportedDetailShortcut(text)
+    if ContainsAny(text, { "combat timer alpha", "combat timer opacity", "combat timer transparency" }) then
+        return {
+            kind = "unknown",
+            text = "Combat Timer alpha is not exposed by the current MSUF UI/DB. The Assistant can change real Combat Timer controls like enable, size, position, anchor, lock, and colors.",
+            status = "failed",
+        }
+    end
+    if ContainsAny(text, { "hp text anchor", "health text anchor", "power text anchor", "mana text anchor" }) then
+        return {
+            kind = "unknown",
+            text = "HP/Power text does not have a separate anchor dropdown in the current MSUF UI. Use the left/center/right text slots and X/Y offsets instead.",
+            status = "failed",
+        }
+    end
+    return nil
+end
+
+local function CurrentPageUnit()
+    local page = M and M.activeKey
+    if type(page) ~= "string" then return nil end
+    for i = 1, #ALL_UNITFRAMES do
+        local unit = ALL_UNITFRAMES[i]
+        if UnitPageKey(unit) == page then return unit end
+    end
+    return nil
+end
+
+local function DetailUnitsOrCurrentPage(text)
+    local units = DetectUnits(text)
+    if #units > 0 then return units, false end
+    local pageUnit = CurrentPageUnit()
+    if pageUnit then return { pageUnit }, false end
+    return {}, true
+end
+
+local function BuildUnitDetailChoices(attr, value, relativeDelta, direction)
+    local settings = {}
+    for i = 1, #ALL_UNITFRAMES do
+        local setting = Registry and Registry:GetSetting(tostring(ALL_UNITFRAMES[i]) .. "." .. attr)
+        if setting then settings[#settings + 1] = setting end
+    end
+    return {
+        kind = "ambiguous",
+        choices = BuildChanges(settings, value, relativeDelta, direction),
+        label = "Multiple matching unitframe detail settings",
+    }
+end
+
+local function ParsePortraitDetailShortcut(text)
+    if not ContainsAny(text, { "portrait" }) then return nil end
+    if ContainsAny(text, { "color", "colour", "farbe", "reset" }) then return nil end
+    if ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) and DetectDirection(text, {}) then return nil end
+
+    local attr
+    local value
+    local relativeDelta
+    local direction
+
+    if ContainsAny(text, { "border thickness", "border size", "border thicker", "border thinner", "thicker", "thinner", "dicker", "duenner" }) then
+        attr = "portraitBorderThickness"
+        relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
+        if relativeDelta == nil then value = FirstNumber(text) end
+    elseif ContainsAny(text, { "size", "size override", "bigger", "smaller", "larger", "groesser", "kleiner" }) then
+        attr = "portraitSizeOverride"
+        relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 4)
+        if relativeDelta == nil then value = FirstNumber(text) end
+    elseif ContainsAny(text, { "border" }) then
+        attr = "portraitBorderStyle"
+        if ContainsAny(text, { "off", "disable", "disabled", "hide", "none", "no border", "aus", "deaktivieren" }) then
+            value = "NONE"
+        elseif ContainsAny(text, { "on", "enable", "enabled", "show", "solid", "an", "aktivieren" }) then
+            value = "SOLID"
+        elseif ContainsAny(text, { "class color", "class" }) then
+            value = "CLASS_COLOR"
+        elseif ContainsAny(text, { "reaction" }) then
+            value = "REACTION"
+        elseif ContainsAny(text, { "custom" }) then
+            value = "CUSTOM"
+        end
+    else
+        attr = "portraitMode"
+        if ContainsAny(text, { "off", "disable", "disabled", "hide", "aus", "deaktivieren" }) then
+            value = "OFF"
+        elseif ContainsAny(text, { "right" }) then
+            value = "RIGHT"
+        elseif ContainsAny(text, { "on", "enable", "enabled", "show", "left", "an", "aktivieren" }) then
+            value = "LEFT"
+        end
+    end
+
+    if not attr or (value == nil and relativeDelta == nil) then return nil end
+    local units, ambiguous = DetailUnitsOrCurrentPage(text)
+    if ambiguous then return BuildUnitDetailChoices(attr, value, relativeDelta, direction) end
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Portrait detail",
+        summary = "Changes a registered portrait detail control.",
+    }
+end
+
 local DETAIL_MOVE_SPECS = {
     { terms = { "portrait" }, x = "portraitOffsetX", y = "portraitOffsetY", label = "Move portrait" },
     { terms = { "name text", "unit name", "name" }, x = "nameOffsetX", y = "nameOffsetY", label = "Move name text" },
@@ -2655,10 +3075,170 @@ local function ParseUnitDetailMove(text)
     }
 end
 
+local function OutlineScopeSettingForText(text)
+    local explicitScope = DetectGlobalScope(text)
+    local scope = explicitScope
+    if not scope or scope == "shared" then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then scope = pageUnit end
+    end
+    if scope and scope ~= "shared" then
+        local scoped = Registry and Registry:GetSetting("barScope." .. tostring(scope) .. ".barOutlineThickness")
+        if scoped then return scoped, scope end
+    end
+    return Registry and Registry:GetSetting("bars.barOutlineThickness"), "shared"
+end
+
+local function ParseBorderThicknessShortcut(text)
+    if not ContainsAny(text, { "border", "outline" }) then return nil end
+    if ContainsAny(text, { "portrait", "castbar", "cast bar", "class power", "class resource" }) then return nil end
+    if ContainsAny(text, { "color", "colour", "farbe", "reset" }) then return nil end
+    if ContainsAny(text, { "aggro", "threat", "dispel", "dispellable", "purge", "purgeable", "boss target", "highlight" }) then return nil end
+
+    local explicitDetail = ContainsAny(text, {
+        "frame outline", "frame border", "bar outline", "bar border", "border outline", "outline border",
+        "outline thickness", "border thickness", "outline size", "border size", "outline width", "border width",
+        "outline thicker", "outline thinner", "border thicker", "border thinner",
+        "thicker", "thinner", "bigger", "larger", "smaller", "dicker", "duenner",
+    })
+    local toggleIntent = DetectBoolean(text) ~= nil
+    local numberIntent = FirstNumber(text) ~= nil
+    if not (explicitDetail or toggleIntent or numberIntent) then return nil end
+
+    local setting = OutlineScopeSettingForText(text)
+    if not setting then return nil end
+
+    local value
+    local relativeDelta
+    local bool = DetectBoolean(text)
+    if bool ~= nil and not numberIntent and not ContainsAny(text, { "thicker", "thinner", "bigger", "larger", "smaller", "increase", "decrease", "dicker", "duenner" }) then
+        value = bool and 1 or 0
+    else
+        relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
+        if relativeDelta == nil then value = FirstNumber(text) end
+    end
+    if value == nil and relativeDelta == nil then return nil end
+
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = setting.label or "Frame outline thickness",
+        summary = "Changes the registered frame/bar outline thickness control instead of toggling the whole unit frame.",
+    }
+end
+
+local function ParseUnitDetailOffsetShortcut(text)
+    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if not ContainsAny(text, { "offset" }) then return nil end
+    if DetectDirection(text, {}) then return nil end
+    local value = FirstNumber(text)
+    if value == nil then return nil end
+    local spec
+    for i = 1, #DETAIL_MOVE_SPECS do
+        if ContainsAny(text, DETAIL_MOVE_SPECS[i].terms) then
+            spec = DETAIL_MOVE_SPECS[i]
+            break
+        end
+    end
+    if not spec then return nil end
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then
+            units = { pageUnit }
+        else
+            units = ALL_UNITFRAMES
+        end
+    end
+    local changes = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        local sx = Registry and Registry:GetSetting(unit .. "." .. spec.x)
+        local sy = Registry and Registry:GetSetting(unit .. "." .. spec.y)
+        if sx then changes[#changes + 1] = { setting = sx, value = value, direction = "x" } end
+        if sy then changes[#changes + 1] = { setting = sy, value = value, direction = "y" } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "ambiguous",
+        choices = changes,
+        label = "Which " .. tostring(spec.label or "detail") .. " offset should I set?",
+        summary = "The command names an offset but not X/Y or a movement direction.",
+    }
+end
+
+local CASTBAR_DETAIL_PREFIXES = {
+    player = "castbarPlayer",
+    target = "castbarTarget",
+    focus = "castbarFocus",
+    boss = "bossCast",
+}
+
+local function CastbarDetailUnitsOrCurrentPage(text)
+    local units = DetectUnits(text)
+    local filtered = {}
+    for i = 1, #units do
+        local unit = units[i]
+        if CASTBAR_DETAIL_PREFIXES[unit] then filtered[#filtered + 1] = unit end
+    end
+    if #filtered > 0 then return filtered end
+    local pageUnit = CurrentPageUnit()
+    if pageUnit and CASTBAR_DETAIL_PREFIXES[pageUnit] then return { pageUnit } end
+    return { "player", "target", "focus", "boss" }
+end
+
+local function ParseCastbarTextMoveShortcut(text)
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) then return nil end
+    local direction = DetectDirection(text, {})
+    if not direction then return nil end
+    local field
+    local label
+    if ContainsAny(text, { "time text", "castbar time", "cast time", "timer", "time" }) then
+        field = (direction == "left" or direction == "right") and "TimeOffsetX" or "TimeOffsetY"
+        label = "Move castbar time text"
+    elseif ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "text" }) then
+        field = (direction == "left" or direction == "right") and "TextOffsetX" or "TextOffsetY"
+        label = "Move castbar spell text"
+    else
+        return nil
+    end
+    local amount = FirstNumber(text) or 5
+    if direction == "left" or direction == "down" then amount = -amount end
+    local units = CastbarDetailUnitsOrCurrentPage(text)
+    local changes = {}
+    for i = 1, #units do
+        local prefix = CASTBAR_DETAIL_PREFIXES[units[i]]
+        local setting = prefix and Registry and Registry:GetSetting("general." .. prefix .. field)
+        if setting then changes[#changes + 1] = { setting = setting, relativeDelta = amount, direction = direction } end
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
+        return { kind = "ambiguous", choices = changes, label = "Which castbar text should I move?" }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        summary = "Moves a registered castbar text detail control by pixels.",
+    }
+end
+
 local function ParseUnitOpacityShortcut(text)
-    if not ContainsAny(text, { "alpha", "opacity", "transparency" }) then return nil end
+    if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
     if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp" }) then return nil end
-    local relativeDelta = RelativeNumberDeltaForText({ percent = true, step = 0.05 }, text)
+    local relativeDelta
+    if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
+        local amount = FirstNumber(text) or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = -amount
+    elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "opaquer" }) then
+        local amount = FirstNumber(text) or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = amount
+    else
+        relativeDelta = RelativeNumberDeltaForText({ percent = true, step = 0.05 }, text)
+    end
     local value
     if relativeDelta == nil then
         value = FirstNumber(text)
@@ -2666,7 +3246,18 @@ local function ParseUnitOpacityShortcut(text)
         if value > 1 then value = value / 100 end
     end
     local units = DetectUnits(text)
-    if #units == 0 then return nil end
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then
+            units = { pageUnit }
+        else
+            return {
+                kind = "unknown",
+                text = "Which unitframe alpha should I change? Try 'set player alpha to 50' or open a unit page and say 'set alpha to 50'.",
+                status = "failed",
+            }
+        end
+    end
     local changes = {}
     for i = 1, #units do
         local unit = tostring(units[i])
@@ -2732,7 +3323,8 @@ end
 local function ParseSetting(text, ctx)
     local frameType = DetectFrameType(text, ctx)
     local direction = DetectDirection(text, ctx)
-    local attr = direction and ((direction == "left" or direction == "right") and "offsetX" or "offsetY") or DetectAttribute(text, frameType)
+    local movementIntent = direction and ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y" }) and not ContainsAny(text, { "anchor" })
+    local attr = movementIntent and ((direction == "left" or direction == "right") and "offsetX" or "offsetY") or DetectAttribute(text, frameType)
     if not attr then return nil end
 
     local units = {}
@@ -2805,6 +3397,7 @@ function A.Parse(text)
     local parsed = ParseGuidedSetupFollowup(normalized, ctx)
         or BuildFollowup(normalized, ctx)
         or BuildBooleanCorrection(normalized, ctx)
+        or ParseWorkflowLifecycle(normalized)
         or ParseProfile(normalized, raw)
         or ParseAuraQuickPreset(normalized)
         or ParseAuraGroupCategoryBlacklist(normalized)
@@ -2817,7 +3410,12 @@ function A.Parse(text)
         or ParseSupportWorkflow(normalized)
         or ParseDiagnostic(normalized)
         or ParseMenuWindowAction(normalized)
+        or ParseUnsupportedDetailShortcut(normalized)
+        or ParsePortraitDetailShortcut(normalized)
         or ParseUnitDetailMove(normalized)
+        or ParseBorderThicknessShortcut(normalized)
+        or ParseUnitDetailOffsetShortcut(normalized)
+        or ParseCastbarTextMoveShortcut(normalized)
         or ParseUnitOpacityShortcut(normalized)
         or ParseClassPowerAction(normalized)
         or ParseGameplayAction(normalized, raw)
@@ -2837,6 +3435,8 @@ function A.Parse(text)
         or ParseUnitStatusPreview(normalized, ctx)
         or ParseUnitStatusIndicatorReset(normalized)
         or ParseGroupStatusIconReset(normalized)
+        or ParseUnitStatusIndicatorMove(normalized)
+        or ParseCustomAnchorWorkflow(normalized)
         or ParseCustomAnchorClear(normalized)
         or ParseReset(normalized)
         or ParseOpen(normalized, raw)

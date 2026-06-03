@@ -61,6 +61,7 @@ local GFReadAuraNumber = C.GFReadAuraNumber
 local GFWriteAuraNumber = C.GFWriteAuraNumber
 local GFReadAuraValue = C.GFReadAuraValue
 local GFWriteAuraValue = C.GFWriteAuraValue
+local ApplyGroup = C.ApplyGroup
 
 local AURA_UNITS = { "player", "target", "focus", "boss" }
 local AURA_SCOPES = { "shared", "player", "target", "focus", "boss" }

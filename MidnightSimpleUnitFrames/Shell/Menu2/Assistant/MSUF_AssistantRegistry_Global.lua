@@ -806,7 +806,7 @@ local function NormalizeTextureKeyForAssistant(value)
 end
 
 RegisterGeneralString("barTexture", "texture", "Global Bar Texture", "Solid", {
-    "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture", "power bar texture", "foreground bar texture",
+    "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture", "power bar texture", "foreground bar texture", "foreground texture", "foreground bar texture",
 }, {
     category = "Global / Bars / Textures",
     frameType = "globalBars",
@@ -815,7 +815,7 @@ RegisterGeneralString("barTexture", "texture", "Global Bar Texture", "Solid", {
     normalizeValue = NormalizeTextureKeyForAssistant,
 })
 RegisterGeneralString("barBackgroundTexture", "backgroundTexture", "Global Bar Background Texture", "Solid", {
-    "bar background texture", "global bar background texture", "background bar texture", "bar bg texture",
+    "bar background texture", "global bar background texture", "background bar texture", "bar bg texture", "background texture", "background texture bars", "bars background texture",
 }, {
     category = "Global / Bars / Textures",
     frameType = "globalBars",
@@ -899,7 +899,11 @@ RegisterGeneralNumberSetting("healAbsorbBarOpacity", "healAbsorbOpacity", "Heal 
 }, { category = "Global / Bars / Absorb", frameType = "globalBars", apply = ApplyAbsorbBars, reason = "MSUF_ASSISTANT_HEAL_ABSORB_OPACITY", step = 0.05, percent = true })
 
 RegisterBarsNumber("barOutlineThickness", "outline", "Global Bar Outline Thickness", 1, 0, 8, {
-    "bar outline thickness", "global bar outline", "frame outline thickness", "bar border thickness",
+    "bar outline thickness", "bar outline", "global bar outline", "global frame outline", "frame outline", "frame outline thickness",
+    "bar border thickness", "bar border", "frame border", "global frame border", "border thickness", "outline thickness",
+    "make border thicker", "make border thinner", "make border bigger", "make border smaller",
+    "make frame outline bigger", "make frame outline smaller", "make outline bigger", "make outline smaller",
+    "border thicker", "border thinner", "border bigger", "border smaller", "outline thicker", "outline thinner", "outline bigger", "outline smaller",
 }, { category = "Global / Bars / Outline", frameType = "globalBars", apply = ApplyBarOutline, reason = "MSUF_ASSISTANT_BAR_OUTLINE" })
 RegisterBarsBoolean("roundedFramesEnabled", "rounded", "Rounded Frame Texture", false, {
     "rounded frame texture", "rounded frames", "round corners", "rounded corners", "rounded texture",
@@ -986,7 +990,7 @@ for _, scope in ipairs(GLOBAL_SCOPE_ORDER) do
         description = "Enables or disables custom Global Bars settings for this scope.",
     })
     RegisterScopedSetting("barScope", scope, "barTexture", "texture", "Bar Texture", "string", "Blizzard", GlobalScopeAliases(scope, {
-        "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture", "power bar texture", "foreground bar texture",
+        "bar texture", "bars texture", "global bar texture", "global bars texture", "health bar texture", "power bar texture", "foreground bar texture", "foreground texture", "foreground bar texture",
     }), {
         flag = "hlOverride",
         normalizeValue = NormalizeTextureKeyForAssistant,
@@ -2228,7 +2232,7 @@ end, function(r, g, b)
     SetGeneralRGBAlias("hlPurgeColor", "purgeBorderColor", r, g, b)
 end, { category = "Colors / Bar Colors", attribute = "purgeBorderColor", defaultR = 1, defaultG = 0.85, defaultB = 0, apply = ApplyColors })
 ColorSetting("general.barOutlineColor", "Bar Outline Color", {
-    "bar outline color", "frame outline color", "bar border color", "bars border color",
+    "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color",
 }, function()
     return ApiRGB("GetBarOutlineColor", 0, 0, 0)
 end, function(r, g, b)
@@ -2246,7 +2250,7 @@ for _, scope in ipairs(GLOBAL_SCOPE_ORDER) do
         frameType = "globalBars",
         attribute = "barOutlineColor",
         type = "color",
-        aliases = GlobalScopeAliases(scope, { "bar outline color", "frame outline color", "bar border color", "bars border color", "border color", "outline color" }),
+        aliases = GlobalScopeAliases(scope, { "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color", "border color", "outline color" }),
         get = function()
             return {
                 r = Clamp01(GlobalScopeRead(scope, "hlOverride", GeneralDB(), "barOutlineColorR", 0)),
@@ -2304,7 +2308,7 @@ for _, row in ipairs({
     { key = "castbarInterruptible", label = "Interruptible Cast Color", get = "GetInterruptibleCastColor", set = "SetInterruptibleCastColor", dr = 0, dg = 0.9, db = 0.8, aliases = { "interruptible cast color", "interruptible castbar color", "kickable cast color" } },
     { key = "castbarNonInterruptible", label = "Non-Interruptible Cast Color", get = "GetNonInterruptibleCastColor", set = "SetNonInterruptibleCastColor", dr = 0.4, dg = 0.01, db = 0.01, aliases = { "non interruptible cast color", "noninterruptible cast color", "not interruptible castbar color", "unkickable cast color" } },
     { key = "castbarInterruptFeedback", label = "Interrupt Feedback Cast Color", get = "GetInterruptFeedbackCastColor", set = "SetInterruptFeedbackCastColor", dr = 1, dg = 0.82, db = 0, aliases = { "interrupt color", "interrupt feedback color", "interrupted cast color", "castbar interrupt color" } },
-    { key = "castbarFont", label = "Castbar Text Color", get = "GetCastbarTextColor", set = "SetCastbarTextColor", dr = 1, dg = 1, db = 1, aliases = { "castbar text color", "castbar font color", "cast bar text color" } },
+    { key = "castbarFont", label = "Castbar Text Color", get = "GetCastbarTextColor", set = "SetCastbarTextColor", dr = 1, dg = 1, db = 1, aliases = { "castbar text color", "castbar font color", "cast bar text color", "castbar spell name color", "castbar spell name text color", "castbar spell color", "castbar spell text color", "spell name color", "spell text color" } },
 }) do
     ColorSetting("general." .. row.key .. "Color", row.label, row.aliases, function()
         return ApiRGB(row.get, row.dr, row.dg, row.db)

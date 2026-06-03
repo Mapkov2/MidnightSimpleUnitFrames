@@ -50,13 +50,10 @@ end
 
 
 local function SearchPlaceholderText()
-    local text = M.Tr("Search")
-    if type(text) ~= "string" or text == "" then text = "Search" end
-    local ask = M.Tr("Ask...")
-    if type(ask) ~= "string" or ask == "" then ask = "Ask..." end
-    return text .. " / " .. ask
+    local text = M.Tr("Ask MSUF anything...")
+    if type(text) ~= "string" or text == "" then text = "Ask MSUF anything..." end
+    return text
 end
-
 local function SearchBoxHasText(searchBox)
     if not (searchBox and searchBox.GetText) then return false end
     return (searchBox:GetText() or ""):match("%S") ~= nil

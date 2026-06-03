@@ -487,6 +487,7 @@ Registry:RegisterAction({
     run = function(args)
         local page = args and args.page
         if type(page) ~= "string" or page == "" then return false, "I do not know which page to open." end
+        local previousPage = M and M.activeKey
         local label = tostring(args.label or page)
         local opened = false
         local bridge = M and M.SearchBridge
@@ -500,7 +501,12 @@ Registry:RegisterAction({
         elseif not opened and M and type(M.SelectPage) == "function" then
             opened = M.SelectPage(page) ~= false
         end
-        if opened then return true, "Opened " .. label .. "." end
+        if opened then
+            if previousPage and previousPage ~= page and A.Workflow and type(A.Workflow.PushNavigationPage) == "function" then
+                A.Workflow.PushNavigationPage(previousPage)
+            end
+            return true, "Opened " .. label .. "."
+        end
         return false, "Dashboard navigation is not available right now."
     end,
 })
