@@ -9,6 +9,10 @@ MSUF.UF.Elements = MSUF.UF.Elements or {}
 local UF = MSUF.UF
 local Elements = UF.Elements
 local Metadata = UF.Metadata or {}
+-- Events with a compiled hot-state runner (Metadata.hotEventKind) never read the
+-- flat per-event element list; only non-hot events fall back to it. Captured here
+-- so RebuildFrameEventList can skip building a dead array for hot events.
+local HOT_EVENT_KIND = Metadata.hotEventKind or {}
 local type = type
 local pairs = pairs
 local tostring = tostring
@@ -604,28 +608,39 @@ local function RebuildFrameEventList(frame, event)
         end
         return
     end
-    if not lists then
-        lists = {}
-        frame._msufEventElementLists = lists
-    end
-    local list = lists[event]
-    if not list then
-        list = {}
-        lists[event] = list
+    -- Hot events always compile to a runner (every Metadata.hotEventKind kind has
+    -- a HOT_RUNNERS entry), and DispatchFrameEvent only walks the flat list when no
+    -- runner exists. So the flat list is dead for hot events -- building it just
+    -- allocates a 2N array per frame/event that is rebuilt on every spec apply and
+    -- never read. Build it only for non-hot events; clear any stale hot-event list.
+    if HOT_EVENT_KIND[event] then
+        if lists then
+            lists[event] = nil
+        end
     else
-        ClearArray(list)
-    end
-    local n = 0
-    for i = 1, #UF.elementOrder do
-        local name = UF.elementOrder[i]
-        local mode = owners[name]
-        if mode ~= nil then
-            local element = UF.elements[name]
-            if element and element.Update then
-                n = n + 1
-                list[n] = element.Update
-                n = n + 1
-                list[n] = mode
+        if not lists then
+            lists = {}
+            frame._msufEventElementLists = lists
+        end
+        local list = lists[event]
+        if not list then
+            list = {}
+            lists[event] = list
+        else
+            ClearArray(list)
+        end
+        local n = 0
+        for i = 1, #UF.elementOrder do
+            local name = UF.elementOrder[i]
+            local mode = owners[name]
+            if mode ~= nil then
+                local element = UF.elements[name]
+                if element and element.Update then
+                    n = n + 1
+                    list[n] = element.Update
+                    n = n + 1
+                    list[n] = mode
+                end
             end
         end
     end

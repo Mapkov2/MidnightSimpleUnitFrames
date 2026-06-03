@@ -646,16 +646,13 @@ function DispatchFrameEvent(frame, event, unit, ...)
     -- non-nil; the outer `frame._msufEventOwners` table is created on first
     -- element registration, so a frame that gets here without owners (e.g.,
     -- because a stale event registration survived a detach) just returns.
-    local allOwners = frame._msufEventOwners
-    if not allOwners then return end
-    local owners = allOwners[event]
-    if not owners then return end
 
     -- Cross-unit (ToT-style) gating: when the event's unit isn't this frame's
     -- unit, dispatch only if the frame has at least one element in "unitless"
     -- mode for this event. Per-frame RegisterUnitEvent already filters at the C
     -- side for the common same-unit path, so this check is just a safety net
-    -- for central-driver delivery.
+    -- for central-driver delivery. A frame with no registration for `event` has
+    -- no unitless entry either, so this still returns early in the stale case.
     if unit and unit ~= frame.unit then
         local unitless = frame._msufEventUnitless
         if not (unitless and unitless[event]) then
@@ -663,25 +660,35 @@ function DispatchFrameEvent(frame, event, unit, ...)
         end
     end
 
+    -- Hot path first. A compiled runner exists for every event a frame normally
+    -- registers (Metadata.hotEventKind), and a hot state is only ever created
+    -- while owners exist for the event -- so the owner-map guards are redundant
+    -- here and live in the non-hot fallback below. This keeps the dominant
+    -- UNIT_HEALTH / UNIT_POWER traffic to a single per-event state lookup.
     local hotStates = frame._msufHotEventState
     local hotState = hotStates and hotStates[event]
-    if hotState and hotState.empty == true then
-        return
-    end
-    local runner = hotState and hotState.runner
-    if runner then
-        frame._msufDispatchToken = frame._msufDispatchToken + 1
-        frame._msufDispatchActive = true
-        local sameUnit = (not unit) or unit == frame.unit
-        local eventUnit = sameUnit and (unit or frame.unit) or unit
-        if runner(frame, hotState, event, eventUnit, sameUnit, ...) then
-            frame._msufDispatchActive = nil
+    if hotState then
+        if hotState.empty == true then
             return
+        end
+        local runner = hotState.runner
+        if runner then
+            frame._msufDispatchToken = frame._msufDispatchToken + 1
+            frame._msufDispatchActive = true
+            local sameUnit = (not unit) or unit == frame.unit
+            local eventUnit = sameUnit and (unit or frame.unit) or unit
+            if runner(frame, hotState, event, eventUnit, sameUnit, ...) then
+                frame._msufDispatchActive = nil
+                return
+            end
         end
     end
 
     -- Safety fallback for events without a compiled state: walk the pre-built
-    -- flat list. Normal hot events use the compiled runner above.
+    -- flat list. Normal hot events use the compiled runner above. The owner-map
+    -- guard gates this path (no owners -> stale event registration -> return).
+    local allOwners = frame._msufEventOwners
+    if not (allOwners and allOwners[event]) then return end
     local lists = frame._msufEventElementLists
     local list = lists and lists[event]
     if not list then
