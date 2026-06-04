@@ -3134,6 +3134,73 @@ local function AnyMSUFGroupFrameEnabled()
     return GF.IsKindEnabled("party") or GF.IsKindEnabled("raid") or GF.IsKindEnabled("mythicraid")
 end
 
+local _blizzardPartyAutoReconcileSerial = 0
+
+local function BlizzardPartyAutoInEditMode()
+    if _G.MSUF_UnitEditModeActive == true then return true end
+    local editMode = _G.EditModeManagerFrame
+    if editMode then
+        if type(editMode.IsEditModeActive) == "function" then
+            local ok, active = pcall(editMode.IsEditModeActive, editMode)
+            if ok and active == true then return true end
+        end
+        if editMode.editModeActive == true then return true end
+    end
+    return false
+end
+
+local function BlizzardPartyAutoShouldShow()
+    if IsInRaid and IsInRaid() then return false end
+    if IsInGroup then
+        if IsInGroup() then return true end
+        local instanceCategory = _G.LE_PARTY_CATEGORY_INSTANCE
+        if instanceCategory ~= nil and IsInGroup(instanceCategory) then return true end
+    end
+    local inInstance, instanceType = IsInInstance and IsInInstance()
+    return inInstance == true and instanceType == "arena"
+end
+
+local function SoftHideBlizzardPartyFrames()
+    if _G.PartyFrame and _G.PartyFrame.Hide then _G.PartyFrame:Hide() end
+    if _G.CompactPartyFrame and _G.CompactPartyFrame.Hide then _G.CompactPartyFrame:Hide() end
+    if _G.CompactPartyFrameTitle and _G.CompactPartyFrameTitle.Hide then _G.CompactPartyFrameTitle:Hide() end
+end
+
+local function ReconcileBlizzardPartyAuto()
+    if InCombatLockdown() then
+        GF._pendingBlizzardDisable = true
+        return
+    end
+    local partyConf = GF.GetConf("party")
+    if not partyConf or partyConf.enabled == true then return end
+    if NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode) ~= "AUTO" then return end
+    if AnyMSUFGroupFrameEnabled() then return end
+
+    -- AUTO keeps the Blizzard-owned state. First release any MSUF lock, then
+    -- only fix obvious stale visibility after Blizzard's late zone/roster pass.
+    RestoreBlizzardPartyFrames(false)
+    if BlizzardPartyAutoShouldShow() then
+        RestoreBlizzardPartyFrames(true)
+    elseif not BlizzardPartyAutoInEditMode() then
+        SoftHideBlizzardPartyFrames()
+    end
+end
+
+local function ScheduleBlizzardPartyAutoReconcile()
+    _blizzardPartyAutoReconcileSerial = _blizzardPartyAutoReconcileSerial + 1
+    local serial = _blizzardPartyAutoReconcileSerial
+    local function run()
+        if serial ~= _blizzardPartyAutoReconcileSerial then return end
+        ReconcileBlizzardPartyAuto()
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, run)
+        C_Timer.After(0.25, run)
+    else
+        run()
+    end
+end
+
 local function ApplyAutoOwnedDisabledPartyFallback(mode, msufOwnsGroupFrames)
     mode = NormalizeBlizzardFallbackMode(mode)
     if mode == "NONE" then
@@ -3145,6 +3212,9 @@ local function ApplyAutoOwnedDisabledPartyFallback(mode, msufOwnsGroupFrames)
         HideBlizzardPartyFrames()
     else
         ApplyDisabledPartyFallback(mode)
+        if mode == "AUTO" then
+            ScheduleBlizzardPartyAutoReconcile()
+        end
     end
 end
 
