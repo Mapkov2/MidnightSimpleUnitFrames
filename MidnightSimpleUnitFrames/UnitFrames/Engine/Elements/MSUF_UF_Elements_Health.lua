@@ -20,6 +20,9 @@ local ApplyBackgrounds = C.ApplyBackgrounds
 local RefreshUnitState = C.RefreshUnitState
 local ApplyBarGradient = C.ApplyBarGradient
 local IsNil = C.IsNil or function(value) return value == nil end
+local IsSecret = C.IsSecret or function(_) return false end
+local floor = C.floor or math.floor
+local type = type
 local Health = {
     events = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION" },
 }
@@ -54,6 +57,9 @@ function Health.Apply(frame, spec)
     frame.Health = frame.hpBar
     frame.health = frame.hpBar
     frame.healthBg = frame.hpBarBG or frame.bg
+    -- Drop any cached gradient percent bucket: the spec (mode/curve) and/or the
+    -- frame's unit may have changed, so the next tick must recolor from scratch.
+    frame.hpBar._msufGradientPct = nil
     frame._msufIsGroupFrame = spec and spec.scope == "group"
     frame._msufHealthColorByHealth = spec and spec.health and spec.health.mode == "gradient"
     frame._msufHealthBgDynamic = spec and spec.health and spec.health.backgroundMatchHealth == true
@@ -149,9 +155,30 @@ function Health.Update(frame, event, unit)
             or bar._msufStatusR == nil
     end
 
+    -- Gradient color is a pure function of the health percent (the cached
+    -- alive/dead state only refreshes on non-health events). On a UNIT_HEALTH
+    -- tick, recomputing the color curve + writing SetStatusBarColor is wasted
+    -- work unless the integer percent bucket actually changed. Cache the bucket
+    -- per bar and skip the recolor when it is unchanged. _msufGradientPct is only
+    -- trusted while it holds a live-gradient bucket; the recolor below resets it
+    -- to nil whenever the dead/offline (grey) path runs, so a later tick at the
+    -- same percent still recolors back to the gradient.
+    local gradientBucket
+    if event == "UNIT_HEALTH" and frame._msufHealthColorByHealth == true
+        and not (IsSecret(hp) or IsSecret(maxHP))
+        and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
+        gradientBucket = floor((hp / maxHP) * 100 + 0.5)
+        if bar._msufGradientPct == gradientBucket then
+            updateColor = false
+        end
+    end
+
     local rawHealthColor
     if updateColor then
         rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP)
+        if gradientBucket ~= nil then
+            bar._msufGradientPct = rawHealthColor == true and gradientBucket or nil
+        end
     end
     if updateColor and not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
         ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
