@@ -133,6 +133,24 @@ local function HideBar(bar)
     end
 end
 
+local function CachedHealthMax(frame, unit)
+    local hpBar = frame and (frame.hpBar or frame.Health)
+    if hpBar
+        and hpBar._msufHealthMaxReady == true
+        and hpBar._msufHealthMaxUnit == unit then
+        return hpBar._msufHealthMax
+    end
+    return nil
+end
+
+local function ReadHealthMax(frame, unit)
+    local maxHP = CachedHealthMax(frame, unit)
+    if IsNil(maxHP) and UnitHealthMax then
+        maxHP = UnitHealthMax(unit)
+    end
+    return maxHP
+end
+
 local function ShowValue(bar, maxValue, value, forceMax)
     if not bar or IsNil(value) then
         HideBar(bar)
@@ -695,7 +713,7 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
         calc = UpdateCalc(frame, unit, cfg)
         if not calc and frame._msufPredictionClampAbsorbToMissing == true then
             if IsNil(hp) and UnitHealth then hp = UnitHealth(unit) end
-            if IsNil(maxHP) and UnitHealthMax then maxHP = UnitHealthMax(unit) end
+            if IsNil(maxHP) then maxHP = ReadHealthMax(frame, unit) end
         end
         frame._msufPredictionAbsorb = ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
         frame._msufPredictionCacheReady = true
@@ -703,8 +721,8 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
         frame._msufPredictionCacheCfg = cfg
     end
 
-    if (forceMax == true or bar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
-        maxHP = UnitHealthMax(unit)
+    if (forceMax == true or bar._msufMaxReady ~= true) and IsNil(maxHP) then
+        maxHP = ReadHealthMax(frame, unit)
     end
     ShowValue(bar, maxHP, frame._msufPredictionAbsorb, forceMax)
 end
@@ -855,7 +873,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         hp, maxHP = seedHP, seedMaxHP
     end
     if (needHP or needMaxHP) and IsNil(hp) and UnitHealth then hp = UnitHealth(unit) end
-    if needMaxHP and IsNil(maxHP) and UnitHealthMax then maxHP = UnitHealthMax(unit) end
+    if needMaxHP and IsNil(maxHP) then maxHP = ReadHealthMax(frame, unit) end
 
     local calc
     if refreshHeal or refreshAbsorb or refreshHealAbsorb then
@@ -879,8 +897,8 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
 
     if showHeal and frame.incomingHealBar then
         local incoming = frame._msufPredictionIncoming
-        if (forceMax == true or frame.incomingHealBar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
-            maxHP = UnitHealthMax(unit)
+        if (forceMax == true or frame.incomingHealBar._msufMaxReady ~= true) and IsNil(maxHP) then
+            maxHP = ReadHealthMax(frame, unit)
         end
         ShowValue(frame.incomingHealBar, maxHP, incoming, forceMax)
     end
@@ -890,15 +908,15 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
             local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
             LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
         end
-        if (forceMax == true or frame.absorbBar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
-            maxHP = UnitHealthMax(unit)
+        if (forceMax == true or frame.absorbBar._msufMaxReady ~= true) and IsNil(maxHP) then
+            maxHP = ReadHealthMax(frame, unit)
         end
         ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb, forceMax)
     end
 
     if showHealAbsorb and frame.healAbsorbBar then
-        if (forceMax == true or frame.healAbsorbBar._msufMaxReady ~= true) and IsNil(maxHP) and UnitHealthMax then
-            maxHP = UnitHealthMax(unit)
+        if (forceMax == true or frame.healAbsorbBar._msufMaxReady ~= true) and IsNil(maxHP) then
+            maxHP = ReadHealthMax(frame, unit)
         end
         ShowValue(frame.healAbsorbBar, maxHP, frame._msufPredictionHealAbsorb, forceMax)
     end

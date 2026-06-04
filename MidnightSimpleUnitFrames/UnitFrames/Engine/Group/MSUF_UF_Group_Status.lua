@@ -44,11 +44,6 @@ local UnitIsDND = _G.UnitIsDND
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 
-local function PlainTrue(value)
-    if IsSecret(value) then return nil end
-    return value == true or value == 1
-end
-
 local function BindStatusRuntime()
     statusRuntime = MSUF.UFStatusRuntime or statusRuntime
     if not statusRuntime then return false end
@@ -120,12 +115,12 @@ local function StatusTextHealthKey(frame, cfg)
     if cfg.showGhost == true and UnitIsGhost then
         local ghost = UnitIsGhost(unit)
         if IsSecret(ghost) then return nil end
-        if PlainTrue(ghost) then key = key + 2 end
+        if ghost == true or ghost == 1 then key = key + 2 end
     end
     if cfg.showDead == true and UnitIsDeadOrGhost then
         local dead = UnitIsDeadOrGhost(unit)
         if IsSecret(dead) then return nil end
-        if PlainTrue(dead) then key = key + 4 end
+        if dead == true or dead == 1 then key = key + 4 end
     end
     return key
 end
@@ -149,12 +144,12 @@ local function StatusTextFlagsKey(frame, cfg)
     if cfg.showAFK == true and UnitIsAFK then
         local afk = UnitIsAFK(unit)
         if IsSecret(afk) then return nil end
-        if PlainTrue(afk) then key = key + 8 end
+        if afk == true or afk == 1 then key = key + 8 end
     end
     if cfg.showDND == true and UnitIsDND then
         local dnd = UnitIsDND(unit)
         if IsSecret(dnd) then return nil end
-        if PlainTrue(dnd) then key = key + 16 end
+        if dnd == true or dnd == 1 then key = key + 16 end
     end
     return key
 end

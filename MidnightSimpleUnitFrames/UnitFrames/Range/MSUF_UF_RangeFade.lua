@@ -12,7 +12,6 @@ UF.Range = Range
 local CreateFrame = _G.CreateFrame
 local C_Timer = _G.C_Timer
 local UnitExists = _G.UnitExists
-local UnitIsUnit = _G.UnitIsUnit
 local UnitCanAssist = _G.UnitCanAssist
 local UnitCanAttack = _G.UnitCanAttack
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
@@ -340,7 +339,7 @@ end
 
 local function DirectRange(unit)
     if not UnitExistsPlain(unit) then return nil end
-    if unit == "player" or (UnitIsUnit and PlainBool(UnitIsUnit(unit, "player")) == true) then
+    if unit == "player" then
         return true
     end
 

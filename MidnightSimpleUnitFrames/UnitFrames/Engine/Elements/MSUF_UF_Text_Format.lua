@@ -19,6 +19,7 @@ local format = Text.format
 local floor = Text.floor
 local max = Text.max
 local GetTime = Text.GetTime
+local C_Timer = _G.C_Timer
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
@@ -951,11 +952,16 @@ local FlushPendingPowerText
 local function ResolvePendingHealth(frame, rt, hp, hpMax)
     local unit = frame and frame.unit
     if unit then
-        if not hp and UnitHealth then
+        if IsNil(hp) and UnitHealth then
             hp = UnitHealth(unit)
         end
-        if not hpMax and UnitHealthMax then
-            hpMax = UnitHealthMax(unit)
+        if IsNil(hpMax) then
+            local bar = frame.hpBar or frame.Health
+            if bar and bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
+                hpMax = bar._msufHealthMax
+            elseif UnitHealthMax then
+                hpMax = UnitHealthMax(unit)
+            end
         end
     end
     if rt.healthNeedsMissing == true then
@@ -969,7 +975,7 @@ end
 
 local function ResolvePendingPower(frame, rt, power, powerMax)
     local unit = frame and frame.unit
-    if unit and (not power or not powerMax) then
+    if unit and (IsNil(power) or IsNil(powerMax)) then
         local powerType = frame._msufTextPowerType
         if frame._msufTextPowerTypeKnown ~= true and UnitPowerType then
             local rawType = UnitPowerType(unit)
@@ -980,14 +986,14 @@ local function ResolvePendingPower(frame, rt, power, powerMax)
             frame._msufTextPowerTypeKnown = true
         end
 
-        if not power and UnitPower then
+        if IsNil(power) and UnitPower then
             if powerType ~= nil then
                 power = UnitPower(unit, powerType)
             else
                 power = UnitPower(unit)
             end
         end
-        if not powerMax and UnitPowerMax then
+        if IsNil(powerMax) and UnitPowerMax then
             if powerType ~= nil then
                 powerMax = UnitPowerMax(unit, powerType)
             else
@@ -1030,6 +1036,7 @@ end
 local textThrottleFrame
 local textThrottleTimerActive
 local textThrottleTimerAt
+local textThrottleToken = 0
 local healthTextQueue = {}
 local powerTextQueue = {}
 local TEXT_FLUSH_PER_TICK = 10
@@ -1078,23 +1085,29 @@ end
 
 local ScheduleTextThrottleTimer
 
-local function TextThrottleOnUpdate(self)
-    local now = GetTime and GetTime() or 0
-    if textThrottleTimerAt and now < textThrottleTimerAt then
-        return
-    end
-
+local function RunTextThrottle(now)
+    now = now or (GetTime and GetTime() or 0)
     textThrottleTimerActive = nil
     textThrottleTimerAt = nil
 
     local active, nextAt = FlushTextQueues(now)
     if not active then
-        self:Hide()
-        return
+        return false
     end
 
     local delay = nextAt and nextAt > now and (nextAt - now) or TEXT_MIN_DELAY
     ScheduleTextThrottleTimer(delay, now + delay)
+    return true
+end
+
+local function TextThrottleOnUpdate(self)
+    local now = GetTime and GetTime() or 0
+    if textThrottleTimerAt and now < textThrottleTimerAt then
+        return
+    end
+    if not RunTextThrottle(now) then
+        self:Hide()
+    end
 end
 
 ScheduleTextThrottleTimer = function(delay, when)
@@ -1105,13 +1118,25 @@ ScheduleTextThrottleTimer = function(delay, when)
         return
     end
 
+    textThrottleTimerActive = true
+    textThrottleTimerAt = when
+    if C_Timer and C_Timer.After then
+        textThrottleToken = textThrottleToken + 1
+        local token = textThrottleToken
+        C_Timer.After(delay, function()
+            if token ~= textThrottleToken then
+                return
+            end
+            RunTextThrottle()
+        end)
+        return
+    end
+
     if not textThrottleFrame then
         textThrottleFrame = CreateFrame("Frame")
         textThrottleFrame:SetScript("OnUpdate", TextThrottleOnUpdate)
         textThrottleFrame:Hide()
     end
-    textThrottleTimerActive = true
-    textThrottleTimerAt = when
     textThrottleFrame:Show()
 end
 

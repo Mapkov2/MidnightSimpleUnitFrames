@@ -12,9 +12,11 @@ local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
 local IsInRaid = IsInRaid
-local UnitIsUnit = UnitIsUnit
+local UnitGUID = UnitGUID
 local floor = math.floor
 local type = type
+local Secrets = MSUF.Secrets or {}
+local IsSecret = Secrets.IsSecret or function(_) return false end
 
 local eventFrame
 local rosterRebuildQueued = false
@@ -91,8 +93,15 @@ local function GroupUnitMatches(frame, unit)
     if frameUnit == unit then
         return true
     end
-    local same = UnitIsUnit and frameUnit and UnitIsUnit(frameUnit, unit)
-    return same == true or same == 1
+    if not (UnitGUID and frameUnit) then
+        return false
+    end
+    local frameGuid = UnitGUID(frameUnit)
+    local unitGuid = UnitGUID(unit)
+    if IsSecret(frameGuid) or IsSecret(unitGuid) then
+        return false
+    end
+    return frameGuid ~= nil and frameGuid == unitGuid
 end
 
 function GF.RefreshGroupNames(unit)

@@ -13,7 +13,7 @@ end
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent
-local UnitIsUnit = UnitIsUnit
+local UnitGUID = UnitGUID
 local tonumber = tonumber
 local max = math.max
 local floor = math.floor
@@ -127,11 +127,25 @@ local function HideEdges(edges)
     end
 end
 
+local function SameUnitByGUID(unit, otherUnit)
+    if not (unit and otherUnit and UnitGUID) then
+        return false
+    end
+    if unit == otherUnit then
+        return true
+    end
+    local guid = UnitGUID(unit)
+    local otherGuid = UnitGUID(otherUnit)
+    if IsSecret(guid) or IsSecret(otherGuid) then
+        return false
+    end
+    return guid ~= nil and guid == otherGuid
+end
+
 local function UpdateTarget(frame, cfg)
     local show = false
-    if cfg.targetIndicator == true and UnitIsUnit and frame.unit then
-        local same = UnitIsUnit(frame.unit, "target")
-        show = same == true or same == 1
+    if cfg.targetIndicator == true and frame.unit then
+        show = SameUnitByGUID(frame.unit, "target")
     end
     if not show then
         HideEdges(frame.MSUFGFTargetEdges)
@@ -153,9 +167,8 @@ end
 
 local function UpdateFocus(frame, cfg)
     local show = false
-    if cfg.focusIndicator == true and UnitIsUnit and frame.unit then
-        local same = UnitIsUnit(frame.unit, "focus")
-        show = same == true or same == 1
+    if cfg.focusIndicator == true and frame.unit then
+        show = SameUnitByGUID(frame.unit, "focus")
     end
     if not show then
         HideEdges(frame.MSUFGFFocusEdges)

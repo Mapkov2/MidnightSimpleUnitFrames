@@ -157,15 +157,25 @@ function Text.UpdateInline(frame, event, unit)
 end
 
 function Text.UpdateName(frame, event, unit)
-    unit = unit or frame.unit
-    if unit ~= frame.unit then
+    local frameUnit = frame and frame.unit
+    unit = unit or frameUnit
+    if frameUnit and unit ~= frameUnit then
         Text.UpdateInline(frame, event, unit)
         return
     end
-    local rt = frame._msufTextRuntime
-    if not frame.nameText then
+    local rt = frame and frame._msufTextRuntime
+    if not (frame and frame.nameText) then
         return
     end
+    if not frameUnit or frameUnit == "" then
+        frame._msufNameStatusUnit = nil
+        frame._msufNameStatusHidden = nil
+        SetTextCached(frame.nameText, "")
+        frame.nameText._msufShown = nil
+        SetShownCached(frame.nameText, false)
+        return
+    end
+    unit = frameUnit
     if rt and rt.showName == false then
         frame._msufNameStatusUnit = nil
         frame._msufNameStatusHidden = nil
@@ -204,7 +214,7 @@ function Text.UpdateName(frame, event, unit)
     SetShownCached(frame.nameText, true)
     -- UnitName can be a secret string for target/boss units. Do not cache,
     -- compare, shorten, or branch on it in Lua.
-    SetTextCached(frame.nameText, UnitName(unit))
+    SetTextCached(frame.nameText, UnitName and UnitName(unit) or nil)
     Text.UpdateNameColor(frame, event, unit)
 end
 
@@ -425,6 +435,40 @@ function Text.UpdatePower(frame, event, unit, power, powerMax)
     UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
 end
 
+function Text.MarkPowerDirty(frame, event, unit, power, powerMax)
+    unit = unit or frame.unit
+    local rt = frame._msufTextRuntime
+    if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
+        return
+    end
+    if (event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT")
+        or not GetTime
+        or not QueuePowerTextFlush then
+        return Text.UpdatePower(frame, event, unit, power, powerMax)
+    end
+
+    local throttle = rt.powerThrottle or 0
+    if throttle <= 0 then
+        return Text.UpdatePower(frame, event, unit, power, powerMax)
+    end
+
+    rt.pendingPower, rt.pendingPowerMax = power, powerMax
+    rt.powerTextPending = true
+    if rt.powerTimerActive == true then
+        return
+    end
+
+    local now = GetTime()
+    local nextTime = rt.nextPowerTextTime
+
+    if not nextTime or now >= nextTime then
+        rt.nextPowerTextTime = now + throttle
+        QueuePowerTextFlush(frame, rt, 0)
+    else
+        QueuePowerTextFlush(frame, rt, nextTime - now)
+    end
+end
+
 local NAME_EVENTS = { "UNIT_NAME_UPDATE" }
 local NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
 local NAME_STATUS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED", "UNIT_HEALTH" }
@@ -484,7 +528,9 @@ local Runtime = {
     SetShownCached = SetShownCached,
     UpdateName = Text.UpdateName,
     UpdateHealth = Text.UpdateHealth,
+    MarkHealthDirty = Text.MarkHealthDirty,
     UpdatePower = Text.UpdatePower,
+    MarkPowerDirty = Text.MarkPowerDirty,
     UpdateInline = Text.UpdateInline,
 }
 MSUF.UFTextRuntime = Runtime
@@ -577,6 +623,11 @@ function PowerText.GetEvents(frame, spec)
 end
 
 function PowerText.Update(frame, event, unit, power, powerMax)
+    local rt = frame and frame._msufTextRuntime
+    if rt and rt.powerThrottle and rt.powerThrottle > 0
+        and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
+        return Text.MarkPowerDirty(frame, event, unit or frame.unit, power, powerMax)
+    end
     Text.UpdatePower(frame, event, unit or frame.unit, power, powerMax)
 end
 

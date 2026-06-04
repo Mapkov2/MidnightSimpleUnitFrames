@@ -10,9 +10,12 @@ MSUF.GF = GF
 if not (UF and UF.RegisterElement) then return end
 
 local tonumber = tonumber
+local type = type
+local pairs = pairs
 local UnitExists = UnitExists
 local UnitIsConnected = UnitIsConnected
-local UnitIsUnit = UnitIsUnit
+local UnitGUID = UnitGUID
+local UnitInRange = UnitInRange
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 
@@ -30,6 +33,20 @@ local RANGE_OFFLINE_EVENTS = {
     "UNIT_CTR_OPTIONS", "UNIT_OTHER_PARTY_CHANGED",
     "UNIT_CONNECTION",
 }
+local RANGE_SETTLE_EVENTS = {
+    "GROUP_ROSTER_UPDATE",
+    "PLAYER_ENTERING_WORLD",
+    "ZONE_CHANGED_NEW_AREA",
+    "PLAYER_DIFFICULTY_CHANGED",
+    "PLAYER_REGEN_ENABLED",
+}
+local RANGE_SETTLE_EVENT = {
+    GROUP_ROSTER_UPDATE = true,
+    PLAYER_ENTERING_WORLD = true,
+    ZONE_CHANGED_NEW_AREA = true,
+    PLAYER_DIFFICULTY_CHANGED = true,
+    PLAYER_REGEN_ENABLED = true,
+}
 local EMPTY_EVENTS = {}
 
 local GroupRangeFade = {}
@@ -39,7 +56,10 @@ function GroupRangeFade.IsEnabled(frame, spec)
         and (spec.group.rangeFadeEnabled == true or spec.group.hideOfflineEnabled == true)
 end
 
-function GroupRangeFade.GetUnitlessEvents()
+function GroupRangeFade.GetUnitlessEvents(frame, spec)
+    if GroupRangeFade.IsEnabled(frame, spec) then
+        return RANGE_SETTLE_EVENTS
+    end
     return EMPTY_EVENTS
 end
 
@@ -106,9 +126,13 @@ local function UnitIsPlayer(unit)
     if unit == "player" then
         return true
     end
-    if UnitIsUnit then
-        local same = UnitIsUnit(unit, "player")
-        return same == true or same == 1
+    if UnitGUID then
+        local guid = UnitGUID(unit)
+        local playerGuid = UnitGUID("player")
+        if IsSecret(guid) or IsSecret(playerGuid) then
+            return false
+        end
+        return guid ~= nil and guid == playerGuid
     end
     return false
 end
@@ -128,6 +152,95 @@ function GroupRangeFade.GetEvents(frame, spec)
 end
 
 local ApplyAlpha
+local rangeSettleQueued
+local rangeSettleAfterCombat
+
+local function PlainUnitExists(unit)
+    if not (unit and unit ~= "") then
+        return false
+    end
+    if not UnitExists then
+        return true
+    end
+    local exists = UnitExists(unit)
+    if IsSecret(exists) then
+        return true
+    end
+    return exists == true or exists == 1
+end
+
+local function PollCurrentRange(unit)
+    if UnitIsPlayer(unit) then
+        return true, true
+    end
+    if not (UnitInRange and PlainUnitExists(unit)) then
+        return nil, false
+    end
+    local inRange, checked = UnitInRange(unit)
+    if IsSecret(checked) then
+        return inRange, true
+    end
+    if checked == true or checked == 1 then
+        return inRange, true
+    end
+    return nil, false
+end
+
+local function RefreshSettledRange(frame)
+    if not (frame and frame.MSUFSpec and GroupRangeFade.IsEnabled(frame, frame.MSUFSpec)) then
+        return
+    end
+    local value, checked = PollCurrentRange(frame.unit)
+    if not checked then
+        value = nil
+    end
+    if StoreRange(frame, value) then
+        ApplyAlpha(frame)
+    end
+end
+
+local function FlushRangeSettle()
+    rangeSettleQueued = nil
+    if InCombatLockdown and InCombatLockdown() then
+        rangeSettleAfterCombat = true
+        return
+    end
+    rangeSettleAfterCombat = nil
+
+    local list = GF and GF.frameList
+    if type(list) == "table" then
+        for i = 1, #list do
+            local frame = list[i]
+            if frame and (not GF.frames or GF.frames[frame] == true) then
+                RefreshSettledRange(frame)
+            end
+        end
+        return
+    end
+
+    local frames = GF and GF.frames
+    if type(frames) == "table" then
+        for frame in pairs(frames) do
+            RefreshSettledRange(frame)
+        end
+    end
+end
+
+local function QueueRangeSettle(delay)
+    if InCombatLockdown and InCombatLockdown() then
+        rangeSettleAfterCombat = true
+        return
+    end
+    if rangeSettleQueued then
+        return
+    end
+    rangeSettleQueued = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay or 0, FlushRangeSettle)
+    else
+        FlushRangeSettle()
+    end
+end
 
 local function SetAlphaCached(region, alpha, key)
     if region and region.SetAlpha and region[key] ~= alpha then
@@ -388,6 +501,11 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
         end
     elseif event == "UNIT_CONNECTION" then
         changed = true
+    elseif RANGE_SETTLE_EVENT[event] then
+        if event ~= "PLAYER_REGEN_ENABLED" or rangeSettleAfterCombat == true then
+            QueueRangeSettle(event == "PLAYER_ENTERING_WORLD" and 0.2 or 0)
+        end
+        return
     end
     if changed then
         ApplyAlpha(frame)

@@ -35,14 +35,6 @@ local function AddRuntimeReasonMasks(target, mask, reasons)
     end
 end
 
-local function BuildHandledFromStateSpec(spec)
-    local handled = {}
-    for i = 1, #spec do
-        handled[spec[i][1]] = true
-    end
-    return handled
-end
-
 Metadata.BuildNameSet = BuildNameSet
 
 Metadata.hotEventKind = BuildEventKindMap({
@@ -157,13 +149,6 @@ Metadata.hotStateSpecs = {
         { "Borders", "borders" },
     },
 }
-
-for _, kind in pairs({ 1, 2, 3, 5, 9 }) do
-    local spec = Metadata.hotStateSpecs[kind]
-    if spec then
-        spec.tailHandled = BuildHandledFromStateSpec(spec)
-    end
-end
 
 Metadata.runtimeUpdateOwners = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",

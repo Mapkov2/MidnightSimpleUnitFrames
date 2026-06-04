@@ -243,6 +243,10 @@ local function BuildProfiles(ctx)
         profileDrop:SetValue(_G.MSUF_ActiveProfile or "Default")
     end)
     local nameInput = W.TextInput(current, "Profile name for create/copy", fieldW)
+    M.BindTextInput(ctx, nameInput,
+        function() return M.profileCreateCopyName or "" end,
+        function(value) M.profileCreateCopyName = Trim(value or "") end,
+        true)
     local nameHelp = W.Text(current, "Type a name here before creating or copying a profile.", 14, -158, fieldW, T.colors.muted)
     if nameHelp and nameHelp.SetWordWrap then nameHelp:SetWordWrap(true) end
     local create = T.Button(current, "Create profile", buttonW, buttonH)
@@ -254,6 +258,7 @@ local function BuildProfiles(ctx)
             pcall(_G.MSUF_SwitchProfile, name)
             if M.ClearHistory then M.ClearHistory() end
         end
+        M.profileCreateCopyName = ""
         nameInput:SetText("")
         RefreshAfterProfileChange(ctx)
     end)
@@ -265,6 +270,7 @@ local function BuildProfiles(ctx)
             local ok, copied = pcall(_G.MSUF_CopyProfile, _G.MSUF_ActiveProfile or "Default", name)
             if ok and copied and type(_G.MSUF_SwitchProfile) == "function" then pcall(_G.MSUF_SwitchProfile, name) end
             if M.ClearHistory then M.ClearHistory() end
+            M.profileCreateCopyName = ""
             nameInput:SetText("")
             RefreshAfterProfileChange(ctx)
         end
@@ -374,12 +380,17 @@ local function BuildProfiles(ctx)
         end)
     local blob = W.TextInput(io, "Profile string", 640)
     blob._msuf2CommitOnBlur = false
+    M.BindTextInput(ctx, blob,
+        function() return M.profileImportString or "" end,
+        function(value) M.profileImportString = tostring(value or "") end,
+        false)
     local export = T.Button(io, "Export", buttonW, buttonH)
     export:SetScript("OnClick", function()
         local fn = _G.MSUF_ExportSelectionToString
         if type(fn) == "function" then
             local ok, value = pcall(fn, M.profileExportKind or "all")
             if ok and type(value) == "string" then
+                M.profileImportString = value
                 blob:SetText(value)
                 blob:HighlightText()
                 if M.ShowStatusFeedback then M.ShowStatusFeedback("Profile string exported", "ok", 1.5) end
@@ -396,6 +407,10 @@ local function BuildProfiles(ctx)
     AddProfileTooltip(importCreateNew, "Import and create new profile", "Creates a separate profile before importing so you can test the import without changing your current profile.")
     local importProfileName = W.TextInput(io, "New profile name", 260)
     importProfileName._msuf2CommitOnBlur = false
+    M.AddRefresher(ctx, function()
+        if importProfileName:HasFocus() then return end
+        importProfileName:SetText(tostring(M.profileImportNewName or ""))
+    end)
 
     local function ImportIntoCurrent()
         if BlockCombatAction() then return false end
@@ -475,6 +490,7 @@ local function BuildProfiles(ctx)
         if M.ClearHistory then M.ClearHistory() end
         M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true })
         RefreshAfterProfileChange(ctx)
+        M.profileImportNewName = ""
         importProfileName:SetText("")
         ReloadAfterNewProfileImport(name)
         return true
@@ -488,6 +504,7 @@ local function BuildProfiles(ctx)
         end
     end)
     importProfileName:SetOnValueCommitted(function(value)
+        M.profileImportNewName = Trim(value or "")
         if M.profileImportCreateNew == true then
             ImportIntoNewProfile(value)
         end

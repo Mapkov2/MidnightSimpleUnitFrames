@@ -516,10 +516,21 @@ builders.PRESENTATION = function(E)
         end
         if fontSize < 6 then fontSize = 6 end
 
+        local function ApplyClassPowerFont(region, fontPath, size, fontFlags)
+            if not (region and region.SetFont) then return false end
+            local safeSet = _G.MSUF_SetFontSafe
+            if type(safeSet) == "function" then
+                return safeSet(region, fontPath, size, fontFlags) == true
+            end
+            local ok, applied = pcall(region.SetFont, region, fontPath, size, fontFlags)
+            return ok and applied ~= false
+        end
+
         local rev = (_G.MSUF_FontPathSerial or 0) + fontSize * 1000003
         if _cpFontRev ~= rev then
-            fs:SetFont(path, fontSize, flags)
-            _cpFontRev = rev
+            if ApplyClassPowerFont(fs, path, fontSize, flags) then
+                _cpFontRev = rev
+            end
         end
 
         local runeSize = fontSize - 2
@@ -528,7 +539,7 @@ builders.PRESENTATION = function(E)
             local bar = CP.bars[i]
             local rfs = bar and bar._runeText
             if rfs then
-                rfs:SetFont(path, runeSize, flags)
+                ApplyClassPowerFont(rfs, path, runeSize, flags)
             end
         end
 

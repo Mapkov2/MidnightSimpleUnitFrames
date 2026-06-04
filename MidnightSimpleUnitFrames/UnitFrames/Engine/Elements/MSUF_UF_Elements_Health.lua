@@ -95,11 +95,31 @@ function Health.Update(frame, event, unit)
         RefreshUnitState(frame, unit, spec, event)
     end
 
+    if event == "UNIT_FLAGS" or event == "UNIT_FACTION" then
+        local hp, maxHP = bar._msufHealthValue, bar._msufHealthMax
+        local rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP)
+        if not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
+            ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
+        end
+        return hp, maxHP
+    end
+
     local hp = UnitHealth(unit)
     if IsNil(hp) then hp = 0 end
-    local maxHP = UnitHealthMax(unit)
-    if IsNil(maxHP) then maxHP = 1 end
+    bar._msufHealthValue = hp
+
     local animate = event == "UNIT_HEALTH"
+    local maxReady = bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit
+    local maxHP
+    if animate and maxReady then
+        maxHP = bar._msufHealthMax
+    else
+        maxHP = UnitHealthMax(unit)
+        if IsNil(maxHP) then maxHP = 1 end
+        bar._msufHealthMax = maxHP
+        bar._msufHealthMaxUnit = unit
+        bar._msufHealthMaxReady = true
+    end
 
     -- Max health only changes on UNIT_MAXHEALTH (and forced applies); skip the
     -- SetMinMaxValues C call on the high-frequency UNIT_HEALTH tick. Gated on the

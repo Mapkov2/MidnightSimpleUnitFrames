@@ -40,7 +40,7 @@ local CI_SLOT_FIELDS = {
 
 function GF.CompileCornerIndicators(conf)
     conf = conf or {}
-    local slots, slotMap = {}, {}
+    local slots, slotMap, aggroSlots = {}, {}, {}
     local hasWork, needsThreat = false, false
     for i = 1, #CI_SLOT_FIELDS do
         local field = CI_SLOT_FIELDS[i]
@@ -58,7 +58,10 @@ function GF.CompileCornerIndicators(conf)
         }
         if category ~= "none" then
             hasWork = true
-            if category == "aggro" then needsThreat = true end
+            if category == "aggro" then
+                needsThreat = true
+                aggroSlots[#aggroSlots + 1] = slot
+            end
         end
         slots[#slots + 1] = slot
         slotMap[slotKey] = slot
@@ -72,6 +75,7 @@ function GF.CompileCornerIndicators(conf)
         alpha = Alpha(conf.ciAlpha, 1),
         layer = Layer(conf.ciLayer, 7),
         slots = slots,
+        aggroSlots = aggroSlots,
         slotMap = slotMap,
         aggroR = Num(conf.ciAggroColorR, 1),
         aggroG = Num(conf.ciAggroColorG, 0.55),

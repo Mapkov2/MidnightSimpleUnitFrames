@@ -30,24 +30,53 @@ local ApplyBarGradient = C.ApplyBarGradient
 local HideBarGradient = C.HideBarGradient
 local PowerColor = C.PowerColor
 local RefreshUnitState = C.RefreshUnitState
+local IsSecret = C.IsSecret or function(_) return false end
 local IsNil = C.IsNil or function(value) return value == nil end
 local Power = {}
 
-local function ReadPowerValues(unit)
-    local powerType
-    if UnitPowerType then
-        powerType = UnitPowerType(unit)
+local function ReadPowerMeta(frame, bar, unit, force)
+    if not force and bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
+        return bar._msufPowerType, bar._msufPowerMax
     end
-    local power, maxPower
+
+    local powerType = UnitPowerType and UnitPowerType(unit) or nil
+    local maxPower
+    if IsNil(powerType) then
+        maxPower = UnitPowerMax(unit)
+    else
+        maxPower = UnitPowerMax(unit, powerType)
+    end
+    if IsNil(maxPower) then maxPower = 1 end
+
+    bar._msufPowerType = powerType
+    bar._msufPowerMax = maxPower
+    bar._msufPowerMaxUnit = unit
+    bar._msufPowerMaxReady = true
+    frame._msufTextPowerType = IsSecret(powerType) and nil or powerType
+    frame._msufTextPowerTypeKnown = true
+    frame._msufTextPowerMax = maxPower
+    return powerType, maxPower
+end
+
+local function ReadPowerValues(frame, bar, unit, event, animate)
+    local forceMeta = not animate
+        or bar._msufPowerMaxReady ~= true
+        or bar._msufPowerMaxUnit ~= unit
+        or event == "UNIT_MAXPOWER"
+        or event == "UNIT_DISPLAYPOWER"
+        or event == "UNIT_POWER_BAR_SHOW"
+        or event == "UNIT_POWER_BAR_HIDE"
+        or event == "MSUF_APPLY"
+        or event == "MSUF_FORCE_UPDATE"
+        or event == "MSUF_POWER_LAYOUT"
+    local powerType, maxPower = ReadPowerMeta(frame, bar, unit, forceMeta)
+    local power
     if not IsNil(powerType) then
         power = UnitPower(unit, powerType)
-        maxPower = UnitPowerMax(unit, powerType)
     else
         power = UnitPower(unit)
-        maxPower = UnitPowerMax(unit)
     end
     if IsNil(power) then power = 0 end
-    if IsNil(maxPower) then maxPower = 1 end
     return power, maxPower, powerType
 end
 
@@ -305,8 +334,8 @@ function Power.Update(frame, event, unit)
         RefreshUnitState(frame, unit, frame.MSUFSpec, event)
     end
 
-    local power, maxPower = ReadPowerValues(unit)
     local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+    local power, maxPower = ReadPowerValues(frame, bar, unit, event, animate)
 
     -- Max power only changes on UNIT_MAXPOWER / UNIT_DISPLAYPOWER (and forced
     -- applies); skip the SetMinMaxValues C call on the frequent value ticks.
