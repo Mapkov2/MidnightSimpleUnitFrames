@@ -308,6 +308,51 @@ local issecretvalue         = _G.issecretvalue
 local LibStub       = LibStub
 local LSM           = LibStub and LibStub("LibSharedMedia-3.0", true)
 local ResolveFontPath = _G.MSUF_ResolveFontPath or function(path) return path end
+local GAMEPLAY_FALLBACK_FONT = "Fonts/FRIZQT__.TTF"
+
+local function MSUF_GameplayResolveFont(path, size, flags)
+    if type(path) == "string" and path ~= "" then
+        return path
+    end
+
+    return ResolveFontPath(GAMEPLAY_FALLBACK_FONT, size or 14, flags or "") or GAMEPLAY_FALLBACK_FONT
+end
+
+local function MSUF_GameplaySetFontSafe(fontString, path, size, flags)
+    if not fontString or not fontString.SetFont then
+        return false
+    end
+
+    size = tonumber(size) or 14
+    flags = flags or ""
+    path = MSUF_GameplayResolveFont(path, size, flags)
+
+    local general = (MSUF_DB and MSUF_DB.general) or nil
+    local fontKey = general and general.fontKey or nil
+    local setFontSafe = _G.MSUF_SetFontSafe
+    if type(setFontSafe) == "function" then
+        if setFontSafe(fontString, path, size, flags, fontKey) == true then
+            return true
+        end
+    else
+        local ok, applied = pcall(fontString.SetFont, fontString, path, size, flags)
+        if ok and applied ~= false then
+            return true
+        end
+    end
+
+    local fallback = ResolveFontPath(GAMEPLAY_FALLBACK_FONT, size, flags) or GAMEPLAY_FALLBACK_FONT
+    if fallback == path then
+        return false
+    end
+
+    if type(setFontSafe) == "function" then
+        return setFontSafe(fontString, fallback, size, flags, "FRIZQT") == true
+    end
+
+    local ok, applied = pcall(fontString.SetFont, fontString, fallback, size, flags)
+    return ok and applied ~= false
+end
 
 ------------------------------------------------------
 -- UpdateManager accessor (avoid repeating global lookups everywhere)
@@ -1232,7 +1277,7 @@ local function _ApplyFirstDanceFont()
     local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
 
     if firstDanceText then
-        firstDanceText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+        MSUF_GameplaySetFontSafe(firstDanceText, path, (size or 24), flags or "OUTLINE")
         firstDanceText:SetTextColor(lr, lg, lb, 1)
         if useShadow then
             firstDanceText:SetShadowOffset(1, -1)
@@ -1245,7 +1290,7 @@ local function _ApplyFirstDanceFont()
     if firstDanceCDText then
         local iconSz = (g and g.firstDanceIconSize) or 40
         local cdFontSz = math_max(10, math.floor(iconSz * 0.45 + 0.5))
-        firstDanceCDText:SetFont(path or "Fonts/FRIZQT__.TTF", cdFontSz, "OUTLINE")
+        MSUF_GameplaySetFontSafe(firstDanceCDText, path, cdFontSz, "OUTLINE")
         firstDanceCDText:SetTextColor(1, 1, 1, 1)
         if useShadow then
             firstDanceCDText:SetShadowOffset(1, -1)
@@ -1262,7 +1307,7 @@ local function ApplyFontToCounter()
     -- Combat timer font (uses its own override)
     if combatTimerText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFontSettings("timer")
-        combatTimerText:SetFont(path or "Fonts/FRIZQT__.TTF", size or 20, flags or "OUTLINE")
+        MSUF_GameplaySetFontSafe(combatTimerText, path, size or 20, flags or "OUTLINE")
         local gdb = GetGameplayDBFast()
         local tr, tg, tb = _MSUF_NormalizeRGB(gdb and gdb.combatTimerColor, r or 1, g or 1, b or 1)
         combatTimerText:SetTextColor(tr, tg, tb, 1)
@@ -1277,7 +1322,7 @@ local function ApplyFontToCounter()
     -- Combat state text font (shares combat font settings)
     if combatStateText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFontSettings("state")
-        combatStateText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+        MSUF_GameplaySetFontSafe(combatStateText, path, (size or 24), flags or "OUTLINE")
         combatStateText:SetTextColor(r or 1, g or 1, b or 1, 1)
         if useShadow then
             combatStateText:SetShadowOffset(1, -1)
@@ -1400,7 +1445,7 @@ EnsureCombatStateText = function()
 
     -- Use gameplay combat font settings
     local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFontSettings("state")
-    combatStateText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+    MSUF_GameplaySetFontSafe(combatStateText, path, (size or 24), flags or "OUTLINE")
     local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
     combatStateText._msufLastState = "dance"
     combatStateText:SetTextColor(lr, lg, lb, 1)
