@@ -83,6 +83,16 @@ local function FontApplied(fs, requested)
     return tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
 end
 
+local function ApplyFontChecked(fs, requested, size, flags)
+    if not (fs and type(fs.SetFont) == "function") then return false end
+    local safeSet = _G.MSUF_SetFontSafe
+    if type(safeSet) == "function" then
+        return safeSet(fs, requested, size, flags) == true and FontApplied(fs, requested)
+    end
+    local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
+    return ok and applied ~= false and FontApplied(fs, requested)
+end
+
 local function SetFont(fs, spec, size)
     if not fs then
         return
@@ -91,8 +101,7 @@ local function SetFont(fs, spec, size)
     local fontSize = tonumber(size) or 12
     local flags = spec and spec.fontFlags or "OUTLINE"
     if fs._msufFont ~= font or fs._msufFontSize ~= fontSize or fs._msufFontFlags ~= flags then
-        fs:SetFont(font, fontSize, flags)
-        if FontApplied(fs, font) then
+        if ApplyFontChecked(fs, font, fontSize, flags) then
             fs._msufFont = font
             fs._msufFontSize = fontSize
             fs._msufFontFlags = flags
@@ -103,7 +112,7 @@ local function SetFont(fs, spec, size)
             -- next layout pass retries it once the real font has loaded. (Without
             -- this the memo records the intended font and the fallback face/metrics
             -- stick until a /reload.)
-            fs:SetFont(STANDARD_FONT, fontSize, flags)
+            ApplyFontChecked(fs, STANDARD_FONT, fontSize, flags)
             fs._msufFont = nil
             fs._msufFontSize = nil
             fs._msufFontFlags = nil

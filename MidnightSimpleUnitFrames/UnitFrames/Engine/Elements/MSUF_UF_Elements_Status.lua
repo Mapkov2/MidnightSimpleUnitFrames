@@ -222,6 +222,18 @@ local function SetText(region, text, raw)
     end
 end
 
+local function ApplyStatusFont(region, font, size, flags)
+    if not (region and region.SetFont and font) then
+        return false
+    end
+    local safeSet = _G.MSUF_SetFontSafe
+    if type(safeSet) == "function" then
+        return safeSet(region, font, size, flags) == true
+    end
+    local ok, applied = pcall(region.SetFont, region, font, size, flags)
+    return ok and applied ~= false
+end
+
 local function SetFont(region, spec, size)
     if not region or not region.SetFont then
         return
@@ -230,8 +242,9 @@ local function SetFont(region, spec, size)
     local flags = spec and spec.fontFlags or "OUTLINE"
     size = tonumber(size) or 14
     if font and (region._msufStatusFont ~= font or region._msufStatusFontSize ~= size or region._msufStatusFontFlags ~= flags) then
-        region:SetFont(font, size, flags)
-        region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
+        if ApplyStatusFont(region, font, size, flags) then
+            region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
+        end
     end
 end
 

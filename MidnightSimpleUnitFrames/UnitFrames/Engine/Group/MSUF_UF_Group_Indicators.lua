@@ -9,7 +9,13 @@ MSUF.GF = GF
 
 if not (UF and UF.RegisterElement) then return end
 
-local SetShown = function(region, show) if region then region:SetShown(show) end end
+local function SetShown(region, show)
+    if not region then return end
+    show = show == true
+    if region._msufGFShown == show then return end
+    region:SetShown(show)
+    region._msufGFShown = show
+end
 local UnitThreatSituation = UnitThreatSituation
 local CreateFrame = CreateFrame
 local tonumber = tonumber
@@ -158,38 +164,72 @@ local function HideCorners(frame)
     if frame and frame.MSUFGFCornerIndicators then
         for _, tex in pairs(frame.MSUFGFCornerIndicators) do SetShown(tex, false) end
     end
+    if frame then
+        frame._msufGFCornerThreatState = nil
+        frame._msufGFCornerThreatCfg = nil
+        frame._msufGFCornerPreparedCfg = nil
+    end
 end
 
-local function UpdateCornerIndicators(frame)
+local function PrepareCornerIndicators(frame, cfg)
+    if not (frame and cfg and cfg.enabled == true) then return end
+    local slots = cfg.aggroSlots or cfg.slots or EMPTY
+    for i = 1, #slots do
+        local slot = slots[i]
+        if slot.category == "aggro" then
+            local tex, holder = EnsureCorner(frame, slot.key, cfg.layer)
+            local size = max(1, tonumber(cfg.size) or 8)
+            SetSizeCached(tex, size, size)
+            SetColorTextureCached(tex, cfg.aggroR or 1, cfg.aggroG or 0.55, cfg.aggroB or 0, cfg.alpha or 1)
+            SetPointCached(tex, slot.anchor or "CENTER", holder, slot.anchor or "CENTER", slot.x or 0, slot.y or 0)
+            SetShown(tex, false)
+        end
+    end
+    if slots ~= cfg.slots and frame.MSUFGFCornerIndicators then
+        for key, tex in pairs(frame.MSUFGFCornerIndicators) do
+            if not (cfg.slotMap and cfg.slotMap[key] and cfg.slotMap[key].category == "aggro") then
+                SetShown(tex, false)
+            end
+        end
+    end
+    frame._msufGFCornerPreparedCfg = cfg
+end
+
+local function UpdateCornerIndicators(frame, event)
     local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
     if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
     local unit = frame.unit
     if unit and UnitMissing(unit) then HideCorners(frame); return end
+    if frame._msufGFCornerPreparedCfg ~= cfg then
+        PrepareCornerIndicators(frame, cfg)
+    end
     local threat = HasThreat(unit)
-    local slots = cfg.slots or EMPTY
+    if (event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE")
+        and frame._msufGFCornerThreatCfg == cfg
+        and frame._msufGFCornerThreatState == threat then
+        return
+    end
+    frame._msufGFCornerThreatCfg = cfg
+    frame._msufGFCornerThreatState = threat
+    local slots = cfg.aggroSlots or EMPTY
     for i = 1, #slots do
         local slot = slots[i]
-        local show, r, g, b = false, 1, 1, 1
-        if slot.category == "aggro" then
-            show = threat
-            r, g, b = cfg.aggroR or 1, cfg.aggroG or 0.55, cfg.aggroB or 0
+        local tex = frame.MSUFGFCornerIndicators and frame.MSUFGFCornerIndicators[slot.key]
+        if not tex then
+            PrepareCornerIndicators(frame, cfg)
+            tex = frame.MSUFGFCornerIndicators and frame.MSUFGFCornerIndicators[slot.key]
         end
-        if show then
-            local tex, holder = EnsureCorner(frame, slot.key, cfg.layer)
-            local size = max(1, tonumber(cfg.size) or 8)
-            SetSizeCached(tex, size, size)
-            SetColorTextureCached(tex, r, g, b, cfg.alpha or 1)
-            SetPointCached(tex, slot.anchor or "CENTER", holder, slot.anchor or "CENTER", slot.x or 0, slot.y or 0)
-            SetShown(tex, true)
-        else
-            local tex = frame.MSUFGFCornerIndicators and frame.MSUFGFCornerIndicators[slot.key]
-            SetShown(tex, false)
-        end
+        SetShown(tex, threat)
     end
 end
 
-function GroupCornerIndicators.Apply(frame) UpdateCornerIndicators(frame) end
-function GroupCornerIndicators.Update(frame) UpdateCornerIndicators(frame) end
+function GroupCornerIndicators.Apply(frame)
+    local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
+    if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
+    PrepareCornerIndicators(frame, cfg)
+    UpdateCornerIndicators(frame, "MSUF_APPLY")
+end
+function GroupCornerIndicators.Update(frame, event) UpdateCornerIndicators(frame, event) end
 function GroupCornerIndicators.Disable(frame) HideCorners(frame) end
 
 UF.RegisterElement("GroupCornerIndicators", GroupCornerIndicators)

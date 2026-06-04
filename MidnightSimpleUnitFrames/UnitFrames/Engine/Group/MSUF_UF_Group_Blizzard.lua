@@ -30,6 +30,8 @@ local ownedFrames = {}
 local pendingHide = {}
 local pendingRestore = {}
 local lastOwnershipSig
+local partyReconcileScheduled
+local partyReconcileHideSolo
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -313,6 +315,29 @@ local function HidePartyFrames(hard)
     end
 end
 
+local function SoftHidePartyFramesOnly()
+    SafeHide(_G.PartyFrame)
+    if _G.PartyFrame then
+        ForEachPoolActive(_G.PartyFrame.PartyMemberFramePool, function(frame)
+            SafeHide(frame)
+        end)
+    end
+    SafeHide(_G.CompactPartyFrame)
+    SafeHide(_G.CompactPartyFrameTitle)
+    if _G.CompactPartyFrame then
+        ForEachFrameTable(_G.CompactPartyFrame.memberUnitFrames, function(frame)
+            SafeHide(frame)
+        end)
+    end
+    for i = 1, MEMBERS_PER_RAID_GROUP do
+        SafeHide(_G["CompactPartyFrameMember" .. i])
+    end
+    for i = 1, 4 do
+        SafeHide(_G["PartyMemberFrame" .. i])
+        SafeHide(_G["PartyMemberFrame" .. i .. "PetFrame"])
+    end
+end
+
 local function RestorePartyFrames(showAfter)
     RestoreFrame(_G.PartyFrame, showAfter)
     if _G.PartyFrame then
@@ -335,6 +360,28 @@ local function RestorePartyFrames(showAfter)
         RestoreFrame(_G["PartyMemberFrame" .. i .. "PetFrame"], showAfter)
     end
     RefreshBlizzardParty()
+end
+
+local function SchedulePartyReconcile(hideSolo)
+    partyReconcileHideSolo = hideSolo == true
+    if partyReconcileScheduled then
+        return
+    end
+    partyReconcileScheduled = true
+    local function Run()
+        partyReconcileScheduled = nil
+        local hideIfSolo = partyReconcileHideSolo
+        partyReconcileHideSolo = nil
+        RefreshBlizzardParty()
+        if hideIfSolo and (not GetNumGroupMembers or (GetNumGroupMembers() or 0) <= 0) then
+            SoftHidePartyFramesOnly()
+        end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, Run)
+    else
+        Run()
+    end
 end
 
 local function HideRaidFrames(hard)
@@ -457,10 +504,12 @@ local function ApplyDisabledPartyFallback(mode, msufOwnsGroupFrames)
         HidePartyFrames(true)
     elseif mode == "SHOW" then
         RestorePartyFrames(true)
+        SchedulePartyReconcile(false)
     elseif msufOwnsGroupFrames then
         HidePartyFrames(true)
     else
         RestorePartyFrames(false)
+        SchedulePartyReconcile((GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0) <= 0)
     end
 end
 

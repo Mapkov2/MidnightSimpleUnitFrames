@@ -15,7 +15,10 @@ local Metadata = UF.Metadata or {}
 local HOT_EVENT_KIND = Metadata.hotEventKind or {}
 local type = type
 local pairs = pairs
+local next = next
 local tostring = tostring
+local table_sort = table.sort
+local unpack = unpack or table.unpack
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 
@@ -186,18 +189,29 @@ local eventFrameCounts = UF.eventFrameCounts or {}
 local eventUnitFrames = UF.eventUnitFrames or {}
 local eventUnitlessFrames = UF.eventUnitlessFrames or {}
 local eventUnitlessFrameCounts = UF.eventUnitlessFrameCounts or {}
+local eventDerivedFrames = UF.eventDerivedFrames or {}
+local eventDerivedFrameCounts = UF.eventDerivedFrameCounts or {}
 UF.eventFrames = eventFrames
 UF.eventFrameCounts = eventFrameCounts
 UF.eventUnitFrames = eventUnitFrames
 UF.eventUnitlessFrames = eventUnitlessFrames
 UF.eventUnitlessFrameCounts = eventUnitlessFrameCounts
+UF.eventDerivedFrames = eventDerivedFrames
+UF.eventDerivedFrameCounts = eventDerivedFrameCounts
 
 -- A UNIT_* event may only fan out through the central driver when a feature
 -- really needs cross-unit state. Health, power, prediction and similar hot
 -- unit events must stay unit-scoped; otherwise one raid UNIT_HEALTH tick can
 -- wake every attached group frame.
 local UNIT_EVENT_UNITLESS_ALLOWED = {
-    UNIT_TARGET = true,
+    UNIT_NAME_UPDATE = true,
+    UNIT_FACTION = true,
+    UNIT_FLAGS = true,
+    UNIT_CONNECTION = true,
+    UNIT_CLASSIFICATION_CHANGED = true,
+}
+
+local INLINE_DERIVED_TARGET_EVENTS = {
     UNIT_NAME_UPDATE = true,
     UNIT_FACTION = true,
     UNIT_FLAGS = true,
@@ -207,6 +221,64 @@ local UNIT_EVENT_UNITLESS_ALLOWED = {
 
 local function UnitEventAllowsUnitless(event)
     return not UNIT_EVENT_HAS_UNIT[event] or UNIT_EVENT_UNITLESS_ALLOWED[event] == true
+end
+
+local function DerivedEventSource(frame, event)
+    local unit = frame and frame.unit
+    if event == "UNIT_TARGET" then
+        if unit == "targettarget" then
+            return "target"
+        elseif unit == "focustarget" then
+            return "focus"
+        end
+    elseif unit == "target" and INLINE_DERIVED_TARGET_EVENTS[event] == true then
+        return "targettarget"
+    end
+    return nil
+end
+
+local function AddEventSource(sourceUnits, sourceSet, unit)
+    if not unit or sourceSet[unit] then
+        return
+    end
+    sourceSet[unit] = true
+    sourceUnits[#sourceUnits + 1] = unit
+end
+
+local function BuildCentralUnitSources(event)
+    local sourceUnits, sourceSet = {}, {}
+    local byUnit = eventUnitFrames[event]
+    if byUnit then
+        for unit in pairs(byUnit) do
+            AddEventSource(sourceUnits, sourceSet, unit)
+        end
+    end
+    local derived = eventDerivedFrames[event]
+    if derived then
+        for unit in pairs(derived) do
+            AddEventSource(sourceUnits, sourceSet, unit)
+        end
+    end
+    if #sourceUnits > 1 then
+        table_sort(sourceUnits)
+    end
+    return sourceUnits
+end
+
+local function CentralDriverRegistration(event)
+    if not UNIT_EVENT_HAS_UNIT[event] or eventUnitlessFrameCounts[event] ~= nil then
+        return "event", nil, 0
+    end
+    local sourceUnits = BuildCentralUnitSources(event)
+    local count = #sourceUnits
+    if count > 0 and eventDriver and eventDriver.RegisterUnitEvent then
+        local signature = "unit"
+        for i = 1, count do
+            signature = signature .. ":" .. sourceUnits[i]
+        end
+        return signature, sourceUnits, count
+    end
+    return "event", nil, 0
 end
 
 local function FrameUnitMatches(frame, unit)
@@ -254,6 +326,13 @@ local function EventDriverOnEvent(_, event, unit, ...)
                 dispatch(ownerFrame, event, unit, ...)
             end
         end
+        local derived = eventDerivedFrames[event]
+        local derivedFrames = derived and derived[unit]
+        if derivedFrames then
+            for frame in pairs(derivedFrames) do
+                dispatch(frame, event, unit, ...)
+            end
+        end
         local unitFrames = eventUnitFrames[event]
         unitFrames = unitFrames and unitFrames[unit]
         if unitFrames then
@@ -278,6 +357,68 @@ local function EventDriverOnEvent(_, event, unit, ...)
 
     for frame in pairs(frames) do
         dispatch(frame, event, unit, ...)
+    end
+end
+
+local function AddDerivedEventFrame(frame, event, sourceUnit)
+    if not (frame and event and sourceUnit and UNIT_EVENT_HAS_UNIT[event]) then
+        return false
+    end
+    if frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event] then
+        ClearFrameUnitFilter(frame, event)
+    end
+    local centralUnit = frame._msufDriverEventUnits and frame._msufDriverEventUnits[event]
+    if centralUnit then
+        RemoveEventUnitFrame(frame, event, centralUnit)
+    end
+    local byEvent = eventDerivedFrames[event]
+    if not byEvent then
+        byEvent = {}
+        eventDerivedFrames[event] = byEvent
+    end
+    local byUnit = byEvent[sourceUnit]
+    if not byUnit then
+        byUnit = {}
+        byEvent[sourceUnit] = byUnit
+    end
+    if byUnit[frame] then
+        return true
+    end
+    byUnit[frame] = true
+    eventDerivedFrameCounts[event] = (eventDerivedFrameCounts[event] or 0) + 1
+    frame._msufDerivedEventUnits = frame._msufDerivedEventUnits or {}
+    frame._msufDerivedEventUnits[event] = sourceUnit
+    if RefreshEventDriverRegistration then
+        RefreshEventDriverRegistration(event)
+    end
+    return true
+end
+
+local function RemoveDerivedEventFrame(frame, event)
+    local sourceUnit = frame and frame._msufDerivedEventUnits and frame._msufDerivedEventUnits[event]
+    if not (frame and event and sourceUnit) then
+        return
+    end
+    local byEvent = eventDerivedFrames[event]
+    local byUnit = byEvent and byEvent[sourceUnit]
+    if byUnit and byUnit[frame] then
+        byUnit[frame] = nil
+        if next(byUnit) == nil then
+            byEvent[sourceUnit] = nil
+            if next(byEvent) == nil then
+                eventDerivedFrames[event] = nil
+            end
+        end
+        local count = (eventDerivedFrameCounts[event] or 1) - 1
+        if count <= 0 then
+            eventDerivedFrameCounts[event] = nil
+        else
+            eventDerivedFrameCounts[event] = count
+        end
+    end
+    frame._msufDerivedEventUnits[event] = nil
+    if RefreshEventDriverRegistration then
+        RefreshEventDriverRegistration(event)
     end
 end
 
@@ -359,19 +500,18 @@ end
 
 local function PromoteEventToCentralDriver(frame, event)
     -- A unitless registration arrived (or replaced a unit-mode registration).
-    -- Tear down the per-frame C-side filter and register on the central driver
-    -- so this frame receives the event for any unit (not just frame.unit).
+    -- Tear down the per-frame C-side filter; the central driver registration
+    -- itself is rebuilt once the route table has the final source-unit shape.
     if frame._msufFrameUnitEvents and frame._msufFrameUnitEvents[event] then
         ClearFrameUnitFilter(frame, event)
-    end
-    if not (eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event]) then
-        EnsureEventDriver():RegisterEvent(event)
-        eventDriver._msufRegistered = eventDriver._msufRegistered or {}
-        eventDriver._msufRegistered[event] = true
     end
 end
 
 local function RegisterDriverFrameUnitlessEvent(frame, event)
+    local sourceUnit = DerivedEventSource(frame, event)
+    if sourceUnit then
+        return AddDerivedEventFrame(frame, event, sourceUnit)
+    end
     if UNIT_EVENT_HAS_UNIT[event] and not UnitEventAllowsUnitless(event) then
         return false
     end
@@ -393,6 +533,10 @@ local function RegisterDriverFrameUnitlessEvent(frame, event)
 end
 
 local function UnregisterDriverFrameUnitlessEvent(frame, event)
+    if frame and frame._msufDerivedEventUnits and frame._msufDerivedEventUnits[event] then
+        RemoveDerivedEventFrame(frame, event)
+        return
+    end
     local frames = eventUnitlessFrames[event]
     if not (frames and frames[frame]) then
         return
@@ -424,7 +568,9 @@ local function EventNeedsCentralDriver(event)
         return false
     end
     if UNIT_EVENT_HAS_UNIT[event] then
-        return eventUnitlessFrameCounts[event] ~= nil or eventUnitFrames[event] ~= nil
+        return eventUnitlessFrameCounts[event] ~= nil
+            or eventUnitFrames[event] ~= nil
+            or eventDerivedFrameCounts[event] ~= nil
     end
     return eventFrameCounts[event] ~= nil
 end
@@ -435,10 +581,19 @@ RefreshEventDriverRegistration = function(event)
     end
     local registered = eventDriver and eventDriver._msufRegistered and eventDriver._msufRegistered[event]
     if EventNeedsCentralDriver(event) then
-        if not registered then
-            EnsureEventDriver():RegisterEvent(event)
+        EnsureEventDriver()
+        local signature, units, unitCount = CentralDriverRegistration(event)
+        if registered ~= signature then
+            if registered then
+                eventDriver:UnregisterEvent(event)
+            end
+            if units and unitCount > 0 then
+                eventDriver:RegisterUnitEvent(event, unpack(units, 1, unitCount))
+            else
+                eventDriver:RegisterEvent(event)
+            end
             eventDriver._msufRegistered = eventDriver._msufRegistered or {}
-            eventDriver._msufRegistered[event] = true
+            eventDriver._msufRegistered[event] = signature
         end
     elseif registered then
         eventDriver._msufRegistered[event] = nil
@@ -520,6 +675,10 @@ RefreshFrameUnitEventRouting = function(frame)
             if FrameHasUnitlessForEvent(frame, event) then
                 if centralUnit then
                     RemoveEventUnitFrame(frame, event, centralUnit)
+                end
+                local sourceUnit = DerivedEventSource(frame, event)
+                if sourceUnit then
+                    AddDerivedEventFrame(frame, event, sourceUnit)
                 end
                 ClearFrameUnitFilter(frame, event)
             elseif unit and frame.RegisterUnitEvent then
@@ -667,14 +826,20 @@ local function RegisterElementEvent(frame, elementName, event, unitless)
     end
 
     local byElement = owners[event]
+    local createdOwners = false
     if not byElement then
         byElement = {}
         owners[event] = byElement
         RegisterDriverFrameEvent(frame, event)
+        createdOwners = true
     end
 
     if unitless == true then
         if not RegisterDriverFrameUnitlessEvent(frame, event) then
+            if createdOwners then
+                owners[event] = nil
+                UnregisterDriverFrameEvent(frame, event)
+            end
             return
         end
         unitlessOwners[event] = true
@@ -948,12 +1113,19 @@ function UF.DetachFrame(frame)
             RemoveEventUnitFrame(frame, event, unit)
         end
     end
+    local derivedUnits = frame._msufDerivedEventUnits
+    if derivedUnits then
+        for event in pairs(derivedUnits) do
+            RemoveDerivedEventFrame(frame, event)
+        end
+    end
     frame._msufEventOwners = nil
     frame._msufEventUnitless = nil
     frame._msufElementEventRefs = nil
     frame._msufEventElementLists = nil
     frame._msufHotEventState = nil
     frame._msufDriverEventUnits = nil
+    frame._msufDerivedEventUnits = nil
     frame._msufCoreScope = nil
     frame._msufCoreAdapter = nil
     UF.attachedFrames[frame] = nil

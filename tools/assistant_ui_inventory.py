@@ -577,7 +577,7 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if row.function == "StyleHistoryButton":
             return mark_registry_family(row, action_with_key(actions, "assistant.action.history.undo") + action_with_key(actions, "assistant.action.history.redo"), "Matched NavRail Undo/Redo buttons to Assistant history actions.")
         if row.function == "ShowSearchIntro":
-            return mark_known_gap(row, "NavRail section/search intro buttons are UI-only expand/help state; Assistant opens concrete pages and search targets directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_nav_section") + action_with_key(actions, "set_nav_search_intro"), "Matched NavRail disclosure/search-intro state to shared Assistant navigation actions.")
 
     if "MSUF_Menu2_Window.lua" in ui_file:
         if row.function == "CreateMinimizedBar" and label == "restore":
@@ -612,14 +612,14 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
             return mark_known_gap(row, "Colors ButtonAt() factory helper; concrete reset buttons are covered by registered color reset actions where shared helpers exist.", "todo")
         if section == "power bar colors":
             if label == "power type":
-                return mark_known_gap(row, "Runtime selected power-token dropdown; Assistant targets concrete registered power-token color settings directly.", "todo")
+                return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime power-token dropdown to Assistant menu selector state action.")
             if label == "color":
                 return mark_registry_family(row, settings_with_attribute(settings, {"powerColor"}, "colors"), "Matched selected power-token color swatch to registered power-color token settings.")
             if label == "reset":
                 return mark_registry_family(row, action_with_key(actions, "reset_power_color_token"), "Matched selected power-token reset button to Assistant token reset action.")
         if section == "class power colors":
             if label == "resource type":
-                return mark_known_gap(row, "Runtime selected class-resource token dropdown; Assistant targets concrete registered class-resource token color settings directly.", "todo")
+                return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime class-resource token dropdown to Assistant menu selector state action.")
             if label == "color":
                 return mark_registry_family(row, settings_with_attribute(settings, {"classPowerColor"}, "colors"), "Matched selected class-resource color swatch to registered class-resource token color settings.")
             if label == "background":
@@ -696,7 +696,7 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
 
     if "MSUF_Menu2_Group.lua" in ui_file:
         if row.function == "RunCopy":
-            return mark_known_gap(row, "Runtime group copy category checkbox in the copy popup; Assistant passes category scopes directly to copy_group.", "partial", "copy_group")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state") + action_with_key(actions, "copy_group"), "Matched runtime group copy category checkbox to Assistant staging plus category-scoped copy action.")
 
     if "MSUF_Menu2_UnitSectionShared.lua" in ui_file:
         if row.function == "IsNameRelativeAnchor":
@@ -704,7 +704,7 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
 
     if "MSUF_Menu2_UnitText.lua" in ui_file:
         if label == "text area":
-            return mark_known_gap(row, "Runtime unit text-area tab selector; Assistant targets concrete name, HP, power, and advanced text settings directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime unit text-area tab selector to Assistant menu selector state action.")
         if row.function == "SwitchOrToggle":
             return mark_known_gap(row, "Unit text toggle factory for HP reverse-order and move-together UI state; concrete persistent text settings are mapped separately.", "todo")
         if label == "hidden" and row.function == "BuildValueTextTab":
@@ -719,7 +719,7 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if row.function == "SlotControl" and label == "":
             return mark_registry_family(row, settings_with_suffix(settings, {"hpTextReverse"}, "unitframe"), "Matched HP reverse-order toggle to registered setting.")
         if row.function == "SlotControl" and label == "slot":
-            return mark_known_gap(row, "Runtime selected HP/power text slot selector; Assistant targets concrete left/center/right slot settings directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime unit selected-slot selector to Assistant menu selector state action.")
         if row.function == "SlotControl" and label == "slot x":
             return mark_registry_family(row, settings_with_suffix(settings, {
                 "hpTextLeftOffsetX", "hpTextCenterOffsetX", "hpTextRightOffsetX",
@@ -784,7 +784,7 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if label == "active profile":
             return mark_registry_family(row, action_with_key(actions, "switch_profile"), "Matched active-profile dropdown to profile switch action.")
         if label == "profile name for create copy":
-            return mark_known_gap(row, "Profile-name staging input; Assistant passes the name directly to create_profile or copy_profile.", "partial", "create_profile|copy_profile")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched profile create/copy name staging input to Assistant menu selector state action.")
         if label == "copy current to name":
             return mark_registry_family(row, action_with_key(actions, "copy_profile"), "Matched profile copy action.")
         if label == "reset current profile":
@@ -796,17 +796,17 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if label.startswith("dynamic s name"):
             return mark_registry_family(row, action_with_key(actions, "set_spec_profile") + action_with_key(actions, "clear_spec_profile"), "Matched dynamic specialization profile assignment actions.")
         if label == "export kind":
-            return mark_known_gap(row, "Profile export-kind staging dropdown; Assistant passes the requested kind directly to export_profile.", "partial", "export_profile")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched profile export-kind staging dropdown to Assistant menu selector state action.")
         if label == "profile string":
-            return mark_known_gap(row, "Profile-string staging input/output; Assistant export/import actions provide or consume the string directly.", "partial", "export_profile|import_profile_string|import_profile_string_new|import_legacy_profile_string")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state") + action_with_key(actions, "export_profile") + action_with_key(actions, "import_profile_string") + action_with_key(actions, "import_profile_string_new") + action_with_key(actions, "import_legacy_profile_string"), "Matched profile-string staging input/output to Assistant staging plus export/import actions.")
         if label == "export":
             return mark_registry_family(row, action_with_key(actions, "export_profile"), "Matched profile export action.")
         if label == "import to current profile":
             return mark_registry_family(row, action_with_key(actions, "import_profile_string"), "Matched active-profile import action.")
         if label == "import and create new profile":
-            return mark_known_gap(row, "New-profile import mode toggle; Assistant uses import_profile_string_new with the target name directly.", "partial", "import_profile_string_new")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched new-profile import mode toggle to Assistant menu selector state action.")
         if label == "new profile name":
-            return mark_known_gap(row, "New-profile import name staging input; Assistant passes the target profile name directly to import_profile_string_new.", "partial", "import_profile_string_new")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched new-profile import name staging input to Assistant menu selector state action.")
         if label == "import legacy":
             return mark_registry_family(row, action_with_key(actions, "import_legacy_profile_string"), "Matched legacy profile import action.")
         if label == "browse wago profiles":
@@ -896,13 +896,19 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
             suffix = "groupNumberX"
         elif label == "y offset" and row.line == 76:
             suffix = "groupNumberY"
+        elif label == "border thickness" and row.line == 84:
+            suffix = "hlHoverSize"
+        elif label == "border thickness" and row.line == 107:
+            suffix = "hlFocusSize"
+        elif label == "border thickness" and row.line == 128:
+            suffix = "groupBorderSize"
         if suffix:
             return mark_registry_family(row, settings_with_suffix(settings, {suffix}, "group"), "Matched Group Indicators control to scoped group-frame setting.")
 
         if label == "status icon controls":
-            return mark_known_gap(row, "Runtime Basic/Advanced status-icon tab selector; Assistant changes the concrete status-icon fields directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime group status-icon tab selector to Assistant menu selector state action.")
         if label == "indicator":
-            return mark_known_gap(row, "Runtime selected-status-icon dropdown; Assistant targets concrete group status icons by phrase.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime group selected-status-icon dropdown to Assistant menu selector state action.")
         if label == "enabled" and row.function == "BindStatusSlider":
             return mark_registry_family(row, settings_with_suffix(settings, {
                 "roleIcon", "leaderIcon", "assistIcon", "raidMarker", "readyCheckIcon", "summonIcon",
@@ -933,11 +939,11 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if label.startswith("dynamic tr spec"):
             return mark_registry_family(row, settings_with_keys(settings, group_keys("spellIndicators.spec")), "Matched spell-indicator spec setting.")
         if label.startswith("dynamic tr multi spec entry"):
-            return mark_known_gap(row, "Runtime selected multi-spec dropdown; Assistant toggles a concrete multi-spec entry by spec name.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime spell-indicator multi-spec dropdown to Assistant menu selector state action.")
         if label.startswith("dynamic tr track selected multi spec"):
             return mark_registry_family(row, action_with_key(actions, "set_group_spell_indicator_multi_spec"), "Matched spell-indicator multi-spec tracking action.")
         if label.startswith("dynamic tr spell"):
-            return mark_known_gap(row, "Runtime selected-spell dropdown; Assistant targets concrete spell-indicator auras by name or spell ID.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime selected-spell dropdown to Assistant menu selector state action.")
         if label.startswith("dynamic tr enabled") or label.startswith("dynamic tr only my cast"):
             return mark_registry_family(row, action_with_key(actions, "set_group_spell_indicator_aura"), "Matched dynamic selected spell-indicator aura action.")
         if (
@@ -949,7 +955,7 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if label.startswith("dynamic slotinfo text or slotkey indicator"):
             return mark_registry_family(row, settings_with_suffix(settings, {"ciSlotTL", "ciSlotTR", "ciSlotBL", "ciSlotBR", "ciSlotC"}, "group"), "Matched corner-indicator slot assignment settings.")
         if label == "editor slot":
-            return mark_known_gap(row, "Runtime selected corner-editor slot; Assistant targets concrete corner slots by phrase.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime corner-editor slot selector to Assistant menu selector state action.")
         if label == "selected slot indicator":
             return mark_registry_family(row, settings_with_suffix(settings, {"ciSlotTL", "ciSlotTR", "ciSlotBL", "ciSlotBR", "ciSlotC"}, "group"), "Matched selected corner-indicator slot assignment settings.")
         if label == "spell ids comma separated":
@@ -1005,7 +1011,7 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if suffix:
             return mark_registry_family(row, settings_with_suffix(settings, {suffix}, "group"), "Matched Group Bars control to scoped group-frame setting.")
         if label == "text area":
-            return mark_known_gap(row, "Runtime Text area tab selector; Assistant targets the concrete group text settings directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime group text-area tab selector to Assistant menu selector state action.")
         if label in {"hidden", "font"} and row.function == "BuildValueTextTab":
             return mark_registry_family(row, settings_with_suffix(settings, {"showHPText", "showPowerText"}, "group"), "Matched dynamic HP/power text visibility controls.")
         if label == "visual" and row.function == "SlotControl":
@@ -1022,9 +1028,9 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if label == "y offset" and row.function == "SlotControl":
             return mark_registry_family(row, settings_with_suffix(settings, {"hpOffsetY", "powerOffsetY"}, "group"), "Matched dynamic HP/power group text Y offset controls.")
         if label == "move text as one group":
-            return mark_known_gap(row, "Runtime editor toggle only; Assistant sets whole-text offsets and per-slot offsets directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime group text move-together editor toggle to Assistant menu selector state action.")
         if label == "slot":
-            return mark_known_gap(row, "Runtime selected-slot selector only; Assistant targets concrete left/center/right slot offset settings directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime group selected-slot selector to Assistant menu selector state action.")
         if label.startswith("dynamic slot") or row.function == "SlotAxis":
             return mark_registry_family(row, settings_with_suffix(settings, {
                 "hpTextLeftOffsetX", "hpTextCenterOffsetX", "hpTextRightOffsetX",
@@ -1084,15 +1090,20 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if suffix:
             return mark_registry_family(row, settings_with_suffix(settings, {suffix}, "group"), "Matched Group Layout control to scoped group-frame setting.")
         if label == "pick":
-            return mark_known_gap(row, "Interactive group anchor picker overlay; Assistant supports the resulting custom anchor frame name via group customAnchorFrame.", "partial", "gf_party.customAnchorFrame|gf_raid.customAnchorFrame|gf_mythicraid.customAnchorFrame")
+            return mark_registry_family(
+                row,
+                action_with_key(actions, "start_group_custom_anchor_picker")
+                + settings_with_suffix(settings, {"customAnchorFrame"}, "group"),
+                "Matched group custom-anchor picker workflow plus direct custom anchor frame-name setting.",
+            )
         if label == "clear":
             return mark_registry_family(row, action_with_key(actions, "clear_group_custom_anchor"), "Matched Assistant action that clears the group custom anchor frame.")
 
     if "MSUF_Menu2_UnitStatusSection.lua" in ui_file:
         if label == "status icon controls":
-            return mark_known_gap(row, "Runtime Basic/Advanced tab selector; Assistant changes the concrete status fields directly.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime unit status tab selector to Assistant menu selector state action.")
         if label == "indicator":
-            return mark_known_gap(row, "Runtime selected-indicator dropdown; Assistant targets concrete indicators by phrase.", "todo")
+            return mark_registry_family(row, action_with_key(actions, "set_menu_selector_state"), "Matched runtime unit selected-indicator dropdown to Assistant menu selector state action.")
         if label == "use midnight style":
             return mark_registry_family(row, settings_with_keys(settings, {"general.statusIconsUseMidnightStyle"}), "Matched global status-icon style setting.")
         if label == "enabled":
@@ -1149,7 +1160,12 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if row.function == "BuildBasics" and label == "enable" and row.control_type == "button":
             return mark_registry_family(row, settings_with_suffix(settings, {"enabled"}, "unitframe"), "Matched frame-enabled setting used by the enable-now button.")
         if row.function in {"CommitCustomAnchor", "PickCustomAnchor"} and label == "pick":
-            return mark_known_gap(row, "Interactive picker overlay; Assistant supports the resulting custom anchor frame name via unit.anchorFrameName.", "partial", "player.anchorFrameName|target.anchorFrameName|focus.anchorFrameName")
+            return mark_registry_family(
+                row,
+                action_with_key(actions, "start_unit_custom_anchor_picker")
+                + settings_with_suffix(settings, {"anchorFrameName"}, "unitframe"),
+                "Matched unit custom-anchor picker workflow plus direct custom anchor frame-name setting.",
+            )
         if row.function in {"CommitCustomAnchor", "PickCustomAnchor"} and label == "clear":
             return mark_registry_family(row, action_with_key(actions, "clear_unit_custom_anchor"), "Matched Assistant action that clears the custom anchor frame.")
         if row.function == "BuildInlineText" and label == "custom separator":

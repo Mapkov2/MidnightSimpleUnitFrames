@@ -622,6 +622,14 @@ local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc)
     return false
 end
 
+local function RefreshPreserveMissingHPAlpha(frame)
+    local alpha = frame and frame.MSUFSpec and frame.MSUFSpec.alpha
+    local refresh = alpha and alpha.preserveHPColor == true and _G.MSUF_Alpha_UpdatePreserveMissingHP or nil
+    if type(refresh) == "function" then
+        refresh(frame)
+    end
+end
+
 local function ApplyBackgrounds(frame, health, power)
     local spec = frame and frame.MSUFSpec
     if not spec then
@@ -640,6 +648,7 @@ local function ApplyBackgrounds(frame, health, power)
         end
         ApplyTextureColor(frame.bg, spec.health.backgroundTexture, r, g, b, hb.a or spec.backgroundAlpha or 0.9)
         frame._msufHPBgTex = spec.health.backgroundTexture
+        RefreshPreserveMissingHPAlpha(frame)
     end
     local pb = spec.power and spec.power.background
     if power and frame.powerBarBG and pb then

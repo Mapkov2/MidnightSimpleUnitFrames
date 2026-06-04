@@ -1169,7 +1169,9 @@ local function ResolveUnit(db, unit, out)
             powerThrottle = powerThrottle / 1000
         end
     end
-    if conf.powerTextThrottleEnabled == false or general.powerTextThrottleEnabled == false then
+    if key == "player" and bars.realtimePowerText == true then
+        powerThrottle = 0
+    elseif conf.powerTextThrottleEnabled == false or general.powerTextThrottleEnabled == false then
         powerThrottle = 0
     elseif powerThrottle < 0 then
         powerThrottle = 0

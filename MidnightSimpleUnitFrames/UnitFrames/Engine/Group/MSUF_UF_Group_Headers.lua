@@ -16,9 +16,10 @@ local table_insert = table.insert
 local table_concat = table.concat
 local table_sort = table.sort
 local UnitName = UnitName
+local UnitGUID = UnitGUID
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
-local UnitIsUnit = UnitIsUnit
+local IsSecret = Secrets.IsSecret or function(_) return false end
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
@@ -319,10 +320,21 @@ local function UnitRole(unit)
 end
 
 local function IsPlayerUnit(unit)
-    if UnitIsUnit and unit then
-        return UnitIsUnit(unit, "player") == true
+    if not unit or unit == "" then
+        return false
     end
-    return unit == "player"
+    if unit == "player" then
+        return true
+    end
+    if UnitGUID then
+        local guid = UnitGUID(unit)
+        local playerGuid = UnitGUID("player")
+        if IsSecret(guid) or IsSecret(playerGuid) then
+            return false
+        end
+        return guid ~= nil and guid == playerGuid
+    end
+    return false
 end
 
 local function AddNameListEntry(entries, unit, index, conf, raidIndex)

@@ -7,6 +7,8 @@ local UF = Text.UF
 local tonumber = Text.tonumber
 local floor = Text.floor
 local max = Text.max
+local concat = table.concat
+local tostring = tostring
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local DrawSubLayer = Text.DrawSubLayer
 local ClampFrameLayer = Text.ClampFrameLayer
@@ -510,9 +512,112 @@ function Text.Create(frame, spec)
     frame.powerText = frame.powerTextRight
 end
 
+local function TextApplySignature(spec, text)
+    local power = spec and spec.power or EMPTY_EVENTS
+    local inline = text and text.inlineToT or EMPTY_EVENTS
+    return concat({
+        tostring(spec and spec.key),
+        tostring(spec and spec.scope),
+        tostring(spec and spec.width),
+        tostring(spec and spec.height),
+        tostring(spec and spec.showName ~= false),
+        tostring(spec and spec.showHealthText ~= false),
+        tostring(spec and spec.showPowerText ~= false),
+        tostring(spec and spec.font),
+        tostring(spec and spec.fontFlags),
+        tostring(spec and spec.nameFontSize),
+        tostring(spec and spec.healthFontSize),
+        tostring(spec and spec.powerFontSize),
+        tostring(power.enabled),
+        tostring(power.detached),
+        tostring(power.textOnDetached),
+        tostring(power.detachedLevel),
+        tostring(power.detachedHeight),
+        tostring(power.detachedWidth),
+        tostring(power.detachedX),
+        tostring(power.detachedY),
+        tostring(power.detachedSyncClass),
+        tostring(power.detachedAnchorClass),
+        tostring(power.detachedClassWidth),
+        tostring(power.detachedWidthFrameName),
+        tostring(power.detachedClassWidthFrameName),
+        tostring(text and text.nameAnchor),
+        tostring(text and text.nameX),
+        tostring(text and text.nameY),
+        tostring(text and text.nameLayer),
+        tostring(text and text.nameShorten),
+        tostring(text and text.nameShortenSide),
+        tostring(text and text.nameShortenDots),
+        tostring(text and text.nameShortenMax),
+        tostring(text and text.nameShortenWidth),
+        tostring(text and text.nameLeftWidth),
+        tostring(text and text.healthLayer),
+        tostring(text and text.healthLeft),
+        tostring(text and text.healthCenter),
+        tostring(text and text.healthRight),
+        tostring(text and text.healthDelimiter),
+        tostring(text and text.healthColorByHealth),
+        tostring(text and text.healthThrottle),
+        tostring(text and text.healthLeftX),
+        tostring(text and text.healthLeftY),
+        tostring(text and text.healthCenterX),
+        tostring(text and text.healthCenterY),
+        tostring(text and text.healthRightX),
+        tostring(text and text.healthRightY),
+        tostring(text and text.powerLayer),
+        tostring(text and text.powerLeft),
+        tostring(text and text.powerCenter),
+        tostring(text and text.powerRight),
+        tostring(text and text.powerDelimiter),
+        tostring(text and text.powerColorByType),
+        tostring(text and text.powerThrottle),
+        tostring(text and text.powerLeftX),
+        tostring(text and text.powerLeftY),
+        tostring(text and text.powerCenterX),
+        tostring(text and text.powerCenterY),
+        tostring(text and text.powerRightX),
+        tostring(text and text.powerRightY),
+        tostring(text and text.shortNumbers),
+        tostring(text and text.hidePercentSymbol),
+        tostring(text and text.hideNameOnDeadOffline),
+        tostring(inline.enabled),
+        tostring(inline.separator),
+        tostring(inline.unit),
+        tostring(inline.colorMode),
+        tostring(inline.targetNameClassColor),
+        tostring(inline.targetNameNpcColor),
+        tostring(inline.totNameClassColor),
+        tostring(inline.totNameNpcColor),
+        tostring(inline.nameShorten),
+        tostring(inline.nameShortenSide),
+        tostring(inline.nameShortenDots),
+        tostring(inline.nameShortenMax),
+        tostring(inline.nameShortenWidth),
+        tostring(spec and spec._msufGFCompileSerial),
+    }, "\031")
+end
+
 function Text.Apply(frame, spec)
-    Text.Create(frame, spec)
     local text = spec and spec.text or {}
+    local signature = TextApplySignature(spec, text)
+    if frame._msufTextApplySignature == signature
+        and frame.nameText
+        and frame.hpTextLeft
+        and frame.hpTextCenter
+        and frame.hpTextRight
+        and frame.powerTextLeft
+        and frame.powerTextCenter
+        and frame.powerTextRight then
+        local rt = frame._msufTextRuntime
+        if UpdateHealthTextColor then
+            UpdateHealthTextColor(frame, rt, frame.unit)
+        end
+        if frame.nameText then
+            SetNameTextColor(frame, NameTextColor(frame, frame.unit))
+        end
+        return
+    end
+    Text.Create(frame, spec)
     local inlineEnabled = spec and spec.key == "target" and text.inlineToT and text.inlineToT.enabled == true
     if inlineEnabled then
         frame.totInlineSep = EnsureFontString(frame, "totInlineSep", "GameFontNormal", text.nameLayer, 5, "MSUFNameTextLayer")
@@ -619,4 +724,5 @@ function Text.Apply(frame, spec)
     if frame.nameText then
         SetNameTextColor(frame, NameTextColor(frame, frame.unit))
     end
+    frame._msufTextApplySignature = signature
 end

@@ -18,14 +18,6 @@ local math_floor = math.floor
 local debugprofilestop = debugprofilestop
 
 local EMPTY_METADATA_SET = {}
-local BOSS_UNITS = {
-    boss1 = true,
-    boss2 = true,
-    boss3 = true,
-    boss4 = true,
-    boss5 = true,
-}
-
 local ApplyElementToFrame = UF.ApplyElementToFrame
 local DEFERRED_REFRESH_ALL = "*"
 
@@ -498,8 +490,6 @@ local function DriverOnEvent(self, event, unit)
             UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY")
         elseif unit == "focus" then
             UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY")
-        elseif unit and BOSS_UNITS[unit] then
-            UF.UpdateRuntime(unit, "MSUF_UNIT_IDENTITY")
         end
     elseif event == "UNIT_PET" then
         if unit == "player" then
@@ -521,7 +511,7 @@ if CreateFrame and not UF.driver then
     UF.driver:RegisterEvent("UNIT_PET")
     UF.driver:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
     if UF.driver.RegisterUnitEvent then
-        UF.driver:RegisterUnitEvent("UNIT_TARGET", "target", "focus", "boss1", "boss2", "boss3", "boss4", "boss5")
+        UF.driver:RegisterUnitEvent("UNIT_TARGET", "target", "focus")
     else
         UF.driver:RegisterEvent("UNIT_TARGET")
     end

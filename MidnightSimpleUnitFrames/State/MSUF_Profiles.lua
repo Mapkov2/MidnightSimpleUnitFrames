@@ -584,6 +584,60 @@ function MSUF_CopyProfile(sourceName, destName)
     print("|cff00ff00MSUF:|r Copied '"..sourceName.."' -> '"..destName.."'.")
     return true
 end
+function MSUF_RenameProfile(sourceName, destName)
+    if not sourceName or sourceName == "" then
+        print("|cffff0000MSUF:|r No source profile specified.")
+        return false
+    end
+    if not destName or destName == "" then
+        print("|cffff0000MSUF:|r No destination name specified.")
+        return false
+    end
+    if sourceName == destName then
+        print("|cffffd700MSUF:|r Profile is already named '"..sourceName.."'.")
+        return true
+    end
+    if sourceName == "Default" then
+        print("|cffff0000MSUF:|r You cannot rename the 'Default' profile. Copy it instead.")
+        return false
+    end
+
+    local profiles, chars = MSUF_ProfileIO_EnsureProfileRoots()
+    local src = profiles[sourceName]
+    if type(src) ~= "table" then
+        print("|cffff0000MSUF:|r Source profile '"..sourceName.."' not found.")
+        return false
+    end
+    if profiles[destName] then
+        print("|cffff0000MSUF:|r Profile '"..destName.."' already exists.")
+        return false
+    end
+
+    profiles[destName] = src
+    profiles[sourceName] = nil
+    if chars then
+        for _, char in pairs(chars) do
+            if type(char) == "table" then
+                if char.activeProfile == sourceName then
+                    char.activeProfile = destName
+                end
+                local map = char.specProfileMap
+                if type(map) == "table" then
+                    for specID, profileName in pairs(map) do
+                        if profileName == sourceName then
+                            map[specID] = destName
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if MSUF_ActiveProfile == sourceName then
+        MSUF_SwitchProfile(destName)
+    end
+    print("|cff00ff00MSUF:|r Renamed '"..sourceName.."' -> '"..destName.."'.")
+    return true
+end
 function MSUF_GetAllProfiles()
     local list = {}
     if MSUF_GlobalDB and type(MSUF_GlobalDB.profiles) == "table" then
