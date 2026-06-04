@@ -6033,3 +6033,79 @@ local MSUF_MENU_SEARCH_POLISH_zhTW = {
     ["Open Group Frames > Health & Text. It controls health colors, bars, power bar, text, dispel overlay, debuff stripe, and range fade. Heal prediction is in Global Style > Bars > Absorb Display."] = "開啟隊伍框架 > 生命值與文字。這裡控制生命值顏色、條列、能量條、文字、驅散覆蓋、減益條紋和距離淡出。治療預估位於 全域樣式 > 條列 > 吸收顯示。",
 }
 AddMissing("zhTW", MSUF_MENU_SEARCH_POLISH_zhTW)
+
+-- MSUF 5.x client compatibility guard for WoW 12.1+
+local MSUF_121_COMPAT_POPUP = "|cffff5555MSUF 5.x is not compatible with WoW 12.1.|r\n\nYou are running WoW %s. MSUF 5.x only supports patch 12.0.7 or older.\n\nPlease download the current MSUF Alpha/Beta version for WoW 12.1, then reload your UI."
+local MSUF_121_COMPAT_CHAT = "|cffff5555MSUF:|r MSUF 5.x is not compatible with WoW 12.1. Please install the current MSUF Alpha/Beta for WoW 12.1. MSUF 5.x only supports patch 12.0.7 or older."
+
+AddMissing("enUS", {
+    [MSUF_121_COMPAT_POPUP] = MSUF_121_COMPAT_POPUP,
+    [MSUF_121_COMPAT_CHAT] = MSUF_121_COMPAT_CHAT,
+    ["I understand"] = "I understand",
+})
+
+AddMissing("enGB", {
+    [MSUF_121_COMPAT_POPUP] = MSUF_121_COMPAT_POPUP,
+    [MSUF_121_COMPAT_CHAT] = MSUF_121_COMPAT_CHAT,
+    ["I understand"] = "I understand",
+})
+
+AddMissing("deDE", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x ist nicht mit WoW 12.1 kompatibel.|r\n\nDu verwendest WoW %s. MSUF 5.x unterstuetzt nur Patch 12.0.7 oder aelter.\n\nBitte lade die aktuelle MSUF Alpha/Beta-Version fuer WoW 12.1 herunter und lade danach die UI neu.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x ist nicht mit WoW 12.1 kompatibel. Bitte installiere die aktuelle MSUF Alpha/Beta fuer WoW 12.1. MSUF 5.x unterstuetzt nur Patch 12.0.7 oder aelter.",
+    ["I understand"] = "Verstanden",
+})
+
+AddMissing("zhCN", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x 与 WoW 12.1 不兼容。|r\n\n你正在运行 WoW %s。MSUF 5.x 仅支持补丁 12.0.7 或更早版本。\n\n请下载适用于 WoW 12.1 的当前 MSUF Alpha/Beta 版本，然后重新载入界面。",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x 与 WoW 12.1 不兼容。请安装适用于 WoW 12.1 的当前 MSUF Alpha/Beta。MSUF 5.x 仅支持补丁 12.0.7 或更早版本。",
+    ["I understand"] = "我明白了",
+})
+
+AddMissing("zhTW", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x 與 WoW 12.1 不相容。|r\n\n你正在執行 WoW %s。MSUF 5.x 僅支援 12.0.7 或更早的更新版本。\n\n請下載適用於 WoW 12.1 的目前 MSUF Alpha/Beta 版本，然後重新載入介面。",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x 與 WoW 12.1 不相容。請安裝適用於 WoW 12.1 的目前 MSUF Alpha/Beta。MSUF 5.x 僅支援 12.0.7 或更早的更新版本。",
+    ["I understand"] = "我了解了",
+})
+
+AddMissing("frFR", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x n'est pas compatible avec WoW 12.1.|r\n\nVous utilisez WoW %s. MSUF 5.x ne prend en charge que le patch 12.0.7 ou une version anterieure.\n\nVeuillez telecharger la version Alpha/Beta actuelle de MSUF pour WoW 12.1, puis recharger votre interface.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF :|r MSUF 5.x n'est pas compatible avec WoW 12.1. Veuillez installer la version Alpha/Beta actuelle de MSUF pour WoW 12.1. MSUF 5.x ne prend en charge que le patch 12.0.7 ou une version anterieure.",
+    ["I understand"] = "J'ai compris",
+})
+
+AddMissing("esES", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x no es compatible con WoW 12.1.|r\n\nEstas usando WoW %s. MSUF 5.x solo es compatible con el parche 12.0.7 o anterior.\n\nDescarga la version Alpha/Beta actual de MSUF para WoW 12.1 y luego recarga la interfaz.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x no es compatible con WoW 12.1. Instala la version Alpha/Beta actual de MSUF para WoW 12.1. MSUF 5.x solo es compatible con el parche 12.0.7 o anterior.",
+    ["I understand"] = "Entiendo",
+})
+
+AddMissing("esMX", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x no es compatible con WoW 12.1.|r\n\nEstas usando WoW %s. MSUF 5.x solo es compatible con el parche 12.0.7 o anterior.\n\nDescarga la version Alpha/Beta actual de MSUF para WoW 12.1 y luego recarga la interfaz.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x no es compatible con WoW 12.1. Instala la version Alpha/Beta actual de MSUF para WoW 12.1. MSUF 5.x solo es compatible con el parche 12.0.7 o anterior.",
+    ["I understand"] = "Entiendo",
+})
+
+AddMissing("itIT", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x non e compatibile con WoW 12.1.|r\n\nStai usando WoW %s. MSUF 5.x supporta solo la patch 12.0.7 o precedente.\n\nScarica la versione Alpha/Beta attuale di MSUF per WoW 12.1, poi ricarica l'interfaccia.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x non e compatibile con WoW 12.1. Installa la versione Alpha/Beta attuale di MSUF per WoW 12.1. MSUF 5.x supporta solo la patch 12.0.7 o precedente.",
+    ["I understand"] = "Ho capito",
+})
+
+AddMissing("koKR", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x는 WoW 12.1과 호환되지 않습니다.|r\n\n현재 WoW %s를 실행 중입니다. MSUF 5.x는 패치 12.0.7 이하만 지원합니다.\n\nWoW 12.1용 최신 MSUF Alpha/Beta 버전을 다운로드한 뒤 UI를 다시 불러오세요.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x는 WoW 12.1과 호환되지 않습니다. WoW 12.1용 최신 MSUF Alpha/Beta를 설치하세요. MSUF 5.x는 패치 12.0.7 이하만 지원합니다.",
+    ["I understand"] = "알겠습니다",
+})
+
+AddMissing("ptBR", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x nao e compativel com WoW 12.1.|r\n\nVoce esta usando WoW %s. MSUF 5.x so e compativel com o patch 12.0.7 ou anterior.\n\nBaixe a versao Alpha/Beta atual do MSUF para WoW 12.1 e depois recarregue a interface.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x nao e compativel com WoW 12.1. Instale a versao Alpha/Beta atual do MSUF para WoW 12.1. MSUF 5.x so e compativel com o patch 12.0.7 ou anterior.",
+    ["I understand"] = "Entendi",
+})
+
+AddMissing("ruRU", {
+    [MSUF_121_COMPAT_POPUP] = "|cffff5555MSUF 5.x несовместим с WoW 12.1.|r\n\nВы используете WoW %s. MSUF 5.x поддерживает только патч 12.0.7 или более ранние версии.\n\nЗагрузите актуальную Alpha/Beta-версию MSUF для WoW 12.1, затем перезагрузите интерфейс.",
+    [MSUF_121_COMPAT_CHAT] = "|cffff5555MSUF:|r MSUF 5.x несовместим с WoW 12.1. Установите актуальную Alpha/Beta-версию MSUF для WoW 12.1. MSUF 5.x поддерживает только патч 12.0.7 или более ранние версии.",
+    ["I understand"] = "Понятно",
+})

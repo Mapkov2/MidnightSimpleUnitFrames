@@ -26,6 +26,22 @@ local IsInGroup, IsInRaid, IsInGuild = IsInGroup, IsInRaid, IsInGuild
 local LE_PARTY_CATEGORY_HOME     = LE_PARTY_CATEGORY_HOME
 local LE_PARTY_CATEGORY_INSTANCE = LE_PARTY_CATEGORY_INSTANCE
 
+local INCOMPATIBLE_121_TOC = 120100
+local COMPAT_POPUP_KEY = "MSUF_5X_CLIENT_121_WARNING"
+local COMPAT_POPUP_TEXT = "|cffff5555MSUF 5.x is not compatible with WoW 12.1.|r\n\nYou are running WoW %s. MSUF 5.x only supports patch 12.0.7 or older.\n\nPlease download the current MSUF Alpha/Beta version for WoW 12.1, then reload your UI."
+local COMPAT_CHAT_TEXT = "|cffff5555MSUF:|r MSUF 5.x is not compatible with WoW 12.1. Please install the current MSUF Alpha/Beta for WoW 12.1. MSUF 5.x only supports patch 12.0.7 or older."
+
+local function Tr(text)
+    local locale = (type(ns) == "table" and ns.L) or _G.MSUF_L
+    if type(locale) == "table" then
+        local translated = rawget(locale, text)
+        if type(translated) == "string" and translated ~= "" then
+            return translated
+        end
+    end
+    return text
+end
+
 -- Version parsing
 -- "2.2" / "2.2.1" / "2.10.3" → single integer for fast comparison.
 -- Format: major * 10000 + minor * 100 + patch
@@ -56,6 +72,7 @@ local highestSeenStr = nil
 local notifiedUser   = false
 local prefixOk       = false
 local moduleActive   = false  -- true if Init() ran successfully
+local clientCompatNotified = false
 
 -- Core
 local function ReadMyVersion()
@@ -77,6 +94,63 @@ local function PrintUpdateMessage(newVer)
         "|cffffd100", tostring(newVer),
         "|cffffd100", tostring(myVersionStr or "?")
     ))
+end
+
+local function GetClientBuildInfo()
+    if type(GetBuildInfo) ~= "function" then return "?", 0 end
+    local ok, version, _, _, tocVersion = pcall(GetBuildInfo)
+    if not ok then return "?", 0 end
+    return tostring(version or "?"), tonumber(tocVersion) or 0
+end
+
+local function IsLegacyFiveXBuild()
+    ReadMyVersion()
+    if myVersionNum > 0 then return myVersionNum < 60000 end
+    if type(myVersionStr) == "string" and myVersionStr ~= "" then
+        return string_match(myVersionStr, "^5%.") ~= nil
+    end
+    return true
+end
+
+local function EnsureClientCompatibilityDialog()
+    if not _G.StaticPopupDialogs then return false end
+    if not _G.StaticPopupDialogs[COMPAT_POPUP_KEY] then
+        _G.StaticPopupDialogs[COMPAT_POPUP_KEY] = {
+            text = "%s",
+            button1 = Tr("Reload UI"),
+            button2 = Tr("I understand"),
+            OnAccept = function()
+                if type(_G.ReloadUI) == "function" then
+                    _G.ReloadUI()
+                end
+            end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = false,
+            exclusive = true,
+            showAlert = true,
+            enterClicksFirstButton = false,
+            preferredIndex = 3,
+        }
+    end
+    return true
+end
+
+local function CheckClientCompatibility()
+    if clientCompatNotified then return end
+
+    local clientVersion, tocVersion = GetClientBuildInfo()
+    if tocVersion < INCOMPATIBLE_121_TOC then return end
+    if not IsLegacyFiveXBuild() then return end
+
+    clientCompatNotified = true
+
+    local message = string_format(Tr(COMPAT_POPUP_TEXT), clientVersion)
+    print(Tr(COMPAT_CHAT_TEXT))
+
+    if EnsureClientCompatibilityDialog() and _G.StaticPopup_Show then
+        _G.StaticPopup_Show(COMPAT_POPUP_KEY, message)
+    end
 end
 
 local function NotifyOnce()
@@ -141,6 +215,12 @@ local function Init()
     if not IsEnabled() then return end
 
     ReadMyVersion()
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(1.5, CheckClientCompatibility)
+    else
+        CheckClientCompatibility()
+    end
 
     -- Register prefix (idempotent)
     if C_ChatInfo and C_ChatInfo.RegisterAddonMessagePrefix then
