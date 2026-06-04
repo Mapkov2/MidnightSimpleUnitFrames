@@ -18,6 +18,7 @@ end
 
 local COMMAND_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset", "copy",
+    "add", "put", "clear",
     "export", "import", "create", "delete", "remove", "switch", "assign", "rename", "open", "close", "toggle",
     "diagnose", "why", "help", "undo", "redo", "yes", "cancel", "next", "back", "finish", "start", "stop", "enter", "leave",
     "an", "aus", "aktivieren", "deaktivieren", "anzeigen", "verstecken", "verschiebe", "oeffne", "suche", "finde",
@@ -32,7 +33,7 @@ local FLOW_TERMS = {
 
 local MUTATION_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset",
-    "copy", "export", "import", "create", "delete", "remove", "switch", "assign", "rename", "close", "toggle",
+    "copy", "export", "import", "create", "delete", "remove", "add", "put", "clear", "switch", "assign", "rename", "close", "toggle",
     "start", "stop", "enter", "leave", "select", "use", "apply",
     "an", "aus", "aktivieren", "deaktivieren", "anzeigen", "verstecken", "verschiebe",
 }
@@ -70,6 +71,20 @@ local PAGE_CONTEXT = {
     auras3_debuffs = { prefix = "aura debuff", label = "Debuffs" },
     auras3_styling = { prefix = "aura style", label = "Aura Style" },
     auras3_filters = { prefix = "aura filter", label = "Aura Filters" },
+}
+
+local GROUP_CONTEXT_PAGES = {
+    gf_layout = true,
+    gf_bars = true,
+    gf_indicators = true,
+}
+
+local GROUP_SCOPE_PREFIXES = {
+    party = "party",
+    raid = "raid",
+    mythicraid = "mythic raid",
+    mythic = "mythic raid",
+    ["mythic raid"] = "mythic raid",
 }
 
 local function Normalize(text)
@@ -116,6 +131,39 @@ local function LooksLikeMutation(text)
     return ContainsAny(norm, MUTATION_TERMS)
 end
 
+local function LooksLikeKnowledgeRequest(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    return ContainsAny(norm, {
+        "help", "why", "where", "where is", "where are", "what", "what is", "what are", "how", "how do",
+        "search", "find", "faq", "explain", "show me",
+        "hilfe", "warum", "wo", "wo ist", "wie", "suche", "finde", "erklaere",
+    })
+end
+
+local function LooksLikeKnowledgeFirstRequest(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    if ContainsAny(norm, MUTATION_TERMS) then return false end
+    if ContainsAny(norm, { "open", "go to", "show settings", "show me settings", "oeffne" }) then return false end
+    if ContainsAny(norm, {
+        "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you set", "last change", "previous change", "what is it now",
+        "what is it set to", "current value", "value now", "show last change",
+    }) then return false end
+    return ContainsAny(norm, {
+        "search", "find", "where", "where is", "where are", "faq", "explain",
+        "suche", "finde", "wo", "wo ist", "erklaere",
+    })
+end
+
+local function KnowledgeNoMatch(text)
+    if A.Knowledge and type(A.Knowledge.NoMatch) == "function" then
+        return A.Knowledge.NoMatch(text)
+    end
+    return nil
+end
+
 local function IsUnknownResult(result)
     if type(result) ~= "table" then return true end
     if result.kind == "unknown" then return true end
@@ -160,11 +208,28 @@ local function CurrentPageContext()
     return PAGE_CONTEXT[key]
 end
 
+local function CurrentGroupScopePrefix()
+    local scope = M and M.gfScope
+    if type(scope) ~= "string" or scope == "" then return nil end
+    scope = Normalize(scope)
+    return GROUP_SCOPE_PREFIXES[scope]
+end
+
 local function AddUnique(out, value)
     value = Trim(value)
     if value == "" then return end
     for i = 1, #out do if out[i] == value then return end end
     out[#out + 1] = value
+end
+
+local function ContextPrefixes(ctx)
+    local prefixes = {}
+    local key = M and M.activeKey
+    if GROUP_CONTEXT_PAGES[key] then
+        AddUnique(prefixes, CurrentGroupScopePrefix() or "")
+    end
+    if ctx and ctx.prefix then AddUnique(prefixes, ctx.prefix) end
+    return prefixes
 end
 
 local function StripBooleanWords(text)
@@ -173,6 +238,8 @@ local function StripBooleanWords(text)
     out = out:gsub("^set%s+", "")
     out = out:gsub("^make%s+", "")
     out = out:gsub("^change%s+", "")
+    out = out:gsub("^on%s+", "")
+    out = out:gsub("^off%s+", "")
     out = out:gsub("^enable%s+", "")
     out = out:gsub("^disable%s+", "")
     out = out:gsub("^show%s+", "")
@@ -217,7 +284,8 @@ local function ContextualVariants(text)
     if not ctx or not ctx.prefix then return nil end
     local norm = Normalize(text)
     local variants = {}
-    local prefix = ctx.prefix
+    local prefixes = ContextPrefixes(ctx)
+    local prefix = prefixes[1] or ctx.prefix
 
     if M.activeKey == "profiles" then
         if norm == "export" or norm == "export profile" then
@@ -262,12 +330,15 @@ local function ContextualVariants(text)
         AddUnique(variants, "global " .. text)
     else
         local noun = StripLeadingCommand(text)
-        AddBooleanContextVariants(variants, prefix, text)
-        AddUnique(variants, prefix .. " " .. text)
-        AddUnique(variants, "set " .. prefix .. " " .. text)
-        if noun ~= "" and noun ~= Normalize(text) then
-            AddUnique(variants, "set " .. prefix .. " " .. noun)
-            AddUnique(variants, "change " .. prefix .. " " .. noun)
+        for i = 1, #prefixes do
+            local scopedPrefix = prefixes[i]
+            AddBooleanContextVariants(variants, scopedPrefix, text)
+            AddUnique(variants, scopedPrefix .. " " .. text)
+            AddUnique(variants, "set " .. scopedPrefix .. " " .. text)
+            if noun ~= "" and noun ~= Normalize(text) then
+                AddUnique(variants, "set " .. scopedPrefix .. " " .. noun)
+                AddUnique(variants, "change " .. scopedPrefix .. " " .. noun)
+            end
         end
     end
     return #variants > 0 and variants or nil
@@ -345,6 +416,13 @@ function A.RouteInput(text, coreHandler)
     local contextResult = TryContext(text, coreHandler)
     if contextResult and not IsUnknownResult(contextResult) then return contextResult end
 
+    if LooksLikeKnowledgeFirstRequest(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
+        local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+        if answer then return answer end
+        local noMatch = KnowledgeNoMatch(text)
+        if noMatch then return noMatch end
+    end
+
     local coreResult
     if type(coreHandler) == "function" then
         coreResult = coreHandler(text)
@@ -354,6 +432,8 @@ function A.RouteInput(text, coreHandler)
     if LooksLikeBareLookup(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
         if answer then return answer end
+        local noMatch = KnowledgeNoMatch(text)
+        if noMatch then return noMatch end
     end
 
     -- Mutation-like commands must not be swallowed by Search/FAQ fallback.
@@ -367,6 +447,10 @@ function A.RouteInput(text, coreHandler)
     if A.Knowledge and type(A.Knowledge.Answer) == "function" then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
         if answer then return answer end
+        if LooksLikeKnowledgeRequest(text) then
+            local noMatch = KnowledgeNoMatch(text)
+            if noMatch then return noMatch end
+        end
     end
 
     return coreResult or { text = "I do not know that setting yet.", status = "failed" }

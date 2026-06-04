@@ -38,6 +38,7 @@ REGISTRY_FILES = [
     "MSUF_AssistantRegistry_Dashboard.lua",
     "MSUF_AssistantRegistry_Profiles.lua",
     "MSUF_AssistantRegistry_EditMode.lua",
+    "MSUF_AssistantRegistry_Workflows.lua",
     "MSUF_AssistantRegistry_Diagnostics.lua",
 ]
 
@@ -565,7 +566,11 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
         if row.function == "Button" and label.startswith("dynamic"):
             return mark_known_gap(row, "Dashboard local Button() factory; concrete Dashboard panel/actions are audited at their call sites or through Dashboard Assistant actions.", "todo")
         if row.function == "BuildCommandCenter":
-            return mark_known_gap(row, "Dashboard command-center result buttons are transient parser-result choices; Assistant executes the selected parsed action directly.", "todo")
+            return mark_registry_family(
+                row,
+                action_with_key(actions, "assistant_help") + action_with_key(actions, "diagnose_dashboard_setup"),
+                "Dashboard command-center is only the fallback when the Assistant card is unavailable; normal XML load order builds MSUF.Assistant.BuildDashboardCard, and Dashboard-path smoke covers the real Assistant input/result path.",
+            )
         if row.function == "BuildSimpleScaleColumn":
             return mark_registry_family(row, settings_with_keys(settings, {"general.msufUiScale", "general.slashMenuScale"}), "Matched Dashboard simple scale sliders to MSUF frame/menu scale settings.")
         if row.db_key_or_helper in {"dashboardRecoveryOpen", "dashboardScalingOpen", "dashboardChangelogOpen", "BuildDashboardChangelog"}:

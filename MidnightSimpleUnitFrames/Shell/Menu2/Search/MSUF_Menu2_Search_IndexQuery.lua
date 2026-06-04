@@ -1342,6 +1342,19 @@ local function ShowSearchPageForQuery(query)
     end
 end
 
+local function SubmitAssistantSearchQuery(query)
+    query = TrimText(query)
+    if query == "" then return false end
+    local A = (MSUF and MSUF.Assistant) or M.Assistant
+    if not (A and type(A.Submit) == "function") then return false end
+    if type(M.SelectPage) == "function" and M.activeKey ~= "home" then
+        M.SelectPage("home")
+    end
+    A.Submit(query)
+    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    return true
+end
+
 local function RunSearchInputQuery(query, openPage)
     query = TrimText(query)
     M.searchQuery = query
@@ -1411,6 +1424,7 @@ end
 
 local function OpenSearchResults(query)
     SEARCH_STATE.inputSerial = SEARCH_STATE.inputSerial + 1
+    if SubmitAssistantSearchQuery(query) then return end
     RunSearchInputQuery(query, true)
 end
 

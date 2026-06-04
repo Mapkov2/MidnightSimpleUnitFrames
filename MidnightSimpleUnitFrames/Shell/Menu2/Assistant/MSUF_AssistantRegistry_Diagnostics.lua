@@ -22,6 +22,7 @@ local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit
 local GeneralDB = C.GeneralDB
+local BarsDB = C.BarsDB or function() return (_G.MSUF_DB and _G.MSUF_DB.bars) or {} end
 local UnitDB = C.UnitDB
 local GroupDB = C.GroupDB
 local AuraSharedBool = C.AuraSharedBool
@@ -296,6 +297,151 @@ local function GroupFrameDiagnosticText(scope)
         return label .. " Group Frames are enabled and have no obvious hidden-size or opacity problem. Open Group Frames or Edit Mode to inspect position and current group context."
     end
     return table.concat(issues, "\n")
+end
+
+local function CountKeys(tbl)
+    local count = 0
+    if type(tbl) ~= "table" then return 0 end
+    for _ in pairs(tbl) do count = count + 1 end
+    return count
+end
+
+local function CharProfileState()
+    local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
+    local chars = global and type(global.char) == "table" and global.char or nil
+    local key
+    if type(_G.MSUF_GetCharKey) == "function" then
+        key = _G.MSUF_GetCharKey()
+    elseif type(_G.UnitName) == "function" and type(_G.GetRealmName) == "function" then
+        key = tostring(_G.UnitName("player") or "Player") .. "-" .. tostring(_G.GetRealmName() or "Realm")
+    end
+    local char = key and chars and chars[key] or nil
+    return key, type(char) == "table" and char or nil
+end
+
+local function ProfileDiagnosticText()
+    local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
+    local profiles = global and type(global.profiles) == "table" and global.profiles or nil
+    local active = ActiveProfileName()
+    local activeTable = profiles and profiles[active] or nil
+    local charKey, char = CharProfileState()
+    local map = char and type(char.specProfileMap) == "table" and char.specProfileMap or nil
+    local brokenSpecs = 0
+    if map and profiles then
+        for _, profileName in pairs(map) do
+            if type(profileName) == "string" and type(profiles[profileName]) ~= "table" then brokenSpecs = brokenSpecs + 1 end
+        end
+    end
+
+    local lines = {
+        "Profile diagnostic:",
+        "Active profile: " .. tostring(active),
+        "Profiles loaded: " .. tostring(CountKeys(profiles)),
+        "Active profile table: " .. (type(activeTable) == "table" and "ok" or "missing"),
+        "Active DB reference: " .. ((type(activeTable) == "table" and _G.MSUF_DB == activeTable) and "ok" or "check"),
+        "Character profile key: " .. tostring(charKey or "unknown"),
+        "Spec auto-switch: " .. ((char and char.specAutoSwitch == true) and "on" or "off"),
+        "Spec mappings: " .. tostring(CountKeys(map)),
+    }
+    if brokenSpecs > 0 then
+        lines[#lines + 1] = "Broken spec mappings: " .. tostring(brokenSpecs) .. " point to missing profiles."
+    end
+    lines[#lines + 1] = "Profile staging:"
+    lines[#lines + 1] = "- Create/copy name: " .. tostring((M and M.profileCreateCopyName ~= "" and M.profileCreateCopyName) or "empty")
+    lines[#lines + 1] = "- Export kind: " .. tostring((M and M.profileExportKind) or "all")
+    lines[#lines + 1] = "- Import string: " .. (((M and type(M.profileImportString) == "string" and M.profileImportString ~= "") and "present") or "empty")
+    lines[#lines + 1] = "- Import as new profile: " .. ((M and M.profileImportCreateNew == true) and "on" or "off")
+    lines[#lines + 1] = "Available helpers:"
+    lines[#lines + 1] = "- create/switch/copy/delete/rename: "
+        .. ((type(_G.MSUF_CreateProfile) == "function") and "create " or "")
+        .. ((type(_G.MSUF_SwitchProfile) == "function") and "switch " or "")
+        .. ((type(_G.MSUF_CopyProfile) == "function") and "copy " or "")
+        .. ((type(_G.MSUF_DeleteProfile) == "function") and "delete " or "")
+        .. ((type(_G.MSUF_RenameProfile) == "function") and "rename" or "")
+    lines[#lines + 1] = "- import/export: "
+        .. ((type(_G.MSUF_ImportFromString) == "function") and "import " or "")
+        .. ((type(_G.MSUF_ExportSelectionToString) == "function") and "export" or "")
+    if type(activeTable) ~= "table" then
+        lines[#lines + 1] = "Next safe fix: switch to an existing profile or create/copy a new profile before importing."
+    elseif brokenSpecs > 0 then
+        lines[#lines + 1] = "Next safe fix: clear or reassign the broken spec profile mappings."
+    else
+        lines[#lines + 1] = "No obvious profile storage problem was found."
+    end
+    return table.concat(lines, "\n")
+end
+
+local function ClassPowerDiagnosticText()
+    local bars = BarsDB()
+    local player = UnitDB("player")
+    local issues = {}
+    if bars.showClassPower == false then
+        issues[#issues + 1] = "Class Resources are disabled. Say 'turn on class resources' to enable them; reload may be required."
+    end
+    if tonumber(bars.classPowerHeight) ~= nil and tonumber(bars.classPowerHeight) < 1 then
+        issues[#issues + 1] = "Class Resource height is extremely small. Say 'set class resource height to 4'."
+    end
+    if (bars.classPowerWidthMode == "custom" or bars.classPowerWidthMode == "manual") and (tonumber(bars.classPowerWidth) or 0) <= 0 then
+        issues[#issues + 1] = "Class Resource width mode is custom but width is zero. Set a width or use player/cooldown width mode."
+    end
+    if LowOpacity(bars.classPowerFilledAlpha) and LowOpacity(bars.classPowerEmptyAlpha) then
+        issues[#issues + 1] = "Filled and empty Class Resource opacity are both near zero."
+    elseif LowOpacity(bars.classPowerFilledAlpha) then
+        issues[#issues + 1] = "Filled Class Resource opacity is near zero."
+    end
+    if bars.classPowerHideOOC == true then
+        issues[#issues + 1] = "Class Resources hide out of combat by setting."
+    end
+    if bars.classPowerHideWhenFull == true and bars.classPowerHideWhenEmpty == true then
+        issues[#issues + 1] = "Class Resources are configured to hide when full and when empty."
+    end
+    if player.powerBarDetached == true then
+        issues[#issues + 1] = "Player power bar is detached. If it should align with Class Resources, check detached power sync/anchor settings."
+    end
+
+    local lines = {
+        "Class Resources diagnostic:",
+        "Enabled: " .. (bars.showClassPower == false and "off" or "on"),
+        "Height: " .. tostring(bars.classPowerHeight or "default"),
+        "Width mode: " .. tostring(bars.classPowerWidthMode or "player"),
+        "Width: " .. tostring(bars.classPowerWidth or "auto"),
+        "Hide rules: OOC=" .. tostring(bars.classPowerHideOOC == true) .. ", full=" .. tostring(bars.classPowerHideWhenFull == true) .. ", empty=" .. tostring(bars.classPowerHideWhenEmpty == true),
+    }
+    if #issues == 0 then
+        lines[#lines + 1] = "No obvious Class Resource settings problem was found. Some specs have no class-resource bar until the relevant resource exists."
+    else
+        for i = 1, #issues do lines[#lines + 1] = issues[i] end
+    end
+    return table.concat(lines, "\n")
+end
+
+local function DashboardSetupDiagnosticText()
+    local ctx = A.GetContext and A.GetContext() or {}
+    local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
+    local dashRoot = global and type(global.global) == "table" and global.global or nil
+    local dash = dashRoot and type(dashRoot.dashboard) == "table" and dashRoot.dashboard or {}
+    local lines = {
+        "Dashboard setup diagnostic:",
+        "Active page: " .. tostring((M and M.activeKey) or "unknown"),
+        "Open/select helper: " .. (((M and type(M.Open) == "function") or (M and type(M.SelectPage) == "function")) and "available" or "missing"),
+        "Assistant page stack: " .. tostring(A.Workflow and type(A.Workflow.navStack) == "table" and #A.Workflow.navStack or 0),
+        "Pending confirmation: " .. tostring(A.pendingConfirmation ~= nil),
+        "Pending choices: " .. tostring(type(A.pendingChoices) == "table" and #A.pendingChoices or 0),
+        "Pending flow: " .. tostring(type(A.pendingFlow) == "table" and (A.pendingFlow.label or A.pendingFlow.kind) or "none"),
+        "Guided setup: " .. tostring(type(ctx.guidedSetup) == "table" and "active" or "inactive"),
+        "Recovery panel: " .. tostring(dash.dashboardRecoveryOpen == true or (M and M.dashboardRecoveryOpen == true)),
+        "Scaling panel: " .. tostring(dash.dashboardScalingOpen == true or (M and M.dashboardScalingOpen == true)),
+        "Changelog panel: " .. tostring(dash.dashboardChangelogOpen == true or (M and M.dashboardChangelogOpen == true)),
+        "Search intro seen: " .. tostring(M and M.searchIntroSeen == true),
+    }
+    if not (M and (type(M.Open) == "function" or type(M.SelectPage) == "function")) then
+        lines[#lines + 1] = "Next safe fix: open Menu2 once so navigation helpers are initialized."
+    elseif A.pendingConfirmation or (type(A.pendingChoices) == "table" and #A.pendingChoices > 0) or type(A.pendingFlow) == "table" then
+        lines[#lines + 1] = "Next safe fix: answer the pending prompt or say 'cancel workflow'."
+    else
+        lines[#lines + 1] = "No obvious Dashboard setup blocker was found."
+    end
+    return table.concat(lines, "\n")
 end
 
 local GUIDED_SETUP_STEPS = {
@@ -660,6 +806,36 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "diagnose_profile_status",
+    label = "Diagnose Profiles",
+    type = "diagnostic",
+    combatSafe = true,
+    run = function()
+        return true, ProfileDiagnosticText()
+    end,
+})
+
+Registry:RegisterAction({
+    key = "diagnose_class_power_status",
+    label = "Diagnose Class Resources",
+    type = "diagnostic",
+    combatSafe = true,
+    run = function()
+        return true, ClassPowerDiagnosticText()
+    end,
+})
+
+Registry:RegisterAction({
+    key = "diagnose_dashboard_setup",
+    label = "Diagnose Dashboard Setup",
+    type = "diagnostic",
+    combatSafe = true,
+    run = function()
+        return true, DashboardSetupDiagnosticText()
+    end,
+})
+
+Registry:RegisterAction({
     key = "guided_setup",
     label = "Guided Setup",
     type = "setup",
@@ -682,4 +858,4 @@ Registry:RegisterAction({
 Registry:RegisterTodo("Auras3 remaining advanced work: whitelist-style operations where the UI exposes them beyond the registered filters, blacklists, color controls, and group category blacklists.")
 Registry:RegisterTodo("Profiles remaining work: spec-profile edge cases should keep expanding as new public helpers appear.")
 Registry:RegisterTodo("Preset operations remaining work: add Assistant routes for any future UI preset buttons only after they expose public shared helpers.")
-Registry:RegisterTodo("Diagnostic/setup workflows remaining work: deeper page-specific troubleshooters and richer guided setup branches beyond the registered castbar, unit-frame, group-frame, scoped command-help, and clean-layout setup flows; any future public factory-reset helper should be routed without slash-command execution.")
+Registry:RegisterTodo("Diagnostic/setup workflows remaining work: aura-specific troubleshooters, deeper branch-specific guided setup flows, and any future public factory-reset helper routed without slash-command execution.")

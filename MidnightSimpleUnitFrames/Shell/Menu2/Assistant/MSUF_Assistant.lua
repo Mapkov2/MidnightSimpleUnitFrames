@@ -72,6 +72,8 @@ local function SerializeChoices(choices)
             label = choice and choice.label,
             valueLabel = choice and choice.valueLabel,
             mediaType = choice and choice.mediaType,
+            textArea = choice and choice.textArea,
+            textSlot = choice and choice.textSlot,
         }
     end
     return out
@@ -92,6 +94,8 @@ local function RehydrateChoices(serialized)
                 label = item.label,
                 valueLabel = item.valueLabel,
                 mediaType = item.mediaType,
+                textArea = item.textArea,
+                textSlot = item.textSlot,
             }
         end
     end
@@ -216,6 +220,60 @@ local function RunApplies(changedSettings)
     end
 end
 
+local function NormalizeTextSlot(slot)
+    slot = tostring(slot or ""):lower()
+    if slot == "left" then return "left" end
+    if slot == "center" or slot == "centre" or slot == "middle" then return "center" end
+    if slot == "right" then return "right" end
+    return nil
+end
+
+local function TextContextFromSetting(setting, item)
+    local area = item and item.textArea
+    local slot = NormalizeTextSlot(item and item.textSlot)
+    local attr = tostring(setting and setting.attribute or "")
+    local key = tostring(setting and setting.key or "")
+    local hay = attr .. " " .. key
+    if not area then
+        if hay:find("hpText", 1, true) or hay:find(".text", 1, true) or hay:find("healthText", 1, true) then
+            area = "hp"
+        elseif hay:find("powerText", 1, true) then
+            area = "power"
+        end
+    end
+    if not slot then
+        if hay:find("Left", 1, true) or hay:find("textLeft", 1, true) then
+            slot = "left"
+        elseif hay:find("Center", 1, true) or hay:find("textCenter", 1, true) then
+            slot = "center"
+        elseif hay:find("Right", 1, true) or hay:find("textRight", 1, true) then
+            slot = "right"
+        end
+    end
+    if area ~= "hp" and area ~= "power" then return nil end
+    if not slot then return nil end
+    return area, slot
+end
+
+local function RememberTextChangeContext(setting, item, value)
+    local area, slot = TextContextFromSetting(setting, item)
+    if not area then return end
+    local ctx = A.GetContext and A.GetContext()
+    if not ctx then return end
+    ctx.lastTextArea = area
+    ctx.lastTextSlot = slot
+    ctx.lastTextSetting = setting and setting.key
+    ctx.lastTextValue = value
+    ctx.lastTextFrameType = setting and setting.frameType
+    ctx.lastTextUnit = setting and setting.unit
+    ctx.selectedTextEditorTarget = {
+        frameType = setting and setting.frameType,
+        unit = setting and setting.unit,
+        tab = area,
+        slot = slot,
+    }
+end
+
 local function BuildSerializable(changes)
     local out = {}
     for i = 1, #changes do
@@ -226,6 +284,10 @@ local function BuildSerializable(changes)
             frameType = setting and setting.frameType,
             attribute = setting and setting.attribute,
             value = changes[i].newValue,
+            relativeDelta = changes[i].relativeDelta,
+            direction = changes[i].direction,
+            textArea = changes[i].textArea,
+            textSlot = changes[i].textSlot,
         }
     end
     return out
@@ -269,6 +331,7 @@ local function ExecuteChanges(plan)
                 lastValue = newValue
                 if setting.requiresReload == true then requiresReload = true end
                 if item.direction then A.SetContextValue("lastDirection", item.direction) end
+                RememberTextChangeContext(setting, item, newValue)
             end
         end
     end
@@ -425,6 +488,9 @@ function A.HandleCommandInput(text)
     end
     if parsed.kind == "unknown" then
         return { text = parsed.text or "I do not know that setting yet.", status = parsed.status or "failed", kind = "unknown" }
+    end
+    if parsed.kind == "answer" then
+        return { text = parsed.text or "", status = parsed.status or "info", summary = parsed.summary }
     end
     return A.ExecutePlan(parsed)
 end

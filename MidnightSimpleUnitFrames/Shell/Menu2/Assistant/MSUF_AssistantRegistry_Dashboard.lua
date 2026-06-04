@@ -249,6 +249,18 @@ local PROFILE_EXPORT_KIND_LABELS = {
     groupframe = "Group Frames",
 }
 
+local UNIT_COPY_CATEGORY_FALLBACK = {
+    { key = "basics", label = "Frame Basics", default = true, aliases = { "frame basics", "basic settings", "basics", "enable state", "smooth fill", "reverse fill" } },
+    { key = "text", label = "Text", default = true, aliases = { "text", "name", "hp", "health text", "hp text", "power text", "font", "fonts" } },
+    { key = "portrait", label = "Portrait", default = true, aliases = { "portrait", "portrait settings" } },
+    { key = "power", label = "Power Bar", default = true, aliases = { "power", "power bar", "powerbar", "detached power", "detached power bar", "resource bar" } },
+    { key = "castbar", label = "Castbar", default = true, aliases = { "castbar", "cast bar" } },
+    { key = "status", label = "Status Icons", default = true, aliases = { "status", "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "level indicator", "raid marker" } },
+    { key = "load", label = "Load Conditions", default = true, aliases = { "load", "load condition", "load conditions", "hide mounted", "hide out of combat" } },
+    { key = "transparency", label = "Transparency", default = true, aliases = { "transparency", "opacity", "alpha", "range fade" } },
+    { key = "layout", label = "Size & Anchoring", default = false, aliases = { "layout", "position", "size", "anchoring", "anchor", "width", "height" } },
+}
+
 local GROUP_COPY_CATEGORY_FALLBACK = {
     { key = "general", label = "Basics", aliases = { "general", "basics", "basic", "layout", "size", "spacing", "growth", "sort", "sorting" } },
     { key = "health", label = "Health & Bars", aliases = { "health", "health bars", "bars", "power", "power bar", "dispel overlay" } },
@@ -379,6 +391,60 @@ local function ResolveProfileExportKind(kind)
     if kind == "group" or kind == "groupframes" or kind == "group frame" or kind == "group frames" then kind = "groupframe" end
     if PROFILE_EXPORT_KIND_LABELS[kind] then return kind, PROFILE_EXPORT_KIND_LABELS[kind] end
     return "all", PROFILE_EXPORT_KIND_LABELS.all
+end
+
+local function UnitCopyCategories()
+    local cats = M and M.UnitPage and type(M.UnitPage.UF_COPY_CATEGORIES) == "table" and M.UnitPage.UF_COPY_CATEGORIES or nil
+    if cats and #cats > 0 then return cats end
+    return UNIT_COPY_CATEGORY_FALLBACK
+end
+
+local function EnsureUnitCopyScopes()
+    M.unitCopyScopes = type(M.unitCopyScopes) == "table" and M.unitCopyScopes or {}
+    local cats = UnitCopyCategories()
+    for i = 1, #cats do
+        local cat = cats[i]
+        local key = cat and cat.key
+        if type(key) == "string" and M.unitCopyScopes[key] == nil then
+            local defaultValue = cat.default
+            if defaultValue == nil then
+                for j = 1, #UNIT_COPY_CATEGORY_FALLBACK do
+                    if UNIT_COPY_CATEGORY_FALLBACK[j].key == key then
+                        defaultValue = UNIT_COPY_CATEGORY_FALLBACK[j].default
+                        break
+                    end
+                end
+            end
+            M.unitCopyScopes[key] = defaultValue ~= false
+        end
+    end
+    return M.unitCopyScopes, cats
+end
+
+local function UnitCopyFallbackSpec(key)
+    for i = 1, #UNIT_COPY_CATEGORY_FALLBACK do
+        local spec = UNIT_COPY_CATEGORY_FALLBACK[i]
+        if spec.key == key then return spec end
+    end
+    return nil
+end
+
+local function ResolveUnitCopyCategory(category)
+    local needle = NormalizeKey(category)
+    if needle == "" then return nil end
+    local cats = UnitCopyCategories()
+    for i = 1, #cats do
+        local cat = cats[i]
+        local key = cat and cat.key
+        local fallback = UnitCopyFallbackSpec(key)
+        local label = cat and cat.label or fallback and fallback.label
+        if key and (needle == NormalizeKey(key) or needle == NormalizeKey(label)) then return key, label or key end
+        local aliases = cat and cat.aliases or fallback and fallback.aliases
+        for j = 1, #(aliases or {}) do
+            if needle == NormalizeKey(aliases[j]) then return key, label or key end
+        end
+    end
+    return nil
 end
 
 local function GroupCopyCategories()
@@ -533,6 +599,24 @@ local function CurrentGroupTextSlot(scope, tab)
     return ResolveTextSlot(slot) or "center"
 end
 
+local function RememberSelectedTextTarget(frameType, unitOrScope, tab, slot)
+    if tab ~= "hp" and tab ~= "power" then return end
+    slot = ResolveTextSlot(slot)
+    if not slot then return end
+    local ctx = A.GetContext and A.GetContext()
+    if not ctx then return end
+    ctx.lastTextFrameType = frameType
+    ctx.lastTextUnit = unitOrScope
+    ctx.lastTextArea = tab
+    ctx.lastTextSlot = slot
+    ctx.selectedTextEditorTarget = {
+        frameType = frameType,
+        unit = unitOrScope,
+        tab = tab,
+        slot = slot,
+    }
+end
+
 local function SetUnitTextSelector(args)
     local unit = ResolveUnitKey(args and args.unit)
     local tab = ResolveTextTab(args and args.tab)
@@ -541,6 +625,7 @@ local function SetUnitTextSelector(args)
     if not tab then return false, "I do not know which text tab to select." end
     PersistTableValue("unitTextTabSelection", unit, tab)
     if slot and (tab == "hp" or tab == "power") then PersistNestedTableValue("unitTextSlotSelection", unit, tab, slot) end
+    RememberSelectedTextTarget("unitframe", unit, tab, slot)
     FocusUnitText(unit, tab, slot)
     OpenMenuPage(UNIT_PAGE_KEYS[unit])
     return true, "Selected " .. UnitLabel(unit) .. " " .. TEXT_TAB_LABELS[tab] .. (slot and (" " .. TEXT_SLOT_LABELS[slot] .. " slot") or " tab") .. "."
@@ -557,6 +642,7 @@ local function SetUnitTextMoveTogether(args)
     M.unitTextMoveTogether[unit][tab] = value
     PersistTableValue("unitTextTabSelection", unit, tab)
     local slot = value and nil or CurrentUnitTextSlot(unit, tab)
+    RememberSelectedTextTarget("unitframe", unit, tab, slot)
     FocusUnitText(unit, tab, slot)
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("MSUF_ASSISTANT_TEXT_MOVE_MODE") end
     OpenMenuPage(UNIT_PAGE_KEYS[unit])
@@ -571,6 +657,7 @@ local function SetGroupTextSelector(args)
     PersistScalar("gfScope", scope)
     PersistTableValue("gfTextTabSelection", scope, tab)
     if slot and (tab == "hp" or tab == "power") then PersistNestedTableValue("gfTextSlotSelection", scope, tab, slot) end
+    RememberSelectedTextTarget("group", scope, tab, slot)
     FocusGroupText(scope, tab, slot)
     OpenMenuPage("gf_bars")
     return true, "Selected " .. GroupLabel(scope) .. " " .. TEXT_TAB_LABELS[tab] .. (slot and (" " .. TEXT_SLOT_LABELS[slot] .. " slot") or " tab") .. "."
@@ -587,6 +674,7 @@ local function SetGroupTextMoveTogether(args)
     M.gfTextMoveTogether[scope][tab] = value
     PersistTableValue("gfTextTabSelection", scope, tab)
     local slot = value and nil or CurrentGroupTextSlot(scope, tab)
+    RememberSelectedTextTarget("group", scope, tab, slot)
     FocusGroupText(scope, tab, slot)
     if M and type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews() end
     OpenMenuPage("gf_bars")
@@ -699,6 +787,56 @@ local function SetProfileStagingSelector(args)
     return false, "I do not know which profile staging field to set."
 end
 
+local function CurrentUnitPage()
+    local page = M and M.activeKey
+    if type(page) ~= "string" then return nil end
+    for unit, key in pairs(UNIT_PAGE_KEYS) do
+        if key == page then return unit end
+    end
+    return nil
+end
+
+local function SetUnitCopyScopeSelector(args)
+    local scopes, cats = EnsureUnitCopyScopes()
+    local unit = ResolveUnitKey(args and args.unit) or CurrentUnitPage() or "player"
+    local command = NormalizeKey(args and args.command)
+    local function refresh()
+        OpenMenuPage(UNIT_PAGE_KEYS[unit] or "uf_player")
+        if M and type(M.Refresh) == "function" then M.Refresh() end
+    end
+    if command == "all" or command == "selectall" then
+        for i = 1, #cats do scopes[cats[i].key] = true end
+        refresh()
+        return true, "Selected all unit copy categories."
+    end
+    if command == "none" or command == "clear" or command == "selectnone" then
+        for i = 1, #cats do scopes[cats[i].key] = false end
+        refresh()
+        return true, "Cleared all unit copy categories."
+    end
+    if command == "only" then
+        local wanted = args and args.categories
+        if type(wanted) ~= "table" or #wanted == 0 then return false, "I need at least one unit copy category." end
+        for i = 1, #cats do scopes[cats[i].key] = false end
+        local labels = {}
+        for i = 1, #wanted do
+            local key, label = ResolveUnitCopyCategory(wanted[i])
+            if key then
+                scopes[key] = true
+                labels[#labels + 1] = tostring(label or key)
+            end
+        end
+        if #labels == 0 then return false, "I do not know those unit copy categories." end
+        refresh()
+        return true, "Selected only unit copy categories: " .. table.concat(labels, ", ") .. "."
+    end
+    local key, label = ResolveUnitCopyCategory(args and args.category)
+    if not key then return false, "I do not know which unit copy category to set." end
+    scopes[key] = SelectorBool(args and args.value)
+    refresh()
+    return true, "Set unit copy category " .. tostring(label or key) .. " " .. (scopes[key] and "on" or "off") .. "."
+end
+
 local function SetGroupCopyScopeSelector(args)
     local scopes, cats = EnsureGroupCopyScopes()
     local command = NormalizeKey(args and args.command)
@@ -751,6 +889,7 @@ function A.Workflow.SetMenuSelectorState(args)
     if selector == "group_corner" then return SetGroupCornerSelector(args) end
     if selector == "color_token" then return SetColorTokenSelector(args) end
     if selector == "profile_staging" then return SetProfileStagingSelector(args) end
+    if selector == "unit_copy_scope" then return SetUnitCopyScopeSelector(args) end
     if selector == "group_copy_scope" then return SetGroupCopyScopeSelector(args) end
     return false, "I do not know which menu selector to set."
 end
@@ -888,6 +1027,7 @@ Registry:RegisterAction({
         "select power color token", "select class resource color token",
         "move text as one group", "move text per slot", "text move together",
         "select profile export kind", "set profile staging field", "set profile string field",
+        "set unit copy category", "select unit copy categories",
         "set group copy category", "select group copy categories",
     },
     combatSafe = true,
@@ -963,6 +1103,55 @@ Registry:RegisterAction({
             return false, "Assistant redo is not available right now."
         end
         return A.RedoLast()
+    end,
+})
+
+Registry:RegisterAction({
+    key = "menu_history_undo",
+    label = "Undo Last Menu Change",
+    type = "history",
+    aliases = { "undo menu change", "undo menu history", "undo ui change", "undo navrail history" },
+    combatSafe = false,
+    run = function()
+        if not (M and type(M.Undo) == "function") then return false, "MSUF menu undo is not available right now." end
+        local ok = M.Undo()
+        if ok then return true, "Done. Undid the last MSUF menu change." end
+        return false, "There is no MSUF menu change to undo."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "menu_history_redo",
+    label = "Redo Last Menu Change",
+    type = "history",
+    aliases = { "redo menu change", "redo menu history", "redo ui change", "redo navrail history" },
+    combatSafe = false,
+    run = function()
+        if not (M and type(M.Redo) == "function") then return false, "MSUF menu redo is not available right now." end
+        local ok = M.Redo()
+        if ok then return true, "Done. Redid the last MSUF menu change." end
+        return false, "There is no MSUF menu change to redo."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "menu_history_reset_session",
+    label = "Reset Menu Session Changes",
+    type = "history",
+    aliases = {
+        "reset all menu changes", "reset menu session changes", "reset all session changes",
+        "reset msuf2 menu changes", "reset navrail history session",
+    },
+    combatSafe = false,
+    confirmRequired = true,
+    captureProfileSnapshot = true,
+    run = function()
+        if not (M and type(M.ResetHistorySession) == "function") then return false, "MSUF menu session reset is not available right now." end
+        local state = M.GetHistoryState and M.GetHistoryState() or nil
+        if state and not state.canResetAll then return false, "There are no MSUF menu session changes to reset." end
+        local ok = M.ResetHistorySession()
+        if ok then return true, "Done. Reset all MSUF menu changes from this open session." end
+        return false, "MSUF menu session changes could not be reset right now."
     end,
 })
 
