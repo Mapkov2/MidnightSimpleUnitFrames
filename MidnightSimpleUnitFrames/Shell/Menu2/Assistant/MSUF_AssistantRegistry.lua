@@ -26,5 +26,6 @@ A.RegistryDomainFiles = {
     "MSUF_AssistantRegistry_Dashboard.lua",
     "MSUF_AssistantRegistry_Profiles.lua",
     "MSUF_AssistantRegistry_EditMode.lua",
+    "MSUF_AssistantRegistry_Workflows.lua",
     "MSUF_AssistantRegistry_Diagnostics.lua",
 }

@@ -383,6 +383,24 @@ local function QueryIntent(text)
     return "search"
 end
 
+local QUERY_PREFIXES = {
+    "where is ", "where are ", "where ", "search for ", "search ", "find ", "show me ",
+    "faq ", "explain ", "what is ", "what are ", "what can ", "how do ", "how ",
+    "wo ist ", "wo ", "suche nach ", "suche ", "finde ", "zeige mir ",
+    "erklaere ", "hilfe zu ", "hilfe fuer ", "hilfe fur ",
+}
+
+local function SearchQueryText(query)
+    local norm = Normalize(query)
+    for i = 1, #QUERY_PREFIXES do
+        local prefix = QUERY_PREFIXES[i]
+        if norm:sub(1, #prefix) == prefix then
+            return Trim(norm:sub(#prefix + 1))
+        end
+    end
+    return norm
+end
+
 local function ExpandQueryText(query)
     local Data = M.SearchData or {}
     local aliases = Data.QUERY_ALIASES
@@ -406,17 +424,20 @@ end
 local function TokenScore(item, queryTokens, queryNorm, intent)
     if not item or item.haystack == "" then return 0 end
     local score = 0
-    if item.label and Normalize(item.label) == queryNorm then score = score + 600 end
-    if item.label and Normalize(item.label):find(queryNorm, 1, true) then score = score + 280 end
-    if item.haystack:find(queryNorm, 1, true) then score = score + 180 end
+    local matched = false
+    if item.label and Normalize(item.label) == queryNorm then score = score + 600; matched = true end
+    if item.label and Normalize(item.label):find(queryNorm, 1, true) then score = score + 280; matched = true end
+    if item.haystack:find(queryNorm, 1, true) then score = score + 180; matched = true end
     for i = 1, #queryTokens do
         local token = queryTokens[i]
         if item.haystack:find(token, 1, true) then
             score = score + 70 + math.min(#token * 3, 30)
+            matched = true
         else
             score = score - 25
         end
     end
+    if not matched then return 0 end
     if item.kind == "faq" then score = score + 80 + math.min(tonumber(item.priority) or 0, 300) end
     if item.kind == "setting" then score = score + 90 end
     if item.kind == "page" then score = score + 65 end
@@ -435,7 +456,8 @@ function K.Search(query, limit, opts)
     opts = opts or {}
     local index = K.EnsureIndex()
     local intent = QueryIntent(query)
-    local expandedQuery = ExpandQueryText(query)
+    local cleanedQuery = SearchQueryText(query)
+    local expandedQuery = ExpandQueryText(cleanedQuery ~= "" and cleanedQuery or query)
     local norm = Normalize(expandedQuery)
     local queryTokens = SplitTokens(norm)
     if norm == "" or #queryTokens == 0 then return {} end
@@ -708,6 +730,16 @@ function K.Answer(query, opts)
     local action = ActionableHint(top)
     if action then lines[#lines + 1] = action end
     return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant knowledge result" }
+end
+
+function K.NoMatch(query)
+    local text = Trim(query)
+    local suffix = text ~= "" and (": " .. text) or "."
+    return {
+        text = "I could not find a matching MSUF setting, page, action, diagnostic, or FAQ" .. suffix .. "\nTry: describe the page or setting name, ask 'what can I change here', or ask for general help.",
+        status = "failed",
+        summary = "Assistant knowledge no match",
+    }
 end
 
 function K.Summary()

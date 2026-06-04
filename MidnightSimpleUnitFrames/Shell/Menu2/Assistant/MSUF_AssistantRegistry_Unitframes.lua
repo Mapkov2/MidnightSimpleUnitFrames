@@ -33,6 +33,7 @@ local RegisterUnitNumber = C.RegisterUnitNumber
 local UnitDefaultPower = C.UnitDefaultPower
 
 local UNIT_KEYS = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
+local RANGE_FADE_UNITS = { target = true, targettarget = true, focus = true, focustarget = true, pet = true, boss = true }
 for i = 1, #UNIT_KEYS do
     local unit = UNIT_KEYS[i]
     local aliases
@@ -81,14 +82,15 @@ for i = 1, #UNIT_KEYS do
     AddAliasesForUnit(aliases, unit, "raid marker icon", "schlachtzug marker")
     RegisterUnitBoolean(unit, "raidMarker", "showRaidMarker", "Raid Marker", true, aliases, { category = "Status", reason = "MSUF_ASSISTANT_RAID_MARKER", text = true, refresh = "MSUF_RefreshRaidMarkerFrames" })
 
-    aliases = {}
-    AddAliasesForUnit(aliases, unit, "range fade", "range fade")
-    AddAliasesForUnit(aliases, unit, "range fading", "reichweite fade")
-    RegisterUnitBoolean(unit, "rangeFade", "rangeFadeEnabled", "Range Fade", true, aliases, { category = "Range", reason = "MSUF_ASSISTANT_RANGE_FADE", alpha = true })
+    if RANGE_FADE_UNITS[unit] then
+        aliases = {}
+        AddAliasesForUnit(aliases, unit, "range fade", "range fade")
+        AddAliasesForUnit(aliases, unit, "range fading", "reichweite fade")
+        RegisterUnitBoolean(unit, "rangeFade", "rangeFadeEnabled", "Range Fade", true, aliases, { category = "Range", reason = "MSUF_ASSISTANT_RANGE_FADE", alpha = true })
+    end
 end
 
 local POWER_UNITS = { player = true, target = true, focus = true, boss = true }
-local RANGE_FADE_UNITS = { target = true, targettarget = true, focus = true, focustarget = true, pet = true, boss = true }
 
 local TEXT_ANCHOR_VALUES = { "LEFT", "CENTER", "RIGHT" }
 local HP_MODE_VALUES = { "PERCENT", "CURRENT", "MAX", "DEFICIT", "CURMAX", "CURPERCENT", "CURMAXPERCENT", "MAXPERCENT", "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX", "NONE" }

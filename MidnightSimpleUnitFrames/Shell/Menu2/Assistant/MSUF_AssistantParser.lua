@@ -136,6 +136,15 @@ local function DetectUnits(text)
             end
         end
     end
+    if #units == 0 then
+        if ContainsAny(text, { "player", "player frame", "player unitframe", "spieler", "self", "ich" }) then AddUnique(units, "player") end
+        if ContainsAny(text, { "target", "target frame", "target unitframe", "ziel" }) then AddUnique(units, "target") end
+        if ContainsAny(text, { "focus", "focus frame", "focus unitframe", "fokus" }) then AddUnique(units, "focus") end
+        if ContainsAny(text, { "pet", "pet frame", "pet unitframe", "begleiter" }) then AddUnique(units, "pet") end
+        if ContainsAny(text, { "boss", "boss frame", "boss frames", "bossframe", "bossframes" }) then AddUnique(units, "boss") end
+        if ContainsAny(text, { "targettarget", "target of target", "target of target frame", "tot", "ziel des ziels" }) then AddUnique(units, "targettarget") end
+        if ContainsAny(text, { "focustarget", "focus target", "focus target frame", "fokus ziel" }) then AddUnique(units, "focustarget") end
+    end
     return units
 end
 
@@ -155,6 +164,11 @@ local function DetectGroups(text)
                 break
             end
         end
+    end
+    if #groups == 0 then
+        if ContainsAny(text, { "party", "party frame", "party frames", "partyframe", "partyframes" }) then AddUnique(groups, "party") end
+        if ContainsAny(text, { "raid", "raid frame", "raid frames", "raidframe", "raidframes", "schlachtzug" }) then AddUnique(groups, "raid") end
+        if ContainsAny(text, { "mythicraid", "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraidframe", "mythicraidframes" }) then AddUnique(groups, "mythicraid") end
     end
     if #groups == 0 and (HasPhrase(text, "group frames") or HasPhrase(text, "gruppenframes")) then
         for i = 1, #ALL_GROUPS do AddUnique(groups, ALL_GROUPS[i]) end
@@ -190,6 +204,56 @@ end
 local function FirstNumber(text)
     local value = text:match("[-+]?%d+%.?%d*")
     return tonumber(value)
+end
+
+function A._ExplicitNumberValue(text)
+    text = tostring(text or "")
+    local value
+    for _, pattern in ipairs({
+        "%f[%w]to%f[%W]%s+([-+]?%d+%.?%d*)",
+        "%f[%w]auf%f[%W]%s+([-+]?%d+%.?%d*)",
+        "%f[%w]zu%f[%W]%s+([-+]?%d+%.?%d*)",
+        "%f[%w]as%f[%W]%s+([-+]?%d+%.?%d*)",
+        "%f[%w]is%f[%W]%s+([-+]?%d+%.?%d*)",
+        "%f[%w]be%f[%W]%s+([-+]?%d+%.?%d*)",
+        "%f[%w]value%f[%W]%s+([-+]?%d+%.?%d*)",
+        "=%s*([-+]?%d+%.?%d*)",
+    }) do
+        for numberText in text:gmatch(pattern) do
+            value = tonumber(numberText)
+        end
+    end
+    return value
+end
+
+function A._LastNumberValue(text)
+    local value
+    for numberText in tostring(text or ""):gmatch("[-+]?%d+%.?%d*") do
+        value = tonumber(numberText)
+    end
+    return value
+end
+
+function A._NumberValueForText(setting, text)
+    local explicit = A._ExplicitNumberValue(text)
+    if explicit ~= nil then return explicit end
+    local hay = setting and (tostring(setting.key or "") .. " " .. tostring(setting.label or "") .. " " .. tostring(setting.attribute or "")) or ""
+    if hay:find("%d") then return A._LastNumberValue(text) end
+    return FirstNumber(text)
+end
+
+function A._RelativeNumberAmountForText(text)
+    text = tostring(text or "")
+    local value
+    for _, pattern in ipairs({
+        "%f[%w]by%f[%W]%s+([-+]?%d+%.?%d*)",
+        "%f[%w]um%f[%W]%s+([-+]?%d+%.?%d*)",
+    }) do
+        for numberText in text:gmatch(pattern) do
+            value = tonumber(numberText)
+        end
+    end
+    return value or FirstNumber(text)
 end
 
 local function Compact(text)
@@ -230,6 +294,15 @@ local function ExtractColor(raw, text)
     local rr, gg, bb = tostring(raw or ""):match("(%d+)%s*,%s*(%d+)%s*,%s*(%d+)")
     if rr and gg and bb then
         local r, g, b = tonumber(rr) or 255, tonumber(gg) or 255, tonumber(bb) or 255
+        if r > 1 or g > 1 or b > 1 then r, g, b = r / 255, g / 255, b / 255 end
+        return r, g, b, tostring(rr) .. "," .. tostring(gg) .. "," .. tostring(bb)
+    end
+    rr, gg, bb = tostring(text or ""):match("rgb%s+([-+]?%d+%.?%d*)%s+([-+]?%d+%.?%d*)%s+([-+]?%d+%.?%d*)")
+    if not rr then
+        rr, gg, bb = tostring(text or ""):match("r%s+([-+]?%d+%.?%d*)%s+g%s+([-+]?%d+%.?%d*)%s+b%s+([-+]?%d+%.?%d*)")
+    end
+    if rr and gg and bb then
+        local r, g, b = tonumber(rr) or 1, tonumber(gg) or 1, tonumber(bb) or 1
         if r > 1 or g > 1 or b > 1 then r, g, b = r / 255, g / 255, b / 255 end
         return r, g, b, tostring(rr) .. "," .. tostring(gg) .. "," .. tostring(bb)
     end
@@ -820,6 +893,63 @@ local function ParseGroupCopyScopeState(text)
         category = matches[1],
         value = value,
     }, "Set group copy category", "Sets one Group Frames copy-popup category checkbox.")
+end
+
+local function ParseUnitCopyScopeState(text)
+    if ContainsAny(text, { "group copy", "group frame copy", "group frames copy", "group copy category", "group copy categories", "group copy scope", "group copy scopes" }) then return nil end
+    if not ContainsAny(text, { "category", "categories", "scope", "scopes" }) then return nil end
+    local units = DetectUnits(text)
+    local pageUnit
+    local page = M and M.activeKey
+    for i = 1, #ALL_UNITFRAMES do
+        local unit = ALL_UNITFRAMES[i]
+        if UnitPageKey(unit) == page then
+            pageUnit = unit
+            break
+        end
+    end
+    local explicit = ContainsAny(text, { "unit copy", "unit frame copy", "unit frames copy", "unitframe copy", "unitframes copy", "frame copy" })
+    if not explicit and #units == 0 and not pageUnit then return nil end
+    if ContainsAny(text, { "all categories", "select all", "turn on all", "enable all" })
+        or (ContainsAny(text, { "all" }) and ContainsAny(text, { "turn on", "enable", "select" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "unit_copy_scope",
+            unit = units[1] or pageUnit,
+            command = "all",
+        }, "Select all unit copy categories", "Sets every Unit Copy popup category checkbox on.")
+    end
+    if ContainsAny(text, { "no categories", "none", "select none", "clear categories", "turn off all", "disable all" })
+        or (ContainsAny(text, { "clear", "disable" }) and ContainsAny(text, { "category", "categories", "scope", "scopes" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "unit_copy_scope",
+            unit = units[1] or pageUnit,
+            command = "none",
+        }, "Clear unit copy categories", "Sets every Unit Copy popup category checkbox off.")
+    end
+
+    local matches = CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS)
+    if #matches == 0 then return nil end
+    if ContainsAny(text, { "only", "only these", "just" }) then
+        return BuildMenuSelectorState({
+            selector = "unit_copy_scope",
+            unit = units[1] or pageUnit,
+            command = "only",
+            categories = matches,
+        }, "Select only unit copy categories", "Sets the Unit Copy popup categories to exactly the requested category set.")
+    end
+
+    local value = DetectBoolean(text)
+    if value == nil then
+        if ContainsAny(text, { "exclude", "without", "remove", "disable" }) then value = false else value = true end
+    end
+    return BuildMenuSelectorState({
+        selector = "unit_copy_scope",
+        unit = units[1] or pageUnit,
+        category = matches[1],
+        value = value,
+    }, "Set unit copy category", "Sets one Unit Copy popup category checkbox.")
 end
 
 local function ParseProfile(text, raw)
@@ -2015,6 +2145,40 @@ local function ParseMenuWindowAction(text)
     } or nil
 end
 
+function A._ParseMenuHistoryAction(text)
+    if not ContainsAny(text, {
+        "menu history", "menu change", "menu changes", "menu session", "session changes",
+        "msuf2 menu changes", "ui change", "ui changes", "navrail history",
+    }) then return nil end
+    local actionKey
+    local label
+    local summary
+    local confirmRequired
+    if ContainsAny(text, { "reset all", "reset", "restore all", "discard all", "revert all", "clear all" }) then
+        actionKey = "menu_history_reset_session"
+        label = "Reset menu session changes"
+        summary = "Uses the same MSUF menu history-session reset helper as Shift-click Undo."
+        confirmRequired = true
+    elseif ContainsAny(text, { "redo", "reapply" }) then
+        actionKey = "menu_history_redo"
+        label = "Redo menu change"
+        summary = "Uses the same MSUF menu redo helper as the NavRail Redo button."
+    elseif ContainsAny(text, { "undo", "revert" }) then
+        actionKey = "menu_history_undo"
+        label = "Undo menu change"
+        summary = "Uses the same MSUF menu undo helper as the NavRail Undo button."
+    end
+    local action = actionKey and Registry and Registry:GetAction(actionKey)
+    return action and {
+        kind = "action",
+        action = action,
+        args = {},
+        confirmRequired = confirmRequired,
+        label = label,
+        summary = summary,
+    } or nil
+end
+
 local function SettingMatchesText(setting, text)
     if type(setting) ~= "table" then return false end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
@@ -2147,7 +2311,7 @@ local function RelativeNumberDeltaForText(setting, text, fallbackAmount)
     if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
     if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
     if not sign then return nil end
-    local amount = FirstNumber(text)
+    local amount = A._RelativeNumberAmountForText(text)
     if amount == nil then
         amount = fallbackAmount
             or (setting and tonumber(setting.step))
@@ -2203,7 +2367,7 @@ local function ValueForRegistrySetting(setting, text, raw)
     if setting.type == "number" then
         local boolValue = BooleanValueForNumberSetting(setting, text)
         if boolValue ~= nil then return boolValue end
-        local value = FirstNumber(text)
+        local value = A._NumberValueForText(setting, text)
         if value and setting.percent == true and value > 1 then value = value / 100 end
         return value
     end
@@ -2325,6 +2489,7 @@ end
 
 local function ScopedOnlyKind(text)
     if not ContainsAny(text, { "only", "nur", "just" }) then return nil end
+    if ContainsAny(text, { "current health only", "on current health only", "on health only" }) then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
     if ContainsAny(text, { "font", "fonts", "schrift", "text outline", "font outline", "text shadow", "name color", "name shortening", "text size" }) then
         return "fonts"
@@ -2439,6 +2604,247 @@ local function ParseClassPowerRootToggle(text)
         label = "Class Resource",
         summary = "Toggles MSUF Class Resources.",
     } or nil
+end
+
+function A._ParseClassPowerMoveShortcut(text)
+    if not ContainsAny(text, CLASS_POWER_TERMS) then return nil end
+    if ContainsAny(text, { "text", "number", "font", "detached power", "alt mana", "alternative mana" }) then return nil end
+    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe" }) then return nil end
+    local direction = DetectDirection(text, {})
+    if not direction then return nil end
+    local key = (direction == "left" or direction == "right") and "bars.classPowerOffsetX" or "bars.classPowerOffsetY"
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    local amount = FirstNumber(text) or 10
+    if direction == "left" or direction == "down" then amount = -amount end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, relativeDelta = amount, direction = direction } },
+        label = "Move Class Resource",
+        summary = "Moves the registered Class Resource Offset X/Y slider by pixels.",
+    }
+end
+
+A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
+    {
+        id = "combatTimer",
+        label = "Combat Timer",
+        terms = { "combat timer" },
+        pageTerms = { "timer" },
+        enable = "gameplay.enableCombatTimer",
+        x = "gameplay.combatOffsetX",
+        y = "gameplay.combatOffsetY",
+        size = "gameplay.combatFontSize",
+        anchor = "gameplay.combatTimerAnchor",
+        booleans = {
+            { key = "gameplay.lockCombatTimer", terms = { "lock", "locked", "lock position" } },
+            { key = "gameplay.combatTimerClickThrough", terms = { "click through", "click-through", "mouse clicks", "mouse input" } },
+        },
+    },
+    {
+        id = "combatState",
+        label = "Combat Enter Leave Text",
+        terms = { "combat state", "combat enter leave", "combat enter", "combat leave" },
+        pageTerms = { "enter leave", "enter text", "leave text", "combat text", "state text" },
+        enable = "gameplay.enableCombatStateText",
+        x = "gameplay.combatStateOffsetX",
+        y = "gameplay.combatStateOffsetY",
+        size = "gameplay.combatStateFontSize",
+        duration = "gameplay.combatStateDuration",
+        booleans = {
+            { key = "gameplay.lockCombatState", terms = { "lock", "locked", "lock position" } },
+            { key = "gameplay.combatStateColorSync", terms = { "sync color", "sync colors", "color sync" } },
+        },
+    },
+    {
+        id = "playerTotems",
+        label = "Totem Frame",
+        terms = { "totem frame", "totemframe", "blizzard totem", "statue frame" },
+        pageTerms = { "totem", "totems", "statue" },
+        enable = "gameplay.enablePlayerTotems",
+        x = "gameplay.playerTotemsOffsetX",
+        y = "gameplay.playerTotemsOffsetY",
+        size = "gameplay.playerTotemsIconSize",
+        anchorFrom = "gameplay.playerTotemsAnchorFrom",
+        anchorTo = "gameplay.playerTotemsAnchorTo",
+    },
+    {
+        id = "firstDance",
+        label = "First Dance Tracker",
+        terms = { "first dance" },
+        pageTerms = { "dance tracker" },
+        enable = "gameplay.enableFirstDanceTimer",
+        x = "gameplay.firstDanceOffsetX",
+        y = "gameplay.firstDanceOffsetY",
+        size = "gameplay.firstDanceIconSize",
+        booleans = {
+            { key = "gameplay.lockFirstDance", terms = { "lock", "locked", "lock position" } },
+            { key = "gameplay.firstDanceClickThrough", terms = { "click through", "click-through", "mouse input" } },
+            { key = "gameplay.firstDanceShowIcon", terms = { "icon", "icon mode", "cooldown swipe" } },
+            { key = "gameplay.firstDanceShowReady", terms = { "show ready", "ready visible", "keep visible", "ready" } },
+        },
+    },
+    {
+        id = "combatCrosshair",
+        label = "Combat Crosshair",
+        terms = { "combat crosshair", "crosshair", "fadenkreuz" },
+        pageTerms = { "crosshair", "fadenkreuz" },
+        enable = "gameplay.enableCombatCrosshair",
+        size = "gameplay.crosshairSize",
+        thickness = "gameplay.crosshairThickness",
+        booleans = {
+            { key = "gameplay.enableCombatCrosshairMeleeRangeColor", terms = { "range color", "melee range color", "in range color", "color mode" } },
+            { key = "gameplay.meleeSpellPerClass", terms = { "per class", "class spell", "spell per class" } },
+            { key = "gameplay.meleeSpellPerSpec", terms = { "per spec", "spec spell", "spell per spec" } },
+        },
+    },
+}
+
+function A._GameplayShortcutSpec(text)
+    local specs = A._GameplayShortcutSpecs or {}
+    for i = 1, #specs do
+        local spec = specs[i]
+        if ContainsAny(text, spec.terms) then return spec end
+    end
+    if M and M.activeKey == "gameplay" then
+        for i = 1, #specs do
+            local spec = specs[i]
+            if ContainsAny(text, spec.pageTerms) then return spec end
+        end
+        if ContainsAny(text, { "timer" }) and not ContainsAny(text, { "first dance", "dance", "enter", "leave", "state" }) then
+            return specs[1]
+        end
+    end
+    return nil
+end
+
+function A._GameplayShortcutChange(key, value, relativeDelta, direction, label, summary)
+    local setting = Registry and Registry:GetSetting(key)
+    return setting and {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction } },
+        label = label or setting.label,
+        summary = summary or "Changes a registered Gameplay control.",
+    } or nil
+end
+
+function A._ParseGameplayBooleanShortcut(text)
+    local value = DetectBoolean(text)
+    if value == nil then return nil end
+    local spec = A._GameplayShortcutSpec(text)
+    if not spec then return nil end
+    local key
+    local booleans = spec.booleans or {}
+    for i = 1, #booleans do
+        if ContainsAny(text, booleans[i].terms) then
+            key = booleans[i].key
+            break
+        end
+    end
+    if not key then
+        if ContainsAny(text, { "anchor", "attach", "size", "font", "duration", "offset", "position", "move", "x", "y", "thickness", "thick", "thin", "spell" }) then
+            return nil
+        end
+        key = spec.enable
+    end
+    return A._GameplayShortcutChange(key, value, nil, nil, spec.label, "Toggles a registered Gameplay control.")
+end
+
+function A._ParseGameplayAnchorShortcut(text)
+    if not ContainsAny(text, { "anchor", "attach", "attached", "from point", "to point" }) then return nil end
+    local spec = A._GameplayShortcutSpec(text)
+    if not spec then return nil end
+    local key
+    if spec.id == "combatTimer" then
+        key = spec.anchor
+    elseif spec.id == "playerTotems" then
+        if ContainsAny(text, { "from anchor", "anchor from", "from point" }) then
+            key = spec.anchorFrom
+        elseif ContainsAny(text, { "to anchor", "anchor to", "to point", "attach to" }) then
+            key = spec.anchorTo
+        end
+    end
+    if not key then return nil end
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    local value = EnumValueForText(setting, text)
+    if value == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or spec.label,
+        summary = "Changes a registered Gameplay anchor selector.",
+    }
+end
+
+function A._ParseGameplayNumberShortcut(text)
+    local spec = A._GameplayShortcutSpec(text)
+    if not spec then return nil end
+    if ContainsAny(text, { "spell", "spell id", "range check spell" }) then return nil end
+    local key
+    if spec.id == "combatState" and ContainsAny(text, { "duration", "time visible", "visible time" }) then
+        key = spec.duration
+    elseif spec.id == "combatCrosshair" and ContainsAny(text, { "thickness", "thick", "thicker", "thin", "thinner" }) then
+        key = spec.thickness
+    elseif ContainsAny(text, { "size", "font size", "text size", "icon size", "bigger", "larger", "smaller", "grow", "shrink", "groesser", "kleiner" }) then
+        key = spec.size
+    end
+    if not key then return nil end
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText(setting, text)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = setting.label or spec.label,
+        summary = "Changes a registered Gameplay number slider.",
+    }
+end
+
+function A._ParseGameplayMoveShortcut(text)
+    local direction = DetectDirection(text, {})
+    local movementIntent = ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y", "horizontal", "vertical" }) or (direction and FirstNumber(text) ~= nil)
+    if not movementIntent then return nil end
+    local spec = A._GameplayShortcutSpec(text)
+    if not spec then return nil end
+    local axis
+    if ContainsAny(text, { "x", "x offset", "offset x", "horizontal" }) then axis = "x" end
+    if ContainsAny(text, { "y", "y offset", "offset y", "vertical" }) then axis = "y" end
+    if not axis and direction then
+        axis = (direction == "left" or direction == "right") and "x" or "y"
+    end
+    if not axis then return nil end
+    local key = axis == "x" and spec.x or spec.y
+    if not key then
+        return {
+            kind = "unknown",
+            text = tostring(spec.label or "That Gameplay element") .. " position is not exposed by the current MSUF UI/DB. The Assistant can only change registered safe UI controls.",
+            status = "failed",
+        }
+    end
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    local value
+    local relativeDelta
+    if direction then
+        local amount = FirstNumber(text) or 10
+        if direction == "left" or direction == "down" then amount = -amount end
+        relativeDelta = amount
+    else
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } },
+        label = "Move " .. tostring(spec.label or "Gameplay element"),
+        summary = "Moves a registered Gameplay element through its real X/Y offset setting.",
+    }
 end
 
 local function ParseFontColorAction(text, raw)
@@ -2650,6 +3056,26 @@ end
 
 local function ParseDiagnostic(text)
     if not ContainsAny(text, { "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum", "not showing", "not visible", "missing", "doesnt show", "does not show", "hidden", "nicht sichtbar", "zeigt nicht" }) then return nil end
+    if ContainsAny(text, { "profile", "profiles", "profil", "profile import", "profile export", "spec profile" }) then
+        local action = Registry and Registry:GetAction("diagnose_profile_status")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Diagnose Profiles",
+            summary = "Inspects profile storage, active profile, spec mappings, staging fields, and helper availability.",
+        } or nil
+    end
+    if ContainsAny(text, { "class resource", "class resources", "class power", "class bar", "resource bar" }) then
+        local action = Registry and Registry:GetAction("diagnose_class_power_status")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Diagnose Class Resources",
+            summary = "Inspects Class Resource visibility, sizing, opacity, width mode, and hide rules.",
+        } or nil
+    end
     if ContainsAny(text, { "castbar", "zauberleiste" }) then
         local units = DetectUnits(text)
         local unit = units[1] or "target"
@@ -2685,6 +3111,20 @@ local function ParseDiagnostic(text)
             args = { unit = unit },
             label = "Diagnose " .. tostring((A.UnitLabels or {})[unit] or unit) .. " frame",
             summary = "Inspects current unit-frame settings and suggests the next safe fix.",
+        } or nil
+    end
+    if ContainsAny(text, { "dashboard", "assistant setup", "menu setup", "navigation", "page stack", "workflow", "setup checklist", "guided setup" })
+        or text == "diagnose setup"
+        or text == "diagnostic setup"
+        or text == "troubleshoot setup"
+    then
+        local action = Registry and Registry:GetAction("diagnose_dashboard_setup")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Diagnose Dashboard setup",
+            summary = "Inspects Assistant pending state, Dashboard panels, page stack, and navigation helper availability.",
         } or nil
     end
     return nil
@@ -3118,7 +3558,7 @@ local function ParseDarkModeBrightnessShortcut(text)
     if not ContainsAny(text, {
         "lighter", "brighter", "brighten", "heller",
         "darker", "darken", "dunkler", "super dark", "very dark", "black", "almost black",
-        "brightness", "bar color",
+        "brightness", "bar color", "percent", "percentage", "slider", "value", "set", "make", "change", "adjust",
     }) then
         return nil
     end
@@ -3128,7 +3568,11 @@ local function ParseDarkModeBrightnessShortcut(text)
     local value
     local relativeDelta
     local amount = FirstNumber(text)
-    if amount ~= nil and ContainsAny(text, { "to", "set", "value" }) then
+    local relativeIntent = ContainsAny(text, { "lighter", "brighter", "brighten", "heller", "darker", "darken", "dunkler" })
+    local exactIntent = amount ~= nil and not relativeIntent and (ContainsAny(text, {
+        "to", "set", "value", "percent", "percentage", "slider", "brightness", "bar color", "make", "change", "adjust",
+    }) or text:find("%%", 1, true) ~= nil)
+    if exactIntent then
         value = amount > 1 and (amount / 100) or amount
     elseif ContainsAny(text, { "super dark", "very dark", "almost black", "black" }) then
         value = 0.01
@@ -3274,13 +3718,6 @@ local function ParseUnsupportedDetailShortcut(text)
             status = "failed",
         }
     end
-    if ContainsAny(text, { "hp text anchor", "health text anchor", "power text anchor", "mana text anchor" }) then
-        return {
-            kind = "unknown",
-            text = "HP/Power text does not have a separate anchor dropdown in the current MSUF UI. Use the left/center/right text slots and X/Y offsets instead.",
-            status = "failed",
-        }
-    end
     return nil
 end
 
@@ -3376,9 +3813,15 @@ end
 
 local DETAIL_MOVE_SPECS = {
     { terms = { "portrait" }, x = "portraitOffsetX", y = "portraitOffsetY", label = "Move portrait" },
-    { terms = { "name text", "unit name", "name" }, x = "nameOffsetX", y = "nameOffsetY", label = "Move name text" },
-    { terms = { "hp text", "health text", "health value" }, x = "hpOffsetX", y = "hpOffsetY", label = "Move HP text" },
-    { terms = { "power text", "mana text", "power value", "mana value" }, x = "powerOffsetX", y = "powerOffsetY", label = "Move power text" },
+    { terms = { "name text", "frame name text", "unit name text", "unitframe name", "unit name", "name label", "name labels", "names", "name" }, x = "nameOffsetX", y = "nameOffsetY", label = "Move name text" },
+    { terms = { "hp text", "health text", "health value", "hp value", "hp number", "health number", "hp label", "health label", "life text", "hp", "health", "leben" }, x = "hpOffsetX", y = "hpOffsetY", label = "Move HP text" },
+    { terms = { "power text", "mana text", "power value", "mana value", "power number", "mana number", "power label", "mana label", "energie text", "power", "mana" }, x = "powerOffsetX", y = "powerOffsetY", label = "Move power text" },
+}
+
+local GROUP_DETAIL_MOVE_SPECS = {
+    { terms = { "name text", "frame name text", "unit name text", "unit name", "frame name", "name label", "name labels", "party name", "raid name", "group name", "names", "name" }, x = "nameOffsetX", y = "nameOffsetY", label = "Move group name text" },
+    { terms = { "hp text", "health text", "health value", "hp value", "hp number", "health number", "hp label", "health label", "life text", "party hp", "party health", "raid hp", "raid health", "group hp", "group health", "hp", "health", "leben" }, x = "hpOffsetX", y = "hpOffsetY", label = "Move group HP text" },
+    { terms = { "power text", "mana text", "power value", "mana value", "power number", "mana number", "power label", "mana label", "energie text", "party power", "party mana", "raid power", "raid mana", "group power", "group mana", "power", "mana" }, x = "powerOffsetX", y = "powerOffsetY", label = "Move group power text" },
 }
 
 local function ParseUnitDetailMove(text)
@@ -3387,7 +3830,14 @@ local function ParseUnitDetailMove(text)
     local direction = DetectDirection(text, {})
     if not direction then return nil end
     local units = DetectUnits(text)
-    if #units == 0 then return nil end
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then
+            units = { pageUnit }
+        else
+            return nil
+        end
+    end
     local spec
     for i = 1, #DETAIL_MOVE_SPECS do
         if ContainsAny(text, DETAIL_MOVE_SPECS[i].terms) then
@@ -3410,6 +3860,137 @@ local function ParseUnitDetailMove(text)
         changes = changes,
         label = spec.label,
         summary = "Moves a unitframe detail control by pixels.",
+    }
+end
+
+local function GroupScopesOrCurrentPage(text)
+    local groups = DetectGroups(text)
+    if #groups > 0 then return groups end
+    local page = M and M.activeKey
+    if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+        if M and (M.gfScope == "party" or M.gfScope == "raid" or M.gfScope == "mythicraid") then return { M.gfScope } end
+        return { "party" }
+    end
+    return {}
+end
+
+function A._ParseGroupAnchorTargetShortcut(text)
+    if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
+    if not ContainsAny(text, { "anchor to", "attach to", "anchored to", "anchor target", "anchor frame" }) then return nil end
+    local groups = GroupScopesOrCurrentPage(text)
+    if #groups == 0 then return nil end
+    local changes = {}
+    for i = 1, #groups do
+        local scope = tostring(groups[i])
+        local setting = Registry and Registry:GetSetting("gf_" .. scope .. ".anchorToFrame")
+        local value = setting and EnumValueForText(setting, text)
+        if setting and value ~= nil then changes[#changes + 1] = { setting = setting, value = value } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set group anchor target",
+        summary = "Changes the registered Group Layout Anchor To dropdown.",
+    }
+end
+
+local function ParseGroupDetailMove(text)
+    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "portrait" }) then return nil end
+    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) then return nil end
+    local direction = DetectDirection(text, {})
+    if not direction then return nil end
+    local groups = GroupScopesOrCurrentPage(text)
+    if #groups == 0 then return nil end
+    local spec
+    for i = 1, #GROUP_DETAIL_MOVE_SPECS do
+        if ContainsAny(text, GROUP_DETAIL_MOVE_SPECS[i].terms) then
+            spec = GROUP_DETAIL_MOVE_SPECS[i]
+            break
+        end
+    end
+    if not spec then return nil end
+    local attr = (direction == "left" or direction == "right") and spec.x or spec.y
+    local amount = FirstNumber(text) or 10
+    if direction == "left" or direction == "down" then amount = -amount end
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, relativeDelta = amount, direction = direction } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = spec.label,
+        summary = "Moves a registered group-frame text control by pixels.",
+    }
+end
+
+function A._DetailOffsetAxis(text)
+    if ContainsAny(text, { "x offset", "x position", "x pos", "horizontal", "left right" }) or HasPhrase(text, "x") then return "x" end
+    if ContainsAny(text, { "y offset", "y position", "y pos", "vertical", "up down" }) or HasPhrase(text, "y") then return "y" end
+    return nil
+end
+
+function A._DetailSpecForText(text, specs)
+    for i = 1, #(specs or {}) do
+        if ContainsAny(text, specs[i].terms) then return specs[i] end
+    end
+    return nil
+end
+
+function A._ParseTextDetailExactOffset(text)
+    if ContainsAny(text, { "castbar", "cast bar", "zauberleiste", "portrait" }) then return nil end
+    if not ContainsAny(text, { "offset", "position", "pos", "x", "y" }) then return nil end
+    local axis = A._DetailOffsetAxis(text)
+    if not axis then return nil end
+    local value = FirstNumber(text)
+    if value == nil then return nil end
+
+    local groupSpec = A._DetailSpecForText(text, GROUP_DETAIL_MOVE_SPECS)
+    local unitSpec = A._DetailSpecForText(text, DETAIL_MOVE_SPECS)
+    if not groupSpec and not unitSpec then return nil end
+
+    local groups = groupSpec and DetectGroups(text) or {}
+    local units = unitSpec and DetectUnits(text) or {}
+    local useGroups = #groups > 0
+    local useUnits = #units > 0
+
+    if not useGroups and not useUnits then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+            useGroups = #groups > 0
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then
+                units = { pageUnit }
+                useUnits = true
+            end
+        end
+    end
+
+    local changes = {}
+    if useGroups and groupSpec then
+        local attr = axis == "x" and groupSpec.x or groupSpec.y
+        for i = 1, #groups do
+            local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
+            if setting then changes[#changes + 1] = { setting = setting, value = value, direction = axis } end
+        end
+    elseif useUnits and unitSpec then
+        local attr = axis == "x" and unitSpec.x or unitSpec.y
+        for i = 1, #units do
+            local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
+            if setting then changes[#changes + 1] = { setting = setting, value = value, direction = axis } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set text offset",
+        summary = "Sets a registered unit/group text offset slider value.",
     }
 end
 
@@ -3564,7 +4145,9 @@ end
 
 local function ParseUnitOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
-    if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp" }) then return nil end
+    if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar", "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return nil end
+    if DetectGroups(text)[1] then return nil end
+    if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp", "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
     local relativeDelta
     if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
         local amount = FirstNumber(text) or 0.05
@@ -3610,6 +4193,55 @@ local function ParseUnitOpacityShortcut(text)
         changes = changes,
         label = "Set unit opacity",
         summary = "Sets both in-combat and out-of-combat opacity for the requested unitframe.",
+    }
+end
+
+function A._ParseGroupOpacityShortcut(text)
+    if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
+    if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp", "background", "backdrop", "hp fill", "health fill", "hp track", "health track", "text ignores", "dispel overlay", "debuff overlay" }) then return nil end
+
+    local groups = DetectGroups(text)
+    if #groups == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        end
+    end
+    if #groups == 0 then return nil end
+
+    local relativeDelta
+    if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
+        local amount = FirstNumber(text) or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = -amount
+    elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "opaquer" }) then
+        local amount = FirstNumber(text) or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = amount
+    else
+        relativeDelta = RelativeNumberDeltaForText({ percent = true, step = 0.05 }, text)
+    end
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+        if value > 1 then value = value / 100 end
+    end
+
+    local changes = {}
+    for i = 1, #groups do
+        local scope = tostring(groups[i])
+        local inCombat = Registry and Registry:GetSetting("gf_" .. scope .. ".alphaCurrentInCombat")
+        local outCombat = Registry and Registry:GetSetting("gf_" .. scope .. ".alphaCurrentOutOfCombat")
+        if inCombat then changes[#changes + 1] = { setting = inCombat, value = value, relativeDelta = relativeDelta } end
+        if outCombat then changes[#changes + 1] = { setting = outCombat, value = value, relativeDelta = relativeDelta } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set group opacity",
+        summary = "Sets both in-combat and out-of-combat opacity for the requested group-frame scope.",
     }
 end
 
@@ -3719,17 +4351,28 @@ local function TextSelectorTab(text)
 end
 
 local function TextSelectorSlot(text)
-    if ContainsAny(text, { "left slot", "slot left", "left text slot" }) or (HasPhrase(text, "left") and ContainsAny(text, { "slot", "text slot" })) then return "left" end
+    if ContainsAny(text, { "left slot", "slot left", "left text slot", "left anchor", "anchor left", "anchor to left", "to left", "on left", "on the left", "left side" })
+        or (HasPhrase(text, "left") and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
+    then
+        return "left"
+    end
     if ContainsAny(text, { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", "center text slot", "centre text slot", "middle text slot" })
-        or ((HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle")) and ContainsAny(text, { "slot", "text slot" }))
+        or ContainsAny(text, { "center anchor", "centre anchor", "middle anchor", "anchor center", "anchor centre", "anchor middle", "anchor to center", "anchor to centre", "anchor to middle", "to center", "to centre", "to middle", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle", "center side", "centre side", "middle" })
+        or ((HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle")) and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
     then
         return "center"
     end
-    if ContainsAny(text, { "right slot", "slot right", "right text slot" }) or (HasPhrase(text, "right") and ContainsAny(text, { "slot", "text slot" })) then return "right" end
+    if ContainsAny(text, { "right slot", "slot right", "right text slot", "right anchor", "anchor right", "anchor to right", "to right", "on right", "on the right", "right side" })
+        or (HasPhrase(text, "right") and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
+    then
+        return "right"
+    end
     return nil
 end
 
 local function TextSelectorIntent(text, tab, slot)
+    if tab == "name" and ContainsAny(text, { "anchor", "anchoring", "align", "alignment" }) then return false end
+    if (tab == "hp" or tab == "power") and slot and ContainsAny(text, { "anchor", "anchoring", "align", "alignment" }) then return true end
     if ContainsAny(text, {
         "text area", "text tab", "text tabs", "text editor", "text slot", "slot selector", "slot dropdown",
         "selected slot", "left slot", "center slot", "centre slot", "right slot",
@@ -3739,20 +4382,548 @@ local function TextSelectorIntent(text, tab, slot)
     return tab and ContainsAny(text, { "name text", "hp text", "health text", "power text", "mana text" }) and (HasPhrase(text, "tab") or slot ~= nil)
 end
 
+function A._ParseTextFontSizeShortcut(text)
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, {
+        "font size", "text size", "name size", "name font size", "hp font size", "health font size",
+        "power font size", "mana font size", "schriftgroesse", "schrift groesse",
+    }) then
+        return nil
+    end
+    local tab = TextSelectorTab(text)
+    if tab ~= "name" and tab ~= "hp" and tab ~= "power" then return nil end
+    local attr = tab == "name" and "nameFontSize" or (tab == "hp" and "hpFontSize" or "powerFontSize")
+    local relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
+    local value
+    if relativeDelta == nil then value = FirstNumber(text) end
+    if value == nil and relativeDelta == nil then return nil end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+
+    if #groups == 0 and #units == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+    end
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and #groups > 1 then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Multiple matching group text font-size settings",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set text font size",
+        summary = "Changes the registered Name/HP/Power text font-size slider for the selected unit or group scope.",
+    }
+end
+
+function A._ParseTextLayerShortcut(text)
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar" }) then return nil end
+    if not ContainsAny(text, { "text layer", "draw layer", "text level", "draw level", "layer" }) then return nil end
+    local tab = TextSelectorTab(text)
+    if tab ~= "name" and tab ~= "hp" and tab ~= "power" then return nil end
+
+    local relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
+    if relativeDelta == nil then
+        if ContainsAny(text, { "bring forward", "move forward", "raise forward", "forward", "front", "above", "up" }) then
+            relativeDelta = 1
+        elseif ContainsAny(text, { "send back", "move back", "backward", "behind", "below" }) then
+            relativeDelta = -1
+        end
+    end
+    local value
+    if relativeDelta == nil then value = FirstNumber(text) end
+    if value == nil and relativeDelta == nil then return nil end
+
+    local unitAttr = tab == "name" and "nameTextLayer" or (tab == "hp" and "hpTextLayer" or "powerTextLayer")
+    local groupAttr = tab == "name" and "nameTextLayer" or (tab == "hp" and "textLayer" or "powerTextLayer")
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+
+    if #groups == 0 and #units == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. groupAttr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+    end
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. unitAttr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and #groups > 1 then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Multiple matching group text-layer settings",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set text layer",
+        summary = "Changes the registered Name/HP/Power text-layer slider for the selected unit or group scope.",
+    }
+end
+
+function A._TextSlotForDetail(text, tab)
+    if tab ~= "hp" and tab ~= "power" then return nil end
+    if tab == "hp" then
+        if ContainsAny(text, { "left hp text", "hp left text", "hp text left", "left health text", "health left text", "health text left", "left hp slot", "hp left slot", "hp slot left", "left health slot", "health left slot", "health slot left", "left hp label", "hp left label", "hp label left", "left health label", "health left label", "health label left" }) then return "Left" end
+        if ContainsAny(text, { "center hp text", "centre hp text", "middle hp text", "hp center text", "hp centre text", "hp middle text", "hp text center", "hp text centre", "hp text middle", "center health text", "centre health text", "middle health text", "health center text", "health centre text", "health middle text", "health text center", "health text centre", "health text middle", "center hp slot", "centre hp slot", "middle hp slot", "hp center slot", "hp centre slot", "hp middle slot", "hp slot center", "hp slot centre", "hp slot middle", "center health slot", "centre health slot", "middle health slot", "health center slot", "health centre slot", "health middle slot", "health slot center", "health slot centre", "health slot middle", "center hp label", "centre hp label", "middle hp label", "hp center label", "hp centre label", "hp middle label", "hp label center", "hp label centre", "hp label middle", "center health label", "centre health label", "middle health label", "health center label", "health centre label", "health middle label", "health label center", "health label centre", "health label middle" }) then return "Center" end
+        if ContainsAny(text, { "right hp text", "hp right text", "hp text right", "right health text", "health right text", "health text right", "right hp slot", "hp right slot", "hp slot right", "right health slot", "health right slot", "health slot right", "right hp label", "hp right label", "hp label right", "right health label", "health right label", "health label right" }) then return "Right" end
+    else
+        if ContainsAny(text, { "left power text", "power left text", "power text left", "left mana text", "mana left text", "mana text left", "left power slot", "power left slot", "power slot left", "left mana slot", "mana left slot", "mana slot left", "left power label", "power left label", "power label left", "left mana label", "mana left label", "mana label left" }) then return "Left" end
+        if ContainsAny(text, { "center power text", "centre power text", "middle power text", "power center text", "power centre text", "power middle text", "power text center", "power text centre", "power text middle", "center mana text", "centre mana text", "middle mana text", "mana center text", "mana centre text", "mana middle text", "mana text center", "mana text centre", "mana text middle", "center power slot", "centre power slot", "middle power slot", "power center slot", "power centre slot", "power middle slot", "power slot center", "power slot centre", "power slot middle", "center mana slot", "centre mana slot", "middle mana slot", "mana center slot", "mana centre slot", "mana middle slot", "mana slot center", "mana slot centre", "mana slot middle", "center power label", "centre power label", "middle power label", "power center label", "power centre label", "power middle label", "power label center", "power label centre", "power label middle", "center mana label", "centre mana label", "middle mana label", "mana center label", "mana centre label", "mana middle label", "mana label center", "mana label centre", "mana label middle" }) then return "Center" end
+        if ContainsAny(text, { "right power text", "power right text", "power text right", "right mana text", "mana right text", "mana text right", "right power slot", "power right slot", "power slot right", "right mana slot", "mana right slot", "mana slot right", "right power label", "power right label", "power label right", "right mana label", "mana right label", "mana label right" }) then return "Right" end
+    end
+    local slot = TextSelectorSlot(text)
+    if (slot == "left" or slot == "center" or slot == "right")
+        and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "side", "left side", "right side", "center side", "centre side", "middle side" })
+    then
+        return slot == "left" and "Left" or (slot == "right" and "Right" or "Center")
+    end
+    return nil
+end
+
+function A._TextSlotName(slot)
+    slot = tostring(slot or ""):lower()
+    if slot == "left" then return "Left" end
+    if slot == "center" or slot == "centre" or slot == "middle" then return "Center" end
+    if slot == "right" then return "Right" end
+    return nil
+end
+
+function A._TextSlotLower(slot)
+    slot = A._TextSlotName(slot)
+    if slot == "Left" then return "left" end
+    if slot == "Center" then return "center" end
+    if slot == "Right" then return "right" end
+    return nil
+end
+
+function A._TextSlotSettingKey(tab, slot)
+    slot = A._TextSlotName(slot)
+    if not slot then return nil end
+    if tab == "hp" then
+        return slot == "Left" and "textLeft" or (slot == "Center" and "textCenter" or "textRight")
+    elseif tab == "power" then
+        return "powerText" .. slot
+    end
+    return nil
+end
+
+function A._TextGroupScopeName(scope)
+    scope = tostring(scope or "")
+    if scope == "gf_party" then return "party" end
+    if scope == "gf_raid" then return "raid" end
+    if scope == "gf_mythicraid" then return "mythicraid" end
+    return scope
+end
+
+function A._SelectedTextSlotFromContext(frameType, unitOrScope, tab)
+    if tab ~= "hp" and tab ~= "power" then return nil end
+    if frameType == "group" then unitOrScope = A._TextGroupScopeName(unitOrScope) end
+    local ctx = A.GetContext and A.GetContext() or nil
+    local selected = ctx and ctx.selectedTextEditorTarget
+    if type(selected) == "table"
+        and selected.tab == tab
+        and selected.frameType == frameType
+        and tostring(frameType == "group" and A._TextGroupScopeName(selected.unit) or selected.unit or "") == tostring(unitOrScope or "")
+    then
+        return A._TextSlotName(selected.slot)
+    end
+    if ctx and ctx.lastTextArea == tab
+        and ctx.lastTextFrameType == frameType
+        and tostring(frameType == "group" and A._TextGroupScopeName(ctx.lastTextUnit) or ctx.lastTextUnit or "") == tostring(unitOrScope or "")
+    then
+        return A._TextSlotName(ctx.lastTextSlot)
+    end
+    if frameType == "group" then
+        local byScope = M and M.gfTextSlotSelection and M.gfTextSlotSelection[unitOrScope]
+        return A._TextSlotName(byScope and byScope[tab])
+    end
+    local byUnit = M and M.unitTextSlotSelection and M.unitTextSlotSelection[unitOrScope]
+    return A._TextSlotName(byUnit and byUnit[tab])
+end
+
+function A._SelectedTextTargetFromContext(tab)
+    local ctx = A.GetContext and A.GetContext() or nil
+    local selected = ctx and ctx.selectedTextEditorTarget
+    if type(selected) == "table" and (not tab or selected.tab == tab) then
+        return selected.frameType, selected.frameType == "group" and A._TextGroupScopeName(selected.unit) or selected.unit, selected.tab, A._TextSlotName(selected.slot)
+    end
+    if ctx and ctx.lastTextArea and (not tab or ctx.lastTextArea == tab) then
+        return ctx.lastTextFrameType, ctx.lastTextFrameType == "group" and A._TextGroupScopeName(ctx.lastTextUnit) or ctx.lastTextUnit, ctx.lastTextArea, A._TextSlotName(ctx.lastTextSlot)
+    end
+    return nil
+end
+
+function A._EnumAllowsValue(setting, value)
+    local values = setting and setting.values
+    if type(values) ~= "table" then return false end
+    for i = 1, #values do
+        if values[i] == value then return true end
+    end
+    return false
+end
+
+function A._TextSlotDropdownValueForText(setting, text)
+    local aliases = {
+        { "current max percent", "CURMAXPERCENT" },
+        { "current maximum percent", "CURMAXPERCENT" },
+        { "current max percentage", "CURMAXPERCENT" },
+        { "current maximum percentage", "CURMAXPERCENT" },
+        { "percent current max", "PERCENTCURMAX" },
+        { "percent current maximum", "PERCENTCURMAX" },
+        { "percent max current", "PERCENTCURMAX" },
+        { "percent maximum current", "PERCENTCURMAX" },
+        { "current and max", "CURMAX" },
+        { "current and maximum", "CURMAX" },
+        { "current/max", "CURMAX" },
+        { "current / max", "CURMAX" },
+        { "current max", "CURMAX" },
+        { "current maximum", "CURMAX" },
+        { "current and percent", "CURPERCENT" },
+        { "current and percentage", "CURPERCENT" },
+        { "current/percent", "CURPERCENT" },
+        { "current / percent", "CURPERCENT" },
+        { "current percent", "CURPERCENT" },
+        { "current percentage", "CURPERCENT" },
+        { "max percent", "MAXPERCENT" },
+        { "maximum percent", "MAXPERCENT" },
+        { "max percentage", "MAXPERCENT" },
+        { "maximum percentage", "MAXPERCENT" },
+        { "percent current", "PERCENTCUR" },
+        { "percentage current", "PERCENTCUR" },
+        { "percent max", "PERCENTMAX" },
+        { "percentage max", "PERCENTMAX" },
+        { "percent maximum", "PERCENTMAX" },
+        { "percentage maximum", "PERCENTMAX" },
+        { "current health", "CURRENT" },
+        { "current hp", "CURRENT" },
+        { "hp current", "CURRENT" },
+        { "health current", "CURRENT" },
+        { "current power", "CURRENT" },
+        { "current mana", "CURRENT" },
+        { "power current", "CURRENT" },
+        { "mana current", "CURRENT" },
+        { "current", "CURRENT" },
+        { "actual", "CURRENT" },
+        { "max health", "MAX" },
+        { "maximum health", "MAX" },
+        { "health max", "MAX" },
+        { "health maximum", "MAX" },
+        { "max hp", "MAX" },
+        { "maximum hp", "MAX" },
+        { "hp max", "MAX" },
+        { "hp maximum", "MAX" },
+        { "max power", "MAX" },
+        { "maximum power", "MAX" },
+        { "power max", "MAX" },
+        { "power maximum", "MAX" },
+        { "max mana", "MAX" },
+        { "maximum mana", "MAX" },
+        { "mana max", "MAX" },
+        { "mana maximum", "MAX" },
+        { "maximum", "MAX" },
+        { "max", "MAX" },
+        { "missing health", "DEFICIT" },
+        { "missing hp", "DEFICIT" },
+        { "health deficit", "DEFICIT" },
+        { "hp deficit", "DEFICIT" },
+        { "deficit", "DEFICIT" },
+        { "missing", "DEFICIT" },
+        { "only %", "PERCENT" },
+        { "% only", "PERCENT" },
+        { "%", "PERCENT" },
+        { "only percent", "PERCENT" },
+        { "only percentage", "PERCENT" },
+        { "just percent", "PERCENT" },
+        { "just percentage", "PERCENT" },
+        { "percent only", "PERCENT" },
+        { "percentage only", "PERCENT" },
+        { "percentage", "PERCENT" },
+        { "percent", "PERCENT" },
+        { "pct", "PERCENT" },
+        { "clear", "NONE" },
+        { "remove", "NONE" },
+        { "removed", "NONE" },
+        { "nothing", "NONE" },
+        { "empty", "NONE" },
+        { "none", "NONE" },
+        { "hidden", "NONE" },
+        { "hide", "NONE" },
+        { "off", "NONE" },
+    }
+    for i = 1, #aliases do
+        local alias, value = aliases[i][1], aliases[i][2]
+        if HasPhrase(text, alias) then
+            if A._EnumAllowsValue(setting, value) then return value end
+            return nil, value
+        end
+    end
+    local value = EnumValueForText(setting, text)
+    if value ~= nil and A._EnumAllowsValue(setting, value) then return value end
+    return nil
+end
+
+function A._ParseTextSlotDropdownShortcut(text)
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if ContainsAny(text, { "dispel overlay", "debuff overlay", "current health only", "on current health only", "on health only" }) then return nil end
+    if ContainsAny(text, { "dark mode", "dark bars", "dark bar", "bar color", "brightness" }) then return nil end
+    if not ContainsAny(text, { "set", "show", "display", "use", "put", "make", "change", "hide", "turn off", "turn on", "create", "create new", "add", "new", "remove", "clear" }) then return nil end
+    local tab = TextSelectorTab(text)
+    local ctxFrame, ctxUnit, ctxTab, ctxSlot = A._SelectedTextTargetFromContext(tab)
+    local contextReference = ContainsAny(text, { "it", "that", "this", "selected", "here", "there", "same", "now" })
+    if not tab and contextReference then tab = ctxTab end
+    if tab ~= "hp" and tab ~= "power" then return nil end
+    local slot = A._TextSlotForDetail(text, tab)
+    if ContainsAny(text, { "offset", "position", "pos", "x", "y", "up", "down", "move", "nudge", "shift", "layer", "size", "font size" }) then return nil end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+    if #groups == 0 and #units == 0 and contextReference and ctxFrame and ctxUnit and ctxTab == tab then
+        if ctxFrame == "group" then
+            groups = { tostring(ctxUnit) }
+        else
+            units = { tostring(ctxUnit) }
+        end
+    end
+    if #groups == 0 and #units == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+    if #groups == 0 and #units == 0 and ctxFrame and ctxUnit and ctxTab == tab then
+        if ctxFrame == "group" then
+            groups = { tostring(ctxUnit) }
+        else
+            units = { tostring(ctxUnit) }
+        end
+    end
+
+    if not slot then
+        if #groups == 1 then
+            slot = A._SelectedTextSlotFromContext("group", groups[1], tab)
+        elseif #units == 1 then
+            slot = A._SelectedTextSlotFromContext("unitframe", units[1], tab)
+        end
+    end
+    if not slot and ctxSlot and ctxTab == tab then slot = ctxSlot end
+
+    local clearAllSlots = slot == nil
+        and ContainsAny(text, { "remove", "clear", "hide", "turn off", "disable", "empty", "none", "off" })
+        and not ContainsAny(text, { "it", "that", "this", "selected", "here" })
+    local slots = {}
+    if slot then
+        slots[1] = slot
+    else
+        slots[1], slots[2], slots[3] = "Left", "Center", "Right"
+    end
+
+    local function AddTextSlotChange(out, setting, slotName)
+        if not setting then return nil end
+        local value, invalid = A._TextSlotDropdownValueForText(setting, text)
+        if value ~= nil then
+            out[#out + 1] = {
+                setting = setting,
+                value = value,
+                textArea = tab,
+                textSlot = A._TextSlotLower(slotName),
+                valueLabel = value,
+            }
+        end
+        return invalid
+    end
+
+    local changes = {}
+    local invalidValue
+    for i = 1, #groups do
+        for j = 1, #slots do
+            local keyName = A._TextSlotSettingKey(tab, slots[j])
+            local setting = keyName and Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. keyName)
+            invalidValue = AddTextSlotChange(changes, setting, slots[j]) or invalidValue
+        end
+    end
+    for i = 1, #units do
+        for j = 1, #slots do
+            local keyName = A._TextSlotSettingKey(tab, slots[j])
+            local setting = keyName and Registry and Registry:GetSetting(tostring(units[i]) .. "." .. keyName)
+            invalidValue = AddTextSlotChange(changes, setting, slots[j]) or invalidValue
+        end
+    end
+    if #changes == 0 and invalidValue then
+        return {
+            kind = "unknown",
+            text = "That text-slot value is not available for the selected MSUF dropdown.",
+            status = "failed",
+        }
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and not clearAllSlots then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Multiple matching text-slot dropdown settings",
+            summary = "The command did not identify one concrete text slot, so the Assistant is asking which real slot to change.",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set text slot content",
+        summary = "Changes the registered HP/Power left/center/right text-slot dropdown for the selected unit or group scope.",
+    }
+end
+
+function A._ParseTextSlotOffsetShortcut(text)
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down" }) then return nil end
+    local tab = TextSelectorTab(text)
+    if tab ~= "hp" and tab ~= "power" then return nil end
+    local slot = A._TextSlotForDetail(text, tab)
+    if not slot then return nil end
+
+    local axis = A._DetailOffsetAxis(text)
+    local direction
+    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then
+        direction = "down"
+    elseif ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then
+        direction = "up"
+    else
+        direction = DetectDirection(text, {})
+    end
+    if (direction == "left" or direction == "right") and (slot == "Left" or slot == "Right")
+        and not ContainsAny(text, {
+            "left hp text", "hp left text", "left health text", "health left text", "left power text", "power left text", "left mana text", "mana left text",
+            "right hp text", "hp right text", "right health text", "health right text", "right power text", "power right text", "right mana text", "mana right text",
+            "left slot", "slot left", "right slot", "slot right", "left side", "right side", "left label", "right label",
+        })
+    then
+        return nil
+    end
+    if not axis and direction then
+        axis = (direction == "left" or direction == "right") and "x" or "y"
+    end
+    if not axis then return nil end
+
+    local value
+    local relativeDelta
+    if ContainsAny(text, { "move", "nudge", "shift" }) and direction then
+        relativeDelta = FirstNumber(text) or 10
+        if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
+    else
+        value = FirstNumber(text)
+    end
+    if value == nil and relativeDelta == nil then return nil end
+
+    local prefix = (tab == "hp" and "hpText" or "powerText") .. slot
+    local attr = prefix .. (axis == "x" and "OffsetX" or "OffsetY")
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+
+    if #groups == 0 and #units == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
+    end
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and #groups > 1 then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Multiple matching text-slot offset settings",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set text slot offset",
+        summary = "Changes the registered HP/Power left/center/right text-slot offset slider for the selected unit or group scope.",
+    }
+end
+
 local function TextMoveTogetherIntent(text)
+    if ContainsAny(text, { "individual", "separate", "separately", "each" })
+        and ContainsAny(text, { "hp text", "health text", "power text", "mana text" })
+        and ContainsAny(text, { "unit", "units", "slot", "slots", "text unit", "text units", "text slot", "text slots" })
+    then
+        return true
+    end
     return ContainsAny(text, {
         "move text as one group", "move as one group", "text as one group",
         "move text together", "text move together", "move together",
         "move text per slot", "text per slot", "per slot", "selected slot mode",
         "individual slot", "individual slots", "separate slot", "separate slots",
-        "move text separately", "text separately",
+        "move text separately", "text separately", "individual text unit", "individual text units",
+        "separate text unit", "separate text units", "move individual text", "move each text",
     })
 end
 
 local function TextMoveTogetherValue(text)
+    if ContainsAny(text, { "individual", "separate", "separately", "each" })
+        and ContainsAny(text, { "hp text", "health text", "power text", "mana text" })
+        and ContainsAny(text, { "unit", "units", "slot", "slots", "text unit", "text units", "text slot", "text slots" })
+    then
+        return false
+    end
     if ContainsAny(text, {
         "per slot", "selected slot mode", "individual slot", "individual slots",
         "separate slot", "separate slots", "separately", "text separately",
+        "individual text unit", "individual text units", "separate text unit", "separate text units",
+        "move individual text", "move each text",
     }) then
         return false
     end
@@ -3800,6 +4971,29 @@ local function ParseMenuSelectorState(text)
                     value = TextMoveTogetherValue(text),
                 }, "Set unit text move mode")
             end
+        end
+    end
+
+    local anchorTextTab = TextSelectorTab(text)
+    local anchorTextSlot = TextSelectorSlot(text)
+    if (anchorTextTab == "hp" or anchorTextTab == "power") and TextSelectorIntent(text, anchorTextTab, anchorTextSlot) then
+        local groups = DetectGroups(text)
+        if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
+            return MenuSelectorAction({
+                selector = "group_text",
+                scope = groups[1] or SelectorGroupScope(text),
+                tab = anchorTextTab,
+                slot = anchorTextSlot,
+            }, "Select group text editor state")
+        end
+        local unit = SelectorUnit(text)
+        if unit then
+            return MenuSelectorAction({
+                selector = "unit_text",
+                unit = unit,
+                tab = anchorTextTab,
+                slot = anchorTextSlot,
+            }, "Select unit text editor state")
         end
     end
 
@@ -3918,18 +5112,306 @@ local function ContextUnits(ctx)
     return units
 end
 
+local GROUP_CONTEXT_UNITS = { party = true, raid = true, mythicraid = true }
+
+local function IsGroupContextUnit(unit)
+    return type(unit) == "string" and GROUP_CONTEXT_UNITS[unit] == true
+end
+
+local function ContextGroups(ctx)
+    local groups = {}
+    if ctx and IsGroupContextUnit(ctx.lastUnit) then groups[#groups + 1] = ctx.lastUnit end
+    return groups
+end
+
+local function ShouldUseLastUnitContext(text)
+    return ContainsAny(text, {
+        "it", "that", "this", "das", "same", "again", "wieder", "back", "more", "mehr",
+        "frame", "unitframe", "name", "text", "health", "hp", "power", "width", "height",
+        "size", "alpha", "opacity", "position", "offset", "anchor",
+    })
+end
+
+function A._ParseFollowupAnswer(text, ctx)
+    if not (ctx and type(ctx.lastChangeBundle) == "table") then return nil end
+    if not ContainsAny(text, {
+        "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you set", "last change", "previous change", "what is it now",
+        "what is it set to", "current value", "value now", "show last change",
+    }) then return nil end
+    local key = ctx.lastSetting
+    if type(key) ~= "string" or key == "" then
+        local first = ctx.lastChangeBundle[1]
+        key = first and first.key
+    end
+    local setting = key and Registry and Registry:GetSetting(key) or nil
+    if not setting then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "No previous Assistant setting change is available yet.",
+            summary = "Reports the last Assistant change from context.",
+        }
+    end
+    local value = type(setting.get) == "function" and setting.get() or ctx.lastValue
+    return {
+        kind = "answer",
+        status = "info",
+        text = tostring(setting.label or setting.key or "Last setting") .. " is " .. tostring(value) .. ".",
+        summary = "Reports the last Assistant setting and current value from context.",
+    }
+end
+
 local function BuildFollowup(text, ctx)
     if not (ctx and type(ctx.lastChangeBundle) == "table") then return nil end
-    if not ContainsAny(text, { "too", "also", "same", "auch", "genauso", "das auch", "same for" }) then return nil end
+    local positiveTerms = {
+        "bigger", "larger", "higher", "thicker", "wider", "taller", "increase", "raise", "up", "grow", "stronger",
+        "brighter", "lighter", "more opaque", "more visible",
+        "groesser", "hoeher", "dicker", "breiter", "heller", "hoch",
+    }
+    local negativeTerms = {
+        "smaller", "lower", "thinner", "narrower", "shorter", "less", "decrease", "reduce", "down", "shrink", "weaker",
+        "darker", "dimmer", "more transparent", "less opaque", "fainter",
+        "kleiner", "tiefer", "duenner", "weniger", "dunkler", "runter",
+    }
+    local neutralTerms = {
+        "more", "mehr", "weiter", "further", "farther", "again", "do it again", "same again", "once more", "one more",
+        "another", "repeat", "keep going", "continue", "nochmal", "noch mal",
+    }
+    local oppositeTerms = {
+        "opposite", "opposite way", "other way", "reverse", "reverse it", "undo direction", "andersrum", "umgekehrt",
+    }
+    local reverseCorrectionTerms = {
+        "too much", "too far", "not that much", "went too far", "go back a bit", "back a bit", "a bit back",
+        "zu viel", "zu weit", "etwas zurueck",
+    }
+    local tooPositiveTerms = {
+        "too high", "too big", "too large", "too thick", "too wide", "too tall", "too bright", "too visible", "too opaque",
+        "zu hoch", "zu gross", "zu dick", "zu breit", "zu hell",
+    }
+    local tooNegativeTerms = {
+        "too low", "too small", "too thin", "too narrow", "too short", "too dark", "too transparent", "not visible enough",
+        "zu niedrig", "zu klein", "zu duenn", "zu schmal", "zu dunkel",
+    }
+    local notEnoughTerms = {
+        "not enough", "needs more", "need more", "more still", "still more", "not far enough",
+        "not big enough", "not high enough", "not wide enough", "not visible enough",
+        "nicht genug", "mehr noch",
+    }
+    local replayTerms = {
+        "too", "also", "as well", "same", "same for", "same on", "same to",
+        "do the same", "do that", "do it", "apply that", "apply it", "copy that", "copy it",
+        "auch", "auch fuer", "auch fur", "genauso", "genauso fuer", "genauso fur",
+        "das auch", "mach das", "mach das gleiche", "das gleiche fuer", "das gleiche fur",
+    }
+    local rightIntent = ContainsAny(text, { "right", "rechts" })
+    local leftIntent = ContainsAny(text, { "left", "links" })
+    local upIntent = ContainsAny(text, { "up", "higher", "hoch", "oben", "hoeher" })
+    local downIntent = ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" })
+    local followDirection = rightIntent and "right" or (leftIntent and "left" or (upIntent and "up" or (downIntent and "down" or nil)))
+    local forcePositive = ContainsAny(text, { "more opaque", "less transparent", "more visible", "brighter", "lighter", "heller" })
+    local forceNegative = ContainsAny(text, { "more transparent", "less opaque", "darker", "dimmer", "fainter", "dunkler" })
+    local positiveIntent = forcePositive or (ContainsAny(text, positiveTerms) and not forceNegative)
+    local negativeIntent = forceNegative or (ContainsAny(text, negativeTerms) and not forcePositive)
+    local neutralIntent = ContainsAny(text, neutralTerms)
+    local neutralIncreaseIntent = ContainsAny(text, { "more", "mehr", "weiter", "further", "farther", "once more", "one more", "another", "keep going", "continue" })
+    local oppositeIntent = ContainsAny(text, oppositeTerms)
+    local reverseCorrectionIntent = ContainsAny(text, reverseCorrectionTerms)
+    local tooPositiveIntent = ContainsAny(text, tooPositiveTerms)
+    local tooNegativeIntent = ContainsAny(text, tooNegativeTerms)
+    local notEnoughIntent = ContainsAny(text, notEnoughTerms)
+    local targetReplayIntent = ContainsAny(text, replayTerms)
+    local pureNumberIntent = tostring(text or ""):match("^[-+]?%d+%.?%d*$") ~= nil
+    local exactValueReference = ContainsAny(text, {
+        "it", "that", "this", "last setting", "last value", "actually", "instead", "rather",
+        "no", "nope", "wait", "oops", "set it", "make it", "change it", "use",
+    })
+    local exactValueIntent = pureNumberIntent
+        or ContainsAny(text, { "min", "minimum", "max", "maximum" })
+        or (exactValueReference and FirstNumber(text) ~= nil)
+    local commandIntent = ContainsAny(text, {
+        "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift",
+        "create", "select", "use", "reset", "copy", "open", "import", "export", "rename", "delete", "remove", "switch", "assign",
+    })
+    local explicitFollowupReference = ContainsAny(text, { "it", "that", "this", "same", "do it", "do that", "again", "more", "less", "opposite", "other way" })
+    local bareDirectionalFollowup = ContainsAny(text, {
+        "left", "right", "up", "down",
+        "move left", "move right", "move up", "move down",
+        "nudge left", "nudge right", "nudge up", "nudge down",
+        "shift left", "shift right", "shift up", "shift down",
+    }) and not ContainsAny(text, { "anchor", "attach", "point", "bottom left", "bottom right", "top left", "top right" })
+    local hasIntent = positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
+        or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or exactValueIntent
+        or leftIntent or rightIntent or targetReplayIntent
+    if not hasIntent then return nil end
     local units = DetectUnits(text)
-    if #units == 0 then return nil end
+    local groups = DetectGroups(text)
+
+    local function FollowupSiblingKey(key, direction)
+        key = tostring(key or "")
+        if direction == "left" or direction == "right" then
+            if key:find("Y$") then return (key:gsub("Y$", "X")) end
+            if key:find("X$") then return key end
+        elseif direction == "up" or direction == "down" then
+            if key:find("X$") then return (key:gsub("X$", "Y")) end
+            if key:find("Y$") then return key end
+        end
+        return nil
+    end
+
+    local function FollowupExactValue(setting)
+        if not (setting and setting.type == "number") then return nil end
+        if ContainsAny(text, { "maximum", "max" }) and setting.max ~= nil then return setting.max end
+        if ContainsAny(text, { "minimum", "min" }) and setting.min ~= nil then return setting.min end
+        local value = A._ExplicitNumberValue(text)
+        if value == nil then value = FirstNumber(text) end
+        if value == nil then return nil end
+        if setting.percent == true and value > 1 then value = value / 100 end
+        return value
+    end
+
+    local function FollowupAmount(setting, prevDelta, explicitAmount)
+        local amount = explicitAmount
+        local step = (setting and tonumber(setting.step)) or 1
+        if amount == nil and prevDelta ~= nil and prevDelta ~= 0 then amount = math.abs(prevDelta) end
+        if amount == nil or amount == 0 then amount = step end
+        if explicitAmount == nil and ContainsAny(text, { "a bit", "bit", "a little", "little", "slightly", "tiny", "small step", "etwas" }) then
+            amount = amount / 2
+            if amount < step then amount = step end
+        elseif explicitAmount == nil and ContainsAny(text, { "half", "half as much" }) then
+            amount = amount / 2
+            if amount < step then amount = step end
+        elseif explicitAmount == nil and not reverseCorrectionIntent and ContainsAny(text, { "a lot", "much", "way more", "way less", "far more", "far less", "big step", "large step", "twice", "double" }) then
+            amount = amount * 2
+        end
+        if setting and setting.percent == true and amount > 1 then amount = amount / 100 end
+        return amount
+    end
+
+    if #units == 0 and #groups == 0 and exactValueIntent then
+        local exactChanges = {}
+        for i = 1, #ctx.lastChangeBundle do
+            local prev = ctx.lastChangeBundle[i]
+            local setting = prev and prev.key and Registry:GetSetting(prev.key)
+            local value = FollowupExactValue(setting)
+            if value ~= nil then
+                exactChanges[#exactChanges + 1] = { setting = setting, value = value }
+            end
+        end
+        if #exactChanges > 0 then
+            return {
+                kind = "changes",
+                changes = exactChanges,
+                label = "Set previous numeric value",
+                summary = "Uses the previous Assistant numeric setting as context.",
+            }
+        end
+    end
+
+    if #units == 0 and #groups == 0
+        and (positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
+            or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or leftIntent or rightIntent)
+        and (not commandIntent or explicitFollowupReference or bareDirectionalFollowup)
+    then
+        local repeatChanges = {}
+        for i = 1, #ctx.lastChangeBundle do
+            local prev = ctx.lastChangeBundle[i]
+            local setting = prev and prev.key and Registry:GetSetting(prev.key)
+            if setting and setting.type == "number" then
+                local direction = followDirection or prev.direction
+                local siblingKey = followDirection and FollowupSiblingKey(prev.key, followDirection) or nil
+                local sibling = siblingKey and Registry:GetSetting(siblingKey) or nil
+                if sibling and sibling.type == "number" then setting = sibling end
+                local relativeDelta = nil
+                local prevDelta = tonumber(prev.relativeDelta)
+                local explicitAmount = A._RelativeNumberAmountForText(text)
+                local amount = FollowupAmount(setting, prevDelta, explicitAmount)
+                local previousNegative = (prev.direction == "left" or prev.direction == "down") or (prevDelta ~= nil and prevDelta < 0)
+                local sign = nil
+                if (oppositeIntent or reverseCorrectionIntent) and prevDelta ~= nil and prevDelta ~= 0 then
+                    sign = previousNegative and 1 or -1
+                elseif reverseCorrectionIntent or tooPositiveIntent then
+                    sign = -1
+                elseif tooNegativeIntent then
+                    sign = 1
+                elseif notEnoughIntent and prevDelta ~= nil and prevDelta ~= 0 then
+                    sign = previousNegative and -1 or 1
+                elseif notEnoughIntent then
+                    sign = 1
+                elseif followDirection == "left" or followDirection == "down" then
+                    sign = -1
+                elseif followDirection == "right" or followDirection == "up" then
+                    sign = 1
+                elseif negativeIntent then
+                    sign = -1
+                elseif positiveIntent then
+                    sign = 1
+                elseif neutralIntent and (prevDelta ~= nil or neutralIncreaseIntent) then
+                    sign = previousNegative and -1 or 1
+                end
+                if sign ~= nil then
+                    relativeDelta = amount * sign
+                end
+                if relativeDelta ~= nil then
+                    repeatChanges[#repeatChanges + 1] = { setting = setting, relativeDelta = relativeDelta, direction = direction }
+                end
+            end
+        end
+        if #repeatChanges > 0 then
+            return {
+                kind = "changes",
+                changes = repeatChanges,
+                label = "Repeat previous adjustment",
+                summary = "Uses the previous Assistant numeric adjustment as context.",
+            }
+        end
+    end
+    if #units == 0 and #groups == 0 then return nil end
+    if not targetReplayIntent then return nil end
+
+    local function GlobalScopeForGroup(scope)
+        if scope == "party" then return "gf_party" end
+        if scope == "raid" or scope == "mythicraid" then return "gf_raid" end
+        return scope
+    end
+
+    local function AddReplayTarget(out, settingUnit, frameType, attribute, value)
+        if not (settingUnit and frameType and attribute) then return end
+        local found = Registry:FindSettings({ unit = settingUnit, frameType = frameType, attribute = attribute })
+        if found[1] then
+            out[#out + 1] = { setting = found[1], value = value }
+        end
+    end
+
     local changes = {}
     for i = 1, #ctx.lastChangeBundle do
         local prev = ctx.lastChangeBundle[i]
-        for j = 1, #units do
-            local found = Registry:FindSettings({ unit = units[j], frameType = prev.frameType, attribute = prev.attribute })
-            if found[1] then
-                changes[#changes + 1] = { setting = found[1], value = prev.value }
+        if prev and prev.attribute ~= nil and prev.value ~= nil then
+            for j = 1, #units do
+                local targetFrameType = prev.frameType == "group" and "unitframe" or prev.frameType
+                AddReplayTarget(changes, units[j], targetFrameType, prev.attribute, prev.value)
+            end
+            for j = 1, #groups do
+                local scope = groups[j]
+                local targetFrameType = prev.frameType == "unitframe" and "group" or prev.frameType
+                local settingUnit = scope
+                if targetFrameType == "globalBars" or targetFrameType == "fonts" then
+                    settingUnit = GlobalScopeForGroup(scope)
+                end
+                AddReplayTarget(changes, settingUnit, targetFrameType, prev.attribute, prev.value)
+            end
+        end
+    end
+    if #changes == 0 then
+        for i = 1, #ctx.lastChangeBundle do
+            local prev = ctx.lastChangeBundle[i]
+            if prev and prev.attribute ~= nil and prev.value ~= nil and (prev.frameType == "unitframe" or prev.frameType == "group") then
+                for j = 1, #units do
+                    AddReplayTarget(changes, units[j], "unitframe", prev.attribute, prev.value)
+                end
+                for j = 1, #groups do
+                    AddReplayTarget(changes, groups[j], "group", prev.attribute, prev.value)
+                end
             end
         end
     end
@@ -3967,6 +5449,10 @@ local function ParseSetting(text, ctx)
     local movementIntent = direction and ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y" }) and not ContainsAny(text, { "anchor" })
     local attr = movementIntent and ((direction == "left" or direction == "right") and "offsetX" or "offsetY") or DetectAttribute(text, frameType)
     if not attr then return nil end
+    local useLastUnit = ShouldUseLastUnitContext(text)
+    if useLastUnit and frameType == "unitframe" and ctx and IsGroupContextUnit(ctx.lastUnit) then
+        frameType = "group"
+    end
 
     local units = {}
     if frameType == "group" then
@@ -3974,8 +5460,12 @@ local function ParseSetting(text, ctx)
     else
         units = DetectUnits(text)
     end
-    if #units == 0 and (HasPhrase(text, "it") or HasPhrase(text, "that") or HasPhrase(text, "das") or HasPhrase(text, "more") or HasPhrase(text, "mehr")) then
-        units = ContextUnits(ctx)
+    if #units == 0 and useLastUnit then
+        if frameType == "group" then
+            units = ContextGroups(ctx)
+        else
+            units = ContextUnits(ctx)
+        end
     end
 
     local value
@@ -4024,18 +5514,9 @@ local function ParseSetting(text, ctx)
     }
 end
 
-function A.Parse(text)
-    local raw = Trim(text)
-    local normalized = Normalize(raw)
-    local ctx = A.GetContext and A.GetContext() or {}
-    if normalized == "" then return { kind = "empty" } end
-    if ContainsAny(normalized, { "undo", "undo that", "undo last", "rueckgaengig" }) then
-        return { kind = "undo" }
-    end
-    if ContainsAny(normalized, { "redo", "redo last" }) then
-        return { kind = "redo" }
-    end
-    local parsed = ParseGuidedSetupFollowup(normalized, ctx)
+function A._ParsePipelineWorkflow(normalized, raw, ctx)
+    return ParseGuidedSetupFollowup(normalized, ctx)
+        or A._ParseFollowupAnswer(normalized, ctx)
         or BuildFollowup(normalized, ctx)
         or BuildBooleanCorrection(normalized, ctx)
         or ParseWorkflowLifecycle(normalized)
@@ -4045,7 +5526,12 @@ function A.Parse(text)
         or ParseAuraGroupCategoryBlacklist(normalized)
         or ParseAuraBlacklist(normalized, raw)
         or ParseClassPowerRootToggle(normalized)
+        or A._ParseClassPowerMoveShortcut(normalized)
         or ParseGameplayRootToggle(normalized)
+        or A._ParseGameplayBooleanShortcut(normalized)
+        or A._ParseGameplayAnchorShortcut(normalized)
+        or A._ParseGameplayNumberShortcut(normalized)
+        or A._ParseGameplayMoveShortcut(normalized)
         or ParsePresetWorkflow(normalized)
         or ParseScopedHelp(normalized)
         or ParseDashboardPanelAction(normalized)
@@ -4053,17 +5539,31 @@ function A.Parse(text)
         or ParseSupportWorkflow(normalized)
         or ParseDiagnostic(normalized)
         or ParseMenuWindowAction(normalized)
+        or ParseUnitCopyScopeState(normalized)
+end
+
+function A._ParsePipelineGeometry(normalized, raw)
+    return A._ParseTextSlotOffsetShortcut(normalized)
+        or ParseUnitDetailMove(normalized)
+        or ParseGroupDetailMove(normalized)
         or ParseUnsupportedDetailShortcut(normalized)
         or ParseScopedOnlyOverride(normalized, raw)
         or ParseGroupFrameColorMode(normalized)
+        or A._ParseTextFontSizeShortcut(normalized)
+        or A._ParseTextLayerShortcut(normalized)
+        or A._ParseTextSlotDropdownShortcut(normalized)
         or ParseMenuSelectorState(normalized)
         or ParsePortraitDetailShortcut(normalized)
-        or ParseUnitDetailMove(normalized)
         or ParseBorderThicknessShortcut(normalized)
+        or A._ParseTextDetailExactOffset(normalized)
         or ParseUnitDetailOffsetShortcut(normalized)
         or ParseCastbarTextMoveShortcut(normalized)
+        or A._ParseGroupOpacityShortcut(normalized)
         or ParseUnitOpacityShortcut(normalized)
-        or ParseClassPowerAction(normalized)
+end
+
+function A._ParsePipelineFeature(normalized, raw, ctx)
+    return ParseClassPowerAction(normalized)
         or ParseGameplayAction(normalized, raw)
         or ParseDarkModeBrightnessShortcut(normalized)
         or ParseGlobalBarsAction(normalized)
@@ -4083,6 +5583,10 @@ function A.Parse(text)
         or ParseUnitStatusIndicatorReset(normalized)
         or ParseGroupStatusIconReset(normalized)
         or ParseUnitStatusIndicatorMove(normalized)
+end
+
+function A._ParsePipelineFallback(normalized, raw, ctx)
+    return A._ParseGroupAnchorTargetShortcut(normalized)
         or ParseCustomAnchorSet(normalized, raw)
         or ParseCustomAnchorWorkflow(normalized)
         or ParseCustomAnchorClear(normalized)
@@ -4091,6 +5595,29 @@ function A.Parse(text)
         or ParseFontColorAction(normalized, raw)
         or ParseRegistryAlias(normalized, raw)
         or ParseSetting(normalized, ctx)
+end
+
+function A.Parse(text)
+    local raw = Trim(text)
+    local normalized = Normalize(raw)
+    local ctx = A.GetContext and A.GetContext() or {}
+    if normalized == "" then return { kind = "empty" } end
+    local historyAction = A._ParseMenuHistoryAction(normalized)
+    if historyAction then
+        historyAction.raw = raw
+        historyAction.normalized = normalized
+        return historyAction
+    end
+    if ContainsAny(normalized, { "undo", "undo that", "undo last", "rueckgaengig" }) then
+        return { kind = "undo" }
+    end
+    if ContainsAny(normalized, { "redo", "redo last" }) then
+        return { kind = "redo" }
+    end
+    local parsed = A._ParsePipelineWorkflow(normalized, raw, ctx)
+        or A._ParsePipelineGeometry(normalized, raw)
+        or A._ParsePipelineFeature(normalized, raw, ctx)
+        or A._ParsePipelineFallback(normalized, raw, ctx)
     if parsed then
         parsed.raw = raw
         parsed.normalized = normalized

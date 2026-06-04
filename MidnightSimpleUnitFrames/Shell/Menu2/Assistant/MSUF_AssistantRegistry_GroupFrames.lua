@@ -742,6 +742,11 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "growth", "wachstum")
     AddAliasesForUnit(aliases, scope, "growth direction", "wachstumsrichtung")
+    AddAliasesForUnit(aliases, scope, "grow")
+    AddAliasesForUnit(aliases, scope, "to grow")
+    AddAliasesForUnit(aliases, scope, "grow direction")
+    AddAliasesForUnit(aliases, scope, "frames grow")
+    AddAliasesForUnit(aliases, scope, "frames to grow")
     RegisterGroupEnum(scope, "growth", "growth", "Growth Direction", "DOWN", { "DOWN", "UP", "RIGHT", "LEFT" }, {
         down = "DOWN",
         runter = "DOWN",
@@ -906,6 +911,9 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "manual scale", "manuelle skalierung")
+    AddAliasesForUnit(aliases, scope, "scale")
+    AddAliasesForUnit(aliases, scope, "frame scale")
+    AddAliasesForUnit(aliases, scope, "scale percent")
     AddAliasesForUnit(aliases, scope, "frame scale percent")
     RegisterGroupNumber(scope, "frameScaleManual", "frameScaleManual", "Manual Frame Scale", 100, 50, 150, 5, "rebuild", aliases)
 
@@ -1370,7 +1378,6 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "debuff overlay style")
     RegisterGroupEnum(scope, "dispelOverlayStyle", "dispelOverlayStyle", "Dispel Overlay Style", "FULL", GROUP_DISPEL_STYLE_VALUES, {
         full = "FULL",
-        frame = "FULL",
         ["full frame"] = "FULL",
         bottom = "BOTTOM",
         top = "TOP",
@@ -1380,8 +1387,11 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "dispel overlay current health")
+    AddAliasesForUnit(aliases, scope, "dispel overlay current health only")
+    AddAliasesForUnit(aliases, scope, "dispel overlay on current health only")
     AddAliasesForUnit(aliases, scope, "dispel overlay on health")
     AddAliasesForUnit(aliases, scope, "debuff overlay on health")
+    AddAliasesForUnit(aliases, scope, "debuff overlay current health only")
     RegisterGroupBoolean(scope, "dispelOverlayOnHealth", "dispelOverlayOnHealth", "Dispel Overlay On Current Health", true, "visual", aliases)
 
     aliases = {}
