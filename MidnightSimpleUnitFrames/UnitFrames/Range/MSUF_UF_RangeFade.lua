@@ -151,12 +151,24 @@ local function PlainBool(value)
     return nil
 end
 
+-- Override spell IDs are stable for a given talent/spec/spellbook state and only
+-- change on the events that drive RebuildSpells (SPELLS_CHANGED, talent/spec/
+-- trait updates) -- the same signal Blizzard raises for spellbook overrides.
+-- Cache per spellID (false sentinel = "no override") and wipe in RebuildSpells,
+-- so each poll/range check skips a pcall into GetOverrideSpell.
+local spellOverrideCache = {}
 local function SpellOverrideID(spellID)
     if not (spellID and GetOverrideSpell) then return nil end
+    local cached = spellOverrideCache[spellID]
+    if cached ~= nil then
+        return cached or nil
+    end
     local ok, overrideID = pcall(GetOverrideSpell, spellID)
     if ok and type(overrideID) == "number" and overrideID > 0 and overrideID ~= spellID then
+        spellOverrideCache[spellID] = overrideID
         return overrideID
     end
+    spellOverrideCache[spellID] = false
     return nil
 end
 
@@ -223,6 +235,10 @@ local SyncTargetSpells
 local TargetRefresh
 
 local function RebuildSpells()
+    -- Talents/spec/spellbook just changed -> previously cached overrides may no
+    -- longer hold. Drop them before re-picking known spells (SyncTargetSpells,
+    -- called at the end, repopulates the cache through SpellOverrideID).
+    WipeTable(spellOverrideCache)
     local class
     if UnitClass then
         local _
