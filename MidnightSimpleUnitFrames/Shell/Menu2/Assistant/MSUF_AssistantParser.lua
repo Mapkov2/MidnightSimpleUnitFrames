@@ -510,6 +510,32 @@ local function RawCopyProfileName(raw)
         or RawBetween(raw, "duplicate ", " profile")
 end
 
+local function RawRenameProfileNames(raw)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local function splitAfterPrefix(prefix)
+        if lower:sub(1, #prefix) ~= prefix then return nil, nil end
+        local start = #prefix + 1
+        local sepStart, sepEnd = lower:find("%s+to%s+", start)
+        if not sepStart then return nil, nil end
+        return CleanProfileName(raw:sub(start, sepStart - 1)), CleanProfileName(raw:sub(sepEnd + 1))
+    end
+
+    local source, dest = splitAfterPrefix("rename profile ")
+    if source and dest then return source, dest end
+
+    dest = RawAfterPrefix(raw, { "rename current profile to ", "rename profile to " })
+    if dest then return nil, dest end
+
+    source, dest = splitAfterPrefix("rename ")
+    if source and dest then
+        source = CleanProfileName((source:gsub("%s+profile$", "")))
+        return source, dest
+    end
+
+    return nil, nil
+end
+
 local PROFILE_EXPORT_KIND_LABELS = {
     all = "Full profile",
     unitframe = "Unitframes",
@@ -526,6 +552,26 @@ local function ProfileExportKindForText(text)
     if ContainsAny(text, { "group frame", "group frames", "groupframe", "party", "raid", "mythicraid" }) then return "groupframe" end
     if ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames", "player", "target", "focus", "boss", "pet" }) then return "unitframe" end
     return "all"
+end
+
+local function RawAfterLastConnector(raw, connectors)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local bestEnd
+    for i = 1, #(connectors or {}) do
+        local connector = connectors[i]
+        local start = 1
+        while true do
+            local s, e = lower:find(connector, start, true)
+            if not s then break end
+            if not bestEnd or e > bestEnd then bestEnd = e end
+            start = e + 1
+        end
+    end
+    if not bestEnd then return nil end
+    local value = Trim(raw:sub(bestEnd + 1))
+    if value == "" then return nil end
+    return value
 end
 
 local function CleanSpecName(name)
@@ -657,6 +703,125 @@ local function ParseWorkflowLifecycle(text)
     return nil
 end
 
+local function BuildMenuSelectorState(args, label, summary)
+    local action = Registry and Registry:GetAction("set_menu_selector_state")
+    return action and {
+        kind = "action",
+        action = action,
+        args = args,
+        label = label or "Set menu selector state",
+        summary = summary or "Selects or stages a Menu2 UI state.",
+    } or nil
+end
+
+local function ParseProfileStagingState(text, raw)
+    if not ContainsAny(text, { "profile", "profiles", "profil" }) then return nil end
+    local hasStagingIntent = ContainsAny(text, {
+        "field", "input", "text box", "textbox", "staging", "stage", "select", "choose", "set", "fill", "paste into",
+        "turn on", "turn off", "enable", "disable",
+    })
+    if not hasStagingIntent then return nil end
+
+    if ContainsAny(text, { "export kind", "export type", "export dropdown", "profile export kind", "profile export type" }) then
+        return BuildMenuSelectorState({
+            selector = "profile_staging",
+            field = "profileExportKind",
+            kind = ProfileExportKindForText(text),
+        }, "Select profile export kind", "Selects the Profiles export-kind dropdown without immediately exporting.")
+    end
+
+    if ContainsAny(text, { "import and create new profile", "import create new", "new profile import", "new-profile import", "import into new profile", "create new profile import" }) then
+        local value = DetectBoolean(text)
+        if value == nil then value = not ContainsAny(text, { "off", "disable", "disabled", "current profile", "active profile" }) end
+        return BuildMenuSelectorState({
+            selector = "profile_staging",
+            field = "profileImportCreateNew",
+            value = value,
+        }, "Set profile import mode", "Sets the Profiles import-and-create-new-profile toggle.")
+    end
+
+    if ContainsAny(text, { "new profile name", "new-profile name", "import new profile name", "import profile name" })
+        and ContainsAny(text, { "import", "new profile", "new-profile" })
+    then
+        local value = CleanProfileName(RawAfterLastConnector(raw, { " to ", " as ", " named ", " called ", " name ", " value " }))
+        if value then
+            return BuildMenuSelectorState({
+                selector = "profile_staging",
+                field = "profileImportNewName",
+                value = value,
+            }, "Set profile import new-profile name", "Stages the Profiles new-profile import name field.")
+        end
+    end
+
+    if ContainsAny(text, { "profile string", "import string", "profile import string" })
+        and ContainsAny(text, { "field", "input", "text box", "textbox", "stage", "staging", "set", "fill", "paste into" })
+    then
+        local value = RawAfterLastConnector(raw, { " to ", " with ", " value ", " text ", " string ", " paste " })
+        if value then
+            return BuildMenuSelectorState({
+                selector = "profile_staging",
+                field = "profileString",
+                value = value,
+            }, "Set profile string field", "Stages the Profiles profile-string field without importing.")
+        end
+    end
+
+    if ContainsAny(text, { "profile name field", "profile name input", "create copy name", "create/copy name", "profile create name", "profile copy name", "profile name for create", "profile name for copy" }) then
+        local value = CleanProfileName(RawAfterLastConnector(raw, { " to ", " as ", " named ", " called ", " name ", " value " }))
+        if value then
+            return BuildMenuSelectorState({
+                selector = "profile_staging",
+                field = "profileCreateCopyName",
+                value = value,
+            }, "Set profile create/copy name", "Stages the Profiles create/copy name field.")
+        end
+    end
+
+    return nil
+end
+
+local function ParseGroupCopyScopeState(text)
+    if not ContainsAny(text, { "group copy", "group frame copy", "group frames copy", "copy category", "copy categories", "copy scope", "copy scopes" }) then return nil end
+    if not ContainsAny(text, { "category", "categories", "scope", "scopes" }) then return nil end
+
+    if ContainsAny(text, { "all categories", "select all", "turn on all", "enable all" })
+        or (ContainsAny(text, { "all" }) and ContainsAny(text, { "turn on", "enable", "select" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "group_copy_scope",
+            command = "all",
+        }, "Select all group copy categories", "Sets every Group Frames copy-popup category checkbox on.")
+    end
+    if ContainsAny(text, { "no categories", "none", "select none", "clear categories", "turn off all", "disable all" })
+        or (ContainsAny(text, { "clear", "disable" }) and ContainsAny(text, { "category", "categories", "scope", "scopes" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "group_copy_scope",
+            command = "none",
+        }, "Clear group copy categories", "Sets every Group Frames copy-popup category checkbox off.")
+    end
+
+    local matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS)
+    if #matches == 0 then return nil end
+    if ContainsAny(text, { "only", "only these", "just" }) then
+        return BuildMenuSelectorState({
+            selector = "group_copy_scope",
+            command = "only",
+            categories = matches,
+        }, "Select only group copy categories", "Sets the Group Frames copy-popup categories to exactly the requested category set.")
+    end
+
+    local value = DetectBoolean(text)
+    if value == nil then
+        if ContainsAny(text, { "exclude", "without", "remove", "disable" }) then value = false else value = true end
+    end
+    return BuildMenuSelectorState({
+        selector = "group_copy_scope",
+        category = matches[1],
+        value = value,
+    }, "Set group copy category", "Sets one Group Frames copy-popup category checkbox.")
+end
+
 local function ParseProfile(text, raw)
     local rawText = tostring(raw or "")
     local startIndex, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
@@ -776,7 +941,8 @@ local function ParseProfile(text, raw)
     end
 
     if ContainsAny(text, { "rename", "umbenennen", "profile rename" }) then
-        local source, dest = text:match("rename%s+profile%s+(.+)%s+to%s+(.+)$")
+        local source, dest = RawRenameProfileNames(rawText)
+        if not source and not dest then source, dest = text:match("rename%s+profile%s+(.+)%s+to%s+(.+)$") end
         if not source then source, dest = text:match("rename%s+(.+)%s+profile%s+to%s+(.+)$") end
         if not source then source, dest = text:match("rename%s+(.+)%s+to%s+(.+)$") end
         if not source then dest = text:match("rename%s+current%s+profile%s+to%s+(.+)$") or text:match("rename%s+profile%s+to%s+(.+)$") end
@@ -822,22 +988,11 @@ local function ParseProfile(text, raw)
             } or nil
         end
 
-        local sourceOnly = text:match("^copy%s+profile%s+(.+)$") or text:match("^duplicate%s+profile%s+(.+)$")
-        sourceOnly = CleanProfileName(sourceOnly)
-        if sourceOnly and not text:match("%s+to%s+") then
-            local action = Registry and Registry:GetAction("start_profile_copy_flow")
-            return action and {
-                kind = "action",
-                action = action,
-                args = { source = sourceOnly },
-                label = "Start profile copy flow",
-                summary = "Asks for the missing destination profile name.",
-            } or nil
-        end
-
-        local name = RawAfterPrefix(rawText, { "copy current profile to ", "copy profile to " })
+        local name = RawCopyProfileName(rawText)
             or text:match("copy%s+current%s+profile%s+to%s+(.+)$")
             or text:match("copy%s+profile%s+to%s+(.+)$")
+            or text:match("copy%s+profile%s+(.+)$")
+            or text:match("duplicate%s+profile%s+(.+)$")
             or text:match("duplicate%s+(.+)%s+profile$")
         name = CleanProfileName(name)
         if name then
@@ -849,6 +1004,26 @@ local function ParseProfile(text, raw)
                 confirmRequired = true,
                 label = "Copy current profile",
                 summary = "Copies the active profile to a new profile name.",
+            } or nil
+        end
+
+        local sourceOnly = RawAfterPrefix(rawText, {
+                "copy from profile ",
+                "copy existing profile ",
+                "copy source profile ",
+            })
+            or text:match("^copy%s+from%s+profile%s+(.+)$")
+            or text:match("^copy%s+existing%s+profile%s+(.+)$")
+            or text:match("^copy%s+source%s+profile%s+(.+)$")
+        sourceOnly = CleanProfileName(sourceOnly)
+        if sourceOnly and not text:match("%s+to%s+") then
+            local action = Registry and Registry:GetAction("start_profile_copy_flow")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = sourceOnly },
+                label = "Start profile copy flow",
+                summary = "Asks for the missing destination profile name.",
             } or nil
         end
     end
@@ -1526,6 +1701,75 @@ local function ParseCustomAnchorWorkflow(text)
     } or nil
 end
 
+local function CleanCustomAnchorFrameName(name)
+    name = Trim(tostring(name or ""))
+    name = name:gsub("[\"'`]", "")
+    name = name:gsub("^frame%s+", "")
+    name = name:gsub("^name%s+", "")
+    name = name:gsub("^named%s+", "")
+    name = name:gsub("^called%s+", "")
+    name = name:gsub("^to%s+", "")
+    name = name:gsub("^as%s+", "")
+    name = name:gsub("[%s%.%,;:!%?]+$", "")
+    name = Trim(name)
+    if name == "" then return nil end
+    local lower = Normalize(name)
+    if lower == "none" or lower == "free" or lower == "clear" or lower == "default" or lower == "global" then return "" end
+    return name
+end
+
+local function RawCustomAnchorFrameName(raw)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local connectors = { " to ", " as ", " named ", " called ", " frame ", " name " }
+    local bestEnd
+    for i = 1, #connectors do
+        local start = 1
+        while true do
+            local s, e = lower:find(connectors[i], start, true)
+            if not s then break end
+            if not bestEnd or e > bestEnd then bestEnd = e end
+            start = e + 1
+        end
+    end
+    if bestEnd then return CleanCustomAnchorFrameName(raw:sub(bestEnd + 1)) end
+    return nil
+end
+
+local function ParseCustomAnchorSet(text, raw)
+    if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
+    if not ContainsAny(text, { "set", "change", "use", "assign", "write", "apply" }) then return nil end
+    local frameName = RawCustomAnchorFrameName(raw)
+    if frameName == nil then return nil end
+
+    local groups = DetectGroups(text)
+    if #groups > 0 then
+        local changes = {}
+        for i = 1, #groups do
+            local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. ".customAnchorFrame")
+            if setting then changes[#changes + 1] = { setting = setting, value = frameName } end
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = "Set group custom anchor frame",
+            summary = "Writes the Group Layout custom anchor frame name directly, matching the custom anchor text box result.",
+        }
+    end
+
+    local units = DetectUnits(text)
+    if #units == 0 then return nil end
+    local setting = Registry and Registry:GetSetting(units[1] .. ".anchorFrameName")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = frameName } },
+        label = "Set unit custom anchor frame",
+        summary = "Writes the Unit Frame custom anchor frame name directly, matching the custom anchor text box result.",
+    }
+end
+
 local function ParseCustomAnchorClear(text)
     if not ContainsAny(text, { "clear", "remove", "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
     if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
@@ -1681,6 +1925,65 @@ local function ParseDashboardPanelAction(text)
         args = { panel = panel, open = open },
         label = (open == false and "Close " or (open == nil and "Toggle " or "Open ")) .. label,
         summary = "Controls the persisted Dashboard panel disclosure state.",
+    } or nil
+end
+
+local NAV_SECTION_TEXT_TARGETS = {
+    { section = "groupframes", label = "Group Frames", terms = { "group frames", "groupframes", "raid frames", "party frames", "group frame", "groups" } },
+    { section = "unitframes", label = "Frames", terms = { "frames", "unitframes", "unit frames", "unit frame", "frame list" } },
+    { section = "globalstyle", label = "Appearance", terms = { "appearance", "global style", "globalstyle", "style section", "look section" } },
+    { section = "modules", label = "Advanced", terms = { "advanced", "modules", "module section", "advanced menu" } },
+    { section = "auras", label = "Auras", terms = { "auras", "aura section", "buffs section", "debuffs section" } },
+}
+
+local function NavSectionForText(text)
+    for i = 1, #NAV_SECTION_TEXT_TARGETS do
+        local spec = NAV_SECTION_TEXT_TARGETS[i]
+        if ContainsAny(text, spec.terms) then return spec.section, spec.label end
+    end
+    return nil, nil
+end
+
+local function ParseNavRailAction(text)
+    if ContainsAny(text, { "search intro", "ask msuf intro", "assistant search intro", "search help intro" }) then
+        local command
+        if ContainsAny(text, { "hide", "close", "dismiss", "mark seen", "mark as seen", "dont show" }) then
+            command = "seen"
+        elseif ContainsAny(text, { "reset", "show again", "next time" }) then
+            command = "reset"
+        elseif ContainsAny(text, { "show", "open" }) then
+            command = "show"
+        end
+        if not command then return nil end
+        local action = Registry and Registry:GetAction("set_nav_search_intro")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { command = command },
+            label = "Set search intro",
+            summary = "Controls the NavRail search intro state.",
+        } or nil
+    end
+
+    if not ContainsAny(text, { "navigation section", "nav section", "sidebar section", "left nav section", "section", "navigation group", "nav group", "sidebar group" }) then return nil end
+    if not ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle" }) then return nil end
+    local section, label = NavSectionForText(text)
+    if not section then return nil end
+    local open
+    if ContainsAny(text, { "close", "hide", "collapse" }) then
+        open = false
+    elseif ContainsAny(text, { "toggle" }) then
+        open = nil
+    else
+        open = true
+    end
+    local action = Registry and Registry:GetAction("set_nav_section")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { section = section, open = open },
+        label = (open == false and "Close " or (open == nil and "Toggle " or "Open ")) .. label .. " navigation section",
+        summary = "Controls the NavRail section disclosure state.",
     } or nil
 end
 
@@ -2810,6 +3113,41 @@ local function ParseGlobalBarsAction(text)
     return nil
 end
 
+local function ParseDarkModeBrightnessShortcut(text)
+    if not ContainsAny(text, { "dark mode", "dark bars", "dark bar", "dark mode bar color", "dark bar brightness" }) then return nil end
+    if not ContainsAny(text, {
+        "lighter", "brighter", "brighten", "heller",
+        "darker", "darken", "dunkler", "super dark", "very dark", "black", "almost black",
+        "brightness", "bar color",
+    }) then
+        return nil
+    end
+    local setting = Registry and Registry:GetSetting("general.darkBarGray")
+    if not setting then return nil end
+
+    local value
+    local relativeDelta
+    local amount = FirstNumber(text)
+    if amount ~= nil and ContainsAny(text, { "to", "set", "value" }) then
+        value = amount > 1 and (amount / 100) or amount
+    elseif ContainsAny(text, { "super dark", "very dark", "almost black", "black" }) then
+        value = 0.01
+    elseif ContainsAny(text, { "lighter", "brighter", "brighten", "heller" }) then
+        local fallback = ContainsAny(text, { "bit", "a bit", "slightly", "little", "etwas" }) and 0.03 or 0.08
+        relativeDelta = amount and (amount > 1 and amount / 100 or amount) or fallback
+    elseif ContainsAny(text, { "darker", "darken", "dunkler" }) then
+        local fallback = ContainsAny(text, { "bit", "a bit", "slightly", "little", "etwas" }) and 0.03 or 0.08
+        relativeDelta = -((amount and (amount > 1 and amount / 100 or amount)) or fallback)
+    end
+    if value == nil and relativeDelta == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = "Set dark mode bar color",
+        summary = "Adjusts the real Colors > Unitframe Global Coloring dark-mode bar color slider.",
+    }
+end
+
 local function ParseCastbarPreviewAction(text)
     if not ContainsAny(text, { "test", "preview", "show preview" }) then return nil end
     if not ContainsAny(text, { "castbar", "cast bar" }) then return nil end
@@ -3275,6 +3613,305 @@ local function ParseUnitOpacityShortcut(text)
     }
 end
 
+local function GroupColorModeScopes(text)
+    local scopes = {}
+    local explicitGroupGeneric = ContainsAny(text, { "group frames", "group frame", "gruppenframes", "groups" })
+    local explicitNamed = false
+    if ContainsAny(text, { "party", "party frame", "party frames", "partyframe" }) then AddUnique(scopes, "party"); explicitNamed = true end
+    if ContainsAny(text, { "mythic raid", "mythicraid", "mythic raid frame", "mythic raid frames", "mythicraidframe" }) then AddUnique(scopes, "mythicraid"); explicitNamed = true end
+    if ContainsAny(text, { "raid", "raid frame", "raid frames", "raidframe" }) and not ContainsAny(text, { "mythic raid", "mythicraid", "mythicraidframe" }) then
+        AddUnique(scopes, "raid")
+        explicitNamed = true
+    end
+    if not explicitNamed and explicitGroupGeneric then
+        return { "party", "raid", "mythicraid" }
+    end
+    if #scopes == 0 then
+        local detected = DetectGroups(text)
+        for i = 1, #detected do AddUnique(scopes, detected[i]) end
+    end
+    return scopes
+end
+
+local function GroupBarColorModeForText(text)
+    local bool = DetectBoolean(text)
+    if ContainsAny(text, { "class color", "class colors", "class colored", "class mode" }) then
+        return bool == false and "GLOBAL" or "CLASS"
+    end
+    if ContainsAny(text, { "gradient", "health gradient" }) then return bool == false and "GLOBAL" or "GRADIENT" end
+    if ContainsAny(text, { "custom", "manual" }) then return bool == false and "GLOBAL" or "CUSTOM" end
+    if ContainsAny(text, { "dark mode", "dark bars", "dark" }) then return bool == false and "GLOBAL" or "dark" end
+    if ContainsAny(text, { "unified", "unified color", "unified bars" }) then return bool == false and "GLOBAL" or "unified" end
+    if ContainsAny(text, { "global", "global style", "inherit", "default" }) then return "GLOBAL" end
+    return nil
+end
+
+local function ParseGroupFrameColorMode(text)
+    if not ContainsAny(text, {
+        "group frames", "group frame", "gruppenframes", "party", "party frame", "party frames", "partyframe",
+        "raid", "raid frame", "raid frames", "raidframe", "mythic raid", "mythicraid",
+    }) then
+        return nil
+    end
+    if not ContainsAny(text, {
+        "bar color mode", "health bar color mode", "class color mode", "health color mode",
+        "group bar style", "bar mode", "class colored health", "class color health",
+    }) then
+        return nil
+    end
+    local value = GroupBarColorModeForText(text)
+    if not value then return nil end
+    local scopes = GroupColorModeScopes(text)
+    if #scopes == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local scope = scopes[i]
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scope) .. ".gfBarMode")
+        if setting then changes[#changes + 1] = { setting = setting, value = value } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set group-frame bar color mode",
+        summary = "Changes the real Group Frames > Health & Text Bar Color Mode instead of the global unitframe bar mode.",
+    }
+end
+
+local MENU_SELECTOR_VERBS = {
+    "select", "choose", "pick", "open", "show", "switch to", "go to", "focus", "edit",
+}
+
+local function HasMenuSelectorVerb(text)
+    return ContainsAny(text, MENU_SELECTOR_VERBS)
+end
+
+local function MenuSelectorAction(args, label, summary)
+    local action = Registry and Registry:GetAction("set_menu_selector_state")
+    return action and {
+        kind = "action",
+        action = action,
+        args = args,
+        label = label or "Set menu selector state",
+        summary = summary or "Selects a visible Menu2 tab, dropdown entry, or editor slot without changing the underlying setting value.",
+    } or nil
+end
+
+local function SelectorUnit(text)
+    local units = DetectUnits(text)
+    return units[1] or CurrentPageUnit()
+end
+
+local function SelectorGroupScope(text)
+    local groups = DetectGroups(text)
+    if groups[1] then return groups[1] end
+    if M and (M.gfScope == "party" or M.gfScope == "raid" or M.gfScope == "mythicraid") then return M.gfScope end
+    return "party"
+end
+
+local function TextSelectorTab(text)
+    if ContainsAny(text, { "advanced text tab", "advanced text", "text advanced", "text layers", "advanced tab" }) then return "advanced" end
+    if ContainsAny(text, { "power text tab", "power text", "mana text", "power tab", "mana tab", "power", "mana" }) then return "power" end
+    if ContainsAny(text, { "hp text tab", "health text tab", "hp text", "health text", "hp tab", "health tab", "hp", "health" }) then return "hp" end
+    if ContainsAny(text, { "name text tab", "name text", "name tab", "name" }) then return "name" end
+    return nil
+end
+
+local function TextSelectorSlot(text)
+    if ContainsAny(text, { "left slot", "slot left", "left text slot" }) or (HasPhrase(text, "left") and ContainsAny(text, { "slot", "text slot" })) then return "left" end
+    if ContainsAny(text, { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", "center text slot", "centre text slot", "middle text slot" })
+        or ((HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle")) and ContainsAny(text, { "slot", "text slot" }))
+    then
+        return "center"
+    end
+    if ContainsAny(text, { "right slot", "slot right", "right text slot" }) or (HasPhrase(text, "right") and ContainsAny(text, { "slot", "text slot" })) then return "right" end
+    return nil
+end
+
+local function TextSelectorIntent(text, tab, slot)
+    if ContainsAny(text, {
+        "text area", "text tab", "text tabs", "text editor", "text slot", "slot selector", "slot dropdown",
+        "selected slot", "left slot", "center slot", "centre slot", "right slot",
+    }) then
+        return true
+    end
+    return tab and ContainsAny(text, { "name text", "hp text", "health text", "power text", "mana text" }) and (HasPhrase(text, "tab") or slot ~= nil)
+end
+
+local function TextMoveTogetherIntent(text)
+    return ContainsAny(text, {
+        "move text as one group", "move as one group", "text as one group",
+        "move text together", "text move together", "move together",
+        "move text per slot", "text per slot", "per slot", "selected slot mode",
+        "individual slot", "individual slots", "separate slot", "separate slots",
+        "move text separately", "text separately",
+    })
+end
+
+local function TextMoveTogetherValue(text)
+    if ContainsAny(text, {
+        "per slot", "selected slot mode", "individual slot", "individual slots",
+        "separate slot", "separate slots", "separately", "text separately",
+    }) then
+        return false
+    end
+    local value = DetectBoolean(text)
+    if value ~= nil then return value end
+    return true
+end
+
+local function StatusSelectorTab(text)
+    if ContainsAny(text, { "advanced status tab", "advanced status icon tab", "advanced indicator tab", "advanced status controls", "advanced status" }) then return "advanced" end
+    if ContainsAny(text, { "basic status tab", "basic status icon tab", "basic indicator tab", "basic status controls", "basic status" }) then return "basic" end
+    return nil
+end
+
+local function StatusSelectorIntent(text)
+    if ContainsAny(text, {
+        "status tab", "status icon tab", "status indicator tab", "indicator tab",
+        "status selector", "status dropdown", "indicator selector", "indicator dropdown",
+        "status controls", "status icon controls", "selected indicator",
+    }) then
+        return true
+    end
+    return ContainsAny(text, { "indicator", "status icon" })
+end
+
+local function ParseMenuSelectorState(text)
+    if TextMoveTogetherIntent(text) then
+        local textTab = TextSelectorTab(text)
+        if textTab == "hp" or textTab == "power" then
+            local groups = DetectGroups(text)
+            if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
+                return MenuSelectorAction({
+                    selector = "group_text_move_together",
+                    scope = groups[1] or SelectorGroupScope(text),
+                    tab = textTab,
+                    value = TextMoveTogetherValue(text),
+                }, "Set group text move mode")
+            end
+            local unit = SelectorUnit(text)
+            if unit then
+                return MenuSelectorAction({
+                    selector = "unit_text_move_together",
+                    unit = unit,
+                    tab = textTab,
+                    value = TextMoveTogetherValue(text),
+                }, "Set unit text move mode")
+            end
+        end
+    end
+
+    if not HasMenuSelectorVerb(text) then return nil end
+
+    if ContainsAny(text, { "class power color token", "class resource color token", "class power token", "class resource token" }) then
+        local token = ClassPowerColorTokenForText(text)
+        if token then
+            return MenuSelectorAction({ selector = "color_token", kind = "classPower", token = token }, "Select class resource color token")
+        end
+    end
+    if ContainsAny(text, { "power color token", "power token", "power type", "resource type", "resource color token" })
+        and not ContainsAny(text, { "class power", "class resource", "combo point", "combo points" })
+    then
+        local token = PowerColorTokenForText(text)
+        if token then
+            return MenuSelectorAction({ selector = "color_token", kind = "power", token = token }, "Select power color token")
+        end
+    end
+
+    local textTab = TextSelectorTab(text)
+    local textSlot = TextSelectorSlot(text)
+    if textTab and TextSelectorIntent(text, textTab, textSlot) then
+        local groups = DetectGroups(text)
+        if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
+            return MenuSelectorAction({
+                selector = "group_text",
+                scope = groups[1] or SelectorGroupScope(text),
+                tab = textTab,
+                slot = textSlot,
+            }, "Select group text editor state")
+        end
+        local unit = SelectorUnit(text)
+        if unit then
+            return MenuSelectorAction({
+                selector = "unit_text",
+                unit = unit,
+                tab = textTab,
+                slot = textSlot,
+            }, "Select unit text editor state")
+        end
+    end
+
+    if ContainsAny(text, { "spell indicator selector", "spell indicator dropdown", "spell indicator spec", "tracked spell selector", "tracked spells selector", "tracked spell", "multi spec entry", "multi-spec entry" }) then
+        local spec = A.ResolveGroupSpellSpec and A.ResolveGroupSpellSpec(text) or nil
+        local aura, resolvedSpec = A.ResolveGroupSpellAura and A.ResolveGroupSpellAura(spec, text) or nil
+        spec = spec or resolvedSpec
+        if spec or aura then
+            return MenuSelectorAction({
+                selector = "group_spell",
+                scope = SelectorGroupScope(text),
+                spec = spec,
+                aura = aura,
+                text = text,
+            }, "Select group spell indicator editor state")
+        end
+    end
+
+    if ContainsAny(text, { "corner editor slot", "editor slot", "corner slot", "custom spell editor" }) then
+        local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(text) or nil
+        if slot then
+            return MenuSelectorAction({
+                selector = "group_corner",
+                scope = SelectorGroupScope(text),
+                slot = slot.key or slot.value or text,
+                text = text,
+            }, "Select group corner editor slot")
+        end
+    end
+
+    local statusTab = StatusSelectorTab(text)
+    local statusIntent = StatusSelectorIntent(text)
+    if statusIntent then
+        local groups = DetectGroups(text)
+        local groupStatusIcon = GroupStatusIconForText(text)
+        if groups[1] or ContainsAny(text, { "group status", "group indicator", "party indicator", "raid indicator", "mythic raid indicator" }) then
+            if statusTab or groupStatusIcon then
+                return MenuSelectorAction({
+                    selector = "group_status",
+                    scope = groups[1] or SelectorGroupScope(text),
+                    tab = statusTab,
+                    icon = groupStatusIcon,
+                    text = text,
+                }, "Select group status icon editor state")
+            end
+        end
+
+        local unit = SelectorUnit(text)
+        local unitStatus = unit and A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
+        if unit and (statusTab or unitStatus) then
+            return MenuSelectorAction({
+                selector = "unit_status",
+                unit = unit,
+                tab = statusTab,
+                status = unitStatus and unitStatus.value,
+                text = text,
+            }, "Select unit status editor state")
+        end
+
+        if groupStatusIcon then
+            return MenuSelectorAction({
+                selector = "group_status",
+                scope = SelectorGroupScope(text),
+                icon = groupStatusIcon,
+                text = text,
+            }, "Select group status icon editor state")
+        end
+    end
+
+    return nil
+end
+
 local function ContextUnits(ctx)
     local units = {}
     if ctx and type(ctx.lastUnit) == "string" then units[#units + 1] = ctx.lastUnit end
@@ -3309,7 +3946,11 @@ local function BuildBooleanCorrection(text, ctx)
     if not (ctx and type(ctx.lastSetting) == "string") then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
-    if not ContainsAny(text, { "again", "wieder", "doch", "actually", "ne" }) then return nil end
+    if not ContainsAny(text, {
+        "again", "wieder", "doch", "actually", "ne",
+        "it", "that", "this", "back", "back on", "back off",
+        "turn it", "turn that", "same setting", "last setting",
+    }) then return nil end
     local setting = Registry:GetSetting(ctx.lastSetting)
     if not setting or setting.type ~= "boolean" then return nil end
     return {
@@ -3398,6 +4039,7 @@ function A.Parse(text)
         or BuildFollowup(normalized, ctx)
         or BuildBooleanCorrection(normalized, ctx)
         or ParseWorkflowLifecycle(normalized)
+        or ParseProfileStagingState(normalized, raw)
         or ParseProfile(normalized, raw)
         or ParseAuraQuickPreset(normalized)
         or ParseAuraGroupCategoryBlacklist(normalized)
@@ -3407,10 +4049,14 @@ function A.Parse(text)
         or ParsePresetWorkflow(normalized)
         or ParseScopedHelp(normalized)
         or ParseDashboardPanelAction(normalized)
+        or ParseNavRailAction(normalized)
         or ParseSupportWorkflow(normalized)
         or ParseDiagnostic(normalized)
         or ParseMenuWindowAction(normalized)
         or ParseUnsupportedDetailShortcut(normalized)
+        or ParseScopedOnlyOverride(normalized, raw)
+        or ParseGroupFrameColorMode(normalized)
+        or ParseMenuSelectorState(normalized)
         or ParsePortraitDetailShortcut(normalized)
         or ParseUnitDetailMove(normalized)
         or ParseBorderThicknessShortcut(normalized)
@@ -3419,12 +4065,13 @@ function A.Parse(text)
         or ParseUnitOpacityShortcut(normalized)
         or ParseClassPowerAction(normalized)
         or ParseGameplayAction(normalized, raw)
-        or ParseScopedOnlyOverride(normalized, raw)
+        or ParseDarkModeBrightnessShortcut(normalized)
         or ParseGlobalBarsAction(normalized)
         or ParseCastbarGlobalDetail(normalized)
         or ParseCastbarPreviewAction(normalized)
         or ParseScopedOverrideReset(normalized)
         or ParseGuidedSetup(normalized)
+        or ParseGroupCopyScopeState(normalized)
         or ParseGroupCopy(normalized)
         or ParseCopy(normalized)
         or BuildContextReset(normalized, ctx)
@@ -3436,6 +4083,7 @@ function A.Parse(text)
         or ParseUnitStatusIndicatorReset(normalized)
         or ParseGroupStatusIconReset(normalized)
         or ParseUnitStatusIndicatorMove(normalized)
+        or ParseCustomAnchorSet(normalized, raw)
         or ParseCustomAnchorWorkflow(normalized)
         or ParseCustomAnchorClear(normalized)
         or ParseReset(normalized)

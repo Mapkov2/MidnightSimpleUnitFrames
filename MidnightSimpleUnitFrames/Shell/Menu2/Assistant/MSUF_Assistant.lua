@@ -167,6 +167,21 @@ local function FindChoice(text, choices)
     local normalized = NormalizeReply(text)
     local n = tonumber(normalized)
     if n and choices[n] then return choices[n] end
+
+    local withPrefix = normalized:gsub("^option%s+", ""):gsub("^choice%s+", ""):gsub("^select%s+", ""):gsub("^pick%s+", "")
+    n = tonumber(withPrefix)
+    if n and choices[n] then return choices[n] end
+
+    n = tonumber(normalized:match("^(%d+)[a-z]+$"))
+    if n and choices[n] then return choices[n] end
+
+    local wordToNumber = {
+        ["first"] = 1, ["second"] = 2, ["third"] = 3, ["fourth"] = 4, ["fifth"] = 5,
+        ["sixth"] = 6, ["seventh"] = 7, ["eighth"] = 8, ["ninth"] = 9, ["tenth"] = 10,
+    }
+    local choiceIndex = wordToNumber[normalized] or wordToNumber[withPrefix]
+    if choiceIndex and choices[choiceIndex] then return choices[choiceIndex] end
+
     local units = A.Parse and A.Parse("show " .. normalized .. " name")
     local wantedUnit
     if units and type(units.changes) == "table" and units.changes[1] and units.changes[1].setting then

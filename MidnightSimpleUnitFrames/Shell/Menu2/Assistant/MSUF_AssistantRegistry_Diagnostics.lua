@@ -680,6 +680,6 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterTodo("Auras3 remaining advanced work: whitelist-style operations where the UI exposes them beyond the registered filters, blacklists, color controls, and group category blacklists.")
-Registry:RegisterTodo("Profiles remaining work: profile rename is not exposed by the UI helpers, and spec-profile edge cases should keep expanding as new public helpers appear.")
+Registry:RegisterTodo("Profiles remaining work: spec-profile edge cases should keep expanding as new public helpers appear.")
 Registry:RegisterTodo("Preset operations remaining work: add Assistant routes for any future UI preset buttons only after they expose public shared helpers.")
 Registry:RegisterTodo("Diagnostic/setup workflows remaining work: deeper page-specific troubleshooters and richer guided setup branches beyond the registered castbar, unit-frame, group-frame, scoped command-help, and clean-layout setup flows; any future public factory-reset helper should be routed without slash-command execution.")

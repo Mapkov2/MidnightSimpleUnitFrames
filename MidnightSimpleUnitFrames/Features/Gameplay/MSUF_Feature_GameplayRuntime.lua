@@ -573,18 +573,40 @@ do
     MSUF.MSUF_FirstDance_ApplyMasque = ApplyFirstDanceMasque
 end
 
+local GAMEPLAY_FALLBACK_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+
+local function ApplyGameplayFont(fs, path, size, flags)
+    if not (fs and fs.SetFont) then return false end
+    path = path or GAMEPLAY_FALLBACK_FONT
+    size = size or 12
+    flags = flags or "OUTLINE"
+    local safeSet = _G.MSUF_SetFontSafe
+    if type(safeSet) == "function" then
+        return safeSet(fs, path, size, flags) == true
+    end
+    local ok, applied = pcall(fs.SetFont, fs, path, size, flags)
+    if ok and applied ~= false then
+        return true
+    end
+    if path ~= GAMEPLAY_FALLBACK_FONT then
+        ok, applied = pcall(fs.SetFont, fs, GAMEPLAY_FALLBACK_FONT, size, flags)
+        return ok and applied ~= false
+    end
+    return false
+end
+
 local function ApplyFirstDanceFont()
     local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFont("state")
     local g = GetGameplayDB()
     local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
 
     if not danceText then return end
-    danceText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+    ApplyGameplayFont(danceText, path, (size or 24), flags or "OUTLINE")
     danceText:SetTextColor(lr, lg, lb, 1)
     SetTextShadow(danceText, useShadow)
 
     local iconSz = (g and g.firstDanceIconSize) or 40
-    danceCDText:SetFont(path or "Fonts/FRIZQT__.TTF", math_max(10, math.floor(iconSz * 0.45 + 0.5)), "OUTLINE")
+    ApplyGameplayFont(danceCDText, path, math_max(10, math.floor(iconSz * 0.45 + 0.5)), "OUTLINE")
     danceCDText:SetTextColor(1, 1, 1, 1)
     SetTextShadow(danceCDText, useShadow)
 end
@@ -593,7 +615,7 @@ local function ApplyFontToCounter()
     if not timerText and not stateText and not danceText then return end
     if timerText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFont("timer")
-        timerText:SetFont(path or "Fonts/FRIZQT__.TTF", size or 20, flags or "OUTLINE")
+        ApplyGameplayFont(timerText, path, size or 20, flags or "OUTLINE")
         local gdb = GetGameplayDB()
         local tr, tg, tb = NormalizeRGB(gdb and gdb.combatTimerColor, r or 1, g or 1, b or 1)
         timerText:SetTextColor(tr, tg, tb, 1)
@@ -602,7 +624,7 @@ local function ApplyFontToCounter()
 
     if stateText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFont("state")
-        stateText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+        ApplyGameplayFont(stateText, path, (size or 24), flags or "OUTLINE")
         stateText:SetTextColor(r or 1, g or 1, b or 1, 1)
         SetTextShadow(stateText, useShadow)
         ApplyCombatStateDynamicColor()
@@ -753,7 +775,7 @@ EnsureCombatStateText = function()
     stateText:SetPoint("CENTER")
 
     local path, flags, r, gCol, bCol, size, useShadow = GetGameplayFont("state")
-    stateText:SetFont(path or "Fonts/FRIZQT__.TTF", (size or 24), flags or "OUTLINE")
+    ApplyGameplayFont(stateText, path, (size or 24), flags or "OUTLINE")
     local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
     stateText._msufLastState = "dance"
     stateText:SetTextColor(lr, lg, lb, 1)
