@@ -67,7 +67,7 @@ end
 
 -- BUFF PROVIDERS
 local _PROVIDERS = {
-    { key="FORTITUDE",       label="Power Word: Fortitude",  providerClass="PRIEST",     satisfiedBy={[21562]=true},  iconSpell=21562  },
+    { key="FORTITUDE",       label="Power Word: Fortitude",  providerClass="PRIEST",     satisfiedBy={[21562]=true},  satisfiedByNames={["Power Word: Fortitude"]=true}, iconSpell=21562  },
     { key="ARCANE_INTELLECT",label="Arcane Intellect",       providerClass="MAGE",       satisfiedBy={[1459]=true},   iconSpell=1459   },
     { key="MARK_OF_WILD",    label="Mark of the Wild",       providerClass="DRUID",      satisfiedBy={[1126]=true},   iconSpell=1126   },
     { key="BATTLE_SHOUT",    label="Battle Shout",           providerClass="WARRIOR",    satisfiedBy={[6673]=true},   iconSpell=6673   },
@@ -145,6 +145,22 @@ for i = 1, #_PROVIDERS do
     end
 end
 
+-- Optional visible-aura name fallback for provider auras that can surface under
+-- a different runtime spellID. This never queries non-whitelisted alias IDs.
+local _nameToProvider = {}
+local _hasProviderNameFallback = false
+for i = 1, #_PROVIDERS do
+    local names = _PROVIDERS[i].satisfiedByNames
+    if names then
+        for name in next, names do
+            if type(name) == "string" and name ~= "" then
+                _nameToProvider[name] = i
+                _hasProviderNameFallback = true
+            end
+        end
+    end
+end
+
 local _providerHasBuff = {}
 local _providerMinRem  = {}
 local _wantedProviders = {}
@@ -216,6 +232,18 @@ local function _DecodeSpellId(data)
     return tonumber(sid) or 0
 end
 
+local function _DecodeAuraName(data)
+    local name = data and data.name
+    if name == nil then return nil end
+    if _hasCanaccessvalue then
+        if canaccessvalue(name) ~= true then return nil end
+    elseif issecretvalue and issecretvalue(name) == true then
+        return nil
+    end
+    if type(name) == "string" and name ~= "" then return name end
+    return nil
+end
+
 local function _AddProviderAura(idx, data, threshold)
     _providerHasBuff[idx] = true
     if threshold > 0 then
@@ -232,6 +260,73 @@ local function _AddProviderAura(idx, data, threshold)
                 _providerMinRem[idx] = 999999
             end
         end
+    end
+end
+
+local _auraSlotBuffer = {}
+local _auraSlotBufferCount = 0
+local function _CaptureAuraSlots(...)
+    local count = select("#", ...)
+    for i = 1, count do
+        _auraSlotBuffer[i] = select(i, ...)
+    end
+    for i = count + 1, _auraSlotBufferCount do
+        _auraSlotBuffer[i] = nil
+    end
+    _auraSlotBufferCount = count
+
+    local nextToken = _auraSlotBuffer[1]
+    if nextToken ~= nil then
+        if _hasCanaccessvalue then
+            if canaccessvalue(nextToken) ~= true then nextToken = nil end
+        elseif issecretvalue and issecretvalue(nextToken) == true then
+            nextToken = nil
+        end
+    end
+    return count, nextToken
+end
+
+local function _ScanPlayerAuraNamesDirect(threshold, wanted)
+    if not _hasProviderNameFallback then return end
+
+    local needsFallback = false
+    for _, idx in next, _nameToProvider do
+        if wanted[idx] and not _providerHasBuff[idx] then
+            needsFallback = true
+            break
+        end
+    end
+    if not needsFallback then return end
+
+    local CUA = C_UnitAuras
+    if not (CUA and CUA.GetAuraSlots and CUA.GetAuraDataBySlot) then return end
+
+    local continuationToken
+    for _ = 1, 16 do
+        local slotCount, nextToken = _CaptureAuraSlots(CUA.GetAuraSlots("player", "HELPFUL", 32, continuationToken))
+        for i = 2, slotCount do
+            local slot = _auraSlotBuffer[i]
+            local readable = true
+            if _hasCanaccessvalue then
+                readable = canaccessvalue(slot) == true
+            elseif issecretvalue and issecretvalue(slot) == true then
+                readable = false
+            end
+
+            if readable then
+                local data = CUA.GetAuraDataBySlot("player", slot)
+                if data and not (issecretvalue and issecretvalue(data) == true) then
+                    local name = _DecodeAuraName(data)
+                    local idx = name and _nameToProvider[name]
+                    if idx and wanted[idx] and not _providerHasBuff[idx] then
+                        _AddProviderAura(idx, data, threshold)
+                    end
+                end
+            end
+        end
+
+        if nextToken == nil then break end
+        continuationToken = nextToken
     end
 end
 
@@ -255,6 +350,7 @@ local function _ScanPlayerAurasDirect(threshold, wanted)
             end
         end
     end
+    _ScanPlayerAuraNamesDirect(threshold, wanted)
     return true
 end
 
@@ -286,6 +382,7 @@ local function _ScanPlayerAurasCached(threshold, wanted)
     if s._fullScanPending then return false end
     local thr = threshold
     local lookup = _spellToProvider
+    local nameLookup = _nameToProvider
     for _, data in next, s.all do
         local idx = data._msufA2_remProvider
         if idx == nil then
@@ -298,6 +395,12 @@ local function _ScanPlayerAurasCached(threshold, wanted)
                 idx = lookup[sid] or false
             else
                 idx = false
+            end
+            if not idx and _hasProviderNameFallback then
+                local name = _DecodeAuraName(data)
+                if name then
+                    idx = nameLookup[name] or false
+                end
             end
             data._msufA2_remProvider = idx
         end
