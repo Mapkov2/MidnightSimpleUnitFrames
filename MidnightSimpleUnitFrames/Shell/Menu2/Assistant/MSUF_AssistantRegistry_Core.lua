@@ -36,9 +36,9 @@ local UNIT_ALIASES = {
     focus = { "focus", "fokus" },
     pet = { "pet", "begleiter" },
     boss = { "boss", "boss frames", "bossframes" },
-    party = { "party", "group", "group frames", "gruppenframes", "gruppe" },
-    raid = { "raid", "raid frames", "schlachtzug" },
-    mythicraid = { "mythicraid", "mythic raid", "mythic raid frames" },
+    party = { "party", "party frame", "party frames", "partyframe", "group", "group frames", "gruppenframes", "gruppe" },
+    raid = { "raid", "raid frame", "raid frames", "raidframe", "schlachtzug" },
+    mythicraid = { "mythicraid", "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraidframe" },
 }
 A.UnitAliases = UNIT_ALIASES
 A.UnitLabels = UNIT_LABELS

@@ -423,6 +423,18 @@ Registry:RegisterAction({
         local dest = Trim(args and args.name or args and args.destination or "")
         if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
         if dest == "" then return false, "I need the new profile name." end
+        local requested = source
+        local resolve = A.ResolveProfileName
+        if type(resolve) == "function" then
+            local resolved, how = resolve(source)
+            if how == "multiple" then return false, "I found multiple matching source profiles. Please use the exact profile name." end
+            if resolved then source = resolved end
+        end
+        if type(A.ProfileExists) == "function" then
+            if not A.ProfileExists(source) then return false, "Profile " .. tostring(requested) .. " was not found." end
+            if A.ProfileExists(dest) then return false, "Profile " .. tostring(dest) .. " already exists." end
+        end
+        if source == "Default" then return false, "The Default profile cannot be renamed. Copy it to a new profile instead." end
         local rename = _G.MSUF_RenameProfile or _G.MSUF_ProfileRename
         if type(rename) ~= "function" then
             return false, "Profile rename is not available because no shared public rename helper is exposed yet."
@@ -447,5 +459,3 @@ Registry:RegisterAction({
         return true, "Rename profile " .. tostring(source) .. " to what new name? Type the new name or 'cancel'."
     end,
 })
-
-Registry:RegisterTodo("Workflow lifecycle: profile rename remains blocked until a shared public rename helper such as MSUF_RenameProfile is exposed by the core profile system.")

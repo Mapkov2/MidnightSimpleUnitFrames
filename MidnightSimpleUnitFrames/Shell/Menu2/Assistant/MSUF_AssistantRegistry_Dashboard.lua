@@ -47,6 +47,93 @@ local DASHBOARD_PANEL_FIELDS = {
     changelog = { field = "dashboardChangelogOpen", label = "Dashboard changelog" },
 }
 
+local NAV_SECTION_LABELS = {
+    unitframes = "Frames",
+    groupframes = "Group Frames",
+    auras = "Auras",
+    globalstyle = "Appearance",
+    modules = "Advanced",
+}
+
+local NAV_SECTION_ALIASES = {
+    frames = "unitframes",
+    frame = "unitframes",
+    unitframe = "unitframes",
+    unitframes = "unitframes",
+    group = "groupframes",
+    groups = "groupframes",
+    groupframe = "groupframes",
+    groupframes = "groupframes",
+    raidframes = "groupframes",
+    partyframes = "groupframes",
+    aura = "auras",
+    auras = "auras",
+    buffs = "auras",
+    debuffs = "auras",
+    appearance = "globalstyle",
+    global = "globalstyle",
+    globalstyle = "globalstyle",
+    style = "globalstyle",
+    look = "globalstyle",
+    advanced = "modules",
+    module = "modules",
+    modules = "modules",
+}
+
+local function NormalizeKey(text)
+    text = tostring(text or ""):lower()
+    text = text:gsub("&", " and ")
+    text = text:gsub("[^%w]+", "")
+    return text
+end
+
+local function ResolveNavSection(section)
+    if M and type(M.ResolveNavHeader) == "function" then
+        local id, label, item = M.ResolveNavHeader(section)
+        if id then return id, label, item end
+    end
+    local token = NormalizeKey(section)
+    local aliasId = NAV_SECTION_ALIASES[token]
+    local nav = M and type(M.navItems) == "table" and M.navItems or {}
+    for i = 1, #nav do
+        local item = nav[i]
+        if item and item.header then
+            local id = tostring(item.id or item.header)
+            if aliasId == id or token == NormalizeKey(id) or token == NormalizeKey(item.header) then
+                return id, item.header, item
+            end
+        end
+    end
+    if aliasId then return aliasId, NAV_SECTION_LABELS[aliasId] or aliasId, nil end
+    return nil
+end
+
+local function ReflowNavRail()
+    local nav = M and M.nav
+    if nav and type(nav._msuf2NavReflow) == "function" then
+        nav:_msuf2NavReflow()
+        return true
+    end
+    local frame = M and M.frame
+    nav = frame and (frame.nav or frame._msufNavRail or frame._msufNavStack)
+    if nav and type(nav._msuf2NavReflow) == "function" then
+        nav:_msuf2NavReflow()
+        return true
+    end
+    return false
+end
+
+local function PersistSearchIntroSeen(seen)
+    seen = seen and true or false
+    if M and type(M.SetSearchIntroSeen) == "function" then
+        M.SetSearchIntroSeen(seen)
+    elseif M and type(M.PersistMenuStateValue) == "function" then
+        M.PersistMenuStateValue("searchIntroSeen", seen)
+    elseif M then
+        M.searchIntroSeen = seen
+    end
+end
+
 function A.Workflow.SetDashboardPanel(panel, open)
     local spec = DASHBOARD_PANEL_FIELDS[tostring(panel or "")]
     if not spec then return false, "I do not know which Dashboard panel to change." end
@@ -73,6 +160,599 @@ end
 
 function A.Workflow.OpenDashboardPanel(panel)
     return A.Workflow.SetDashboardPanel(panel, true)
+end
+
+function A.Workflow.SetNavSection(section, open)
+    if M and type(M.SetNavHeaderOpen) == "function" then
+        return M.SetNavHeaderOpen(section, open)
+    end
+    local id, label, item = ResolveNavSection(section)
+    if not id then return false, "I do not know that navigation section." end
+    if M and type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    if not M then return false, "Dashboard navigation is not available right now." end
+    M.navHeaderState = type(M.navHeaderState) == "table" and M.navHeaderState or {}
+    if M.navHeaderState[id] == nil then
+        M.navHeaderState[id] = not (item and item.defaultOpen == false)
+    end
+    if open == nil then
+        open = not M.navHeaderState[id]
+    else
+        open = open and true or false
+    end
+    M.navHeaderState[id] = open
+    ReflowNavRail()
+    return true, (open and "Opened " or "Closed ") .. tostring(label or id) .. " navigation section."
+end
+
+function A.Workflow.SetNavSearchIntro(command)
+    command = tostring(command or "show")
+    if command == "hide" or command == "seen" then
+        PersistSearchIntroSeen(true)
+        if M and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
+        return true, "Search intro is marked seen."
+    end
+    if command == "reset" then
+        PersistSearchIntroSeen(false)
+        return true, "Search intro will show again the next time the search box is focused."
+    end
+    if command == "show" then
+        PersistSearchIntroSeen(false)
+        if M and type(M.ShowNavSearchIntro) == "function" then
+            M.ShowNavSearchIntro()
+            return true, "Shown the search intro."
+        end
+        return true, "Search intro will show the next time the search box is focused."
+    end
+    return false, "I do not know which search intro action to run."
+end
+
+local UNIT_PAGE_KEYS = {
+    player = "uf_player",
+    target = "uf_target",
+    focus = "uf_focus",
+    pet = "uf_pet",
+    targettarget = "uf_targettarget",
+    focustarget = "uf_focustarget",
+    boss = "uf_boss",
+}
+
+local GROUP_SCOPE_LABELS = {
+    party = "Party",
+    raid = "Raid",
+    mythicraid = "Mythic Raid",
+}
+
+local TEXT_TAB_LABELS = {
+    name = "Name Text",
+    hp = "HP Text",
+    power = "Power Text",
+    advanced = "Advanced Text",
+}
+
+local TEXT_SLOT_LABELS = {
+    left = "left",
+    center = "center",
+    right = "right",
+}
+
+local STATUS_TAB_LABELS = {
+    basic = "Basic",
+    advanced = "Advanced",
+}
+
+local PROFILE_EXPORT_KIND_LABELS = {
+    all = "Full profile",
+    unitframe = "Unitframes",
+    castbar = "Castbars",
+    colors = "Colors",
+    gameplay = "Gameplay",
+    groupframe = "Group Frames",
+}
+
+local GROUP_COPY_CATEGORY_FALLBACK = {
+    { key = "general", label = "Basics", aliases = { "general", "basics", "basic", "layout", "size", "spacing", "growth", "sort", "sorting" } },
+    { key = "health", label = "Health & Bars", aliases = { "health", "health bars", "bars", "power", "power bar", "dispel overlay" } },
+    { key = "text", label = "Text & Name", aliases = { "text", "name", "health text", "hp text", "text and name" } },
+    { key = "font", label = "Font Override", aliases = { "font", "fonts", "font override", "font color", "font outline" } },
+    { key = "border", label = "Background & Opacity", aliases = { "background", "opacity", "alpha", "transparency", "background opacity" } },
+    { key = "range", label = "Range Fade", aliases = { "range", "range fade", "offline alpha" } },
+    { key = "indicators", label = "Indicators & Status Icons", aliases = { "indicators", "status icons", "status icon", "role icon", "leader icon", "assist icon", "raid marker" } },
+    { key = "auras", label = "Auras", aliases = { "auras", "aura", "buffs", "debuffs" } },
+    { key = "highlight", label = "Highlight & Aggro", aliases = { "highlight", "aggro", "dispel border", "purge border" } },
+    { key = "dstripe", label = "Debuff Stripe", aliases = { "debuff stripe", "stripe" } },
+    { key = "features", label = "Corner/Spell", aliases = { "corner", "corner indicator", "corner indicators", "spell indicator", "spell indicators", "corner spell" } },
+}
+
+local GROUP_STATUS_ICON_SPECS = {
+    roleIcon = "Role Icon",
+    leaderIcon = "Leader Icon",
+    assistIcon = "Assist Icon",
+    raidMarker = "Raid Marker",
+    readyCheckIcon = "Ready Check Icon",
+    summonIcon = "Summon Icon",
+    resurrectIcon = "Resurrection Icon",
+    phaseIcon = "Phase Icon",
+    statusText = "Dead Text",
+    statusGhostText = "Ghost Text",
+    statusAFKText = "AFK Text",
+}
+
+local GROUP_STATUS_ICON_ALIASES = {
+    roleicon = "roleIcon",
+    roleindicator = "roleIcon",
+    leadericon = "leaderIcon",
+    leaderindicator = "leaderIcon",
+    assisticon = "assistIcon",
+    assistanticon = "assistIcon",
+    assistindicator = "assistIcon",
+    raidmarker = "raidMarker",
+    targetmarker = "raidMarker",
+    readycheck = "readyCheckIcon",
+    readycheckicon = "readyCheckIcon",
+    summonicon = "summonIcon",
+    summonindicator = "summonIcon",
+    resurrecticon = "resurrectIcon",
+    resurrectionicon = "resurrectIcon",
+    rezicon = "resurrectIcon",
+    phaseicon = "phaseIcon",
+    phasingicon = "phaseIcon",
+    statustext = "statusText",
+    deadtext = "statusText",
+    ghosttext = "statusGhostText",
+    afktext = "statusAFKText",
+    dndtext = "statusAFKText",
+}
+
+local function UnitLabel(unit)
+    return tostring((A.UnitLabels or {})[unit] or unit or "")
+end
+
+local function GroupLabel(scope)
+    return tostring(GROUP_SCOPE_LABELS[scope] or (A.UnitLabels or {})[scope] or scope or "")
+end
+
+local function ResolveUnitKey(unit)
+    unit = tostring(unit or "")
+    local direct = NormalizeKey(unit)
+    for key in pairs(UNIT_PAGE_KEYS) do
+        if direct == NormalizeKey(key) then return key end
+    end
+    local aliases = A.UnitAliases or {}
+    for key in pairs(UNIT_PAGE_KEYS) do
+        local list = aliases[key] or {}
+        for i = 1, #list do
+            if direct == NormalizeKey(list[i]) then return key end
+        end
+    end
+    return nil
+end
+
+local function ResolveGroupScope(scope)
+    scope = tostring(scope or "")
+    local key = NormalizeKey(scope)
+    if key == "party" or key == "partyframes" or key == "group" or key == "groupframes" then return "party" end
+    if key == "raid" or key == "raidframes" then return "raid" end
+    if key == "mythicraid" or key == "mythicraidframes" or key == "mythic" then return "mythicraid" end
+    local aliases = A.UnitAliases or {}
+    for _, candidate in ipairs({ "party", "raid", "mythicraid" }) do
+        local list = aliases[candidate] or {}
+        for i = 1, #list do
+            if key == NormalizeKey(list[i]) then return candidate end
+        end
+    end
+    return nil
+end
+
+local function ResolveTextTab(tab)
+    tab = NormalizeKey(tab)
+    if tab == "health" or tab == "healthtext" then tab = "hp" end
+    if tab == "mana" or tab == "manatext" or tab == "powertext" then tab = "power" end
+    if tab == "nametext" then tab = "name" end
+    if TEXT_TAB_LABELS[tab] then return tab end
+    return nil
+end
+
+local function ResolveTextSlot(slot)
+    slot = NormalizeKey(slot)
+    if slot == "centre" or slot == "middle" then slot = "center" end
+    if TEXT_SLOT_LABELS[slot] then return slot end
+    return nil
+end
+
+local function ResolveStatusTab(tab)
+    tab = NormalizeKey(tab)
+    if STATUS_TAB_LABELS[tab] then return tab end
+    return nil
+end
+
+local function ResolveProfileExportKind(kind)
+    local workflow = A and A.ProfileWorkflow
+    if workflow and type(workflow.ExportKind) == "function" then
+        local resolved = workflow.ExportKind(kind)
+        if PROFILE_EXPORT_KIND_LABELS[resolved] then return resolved, PROFILE_EXPORT_KIND_LABELS[resolved] end
+    end
+    kind = tostring(kind or "all"):lower()
+    if kind == "full" or kind == "profile" then kind = "all" end
+    if kind == "unitframes" or kind == "unit frame" or kind == "unit frames" then kind = "unitframe" end
+    if kind == "castbars" or kind == "cast bar" or kind == "cast bars" then kind = "castbar" end
+    if kind == "color" then kind = "colors" end
+    if kind == "group" or kind == "groupframes" or kind == "group frame" or kind == "group frames" then kind = "groupframe" end
+    if PROFILE_EXPORT_KIND_LABELS[kind] then return kind, PROFILE_EXPORT_KIND_LABELS[kind] end
+    return "all", PROFILE_EXPORT_KIND_LABELS.all
+end
+
+local function GroupCopyCategories()
+    local cats = M and M.GroupPage and type(M.GroupPage.GF_COPY_CATEGORIES) == "table" and M.GroupPage.GF_COPY_CATEGORIES or nil
+    if cats and #cats > 0 then return cats end
+    return GROUP_COPY_CATEGORY_FALLBACK
+end
+
+local function EnsureGroupCopyScopes()
+    M.gfCopyScopes = type(M.gfCopyScopes) == "table" and M.gfCopyScopes or {}
+    local cats = GroupCopyCategories()
+    for i = 1, #cats do
+        local key = cats[i] and cats[i].key
+        if type(key) == "string" and M.gfCopyScopes[key] == nil then M.gfCopyScopes[key] = true end
+    end
+    return M.gfCopyScopes, cats
+end
+
+local function ResolveGroupCopyCategory(category)
+    local needle = NormalizeKey(category)
+    if needle == "" then return nil end
+    local cats = GroupCopyCategories()
+    for i = 1, #cats do
+        local cat = cats[i]
+        local key = cat and cat.key
+        local label = cat and cat.label
+        if key and (needle == NormalizeKey(key) or needle == NormalizeKey(label)) then return key, label or key end
+        local aliases = cat and cat.aliases
+        for j = 1, #(aliases or {}) do
+            if needle == NormalizeKey(aliases[j]) then return key, label or key end
+        end
+    end
+    return nil
+end
+
+local function ResolveGroupStatusIcon(icon)
+    local key = NormalizeKey(icon)
+    local canonical = GROUP_STATUS_ICON_ALIASES[key]
+    if canonical then return canonical, GROUP_STATUS_ICON_SPECS[canonical] end
+    for value, label in pairs(GROUP_STATUS_ICON_SPECS) do
+        if key == NormalizeKey(value) or key == NormalizeKey(label) then return value, label end
+    end
+    return nil
+end
+
+local function ResolveToken(tokens, token)
+    local key = tostring(token or "")
+    local compact = NormalizeKey(key)
+    for i = 1, #(tokens or {}) do
+        local spec = tokens[i]
+        local value = spec and spec.key
+        local label = spec and (spec.label or spec.text or value)
+        if value and (key == value or compact == NormalizeKey(value) or compact == NormalizeKey(label)) then
+            return value, label
+        end
+    end
+    return nil
+end
+
+local function EnsureMenuState()
+    if M and type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+end
+
+local function PersistScalar(field, value)
+    EnsureMenuState()
+    if M and type(M.PersistMenuStateValue) == "function" then
+        M.PersistMenuStateValue(field, value)
+    elseif M then
+        M[field] = value
+    else
+        return false
+    end
+    return true
+end
+
+local function PersistentTable(field)
+    EnsureMenuState()
+    if M and type(M.GetPersistentMenuStateTable) == "function" then
+        local target = M.GetPersistentMenuStateTable(field)
+        if type(target) == "table" then return target end
+    end
+    if not M then return nil end
+    M[field] = type(M[field]) == "table" and M[field] or {}
+    return M[field]
+end
+
+local function PersistTableValue(field, key, value)
+    local target = PersistentTable(field)
+    if type(target) ~= "table" then return false end
+    target[key] = value
+    return true
+end
+
+local function PersistNestedTableValue(field, key1, key2, value)
+    local target = PersistentTable(field)
+    if type(target) ~= "table" then return false end
+    target[key1] = type(target[key1]) == "table" and target[key1] or {}
+    target[key1][key2] = value
+    return true
+end
+
+local function OpenMenuPage(pageKey)
+    if pageKey and M and type(M.InvalidatePage) == "function" then M.InvalidatePage(pageKey) end
+    if M and type(M.Open) == "function" then
+        return M.Open(pageKey) ~= false
+    end
+    if M and type(M.SelectPage) == "function" then
+        return M.SelectPage(pageKey) ~= false
+    end
+    return true
+end
+
+local function FocusUnitText(unit, tab, slot)
+    if type(_G.MSUF_UFPreview_FocusTextSlot) == "function" then
+        _G.MSUF_UFPreview_FocusTextSlot(unit, tab, slot, true)
+    end
+    if type(_G.MSUF_EM2_SetFocusSelection) == "function" then
+        _G.MSUF_EM2_SetFocusSelection(unit, tab, slot, { source = "assistant", clearHover = true })
+    end
+end
+
+local function FocusGroupText(scope, tab, slot)
+    if M and type(M.FocusGFPreviewTextSlot) == "function" then
+        M.FocusGFPreviewTextSlot(tab, slot, true)
+    end
+    if type(_G.MSUF_EM2_SetFocusSelection) == "function" then
+        local key = scope == "raid" and "gf_raid" or (scope == "mythicraid" and "gf_mythicraid" or "gf_party")
+        _G.MSUF_EM2_SetFocusSelection(key, tab, slot, { source = "assistant", clearHover = true })
+    end
+end
+
+local function FocusUnitStatus(status)
+    if type(_G.MSUF_UFPreview_SelectStatusIcon) == "function" then
+        _G.MSUF_UFPreview_SelectStatusIcon(status)
+    end
+end
+
+local function SelectorBool(value)
+    if value == false then return false end
+    return true
+end
+
+local function CurrentUnitTextSlot(unit, tab)
+    local byUnit = M and M.unitTextSlotSelection and M.unitTextSlotSelection[unit]
+    local slot = byUnit and byUnit[tab]
+    return ResolveTextSlot(slot) or "center"
+end
+
+local function CurrentGroupTextSlot(scope, tab)
+    local byScope = M and M.gfTextSlotSelection and M.gfTextSlotSelection[scope]
+    local slot = byScope and byScope[tab]
+    return ResolveTextSlot(slot) or "center"
+end
+
+local function SetUnitTextSelector(args)
+    local unit = ResolveUnitKey(args and args.unit)
+    local tab = ResolveTextTab(args and args.tab)
+    local slot = ResolveTextSlot(args and args.slot)
+    if not unit then return false, "I do not know which unit text menu to select." end
+    if not tab then return false, "I do not know which text tab to select." end
+    PersistTableValue("unitTextTabSelection", unit, tab)
+    if slot and (tab == "hp" or tab == "power") then PersistNestedTableValue("unitTextSlotSelection", unit, tab, slot) end
+    FocusUnitText(unit, tab, slot)
+    OpenMenuPage(UNIT_PAGE_KEYS[unit])
+    return true, "Selected " .. UnitLabel(unit) .. " " .. TEXT_TAB_LABELS[tab] .. (slot and (" " .. TEXT_SLOT_LABELS[slot] .. " slot") or " tab") .. "."
+end
+
+local function SetUnitTextMoveTogether(args)
+    local unit = ResolveUnitKey(args and args.unit)
+    local tab = ResolveTextTab(args and args.tab)
+    local value = SelectorBool(args and args.value)
+    if not unit then return false, "I do not know which unit text move mode to set." end
+    if tab ~= "hp" and tab ~= "power" then return false, "Text move-together mode is only available for HP and Power text." end
+    M.unitTextMoveTogether = type(M.unitTextMoveTogether) == "table" and M.unitTextMoveTogether or {}
+    M.unitTextMoveTogether[unit] = type(M.unitTextMoveTogether[unit]) == "table" and M.unitTextMoveTogether[unit] or {}
+    M.unitTextMoveTogether[unit][tab] = value
+    PersistTableValue("unitTextTabSelection", unit, tab)
+    local slot = value and nil or CurrentUnitTextSlot(unit, tab)
+    FocusUnitText(unit, tab, slot)
+    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh("MSUF_ASSISTANT_TEXT_MOVE_MODE") end
+    OpenMenuPage(UNIT_PAGE_KEYS[unit])
+    return true, "Set " .. UnitLabel(unit) .. " " .. TEXT_TAB_LABELS[tab] .. " move text as one group " .. (value and "on" or "off") .. "."
+end
+
+local function SetGroupTextSelector(args)
+    local scope = ResolveGroupScope(args and args.scope) or "party"
+    local tab = ResolveTextTab(args and args.tab)
+    local slot = ResolveTextSlot(args and args.slot)
+    if not tab then return false, "I do not know which group text tab to select." end
+    PersistScalar("gfScope", scope)
+    PersistTableValue("gfTextTabSelection", scope, tab)
+    if slot and (tab == "hp" or tab == "power") then PersistNestedTableValue("gfTextSlotSelection", scope, tab, slot) end
+    FocusGroupText(scope, tab, slot)
+    OpenMenuPage("gf_bars")
+    return true, "Selected " .. GroupLabel(scope) .. " " .. TEXT_TAB_LABELS[tab] .. (slot and (" " .. TEXT_SLOT_LABELS[slot] .. " slot") or " tab") .. "."
+end
+
+local function SetGroupTextMoveTogether(args)
+    local scope = ResolveGroupScope(args and args.scope) or "party"
+    local tab = ResolveTextTab(args and args.tab)
+    local value = SelectorBool(args and args.value)
+    if tab ~= "hp" and tab ~= "power" then return false, "Text move-together mode is only available for HP and Power text." end
+    PersistScalar("gfScope", scope)
+    M.gfTextMoveTogether = type(M.gfTextMoveTogether) == "table" and M.gfTextMoveTogether or {}
+    M.gfTextMoveTogether[scope] = type(M.gfTextMoveTogether[scope]) == "table" and M.gfTextMoveTogether[scope] or {}
+    M.gfTextMoveTogether[scope][tab] = value
+    PersistTableValue("gfTextTabSelection", scope, tab)
+    local slot = value and nil or CurrentGroupTextSlot(scope, tab)
+    FocusGroupText(scope, tab, slot)
+    if M and type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews() end
+    OpenMenuPage("gf_bars")
+    return true, "Set " .. GroupLabel(scope) .. " " .. TEXT_TAB_LABELS[tab] .. " move text as one group " .. (value and "on" or "off") .. "."
+end
+
+local function SetUnitStatusSelector(args)
+    local unit = ResolveUnitKey(args and args.unit)
+    local tab = ResolveStatusTab(args and args.tab)
+    local spec = unit and A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, args and (args.status or args.text)) or nil
+    if not unit then return false, "I do not know which unit status menu to select." end
+    if not (tab or spec) then return false, "I do not know which unit status indicator to select." end
+    if tab then PersistTableValue("unitStatusTabSelection", unit, tab) end
+    if spec then
+        PersistTableValue("unitStatusSelection", unit, spec.value)
+        FocusUnitStatus(spec.value)
+    end
+    OpenMenuPage(UNIT_PAGE_KEYS[unit])
+    if spec then
+        return true, "Selected " .. UnitLabel(unit) .. " " .. tostring(spec.label or spec.value) .. " status indicator."
+    end
+    return true, "Selected " .. UnitLabel(unit) .. " " .. STATUS_TAB_LABELS[tab] .. " status tab."
+end
+
+local function SetGroupStatusSelector(args)
+    local scope = ResolveGroupScope(args and args.scope) or "party"
+    local tab = ResolveStatusTab(args and args.tab)
+    local icon, label = ResolveGroupStatusIcon(args and (args.icon or args.text))
+    if not (tab or icon) then return false, "I do not know which group status indicator to select." end
+    PersistScalar("gfScope", scope)
+    if tab then PersistTableValue("gfStatusIconTabSelection", scope, tab) end
+    if icon then PersistScalar("gfStatusIconSelection", icon) end
+    OpenMenuPage("gf_indicators")
+    if icon then return true, "Selected " .. GroupLabel(scope) .. " " .. tostring(label or icon) .. " indicator." end
+    return true, "Selected " .. GroupLabel(scope) .. " " .. STATUS_TAB_LABELS[tab] .. " status icon tab."
+end
+
+local function SetGroupSpellSelector(args)
+    local scope = ResolveGroupScope(args and args.scope) or "party"
+    local spec = A.ResolveGroupSpellSpec and A.ResolveGroupSpellSpec(args and (args.spec or args.text)) or nil
+    local aura, resolvedSpec, display = A.ResolveGroupSpellAura and A.ResolveGroupSpellAura(spec, tostring(args and (args.aura or args.text) or "")) or nil
+    spec = spec or resolvedSpec
+    if not (spec or aura) then return false, "I do not know which spell indicator selector to set." end
+    PersistScalar("gfScope", scope)
+    if spec then PersistTableValue("gfSpellMultiSpecSelection", scope, spec) end
+    if aura then PersistTableValue("gfSpellIndicatorSelection", scope, aura) end
+    OpenMenuPage("gf_indicators")
+    local specLabel = spec and A.GroupSpellSpecDisplay and A.GroupSpellSpecDisplay(spec) or spec
+    if aura then
+        return true, "Selected " .. GroupLabel(scope) .. " " .. tostring(display or aura) .. " spell indicator."
+    end
+    return true, "Selected " .. GroupLabel(scope) .. " " .. tostring(specLabel or spec) .. " spell indicator spec."
+end
+
+local function SetGroupCornerSelector(args)
+    local scope = ResolveGroupScope(args and args.scope) or "party"
+    local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(args and (args.slot or args.text)) or nil
+    if not slot then return false, "I do not know which corner editor slot to select." end
+    PersistScalar("gfScope", scope)
+    PersistScalar("gfCornerSlotSelection", slot.key or slot.value)
+    OpenMenuPage("gf_indicators")
+    return true, "Selected " .. GroupLabel(scope) .. " " .. tostring(slot.label or slot.text or slot.key or slot.value) .. " corner editor slot."
+end
+
+local function SetColorTokenSelector(args)
+    local kind = NormalizeKey(args and args.kind)
+    if kind == "classpower" or kind == "classresource" or kind == "cp" then
+        local token, label = ResolveToken(A.ClassPowerColorTokens or {}, args and args.token)
+        if not token then return false, "I do not know which class resource color token to select." end
+        PersistScalar("colorsCPToken", token)
+        OpenMenuPage("opt_colors")
+        return true, "Selected " .. tostring(label or token) .. " class resource color token."
+    end
+    local token, label = ResolveToken(A.PowerColorTokens or {}, args and args.token)
+    if not token then return false, "I do not know which power color token to select." end
+    PersistScalar("colorsPowerToken", token)
+    OpenMenuPage("opt_colors")
+    return true, "Selected " .. tostring(label or token) .. " power color token."
+end
+
+local function SetProfileStagingSelector(args)
+    local field = NormalizeKey(args and (args.field or args.selector))
+    if field == "profileexportkind" or field == "exportkind" or field == "exporttype" then
+        local kind, label = ResolveProfileExportKind(args and args.kind)
+        PersistScalar("profileExportKind", kind)
+        OpenMenuPage("profiles")
+        return true, "Selected " .. tostring(label or kind) .. " profile export kind."
+    end
+    if field == "profileimportcreatenew" or field == "importcreatenew" or field == "importnewprofile" or field == "newprofileimport" then
+        local value = SelectorBool(args and args.value)
+        PersistScalar("profileImportCreateNew", value)
+        OpenMenuPage("profiles")
+        return true, "Set profile import and create new profile " .. (value and "on" or "off") .. "."
+    end
+    if field == "profilecreatecopyname" or field == "createname" or field == "copyname" or field == "profilename" then
+        M.profileCreateCopyName = tostring(args and args.value or "")
+        OpenMenuPage("profiles")
+        return true, "Set profile create/copy name to " .. tostring(M.profileCreateCopyName) .. "."
+    end
+    if field == "profileimportnewname" or field == "importnewname" or field == "newprofilename" then
+        M.profileImportNewName = tostring(args and args.value or "")
+        OpenMenuPage("profiles")
+        return true, "Set profile import new-profile name to " .. tostring(M.profileImportNewName) .. "."
+    end
+    if field == "profilestring" or field == "profileimportstring" or field == "importstring" then
+        M.profileImportString = tostring(args and args.value or "")
+        OpenMenuPage("profiles")
+        return true, "Set profile string field."
+    end
+    return false, "I do not know which profile staging field to set."
+end
+
+local function SetGroupCopyScopeSelector(args)
+    local scopes, cats = EnsureGroupCopyScopes()
+    local command = NormalizeKey(args and args.command)
+    local function refresh()
+        OpenMenuPage("gf_layout")
+        if M and type(M.Refresh) == "function" then M.Refresh() end
+    end
+    if command == "all" or command == "selectall" then
+        for i = 1, #cats do scopes[cats[i].key] = true end
+        refresh()
+        return true, "Selected all group copy categories."
+    end
+    if command == "none" or command == "clear" or command == "selectnone" then
+        for i = 1, #cats do scopes[cats[i].key] = false end
+        refresh()
+        return true, "Cleared all group copy categories."
+    end
+    if command == "only" then
+        local wanted = args and args.categories
+        if type(wanted) ~= "table" or #wanted == 0 then return false, "I need at least one group copy category." end
+        for i = 1, #cats do scopes[cats[i].key] = false end
+        local labels = {}
+        for i = 1, #wanted do
+            local key, label = ResolveGroupCopyCategory(wanted[i])
+            if key then
+                scopes[key] = true
+                labels[#labels + 1] = tostring(label or key)
+            end
+        end
+        if #labels == 0 then return false, "I do not know those group copy categories." end
+        refresh()
+        return true, "Selected only group copy categories: " .. table.concat(labels, ", ") .. "."
+    end
+    local key, label = ResolveGroupCopyCategory(args and args.category)
+    if not key then return false, "I do not know which group copy category to set." end
+    scopes[key] = SelectorBool(args and args.value)
+    refresh()
+    return true, "Set group copy category " .. tostring(label or key) .. " " .. (scopes[key] and "on" or "off") .. "."
+end
+
+function A.Workflow.SetMenuSelectorState(args)
+    local selector = tostring(args and args.selector or "")
+    if selector == "unit_text" then return SetUnitTextSelector(args) end
+    if selector == "group_text" then return SetGroupTextSelector(args) end
+    if selector == "unit_text_move_together" then return SetUnitTextMoveTogether(args) end
+    if selector == "group_text_move_together" then return SetGroupTextMoveTogether(args) end
+    if selector == "unit_status" then return SetUnitStatusSelector(args) end
+    if selector == "group_status" then return SetGroupStatusSelector(args) end
+    if selector == "group_spell" then return SetGroupSpellSelector(args) end
+    if selector == "group_corner" then return SetGroupCornerSelector(args) end
+    if selector == "color_token" then return SetColorTokenSelector(args) end
+    if selector == "profile_staging" then return SetProfileStagingSelector(args) end
+    if selector == "group_copy_scope" then return SetGroupCopyScopeSelector(args) end
+    return false, "I do not know which menu selector to set."
 end
 
 function A.Workflow.ControlMenuWindow(command)
@@ -164,6 +844,55 @@ Registry:RegisterAction({
     combatSafe = true,
     run = function(args)
         return A.Workflow.SetDashboardPanel(args and args.panel, args and args.open)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "set_nav_section",
+    label = "Set Navigation Section",
+    type = "navigation",
+    aliases = {
+        "open navigation section", "close navigation section", "toggle navigation section",
+        "expand frames section", "collapse frames section",
+        "expand group frames section", "collapse group frames section",
+        "expand appearance section", "collapse appearance section",
+        "expand advanced section", "collapse advanced section",
+    },
+    combatSafe = true,
+    run = function(args)
+        return A.Workflow.SetNavSection(args and args.section, args and args.open)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "set_nav_search_intro",
+    label = "Set Search Intro",
+    type = "navigation",
+    aliases = {
+        "show search intro", "hide search intro", "reset search intro",
+        "mark search intro seen", "show ask msuf intro",
+    },
+    combatSafe = true,
+    run = function(args)
+        return A.Workflow.SetNavSearchIntro(args and args.command)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "set_menu_selector_state",
+    label = "Set Menu Selector State",
+    type = "navigation",
+    aliases = {
+        "select text tab", "select text slot", "select status tab", "select status indicator",
+        "select group status icon", "select spell indicator", "select corner editor slot",
+        "select power color token", "select class resource color token",
+        "move text as one group", "move text per slot", "text move together",
+        "select profile export kind", "set profile staging field", "set profile string field",
+        "set group copy category", "select group copy categories",
+    },
+    combatSafe = true,
+    run = function(args)
+        return A.Workflow.SetMenuSelectorState(args)
     end,
 })
 

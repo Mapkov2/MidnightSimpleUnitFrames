@@ -47,6 +47,102 @@ local function ShortLabel(text, limit)
     return text:sub(1, max(1, limit - 3)) .. "..."
 end
 
+local function NormalizeNavToken(text)
+    text = tostring(text or ""):lower()
+    text = text:gsub("&", " and ")
+    text = text:gsub("[^%w]+", "")
+    return text
+end
+
+local NAV_HEADER_SPECS = {
+    unitframes = { label = "Frames", aliases = { "frames", "frame", "unit frame", "unit frames", "unitframes", "unitframe" } },
+    groupframes = { label = "Group Frames", aliases = { "group", "groups", "group frame", "group frames", "groupframes", "raid frames", "party frames" } },
+    auras = { label = "Auras", aliases = { "aura", "auras", "buffs", "debuffs" } },
+    globalstyle = { label = "Appearance", aliases = { "appearance", "global style", "globalstyle", "style", "global", "look" } },
+    modules = { label = "Advanced", aliases = { "advanced", "module", "modules", "advanced menu" } },
+}
+
+local NAV_HEADER_ALIASES = {}
+for id, spec in pairs(NAV_HEADER_SPECS) do
+    NAV_HEADER_ALIASES[NormalizeNavToken(id)] = id
+    NAV_HEADER_ALIASES[NormalizeNavToken(spec.label)] = id
+    for i = 1, #(spec.aliases or {}) do
+        NAV_HEADER_ALIASES[NormalizeNavToken(spec.aliases[i])] = id
+    end
+end
+
+local function CurrentNavItems()
+    return type(M.navItems) == "table" and M.navItems or NAV or {}
+end
+
+local function ResolveNavHeader(section)
+    local token = NormalizeNavToken(section)
+    if token == "" then return nil end
+    local aliasId = NAV_HEADER_ALIASES[token]
+    local nav = CurrentNavItems()
+    for i = 1, #nav do
+        local item = nav[i]
+        if item and item.header then
+            local id = tostring(item.id or item.header)
+            if token == NormalizeNavToken(id) or token == NormalizeNavToken(item.header) or aliasId == id then
+                return id, item.header, item
+            end
+        end
+    end
+    if aliasId and NAV_HEADER_SPECS[aliasId] then
+        return aliasId, NAV_HEADER_SPECS[aliasId].label, nil
+    end
+    return nil
+end
+
+local function ReflowNavRail()
+    local nav = M.nav
+    if nav and type(nav._msuf2NavReflow) == "function" then
+        nav:_msuf2NavReflow()
+        return true
+    end
+    local frame = M.frame
+    nav = frame and (frame.nav or frame._msufNavRail or frame._msufNavStack)
+    if nav and type(nav._msuf2NavReflow) == "function" then
+        nav:_msuf2NavReflow()
+        return true
+    end
+    return false
+end
+
+function M.ResolveNavHeader(section)
+    return ResolveNavHeader(section)
+end
+
+function M.SetNavHeaderOpen(section, open)
+    local id, label, item = ResolveNavHeader(section)
+    if not id then return false, "I do not know that navigation section." end
+    if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
+    M.navHeaderState = type(M.navHeaderState) == "table" and M.navHeaderState or {}
+    if M.navHeaderState[id] == nil then
+        M.navHeaderState[id] = not (item and item.defaultOpen == false)
+    end
+    if open == nil then
+        open = not M.navHeaderState[id]
+    else
+        open = open and true or false
+    end
+    M.navHeaderState[id] = open
+    ReflowNavRail()
+    return true, (open and "Opened " or "Closed ") .. tostring(label or id) .. " navigation section.", open, id, label
+end
+
+function M.SetSearchIntroSeen(seen)
+    seen = seen and true or false
+    if type(M.PersistMenuStateValue) == "function" then
+        M.PersistMenuStateValue("searchIntroSeen", seen)
+    else
+        M.searchIntroSeen = seen
+    end
+    if seen and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
+    return true
+end
+
 local function AssistantAPI()
     return (MSUF and MSUF.Assistant) or M.Assistant
 end
@@ -232,6 +328,7 @@ end
 
 local function BuildNavRail(parent)
     if M.EnsurePersistentMenuState then M.EnsurePersistentMenuState() end
+    M.nav = parent
     M.navButtons = {}
     M.navHeaders = {}
     M.navGroupForKey = {}
@@ -277,11 +374,7 @@ local function BuildNavRail(parent)
     end
 
     local function MarkSearchIntroSeen()
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("searchIntroSeen", true)
-        else
-            M.searchIntroSeen = true
-        end
+        M.SetSearchIntroSeen(true)
     end
 
     local function EnsureSearchIntro()
@@ -338,6 +431,8 @@ local function BuildNavRail(parent)
             end)
         end
     end
+    M.HideNavSearchIntro = HideSearchIntro
+    M.ShowNavSearchIntro = ShowSearchIntro
 
     search:SetScript("OnMouseDown", function(self, button)
         if button == "LeftButton" then self:SetFocus() end
@@ -446,9 +541,7 @@ local function BuildNavRail(parent)
             arrow:SetTexture(T.media.collapseArrow)
             btn._msuf2NavArrow = arrow
             btn:SetScript("OnClick", function(self)
-                local groupId = self._msuf2NavHeaderId
-                M.navHeaderState[groupId] = not M.navHeaderState[groupId]
-                if parent._msuf2NavReflow then parent:_msuf2NavReflow() end
+                M.SetNavHeaderOpen(self._msuf2NavHeaderId, nil)
             end)
             btn._msuf2SkipHistoryCheckpoint = true
             AttachNavHoverGrow(btn)
