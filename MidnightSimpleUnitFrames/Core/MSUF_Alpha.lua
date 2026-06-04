@@ -325,7 +325,7 @@ local function _AlphaEnsureMissingHPBackground(frame)
     return bg
 end
 
-local function _AlphaSyncMissingHPBackground(frame, maxHP, hp, alpha)
+local function _AlphaSyncMissingHPBackground(frame, maxHP, hp, alpha, interp)
     if not frame then return end
     if frame._msufAlphaPreserveHPColor ~= true then
         _AlphaHideMissingHPBackground(frame)
@@ -361,7 +361,11 @@ local function _AlphaSyncMissingHPBackground(frame, maxHP, hp, alpha)
     end
 
     bg:SetMinMaxValues(0, maxHP or 1)
-    bg:SetValue(missing or 0)
+    if interp then
+        bg:SetValue(missing or 0, interp)
+    else
+        bg:SetValue(missing or 0)
+    end
     if bg.SetAlpha then bg:SetAlpha(alpha) end
     _AlphaApplyMissingHPBackgroundColor(frame, bg)
     bg:Show()
