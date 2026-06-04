@@ -20,6 +20,10 @@ local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local UnitThreatSituation = _G.UnitThreatSituation
 local IsInGroup = _G.IsInGroup
 local IsInRaid = _G.IsInRaid
+local IsInInstance = _G.IsInInstance
+local InCombatLockdown = _G.InCombatLockdown
+local C_Timer = _G.C_Timer
+local CreateFrame = _G.CreateFrame
 
 local function _RuntimeEnabledForFrame(f)
     local fn = GF._RuntimeEnabledForFrame
@@ -260,6 +264,143 @@ do
             if target and target.SetAlpha then target:SetAlpha(frameAlpha) end
         end
     end
+end
+
+local RANGE_SETTLE_INTERVAL = 0.25
+local RANGE_SETTLE_PASSES = 4
+local _rangeSettleTicker
+local _rangeSettlePasses
+local _rangeSettlePendingCombat
+
+local function _GF_InCombat()
+    return _G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()) and true or false
+end
+
+local function _GF_InInstance()
+    if not IsInInstance then return false end
+    local inInstance = IsInInstance()
+    if issecretvalue and issecretvalue(inInstance) then return false end
+    return inInstance == true or inInstance == 1
+end
+
+local function _GF_CancelRangeSettleTicker()
+    local ticker = _rangeSettleTicker
+    if ticker and ticker.Cancel then ticker:Cancel() end
+    _rangeSettleTicker = nil
+    _rangeSettlePasses = nil
+end
+
+local function _GF_FrameWantsRangeRefresh(f)
+    if not (f and _RuntimeEnabledForFrame(f)) then return false end
+    local unit = f.unit
+    if not unit then return false end
+    if UnitExists then
+        local exists = UnitExists(unit)
+        if issecretvalue and issecretvalue(exists) then return false end
+        if not exists then return false end
+    end
+
+    local c = f._c
+    if not c and GF.BuildFrameCache then
+        GF.BuildFrameCache(f)
+        c = f._c
+    end
+    if c and c.rfEn then return true end
+
+    local kind = f._msufGFKind or "party"
+    local conf = GF.GetConf and GF.GetConf(kind)
+    return conf and conf.rangeFadeEnabled ~= false
+end
+
+local function _GF_RefreshRangeFrame(f)
+    if not _GF_FrameWantsRangeRefresh(f) then return 0 end
+    ApplyRangeFade(f, f.unit)
+    return 1
+end
+
+function GF.RefreshRangeFade()
+    local refreshed = 0
+    if type(GF.ForEachFrame) == "function" then
+        GF.ForEachFrame(function(f)
+            refreshed = refreshed + _GF_RefreshRangeFrame(f)
+        end)
+        return refreshed
+    end
+
+    local list = GF.frameList
+    if list then
+        for i = 1, #list do
+            refreshed = refreshed + _GF_RefreshRangeFrame(list[i])
+        end
+        return refreshed
+    end
+
+    local frames = GF.frames
+    if frames then
+        for f in pairs(frames) do
+            refreshed = refreshed + _GF_RefreshRangeFrame(f)
+        end
+    end
+    return refreshed
+end
+
+function GF.ScheduleRangeFadeSettleRefresh(reason)
+    if not _GF_InInstance() then
+        _rangeSettlePendingCombat = nil
+        _GF_CancelRangeSettleTicker()
+        return false
+    end
+    if _GF_InCombat() then
+        _rangeSettlePendingCombat = reason or true
+        _GF_CancelRangeSettleTicker()
+        return false
+    end
+
+    if not (C_Timer and C_Timer.NewTicker) then
+        GF.RefreshRangeFade()
+        return true
+    end
+
+    _GF_CancelRangeSettleTicker()
+    _rangeSettlePendingCombat = nil
+    _rangeSettlePasses = 0
+    GF.RefreshRangeFade()
+    _rangeSettleTicker = C_Timer.NewTicker(RANGE_SETTLE_INTERVAL, function()
+        _rangeSettlePasses = (_rangeSettlePasses or 0) + 1
+        if not _GF_InInstance() then
+            _GF_CancelRangeSettleTicker()
+            return
+        end
+        if _GF_InCombat() then
+            _rangeSettlePendingCombat = true
+            _GF_CancelRangeSettleTicker()
+            return
+        end
+        GF.RefreshRangeFade()
+        if (_rangeSettlePasses or 0) >= RANGE_SETTLE_PASSES then
+            _GF_CancelRangeSettleTicker()
+        end
+    end)
+    return true
+end
+
+if CreateFrame then
+    local eventFrame = CreateFrame("Frame")
+    eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
+    eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+    eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    eventFrame:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_ENABLED" then
+            if _rangeSettlePendingCombat then
+                local reason = _rangeSettlePendingCombat
+                _rangeSettlePendingCombat = nil
+                GF.ScheduleRangeFadeSettleRefresh(reason)
+            end
+            return
+        end
+        GF.ScheduleRangeFadeSettleRefresh(event)
+    end)
 end
 
 function GF.RefreshGroupAlphas()
