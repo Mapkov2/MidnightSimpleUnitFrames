@@ -622,6 +622,14 @@ local function RunHotKindCooldown(frame, state, event, unit, sameUnit, a, b, c)
     return true
 end
 
+-- Kind -> runner. Each runner inlines the element call-order for its kind and
+-- reads the compiled per-frame `state` whose fields are populated by
+-- Metadata.hotStateSpecs[kind] (the second column of each spec entry is the
+-- state field a runner expects, e.g. spec { "Health", "health" } -> state.health).
+-- A runner and its hotStateSpecs entry must stay in lockstep: a state field a
+-- runner reads but the spec never fills is simply nil (dead, silently skipped).
+-- The load-time guard below enforces the other half -- that every hot event
+-- resolves to a runner at all.
 local HOT_RUNNERS = {
     [1] = RunHotKindHealth,
     [2] = RunHotKindPower,
@@ -648,6 +656,33 @@ local HOT_EVENT_RUNNERS = {
     UNIT_FLAGS = RunHotHealthFlags,
     UNIT_FACTION = RunHotHealthFaction,
 }
+
+-- Load-time invariant guard (dev aid, runs once, zero per-event cost). Every
+-- event that compiles to a hot kind must resolve to a runner through the exact
+-- lookup RebuildHotEventState uses below: HOT_EVENT_RUNNERS[event] or
+-- HOT_RUNNERS[kind]. If a future Metadata.hotEventKind entry introduces a kind
+-- without a matching runner, the hot path would set state.runner = nil and the
+-- event would be silently dropped -- the flat fallback list is intentionally
+-- NOT built for hot events (see RebuildFrameEventList in MSUF_UF_Core.lua). Make
+-- that mistake loud at load through the standard error handler: visible to
+-- developers (BugSack / scriptErrors), silent for players on the default UI.
+do
+    local missing
+    for event, kind in pairs(HOT_EVENT_KIND) do
+        if not (HOT_EVENT_RUNNERS[event] or HOT_RUNNERS[kind]) then
+            missing = missing and (missing .. ", " .. tostring(event)) or tostring(event)
+        end
+    end
+    if missing then
+        local message = "MSUF UF Dispatch: hot event(s) without a runner -> " .. missing
+        local handler = _G.geterrorhandler and _G.geterrorhandler()
+        if type(handler) == "function" then
+            handler(message)
+        else
+            print(message)
+        end
+    end
+end
 
 RebuildHotEventState = function(frame, event, owners)
     local kind = HOT_EVENT_KIND[event]
