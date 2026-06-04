@@ -555,7 +555,7 @@ local function UFCore_SetHealthBarValue(f, bar, hp)
     end
     local syncMissing = _G.MSUF_Alpha_UpdatePreserveMissingHP
     if type(syncMissing) == "function" then
-        syncMissing(f, nil, hp)
+        syncMissing(f, nil, hp, nil, interp)
     end
 end
 
