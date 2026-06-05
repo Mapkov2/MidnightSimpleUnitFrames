@@ -88,7 +88,7 @@ local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
 local ParseAuraBlacklist = P.ParseAuraBlacklist
 
-local COPY_VERBS = { "copy", "kopiere", "kopieren", "uebernehme", "uebernehmen" }
+local COPY_VERBS = { "copy", "use", "kopiere", "kopieren", "uebernehme", "uebernehmen" }
 
 local function CopyCommandText(text)
     local normalized = Normalize(text)
@@ -111,6 +111,10 @@ local function CopyTextParts(text)
     src, dst = text:match("^copy%s+from%s+(.+)%s+to%s+(.+)$")
     if src and dst then return src, dst end
     src, dst = text:match("^copy%s+(.+)%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^use%s+.-%s+from%s+(.+)%s+for%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^use%s+(.+)%s+for%s+(.+)$")
     if src and dst then return src, dst end
     src, dst = text:match("^kopiere%s+.-%s+von%s+(.+)%s+nach%s+(.+)$")
     if src and dst then return src, dst end
@@ -159,7 +163,7 @@ local function CopyGroupTargetsForText(text, source)
 end
 
 local function ParseGroupCopy(text)
-    if not ContainsAny(text, { "copy", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehmen" }) then return nil end
     local source, targets
     local srcText, dstText = CopyTextParts(text)
     if srcText and dstText then
@@ -188,7 +192,7 @@ local function ParseGroupCopy(text)
 end
 
 local function ParseUnsupportedMixedCopy(text)
-    if not ContainsAny(text, { "copy", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehmen" }) then return nil end
     local srcText, dstText = CopyTextParts(text)
     if not (srcText and dstText) then return nil end
 
@@ -216,7 +220,7 @@ local function ParseUnsupportedMixedCopy(text)
 end
 
 local function ParseCopy(text)
-    if not ContainsAny(text, { "copy", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehmen" }) then return nil end
     local source, targets
     local srcText, dstText = CopyTextParts(text)
     if srcText and dstText then
@@ -262,17 +266,29 @@ local function BuildContextReset(text, ctx)
 end
 
 local GROUP_STATUS_ICON_ALIASES = {
-    { key = "roleIcon", aliases = { "role icon", "role indicator", "role symbol" } },
-    { key = "leaderIcon", aliases = { "leader icon", "leader indicator", "leader symbol" } },
-    { key = "assistIcon", aliases = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
-    { key = "raidMarker", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
-    { key = "readyCheckIcon", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
-    { key = "summonIcon", aliases = { "summon icon", "summon indicator", "summon symbol" } },
-    { key = "resurrectIcon", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
-    { key = "phaseIcon", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
-    { key = "statusText", aliases = { "dead text", "dead status text", "status text" } },
-    { key = "statusGhostText", aliases = { "ghost text", "ghost status text" } },
-    { key = "statusAFKText", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
+    { key = "roleIcon", size = "roleIconSize", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role indicator", "role symbol" } },
+    { key = "leaderIcon", size = "leaderIconSize", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader indicator", "leader symbol" } },
+    { key = "assistIcon", size = "assistIconSize", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
+    { key = "raidMarker", size = "raidMarkerSize", layer = "raidMarkerLayer", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
+    { key = "readyCheckIcon", size = "readyCheckSize", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
+    { key = "summonIcon", size = "summonIconSize", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol" } },
+    { key = "resurrectIcon", size = "resurrectIconSize", layer = "resurrectLayer", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
+    { key = "phaseIcon", size = "phaseIconSize", layer = "phaseLayer", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
+    { key = "statusText", size = "statusTextSize", layer = "statusTextLayer", aliases = { "dead text", "dead status text", "status text" } },
+    { key = "statusGhostText", size = "statusGhostTextSize", layer = "statusGhostTextLayer", aliases = { "ghost text", "ghost status text" } },
+    { key = "statusAFKText", size = "statusAFKTextSize", layer = "statusAFKTextLayer", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
+}
+
+local GROUP_STATUS_ICON_PACK_ALIASES = {
+    inherit = "DEFAULT",
+    global = "DEFAULT",
+    default = "DEFAULT",
+    ["follow global"] = "DEFAULT",
+    blizzard = "BLIZZARD",
+    classic = "CLASSIC",
+    old = "CLASSIC",
+    midnight = "MIDNIGHT",
+    msuf = "MIDNIGHT",
 }
 
 local function GroupStatusIconForText(text)
@@ -283,10 +299,24 @@ local function GroupStatusIconForText(text)
     return nil
 end
 
+local function GroupStatusIconSpecForText(text)
+    local key = GroupStatusIconForText(text)
+    if not key then return nil end
+    for i = 1, #GROUP_STATUS_ICON_ALIASES do
+        if GROUP_STATUS_ICON_ALIASES[i].key == key then return GROUP_STATUS_ICON_ALIASES[i] end
+    end
+    return nil
+end
+
 local GROUP_STATUS_ICON_TERMS = {
     "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "symbol", "symbols",
     "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon",
     "resurrect icon", "rez icon", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
+}
+
+local GROUP_STATUS_MIDNIGHT_STYLE_TERMS = {
+    "midnight style", "use midnight style", "midnight icon style", "midnight icons",
+    "midnight status icons", "status icon midnight style", "status icons midnight style",
 }
 
 local function FirstGroupOrDefault(text)
@@ -491,20 +521,190 @@ local function ParseGroupStatusPreview(text)
     } or nil
 end
 
+local function RelativeLayerDeltaForText(text)
+    local amount = FirstNumber(text) or 1
+    if ContainsAny(text, { "behind", "backward", "backwards", "send back", "to back", "lower layer", "lower draw", "hinter", "nach hinten" }) then
+        return -amount
+    end
+    if ContainsAny(text, { "forward", "front", "to front", "bring forward", "higher layer", "higher draw", "nach vorne" }) then
+        return amount
+    end
+    return nil
+end
+
+local function GroupStatusScopesForText(text)
+    local scopes = {}
+    if ContainsAny(text, { "all group frames", "all groups", "every group frame", "each group frame", "for all group frames", "alle gruppen", "alle gruppenframes" }) then
+        scopes[1], scopes[2], scopes[3] = "party", "raid", "mythicraid"
+        return scopes
+    end
+    local groups = DetectGroups(text)
+    if #groups > 0 then return groups end
+    scopes[1] = FirstGroupOrDefault(text)
+    return scopes
+end
+
+local function BuildGroupStatusChanges(scopes, dbKey, value, relativeDelta)
+    local changes = {}
+    for i = 1, #(scopes or {}) do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[i]) .. "." .. tostring(dbKey or ""))
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+    end
+    return changes
+end
+
+local function ParseGroupStatusIconDetail(text)
+    local hasGroupStatus = ContainsAny(text, GROUP_STATUS_ICON_TERMS)
+    if not hasGroupStatus and not ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS) then return nil end
+
+    local explicitUnits = DetectUnits(text)
+    local explicitGroups = DetectGroups(text)
+    if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
+
+    local scopes = GroupStatusScopesForText(text)
+    if ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS) then
+        local value = DetectBoolean(text)
+        if value == nil then
+            if ContainsAny(text, { "classic style", "classic icons", "classic status icons" }) then
+                value = false
+            elseif ContainsAny(text, { "midnight style", "midnight icons", "midnight status icons" }) then
+                value = true
+            end
+        end
+        if value ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, "useMidnightIcons", value)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icons Use Midnight Style",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the group-frame Midnight status icon style without changing individual icon visibility.",
+                }
+            end
+        end
+    end
+
+    local iconSpec = GroupStatusIconSpecForText(text)
+    if not iconSpec then return nil end
+
+    if ContainsAny(text, { "icon pack", "icon style" }) and iconSpec.style then
+        local value = AliasValueForText(text, GROUP_STATUS_ICON_PACK_ALIASES, { "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT" })
+        if value ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, iconSpec.style, value)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icon Pack",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the selected group status icon pack/style dropdown.",
+                }
+            end
+        end
+    end
+
+    if ContainsAny(text, { "layer", "draw layer", "draw order", "behind", "forward", "front", "backward", "backwards" }) then
+        local relativeDelta = RelativeLayerDeltaForText(text)
+        local value
+        if relativeDelta == nil then value = FirstNumber(text) end
+        if value ~= nil or relativeDelta ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, iconSpec.layer, value, relativeDelta)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icon Layer",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the selected group status icon layer slider.",
+                }
+            end
+        end
+    end
+
+    if ContainsAny(text, { "size", "icon size", "indicator size", "symbol size", "scale", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink", "groesser", "kleiner" }) then
+        if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) and DetectDirection(text) then return nil end
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.size))
+        local relativeDelta = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text, 1) or nil
+        local value
+        if relativeDelta == nil then value = FirstNumber(text) end
+        if value ~= nil or relativeDelta ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, iconSpec.size, value, relativeDelta)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icon Size",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the selected group status icon size slider.",
+                }
+            end
+        end
+    end
+
+    return nil
+end
+
 local UNIT_STATUS_RESET_TERMS = {
     "status indicator", "status indicators", "status icon", "status icons", "status symbol", "status symbols", "indicator position", "level indicator", "level text",
-    "leader icon", "assist icon", "raid marker", "raid marker icon", "raid group", "raid group name",
-    "elite icon", "rare icon", "dead text", "status text", "combat indicator", "combat icon", "combat symbol",
-    "rested indicator", "resting indicator", "incoming rez", "incoming resurrection", "resurrection icon",
+    "leader icon", "leader indicator", "leader symbol", "assist icon", "assist indicator", "assist symbol",
+    "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "raid indicator", "raid symbol", "raid group", "raid group name",
+    "elite icon", "elite indicator", "elite symbol", "rare icon", "rare indicator", "rare symbol",
+    "dead text", "status text", "combat indicator", "combat icon", "combat symbol", "combat state symbol",
+    "rested indicator", "resting indicator", "rested icon", "resting icon", "rested symbol", "resting symbol",
+    "incoming rez", "incoming rez indicator", "incoming rez symbol", "incoming resurrection", "incoming resurrection indicator", "incoming resurrection symbol",
+    "resurrection icon", "resurrection indicator", "resurrection symbol",
 }
+
+local UNIT_STATUS_RUNTIME_TEXT_TERMS = {
+    "afk text", "afk indicator", "afk status", "afk status text", "afk status indicator",
+    "dnd text", "dnd indicator", "dnd status", "dnd status text", "dnd status indicator",
+    "away text", "away indicator", "away status", "afk dnd text", "afk dnd indicator",
+}
+
+local UNIT_STATUS_SIZE_TERMS = {
+    "size", "font size", "text size", "icon size", "indicator size", "symbol size", "scale",
+    "bigger", "larger", "smaller", "increase", "decrease", "reduce", "raise", "lower", "grow", "shrink",
+    "groesse", "groesser", "kleiner", "erhoehe", "erhoehen", "reduziere", "verringere",
+}
+
+local UNIT_STATUS_MIDNIGHT_STYLE_TERMS = {
+    "midnight style", "use midnight style", "midnight icon style", "midnight icons",
+    "midnight status style", "midnight status icon", "midnight status icons",
+    "status icon midnight style", "status icons midnight style",
+    "status indicator midnight style", "status indicators midnight style",
+}
+
+local UNIT_STATUS_ICON_PACK_ALIASES = {
+    blizzard = "BLIZZARD",
+    default = "BLIZZARD",
+    classic = "CLASSIC",
+    old = "CLASSIC",
+    midnight = "MIDNIGHT",
+    msuf = "MIDNIGHT",
+}
+
+local function UnitStatusHasIntent(text)
+    return ContainsAny(text, UNIT_STATUS_RESET_TERMS) or ContainsAny(text, UNIT_STATUS_RUNTIME_TEXT_TERMS)
+end
+
+local function ResolveUnitStatusSpecForText(unit, text)
+    local resolver = A.ResolveUnitStatusSpec
+    local spec = resolver and resolver(unit, text) or nil
+    if spec then return spec end
+    if ContainsAny(text, UNIT_STATUS_RUNTIME_TEXT_TERMS) then
+        return resolver and resolver(unit, "status text") or nil
+    end
+    return nil
+end
 
 local function ParseUnitStatusIndicatorReset(text)
     if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
-    if not ContainsAny(text, UNIT_STATUS_RESET_TERMS) then return nil end
+    if not UnitStatusHasIntent(text) then return nil end
     local units = DetectUnits(text)
     if #units == 0 then return nil end
     local unit = units[1]
-    local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text)
+    local spec = ResolveUnitStatusSpecForText(unit, text)
     if not spec then return nil end
     local action = Registry and Registry:GetAction("reset_unit_status_indicator")
     return action and {
@@ -518,10 +718,10 @@ end
 
 local function ParseUnitStatusPreview(text, ctx)
     if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons" }) then return nil end
-    if not ContainsAny(text, UNIT_STATUS_RESET_TERMS) then return nil end
+    if not UnitStatusHasIntent(text) then return nil end
     local units = DetectUnits(text)
     local unit = units[1] or (ctx and ctx.lastUnit)
-    local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
+    local spec = ResolveUnitStatusSpecForText(unit, text)
     local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
     local action = Registry and Registry:GetAction("preview_unit_status_indicator")
     return action and {
@@ -533,20 +733,110 @@ local function ParseUnitStatusPreview(text, ctx)
     } or nil
 end
 
+local function ParseUnitStatusIconStyle(text)
+    if not ContainsAny(text, UNIT_STATUS_MIDNIGHT_STYLE_TERMS) then return nil end
+    if not UnitStatusHasIntent(text) and not ContainsAny(text, { "status icon", "status icons", "status indicator", "status indicators" }) then return nil end
 
-local function ParseUnitStatusIndicatorMove(text)
-    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) then return nil end
-    local direction = DetectDirection(text)
-    if not direction then return nil end
-    if not ContainsAny(text, UNIT_STATUS_RESET_TERMS) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then
+        if ContainsAny(text, { "classic style", "classic icon", "classic icons", "classic status icon", "classic status icons" }) then
+            value = false
+        elseif ContainsAny(text, { "midnight style", "midnight icon", "midnight icons", "midnight status icon", "midnight status icons" }) then
+            value = true
+        end
+    end
+    if value == nil then return nil end
+
+    local setting = Registry and Registry:GetSetting("general.statusIconsUseMidnightStyle")
+    return setting and {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = "Status Icons Use Midnight Style",
+        summary = "Changes the shared unit-frame status icon Midnight style toggle without changing indicator visibility.",
+    } or nil
+end
+
+local function UnitStatusUnitsOrCurrent(text)
     local units = DetectUnits(text)
     if #units == 0 then
         local currentUnit = CurrentPageUnit and CurrentPageUnit() or nil
         if currentUnit then units = { currentUnit } end
     end
+    return units
+end
+
+local function ParseUnitStatusIndicatorDetail(text)
+    if not UnitStatusHasIntent(text) then return nil end
+
+    local units = UnitStatusUnitsOrCurrent(text)
     if #units == 0 then return nil end
     local unit = units[1]
-    local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
+    local spec = ResolveUnitStatusSpecForText(unit, text)
+    if not spec then return nil end
+
+    if ContainsAny(text, { "icon pack", "icon style" }) and spec.iconStyle then
+        local value = AliasValueForText(text, UNIT_STATUS_ICON_PACK_ALIASES, { "BLIZZARD", "CLASSIC", "MIDNIGHT" })
+        local setting = value and Registry and Registry:GetSetting(unit .. "." .. spec.iconStyle) or nil
+        if setting then
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = value } },
+                label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Icon Pack",
+                summary = "Changes the registered icon-pack dropdown for one unit-frame status indicator.",
+            }
+        end
+    end
+
+    if ContainsAny(text, { "layer", "draw layer", "draw order", "behind", "forward", "front", "backward", "backwards" })
+        and type(spec.layer) == "string" and spec.layer ~= ""
+    then
+        local setting = Registry and Registry:GetSetting(unit .. "." .. spec.layer)
+        local relativeDelta = RelativeLayerDeltaForText(text)
+        local value
+        if relativeDelta == nil then value = FirstNumber(text) end
+        if setting and (value ~= nil or relativeDelta ~= nil) then
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+                label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Layer",
+                summary = "Changes the registered layer slider for one unit-frame status indicator.",
+            }
+        end
+    end
+
+    if ContainsAny(text, UNIT_STATUS_SIZE_TERMS) and type(spec.size) == "string" and spec.size ~= "" then
+        if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) and DetectDirection(text) then return nil end
+        local setting = Registry and Registry:GetSetting(unit .. "." .. spec.size)
+        if not setting then return nil end
+
+        local relativeDelta = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text, 1) or nil
+        local value
+        if relativeDelta == nil then
+            if not ContainsAny(text, { "size", "font size", "text size", "icon size", "indicator size", "symbol size", "scale", "groesse" }) then return nil end
+            value = FirstNumber(text)
+        end
+        if value == nil and relativeDelta == nil then return nil end
+
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+            label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Size",
+            summary = "Changes the registered size slider for one unit-frame status indicator.",
+        }
+    end
+
+    return nil
+end
+
+local function ParseUnitStatusIndicatorMove(text)
+    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) then return nil end
+    local direction = DetectDirection(text)
+    if not direction then return nil end
+    if not UnitStatusHasIntent(text) then return nil end
+    local units = UnitStatusUnitsOrCurrent(text)
+    if #units == 0 then return nil end
+    local unit = units[1]
+    local spec = ResolveUnitStatusSpecForText(unit, text)
     if not spec then return nil end
     local key = (direction == "left" or direction == "right") and spec.x or spec.y
     if type(key) ~= "string" or key == "" then return nil end
@@ -978,9 +1268,12 @@ P.ParseGroupSpellIndicatorAction = ParseGroupSpellIndicatorAction
 P.ParseGroupCornerIndicatorReset = ParseGroupCornerIndicatorReset
 P.ParseGroupStatusIconReset = ParseGroupStatusIconReset
 P.ParseGroupStatusPreview = ParseGroupStatusPreview
+P.ParseGroupStatusIconDetail = ParseGroupStatusIconDetail
 P.UNIT_STATUS_RESET_TERMS = UNIT_STATUS_RESET_TERMS
 P.ParseUnitStatusIndicatorReset = ParseUnitStatusIndicatorReset
 P.ParseUnitStatusPreview = ParseUnitStatusPreview
+P.ParseUnitStatusIconStyle = ParseUnitStatusIconStyle
+P.ParseUnitStatusIndicatorDetail = ParseUnitStatusIndicatorDetail
 P.ParseUnitStatusIndicatorMove = ParseUnitStatusIndicatorMove
 P.ParseCustomAnchorWorkflow = ParseCustomAnchorWorkflow
 P.CleanCustomAnchorFrameName = CleanCustomAnchorFrameName

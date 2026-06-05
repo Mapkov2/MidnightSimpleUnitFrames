@@ -1498,9 +1498,15 @@ local function ParsePowerBarRegistryShortcut(text, raw)
 end
 
 local function ParseCastbarInterruptRegistryShortcut(text)
-    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
     if not ContainsAny(text, { "interrupt", "interruptible", "kick", "kickable", "unterbrechen" }) then return nil end
     if ContainsAny(text, { "ready", "tracker", "focus kick", "indicator" }) then return nil end
+    local explicitUnits = {}
+    local pageUnit
+    if not HasAllScopeIntent(text) then
+        explicitUnits = ExplicitScopes(text)
+        pageUnit = CurrentRegistryPageUnit()
+    end
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) and not explicitUnits[1] and not pageUnit then return nil end
     local value = DetectBoolean(text)
     if value == nil then return nil end
 
@@ -1508,10 +1514,8 @@ local function ParseCastbarInterruptRegistryShortcut(text)
     if HasAllScopeIntent(text) then
         for i = 1, #CASTBAR_INTERRUPT_UNITS do units[#units + 1] = CASTBAR_INTERRUPT_UNITS[i] end
     else
-        local explicitUnits = ExplicitScopes(text)
         for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
         if #units == 0 then
-            local pageUnit = CurrentRegistryPageUnit()
             if pageUnit then units[#units + 1] = pageUnit end
         end
     end

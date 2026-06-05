@@ -59,9 +59,9 @@ local COPY_SCOPE_DEFAULTS = {
 
 local UNIT_COPY_SCOPE_SPECS = {
     { key = "layout", aliases = { "layout", "position", "size", "anchoring", "anchor", "width", "height" } },
-    { key = "text", aliases = { "text", "name", "hp", "health text", "hp text", "power text", "font", "fonts" } },
+    { key = "text", aliases = { "text", "name", "hp", "health text", "hp text", "power text", "mana text", "energy text", "resource text", "font", "fonts" } },
     { key = "portrait", aliases = { "portrait", "portrait settings" } },
-    { key = "power", aliases = { "power bar", "powerbar", "detached power", "detached power bar", "resource bar" } },
+    { key = "power", aliases = { "power", "mana", "energy", "resource", "power settings", "mana settings", "energy settings", "resource settings", "power bar", "powerbar", "detached power", "detached power bar", "resource bar" } },
     { key = "castbar", aliases = { "castbar", "cast bar" } },
     { key = "status", aliases = { "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "level indicator", "raid marker" } },
     { key = "load", aliases = { "load condition", "load conditions", "hide mounted", "hide out of combat" } },

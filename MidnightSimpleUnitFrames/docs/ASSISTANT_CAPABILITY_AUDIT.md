@@ -106,8 +106,10 @@ Partial rows are Aura-only in this non-aura pass:
 Currently understood:
 
 - Boolean commands such as `turn on player name`, `hide target frame`, and `turn off combat timer`.
+- Conservative multi-command batches such as `hide player name and move target frame down 5`, where the Assistant only splits on `and/then/und/dann` when the following segment starts with a new safe command; phrases such as `hp and energy settings` remain one copy command.
 - Numeric commands such as `set player width to 300`, `set class resource height to 12`, `move class resource down 5`, page-local Class Resource commands such as `set background opacity to 40`, and Gameplay commands such as `move combat timer down 10`, `set crosshair size to 44`, and `make crosshair thicker by 2`.
 - Relative movement/size commands such as `move player frame right 10` and `make player frame wider`.
+- Unitframe size matching such as `can you make the focus frame as big as player` or `mach den fokus frame so gross wie spieler`, which copies only the source unitframe's current width and height to the target unitframe.
 - Enum, string, and color routing through registered setting aliases.
 - Relative numeric registry commands such as `increase player width by 5`, `decrease player name font size by 2`, `increase player alpha by 5`, and `decrease castbar outline thickness by 1`.
 - Detail pixel movement for unitframe elements such as `move player portrait 5 right`, `move player name text 5 right`, and natural label wording like `move player unit name label up 2`.
@@ -118,6 +120,7 @@ Currently understood:
 - Natural aliases for scoped bar border/outline colors and SharedMedia texture strings, such as `set player border color to red`, exact RGB/hex color picker values such as `set player border color to rgb 255 128 0` and `set castbar text color to #336699`, color follow-ups such as `same for target`, and `set bars texture to Smooth`.
 - Bars/Fonts `only` phrasing is treated as scoped override intent. Examples: `only player bars on` toggles `barScope.player.override`; `set only party bars dispel border off` enables `barScope.gf_party.override` and changes the party scoped dispel-border setting; `set target font outline only to THICKOUTLINE` enables `fontScope.target.override` and changes the scoped font outline.
 - Reset, copy, preset, profile, support, diagnostic, setup, dashboard, navigation, undo/redo, and Edit Mode actions, including natural reset phrases for unit positions/pages, scoped Bars/Fonts overrides, unit and group category-scoped copy, TotemFrame layout, group status icons, and concrete group spell-indicator aura reset requests.
+- Unit Copy understands power-resource wording such as `copy hp and energy settings from target to target of target frame` and `also copy power text settings from target to target of target`; Text copy also carries the real text visibility toggles (`showName`, `showHP`, `showPower`) so copied Power Text is not hidden on targets where it was disabled.
 - Profile commands for summary, export, import, create, switch, delete, copy, short `copy profile NAME`, spec auto-switch, and spec mapping where parser phrasing matches.
 - Group health color, group-frame class color mode for Raid/Party/Mythic Raid, Group Layout anchor target, growth direction, frame scaling/manual scale/breakpoint scale, and specific backdrop/HP opacity sliders, group status icon preview/reset, group text/status/spell/corner selector state, individual group name/HP/power text movement plus exact X/Y offset, left/center/right text-slot dropdown/offset, text-layer slider values, and group/unit text move-together editor state including natural `individual text units` wording, Group Copy category staging, Profile staging fields, custom anchor direct frame-name control, color token selector state, dispel border test type, Global Fonts name shortening, and AdvancedGameplay commands from the latest passes.
 - Gameplay page context and natural aliases for Combat Timer, Combat Enter/Leave, TotemFrame, First Dance, and Combat Crosshair. Covered examples include `turn on timer` on the Gameplay page, `move timer down 5`, `set timer anchor to target`, `set combat enter text to Pulling`, `move totem frame right 6`, `set totem frame to anchor to bottom left`, `turn off first dance ready`, `set crosshair size to 44`, `make crosshair thicker by 2`, `turn on crosshair range color`, and `set crosshair spell to 12345`.
@@ -135,6 +138,7 @@ Parser examples and remaining incomplete commands:
 - `select only unit copy text and castbar categories`: sets the Unit Copy popup category state to only Text and Castbar.
 - `clear group copy categories`: clears the Group Frames copy-popup category state.
 - `copy player text and castbar to target`: parsed as unit copy with only Text and Castbar scopes enabled.
+- `can you make the focus frame as big as player`: parsed as direct Focus width/height changes using the current Player width/height values.
 - `copy party health and text to raid`: parsed as group-frame copy with only Health and Text scopes enabled.
 - `rename profile Test`: starts the profile rename follow-up flow and asks for the destination name.
 - `rename profile Test to New`: parsed as a confirmed profile rename through `MSUF_RenameProfile`.
