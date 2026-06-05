@@ -71,7 +71,7 @@ local function CP_EnsureBars(parent, count)
         end
 
         --- Tick separators (between bars)
-        for i = CP.maxBars + 1, count - 1 do
+        for i = math.max(1, CP.maxBars), count - 1 do
             if not CP.ticks[i] then
                 local tick = CP.container:CreateTexture(nil, "OVERLAY")
                 tick:SetTexture("Interface\\Buttons\\WHITE8x8")
