@@ -82,7 +82,35 @@ local function MessageColor(role, status)
     if role == "user" then return T.colors and T.colors.text or { 0.95, 0.97, 1, 1 } end
     if status == "failed" then return T.colors and T.colors.danger or { 1, 0.35, 0.35, 1 } end
     if status == "queued" or status == "confirmation_needed" or status == "ambiguous" then return T.colors and T.colors.accent2 or { 1, 0.78, 0.35, 1 } end
+    if status == "info" then return T.colors and T.colors.text or { 0.88, 0.92, 1, 1 } end
     return T.colors and T.colors.ok or { 0.45, 0.95, 0.62, 1 }
+end
+
+local BUSY_DOTS = { "", ".", "..", "..." }
+
+local function BusyText(ui)
+    local text = (A.GetBusyText and A.GetBusyText()) or "I am working on that"
+    local phase = tonumber(ui and ui._msufAssistantBusyPhase) or 1
+    local dots = BUSY_DOTS[((phase - 1) % #BUSY_DOTS) + 1]
+    return tostring(text or "I am working on that") .. dots
+end
+
+local function ScheduleBusyPulse(ui)
+    if not (ui and A.IsBusy and A.IsBusy()) then return end
+    if ui._msufAssistantBusyPulse then return end
+    if not (_G.C_Timer and type(_G.C_Timer.After) == "function") then return end
+
+    ui._msufAssistantBusyPulse = true
+    local function Pulse()
+        if not (A.IsBusy and A.IsBusy()) or A.dashboardUI ~= ui then
+            ui._msufAssistantBusyPulse = nil
+            return
+        end
+        ui._msufAssistantBusyPhase = ((tonumber(ui._msufAssistantBusyPhase) or 1) % 4) + 1
+        if type(A.RefreshUI) == "function" then A.RefreshUI() end
+        _G.C_Timer.After(0.25, Pulse)
+    end
+    _G.C_Timer.After(0.25, Pulse)
 end
 
 local function RenderHistory(ui)
@@ -144,6 +172,37 @@ local function RenderHistory(ui)
         end
     end
 
+    if A.IsBusy and A.IsBusy() then
+        rowIndex = rowIndex + 1
+        local row = ui.rows[rowIndex] or CreateFrame("Frame", nil, ui.child)
+        ui.rows[rowIndex] = row
+        row:SetPoint("TOPLEFT", ui.child, "TOPLEFT", 0, y)
+        row:SetWidth(width)
+        row:Show()
+
+        row.role = row.role or Font(row, "GameFontDisableSmall", "", T.colors and T.colors.dim or { 0.45, 0.50, 0.60, 1 })
+        row.role:ClearAllPoints()
+        row.role:SetPoint("TOPLEFT", row, "TOPLEFT", 6, -4)
+        row.role:SetWidth(78)
+        row.role:SetJustifyH("LEFT")
+        row.role:SetText(Tr("MSUF"))
+
+        row.text = row.text or Font(row, "GameFontHighlightSmall", "", T.colors and T.colors.text or { 1, 1, 1, 1 })
+        row.text:ClearAllPoints()
+        row.text:SetPoint("TOPLEFT", row, "TOPLEFT", 82, -4)
+        row.text:SetWidth(width - 92)
+        row.text:SetJustifyH("LEFT")
+        if row.text.SetWordWrap then row.text:SetWordWrap(true) end
+        local c = MessageColor("assistant", "queued")
+        if row.text.SetTextColor then row.text:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
+        row.text:SetText(BusyText(ui))
+
+        local h = max(30, floor((row.text.GetStringHeight and row.text:GetStringHeight() or 20) + 12))
+        row:SetHeight(h)
+        y = y - h - 4
+        ScheduleBusyPulse(ui)
+    end
+
     ui.child:SetSize(width, max(ui.height or 180, math.abs(y) + 8))
     if ui.scroll.SetVerticalScroll then
         ui.scroll:SetVerticalScroll(max(0, math.abs(y) - (ui.height or 180)))
@@ -154,6 +213,28 @@ end
 local function SetButtonText(btn, text)
     if btn and btn._msuf2Label then btn._msuf2Label:SetText(Tr(text)) end
     if btn and btn.SetText then btn:SetText(Tr(text)) end
+end
+
+local function SetControlEnabled(control, enabled)
+    if not control then return end
+    if enabled then
+        if type(control.Enable) == "function" then control:Enable() end
+    elseif type(control.Disable) == "function" then
+        control:Disable()
+    end
+end
+
+local function RefreshInputState(ui)
+    if not ui then return end
+    local busy = A.IsBusy and A.IsBusy()
+    SetButtonText(ui.send, busy and "Busy" or "Send")
+    SetControlEnabled(ui.send, not busy)
+    SetControlEnabled(ui.input, not busy)
+    if type(ui.chips) == "table" then
+        for i = 1, #ui.chips do
+            SetControlEnabled(ui.chips[i], not busy)
+        end
+    end
 end
 
 local function RenderLargeTextPanel(ui)
@@ -225,6 +306,7 @@ function A.RefreshUI()
         if A.dashboardUI.scroll then A.dashboardUI.scroll:Show() end
         RenderHistory(A.dashboardUI)
         RenderLargeTextPanel(A.dashboardUI)
+        RefreshInputState(A.dashboardUI)
     end
 end
 
@@ -350,6 +432,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         child = child,
         input = input,
         send = send,
+        chips = chips,
         largePanel = panel,
         width = cardW - 44,
         height = conversationH,
@@ -357,6 +440,10 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     A.dashboardUI = ui
 
     local function SubmitInput()
+        if A.IsBusy and A.IsBusy() then
+            if type(A.RefreshUI) == "function" then A.RefreshUI() end
+            return
+        end
         local query = Trim(input:GetText() or "")
         if query == "" then
             input:SetFocus()
@@ -364,7 +451,9 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         end
         input:SetText("")
         SetRegionShown(input._msufAssistantPlaceholder, true)
-        if type(A.Submit) == "function" then
+        if type(A.SubmitDeferred) == "function" then
+            A.SubmitDeferred(query)
+        elseif type(A.Submit) == "function" then
             A.Submit(query)
         elseif type(A.AddHistory) == "function" then
             A.AddHistory("assistant", "Assistant runtime is not ready yet. Reopen the dashboard and try again.", "failed")

@@ -540,11 +540,19 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "show player", "spieler anzeigen")
     AddAliasesForUnit(aliases, scope, "player in group", "spieler in gruppe")
+    AddAliasesForUnit(aliases, scope, "player in group frames")
+    AddAliasesForUnit(aliases, scope, "show player in group")
+    AddAliasesForUnit(aliases, scope, "show player in group frames")
+    AddAliasesForUnit(aliases, scope, "show player when solo")
+    AddAliasesForUnit(aliases, scope, "show player in group when solo")
     RegisterGroupBoolean(scope, "showPlayer", "showPlayer", "Show Player", true, "rebuild", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "show solo", "solo anzeigen")
     AddAliasesForUnit(aliases, scope, "solo mode", "solo modus")
+    AddAliasesForUnit(aliases, scope, "show while solo")
+    AddAliasesForUnit(aliases, scope, "show group while solo")
+    AddAliasesForUnit(aliases, scope, "show group frames while solo")
     RegisterGroupBoolean(scope, "showSolo", "showSolo", "Show While Solo", false, "rebuild", aliases)
 
     aliases = {}
@@ -1676,13 +1684,17 @@ Registry:RegisterAction({
         local scopes = args and args.scopes
         if type(scopes) ~= "table" and type(GP.NewGFCopyScopes) == "function" then scopes = GP.NewGFCopyScopes() end
         local count = 0
+        local copiedLabels = {}
         for i = 1, #targets do
             local dst = targets[i]
             if dst ~= "raid" and dst ~= "mythicraid" then dst = "party" end
-            if dst ~= src and GP.CopyGroupSettings(src, dst, scopes) then count = count + 1 end
+            if dst ~= src and GP.CopyGroupSettings(src, dst, scopes) then
+                count = count + 1
+                copiedLabels[#copiedLabels + 1] = tostring(UNIT_LABELS[dst] or dst)
+            end
         end
         if count == 0 then return false, "No group-frame destination was copied." end
-        return true, "Done. Copied " .. tostring(UNIT_LABELS[src] or src) .. " group-frame settings."
+        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " group-frame settings to " .. table.concat(copiedLabels, ", ") .. "."
     end,
 })
 end

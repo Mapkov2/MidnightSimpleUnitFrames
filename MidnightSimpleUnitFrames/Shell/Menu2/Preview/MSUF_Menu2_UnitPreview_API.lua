@@ -14,9 +14,35 @@ local function PreviewInCombat()
     return type(fn) == "function" and fn() or false
 end
 
+local function BoxOwnerInactive(box)
+    local menu = (MSUF and MSUF.MSUF2) or _G.MSUF2
+    if menu and menu.frame and menu.frame.IsShown and not menu.frame:IsShown() then return true end
+
+    local pageKey = box and (box._msuf2PinnedPreviewPageKey or box._msufGFNativePreviewPageKey)
+    if pageKey and menu and menu.activeKey and menu.activeKey ~= pageKey then return true end
+
+    local wrapper = box and (box._msuf2PinnedPreviewWrapper or box._msufGFNativePreviewWrapper)
+    if wrapper and wrapper.IsShown and not wrapper:IsShown() then return true end
+    if wrapper and wrapper.IsVisible and not wrapper:IsVisible() then return true end
+    return false
+end
+
 local function RequestRefreshForBox(box, reason)
     if not box or not box:IsShown() then return end
     if box.IsVisible and not box:IsVisible() then return end
+    if BoxOwnerInactive(box) then
+        box._refreshReason = nil
+        box._refreshQueued = nil
+        if box.Hide then box:Hide() end
+        return
+    end
+    local hostShown = box._msuf2UnitPageHostShown
+    if not box._msuf2PinnedFloating and type(hostShown) == "function" and not hostShown() then
+        box._refreshReason = nil
+        box._refreshQueued = nil
+        if box.Hide then box:Hide() end
+        return
+    end
     if PreviewInCombat() then
         box._refreshReason = nil
         box._refreshQueued = nil

@@ -18,10 +18,12 @@ end
 
 local COMMAND_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset", "copy",
-    "add", "put", "clear",
+    "add", "put", "clear", "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "undock", "dock", "embed",
     "export", "import", "create", "delete", "remove", "switch", "assign", "rename", "open", "close", "toggle",
     "diagnose", "why", "help", "undo", "redo", "yes", "cancel", "next", "back", "finish", "start", "stop", "enter", "leave",
-    "an", "aus", "aktivieren", "deaktivieren", "anzeigen", "verstecken", "verschiebe", "oeffne", "suche", "finde",
+    "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken",
+    "einblenden", "ausblenden", "verschiebe", "verschieben", "setze", "stelle", "erhoehe", "erhoehen", "senke", "reduziere",
+    "abkoppeln", "ankoppeln", "einbetten", "oeffne", "suche", "finde",
 }
 local COLOR_TERMS = {
     "red", "green", "blue", "yellow", "white", "black", "orange", "purple", "pink", "gold", "gray", "grey",
@@ -30,12 +32,48 @@ local COLOR_TERMS = {
 local FLOW_TERMS = {
     "yes", "y", "ja", "confirm", "apply", "cancel", "no", "nein", "abort", "stop", "next", "back", "finish", "undo", "redo",
 }
+local DISCORD_INVITE = "https://discord.gg/2Gf9b2Wprz"
+local CURSEFORGE_PAGE = "https://www.curseforge.com/wow/addons/midnightsimpleunitframes"
+local WOWHEAD_GUIDES = "https://www.wowhead.com/guides"
+
+local WOW_JOKES_EN = {
+    "Sure. Why did the unit frame join the raid? It wanted a stable group.",
+    "Sure. My castbar tried to tell a joke, but someone interrupted it before the punchline.",
+    "Sure. The healer asked for cleaner frames, so MSUF dispelled three pixels of chaos.",
+    "Sure. I rolled need on a perfect UI. The loot window said: already equipped.",
+    "Sure. Why did the DPS resize the target frame? To make the meters look smaller.",
+    "Sure. MSUF went to a raid meeting and came back with one assignment: keep everyone visible.",
+    "Sure. The power bar wanted more space, but the health bar said: not in this layout.",
+    "Sure. I asked the boss frame for feedback. It said: too many targets, not enough focus.",
+    "Sure. My favorite pull timer is a checkbox. It wipes less often than most countdowns.",
+    "Sure. Why did the unit frame stay out of fire? It had range fade enabled.",
+    "Sure. Target of Target text tried dating raid markers. It said the relationship was complicated.",
+    "Sure. The profile import promised it was simple, then arrived with seven backups and a reload prompt.",
+}
+
+local WOW_JOKES_DE = {
+    "Klar. Warum ist der Unit Frame dem Raid beigetreten? Er wollte endlich eine stabile Gruppe.",
+    "Klar. Meine Castbar wollte einen Witz erzaehlen, aber jemand hat sie vor der Pointe unterbrochen.",
+    "Klar. Der Heiler wollte mehr Uebersicht, also hat MSUF drei Pixel Chaos dispellt.",
+    "Klar. Ich habe Bedarf auf ein perfektes UI gewuerfelt. Das Lootfenster sagte: schon angelegt.",
+    "Klar. Warum hat der DPS das Target Frame groesser gemacht? Damit die Meter kleiner wirken.",
+    "Klar. MSUF kam aus dem Raidmeeting mit genau einer Aufgabe zurueck: alle sichtbar halten.",
+    "Klar. Die Power Bar wollte mehr Platz, aber die Health Bar sagte: nicht in diesem Layout.",
+    "Klar. Ich habe das Boss Frame nach Feedback gefragt. Es sagte: zu viele Ziele, zu wenig Fokus.",
+    "Klar. Mein liebster Pulltimer ist eine Checkbox. Die wiped seltener als die meisten Countdowns.",
+    "Klar. Warum bleibt der Unit Frame aus dem Feuer? Range Fade ist an.",
+    "Klar. Target-of-Target Text war mit Raidmarkern aus. Es sagte: es ist kompliziert.",
+    "Klar. Der Profilimport versprach, einfach zu sein, und kam dann mit sieben Backups und einem Reload-Hinweis.",
+}
 
 local MUTATION_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset",
     "copy", "export", "import", "create", "delete", "remove", "add", "put", "clear", "switch", "assign", "rename", "close", "toggle",
+    "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "undock", "dock", "embed",
     "start", "stop", "enter", "leave", "select", "use", "apply",
-    "an", "aus", "aktivieren", "deaktivieren", "anzeigen", "verstecken", "verschiebe",
+    "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken",
+    "einblenden", "ausblenden", "verschiebe", "verschieben", "setze", "stelle", "erhoehe", "erhoehen", "senke", "reduziere",
+    "abkoppeln", "ankoppeln", "einbetten",
 }
 local NAV_HELP_TERMS = {
     "open", "go to", "where", "where is", "where are", "find", "search", "show me", "help", "why", "diagnose", "what", "how",
@@ -44,7 +82,7 @@ local NAV_HELP_TERMS = {
 local EXPLICIT_DOMAIN_TERMS = {
     "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target", "party", "raid", "group", "group frames",
     "spieler", "ziel", "fokus", "begleiter", "gruppe", "gruppenframes",
-    "castbar", "cast bar", "auras", "aura", "buff", "debuff", "profile", "profiles", "font", "fonts", "bar", "bars", "class resource", "class power", "gameplay",
+    "castbar", "cast bar", "auras", "aura", "buff", "debuff", "profile", "profiles", "class resource", "class power", "gameplay",
 }
 
 local PAGE_CONTEXT = {
@@ -94,6 +132,7 @@ local function Normalize(text)
 end
 
 local function HasPhrase(text, phrase)
+    text = Normalize(text)
     phrase = Normalize(phrase)
     if phrase == "" then return false end
     return (" " .. text .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
@@ -164,6 +203,187 @@ local function KnowledgeNoMatch(text)
     return nil
 end
 
+local function IsGermanConversation(text)
+    return ContainsAny(text, {
+        "hallo", "moin", "servus", "danke", "danke dir", "bitte", "wie gehts", "wie geht es dir", "alles gut",
+        "wer bist du", "was bist du", "witz", "normal reden", "einfach reden", "besser in wow",
+        "besser bei wow", "wie werde ich besser", "klassenguide", "talente", "spielweise",
+    })
+end
+
+local function LooksLikeBugReportRequest(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    if ContainsAny(norm, {
+        "bug report", "report bug", "report a bug", "report bugs", "submit bug", "submit a bug",
+        "bug feedback", "bug ticket", "where report bug", "where do i report bugs", "where can i report bugs",
+        "where to report bugs", "how do i report bugs", "how to report bugs", "i found a bug",
+        "i found bug", "found a bug", "found bug", "i found an issue", "found an issue",
+        "report issue", "report an issue", "submit issue", "submit an issue", "open issue",
+        "leave comment", "leave a comment", "curseforge comment",
+        "bug melden", "bugs melden", "fehler melden", "problem melden", "bug reporten",
+        "fehler reporten", "problem reporten", "wo melde ich bugs", "wo kann ich bugs melden",
+        "wo melde ich fehler", "wo kann ich fehler melden", "wie melde ich bugs", "wie melde ich fehler",
+        "ich habe einen bug gefunden", "ich habe ein bug gefunden", "ich habe einen fehler gefunden",
+        "bug gefunden", "fehler gefunden", "kommentar auf curseforge",
+    }) then
+        return true
+    end
+
+    local hasBugWord = ContainsAny(norm, { "bug", "bugs", "issue", "issues", "problem", "problems", "fehler", "probleme" })
+    local hasReportWord = ContainsAny(norm, {
+        "report", "reporting", "submit", "where", "where do", "where can", "how do", "how to",
+        "found", "found a", "i found", "comment", "curseforge",
+        "melden", "melde", "reporten", "gefunden", "kommentar",
+    })
+    return hasBugWord and hasReportWord
+end
+
+local function BugReportReply(text)
+    local german = IsGermanConversation(text) or ContainsAny(text, {
+        "bug melden", "fehler", "problem melden", "wo melde", "wo kann", "wie melde",
+        "gefunden", "kommentar auf curseforge",
+    })
+    if german then
+        return {
+            text = "Danke, dass du es melden willst. Es waere super, wenn du den Bug reportest, damit ich ihn reproduzieren kann.\nDiscord: " .. DISCORD_INVITE .. "\nAlternativ kannst du auf der MSUF CurseForge-Seite einen Kommentar hinterlassen: " .. CURSEFORGE_PAGE .. "\nHilfreich sind: dein genauer Assistant-Text, die offene MSUF-Seite, was du erwartet hast und was wirklich passiert ist.",
+            status = "info",
+            summary = "Assistant bug report help",
+        }
+    end
+    return {
+        text = "Thanks for wanting to report it. That would really help MSUF development, especially if I can reproduce it.\nDiscord: " .. DISCORD_INVITE .. "\nAlternatively, you can leave a comment on the MSUF CurseForge page: " .. CURSEFORGE_PAGE .. "\nHelpful details: the exact Assistant text, the open MSUF page, what you expected, and what actually happened.",
+        status = "info",
+        summary = "Assistant bug report help",
+    }
+end
+
+local function NextConversationJoke(german)
+    local jokes = german and WOW_JOKES_DE or WOW_JOKES_EN
+    if #jokes == 0 then return nil end
+
+    local key = german and "lastGermanJokeIndex" or "lastEnglishJokeIndex"
+    local index = 1
+    local ctx = A.GetContext and A.GetContext() or nil
+    if type(ctx) == "table" then
+        index = (tonumber(ctx[key]) or 0) + 1
+        if index > #jokes then index = 1 end
+        ctx[key] = index
+    end
+    return jokes[index]
+end
+
+local function HumanConversationReply(text)
+    local norm = Normalize(text)
+    if norm == "" then return nil end
+    local german = IsGermanConversation(norm)
+
+    if ContainsAny(norm, {
+        "tell me a joke", "tell joke", "tell me another joke", "another joke", "say something funny", "make me laugh", "joke", "jokes",
+        "erzaehl mir einen witz", "erzaehle mir einen witz", "erzaehl einen witz",
+        "erzaehle einen witz", "mach einen witz", "noch einen witz", "noch ein witz", "naechster witz", "witz",
+    }) then
+        return {
+            text = NextConversationJoke(german) or (german and "Klar. MSUF ist bereit fuer den naechsten Witz." or "Sure. MSUF is ready for the next joke."),
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if ContainsAny(norm, {
+        "can we talk", "talk to me", "chat with me", "normal talk", "talk normally", "just talk",
+        "small talk", "normal reden", "einfach reden", "lass uns reden", "kannst du normal reden",
+    }) then
+        return {
+            text = german
+                and "Ja, kurz schon. Ich bin aber ein lokaler MSUF Assistant, keine externe KI. Ich kann dir MSUF erklaeren, Einstellungen aendern, Fehlerwege nennen oder dich bei WoW-Fragen auf aktuelle Seiten wie Wowhead verweisen."
+                or "Yes, a little. I am still a local MSUF Assistant, not an external AI. I can explain MSUF, change settings, help with bug-report paths, or point general WoW questions to current sites like Wowhead.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if ContainsAny(norm, {
+        "get better at wow", "better at wow", "improve at wow", "improve in wow", "wow improvement",
+        "learn wow", "wow guide", "guide for wow", "class guide", "rotation guide", "talent guide",
+        "best talents", "best build", "dps guide", "healer guide", "tank guide", "raid guide",
+        "mythic plus guide", "m plus guide", "m+ guide", "how do i play my class",
+        "where can i find wow guides", "wowhead",
+        "besser in wow", "besser bei wow", "wow besser", "wie werde ich besser",
+        "wie werde ich besser in wow", "klassenguide", "klassen guide", "talente",
+        "rotation", "spielweise", "wow guide deutsch",
+    }) then
+        return {
+            text = german
+                and ("Dabei kann ich nur begrenzt helfen, weil MSUF offline laeuft und keine aktuellen Klassen- oder Patch-Guides laden kann. Fuer aktuelle WoW-Guides schau am besten auf Wowhead: " .. WOWHEAD_GUIDES .. ". Bei UI-Setup, Unit Frames, Sichtbarkeit, Texten und MSUF-Profilen helfe ich dir direkt hier.")
+                or ("I can only help a little with that, because MSUF runs offline and cannot keep live class or patch guides updated. For current WoW guides, check Wowhead: " .. WOWHEAD_GUIDES .. ". For UI setup, unit frames, visibility, texts, and MSUF profiles, I can help directly here."),
+            status = "info",
+            summary = "General WoW help",
+        }
+    end
+
+    if ContainsAny(norm, { "how are you", "how are you doing", "are you ok", "you good", "wie gehts", "wie geht es dir", "alles gut", "gehts dir gut" }) then
+        return {
+            text = german
+                and "Mir geht es gut. Ich bin bereit fuer MSUF. Sag mir einfach, welche Einstellung oder welches Frame du aendern willst."
+                or "I am ready to help with MSUF. Tell me the setting or frame you want to change, or ask where something is.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if ContainsAny(norm, { "hi", "hello", "hey", "good morning", "good evening", "hallo", "moin", "servus" }) then
+        return {
+            text = german
+                and "Hallo. Ich bin der lokale MSUF Assistant. Sag mir, was du in MSUF aendern oder finden willst."
+                or "Hi. I am the local MSUF Assistant. Tell me what you want to change or find in MSUF.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if ContainsAny(norm, { "thanks", "thank you", "thx", "danke", "danke dir" }) then
+        return {
+            text = german
+                and "Gerne. Sag mir einfach den naechsten MSUF-Wunsch."
+                or "You are welcome. Send the next MSUF change whenever you are ready.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    if ContainsAny(norm, { "who are you", "what are you", "wer bist du", "was bist du" }) then
+        return {
+            text = german
+                and "Ich bin der lokale MSUF Assistant. Ich nutze keine externe KI und kann nur echte, registrierte MSUF-Funktionen ausfuehren."
+                or "I am the local MSUF Assistant. I do not use external AI, and I only run real registered MSUF controls.",
+            status = "info",
+            summary = "Assistant conversation",
+        }
+    end
+
+    return nil
+end
+
+local function FriendlyNoMatch(text)
+    local noMatch = KnowledgeNoMatch(text)
+    if noMatch then return noMatch end
+    return {
+        text = "I could not map that to a safe MSUF command yet. Please ask in Discord and include your exact wording: " .. DISCORD_INVITE,
+        status = "info",
+        summary = "Assistant no match",
+    }
+end
+
+local function IsNoClueResult(result)
+    if type(result) ~= "table" then return true end
+    local msg = tostring(result.text or "")
+    if result.kind == "unknown" and (msg == "" or msg:find("I do not know that setting yet", 1, true)) then return true end
+    if result.status == "failed" and msg:find("I do not know that setting yet", 1, true) then return true end
+    if result.status == "failed" and msg:find("could not parse", 1, true) then return true end
+    return false
+end
+
 local function IsUnknownResult(result)
     if type(result) ~= "table" then return true end
     if result.kind == "unknown" then return true end
@@ -176,7 +396,33 @@ local function IsUnknownResult(result)
 end
 
 local function IsAmbiguousResult(result)
-    return type(result) == "table" and result.kind == "ambiguous"
+    return type(result) == "table" and (result.kind == "ambiguous" or result.status == "ambiguous")
+end
+
+local function SnapshotPendingState()
+    local ctx = A.GetContext and A.GetContext()
+    return {
+        pendingConfirmation = A.pendingConfirmation,
+        pendingChoices = A.pendingChoices,
+        pendingFlow = A.pendingFlow,
+        ctx = ctx,
+        ctxPendingConfirmation = ctx and ctx.pendingConfirmation,
+        ctxPendingChoices = ctx and ctx.pendingChoices,
+        ctxPendingFlow = ctx and ctx.pendingFlow,
+    }
+end
+
+local function RestorePendingState(state)
+    if type(state) ~= "table" then return end
+    A.pendingConfirmation = state.pendingConfirmation
+    A.pendingChoices = state.pendingChoices
+    A.pendingFlow = state.pendingFlow
+    local ctx = state.ctx
+    if type(ctx) == "table" then
+        ctx.pendingConfirmation = state.ctxPendingConfirmation
+        ctx.pendingChoices = state.ctxPendingChoices
+        ctx.pendingFlow = state.ctxPendingFlow
+    end
 end
 
 
@@ -238,12 +484,30 @@ local function StripBooleanWords(text)
     out = out:gsub("^set%s+", "")
     out = out:gsub("^make%s+", "")
     out = out:gsub("^change%s+", "")
+    out = out:gsub("^increase%s+", "")
+    out = out:gsub("^decrease%s+", "")
+    out = out:gsub("^raise%s+", "")
+    out = out:gsub("^lower%s+", "")
+    out = out:gsub("^detach%s+", "")
+    out = out:gsub("^attach%s+", "")
+    out = out:gsub("^undock%s+", "")
+    out = out:gsub("^dock%s+", "")
     out = out:gsub("^on%s+", "")
     out = out:gsub("^off%s+", "")
     out = out:gsub("^enable%s+", "")
     out = out:gsub("^disable%s+", "")
+    out = out:gsub("^einschalten%s+", "")
+    out = out:gsub("^ausschalten%s+", "")
+    out = out:gsub("^einblenden%s+", "")
+    out = out:gsub("^ausblenden%s+", "")
     out = out:gsub("^show%s+", "")
     out = out:gsub("^hide%s+", "")
+    out = out:gsub("^erhoehe%s+", "")
+    out = out:gsub("^erhoehen%s+", "")
+    out = out:gsub("^senke%s+", "")
+    out = out:gsub("^reduziere%s+", "")
+    out = out:gsub("^abkoppeln%s+", "")
+    out = out:gsub("^ankoppeln%s+", "")
     out = out:gsub("%s+on$", "")
     out = out:gsub("%s+off$", "")
     out = out:gsub("%s+enabled$", "")
@@ -259,20 +523,45 @@ local function StripLeadingCommand(text)
     out = out:gsub("^set%s+", "")
     out = out:gsub("^change%s+", "")
     out = out:gsub("^make%s+", "")
+    out = out:gsub("^increase%s+", "")
+    out = out:gsub("^decrease%s+", "")
+    out = out:gsub("^raise%s+", "")
+    out = out:gsub("^lower%s+", "")
+    out = out:gsub("^detach%s+", "")
+    out = out:gsub("^attach%s+", "")
+    out = out:gsub("^undock%s+", "")
+    out = out:gsub("^dock%s+", "")
+    out = out:gsub("^erhoehe%s+", "")
+    out = out:gsub("^erhoehen%s+", "")
+    out = out:gsub("^senke%s+", "")
+    out = out:gsub("^reduziere%s+", "")
+    out = out:gsub("^abkoppeln%s+", "")
+    out = out:gsub("^ankoppeln%s+", "")
     out = out:gsub("^use%s+", "")
     out = out:gsub("^select%s+", "")
     out = out:gsub("^choose%s+", "")
     return Trim(out)
 end
 
+local function LeadingRelativeCommand(text)
+    local norm = Normalize(text)
+    if ContainsAny(norm, { "decrease", "lower", "reduce", "smaller", "shrink", "less", "senke", "reduziere", "kleiner", "weniger" }) then
+        return "decrease"
+    end
+    if ContainsAny(norm, { "increase", "raise", "higher", "more", "larger", "bigger", "grow", "erhoehe", "erhoehen", "hoeher", "groesser" }) then
+        return "increase"
+    end
+    return nil
+end
+
 local function AddBooleanContextVariants(variants, prefix, text)
     local norm = Normalize(text)
     local noun = StripBooleanWords(text)
     if noun == "" then return end
-    if ContainsAny(norm, { "off", "disable", "disabled", "hide", "aus", "deaktivieren", "verstecken" }) then
+    if ContainsAny(norm, { "off", "disable", "disabled", "hide", "aus", "deaktivieren", "ausschalten", "verstecken", "ausblenden" }) then
         AddUnique(variants, "turn off " .. prefix .. " " .. noun)
         AddUnique(variants, "disable " .. prefix .. " " .. noun)
-    elseif ContainsAny(norm, { "on", "enable", "enabled", "show", "an", "aktivieren", "anzeigen" }) then
+    elseif ContainsAny(norm, { "on", "enable", "enabled", "show", "an", "aktivieren", "einschalten", "anzeigen", "einblenden" }) then
         AddUnique(variants, "turn on " .. prefix .. " " .. noun)
         AddUnique(variants, "enable " .. prefix .. " " .. noun)
     end
@@ -299,20 +588,24 @@ local function ContextualVariants(text)
         end
     elseif M.activeKey == "opt_castbar" then
         local noun = StripLeadingCommand(text)
+        local relativeVerb = LeadingRelativeCommand(text)
         AddBooleanContextVariants(variants, "castbar", text)
         AddUnique(variants, "castbar " .. text)
         AddUnique(variants, "set castbar " .. text)
         if noun ~= "" and noun ~= Normalize(text) then
+            if relativeVerb then AddUnique(variants, relativeVerb .. " castbar " .. noun) end
             AddUnique(variants, "set castbar " .. noun)
             AddUnique(variants, "change castbar " .. noun)
         end
         AddUnique(variants, "target castbar " .. text)
     elseif M.activeKey == "opt_bars" then
         local noun = StripLeadingCommand(text)
+        local relativeVerb = LeadingRelativeCommand(text)
         AddBooleanContextVariants(variants, "bar", text)
         AddUnique(variants, "bar " .. text)
         AddUnique(variants, "set bar " .. text)
         if noun ~= "" and noun ~= Normalize(text) then
+            if relativeVerb then AddUnique(variants, relativeVerb .. " bar " .. noun) end
             AddUnique(variants, "set bar " .. noun)
             AddUnique(variants, "change bar " .. noun)
         end
@@ -330,12 +623,14 @@ local function ContextualVariants(text)
         AddUnique(variants, "global " .. text)
     else
         local noun = StripLeadingCommand(text)
+        local relativeVerb = LeadingRelativeCommand(text)
         for i = 1, #prefixes do
             local scopedPrefix = prefixes[i]
             AddBooleanContextVariants(variants, scopedPrefix, text)
             AddUnique(variants, scopedPrefix .. " " .. text)
             AddUnique(variants, "set " .. scopedPrefix .. " " .. text)
             if noun ~= "" and noun ~= Normalize(text) then
+                if relativeVerb then AddUnique(variants, relativeVerb .. " " .. scopedPrefix .. " " .. noun) end
                 AddUnique(variants, "set " .. scopedPrefix .. " " .. noun)
                 AddUnique(variants, "change " .. scopedPrefix .. " " .. noun)
             end
@@ -348,7 +643,9 @@ local function TryContext(text, coreHandler)
     if type(coreHandler) ~= "function" then return nil end
     local variants = ContextualVariants(text)
     if not variants then return nil end
+    local basePending = SnapshotPendingState()
     local bestAmbiguous
+    local bestAmbiguousPending
     for i = 1, #variants do
         local result = coreHandler(variants[i])
         if result and not IsUnknownResult(result) then
@@ -356,9 +653,15 @@ local function TryContext(text, coreHandler)
                 result.summary = result.summary or ("Current-page context: " .. tostring((CurrentPageContext() or {}).label or M.activeKey or "page"))
                 return result
             end
+            local ambiguousPending = SnapshotPendingState()
+            RestorePendingState(basePending)
             bestAmbiguous = bestAmbiguous or result
+            bestAmbiguousPending = bestAmbiguousPending or ambiguousPending
+        else
+            RestorePendingState(basePending)
         end
     end
+    if bestAmbiguous and bestAmbiguousPending then RestorePendingState(bestAmbiguousPending) end
     return bestAmbiguous
 end
 
@@ -375,13 +678,17 @@ local function MutationFallbackVariants(text)
         AddUnique(variants, "global bar " .. norm)
     end
 
-    if ContainsAny(norm, { "turn off", "turn on", "enable", "disable", "show", "hide", "an", "aus", "aktivieren", "deaktivieren", "anzeigen", "verstecken" }) then
+    if ContainsAny(norm, { "turn off", "turn on", "enable", "disable", "show", "hide", "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden" }) then
         AddUnique(variants, norm:gsub("^turn%s+off%s+", "disable "))
         AddUnique(variants, norm:gsub("^turn%s+on%s+", "enable "))
         AddUnique(variants, norm:gsub("^show%s+", "turn on "))
         AddUnique(variants, norm:gsub("^hide%s+", "turn off "))
         AddUnique(variants, norm:gsub("^disable%s+", "turn off "))
         AddUnique(variants, norm:gsub("^enable%s+", "turn on "))
+        AddUnique(variants, norm:gsub("^ausschalten%s+", "turn off "))
+        AddUnique(variants, norm:gsub("^ausblenden%s+", "turn off "))
+        AddUnique(variants, norm:gsub("^einschalten%s+", "turn on "))
+        AddUnique(variants, norm:gsub("^einblenden%s+", "turn on "))
     end
 
     return variants
@@ -412,6 +719,11 @@ function A.RouteInput(text, coreHandler)
         if pendingResult and (not IsUnknownResult(pendingResult) or HasPendingAssistantState()) then return pendingResult end
     end
 
+    if LooksLikeBugReportRequest(text) then return BugReportReply(text) end
+
+    local humanResult = HumanConversationReply(text)
+    if humanResult then return humanResult end
+
     -- Short page-local commands become useful before falling back to broad global matching.
     local contextResult = TryContext(text, coreHandler)
     if contextResult and not IsUnknownResult(contextResult) then return contextResult end
@@ -441,6 +753,7 @@ function A.RouteInput(text, coreHandler)
     if LooksLikeMutation(text) then
         local fallbackResult = TryMutationFallbacks(text, coreHandler)
         if fallbackResult and not IsUnknownResult(fallbackResult) then return fallbackResult end
+        if IsNoClueResult(coreResult) then return FriendlyNoMatch(text) end
         return coreResult or { text = "I could not apply that command. Try being more specific or ask for help.", status = "failed" }
     end
 
@@ -453,5 +766,6 @@ function A.RouteInput(text, coreHandler)
         end
     end
 
-    return coreResult or { text = "I do not know that setting yet.", status = "failed" }
+    if IsNoClueResult(coreResult) then return FriendlyNoMatch(text) end
+    return coreResult or FriendlyNoMatch(text)
 end

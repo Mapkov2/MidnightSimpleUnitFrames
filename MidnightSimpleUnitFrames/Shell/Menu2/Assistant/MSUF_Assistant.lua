@@ -23,6 +23,7 @@ local function InCombat()
 end
 
 local function SettingValueLabel(setting, value)
+    if value == nil then return "not set" end
     if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
     if setting and setting.type == "color" and type(value) == "table" then
         if type(value.label) == "string" and value.label ~= "" then return value.label end
@@ -45,7 +46,7 @@ local function ValuesEqual(setting, oldValue, newValue)
 end
 
 local function ChoiceText(choices)
-    local lines = { "I found multiple matches:" }
+    local lines = { (#choices == 1) and "I found a likely match:" or "I found multiple matches:" }
     for i = 1, #choices do
         local choice = choices[i]
         local setting = choice and choice.setting
@@ -53,11 +54,14 @@ local function ChoiceText(choices)
         if not label or label == "" then
             label = tostring(setting and setting.label or "Option")
         end
+        label = tostring(label):gsub("%s*%[%s*%]", "")
         lines[#lines + 1] = tostring(i) .. ". " .. tostring(label)
     end
-    lines[#lines + 1] = "Please choose one."
+    lines[#lines + 1] = "0. None - do nothing."
+    lines[#lines + 1] = (#choices == 1) and "Type 1 to apply it, or 0/None to cancel." or "Please choose one, or 0/None to cancel."
     return table.concat(lines, "\n")
 end
+A._ChoiceTextForTest = ChoiceText
 
 local function SerializeChoices(choices)
     local out = {}
@@ -144,7 +148,7 @@ local function PlanNeedsConfirmation(plan)
     if plan.confirmRequired == true then return true end
     if plan.kind == "action" and plan.action and plan.action.confirmRequired == true then return true end
     if AnySettingFlag(plan, "confirmRequired") then return true end
-    if type(plan.changes) == "table" and #plan.changes >= 6 then return true end
+    if type(plan.changes) == "table" and #plan.changes >= 6 and plan.bulkSafe ~= true then return true end
     return false
 end
 
@@ -157,6 +161,13 @@ local function NormalizeReply(text)
     return A.Normalize and A.Normalize(text) or Trim(text):lower()
 end
 
+local function ReplyHasPhrase(text, phrase)
+    text = " " .. NormalizeReply(text) .. " "
+    phrase = NormalizeReply(phrase)
+    if phrase == "" then return false end
+    return text:find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
 local function IsYes(text)
     text = NormalizeReply(text)
     return text == "yes" or text == "y" or text == "ja" or text == "confirm" or text == "apply"
@@ -165,6 +176,51 @@ end
 local function IsCancel(text)
     text = NormalizeReply(text)
     return text == "cancel" or text == "no" or text == "nein" or text == "abort" or text == "stop"
+end
+
+local function IsChoiceAbort(text)
+    if IsCancel(text) then return true end
+    local normalized = NormalizeReply(text)
+    local withoutPrefix = normalized:gsub("^option%s+", ""):gsub("^choice%s+", ""):gsub("^select%s+", ""):gsub("^pick%s+", "")
+    if normalized == "0" or withoutPrefix == "0" then return true end
+    if normalized == "none" or withoutPrefix == "none" then return true end
+    if normalized == "nothing" or withoutPrefix == "nothing" then return true end
+    if normalized == "do nothing" or withoutPrefix == "do nothing" then return true end
+    local phrases = {
+        "nope", "never mind", "nevermind", "forget it", "leave it", "skip it",
+        "cancel that", "abort that", "stop that", "stop it", "not now",
+        "i dont want", "i do not want", "dont want", "do not want",
+        "i dont want to change", "i do not want to change", "dont change", "do not change",
+        "not that", "not this", "wrong choice", "wrong list", "none of these", "none of them",
+        "abbrechen", "abbruch", "nein danke", "nicht aendern", "nichts aendern",
+        "ich will nicht", "will ich nicht", "doch nicht", "vergiss es", "lass es",
+    }
+    for i = 1, #phrases do
+        if ReplyHasPhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
+local function LooksLikeFreshCommand(text)
+    local phrases = {
+        "change", "set", "turn", "enable", "disable", "show", "hide", "open", "search",
+        "help", "diagnose", "move", "copy", "reset", "import", "export", "rename",
+        "create", "delete", "profile", "edit mode", "how", "what", "where", "why",
+        "make", "increase", "decrease", "switch",
+        "aendere", "setze", "schalte", "zeige", "verstecke", "oeffne", "suche",
+        "hilfe", "diagnose", "verschiebe", "kopiere", "zuruecksetzen", "profil",
+        "wie", "was", "wo", "warum",
+    }
+    for i = 1, #phrases do
+        if ReplyHasPhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
+local function ClearPendingChoices()
+    A.pendingChoices = nil
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingChoices = nil end
 end
 
 local function FindChoice(text, choices)
@@ -204,6 +260,18 @@ local function FindChoice(text, choices)
         for i = 1, #choices do
             local setting = choices[i].setting
             if setting and setting.unit == wantedUnit then return choices[i] end
+        end
+    end
+    if #normalized >= 2 then
+        for i = 1, #choices do
+            local choice = choices[i]
+            local setting = choice and choice.setting
+            local label = NormalizeReply(choice and (choice.label or choice.valueLabel) or "")
+            local valueLabel = NormalizeReply(choice and choice.valueLabel or "")
+            local settingLabel = NormalizeReply(setting and setting.label or "")
+            if label ~= "" and (label == normalized or label:find(normalized, 1, true)) then return choice end
+            if valueLabel ~= "" and (valueLabel == normalized or valueLabel:find(normalized, 1, true)) then return choice end
+            if settingLabel ~= "" and settingLabel == normalized then return choice end
         end
     end
     return nil
@@ -293,10 +361,55 @@ local function BuildSerializable(changes)
     return out
 end
 
+local function SettingLabel(setting)
+    return tostring(setting and setting.label or "MSUF setting")
+end
+
+local function DescribeChange(setting, undo)
+    local oldLabel = SettingValueLabel(setting, undo and undo.oldValue)
+    local newLabel = tostring((undo and undo.valueLabel) or SettingValueLabel(setting, undo and undo.newValue))
+    return SettingLabel(setting) .. " from " .. tostring(oldLabel) .. " to " .. tostring(newLabel)
+end
+
+local function ChangedResponse(changedSettings, undoChanges)
+    local count = #undoChanges
+    if count == 1 then
+        return "Done. I changed " .. DescribeChange(changedSettings[1], undoChanges[1]) .. "."
+    end
+
+    local visible = math.min(count, 5)
+    local lines = { "Done. I changed " .. tostring(count) .. " MSUF settings:" }
+    for i = 1, visible do
+        lines[#lines + 1] = tostring(i) .. ". " .. DescribeChange(changedSettings[i], undoChanges[i]) .. "."
+    end
+    if count > visible then
+        lines[#lines + 1] = "And " .. tostring(count - visible) .. " more."
+    end
+    return table.concat(lines, "\n")
+end
+
+local function AlreadySetResponse(changes)
+    if type(changes) == "table" and #changes == 1 then
+        local setting = changes[1].setting
+        if setting and type(setting.get) == "function" then
+            return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, setting.get()) .. "."
+        end
+    end
+    return "Already set. No MSUF setting changed."
+end
+
+local function RefreshedAlreadySetResponse(setting)
+    if setting and type(setting.get) == "function" then
+        return "Already set. " .. SettingLabel(setting) .. " is already " .. SettingValueLabel(setting, setting.get()) .. ". I refreshed it so the visible UI uses the current value."
+    end
+    return "Already set. I refreshed the related MSUF control so the visible UI uses the current value."
+end
+
 local function ExecuteChanges(plan)
     local changes = plan.changes or {}
     local undoChanges = {}
     local changedSettings = {}
+    local unchangedApplySettings = {}
     local lastSetting, lastUnit, lastFrameType, lastCategory, lastValue
     local requiresReload
 
@@ -332,12 +445,19 @@ local function ExecuteChanges(plan)
                 if setting.requiresReload == true then requiresReload = true end
                 if item.direction then A.SetContextValue("lastDirection", item.direction) end
                 RememberTextChangeContext(setting, item, newValue)
+            elseif setting.applyWhenUnchanged == true then
+                unchangedApplySettings[#unchangedApplySettings + 1] = setting
             end
         end
     end
 
     if #undoChanges == 0 then
-        return { text = "Already set.", status = "applied", summary = plan.summary }
+        if #unchangedApplySettings > 0 then
+            RunApplies(unchangedApplySettings)
+            local first = unchangedApplySettings[1]
+            return { text = RefreshedAlreadySetResponse(first), status = "applied", summary = plan.summary }
+        end
+        return { text = AlreadySetResponse(changes), status = "applied", summary = plan.summary }
     end
 
     RunApplies(changedSettings)
@@ -356,15 +476,18 @@ local function ExecuteChanges(plan)
     A.PushUndo(bundle)
     A.RememberAppliedBundle(bundle)
 
-    local first = changedSettings[1]
-    local text
-    if #undoChanges == 1 and first then
-        text = "Done. " .. tostring(first.label) .. " " .. tostring(undoChanges[1].valueLabel or SettingValueLabel(first, undoChanges[1].newValue)) .. "."
-    else
-        text = "Done. Applied " .. tostring(#undoChanges) .. " changes."
-    end
+    local text = ChangedResponse(changedSettings, undoChanges)
     if requiresReload then text = text .. " Reload UI is required for the change to fully take effect." end
     return { text = text, status = "applied", summary = plan.summary }
+end
+
+local function ActionResponse(action, plan, message)
+    message = Trim(message or "")
+    if message == "" or message == "Done." then
+        return "Done. I ran " .. tostring(plan and plan.label or action and action.label or "that MSUF action") .. "."
+    end
+    if message:find("^Done%.") or message:find("^Already set%.") then return message end
+    return "Done. " .. message
 end
 
 local function ExecuteAction(plan)
@@ -396,7 +519,7 @@ local function ExecuteAction(plan)
         action = action.key,
         serializable = {},
     })
-    return { text = message or "Done.", status = "applied", summary = plan.summary }
+    return { text = ActionResponse(action, plan, message), status = "applied", summary = plan.summary }
 end
 
 function A.ShowLargeTextPanel(spec)
@@ -452,12 +575,18 @@ local function HandlePending(text)
     end
     local choices = CurrentPendingChoices()
     if choices then
+        if IsChoiceAbort(text) then
+            ClearPendingChoices()
+            return { text = "Cancelled. No MSUF setting changed.", status = "info" }
+        end
         local choice = FindChoice(text, choices)
         if choice then
-            A.pendingChoices = nil
-            local ctx = A.GetContext and A.GetContext()
-            if ctx then ctx.pendingChoices = nil end
+            ClearPendingChoices()
             return A.ExecutePlan({ kind = "changes", changes = { choice }, label = "Assistant selected setting" })
+        end
+        if LooksLikeFreshCommand(text) then
+            ClearPendingChoices()
+            return nil
         end
         return { text = "Please choose one of the listed options by number or unit name.", status = "ambiguous" }
     end
@@ -502,15 +631,83 @@ function A.HandleInput(text)
     return A.HandleCommandInput(text)
 end
 
-function A.Submit(text)
+function A.IsBusy()
+    return A._busy == true
+end
+
+function A.GetBusyText()
+    return tostring(A._busyText or "I am working on that")
+end
+
+function A.SetBusy(active, text)
+    A._busy = active and true or false
+    A._busyText = A._busy and Trim(text or "I am working on that") or nil
+    A._busySerial = (tonumber(A._busySerial) or 0) + 1
+    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    return A._busy
+end
+
+local function SubmitNow(text, opts)
+    opts = opts or {}
     text = Trim(text)
     if text == "" then return nil end
-    A.AddHistory("user", text, "submitted")
+    if opts.skipUserHistory ~= true then
+        A.AddHistory("user", text, "submitted")
+    end
     local result = A.HandleInput(text)
     if result and result.text then
         A.AddHistory("assistant", result.text, result.status, result.summary)
+        if result.status == "applied" and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
+            A.RecordSuccessfulAssistantAction()
+            local hint = A.MaybePowerUserSupportHint()
+            if hint then A.AddHistory("assistant", hint, "info", "Assistant power-user dashboard links hint") end
+        end
     end
     if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    return result
+end
+
+function A.Submit(text)
+    return SubmitNow(text)
+end
+
+function A.SubmitDeferred(text, callback)
+    text = Trim(text)
+    if text == "" then return nil end
+    if A.IsBusy() then
+        return { text = "I am still working on the previous request.", status = "busy" }
+    end
+
+    A.AddHistory("user", text, "submitted")
+    A.SetBusy(true, "I am working on that")
+
+    local result
+    local function Finish()
+        local ok, err = pcall(function()
+            result = SubmitNow(text, { skipUserHistory = true })
+        end)
+        if not ok then
+            result = {
+                text = "Something went wrong while MSUF processed that request: " .. tostring(err),
+                status = "failed",
+            }
+            A.AddHistory("assistant", result.text, result.status)
+        end
+        A.SetBusy(false)
+        if type(callback) == "function" then pcall(callback, result) end
+    end
+
+    local scheduler = (MSUF and MSUF.Scheduler) or _G.MSUF_Scheduler
+    if scheduler and type(scheduler.RunNextFrame) == "function" then
+        scheduler.RunNextFrame(Finish)
+        return { text = A.GetBusyText(), status = "queued" }
+    end
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, Finish)
+        return { text = A.GetBusyText(), status = "queued" }
+    end
+
+    Finish()
     return result
 end
 

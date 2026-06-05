@@ -17,6 +17,7 @@ A.Knowledge = K
 
 local MAX_RESULTS = 6
 local INDEX_VERSION = 3
+local DISCORD_INVITE = "https://discord.gg/2Gf9b2Wprz"
 
 local function Trim(text)
     text = tostring(text or "")
@@ -736,8 +737,8 @@ function K.NoMatch(query)
     local text = Trim(query)
     local suffix = text ~= "" and (": " .. text) or "."
     return {
-        text = "I could not find a matching MSUF setting, page, action, diagnostic, or FAQ" .. suffix .. "\nTry: describe the page or setting name, ask 'what can I change here', or ask for general help.",
-        status = "failed",
+        text = "I could not find a safe MSUF match" .. suffix .. "\nPlease ask in Discord and include your exact wording: " .. DISCORD_INVITE,
+        status = "info",
         summary = "Assistant knowledge no match",
     }
 end

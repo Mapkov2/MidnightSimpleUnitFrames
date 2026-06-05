@@ -62,6 +62,7 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
     end
 
     local shellBody, shellEntry
+    local shellRefresh
     local built = false
     local building = false
     local LazyRefresh
@@ -113,12 +114,19 @@ local function BuildRegisteredSectionLazy(ctx, builder, unit, spec)
         if current and current ~= LazyRefresh and not builtNow then
             return pcall(current, entryArg or shellEntry)
         end
+        if shellRefresh and not builtNow then
+            return pcall(shellRefresh, entryArg or shellEntry)
+        end
     end
 
     local proxy = setmetatable({}, { __index = builder })
     function proxy:CollapsibleSection(id, title, height, defaultOpen)
         shellBody = builder:CollapsibleSection(id, title, height, defaultOpen)
         shellEntry = shellBody and shellBody._msuf2CollapsibleEntry
+        if shellEntry and type(spec.prepareShell) == "function" then
+            local refresh = spec.prepareShell(ctx, shellBody, unit, spec)
+            if type(refresh) == "function" then shellRefresh = refresh end
+        end
         if not shellEntry or shellEntry.open then
             return shellBody
         end

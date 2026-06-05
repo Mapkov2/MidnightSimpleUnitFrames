@@ -1928,6 +1928,41 @@ function M.RefreshPinnedPreviews(scroll)
     end
 end
 
+function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
+    local list = M._pinnedPreviews
+    if type(list) ~= "table" then return end
+
+    local writeIndex = 1
+    for readIndex = 1, #list do
+        local record = list[readIndex]
+        local pageKey = record and record.pageKey
+        local release
+        if releaseKey ~= nil then
+            release = pageKey == releaseKey
+        elseif keepKey ~= nil then
+            release = pageKey ~= keepKey
+        else
+            release = true
+        end
+
+        if release then
+            local box = record and record.box
+            if record and type(record.restore) == "function" then record.restore() end
+            if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then
+                record.scroll._msuf2PinnedPreviewActiveRecord = nil
+            end
+            if box then
+                if box._msuf2PinnedPreviewRecord == record then box._msuf2PinnedPreviewRecord = nil end
+                if box.Hide then box:Hide() end
+            end
+        else
+            list[writeIndex] = record
+            writeIndex = writeIndex + 1
+        end
+    end
+    for i = writeIndex, #list do list[i] = nil end
+end
+
 function W.AttachPinnedPreview(body, box, opts)
     if not (body and box) then return nil end
     opts = opts or {}
@@ -2104,7 +2139,9 @@ function W.AttachPinnedPreview(body, box, opts)
         if GameTooltip then GameTooltip:Hide() end
     end)
 
-    record = { scroll = scroll, update = ApplyPinnedState, restore = Restore, box = box, stateKey = stateKey }
+    box._msuf2PinnedPreviewPageKey = pageKey
+    box._msuf2PinnedPreviewWrapper = pageWrapper
+    record = { scroll = scroll, update = ApplyPinnedState, restore = Restore, box = box, stateKey = stateKey, pageKey = pageKey, pageWrapper = pageWrapper }
     M._pinnedPreviews = M._pinnedPreviews or {}
     for i = #M._pinnedPreviews, 1, -1 do
         local r = M._pinnedPreviews[i]

@@ -1286,28 +1286,95 @@ function M.ShowPageResetConfirm(pageKey)
     return M.ResetPageToDefaults(pageKey)
 end
 
-function M.AddRefresher(ctx, fn)
+function M.AddRefresher(ctx, fn, key)
     if not (ctx and type(fn) == "function") then return end
-    ctx.refreshers[#ctx.refreshers + 1] = fn
+    local refreshers = ctx.refreshers or (ctx.entry and ctx.entry.refreshers)
+    if type(refreshers) ~= "table" then return end
+
+    if key ~= nil then
+        local seenKeys = ctx._msuf2RefresherKeys or (ctx.entry and ctx.entry._msuf2RefresherKeys)
+        if not seenKeys then
+            seenKeys = {}
+            if ctx.entry then ctx.entry._msuf2RefresherKeys = seenKeys else ctx._msuf2RefresherKeys = seenKeys end
+        end
+        key = tostring(key)
+        if seenKeys[key] then return fn end
+        seenKeys[key] = true
+    end
+
+    local seenFns = ctx._msuf2RefresherFns or (ctx.entry and ctx.entry._msuf2RefresherFns)
+    if not seenFns then
+        seenFns = {}
+        if ctx.entry then ctx.entry._msuf2RefresherFns = seenFns else ctx._msuf2RefresherFns = seenFns end
+    end
+    if seenFns[fn] then return fn end
+    seenFns[fn] = true
+
+    refreshers[#refreshers + 1] = fn
+    return fn
+end
+
+function M.AddRefresherOnce(ctx, key, fn)
+    if type(fn) ~= "function" then return end
+    return M.AddRefresher(ctx, fn, key or fn)
+end
+
+local function ResolveRefreshEntry(ctx)
+    if ctx and ctx.entry then return ctx.entry end
+    return M.activeKey and M.cache and M.cache[M.activeKey] or nil
+end
+
+local function RunRefreshList(refreshers)
+    if type(refreshers) ~= "table" then return end
+    for i = 1, #refreshers do
+        local fn = refreshers[i]
+        if type(fn) == "function" then pcall(fn) end
+    end
+end
+
+function M.RequestRefresh(ctx, reason)
+    if M.MarkMenuDataDirty then M.MarkMenuDataDirty(reason or "request-refresh") end
+
+    local entry = ResolveRefreshEntry(ctx)
+    if entry then
+        if entry._msuf2RefreshQueued then return true end
+        entry._msuf2RefreshQueued = true
+        local function Run()
+            entry._msuf2RefreshQueued = nil
+            if entry._msuf2Invalidated then return end
+            if M.RunEntryRefreshers then
+                M.RunEntryRefreshers(entry)
+            else
+                RunRefreshList(entry.refreshers)
+            end
+        end
+        if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
+        return true
+    end
+
+    if M._msuf2RefreshQueued then return true end
+    M._msuf2RefreshQueued = true
+    local function Run()
+        M._msuf2RefreshQueued = nil
+        local active = ResolveRefreshEntry()
+        if active then
+            if M.RunEntryRefreshers then M.RunEntryRefreshers(active) else RunRefreshList(active.refreshers) end
+        end
+    end
+    if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
+    return true
 end
 
 function M.Refresh(ctx)
     if M.MarkMenuDataDirty then M.MarkMenuDataDirty("refresh") end
-    local entry = ctx and ctx.entry
-    if not entry then
-        entry = M.activeKey and M.cache and M.cache[M.activeKey]
-    end
+    local entry = ResolveRefreshEntry(ctx)
     if entry and M.RunEntryRefreshers then
         M.RunEntryRefreshers(entry, { force = true })
         return
     end
     local refreshers = ctx and ctx.refreshers
     if not refreshers then refreshers = entry and entry.refreshers end
-    if not refreshers then return end
-    for i = 1, #refreshers do
-        local fn = refreshers[i]
-        if type(fn) == "function" then pcall(fn) end
-    end
+    RunRefreshList(refreshers)
 end
 
 local function MarkCommandSearchDirty()
@@ -1345,7 +1412,7 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
             return WidgetHistorySource(ctx, widget, label)
         end,
         refresh = function()
-            if M.Refresh then M.Refresh(ctx) end
+            if M.RequestRefresh then M.RequestRefresh(ctx, "command-refresh") elseif M.Refresh then M.Refresh(ctx) end
         end,
         blockCombat = function()
             return BlockCombatAndRefresh(ctx)
