@@ -1,5 +1,11 @@
 local e,e=...if type(_G.MSUF_HardSyncCastbarPreview)~="function"then
-local function t(e)e=tonumber(e)return e and e>0 and e or nil end
+local function t(e)local n=_G.issecretvalue
+if type(n)=="function"and n(e)==true then return nil end
+e=tonumber(e)
+if type(n)=="function"and n(e)==true then return nil end
+if type(e)~="number"then return nil end
+local n,r=pcall(function()return e>0 end)
+return(n and r)and e or nil end
 function _G.MSUF_HardSyncCastbarPreview(e,n)if not e or not n then return end
 if n.GetScale and e.SetScale then local n=t(n:GetScale())if n then e:SetScale(n)end end
 if e.statusBar and e.statusBar.SetSize then if n.statusBar and n.statusBar.GetSize then
