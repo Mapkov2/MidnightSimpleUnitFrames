@@ -771,12 +771,12 @@ local STATUS_CONTROL_SPECS = {
         value = "leader", label = "Leader / Assist", show = "showLeaderIcon", defaultShow = true, size = "leaderIconSize", defaultSize = 14,
         anchor = "leaderIconAnchor", defaultAnchor = "TOPLEFT", x = "leaderIconOffsetX", defaultX = 0, y = "leaderIconOffsetY", defaultY = 3,
         layer = "leaderIconLayer", defaultLayer = 7, refresh = "MSUF_RefreshLeaderIconFrames", iconStyle = "leaderIconStyle",
-        defaultIconStyle = "BLIZZARD", units = { player = true, target = true }, aliases = { "leader icon", "assist icon", "leader assist icon" },
+        defaultIconStyle = "BLIZZARD", units = { player = true, target = true }, aliases = { "leader icon", "leader indicator", "assist icon", "assist indicator", "leader assist icon", "leader assist indicator" },
     },
     {
         value = "raidmarker", label = "Raid Marker", show = "showRaidMarker", defaultShow = true, size = "raidMarkerSize", defaultSize = 18,
         anchor = "raidMarkerAnchor", defaultAnchor = "TOPLEFT", x = "raidMarkerOffsetX", defaultX = 16, y = "raidMarkerOffsetY", defaultY = 3,
-        layer = "raidMarkerLayer", defaultLayer = 7, refresh = "MSUF_RefreshRaidMarkerFrames", aliases = { "raid marker", "raid marker icon" },
+        layer = "raidMarkerLayer", defaultLayer = 7, refresh = "MSUF_RefreshRaidMarkerFrames", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "target marker", "target marker icon", "target marker indicator" },
     },
     {
         value = "level", label = "Level Indicator", show = "showLevelIndicator", defaultShow = true, size = "levelIndicatorSize", defaultSize = 14,
@@ -809,21 +809,21 @@ local STATUS_CONTROL_SPECS = {
         anchor = "combatStateIndicatorAnchor", defaultAnchor = "TOPLEFT", x = "combatStateIndicatorOffsetX", defaultX = 0, y = "combatStateIndicatorOffsetY", defaultY = 0,
         layer = "combatStateIndicatorLayer", defaultLayer = 7, refresh = "MSUF_RequestStatusCombatIndicatorRefresh", symbol = "combatStateIndicatorSymbol",
         symbolValues = COMBAT_SYMBOL_VALUES, statusRuntime = true, units = { player = true, target = true },
-        aliases = { "combat indicator", "combat state indicator", "combat icon" },
+        aliases = { "combat indicator", "combat state indicator", "combat status indicator", "combat icon", "combat state icon", "combat symbol", "combat state symbol" },
     },
     {
         value = "statusResting", label = "Rested Indicator", show = "showRestingIndicator", defaultShow = false, size = "restedStateIndicatorSize", defaultSize = 18,
         anchor = "restedStateIndicatorAnchor", defaultAnchor = "TOPLEFT", x = "restedStateIndicatorOffsetX", defaultX = 0, y = "restedStateIndicatorOffsetY", defaultY = 0,
         layer = "restedStateIndicatorLayer", defaultLayer = 7, refresh = "MSUF_RequestStatusRestingIndicatorRefresh", symbol = "restedStateIndicatorSymbol",
         symbolValues = RESTED_SYMBOL_VALUES, statusRuntime = true, units = { player = true },
-        aliases = { "rested indicator", "resting indicator", "rested icon" },
+        aliases = { "rested indicator", "resting indicator", "rested icon", "resting icon", "rested symbol", "resting symbol" },
     },
     {
         value = "statusIncomingRes", label = "Incoming Rez Indicator", show = "showIncomingResIndicator", defaultShow = true, size = "incomingResIndicatorSize", defaultSize = 18,
         anchor = "incomingResIndicatorAnchor", defaultAnchor = "TOPRIGHT", x = "incomingResIndicatorOffsetX", defaultX = 0, y = "incomingResIndicatorOffsetY", defaultY = 0,
         layer = "incomingResIndicatorLayer", defaultLayer = 7, refresh = "MSUF_RequestStatusIncomingResIndicatorRefresh", symbol = "incomingResIndicatorSymbol",
         symbolValues = RESS_SYMBOL_VALUES, statusRuntime = true, units = { player = true, target = true },
-        aliases = { "incoming rez indicator", "incoming resurrection indicator", "rez icon", "resurrection icon" },
+        aliases = { "incoming rez indicator", "incoming resurrection indicator", "incoming rez icon", "incoming resurrection icon", "incoming rez symbol", "incoming resurrection symbol", "rez indicator", "rez icon", "rez symbol", "resurrection indicator", "resurrection icon", "resurrection symbol" },
     },
 }
 
@@ -1213,7 +1213,11 @@ for i = 1, #UNIT_KEYS do
         local spec = STATUS_CONTROL_SPECS[s]
         if not spec.units or spec.units[unit] == true then
             local aliases = {}
-            for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a]) end
+            for a = 1, #(spec.aliases or {}) do
+                local alias = spec.aliases[a]
+                aliases[#aliases + 1] = alias
+                AddAliasesForUnit(aliases, unit, alias)
+            end
             RegisterUnitBooleanSetting(unit, spec.show, spec.show, spec.label, spec.defaultShow, aliases, {
                 category = "Status Icons",
                 frameType = "unitframe",
@@ -1226,7 +1230,11 @@ for i = 1, #UNIT_KEYS do
 
             if spec.iconStyle then
                 aliases = {}
-                for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a] .. " icon pack") end
+                for a = 1, #(spec.aliases or {}) do
+                    local alias = spec.aliases[a] .. " icon pack"
+                    aliases[#aliases + 1] = alias
+                    AddAliasesForUnit(aliases, unit, alias)
+                end
                 RegisterUnitString(unit, spec.iconStyle, spec.iconStyle, spec.label .. " Icon Pack", spec.defaultIconStyle or "BLIZZARD", aliases, {
                     category = "Status Icons",
                     description = "Status icon pack key. The dropdown values can be provided dynamically by the UI; fallback values include " .. table.concat(STATUS_ICON_PACK_FALLBACK_VALUES, ", ") .. ".",
@@ -1237,7 +1245,12 @@ for i = 1, #UNIT_KEYS do
 
             if spec.symbol then
                 aliases = {}
-                for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a] .. " symbol") end
+                for a = 1, #(spec.aliases or {}) do
+                    local base = spec.aliases[a]
+                    local alias = tostring(base):find("symbol", 1, true) and base or (tostring(base) .. " symbol")
+                    aliases[#aliases + 1] = alias
+                    AddAliasesForUnit(aliases, unit, alias)
+                end
                 RegisterUnitEnum(unit, spec.symbol, spec.symbol, spec.label .. " Symbol", "DEFAULT", spec.symbolValues or { "DEFAULT" }, aliases, {
                     category = "Status Icons",
                     valueAliases = STATUS_SYMBOL_ALIASES,
@@ -1247,7 +1260,11 @@ for i = 1, #UNIT_KEYS do
             end
 
             aliases = {}
-            for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a] .. " size") end
+            for a = 1, #(spec.aliases or {}) do
+                local alias = spec.aliases[a] .. " size"
+                aliases[#aliases + 1] = alias
+                AddAliasesForUnit(aliases, unit, alias)
+            end
             RegisterUnitNumberSetting(unit, spec.value .. "Size", spec.size, spec.label .. " Size", spec.defaultSize, 8, 64, aliases, {
                 category = "Status Icons",
                 keySuffix = spec.size,
@@ -1257,7 +1274,11 @@ for i = 1, #UNIT_KEYS do
             })
 
             aliases = {}
-            for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a] .. " anchor") end
+            for a = 1, #(spec.aliases or {}) do
+                local alias = spec.aliases[a] .. " anchor"
+                aliases[#aliases + 1] = alias
+                AddAliasesForUnit(aliases, unit, alias)
+            end
             RegisterUnitEnum(unit, spec.value .. "Anchor", spec.anchor, spec.label .. " Anchor", spec.defaultAnchor, spec.nameAnchors and STATUS_ANCHOR_VALUES or STATUS_CORNER_ANCHOR_VALUES, aliases, {
                 category = "Status Icons",
                 keySuffix = spec.anchor,
@@ -1272,7 +1293,11 @@ for i = 1, #UNIT_KEYS do
             })
 
             aliases = {}
-            for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a] .. " x offset") end
+            for a = 1, #(spec.aliases or {}) do
+                local alias = spec.aliases[a] .. " x offset"
+                aliases[#aliases + 1] = alias
+                AddAliasesForUnit(aliases, unit, alias)
+            end
             RegisterUnitNumberSetting(unit, spec.value .. "OffsetX", spec.x, spec.label .. " X Offset", spec.defaultX, -1000, 1000, aliases, {
                 category = "Status Icons",
                 keySuffix = spec.x,
@@ -1281,7 +1306,11 @@ for i = 1, #UNIT_KEYS do
             })
 
             aliases = {}
-            for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a] .. " y offset") end
+            for a = 1, #(spec.aliases or {}) do
+                local alias = spec.aliases[a] .. " y offset"
+                aliases[#aliases + 1] = alias
+                AddAliasesForUnit(aliases, unit, alias)
+            end
             RegisterUnitNumberSetting(unit, spec.value .. "OffsetY", spec.y, spec.label .. " Y Offset", spec.defaultY, -1000, 1000, aliases, {
                 category = "Status Icons",
                 keySuffix = spec.y,
@@ -1290,7 +1319,11 @@ for i = 1, #UNIT_KEYS do
             })
 
             aliases = {}
-            for a = 1, #(spec.aliases or {}) do AddAliasesForUnit(aliases, unit, spec.aliases[a] .. " layer") end
+            for a = 1, #(spec.aliases or {}) do
+                local alias = spec.aliases[a] .. " layer"
+                aliases[#aliases + 1] = alias
+                AddAliasesForUnit(aliases, unit, alias)
+            end
             RegisterUnitNumberSetting(unit, spec.value .. "Layer", spec.layer, spec.label .. " Layer", spec.defaultLayer, 1, 10, aliases, {
                 category = "Status Icons",
                 keySuffix = spec.layer,
@@ -1563,6 +1596,31 @@ Registry:RegisterAction({
     end,
 })
 
+local UNIT_COPY_SCOPE_LABELS = {
+    { key = "basics", label = "Frame Basics" },
+    { key = "text", label = "Text" },
+    { key = "portrait", label = "Portrait" },
+    { key = "power", label = "Power Bar" },
+    { key = "castbar", label = "Castbar" },
+    { key = "status", label = "Status Icons" },
+    { key = "load", label = "Load Conditions" },
+    { key = "transparency", label = "Transparency" },
+    { key = "layout", label = "Size & Anchoring" },
+}
+
+local function UnitCopyScopeSummary(scopes)
+    if type(scopes) ~= "table" then return "" end
+    local selected, total = {}, 0
+    for i = 1, #UNIT_COPY_SCOPE_LABELS do
+        local row = UNIT_COPY_SCOPE_LABELS[i]
+        total = total + 1
+        if scopes[row.key] == true then selected[#selected + 1] = row.label end
+    end
+    if #selected == 0 then return " No copy categories were selected." end
+    if #selected == total then return " Categories: all unit copy categories." end
+    return " Categories: " .. table.concat(selected, ", ") .. "."
+end
+
 Registry:RegisterAction({
     key = "copy_unit",
     label = "Copy Unit Settings",
@@ -1586,7 +1644,7 @@ Registry:RegisterAction({
         end
         local targetText = table.concat(targetLabels, ", ")
         if targetText == "" then targetText = "the selected destination" end
-        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " settings to " .. targetText .. "."
+        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " settings to " .. targetText .. "." .. UnitCopyScopeSummary(args and args.scopes)
     end,
 })
 

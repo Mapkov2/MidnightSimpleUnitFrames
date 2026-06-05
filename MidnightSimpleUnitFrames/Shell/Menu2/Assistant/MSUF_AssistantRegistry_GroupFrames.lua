@@ -450,14 +450,14 @@ local GROUP_STATUS_ICON_PACK_ALIASES = {
 }
 
 local GROUP_STATUS_ICON_SPECS = {
-    { value = "roleIcon", label = "Role Icon", enabled = "roleIcon", iconStyle = "roleIconStyle", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1, terms = { "role icon", "role indicator" } },
-    { value = "leaderIcon", label = "Leader Icon", enabled = "leaderIcon", iconStyle = "leaderIconStyle", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "leader icon", "leader indicator" } },
-    { value = "assistIcon", label = "Assist Icon", enabled = "assistIcon", iconStyle = "assistIconStyle", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "assist icon", "assistant icon", "assist indicator" } },
-    { value = "raidMarker", label = "Raid Marker", enabled = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 3, terms = { "raid marker", "raid marker icon", "target marker" } },
-    { value = "readyCheckIcon", label = "Ready Check Icon", enabled = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "ready check", "ready check icon", "ready icon" } },
-    { value = "summonIcon", label = "Summon Icon", enabled = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "summon icon", "summon indicator" } },
-    { value = "resurrectIcon", label = "Resurrect Icon", enabled = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "resurrect icon", "resurrection icon", "rez icon", "incoming resurrection" } },
-    { value = "phaseIcon", label = "Phase Icon", enabled = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3, terms = { "phase icon", "phasing icon", "phase indicator" } },
+    { value = "roleIcon", label = "Role Icon", enabled = "roleIcon", iconStyle = "roleIconStyle", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1, terms = { "role icon", "role indicator", "role symbol" } },
+    { value = "leaderIcon", label = "Leader Icon", enabled = "leaderIcon", iconStyle = "leaderIconStyle", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "leader icon", "leader indicator", "leader symbol" } },
+    { value = "assistIcon", label = "Assist Icon", enabled = "assistIcon", iconStyle = "assistIconStyle", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
+    { value = "raidMarker", label = "Raid Marker", enabled = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 3, terms = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
+    { value = "readyCheckIcon", label = "Ready Check Icon", enabled = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
+    { value = "summonIcon", label = "Summon Icon", enabled = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "summon icon", "summon indicator", "summon symbol" } },
+    { value = "resurrectIcon", label = "Resurrect Icon", enabled = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
+    { value = "phaseIcon", label = "Phase Icon", enabled = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3, terms = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
     { value = "statusText", label = "Dead Text", enabled = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusOffsetX", y = "statusOffsetY", layer = "statusTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7, terms = { "dead text", "dead status text", "status text" } },
     { value = "statusGhostText", label = "Ghost Text", enabled = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", x = "statusGhostOffsetX", y = "statusGhostOffsetY", layer = "statusGhostTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7, terms = { "ghost text", "ghost status text" } },
     { value = "statusAFKText", label = "AFK DND Text", enabled = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", x = "statusAFKOffsetX", y = "statusAFKOffsetY", layer = "statusAFKTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7, terms = { "afk text", "dnd text", "afk dnd text", "away text" } },
@@ -496,8 +496,14 @@ end
 local function AddGroupStatusIconAliases(out, scope, spec, suffix)
     for i = 1, #(spec.terms or {}) do
         local term = spec.terms[i]
-        AddAliasesForUnit(out, scope, suffix and (term .. " " .. suffix) or term)
-        if suffix then AddAliasesForUnit(out, scope, suffix .. " " .. term) end
+        local alias = suffix and (term .. " " .. suffix) or term
+        out[#out + 1] = alias
+        AddAliasesForUnit(out, scope, alias)
+        if suffix then
+            local prefixAlias = suffix .. " " .. term
+            out[#out + 1] = prefixAlias
+            AddAliasesForUnit(out, scope, prefixAlias)
+        end
     end
 end
 
@@ -1661,6 +1667,33 @@ Registry:RegisterAction({
     end,
 })
 
+local GROUP_COPY_SCOPE_LABELS = {
+    { key = "general", label = "Basics" },
+    { key = "health", label = "Health & Bars" },
+    { key = "text", label = "Text & Name" },
+    { key = "font", label = "Font Override" },
+    { key = "border", label = "Background & Opacity" },
+    { key = "range", label = "Range Fade" },
+    { key = "indicators", label = "Indicators & Status Icons" },
+    { key = "auras", label = "Auras" },
+    { key = "highlight", label = "Highlight & Aggro" },
+    { key = "dstripe", label = "Debuff Stripe" },
+    { key = "features", label = "Corner/Spell" },
+}
+
+local function GroupCopyScopeSummary(scopes)
+    if type(scopes) ~= "table" then return "" end
+    local selected, total = {}, 0
+    for i = 1, #GROUP_COPY_SCOPE_LABELS do
+        local row = GROUP_COPY_SCOPE_LABELS[i]
+        total = total + 1
+        if scopes[row.key] == true then selected[#selected + 1] = row.label end
+    end
+    if #selected == 0 then return " No copy categories were selected." end
+    if #selected == total then return " Categories: all group-frame copy categories." end
+    return " Categories: " .. table.concat(selected, ", ") .. "."
+end
+
 Registry:RegisterAction({
     key = "copy_group",
     label = "Copy Group Frame Settings",
@@ -1694,7 +1727,7 @@ Registry:RegisterAction({
             end
         end
         if count == 0 then return false, "No group-frame destination was copied." end
-        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " group-frame settings to " .. table.concat(copiedLabels, ", ") .. "."
+        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " group-frame settings to " .. table.concat(copiedLabels, ", ") .. "." .. GroupCopyScopeSummary(scopes)
     end,
 })
 end

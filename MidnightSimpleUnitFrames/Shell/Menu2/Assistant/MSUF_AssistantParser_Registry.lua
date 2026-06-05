@@ -200,6 +200,19 @@ local function HasAllScopeIntent(text)
     })
 end
 
+local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
+    "indicator", "indicators", "status icon", "status icons", "status indicator", "status indicators",
+    "icon", "icons", "symbol", "symbols", "portrait", "portraits", "power bar", "mana bar",
+    "health bar", "hp bar", "castbar", "cast bar", "name", "names", "text", "border", "outline",
+    "alpha", "opacity", "range fade",
+}
+
+local function RootFrameEnabledBlockedByDetail(setting, text)
+    if not (setting and setting.attribute == "enabled") then return false end
+    if setting.frameType ~= "unitframe" and setting.frameType ~= "group" then return false end
+    return ContainsAny(text, ROOT_FRAME_ENABLED_DETAIL_TERMS)
+end
+
 local function ClassPowerMentionIsNegated(text)
     return ContainsAny(text, {
         "not class resource", "not class resources", "not class power", "not class bar", "not resource bar",
@@ -247,6 +260,7 @@ end
 
 local function SettingMatchesText(setting, text)
     if type(setting) ~= "table" then return false end
+    if RootFrameEnabledBlockedByDetail(setting, text) then return false end
     if not SettingAllowedByExplicitScopes(setting, text) then return false end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
         local wantedGroup
@@ -272,6 +286,7 @@ end
 
 local function SettingMatchScore(setting, text)
     if type(setting) ~= "table" then return 0 end
+    if RootFrameEnabledBlockedByDetail(setting, text) then return 0 end
     if not SettingAllowedByExplicitScopes(setting, text) then return 0 end
     if setting.frameType == "castbar" and setting.attribute == "enabled" and ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) then
         return 0
@@ -721,7 +736,8 @@ end
 local LOAD_CONDITION_DETAIL_BLOCKERS = {
     "name", "names", "text", "hp text", "health text", "power text", "mana text",
     "castbar", "cast bar", "power bar", "mana bar", "health bar", "status icon",
-    "status indicator", "portrait", "alpha", "opacity", "range fade",
+    "status icons", "status indicator", "status indicators", "indicator", "indicators",
+    "icon", "icons", "symbol", "symbols", "portrait", "alpha", "opacity", "range fade",
 }
 
 local function HasUnitLoadConditionIntent(text, spec)

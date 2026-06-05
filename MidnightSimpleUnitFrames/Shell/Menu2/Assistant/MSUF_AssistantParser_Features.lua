@@ -376,6 +376,84 @@ function A._ParseGameplayNumberShortcut(text)
     }
 end
 
+local GAMEPLAY_PRESET_BOUNDS = {
+    combatTimer = { width = 180, height = 42 },
+    combatState = { width = 220, height = 42 },
+    firstDance = { width = 220, height = 60 },
+}
+
+local UNIT_PRESET_DEFAULTS = {
+    player = { x = -256, y = -180, width = 275, height = 40 },
+    target = { x = 320, y = -180, width = 275, height = 40 },
+    focus = { x = -260, y = -300, width = 250, height = 40 },
+    pet = { x = -275, y = -250, width = 160, height = 36 },
+    targettarget = { x = 220, y = -300, width = 250, height = 40 },
+    focustarget = { x = 260, y = 180, width = 250, height = 40 },
+    boss = { x = 0, y = 160, width = 250, height = 40 },
+}
+
+local function GameplayPresetPlacement(text)
+    if ContainsAny(text, { "under", "below", "beneath", "bottom of", "unter", "darunter" }) then return "below" end
+    if ContainsAny(text, { "above", "over", "top of", "ueber", "darueber", "oben" }) then return "above" end
+    if ContainsAny(text, { "left of", "to the left of", "links von" }) then return "left" end
+    if ContainsAny(text, { "right of", "to the right of", "rechts von" }) then return "right" end
+    if ContainsAny(text, { "center on", "centered on", "middle of", "zentriert", "mitte" }) then return "center" end
+    return nil
+end
+
+local function UnitPresetFrame(unit)
+    unit = tostring(unit or "")
+    local fallback = UNIT_PRESET_DEFAULTS[unit]
+    local db = _G.MSUF_DB
+    local conf = db and type(db[unit]) == "table" and db[unit] or {}
+    return {
+        x = tonumber(conf.offsetX) or (fallback and fallback.x) or 0,
+        y = tonumber(conf.offsetY) or (fallback and fallback.y) or 0,
+        width = tonumber(conf.width) or (fallback and fallback.width) or 250,
+        height = tonumber(conf.height) or (fallback and fallback.height) or 40,
+    }
+end
+
+local function GameplayPresetPosition(spec, unit, placement)
+    local frame = UnitPresetFrame(unit)
+    local bounds = GAMEPLAY_PRESET_BOUNDS[spec and spec.id] or { width = 180, height = 42 }
+    local gap = 8
+    local x, y = frame.x, frame.y
+    if placement == "below" then
+        y = frame.y - (frame.height / 2) - (bounds.height / 2) - gap
+    elseif placement == "above" then
+        y = frame.y + (frame.height / 2) + (bounds.height / 2) + gap
+    elseif placement == "left" then
+        x = frame.x - (frame.width / 2) - (bounds.width / 2) - gap
+    elseif placement == "right" then
+        x = frame.x + (frame.width / 2) + (bounds.width / 2) + gap
+    end
+    return math.floor(x + 0.5), math.floor(y + 0.5)
+end
+
+function A._ParseGameplayPositionPreset(text)
+    if not ContainsAny(text, { "move", "place", "put", "position", "set", "verschiebe", "stelle", "setze" }) then return nil end
+    local placement = GameplayPresetPlacement(text)
+    if not placement then return nil end
+    local spec = A._GameplayShortcutSpec(text)
+    if not spec or not spec.x or not spec.y then return nil end
+    local units = DetectUnits(text)
+    local unit = units[1] or "player"
+    local x, y = GameplayPresetPosition(spec, unit, placement)
+    local xSetting = Registry and Registry:GetSetting(spec.x)
+    local ySetting = Registry and Registry:GetSetting(spec.y)
+    if not xSetting or not ySetting then return nil end
+    return {
+        kind = "changes",
+        changes = {
+            { setting = xSetting, value = x },
+            { setting = ySetting, value = y },
+        },
+        label = "Position " .. tostring(spec.label or "Gameplay element"),
+        summary = "Positions a Gameplay tracker near the selected unit frame using its real X/Y offset settings.",
+    }
+end
+
 function A._ParseGameplayMoveShortcut(text)
     local direction = DetectDirection(text, {})
     local movementIntent = ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y", "horizontal", "vertical" }) or (direction and FirstNumber(text) ~= nil)
@@ -1316,7 +1394,15 @@ local function ParseCastbarGlobalDetail(text)
 end
 
 local function ParseGuidedSetup(text)
-    if not ContainsAny(text, { "help me build", "guided setup", "setup", "build a clean", "clean layout", "rogue layout", "layout bauen", "setup hilfe" }) then return nil end
+    if not ContainsAny(text, {
+        "help me build", "guided setup", "setup", "setup guide", "start guide", "start tour",
+        "tour guide", "guide me", "show me around", "walk me through", "getting started",
+        "start with msuf", "how do i start with msuf", "first time msuf", "new to msuf",
+        "never used msuf", "never used this addon", "new user", "beginner guide",
+        "beginner setup", "onboarding", "build a clean", "clean layout", "rogue layout",
+        "layout bauen", "setup hilfe", "fuehre mich", "fuehr mich", "fuehrung",
+        "einsteiger", "anfanger", "neu in msuf", "noch nie msuf", "zeig mir msuf",
+    }) then return nil end
     local action = Registry and Registry:GetAction("guided_setup")
     return action and {
         kind = "action",
@@ -1338,19 +1424,37 @@ local function ParseGuidedSetupFollowup(text, ctx)
         "show setup", "show setup step", "repeat setup", "current setup step", "setup status",
     })
     if not active and not explicit then return nil end
+    local exact
+    if active then
+        if text == "cancel" or text == "stop" or text == "abort" then
+            exact = "cancel"
+        elseif text == "finish" or text == "done" or text == "complete" then
+            exact = "finish"
+        elseif text == "skip" then
+            exact = "skip"
+        elseif text == "next" or text == "continue" then
+            exact = "next"
+        elseif text == "back" or text == "previous" then
+            exact = "back"
+        elseif text == "show" or text == "repeat" or text == "status" then
+            exact = "show"
+        end
+    end
     local command
-    if ContainsAny(text, { "cancel setup", "stop setup", "abort setup", "setup cancel" }) or (active and HasPhrase(text, "cancel")) then
+    if ContainsAny(text, { "cancel setup", "stop setup", "abort setup", "setup cancel" }) then
         command = "cancel"
-    elseif ContainsAny(text, { "finish setup", "done setup", "setup done", "complete setup", "setup complete" }) or (active and HasPhrase(text, "done")) then
+    elseif ContainsAny(text, { "finish setup", "done setup", "setup done", "complete setup", "setup complete" }) then
         command = "finish"
-    elseif ContainsAny(text, { "skip setup", "skip setup step", "setup skip" }) or (active and HasPhrase(text, "skip")) then
+    elseif ContainsAny(text, { "skip setup", "skip setup step", "setup skip" }) then
         command = "skip"
-    elseif ContainsAny(text, { "next setup", "next setup step", "setup next", "continue setup" }) or (active and ContainsAny(text, { "next", "continue" })) then
+    elseif ContainsAny(text, { "next setup", "next setup step", "setup next", "continue setup" }) then
         command = "next"
-    elseif ContainsAny(text, { "back setup", "back setup step", "setup back", "previous setup", "previous setup step", "setup previous" }) or (active and ContainsAny(text, { "back", "previous" })) then
+    elseif ContainsAny(text, { "back setup", "back setup step", "setup back", "previous setup", "previous setup step", "setup previous" }) then
         command = "back"
     elseif ContainsAny(text, { "show setup", "show setup step", "repeat setup", "current setup step", "setup status" }) then
         command = "show"
+    elseif exact then
+        command = exact
     end
     if not command then return nil end
     local action = Registry and Registry:GetAction("guided_setup_step")

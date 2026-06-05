@@ -88,22 +88,45 @@ local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
 local ParseAuraBlacklist = P.ParseAuraBlacklist
 
+local COPY_VERBS = { "copy", "kopiere", "kopieren", "uebernehme", "uebernehmen" }
+
+local function CopyCommandText(text)
+    local normalized = Normalize(text)
+    local padded = " " .. normalized .. " "
+    local best
+    for i = 1, #COPY_VERBS do
+        local verb = COPY_VERBS[i]
+        local startPos = padded:find(" " .. verb .. " ", 1, true)
+        if startPos and (not best or startPos < best) then best = startPos end
+    end
+    if not best then return nil end
+    return Trim(padded:sub(best + 1))
+end
+
 local function CopyTextParts(text)
-    local src, dst = text:match("^copy%s+(.+)%s+to%s+(.+)$")
-    if src and dst then return src, dst end
-    src, dst = text:match("^copy%s+.+%s+from%s+(.+)%s+to%s+(.+)$")
+    text = CopyCommandText(text)
+    if not text then return nil, nil end
+    local src, dst = text:match("^copy%s+.-%s+from%s+(.+)%s+to%s+(.+)$")
     if src and dst then return src, dst end
     src, dst = text:match("^copy%s+from%s+(.+)%s+to%s+(.+)$")
     if src and dst then return src, dst end
+    src, dst = text:match("^copy%s+(.+)%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^kopiere%s+.-%s+von%s+(.+)%s+nach%s+(.+)$")
+    if src and dst then return src, dst end
     src, dst = text:match("^kopiere%s+(.+)%s+nach%s+(.+)$")
     if src and dst then return src, dst end
-    src, dst = text:match("^kopiere%s+.+%s+von%s+(.+)%s+nach%s+(.+)$")
+    src, dst = text:match("^kopieren%s+.-%s+von%s+(.+)%s+nach%s+(.+)$")
     if src and dst then return src, dst end
     src, dst = text:match("^kopieren%s+(.+)%s+nach%s+(.+)$")
     if src and dst then return src, dst end
-    src, dst = text:match("^kopieren%s+.+%s+von%s+(.+)%s+nach%s+(.+)$")
+    src, dst = text:match("^uebernehme%s+.-%s+von%s+(.+)%s+fuer%s+(.+)$")
     if src and dst then return src, dst end
     src, dst = text:match("^uebernehme%s+(.+)%s+fuer%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^uebernehmen%s+.-%s+von%s+(.+)%s+fuer%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^uebernehmen%s+(.+)%s+fuer%s+(.+)$")
     if src and dst then return src, dst end
     return nil, nil
 end
@@ -164,6 +187,34 @@ local function ParseGroupCopy(text)
     }
 end
 
+local function ParseUnsupportedMixedCopy(text)
+    if not ContainsAny(text, { "copy", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    local srcText, dstText = CopyTextParts(text)
+    if not (srcText and dstText) then return nil end
+
+    local srcUnits = DetectUnits(srcText)
+    local srcGroups = DetectGroups(srcText)
+    local dstUnits = DetectUnits(dstText)
+    local dstGroups = DetectGroups(dstText)
+    if #srcUnits > 0 and #dstGroups > 0 then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "I can copy Unit Frame settings to other Unit Frames, and Group Frame settings to other Group Frames. I cannot safely copy a Unit Frame directly into a Group Frame because MSUF does not expose a shared public helper for that different DB shape. Try: copy just text options from target to player, or copy just health and text options from party to raid.",
+            summary = "Explains unsupported mixed Unit/Group copy request without faking a helper.",
+        }
+    end
+    if #srcGroups > 0 and #dstUnits > 0 then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "I can copy Group Frame settings to other Group Frames, and Unit Frame settings to other Unit Frames. I cannot safely copy a Group Frame directly into a Unit Frame because MSUF does not expose a shared public helper for that different DB shape. Try: copy just health and text options from party to raid, or copy just text options from target to player.",
+            summary = "Explains unsupported mixed Group/Unit copy request without faking a helper.",
+        }
+    end
+    return nil
+end
+
 local function ParseCopy(text)
     if not ContainsAny(text, { "copy", "kopieren", "kopiere", "uebernehmen" }) then return nil end
     local source, targets
@@ -211,14 +262,14 @@ local function BuildContextReset(text, ctx)
 end
 
 local GROUP_STATUS_ICON_ALIASES = {
-    { key = "roleIcon", aliases = { "role icon", "role indicator" } },
-    { key = "leaderIcon", aliases = { "leader icon", "leader indicator" } },
-    { key = "assistIcon", aliases = { "assist icon", "assistant icon", "assist indicator" } },
-    { key = "raidMarker", aliases = { "raid marker", "raid marker icon", "target marker" } },
-    { key = "readyCheckIcon", aliases = { "ready check", "ready check icon", "ready icon" } },
-    { key = "summonIcon", aliases = { "summon icon", "summon indicator" } },
-    { key = "resurrectIcon", aliases = { "resurrect icon", "resurrection icon", "rez icon", "incoming resurrection" } },
-    { key = "phaseIcon", aliases = { "phase icon", "phasing icon", "phase indicator" } },
+    { key = "roleIcon", aliases = { "role icon", "role indicator", "role symbol" } },
+    { key = "leaderIcon", aliases = { "leader icon", "leader indicator", "leader symbol" } },
+    { key = "assistIcon", aliases = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
+    { key = "raidMarker", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
+    { key = "readyCheckIcon", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
+    { key = "summonIcon", aliases = { "summon icon", "summon indicator", "summon symbol" } },
+    { key = "resurrectIcon", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
+    { key = "phaseIcon", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
     { key = "statusText", aliases = { "dead text", "dead status text", "status text" } },
     { key = "statusGhostText", aliases = { "ghost text", "ghost status text" } },
     { key = "statusAFKText", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
@@ -233,7 +284,7 @@ local function GroupStatusIconForText(text)
 end
 
 local GROUP_STATUS_ICON_TERMS = {
-    "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators",
+    "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "symbol", "symbols",
     "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon",
     "resurrect icon", "rez icon", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
 }
@@ -441,9 +492,9 @@ local function ParseGroupStatusPreview(text)
 end
 
 local UNIT_STATUS_RESET_TERMS = {
-    "status indicator", "status indicators", "status icon", "status icons", "indicator position", "level indicator", "level text",
+    "status indicator", "status indicators", "status icon", "status icons", "status symbol", "status symbols", "indicator position", "level indicator", "level text",
     "leader icon", "assist icon", "raid marker", "raid marker icon", "raid group", "raid group name",
-    "elite icon", "rare icon", "dead text", "status text", "combat indicator", "combat icon",
+    "elite icon", "rare icon", "dead text", "status text", "combat indicator", "combat icon", "combat symbol",
     "rested indicator", "resting indicator", "incoming rez", "incoming resurrection", "resurrection icon",
 }
 
@@ -911,6 +962,7 @@ P.RemoveUnit = RemoveUnit
 P.CopyTargetsForText = CopyTargetsForText
 P.CopyGroupTargetsForText = CopyGroupTargetsForText
 P.ParseGroupCopy = ParseGroupCopy
+P.ParseUnsupportedMixedCopy = ParseUnsupportedMixedCopy
 P.ParseCopy = ParseCopy
 P.BuildContextReset = BuildContextReset
 P.GROUP_STATUS_ICON_ALIASES = GROUP_STATUS_ICON_ALIASES
