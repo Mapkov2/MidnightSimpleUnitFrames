@@ -348,9 +348,23 @@ builders.LAYOUT = function(E)
         local fillReverse = (b.classPowerFillReverse == true)
         local numTicks = maxPower - 1
         local snapTickW = (tickW > 0 and type(snap) == "function") and snap(CP.container, tickW) or tickW
-        local totalSepW = numTicks * (snapTickW + snapGap)
+        local sepW = snapTickW + snapGap
+        if numTicks > 0 then
+            local maxSepW = math_floor((frameW - maxPower) / numTicks)
+            if maxSepW < 0 then maxSepW = 0 end
+            if sepW > maxSepW then
+                if snapTickW > maxSepW then
+                    snapTickW = maxSepW
+                    snapGap = 0
+                else
+                    snapGap = maxSepW - snapTickW
+                end
+                sepW = snapTickW + snapGap
+            end
+        end
+        local totalSepW = numTicks * sepW
         local totalBarSpace = frameW - totalSepW
-        local barW = math_floor(totalBarSpace / maxPower)
+        if totalBarSpace < maxPower then totalBarSpace = maxPower end
 
         local bgA = tonumber(b.classPowerBgAlpha) or 0.3
         local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
@@ -368,11 +382,14 @@ builders.LAYOUT = function(E)
                        or (b.classPowerHideWhenEmpty == true))
 
         local xPos = 0
+        local prevBoundary = 0
         for i = 1, maxPower do
             local bar = CP.bars[i]
             if bar then
                 bar:ClearAllPoints()
-                local thisW = (i == maxPower) and (frameW - xPos) or barW
+                local boundary = math_floor((totalBarSpace * i) / maxPower)
+                local thisW = boundary - prevBoundary
+                if thisW < 1 then thisW = 1 end
                 if fillReverse then
                     bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -xPos, 0)
                 else
@@ -381,7 +398,22 @@ builders.LAYOUT = function(E)
                 bar:SetSize(thisW, h)
                 bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
                 bar:Show()
-                xPos = xPos + thisW + snapTickW + snapGap
+                if snapTickW > 0 and i < maxPower then
+                    local tick = CP.ticks[i]
+                    if tick then
+                        local tickX = xPos + thisW + math_floor(snapGap / 2)
+                        tick:ClearAllPoints()
+                        if fillReverse then
+                            tick:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -tickX, 0)
+                        else
+                            tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
+                        end
+                        tick:SetSize(snapTickW, h)
+                        tick:Show()
+                    end
+                end
+                xPos = xPos + thisW + sepW
+                prevBoundary = boundary
             end
         end
 
@@ -389,24 +421,6 @@ builders.LAYOUT = function(E)
             if CP.bars[i] then CP.bars[i]:Hide() end
         end
 
-        if snapTickW > 0 then
-            local tickX = barW + math_floor(snapGap / 2)
-            local tickStride = barW + snapTickW + snapGap
-            for i = 1, numTicks do
-                local tick = CP.ticks[i]
-                if tick then
-                    tick:ClearAllPoints()
-                    if fillReverse then
-                        tick:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(tickX), 0)
-                    else
-                        tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
-                    end
-                    tick:SetSize(snapTickW, h)
-                    tick:Show()
-                end
-                tickX = tickX + tickStride
-            end
-        end
         local hideFrom = (snapTickW > 0) and maxPower or 1
         for i = hideFrom, #CP.ticks do
             if CP.ticks[i] then CP.ticks[i]:Hide() end
