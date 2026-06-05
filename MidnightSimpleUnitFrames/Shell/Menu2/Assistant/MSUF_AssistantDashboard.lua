@@ -286,7 +286,7 @@ local function RenderLargeTextPanel(ui)
                 summary = "Imports profile data into the active profile.",
             })
             if result and result.text then A.AddHistory("assistant", result.text, result.status, result.summary) end
-            A.largeTextPanel.status = "Confirmation requested in the conversation. Type yes to apply or cancel."
+            A.largeTextPanel.status = "Confirmation requested in the conversation. Type yes, do it, or mach das to apply; cancel stops it."
             panel.status:SetText(Tr(A.largeTextPanel.status))
             A.RefreshUI()
         end)

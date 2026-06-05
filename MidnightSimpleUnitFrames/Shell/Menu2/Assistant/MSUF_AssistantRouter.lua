@@ -196,6 +196,21 @@ local function LooksLikeKnowledgeFirstRequest(text)
     })
 end
 
+local function LooksLikeChangelogKnowledgeRequest(text)
+    if A.Knowledge and type(A.Knowledge.LooksLikeChangelogQuestion) == "function" then
+        return A.Knowledge.LooksLikeChangelogQuestion(text) == true
+    end
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    if ContainsAny(norm, { "open changelog", "close changelog", "toggle changelog", "oeffne changelog" }) then return false end
+    if ContainsAny(norm, { "release notes", "patch notes", "build notes", "latest changes", "changelog", "change log", "was ist neu", "was hat sich geaendert" }) then return true end
+    if ContainsAny(norm, { "what changed", "what is new", "whats new" })
+        and (norm:find("%d+%.%d+") or ContainsAny(norm, { "release", "version", "preview", "alpha", "beta", "patch", "build" })) then
+        return true
+    end
+    return false
+end
+
 local function KnowledgeNoMatch(text)
     if A.Knowledge and type(A.Knowledge.NoMatch) == "function" then
         return A.Knowledge.NoMatch(text)
@@ -756,6 +771,14 @@ function A.RouteInput(text, coreHandler)
     -- Short page-local commands become useful before falling back to broad global matching.
     local contextResult = TryContext(text, coreHandler)
     if contextResult and not IsUnknownResult(contextResult) then return contextResult end
+
+    -- Release-note questions must not be mistaken for "what did you just change?" follow-ups.
+    if LooksLikeChangelogKnowledgeRequest(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
+        local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+        if answer then return answer end
+        local noMatch = KnowledgeNoMatch(text)
+        if noMatch then return noMatch end
+    end
 
     if LooksLikeKnowledgeFirstRequest(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })

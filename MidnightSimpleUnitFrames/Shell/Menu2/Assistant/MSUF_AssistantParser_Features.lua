@@ -704,6 +704,32 @@ end
 
 local function ParseDiagnostic(text)
     if not ContainsAny(text, { "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum", "not showing", "not visible", "missing", "doesnt show", "does not show", "hidden", "nicht sichtbar", "zeigt nicht" }) then return nil end
+    local gameplayFeature
+    if ContainsAny(text, { "combat timer", "kampf timer", "kampftimer" }) then
+        gameplayFeature = "combatTimer"
+    elseif ContainsAny(text, { "combat enter", "combat leave", "combat state", "combat text", "enter leave", "kampf text", "kampfanzeige" }) then
+        gameplayFeature = "combatState"
+    elseif ContainsAny(text, { "totem", "totem frame", "statue", "statue frame" }) then
+        gameplayFeature = "playerTotems"
+    elseif ContainsAny(text, { "first dance", "first dance tracker", "first dancer" }) then
+        gameplayFeature = "firstDance"
+    elseif ContainsAny(text, { "crosshair", "combat crosshair", "fadenkreuz" }) then
+        gameplayFeature = "combatCrosshair"
+    elseif ContainsAny(text, { "gameplay", "gameplay helper", "gameplay helpers", "spielhilfe", "spielhilfen" }) then
+        gameplayFeature = "all"
+    elseif M and M.activeKey == "gameplay" and ContainsAny(text, { "timer", "helper", "helpers", "not visible", "missing", "hidden", "nicht sichtbar" }) then
+        gameplayFeature = "all"
+    end
+    if gameplayFeature then
+        local action = Registry and Registry:GetAction("diagnose_gameplay_helpers")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { feature = gameplayFeature },
+            label = "Diagnose " .. (gameplayFeature == "all" and "Gameplay helpers" or "Gameplay helper"),
+            summary = "Inspects Gameplay helper settings and suggests safe setting-backed fixes when a focused helper is clearly requested.",
+        } or nil
+    end
     if ContainsAny(text, { "profile", "profiles", "profil", "profile import", "profile export", "spec profile" }) then
         local action = Registry and Registry:GetAction("diagnose_profile_status")
         return action and {

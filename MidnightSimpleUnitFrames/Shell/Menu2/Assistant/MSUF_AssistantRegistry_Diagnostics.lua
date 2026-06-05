@@ -23,6 +23,7 @@ local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit
 local GeneralDB = C.GeneralDB
 local BarsDB = C.BarsDB or function() return (_G.MSUF_DB and _G.MSUF_DB.bars) or {} end
+local GameplayDB = C.GameplayDB or function() return (_G.MSUF_DB and _G.MSUF_DB.gameplay) or {} end
 local UnitDB = C.UnitDB
 local GroupDB = C.GroupDB
 local AuraSharedBool = C.AuraSharedBool
@@ -32,6 +33,7 @@ local GlobalScopeLabel = C.GlobalScopeLabel
 local GlobalScopeHasOverride = C.GlobalScopeHasOverride
 local GlobalScopeRead = C.GlobalScopeRead
 local CASTBAR_KEYS = C.CASTBAR_KEYS
+local GetCastbarBackend = C.GetCastbarBackend
 
 local function ActiveProfileName()
     if A and type(A.ActiveProfileName) == "function" then return A.ActiveProfileName() end
@@ -135,6 +137,80 @@ local function LowOpacity(value)
     return value ~= nil and value <= 0.05
 end
 
+local function AddFixChoice(choices, key, value, label, valueLabel)
+    if type(choices) ~= "table" or type(key) ~= "string" or key == "" then return end
+    if not (Registry and type(Registry.GetSetting) == "function") then return end
+    local setting = Registry:GetSetting(key)
+    if not setting then return end
+    choices[#choices + 1] = {
+        setting = setting,
+        value = value,
+        label = label,
+        valueLabel = valueLabel,
+        diagnosticFix = true,
+    }
+end
+
+local function AddActionChoice(choices, key, args, label, summary, confirmRequired, diagnosticFix)
+    if type(choices) ~= "table" or type(key) ~= "string" or key == "" then return end
+    if not (Registry and type(Registry.GetAction) == "function") then return end
+    local action = Registry:GetAction(key)
+    if not action then return end
+    choices[#choices + 1] = {
+        action = action,
+        args = type(args) == "table" and args or {},
+        label = label,
+        summary = summary,
+        confirmRequired = confirmRequired,
+        diagnosticFix = diagnosticFix == true,
+    }
+end
+
+local function AppendFixChoices(text, choices)
+    if type(choices) ~= "table" or #choices == 0 then return text end
+    local choiceText
+    if A and type(A.SetPendingChoices) == "function" then
+        choiceText = A.SetPendingChoices(choices)
+    elseif A and type(A._ChoiceTextForTest) == "function" then
+        A.pendingChoices = choices
+        choiceText = A._ChoiceTextForTest(choices)
+    end
+    if type(choiceText) == "string" and choiceText ~= "" then
+        return tostring(text or "") .. "\n\nSuggested fixes:\n" .. choiceText
+    end
+    return text
+end
+
+local function UnitDefaultWidth(unit)
+    if unit == "boss" or unit == "focus" then return 180 end
+    return 275
+end
+
+local function UnitDefaultHeight(unit)
+    if unit == "boss" or unit == "focus" then return 30 end
+    return 40
+end
+
+local function GroupDefaultWidth(scope)
+    return scope == "party" and 120 or 80
+end
+
+local function GroupDefaultHeight(scope)
+    return scope == "party" and 40 or 32
+end
+
+local LOAD_CONDITION_FIXES = {
+    { key = "loadCondHideMounted", label = "Hide Mounted" },
+    { key = "loadCondHideOutOfCombat", label = "Hide Out Of Combat" },
+    { key = "loadCondHideSolo", label = "Hide Solo" },
+    { key = "loadCondHideInVehicle", label = "Hide In Vehicle" },
+    { key = "loadCondHideInGroup", label = "Hide In Group" },
+    { key = "loadCondHideInInstance", label = "Hide In Instance" },
+    { key = "loadCondHideResting", label = "Hide Resting" },
+    { key = "loadCondHideInCombat", label = "Hide In Combat" },
+    { key = "loadCondHideStealthed", label = "Hide Stealthed" },
+}
+
 local function SettingPreviewLines(settings, limit)
     local lines = {}
     local seen = {}
@@ -231,23 +307,38 @@ local function UnitFrameDiagnosticText(unit)
     local conf = UnitDB(unit)
     local label = UNIT_LABELS[unit] or unit
     local issues = {}
+    local choices = {}
     if conf.enabled == false then
         issues[#issues + 1] = label .. " frame is disabled. Say 'show " .. tostring(unit) .. " frame' to enable it."
+        AddFixChoice(choices, unit .. ".enabled", true, "Show " .. label .. " frame")
     end
     local width = tonumber(conf.width)
     local height = tonumber(conf.height)
     if width ~= nil and width < 10 then
-        issues[#issues + 1] = label .. " width is extremely small. Say 'make " .. tostring(unit) .. " width 275'."
+        issues[#issues + 1] = label .. " width is extremely small. Say 'make " .. tostring(unit) .. " width " .. tostring(UnitDefaultWidth(unit)) .. "'."
+        AddFixChoice(choices, unit .. ".width", UnitDefaultWidth(unit), "Set " .. label .. " width to " .. tostring(UnitDefaultWidth(unit)))
     end
     if height ~= nil and height < 6 then
-        issues[#issues + 1] = label .. " height is extremely small. Say 'make " .. tostring(unit) .. " height 40'."
+        issues[#issues + 1] = label .. " height is extremely small. Say 'make " .. tostring(unit) .. " height " .. tostring(UnitDefaultHeight(unit)) .. "'."
+        AddFixChoice(choices, unit .. ".height", UnitDefaultHeight(unit), "Set " .. label .. " height to " .. tostring(UnitDefaultHeight(unit)))
     end
     if LowOpacity(conf.alphaInCombat) and LowOpacity(conf.alphaOutOfCombat) then
         issues[#issues + 1] = label .. " opacity is near zero in and out of combat. Open Alpha settings or set opacity back to 100%."
+        AddFixChoice(choices, unit .. ".alphaInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
+        AddFixChoice(choices, unit .. ".alphaOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
     elseif LowOpacity(conf.alphaOutOfCombat) then
         issues[#issues + 1] = label .. " out-of-combat opacity is near zero. It may disappear while not fighting."
+        AddFixChoice(choices, unit .. ".alphaOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
     elseif LowOpacity(conf.alphaInCombat) then
         issues[#issues + 1] = label .. " in-combat opacity is near zero. It may disappear while fighting."
+        AddFixChoice(choices, unit .. ".alphaInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
+    end
+    for i = 1, #LOAD_CONDITION_FIXES do
+        local spec = LOAD_CONDITION_FIXES[i]
+        if conf[spec.key] == true then
+            issues[#issues + 1] = label .. " has load condition '" .. spec.label .. "' enabled; the frame can hide when that condition matches."
+            AddFixChoice(choices, unit .. "." .. spec.key, false, "Turn off " .. label .. " " .. spec.label)
+        end
     end
     if unit == "pet" then
         issues[#issues + 1] = "Pet frames also require an active pet; this diagnostic only checks MSUF settings."
@@ -261,7 +352,7 @@ local function UnitFrameDiagnosticText(unit)
     if #issues == 0 then
         return label .. " frame is enabled in MSUF and has no obvious hidden-size or opacity problem. Open " .. label .. " settings or Edit Mode to inspect position."
     end
-    return table.concat(issues, "\n")
+    return AppendFixChoices(table.concat(issues, "\n"), choices)
 end
 
 local function GroupFrameDiagnosticText(scope)
@@ -269,34 +360,44 @@ local function GroupFrameDiagnosticText(scope)
     local conf = GroupDB(scope)
     local label = UNIT_LABELS[scope] or scope
     local issues = {}
+    local choices = {}
     if conf.enabled ~= true then
         issues[#issues + 1] = label .. " Group Frames are disabled. Say 'show " .. tostring(scope) .. " group frames' to enable them."
+        AddFixChoice(choices, "gf_" .. scope .. ".enabled", true, "Show " .. label .. " group frames")
     end
     if scope == "party" and conf.showSolo ~= true then
         issues[#issues + 1] = "Party frames are set to hide while solo. This is normal outside a group unless Show While Solo is enabled."
+        AddFixChoice(choices, "gf_party.showSolo", true, "Show Party frames while solo")
     end
     local width = tonumber(conf.width)
     local height = tonumber(conf.height)
     if width ~= nil and width < 10 then
-        issues[#issues + 1] = label .. " frame width is extremely small. Say 'make " .. tostring(scope) .. " width 120'."
+        issues[#issues + 1] = label .. " frame width is extremely small. Say 'make " .. tostring(scope) .. " width " .. tostring(GroupDefaultWidth(scope)) .. "'."
+        AddFixChoice(choices, "gf_" .. scope .. ".width", GroupDefaultWidth(scope), "Set " .. label .. " frame width to " .. tostring(GroupDefaultWidth(scope)))
     end
     if height ~= nil and height < 6 then
-        issues[#issues + 1] = label .. " frame height is extremely small. Say 'make " .. tostring(scope) .. " height 40'."
+        issues[#issues + 1] = label .. " frame height is extremely small. Say 'make " .. tostring(scope) .. " height " .. tostring(GroupDefaultHeight(scope)) .. "'."
+        AddFixChoice(choices, "gf_" .. scope .. ".height", GroupDefaultHeight(scope), "Set " .. label .. " frame height to " .. tostring(GroupDefaultHeight(scope)))
     end
     if LowOpacity(conf.alphaCurrentInCombat) and LowOpacity(conf.alphaCurrentOutOfCombat) then
         issues[#issues + 1] = label .. " opacity is near zero in and out of combat. Set group opacity back to 100%."
+        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
+        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
     elseif LowOpacity(conf.alphaCurrentOutOfCombat) then
         issues[#issues + 1] = label .. " out-of-combat opacity is near zero. It may disappear while not fighting."
+        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
     elseif LowOpacity(conf.alphaCurrentInCombat) then
         issues[#issues + 1] = label .. " in-combat opacity is near zero. It may disappear while fighting."
+        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
     end
     if conf.hideInClientScene == true then
         issues[#issues + 1] = label .. " frames hide during client scenes by setting; that only applies during those scenes."
+        AddFixChoice(choices, "gf_" .. scope .. ".hideInClientScene", false, "Turn off " .. label .. " Hide During Client Scene")
     end
     if #issues == 0 then
         return label .. " Group Frames are enabled and have no obvious hidden-size or opacity problem. Open Group Frames or Edit Mode to inspect position and current group context."
     end
-    return table.concat(issues, "\n")
+    return AppendFixChoices(table.concat(issues, "\n"), choices)
 end
 
 local function CountKeys(tbl)
@@ -304,6 +405,18 @@ local function CountKeys(tbl)
     if type(tbl) ~= "table" then return 0 end
     for _ in pairs(tbl) do count = count + 1 end
     return count
+end
+
+local function FirstExistingProfile(profiles, preferred)
+    if type(profiles) ~= "table" then return nil end
+    if type(preferred) == "string" and type(profiles[preferred]) == "table" then return preferred end
+    if type(profiles.Default) == "table" then return "Default" end
+    local names = {}
+    for name, profile in pairs(profiles) do
+        if type(name) == "string" and type(profile) == "table" then names[#names + 1] = name end
+    end
+    table.sort(names, function(a, b) return tostring(a):lower() < tostring(b):lower() end)
+    return names[1]
 end
 
 local function CharProfileState()
@@ -317,6 +430,28 @@ local function CharProfileState()
     end
     local char = key and chars and chars[key] or nil
     return key, type(char) == "table" and char or nil
+end
+
+local function ClearBrokenSpecProfileMappings()
+    local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
+    local profiles = global and type(global.profiles) == "table" and global.profiles or nil
+    local _, char = CharProfileState()
+    local map = char and type(char.specProfileMap) == "table" and char.specProfileMap or nil
+    if type(profiles) ~= "table" or type(map) ~= "table" then return 0 end
+    local broken = {}
+    for specID, profileName in pairs(map) do
+        if type(profileName) == "string" and type(profiles[profileName]) ~= "table" then broken[#broken + 1] = specID end
+    end
+    table.sort(broken, function(a, b) return tostring(a) < tostring(b) end)
+    for i = 1, #broken do
+        local specID = broken[i]
+        if type(_G.MSUF_SetSpecProfile) == "function" then
+            _G.MSUF_SetSpecProfile(specID, nil)
+        else
+            map[specID] = nil
+        end
+    end
+    return #broken
 end
 
 local function ProfileDiagnosticText()
@@ -368,32 +503,62 @@ local function ProfileDiagnosticText()
     else
         lines[#lines + 1] = "No obvious profile storage problem was found."
     end
-    return table.concat(lines, "\n")
+    local choices = {}
+    if type(activeTable) ~= "table" then
+        local fallback = FirstExistingProfile(profiles)
+        if fallback then
+            AddActionChoice(choices, "switch_profile", { name = fallback }, "Switch to existing profile " .. tostring(fallback), "Rebinds MSUF to an existing profile after a missing active-profile reference.", nil, true)
+        end
+    elseif _G.MSUF_DB ~= activeTable then
+        AddActionChoice(choices, "switch_profile", { name = active }, "Rebind active profile " .. tostring(active), "Runs the real profile switch helper for the current active profile again.", nil, true)
+    end
+    if brokenSpecs > 0 then
+        AddActionChoice(choices, "clear_broken_spec_profile_mappings", {}, "Clear broken spec profile mappings", "Removes spec profile assignments that point to profiles that no longer exist.", nil, true)
+    end
+    AddActionChoice(choices, "open_page", { page = "profiles", label = "Profiles" }, "Open Profiles page", "Opens the real Profiles page for review.")
+    return AppendFixChoices(table.concat(lines, "\n"), choices)
 end
 
 local function ClassPowerDiagnosticText()
     local bars = BarsDB()
     local player = UnitDB("player")
     local issues = {}
+    local choices = {}
     if bars.showClassPower == false then
         issues[#issues + 1] = "Class Resources are disabled. Say 'turn on class resources' to enable them; reload may be required."
+        AddFixChoice(choices, "bars.showClassPower", true, "Turn on Class Resources")
     end
     if tonumber(bars.classPowerHeight) ~= nil and tonumber(bars.classPowerHeight) < 1 then
         issues[#issues + 1] = "Class Resource height is extremely small. Say 'set class resource height to 4'."
+        AddFixChoice(choices, "bars.classPowerHeight", 4, "Set Class Resource height to 4")
     end
     if (bars.classPowerWidthMode == "custom" or bars.classPowerWidthMode == "manual") and (tonumber(bars.classPowerWidth) or 0) <= 0 then
         issues[#issues + 1] = "Class Resource width mode is custom but width is zero. Set a width or use player/cooldown width mode."
+        AddFixChoice(choices, "bars.classPowerWidth", 120, "Set Class Resource width to 120")
+        AddFixChoice(choices, "bars.classPowerWidthMode", "player", "Use Player width mode for Class Resources")
     end
     if LowOpacity(bars.classPowerFilledAlpha) and LowOpacity(bars.classPowerEmptyAlpha) then
         issues[#issues + 1] = "Filled and empty Class Resource opacity are both near zero."
+        AddFixChoice(choices, "bars.classPowerFilledAlpha", 1, "Set Class Resource filled opacity to 100%")
+        AddFixChoice(choices, "bars.classPowerEmptyAlpha", 0.3, "Set Class Resource empty opacity to 30%")
     elseif LowOpacity(bars.classPowerFilledAlpha) then
         issues[#issues + 1] = "Filled Class Resource opacity is near zero."
+        AddFixChoice(choices, "bars.classPowerFilledAlpha", 1, "Set Class Resource filled opacity to 100%")
     end
     if bars.classPowerHideOOC == true then
         issues[#issues + 1] = "Class Resources hide out of combat by setting."
+        AddFixChoice(choices, "bars.classPowerHideOOC", false, "Turn off Class Resource Hide Out Of Combat")
     end
     if bars.classPowerHideWhenFull == true and bars.classPowerHideWhenEmpty == true then
         issues[#issues + 1] = "Class Resources are configured to hide when full and when empty."
+        AddFixChoice(choices, "bars.classPowerHideWhenFull", false, "Turn off Class Resource Hide When Full")
+        AddFixChoice(choices, "bars.classPowerHideWhenEmpty", false, "Turn off Class Resource Hide When Empty")
+    elseif bars.classPowerHideWhenFull == true then
+        issues[#issues + 1] = "Class Resources hide when full by setting."
+        AddFixChoice(choices, "bars.classPowerHideWhenFull", false, "Turn off Class Resource Hide When Full")
+    elseif bars.classPowerHideWhenEmpty == true then
+        issues[#issues + 1] = "Class Resources hide when empty by setting."
+        AddFixChoice(choices, "bars.classPowerHideWhenEmpty", false, "Turn off Class Resource Hide When Empty")
     end
     if player.powerBarDetached == true then
         issues[#issues + 1] = "Player power bar is detached. If it should align with Class Resources, check detached power sync/anchor settings."
@@ -412,7 +577,7 @@ local function ClassPowerDiagnosticText()
     else
         for i = 1, #issues do lines[#lines + 1] = issues[i] end
     end
-    return table.concat(lines, "\n")
+    return AppendFixChoices(table.concat(lines, "\n"), choices)
 end
 
 local function DashboardSetupDiagnosticText()
@@ -420,6 +585,10 @@ local function DashboardSetupDiagnosticText()
     local global = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or nil
     local dashRoot = global and type(global.global) == "table" and global.global or nil
     local dash = dashRoot and type(dashRoot.dashboard) == "table" and dashRoot.dashboard or {}
+    local hasPending = A.pendingConfirmation or (type(A.pendingChoices) == "table" and #A.pendingChoices > 0) or type(A.pendingFlow) == "table"
+    local recoveryOpen = dash.dashboardRecoveryOpen == true or (M and M.dashboardRecoveryOpen == true)
+    local scalingOpen = dash.dashboardScalingOpen == true or (M and M.dashboardScalingOpen == true)
+    local changelogOpen = dash.dashboardChangelogOpen == true or (M and M.dashboardChangelogOpen == true)
     local lines = {
         "Dashboard setup diagnostic:",
         "Active page: " .. tostring((M and M.activeKey) or "unknown"),
@@ -429,19 +598,149 @@ local function DashboardSetupDiagnosticText()
         "Pending choices: " .. tostring(type(A.pendingChoices) == "table" and #A.pendingChoices or 0),
         "Pending flow: " .. tostring(type(A.pendingFlow) == "table" and (A.pendingFlow.label or A.pendingFlow.kind) or "none"),
         "Guided setup: " .. tostring(type(ctx.guidedSetup) == "table" and "active" or "inactive"),
-        "Recovery panel: " .. tostring(dash.dashboardRecoveryOpen == true or (M and M.dashboardRecoveryOpen == true)),
-        "Scaling panel: " .. tostring(dash.dashboardScalingOpen == true or (M and M.dashboardScalingOpen == true)),
-        "Changelog panel: " .. tostring(dash.dashboardChangelogOpen == true or (M and M.dashboardChangelogOpen == true)),
+        "Recovery panel: " .. tostring(recoveryOpen),
+        "Scaling panel: " .. tostring(scalingOpen),
+        "Changelog panel: " .. tostring(changelogOpen),
         "Search intro seen: " .. tostring(M and M.searchIntroSeen == true),
     }
     if not (M and (type(M.Open) == "function" or type(M.SelectPage) == "function")) then
         lines[#lines + 1] = "Next safe fix: open Menu2 once so navigation helpers are initialized."
-    elseif A.pendingConfirmation or (type(A.pendingChoices) == "table" and #A.pendingChoices > 0) or type(A.pendingFlow) == "table" then
+    elseif hasPending then
         lines[#lines + 1] = "Next safe fix: answer the pending prompt or say 'cancel workflow'."
     else
         lines[#lines + 1] = "No obvious Dashboard setup blocker was found."
     end
-    return table.concat(lines, "\n")
+    local choices = {}
+    if hasPending then
+        AddActionChoice(choices, "assistant.workflow.cancel", {}, "Cancel active Assistant workflow", "Clears the current pending Assistant prompt, choice, flow, or panel.")
+    end
+    if M and M.searchIntroSeen == true then
+        AddActionChoice(choices, "set_nav_search_intro", { command = "reset" }, "Reset Search Intro", "Makes the Ask MSUF search intro eligible to show again.")
+    end
+    if M and M.activeKey ~= "home" then
+        AddActionChoice(choices, "open_page", { page = "home", label = "Dashboard" }, "Open Dashboard page", "Returns to the Dashboard home page.")
+    end
+    if not recoveryOpen then
+        AddActionChoice(choices, "open_recovery_tools", {}, "Open Recovery Tools", "Opens the Dashboard recovery tools.")
+    end
+    if not scalingOpen then
+        AddActionChoice(choices, "open_dashboard_panel", { panel = "scaling" }, "Open Scaling Tools", "Opens the Dashboard scaling tools.")
+    end
+    if not changelogOpen then
+        AddActionChoice(choices, "open_dashboard_panel", { panel = "changelog" }, "Open Changelog", "Opens the Dashboard changelog panel.")
+    end
+    return AppendFixChoices(table.concat(lines, "\n"), choices)
+end
+
+local function OnOff(value)
+    return value == true and "on" or "off"
+end
+
+local function GameplayFeatureLabel(feature)
+    if feature == "combatTimer" then return "Combat Timer" end
+    if feature == "combatState" then return "Combat Enter Leave Text" end
+    if feature == "playerTotems" then return "Totem Frame" end
+    if feature == "firstDance" then return "First Dance Tracker" end
+    if feature == "combatCrosshair" then return "Combat Crosshair" end
+    return "Gameplay helpers"
+end
+
+local function GameplayDiagnosticText(feature)
+    local g = GameplayDB()
+    feature = tostring(feature or "all")
+    local focus = feature ~= "all" and feature or nil
+    local lines = {
+        "Gameplay helpers diagnostic:",
+        "Focused helper: " .. GameplayFeatureLabel(focus or "all"),
+        "Combat Timer: " .. OnOff(g.enableCombatTimer) .. ", size=" .. tostring(g.combatFontSize or 24) .. ", anchor=" .. tostring(g.combatTimerAnchor or "none"),
+        "Combat Enter Leave Text: " .. OnOff(g.enableCombatStateText) .. ", size=" .. tostring(g.combatStateFontSize or 24) .. ", duration=" .. tostring(g.combatStateDuration or 1.5),
+        "Totem Frame: " .. OnOff(g.enablePlayerTotems) .. ", icon size=" .. tostring(g.playerTotemsIconSize or 24),
+        "First Dance Tracker: " .. OnOff(g.enableFirstDanceTimer) .. ", ready=" .. OnOff(g.firstDanceShowReady ~= false),
+        "Combat Crosshair: " .. OnOff(g.enableCombatCrosshair) .. ", size=" .. tostring(g.crosshairSize or 40) .. ", thickness=" .. tostring(g.crosshairThickness or 3) .. ", melee spell=" .. tostring(g.nameplateMeleeSpellID or 0),
+    }
+    local issues = {}
+    local choices = {}
+
+    if focus == "combatTimer" then
+        if g.enableCombatTimer ~= true then
+            issues[#issues + 1] = "Combat Timer is disabled. It only appears when enabled and combat timing is active."
+            AddFixChoice(choices, "gameplay.enableCombatTimer", true, "Turn on Combat Timer")
+        end
+        if tonumber(g.combatFontSize) ~= nil and tonumber(g.combatFontSize) < 10 then
+            issues[#issues + 1] = "Combat Timer text size is extremely small."
+            AddFixChoice(choices, "gameplay.combatFontSize", 24, "Set Combat Timer size to 24")
+        end
+    elseif focus == "combatState" then
+        if g.enableCombatStateText ~= true then
+            issues[#issues + 1] = "Combat Enter Leave Text is disabled."
+            AddFixChoice(choices, "gameplay.enableCombatStateText", true, "Turn on Combat Enter Leave Text")
+        end
+        if tonumber(g.combatStateDuration) ~= nil and tonumber(g.combatStateDuration) <= 0 then
+            issues[#issues + 1] = "Combat Enter Leave duration is zero or negative."
+            AddFixChoice(choices, "gameplay.combatStateDuration", 1.5, "Set Combat Enter Leave duration to 1.5")
+        end
+        if tonumber(g.combatStateFontSize) ~= nil and tonumber(g.combatStateFontSize) < 10 then
+            issues[#issues + 1] = "Combat Enter Leave text size is extremely small."
+            AddFixChoice(choices, "gameplay.combatStateFontSize", 24, "Set Combat Enter Leave text size to 24")
+        end
+    elseif focus == "playerTotems" then
+        if g.enablePlayerTotems ~= true then
+            issues[#issues + 1] = "Totem Frame is disabled. It also only has useful runtime content for classes or states with totems/statues."
+            AddFixChoice(choices, "gameplay.enablePlayerTotems", true, "Turn on Totem Frame")
+        end
+        if tonumber(g.playerTotemsIconSize) ~= nil and tonumber(g.playerTotemsIconSize) < 8 then
+            issues[#issues + 1] = "Totem Frame icon size is extremely small."
+            AddFixChoice(choices, "gameplay.playerTotemsIconSize", 24, "Set Totem Frame icon size to 24")
+        end
+    elseif focus == "firstDance" then
+        if g.enableFirstDanceTimer ~= true then
+            issues[#issues + 1] = "First Dance Tracker is disabled. It is a rogue helper and only has meaningful runtime state for that gameplay."
+            AddFixChoice(choices, "gameplay.enableFirstDanceTimer", true, "Turn on First Dance Tracker")
+        end
+        if g.firstDanceShowReady == false then
+            issues[#issues + 1] = "First Dance Show Ready is off, so the tracker can disappear while ready/inactive."
+            AddFixChoice(choices, "gameplay.firstDanceShowReady", true, "Show First Dance ready state")
+        end
+        if tonumber(g.firstDanceIconSize) ~= nil and tonumber(g.firstDanceIconSize) < 16 then
+            issues[#issues + 1] = "First Dance icon size is extremely small."
+            AddFixChoice(choices, "gameplay.firstDanceIconSize", 40, "Set First Dance icon size to 40")
+        end
+    elseif focus == "combatCrosshair" then
+        if g.enableCombatCrosshair ~= true then
+            issues[#issues + 1] = "Combat Crosshair is disabled."
+            AddFixChoice(choices, "gameplay.enableCombatCrosshair", true, "Turn on Combat Crosshair")
+        end
+        if tonumber(g.crosshairSize) ~= nil and tonumber(g.crosshairSize) < 20 then
+            issues[#issues + 1] = "Combat Crosshair size is extremely small."
+            AddFixChoice(choices, "gameplay.crosshairSize", 40, "Set Combat Crosshair size to 40")
+        end
+        if tonumber(g.crosshairThickness) ~= nil and tonumber(g.crosshairThickness) < 1 then
+            issues[#issues + 1] = "Combat Crosshair thickness is zero."
+            AddFixChoice(choices, "gameplay.crosshairThickness", 3, "Set Combat Crosshair thickness to 3")
+        end
+        if g.enableCombatCrosshairMeleeRangeColor == true and (tonumber(g.nameplateMeleeSpellID) or 0) <= 0 then
+            issues[#issues + 1] = "Crosshair range color is on but no melee range spell is set. Use 'set crosshair spell to 12345' with a real spell ID."
+        end
+    else
+        local enabledCount = 0
+        if g.enableCombatTimer == true then enabledCount = enabledCount + 1 end
+        if g.enableCombatStateText == true then enabledCount = enabledCount + 1 end
+        if g.enablePlayerTotems == true then enabledCount = enabledCount + 1 end
+        if g.enableFirstDanceTimer == true then enabledCount = enabledCount + 1 end
+        if g.enableCombatCrosshair == true then enabledCount = enabledCount + 1 end
+        lines[#lines + 1] = "Enabled optional helpers: " .. tostring(enabledCount) .. " of 5."
+        if enabledCount == 0 then
+            issues[#issues + 1] = "All optional Gameplay helpers are off. That is valid if you do not use them; ask for a focused diagnostic such as 'diagnose combat timer' if one should be visible."
+        end
+    end
+
+    if #issues == 0 then
+        lines[#lines + 1] = "No obvious Gameplay helper settings problem was found. Some helpers only appear in combat, with a matching class/spec, or when a real gameplay state exists."
+    else
+        for i = 1, #issues do lines[#lines + 1] = issues[i] end
+    end
+    AddActionChoice(choices, "open_page", { page = "gameplay", label = "Gameplay" }, "Open Gameplay page", "Opens the real Gameplay helper page for review.")
+    return AppendFixChoices(table.concat(lines, "\n"), choices)
 end
 
 local GUIDED_SETUP_STEPS = {
@@ -531,6 +830,306 @@ local GUIDED_SETUP_STEPS = {
     },
 }
 
+local GUIDED_SETUP_GUIDES = {
+    main = {
+        label = "MSUF layout setup",
+        steps = GUIDED_SETUP_STEPS,
+    },
+    group_frames = {
+        label = "Group Frames setup",
+        steps = {
+            {
+                key = "group_visibility",
+                title = "Party And Raid Visibility",
+                page = "gf_layout",
+                goal = "Decide which group frames should exist before tuning dense details.",
+                body = "Start with Party and Raid visibility, then diagnose anything that should be visible but is not.",
+                examples = {
+                    "show party group frames",
+                    "show raid group frames",
+                    "diagnose party frames",
+                },
+            },
+            {
+                key = "group_geometry",
+                title = "Group Size And Growth",
+                page = "gf_layout",
+                goal = "Make group frames scan cleanly at the roster sizes you actually play.",
+                body = "Tune width, scale, growth, and breakpoint scale before text and indicators.",
+                examples = {
+                    "make raid width 80",
+                    "set raid scale to 90",
+                    "set raid frames to grow right",
+                },
+            },
+            {
+                key = "group_text",
+                title = "Group Health And Text",
+                page = "gf_bars",
+                goal = "Keep readable health information without crowding each group cell.",
+                body = "Use explicit Party/Raid wording when you are not already on the group page.",
+                examples = {
+                    "move party frame name down",
+                    "set party power center text to current percent",
+                    "set party power text size to 11",
+                },
+            },
+            {
+                key = "group_indicators",
+                title = "Group Indicators",
+                page = "gf_indicators",
+                goal = "Verify group status icons and editor selections after layout and text feel stable.",
+                body = "Use selector commands for editor state, then diagnose visibility if an icon still looks wrong.",
+                examples = {
+                    "turn off ready check symbol for all group frames",
+                    "select party leader icon indicator",
+                    "select bottom right corner editor slot",
+                },
+            },
+        },
+    },
+    castbars = {
+        label = "Castbars setup",
+        steps = {
+            {
+                key = "castbar_visibility",
+                title = "Castbar Visibility",
+                page = "opt_castbar",
+                goal = "Make the castbars you care about visible before adjusting detail controls.",
+                body = "Target is usually the first castbar to verify; Player, Focus, and Boss can be added as needed.",
+                examples = {
+                    "show target castbar",
+                    "show player castbar",
+                    "diagnose target castbar",
+                },
+            },
+            {
+                key = "castbar_layout",
+                title = "Castbar Layout",
+                page = "opt_castbar",
+                goal = "Place castbars and attached icons where they do not fight the unit frames.",
+                body = "Move the bar or its text/icon parts separately when only one piece is wrong.",
+                examples = {
+                    "move target castbar icon right 4",
+                    "move focus kick icon down 3",
+                    "set target castbar height to 18",
+                },
+            },
+            {
+                key = "castbar_details",
+                title = "Castbar Details",
+                page = "opt_castbar",
+                goal = "Keep important cast information visible and hide detail noise you do not read.",
+                body = "Detail commands target the registered castbar controls instead of toggling the whole castbar.",
+                examples = {
+                    "turn off target castbar icon",
+                    "turn off target castbar interrupt",
+                    "set castbar text color red",
+                },
+            },
+        },
+    },
+    profiles = {
+        label = "Profiles setup",
+        steps = {
+            {
+                key = "profile_backup",
+                title = "Backup Current Profile",
+                page = "profiles",
+                goal = "Create an export point before doing broad layout work.",
+                body = "Profile exports use the real MSUF profile export helper when it is available.",
+                examples = {
+                    "export current profile",
+                    "select profile export kind group frames",
+                    "copy discord link",
+                },
+            },
+            {
+                key = "profile_create",
+                title = "Create Or Stage A Profile",
+                page = "profiles",
+                goal = "Prepare a named profile before switching or importing.",
+                body = "The Assistant can stage profile fields and will ask for confirmation on destructive profile actions.",
+                examples = {
+                    "set profile name field to Raid Draft",
+                    "copy profile Raid Draft",
+                    "turn on profile import and create new profile",
+                },
+            },
+            {
+                key = "profile_import",
+                title = "Import And Spec Routing",
+                page = "profiles",
+                goal = "Keep imports and automatic spec switching explicit and reversible where helpers support snapshots.",
+                body = "Ask for profile diagnostics after imports, switches, or spec assignments.",
+                examples = {
+                    "import profile",
+                    "enable spec auto-switch",
+                    "diagnose profiles",
+                },
+            },
+        },
+    },
+    class_resources = {
+        label = "Class Resources setup",
+        steps = {
+            {
+                key = "class_resource_baseline",
+                title = "Enable And Place Resources",
+                page = "classpower",
+                goal = "Make class resources visible without confusing them with normal power bars.",
+                body = "Class Resources are global controls; unit Power Bar controls are separate.",
+                examples = {
+                    "quick setup class resources",
+                    "turn on class resources",
+                    "move class resource down 5",
+                },
+            },
+            {
+                key = "class_resource_shape",
+                title = "Shape And Readability",
+                page = "classpower",
+                goal = "Tune width mode, opacity, and prediction once placement is stable.",
+                body = "Page-local commands work on the Class Resources page, but explicit wording also works from Dashboard.",
+                examples = {
+                    "set width mode to custom",
+                    "set background opacity to 40",
+                    "turn off prediction",
+                },
+            },
+            {
+                key = "class_resource_extras",
+                title = "Class-Specific Extras",
+                page = "classpower",
+                goal = "Handle optional overlays such as Alternative Mana after the main resource is readable.",
+                body = "Use diagnostics if the Class Resource page looks enabled but the runtime state does not match.",
+                examples = {
+                    "set alt mana height to 12",
+                    "diagnose class resources",
+                    "open class resources",
+                },
+            },
+        },
+    },
+    gameplay = {
+        label = "Gameplay helpers setup",
+        steps = {
+            {
+                key = "combat_timer",
+                title = "Combat Timer",
+                page = "gameplay",
+                goal = "Place the combat timer where it gives timing context without blocking frames.",
+                body = "The Gameplay page supports short page-local commands while it is active.",
+                examples = {
+                    "turn on timer",
+                    "move timer down 5",
+                    "set timer anchor to target",
+                },
+            },
+            {
+                key = "combat_state_text",
+                title = "Combat State Text",
+                page = "gameplay",
+                goal = "Use combat enter/leave text only if the extra signal helps you react.",
+                body = "Text, size, duration, and movement are separate registered controls.",
+                examples = {
+                    "turn on combat enter leave text",
+                    "set combat enter text to Pulling",
+                    "set combat state duration to 2.5",
+                },
+            },
+            {
+                key = "gameplay_frames",
+                title = "Totem, First Dance, And Crosshair",
+                page = "gameplay",
+                goal = "Enable only the helper frames that match your class or role.",
+                body = "Unsupported controls are reported explicitly instead of faking success.",
+                examples = {
+                    "turn on totem frame",
+                    "turn on first dance",
+                    "turn on combat crosshair",
+                },
+            },
+        },
+    },
+    appearance = {
+        label = "Bars and Fonts setup",
+        steps = {
+            {
+                key = "bars_baseline",
+                title = "Bars Baseline",
+                page = "opt_bars",
+                goal = "Set textures, outlines, and bar readability before per-frame overrides.",
+                body = "Shared settings apply broadly; ONLY wording enables scoped overrides for one target.",
+                examples = {
+                    "set bars texture to Smooth",
+                    "set global bar outline thickness to 2",
+                    "set only player bar outline thickness to 3",
+                },
+            },
+            {
+                key = "fonts_baseline",
+                title = "Fonts Baseline",
+                page = "opt_fonts",
+                goal = "Make text readable first, then tune scoped font overrides only where needed.",
+                body = "Rendering, baseline, outline, and name-shortening controls use real Global Fonts settings.",
+                examples = {
+                    "set font baseline to 2",
+                    "set global font size 14",
+                    "set target font outline only to THICKOUTLINE",
+                },
+            },
+            {
+                key = "colors_baseline",
+                title = "Colors And Follow-Ups",
+                page = "opt_colors",
+                goal = "Use exact color commands and follow-ups for consistent non-aura colors.",
+                body = "Registered color pickers support named colors, RGB values, hex values, and same-for follow-ups.",
+                examples = {
+                    "set player border color to rgb 255 128 0",
+                    "same for target",
+                    "change party health bar color to blue",
+                },
+            },
+        },
+    },
+}
+
+local function SetupNormalize(text)
+    if A and type(A.Normalize) == "function" then return A.Normalize(text) end
+    text = tostring(text or ""):lower()
+    text = text:gsub("[,;:!?%(%)]", " ")
+    text = text:gsub("%s+", " ")
+    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function SetupHasAny(text, terms)
+    text = " " .. SetupNormalize(text) .. " "
+    for i = 1, #(terms or {}) do
+        local term = SetupNormalize(terms[i])
+        if term ~= "" and text:find(" " .. term .. " ", 1, true) then return true end
+    end
+    return false
+end
+
+local function GuidedSetupGuideKey(style)
+    local text = SetupNormalize(style)
+    if text == "" then return "main" end
+    if SetupHasAny(text, { "group frames", "group frame", "party frames", "raid frames", "mythic raid frames", "gruppenframes", "gruppe setup", "raid setup", "party setup" }) then return "group_frames" end
+    if SetupHasAny(text, { "castbar", "castbars", "cast bar", "cast bars", "zauberleiste", "kick bar", "focus kick" }) then return "castbars" end
+    if SetupHasAny(text, { "profile", "profiles", "profil", "profile setup", "profile guide", "spec profile", "import profile", "export profile" }) then return "profiles" end
+    if SetupHasAny(text, { "class resource", "class resources", "class power", "class bar", "resource bar", "klassenressource", "klassenressourcen" }) then return "class_resources" end
+    if SetupHasAny(text, { "gameplay", "combat timer", "combat text", "totem", "first dance", "crosshair", "spielhilfe" }) then return "gameplay" end
+    if SetupHasAny(text, { "appearance", "bars and fonts", "fonts and bars", "global bars", "global fonts", "font setup", "bar setup", "color setup", "farben", "schrift" }) then return "appearance" end
+    return "main"
+end
+
+local function GuidedSetupGuideForFlow(flow)
+    local key = type(flow) == "table" and flow.guide or "main"
+    local guide = GUIDED_SETUP_GUIDES[key]
+    return guide or GUIDED_SETUP_GUIDES.main, guide and key or "main"
+end
+
 local function GuidedSetupStyleLabel(style)
     style = tostring(style or ""):lower()
     if style:find("healer", 1, true) or style:find("raid", 1, true) then return "healer raid" end
@@ -567,18 +1166,20 @@ end
 local function GuidedSetupStepText(flow)
     flow = flow or GuidedSetupFlow()
     if type(flow) ~= "table" then return "No guided setup is active. Say 'help me build a clean layout' to start." end
+    local guide = GuidedSetupGuideForFlow(flow)
+    local steps = (guide and guide.steps) or GUIDED_SETUP_STEPS
     local index = tonumber(flow.step) or 1
     if index < 1 then index = 1 end
-    if index > #GUIDED_SETUP_STEPS then
+    if index > #steps then
         SetGuidedSetupFlow(nil)
         CloseGuidedSetupPanel()
         return "Guided setup complete. You can keep typing normal MSUF commands, use 'undo' for the last Assistant change, or ask me to diagnose anything that is not visible."
     end
     flow.step = index
-    local step = GUIDED_SETUP_STEPS[index]
+    local step = steps[index]
     local lines = {
-        "Guided setup - " .. tostring(flow.styleLabel or "clean") .. " layout",
-        "Step " .. tostring(index) .. "/" .. tostring(#GUIDED_SETUP_STEPS) .. ": " .. step.title,
+        "Guided setup - " .. tostring(flow.guideTitle or (guide and guide.label) or "MSUF layout setup"),
+        "Step " .. tostring(index) .. "/" .. tostring(#steps) .. ": " .. step.title,
         "Goal: " .. tostring(step.goal or ""),
         tostring(step.body or ""),
     }
@@ -597,8 +1198,12 @@ local function GuidedSetupStepText(flow)
 end
 
 function A.Workflow.StartGuidedSetup(style)
+    local guideKey = GuidedSetupGuideKey(style)
+    local guide = GUIDED_SETUP_GUIDES[guideKey] or GUIDED_SETUP_GUIDES.main
     local label = GuidedSetupStyleLabel(style)
-    local flow = SetGuidedSetupFlow({ style = tostring(style or "clean"), styleLabel = label, step = 1 })
+    local title = guide.label
+    if guideKey == "main" then title = tostring(label or "clean") .. " layout" end
+    local flow = SetGuidedSetupFlow({ style = tostring(style or "clean"), styleLabel = label, guide = guideKey, guideTitle = title, step = 1 })
     return GuidedSetupStepText(flow)
 end
 
@@ -624,7 +1229,9 @@ function A.Workflow.GuidedSetupStep(command)
         flow.step = (tonumber(flow.step) or 1) + 1
     end
     if flow.step < 1 then flow.step = 1 end
-    if flow.step > #GUIDED_SETUP_STEPS then
+    local guide = GuidedSetupGuideForFlow(flow)
+    local steps = (guide and guide.steps) or GUIDED_SETUP_STEPS
+    if flow.step > #steps then
         SetGuidedSetupFlow(nil)
         CloseGuidedSetupPanel()
         return "Guided setup marked complete. You can still ask for diagnostics or use 'undo' for the last Assistant change."
@@ -775,14 +1382,18 @@ Registry:RegisterAction({
         local unitEnabled = true
         if unit ~= "boss" then unitEnabled = UnitDB(unit).enabled ~= false end
         local label = UNIT_LABELS[unit] or unit
+        local choices = {}
         if backend == "HIDE" then
-            return true, label .. " castbar is hidden by its backend setting. Say 'show " .. tostring(unit) .. " castbar' or open Castbar settings."
+            AddFixChoice(choices, "general." .. tostring(CASTBAR_KEYS[unit].enable), true, "Show " .. label .. " castbar")
+            return true, AppendFixChoices(label .. " castbar is hidden by its backend setting. Say 'show " .. tostring(unit) .. " castbar' or open Castbar settings.", choices)
         end
         if unitEnabled == false then
-            return true, label .. " frame is disabled, so its attached castbar may not be visible. Say 'show " .. tostring(unit) .. " frame' first."
+            AddFixChoice(choices, unit .. ".enabled", true, "Show " .. label .. " frame")
+            return true, AppendFixChoices(label .. " frame is disabled, so its attached castbar may not be visible. Say 'show " .. tostring(unit) .. " frame' first.", choices)
         end
         if unit == "player" and backend == "BLIZZARD" then
-            return true, "Player castbar is assigned to the Blizzard castbar. Say 'show player castbar' to use the MSUF castbar backend."
+            AddFixChoice(choices, "general.castbarPlayerBackend", "MSUF", "Use the MSUF Player castbar backend")
+            return true, AppendFixChoices("Player castbar is assigned to the Blizzard castbar. Say 'show player castbar' to use the MSUF castbar backend.", choices)
         end
         return true, label .. " castbar is enabled in MSUF. If it still is not visible, check Edit Mode position, castbar text/icon settings, and whether the unit is currently casting."
     end,
@@ -813,6 +1424,22 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "clear_broken_spec_profile_mappings",
+    label = "Clear Broken Spec Profile Mappings",
+    type = "profile",
+    combatSafe = false,
+    captureSnapshot = true,
+    captureProfileSnapshot = true,
+    run = function()
+        local count = ClearBrokenSpecProfileMappings()
+        if A and type(A.ApplyBroad) == "function" then A.ApplyBroad("MSUF_ASSISTANT_PROFILE_SPEC_MAPPING_REPAIR") end
+        if M and type(M.Refresh) == "function" then M.Refresh() end
+        if count <= 0 then return true, "No broken spec profile mappings were found." end
+        return true, "Done. Cleared " .. tostring(count) .. " broken spec profile mapping" .. (count == 1 and "." or "s.")
+    end,
+})
+
+Registry:RegisterAction({
     key = "diagnose_profile_status",
     label = "Diagnose Profiles",
     type = "diagnostic",
@@ -829,6 +1456,16 @@ Registry:RegisterAction({
     combatSafe = true,
     run = function()
         return true, ClassPowerDiagnosticText()
+    end,
+})
+
+Registry:RegisterAction({
+    key = "diagnose_gameplay_helpers",
+    label = "Diagnose Gameplay Helpers",
+    type = "diagnostic",
+    combatSafe = true,
+    run = function(args)
+        return true, GameplayDiagnosticText(args and args.feature or "all")
     end,
 })
 
@@ -865,4 +1502,4 @@ Registry:RegisterAction({
 Registry:RegisterTodo("Auras3 remaining advanced work: whitelist-style operations where the UI exposes them beyond the registered filters, blacklists, color controls, and group category blacklists.")
 Registry:RegisterTodo("Profiles remaining work: spec-profile edge cases should keep expanding as new public helpers appear.")
 Registry:RegisterTodo("Preset operations remaining work: add Assistant routes for any future UI preset buttons only after they expose public shared helpers.")
-Registry:RegisterTodo("Diagnostic/setup workflows remaining work: aura-specific troubleshooters, deeper branch-specific guided setup flows, and any future public factory-reset helper routed without slash-command execution.")
+Registry:RegisterTodo("Diagnostic/setup workflows remaining work: aura-specific troubleshooters, deeper branch-specific diagnostic repair flows as new helpers appear, and any future public factory-reset helper routed without slash-command execution.")

@@ -165,6 +165,9 @@ end
 function A.RememberAppliedBundle(bundle)
     local ctx = A.GetContext()
     ctx.lastAction = bundle and bundle.action or "change"
+    ctx.lastActionLabel = bundle and bundle.actionLabel or bundle and bundle.label
+    ctx.lastActionMessage = bundle and bundle.actionMessage
+    ctx.lastActionUndoable = bundle and bundle.undoAvailable == true or nil
     ctx.lastValue = bundle and bundle.lastValue
     ctx.lastSetting = bundle and bundle.lastSetting
     ctx.lastUnit = bundle and bundle.lastUnit

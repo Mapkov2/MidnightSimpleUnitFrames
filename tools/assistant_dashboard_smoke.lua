@@ -165,8 +165,56 @@ M.RequestUnitApply = function(unit, reason) MSUF._lastUnitApply = { unit = unit,
 M.RequestGeneralApply = function(reason) MSUF._lastGeneralApply = reason end
 _G.MSUF_RequestStatusIconsRefreshForCurrent = function() MSUF._statusRefresh = (MSUF._statusRefresh or 0) + 1 end
 MSUF.MSUF_RequestGameplayApply = function(reason) MSUF._lastGameplayApply = reason end
-M.Open = function(page) M.activeKey = page; return true end
+local function pushPageHistory(stack, key)
+    if not key or key == "" then return stack end
+    stack = type(stack) == "table" and stack or {}
+    if stack[#stack] ~= key then stack[#stack + 1] = key end
+    while #stack > 30 do table.remove(stack, 1) end
+    return stack
+end
+local function clearPageHistory(stack)
+    if type(stack) ~= "table" then return end
+    for key in pairs(stack) do stack[key] = nil end
+end
+M.Open = function(page)
+    page = page or "home"
+    local previous = M.activeKey
+    if not M._pageHistorySuppress and previous and previous ~= page then
+        M.pageBackStack = pushPageHistory(M.pageBackStack, previous)
+        M.pageForwardStack = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+        clearPageHistory(M.pageForwardStack)
+    end
+    M.activeKey = page
+    return true
+end
 M.SelectPage = M.Open
+M.GetPageHistoryState = function()
+    local back = type(M.pageBackStack) == "table" and M.pageBackStack or {}
+    local forward = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+    return { canBack = #back > 0, canForward = #forward > 0, backCount = #back, forwardCount = #forward, previousPage = back[#back], nextPage = forward[#forward] }
+end
+M.GoBackPage = function()
+    M.pageBackStack = type(M.pageBackStack) == "table" and M.pageBackStack or {}
+    local page = table.remove(M.pageBackStack)
+    if not page then return false, "Dashboard back navigation has no previous native Menu2 page." end
+    local current = M.activeKey
+    M._pageHistorySuppress = true
+    M.Open(page)
+    M._pageHistorySuppress = nil
+    M.pageForwardStack = pushPageHistory(M.pageForwardStack, current)
+    return true, "Opened previous page."
+end
+M.GoForwardPage = function()
+    M.pageForwardStack = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+    local page = table.remove(M.pageForwardStack)
+    if not page then return false, "Dashboard forward navigation has no next native Menu2 page." end
+    local current = M.activeKey
+    M._pageHistorySuppress = true
+    M.Open(page)
+    M._pageHistorySuppress = nil
+    M.pageBackStack = pushPageHistory(M.pageBackStack, current)
+    return true, "Opened next page."
+end
 M.InvalidatePage = function() end
 M.SyncGFPagePreviewForKey = function(key, force)
     MSUF._gfPagePreviewSync = { key = key, force = force, scope = M.gfScope }
@@ -217,6 +265,7 @@ local function loadState(relative)
     chunk("MidnightSimpleUnitFrames", MSUF)
 end
 
+loadState("MSUF_Changelog.lua")
 loadState("MSUF_Profiles.lua")
 assert(type(_G.MSUF_RenameProfile) == "function", "Core profile rename helper missing")
 
@@ -277,6 +326,7 @@ assert(type(A.SubmitDeferred) == "function", "Assistant deferred Submit path mis
 assert(type(A.HandleInput) == "function", "Assistant input handler missing")
 assert(type(A.RouteInput) == "function", "Assistant router missing")
 assert(type(A._ChoiceTextForTest) == "function", "Assistant choice text formatter missing")
+assert(type(A.SetPendingChoices) == "function", "Assistant pending choice setter missing")
 assert(A.IsBusy() == false, "Assistant should not start busy")
 A.SetBusy(true, "Testing busy state")
 local busySubmit = A.SubmitDeferred("turn off target name")
@@ -317,7 +367,21 @@ local choiceText = A._ChoiceTextForTest({
 assert(not choiceText:find("%[%]", 1, false), "Assistant choice text still renders empty [] scope marker")
 assert(choiceText:find("Global Bar Texture EQOL: Absorb", 1, true), "Assistant choice text removed too much content")
 assert(choiceText:find("0. None", 1, true), "Assistant choice text does not show a visible None option")
+assert(choiceText:find("by number or label", 1, true), "Assistant multi-choice text should ask for a specific number or label")
 local barTextureSetting = assert(A.Registry:GetSetting("general.barTexture"), "Global Bar Texture registry setting missing")
+local singleSettingChoiceText = A._ChoiceTextForTest({
+    { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
+})
+assert(singleSettingChoiceText:find("yes", 1, true) and singleSettingChoiceText:find("apply it", 1, true), "Assistant single setting-choice text did not explain natural apply replies")
+local openPageAction = assert(A.Registry:GetAction("open_page"), "Open page action missing")
+local singleActionChoiceText = A._ChoiceTextForTest({
+    { action = openPageAction, args = { page = "profiles", label = "Profiles" }, label = "Open Profiles page" },
+})
+assert(singleActionChoiceText:find("open it", 1, true), "Assistant single action-choice text did not explain natural action replies")
+local singleFixChoiceText = A._ChoiceTextForTest({
+    { action = openPageAction, args = { page = "profiles", label = "Profiles" }, label = "Repair Profiles", diagnosticFix = true },
+})
+assert(singleFixChoiceText:find("fix it", 1, true), "Assistant single repair-choice text did not explain natural fix replies")
 _G.MSUF_DB.general.barTexture = "Solid"
 A.pendingChoices = {
     { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
@@ -343,6 +407,22 @@ local zeroChoice = A.Submit("0")
 assert(zeroChoice.status == "info" and tostring(zeroChoice.text or ""):find("Cancelled", 1, true), "Assistant did not cancel pending choices from option 0")
 assert(A.pendingChoices == nil, "Assistant did not clear pending choices after option 0")
 assert(_G.MSUF_DB.general.barTexture == "Solid", "Assistant changed a setting after option 0")
+A.pendingChoices = {
+    { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
+    { setting = barTextureSetting, value = "EQOL: Astral", label = "Global Bar Texture [] EQOL: Astral" },
+}
+local yesAmbiguousChoice = A.Submit("yes")
+assert(yesAmbiguousChoice.status == "ambiguous", "Assistant should not apply a multi-choice list from plain yes")
+assert(type(A.pendingChoices) == "table" and #A.pendingChoices == 2, "Assistant cleared multi-choice list after plain yes")
+assert(_G.MSUF_DB.general.barTexture == "Solid", "Assistant changed a multi-choice setting after plain yes")
+A.pendingChoices = nil
+A.pendingChoices = {
+    { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
+}
+local yesSingleChoice = A.Submit("yes")
+assert(yesSingleChoice.status == "applied", "Assistant did not apply a single pending choice from plain yes")
+assert(_G.MSUF_DB.general.barTexture == "EQOL: Absorb", "Assistant did not apply the single pending choice from plain yes")
+_G.MSUF_DB.general.barTexture = "Solid"
 A.pendingChoices = {
     { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
     { setting = barTextureSetting, value = "EQOL: Astral", label = "Global Bar Texture [] EQOL: Astral" },
@@ -425,6 +505,7 @@ assert(supportDB.powerUserSupportSuccessCount == 100, "Power-user hint should ke
 _G.MSUF_DB.player.showName = true
 local humanSingleChange = expectApplied("turn off player name", "I changed")
 assert(tostring(humanSingleChange.text or ""):find("from enabled to disabled", 1, true), "Dashboard Assistant success response did not explain the old and new values")
+assert(tostring(humanSingleChange.text or ""):find("Next: type 'undo' to revert", 1, true), "Dashboard Assistant success response did not offer an undo/follow-up hint")
 assert(_G.MSUF_DB.player.showName == false, "Dashboard Submit did not write player.showName")
 assert(MSUF._lastUnitApply and MSUF._lastUnitApply.unit == "player", "Dashboard Submit did not request player apply")
 _G.MSUF_DB.player.showName = true
@@ -441,6 +522,32 @@ assert(_G.MSUF_DB.player.enabled == true, "Dashboard context follow-up did not r
 _G.MSUF_DB.player.enabled = false
 expectApplied("spieler frame einschalten", "Done.")
 assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit did not understand German Player frame on")
+_G.MSUF_DB.player.enabled = false
+local playerDiag = expectApplied("diagnose player frame", "Suggested fixes:")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "player.enabled", "Player diagnostic did not offer the frame enable fix")
+assert(tostring(playerDiag.text or ""):find("Show Player frame", 1, true), "Player diagnostic did not render the enable fix label")
+expectApplied("fix it", "Done.")
+assert(_G.MSUF_DB.player.enabled == true, "Player diagnostic natural fix follow-up did not enable the frame")
+_G.MSUF_DB.player.loadCondHideInCombat = true
+local playerLoadDiag = expectApplied("diagnose player frame", "Hide In Combat")
+assert(tostring(playerLoadDiag.text or ""):find("Suggested fixes:", 1, true), "Player load-condition diagnostic did not render suggested fixes")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "player.loadCondHideInCombat", "Player diagnostic did not offer the load-condition fix")
+expectApplied("1", "Done.")
+assert(_G.MSUF_DB.player.loadCondHideInCombat == false, "Player diagnostic numbered fix did not disable the load condition")
+_G.MSUF_DB.gf_party.enabled = true
+_G.MSUF_DB.gf_party.showSolo = false
+local partyDiag = expectApplied("diagnose party frames", "Show While Solo")
+assert(tostring(partyDiag.text or ""):find("Suggested fixes:", 1, true), "Party diagnostic did not render suggested fixes")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "gf_party.showSolo", "Party diagnostic did not offer Show While Solo")
+expectApplied("1", "Done.")
+assert(_G.MSUF_DB.gf_party.showSolo == true, "Party diagnostic numbered fix did not enable Show While Solo")
+_G.MSUF_DB.general.castbarTargetBackend = "HIDE"
+_G.MSUF_DB.general.enableTargetCastbar = false
+local castbarDiag = expectApplied("diagnose target castbar", "Suggested fixes:")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "general.enableTargetCastbar", "Castbar diagnostic did not offer the castbar enable fix")
+assert(tostring(castbarDiag.text or ""):find("Show Target castbar", 1, true), "Castbar diagnostic did not render the enable fix label")
+expectApplied("1", "Done.")
+assert(_G.MSUF_DB.general.castbarTargetBackend == "MSUF", "Castbar diagnostic numbered fix did not switch backend to MSUF")
 _G.MSUF_DB.general.slashMenuSnapEnabled = true
 expectApplied("turn off snapping feature", "Done.")
 assert(_G.MSUF_DB.general.slashMenuSnapEnabled == false, "Dashboard Submit did not turn off Misc menu edge snapping")
@@ -505,8 +612,8 @@ _G.MSUF_DB.gf_raid.showName = true
 expectApplied("same for raid", "Done.")
 assert(_G.MSUF_DB.gf_raid.showName == false, "Dashboard follow-up did not map Unit name change to Raid group name")
 
-expectStatus("reset player settings", "confirmation_needed", "Type 'yes'")
-expectStatus("cancel", "failed", "Cancelled.")
+expectStatus("reset player settings", "confirmation_needed", "mach das")
+expectStatus("never mind", "failed", "Cancelled.")
 local menuUndoCount = 0
 local menuRedoCount = 0
 local menuResetCount = 0
@@ -518,7 +625,7 @@ expectApplied("undo menu change", "Done. Undid")
 assert(menuUndoCount == 1, "Dashboard Submit did not call menu history undo helper")
 expectApplied("redo menu change", "Done. Redid")
 assert(menuRedoCount == 1, "Dashboard Submit did not call menu history redo helper")
-expectStatus("reset all menu changes from this session", "confirmation_needed", "Type 'yes'")
+expectStatus("reset all menu changes from this session", "confirmation_needed", "mach das")
 expectApplied("yes", "Reset all MSUF menu changes")
 assert(menuResetCount == 1, "Dashboard Submit did not call menu history session reset helper")
 
@@ -789,6 +896,7 @@ _G.MSUF_DB.bars.smoothPowerBar = true
 local humanBulkChange = expectApplied("turn off all power bars", "MSUF settings:")
 assert(tostring(humanBulkChange.text or ""):find("1. ", 1, true), "Dashboard Assistant bulk success response did not list changed settings")
 assert(tostring(humanBulkChange.text or ""):find("from enabled to disabled", 1, true), "Dashboard Assistant bulk success response did not explain changed values")
+assert(tostring(humanBulkChange.text or ""):find("Next: type 'undo' to revert", 1, true), "Dashboard Assistant bulk success response did not offer an undo/follow-up hint")
 assert(_G.MSUF_DB.player.showPowerBar == false and _G.MSUF_DB.target.showPowerBar == false and _G.MSUF_DB.focus.showPowerBar == false and _G.MSUF_DB.boss.showPowerBar == false, "Dashboard Submit did not turn off all unit power bars")
 assert(_G.MSUF_DB.gf_party.powerBarEnabled == false and _G.MSUF_DB.gf_raid.powerBarEnabled == false and _G.MSUF_DB.gf_mythicraid.powerBarEnabled == false, "Dashboard Submit did not turn off all group power bars")
 assert(_G.MSUF_DB.bars.smoothPowerBar == true, "Dashboard Submit changed Smooth Power Bar instead of only root Power Bar visibility")
@@ -969,6 +1077,9 @@ assert(_G.MSUF_DB.general.anchorToCooldown == false, "Edit Mode Anchor picker ca
 expectApplied("how do i move the player frame", "Edit Mode")
 expectApplied("search castbar texture", "I found")
 expectApplied("where is castbar texture", "MSUF")
+expectApplied("what changed in 6.0 Preview 2", "Menu2 Architecture")
+expectApplied("was ist neu in preview 2", "Changelog: 6.0 Preview 2")
+expectApplied("what changed in edit mode in latest release", "Edit Mode")
 expectApplied("how do profiles work", "Profiles help")
 expectApplied("profil hilfe", "Profiles help")
 expectApplied("what can i change here")
@@ -989,6 +1100,17 @@ assert(((A.GetContext and A.GetContext() or {}).guidedSetup or {}).step == 2, "S
 assert(M.activeKey == guidedStartPage, "Guided setup next should not automatically navigate")
 expectApplied("cancel setup", "Cancelled guided setup.")
 assert(type((A.GetContext and A.GetContext() or {}).guidedSetup) ~= "table", "Dashboard Submit did not cancel guided setup")
+local groupGuideStartPage = M.activeKey
+local groupGuide = expectApplied("help me setup group frames", "Group Frames setup")
+assert(M.activeKey == groupGuideStartPage, "Group Frames guide should not automatically navigate")
+assert(tostring(groupGuide.text or ""):find("show party group frames", 1, true), "Group Frames guide did not include real group-frame commands")
+assert(((A.GetContext and A.GetContext() or {}).guidedSetup or {}).guide == "group_frames", "Group Frames guide did not store the branch guide key")
+expectApplied("next", "Group Size And Growth")
+expectApplied("cancel setup", "Cancelled guided setup.")
+local castbarGuide = expectApplied("castbar setup guide", "Castbars setup")
+assert(tostring(castbarGuide.text or ""):find("diagnose target castbar", 1, true), "Castbar guide did not include real castbar diagnostic command")
+assert(((A.GetContext and A.GetContext() or {}).guidedSetup or {}).guide == "castbars", "Castbar guide did not store the branch guide key")
+expectApplied("cancel setup", "Cancelled guided setup.")
 local firstJoke = expectStatus("tell me a joke", "info", "unit frame")
 local secondJoke = expectStatus("tell me another joke", "info", "castbar")
 assert(firstJoke.text ~= secondJoke.text, "Assistant repeated the same joke for another-joke request")
@@ -1007,9 +1129,75 @@ expectStatus("where do I report bugs", "info", "https://www.curseforge.com/wow/a
 expectStatus("wo kann ich fehler melden", "info", "MSUF CurseForge-Seite")
 expectStatus("search zzzqqq yyyxxx", "info", "https://discord.gg/2Gf9b2Wprz")
 expectStatus("flibbertigibbet", "info", "https://discord.gg/2Gf9b2Wprz")
-expectApplied("diagnose profiles", "Profile diagnostic:")
+local profileDiag = expectApplied("diagnose profiles", "Suggested fixes:")
+assert(tostring(profileDiag.text or ""):find("Open Profiles page", 1, true), "Profile diagnostic did not render the Profiles action choice")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].action and A.pendingChoices[1].action.key == "open_page", "Profile diagnostic did not offer the Profiles page action")
+local profileCtx = A.GetContext and A.GetContext() or {}
+assert(type(profileCtx.pendingChoices) == "table" and profileCtx.pendingChoices[1] and profileCtx.pendingChoices[1].actionKey == "open_page", "Profile action choice was not serialized into Assistant context")
+A.pendingChoices = nil
+expectApplied("open it", "Opened Profiles")
+assert(M.activeKey == "profiles", "Profile diagnostic action choice did not open Profiles")
+M.activeKey = "home"
+_G.MSUF_GlobalDB.char["Player-Realm"].specProfileMap[456] = "Missing Profile"
+local brokenProfileDiag = expectApplied("diagnose profiles", "Broken spec mappings: 1")
+assert(tostring(brokenProfileDiag.text or ""):find("Clear broken spec profile mappings", 1, true), "Profile diagnostic did not offer the broken spec mapping repair")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].action and A.pendingChoices[1].action.key == "clear_broken_spec_profile_mappings", "Profile diagnostic did not put the spec mapping repair first")
+assert(A.pendingChoices[1].diagnosticFix == true, "Profile repair action choice was not marked as a diagnostic fix")
+local brokenProfileCtx = A.GetContext and A.GetContext() or {}
+assert(type(brokenProfileCtx.pendingChoices) == "table" and brokenProfileCtx.pendingChoices[1] and brokenProfileCtx.pendingChoices[1].actionKey == "clear_broken_spec_profile_mappings", "Profile repair action choice was not serialized into Assistant context")
+assert(brokenProfileCtx.pendingChoices[1].diagnosticFix == true, "Profile repair diagnostic-fix marker was not serialized into Assistant context")
+expectApplied("fix it", "Cleared 1 broken spec profile mapping")
+assert(_G.MSUF_GlobalDB.char["Player-Realm"].specProfileMap[456] == nil, "Profile diagnostic repair did not clear the broken spec mapping")
+_G.MSUF_DB.bars.showClassPower = false
+local classPowerDisabledDiag = expectApplied("diagnose class resources", "Suggested fixes:")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "bars.showClassPower", "Class Resource diagnostic did not offer the enable fix")
+assert(tostring(classPowerDisabledDiag.text or ""):find("Turn on Class Resources", 1, true), "Class Resource diagnostic did not render the enable fix label")
+expectApplied("1", "Done.")
+assert(_G.MSUF_DB.bars.showClassPower == true, "Class Resource diagnostic numbered fix did not enable Class Resources")
+_G.MSUF_DB.bars.showClassPower = true
+_G.MSUF_DB.bars.classPowerWidthMode = "custom"
+_G.MSUF_DB.bars.classPowerWidth = 0
+local classPowerWidthDiag = expectApplied("diagnose class resources", "width is zero")
+assert(tostring(classPowerWidthDiag.text or ""):find("Suggested fixes:", 1, true), "Class Resource width diagnostic did not render suggested fixes")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "bars.classPowerWidth", "Class Resource diagnostic did not offer the width fix")
+expectApplied("1", "Done.")
+assert(_G.MSUF_DB.bars.classPowerWidth == 120, "Class Resource diagnostic numbered fix did not repair custom width")
+_G.MSUF_DB.bars.classPowerHideWhenFull = true
+_G.MSUF_DB.bars.classPowerHideWhenEmpty = true
+local classPowerHideDiag = expectApplied("diagnose class resources", "hide when full and when empty")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "bars.classPowerHideWhenFull", "Class Resource diagnostic did not offer the hide-full fix")
+expectApplied("2", "Done.")
+assert(_G.MSUF_DB.bars.classPowerHideWhenEmpty == false, "Class Resource diagnostic numbered fix did not disable hide-empty")
+_G.MSUF_DB.bars.classPowerHideWhenFull = false
 expectApplied("diagnose class resources", "Class Resources diagnostic:")
-expectApplied("diagnose dashboard setup", "Dashboard setup diagnostic:")
+_G.MSUF_DB.gameplay.enableCombatTimer = false
+local combatTimerDiag = expectApplied("diagnose combat timer", "Combat Timer is disabled")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "gameplay.enableCombatTimer", "Gameplay diagnostic did not offer Combat Timer enable fix")
+assert(tostring(combatTimerDiag.text or ""):find("Open Gameplay page", 1, true), "Gameplay diagnostic did not offer the Gameplay page action")
+expectApplied("mach das", "Done.")
+assert(_G.MSUF_DB.gameplay.enableCombatTimer == true, "Gameplay diagnostic natural fix did not enable Combat Timer")
+_G.MSUF_DB.gameplay.enableCombatCrosshair = true
+_G.MSUF_DB.gameplay.enableCombatCrosshairMeleeRangeColor = true
+_G.MSUF_DB.gameplay.nameplateMeleeSpellID = 0
+expectApplied("wieso ist das fadenkreuz nicht sichtbar", "no melee range spell is set")
+local gameplayDiag = expectApplied("diagnose gameplay", "Gameplay helpers diagnostic:")
+assert(tostring(gameplayDiag.text or ""):find("Open Gameplay page", 1, true), "Generic Gameplay diagnostic did not offer Gameplay navigation")
+M.dashboardRecoveryOpen = false
+M.dashboardScalingOpen = false
+M.dashboardChangelogOpen = false
+M.searchIntroSeen = false
+local dashboardDiag = expectApplied("diagnose dashboard setup", "Suggested fixes:")
+assert(tostring(dashboardDiag.text or ""):find("Open Recovery Tools", 1, true), "Dashboard diagnostic did not offer Recovery Tools")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].action and A.pendingChoices[1].action.key == "open_recovery_tools", "Dashboard diagnostic did not put Recovery Tools first")
+expectApplied("1", "Opened Dashboard recovery tools.")
+assert(M.dashboardRecoveryOpen == true and M.activeKey == "home", "Dashboard diagnostic action choice did not open Recovery tools")
+A.StartPendingFlow("testDashboardFlow", { label = "Dashboard test flow" })
+local pendingDashboardDiag = expectApplied("diagnose dashboard setup", "Pending flow: Dashboard test flow")
+assert(tostring(pendingDashboardDiag.text or ""):find("Cancel active Assistant workflow", 1, true), "Dashboard diagnostic did not offer workflow cancel")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].action and A.pendingChoices[1].action.key == "assistant.workflow.cancel", "Dashboard diagnostic did not put workflow cancel first")
+expectApplied("1", "Cancelled Dashboard test flow.")
+assert(A.Workflow.PendingFlow() == nil, "Dashboard diagnostic workflow cancel action did not clear pending flow")
+M.dashboardRecoveryOpen = false
 _G.MSUF_DB.bars.classPowerOffsetY = 0
 expectApplied("move class resource down 5", "Done.")
 assert(_G.MSUF_DB.bars.classPowerOffsetY == -5, "Dashboard Submit did not move Class Resource down")
@@ -1161,6 +1349,18 @@ expectApplied("back", "Opened previous page.")
 assert(M.activeKey == "uf_player", "Dashboard back did not return to previous Assistant-opened page")
 expectApplied("open previous page", "Opened previous page.")
 assert(M.activeKey == "home", "Dashboard back did not return to Dashboard page")
+A.Workflow.navStack = {}
+M.pageBackStack = {}
+M.pageForwardStack = {}
+M.activeKey = "home"
+M.SelectPage("opt_bars")
+M.SelectPage("profiles")
+expectApplied("back", "Opened previous page.")
+assert(M.activeKey == "opt_bars", "Dashboard back did not use native Menu2 page history after direct menu navigation")
+expectApplied("forward", "Opened next page.")
+assert(M.activeKey == "profiles", "Dashboard forward did not use native Menu2 page history")
+expectApplied("assistant workflow status", "Native page history:")
+M.activeKey = "home"
 
 expectApplied("turn on class color mode for raidframe", "Done.")
 assert(_G.MSUF_DB.gf_raid.gfBarMode == "CLASS", "Raid frame class color mode did not set gf_raid.gfBarMode")
@@ -1427,7 +1627,10 @@ M.UnitPage = {
     end,
 }
 expectStatus("copy target profile to player", "confirmation_needed", "Copy Target settings")
-expectApplied("yes", "Target settings to Player")
+local unitCopyConfirm = expectApplied("go ahead", "Target settings to Player")
+assert(tostring(unitCopyConfirm.text or ""):find("Next: type 'undo' to revert", 1, true), "Snapshot action response did not offer an undo/follow-up hint")
+expectStatus("what did you change", "info", "Copy Target settings")
+expectStatus("what did you do", "info", "You can type 'undo' to revert it.")
 assert(#unitCopyCalls == 1, "Unit profile wording did not execute exactly one Unit Copy call")
 assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "player", "Unit profile wording copied the wrong unit direction")
 assert(unitCopyCalls[1].scopes and unitCopyCalls[1].scopes.text == true and unitCopyCalls[1].scopes.layout == true, "Unit profile wording did not copy all Unit Copy categories")
@@ -1501,7 +1704,51 @@ assert(M.gfCopyScopes.general == false and M.gfCopyScopes.font == false, "Group 
 expectApplied("turn off group copy auras category", "Set group copy category Auras off.")
 assert(M.gfCopyScopes.auras == false, "Group copy category toggle did not disable auras")
 
-expectStatus("rename profile Raid to Raid PvP", "confirmation_needed", "Type 'yes'")
+_G.MSUF_GlobalDB.profiles.Raid = _G.MSUF_GlobalDB.profiles.Raid or _G.MSUF_DB
+expectApplied("copy from profile Raid", "call it Raid Backup")
+expectStatus("call it Raid Backup", "confirmation_needed", "Copy profile Raid to Raid Backup")
+expectApplied("go ahead", "Copied profile Raid to Raid Backup")
+assert(type(_G.MSUF_GlobalDB.profiles["Raid Backup"]) == "table", "Profile copy pending flow did not create cleaned destination profile")
+assert(_G.MSUF_ActiveProfile == "Raid Backup", "Profile copy pending flow did not switch to copied profile")
+_G.MSUF_GlobalDB.profiles.Raid = _G.MSUF_GlobalDB.profiles.Raid or _G.CopyTable(_G.MSUF_GlobalDB.profiles["Raid Backup"])
+_G.MSUF_ActiveProfile = "Raid"
+_G.MSUF_DB = _G.MSUF_GlobalDB.profiles.Raid
+_G.MSUF_GlobalDB.char["Player-Realm"].activeProfile = "Raid"
+expectApplied("copy from profile Raid", "call it Raid Backup")
+expectApplied("never mind", "Cancelled Profile copy.")
+assert(A.Workflow.PendingFlow() == nil, "Profile copy natural cancel did not clear the pending flow")
+assert(type(_G.MSUF_GlobalDB.profiles["Never Mind"]) ~= "table", "Profile copy pending flow treated cancel wording as a destination")
+local renameFlowStart = submit("rename profile Raid")
+assert(renameFlowStart.status == "applied", "rename profile Raid: wrong start status " .. tostring(renameFlowStart.status))
+assert(tostring(renameFlowStart.text or ""):find("to Raid Renamed", 1, true), "rename profile Raid: missing natural destination prompt")
+assert(type(A.Workflow.PendingFlow()) == "table" and A.Workflow.PendingFlow().kind == "profileRenameDestination" and A.Workflow.PendingFlow().source == "Raid", "rename profile Raid did not start the profile rename pending flow")
+expectStatus("to Raid Renamed", "confirmation_needed", "Rename profile Raid to Raid Renamed")
+expectApplied("do it", "Renamed profile Raid to Raid Renamed")
+assert(_G.MSUF_GlobalDB.profiles.Raid == nil, "Profile rename pending flow did not remove old profile key")
+assert(type(_G.MSUF_GlobalDB.profiles["Raid Renamed"]) == "table", "Profile rename pending flow did not create cleaned destination profile key")
+_G.MSUF_GlobalDB.profiles.Raid = _G.MSUF_GlobalDB.profiles["Raid Renamed"]
+_G.MSUF_GlobalDB.profiles["Raid Renamed"] = nil
+_G.MSUF_ActiveProfile = "Raid"
+_G.MSUF_DB = _G.MSUF_GlobalDB.profiles.Raid
+_G.MSUF_GlobalDB.char["Player-Realm"].activeProfile = "Raid"
+_G.MSUF_GlobalDB.char["Player-Realm"].specProfileMap[123] = "Raid"
+
+local germanRenameFlowStart = submit("profil Raid umbenennen")
+assert(germanRenameFlowStart.status == "applied", "profil Raid umbenennen: wrong start status " .. tostring(germanRenameFlowStart.status))
+assert(tostring(germanRenameFlowStart.text or ""):find("in Raid Neu", 1, true), "profil Raid umbenennen: missing German-style destination prompt")
+assert(type(A.Workflow.PendingFlow()) == "table" and A.Workflow.PendingFlow().kind == "profileRenameDestination" and A.Workflow.PendingFlow().source == "Raid", "profil Raid umbenennen did not start the profile rename pending flow")
+expectStatus("in Raid Deutsch", "confirmation_needed", "Rename profile Raid to Raid Deutsch")
+expectApplied("ja mach das", "Renamed profile Raid to Raid Deutsch")
+assert(_G.MSUF_GlobalDB.profiles.Raid == nil, "German profile rename pending flow did not remove old profile key")
+assert(type(_G.MSUF_GlobalDB.profiles["Raid Deutsch"]) == "table", "German profile rename pending flow did not create cleaned destination profile key")
+_G.MSUF_GlobalDB.profiles.Raid = _G.MSUF_GlobalDB.profiles["Raid Deutsch"]
+_G.MSUF_GlobalDB.profiles["Raid Deutsch"] = nil
+_G.MSUF_ActiveProfile = "Raid"
+_G.MSUF_DB = _G.MSUF_GlobalDB.profiles.Raid
+_G.MSUF_GlobalDB.char["Player-Realm"].activeProfile = "Raid"
+_G.MSUF_GlobalDB.char["Player-Realm"].specProfileMap[123] = "Raid"
+
+expectStatus("rename profile Raid to Raid PvP", "confirmation_needed", "mach das")
 expectApplied("yes", "Renamed profile Raid to Raid PvP")
 assert(_G.MSUF_GlobalDB.profiles.Raid == nil, "Profile rename did not remove old profile key")
 assert(type(_G.MSUF_GlobalDB.profiles["Raid PvP"]) == "table", "Profile rename did not create destination profile key")

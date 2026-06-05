@@ -226,19 +226,50 @@ local function ShouldUseLastUnitContext(text)
 end
 
 function A._ParseFollowupAnswer(text, ctx)
-    if not (ctx and type(ctx.lastChangeBundle) == "table") then return nil end
     if not ContainsAny(text, {
         "what did you change", "what changed", "what was changed", "what did you do",
         "what did you set", "last change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
     }) then return nil end
-    local key = ctx.lastSetting
-    if type(key) ~= "string" or key == "" then
-        local first = ctx.lastChangeBundle[1]
-        key = first and first.key
+    if not ctx then return nil end
+
+    if type(ctx.lastChangeBundle) == "table" and #ctx.lastChangeBundle > 0 then
+        local key = ctx.lastSetting
+        if type(key) ~= "string" or key == "" then
+            local first = ctx.lastChangeBundle[1]
+            key = first and first.key
+        end
+        local setting = key and Registry and Registry:GetSetting(key) or nil
+        if setting then
+            local value = type(setting.get) == "function" and setting.get() or ctx.lastValue
+            return {
+                kind = "answer",
+                status = "info",
+                text = tostring(setting.label or setting.key or "Last setting") .. " is " .. tostring(value) .. ".",
+                summary = "Reports the last Assistant setting and current value from context.",
+            }
+        end
     end
-    local setting = key and Registry and Registry:GetSetting(key) or nil
-    if not setting then
+
+    local actionKey = type(ctx.lastAction) == "string" and ctx.lastAction or nil
+    if actionKey and actionKey ~= "" and actionKey ~= "change" then
+        local action = Registry and type(Registry.GetAction) == "function" and Registry:GetAction(actionKey) or nil
+        local label = ctx.lastActionLabel or (action and action.label) or actionKey
+        local message = tostring(ctx.lastActionMessage or "")
+        local lines = { "Last Assistant action: " .. tostring(label) .. "." }
+        if message ~= "" then lines[#lines + 1] = "Result: " .. message end
+        if ctx.lastActionUndoable == true then
+            lines[#lines + 1] = "You can type 'undo' to revert it."
+        end
+        return {
+            kind = "answer",
+            status = "info",
+            text = table.concat(lines, "\n"),
+            summary = "Reports the last Assistant action from context.",
+        }
+    end
+
+    if actionKey == "change" then
         return {
             kind = "answer",
             status = "info",
@@ -246,13 +277,7 @@ function A._ParseFollowupAnswer(text, ctx)
             summary = "Reports the last Assistant change from context.",
         }
     end
-    local value = type(setting.get) == "function" and setting.get() or ctx.lastValue
-    return {
-        kind = "answer",
-        status = "info",
-        text = tostring(setting.label or setting.key or "Last setting") .. " is " .. tostring(value) .. ".",
-        summary = "Reports the last Assistant setting and current value from context.",
-    }
+    return nil
 end
 
 local function BuildFollowup(text, ctx)

@@ -780,6 +780,10 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
             return mark_registry_family(row, settings_with_keys(settings, {"general.fontKey"}), "Matched shared font picker to global font setting.")
         if label == "outline":
             return mark_registry_family(row, font_scope_settings({"outline"}), "Matched font outline segment to scoped font outline settings.")
+        if row.function == "ActiveFontOverrideLabels" and label == "rendering":
+            return mark_registry_family(row, font_scope_settings({"fontMonochrome"}), "Matched font rendering segment to scoped font rendering settings.")
+        if row.function == "ActiveFontOverrideLabels" and label == "baseline":
+            return mark_registry_family(row, font_scope_settings({"fontBaselineOffset"}), "Matched font baseline slider to scoped font baseline settings.")
         if label == "player name color":
             return mark_registry_family(row, font_scope_settings({"nameColorMode"}), "Matched name color dropdown to scoped font name-color settings.")
         if label == "npc boss name color":
