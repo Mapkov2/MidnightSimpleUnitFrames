@@ -58,23 +58,14 @@ local function CP_StampMinMax(bar, minValue, maxValue)
     bar:SetMinMaxValues(minValue, maxValue)
 end
 
-local function CP_StampTextShown(fs, shown)
-    CP_StampShown(fs, shown)
-end
-
 _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
     local tonumber = tonumber
     local PLAYER_CLASS = E.PLAYER_CLASS
     local PT = E.PT
     local CPConst = E.CPConst
     local CP = E.CP
-    local _cpDB = E._cpDB
     local UnitPower = E.UnitPower
     local NotSecret = E.NotSecret
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
-    local ResolveChargedColor = E.ResolveChargedColor
-    local ResolveComboPointSlotColor = E.ResolveComboPointSlotColor
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local GetSpec = E.GetSpec
     local GetTime = E.GetTime
@@ -139,7 +130,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                 local bar = CP.bars[i]
                 if bar then bar:SetValue(1) end
             end
-            if CP.text then CP_StampTextShown(CP.text, false) end
+            if CP.text then CP_StampShown(CP.text, false) end
             StopEssenceOnUpdates()
             return
         end
@@ -215,10 +206,10 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
             local showText = visual and visual.showText == true
             if showText then
                 txt:SetText(cur)
-                CP_StampTextShown(txt, true)
+                CP_StampShown(txt, true)
                 txt:SetTextColor(1, 1, 1, 1)
             else
-                CP_StampTextShown(txt, false)
+                CP_StampShown(txt, false)
             end
         end
         CP_CheckAutoHide(cur, maxPower)
@@ -235,7 +226,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
         local cur = UnitPower("player", powerType)
         if not NotSecret(cur) then
             for i = 1, maxPower do local bar = CP.bars[i]; if bar then bar:SetValue(1) end end
-            if CP.text then CP_StampTextShown(CP.text, false) end
+            if CP.text then CP_StampShown(CP.text, false) end
             return
         end
         cur = tonumber(cur) or 0
@@ -287,7 +278,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                 local predOn = visual.showPrediction ~= false
                 local predDelta = CP.wlPredDelta
                 if predDelta ~= 0 and PLAYER_CLASS == "WARLOCK" then txt:SetText(cur .. "*") else txt:SetText(cur) end
-                CP_StampTextShown(txt, true)
+                CP_StampShown(txt, true)
                 if PLAYER_CLASS == "WARLOCK" and predOn then
                     local spec = GetSpec and GetSpec()
                     local threshold = spec and CPConst.WL_LOW_SHARD_THRESHOLD[spec]
@@ -295,7 +286,7 @@ _G.MSUF_CP_MODE_BUILDERS.SEGMENTED = function(E)
                 else
                     txt:SetTextColor(1,1,1,1)
                 end
-            else CP_StampTextShown(txt, false) end
+            else CP_StampShown(txt, false) end
         end
         CP_CheckAutoHide(cur, maxPower)
     end
@@ -314,12 +305,9 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
     local string_format = string.format
     local math_floor = math.floor
     local CP = E.CP
-    local _cpDB = E._cpDB
     local UnitPower = E.UnitPower
     local UnitPowerDisplayMod = E.UnitPowerDisplayMod
     local NotSecret = E.NotSecret
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local CPConst = E.CPConst
     local CPK = E.CPK
@@ -329,7 +317,7 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
         local rawCur = UnitPower("player", powerType, true)
         if not NotSecret(rawCur) then
             for i = 1, maxPower do local bar = CP.bars[i]; if bar then bar:SetValue(1) end end
-            if CP.text then CP_StampTextShown(CP.text, false) end
+            if CP.text then CP_StampShown(CP.text, false) end
             return
         end
         rawCur = tonumber(rawCur) or 0
@@ -368,12 +356,12 @@ _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
                 else
                     if partial > 0.001 then txt:SetText(string_format("%.1f", fractional)) else txt:SetText(fullBars) end
                 end
-                CP_StampTextShown(txt, true)
+                CP_StampShown(txt, true)
                 if predOn then
                     local threshold = CPConst.WL_LOW_SHARD_THRESHOLD[CPK.SPEC.WARLOCK_DESTRUCTION]
                     if threshold and fullBars < threshold then txt:SetTextColor(1,0.1,0.1,1) else txt:SetTextColor(1,1,1,1) end
                 else txt:SetTextColor(1,1,1,1) end
-            else CP_StampTextShown(txt, false) end
+            else CP_StampShown(txt, false) end
         end
         CP_CheckAutoHide(fullBars, maxPower)
     end
@@ -396,7 +384,6 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     local GetTime = E.GetTime
     local GetRuneCooldown = E.GetRuneCooldown
     local UnitHasVehicleUI = E.UnitHasVehicleUI
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local CP_ApplyRuneSortOrder = E.CP_ApplyRuneSortOrder
     local GetRuneMap = E.GetRuneMap
@@ -602,9 +589,9 @@ _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
             local showText = visual and visual.showText == true
             if showText and readyCount > 0 then
                 txt:SetText(readyCount)
-                CP_StampTextShown(txt, true)
+                CP_StampShown(txt, true)
             else
-                CP_StampTextShown(txt, false)
+                CP_StampShown(txt, false)
             end
         end
 
@@ -638,7 +625,6 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
     local CPK = E.CPK
     local WW = E.WW
     local NotSecret = E.NotSecret
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
     local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local ResolveMWAbove5Color = E.ResolveMWAbove5Color
     local CP_CheckAutoHide = E.CP_CheckAutoHide
@@ -687,9 +673,9 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
                     else
                         txt:SetText(rawCur)
                     end
-                    CP_StampTextShown(txt, true)
+                    CP_StampShown(txt, true)
                 else
-                    CP_StampTextShown(txt, false)
+                    CP_StampShown(txt, false)
                 end
             end
         else
@@ -740,7 +726,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
             local txt = CP.text
             if txt then
                 local showText = visual and visual.showText == true
-                if showText and cur > 0 then txt:SetText(cur); CP_StampTextShown(txt, true) else CP_StampTextShown(txt, false) end
+                if showText and cur > 0 then txt:SetText(cur); CP_StampShown(txt, true) else CP_StampShown(txt, false) end
             end
             CP_CheckAutoHide(cur, maxPower)
         end
@@ -812,7 +798,7 @@ _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
         local txt = CP.text
         if txt then
             local showText = visual and visual.showText == true
-            if showText and displayCur > 0 then txt:SetText(displayCur); CP_StampTextShown(txt, true) else CP_StampTextShown(txt, false) end
+            if showText and displayCur > 0 then txt:SetText(displayCur); CP_StampShown(txt, true) else CP_StampShown(txt, false) end
         end
         local intCur = (cur > 0.01) and 1 or 0
         CP_CheckAutoHide(intCur, 1)
@@ -832,13 +818,10 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
     local string_format = string.format
     local math_floor = math.floor
     local CP = E.CP
-    local _cpDB = E._cpDB
     local C_UnitAuras = E.C_UnitAuras
     local GetTime = E.GetTime
     local EBON = E.EBON
     local CPK = E.CPK
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local GetFilledAlpha = E.GetFilledAlpha
     local GetEmptyAlpha = E.GetEmptyAlpha
@@ -895,9 +878,9 @@ _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
             local showText = visual and visual.timerShowText == true
             if showText then
                 txt:SetText(string_format("%.1fs", remaining))
-                CP_StampTextShown(txt, true)
+                CP_StampShown(txt, true)
             else
-                CP_StampTextShown(txt, false)
+                CP_StampShown(txt, false)
             end
         end
 
@@ -952,12 +935,9 @@ _G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
 _G.MSUF_CP_MODE_BUILDERS.CONTINUOUS = function(E)
     local tonumber = tonumber
     local CP = E.CP
-    local _cpDB = E._cpDB
     local UnitPower = E.UnitPower
     local UnitPowerMax = E.UnitPowerMax
     local NotSecret = E.NotSecret
-    local ResolveClassPowerColor = E.ResolveClassPowerColor
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local GetFilledAlpha = E.GetFilledAlpha
 
@@ -1012,9 +992,9 @@ _G.MSUF_CP_MODE_BUILDERS.CONTINUOUS = function(E)
             local showText = visual and visual.showText == true
             if showText and cur and mx then
                 txt:SetFormattedText("%d / %d", cur, mx)
-                CP_StampTextShown(txt, true)
+                CP_StampShown(txt, true)
             else
-                CP_StampTextShown(txt, false)
+                CP_StampShown(txt, false)
             end
         end
 
@@ -1042,7 +1022,6 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
     local NotSecret = E.NotSecret
     local UnitStagger = E.UnitStagger
     local UnitHealthMax = E.UnitHealthMax
-    local ResolveClassPowerBgColor = E.ResolveClassPowerBgColor
     local CP_CheckAutoHide = E.CP_CheckAutoHide
     local STAGGER_CONST = E.STAGGER_CONST or {}
     local GetFilledAlpha = E.GetFilledAlpha
@@ -1123,12 +1102,12 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
                 else
                     txt:SetFormattedText("%d", cur)
                 end
-                CP_StampTextShown(txt, true)
+                CP_StampShown(txt, true)
             elseif showText then
                 txt:SetText("")
-                CP_StampTextShown(txt, false)
+                CP_StampShown(txt, false)
             else
-                CP_StampTextShown(txt, false)
+                CP_StampShown(txt, false)
             end
         end
 
