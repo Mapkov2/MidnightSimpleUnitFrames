@@ -640,14 +640,22 @@ function GF.GetEffectivePowerHeight(kind, unit, role, conf)
     return (GF.GetScaledPowerHeight and GF.GetScaledPowerHeight(kind)) or (tonumber(conf and conf.powerHeight) or 0)
 end
 
-local function GetRaidGroupLayoutParts(conf)
+local function GetRaidGroupLayoutParts(conf, count)
     local upc = math_floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
     if upc < 1 then upc = 1 elseif upc > 40 then upc = 40 end
     local primary = math_min(upc, 5)
     local groups = math_floor((tonumber(conf and conf.maxColumns) or 8) + 0.5)
     if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+    count = tonumber(count) or 0
+    local needed
+    if count > 0 then
+        needed = math_ceil(count / 5)
+        if needed > groups then groups = needed end
+        if groups > 8 then groups = 8 end
+    end
     if type(GF.GetPreservedRaidGroupCount) == "function" then
         groups = tonumber(GF.GetPreservedRaidGroupCount(conf)) or groups
+        if needed and needed > groups then groups = needed end
         if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
     end
     local blockColumns = math_ceil(5 / primary)
@@ -659,9 +667,9 @@ function GF.GetPreservedRaidGridMetrics(kind, count)
     local conf = GF.GetConf(kind)
     local w, h, sp = GF.GetScaledFrameMetrics(kind)
     local growth = conf.growth or "DOWN"
-    local upc, primary, maxGroups, blockColumns = GetRaidGroupLayoutParts(conf)
 
     count = tonumber(count) or 0
+    local upc, primary, maxGroups, blockColumns = GetRaidGroupLayoutParts(conf, count)
     local groups = (count > 0) and math_ceil(count / 5) or maxGroups
     if groups < 1 then groups = 1 end
     groups = math_min(maxGroups, groups)
@@ -721,6 +729,9 @@ function GF.GetGridMetrics(kind, count)
     if numCols < 1 then numCols = 1 end
     local maxColumns = math_floor((tonumber(conf.maxColumns) or numCols) + 0.5)
     if maxColumns < 1 then maxColumns = 1 elseif maxColumns > 8 then maxColumns = 8 end
+    if IsRaidLikeKind(kind) and numCols > maxColumns then
+        maxColumns = math_min(numCols, 8)
+    end
     if numCols > maxColumns then numCols = maxColumns end
     local major = math_min(count, upc)
 

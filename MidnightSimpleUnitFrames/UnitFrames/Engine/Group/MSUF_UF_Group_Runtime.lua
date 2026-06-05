@@ -11,6 +11,7 @@ local Metadata = GF.Metadata or {}
 local CreateFrame = CreateFrame
 local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
+local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
 local UnitGUID = UnitGUID
 local floor = math.floor
@@ -20,8 +21,9 @@ local IsSecret = Secrets.IsSecret or function(_) return false end
 
 local eventFrame
 local rosterRebuildQueued = false
+local rosterSettleToken = 0
 local nameEventsRegistered = false
-local lastInRaid
+local lastRosterMode
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -143,22 +145,32 @@ end
 
 local function ShouldShowParty()
     local conf = GF.GetConf and GF.GetConf("party") or {}
-    return conf.enabled == true and not (IsInRaid and IsInRaid())
+    if conf.enabled ~= true or (IsInRaid and IsInRaid()) then
+        return false
+    end
+    if IsInGroup and IsInGroup() then
+        return true
+    end
+    return conf.showSolo == true and conf.showPlayer ~= false
 end
 
-local function ShouldShowRaid()
-    if not (IsInRaid and IsInRaid()) then return false end
-    local conf = GF.GetConf and GF.GetConf(LiveRaidKind()) or {}
-    return conf.enabled == true
+local function RosterMode()
+    if IsInRaid and IsInRaid() then
+        return "raid"
+    end
+    if IsInGroup and IsInGroup() then
+        return "party"
+    end
+    return "solo"
 end
 
 local function MarkRosterMode()
-    local inRaid = IsInRaid and IsInRaid() or false
-    if lastInRaid ~= nil and lastInRaid ~= inRaid then
+    local mode = RosterMode()
+    if lastRosterMode ~= nil and lastRosterMode ~= mode then
         GF._forceRecreateHeaders = true
     end
-    lastInRaid = inRaid
-    return inRaid
+    lastRosterMode = mode
+    return mode
 end
 
 local function HeaderKindForKey(key)
@@ -203,6 +215,26 @@ local function RefreshCombatAlpha()
     return false
 end
 
+local function ScheduleRosterSettle()
+    if not (C_Timer and C_Timer.After) then
+        return
+    end
+    if RosterMode() ~= "raid" then
+        return
+    end
+    rosterSettleToken = rosterSettleToken + 1
+    local token = rosterSettleToken
+    local function Run()
+        if token ~= rosterSettleToken or RosterMode() ~= "raid" then
+            return
+        end
+        GF._forceScanHeaders = true
+        GF.RebuildAll()
+    end
+    C_Timer.After(0.15, Run)
+    C_Timer.After(0.60, Run)
+end
+
 local function ScheduleRosterRebuild()
     if rosterRebuildQueued then
         return
@@ -232,6 +264,9 @@ local function HideOrRetireHeader(key)
 end
 
 local function PreviewSuppressesHeader(key)
+    if _G.MSUF_UnitEditModeActive == true then
+        return false
+    end
     local active = GF._previewActive
     if not active then return false end
     if key == "party" then
@@ -250,25 +285,33 @@ function GF.UpdateGroupVisibility()
     end
     if GF.EnsureDB then GF.EnsureDB() end
 
+    local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
+    local raidKind = LiveRaidKind()
+    local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
+    local wantRaid = (IsInRaid and IsInRaid()) and raidConf.enabled == true and not PreviewSuppressesHeader("raid")
+
     local party = GF.headers and GF.headers.party
-    if ShouldShowParty() and not PreviewSuppressesHeader("party") then
+    local raid = GF.headers and GF.headers.raid
+    if not wantParty and party then
+        HideOrRetireHeader("party")
+        party = nil
+    end
+    if not wantRaid and raid then
+        HideOrRetireHeader("raid")
+        raid = nil
+    end
+
+    if wantParty then
         party = party or (GF.SetupHeader and GF.SetupHeader("party", "party"))
         if party then party:Show() end
-    elseif party then
-        HideOrRetireHeader("party")
     end
     ApplyHeaderSceneAlpha("party")
 
-    local raidKind = LiveRaidKind()
-    local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
-    local raid = GF.headers and GF.headers.raid
-    if ShouldShowRaid() and raidConf.enabled == true and not PreviewSuppressesHeader("raid") then
+    if wantRaid then
         if (not raid or raid._msufGFKind ~= raidKind) and GF.SetupHeader then
             raid = GF.SetupHeader("raid", raidKind) or raid
         end
         if raid then raid:Show() end
-    elseif raid then
-        HideOrRetireHeader("raid")
     end
     ApplyHeaderSceneAlpha("raid")
     if GF.ApplyBlizzardGroupFrameOwnership then
@@ -284,23 +327,33 @@ function GF.RebuildAll()
     end
     InvalidateSpecs()
     if GF.EnsureDB then GF.EnsureDB() end
-    if ShouldShowParty() and not PreviewSuppressesHeader("party") and GF.SetupHeader then
-        local party = GF.SetupHeader("party", "party")
-        if party then party:Show() end
-    elseif GF.headers and GF.headers.party then
+
+    local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
+    local raidKind = LiveRaidKind()
+    local raidConf = GF.GetConf and GF.GetConf(raidKind) or {}
+    local wantRaid = (IsInRaid and IsInRaid()) and raidConf.enabled == true and not PreviewSuppressesHeader("raid")
+
+    if not wantParty and GF.headers and GF.headers.party then
         HideOrRetireHeader("party")
     end
-    if ShouldShowRaid() and not PreviewSuppressesHeader("raid") and GF.SetupHeader then
-        local raid = GF.SetupHeader("raid", LiveRaidKind())
-        if raid then raid:Show() end
-    elseif GF.headers and GF.headers.raid then
+    if not wantRaid and GF.headers and GF.headers.raid then
         HideOrRetireHeader("raid")
+    end
+
+    if wantParty and GF.SetupHeader then
+        local party = GF.SetupHeader("party", "party")
+        if party then party:Show() end
+    end
+    if wantRaid and GF.SetupHeader then
+        local raid = GF.SetupHeader("raid", raidKind)
+        if raid then raid:Show() end
     end
     ApplyHeaderSceneAlpha("party")
     ApplyHeaderSceneAlpha("raid")
     if GF.ApplyBlizzardGroupFrameOwnership then
         GF.ApplyBlizzardGroupFrameOwnership("rebuild")
     end
+    GF._forceScanHeaders = nil
     GF._forceRecreateHeaders = nil
     return true
 end
@@ -373,6 +426,7 @@ function GF.EM2_SetActivePreviewKind(kind)
 end
 
 function GF.EM2_NudgePreview(key, dx, dy)
+    if InCombat() then return true end
     local kind = key
     if key == "gf_party" then kind = "party"
     elseif key == "gf_raid" then kind = "raid"
@@ -419,9 +473,17 @@ local function OnEvent(self, event, ...)
         end
         GF.RebuildAll()
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
-        MarkRosterMode()
+        local mode = MarkRosterMode()
         if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
+        GF._forceScanHeaders = true
+        if InCombat() then
+            GF.DeferGroupRuntime("roster")
+            return
+        end
         ScheduleRosterRebuild()
+        if event == "GROUP_ROSTER_UPDATE" and mode == "raid" then
+            ScheduleRosterSettle()
+        end
     elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
         GF._forceRecreateHeaders = true
         GF.RefreshAll()

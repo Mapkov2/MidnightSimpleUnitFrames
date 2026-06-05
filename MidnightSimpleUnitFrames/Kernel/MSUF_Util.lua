@@ -725,8 +725,6 @@ do
     if type(_G.MSUF_IsConfigCombatLocked) ~= "function" then
         function _G.MSUF_IsConfigCombatLocked()
             if InCombatLockdown and InCombatLockdown() then return true end
-            local uac = _G.UnitAffectingCombat
-            if type(uac) == "function" and uac("player") then return true end
             return false
         end
     end

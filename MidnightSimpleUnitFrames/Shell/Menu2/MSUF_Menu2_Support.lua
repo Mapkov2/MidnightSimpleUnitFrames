@@ -47,7 +47,7 @@ local function IsConfigCombatLocked()
         return _G.MSUF_IsConfigCombatLocked() and true or false
     end
     if _G.InCombatLockdown and _G.InCombatLockdown() then return true end
-    return (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false
+    return false
 end
 
 local function ShowConfigCombatLockMessage()
@@ -579,8 +579,7 @@ function M.IsEditModeCombatLocked(includeBlizzard)
         local ok, locked = pcall(fn)
         if ok then return locked and true or false end
     end
-    return (_G.InCombatLockdown and _G.InCombatLockdown())
-        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+    return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
 
 local function EditModeState()

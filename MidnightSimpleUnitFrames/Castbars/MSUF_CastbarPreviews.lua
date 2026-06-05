@@ -186,3 +186,47 @@ _G.MSUF_SyncBossCastbarSliders=MSUF_SyncBossCastbarSliders
 u()if hooksecurefunc and type(_G.MSUF_UpdateBossCastbarPreview)=="function"and not _G.MSUF_BossPreviewSetupHooked then
 _G.MSUF_BossPreviewSetupHooked=true
 hooksecurefunc("MSUF_UpdateBossCastbarPreview",function()if not n()then MSUF_SetupBossCastbarPreviewEditMode()end end)end
+
+do
+local function MSUF_HideCastbarPreviewFrame(frame)
+if not frame then return end
+frame.MSUF_testMode=nil
+frame._msufTestActive=nil
+frame.MSUF_testStart=nil
+frame.MSUF_testDur=nil
+if frame.SetScript then frame:SetScript("OnUpdate",nil)end
+if frame.statusBar then
+if frame.statusBar.SetMinMaxValues then frame.statusBar:SetMinMaxValues(0,1)end
+if frame.statusBar.SetValue then frame.statusBar:SetValue(0)end
+local tex=frame.statusBar.GetStatusBarTexture and frame.statusBar:GetStatusBarTexture()
+if tex and tex.SetAlpha then tex:SetAlpha(0)end
+frame.statusBar.MSUF_hideFillTexture=true
+end
+if frame.timeText and frame.timeText.SetText then frame.timeText:SetText("")end
+if frame.latencyBar and frame.latencyBar.Hide then frame.latencyBar:Hide()end
+if frame.Hide then frame:Hide()end
+end
+
+function _G.MSUF_HideAllCastbarPreviews()
+local db=_G.MSUF_DB
+local g=db and db.general
+if g then
+g.castbarPlayerPreviewEnabled=false
+g.playerCastbarTestMode=false
+g.targetCastbarTestMode=false
+g.focusCastbarTestMode=false
+g.bossCastbarTestMode=false
+end
+MSUF_HideCastbarPreviewFrame(_G.MSUF_PlayerCastbarPreview)
+MSUF_HideCastbarPreviewFrame(_G.MSUF_TargetCastbarPreview)
+MSUF_HideCastbarPreviewFrame(_G.MSUF_FocusCastbarPreview)
+if type(_G.MSUF_HideAllBossCastbarPreviews)=="function"then _G.MSUF_HideAllBossCastbarPreviews()end
+local maxBoss=tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES)or 5
+if maxBoss<1 or maxBoss>12 then maxBoss=5 end
+MSUF_HideCastbarPreviewFrame(_G.MSUF_BossCastbarPreview)
+MSUF_HideCastbarPreviewFrame(_G.MSUF_BossCastbarPreview1)
+for i=2,maxBoss do
+MSUF_HideCastbarPreviewFrame(_G["MSUF_BossCastbarPreview"..i])
+end
+end
+end

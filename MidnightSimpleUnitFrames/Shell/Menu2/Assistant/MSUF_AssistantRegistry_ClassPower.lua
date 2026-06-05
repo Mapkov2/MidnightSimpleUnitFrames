@@ -173,7 +173,7 @@ RegisterBarsNumber("classPowerBgAlpha", "backgroundAlpha", "Class Resource Backg
     percent = true,
     step = 0.01,
 })
-RegisterBarsNumber("classPowerTickWidth", "separator", "Class Resource Separator Width", 1, 0, 4, ClassPowerAliases("separator", "separator width", "tick width", "pip separator"), {
+RegisterBarsNumber("classPowerTickWidth", "separator", "Class Resource Separator Width", 1, 0, 4, ClassPowerAliases("separator", "separator width", "tick width", "pip separator", "divider", "divider width", "divider line width"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_SEPARATOR",
 })
 RegisterBarsNumber("classPowerOutline", "outline", "Class Resource Outline", 1, 0, 4, ClassPowerAliases(
@@ -194,7 +194,7 @@ RegisterBarsNumber("classPowerEmptyAlpha", "emptyAlpha", "Class Resource Empty O
     percent = true,
     step = 0.05,
 })
-RegisterBarsNumber("classPowerGap", "gap", "Class Resource Pip Gap", 0, 0, 8, ClassPowerAliases("pip gap", "gap", "resource gap", "point gap"), {
+RegisterBarsNumber("classPowerGap", "gap", "Class Resource Pip Gap", 0, 0, 8, ClassPowerAliases("pip gap", "gap", "resource gap", "point gap", "divider gap", "divider spacing", "separator spacing"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_GAP",
 })
 RegisterBarsString("classPowerTexture", "texture", "Class Resource Foreground Texture", "", {

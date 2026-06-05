@@ -34,6 +34,7 @@ GF.anchors = GF.anchors or {}
 -- recreated on the next show. Bounds the secure-frame count to one header
 -- (plus its child buttons) per key for the whole session.
 GF._headerPool = GF._headerPool or {}
+GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 
 local NIL_ATTR = {}
 
@@ -119,6 +120,25 @@ local function AnchorName(key)
     return key == "party" and "MSUF_GF_PartyAnchor" or "MSUF_GF_RaidAnchor"
 end
 
+-- Transient 0 roster reads must not center the live raid header as a full 40.
+local UNKNOWN_RAID_LAYOUT_COUNT = 10
+
+local function RememberLayoutCount(kind, count)
+    count = floor((tonumber(count) or 0) + 0.5)
+    if count < 1 then return 0 end
+    if count > 40 then count = 40 end
+    GF._lastKnownLayoutCounts[kind] = count
+    return count
+end
+
+local function UnknownRaidLayoutCount(kind)
+    local count = GF._lastKnownLayoutCounts and GF._lastKnownLayoutCounts[kind]
+    if count and count > 0 and count <= UNKNOWN_RAID_LAYOUT_COUNT then
+        return count
+    end
+    return UNKNOWN_RAID_LAYOUT_COUNT
+end
+
 local function ConfiguredCount(kind, conf)
     if kind == "party" then
         if GetNumSubgroupMembers then
@@ -128,15 +148,15 @@ local function ConfiguredCount(kind, conf)
             elseif n == 0 and conf.showSolo == true and conf.showPlayer ~= false then
                 n = 1
             end
-            if n > 0 then return n end
+            if n > 0 then return RememberLayoutCount(kind, n) end
         end
         return 5
     end
     if GetNumGroupMembers then
         local n = GetNumGroupMembers() or 0
-        if n > 0 then return n end
+        if n > 0 then return RememberLayoutCount(kind, n) end
     end
-    return 40
+    return UnknownRaidLayoutCount(kind)
 end
 
 local function LayoutParts(kind, conf)
@@ -151,7 +171,7 @@ local function LayoutParts(kind, conf)
     if GF.GetGridMetrics then
         dx, dy, totalW, totalH = GF.GetGridMetrics(kind, count)
     end
-    return w, h, spacing, dx or 0, dy or 0, totalW or w, totalH or h
+    return w, h, spacing, dx or 0, dy or 0, totalW or w, totalH or h, count
 end
 
 local function ResolveAnchorFrame(conf)
@@ -183,6 +203,7 @@ local function EnsureAnchor(key, conf, totalW, totalH)
     anchor:ClearAllPoints()
     local point = AnchorPoint(conf)
     anchor:SetPoint(point, ResolveAnchorFrame(conf), point, conf.offsetX or 0, conf.offsetY or 0)
+    anchor:Show()
     return anchor
 end
 
@@ -226,6 +247,21 @@ local function ClampInt(value, fallback, minValue, maxValue)
     if minValue and value < minValue then value = minValue end
     if maxValue and value > maxValue then value = maxValue end
     return value
+end
+
+local function RequiredHeaderColumns(kind, conf, count)
+    if kind == "party" then return 1 end
+    count = floor((tonumber(count) or 0) + 0.5)
+    if count < 1 then return 1 end
+    if conf and conf.preserveRaidGroups == true then
+        local groups = floor(((count + 4) / 5))
+        if groups < 1 then groups = 1 elseif groups > 8 then groups = 8 end
+        return groups
+    end
+    local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
+    local columns = floor(((count + upc - 1) / upc))
+    if columns < 1 then columns = 1 elseif columns > 8 then columns = 8 end
+    return columns
 end
 
 local function RoleOrder(conf)
@@ -554,10 +590,12 @@ local function ApplyGroupBorder(anchor, conf)
     end
 end
 
-local function ConfigureHeader(header, key, kind, conf, w, h, spacing)
+local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
     local point, xOffset, yOffset, columnAnchor = GrowthAttributes(conf.growth, spacing)
     local upc = ClampInt(conf.unitsPerColumn, kind == "party" and 5 or 5, 1, 40)
     local columns = ClampInt(conf.maxColumns, kind == "party" and 1 or 8, 1, 8)
+    local requiredColumns = RequiredHeaderColumns(kind, conf, layoutCount)
+    if columns < requiredColumns then columns = requiredColumns end
     local initialWidth = floor((w or 80) + 0.5)
     local initialHeight = floor((h or 32) + 0.5)
     local sortState = BuildSortState(key, kind, conf)
@@ -614,8 +652,13 @@ function GF.SetupHeader(key, kind)
     end
     if GF.EnsureDB then GF.EnsureDB() end
     local conf = GF.GetConf and GF.GetConf(kind) or {}
-    local w, h, spacing, dx, dy, totalW, totalH = LayoutParts(kind, conf)
+    local w, h, spacing, dx, dy, totalW, totalH, layoutCount = LayoutParts(kind, conf)
     local anchor = EnsureAnchor(key, conf, totalW, totalH)
+    anchor.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or (kind == "party" and "gf_party" or "gf_raid")
+    anchor._msufIsGroupFrame = true
+    anchor._msufGFKind = kind
+    anchor._msufGFDragCenterToGridX = 0
+    anchor._msufGFDragCenterToGridY = 0
     ApplyGroupBorder(anchor, conf)
 
     local header = GF.headers[key]
@@ -658,7 +701,7 @@ function GF.SetupHeader(key, kind)
     -- or leaves the group) nothing structural changes, so the header stays shown
     -- and the secure template re-lays-out its own children -- removing the blink
     -- that previously fired every time the roster changed.
-    local attrChanged, wasHiddenForLayout = ConfigureHeader(header, key, kind, conf, w, h, spacing)
+    local attrChanged, wasHiddenForLayout = ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCount)
     header._msufGFKind = kind
     header._msufGFKey = key
     if header:GetParent() ~= anchor then
@@ -674,10 +717,10 @@ function GF.SetupHeader(key, kind)
     if attrChanged and header.SetAttribute and not InCombat() then
         header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
     end
-    -- Reused (pooled) and brand-new headers always rescan so detached children
-    -- are re-tracked, re-sized and re-styled; otherwise only when attributes
-    -- changed. The scan is idempotent and short-circuits when nothing is stale.
-    if GF.ScheduleScan and (newHeader or attrChanged or reused) then
+    -- Roster updates can make SecureGroupHeaderTemplate create new children
+    -- without changing structural attributes. The forced scan is roster-only,
+    -- idempotent, and bounded by the secure header child count.
+    if GF.ScheduleScan and (newHeader or attrChanged or reused or GF._forceScanHeaders == true) then
         GF.ScheduleScan(key, kind)
     end
     return header

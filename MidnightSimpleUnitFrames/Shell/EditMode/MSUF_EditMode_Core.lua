@@ -55,7 +55,7 @@ function Util.IsConfigCombatLocked()
         return _G.MSUF_IsConfigCombatLocked() and true or false
     end
     if InCombatLockdown and InCombatLockdown() then return true end
-    return (UnitAffectingCombat and UnitAffectingCombat("player")) and true or false
+    return false
 end
 
 function Util.ShowConfigCombatLockMessage()
@@ -197,6 +197,7 @@ EM2.State = State
 local active      = false
 local unitKey     = nil
 local combatFrame = nil
+local pendingCombatExitApply = false
 
 local IsConfigCombatLocked = Util.IsConfigCombatLocked
 local ShowConfigCombatLockMessage = Util.ShowConfigCombatLockMessage
@@ -334,6 +335,34 @@ local function FlushPendingCommits()
     end
 end
 
+local function HardHideEditModePreviews()
+    _G.MSUF_UnitPreviewActive = false
+    _G.MSUF_PreviewTestMode = false
+    _G.MSUF_BossTestMode = false
+
+    local hideCastbars = _G.MSUF_HideAllCastbarPreviews
+    if type(hideCastbars) == "function" then
+        hideCastbars()
+    end
+
+    local hideGroup = _G.MSUF_GF_EM2_HidePreview
+    if type(hideGroup) == "function" then
+        hideGroup()
+    end
+end
+
+local function RestoreAfterCombatExit()
+    pendingCombatExitApply = false
+    ApplyAllSettingsSafe()
+    _G.MSUF_UnitPreviewActive = false
+    if _G.MSUF_SyncAllUnitPreviews then
+        _G.MSUF_SyncAllUnitPreviews()
+    end
+    if _G.MSUF_Auras3_RefreshAll then
+        _G.MSUF_Auras3_RefreshAll()
+    end
+end
+
 local function RestoreDB()
     local dc = GetDeepCopy()
     if not _snapshot or not dc then return false end
@@ -428,6 +457,7 @@ end
 --- EXIT Edit Mode
 function State.Exit(source)
     if not active then return end
+    local combatLocked = (InCombatLockdown and InCombatLockdown()) and true or false
 
     --- Stop ticker FIRST (zero overhead from this point)
     if EM2.Ticker and EM2.Ticker.Stop then EM2.Ticker.Stop() end
@@ -455,22 +485,31 @@ function State.Exit(source)
         _G.MSUF_EnableArrowKeyNudge(false)
     end
 
-    --- Visibility drivers restore
-    ApplyAllSettingsSafe()
+    --- Visibility drivers restore. In combat, protected frames cannot be
+    --- safely re-shown/re-anchored, so only clear non-protected edit previews
+    --- now and defer the heavy restore until PLAYER_REGEN_ENABLED.
+    if combatLocked then
+        pendingCombatExitApply = true
+        HardHideEditModePreviews()
+    else
+        ApplyAllSettingsSafe()
+    end
 
     --- Preview: disable all previews, restore visibility
     _G.MSUF_UnitPreviewActive = false
-    if _G.MSUF_SyncAllUnitPreviews then
+    if combatLocked then
+        HardHideEditModePreviews()
+    elseif _G.MSUF_SyncAllUnitPreviews then
         _G.MSUF_SyncAllUnitPreviews()
     end
-    if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
+    if not combatLocked
         and _G.MSUF_UpdateBossCastbarPreview
     then
         _G.MSUF_UpdateBossCastbarPreview()
     end
 
     --- Refresh Auras3
-    if _G.MSUF_Auras3_RefreshAll then
+    if not combatLocked and _G.MSUF_Auras3_RefreshAll then
         _G.MSUF_Auras3_RefreshAll()
     end
 
@@ -540,10 +579,13 @@ function State.EnsureCombatListener()
     if combatFrame then return end
     combatFrame = CreateFrame("Frame")
     combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     combatFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" and active then
             State.Exit("combat")
             ShowConfigCombatLockMessage()
+        elseif event == "PLAYER_REGEN_ENABLED" and pendingCombatExitApply then
+            RestoreAfterCombatExit()
         end
     end)
 end
