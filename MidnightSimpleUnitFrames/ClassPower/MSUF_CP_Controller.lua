@@ -27,6 +27,7 @@ local math_floor = math.floor
 local math_min = math.min
 local string_format = string.format
 local table_sort = table.sort
+local wipe = wipe
 local CreateFrame = CreateFrame
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
 local UnitPowerType = UnitPowerType
@@ -787,15 +788,75 @@ local CP = {
     runeOUAAny  = false,   --- true if any rune bar currently has an OnUpdate
     essenceOUAAny = false, --- true if Essence recharge pip has an OnUpdate
     powerToken  = nil,     --- cached POWER_TYPE_TOKENS[powerType] for hot event filters
+    visual      = nil,     --- compiled static visual runtime values for active mode
     --- Spell Tracker state (Tip of the Spear only - Whirlwind uses WW module)
     spStacks    = 0,       --- current stack count
     spExpires   = nil,     --- GetTime() expiry timestamp (nil = no timer)
     spCachedQ   = -1,      --- skip-if-same quantizer
 }
 
+--- Cached alpha values (resolved once in FullRefresh, used in hot paths)
+local _filledAlpha = 1.0
+local _emptyAlpha  = 0.3
+
 --- DK Rune map: [display_slot] = rune_id (1-6), sorted per sortOrder
 local _runeMap = { 1, 2, 3, 4, 5, 6 }
 local _runeAppliedSortOrder = "natural"
+
+local function CP_CompileVisual(powerType, renderMode, maxP)
+    local b = _cpDB.bars or {}
+    local visual = CP.visual
+    if not visual then
+        visual = {}
+        CP.visual = visual
+    elseif wipe then
+        wipe(visual)
+    else
+        for k in pairs(visual) do visual[k] = nil end
+    end
+
+    local colorByType = _cpDB.colorByType ~= false
+    local baseR, baseG, baseB
+    if colorByType then
+        baseR, baseG, baseB = ResolveClassPowerColor(powerType)
+    else
+        baseR, baseG, baseB = 1, 1, 1
+    end
+    local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
+    local chargedR, chargedG, chargedB = ResolveChargedColor()
+
+    visual.powerType = powerType
+    CP.visualVersion = (CP.visualVersion or 0) + 1
+    visual.version = CP.visualVersion
+    visual.powerToken = POWER_TYPE_TOKENS[powerType] or (type(powerType) == "string" and powerType or nil)
+    visual.renderMode = renderMode
+    visual.maxP = maxP
+    visual.colorByType = colorByType
+    visual.showText = _cpDB.showText == true
+    visual.showPrediction = _cpDB.showPrediction ~= false
+    visual.showCharged = _cpDB.showCharged ~= false
+    visual.filledAlpha = _filledAlpha
+    visual.emptyAlpha = _emptyAlpha
+    visual.bgAlpha = _cpDB.bgAlpha or 0.3
+    visual.baseR, visual.baseG, visual.baseB = baseR, baseG, baseB
+    visual.bgR, visual.bgG, visual.bgB = bgR, bgG, bgB
+    visual.chargedR, visual.chargedG, visual.chargedB = chargedR, chargedG, chargedB
+    visual.runeShowTime = b.runeShowTime ~= false
+    visual.timerShowText = b.classPowerShowText == true
+    visual.useComboSlotColors = powerType == PT.ComboPoints
+        and (_cpDB.comboPointColorMode == "ramp" or _cpDB.comboPointColorMode == "custom")
+        and type(ResolveComboPointSlotColor) == "function"
+
+    if visual.useComboSlotColors then
+        visual.slotR, visual.slotG, visual.slotB = visual.slotR or {}, visual.slotG or {}, visual.slotB or {}
+        for i = 1, math_min(tonumber(maxP) or 0, 7) do
+            local r, g, bl = ResolveComboPointSlotColor(i)
+            visual.slotR[i], visual.slotG[i], visual.slotB[i] = r, g, bl
+        end
+    end
+
+    return visual
+end
 
 local function CP_ApplyRuneSortOrder(sortOrder)
     local wanted = (sortOrder == "asc" or sortOrder == "desc") and sortOrder or "natural"
@@ -847,10 +908,6 @@ local CP_ApplyTextOffset
 local CP_ApplyFont
 local CP_ApplyColors
 local CP_RefreshTexture
-
---- Cached alpha values (resolved once in FullRefresh, used in hot paths)
-local _filledAlpha = 1.0
-local _emptyAlpha  = 0.3
 
 --- Auto-Hide: visibility check after each update (OOC / Full / Empty)
 --- Zero overhead when all three are disabled (early-out on first check).
@@ -957,6 +1014,7 @@ do
         TIP = TIP,
         GetFilledAlpha = function() return _filledAlpha end,
         GetEmptyAlpha = function() return _emptyAlpha end,
+        GetVisual = function() return CP.visual end,
         GetChargedMap = function() return _chargedMap end,
         GetPowerRegenForPowerType = GetPowerRegenForPowerType,
     }
@@ -1080,6 +1138,7 @@ do
         GetRuneMap = function() return _runeMap end,
         GetFilledAlpha = function() return _filledAlpha end,
         GetEmptyAlpha = function() return _emptyAlpha end,
+        GetVisual = function() return CP.visual end,
     }
 
     local rune = CP_CallBuilder(CPModeBuilders.RUNE, commonEnv)
@@ -1229,6 +1288,9 @@ end
 CP_RunActiveUpdate = function(powerType, maxP)
     local updateFn = CP.updateFn
     if not updateFn then return false end
+    if not CP.visual then
+        CP_CompileVisual(powerType or CP.powerType, CP.renderMode, maxP or CP.currentMax)
+    end
     local timerActive = (updateFn(powerType or CP.powerType, maxP or CP.currentMax) == true)
     CP_SyncRuntimeOnUpdates(timerActive)
     return timerActive
@@ -1483,6 +1545,7 @@ local function FullRefresh()
         CP.isVehicle = (UnitHasVehicleUI and UnitHasVehicleUI("player")) or false
         CP.updateFn = MODE_UPDATE_FN[renderMode]
         CP.modeProfile = CP_GetModeEventProfile(renderMode, powerType, isAuraPower)
+        CP_CompileVisual(powerType, renderMode, maxP)
 
         --- Charged points only for standard segmented (CP/HP)
         if renderMode == CPK.MODE.SEGMENTED then
@@ -1519,6 +1582,7 @@ local function FullRefresh()
 
     else
         --- Clean up rune/timer/essence OnUpdate scripts when hiding
+        CP.visual = nil
         if (CP.renderMode == CPK.MODE.RUNE_CD or CP.runeOUAAny) and CP_StopRuneOnUpdates then
             CP_StopRuneOnUpdates(true)
         end
