@@ -63,6 +63,7 @@ local IsEditModeActive
 
 local PREVIEW_WARNING_LINES = {
     "|cffff5555MSUF 6.0 Preview Warning:|r This is an alpha/preview build for World of Warcraft 12.1.",
+    "|cffffd700MSUF:|r MSUF 6.0 release is planned for 10.08.2026.",
     "|cffffd700MSUF:|r Blizzard rewrote the aura system in 12.1. Buffs, debuffs, and aura tracking currently do not work in MSUF.",
     "|cffffd700MSUF:|r Use this build only for preview/testing if you can play without MSUF aura display and aura configuration.",
 }
