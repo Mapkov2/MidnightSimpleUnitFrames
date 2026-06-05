@@ -508,6 +508,18 @@ assert(tostring(humanSingleChange.text or ""):find("from enabled to disabled", 1
 assert(tostring(humanSingleChange.text or ""):find("Next: type 'undo' to revert", 1, true), "Dashboard Assistant success response did not offer an undo/follow-up hint")
 assert(_G.MSUF_DB.player.showName == false, "Dashboard Submit did not write player.showName")
 assert(MSUF._lastUnitApply and MSUF._lastUnitApply.unit == "player", "Dashboard Submit did not request player apply")
+_G.MSUF_DB.player.width = 333
+_G.MSUF_DB.player.height = 44
+_G.MSUF_DB.focus.width = 180
+_G.MSUF_DB.focus.height = 30
+expectApplied("can you make the focus frame as big as player", "I changed")
+assert(_G.MSUF_DB.focus.width == 333, "Dashboard Submit did not copy Player width to Focus")
+assert(_G.MSUF_DB.focus.height == 44, "Dashboard Submit did not copy Player height to Focus")
+_G.MSUF_DB.focus.width = 180
+_G.MSUF_DB.focus.height = 30
+expectApplied("mach den fokus frame so gross wie spieler", "Done.")
+assert(_G.MSUF_DB.focus.width == 333, "Dashboard Submit did not understand German same-size width")
+assert(_G.MSUF_DB.focus.height == 44, "Dashboard Submit did not understand German same-size height")
 _G.MSUF_DB.player.showName = true
 expectApplied("spieler name aus", "Done.")
 assert(_G.MSUF_DB.player.showName == false, "Dashboard Submit did not understand German Player name off")
@@ -519,6 +531,11 @@ expectApplied("turn off player frame", "Done.")
 assert(_G.MSUF_DB.player.enabled == false, "Dashboard Submit did not write player.enabled")
 expectApplied("turn it back on", "Done.")
 assert(_G.MSUF_DB.player.enabled == true, "Dashboard context follow-up did not re-enable player.enabled")
+_G.MSUF_DB.player.showName = true
+_G.MSUF_DB.target.offsetY = 0
+expectApplied("hide player name and move target frame down 5", "handled 2 commands")
+assert(_G.MSUF_DB.player.showName == false, "Dashboard Submit batch did not hide Player name")
+assert(_G.MSUF_DB.target.offsetY == -5, "Dashboard Submit batch did not move Target frame down")
 _G.MSUF_DB.player.enabled = false
 expectApplied("spieler frame einschalten", "Done.")
 assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit did not understand German Player frame on")
@@ -650,6 +667,23 @@ M.activeKey = "uf_player"
 _G.MSUF_DB.player.showName = true
 expectApplied("turn off name", "Done.")
 assert(_G.MSUF_DB.player.showName == false, "Player page context did not route bare name toggle to player.showName")
+_G.MSUF_DB.player.showHP = true
+_G.MSUF_DB.focus.showHP = true
+_G.MSUF_DB.player.fontOverride = false
+_G.MSUF_DB.focus.fontOverride = false
+_G.MSUF_DB.player.colorHealthTextByHealth = false
+_G.MSUF_DB.focus.colorHealthTextByHealth = false
+local hpTextUnitPrompt = expectStatus("turn of player focus hp text", "ambiguous", "Player HP Text -> off")
+assert(tostring(hpTextUnitPrompt.text or ""):find("Focus HP Text -> off", 1, true), "Dashboard Submit did not offer Focus HP Text choice")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "player.showHP", "Dashboard Submit offered wrong first HP Text choice")
+assert(A.pendingChoices[2] and A.pendingChoices[2].setting.key == "focus.showHP", "Dashboard Submit offered wrong second HP Text choice")
+expectApplied("2", "Done.")
+assert(_G.MSUF_DB.player.showHP == true, "Dashboard Submit changed Player HP Text despite choosing Focus")
+assert(_G.MSUF_DB.focus.showHP == false, "Dashboard Submit did not turn off Focus HP Text")
+assert(_G.MSUF_DB.player.colorHealthTextByHealth == false and _G.MSUF_DB.focus.colorHealthTextByHealth == false, "Dashboard Submit changed HP Text Color Mode for an HP Text visibility command")
+_G.MSUF_DB.player.showHP = true
+expectApplied("turn of player hp text", "Done.")
+assert(_G.MSUF_DB.player.showHP == false, "Dashboard Submit did not normalize turn of to turn off for Player HP Text")
 _G.MSUF_DB.player.hpOffsetY = 0
 expectApplied("move health down 4", "Done.")
 assert(_G.MSUF_DB.player.hpOffsetY == -4, "Player page context did not move Player HP text down")
@@ -979,6 +1013,13 @@ _G.MSUF_DB.player.showInterrupt = true
 _G.MSUF_DB.target.showInterrupt = true
 _G.MSUF_DB.focus.showInterrupt = true
 _G.MSUF_DB.boss.showInterrupt = true
+expectApplied("turn off interrupt shake for player", "Done.")
+assert(_G.MSUF_DB.player.showInterrupt == false, "Dashboard Submit did not turn off Player interrupt from unit-scoped interrupt shake wording")
+assert(_G.MSUF_DB.target.showInterrupt == true and _G.MSUF_DB.focus.showInterrupt == true and _G.MSUF_DB.boss.showInterrupt == true, "Dashboard Submit changed other unit interrupt toggles for Player interrupt wording")
+_G.MSUF_DB.player.showInterrupt = true
+expectApplied("turn off interrupt for player", "Done.")
+assert(_G.MSUF_DB.player.showInterrupt == false, "Dashboard Submit did not turn off Player interrupt without explicit castbar wording")
+_G.MSUF_DB.player.showInterrupt = true
 expectApplied("turn off player target focus castbar interrupt", "Done.")
 assert(_G.MSUF_DB.player.showInterrupt == false and _G.MSUF_DB.target.showInterrupt == false and _G.MSUF_DB.focus.showInterrupt == false, "Dashboard Submit did not turn off explicitly named castbar interrupt toggles")
 assert(_G.MSUF_DB.boss.showInterrupt == true, "Dashboard Submit changed Boss castbar interrupt even though Boss was not requested")
@@ -1563,6 +1604,48 @@ expectApplied("show test status icons on target frame", "Already set.")
 assert((MSUF._statusRefresh or 0) > firstStatusRefresh, "Dashboard Submit did not refresh status icons when Target test mode was already enabled")
 expectApplied("hide test status icons on target frame", "Done.")
 assert(_G.MSUF_DB.target.stateIconsTestMode == false, "Dashboard Submit did not disable Target Status Icon Test Mode")
+_G.MSUF_DB.player.enabled = true
+_G.MSUF_DB.general.statusIndicators = _G.MSUF_DB.general.statusIndicators or {}
+_G.MSUF_DB.general.statusIndicators.showAFK = true
+expectApplied("turn off afk indicator for player frame", "Done.")
+assert(_G.MSUF_DB.general.statusIndicators.showAFK == false, "Dashboard Submit did not turn off the registered AFK status text setting")
+assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit disabled Player Frame while changing AFK indicator wording")
+_G.MSUF_DB.general.statusIndicators.showDND = true
+expectApplied("turn off dnd indicator for player frame", "Done.")
+assert(_G.MSUF_DB.general.statusIndicators.showDND == false, "Dashboard Submit did not turn off the registered DND status text setting")
+assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit disabled Player Frame while changing DND indicator wording")
+_G.MSUF_DB.focus.statusTextSize = 16
+expectApplied("make for focus frame the afk indicator smaller", "Done.")
+assert(_G.MSUF_DB.focus.statusTextSize == 15, "Dashboard Submit did not make the Focus AFK status text smaller")
+_G.MSUF_DB.focus.statusTextOffsetY = 0
+expectApplied("move focus afk indicator down 3", "Done.")
+assert(_G.MSUF_DB.focus.statusTextOffsetY == -3, "Dashboard Submit did not move the Focus AFK status text down")
+_G.MSUF_DB.player.showRaidMarker = true
+expectApplied("turn off raid indicator for player", "Done.")
+assert(_G.MSUF_DB.player.showRaidMarker == false, "Dashboard Submit did not turn off Player Raid Marker from raid indicator wording")
+assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit disabled Player Frame while changing raid indicator wording")
+_G.MSUF_DB.target.enabled = true
+_G.MSUF_DB.target.showEliteIcon = true
+expectApplied("turn off elite indicator for target", "Done.")
+assert(_G.MSUF_DB.target.showEliteIcon == false, "Dashboard Submit did not turn off Target Elite/Rare Icon from elite indicator wording")
+assert(_G.MSUF_DB.target.enabled == true, "Dashboard Submit disabled Target Frame while changing elite indicator wording")
+_G.MSUF_DB.player.statusTextEnabled = true
+expectApplied("turn off dead indicator for player", "Done.")
+assert(_G.MSUF_DB.player.statusTextEnabled == false, "Dashboard Submit did not turn off Player Dead Text from dead indicator wording")
+assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit disabled Player Frame while changing dead indicator wording")
+_G.MSUF_DB.general.statusIconsUseMidnightStyle = true
+_G.MSUF_DB.player.showRestingIndicator = true
+expectApplied("turn off midnight style for rested icon player", "Done.")
+assert(_G.MSUF_DB.general.statusIconsUseMidnightStyle == false, "Dashboard Submit did not turn off the shared status-icon Midnight style")
+assert(_G.MSUF_DB.player.showRestingIndicator == true, "Dashboard Submit disabled Player Rested Indicator while changing Midnight style")
+_G.MSUF_DB.player.restedStateIndicatorLayer = 4
+expectApplied("send player rested icon layer behind", "Done.")
+assert(_G.MSUF_DB.player.restedStateIndicatorLayer == 3, "Dashboard Submit did not lower Player Rested Indicator layer")
+_G.MSUF_DB.player.leaderIconStyle = "BLIZZARD"
+expectApplied("set player leader icon pack to midnight", "Done.")
+assert(_G.MSUF_DB.player.leaderIconStyle == "MIDNIGHT", "Dashboard Submit did not set Player Leader icon pack")
+expectApplied("turn off rested icon player", "Done.")
+assert(_G.MSUF_DB.player.showRestingIndicator == false, "Dashboard Submit did not still allow explicit Rested Indicator visibility toggles")
 _G.MSUF_DB.player.showCombatStateIndicator = true
 expectApplied("turn off combat indicator for player", "Done.")
 assert(_G.MSUF_DB.player.showCombatStateIndicator == false, "Dashboard Submit routed Player Combat Indicator to the wrong setting")
@@ -1580,6 +1663,19 @@ expectApplied("turn off combat indicator for all unitframes", "Done.")
 assert(_G.MSUF_DB.player.showCombatStateIndicator == false and _G.MSUF_DB.target.showCombatStateIndicator == false, "Dashboard Submit did not bulk-toggle all registered unit Combat Indicators")
 _G.MSUF_DB.gf_party.enabled = true
 _G.MSUF_DB.gf_party.readyCheckIcon = true
+_G.MSUF_DB.gf_party.useMidnightIcons = true
+expectApplied("turn off midnight style for party ready check icon", "Done.")
+assert(_G.MSUF_DB.gf_party.useMidnightIcons == false, "Dashboard Submit did not turn off Party group Midnight status icon style")
+assert(_G.MSUF_DB.gf_party.readyCheckIcon == true, "Dashboard Submit disabled Party Ready Check icon while changing group Midnight style")
+_G.MSUF_DB.gf_party.readyCheckSize = 16
+expectApplied("make party ready check icon smaller", "Done.")
+assert(_G.MSUF_DB.gf_party.readyCheckSize == 15, "Dashboard Submit did not make Party Ready Check icon smaller")
+_G.MSUF_DB.gf_party.readyCheckLayer = 4
+expectApplied("send party ready check icon layer behind", "Done.")
+assert(_G.MSUF_DB.gf_party.readyCheckLayer == 3, "Dashboard Submit did not lower Party Ready Check icon layer")
+_G.MSUF_DB.gf_party.leaderIconStyle = "DEFAULT"
+expectApplied("set party leader icon pack to midnight", "Done.")
+assert(_G.MSUF_DB.gf_party.leaderIconStyle == "MIDNIGHT", "Dashboard Submit did not set Party Leader icon pack")
 _G.MSUF_DB.gf_raid.readyCheckIcon = true
 _G.MSUF_DB.gf_mythicraid.readyCheckIcon = true
 expectApplied("turn off ready check symbol for all group frames", "Done.")
@@ -1645,6 +1741,21 @@ expectApplied("can you copy just the text options from target to target of targe
 assert(#unitCopyCalls == 1, "Natural scoped Unit Copy wording did not execute exactly one Unit Copy call")
 assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "targettarget", "Natural scoped Unit Copy wording copied the wrong unit direction")
 assert(unitCopyCalls[1].scopes.text == true and unitCopyCalls[1].scopes.layout == false, "Natural scoped Unit Copy copied the wrong categories")
+unitCopyCalls = {}
+expectApplied("use player frame transparency settings for target of target", "Categories: Transparency.")
+assert(#unitCopyCalls == 1, "Use-settings Unit Copy wording did not execute exactly one Unit Copy call")
+assert(unitCopyCalls[1].source == "player" and unitCopyCalls[1].target == "targettarget", "Use-settings Unit Copy copied the wrong unit direction")
+assert(unitCopyCalls[1].scopes.transparency == true and unitCopyCalls[1].scopes.text == false and unitCopyCalls[1].scopes.basics == false, "Use-settings Unit Copy copied the wrong categories")
+unitCopyCalls = {}
+expectApplied("copy hp and energy settings from target to target of target frame", "Categories: Text, Power Bar.")
+assert(#unitCopyCalls == 1, "HP and energy Unit Copy wording did not execute exactly one Unit Copy call")
+assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "targettarget", "HP and energy Unit Copy copied the wrong unit direction")
+assert(unitCopyCalls[1].scopes.text == true and unitCopyCalls[1].scopes.power == true and unitCopyCalls[1].scopes.basics == false, "HP and energy Unit Copy copied the wrong categories")
+unitCopyCalls = {}
+expectApplied("also copy power text settings from target to target of target", "Categories: Text, Power Bar.")
+assert(#unitCopyCalls == 1, "Power text follow-up Unit Copy wording did not execute exactly one Unit Copy call")
+assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "targettarget", "Power text follow-up copied the wrong unit direction")
+assert(unitCopyCalls[1].scopes.text == true and unitCopyCalls[1].scopes.power == true and unitCopyCalls[1].scopes.basics == false, "Power text follow-up copied the wrong categories")
 unitCopyCalls = {}
 expectApplied("copy just the text options from target to the same position to player", "Categories: Text, Size & Anchoring.")
 assert(#unitCopyCalls == 1, "Natural Unit Copy text+position wording did not execute exactly one Unit Copy call")
