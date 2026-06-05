@@ -1324,6 +1324,9 @@ end
 
 _G.MSUF_GF_EM2_ShowPreview = ShowPreviewOnly
 _G.MSUF_GF_EM2_HidePreview = HidePreviewOnly
+_G.MSUF_GF_EM2_IsPreviewShown = function()
+    return _previewShownByEM2 == true
+end
 
 local init = CreateFrame("Frame")
 init:RegisterEvent("PLAYER_LOGIN")
