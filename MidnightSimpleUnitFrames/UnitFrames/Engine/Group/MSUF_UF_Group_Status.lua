@@ -219,7 +219,7 @@ local function RunStatusApply(frame, status, event)
 end
 
 local function CompileStatusDispatch(status)
-    local dispatch = status and status._msufGroupRuntimeDispatch
+    local dispatch = status and status.runtimeDispatch
     if dispatch then
         return dispatch
     end
@@ -257,7 +257,7 @@ local function CompileStatusDispatch(status)
         dispatch[8] = RunStatusText
     end
     dispatch.apply = RunStatusApply
-    status._msufGroupRuntimeDispatch = dispatch
+    status.runtimeDispatch = dispatch
     return dispatch
 end
 
@@ -282,16 +282,8 @@ function GroupStatusRuntime.Update(frame, event)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
     if not status then return end
     local kind = STATUS_EVENT_KIND[event]
-    if kind == 8 then
-        if status.runtimeStatusText ~= true or not StatusTextChanged(frame, status, event) then
-            return
-        end
-        if not UpdateStatusText and not BindStatusRuntime() then return end
-        UpdateStatusText(frame, status, event)
-        return
-    end
     if (not UpdateStatusText or not UpdateRole) and not BindStatusRuntime() then return end
-    local dispatch = CompileStatusDispatch(status)
+    local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
     local runner = kind and dispatch[kind] or dispatch.apply
     if runner then
         runner(frame, status, event)
@@ -302,7 +294,7 @@ function GroupStatusRuntime.Apply(frame)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
     if not status then return end
     if (not UpdateStatusText or not UpdateRole) and not BindStatusRuntime() then return end
-    local dispatch = CompileStatusDispatch(status)
+    local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
     dispatch.apply(frame, status, "MSUF_GF_STATUS_APPLY")
 end
 

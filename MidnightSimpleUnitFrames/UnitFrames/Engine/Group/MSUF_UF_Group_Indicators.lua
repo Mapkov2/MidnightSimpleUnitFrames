@@ -195,14 +195,26 @@ local function PrepareCornerIndicators(frame, cfg)
     frame._msufGFCornerPreparedCfg = cfg
 end
 
-local function UpdateCornerIndicators(frame, event)
-    local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
-    if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
-    local unit = frame.unit
-    if unit and UnitMissing(unit) then HideCorners(frame); return end
-    if frame._msufGFCornerPreparedCfg ~= cfg then
-        PrepareCornerIndicators(frame, cfg)
+local function SetThreatSlotsShown(frame, cfg, shown)
+    local slots = cfg and cfg.aggroSlots or EMPTY
+    local corners = frame and frame.MSUFGFCornerIndicators
+    if not corners then return end
+    for i = 1, #slots do
+        local slot = slots[i]
+        SetShown(corners[slot.key], shown)
     end
+end
+
+local function RuntimeThreat(frame, cfg, event)
+    if not (frame and cfg and cfg.enabled == true and cfg.needsThreat == true) then return end
+    local unit = frame.unit
+    if unit and UnitMissing(unit) then
+        frame._msufGFCornerThreatCfg = cfg
+        frame._msufGFCornerThreatState = false
+        SetThreatSlotsShown(frame, cfg, false)
+        return
+    end
+    if frame._msufGFCornerPreparedCfg ~= cfg then return end
     local threat = HasThreat(unit)
     if (event == "UNIT_THREAT_SITUATION_UPDATE" or event == "UNIT_THREAT_LIST_UPDATE")
         and frame._msufGFCornerThreatCfg == cfg
@@ -211,23 +223,26 @@ local function UpdateCornerIndicators(frame, event)
     end
     frame._msufGFCornerThreatCfg = cfg
     frame._msufGFCornerThreatState = threat
-    local slots = cfg.aggroSlots or EMPTY
-    for i = 1, #slots do
-        local slot = slots[i]
-        local tex = frame.MSUFGFCornerIndicators and frame.MSUFGFCornerIndicators[slot.key]
-        if not tex then
-            PrepareCornerIndicators(frame, cfg)
-            tex = frame.MSUFGFCornerIndicators and frame.MSUFGFCornerIndicators[slot.key]
-        end
-        SetShown(tex, threat)
+    SetThreatSlotsShown(frame, cfg, threat)
+end
+
+local function UpdateCornerIndicators(frame, event)
+    local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
+    if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
+    local fn = cfg.runtimeThreat
+    if fn then
+        return fn(frame, cfg, event)
     end
 end
 
 function GroupCornerIndicators.Apply(frame)
     local cfg = frame.MSUFSpec and frame.MSUFSpec.cornerIndicators
     if not (cfg and cfg.enabled == true) then HideCorners(frame); return end
+    cfg.runtimeThreat = cfg.needsThreat == true and RuntimeThreat or nil
     PrepareCornerIndicators(frame, cfg)
-    UpdateCornerIndicators(frame, "MSUF_APPLY")
+    if cfg.runtimeThreat then
+        cfg.runtimeThreat(frame, cfg, "MSUF_APPLY")
+    end
 end
 function GroupCornerIndicators.Update(frame, event) UpdateCornerIndicators(frame, event) end
 function GroupCornerIndicators.Disable(frame) HideCorners(frame) end

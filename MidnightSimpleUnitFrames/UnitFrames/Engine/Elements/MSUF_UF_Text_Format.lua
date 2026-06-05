@@ -912,6 +912,35 @@ local function CompileTextRuntime(frame, spec, text)
     rt.pendingPowerMax = nil
     rt.nextPowerTextTime = nil
     TrimTextSlots(rt.powerSlots, nextIndex)
+
+    local hot = Text.RuntimeHotFunctions
+    if hot then
+        if rt.healthSlotCount > 0 then
+            rt.healthHot = hot.healthHot
+            rt.healthDirty = rt.healthThrottle > 0 and hot.healthDirty or nil
+            rt.healthFlush = hot.healthFlush
+        else
+            rt.healthHot = nil
+            rt.healthDirty = nil
+            rt.healthFlush = nil
+        end
+        if rt.powerSlotCount > 0 then
+            rt.powerHot = hot.powerHot
+            rt.powerDirty = rt.powerThrottle > 0 and hot.powerDirty or nil
+            rt.powerFlush = hot.powerFlush
+        else
+            rt.powerHot = nil
+            rt.powerDirty = nil
+            rt.powerFlush = nil
+        end
+    else
+        rt.healthHot = nil
+        rt.healthDirty = nil
+        rt.healthFlush = nil
+        rt.powerHot = nil
+        rt.powerDirty = nil
+        rt.powerFlush = nil
+    end
     return rt
 end
 
@@ -1245,5 +1274,7 @@ Text.CompileTextRuntime = CompileTextRuntime
 Text.UpdateTextSlots = UpdateTextSlots
 Text.UpdateTextSlotsPlain = UpdateTextSlotsPlain
 Text.UpdateTextSlotsSecret = UpdateTextSlotsSecret
+Text.FlushPendingHealthText = FlushPendingHealthText
+Text.FlushPendingPowerText = FlushPendingPowerText
 Text.QueueHealthTextFlush = QueueHealthTextFlush
 Text.QueuePowerTextFlush = QueuePowerTextFlush

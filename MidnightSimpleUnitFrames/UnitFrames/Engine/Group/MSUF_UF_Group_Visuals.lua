@@ -8,7 +8,11 @@ local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
 
 local function SetShown(region, show)
-    if region then region:SetShown(show) end
+    if not region then return end
+    show = show == true
+    if region._msufGFVisualShown == show then return end
+    region:SetShown(show)
+    region._msufGFVisualShown = show
 end
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
@@ -142,13 +146,16 @@ local function SameUnitByGUID(unit, otherUnit)
     return guid ~= nil and guid == otherGuid
 end
 
-local function UpdateTarget(frame, cfg)
-    local show = false
-    if cfg.targetIndicator == true and frame.unit then
-        show = SameUnitByGUID(frame.unit, "target")
+local function SetEdgesShown(edges, shown)
+    if not edges then return end
+    for i = 1, #EDGE_KEYS do
+        SetShown(edges[EDGE_KEYS[i]], shown)
     end
-    if not show then
-        HideEdges(frame.MSUFGFTargetEdges)
+end
+
+local function PrepareTarget(frame, cfg)
+    if not (frame and cfg and cfg.targetIndicator == true) then
+        HideEdges(frame and frame.MSUFGFTargetEdges)
         return
     end
     frame.MSUFGFTargetEdges = frame.MSUFGFTargetEdges or {}
@@ -161,17 +168,18 @@ local function UpdateTarget(frame, cfg)
         end
         LayoutTargetEdge(frame, edge, key, 2)
         SetColorTextureCached(edge, cfg.targetR or 1, cfg.targetG or 1, cfg.targetB or 1, 1)
-        SetShown(edge, true)
+        SetShown(edge, false)
     end
 end
 
-local function UpdateFocus(frame, cfg)
-    local show = false
-    if cfg.focusIndicator == true and frame.unit then
-        show = SameUnitByGUID(frame.unit, "focus")
-    end
-    if not show then
-        HideEdges(frame.MSUFGFFocusEdges)
+local function UpdateTarget(frame, cfg)
+    local show = cfg.targetIndicator == true and frame.unit and SameUnitByGUID(frame.unit, "target") or false
+    SetEdgesShown(frame.MSUFGFTargetEdges, show)
+end
+
+local function PrepareFocus(frame, cfg)
+    if not (frame and cfg and cfg.focusIndicator == true) then
+        HideEdges(frame and frame.MSUFGFFocusEdges)
         return
     end
     frame.MSUFGFFocusEdges = frame.MSUFGFFocusEdges or {}
@@ -186,8 +194,13 @@ local function UpdateFocus(frame, cfg)
         end
         LayoutTargetEdge(frame, edge, key, size + offset)
         SetColorTextureCached(edge, cfg.focusR or 0.5, cfg.focusG or 0.5, cfg.focusB or 1, 1)
-        SetShown(edge, true)
+        SetShown(edge, false)
     end
+end
+
+local function UpdateFocus(frame, cfg)
+    local show = cfg.focusIndicator == true and frame.unit and SameUnitByGUID(frame.unit, "focus") or false
+    SetEdgesShown(frame.MSUFGFFocusEdges, show)
 end
 
 local function PercentFromValues(hp, maxHP)
@@ -246,12 +259,27 @@ local function SpecNeedsGroupVisuals(spec)
         or cfg.focusIndicator == true
 end
 
-local function CompileRuntimeFlags(frame, spec)
-    if not frame then return end
+local UpdateBordersFromVisualState
+
+local function RuntimeOnRangeAlpha(frame, cfg)
+    UpdateHealthFade(frame, cfg)
+    UpdateBordersFromVisualState(frame)
+end
+
+local function PrepareVisuals(frame, cfg)
+    if not (frame and cfg) then return end
+    PrepareTarget(frame, cfg)
+    PrepareFocus(frame, cfg)
+end
+
+local function CompileVisualRuntime(spec)
     local cfg = spec and spec.group
-    frame._msufGFVisualHealthFade = cfg and cfg.healthFadeEnabled == true or nil
-    frame._msufGFVisualTarget = cfg and cfg.targetIndicator == true or nil
-    frame._msufGFVisualFocus = cfg and cfg.focusIndicator == true or nil
+    if cfg then
+        cfg.runtimeOnHealth = cfg.healthFadeEnabled == true and UpdateHealthFade or nil
+        cfg.runtimeOnTarget = cfg.targetIndicator == true and UpdateTarget or nil
+        cfg.runtimeOnFocus = cfg.focusIndicator == true and UpdateFocus or nil
+        cfg.runtimeOnRangeAlpha = RuntimeOnRangeAlpha
+    end
 end
 
 local GroupVisuals = {}
@@ -279,7 +307,7 @@ function GroupVisuals.GetUnitlessEvents(frame, spec)
     return EMPTY_EVENTS
 end
 
-local function UpdateBordersFromVisualState(frame)
+UpdateBordersFromVisualState = function(frame)
     local active = frame and frame._msufActiveElements
     local borders = active and active.Borders == true and UF.elements and UF.elements.Borders
     if borders and borders.Update then
@@ -293,29 +321,37 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     if not cfg then return end
 
     if event == "PLAYER_TARGET_CHANGED" then
-        if frame._msufGFVisualTarget == true then
-            UpdateTarget(frame, cfg)
+        local fn = cfg.runtimeOnTarget
+        if fn then
+            fn(frame, cfg, event)
         end
         return
     elseif event == "PLAYER_FOCUS_CHANGED" then
-        if frame._msufGFVisualFocus == true then
-            UpdateFocus(frame, cfg)
+        local fn = cfg.runtimeOnFocus
+        if fn then
+            fn(frame, cfg, event)
         end
         return
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
-        if frame._msufGFVisualHealthFade == true then
-            UpdateHealthFade(frame, cfg, updateInfo, seedMaxHP)
+        local fn = cfg.runtimeOnHealth
+        if fn then
+            fn(frame, cfg, updateInfo, seedMaxHP)
         end
         return
     elseif event == "MSUF_GF_RANGE_ALPHA" then
-        UpdateHealthFade(frame, cfg)
-        UpdateBordersFromVisualState(frame)
+        local fn = cfg.runtimeOnRangeAlpha
+        if fn then
+            fn(frame, cfg, event)
+        end
         return
     end
 
-    UpdateTarget(frame, cfg)
-    UpdateFocus(frame, cfg)
-    UpdateHealthFade(frame, cfg)
+    local fn = cfg.runtimeOnTarget
+    if fn then fn(frame, cfg, event) end
+    fn = cfg.runtimeOnFocus
+    if fn then fn(frame, cfg, event) end
+    fn = cfg.runtimeOnHealth
+    if fn then fn(frame, cfg) end
 
     if event == "MSUF_GF_VISUALS_APPLY" then
         UpdateBordersFromVisualState(frame)
@@ -323,16 +359,15 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
 end
 
 function GroupVisuals.Apply(frame)
-    CompileRuntimeFlags(frame, frame and frame.MSUFSpec)
+    CompileVisualRuntime(frame and frame.MSUFSpec)
+    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
+    PrepareVisuals(frame, cfg)
     UpdateVisuals(frame, "MSUF_GF_VISUALS_APPLY")
 end
 function GroupVisuals.Update(frame, event, unit, updateInfo, seedMaxHP) UpdateVisuals(frame, event, updateInfo, seedMaxHP) end
 
 function GroupVisuals.Disable(frame)
     if not frame then return end
-    frame._msufGFVisualHealthFade = nil
-    frame._msufGFVisualTarget = nil
-    frame._msufGFVisualFocus = nil
     HideEdges(frame.MSUFGFTargetEdges)
     HideEdges(frame.MSUFGFFocusEdges)
 end
