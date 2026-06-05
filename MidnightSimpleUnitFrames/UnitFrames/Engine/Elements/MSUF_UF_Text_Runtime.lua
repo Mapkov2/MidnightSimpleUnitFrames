@@ -218,7 +218,7 @@ function Text.UpdateName(frame, event, unit)
     Text.UpdateNameColor(frame, event, unit)
 end
 
-function Text.UpdateHealth(frame, event, unit, hp, hpMax)
+local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     unit = unit or frame.unit
     local rt = frame._msufTextRuntime
     if not rt or not rt.healthSlotCount or rt.healthSlotCount <= 0 then
@@ -313,19 +313,19 @@ function Text.UpdateHealth(frame, event, unit, hp, hpMax)
     UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
 end
 
-function Text.MarkHealthDirty(frame, event, unit, hp, hpMax)
+local function MarkHealthDirtyRuntime(frame, event, unit, hp, hpMax)
     unit = unit or frame.unit
     local rt = frame._msufTextRuntime
     if not rt or not rt.healthSlotCount or rt.healthSlotCount <= 0 then
         return
     end
     if event ~= "UNIT_HEALTH" or not GetTime or not QueueHealthTextFlush then
-        return Text.UpdateHealth(frame, event, unit, hp, hpMax)
+        return UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
 
     local throttle = rt.healthThrottle or 0
     if throttle <= 0 then
-        return Text.UpdateHealth(frame, event, unit, hp, hpMax)
+        return UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
 
     rt.pendingHP, rt.pendingHPMax = hp, hpMax
@@ -345,7 +345,7 @@ function Text.MarkHealthDirty(frame, event, unit, hp, hpMax)
     end
 end
 
-function Text.UpdatePower(frame, event, unit, power, powerMax)
+local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     unit = unit or frame.unit
     local rt = frame._msufTextRuntime
     if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
@@ -436,7 +436,7 @@ function Text.UpdatePower(frame, event, unit, power, powerMax)
     UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
 end
 
-function Text.MarkPowerDirty(frame, event, unit, power, powerMax)
+local function MarkPowerDirtyRuntime(frame, event, unit, power, powerMax)
     unit = unit or frame.unit
     local rt = frame._msufTextRuntime
     if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
@@ -445,12 +445,12 @@ function Text.MarkPowerDirty(frame, event, unit, power, powerMax)
     if (event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT")
         or not GetTime
         or not QueuePowerTextFlush then
-        return Text.UpdatePower(frame, event, unit, power, powerMax)
+        return UpdatePowerRuntime(frame, event, unit, power, powerMax)
     end
 
     local throttle = rt.powerThrottle or 0
     if throttle <= 0 then
-        return Text.UpdatePower(frame, event, unit, power, powerMax)
+        return UpdatePowerRuntime(frame, event, unit, power, powerMax)
     end
 
     rt.pendingPower, rt.pendingPowerMax = power, powerMax
@@ -469,6 +469,20 @@ function Text.MarkPowerDirty(frame, event, unit, power, powerMax)
         QueuePowerTextFlush(frame, rt, nextTime - now)
     end
 end
+
+Text.RuntimeHotFunctions = {
+    healthHot = UpdateHealthRuntime,
+    healthDirty = MarkHealthDirtyRuntime,
+    healthFlush = Text.FlushPendingHealthText,
+    powerHot = UpdatePowerRuntime,
+    powerDirty = MarkPowerDirtyRuntime,
+    powerFlush = Text.FlushPendingPowerText,
+}
+
+Text.UpdateHealth = UpdateHealthRuntime
+Text.MarkHealthDirty = MarkHealthDirtyRuntime
+Text.UpdatePower = UpdatePowerRuntime
+Text.MarkPowerDirty = MarkPowerDirtyRuntime
 
 local NAME_EVENTS = { "UNIT_NAME_UPDATE" }
 local NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
@@ -596,10 +610,19 @@ function HealthText.GetEvents(frame, spec)
 end
 
 function HealthText.Update(frame, event, unit, hp, hpMax)
+    local rt = frame and frame._msufTextRuntime
     if event == "UNIT_HEALTH" then
+        local fn = rt and (rt.healthDirty or rt.healthHot)
+        if fn then
+            return fn(frame, event, unit or frame.unit, hp, hpMax)
+        end
         return Text.MarkHealthDirty(frame, event, unit or frame.unit, hp, hpMax)
     end
-    Text.UpdateHealth(frame, event, unit or frame.unit, hp, hpMax)
+    local fn = rt and rt.healthHot
+    if fn then
+        return fn(frame, event, unit or frame.unit, hp, hpMax)
+    end
+    return Text.UpdateHealth(frame, event, unit or frame.unit, hp, hpMax)
 end
 
 function HealthText.Disable(frame)
@@ -627,9 +650,17 @@ function PowerText.Update(frame, event, unit, power, powerMax)
     local rt = frame and frame._msufTextRuntime
     if rt and rt.powerThrottle and rt.powerThrottle > 0
         and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
+        local fn = rt.powerDirty or rt.powerHot
+        if fn then
+            return fn(frame, event, unit or frame.unit, power, powerMax)
+        end
         return Text.MarkPowerDirty(frame, event, unit or frame.unit, power, powerMax)
     end
-    Text.UpdatePower(frame, event, unit or frame.unit, power, powerMax)
+    local fn = rt and rt.powerHot
+    if fn then
+        return fn(frame, event, unit or frame.unit, power, powerMax)
+    end
+    return Text.UpdatePower(frame, event, unit or frame.unit, power, powerMax)
 end
 
 function PowerText.Disable(frame)

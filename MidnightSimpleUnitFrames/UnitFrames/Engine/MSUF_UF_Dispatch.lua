@@ -717,12 +717,16 @@ RebuildHotEventState = function(frame, event, owners)
     state.inlineUnitless = OwnerModeIsUnitless(state.inlineMode)
     state.predictionUnitless = OwnerModeIsUnitless(state.predictionMode)
     if state.healthText then
+        local rt = frame and frame._msufTextRuntime
         local text = MSUF.UFText
-        state.healthTextDirty = text and text.MarkHealthDirty or nil
+        state.healthText = rt and rt.healthHot or (text and text.UpdateHealth) or state.healthText
+        state.healthTextDirty = rt and rt.healthDirty or nil
     end
     if state.powerText then
+        local rt = frame and frame._msufTextRuntime
         local text = MSUF.UFText
-        state.powerTextDirty = text and text.MarkPowerDirty or nil
+        state.powerText = rt and rt.powerHot or (text and text.UpdatePower) or state.powerText
+        state.powerTextDirty = rt and rt.powerDirty or nil
     end
     state.needsDispatchContext = state.health ~= nil or state.power ~= nil
     state.empty = state.hasWork ~= true

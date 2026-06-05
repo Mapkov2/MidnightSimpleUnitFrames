@@ -29,8 +29,11 @@ local IsInRaid = IsInRaid
 
 GF.headers = GF.headers or {}
 GF.anchors = GF.anchors or {}
-
-local hiddenParent
+-- Pool of hidden-but-reusable headers (one per key). WoW frames can never be
+-- garbage-collected, so a header is hidden + pooled here instead of being
+-- recreated on the next show. Bounds the secure-frame count to one header
+-- (plus its child buttons) per key for the whole session.
+GF._headerPool = GF._headerPool or {}
 
 local NIL_ATTR = {}
 
@@ -57,35 +60,32 @@ local function InCombat()
     return InCombatLockdown and InCombatLockdown()
 end
 
-local function HiddenParent()
-    if hiddenParent then return hiddenParent end
-    hiddenParent = CreateFrame("Frame", "MSUF_GF_CoreHiddenHeaderParent", UIParent)
-    hiddenParent:SetAllPoints(UIParent)
-    hiddenParent:Hide()
-    return hiddenParent
-end
-
-local function RetireHeaderChildren(hidden, ...)
+-- Suspend (do NOT destroy) a hidden header's children: detach MSUF tracking and
+-- per-frame events so a hidden header costs nothing at runtime, while keeping
+-- each child parented to its header so the whole header can be reused later.
+-- Reusing a pooled header (instead of creating a new one) is what prevents the
+-- permanent secure-frame leak and the recreate-time child flicker. The children
+-- are re-attached/re-styled by the rescan SetupHeader schedules on reuse, and by
+-- the secure header's own unit-attribute assignment on the next show.
+-- Out-of-combat only -- every caller is gated on InCombatLockdown.
+local function SuspendHeaderChildren(...)
     for i = 1, select("#", ...) do
         local child = select(i, ...)
         if child then
             if GF.UntrackFrame then GF.UntrackFrame(child) end
             if child.Hide then child:Hide() end
-            if child.ClearAllPoints then child:ClearAllPoints() end
-            if child.SetParent then child:SetParent(hidden) end
         end
     end
 end
 
 local function RetireHeader(header)
     if not header then return end
-    local hidden = HiddenParent()
     if header.GetChildren then
-        RetireHeaderChildren(hidden, header:GetChildren())
+        SuspendHeaderChildren(header:GetChildren())
     end
     if header.Hide then header:Hide() end
-    if header.ClearAllPoints then header:ClearAllPoints() end
-    if header.SetParent then header:SetParent(hidden) end
+    -- Deliberately not reparented or destroyed: the header is pooled by
+    -- GF.RetireHeader and reused by SetupHeader, preserving its child buttons.
 end
 
 function GF.RetireHeader(key)
@@ -93,6 +93,7 @@ function GF.RetireHeader(key)
     local header = GF.headers[key]
     if not header then return false end
     RetireHeader(header)
+    GF._headerPool[key] = header
     GF.headers[key] = nil
     return true
 end
@@ -619,21 +620,44 @@ function GF.SetupHeader(key, kind)
 
     local header = GF.headers[key]
     local newHeader = false
-    if header and GF._forceRecreateHeaders == true then
-        RetireHeader(header)
-        header = nil
-        GF.headers[key] = nil
+    local reused = false
+
+    -- Reuse a pooled (previously hidden) header instead of creating -- and
+    -- permanently leaking -- a new secure header plus its child buttons.
+    if not header then
+        local pooled = GF._headerPool[key]
+        if pooled then
+            GF._headerPool[key] = nil
+            header = pooled
+            GF.headers[key] = header
+            reused = true
+        end
     end
+
+    -- Forced reset (zone change / difficulty change / raid<->party flip): keep
+    -- the existing header and its children, but wipe the attribute cache so
+    -- ConfigureHeader re-applies every attribute and forces one clean re-layout.
+    -- No frame is recreated, so there are no orphaned secure frames and no child
+    -- respawn gap -- that gap was the "frames disappear on zone change" flicker.
+    if header and GF._forceRecreateHeaders == true then
+        header._msufGFAttrCache = nil
+        reused = true
+    end
+
     if not header then
         header = CreateFrame("Frame", HeaderName(key), UIParent, "SecureGroupHeaderTemplate")
         header:SetParent(anchor)
         GF.headers[key] = header
         newHeader = true
     end
-    local cleanRelayout = header.IsShown and header:IsShown()
-    if cleanRelayout then
-        header:Hide()
-    end
+
+    -- ConfigureHeader hides the header itself only when a structural attribute
+    -- actually changes (its internal shouldHide), batches the writes while
+    -- hidden, and reports that via wasHiddenForLayout so we re-show below. We do
+    -- NOT hide/show unconditionally here: on a pure roster update (someone enters
+    -- or leaves the group) nothing structural changes, so the header stays shown
+    -- and the secure template re-lays-out its own children -- removing the blink
+    -- that previously fired every time the roster changed.
     local attrChanged, wasHiddenForLayout = ConfigureHeader(header, key, kind, conf, w, h, spacing)
     header._msufGFKind = kind
     header._msufGFKey = key
@@ -644,13 +668,16 @@ function GF.SetupHeader(key, kind)
     local point = AnchorPoint(conf)
     header:SetPoint(point, anchor, point, -dx, -dy)
     header:SetSize(totalW, totalH)
-    if cleanRelayout or wasHiddenForLayout then
+    if wasHiddenForLayout then
         header:Show()
     end
     if attrChanged and header.SetAttribute and not InCombat() then
         header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
     end
-    if GF.ScheduleScan and (newHeader or attrChanged) then
+    -- Reused (pooled) and brand-new headers always rescan so detached children
+    -- are re-tracked, re-sized and re-styled; otherwise only when attributes
+    -- changed. The scan is idempotent and short-circuits when nothing is stale.
+    if GF.ScheduleScan and (newHeader or attrChanged or reused) then
         GF.ScheduleScan(key, kind)
     end
     return header
