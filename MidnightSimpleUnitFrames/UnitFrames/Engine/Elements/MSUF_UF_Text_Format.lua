@@ -12,7 +12,10 @@ local UnitPowerMax = Text.UnitPowerMax
 local UnitPowerType = Text.UnitPowerType
 local UnitHealthPercent = Text.UnitHealthPercent
 local UnitPowerPercent = Text.UnitPowerPercent
-local AbbreviateSecretNumber = _G.AbbreviateLargeNumbers
+local AbbreviateShortNumber = Text.AbbreviateNumbers or _G.AbbreviateNumbers
+local BreakUpLargeNumbers = Text.BreakUpLargeNumbers or _G.BreakUpLargeNumbers
+local AbbreviateLargeNumber = Text.AbbreviateLargeNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
+local AbbreviateSecretNumber = AbbreviateShortNumber or AbbreviateLargeNumber
 local tonumber = Text.tonumber
 local type = Text.type or luaType
 local format = Text.format
@@ -93,6 +96,25 @@ local function CompactNumber(value)
     return SmallIntegerText(value) or format("%d", value or 0)
 end
 
+local SPACED_DELIMITERS = {
+    [""] = " ",
+    ["-"] = " - ",
+    ["/"] = " / ",
+    ["\\"] = " \\ ",
+    ["|"] = " | ",
+    ["<"] = " < ",
+    [">"] = " > ",
+    ["~"] = " ~ ",
+    [":"] = " : ",
+}
+
+local function NormalizeTextDelimiter(delimiter)
+    if delimiter == nil then
+        return " - "
+    end
+    return SPACED_DELIMITERS[delimiter] or delimiter
+end
+
 local function ValueArg(value, canSecret)
     if IsSecret(value) then
         return value
@@ -152,13 +174,23 @@ end
 
 local function FormatValue(value, short, canSecret)
     if IsSecret(value) then
-        if short and AbbreviateSecretNumber then
-            return AbbreviateSecretNumber(value)
+        if short then
+            if AbbreviateSecretNumber then
+                return AbbreviateSecretNumber(value)
+            end
+        elseif BreakUpLargeNumbers then
+            return BreakUpLargeNumbers(value)
         end
         return value
     end
     if not short then
+        if BreakUpLargeNumbers then
+            return BreakUpLargeNumbers(ValueOrDefault(value, 0))
+        end
         return SmallIntegerText(value) or format("%d", value or 0)
+    end
+    if AbbreviateShortNumber then
+        return AbbreviateShortNumber(ValueOrDefault(value, 0))
     end
     return CompactNumber(value)
 end
@@ -232,7 +264,13 @@ end
 
 local function SlotValuePlain(slot, value)
     if not slot.short then
+        if BreakUpLargeNumbers then
+            return BreakUpLargeNumbers(value or 0)
+        end
         return SmallIntegerText(value) or format("%d", value or 0)
+    end
+    if AbbreviateShortNumber then
+        return AbbreviateShortNumber(value or 0)
     end
     return CompactNumber(value)
 end
@@ -255,6 +293,8 @@ local function SlotFormattedValue(slot, value)
     if IsSecret(value) then
         if slot.short and AbbreviateSecretNumber then
             return AbbreviateSecretNumber(value), "%s"
+        elseif (not slot.short) and BreakUpLargeNumbers then
+            return BreakUpLargeNumbers(value), "%s"
         end
         return value, "%d"
     end
@@ -557,6 +597,8 @@ local MODE_PLAIN_WRITERS = {
 local function SecretSlotValue(slot, value)
     if slot.short and AbbreviateSecretNumber then
         return AbbreviateSecretNumber(value), "%s"
+    elseif (not slot.short) and BreakUpLargeNumbers then
+        return BreakUpLargeNumbers(value), "%s"
     end
     return value, "%d"
 end
@@ -661,7 +703,7 @@ local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short
         SetTextCached(fs, "")
         return
     end
-    delimiter = delimiter or " - "
+    delimiter = NormalizeTextDelimiter(delimiter)
     local pct
     local pctKnown = false
     if ModeNeedsPercent(mode) then
@@ -722,7 +764,7 @@ local function AddTextSlot(slots, index, fs, mode, delimiter, short, hidePercent
     slot.plainWriter = MODE_PLAIN_WRITERS[mode] or PlainWriteCurMax
     slot.secretWriter = MODE_SECRET_WRITERS[mode]
     slot.needsPercent = needsPercent
-    slot.delimiter = delimiter or " - "
+    slot.delimiter = NormalizeTextDelimiter(delimiter)
     slot.short = short == true
     slot.hidePercentSymbol = hidePercentSymbol == true
     slot.suffix = nil
