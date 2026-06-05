@@ -973,6 +973,22 @@ expectApplied("how do profiles work", "Profiles help")
 expectApplied("profil hilfe", "Profiles help")
 expectApplied("what can i change here")
 expectApplied("help")
+local guidedStartPage = M.activeKey
+local guidedIntro = expectApplied("i never used msuf can you help me?", "Guided setup")
+assert(type((A.GetContext and A.GetContext() or {}).guidedSetup) == "table", "Dashboard Submit did not start guided setup from beginner wording")
+assert(M.activeKey == guidedStartPage, "Guided setup should not automatically open the Player page")
+assert(tostring(guidedIntro.text or ""):find("Step 1", 1, true), "Guided setup did not show the first step")
+assert(tostring(guidedIntro.text or ""):find("stay on the current page", 1, true), "Guided setup did not explain that it stays on the current page")
+assert(A.largeTextPanel == nil, "Guided setup should not open a large Dashboard panel that blocks normal commands")
+_G.MSUF_DB.player.hpOffsetY = 0
+expectApplied("move player hp text up", "Done.")
+assert(_G.MSUF_DB.player.hpOffsetY == 10, "Active guided setup blocked a normal Dashboard command")
+assert(type((A.GetContext and A.GetContext() or {}).guidedSetup) == "table", "Normal commands should not silently cancel guided setup")
+expectApplied("next", "Step 2")
+assert(((A.GetContext and A.GetContext() or {}).guidedSetup or {}).step == 2, "Short guided setup next command did not advance the tour")
+assert(M.activeKey == guidedStartPage, "Guided setup next should not automatically navigate")
+expectApplied("cancel setup", "Cancelled guided setup.")
+assert(type((A.GetContext and A.GetContext() or {}).guidedSetup) ~= "table", "Dashboard Submit did not cancel guided setup")
 local firstJoke = expectStatus("tell me a joke", "info", "unit frame")
 local secondJoke = expectStatus("tell me another joke", "info", "castbar")
 assert(firstJoke.text ~= secondJoke.text, "Assistant repeated the same joke for another-joke request")
@@ -1086,6 +1102,24 @@ assert(_G.MSUF_DB.gameplay.enableFirstDanceTimer == true, "Dashboard Submit did 
 _G.MSUF_DB.gameplay.firstDanceOffsetY = 0
 expectApplied("move first dance down 12", "Done.")
 assert(_G.MSUF_DB.gameplay.firstDanceOffsetY == -12, "Dashboard Submit did not move First Dance down")
+_G.MSUF_DB.player.offsetX = -256
+_G.MSUF_DB.player.offsetY = -180
+_G.MSUF_DB.player.width = 275
+_G.MSUF_DB.player.height = 40
+_G.MSUF_DB.target.offsetX = -9
+_G.MSUF_DB.target.offsetY = 9
+_G.MSUF_DB.target.width = 275
+_G.MSUF_DB.target.height = 40
+_G.MSUF_DB.gameplay.firstDanceOffsetX = 0
+_G.MSUF_DB.gameplay.firstDanceOffsetY = 80
+MSUF._lastGameplayApply = nil
+expectApplied("move first dancer tracker under player frame", "First Dance Offset")
+assert(_G.MSUF_DB.gameplay.firstDanceOffsetX == -256, "Dashboard Submit did not align First Dance X to Player frame")
+assert(_G.MSUF_DB.gameplay.firstDanceOffsetY == -238, "Dashboard Submit did not place First Dance below Player frame")
+assert(MSUF._lastGameplayApply ~= nil, "Dashboard Submit did not request a Gameplay apply after moving First Dance")
+expectApplied("ok now move first dance tracker under target", "First Dance Offset")
+assert(_G.MSUF_DB.gameplay.firstDanceOffsetX == -9, "Dashboard Submit did not realign First Dance X to Target frame")
+assert(_G.MSUF_DB.gameplay.firstDanceOffsetY == -49, "Dashboard Submit did not place First Dance below Target frame")
 _G.MSUF_DB.gameplay.firstDanceShowReady = true
 expectApplied("turn off first dance ready", "Done.")
 assert(_G.MSUF_DB.gameplay.firstDanceShowReady == false, "Dashboard Submit did not disable First Dance ready visibility")
@@ -1329,6 +1363,28 @@ expectApplied("show test status icons on target frame", "Already set.")
 assert((MSUF._statusRefresh or 0) > firstStatusRefresh, "Dashboard Submit did not refresh status icons when Target test mode was already enabled")
 expectApplied("hide test status icons on target frame", "Done.")
 assert(_G.MSUF_DB.target.stateIconsTestMode == false, "Dashboard Submit did not disable Target Status Icon Test Mode")
+_G.MSUF_DB.player.showCombatStateIndicator = true
+expectApplied("turn off combat indicator for player", "Done.")
+assert(_G.MSUF_DB.player.showCombatStateIndicator == false, "Dashboard Submit routed Player Combat Indicator to the wrong setting")
+_G.MSUF_DB.player.showCombatStateIndicator = true
+expectApplied("turn off combat symbol for player", "Done.")
+assert(_G.MSUF_DB.player.showCombatStateIndicator == false, "Dashboard Submit did not understand Combat Symbol as the Combat Indicator")
+_G.MSUF_DB.player.showCombatStateIndicator = true
+_G.MSUF_DB.player.loadCondHideInCombat = true
+expectApplied("turn off combat load condition for player", "Done.")
+assert(_G.MSUF_DB.player.loadCondHideInCombat == false, "Dashboard Submit did not keep explicit Combat Load Condition routed to loadCondHideInCombat")
+assert(_G.MSUF_DB.player.showCombatStateIndicator == true, "Dashboard Submit changed Combat Indicator while changing the Combat Load Condition")
+_G.MSUF_DB.player.showCombatStateIndicator = true
+_G.MSUF_DB.target.showCombatStateIndicator = true
+expectApplied("turn off combat indicator for all unitframes", "Done.")
+assert(_G.MSUF_DB.player.showCombatStateIndicator == false and _G.MSUF_DB.target.showCombatStateIndicator == false, "Dashboard Submit did not bulk-toggle all registered unit Combat Indicators")
+_G.MSUF_DB.gf_party.enabled = true
+_G.MSUF_DB.gf_party.readyCheckIcon = true
+_G.MSUF_DB.gf_raid.readyCheckIcon = true
+_G.MSUF_DB.gf_mythicraid.readyCheckIcon = true
+expectApplied("turn off ready check symbol for all group frames", "Done.")
+assert(_G.MSUF_DB.gf_party.readyCheckIcon == false and _G.MSUF_DB.gf_raid.readyCheckIcon == false and _G.MSUF_DB.gf_mythicraid.readyCheckIcon == false, "Dashboard Submit did not bulk-toggle all group Ready Check symbols")
+assert(_G.MSUF_DB.gf_party.enabled == true, "Dashboard Submit disabled Party group frames while changing Ready Check symbols")
 expectApplied("show all status icons target", "Showing all status indicators")
 expectApplied("select party leader icon indicator", "Selected Party Leader Icon indicator.")
 assert(M.activeKey == "gf_indicators", "Group status selector did not open Group Indicators")
@@ -1381,7 +1437,49 @@ assert(#unitCopyCalls == 1, "Scoped Unit Copy wording did not execute exactly on
 assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "player", "Scoped Unit Copy wording copied the wrong unit direction")
 assert(unitCopyCalls[1].scopes and unitCopyCalls[1].scopes.text == true, "Scoped Unit Copy wording did not enable text")
 assert(unitCopyCalls[1].scopes.basics == false and unitCopyCalls[1].scopes.layout == false and unitCopyCalls[1].scopes.castbar == false, "Scoped Unit Copy wording copied extra categories")
+unitCopyCalls = {}
+expectApplied("can you copy just the text options from target to target of target", "Categories: Text.")
+assert(#unitCopyCalls == 1, "Natural scoped Unit Copy wording did not execute exactly one Unit Copy call")
+assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "targettarget", "Natural scoped Unit Copy wording copied the wrong unit direction")
+assert(unitCopyCalls[1].scopes.text == true and unitCopyCalls[1].scopes.layout == false, "Natural scoped Unit Copy copied the wrong categories")
+unitCopyCalls = {}
+expectApplied("copy just the text options from target to the same position to player", "Categories: Text, Size & Anchoring.")
+assert(#unitCopyCalls == 1, "Natural Unit Copy text+position wording did not execute exactly one Unit Copy call")
+assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "player", "Natural Unit Copy text+position wording copied the wrong unit direction")
+assert(unitCopyCalls[1].scopes.text == true and unitCopyCalls[1].scopes.layout == true and unitCopyCalls[1].scopes.basics == false, "Natural Unit Copy text+position wording copied the wrong categories")
 M.UnitPage = savedUnitPage
+local savedGroupPage = M.GroupPage
+local groupCopyCalls = {}
+M.GroupPage = {
+    NewGFCopyScopes = function()
+        return {
+            general = true,
+            health = true,
+            text = true,
+            font = true,
+            border = true,
+            range = true,
+            indicators = true,
+            auras = true,
+            highlight = true,
+            dstripe = true,
+            features = true,
+        }
+    end,
+    CopyGroupSettings = function(source, target, scopes)
+        groupCopyCalls[#groupCopyCalls + 1] = { source = source, target = target, scopes = scopes }
+        return true
+    end,
+}
+expectApplied("can you copy just health and text options from party to raid", "Categories: Health & Bars, Text & Name.")
+assert(#groupCopyCalls == 1, "Natural scoped Group Copy wording did not execute exactly one Group Copy call")
+assert(groupCopyCalls[1].source == "party" and groupCopyCalls[1].target == "raid", "Natural scoped Group Copy wording copied the wrong group direction")
+assert(groupCopyCalls[1].scopes.health == true and groupCopyCalls[1].scopes.text == true, "Natural scoped Group Copy did not enable health/text")
+assert(groupCopyCalls[1].scopes.general == false and groupCopyCalls[1].scopes.font == false, "Natural scoped Group Copy copied extra categories")
+groupCopyCalls = {}
+expectStatus("copy just text options from target to party group frame", "info", "cannot safely copy a Unit Frame directly into a Group Frame")
+assert(#groupCopyCalls == 0, "Unsupported mixed Unit/Group Copy should not call Group Copy helper")
+M.GroupPage = savedGroupPage
 expectApplied("clear player copy categories", "Cleared all unit copy categories.")
 assert(M.activeKey == "uf_player", "Unit copy staging did not open Player page")
 assert(M.unitCopyScopes and M.unitCopyScopes.text == false and M.unitCopyScopes.castbar == false, "Unit copy clear did not disable categories")

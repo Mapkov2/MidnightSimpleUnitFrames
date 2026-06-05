@@ -454,7 +454,10 @@ local function EnsureFirstDanceFrame()
     local g = GameplayDefaults()
 
     danceFrame = CreateMovableGameplayFrame("MSUF_FirstDanceFrame", 220, 60)
-    danceFrame:SetPoint("CENTER", UIParent, "CENTER", tonumber(g.firstDanceOffsetX) or 0, tonumber(g.firstDanceOffsetY) or 80)
+    local startX, startY = tonumber(g.firstDanceOffsetX) or 0, tonumber(g.firstDanceOffsetY) or 80
+    danceFrame:SetPoint("CENTER", UIParent, "CENTER", startX, startY)
+    danceFrame._msufAppliedPositionX = startX
+    danceFrame._msufAppliedPositionY = startY
     SetupArrowNudge(danceFrame,
         function(self, dx, dy)
             local db = GameplayDefaults()
@@ -463,6 +466,8 @@ local function EnsureFirstDanceFrame()
             db.firstDanceOffsetY = Clamp(RoundInt((tonumber(db.firstDanceOffsetY) or 80) + (dy or 0)), -800, 800)
             self:ClearAllPoints()
             self:SetPoint("CENTER", UIParent, "CENTER", db.firstDanceOffsetX, db.firstDanceOffsetY)
+            self._msufAppliedPositionX = db.firstDanceOffsetX
+            self._msufAppliedPositionY = db.firstDanceOffsetY
             SyncGameplayPanel("MSUF_SyncFirstDanceOffsetSliders")
             ApplyFirstDanceLockState()
             CheckpointHistory("First Dance position", "gameplay:firstDance:position")
@@ -515,6 +520,17 @@ local function EnsureFirstDanceFrame()
     EnsureAltDragWatcher("_MSUF_FirstDanceModifierFrame", danceFrame, "enableFirstDanceTimer", "lockFirstDance", "firstDanceClickThrough")
 
     return danceFrame
+end
+
+local function ApplyFirstDancePosition(g)
+    if not danceFrame or danceFrame._msufDragging then return end
+    g = g or GameplayDefaults()
+    local x, y = tonumber(g.firstDanceOffsetX) or 0, tonumber(g.firstDanceOffsetY) or 80
+    if danceFrame._msufAppliedPositionX == x and danceFrame._msufAppliedPositionY == y then return end
+    danceFrame:ClearAllPoints()
+    danceFrame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    danceFrame._msufAppliedPositionX = x
+    danceFrame._msufAppliedPositionY = y
 end
 
 local function ApplyFirstDanceDisplayMode()
@@ -687,6 +703,7 @@ StartFirstDanceWindow = function()
 
     ApplyFirstDanceFont()
     ApplyFirstDanceDisplayMode()
+    ApplyFirstDancePosition(g)
 
     if g.firstDanceShowIcon ~= false then
         danceCooldown:SetCooldown(GetTime(), FIRST_DANCE_WINDOW)
@@ -755,7 +772,10 @@ EnsureCombatStateText = function()
 
     if not stateFrame then
         stateFrame = CreateMovableGameplayFrame("MSUF_CombatStateFrame", 220, 60)
-        stateFrame:SetPoint("CENTER", UIParent, "CENTER", g.combatStateOffsetX or 0, g.combatStateOffsetY or 80)
+        local startX, startY = tonumber(g.combatStateOffsetX) or 0, tonumber(g.combatStateOffsetY) or 80
+        stateFrame:SetPoint("CENTER", UIParent, "CENTER", startX, startY)
+        stateFrame._msufAppliedPositionX = startX
+        stateFrame._msufAppliedPositionY = startY
         SetupArrowNudge(stateFrame,
             function(self, dx, dy)
                 local db = GameplayDefaults()
@@ -764,6 +784,8 @@ EnsureCombatStateText = function()
                 db.combatStateOffsetY = RoundInt((tonumber(db.combatStateOffsetY) or 80) + (dy or 0))
                 self:ClearAllPoints()
                 self:SetPoint("CENTER", UIParent, "CENTER", db.combatStateOffsetX, db.combatStateOffsetY)
+                self._msufAppliedPositionX = db.combatStateOffsetX
+                self._msufAppliedPositionY = db.combatStateOffsetY
                 CheckpointHistory("Combat enter/leave position", "gameplay:combatState:position")
                 return true
             end,
@@ -799,6 +821,17 @@ EnsureCombatStateText = function()
     SetTextShadow(stateText, useShadow)
 
     ClearCombatStateText()
+end
+
+local function ApplyCombatStatePosition(g)
+    if not stateFrame or stateFrame._msufDragging then return end
+    g = g or GameplayDefaults()
+    local x, y = tonumber(g.combatStateOffsetX) or 0, tonumber(g.combatStateOffsetY) or 80
+    if stateFrame._msufAppliedPositionX == x and stateFrame._msufAppliedPositionY == y then return end
+    stateFrame:ClearAllPoints()
+    stateFrame:SetPoint("CENTER", UIParent, "CENTER", x, y)
+    stateFrame._msufAppliedPositionX = x
+    stateFrame._msufAppliedPositionY = y
 end
 
 _TickFirstDance = function()
@@ -1046,9 +1079,18 @@ local function ApplyCombatTimerAnchor(g)
 
     g = g or GameplayDefaults()
     local anchor = GetCombatTimerAnchorFrame(g)
+    local x, y = tonumber(g.combatOffsetX) or 0, tonumber(g.combatOffsetY) or 0
 
-    combatFrame:ClearAllPoints()
-    combatFrame:SetPoint("CENTER", anchor, "CENTER", tonumber(g.combatOffsetX) or 0, tonumber(g.combatOffsetY) or 0)
+    if combatFrame._msufAppliedAnchor ~= anchor
+        or combatFrame._msufAppliedPositionX ~= x
+        or combatFrame._msufAppliedPositionY ~= y
+    then
+        combatFrame:ClearAllPoints()
+        combatFrame:SetPoint("CENTER", anchor, "CENTER", x, y)
+        combatFrame._msufAppliedAnchor = anchor
+        combatFrame._msufAppliedPositionX = x
+        combatFrame._msufAppliedPositionY = y
+    end
 
     local want = ValidateCombatTimerAnchor(g.combatTimerAnchor)
     if want ~= "none" and anchor == UIParent then
@@ -1277,6 +1319,7 @@ local function ApplyCombatStateText(g)
 
     if wantState then
         SetCombatStateClickThrough(false)
+        ApplyCombatStatePosition(g)
 
         if not g.lockCombatState and stateText then
             local er, eg, eb = MSUF_GetCombatStateColors(g)
@@ -1294,6 +1337,7 @@ local function ApplyCombatStateText(g)
         EnsureFirstDanceFrame()
         ApplyFirstDanceFont()
         ApplyFirstDanceDisplayMode()
+        ApplyFirstDancePosition(g)
 
         if not g.lockFirstDance and danceFrame and not firstDanceActive and not firstDanceReady then
             local iconMode = (g.firstDanceShowIcon ~= false)
@@ -1462,12 +1506,14 @@ do
     MSUF.MSUF_Gameplay_ApplyFontToCounter = ApplyFontToCounter
     MSUF.MSUF_Gameplay_ApplyLockState = ApplyLockState
     MSUF.MSUF_Gameplay_ApplyCombatTimerAnchorFn = ApplyCombatTimerAnchor
+    MSUF.MSUF_Gameplay_ApplyCombatStatePosition = ApplyCombatStatePosition
     MSUF.MSUF_Gameplay_TickCombatTimer = TickCombatTimer
     MSUF.MSUF_GetCombatTimerAnchorFrame = GetCombatTimerAnchorFrame
     MSUF.MSUF_SetEnabledMeleeRangeCheck = SetEnabledMeleeRangeCheck
     MSUF.MSUF_BuildMeleeSpellCache = function() end
     MSUF.MSUF_GetMeleeSpellCache = function() return meleeCache end
     MSUF.MSUF_GetFirstDanceFrame = function() return danceFrame end
+    MSUF.MSUF_ApplyFirstDancePosition = ApplyFirstDancePosition
     MSUF.MSUF_ApplyFirstDanceLockState = ApplyFirstDanceLockState
     MSUF.MSUF_ApplyFirstDanceDisplayMode = ApplyFirstDanceDisplayMode
 end

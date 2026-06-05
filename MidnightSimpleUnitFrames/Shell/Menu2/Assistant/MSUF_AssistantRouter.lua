@@ -239,6 +239,30 @@ local function LooksLikeBugReportRequest(text)
     return hasBugWord and hasReportWord
 end
 
+local function LooksLikeGuidedTourRequest(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    if ContainsAny(norm, {
+        "guided setup", "setup guide", "start guide", "start tour", "tour guide",
+        "show me around", "walk me through", "getting started", "beginner guide",
+        "beginner setup", "onboarding", "first time msuf", "new to msuf",
+        "never used msuf", "never used this addon", "start with msuf",
+        "how do i start with msuf", "setup hilfe", "einsteiger", "anfanger",
+        "neu in msuf", "noch nie msuf", "zeig mir msuf", "fuehrung",
+    }) then
+        return true
+    end
+    if ContainsAny(norm, { "guide me", "help me setup", "help me set up", "help me configure", "help me build" })
+        and ContainsAny(norm, { "msuf", "unit frame", "unit frames", "frames", "layout", "addon", "setup", "beginner", "new", "first", "never used" }) then
+        return true
+    end
+    if ContainsAny(norm, { "i am new", "im new", "i'm new", "new user", "first time", "never used" })
+        and ContainsAny(norm, { "msuf", "unit frame", "unit frames", "addon" }) then
+        return true
+    end
+    return false
+end
+
 local function BugReportReply(text)
     local german = IsGermanConversation(text) or ContainsAny(text, {
         "bug melden", "fehler", "problem melden", "wo melde", "wo kann", "wie melde",
@@ -720,6 +744,11 @@ function A.RouteInput(text, coreHandler)
     end
 
     if LooksLikeBugReportRequest(text) then return BugReportReply(text) end
+
+    if LooksLikeGuidedTourRequest(text) and type(coreHandler) == "function" then
+        local guidedResult = coreHandler(text)
+        if guidedResult and not IsUnknownResult(guidedResult) then return guidedResult end
+    end
 
     local humanResult = HumanConversationReply(text)
     if humanResult then return humanResult end

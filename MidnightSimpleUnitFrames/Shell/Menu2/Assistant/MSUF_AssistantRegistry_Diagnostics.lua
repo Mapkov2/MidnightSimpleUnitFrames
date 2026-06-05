@@ -447,9 +447,10 @@ end
 local GUIDED_SETUP_STEPS = {
     {
         key = "frame_size",
-        title = "Unitframe Size",
+        title = "Main Frame Size",
         page = "uf_player",
-        body = "Set the Player frame size first. A clean baseline is Player width 275 and height 40, then Target can copy that layout.",
+        goal = "Start with readable Player and Target frames before tuning details.",
+        body = "A solid baseline is Player width 275 and height 40, then Target can copy the same size.",
         examples = {
             "make player width 275",
             "make player height 40",
@@ -460,7 +461,8 @@ local GUIDED_SETUP_STEPS = {
         key = "placement",
         title = "Player And Target Placement",
         page = "uf_player",
-        body = "Use MSUF Edit Mode to place Player and Target frames. Small nudges are safer than large jumps.",
+        goal = "Put the main frames where your eyes naturally rest in combat.",
+        body = "Use Edit Mode for broad placement. Small nudges are easier to control than one big jump.",
         examples = {
             "start edit mode",
             "move player 20 left",
@@ -471,7 +473,8 @@ local GUIDED_SETUP_STEPS = {
         key = "castbars",
         title = "Castbars",
         page = "opt_castbar",
-        body = "Enable only the castbars you need, then size and place them. Target castbar is usually the first one to verify.",
+        goal = "Make important casts obvious without crowding the center.",
+        body = "Target castbar is usually the first one to verify. After that, add Player, Focus, or Boss castbars only if you need them.",
         examples = {
             "show target castbar",
             "move target castbar 20 down",
@@ -482,7 +485,8 @@ local GUIDED_SETUP_STEPS = {
         key = "text",
         title = "Text Visibility",
         page = "uf_player",
-        body = "Decide how much repeated text you want. Clean layouts usually keep names and reduce redundant power or HP text.",
+        goal = "Keep the text you actually read and remove repeated noise.",
+        body = "Clean layouts usually keep names and one clear health value, then reduce redundant power or HP text.",
         examples = {
             "hide player power text",
             "show target name",
@@ -490,32 +494,35 @@ local GUIDED_SETUP_STEPS = {
         },
     },
     {
-        key = "auras",
-        title = "Auras",
-        page = "auras3",
-        body = "Tune aura density after frame placement. Use quick presets for the base layout, then adjust icon counts and filters.",
+        key = "power",
+        title = "Power Bars And Resources",
+        page = "opt_bars",
+        goal = "Make resource information clear without mistaking it for class resources.",
+        body = "Power Bar controls live on unit and group frames. Class Resources are separate global controls.",
         examples = {
-            "apply clean aura preset",
-            "set target debuff size 32",
-            "blacklist raid buffs category for raid buffs",
+            "set target power bar height to 8",
+            "detach target power bar",
+            "turn on class resources",
         },
     },
     {
         key = "group_frames",
         title = "Group Frames",
         page = "gf_layout",
-        body = "Configure Party and Raid after unitframes. Healer layouts usually need compact raid frames plus clear status indicators.",
+        goal = "Build Party and Raid after the main frames feel stable.",
+        body = "Group frames need dense but readable sizing. Start with Party/Raid visibility, then tune width, text, and indicators.",
         examples = {
             "show party group frames",
             "make raid width 80",
-            "diagnose raid frames",
+            "turn off ready check symbol for all group frames",
         },
     },
     {
         key = "boss_frames",
-        title = "Boss Frames",
+        title = "Boss Frames And Final Check",
         page = "uf_boss",
-        body = "Finish by checking Boss frames and boss castbars so encounter UI is readable without crowding the main layout.",
+        goal = "Finish with encounter information and a quick diagnostic pass.",
+        body = "Boss frames and boss castbars should be readable without covering your main layout.",
         examples = {
             "show boss frame",
             "show boss castbar",
@@ -546,10 +553,15 @@ local function SetGuidedSetupFlow(flow)
     return flow
 end
 
-local function GuidedSetupOpenStep(step)
-    if step and step.page and M and type(M.SelectPage) == "function" then
-        M.SelectPage(step.page)
+local function CloseGuidedSetupPanel()
+    if A and A.largeTextPanel ~= nil then
+        if type(A.CloseLargeTextPanel) == "function" then A.CloseLargeTextPanel() end
     end
+end
+
+local function GuidedSetupPageHint(step)
+    if not step or type(step.page) ~= "string" or step.page == "" then return nil end
+    return "I will stay on the current page. Ask me to open the matching page when you want to go there."
 end
 
 local function GuidedSetupStepText(flow)
@@ -559,33 +571,28 @@ local function GuidedSetupStepText(flow)
     if index < 1 then index = 1 end
     if index > #GUIDED_SETUP_STEPS then
         SetGuidedSetupFlow(nil)
-        return "Guided setup complete. Use 'undo' for the last Assistant change, or ask for diagnostics if something is not visible."
+        CloseGuidedSetupPanel()
+        return "Guided setup complete. You can keep typing normal MSUF commands, use 'undo' for the last Assistant change, or ask me to diagnose anything that is not visible."
     end
     flow.step = index
     local step = GUIDED_SETUP_STEPS[index]
-    GuidedSetupOpenStep(step)
     local lines = {
-        "Guided setup: " .. tostring(flow.styleLabel or "clean") .. " layout",
-        "Step " .. tostring(index) .. " of " .. tostring(#GUIDED_SETUP_STEPS) .. ": " .. step.title,
-        step.body,
-        "",
-        "Try:",
+        "Guided setup - " .. tostring(flow.styleLabel or "clean") .. " layout",
+        "Step " .. tostring(index) .. "/" .. tostring(#GUIDED_SETUP_STEPS) .. ": " .. step.title,
+        "Goal: " .. tostring(step.goal or ""),
+        tostring(step.body or ""),
     }
+    local pageHint = GuidedSetupPageHint(step)
+    if pageHint then lines[#lines + 1] = pageHint end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Useful commands to try:"
     for i = 1, #(step.examples or {}) do
-        lines[#lines + 1] = "- " .. step.examples[i]
+        lines[#lines + 1] = tostring(i) .. ". " .. step.examples[i]
     end
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "Say 'next setup step', 'back setup step', 'skip setup step', 'show setup step', 'finish setup', or 'cancel setup'."
+    lines[#lines + 1] = "Normal MSUF commands still work while this guide is active. Say 'next', 'back', 'show setup', 'done', or 'cancel setup' when you want to steer the tour."
     local text = table.concat(lines, "\n")
-    if A and type(A.ShowLargeTextPanel) == "function" then
-        A.ShowLargeTextPanel({
-            kind = "text",
-            title = "Guided Setup: " .. step.title,
-            help = "The active setup step is stored in Assistant context. Use next, skip, done, or cancel to continue.",
-            text = text,
-            status = "No settings changed by this guide step.",
-        })
-    end
+    CloseGuidedSetupPanel()
     return text
 end
 
@@ -603,12 +610,12 @@ function A.Workflow.GuidedSetupStep(command)
     end
     if command == "cancel" then
         SetGuidedSetupFlow(nil)
-        if A and type(A.CloseLargeTextPanel) == "function" then A.CloseLargeTextPanel() end
-        return "Cancelled guided setup."
+        CloseGuidedSetupPanel()
+        return "Cancelled guided setup. You can keep typing normal MSUF commands."
     end
     if command == "finish" or command == "done" then
         SetGuidedSetupFlow(nil)
-        if A and type(A.CloseLargeTextPanel) == "function" then A.CloseLargeTextPanel() end
+        CloseGuidedSetupPanel()
         return "Guided setup marked complete. You can still ask for diagnostics or use 'undo' for the last Assistant change."
     end
     if command == "back" or command == "previous" then
@@ -619,7 +626,7 @@ function A.Workflow.GuidedSetupStep(command)
     if flow.step < 1 then flow.step = 1 end
     if flow.step > #GUIDED_SETUP_STEPS then
         SetGuidedSetupFlow(nil)
-        if A and type(A.CloseLargeTextPanel) == "function" then A.CloseLargeTextPanel() end
+        CloseGuidedSetupPanel()
         return "Guided setup marked complete. You can still ask for diagnostics or use 'undo' for the last Assistant change."
     end
     return GuidedSetupStepText(flow)

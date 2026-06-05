@@ -249,16 +249,36 @@ do
 end
 expectCopy("copy taregt profie to player", "copy_unit", "target", { "player" }, { basics = true, text = true, portrait = true, power = true, castbar = true, status = true, load = true, transparency = true, layout = true })
 expectCopy("copy only text from target profile to player", "copy_unit", "target", { "player" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = false })
+expectCopy("can you copy just the text options from target to player", "copy_unit", "target", { "player" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = false })
+expectCopy("please copy just the text options from target to target of target", "copy_unit", "target", { "targettarget" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = false })
+expectCopy("copy just the text options from target to the same position to player", "copy_unit", "target", { "player" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = true })
+expectCopy("can you copy just the text options and position from target to player", "copy_unit", "target", { "player" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = true })
 expectCopy("copy raid profile to party", "copy_group", "raid", { "party" }, { general = true, health = true, text = true, font = true, border = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
 expectCopy("copy player text and castbar to target", "copy_unit", "player", { "target" }, { text = true, castbar = true, basics = false, layout = false })
 expectCopy("copy player size to target", "copy_unit", "player", { "target" }, { layout = true, basics = true, text = false })
 expectCopy("copy player all settings to target", "copy_unit", "player", { "target" }, { basics = true, text = true, portrait = true, power = true, castbar = true, status = true, load = true, transparency = true, layout = true })
 expectCopy("copy party health and text to raid", "copy_group", "party", { "raid" }, { health = true, text = true, general = false, font = false })
+expectCopy("can you copy just health and text options from party to raid", "copy_group", "party", { "raid" }, { health = true, text = true, general = false, font = false })
 expectCopy("copy party all settings to all groups", "copy_group", "party", { "raid", "mythicraid" }, { general = true, health = true, text = true, font = true, border = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
+expectAnswer("copy just text options from target to party group frame", "cannot safely copy a Unit Frame directly into a Group Frame")
 expectActionArg("apply 1440p global ui scale preset", "apply_global_scale_preset", "preset", "1440p")
 expectAction("start guided setup", "guided_setup")
+expectAction("i never used msuf can you guide me", "guided_setup")
+expectAction("can you show me around msuf", "guided_setup")
 expectActionArg("next setup step", "guided_setup_step", "command", "next")
 expectActionArg("cancel setup", "guided_setup_step", "command", "cancel")
+do
+    local ctx = A.GetContext()
+    ctx.guidedSetup = { step = 2, styleLabel = "clean" }
+    expectActionArg("next", "guided_setup_step", "command", "next")
+    expectActionArg("back", "guided_setup_step", "command", "back")
+    expectActionArg("cancel", "guided_setup_step", "command", "cancel")
+    local parsed = A.Parse("open previous page")
+    assert(not (parsed.kind == "action" and parsed.action and parsed.action.key == "guided_setup_step"), "Guided setup must not hijack normal commands that mention previous/back")
+    parsed = A.Parse("continue changing player frame")
+    assert(not (parsed.kind == "action" and parsed.action and parsed.action.key == "guided_setup_step"), "Guided setup must not hijack longer normal commands that mention continue")
+    ctx.guidedSetup = nil
+end
 expectActionArg("copy discord link", "copy_support_link", "link", "discord")
 expectAction("support links", "support_links_summary")
 expectActionArg("confirm wago backup", "confirm_wago_backup", "confirmed", true)
@@ -324,6 +344,21 @@ expectActionArg("reset party spell indicator Rejuvenation", "reset_group_spell_i
 expectActionArg("reset party status icons", "reset_group_status_icons", "scope", "party")
 expectSetting("show test status icons on target frame", "target.stateIconsTestMode", true, "stateIconsTestMode")
 expectSetting("hide test status icons on target frame", "target.stateIconsTestMode", false, "stateIconsTestMode")
+expectSetting("turn off combat indicator for player", "player.showCombatStateIndicator", false, "showCombatStateIndicator")
+expectSetting("turn off combat symbol for player", "player.showCombatStateIndicator", false, "showCombatStateIndicator")
+expectSetting("turn off combat load condition for player", "player.loadCondHideInCombat", false, "loadCondHideInCombat")
+expectSetting("turn off ready check symbol for party", "gf_party.readyCheckIcon", false, "statusIconreadyCheckIconEnabled")
+expectSettingAt("turn off combat indicator for all unitframes", 1, "player.showCombatStateIndicator", false, "showCombatStateIndicator")
+expectSettingAt("turn off combat indicator for all unitframes", 2, "target.showCombatStateIndicator", false, "showCombatStateIndicator")
+expectSettingAt("turn off ready check symbol for all group frames", 1, "gf_party.readyCheckIcon", false, "statusIconreadyCheckIconEnabled")
+expectSettingAt("turn off ready check symbol for all group frames", 2, "gf_raid.readyCheckIcon", false, "statusIconreadyCheckIconEnabled")
+expectSettingAt("turn off ready check symbol for all group frames", 3, "gf_mythicraid.readyCheckIcon", false, "statusIconreadyCheckIconEnabled")
+do
+    local parsed = A.Parse("turn off ready check symbol for all group frames")
+    for i = 1, #(parsed.changes or {}) do
+        assert(parsed.changes[i].setting.key ~= "gf_party.enabled", "Ready Check symbol bulk command must not disable Party group frames")
+    end
+end
 expectActionArg("show all status icons target", "preview_unit_status_indicator", "unit", "target")
 expectActionArg("show all status icons target", "preview_unit_status_indicator", "mode", "all")
 expectActionArg("show all group status icons", "preview_group_status_icon", "scope", "party")
@@ -641,6 +676,20 @@ expectSetting("set totem frame to anchor to bottom left", "gameplay.playerTotems
 expectSetting("turn on first dance", "gameplay.enableFirstDanceTimer", true, "enabled")
 expectSetting("set first dance size to 44", "gameplay.firstDanceIconSize", 44, "size")
 expectSetting("move first dance down 12", "gameplay.firstDanceOffsetY", nil, "offsetY", -12)
+_G.MSUF_DB.player = _G.MSUF_DB.player or {}
+_G.MSUF_DB.player.offsetX = -256
+_G.MSUF_DB.player.offsetY = -180
+_G.MSUF_DB.player.width = 275
+_G.MSUF_DB.player.height = 40
+_G.MSUF_DB.target = _G.MSUF_DB.target or {}
+_G.MSUF_DB.target.offsetX = -9
+_G.MSUF_DB.target.offsetY = 9
+_G.MSUF_DB.target.width = 275
+_G.MSUF_DB.target.height = 40
+expectSettingAt("move first dancer tracker under player frame", 1, "gameplay.firstDanceOffsetX", -256, "offsetX")
+expectSettingAt("move first dancer tracker under player frame", 2, "gameplay.firstDanceOffsetY", -238, "offsetY")
+expectSettingAt("ok now move first dance tracker under target", 1, "gameplay.firstDanceOffsetX", -9, "offsetX")
+expectSettingAt("ok now move first dance tracker under target", 2, "gameplay.firstDanceOffsetY", -49, "offsetY")
 expectSetting("turn off first dance ready", "gameplay.firstDanceShowReady", false, "showReady")
 expectSetting("turn on combat crosshair", "gameplay.enableCombatCrosshair", true, "enabled")
 expectSetting("set crosshair size to 44", "gameplay.crosshairSize", 44, "size")
