@@ -243,7 +243,9 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
 end
 
 function A._ParsePipelineGeometry(normalized, raw)
-    return A._ParseTextSlotOffsetShortcut(normalized)
+    return (P.ParseTextVisibilityShortcut and P.ParseTextVisibilityShortcut(normalized))
+        or A._ParseTextSlotOffsetShortcut(normalized)
+        or P.ParseUnitSizeMatchShortcut(normalized)
         or P.ParseGenericOffsetMove(normalized)
         or ParseUnitDetailMove(normalized)
         or ParseGroupDetailMove(normalized)
@@ -281,9 +283,12 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
         or ParseGroupSpellIndicatorAction(normalized, raw)
         or ParseGroupCornerIndicatorReset(normalized)
         or ParseGroupStatusPreview(normalized)
+        or (P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized))
         or ParseUnitStatusPreview(normalized, ctx)
         or ParseUnitStatusIndicatorReset(normalized)
         or ParseGroupStatusIconReset(normalized)
+        or (P.ParseUnitStatusIconStyle and P.ParseUnitStatusIconStyle(normalized))
+        or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
         or ParseUnitStatusIndicatorMove(normalized)
 end
 

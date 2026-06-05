@@ -178,6 +178,80 @@ local function BuildChanges(settings, value, relativeDelta, direction)
     return changes
 end
 
+function P.ParseUnitSizeMatchShortcut(text)
+    if not ContainsAny(text, {
+        "as big as", "same size as", "the same size as", "same width and height as",
+        "so gross wie", "gleich gross wie", "gleiche groesse wie", "dieselbe groesse wie",
+    }) then
+        return nil
+    end
+    if DetectGroups(text)[1] or ContainsAny(text, { "castbar", "cast bar", "class power", "class resource", "aura", "auras" }) then
+        return nil
+    end
+
+    local unitTerms = {
+        targettarget = { "targettarget", "target of target", "tot", "ziel des ziels" },
+        focustarget = { "focustarget", "focus target", "fokus ziel" },
+        player = { "player", "player frame", "spieler", "spieler frame", "self", "ich" },
+        target = { "target", "target frame", "ziel", "ziel frame" },
+        focus = { "focus", "focus frame", "fokus", "fokus frame" },
+        pet = { "pet", "pet frame", "begleiter", "begleiter frame" },
+        boss = { "boss", "boss frame", "boss frames", "bossframe", "bossframes" },
+    }
+    local function unitInFragment(fragment)
+        fragment = Normalize(fragment or "")
+        if fragment == "" then return nil end
+        for i = 1, #UNIT_ORDER do
+            local unit = UNIT_ORDER[i]
+            local terms = unitTerms[unit] or { unit }
+            for j = 1, #terms do
+                if HasPhrase(fragment, terms[j]) then return unit end
+            end
+        end
+        return nil
+    end
+    local target, source
+    local patterns = {
+        "^(.-)%s+as big as%s+(.+)$",
+        "^(.-)%s+the same size as%s+(.+)$",
+        "^(.-)%s+same size as%s+(.+)$",
+        "^(.-)%s+same width and height as%s+(.+)$",
+        "^(.-)%s+so gross wie%s+(.+)$",
+        "^(.-)%s+gleich gross wie%s+(.+)$",
+        "^(.-)%s+gleiche groesse wie%s+(.+)$",
+        "^(.-)%s+dieselbe groesse wie%s+(.+)$",
+    }
+    for i = 1, #patterns do
+        local before, after = text:match(patterns[i])
+        target = unitInFragment(before)
+        source = unitInFragment(after)
+        if target and source and target ~= source then break end
+        target, source = nil, nil
+    end
+    if not target or not source then return nil end
+
+    local widthSetting = Registry and Registry:GetSetting(target .. ".width")
+    local heightSetting = Registry and Registry:GetSetting(target .. ".height")
+    if not widthSetting or not heightSetting then return nil end
+
+    local sourceWidth = Registry and Registry:GetSetting(source .. ".width")
+    sourceWidth = sourceWidth and type(sourceWidth.get) == "function" and tonumber(sourceWidth.get()) or nil
+    local sourceHeight = Registry and Registry:GetSetting(source .. ".height")
+    sourceHeight = sourceHeight and type(sourceHeight.get) == "function" and tonumber(sourceHeight.get()) or nil
+    if sourceWidth == nil or sourceHeight == nil then return nil end
+
+    return {
+        kind = "changes",
+        changes = {
+            { setting = widthSetting, value = sourceWidth, valueLabel = tostring(sourceWidth) },
+            { setting = heightSetting, value = sourceHeight, valueLabel = tostring(sourceHeight) },
+        },
+        label = "Match unitframe size",
+        summary = "Sets the target unitframe width and height to the current source unitframe size.",
+        bulkSafe = true,
+    }
+end
+
 local function ParseUnsupportedDetailShortcut(text)
     if ContainsAny(text, { "combat timer alpha", "combat timer opacity", "combat timer transparency" }) then
         return {
@@ -664,6 +738,121 @@ local function GroupScopesOrCurrentPage(text)
         return { "party" }
     end
     return {}
+end
+
+P.TEXT_VISIBILITY_VALUE_TERMS = {
+    "current", "actual", "max", "maximum", "percent", "percentage", "pct", "%",
+    "current max", "current maximum", "current percent", "current percentage",
+    "current/max", "current / max", "current/percent", "current / percent",
+    "deficit", "missing", "only percent", "only percentage", "only %",
+    "just percent", "just percentage", "percent only", "percentage only",
+    "left hp text", "hp left text", "hp text left", "right hp text", "hp right text", "hp text right",
+    "center hp text", "centre hp text", "middle hp text", "hp center text", "hp centre text", "hp middle text",
+    "left power text", "power left text", "power text left", "right power text", "power right text", "power text right",
+    "center power text", "centre power text", "middle power text", "power center text", "power centre text", "power middle text",
+    "left mana text", "mana left text", "mana text left", "right mana text", "mana right text", "mana text right",
+    "center mana text", "centre mana text", "middle mana text", "mana center text", "mana centre text", "mana middle text",
+    "slot", "slots", "text slot", "anchor", "anchoring", "side", "left side", "right side",
+    "offset", "position", "pos", "x offset", "y offset", "move", "nudge", "shift",
+    "layer", "size", "font size", "color", "colour", "by health", "by power", "by resource", "by mana",
+}
+
+P.TEXT_VISIBILITY_VERBS = {
+    "turn off", "turn on", "disable", "disabled", "enable", "enabled", "hide", "hidden",
+    "show", "display", "visible", "aus", "deaktivieren", "deaktiviert", "ausschalten",
+    "ausgeschaltet", "ausblenden", "verstecken", "an", "aktivieren", "aktiviert",
+    "einschalten", "eingeschaltet", "anzeigen", "zeigen", "einblenden", "sichtbar",
+}
+
+function P.ParseTextVisibilityShortcut(text)
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
+    if ContainsAny(text, P.TEXT_VISIBILITY_VALUE_TERMS) then return nil end
+    if not ContainsAny(text, P.TEXT_VISIBILITY_VERBS) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then return nil end
+    local spec
+    if ContainsAny(text, { "power text", "mana text", "energy text", "resource text", "energie text", "ressource text" }) then
+        spec = { unitAttr = "showPower", groupAttr = "showPowerText", label = "Power Text" }
+    elseif ContainsAny(text, { "hp text", "health text", "life text", "leben text", "gesundheit text" }) then
+        spec = { unitAttr = "showHP", groupAttr = "showHPText", label = "HP Text" }
+    elseif ContainsAny(text, { "name text" }) then
+        spec = { unitAttr = "showName", groupAttr = "showName", label = "Name Text" }
+    end
+    if not spec then return nil end
+
+    local allScope = ContainsAny(text, {
+        "all", "all of", "for all", "every", "each",
+        "alle", "alles", "fuer alle", "jede", "jeder", "jedes", "jeweils",
+    })
+    local explicitUnits = DetectUnits(text)
+    local explicitGroups = DetectGroups(text)
+    local units = {}
+    local groups = {}
+
+    if allScope then
+        if #explicitGroups > 0 and #explicitUnits == 0 then
+            for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
+        else
+            for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
+        end
+    else
+        for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
+        for i = 1, #explicitGroups do groups[#groups + 1] = explicitGroups[i] end
+    end
+
+    if #units == 0 and #groups == 0 and not allScope then
+        local pageGroups = GroupScopesOrCurrentPage(text)
+        if #pageGroups > 0 then
+            for i = 1, #pageGroups do groups[#groups + 1] = pageGroups[i] end
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units[1] = pageUnit end
+        end
+    end
+
+    local changes = {}
+    local function AddTextVisibilityChange(key)
+        local setting = Registry and Registry:GetSetting(key)
+        if not setting then return end
+        local valueLabel = value and "on" or "off"
+        changes[#changes + 1] = {
+            setting = setting,
+            value = value,
+            valueLabel = valueLabel,
+            label = tostring(setting.label or "Text visibility") .. " -> " .. valueLabel,
+        }
+    end
+    if #units == 0 and #groups == 0 then
+        for i = 1, #ALL_UNITFRAMES do
+            AddTextVisibilityChange(tostring(ALL_UNITFRAMES[i]) .. "." .. spec.unitAttr)
+        end
+    else
+        for i = 1, #units do
+            AddTextVisibilityChange(tostring(units[i]) .. "." .. spec.unitAttr)
+        end
+        for i = 1, #groups do
+            AddTextVisibilityChange("gf_" .. tostring(groups[i]) .. "." .. spec.groupAttr)
+        end
+    end
+    if #changes == 0 then return nil end
+
+    if (#units + #groups > 1 and not allScope) or (#units == 0 and #groups == 0) then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Which " .. spec.label .. "?",
+            summary = "The command names more than one frame, so the Assistant asks which real text visibility toggle to change.",
+        }
+    end
+
+    return {
+        kind = "changes",
+        changes = changes,
+        label = spec.label .. " Visibility",
+        bulkSafe = #changes > 1,
+        summary = "Changes the registered text visibility toggle instead of a text-slot value or color mode.",
+    }
 end
 
 function A._ParseGroupAnchorTargetShortcut(text)

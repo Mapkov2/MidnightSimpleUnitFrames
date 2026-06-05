@@ -65,6 +65,7 @@ local function Normalize(text)
     text = text:gsub("%f[%w]teh%f[%W]", "the")
     text = text:gsub("%f[%w]yuo%f[%W]", "you")
     text = text:gsub("interupt", "interrupt")
+    text = text:gsub("%f[%w]turn%s+of%f[%W]", "turn off")
     text = text:gsub("first%s+dancer", "first dance")
     text = text:gsub("trennzeichen", "separator")
     text = text:gsub("trenner", "separator")
@@ -563,7 +564,11 @@ local function DetectAttribute(text, frameType)
     if ContainsAny(text, { "height", "tall", "taller", "shorter", "hoehe", "hoeher", "kleiner" }) then return "height" end
     if ContainsAny(text, { "enable", "disable", "show", "hide", "on", "off", "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden" })
         and ContainsAny(text, { "frame", "frames", "unitframe", "unitframes", "group", "gruppe" })
-        and not ContainsAny(text, { "border", "outline", "portrait", "alpha", "opacity", "texture", "font", "text", "color", "farbe" }) then
+        and not ContainsAny(text, {
+            "indicator", "indicators", "status icon", "status indicator", "icon", "icons", "symbol", "symbols",
+            "border", "outline", "portrait", "alpha", "opacity", "texture", "font", "text", "color", "farbe",
+            "power bar", "mana bar", "health bar", "hp bar", "castbar", "cast bar", "load condition",
+        }) then
         return "enabled"
     end
     return nil

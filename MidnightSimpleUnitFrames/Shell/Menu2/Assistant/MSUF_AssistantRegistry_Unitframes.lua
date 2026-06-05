@@ -80,6 +80,7 @@ for i = 1, #UNIT_KEYS do
     aliases = {}
     AddAliasesForUnit(aliases, unit, "raid marker", "raid marker")
     AddAliasesForUnit(aliases, unit, "raid marker icon", "schlachtzug marker")
+    AddAliasesForUnit(aliases, unit, "raid indicator", "raid symbol")
     RegisterUnitBoolean(unit, "raidMarker", "showRaidMarker", "Raid Marker", true, aliases, { category = "Status", reason = "MSUF_ASSISTANT_RAID_MARKER", text = true, refresh = "MSUF_RefreshRaidMarkerFrames" })
 
     if RANGE_FADE_UNITS[unit] then
@@ -321,6 +322,39 @@ local function AddVerbUnitNounAliases(out, unit, verbs, noun)
             out[#out + 1] = tostring(verb) .. " " .. tostring(unitText) .. " " .. tostring(noun)
         end
     end
+end
+
+local function ExpandStatusAliases(aliases)
+    local out = {}
+    local seen = {}
+    local function add(value)
+        value = tostring(value or "")
+        if value == "" or seen[value] then return end
+        seen[value] = true
+        out[#out + 1] = value
+    end
+    for i = 1, #(aliases or {}) do
+        local alias = tostring(aliases[i] or "")
+        add(alias)
+        if alias:find("raid marker", 1, true) then
+            add(alias:gsub(" marker", " indicator"))
+            add(alias:gsub(" marker", " icon"))
+            add(alias:gsub(" marker", " symbol"))
+        end
+        if alias:find(" icon", 1, true) then
+            add(alias:gsub(" icon", " indicator"))
+            add(alias:gsub(" icon", " symbol"))
+        end
+        if alias:find(" indicator", 1, true) then
+            add(alias:gsub(" indicator", " icon"))
+            add(alias:gsub(" indicator", " symbol"))
+        end
+        if alias:find(" symbol", 1, true) then
+            add(alias:gsub(" symbol", " icon"))
+            add(alias:gsub(" symbol", " indicator"))
+        end
+    end
+    return out
 end
 
 local function AllowedMap(values)
@@ -776,7 +810,7 @@ local STATUS_CONTROL_SPECS = {
     {
         value = "raidmarker", label = "Raid Marker", show = "showRaidMarker", defaultShow = true, size = "raidMarkerSize", defaultSize = 18,
         anchor = "raidMarkerAnchor", defaultAnchor = "TOPLEFT", x = "raidMarkerOffsetX", defaultX = 16, y = "raidMarkerOffsetY", defaultY = 3,
-        layer = "raidMarkerLayer", defaultLayer = 7, refresh = "MSUF_RefreshRaidMarkerFrames", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "target marker", "target marker icon", "target marker indicator" },
+        layer = "raidMarkerLayer", defaultLayer = 7, refresh = "MSUF_RefreshRaidMarkerFrames", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid indicator", "raid icon", "raid symbol", "target marker", "target marker icon", "target marker indicator" },
     },
     {
         value = "level", label = "Level Indicator", show = "showLevelIndicator", defaultShow = true, size = "levelIndicatorSize", defaultSize = 14,
@@ -789,7 +823,7 @@ local STATUS_CONTROL_SPECS = {
         anchor = "raidGroupNameAnchor", defaultAnchor = "NAMERIGHT", x = "raidGroupNameOffsetX", defaultX = 3, y = "raidGroupNameOffsetY", defaultY = 0,
         layer = "nameTextLayer", defaultLayer = 5, refresh = "MSUF_RefreshRaidGroupNameFrames", inlineName = true, nameAnchors = true,
         units = { player = true, target = true, targettarget = true, focustarget = true, focus = true },
-        aliases = { "raid group name", "raid group", "group number in name", "subgroup name" },
+        aliases = { "raid group name", "raid group", "group number in name", "subgroup name", "raid group indicator", "group number indicator", "subgroup indicator" },
     },
     {
         value = "eliteicon", label = "Elite / Rare Icon", show = "showEliteIcon", defaultShow = true, size = "eliteIconSize", defaultSize = 20,
@@ -802,7 +836,7 @@ local STATUS_CONTROL_SPECS = {
         value = "statusText", label = "Dead Text", show = "statusTextEnabled", defaultShow = true, size = "statusTextSize", defaultSize = 16,
         anchor = "statusTextAnchor", defaultAnchor = "CENTER", x = "statusTextOffsetX", defaultX = 0, y = "statusTextOffsetY", defaultY = 0,
         layer = "statusTextLayer", defaultLayer = 7, refresh = "MSUF_RequestStatusTextRefresh", statusRuntime = true,
-        aliases = { "dead text", "status text", "ghost text", "offline text" },
+        aliases = { "dead text", "status text", "ghost text", "offline text", "dead indicator", "ghost indicator", "offline indicator" },
     },
     {
         value = "statusCombat", label = "Combat Indicator", show = "showCombatStateIndicator", defaultShow = true, size = "combatStateIndicatorSize", defaultSize = 18,
@@ -826,6 +860,9 @@ local STATUS_CONTROL_SPECS = {
         aliases = { "incoming rez indicator", "incoming resurrection indicator", "incoming rez icon", "incoming resurrection icon", "incoming rez symbol", "incoming resurrection symbol", "rez indicator", "rez icon", "rez symbol", "resurrection indicator", "resurrection icon", "resurrection symbol" },
     },
 }
+for i = 1, #STATUS_CONTROL_SPECS do
+    STATUS_CONTROL_SPECS[i].aliases = ExpandStatusAliases(STATUS_CONTROL_SPECS[i].aliases)
+end
 
 local function NormalizeStatusPhrase(text)
     text = tostring(text or ""):lower()
@@ -1389,11 +1426,11 @@ RegisterGeneralNestedBoolean("statusIndicators", "showGhost", "statusTextGhost",
     category = "Status Icons",
     apply = function() CallGlobal("MSUF_RequestStatusTextRefresh"); ApplyUnit("player", "MSUF_ASSISTANT_STATUS_TEXT_STATE", { preview = true, text = true }) end,
 })
-RegisterGeneralNestedBoolean("statusIndicators", "showAFK", "statusTextAFK", "Dead Text Shows AFK Units", false, { "dead text afk", "status text afk", "show afk text" }, {
+RegisterGeneralNestedBoolean("statusIndicators", "showAFK", "statusTextAFK", "Dead Text Shows AFK Units", false, { "dead text afk", "status text afk", "show afk text", "afk text", "afk indicator", "afk status indicator" }, {
     category = "Status Icons",
     apply = function() CallGlobal("MSUF_RequestStatusTextRefresh"); ApplyUnit("player", "MSUF_ASSISTANT_STATUS_TEXT_STATE", { preview = true, text = true }) end,
 })
-RegisterGeneralNestedBoolean("statusIndicators", "showDND", "statusTextDND", "Dead Text Shows DND Units", false, { "dead text dnd", "status text dnd", "show dnd text" }, {
+RegisterGeneralNestedBoolean("statusIndicators", "showDND", "statusTextDND", "Dead Text Shows DND Units", false, { "dead text dnd", "status text dnd", "show dnd text", "dnd text", "dnd indicator", "dnd status indicator" }, {
     category = "Status Icons",
     apply = function() CallGlobal("MSUF_RequestStatusTextRefresh"); ApplyUnit("player", "MSUF_ASSISTANT_STATUS_TEXT_STATE", { preview = true, text = true }) end,
 })

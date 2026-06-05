@@ -795,6 +795,109 @@ function A.SetBusy(active, text)
     return A._busy
 end
 
+local BATCH_COMMAND_STARTERS = {
+    "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset", "copy",
+    "add", "put", "clear", "increase", "decrease", "raise", "lower", "detach", "attach", "embed",
+    "remove", "open", "close", "toggle", "diagnose",
+    "select", "use", "apply", "verschiebe", "verschieben", "setze", "stelle", "kopiere", "kopieren", "uebernehmen",
+    "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden",
+    "oeffne", "waehle", "nutze",
+}
+
+local function NormalizeForBatch(text)
+    if A.Normalize then return A.Normalize(text) end
+    text = tostring(text or ""):lower():gsub("[,;:!?%(%)]", " "):gsub("%s+", " ")
+    return Trim(text)
+end
+
+local function StripBatchLead(text)
+    text = Trim(text)
+    local changed = true
+    while changed do
+        changed = false
+        for _, lead in ipairs({ "also", "then", "please", "pls", "and then", "auch", "dann", "bitte", "und dann" }) do
+            local prefix = lead .. " "
+            if NormalizeForBatch(text):sub(1, #prefix) == prefix then
+                text = Trim(text:sub(#prefix + 1))
+                changed = true
+                break
+            end
+        end
+    end
+    return text
+end
+
+local function StartsBatchCommand(text)
+    local norm = NormalizeForBatch(StripBatchLead(text))
+    if norm == "" then return false end
+    for i = 1, #BATCH_COMMAND_STARTERS do
+        local starter = BATCH_COMMAND_STARTERS[i]
+        if norm == starter or norm:sub(1, #starter + 1) == starter .. " " then return true end
+    end
+    return false
+end
+
+local function SplitBatchCommands(text)
+    if A.pendingConfirmation or CurrentPendingChoices() then return nil end
+    local parts = { Trim(text) }
+    local connectors = { " and ", " then ", " und ", " dann " }
+    local changed = true
+    while changed do
+        changed = false
+        for p = 1, #parts do
+            local raw = parts[p]
+            local lower = raw:lower()
+            for c = 1, #connectors do
+                local startAt = 1
+                while true do
+                    local s, e = lower:find(connectors[c], startAt, true)
+                    if not s then break end
+                    local before = Trim(raw:sub(1, s - 1))
+                    local after = StripBatchLead(raw:sub(e + 1))
+                    if before ~= "" and after ~= "" and StartsBatchCommand(after) then
+                        parts[p] = before
+                        table.insert(parts, p + 1, after)
+                        changed = true
+                        break
+                    end
+                    startAt = e + 1
+                end
+                if changed then break end
+            end
+            if changed then break end
+        end
+    end
+    return #parts > 1 and parts or nil
+end
+
+local function BatchLine(text)
+    text = tostring(text or ""):gsub("\r", "")
+    text = text:gsub("\nNext:.-$", "")
+    local first = text:match("([^\n]+)") or text
+    return Trim(first)
+end
+
+local function TrySubmitBatch(text)
+    local parts = SplitBatchCommands(text)
+    if not parts then return nil end
+    local lines = {}
+    local applied = 0
+    for i = 1, #parts do
+        local result = A.HandleInput(parts[i])
+        if not result then
+            return { text = "I could not process command " .. tostring(i) .. ": " .. tostring(parts[i]), status = "failed" }
+        end
+        if result.status ~= "applied" and result.status ~= "info" then
+            return result
+        end
+        if result.status == "applied" then applied = applied + 1 end
+        lines[#lines + 1] = tostring(i) .. ". " .. BatchLine(result.text)
+    end
+    local textOut = "Done. I handled " .. tostring(#parts) .. " commands:\n" .. table.concat(lines, "\n")
+    if applied > 0 then textOut = AppendUndoFollowupHint(textOut) end
+    return { text = textOut, status = applied > 0 and "applied" or "info", summary = "Executed multiple Assistant commands." }
+end
+
 local function SubmitNow(text, opts)
     opts = opts or {}
     text = Trim(text)
@@ -802,7 +905,7 @@ local function SubmitNow(text, opts)
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
     end
-    local result = A.HandleInput(text)
+    local result = TrySubmitBatch(text) or A.HandleInput(text)
     if result and result.text then
         A.AddHistory("assistant", result.text, result.status, result.summary)
         if result.status == "applied" and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
