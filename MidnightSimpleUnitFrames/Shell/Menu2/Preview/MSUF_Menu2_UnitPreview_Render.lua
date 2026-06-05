@@ -9,6 +9,55 @@ _G.MSUF_NS = MSUF
 local Render = MSUF.UFPreviewRender or {}
 MSUF.UFPreviewRender = Render
 local Pick = (MSUF.MSUF2 or _G.MSUF2 or {}).Pick
+local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}
+
+local CLASS_POWER_PREVIEW_FALLBACK_COLORS = {
+    ARCANE_CHARGES = { 0.45, 0.55, 1.00 },
+    CHARGED = { 0.60, 0.20, 0.80 },
+    CHI = { 0.70, 1.00, 0.86 },
+    COMBO_POINTS = { 1.00, 0.82, 0.10 },
+    EBON_MIGHT = { 0.40, 0.80, 0.60 },
+    ESSENCE = { 0.32, 0.74, 1.00 },
+    HOLY_POWER = { 0.95, 0.86, 0.20 },
+    INSANITY = { 0.55, 0.32, 0.95 },
+    MAELSTROM = { 0.00, 0.55, 1.00 },
+    MAELSTROM_ABOVE_5 = { 1.00, 0.50, 0.00 },
+    RUNES = { 0.55, 0.85, 1.00 },
+    SOUL_FRAGMENTS = { 0.00, 0.80, 0.00 },
+    SOUL_FRAGMENTS_META = { 0.60, 0.20, 0.93 },
+    SOUL_FRAGMENTS_VENG = { 0.34, 0.06, 0.46 },
+    SOUL_SHARDS = { 0.58, 0.28, 0.92 },
+    STAGGER_GREEN = { 0.52, 1.00, 0.52 },
+    STAGGER_YELLOW = { 1.00, 0.98, 0.72 },
+    STAGGER_RED = { 1.00, 0.42, 0.42 },
+    TIP_OF_THE_SPEAR = { 0.60, 0.80, 0.20 },
+    WHIRLWIND = { 0.20, 0.80, 0.20 },
+}
+
+local COMBO_POINT_SLOT_TOKENS = {
+    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
+    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
+}
+local COMBO_POINT_RAMP_R = { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
+local COMBO_POINT_RAMP_G = { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
+local COMBO_POINT_RAMP_B = { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
+
+local function ClassPowerPreviewColorOverride(tableName, token)
+    local db = _G.MSUF_DB
+    local general = db and db.general
+    local overrides = general and general[tableName]
+    local c = overrides and token and overrides[token]
+    if type(c) ~= "table" then return nil end
+    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
+    return nil
+end
+
+local function IsChargedComboPreviewSlot(spec, bars, slot)
+    return spec and spec.token == "COMBO_POINTS"
+        and bars and bars.showChargedComboPoints ~= false
+        and spec.chargedSlots and spec.chargedSlots[slot] == true
+end
 
 function Render.Install(Preview, deps)
     if type(Preview) ~= "table" then return end
@@ -73,6 +122,131 @@ function Render.Install(Preview, deps)
         statusIncomingRes = "incomingRes",
     }
     local ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or function() end
+
+    local function ResolveClassPowerPreviewColor(token, fallbackR, fallbackG, fallbackB)
+        local r, g, b = ClassPowerPreviewColorOverride("classPowerColorOverrides", token)
+        if r then return r, g, b end
+        if type(_G.MSUF_GetPowerBarColor) == "function" and token then
+            r, g, b = _G.MSUF_GetPowerBarColor(0, token)
+            if type(r) == "number" then return r, g, b end
+        end
+        local pbc = _G.PowerBarColor
+        local c = pbc and token and pbc[token]
+        if c then
+            r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
+            if type(r) == "number" then return r, g, b end
+        end
+        c = token and CLASS_POWER_PREVIEW_FALLBACK_COLORS[token]
+        if c then return c[1], c[2], c[3] end
+        if token then
+            r, g, b = PowerColor(token)
+            if type(r) == "number" then return r, g, b end
+        end
+        return fallbackR or 1, fallbackG or 1, fallbackB or 1
+    end
+
+    local function ResolveClassPowerPreviewBaseColor(spec, bars, fallbackR, fallbackG, fallbackB)
+        if bars and bars.classPowerColorByType == false then return 1, 1, 1 end
+        return ResolveClassPowerPreviewColor(spec and spec.token, fallbackR, fallbackG, fallbackB)
+    end
+
+    local function ResolveClassPowerPreviewTextColor(fallbackR, fallbackG, fallbackB)
+        return ResolveClassPowerPreviewColor("RESOURCE_TEXT", fallbackR, fallbackG, fallbackB)
+    end
+
+    local function ResolveComboPointPreviewColor(bars, slot, baseR, baseG, baseB)
+        local mode = bars and bars.classPowerComboPointColorMode
+        if mode ~= "ramp" and mode ~= "custom" then return baseR, baseG, baseB end
+        slot = tonumber(slot) or 1
+        if slot < 1 then slot = 1 elseif slot > 7 then slot = 7 end
+        if mode == "custom" then
+            local r, g, b = ClassPowerPreviewColorOverride("classPowerColorOverrides", COMBO_POINT_SLOT_TOKENS[slot])
+            if r then return r, g, b end
+        end
+        return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
+    end
+
+    local function PreviewFillForSegment(spec, index)
+        if not spec then
+            return index <= 3 and 1 or 0
+        end
+        local mode = spec.mode or "segmented"
+        local value = tonumber(spec.value) or 0
+        if mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single" then
+            if index ~= 1 then return 0 end
+            if value < 0 then value = 0 elseif value > 1 then value = 1 end
+            return value
+        end
+        local full = math.floor(value)
+        if mode == "fractional" then
+            local partial = value - full
+            if index <= full then return 1 end
+            if index == full + 1 and partial > 0.001 then return partial end
+            return 0
+        end
+        return index <= full and 1 or 0
+    end
+
+    local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
+    local function FormatClassPowerPreviewSeconds(remaining)
+        remaining = tonumber(remaining) or 0
+        if remaining <= 0.05 then return "" end
+        return string.format("%.1f", math.floor((remaining * 10) + 0.5) / 10)
+    end
+
+    local function FillRunePreviewState(out, runeID, totalDuration)
+        out.id = runeID
+        out.total = totalDuration
+        local remaining = RUNE_PREVIEW_REMAINING[runeID]
+        if not remaining then
+            out.ready = true
+            out.elapsed = totalDuration
+            out.remaining = 0
+        else
+            out.ready = false
+            out.remaining = remaining
+            out.elapsed = totalDuration - remaining
+        end
+        return out
+    end
+
+    local function BuildRunePreviewOrder(cp, bars, spec)
+        local states = cp.runeStates
+        if not states then
+            states = {}
+            cp.runeStates = states
+        end
+        local totalDuration = tonumber(spec and spec.runeDuration) or 10
+        if totalDuration < 1 then totalDuration = 10 end
+        for i = 1, 6 do states[i] = FillRunePreviewState(states[i] or {}, i, totalDuration) end
+        for i = 7, #states do states[i] = nil end
+        local sortOrder = bars and bars.runeSortOrder
+        if sortOrder == "asc" then
+            table.sort(states, function(a, b)
+                if a.ready ~= b.ready then return a.ready == true end
+                return (a.id or 0) < (b.id or 0)
+            end)
+        elseif sortOrder == "desc" then
+            table.sort(states, function(a, b)
+                if a.ready ~= b.ready then return a.ready ~= true end
+                return (a.id or 0) < (b.id or 0)
+            end)
+        else
+            table.sort(states, function(a, b) return (a.id or 0) < (b.id or 0) end)
+        end
+        return states
+    end
+    local CPPreview = {
+        BuildRuneOrder = BuildRunePreviewOrder,
+        ColorOverride = ClassPowerPreviewColorOverride,
+        FillForSegment = PreviewFillForSegment,
+        FormatSeconds = FormatClassPowerPreviewSeconds,
+        IsCharged = IsChargedComboPreviewSlot,
+        ResolveBaseColor = ResolveClassPowerPreviewBaseColor,
+        ResolveColor = ResolveClassPowerPreviewColor,
+        ResolveComboColor = ResolveComboPointPreviewColor,
+        ResolveTextColor = ResolveClassPowerPreviewTextColor,
+    }
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
     if type(deps.ApplyPreviewFont) ~= "function" then
@@ -257,11 +431,23 @@ function Preview.Refresh(box, reason)
     local castDetached = castEnabled and CastbarDetached(key, g)
     local castPreviewVisible = castEnabled
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars or {}
+    local classPowerPreviewSpec
+    if key == "player" then
+        classPowerPreviewSpec = MSUF.MSUF2 or _G.MSUF2 or MenuState
+        if classPowerPreviewSpec.activeKey == "classpower" and type(classPowerPreviewSpec.GetClassPowerPreviewSpec) == "function" then
+            classPowerPreviewSpec = classPowerPreviewSpec.GetClassPowerPreviewSpec()
+        else
+            classPowerPreviewSpec = nil
+        end
+    end
     local powerAllowed = runtimePower and runtimePower.enabled == true
     if runtimePower == nil then powerAllowed = D.ReadPowerBarEnabled(conf, key) end
     local detachedPower = CanDetachPowerBarKey(key) and powerAllowed and ((runtimePower and runtimePower.detached == true) or (runtimePower == nil and conf.powerBarDetached == true))
     local classPowerOn = runtimeClassPower and runtimeClassPower.enabled == true
     if runtimeClassPower == nil then classPowerOn = key == "player" and (bars.showClassPower ~= false or detachedPower) end
+    if classPowerPreviewSpec then
+        classPowerOn = (bars.showClassPower ~= false or detachedPower) and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none"
+    end
     local powerFrac = tonumber(data.power) or 1
     if not detachedPower and key ~= "player" then powerFrac = 1 end
     if powerFrac < 0 then powerFrac = 0 elseif powerFrac > 1 then powerFrac = 1 end
@@ -495,21 +681,108 @@ function Preview.Refresh(box, reason)
         mock.classPower:SetSize(S(cpW), max(2, S(cpH)))
         mock.classPower:ClearAllPoints()
         mock.classPower:SetPoint("BOTTOMLEFT", mock, "TOPLEFT", S(2 + (tonumber(bars.classPowerOffsetX) or 0)), S(4 + (tonumber(bars.classPowerOffsetY) or 0)))
-        local segCount = 5
-        local gap = max(0, S(tonumber(bars.classPowerGap) or 0))
-        local segW = floor((S(cpW) - (segCount - 1) * gap) / segCount)
+        local cp = box._msufClassPowerPreviewScratch
+        if not cp then cp = {}; box._msufClassPowerPreviewScratch = cp end
+        cp.preview = classPowerPreviewSpec
+        cp.token = cp.preview and cp.preview.token
+        cp.isRune = cp.preview and cp.preview.mode == "rune"
+        cp.r, cp.g, cp.b = pr, pg, pb
+        if cp.token then cp.r, cp.g, cp.b = CPPreview.ResolveBaseColor(cp.preview, bars, pr, pg, pb) end
+        cp.filledAlpha = tonumber(bars.classPowerFilledAlpha) or 0.95
+        if cp.filledAlpha < 0 then cp.filledAlpha = 0 elseif cp.filledAlpha > 1 then cp.filledAlpha = 1 end
+        cp.emptyAlpha = tonumber(bars.classPowerEmptyAlpha) or 0.28
+        if cp.emptyAlpha < 0 then cp.emptyAlpha = 0 elseif cp.emptyAlpha > 1 then cp.emptyAlpha = 1 end
+        cp.bgAlpha = tonumber(bars.classPowerBgAlpha) or 0.30
+        if cp.bgAlpha < 0 then cp.bgAlpha = 0 elseif cp.bgAlpha > 1 then cp.bgAlpha = 1 end
+        if mock.classPower.SetBackdropColor then
+            cp.bgr, cp.bgg, cp.bgb = CPPreview.ColorOverride("classPowerBgColorOverrides", cp.token)
+            mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0, cp.bgAlpha)
+        end
+        cp.segCount = floor(tonumber(cp.preview and cp.preview.segments) or 5)
+        if cp.segCount < 1 then cp.segCount = 1 end
+        if mock.classPower.segments and cp.segCount > #mock.classPower.segments then cp.segCount = #mock.classPower.segments end
+        local previewW = S(cpW)
+        local gap = max(0, S((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)))
+        if cp.segCount > 1 then
+            local maxGap = floor((previewW - cp.segCount) / (cp.segCount - 1))
+            if maxGap < 0 then maxGap = 0 end
+            if gap > maxGap then gap = maxGap end
+        end
+        local segSpace = previewW - (cp.segCount - 1) * gap
+        if segSpace < cp.segCount then segSpace = cp.segCount end
+        local xPos, prevBoundary = 0, 0
+        cp.runeOrder = cp.isRune and CPPreview.BuildRuneOrder(cp, bars, cp.preview) or nil
+        cp.runeShowTime = bars.runeShowTime ~= false
+        if bars.runeShowTime == nil and bars.runeShowTimeText ~= nil then cp.runeShowTime = bars.runeShowTimeText == true end
+        cp.runeTextSize = max(6, S((tonumber(bars.classPowerFontSize) or 16) - 2))
         for i = 1, #mock.classPower.segments do
             local seg = mock.classPower.segments[i]
-            if i <= segCount then
+            local runeText = mock.classPower.runeTexts and mock.classPower.runeTexts[i]
+            if i <= cp.segCount then
+                local boundary = floor((segSpace * i) / cp.segCount)
+                local segW = boundary - prevBoundary
+                if segW < 1 then segW = 1 end
                 seg:Show()
                 seg:ClearAllPoints()
-                seg:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", (i - 1) * (segW + gap), 0)
-                seg:SetPoint("BOTTOMLEFT", mock.classPower, "BOTTOMLEFT", (i - 1) * (segW + gap), 0)
-                seg:SetWidth(i == segCount and (S(cpW) - (i - 1) * (segW + gap)) or segW)
-                local filled = i <= 3
-                seg:SetColorTexture(pr, pg, pb, filled and 0.95 or 0.28)
+                cp.rune = cp.runeOrder and cp.runeOrder[i] or nil
+                cp.fill = cp.rune and ((cp.rune.elapsed or 0) / (cp.rune.total or 1)) or CPPreview.FillForSegment(cp.preview, i)
+                cp.drawW = segW
+                cp.mode = cp.preview and cp.preview.mode
+                if (cp.mode == "continuous" or cp.mode == "timer_bar" or cp.mode == "stagger" or cp.mode == "aura_single" or cp.mode == "fractional") and cp.fill > 0 and cp.fill < 1 then
+                    cp.drawW = max(1, floor(segW * cp.fill + 0.5))
+                elseif cp.rune and cp.fill > 0 and cp.fill < 1 then
+                    cp.drawW = max(1, floor(segW * cp.fill + 0.5))
+                end
+                seg:SetWidth(cp.drawW)
+                if bars.classPowerFillReverse == true then
+                    seg:SetPoint("TOPRIGHT", mock.classPower, "TOPRIGHT", -xPos, 0)
+                    seg:SetPoint("BOTTOMRIGHT", mock.classPower, "BOTTOMRIGHT", -xPos, 0)
+                else
+                    seg:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", xPos, 0)
+                    seg:SetPoint("BOTTOMLEFT", mock.classPower, "BOTTOMLEFT", xPos, 0)
+                end
+                cp.sr, cp.sg, cp.sb = cp.r, cp.g, cp.b
+                cp.charged = CPPreview.IsCharged(cp.preview, bars, i)
+                if cp.charged then
+                    cp.sr, cp.sg, cp.sb = CPPreview.ResolveColor("CHARGED", 0.60, 0.20, 0.80)
+                elseif cp.token == "COMBO_POINTS" then
+                    cp.sr, cp.sg, cp.sb = CPPreview.ResolveComboColor(bars, i, cp.r, cp.g, cp.b)
+                end
+                if cp.preview and cp.preview.threshold and cp.fill > 0 and i > cp.preview.threshold then
+                    cp.sr, cp.sg, cp.sb = CPPreview.ResolveColor(cp.preview.thresholdToken, cp.sr, cp.sg, cp.sb)
+                end
+                cp.alpha = cp.fill > 0 and cp.filledAlpha or cp.emptyAlpha
+                if cp.charged and cp.fill <= 0 then cp.alpha = max(cp.alpha, 0.55) end
+                seg:SetColorTexture(cp.sr, cp.sg, cp.sb, cp.alpha)
+                if runeText then
+                    if cp.rune and cp.runeShowTime and not cp.rune.ready then
+                        cp.runeText = CPPreview.FormatSeconds(cp.rune.remaining)
+                        if cp.runeText ~= "" then
+                            ApplyPreviewFont(runeText, cp.runeTextSize)
+                            cp.tr, cp.tg, cp.tb = CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
+                            runeText:SetText(cp.runeText)
+                            runeText:SetTextColor(cp.tr, cp.tg, cp.tb, 1)
+                            runeText:ClearAllPoints()
+                            if bars.classPowerFillReverse == true then
+                                runeText:SetPoint("CENTER", mock.classPower, "TOPRIGHT", -(xPos + floor(segW * 0.5 + 0.5)), -floor(max(2, S(cpH)) * 0.5 + 0.5))
+                            else
+                                runeText:SetPoint("CENTER", mock.classPower, "TOPLEFT", xPos + floor(segW * 0.5 + 0.5), -floor(max(2, S(cpH)) * 0.5 + 0.5))
+                            end
+                            runeText:Show()
+                        else
+                            runeText:SetText("")
+                            runeText:Hide()
+                        end
+                    else
+                        runeText:SetText("")
+                        runeText:Hide()
+                    end
+                end
+                xPos = xPos + segW + gap
+                prevBoundary = boundary
             else
                 seg:Hide()
+                if runeText then runeText:Hide() end
             end
         end
         local classTextOn = bars.classPowerShowText == true
@@ -517,8 +790,9 @@ function Preview.Refresh(box, reason)
             local cpTextSize = S(tonumber(bars.classPowerFontSize) or 16)
             if cpTextSize < 7 then cpTextSize = 7 end
             ApplyPreviewFont(mock.classPower.text, cpTextSize)
-            mock.classPower.text:SetText("3")
-            mock.classPower.text:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
+            mock.classPower.text:SetText((cp.preview and cp.preview.previewText) or "3")
+            cp.tr, cp.tg, cp.tb = CPPreview.ResolveTextColor(fr or 1, fg or 1, fb or 1)
+            mock.classPower.text:SetTextColor(cp.tr, cp.tg, cp.tb, 1)
             mock.classPower.text:ClearAllPoints()
             mock.classPower.text:SetPoint("CENTER", mock.classPower, "CENTER", S(tonumber(bars.classPowerTextOffsetX) or 0), S(tonumber(bars.classPowerTextOffsetY) or 0))
             mock.classPower.text:Show()

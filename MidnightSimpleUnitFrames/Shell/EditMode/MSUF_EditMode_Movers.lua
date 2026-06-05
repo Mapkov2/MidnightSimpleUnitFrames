@@ -703,6 +703,9 @@ _G.MSUF_SyncAllUnitPreviews = function()
     if IsConfigCombatLocked() then
         _G.MSUF_PreviewTestMode = false
         _G.MSUF_BossTestMode = false
+        if type(_G.MSUF_HideAllCastbarPreviews) == "function" then
+            _G.MSUF_HideAllCastbarPreviews()
+        end
         return
     end
 
@@ -819,6 +822,9 @@ _G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
     local g = db.general
     local active = EM2.State and EM2.State.IsActive()
     g.castbarPlayerPreviewEnabled = active and true or false
+    if not active and type(_G.MSUF_HideAllCastbarPreviews) == "function" then
+        _G.MSUF_HideAllCastbarPreviews()
+    end
 
     for _, name in ipairs(CASTBAR_REFRESH_FUNCS) do
         local fn = _G[name]

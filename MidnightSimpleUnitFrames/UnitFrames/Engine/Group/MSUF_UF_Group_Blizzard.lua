@@ -9,6 +9,7 @@ MSUF.GF = GF
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local UIParent = UIParent
+local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
 local GetNumGroupMembers = GetNumGroupMembers
 local hooksecurefunc = hooksecurefunc
@@ -470,7 +471,13 @@ end
 
 local function PartyScopeActive()
     local party = GF.GetConf and GF.GetConf("party") or nil
-    return party and party.enabled == true and not (IsInRaid and IsInRaid())
+    if not (party and party.enabled == true) or (IsInRaid and IsInRaid()) then
+        return false
+    end
+    if IsInGroup and IsInGroup() then
+        return true
+    end
+    return party.showSolo == true and party.showPlayer ~= false
 end
 
 local function RaidScopeActive()

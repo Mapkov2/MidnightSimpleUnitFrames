@@ -40,12 +40,15 @@ local LABELS = {
 }
 
 local _containers = {}
-local _runtimePreviewAnchors = {}
+local _previewAnchors = {}
 local _popups = {}
 local _em2Active = false
 local _previewShownByEM2 = true
 local _activePreviewKind
 local _gfButton
+local DRAG_WIRE_VERSION = 2
+local _childScratch = {}
+local _childScratchCount = 0
 
 local function GF()
     return MSUF and MSUF.GF
@@ -160,26 +163,18 @@ local function EnsureRuntimeAnchor(kind)
     return nil
 end
 
-local function EnsureRuntimePreviewAnchor(kind)
+local function EnsurePreviewAnchor(kind)
     kind = NormalizeKind(kind)
-    local runtime = kind and EnsureRuntimeAnchor(kind)
-    if not runtime then return nil end
-
-    local anchor = _runtimePreviewAnchors[kind]
+    if not kind then return nil end
+    local anchor = _previewAnchors[kind]
     if not anchor then
-        anchor = CreateFrame("Frame", "MSUF_GFRuntimePreviewAnchor_" .. kind, UIParent)
+        anchor = CreateFrame("Frame", "MSUF_GF_EM2PreviewAnchor_" .. kind, UIParent)
         anchor:EnableMouse(false)
         anchor._msufIsGroupFrame = true
         anchor._msufGFKind = kind
-        anchor._msufGFRuntimePreviewAnchor = true
-        _runtimePreviewAnchors[kind] = anchor
+        anchor._msufGFLogicalPreviewAnchor = true
+        _previewAnchors[kind] = anchor
     end
-
-    if anchor:GetParent() ~= UIParent then anchor:SetParent(UIParent) end
-    anchor:ClearAllPoints()
-    anchor:SetSize(max((runtime.GetWidth and runtime:GetWidth()) or 1, 1), max((runtime.GetHeight and runtime:GetHeight()) or 1, 1))
-    anchor:SetPoint("CENTER", runtime, "CENTER", 0, 0)
-    anchor:Show()
     return anchor
 end
 
@@ -259,11 +254,18 @@ local function IsPreviewActive(kind)
     if not (_em2Active and _previewShownByEM2 and KindEnabled(kind) and ShouldShowPreviewKind(kind)) then
         return false
     end
+    if UsesRuntimeAnchor(kind) then
+        return true
+    end
     local gf = GF()
-    if HasNativePreviewAPI(gf) then
+    if HasNativePreviewAPI(gf) and not ConfigLocked() then
         return gf._previewActive and gf._previewActive[kind] == true
     end
     return true
+end
+
+local function EditDragActive()
+    return EM2.Ticker and EM2.Ticker.IsDragging and EM2.Ticker.IsDragging()
 end
 
 local function EnsureContainer(kind)
@@ -271,6 +273,8 @@ local function EnsureContainer(kind)
     local f = CreateFrame("Frame", "MSUF_GF_Container_" .. kind, UIParent, "BackdropTemplate")
     f:SetSize(120, 40)
     f:SetPoint("CENTER", UIParent, "CENTER", GetDefaultCenter(kind))
+    f:SetFrameStrata("FULLSCREEN")
+    f:SetFrameLevel(320)
     f:SetClampedToScreen(true)
     f:EnableMouse(true)
     f:Hide()
@@ -310,9 +314,127 @@ local function GetPositionCount(kind)
     return GetRequestedPreviewCount(kind)
 end
 
+local function FrameRectToUI(frame)
+    if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
+        return nil
+    end
+    if frame.IsShown and not frame:IsShown() then return nil end
+    local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
+    if not (l and r and t and b) then return nil end
+    local fS = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+    local uiS = UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+    if not fS or fS == 0 then fS = 1 end
+    if not uiS or uiS == 0 then uiS = 1 end
+    local ratio = fS / uiS
+    return l * ratio, r * ratio, t * ratio, b * ratio
+end
+
+local function ExpandBounds(bounds, frame)
+    local l, r, t, b = FrameRectToUI(frame)
+    if not l then return bounds end
+    if not bounds then
+        return { l = l, r = r, t = t, b = b }
+    end
+    if l < bounds.l then bounds.l = l end
+    if r > bounds.r then bounds.r = r end
+    if t > bounds.t then bounds.t = t end
+    if b < bounds.b then bounds.b = b end
+    return bounds
+end
+
+local function FrameCenterToUI(frame)
+    local l, r, t, b = FrameRectToUI(frame)
+    if not l then return nil, nil end
+    return (l + r) * 0.5, (b + t) * 0.5
+end
+
+local function PreviewBounds(kind)
+    local gf = GF()
+    local frames = gf and gf._previewFrames and gf._previewFrames[kind]
+    local bounds
+    if frames then
+        for i = 1, #frames do
+            bounds = ExpandBounds(bounds, frames[i])
+        end
+    end
+    if bounds then return bounds end
+    return ExpandBounds(nil, gf and gf._previewLayoutFrame and gf._previewLayoutFrame[kind])
+end
+
+local function CaptureChildren(...)
+    local count = select("#", ...)
+    for i = 1, count do
+        _childScratch[i] = select(i, ...)
+    end
+    for i = count + 1, _childScratchCount do
+        _childScratch[i] = nil
+    end
+    _childScratchCount = count
+    return count
+end
+
+local function RuntimeBounds(kind)
+    local gf = GF()
+    local headerKey = RuntimeHeaderKey(kind)
+    local header = gf and gf.headers and headerKey and gf.headers[headerKey]
+    local bounds
+    if header and header.GetChildren then
+        local count = CaptureChildren(header:GetChildren())
+        for i = 1, count do
+            bounds = ExpandBounds(bounds, _childScratch[i])
+        end
+    end
+    if bounds then return bounds end
+    return ExpandBounds(nil, RuntimeAnchor(kind))
+end
+
+local function SetFrameToBounds(frame, bounds)
+    if not (frame and bounds) then return false end
+    local w = max((bounds.r or 0) - (bounds.l or 0), 1)
+    local h = max((bounds.t or 0) - (bounds.b or 0), 1)
+    frame:SetSize(w, h)
+    frame:ClearAllPoints()
+    frame:SetPoint("TOPLEFT", UIParent, "TOPLEFT", floor((bounds.l or 0) + 0.5), floor(((bounds.t or 0) - UIParent:GetHeight()) + 0.5))
+    return true
+end
+
+local function HidePreviewVisualsForCombat()
+    local gf = GF()
+    if gf and type(gf.HidePreview) == "function" then
+        for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+            gf.HidePreview(kind)
+        end
+    end
+    for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+        if _containers[kind] then _containers[kind]:Hide() end
+        if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
+    end
+end
+
+local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
+    local anchor = EnsurePreviewAnchor(kind)
+    if not anchor then return nil end
+    anchor:SetSize(max(totalW or 1, 1), max(totalH or 1, 1))
+    anchor:ClearAllPoints()
+    local defX, defY = GetDefaultCenter(kind)
+    local cx = tonumber(conf and conf.offsetX)
+    local cy = tonumber(conf and conf.offsetY)
+    if cx == nil then cx = defX end
+    if cy == nil then cy = defY end
+    local point = AnchorPoint(conf)
+    anchor:SetPoint(point, ResolveAnchorFrame(conf), point, floor(cx + 0.5), floor(cy + 0.5))
+    anchor:Show()
+    return anchor
+end
+
 local function SyncContainer(kind)
     kind = NormalizeKind(kind)
     if not kind then return nil end
+    if ConfigLocked() then
+        if _containers[kind] then _containers[kind]:Hide() end
+        if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
+        return nil
+    end
     local conf = GetConf(kind)
     if not conf then return nil end
     local container = EnsureContainer(kind)
@@ -324,26 +446,74 @@ local function SyncContainer(kind)
     end
 
     local totalW, totalH = tonumber(conf.width) or 80, tonumber(conf.height) or 32
+    local gridDX, gridDY = 0, 0
     if gf and type(gf.GetGridMetrics) == "function" then
-        local _, _, w, h = gf.GetGridMetrics(kind, GetPositionCount(kind))
+        local dx, dy, w, h = gf.GetGridMetrics(kind, GetPositionCount(kind))
+        gridDX = tonumber(dx) or 0
+        gridDY = tonumber(dy) or 0
         totalW = tonumber(w) or totalW
         totalH = tonumber(h) or totalH
     end
 
-    local defX, defY = GetDefaultCenter(kind)
-    local cx = tonumber(conf.offsetX)
-    local cy = tonumber(conf.offsetY)
-    if cx == nil then cx = defX end
-    if cy == nil then cy = defY end
+    local runtime = RuntimeAnchor(kind) or ((not ConfigLocked()) and EnsureRuntimeAnchor(kind)) or nil
+    if runtime then
+        runtime.msufConfigKey = KIND_TO_KEY[kind]
+        runtime._msufIsGroupFrame = true
+        runtime._msufGFKind = kind
+        runtime._msufGFDragCenterToGridX = gridDX
+        runtime._msufGFDragCenterToGridY = gridDY
+        totalW = max((runtime.GetWidth and runtime:GetWidth()) or totalW, totalW, 1)
+        totalH = max((runtime.GetHeight and runtime:GetHeight()) or totalH, totalH, 1)
+    end
 
     container:SetSize(max(totalW, 1), max(totalH, 1))
+    container._msufGFGridWidth = max(totalW, 1)
+    container._msufGFGridHeight = max(totalH, 1)
     container:ClearAllPoints()
-    local point = AnchorPoint(conf)
-    container:SetPoint(point, ResolveAnchorFrame(conf), point, floor(cx + 0.5), floor(cy + 0.5))
-    local fallbackVisuals = not HasNativePreviewAPI(gf)
+    if runtime then
+        container:SetPoint("CENTER", runtime, "CENTER", 0, 0)
+        container._msufGFLiveAnchor = runtime
+        container._msufGFLogicalAnchor = nil
+    else
+        container._msufGFLiveAnchor = nil
+        container._msufGFLogicalAnchor = PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
+        if container._msufGFLogicalAnchor then
+            container:SetPoint("CENTER", container._msufGFLogicalAnchor, "CENTER", 0, 0)
+        else
+            local defX, defY = GetDefaultCenter(kind)
+            local cx = tonumber(conf.offsetX)
+            local cy = tonumber(conf.offsetY)
+            if cx == nil then cx = defX end
+            if cy == nil then cy = defY end
+            local point = AnchorPoint(conf)
+            container:SetPoint(point, ResolveAnchorFrame(conf), point, floor(cx + 0.5), floor(cy + 0.5))
+        end
+    end
+    local nativeActive = HasNativePreviewAPI(gf)
+        and not ConfigLocked()
+        and gf._previewActive
+        and gf._previewActive[kind] == true
+    local fallbackVisuals = not (nativeActive or runtime)
     if container._msufGFEditBg then container._msufGFEditBg:SetShown(fallbackVisuals) end
     if container._msufGFEditEdge then container._msufGFEditEdge:SetShown(fallbackVisuals) end
     if container._msufGFEditLabel then container._msufGFEditLabel:SetShown(fallbackVisuals) end
+    local bounds = runtime and RuntimeBounds(kind) or PreviewBounds(kind)
+    local centerToGridX, centerToGridY = gridDX, gridDY
+    if bounds then
+        local anchor = runtime or container._msufGFLogicalAnchor
+        local anchorCX, anchorCY = FrameCenterToUI(anchor)
+        if anchorCX and anchorCY then
+            centerToGridX = anchorCX - ((bounds.l + bounds.r) * 0.5)
+            centerToGridY = anchorCY - ((bounds.b + bounds.t) * 0.5)
+        end
+        SetFrameToBounds(container, bounds)
+    end
+    container._msufGFDragCenterToGridX = centerToGridX
+    container._msufGFDragCenterToGridY = centerToGridY
+    if runtime then
+        runtime._msufGFDragCenterToGridX = centerToGridX
+        runtime._msufGFDragCenterToGridY = centerToGridY
+    end
     container:Show()
     if not fallbackVisuals then
         local layout = gf and gf._previewLayoutFrame and gf._previewLayoutFrame[kind]
@@ -351,7 +521,6 @@ local function SyncContainer(kind)
             layout.msufConfigKey = KIND_TO_KEY[kind]
             layout._msufIsGroupFrame = true
             layout._msufGFKind = kind
-            return layout
         end
     end
     return container
@@ -367,6 +536,7 @@ local function SyncMoversSoon(delay)
     if not C_Timer then return end
     C_Timer.After(delay or 0, function()
         if not _em2Active then return end
+        if ConfigLocked() then return end
         SyncAllContainers()
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     end)
@@ -379,6 +549,61 @@ local function RefreshGFPositionUI(kind)
         _G.MSUF_EM2_SyncGFPopups()
     end
     if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
+end
+
+local function BeginGroupDrag(frame, kind, source)
+    kind = NormalizeKind(kind)
+    local key = kind and KIND_TO_KEY[kind]
+    local cfg = key and Reg.Get and Reg.Get(key)
+    local mover = key and EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
+    if not (key and cfg and mover and EM2.Ticker) then return end
+    if BlockConfigLocked() then return end
+    frame._msufGFEM2Dragging = true
+    if EM2.Focus and EM2.Focus.SetSelection then
+        EM2.Focus.SetSelection(key, nil, nil, { source = source or "group-drag" })
+    end
+    if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("unit", key) end
+    EM2.Ticker.BeginDrag(mover, key, cfg)
+end
+
+local function EndGroupDrag(frame)
+    if not (frame and frame._msufGFEM2Dragging) then return end
+    frame._msufGFEM2Dragging = nil
+    frame._msufGFEM2LastDragEnd = GetTime and GetTime() or 0
+    if EM2.Ticker then EM2.Ticker.EndDrag() end
+    if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
+end
+
+local function ClickGroupFrame(frame, kind, button, source)
+    if button ~= "LeftButton" and button ~= "RightButton" then return end
+    if frame and frame._msufGFEM2Dragging then return end
+    local now = GetTime and GetTime() or 0
+    if frame and frame._msufGFEM2LastDragEnd and (now - frame._msufGFEM2LastDragEnd) < 0.12 then return end
+    kind = NormalizeKind(kind)
+    local key = kind and KIND_TO_KEY[kind]
+    if not key then return end
+    if EM2.State then EM2.State.SetUnitKey(key) end
+    if EM2.Focus and EM2.Focus.SetSelection then
+        EM2.Focus.SetSelection(key, nil, nil, { source = source or "group-preview" })
+    end
+    if EM2.Popups and EM2.Popups.Open then
+        EM2.Popups.Open(key, frame)
+    end
+end
+
+local function WireDragFrame(frame, kind, source)
+    if not frame or frame._msufGFEM2DragWired == DRAG_WIRE_VERSION then return end
+    frame._msufGFEM2DragWired = DRAG_WIRE_VERSION
+    frame._msufGFEM2Kind = kind
+    if frame.RegisterForDrag then frame:RegisterForDrag("LeftButton") end
+    if frame.EnableMouse then frame:EnableMouse(true) end
+    frame:SetScript("OnDragStart", function(self)
+        BeginGroupDrag(self, self._msufGFEM2Kind or kind, source)
+    end)
+    frame:SetScript("OnDragStop", EndGroupDrag)
+    frame:SetScript("OnMouseUp", function(self, button)
+        ClickGroupFrame(self, self._msufGFEM2Kind or kind, button, source)
+    end)
 end
 
 local function WirePreviewMouse(kind)
@@ -401,34 +626,11 @@ local function WirePreviewMouse(kind)
                 if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("group-preview") end
             end)
             f:SetScript("OnDragStart", function(self)
-                local key = KIND_TO_KEY[self._msufGFEM2Kind or kind]
-                local cfg = key and Reg.Get(key)
-                local mover = key and EM2.Movers and EM2.Movers.Get and EM2.Movers.Get(key)
-                if not (key and cfg and mover and EM2.Ticker) then return end
-                if BlockConfigLocked() then return end
-                self._msufGFEM2Dragging = true
-                if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "group-drag" }) end
-                if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("unit", key) end
-                EM2.Ticker.BeginDrag(mover, key, cfg)
+                BeginGroupDrag(self, self._msufGFEM2Kind or kind, "group-preview")
             end)
-            f:SetScript("OnDragStop", function(self)
-                if not self._msufGFEM2Dragging then return end
-                self._msufGFEM2Dragging = nil
-                self._msufGFEM2LastDragEnd = GetTime and GetTime() or 0
-                if EM2.Ticker then EM2.Ticker.EndDrag() end
-                if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
-            end)
+            f:SetScript("OnDragStop", EndGroupDrag)
             f:SetScript("OnClick", function(self, button)
-                if button ~= "LeftButton" and button ~= "RightButton" then return end
-                if self._msufGFEM2Dragging then return end
-                local now = GetTime and GetTime() or 0
-                if self._msufGFEM2LastDragEnd and (now - self._msufGFEM2LastDragEnd) < 0.12 then return end
-                local key = KIND_TO_KEY[self._msufGFEM2Kind or kind]
-                if EM2.State then EM2.State.SetUnitKey(key) end
-                if EM2.Focus and EM2.Focus.SetSelection then EM2.Focus.SetSelection(key, nil, nil, { source = "group-preview" }) end
-                if EM2.Popups and EM2.Popups.Open then
-                    EM2.Popups.Open(key, self)
-                end
+                ClickGroupFrame(self, self._msufGFEM2Kind or kind, button, "group-preview")
             end)
         elseif f then
             f._msufGFEM2Kind = kind
@@ -437,49 +639,56 @@ local function WirePreviewMouse(kind)
     end
 end
 
-local function HideNativeHeaders()
-    local gf = GF()
-    if not (gf and gf.headers) then return end
-    if ConfigLocked() then return end
-    if gf.headers.party then gf.headers.party:Hide() end
-    if type(gf.HideRaidHeaders) == "function" then
-        gf.HideRaidHeaders(true)
-    elseif gf.headers.raid then
-        gf.headers.raid:Hide()
-    end
-    if gf.headers.mythicraid then gf.headers.mythicraid:Hide() end
-end
-
 local function ShowPreviewOnly()
     local gf = GF()
     if not gf then return end
     _previewShownByEM2 = true
+    if ConfigLocked() then
+        HidePreviewVisualsForCombat()
+        return
+    end
 
-    if HasNativePreviewAPI(gf) then
+    local nativeAllowed = HasNativePreviewAPI(gf) and not ConfigLocked()
+    local needsLiveVisibility = false
+    if nativeAllowed then
         for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
             if KindEnabled(kind) and ShouldShowPreviewKind(kind) then
-                gf.SetPreviewAnchor(kind, EnsureRuntimePreviewAnchor(kind) or EnsureContainer(kind))
-                gf.ShowPreview(kind, GetRequestedPreviewCount(kind))
-                WirePreviewMouse(kind)
+                local liveAnchor = UsesRuntimeAnchor(kind) and (RuntimeAnchor(kind) or EnsureRuntimeAnchor(kind)) or nil
+                if liveAnchor then
+                    gf.SetPreviewAnchor(kind, nil)
+                    gf.HidePreview(kind)
+                    needsLiveVisibility = true
+                else
+                    gf.SetPreviewAnchor(kind, EnsurePreviewAnchor(kind) or EnsureContainer(kind))
+                    gf.ShowPreview(kind, GetRequestedPreviewCount(kind))
+                    WirePreviewMouse(kind)
+                end
             else
                 gf.SetPreviewAnchor(kind, nil)
                 gf.HidePreview(kind)
-                if _runtimePreviewAnchors[kind] then _runtimePreviewAnchors[kind]:Hide() end
             end
         end
-        HideNativeHeaders()
+        if needsLiveVisibility and gf.UpdateGroupVisibility then
+            gf.UpdateGroupVisibility()
+        end
     else
         if type(gf.RefreshAll) == "function" and not ConfigLocked() then
             gf.RefreshAll()
-        elseif type(gf.RefreshVisuals) == "function" then
+        elseif type(gf.RefreshVisuals) == "function" and not ConfigLocked() then
             gf.RefreshVisuals()
         end
     end
 
     SyncAllContainers()
     for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
-        if gf.RefreshPreviewLayout then gf.RefreshPreviewLayout(kind) end
+        if _containers[kind] then WireDragFrame(_containers[kind], kind, "group-container") end
     end
+    for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
+        if nativeAllowed and gf.RefreshPreviewLayout and gf._previewActive and gf._previewActive[kind] then
+            gf.RefreshPreviewLayout(kind)
+        end
+    end
+    SyncAllContainers()
     SyncMoversSoon(0)
     SyncMoversSoon(0.05)
 end
@@ -487,6 +696,10 @@ end
 local function HidePreviewOnly()
     local gf = GF()
     _previewShownByEM2 = false
+    if ConfigLocked() then
+        HidePreviewVisualsForCombat()
+        return
+    end
 
     if HasNativePreviewAPI(gf) then
         for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
@@ -497,13 +710,18 @@ local function HidePreviewOnly()
 
     for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
         if _containers[kind] then _containers[kind]:Hide() end
-        if _runtimePreviewAnchors[kind] then _runtimePreviewAnchors[kind]:Hide() end
+        if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
     end
     if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
 end
 
 local function RefreshEditModePreviewAfterRuntimeChange()
     if not _em2Active then return end
+    if EditDragActive() then return end
+    if ConfigLocked() then
+        HidePreviewVisualsForCombat()
+        return
+    end
     local gf = GF()
     if _previewShownByEM2 and HasNativePreviewAPI(gf) then
         ShowPreviewOnly()
@@ -600,7 +818,7 @@ local function ExitEditMode()
 
     for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
         if _containers[kind] then _containers[kind]:Hide() end
-        if _runtimePreviewAnchors[kind] then _runtimePreviewAnchors[kind]:Hide() end
+        if _previewAnchors[kind] then _previewAnchors[kind]:Hide() end
         if _popups[kind] then _popups[kind]:Hide() end
     end
 
@@ -771,6 +989,22 @@ local function InstallRuntimeHooks()
         end
         _G.MSUF_GF_RebuildAll = gf.RebuildAll
     end
+end
+
+local combatHookFrame
+local function InstallCombatHooks()
+    if combatHookFrame then return end
+    combatHookFrame = CreateFrame("Frame")
+    combatHookFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    combatHookFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    combatHookFrame:SetScript("OnEvent", function(_, event)
+        if not _em2Active then return end
+        if event == "PLAYER_REGEN_DISABLED" then
+            HidePreviewVisualsForCombat()
+        elseif _previewShownByEM2 then
+            ShowPreviewOnly()
+        end
+    end)
 end
 
 local function San(v, d)
@@ -1338,11 +1572,13 @@ init:SetScript("OnEvent", function(self)
             InstallStateHooks()
             InstallHUDToggle()
             InstallRuntimeHooks()
+            InstallCombatHooks()
         end)
     else
         RegisterGF()
         InstallStateHooks()
         InstallHUDToggle()
         InstallRuntimeHooks()
+        InstallCombatHooks()
     end
 end)

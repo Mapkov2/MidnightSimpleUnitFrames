@@ -1094,10 +1094,18 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
     mock.classPower:SetBackdropBorderColor(0, 0, 0, 1)
     mock.classPower.segments = {}
-    for i = 1, 6 do
+    mock.classPower.runeTexts = {}
+    for i = 1, 10 do
         local seg = mock.classPower:CreateTexture(nil, "ARTWORK")
         seg:SetTexture(TEX_W8)
         mock.classPower.segments[i] = seg
+        local rfs = MakeFS(mock.classPower, "OVERLAY", 8)
+        rfs:SetJustifyH("CENTER")
+        if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
+        if rfs.SetShadowColor then rfs:SetShadowColor(0, 0, 0, 1) end
+        if rfs.SetShadowOffset then rfs:SetShadowOffset(1, -1) end
+        rfs:Hide()
+        mock.classPower.runeTexts[i] = rfs
     end
     mock.classPower.text = MakeFS(mock.classPower, "OVERLAY", 12)
     mock.classPower.text:SetJustifyH("CENTER")

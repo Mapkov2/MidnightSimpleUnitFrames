@@ -1068,6 +1068,44 @@ local function ResolveAnchor(key, conf)
     return anchor
 end
 
+local GROUP_VALID_POINTS = {
+    CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
+    TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true,
+}
+
+local function ResolveGroupAnchor(conf)
+    local name = conf and (conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)
+    if type(name) == "string" and name ~= "" and name ~= "FREE" and name ~= "UIParent" then
+        local UF = MSUF and MSUF.UF
+        if UF and UF.frames and UF.frames[name] then return UF.frames[name] end
+        if _G[name] then return _G[name] end
+    end
+    return UIParent
+end
+
+local function GroupAnchorPoint(conf)
+    local point = conf and (conf.anchorPoint or conf.point) or "CENTER"
+    if not GROUP_VALID_POINTS[point] then point = "CENTER" end
+    return point
+end
+
+local function GroupOffsetFromCenter(bar, conf, centerX, centerY, gridDX, gridDY)
+    local point = GroupAnchorPoint(conf)
+    local anchor = ResolveGroupAnchor(conf)
+    local ax, ay = PointXY(anchor, point)
+    if not (ax and ay) then
+        ax = ((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0) * 0.5
+        ay = ((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0) * 0.5
+    end
+
+    local bw = tonumber(bar and bar._msufGFGridWidth) or (bar and bar.GetWidth and bar:GetWidth()) or 0
+    local bh = tonumber(bar and bar._msufGFGridHeight) or (bar and bar.GetHeight and bar:GetHeight()) or 0
+    local pointDX, pointDY = PointOffsetFromCenter(point, bw, bh)
+    local targetX = (centerX or 0) + pointDX + (tonumber(gridDX) or 0)
+    local targetY = (centerY or 0) + pointDY + (tonumber(gridDY) or 0)
+    return round(targetX - ax), round(targetY - ay)
+end
+
 local tickerFrame
 local activeDrag
 local idleSyncAcc = 0
@@ -1144,6 +1182,36 @@ local function ApplyCastbarDragPosition(d, centerX, centerY)
     return true
 end
 
+local function ApplyGroupDragPosition(d, centerX, centerY)
+    if not (d and d.conf and d.bar) then return false end
+    if IsConfigCombatLocked() then return false end
+    local bar = d.bar
+    local gridDX = tonumber(bar._msufGFDragCenterToGridX) or 0
+    local gridDY = tonumber(bar._msufGFDragCenterToGridY) or 0
+    local targetCX = (centerX or d.startCX or 0) + (d.barCenterDX or 0)
+    local targetCY = (centerY or d.startCY or 0) + (d.barCenterDY or 0)
+    local anchorCX = targetCX + gridDX
+    local anchorCY = targetCY + gridDY
+    local nextX, nextY = GroupOffsetFromCenter(bar, d.conf, targetCX, targetCY, gridDX, gridDY)
+    local changed = d.conf.offsetX ~= nextX or d.conf.offsetY ~= nextY
+    if changed then
+        d.conf.offsetX = nextX
+        d.conf.offsetY = nextY
+    end
+    bar._msufDragActive = true
+    bar:ClearAllPoints()
+    bar:SetPoint("CENTER", UIParent, "BOTTOMLEFT", targetCX, targetCY)
+    local liveAnchor = bar._msufGFLiveAnchor
+    local logicalAnchor = bar._msufGFLogicalAnchor
+    local anchor = liveAnchor or logicalAnchor
+    if anchor and anchor ~= bar and anchor.ClearAllPoints and anchor.SetPoint then
+        anchor._msufDragActive = true
+        anchor:ClearAllPoints()
+        anchor:SetPoint("CENTER", UIParent, "BOTTOMLEFT", anchorCX, anchorCY)
+    end
+    return changed
+end
+
 local function SyncCastbarPopupDuringDrag(d, elapsed)
     if not d then return end
     d.popupSyncAcc = (d.popupSyncAcc or 0) + (elapsed or 0)
@@ -1207,35 +1275,15 @@ local function OnUpdate(self, elapsed)
         local bar = d.bar
         if bar and not IsConfigCombatLocked() then
             bar._msufDragActive = true
-            local anchor = d.anchor
             local conf = d.conf
 
             if d.isGroupFrame then
-                local bw = bar:GetWidth() or 0
-                local bh = bar:GetHeight() or 0
-                local gridDX = tonumber(bar._msufGFDragCenterToGridX) or 0
-                local gridDY = tonumber(bar._msufGFDragCenterToGridY) or 0
-                if conf.positionMode == "TOPLEFT_V2" then
-                    local nextX = round(snapCX - d.screenW * 0.5 - bw * 0.5 + gridDX)
-                    local nextY = round(snapCY - d.screenH * 0.5 + bh * 0.5 + gridDY)
-                    if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
-                        conf.offsetX = nextX
-                        conf.offsetY = nextY
-                        bar:ClearAllPoints()
-                        bar:SetPoint("TOPLEFT", UIParent, "CENTER", conf.offsetX - gridDX, conf.offsetY - gridDY)
-                    end
-                else
-                    local nextX = round(snapCX - d.screenW * 0.5 + gridDX)
-                    local nextY = round(snapCY - d.screenH * 0.5 + gridDY)
-                    if conf.offsetX ~= nextX or conf.offsetY ~= nextY then
-                        conf.offsetX = nextX
-                        conf.offsetY = nextY
-                        bar:ClearAllPoints()
-                        bar:SetPoint("CENTER", UIParent, "CENTER", conf.offsetX - gridDX, conf.offsetY - gridDY)
-                    end
+                ApplyGroupDragPosition(d, snapCX, snapCY)
+                if d.mover._coordFS then
+                    d.mover._coordFS:SetText(format("%.0f, %.0f", conf.offsetX or 0, conf.offsetY or 0))
                 end
-                bar._msufDragActive = true
             else
+                local anchor = d.anchor
                 --- Compute where bar center IS in screen pixels after hypothetical move
                 --- snapCX/snapCY are in UIParent coords.
                 --- Bar center in screen pixels = snapCX * uiScale
@@ -1351,7 +1399,8 @@ function Ticker.BeginDrag(mover, key, cfg)
         castbarUnit = key:sub(9)
     end
 
-    local anchor = isCastbar and UIParent or ResolveAnchor(key, conf)
+    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid") or (bar and bar._msufIsGroupFrame == true) or false
+    local anchor = isCastbar and UIParent or (isGroupFrame and ResolveGroupAnchor(conf)) or ResolveAnchor(key, conf)
 
     local bossAdjX, bossAdjY
     if bar and conf and key and key:sub(1,4) == "boss" and bar.unit then
@@ -1375,7 +1424,6 @@ function Ticker.BeginDrag(mover, key, cfg)
         end
     end
 
-    local isGroupFrame = (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid") or (bar and bar._msufIsGroupFrame == true) or false
     local snapEnabled = EM2.Snap and EM2.Snap.IsEnabled and EM2.Snap.IsEnabled() or false
     --- Native StartMoving regressed live profiles because the overlay/db sync
     --- cost more than the manual drag path. Keep one predictable path.
@@ -1487,6 +1535,8 @@ function Ticker.EndDrag()
     activeDrag = nil
 
     if d.bar then d.bar._msufDragActive = false end
+    if d.bar and d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
+    if d.bar and d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
     if EM2.Snap and EM2.Snap.HideGuides then EM2.Snap.HideGuides() end
 
     local mover = d.mover
@@ -1517,17 +1567,16 @@ function Ticker.EndDrag()
             if C_Timer and C_Timer.After then C_Timer.After(0.08, RefreshHomeDashboard) else RefreshHomeDashboard() end
         end
         if d.isGroupFrame and d.conf then
-            local gridDX = tonumber(d.bar and d.bar._msufGFDragCenterToGridX) or 0
-            local gridDY = tonumber(d.bar and d.bar._msufGFDragCenterToGridY) or 0
-            d.conf.offsetX = round(cx - d.screenW * 0.5 + gridDX)
-            d.conf.offsetY = round(cy - d.screenH * 0.5 + gridDY)
+            ApplyGroupDragPosition(d, cx, cy)
             if d.bar and not IsConfigCombatLocked() then
                 pcall(function()
                     d.bar._msufDragActive = false
-                    d.bar:ClearAllPoints()
-                    d.bar:SetPoint("CENTER", UIParent, "CENTER", d.conf.offsetX - gridDX, d.conf.offsetY - gridDY)
+                    if d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
+                    if d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
                 end)
                 d.bar._msufDragActive = false
+                if d.bar._msufGFLiveAnchor then d.bar._msufGFLiveAnchor._msufDragActive = false end
+                if d.bar._msufGFLogicalAnchor then d.bar._msufGFLogicalAnchor._msufDragActive = false end
             end
         end
         --- Offsets already written by OnUpdate. Just finalize pipeline.
