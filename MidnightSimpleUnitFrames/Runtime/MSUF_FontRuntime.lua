@@ -55,10 +55,56 @@ end
 --- 2. Inner closures hoisted to file-level (no re-creation per call)
 --- 3. 3-stamp-layer collapsed to 2 (global + per-key)
 
-local _MSUF_FONT_FLAGS_CODE = { [""] = 0, OUTLINE = 1, THICKOUTLINE = 2 }
+local _MSUF_FONT_FLAGS_CODE = {
+    [""] = 0,
+    OUTLINE = 1,
+    THICKOUTLINE = 2,
+    MONOCHROME = 3,
+    ["OUTLINE,MONOCHROME"] = 4,
+    ["THICKOUTLINE,MONOCHROME"] = 5,
+}
 local _fontState = {}
 local _MSUF_FontPathSerialByKey = {}
 local _MSUF_FontPathSerialNext = 0
+
+local function _MSUF_ComposeFontFlags(outline, monochrome)
+    local flags = ""
+    outline = tostring(outline or "OUTLINE"):upper()
+    if outline == "THICKOUTLINE" then
+        flags = "THICKOUTLINE"
+    elseif outline ~= "NONE" and outline ~= "" then
+        flags = "OUTLINE"
+    end
+    if monochrome == true then
+        flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
+    end
+    return flags
+end
+
+local function _MSUF_ClampTextAlpha(value)
+    value = tonumber(value) or 1
+    if value < 0.7 then return 0.7 end
+    if value > 1 then return 1 end
+    return value
+end
+
+local function _MSUF_ShadowMetrics(strength)
+    strength = tostring(strength or "NORMAL"):upper()
+    if strength == "SOFT" then return 0.55, 1, -1 end
+    if strength == "DEEP" then return 1, 2, -2 end
+    return 1, 1, -1
+end
+
+local function _MSUF_OutlineFromFlags(flags)
+    flags = tostring(flags or ""):upper()
+    if flags:find("THICKOUTLINE", 1, true) then return "THICKOUTLINE" end
+    if flags:find("OUTLINE", 1, true) then return "OUTLINE" end
+    return "NONE"
+end
+
+local function _MSUF_MonochromeFromFlags(flags)
+    return tostring(flags or ""):upper():find("MONOCHROME", 1, true) ~= nil
+end
 
 -- Cold-start text fix, folded into the font subsystem (no standalone file).
 -- On the first login after a client start the configured font may not be
@@ -127,7 +173,7 @@ local function _MSUF_SetFontChecked(fs, path, size, flags, fontKey)
     return applied ~= false and _MSUF_FontApplied(fs, path)
 end
 
-local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
+local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb, ca)
     if not fs then return end
     local S = _fontState
     size = tonumber(size) or 14
@@ -150,22 +196,29 @@ local function _MSUF_ApplyFontCached(fs, size, setColor, cr, cg, cb)
 
     if setColor then
         cr, cg, cb = tonumber(cr) or 1, tonumber(cg) or 1, tonumber(cb) or 1
-        local crev = cr * 1000000 + cg * 1000 + cb
+        ca = _MSUF_ClampTextAlpha(ca)
+        local crev = cr * 1000000000 + cg * 1000000 + cb * 1000 + ca
         if fs._msufColorRev ~= crev then
-            fs:SetTextColor(cr, cg, cb, 1)
+            fs:SetTextColor(cr, cg, cb, ca)
             fs._msufColorRev = crev
         end
     end
 
     local sh = S.useShadow and 1 or 0
-    if fs._msufShadowOn ~= sh then
+    local sx = sh == 1 and (tonumber(S.shadowX) or 1) or 0
+    local sy = sh == 1 and (tonumber(S.shadowY) or -1) or 0
+    local sa = sh == 1 and (tonumber(S.shadowAlpha) or 1) or 0
+    if fs._msufShadowOn ~= sh or fs._msufShadowX ~= sx or fs._msufShadowY ~= sy or fs._msufShadowA ~= sa then
         if sh == 1 then
-            fs:SetShadowColor(0, 0, 0, 1)
-            fs:SetShadowOffset(1, -1)
+            fs:SetShadowColor(0, 0, 0, sa)
+            fs:SetShadowOffset(sx, sy)
         else
             fs:SetShadowOffset(0, 0)
         end
         fs._msufShadowOn = sh
+        fs._msufShadowX = sx
+        fs._msufShadowY = sy
+        fs._msufShadowA = sa
     end
 end
 
@@ -184,19 +237,34 @@ local function _MSUF_ApplyFontsToFrame(f)
     local hpSize    = (conf and conf.hpFontSize)    or S.globalHPSize
     local powerSize = (conf and conf.powerFontSize) or S.globalPowSize
 
-    local _origFlags, _origShadow, _origCPT
+    local _origFlags, _origShadow, _origShadowAlpha, _origShadowX, _origShadowY, _origTextAlpha, _origCPT
     if conf and conf.fontOverride then
         local cNoOL = conf.noOutline
         local cBold = conf.boldText
-        if cNoOL ~= nil or cBold ~= nil then
+        local cMono = conf.fontMonochrome
+        if cNoOL ~= nil or cBold ~= nil or cMono ~= nil then
             _origFlags = S.flags
-            if cNoOL then S.flags = ""
-            elseif cBold then S.flags = "THICKOUTLINE"
-            else S.flags = "OUTLINE" end
+            local outline = _MSUF_OutlineFromFlags(S.flags)
+            local monochrome = _MSUF_MonochromeFromFlags(S.flags)
+            if cNoOL ~= nil or cBold ~= nil then
+                if cNoOL then outline = "NONE"
+                elseif cBold then outline = "THICKOUTLINE"
+                else outline = "OUTLINE" end
+            end
+            if cMono ~= nil then monochrome = cMono == true end
+            S.flags = _MSUF_ComposeFontFlags(outline, monochrome)
         end
         if conf.textBackdrop ~= nil then
             _origShadow = S.useShadow
             S.useShadow = conf.textBackdrop and true or false
+        end
+        if conf.fontShadowStrength ~= nil then
+            _origShadowAlpha, _origShadowX, _origShadowY = S.shadowAlpha, S.shadowX, S.shadowY
+            S.shadowAlpha, S.shadowX, S.shadowY = _MSUF_ShadowMetrics(conf.fontShadowStrength)
+        end
+        if conf.fontTextAlpha ~= nil then
+            _origTextAlpha = S.textAlpha
+            S.textAlpha = _MSUF_ClampTextAlpha(conf.fontTextAlpha)
         end
         if conf.colorPowerTextByType ~= nil then
             _origCPT = S.colorPowerByType
@@ -209,27 +277,29 @@ local function _MSUF_ApplyFontsToFrame(f)
     if f._msufToTInlineSep then _MSUF_ApplyFontCached(f._msufToTInlineSep, nameSize, false, 0, 0, 0) end
     if f._msufToTInlineText then _MSUF_ApplyFontCached(f._msufToTInlineText, nameSize, false, 0, 0, 0) end
     if f.levelText then _MSUF_ApplyFontCached(f.levelText, (conf and conf.levelIndicatorSize) or nameSize, false, 0, 0, 0) end
-    if f.classificationIndicatorText then _MSUF_ApplyFontCached(f.classificationIndicatorText, (conf and conf.classificationIndicatorSize) or nameSize, true, S.fr, S.fg, S.fb) end
+    if f.classificationIndicatorText then _MSUF_ApplyFontCached(f.classificationIndicatorText, (conf and conf.classificationIndicatorSize) or nameSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
 
     local statusSize = (tonumber(nameSize) or 14) + 2
-    if f.statusIndicatorText then _MSUF_ApplyFontCached(f.statusIndicatorText, statusSize, true, S.fr, S.fg, S.fb) end
-    if f.statusIndicatorOverlayText then _MSUF_ApplyFontCached(f.statusIndicatorOverlayText, statusSize, true, S.fr, S.fg, S.fb) end
+    if f.statusIndicatorText then _MSUF_ApplyFontCached(f.statusIndicatorText, statusSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
+    if f.statusIndicatorOverlayText then _MSUF_ApplyFontCached(f.statusIndicatorOverlayText, statusSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
 
     if f.nameText and S.UpdateNameColor then S.UpdateNameColor(f) end
-    if f.hpTextLeft then _MSUF_ApplyFontCached(f.hpTextLeft, hpSize, true, S.fr, S.fg, S.fb) end
-    if f.hpTextCenter then _MSUF_ApplyFontCached(f.hpTextCenter, hpSize, true, S.fr, S.fg, S.fb) end
-    if f.hpText then _MSUF_ApplyFontCached(f.hpText, hpSize, true, S.fr, S.fg, S.fb) end
-    if f.hpTextPct then _MSUF_ApplyFontCached(f.hpTextPct, hpSize, true, S.fr, S.fg, S.fb) end
+    if f.hpTextLeft then _MSUF_ApplyFontCached(f.hpTextLeft, hpSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
+    if f.hpTextCenter then _MSUF_ApplyFontCached(f.hpTextCenter, hpSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
+    if f.hpText then _MSUF_ApplyFontCached(f.hpText, hpSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
+    if f.hpTextPct then _MSUF_ApplyFontCached(f.hpTextPct, hpSize, true, S.fr, S.fg, S.fb, S.textAlpha) end
 
     local pwSetColor = not S.colorPowerByType
     local pCr, pCg, pCb = pwSetColor and S.fr or 0, pwSetColor and S.fg or 0, pwSetColor and S.fb or 0
-    if f.powerTextLeft then _MSUF_ApplyFontCached(f.powerTextLeft, powerSize, pwSetColor, pCr, pCg, pCb) end
-    if f.powerTextCenter then _MSUF_ApplyFontCached(f.powerTextCenter, powerSize, pwSetColor, pCr, pCg, pCb) end
-    if f.powerTextPct then _MSUF_ApplyFontCached(f.powerTextPct, powerSize, pwSetColor, pCr, pCg, pCb) end
-    if f.powerText then _MSUF_ApplyFontCached(f.powerText, powerSize, pwSetColor, pCr, pCg, pCb) end
+    if f.powerTextLeft then _MSUF_ApplyFontCached(f.powerTextLeft, powerSize, pwSetColor, pCr, pCg, pCb, S.textAlpha) end
+    if f.powerTextCenter then _MSUF_ApplyFontCached(f.powerTextCenter, powerSize, pwSetColor, pCr, pCg, pCb, S.textAlpha) end
+    if f.powerTextPct then _MSUF_ApplyFontCached(f.powerTextPct, powerSize, pwSetColor, pCr, pCg, pCb, S.textAlpha) end
+    if f.powerText then _MSUF_ApplyFontCached(f.powerText, powerSize, pwSetColor, pCr, pCg, pCb, S.textAlpha) end
 
     if _origFlags then S.flags = _origFlags end
     if _origShadow ~= nil then S.useShadow = _origShadow end
+    if _origShadowAlpha ~= nil then S.shadowAlpha, S.shadowX, S.shadowY = _origShadowAlpha, _origShadowX, _origShadowY end
+    if _origTextAlpha ~= nil then S.textAlpha = _origTextAlpha end
     if _origCPT ~= nil then S.colorPowerByType = _origCPT end
 end
 
@@ -255,6 +325,8 @@ local function UpdateAllFonts(onlyKey)
     local globalHPSize   = g.hpFontSize    or baseSize
     local globalPowSize  = g.powerFontSize or baseSize
     local useShadow      = g.textBackdrop and true or false
+    local shadowAlpha, shadowX, shadowY = _MSUF_ShadowMetrics(g.fontShadowStrength)
+    local textAlpha = _MSUF_ClampTextAlpha(g.fontTextAlpha)
     local colorPowerByType = (g.colorPowerTextByType == true)
 
     if onlyKey == "tot" or onlyKey == "targetoftarget" then onlyKey = "targettarget" end
@@ -278,6 +350,10 @@ local function UpdateAllFonts(onlyKey)
     _fontState.globalHPSize = globalHPSize
     _fontState.globalPowSize = globalPowSize
     _fontState.useShadow = useShadow
+    _fontState.shadowAlpha = shadowAlpha
+    _fontState.shadowX = shadowX
+    _fontState.shadowY = shadowY
+    _fontState.textAlpha = textAlpha
     _fontState.colorPowerByType = colorPowerByType
     _fontState.onlyKey = onlyKey
     _fontState.UpdateNameColor = nil

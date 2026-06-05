@@ -98,11 +98,28 @@ local ApplyCombatStateDynamicColor
 local StartFirstDanceWindow
 local ApplyFirstDanceMasque
 
+local function GlobalFontTextAlpha()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local a = tonumber(g and g.fontTextAlpha) or 1
+    if a < 0.7 then return 0.7 end
+    if a > 1 then return 1 end
+    return a
+end
+
+local function GlobalFontShadowMetrics()
+    local g = _G.MSUF_DB and _G.MSUF_DB.general
+    local strength = tostring(g and g.fontShadowStrength or "NORMAL"):upper()
+    if strength == "SOFT" then return 0.55, 1, -1 end
+    if strength == "DEEP" then return 1, 2, -2 end
+    return 1, 1, -1
+end
+
 local function SetTextShadow(fs, enabled)
     if not fs then return end
     if enabled then
-        fs:SetShadowOffset(1, -1)
-        fs:SetShadowColor(0, 0, 0, 1)
+        local a, x, y = GlobalFontShadowMetrics()
+        fs:SetShadowOffset(x, y)
+        fs:SetShadowColor(0, 0, 0, a)
     else
         fs:SetShadowOffset(0, 0)
     end
@@ -397,7 +414,7 @@ end
 
 local function ShowCombatStateText(state, text, r, g, b, clickThrough)
     stateText._msufLastState = state
-    stateText:SetTextColor(r, g, b, 1)
+    stateText:SetTextColor(r, g, b, GlobalFontTextAlpha())
     stateText:SetText(text)
     if clickThrough then
         SetCombatStateClickThrough(true)
@@ -602,12 +619,12 @@ local function ApplyFirstDanceFont()
 
     if not danceText then return end
     ApplyGameplayFont(danceText, path, (size or 24), flags or "OUTLINE")
-    danceText:SetTextColor(lr, lg, lb, 1)
+    danceText:SetTextColor(lr, lg, lb, GlobalFontTextAlpha())
     SetTextShadow(danceText, useShadow)
 
     local iconSz = (g and g.firstDanceIconSize) or 40
     ApplyGameplayFont(danceCDText, path, math_max(10, math.floor(iconSz * 0.45 + 0.5)), "OUTLINE")
-    danceCDText:SetTextColor(1, 1, 1, 1)
+    danceCDText:SetTextColor(1, 1, 1, GlobalFontTextAlpha())
     SetTextShadow(danceCDText, useShadow)
 end
 
@@ -618,14 +635,14 @@ local function ApplyFontToCounter()
         ApplyGameplayFont(timerText, path, size or 20, flags or "OUTLINE")
         local gdb = GetGameplayDB()
         local tr, tg, tb = NormalizeRGB(gdb and gdb.combatTimerColor, r or 1, g or 1, b or 1)
-        timerText:SetTextColor(tr, tg, tb, 1)
+        timerText:SetTextColor(tr, tg, tb, GlobalFontTextAlpha())
         SetTextShadow(timerText, useShadow)
     end
 
     if stateText then
         local path, flags, r, g, b, size, useShadow = GetGameplayFont("state")
         ApplyGameplayFont(stateText, path, (size or 24), flags or "OUTLINE")
-        stateText:SetTextColor(r or 1, g or 1, b or 1, 1)
+        stateText:SetTextColor(r or 1, g or 1, b or 1, GlobalFontTextAlpha())
         SetTextShadow(stateText, useShadow)
         ApplyCombatStateDynamicColor()
     end
@@ -644,9 +661,9 @@ ApplyCombatStateDynamicColor = function()
 
     local st = stateText._msufLastState
     if st == "leave" or st == "dance" then
-        stateText:SetTextColor(lr, lg, lb, 1)
+        stateText:SetTextColor(lr, lg, lb, GlobalFontTextAlpha())
     else
-        stateText:SetTextColor(er, eg, eb, 1)
+        stateText:SetTextColor(er, eg, eb, GlobalFontTextAlpha())
     end
 end
 
@@ -778,7 +795,7 @@ EnsureCombatStateText = function()
     ApplyGameplayFont(stateText, path, (size or 24), flags or "OUTLINE")
     local _er, _eg, _eb, lr, lg, lb = MSUF_GetCombatStateColors(g)
     stateText._msufLastState = "dance"
-    stateText:SetTextColor(lr, lg, lb, 1)
+    stateText:SetTextColor(lr, lg, lb, GlobalFontTextAlpha())
     SetTextShadow(stateText, useShadow)
 
     ClearCombatStateText()

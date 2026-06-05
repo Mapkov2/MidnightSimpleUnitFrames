@@ -246,6 +246,17 @@ local function SetFont(region, spec, size)
             region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
         end
     end
+    if region.SetShadowOffset then
+        local shadowOn = spec and spec.fontShadow == true
+        local sx = shadowOn and (tonumber(spec and spec.fontShadowX) or 1) or 0
+        local sy = shadowOn and (tonumber(spec and spec.fontShadowY) or -1) or 0
+        local sa = shadowOn and (tonumber(spec and spec.fontShadowAlpha) or 1) or 0
+        if region._msufStatusShadowX ~= sx or region._msufStatusShadowY ~= sy or region._msufStatusShadowA ~= sa then
+            if shadowOn and region.SetShadowColor then region:SetShadowColor(0, 0, 0, sa) end
+            region:SetShadowOffset(sx, sy)
+            region._msufStatusShadowX, region._msufStatusShadowY, region._msufStatusShadowA = sx, sy, sa
+        end
+    end
 end
 
 local function ApplyTextColor(region, spec)

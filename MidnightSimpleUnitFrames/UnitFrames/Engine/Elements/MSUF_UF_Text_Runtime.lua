@@ -354,7 +354,8 @@ function Text.UpdatePower(frame, event, unit, power, powerMax)
     if rt.powerColorByType == true
         and (event == "UNIT_DISPLAYPOWER" or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_POWER_LAYOUT" or event == "MSUF_POWER_TEXT_COLORS" or frame._msufPowerTextColorInitialized ~= true) then
         local r, g, b = PowerColor(frame, unit)
-        SetPowerTextColor(frame, r, g, b, 1)
+        local c = frame.MSUFSpec and frame.MSUFSpec.textColor
+        SetPowerTextColor(frame, r, g, b, c and c.a or 1)
         frame._msufPowerTextColorInitialized = true
     end
 

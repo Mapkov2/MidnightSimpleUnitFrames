@@ -20,6 +20,47 @@ local function RGB(r, g, b, a)
     return { r or 1, g or 1, b or 1, a or 1 }
 end
 
+local function NormalizeShadowStrength(value)
+    value = tostring(value or "NORMAL"):upper()
+    if value == "SOFT" or value == "DEEP" then return value end
+    return "NORMAL"
+end
+
+local function ShadowMetrics(value)
+    value = NormalizeShadowStrength(value)
+    if value == "SOFT" then return 0.55, 1, -1 end
+    if value == "DEEP" then return 1, 2, -2 end
+    return 1, 1, -1
+end
+
+local function NormalizeTextAlpha(value)
+    value = tonumber(value) or 1
+    if value <= 0.75 then return 0.70 end
+    if value <= 0.925 then return 0.85 end
+    return 1
+end
+
+local function NormalizeBaselineOffset(value)
+    value = floor((tonumber(value) or 0) + 0.5)
+    if value < -4 then return -4 end
+    if value > 4 then return 4 end
+    return value
+end
+
+local function ComposeFontFlags(outline, monochrome)
+    local flags = ""
+    outline = tostring(outline or "OUTLINE"):upper()
+    if outline == "THICKOUTLINE" then
+        flags = "THICKOUTLINE"
+    elseif outline ~= "NONE" and outline ~= "" then
+        flags = "OUTLINE"
+    end
+    if monochrome == true then
+        flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
+    end
+    return flags
+end
+
 local function ConfiguredFontColorPreview()
     local fn = _G.MSUF_GetConfiguredFontColor or (MSUF and MSUF.MSUF_GetConfiguredFontColor)
     if type(fn) == "function" then
@@ -151,15 +192,16 @@ local function PreviewFontKey()
 end
 
 local function PreviewFontFlags()
+    local monochrome = FontScopeGet("fontMonochrome", false) == true
     if IsGFScope(CurrentFontScope()) then
         local v = FontScopeGet("fontOutline", "OUTLINE")
-        if v == "" or v == "NONE" then return "" end
-        if v == "THICKOUTLINE" then return "THICKOUTLINE" end
-        return "OUTLINE"
+        if v == "" then v = "NONE" end
+        return ComposeFontFlags(v, monochrome)
     end
-    if FontScopeGet("noOutline", false) then return "" end
-    if FontScopeGet("boldText", false) then return "THICKOUTLINE" end
-    return "OUTLINE"
+    local outline = "OUTLINE"
+    if FontScopeGet("noOutline", false) then outline = "NONE"
+    elseif FontScopeGet("boldText", false) then outline = "THICKOUTLINE" end
+    return ComposeFontFlags(outline, monochrome)
 end
 
 local function ApplyPreviewFont(fs)
@@ -187,7 +229,18 @@ local function ApplyPreviewFont(fs)
     end
 
     local c = ConfiguredFontColorPreview()
+    c[4] = NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1))
     if fs.SetTextColor then fs:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
+    if fs.SetShadowOffset then
+        local shadowOn = FontScopeGet("textBackdrop", true) == true
+        if shadowOn then
+            local a, x, y = ShadowMetrics(FontScopeGet("fontShadowStrength", "NORMAL"))
+            if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, a) end
+            fs:SetShadowOffset(x, y)
+        else
+            fs:SetShadowOffset(0, 0)
+        end
+    end
 end
 
 local function ApplyNameShortening(reason)
@@ -370,7 +423,8 @@ local function BuildFonts(ctx)
     M.AddRefresher(ctx, RefreshFontPreview)
     RefreshFontPreview()
 
-    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 164, true)
+    local RefreshScopedFontControls
+    local text = b:CollapsibleSection("fonts_text_style", "Text Style", 330, true)
 
     local outline = W.Segment(text, "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420)
     M.BindSegment(ctx, outline,
@@ -388,11 +442,22 @@ local function BuildFonts(ctx)
             if IsGFScope(CurrentFontScope()) then
                 FontScopeSet("fontOutline", v or "OUTLINE", "MSUF2_GF_FONT_OUTLINE")
                 ApplyFonts("MSUF2_GF_FONT_OUTLINE")
+                if RefreshFontPreview then RefreshFontPreview() end
                 return
             end
             FontScopeSet("boldText", v == "THICKOUTLINE", "MSUF2_FONT_OUTLINE")
             FontScopeSet("noOutline", v == "NONE", "MSUF2_FONT_OUTLINE")
             ApplyFonts("MSUF2_FONT_OUTLINE")
+            if RefreshFontPreview then RefreshFontPreview() end
+        end)
+
+    local sharp = W.Segment(text, "Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp"), 260)
+    M.BindSegment(ctx, sharp,
+        function() return FontScopeGet("fontMonochrome", false) and "SHARP" or "SMOOTH" end,
+        function(v)
+            FontScopeSet("fontMonochrome", v == "SHARP", "MSUF2_FONT_MONOCHROME")
+            ApplyFonts("MSUF2_FONT_MONOCHROME")
+            if RefreshFontPreview then RefreshFontPreview() end
         end)
 
     local shadow = W.Segment(text, "Text shadow", VT("ON", "On", "OFF", "Off"), 260)
@@ -401,6 +466,39 @@ local function BuildFonts(ctx)
         function(v)
             FontScopeSet("textBackdrop", v == "ON", "MSUF2_FONT_SHADOW")
             ApplyFonts("MSUF2_FONT_SHADOW")
+            if RefreshFontPreview then RefreshFontPreview() end
+            if RefreshScopedFontControls then RefreshScopedFontControls() end
+        end)
+
+    local shadowStrength = W.Segment(text, "Shadow strength", VT("SOFT", "Soft", "NORMAL", "Normal", "DEEP", "Deep"), 360)
+    M.BindSegment(ctx, shadowStrength,
+        function() return NormalizeShadowStrength(FontScopeGet("fontShadowStrength", "NORMAL")) end,
+        function(v)
+            FontScopeSet("fontShadowStrength", NormalizeShadowStrength(v), "MSUF2_FONT_SHADOW_STRENGTH")
+            ApplyFonts("MSUF2_FONT_SHADOW_STRENGTH")
+            if RefreshFontPreview then RefreshFontPreview() end
+        end)
+
+    local opacity = W.Segment(text, "Text opacity", VT(1, "100%", 0.85, "85%", 0.70, "70%"), 320)
+    M.BindSegment(ctx, opacity,
+        function() return NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1)) end,
+        function(v)
+            FontScopeSet("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA")
+            ApplyFonts("MSUF2_FONT_TEXT_ALPHA")
+            if RefreshFontPreview then RefreshFontPreview() end
+        end)
+
+    local baseline = W.Slider(text, "Baseline", -4, 4, 1, 300)
+    baseline:SetValueFormatter(function(v)
+        v = NormalizeBaselineOffset(v)
+        if v > 0 then return "+" .. tostring(v) .. " px" end
+        return tostring(v) .. " px"
+    end)
+    M.BindSlider(ctx, baseline,
+        function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
+        function(v)
+            FontScopeSet("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE")
+            ApplyFonts("MSUF2_FONT_BASELINE")
         end)
 
     local colors = b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true)
@@ -442,12 +540,16 @@ local function BuildFonts(ctx)
             FontScopeSet("colorPowerTextByType", v == "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
             ApplyFonts("MSUF2_POWER_TEXT_COLOR")
         end)
-    local function RefreshScopedFontControls()
+    RefreshScopedFontControls = function()
         local scopeKey = CurrentFontScope()
         local canEdit = CurrentFontScopeCanEdit()
         local gfScope = IsGFScope(scopeKey)
         SetControlEnabled(outline, canEdit)
-        SetControlEnabled(shadow, canEdit and not gfScope)
+        SetControlEnabled(sharp, canEdit)
+        SetControlEnabled(shadow, canEdit)
+        SetControlEnabled(shadowStrength, canEdit and FontScopeGet("textBackdrop", true) == true)
+        SetControlEnabled(opacity, canEdit)
+        SetControlEnabled(baseline, canEdit)
         SetControlEnabled(nameColor, canEdit)
         SetControlEnabled(npcColor, canEdit and not gfScope)
         SetControlEnabled(healthColor, canEdit)

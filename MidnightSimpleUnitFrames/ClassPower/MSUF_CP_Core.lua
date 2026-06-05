@@ -509,6 +509,16 @@ builders.PRESENTATION = function(E)
         fg       = fg or 1
         fb       = fb or 1
         baseSize = baseSize or 14
+        local textAlpha = 1
+        local shadowAlpha, shadowX, shadowY = 1, 1, -1
+        local general = _cpDB.general
+        if type(general) == "table" then
+            textAlpha = tonumber(general.fontTextAlpha) or 1
+            if textAlpha < 0.7 then textAlpha = 0.7 elseif textAlpha > 1 then textAlpha = 1 end
+            local strength = tostring(general.fontShadowStrength or "NORMAL"):upper()
+            if strength == "SOFT" then shadowAlpha, shadowX, shadowY = 0.55, 1, -1
+            elseif strength == "DEEP" then shadowAlpha, shadowX, shadowY = 1, 2, -2 end
+        end
 
         local fontSize = baseSize
         if _cpDB.bars then
@@ -559,11 +569,11 @@ builders.PRESENTATION = function(E)
             end
         end
 
-        fs:SetTextColor(tr, tg, tb, 1)
+        fs:SetTextColor(tr, tg, tb, textAlpha)
 
         if useShadow then
-            fs:SetShadowColor(0, 0, 0, 1)
-            fs:SetShadowOffset(1, -1)
+            fs:SetShadowColor(0, 0, 0, shadowAlpha)
+            fs:SetShadowOffset(shadowX, shadowY)
         else
             fs:SetShadowOffset(0, 0)
         end

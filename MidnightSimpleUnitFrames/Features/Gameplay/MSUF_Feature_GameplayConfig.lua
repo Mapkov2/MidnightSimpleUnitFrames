@@ -192,6 +192,9 @@ local function GetGameplayFontSettings(kind)
     else
         flags = "OUTLINE"
     end
+    if general.fontMonochrome then
+        flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
+    end
 
     local colorKey = (general.fontColor or "white"):lower()
     local colorTbl = (MSUF_FONT_COLORS and MSUF_FONT_COLORS[colorKey]) or (MSUF_FONT_COLORS and MSUF_FONT_COLORS.white) or {1, 1, 1}

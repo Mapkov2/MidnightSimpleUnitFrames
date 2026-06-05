@@ -928,6 +928,80 @@ local function FontFlagsFromGlobal()
     return "OUTLINE"
 end
 
+local function ComposeFontFlags(outline, monochrome)
+    local flags = ""
+    outline = tostring(outline or "OUTLINE"):upper()
+    if outline == "THICKOUTLINE" then
+        flags = "THICKOUTLINE"
+    elseif outline ~= "NONE" and outline ~= "" then
+        flags = "OUTLINE"
+    end
+    if monochrome == true then
+        flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
+    end
+    return flags
+end
+
+local function ResolveFontFlags(general, conf)
+    local outline = "OUTLINE"
+    local monochrome = general and general.fontMonochrome == true
+    if general and general.noOutline then
+        outline = "NONE"
+    elseif general and general.boldText then
+        outline = "THICKOUTLINE"
+    end
+    if conf and conf.fontOverride == true then
+        if conf.noOutline ~= nil or conf.boldText ~= nil then
+            if conf.noOutline then outline = "NONE"
+            elseif conf.boldText then outline = "THICKOUTLINE"
+            else outline = "OUTLINE" end
+        end
+        if conf.fontMonochrome ~= nil then
+            monochrome = conf.fontMonochrome == true
+        end
+    end
+    if not (conf and conf.fontOverride == true)
+        and not (general and (general.noOutline or general.boldText or general.fontMonochrome)) then
+        return FontFlagsFromGlobal()
+    end
+    return ComposeFontFlags(outline, monochrome)
+end
+
+local function ResolveFontTextAlpha(general, conf)
+    local value = general and general.fontTextAlpha
+    if conf and conf.fontOverride == true and conf.fontTextAlpha ~= nil then
+        value = conf.fontTextAlpha
+    end
+    value = tonumber(value) or 1
+    if value < 0.7 then return 0.7 end
+    if value > 1 then return 1 end
+    return value
+end
+
+local function ResolveFontBaselineOffset(general, conf)
+    local value = general and general.fontBaselineOffset
+    if conf and conf.fontOverride == true and conf.fontBaselineOffset ~= nil then
+        value = conf.fontBaselineOffset
+    end
+    value = tonumber(value) or 0
+    if value < -4 then return -4 end
+    if value > 4 then return 4 end
+    return value
+end
+
+local function ResolveFontShadow(general, conf)
+    local enabled = general and general.textBackdrop == true
+    local strength = general and general.fontShadowStrength or "NORMAL"
+    if conf and conf.fontOverride == true then
+        if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
+        if conf.fontShadowStrength ~= nil then strength = conf.fontShadowStrength end
+    end
+    strength = tostring(strength or "NORMAL"):upper()
+    if strength == "SOFT" then return enabled, 0.55, 1, -1 end
+    if strength == "DEEP" then return enabled, 1, 2, -2 end
+    return enabled, 1, 1, -1
+end
+
 local function BossLayoutDelta(conf, index, def)
     conf = conf or {}
     def = def or DEFAULTS.boss
@@ -1086,13 +1160,21 @@ local function ResolveUnit(db, unit, out)
         out.showPowerText = true
     end
     out.font = FontFromGlobal()
-    out.fontFlags = FontFlagsFromGlobal()
+    out.fontFlags = ResolveFontFlags(general, conf)
     out.fontSize = Number(conf.fontSize or general.fontSize, 12)
     out.nameFontSize = Number(conf.nameFontSize or general.nameFontSize, out.fontSize)
     out.healthFontSize = Number(conf.hpFontSize or general.hpFontSize, out.fontSize)
     out.powerFontSize = Number(conf.powerFontSize or general.powerFontSize, out.fontSize)
     out.textColor = out.textColor or {}
     ResolveTextColor(general, out.textColor)
+    out.textColor.a = ResolveFontTextAlpha(general, conf)
+    do
+        local shadowEnabled, shadowAlpha, shadowX, shadowY = ResolveFontShadow(general, conf)
+        out.fontShadow = shadowEnabled
+        out.fontShadowAlpha = shadowAlpha
+        out.fontShadowX = shadowX
+        out.fontShadowY = shadowY
+    end
 
     out.text = out.text or {}
     out.text.healthLeft = NormalizeHealthTextMode(conf.textLeft, "NONE")
@@ -1106,9 +1188,10 @@ local function ResolveUnit(db, unit, out)
     out.text.healthDelimiter = conf.hpTextSeparator or general.hpTextSeparator or " - "
     out.text.nameAnchor = conf.nameTextAnchor or conf.nameAnchor or general.nameTextAnchor or general.nameAnchor or "LEFT"
     out.text.nameX = Number(conf.nameOffsetX or conf.nameTextOffsetX or general.nameOffsetX or general.nameTextOffsetX, 4)
-    out.text.nameY = Number(conf.nameOffsetY or conf.nameTextOffsetY or general.nameOffsetY or general.nameTextOffsetY, -4)
+    local fontBaselineOffset = ResolveFontBaselineOffset(general, conf)
+    out.text.nameY = Number(conf.nameOffsetY or conf.nameTextOffsetY or general.nameOffsetY or general.nameTextOffsetY, -4) + fontBaselineOffset
     out.text.healthX = Number(conf.hpOffsetX or conf.hpTextOffsetX or general.hpOffsetX or general.hpTextOffsetX, -4)
-    out.text.healthY = Number(conf.hpOffsetY or conf.hpTextOffsetY or general.hpOffsetY or general.hpTextOffsetY, -4)
+    out.text.healthY = Number(conf.hpOffsetY or conf.hpTextOffsetY or general.hpOffsetY or general.hpTextOffsetY, -4) + fontBaselineOffset
     out.text.healthLeftX = out.text.healthX + Number(conf.hpTextLeftOffsetX or conf.hpLeftOffsetX or general.hpTextLeftOffsetX or general.hpLeftOffsetX, 0)
     out.text.healthLeftY = out.text.healthY + Number(conf.hpTextLeftOffsetY or conf.hpLeftOffsetY or general.hpTextLeftOffsetY or general.hpLeftOffsetY, 0)
     out.text.healthCenterX = out.text.healthX + Number(conf.hpTextCenterOffsetX or conf.hpCenterOffsetX or general.hpTextCenterOffsetX or general.hpCenterOffsetX, 0)
@@ -1120,7 +1203,7 @@ local function ResolveUnit(db, unit, out)
     out.text.powerRight = NormalizePowerTextMode(conf.powerTextRight or conf.powerTextMode or general.powerTextMode, "CURPERCENT")
     out.text.powerDelimiter = conf.powerTextSeparator or general.powerTextSeparator or out.text.healthDelimiter
     out.text.powerX = Number(conf.powerOffsetX or conf.powerTextOffsetX or general.powerOffsetX or general.powerTextOffsetX, -4)
-    out.text.powerY = Number(conf.powerOffsetY or conf.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4)
+    out.text.powerY = Number(conf.powerOffsetY or conf.powerTextOffsetY or general.powerOffsetY or general.powerTextOffsetY, 4) + fontBaselineOffset
     out.text.powerLeftX = out.text.powerX + Number(conf.powerTextLeftOffsetX or conf.powerLeftOffsetX or general.powerTextLeftOffsetX or general.powerLeftOffsetX, 0)
     out.text.powerLeftY = out.text.powerY + Number(conf.powerTextLeftOffsetY or conf.powerLeftOffsetY or general.powerTextLeftOffsetY or general.powerLeftOffsetY, 0)
     out.text.powerCenterX = out.text.powerX + Number(conf.powerTextCenterOffsetX or conf.powerCenterOffsetX or general.powerTextCenterOffsetX or general.powerCenterOffsetX, 0)

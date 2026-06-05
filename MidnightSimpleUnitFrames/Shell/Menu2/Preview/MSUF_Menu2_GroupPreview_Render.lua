@@ -383,12 +383,29 @@ function Render.Install(box, ctx, deps)
         local db = _G.MSUF_DB
         local fontKey = db and db.general and db.general.fontKey
         local safeSetFont = _G.MSUF_SetFontSafe
+        local fontShadow = true
+        local fontShadowAlpha = tonumber(runtimeSpec and runtimeSpec.fontShadowAlpha) or 1
+        local fontShadowX = tonumber(runtimeSpec and runtimeSpec.fontShadowX) or 1
+        local fontShadowY = tonumber(runtimeSpec and runtimeSpec.fontShadowY) or -1
+        if runtimeSpec then
+            fontShadow = runtimeSpec.fontShadow == true
+        elseif gf and gf.ResolveFontShadow then
+            fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = gf.ResolveFontShadow(kind)
+        end
         local function SetPreviewFont(fs, size)
             if not fs then return end
             if type(safeSetFont) == "function" then
                 safeSetFont(fs, fontPath, size, fontFlags, fontKey)
             else
                 fs:SetFont(fontPath, size, fontFlags)
+            end
+            if fs.SetShadowOffset then
+                if fontShadow then
+                    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, fontShadowAlpha or 1) end
+                    fs:SetShadowOffset(fontShadowX or 1, fontShadowY or -1)
+                else
+                    fs:SetShadowOffset(0, 0)
+                end
             end
         end
         local function LayoutPreviewText(fs, point, relPoint, x, y, justify, relativeTo)
@@ -401,6 +418,10 @@ function Render.Install(box, ctx, deps)
         local fr, fg, fb = T.colors.text[1], T.colors.text[2], T.colors.text[3]
         if runtimeSpec and runtimeSpec.textColor then fr, fg, fb = runtimeSpec.textColor.r, runtimeSpec.textColor.g, runtimeSpec.textColor.b end
         if gf and gf.ResolveFontColor then fr, fg, fb = gf.ResolveFontColor(kind) end
+        local textAlpha = tonumber(runtimeSpec and runtimeSpec.textColor and runtimeSpec.textColor.a)
+            or (gf and gf.ResolveFontTextAlpha and gf.ResolveFontTextAlpha(kind))
+            or 1
+        local baselineOffset = (runtimeSpec and 0) or (gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or 0
         SetPreviewFont(mock._nameFS, max(6, GFPreviewScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
         local previewName = GF_PREVIEW_NAMES[5]
         if gf and gf.ResolveNameTruncation and gf.TruncateName then
@@ -410,11 +431,11 @@ function Render.Install(box, ctx, deps)
             end
         end
         mock._nameFS:SetText(previewName)
-        mock._nameFS:SetTextColor(fr or 1, fg or 1, fb or 1, 1)
+        mock._nameFS:SetTextColor(fr or 1, fg or 1, fb or 1, textAlpha)
         mock._nameFS:ClearAllPoints()
         local pad4 = GFPreviewScaleValue(4, previewScale, 1)
         local nox = GFPreviewConfigToOffset(runtimeText.nameX or conf.nameOffsetX or 0, previewScale)
-        local noy = GFPreviewConfigToOffset(runtimeText.nameY or conf.nameOffsetY or 0, previewScale)
+        local noy = GFPreviewConfigToOffset(runtimeText.nameY or ((conf.nameOffsetY or 0) + baselineOffset), previewScale)
         local nameAnchor = runtimeText.nameAnchor or conf.nameAnchor or "LEFT"
         local nameWidth = max(80, (tonumber(runtimeSpec and runtimeSpec.width) or liveW or 120) * 0.80)
         mock._nameFS:SetWidth(max(40, GFPreviewScaleValue(nameWidth, previewScale, 40)))
@@ -440,9 +461,9 @@ function Render.Install(box, ctx, deps)
             hpLeftMode, hpCenterMode, hpRightMode = runtimeText.healthLeft or conf.textLeft or "NONE", runtimeText.healthCenter or conf.textCenter or "NONE", runtimeText.healthRight or conf.textRight or "NONE"
         end
         local hpModes = {
-            { fs = mock._hpLeftFS, mode = hpLeftMode, point = "LEFT", rel = "LEFT", x = pad4 + GFPreviewConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0)), previewScale), justify = "LEFT" },
-            { fs = mock._hpCenterFS, mode = hpCenterMode, point = "CENTER", rel = "CENTER", x = GFPreviewConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0)), previewScale), justify = "CENTER" },
-            { fs = mock._hpRightFS, mode = hpRightMode, point = "RIGHT", rel = "RIGHT", x = -pad4 + GFPreviewConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0)), previewScale), justify = "RIGHT" },
+            { fs = mock._hpLeftFS, mode = hpLeftMode, point = "LEFT", rel = "LEFT", x = pad4 + GFPreviewConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0) + baselineOffset), previewScale), justify = "LEFT" },
+            { fs = mock._hpCenterFS, mode = hpCenterMode, point = "CENTER", rel = "CENTER", x = GFPreviewConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale), justify = "CENTER" },
+            { fs = mock._hpRightFS, mode = hpRightMode, point = "RIGHT", rel = "RIGHT", x = -pad4 + GFPreviewConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0) + baselineOffset), previewScale), justify = "RIGHT" },
         }
         local fakeHP, fakeMax = 720000, 1000000
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
@@ -458,7 +479,7 @@ function Render.Install(box, ctx, deps)
             local spec = hpModes[i]
             local fs = spec.fs
             SetPreviewFont(fs, hpSize)
-            fs:SetTextColor(hpTextR, hpTextG, hpTextB, 0.9)
+            fs:SetTextColor(hpTextR, hpTextG, hpTextB, textAlpha)
             LayoutPreviewText(fs, spec.point, spec.rel, spec.x, spec.y, spec.justify, mock)
             if gf and gf.FormatHealthText then
                 fs:SetText(gf.FormatHealthText(spec.mode, fakeHP, fakeMax, runtimeText.healthDelimiter or conf.textDelimiter or " - ", false))
@@ -476,16 +497,16 @@ function Render.Install(box, ctx, deps)
             showPowerText = showText and gf.IsPowerTextEnabled(kind, conf)
         end
         local powerModes = {
-            { fs = mock._powerLeftFS, mode = runtimeText.powerLeft or conf.powerTextLeft or "NONE", point = "BOTTOMLEFT", rel = "BOTTOMLEFT", x = pad4 + GFPreviewConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0))), previewScale), justify = "LEFT" },
-            { fs = mock._powerCenterFS, mode = runtimeText.powerCenter or conf.powerTextCenter or "NONE", point = "BOTTOM", rel = "BOTTOM", x = GFPreviewConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0))), previewScale), justify = "CENTER" },
-            { fs = mock._powerRightFS, mode = runtimeText.powerRight or conf.powerTextRight or "NONE", point = "BOTTOMRIGHT", rel = "BOTTOMRIGHT", x = -pad4 + GFPreviewConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0))), previewScale), justify = "RIGHT" },
+            { fs = mock._powerLeftFS, mode = runtimeText.powerLeft or conf.powerTextLeft or "NONE", point = "BOTTOMLEFT", rel = "BOTTOMLEFT", x = pad4 + GFPreviewConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset)), previewScale), justify = "LEFT" },
+            { fs = mock._powerCenterFS, mode = runtimeText.powerCenter or conf.powerTextCenter or "NONE", point = "BOTTOM", rel = "BOTTOM", x = GFPreviewConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset)), previewScale), justify = "CENTER" },
+            { fs = mock._powerRightFS, mode = runtimeText.powerRight or conf.powerTextRight or "NONE", point = "BOTTOMRIGHT", rel = "BOTTOMRIGHT", x = -pad4 + GFPreviewConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale), justify = "RIGHT" },
         }
         local fakePow, fakePowMax = 70, 100
         for i = 1, #powerModes do
             local spec = powerModes[i]
             local fs = spec.fs
             SetPreviewFont(fs, pwrSize)
-            fs:SetTextColor(fr or 1, fg or 1, fb or 1, 0.9)
+            fs:SetTextColor(fr or 1, fg or 1, fb or 1, textAlpha)
             LayoutPreviewText(fs, spec.point, spec.rel, spec.x, spec.y, spec.justify, mock)
             if gf and gf.FormatPowerText then
                 fs:SetText(gf.FormatPowerText(spec.mode, fakePow, fakePowMax, runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "))
