@@ -68,9 +68,9 @@ end if a then return o(a,n.fontSize or 14,s())end
 end local e=(l and l[1]and l[1].path)or"Fonts\\FRIZQT__.TTF"return o(e,n.fontSize or 14,s())end
 s=function()if not MSUF_DB then MSUF_EnsureDB()end
 MSUF_DB=MSUF_DB or{}MSUF_DB.general=MSUF_DB.general or{}local e=MSUF_DB.general if e.noOutline then
-return""elseif e.boldText then
-return"THICKOUTLINE"else
-return"OUTLINE"end
+local t=""if e.fontMonochrome then return"MONOCHROME"end return t elseif e.boldText then
+local t="THICKOUTLINE"if e.fontMonochrome then return t..",MONOCHROME"end return t else
+local t="OUTLINE"if e.fontMonochrome then return t..",MONOCHROME"end return t end
 end function a.MSUF_GetGlobalFontSettings()if not MSUF_DB then MSUF_EnsureDB()end local e=MSUF_DB.general or{}local t=F()local n=s()local a,o,l=a.MSUF_GetConfiguredFontColor()local r=e.fontSize or 14
 local e=e.textBackdrop and true or false return t,n,a,o,l,r,e
 end function MSUF_GetGlobalFontSettings()if a and a.MSUF_GetGlobalFontSettings then return a.MSUF_GetGlobalFontSettings()end return"Fonts\\FRIZQT__.TTF","OUTLINE",1,1,1,14,false
@@ -212,9 +212,9 @@ local t=(MSUF_DB and MSUF_DB.general)or nil local e=t and t.barBackgroundTexture
 if e==nil or e==""then e=t and t.barTexture
 end return MSUF_ResolveStatusbarTextureKey(e)end function MSUF_UpdateCastbarVisuals()MSUF_BumpCastbarStyleRevision()if not MSUF_DB then MSUF_EnsureDB()end local d=MSUF_DB.general or{}local C=c(nil,d,"castbarShowIcon",true)local B=c(nil,d,"castbarShowSpellName",true)local i=n(d.castbarSpellNameFontSize)or 0 local _=n(d.castbarIconOffsetX)or 0
 local U=n(d.castbarIconOffsetY)or 0 local c=F()local l=s()local o,r,t=1,1,1
-if e(MSUF_GetCastbarTextColor)=="function"then o,r,t=MSUF_GetCastbarTextColor()elseif e(a.MSUF_GetConfiguredFontColor)=="function"then o,r,t=a.MSUF_GetConfiguredFontColor()else local e=(d.fontColor or"white"):lower()local e=(MSUF_FONT_COLORS and(MSUF_FONT_COLORS[e]or MSUF_FONT_COLORS.white))or{1,1,1}o,r,t=e[1],e[2],e[3]end local S=d.textBackdrop and true or false
+if e(MSUF_GetCastbarTextColor)=="function"then o,r,t=MSUF_GetCastbarTextColor()elseif e(a.MSUF_GetConfiguredFontColor)=="function"then o,r,t=a.MSUF_GetConfiguredFontColor()else local e=(d.fontColor or"white"):lower()local e=(MSUF_FONT_COLORS and(MSUF_FONT_COLORS[e]or MSUF_FONT_COLORS.white))or{1,1,1}o,r,t=e[1],e[2],e[3]end local S=d.textBackdrop and true or false local U=n(d.fontTextAlpha)or 1 if U<.7 then U=.7 elseif U>1 then U=1 end local A,R,Y=1,1,-1 local E=tostring(d.fontShadowStrength or"NORMAL"):upper()if E=="SOFT"then A,R,Y=.55,1,-1 elseif E=="DEEP"then A,R,Y=1,2,-2 end
 local s=d.fontSize or 14 local M=(i>0)and i or s
-local i=_G.MSUF_SetFontSafe local function h(a,n)if e(i)=="function"then i(a,c,n,l,d.fontKey)else a:SetFont(c,n,l)end a:SetTextColor(o,r,t,1)end local function b(e)if S then e:SetShadowColor(0,0,0,1)e:SetShadowOffset(1,-1)else
+local i=_G.MSUF_SetFontSafe local function h(a,n)if e(i)=="function"then i(a,c,n,l,d.fontKey)else a:SetFont(c,n,l)end a:SetTextColor(o,r,t,U)end local function b(e)if S then e:SetShadowColor(0,0,0,A)e:SetShadowOffset(R,Y)else
 e:SetShadowOffset(0,0)end
 end local function s(t)if not t or not t.statusBar then return end local r=t.statusBar
 local o=t.icon or t.Icon or(t.IconFrame and(t.IconFrame.Icon or t.IconFrame.icon))or t.iconTexture or t.IconTexture local f=t:GetWidth()or r:GetWidth()or 250

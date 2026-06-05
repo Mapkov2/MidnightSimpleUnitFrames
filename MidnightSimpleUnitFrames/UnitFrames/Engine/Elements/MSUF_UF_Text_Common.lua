@@ -124,6 +124,17 @@ local function SetFont(fs, spec, size)
         fs:SetTextColor(r, g, b, a)
         fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = r, g, b, a
     end
+    if fs.SetShadowOffset then
+        local shadowOn = spec and spec.fontShadow == true
+        local sx = shadowOn and (tonumber(spec and spec.fontShadowX) or 1) or 0
+        local sy = shadowOn and (tonumber(spec and spec.fontShadowY) or -1) or 0
+        local sa = shadowOn and (tonumber(spec and spec.fontShadowAlpha) or 1) or 0
+        if fs._msufShadowX ~= sx or fs._msufShadowY ~= sy or fs._msufShadowA ~= sa then
+            if shadowOn and fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, sa) end
+            fs:SetShadowOffset(sx, sy)
+            fs._msufShadowX, fs._msufShadowY, fs._msufShadowA = sx, sy, sa
+        end
+    end
 end
 
 local function SetPowerTextColor(frame, r, g, b, a)
@@ -223,11 +234,13 @@ local function HealthTextColor(frame, unit, hp, hpMax)
     local calc = frame and frame._msufHealthCalc
     local r, g, b, raw = GradientColor(unit, calc)
     if raw == true then
-        return r, g, b, 1
+        local _, _, _, a = BaseTextColor(frame)
+        return r, g, b, a
     end
     r, g, b = HealthGradientFromValues(hp, hpMax)
     if r then
-        return r, g, b, 1
+        local _, _, _, a = BaseTextColor(frame)
+        return r, g, b, a
     end
     return BaseTextColor(frame)
 end
@@ -267,11 +280,11 @@ local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride)
     if isPlayer then
         if classNames then
             local r, g, b = ClassColor(unit)
-            return r, g, b, 1
+            return r, g, b, fa
         end
     elseif npcNames then
         local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, keyOverride))
-        return r, g, b, 1
+        return r, g, b, fa
     end
     return fr, fg, fb, fa
 end
@@ -320,18 +333,18 @@ local function InlineTextColor(frame, unit, inline)
     if mode == "NPC" then
         if not isPlayer then
             local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, "targettarget"))
-            return r, g, b, 1
+            return r, g, b, fa
         end
         return fr, fg, fb, fa
     end
     if isPlayer then
         if inline and inline.targetNameClassColor == true then
             local r, g, b = ClassColor(unit)
-            return r, g, b, 1
+            return r, g, b, fa
         end
     elseif inline and inline.targetNameNpcColor == true then
         local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, "targettarget"))
-        return r, g, b, 1
+        return r, g, b, fa
     end
     return fr, fg, fb, fa
 end

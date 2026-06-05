@@ -164,6 +164,32 @@ local FONT_OUTLINE_ALIASES = {
     nooutline = "NONE",
     ["no outline"] = "NONE",
 }
+local FONT_RENDERING_VALUES = { "SMOOTH", "SHARP" }
+local FONT_RENDERING_ALIASES = {
+    smooth = "SMOOTH",
+    normal = "SMOOTH",
+    soft = "SMOOTH",
+    sharp = "SHARP",
+    crisp = "SHARP",
+    pixel = "SHARP",
+    monochrome = "SHARP",
+    mono = "SHARP",
+    pixelscharf = "SHARP",
+    ["pixel sharp"] = "SHARP",
+}
+local FONT_SHADOW_STRENGTH_VALUES = { "SOFT", "NORMAL", "DEEP" }
+local FONT_SHADOW_STRENGTH_ALIASES = {
+    soft = "SOFT",
+    subtle = "SOFT",
+    leicht = "SOFT",
+    normal = "NORMAL",
+    default = "NORMAL",
+    standard = "NORMAL",
+    deep = "DEEP",
+    strong = "DEEP",
+    heavy = "DEEP",
+    stark = "DEEP",
+}
 local CLASS_DEFAULT_VALUES = { "DEFAULT", "CLASS" }
 local CLASS_DEFAULT_ALIASES = {
     default = "DEFAULT",
@@ -200,6 +226,14 @@ local DEFAULT_RESOURCE_ALIASES = {
     powercolor = "RESOURCE",
     ["power color"] = "RESOURCE",
 }
+
+local function NormalizeFontTextAlpha(value)
+    value = tonumber(value) or 1
+    if value > 1 and value <= 100 then value = value / 100 end
+    if value <= 0.75 then return 0.70 end
+    if value <= 0.925 then return 0.85 end
+    return 1
+end
 
 local function ScopedFontOutline(scope)
     if GlobalScopeIsGroup(scope) then
@@ -272,8 +306,44 @@ for _, scope in ipairs({ "shared", "player", "target", "targettarget", "focustar
         apply = ApplyFonts,
         reason = "MSUF_ASSISTANT_FONT_OUTLINE",
     })
+    RegisterScopedSetting("fontScope", scope, "fontMonochrome", "rendering", "Rendering", "enum", "SMOOTH", SharedOrScopedAliases(scope, {
+        "font rendering", "text rendering", "font smoothing", "text smoothing", "sharp text", "pixel font", "monochrome font",
+    }), {
+        flag = "fontOverride",
+        values = FONT_RENDERING_VALUES,
+        valueAliases = FONT_RENDERING_ALIASES,
+        get = function(scopeKey) return GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontMonochrome", false) and "SHARP" or "SMOOTH" end,
+        set = function(scopeKey, value) GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontMonochrome", value == "SHARP") end,
+        apply = ApplyFonts,
+        reason = "MSUF_ASSISTANT_FONT_RENDERING",
+    })
+    RegisterScopedSetting("fontScope", scope, "fontTextAlpha", "textOpacity", "Text Opacity", "number", 1, SharedOrScopedAliases(scope, {
+        "text opacity", "font opacity", "text alpha", "font alpha",
+    }), {
+        flag = "fontOverride",
+        min = 0.7,
+        max = 1,
+        step = 0.05,
+        percent = true,
+        get = function(scopeKey) return NormalizeFontTextAlpha(GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "fontTextAlpha", 1)) end,
+        set = function(scopeKey, value) GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "fontTextAlpha", NormalizeFontTextAlpha(value)) end,
+        apply = ApplyFonts,
+        reason = "MSUF_ASSISTANT_FONT_TEXT_ALPHA",
+    })
+    RegisterScopedSetting("fontScope", scope, "fontBaselineOffset", "baseline", "Baseline", "number", 0, SharedOrScopedAliases(scope, {
+        "text baseline", "font baseline", "baseline offset", "vertical font offset", "font y nudge", "text y nudge",
+    }), {
+        flag = "fontOverride",
+        min = -4,
+        max = 4,
+        step = 1,
+        apply = ApplyFonts,
+        reason = "MSUF_ASSISTANT_FONT_BASELINE",
+    })
     RegisterScopedSetting("fontScope", scope, "nameColorMode", "nameColor", "Name Text Color Mode", "enum", "DEFAULT", SharedOrScopedAliases(scope, {
         "name color", "name text color", "player name color", "unit name color",
+        "name text by class", "name text color by class", "color name by class",
+        "color name text by class", "class color name text", "class colored name text",
     }), {
         flag = "fontOverride",
         values = CLASS_DEFAULT_VALUES,
@@ -283,14 +353,23 @@ for _, scope in ipairs({ "shared", "player", "target", "targettarget", "focustar
         apply = ApplyFonts,
         reason = "MSUF_ASSISTANT_NAME_COLOR_MODE",
     })
+    RegisterScopedSetting("fontScope", scope, "textBackdrop", "textShadow", "Text Shadow", "boolean", true, SharedOrScopedAliases(scope, {
+        "text shadow", "font shadow", "shadow text",
+    }), {
+        flag = "fontOverride",
+        apply = ApplyFonts,
+        reason = "MSUF_ASSISTANT_FONT_SHADOW",
+    })
+    RegisterScopedSetting("fontScope", scope, "fontShadowStrength", "shadowStrength", "Shadow Strength", "enum", "NORMAL", SharedOrScopedAliases(scope, {
+        "shadow strength", "text shadow strength", "font shadow strength", "shadow intensity",
+    }), {
+        flag = "fontOverride",
+        values = FONT_SHADOW_STRENGTH_VALUES,
+        valueAliases = FONT_SHADOW_STRENGTH_ALIASES,
+        apply = ApplyFonts,
+        reason = "MSUF_ASSISTANT_FONT_SHADOW_STRENGTH",
+    })
     if not GlobalScopeIsGroup(scope) then
-        RegisterScopedSetting("fontScope", scope, "textBackdrop", "textShadow", "Text Shadow", "boolean", true, SharedOrScopedAliases(scope, {
-            "text shadow", "font shadow", "shadow text",
-        }), {
-            flag = "fontOverride",
-            apply = ApplyFonts,
-            reason = "MSUF_ASSISTANT_FONT_SHADOW",
-        })
         RegisterScopedSetting("fontScope", scope, "npcNameRed", "npcNameColor", "NPC Name Text Color", "enum", "DEFAULT", SharedOrScopedAliases(scope, {
             "npc name color", "npc name red", "npc text color",
         }), {
@@ -304,6 +383,9 @@ for _, scope in ipairs({ "shared", "player", "target", "targettarget", "focustar
         })
         RegisterScopedSetting("fontScope", scope, "colorHealthTextByHealth", "healthTextColor", "Health Text Color Mode", "enum", "DEFAULT", SharedOrScopedAliases(scope, {
             "health text color", "hp text color", "health value color",
+            "color text by health", "text color by health", "color health text",
+            "health color text", "hp color text", "health text by health",
+            "health text color by health", "hp text color by health",
         }), {
             flag = "fontOverride",
             values = DEFAULT_HEALTH_VALUES,
@@ -315,6 +397,11 @@ for _, scope in ipairs({ "shared", "player", "target", "targettarget", "focustar
         })
         RegisterScopedSetting("fontScope", scope, "colorPowerTextByType", "powerTextColor", "Power Text Color Mode", "enum", "DEFAULT", SharedOrScopedAliases(scope, {
             "power text color", "mana text color", "resource text color", "power value color",
+            "color text by power", "text color by power", "color text by resource",
+            "text color by resource", "color text by mana", "text color by mana",
+            "color power text", "power color text", "mana color text", "resource color text",
+            "power text by power", "power text by type", "power text color by power",
+            "mana text color by mana", "resource text color by resource",
         }), {
             flag = "fontOverride",
             values = DEFAULT_RESOURCE_VALUES,

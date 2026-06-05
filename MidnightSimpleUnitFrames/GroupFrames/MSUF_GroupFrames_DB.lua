@@ -20,6 +20,47 @@ local pairs = pairs
 local ipairs = ipairs
 local ResolveFontPathSafe = _G.MSUF_ResolveFontPath or function(path) return path end
 
+local function ComposeFontFlags(outline, monochrome)
+    local flags = ""
+    outline = tostring(outline or "OUTLINE"):upper()
+    if outline == "THICKOUTLINE" then
+        flags = "THICKOUTLINE"
+    elseif outline ~= "NONE" and outline ~= "" then
+        flags = "OUTLINE"
+    end
+    if monochrome == true then
+        flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
+    end
+    return flags
+end
+
+local function ClampTextAlpha(value)
+    value = tonumber(value) or 1
+    if value < 0.7 then return 0.7 end
+    if value > 1 then return 1 end
+    return value
+end
+
+local function ClampBaselineOffset(value)
+    value = tonumber(value) or 0
+    if value < -4 then return -4 end
+    if value > 4 then return 4 end
+    return value
+end
+
+local function NormalizeShadowStrength(value)
+    value = tostring(value or "NORMAL"):upper()
+    if value == "SOFT" or value == "DEEP" then return value end
+    return "NORMAL"
+end
+
+local function ShadowMetrics(value)
+    value = NormalizeShadowStrength(value)
+    if value == "SOFT" then return 0.55, 1, -1 end
+    if value == "DEEP" then return 1, 2, -2 end
+    return 1, 1, -1
+end
+
 ---
 --- C-API references for secret-safe text formatting (WoW 12.0)
 --- AbbreviateNumbers / BreakUpLargeNumbers accept secret values and
@@ -147,6 +188,11 @@ local PARTY_DEFAULTS = {
     hideNameOnDeadOffline = false,
     --- Font style/color (font family is global)
     fontOutline       = nil,
+    fontMonochrome    = nil,
+    textBackdrop      = nil,
+    fontShadowStrength = nil,
+    fontTextAlpha     = nil,
+    fontBaselineOffset = nil,
     useGlobalFontColor = true,
     fontR             = nil,
     fontG             = nil,
@@ -1550,24 +1596,61 @@ end
 --- Resolve font outline flags
 function GF.ResolveFontFlags(kind)
     local conf = GF.GetConf(kind)
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    local monochrome = gen and gen.fontMonochrome == true
     --- When override active: use GF-local fontOutline
     if conf.fontOverride then
         local v = conf.fontOutline
+        if conf.fontMonochrome ~= nil then monochrome = conf.fontMonochrome == true end
         if v ~= nil then
-            if v == "" or v == "NONE" then return "" end
-            if v == "OUTLINE" or v == "THICKOUTLINE" then return v end
+            if v == "" then v = "NONE" end
+            if v == "NONE" or v == "OUTLINE" or v == "THICKOUTLINE" then return ComposeFontFlags(v, monochrome) end
         end
     end
     --- Fallback: derive from global boldText / noOutline
-    local db = _G.MSUF_DB
-    local gen = db and db.general
+    local outline = "OUTLINE"
     if gen then
-        if gen.boldText then return "THICKOUTLINE" end
-        if gen.noOutline then return "" end
+        if gen.boldText then outline = "THICKOUTLINE"
+        elseif gen.noOutline then outline = "NONE" end
     end
     local fn = MSUF.Castbars and MSUF.Castbars._GetFontFlags
-    if type(fn) == "function" then return fn() end
-    return "OUTLINE"
+    if type(fn) == "function" and not (gen and (gen.boldText or gen.noOutline or gen.fontMonochrome)) then return fn() end
+    return ComposeFontFlags(outline, monochrome)
+end
+
+function GF.ResolveFontTextAlpha(kind)
+    local conf = GF.GetConf(kind)
+    if conf.fontOverride and conf.fontTextAlpha ~= nil then
+        return ClampTextAlpha(conf.fontTextAlpha)
+    end
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    return ClampTextAlpha(gen and gen.fontTextAlpha)
+end
+
+function GF.ResolveFontBaselineOffset(kind)
+    local conf = GF.GetConf(kind)
+    if conf.fontOverride and conf.fontBaselineOffset ~= nil then
+        return ClampBaselineOffset(conf.fontBaselineOffset)
+    end
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    return ClampBaselineOffset(gen and gen.fontBaselineOffset)
+end
+
+function GF.ResolveFontShadow(kind)
+    local conf = GF.GetConf(kind)
+    local db = _G.MSUF_DB
+    local gen = db and db.general
+    local enabled = not (gen and gen.textBackdrop == false)
+    local strength = gen and gen.fontShadowStrength or "NORMAL"
+    if conf.fontOverride then
+        if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
+        if conf.fontShadowStrength ~= nil then strength = conf.fontShadowStrength end
+    end
+    local alpha, x, y = ShadowMetrics(strength)
+    return enabled, alpha, x, y
 end
 
 --- Resolve font color (base color for non-name text)

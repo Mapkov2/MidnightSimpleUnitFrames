@@ -1009,12 +1009,21 @@ local function CompileSpecUncached(kind, frame, unit, conf)
     if GF.ResolveFontColor then
         tr, tg, tb = GF.ResolveFontColor(kind)
     end
+    local textAlpha = GF.ResolveFontTextAlpha and GF.ResolveFontTextAlpha(kind) or 1
+    local baselineOffset = GF.ResolveFontBaselineOffset and GF.ResolveFontBaselineOffset(kind) or 0
+    local fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = true, 1, 1, -1
+    if GF.ResolveFontShadow then
+        fontShadow, fontShadowAlpha, fontShadowX, fontShadowY = GF.ResolveFontShadow(kind)
+    end
 
     local healthLeft, healthCenter, healthRight = TextSlots(conf)
     local healthVisual = ResolveHealthVisual(conf)
     local nameTextOptions = ResolveNameTextOptions(kind, conf)
-    local hpX, hpY = Num(conf.hpOffsetX, 0), Num(conf.hpOffsetY, 0)
-    local powerX, powerY = Num(conf.powerOffsetX, 0), Num(conf.powerOffsetY, 0)
+    if type(nameTextOptions.nameColor) == "table" then
+        nameTextOptions.nameColor.a = textAlpha
+    end
+    local hpX, hpY = Num(conf.hpOffsetX, 0), Num(conf.hpOffsetY, 0) + baselineOffset
+    local powerX, powerY = Num(conf.powerOffsetX, 0), Num(conf.powerOffsetY, 0) + baselineOffset
     local status = CompileStatus(kind, conf)
     local group = CompileGroupVisuals(kind, conf)
     local alpha = CompileAlpha(conf)
@@ -1063,7 +1072,11 @@ local function CompileSpecUncached(kind, frame, unit, conf)
         nameFontSize = Num(conf.nameFontSize, 12),
         healthFontSize = Num(conf.hpFontSize, 10),
         powerFontSize = Num(conf.powerFontSize, 9),
-        textColor = { r = tr or 1, g = tg or 1, b = tb or 1, a = 1 },
+        fontShadow = fontShadow == true,
+        fontShadowAlpha = fontShadowAlpha,
+        fontShadowX = fontShadowX,
+        fontShadowY = fontShadowY,
+        textColor = { r = tr or 1, g = tg or 1, b = tb or 1, a = textAlpha },
         showName = conf.showName ~= false,
         showHealthText = conf.showHPText ~= false,
         showPowerText = IsPowerTextEnabled(kind, conf),
@@ -1109,7 +1122,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
             nameColor = nameTextOptions.nameColor,
             nameAnchor = conf.nameAnchor or "LEFT",
             nameX = Num(conf.nameOffsetX, 0),
-            nameY = Num(conf.nameOffsetY, 0),
+            nameY = Num(conf.nameOffsetY, 0) + baselineOffset,
             nameLayer = Layer(conf.nameTextLayer, 5),
             nameShorten = nameTextOptions.nameShorten == true,
             nameShortenMax = nameTextOptions.nameShortenMax,

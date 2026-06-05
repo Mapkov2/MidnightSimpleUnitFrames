@@ -119,7 +119,16 @@ function Render.Install(Preview, deps)
 
             if fs.SetShadowOffset then
                 if useShadow == nil then useShadow = general and general.textBackdrop == true end
-                fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0)
+                if useShadow then
+                    local strength = tostring(general and general.fontShadowStrength or "NORMAL"):upper()
+                    local shadowAlpha, shadowX, shadowY = 1, 1, -1
+                    if strength == "SOFT" then shadowAlpha, shadowX, shadowY = 0.55, 1, -1
+                    elseif strength == "DEEP" then shadowAlpha, shadowX, shadowY = 1, 2, -2 end
+                    if fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, shadowAlpha) end
+                    fs:SetShadowOffset(shadowX, shadowY)
+                else
+                    fs:SetShadowOffset(0, 0)
+                end
             end
         end
     end
@@ -573,6 +582,13 @@ function Preview.Refresh(box, reason)
     local nameSize = S(nameRawSize); if nameSize < 7 then nameSize = 7 end
     local hpSize = S(tonumber(conf.hpFontSize) or tonumber(g.hpFontSize) or baseTextSize); if hpSize < 7 then hpSize = 7 end
     local pwrSize = S(tonumber(conf.powerFontSize) or tonumber(g.powerFontSize) or baseTextSize); if pwrSize < 7 then pwrSize = 7 end
+    box._fontPreviewTextAlpha = tonumber(runtimeSpec and runtimeSpec.textColor and runtimeSpec.textColor.a)
+        or tonumber(conf.fontOverride == true and conf.fontTextAlpha)
+        or tonumber(g.fontTextAlpha)
+        or 1
+    if box._fontPreviewTextAlpha < 0.7 then box._fontPreviewTextAlpha = 0.7 elseif box._fontPreviewTextAlpha > 1 then box._fontPreviewTextAlpha = 1 end
+    box._fontPreviewBaselineOffset = tonumber(conf.fontOverride == true and conf.fontBaselineOffset) or tonumber(g.fontBaselineOffset) or 0
+    if box._fontPreviewBaselineOffset < -4 then box._fontPreviewBaselineOffset = -4 elseif box._fontPreviewBaselineOffset > 4 then box._fontPreviewBaselineOffset = 4 end
     ApplyPreviewFont(mock.nameText, nameSize)
     ApplyPreviewFont(mock.raidGroupNameText, nameSize)
     ApplyPreviewFont(mock.totInlineSep, nameSize)
@@ -585,10 +601,10 @@ function Preview.Refresh(box, reason)
     ApplyPreviewFont(mock.powerTextCenter, pwrSize)
     ApplyPreviewFont(mock.powerText, pwrSize)
     ApplyPreviewFont(mock.powerTextPct, pwrSize)
-    mock.nameText:SetTextColor(fr, fg, fb, 1)
-    mock.raidGroupNameText:SetTextColor(fr, fg, fb, 1)
-    mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, 1)
-    mock.totInlineText:SetTextColor(fr, fg, fb, 1)
+    mock.nameText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
+    mock.raidGroupNameText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
+    mock.totInlineSep:SetTextColor(0.72, 0.76, 0.84, box._fontPreviewTextAlpha)
+    mock.totInlineText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
     local hpTextR, hpTextG, hpTextB = fr, fg, fb
     local healthTextByHealth = g.colorHealthTextByHealth == true
     if conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then
@@ -603,21 +619,21 @@ function Preview.Refresh(box, reason)
             hpTextR, hpTextG, hpTextB = (1 - pct) * 2, 1, 0
         end
     end
-    mock.hpTextLeft:SetTextColor(hpTextR, hpTextG, hpTextB, 1)
-    mock.hpTextCenter:SetTextColor(hpTextR, hpTextG, hpTextB, 1)
-    mock.hpText:SetTextColor(hpTextR, hpTextG, hpTextB, 1)
-    mock.hpTextPct:SetTextColor(hpTextR, hpTextG, hpTextB, 1)
+    mock.hpTextLeft:SetTextColor(hpTextR, hpTextG, hpTextB, box._fontPreviewTextAlpha)
+    mock.hpTextCenter:SetTextColor(hpTextR, hpTextG, hpTextB, box._fontPreviewTextAlpha)
+    mock.hpText:SetTextColor(hpTextR, hpTextG, hpTextB, box._fontPreviewTextAlpha)
+    mock.hpTextPct:SetTextColor(hpTextR, hpTextG, hpTextB, box._fontPreviewTextAlpha)
     if g.colorPowerTextByType == true then
         local prt, pgt, pbt = PowerColor(data.powerToken)
-        mock.powerTextLeft:SetTextColor(prt, pgt, pbt, 1)
-        mock.powerTextCenter:SetTextColor(prt, pgt, pbt, 1)
-        mock.powerText:SetTextColor(prt, pgt, pbt, 1)
-        mock.powerTextPct:SetTextColor(prt, pgt, pbt, 1)
+        mock.powerTextLeft:SetTextColor(prt, pgt, pbt, box._fontPreviewTextAlpha)
+        mock.powerTextCenter:SetTextColor(prt, pgt, pbt, box._fontPreviewTextAlpha)
+        mock.powerText:SetTextColor(prt, pgt, pbt, box._fontPreviewTextAlpha)
+        mock.powerTextPct:SetTextColor(prt, pgt, pbt, box._fontPreviewTextAlpha)
     else
-        mock.powerTextLeft:SetTextColor(fr, fg, fb, 1)
-        mock.powerTextCenter:SetTextColor(fr, fg, fb, 1)
-        mock.powerText:SetTextColor(fr, fg, fb, 1)
-        mock.powerTextPct:SetTextColor(fr, fg, fb, 1)
+        mock.powerTextLeft:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
+        mock.powerTextCenter:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
+        mock.powerText:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
+        mock.powerTextPct:SetTextColor(fr, fg, fb, box._fontPreviewTextAlpha)
     end
     mock.nameText:SetText(ShortenPreviewName(data.name, key, conf))
     mock.raidGroupNameText:SetText(D.PreviewRaidGroupNameText(conf))
@@ -687,7 +703,7 @@ function Preview.Refresh(box, reason)
     mock.powerTextPct:SetShown(false)
     mock.nameText:ClearAllPoints()
     local npt, nrel, nx, njust = ResolveNameAnchor(conf.nameTextAnchor or "LEFT", S(tonumber(conf.nameOffsetX) or 4))
-    mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S(tonumber(conf.nameOffsetY) or -4))
+    mock.nameText:SetPoint(npt, mock.textFrame, nrel, nx, S((tonumber(conf.nameOffsetY) or -4) + box._fontPreviewBaselineOffset))
     mock.nameText:SetJustifyH(njust)
     mock.raidGroupNameText:ClearAllPoints()
     local raidGroupX = S(tonumber(raidGroupCfg and raidGroupCfg.x) or tonumber(conf.raidGroupNameOffsetX) or 3)
@@ -710,7 +726,7 @@ function Preview.Refresh(box, reason)
             local ir, ig, ib = PreviewToTInlineColor(totConf.totInlineColorMode, totData, tr, tg, tb, fr, fg, fb)
             mock.totInlineSep:SetText(sep ~= "" and sep or " ")
             mock.totInlineText:SetText(ShortenPreviewName(totData.name, "targettarget", conf))
-            mock.totInlineText:SetTextColor(ir, ig, ib, 1)
+            mock.totInlineText:SetTextColor(ir, ig, ib, box._fontPreviewTextAlpha)
             local inlineAnchor = (showRaidGroupName and raidGroupAnchor == "NAMERIGHT") and mock.raidGroupNameText or mock.nameText
             mock.totInlineSep:ClearAllPoints()
             mock.totInlineSep:SetPoint("LEFT", inlineAnchor, "RIGHT", S(4), 0)
@@ -734,7 +750,7 @@ function Preview.Refresh(box, reason)
         return tonumber(v) or fallback or 0
     end
     local hpOX = NumField("hpOffsetX", "hpTextOffsetX", "hpOffsetX", "hpTextOffsetX", -4)
-    local hpOY = NumField("hpOffsetY", "hpTextOffsetY", "hpOffsetY", "hpTextOffsetY", -4)
+    local hpOY = NumField("hpOffsetY", "hpTextOffsetY", "hpOffsetY", "hpTextOffsetY", -4) + box._fontPreviewBaselineOffset
     local hpLeftX = hpOX + NumField("hpTextLeftOffsetX", "hpLeftOffsetX", "hpTextLeftOffsetX", "hpLeftOffsetX", 0)
     local hpLeftY = hpOY + NumField("hpTextLeftOffsetY", "hpLeftOffsetY", "hpTextLeftOffsetY", "hpLeftOffsetY", 0)
     local hpCenterX = hpOX + NumField("hpTextCenterOffsetX", "hpCenterOffsetX", "hpTextCenterOffsetX", "hpCenterOffsetX", 0)
@@ -746,7 +762,7 @@ function Preview.Refresh(box, reason)
     PlacePreviewSlot(mock.hpText, mock.textFrame, "RIGHT", "RIGHT", S(-4 + hpRightX), S(hpRightY), "RIGHT")
     PlacePreviewSlot(mock.hpTextPct, mock.textFrame, "RIGHT", "RIGHT", S(-4 + hpRightX), S(hpRightY), "RIGHT")
     local pOX = NumField("powerOffsetX", "powerTextOffsetX", "powerOffsetX", "powerTextOffsetX", -4)
-    local pOY = NumField("powerOffsetY", "powerTextOffsetY", "powerOffsetY", "powerTextOffsetY", 4)
+    local pOY = NumField("powerOffsetY", "powerTextOffsetY", "powerOffsetY", "powerTextOffsetY", 4) + box._fontPreviewBaselineOffset
     local pLeftX = pOX + NumField("powerTextLeftOffsetX", "powerLeftOffsetX", "powerTextLeftOffsetX", "powerLeftOffsetX", 0)
     local pLeftY = pOY + NumField("powerTextLeftOffsetY", "powerLeftOffsetY", "powerTextLeftOffsetY", "powerLeftOffsetY", 0)
     local pCenterX = pOX + NumField("powerTextCenterOffsetX", "powerCenterOffsetX", "powerTextCenterOffsetX", "powerCenterOffsetX", 0)
