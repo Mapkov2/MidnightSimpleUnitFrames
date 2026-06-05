@@ -512,14 +512,21 @@ local SUGGESTION_IGNORE_TOKENS = {
     more = true, less = true, larger = true, smaller = true, bigger = true, wider = true, taller = true, thicker = true, thinner = true,
     on = true, off = true, ["true"] = true, ["false"] = true, yes = true, no = true,
     to = true, as = true, is = true, be = true, value = true, with = true, without = true,
+    ["for"] = true, of = true, from = true, into = true, onto = true,
+    frame = true, frames = true, unitframe = true, unitframes = true, group = true, groups = true,
+    setting = true, settings = true, option = true, options = true, control = true, controls = true,
     all = true, every = true, everyone = true, everything = true, each = true,
     setze = true, stelle = true, aktivieren = true, aktiviert = true, deaktivieren = true, deaktiviert = true,
     einschalten = true, eingeschaltet = true, ausschalten = true, ausgeschaltet = true,
     erhoehe = true, erhoehen = true, hoeher = true, groesser = true, kleiner = true, senke = true, reduziere = true,
     anzeigen = true, einblenden = true, ausblenden = true, verstecken = true, versteckt = true,
     an = true, aus = true, ja = true, nein = true, auf = true, zu = true, als = true, wert = true,
+    fuer = true, fur = true, vom = true, von = true, nach = true, ["in"] = true,
+    gruppe = true, gruppen = true, gruppenframes = true,
     alle = true, alles = true, jede = true, jeder = true, jedes = true, jeweils = true,
 }
+
+local REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT = 260
 
 local function MeaningTokens(text)
     local set = {}
@@ -610,6 +617,81 @@ local function SettingPartialSuggestionScore(setting, text)
         if score > best then best = score end
     end
     return best
+end
+
+P._AddCandidateIndexTokens = function(tokenSet, text)
+    local _, tokens = MeaningTokens(text)
+    for i = 1, #tokens do
+        tokenSet[tokens[i]] = true
+    end
+end
+
+P._BuildRegistryCandidateIndex = function(settings)
+    local byToken = {}
+    local all = {}
+    for i = 1, #(settings or {}) do
+        local setting = settings[i]
+        if type(setting) == "table" then
+            all[#all + 1] = setting
+            local tokenSet = {}
+            P._AddCandidateIndexTokens(tokenSet, setting.key)
+            P._AddCandidateIndexTokens(tokenSet, setting.label)
+            P._AddCandidateIndexTokens(tokenSet, setting.attribute)
+            local aliases = setting.aliases
+            for j = 1, #(aliases or {}) do
+                P._AddCandidateIndexTokens(tokenSet, aliases[j])
+            end
+            local prefixes = setting.valuePrefixes
+            for j = 1, #(prefixes or {}) do
+                P._AddCandidateIndexTokens(tokenSet, prefixes[j])
+            end
+            for token in pairs(tokenSet) do
+                byToken[token] = byToken[token] or {}
+                byToken[token][#byToken[token] + 1] = setting
+            end
+        end
+    end
+    P._registryCandidateIndexSettings = settings
+    P._registryCandidateIndexCount = #(settings or {})
+    P._registryCandidateIndexByToken = byToken
+    P._registryCandidateIndexAll = all
+end
+
+P._EnsureRegistryCandidateIndex = function(settings)
+    if settings ~= P._registryCandidateIndexSettings or #(settings or {}) ~= (P._registryCandidateIndexCount or -1) then
+        P._BuildRegistryCandidateIndex(settings)
+    end
+end
+
+P.RegistryCandidateSettings = function(text, settings)
+    P._EnsureRegistryCandidateIndex(settings)
+    local _, tokens = MeaningTokens(text)
+    if #tokens == 0 then return {} end
+    local selectedTokens, selectedCount, hasRareToken = {}, 0, false
+    for i = 1, #tokens do
+        local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[tokens[i]]
+        if type(list) == "table" and #list > 0 and #list <= REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT then
+            selectedCount = selectedCount + 1
+            selectedTokens[selectedCount] = tokens[i]
+            hasRareToken = true
+        end
+    end
+    if not hasRareToken then
+        selectedTokens = tokens
+        selectedCount = #tokens
+    end
+    local out, seen = {}, {}
+    for i = 1, selectedCount do
+        local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[selectedTokens[i]]
+        for j = 1, #(list or {}) do
+            local setting = list[j]
+            if setting and not seen[setting] then
+                seen[setting] = true
+                out[#out + 1] = setting
+            end
+        end
+    end
+    return out
 end
 
 local function AddUniqueSuggestion(out, seen, item)
@@ -1671,7 +1753,7 @@ local function ParseRegistryAlias(text, raw)
     if repeated then return repeated end
     local groupAvailability = ParseGroupAvailabilityIntent(text)
     if groupAvailability then return groupAvailability end
-    local settings = Registry and Registry:AllSettings() or {}
+    local settings = P.RegistryCandidateSettings(text, Registry and Registry:AllSettings() or {})
     local changes = {}
     local missingValue = {}
     local bestScore = 0

@@ -638,6 +638,168 @@ local function GeneralHelp()
     return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant general help" }
 end
 
+local CHANGELOG_TERMS = {
+    "changelog", "change log", "release notes", "patch notes", "build notes", "version notes",
+    "latest changes", "what changed", "what is new", "whats new",
+    "aenderungen", "anderungen", "neuerungen", "was ist neu", "was hat sich geaendert",
+    "versionshinweise", "patchnotizen",
+}
+
+local CHANGELOG_QUESTION_TERMS = {
+    "what", "explain", "summary", "summarize", "show me", "latest", "release", "notes",
+    "was", "wie", "erklaere", "erklaer", "zusammenfassung", "neu",
+}
+
+local CHANGELOG_OPEN_TERMS = {
+    "open changelog", "close changelog", "toggle changelog",
+    "open change log", "close change log", "toggle change log",
+    "open release notes", "close release notes", "toggle release notes",
+    "oeffne changelog", "changelog oeffnen",
+}
+
+local CHANGELOG_IGNORE_TOKENS = {
+    ["what"] = true, ["changed"] = true, ["change"] = true, ["changes"] = true,
+    ["new"] = true, ["latest"] = true, ["release"] = true, ["releases"] = true,
+    ["note"] = true, ["notes"] = true, ["patch"] = true, ["build"] = true,
+    ["version"] = true, ["versions"] = true, ["preview"] = true, ["alpha"] = true,
+    ["beta"] = true, ["changelog"] = true, ["from"] = true, ["since"] = true,
+    ["current"] = true, ["previous"] = true, ["between"] = true, ["about"] = true,
+    ["with"] = true, ["for"] = true, ["the"] = true, ["and"] = true, ["in"] = true,
+    ["was"] = true, ["ist"] = true, ["neu"] = true, ["sich"] = true,
+    ["geaendert"] = true, ["aenderungen"] = true, ["anderungen"] = true,
+    ["neuerungen"] = true, ["versionshinweise"] = true, ["patchnotizen"] = true,
+    ["zu"] = true, ["zum"] = true, ["zur"] = true, ["ueber"] = true, ["und"] = true,
+}
+
+local function ChangelogData()
+    local data = (type(MSUF) == "table" and MSUF.MSUF_Changelog) or _G.MSUF_Changelog
+    if type(data) ~= "table" then return nil end
+    if type(data.entries) ~= "table" or #data.entries == 0 then return nil end
+    return data
+end
+
+local function LooksLikeChangelogQuestion(query)
+    local norm = Normalize(query)
+    if norm == "" then return false end
+    if ContainsAny(norm, CHANGELOG_OPEN_TERMS) then return false end
+    local hasChangelogTerm = ContainsAny(norm, CHANGELOG_TERMS)
+    if hasChangelogTerm and ContainsAny(norm, CHANGELOG_QUESTION_TERMS) then return true end
+    if ContainsAny(norm, { "latest changes", "release notes", "patch notes", "build notes", "version notes", "was ist neu", "was hat sich geaendert" }) then return true end
+    if ContainsAny(norm, { "what changed", "what is new", "whats new" })
+        and (norm:find("%d+%.%d+") or ContainsAny(norm, {
+            "release", "version", "preview", "alpha", "beta", "patch", "build", "changelog",
+            "menu2", "edit mode", "editmode", "assistant", "dashboard", "search", "runtime",
+            "unit frame", "unitframes", "group frame", "group frames",
+        })) then
+        return true
+    end
+    return false
+end
+K.LooksLikeChangelogQuestion = LooksLikeChangelogQuestion
+
+local function ChangelogEntryMatches(entry, queryNorm, compactQuery)
+    local version = Normalize(entry and entry.version or "")
+    if version == "" then return false end
+    if StringContainsPhrase(queryNorm, version) then return true end
+    local compactVersion = version:gsub("%s+", "")
+    if compactVersion ~= "" and compactQuery:find(compactVersion, 1, true) then return true end
+    local channel, number = version:match("(preview)%s+(%d+)")
+    if not channel then channel, number = version:match("(alpha)%s+(%d+)") end
+    if not channel then channel, number = version:match("(beta)%s+(%d+)") end
+    if channel and number and ContainsAny(queryNorm, { channel .. " " .. number, channel .. number }) then return true end
+    return false
+end
+
+local function ChangelogEntryForQuery(data, query)
+    local entries = data and data.entries or {}
+    local norm = Normalize(query)
+    local compact = norm:gsub("%s+", "")
+    for i = 1, #entries do
+        if ChangelogEntryMatches(entries[i], norm, compact) then return entries[i] end
+    end
+    if ContainsAny(norm, { "previous release", "previous version", "last release", "letzte version", "vorherige version" }) and entries[2] then
+        return entries[2]
+    end
+    return entries[1]
+end
+
+local function ChangelogMeaningTokens(query)
+    local out = {}
+    local seen = {}
+    local norm = Normalize(query)
+    for token in norm:gmatch("%S+") do
+        if #token >= 3 and token:find("%a") and not CHANGELOG_IGNORE_TOKENS[token] and not seen[token] then
+            seen[token] = true
+            out[#out + 1] = token
+        end
+    end
+    return out
+end
+
+local function ChangelogSectionHaystack(section)
+    local parts = { tostring(section and section.title or "") }
+    local bullets = section and section.bullets
+    if type(bullets) == "table" then
+        for i = 1, #bullets do parts[#parts + 1] = tostring(bullets[i] or "") end
+    end
+    return Normalize(table.concat(parts, " "))
+end
+
+local function ChangelogSectionsForQuery(entry, query)
+    local sections = type(entry and entry.sections) == "table" and entry.sections or {}
+    local tokens = ChangelogMeaningTokens(query)
+    if #tokens == 0 then return sections, false end
+    local matched = {}
+    for i = 1, #sections do
+        local haystack = ChangelogSectionHaystack(sections[i])
+        for t = 1, #tokens do
+            if haystack:find(tokens[t], 1, true) then
+                matched[#matched + 1] = sections[i]
+                break
+            end
+        end
+    end
+    if #matched > 0 then return matched, true end
+    return sections, false
+end
+
+local function ChangelogAnswer(query)
+    if not LooksLikeChangelogQuestion(query) then return nil end
+    local data = ChangelogData()
+    if not data then
+        return {
+            text = "No bundled MSUF changelog data is loaded. Try: open changelog.",
+            status = "info",
+            summary = "Assistant changelog answer",
+        }
+    end
+
+    local entry = ChangelogEntryForQuery(data, query)
+    if type(entry) ~= "table" then return nil end
+    local sections, filtered = ChangelogSectionsForQuery(entry, query)
+    local lines = {}
+    local title = "Changelog: " .. tostring(entry.version or data.currentVersion or "MSUF")
+    if entry.date then title = title .. " (" .. tostring(entry.date) .. ")" end
+    lines[#lines + 1] = title
+    if data.rangeLabel and data.rangeLabel ~= "" then lines[#lines + 1] = "Bundled range: " .. tostring(data.rangeLabel) end
+    if filtered then lines[#lines + 1] = "Matched release-note sections for your question." end
+
+    local maxSections = filtered and 5 or 4
+    local maxBullets = filtered and 4 or 2
+    local visibleSections = math.min(#sections, maxSections)
+    for i = 1, visibleSections do
+        local section = sections[i]
+        lines[#lines + 1] = tostring(section.title or "Changes") .. ":"
+        local bullets = type(section.bullets) == "table" and section.bullets or {}
+        local visibleBullets = math.min(#bullets, maxBullets)
+        for b = 1, visibleBullets do lines[#lines + 1] = "- " .. tostring(bullets[b]) end
+        if #bullets > visibleBullets then lines[#lines + 1] = "- ... " .. tostring(#bullets - visibleBullets) .. " more." end
+    end
+    if #sections > visibleSections then lines[#lines + 1] = "... " .. tostring(#sections - visibleSections) .. " more sections in the Dashboard changelog." end
+    lines[#lines + 1] = "Actions: Open Changelog | Search release notes"
+    return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant changelog answer" }
+end
+
 local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
     if norm == "help" or norm == "hilfe" or norm == "show commands" or norm == "commands" or norm == "what can you do" or norm == "what can you do?" then
@@ -682,6 +844,9 @@ end
 
 function K.Answer(query, opts)
     opts = opts or {}
+    local changelog = ChangelogAnswer(query)
+    if changelog then return changelog end
+
     local direct = DirectHelpAnswer(query, opts)
     if direct then return direct end
 

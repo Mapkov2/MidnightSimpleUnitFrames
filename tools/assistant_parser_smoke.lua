@@ -238,10 +238,18 @@ expectActionArg("help for player frame", "assistant_scope_help", "unit", "player
 expectActionArg("help for player frame", "assistant_scope_help", "frameType", "unitframe")
 expectAction("back", "dashboard_page_back")
 expectAction("open previous page", "dashboard_page_back")
+expectAction("forward", "dashboard_page_forward")
+expectAction("open next page", "dashboard_page_forward")
 expectActionArg("copy profile Test", "copy_profile", "name", "Test")
 expectActionArg("copy from profile Test", "start_profile_copy_flow", "source", "Test")
+expectActionArg("rename profile Test", "start_profile_rename_flow", "source", "Test")
 expectActionArg("rename profile Test to New", "rename_profile", "source", "Test")
 expectActionArg("rename profile Test to New", "rename_profile", "name", "New")
+expectActionArg("benenne profil Raid in Raid Neu um", "rename_profile", "source", "Raid")
+expectActionArg("benenne profil Raid in Raid Neu um", "rename_profile", "name", "Raid Neu")
+expectActionArg("profil Raid in Raid Neu umbenennen", "rename_profile", "source", "Raid")
+expectActionArg("profil Raid in Raid Neu umbenennen", "rename_profile", "name", "Raid Neu")
+expectActionArg("profil Raid umbenennen", "start_profile_rename_flow", "source", "Raid")
 expectCopy("copy target profile to player", "copy_unit", "target", { "player" }, { basics = true, text = true, portrait = true, power = true, castbar = true, status = true, load = true, transparency = true, layout = true })
 do
     local parsed = A.Parse("copy target profile to player")
@@ -265,6 +273,9 @@ expectActionArg("apply 1440p global ui scale preset", "apply_global_scale_preset
 expectAction("start guided setup", "guided_setup")
 expectAction("i never used msuf can you guide me", "guided_setup")
 expectAction("can you show me around msuf", "guided_setup")
+expectActionArg("help me setup group frames", "guided_setup", "style", "help me setup group frames")
+expectActionArg("castbar setup guide", "guided_setup", "style", "castbar setup guide")
+expectActionArg("profile setup guide", "guided_setup", "style", "profile setup guide")
 expectActionArg("next setup step", "guided_setup_step", "command", "next")
 expectActionArg("cancel setup", "guided_setup_step", "command", "cancel")
 do
@@ -287,6 +298,9 @@ expectAction("recovery tools", "open_recovery_tools")
 expectAction("enter edit mode", "assistant.action.editMode.enter")
 expectAction("exit edit mode", "assistant.action.editMode.exit")
 expectAction("edit mode status", "assistant.diagnostic.editMode.status")
+expectActionArg("diagnose gameplay", "diagnose_gameplay_helpers", "feature", "all")
+expectActionArg("why is my combat timer not showing", "diagnose_gameplay_helpers", "feature", "combatTimer")
+expectActionArg("wieso ist das fadenkreuz nicht sichtbar", "diagnose_gameplay_helpers", "feature", "combatCrosshair")
 expectAction("cancel edit mode", "assistant.action.editMode.cancel")
 expectActionArg("in edit mode turn off preview auras", "assistant.action.editMode.auras", "value", false)
 expectActionArg("turn off edit mode preview", "assistant.action.editMode.preview", "value", false)
@@ -799,5 +813,14 @@ expectSetting("7", "bars.barOutlineThickness", 7, "outline")
 expectSetting("max", "bars.barOutlineThickness", 8, "outline")
 expectSetting("min", "bars.barOutlineThickness", 0, "outline")
 expectAnswer("what did you change", "Global Bar Outline Thickness")
+local actionCtx = A.GetContext()
+actionCtx.lastChangeBundle = {}
+actionCtx.lastSetting = nil
+actionCtx.lastAction = "copy_unit"
+actionCtx.lastActionLabel = "Copy Unit Settings"
+actionCtx.lastActionMessage = "Done. I copied Target settings to Player."
+actionCtx.lastActionUndoable = true
+expectAnswer("what did you change", "Copy Unit Settings")
+expectAnswer("what did you do", "You can type 'undo' to revert it.")
 
 print("assistant_parser_smoke: ok")

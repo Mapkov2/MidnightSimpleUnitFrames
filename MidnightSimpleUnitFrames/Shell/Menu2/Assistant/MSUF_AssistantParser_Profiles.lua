@@ -205,11 +205,22 @@ end
 local function CleanProfileName(name)
     name = Trim(tostring(name or ""))
     name = name:gsub("^profile%s+", "")
+    name = name:gsub("^profil%s+", "")
     name = name:gsub("%s+profile$", "")
+    name = name:gsub("%s+profil$", "")
     name = name:gsub("^named%s+", "")
     name = name:gsub("^called%s+", "")
+    name = name:gsub("^genannt%s+", "")
+    name = name:gsub("^namens%s+", "")
+    name = name:gsub("^heisst%s+", "")
     name = name:gsub("^to%s+", "")
     name = name:gsub("^as%s+", "")
+    name = name:gsub("^zu%s+", "")
+    name = name:gsub("^in%s+", "")
+    name = name:gsub("^nach%s+", "")
+    name = name:gsub("^als%s+", "")
+    name = name:gsub("%s+umbenennen$", "")
+    name = name:gsub("%s+um$", "")
     name = Trim(name)
     if name == "" then return nil end
     return name
@@ -250,24 +261,68 @@ end
 local function RawRenameProfileNames(raw)
     raw = tostring(raw or "")
     local lower = raw:lower()
-    local function splitAfterPrefix(prefix)
+    local function splitBody(body, connectors)
+        body = tostring(body or "")
+        local lowerBody = body:lower()
+        for i = 1, #(connectors or {}) do
+            local sepStart, sepEnd = lowerBody:find(connectors[i], 1)
+            if sepStart then
+                return CleanProfileName(body:sub(1, sepStart - 1)), CleanProfileName(body:sub(sepEnd + 1))
+            end
+        end
+        return nil, nil
+    end
+    local function splitAfterPrefix(prefix, connectors)
         if lower:sub(1, #prefix) ~= prefix then return nil, nil end
         local start = #prefix + 1
-        local sepStart, sepEnd = lower:find("%s+to%s+", start)
-        if not sepStart then return nil, nil end
-        return CleanProfileName(raw:sub(start, sepStart - 1)), CleanProfileName(raw:sub(sepEnd + 1))
+        return splitBody(raw:sub(start), connectors)
     end
+    local englishConnectors = { "%s+to%s+" }
+    local germanConnectors = { "%s+um%s+in%s+", "%s+um%s+zu%s+", "%s+in%s+", "%s+zu%s+" }
 
-    local source, dest = splitAfterPrefix("rename profile ")
+    local source, dest = splitAfterPrefix("rename profile ", englishConnectors)
     if source and dest then return source, dest end
 
     dest = RawAfterPrefix(raw, { "rename current profile to ", "rename profile to " })
     if dest then return nil, dest end
 
-    source, dest = splitAfterPrefix("rename ")
+    source, dest = splitAfterPrefix("benenne profil ", germanConnectors)
+    if source and dest then return source, dest end
+    source, dest = splitAfterPrefix("benenne profile ", germanConnectors)
+    if source and dest then return source, dest end
+    local body = RawBetween(raw, "profil ", " umbenennen") or RawBetween(raw, "profile ", " umbenennen")
+    if body then
+        source, dest = splitBody(body, germanConnectors)
+        if source and dest then return source, dest end
+        return CleanProfileName(body), nil
+    end
+
+    dest = RawAfterPrefix(raw, {
+        "benenne aktuelles profil in ",
+        "benenne aktuelles profil zu ",
+        "benenne profil in ",
+        "benenne profil zu ",
+        "aktuelles profil in ",
+        "aktuelles profil zu ",
+    })
+    if dest then return nil, dest end
+
+    source = RawAfterPrefix(raw, { "rename profile " })
+    if source then return CleanProfileName(source), nil end
+
+    source = RawAfterPrefix(raw, { "benenne profil ", "benenne profile ", "profil " })
+    if source then return CleanProfileName(source), nil end
+
+    source, dest = splitAfterPrefix("rename ", englishConnectors)
     if source and dest then
         source = CleanProfileName((source:gsub("%s+profile$", "")))
         return source, dest
+    end
+
+    source = RawAfterPrefix(raw, { "rename " })
+    if source then
+        source = CleanProfileName((source:gsub("%s+profile$", "")))
+        if source ~= "" then return source, nil end
     end
 
     return nil, nil
@@ -414,7 +469,20 @@ local function ParseWorkflowLifecycle(text)
             action = action,
             args = {},
             label = "Open previous Dashboard page",
-            summary = "Uses the Assistant page stack when available.",
+            summary = "Uses the Assistant page stack first, then native Menu2 page history when available.",
+        } or nil
+    end
+    if text == "forward" or text == "forwards" or text == "vorwaerts" or ContainsAny(text, {
+        "go forward", "open next page", "next page", "forward page", "return forward", "page forward",
+        "go to next page", "naechste seite", "seite vorwaerts",
+    }) then
+        local action = Registry and Registry:GetAction("dashboard_page_forward")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Open next Dashboard page",
+            summary = "Uses native Menu2 page history when available.",
         } or nil
     end
     if text == "cancel" or ContainsAny(text, { "cancel workflow", "cancel current workflow", "cancel assistant workflow", "stop assistant workflow", "abort workflow" }) then
@@ -734,7 +802,7 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, { "rename", "umbenennen", "profile rename" }) then
+    if ContainsAny(text, { "rename", "umbenennen", "benenne", "benenn", "profile rename" }) then
         local source, dest = RawRenameProfileNames(rawText)
         if not source and not dest then source, dest = text:match("rename%s+profile%s+(.+)%s+to%s+(.+)$") end
         if not source then source, dest = text:match("rename%s+(.+)%s+profile%s+to%s+(.+)$") end

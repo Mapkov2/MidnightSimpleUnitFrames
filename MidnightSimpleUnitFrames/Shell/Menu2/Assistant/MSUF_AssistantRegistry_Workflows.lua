@@ -37,7 +37,74 @@ end
 
 local function IsCancel(text)
     text = Normalize(text)
-    return text == "cancel" or text == "no" or text == "nein" or text == "abort" or text == "stop" or text == "close"
+    if text == "cancel" or text == "no" or text == "nein" or text == "abort" or text == "stop" or text == "close" then return true end
+    local phrases = {
+        "never mind", "nevermind", "forget it", "cancel that", "abort that", "stop that", "not now",
+        "no thanks", "no thank you", "dont", "do not",
+        "abbrechen", "abbruch", "nein danke", "vergiss es", "lass es", "doch nicht",
+    }
+    for i = 1, #phrases do
+        if (" " .. text .. " "):find(" " .. phrases[i] .. " ", 1, true) then return true end
+    end
+    return false
+end
+
+local function StripPrefixCI(raw, prefix)
+    raw = Trim(raw)
+    prefix = tostring(prefix or "")
+    if raw == "" or prefix == "" then return nil end
+    if raw:sub(1, #prefix):lower() == prefix:lower() then
+        local value = Trim(raw:sub(#prefix + 1))
+        value = Trim(value:gsub("^[:=%-%s]+", ""))
+        return value
+    end
+    return nil
+end
+
+local function StripSuffixCI(raw, suffix)
+    raw = Trim(raw)
+    suffix = tostring(suffix or "")
+    if raw == "" or suffix == "" or #raw < #suffix then return raw end
+    if raw:sub(#raw - #suffix + 1):lower() == suffix:lower() then
+        return Trim(raw:sub(1, #raw - #suffix))
+    end
+    return raw
+end
+
+local function CleanPendingProfileDestination(text, kind)
+    local raw = Trim(text)
+    if raw == "" then return "" end
+    raw = Trim(raw:gsub("[%.!]+$", ""))
+    raw = StripSuffixCI(raw, " please")
+    raw = StripSuffixCI(raw, " bitte")
+    local politePrefix = StripPrefixCI(raw, "please ") or StripPrefixCI(raw, "bitte ")
+    if politePrefix and politePrefix ~= "" then raw = politePrefix end
+    local prefixes = {
+        "call it ", "name it ", "use name ", "use profile name ", "profile name ",
+        "new profile name ", "new profile ", "destination profile ", "destination ",
+        "to profile ", "to ",
+        "nenn es ", "nenne es ", "name ist ", "profilname ", "zu profil ", "zu ",
+        "nach profil ", "nach ", "als ",
+    }
+    if kind == "profileCopyDestination" then
+        local copyPrefixes = { "copy it to ", "copy to ", "copy profile to ", "kopiere es nach ", "kopiere nach " }
+        for i = 1, #copyPrefixes do
+            local value = StripPrefixCI(raw, copyPrefixes[i])
+            if value and value ~= "" then raw = value; break end
+        end
+    elseif kind == "profileRenameDestination" then
+        local renamePrefixes = { "rename it to ", "rename to ", "rename profile to ", "benenne es um in ", "benenne es um zu ", "benenne es in ", "umbenennen in ", "umbenennen zu ", "in profile ", "in " }
+        for i = 1, #renamePrefixes do
+            local value = StripPrefixCI(raw, renamePrefixes[i])
+            if value and value ~= "" then raw = value; break end
+        end
+    end
+    for i = 1, #prefixes do
+        local value = StripPrefixCI(raw, prefixes[i])
+        if value and value ~= "" then raw = value; break end
+    end
+    raw = Trim(raw:gsub("^['\"`]+", ""):gsub("['\"`]+$", ""))
+    return raw
 end
 
 local function SafeContext()
@@ -179,15 +246,20 @@ end
 function A.Workflow.GoBackPage()
     local stack = type(A.Workflow.navStack) == "table" and A.Workflow.navStack or nil
     local page = stack and table.remove(stack) or nil
-    if type(page) ~= "string" or page == "" then
-        return false, "Dashboard back navigation has no Assistant page history yet. Open a page through the Assistant first."
+    if type(page) == "string" and page ~= "" then
+        if M and type(M.Open) == "function" then
+            if M.Open(page) ~= false then return true, "Opened previous page." end
+        elseif M and type(M.SelectPage) == "function" then
+            if M.SelectPage(page) ~= false then return true, "Opened previous page." end
+        end
     end
-    if M and type(M.Open) == "function" then
-        if M.Open(page) ~= false then return true, "Opened previous page." end
-    elseif M and type(M.SelectPage) == "function" then
-        if M.SelectPage(page) ~= false then return true, "Opened previous page." end
-    end
+    if M and type(M.GoBackPage) == "function" then return M.GoBackPage() end
     return false, "Dashboard back navigation is not available right now."
+end
+
+function A.Workflow.GoForwardPage()
+    if M and type(M.GoForwardPage) == "function" then return M.GoForwardPage() end
+    return false, "Dashboard forward navigation is not available right now."
 end
 
 function A.Workflow.WorkflowStatusText()
@@ -200,6 +272,10 @@ function A.Workflow.WorkflowStatusText()
     lines[#lines + 1] = "- Assistant panel: " .. (CurrentLargePanelKind() or "none")
     local guided = SafeContext() and SafeContext().guidedSetup
     lines[#lines + 1] = "- Guided setup: " .. (type(guided) == "table" and "active" or "inactive")
+    if M and type(M.GetPageHistoryState) == "function" then
+        local state = M.GetPageHistoryState() or {}
+        lines[#lines + 1] = "- Native page history: back=" .. tostring(tonumber(state.backCount) or 0) .. ", forward=" .. tostring(tonumber(state.forwardCount) or 0)
+    end
     if A.Workflow.EditMode and type(A.Workflow.EditMode.StatusText) == "function" then
         lines[#lines + 1] = ""
         lines[#lines + 1] = A.Workflow.EditMode.StatusText()
@@ -242,8 +318,8 @@ function A.HandlePendingFlow(text)
         return { text = message, status = ok and "applied" or "failed" }
     end
     if flow.kind == "profileCopyDestination" then
-        local dest = Trim(text)
-        if dest == "" then return { text = "Type the destination profile name or 'cancel'.", status = "confirmation_needed" } end
+        local dest = CleanPendingProfileDestination(text, flow.kind)
+        if dest == "" then return { text = "Reply with the destination profile name, for example 'call it Raid Backup', or say 'never mind' to cancel.", status = "confirmation_needed" } end
         A.ClearPendingFlow()
         local action = Registry:GetAction("copy_profile_from_to")
         if not action then return { text = "Profile copy flow is not available right now.", status = "failed" } end
@@ -257,8 +333,8 @@ function A.HandlePendingFlow(text)
         })
     end
     if flow.kind == "profileRenameDestination" then
-        local dest = Trim(text)
-        if dest == "" then return { text = "Type the new profile name or 'cancel'.", status = "confirmation_needed" } end
+        local dest = CleanPendingProfileDestination(text, flow.kind)
+        if dest == "" then return { text = "Reply with the new profile name, for example 'to Raid Renamed' or 'in Raid Neu', or say 'never mind' to cancel.", status = "confirmation_needed" } end
         A.ClearPendingFlow()
         local action = Registry:GetAction("rename_profile")
         if not action then return { text = "Profile rename is not available right now.", status = "failed" } end
@@ -319,6 +395,17 @@ Registry:RegisterAction({
     lifecycle = { workflow = "dashboardNavigation", canStart = true, canExitStop = true, canReportStatus = true },
     run = function()
         return A.Workflow.GoBackPage()
+    end,
+})
+
+Registry:RegisterAction({
+    key = "dashboard_page_forward",
+    label = "Open Next Dashboard Page",
+    type = "navigation",
+    combatSafe = true,
+    lifecycle = { workflow = "dashboardNavigation", canStart = true, canExitStop = true, canReportStatus = true },
+    run = function()
+        return A.Workflow.GoForwardPage()
     end,
 })
 
@@ -405,7 +492,7 @@ Registry:RegisterAction({
         local source = Trim(args and args.source or "")
         if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
         A.StartPendingFlow("profileCopyDestination", { source = source, label = "Profile copy" })
-        return true, "Copy profile " .. tostring(source) .. " to which destination profile name? Type the new name or 'cancel'."
+        return true, "Copy profile " .. tostring(source) .. " to which destination profile name? Reply with a name like 'call it Raid Backup', or say 'never mind' to cancel."
     end,
 })
 
@@ -456,6 +543,6 @@ Registry:RegisterAction({
         local source = Trim(args and args.source or "")
         if source == "" then source = type(A.ActiveProfileName) == "function" and A.ActiveProfileName() or tostring(_G.MSUF_ActiveProfile or "Default") end
         A.StartPendingFlow("profileRenameDestination", { source = source, label = "Profile rename" })
-        return true, "Rename profile " .. tostring(source) .. " to what new name? Type the new name or 'cancel'."
+        return true, "Rename profile " .. tostring(source) .. " to what new name? Reply like 'to Raid Renamed' or 'in Raid Neu', or say 'never mind' to cancel."
     end,
 })

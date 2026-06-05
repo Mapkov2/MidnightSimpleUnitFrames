@@ -50,15 +50,27 @@ local function ChoiceText(choices)
     for i = 1, #choices do
         local choice = choices[i]
         local setting = choice and choice.setting
+        local action = choice and choice.action
         local label = choice and (choice.label or choice.valueLabel) or nil
         if not label or label == "" then
-            label = tostring(setting and setting.label or "Option")
+            label = tostring((setting and setting.label) or (action and action.label) or "Option")
         end
         label = tostring(label):gsub("%s*%[%s*%]", "")
         lines[#lines + 1] = tostring(i) .. ". " .. tostring(label)
     end
     lines[#lines + 1] = "0. None - do nothing."
-    lines[#lines + 1] = (#choices == 1) and "Type 1 to apply it, or 0/None to cancel." or "Please choose one, or 0/None to cancel."
+    if #choices == 1 then
+        local only = choices[1]
+        if only and only.diagnosticFix == true then
+            lines[#lines + 1] = "Type 1, yes, or 'fix it' to apply the repair; 0/None cancels."
+        elseif only and (only.action or only.actionKey) then
+            lines[#lines + 1] = "Type 1, yes, or a natural reply like 'open it' to apply; 0/None cancels."
+        else
+            lines[#lines + 1] = "Type 1, yes, or 'apply it' to apply the setting; 0/None cancels."
+        end
+    else
+        lines[#lines + 1] = "Please choose one by number or label, or 0/None to cancel."
+    end
     return table.concat(lines, "\n")
 end
 A._ChoiceTextForTest = ChoiceText
@@ -68,8 +80,13 @@ local function SerializeChoices(choices)
     for i = 1, #(choices or {}) do
         local choice = choices[i]
         local setting = choice and choice.setting
+        local action = choice and choice.action
         out[#out + 1] = {
             key = setting and setting.key,
+            actionKey = (action and action.key) or choice and choice.actionKey,
+            args = choice and choice.args,
+            confirmRequired = choice and choice.confirmRequired,
+            diagnosticFix = choice and choice.diagnosticFix,
             value = choice and choice.value,
             relativeDelta = choice and choice.relativeDelta,
             direction = choice and choice.direction,
@@ -101,6 +118,19 @@ local function RehydrateChoices(serialized)
                 textArea = item.textArea,
                 textSlot = item.textSlot,
             }
+        elseif item and item.actionKey and type(Registry.GetAction) == "function" then
+            local action = Registry:GetAction(item.actionKey)
+            if action then
+                choices[#choices + 1] = {
+                    action = action,
+                    actionKey = item.actionKey,
+                    args = item.args,
+                    confirmRequired = item.confirmRequired,
+                    diagnosticFix = item.diagnosticFix,
+                    label = item.label,
+                    valueLabel = item.valueLabel,
+                }
+            end
         end
     end
     return choices
@@ -154,7 +184,7 @@ end
 
 local function ConfirmationText(plan)
     local label = tostring(plan and plan.label or "this action")
-    return "This will apply: " .. label .. ". Type 'yes' to apply or 'cancel'."
+    return "This will apply: " .. label .. ". Type 'yes', 'do it', or 'mach das' to apply, or 'cancel'."
 end
 
 local function NormalizeReply(text)
@@ -201,6 +231,53 @@ local function IsChoiceAbort(text)
     return false
 end
 
+local function IsSingleChoiceApply(text)
+    local normalized = NormalizeReply(text)
+    if normalized == "1" then return true end
+    local phrases = {
+        "yes", "y", "yeah", "yep", "yup", "ok", "okay", "sure", "sounds good",
+        "yes please", "go ahead", "please do",
+        "apply", "apply it", "apply that", "do it", "do that", "fix it", "fix that",
+        "use it", "use that", "take it", "take that", "yes do it", "yes apply it",
+        "ok do it", "okay do it", "sure do it", "open it", "open that", "show it", "show me",
+        "ja", "ja bitte", "mach das", "mach es", "anwenden", "uebernehmen", "ja mach das", "ja anwenden",
+        "oeffne es", "oeffne das", "zeig es", "zeig mir das",
+    }
+    for i = 1, #phrases do
+        if ReplyHasPhrase(text, phrases[i]) or normalized == NormalizeReply(phrases[i]) then return true end
+    end
+    return false
+end
+
+local function IsNaturalFixApply(text)
+    local normalized = NormalizeReply(text)
+    local phrases = {
+        "fix it", "fix that", "repair it", "repair that", "apply fix", "apply the fix",
+        "do the fix", "use the fix", "do it", "do that", "mach das", "mach es",
+        "reparieren", "beheben", "fix anwenden",
+    }
+    for i = 1, #phrases do
+        if ReplyHasPhrase(text, phrases[i]) or normalized == NormalizeReply(phrases[i]) then return true end
+    end
+    return false
+end
+
+local function IsConfirmationApply(text)
+    if IsYes(text) then return true end
+    local normalized = NormalizeReply(text)
+    local phrases = {
+        "yes do it", "yes apply it", "yes please", "yep", "yup", "sure",
+        "go ahead", "please do", "do it", "do that", "apply it", "apply that",
+        "run it", "confirm it", "ok do it", "okay do it", "ok apply it", "okay apply it",
+        "ja bitte", "ja mach das", "mach das", "mach es", "mach weiter", "leg los",
+        "anwenden", "uebernehmen", "bestaetigen",
+    }
+    for i = 1, #phrases do
+        if ReplyHasPhrase(text, phrases[i]) or normalized == NormalizeReply(phrases[i]) then return true end
+    end
+    return false
+end
+
 local function LooksLikeFreshCommand(text)
     local phrases = {
         "change", "set", "turn", "enable", "disable", "show", "hide", "open", "search",
@@ -221,6 +298,17 @@ local function ClearPendingChoices()
     A.pendingChoices = nil
     local ctx = A.GetContext and A.GetContext()
     if ctx then ctx.pendingChoices = nil end
+end
+
+function A.SetPendingChoices(choices)
+    if type(choices) ~= "table" or #choices == 0 then
+        ClearPendingChoices()
+        return nil
+    end
+    A.pendingChoices = choices
+    local ctx = A.GetContext and A.GetContext()
+    if ctx then ctx.pendingChoices = SerializeChoices(A.pendingChoices) end
+    return ChoiceText(A.pendingChoices)
 end
 
 local function FindChoice(text, choices)
@@ -266,15 +354,50 @@ local function FindChoice(text, choices)
         for i = 1, #choices do
             local choice = choices[i]
             local setting = choice and choice.setting
+            local action = choice and choice.action
             local label = NormalizeReply(choice and (choice.label or choice.valueLabel) or "")
             local valueLabel = NormalizeReply(choice and choice.valueLabel or "")
             local settingLabel = NormalizeReply(setting and setting.label or "")
+            local actionLabel = NormalizeReply(action and action.label or "")
             if label ~= "" and (label == normalized or label:find(normalized, 1, true)) then return choice end
             if valueLabel ~= "" and (valueLabel == normalized or valueLabel:find(normalized, 1, true)) then return choice end
             if settingLabel ~= "" and settingLabel == normalized then return choice end
+            if actionLabel ~= "" and actionLabel == normalized then return choice end
         end
     end
     return nil
+end
+
+local function SingleNaturalFixChoice(text, choices)
+    if not IsNaturalFixApply(text) then return nil end
+    local fixes = {}
+    for i = 1, #(choices or {}) do
+        local choice = choices[i]
+        if choice and (choice.diagnosticFix == true or (choice.setting and choice.diagnosticFix ~= false)) then
+            fixes[#fixes + 1] = choice
+        end
+    end
+    return #fixes == 1 and fixes[1] or nil
+end
+
+local function ExecuteChoice(choice)
+    if choice and choice.setting then
+        return A.ExecutePlan({ kind = "changes", changes = { choice }, label = "Assistant selected setting" })
+    end
+    if choice and (choice.action or choice.actionKey) then
+        local action = choice.action
+        if not action and Registry and type(Registry.GetAction) == "function" then action = Registry:GetAction(choice.actionKey) end
+        if not action then return { text = "That Assistant action is not available anymore.", status = "failed" } end
+        return A.ExecutePlan({
+            kind = "action",
+            action = action,
+            args = choice.args or {},
+            confirmRequired = choice.confirmRequired,
+            label = choice.label or action.label or "Assistant selected action",
+            summary = choice.summary or "Assistant selected action.",
+        })
+    end
+    return { text = "That option is not available anymore.", status = "failed" }
 end
 
 local function RunApplies(changedSettings)
@@ -369,6 +492,14 @@ local function DescribeChange(setting, undo)
     local oldLabel = SettingValueLabel(setting, undo and undo.oldValue)
     local newLabel = tostring((undo and undo.valueLabel) or SettingValueLabel(setting, undo and undo.newValue))
     return SettingLabel(setting) .. " from " .. tostring(oldLabel) .. " to " .. tostring(newLabel)
+end
+
+local UNDO_FOLLOWUP_HINT = "Next: type 'undo' to revert, or describe another follow-up change."
+
+local function AppendUndoFollowupHint(text)
+    text = tostring(text or "")
+    if text:find(UNDO_FOLLOWUP_HINT, 1, true) then return text end
+    return text .. "\n" .. UNDO_FOLLOWUP_HINT
 end
 
 local function ChangedResponse(changedSettings, undoChanges)
@@ -478,6 +609,7 @@ local function ExecuteChanges(plan)
 
     local text = ChangedResponse(changedSettings, undoChanges)
     if requiresReload then text = text .. " Reload UI is required for the change to fully take effect." end
+    text = AppendUndoFollowupHint(text)
     return { text = text, status = "applied", summary = plan.summary }
 end
 
@@ -503,10 +635,11 @@ local function ExecuteAction(plan)
     if not ok then
         return { text = message or "Action failed.", status = "failed", summary = plan.summary }
     end
+    local undoAvailable = false
     if before or beforeProfile then
         local after = A.CaptureSnapshot and A.CaptureSnapshot()
         local afterProfile = action.captureProfileSnapshot and A.CaptureProfileSnapshot and A.CaptureProfileSnapshot() or nil
-        A.PushUndo({
+        undoAvailable = A.PushUndo({
             label = plan.label or action.label or "Assistant action",
             action = action.key,
             beforeSnapshot = before,
@@ -515,11 +648,16 @@ local function ExecuteAction(plan)
             afterProfileSnapshot = afterProfile,
         })
     end
+    local text = ActionResponse(action, plan, message)
     A.RememberAppliedBundle({
         action = action.key,
+        actionLabel = plan.label or action.label,
+        actionMessage = text,
+        undoAvailable = undoAvailable,
         serializable = {},
     })
-    return { text = ActionResponse(action, plan, message), status = "applied", summary = plan.summary }
+    if undoAvailable then text = AppendUndoFollowupHint(text) end
+    return { text = text, status = "applied", summary = plan.summary }
 end
 
 function A.ShowLargeTextPanel(spec)
@@ -558,31 +696,41 @@ local function HandlePending(text)
         if flowResult then return flowResult end
     end
     if A.pendingConfirmation then
-        if IsCancel(text) then
+        if IsChoiceAbort(text) then
             A.pendingConfirmation = nil
             local ctx = A.GetContext and A.GetContext()
             if ctx then ctx.pendingConfirmation = nil end
             return { text = "Cancelled.", status = "failed" }
         end
-        if IsYes(text) then
+        if IsConfirmationApply(text) then
             local plan = A.pendingConfirmation
             A.pendingConfirmation = nil
             local ctx = A.GetContext and A.GetContext()
             if ctx then ctx.pendingConfirmation = nil end
             return A.ExecutePlan(plan, { confirmed = true })
         end
-        return { text = "Type 'yes' to apply or 'cancel'.", status = "confirmation_needed" }
+        return { text = "Type 'yes', 'do it', or 'mach das' to apply, or 'cancel'.", status = "confirmation_needed" }
     end
     local choices = CurrentPendingChoices()
     if choices then
         if IsChoiceAbort(text) then
             ClearPendingChoices()
-            return { text = "Cancelled. No MSUF setting changed.", status = "info" }
+            return { text = "Cancelled. No MSUF change applied.", status = "info" }
+        end
+        if #choices == 1 and IsSingleChoiceApply(text) then
+            local choice = choices[1]
+            ClearPendingChoices()
+            return ExecuteChoice(choice)
+        end
+        local naturalFix = SingleNaturalFixChoice(text, choices)
+        if naturalFix then
+            ClearPendingChoices()
+            return ExecuteChoice(naturalFix)
         end
         local choice = FindChoice(text, choices)
         if choice then
             ClearPendingChoices()
-            return A.ExecutePlan({ kind = "changes", changes = { choice }, label = "Assistant selected setting" })
+            return ExecuteChoice(choice)
         end
         if LooksLikeFreshCommand(text) then
             ClearPendingChoices()

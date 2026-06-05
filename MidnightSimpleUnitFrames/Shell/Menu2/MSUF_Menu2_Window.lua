@@ -710,6 +710,90 @@ local StartPagePrewarm = StopPagePrewarm
 M.StartPagePrewarm = StartPagePrewarm
 M.StopPagePrewarm = StopPagePrewarm
 
+local PAGE_HISTORY_LIMIT = 30
+local suppressPageHistory
+
+local function ClearTable(tbl)
+    if type(tbl) ~= "table" then return end
+    for key in pairs(tbl) do tbl[key] = nil end
+end
+
+local function NormalizePageKey(key)
+    if key == nil then return nil end
+    key = ALIASES[key or ""] or key
+    key = tostring(key or "")
+    if key == "" then return nil end
+    return key
+end
+
+local function PushPageHistory(stack, key)
+    key = NormalizePageKey(key)
+    if not key then return end
+    stack = type(stack) == "table" and stack or {}
+    if stack[#stack] ~= key then stack[#stack + 1] = key end
+    while #stack > PAGE_HISTORY_LIMIT do table.remove(stack, 1) end
+    return stack
+end
+
+local function RecordPageNavigation(fromKey, toKey)
+    fromKey = NormalizePageKey(fromKey)
+    toKey = NormalizePageKey(toKey)
+    if not fromKey or not toKey or fromKey == toKey then return end
+    M.pageBackStack = PushPageHistory(M.pageBackStack, fromKey)
+    M.pageForwardStack = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+    ClearTable(M.pageForwardStack)
+end
+
+local function OpenHistoryPage(page)
+    local open = type(M.Open) == "function" and M.Open or M.SelectPage
+    if type(open) ~= "function" then return false end
+    suppressPageHistory = true
+    local ok = open(page) ~= false
+    suppressPageHistory = false
+    return ok
+end
+
+function M.GetPageHistoryState()
+    local back = type(M.pageBackStack) == "table" and M.pageBackStack or {}
+    local forward = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+    return {
+        canBack = #back > 0,
+        canForward = #forward > 0,
+        backCount = #back,
+        forwardCount = #forward,
+        previousPage = back[#back],
+        nextPage = forward[#forward],
+    }
+end
+
+function M.GoBackPage()
+    if M.BlockCombatAction and M.BlockCombatAction() then return false, "Dashboard back navigation is blocked in combat." end
+    M.pageBackStack = type(M.pageBackStack) == "table" and M.pageBackStack or {}
+    local page = table.remove(M.pageBackStack)
+    if type(page) ~= "string" or page == "" then return false, "Dashboard back navigation has no previous native Menu2 page." end
+    local current = M.activeKey
+    if OpenHistoryPage(page) then
+        M.pageForwardStack = PushPageHistory(M.pageForwardStack, current)
+        return true, "Opened previous page."
+    end
+    M.pageBackStack = PushPageHistory(M.pageBackStack, page)
+    return false, "Dashboard back navigation is not available right now."
+end
+
+function M.GoForwardPage()
+    if M.BlockCombatAction and M.BlockCombatAction() then return false, "Dashboard forward navigation is blocked in combat." end
+    M.pageForwardStack = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+    local page = table.remove(M.pageForwardStack)
+    if type(page) ~= "string" or page == "" then return false, "Dashboard forward navigation has no next native Menu2 page." end
+    local current = M.activeKey
+    if OpenHistoryPage(page) then
+        M.pageBackStack = PushPageHistory(M.pageBackStack, current)
+        return true, "Opened next page."
+    end
+    M.pageForwardStack = PushPageHistory(M.pageForwardStack, page)
+    return false, "Dashboard forward navigation is not available right now."
+end
+
 function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
@@ -765,6 +849,7 @@ function M.SelectPage(key)
     entry.hiddenBuild = false
 
     M.activeKey = key
+    if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
     if key ~= "search" then M.PersistMenuStateValue("lastPage", key) end
     if M.frame then M.frame._msufCurrentKey = key end
     if M.scrollChild then
