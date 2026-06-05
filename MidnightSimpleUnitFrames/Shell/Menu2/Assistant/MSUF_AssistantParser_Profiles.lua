@@ -1,0 +1,875 @@
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or {}
+_G.MSUF_NS = MSUF
+
+local M = MSUF.MSUF2 or _G.MSUF2 or {}
+MSUF.MSUF2 = M
+_G.MSUF2 = M
+
+local A = MSUF.Assistant or {}
+MSUF.Assistant = A
+M.Assistant = A
+
+local Registry = A.Registry
+local P = A.Parser or {}
+A.Parser = P
+local Trim = P.Trim
+local Normalize = P.Normalize
+local HasPhrase = P.HasPhrase
+local ContainsAny = P.ContainsAny
+local UNIT_ORDER = P.UNIT_ORDER
+local GROUP_ORDER = P.GROUP_ORDER
+local ALL_UNITFRAMES = P.ALL_UNITFRAMES
+local ALL_GROUPS = P.ALL_GROUPS
+local CLASS_POWER_TERMS = P.CLASS_POWER_TERMS
+local GAMEPLAY_TERMS = P.GAMEPLAY_TERMS
+local GLOBAL_BARS_TERMS = P.GLOBAL_BARS_TERMS
+local CASTBAR_ROOT_DETAIL_TERMS = P.CASTBAR_ROOT_DETAIL_TERMS
+local PAGE_TEXT_TARGETS = P.PAGE_TEXT_TARGETS
+local AddUnique = P.AddUnique
+local DetectUnits = P.DetectUnits
+local DetectGroups = P.DetectGroups
+local DetectGlobalScope = P.DetectGlobalScope
+local OFF_WORDS = P.OFF_WORDS
+local ON_WORDS = P.ON_WORDS
+local DetectBoolean = P.DetectBoolean
+local FirstNumber = P.FirstNumber
+local Compact = P.Compact
+local AliasRelationText = P.AliasRelationText
+local TextMatchesAlias = P.TextMatchesAlias
+local ExtractColor = P.ExtractColor
+local DetectFrameType = P.DetectFrameType
+local DetectDirection = P.DetectDirection
+local DetectAttribute = P.DetectAttribute
+local PageForText = P.PageForText
+local FrameTypeForPage = P.FrameTypeForPage
+local UnitPageKey = P.UnitPageKey
+
+local COPY_SCOPE_DEFAULTS = {
+    basics = true,
+    text = true,
+    portrait = true,
+    power = true,
+    castbar = true,
+    status = true,
+    load = true,
+    transparency = true,
+    layout = false,
+}
+
+local UNIT_COPY_SCOPE_SPECS = {
+    { key = "layout", aliases = { "layout", "position", "size", "anchoring", "anchor", "width", "height" } },
+    { key = "text", aliases = { "text", "name", "hp", "health text", "hp text", "power text", "font", "fonts" } },
+    { key = "portrait", aliases = { "portrait", "portrait settings" } },
+    { key = "power", aliases = { "power bar", "powerbar", "detached power", "detached power bar", "resource bar" } },
+    { key = "castbar", aliases = { "castbar", "cast bar" } },
+    { key = "status", aliases = { "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "level indicator", "raid marker" } },
+    { key = "load", aliases = { "load condition", "load conditions", "hide mounted", "hide out of combat" } },
+    { key = "transparency", aliases = { "transparency", "opacity", "alpha", "range fade" } },
+    { key = "basics", aliases = { "frame basics", "basic settings", "basics", "enable state", "smooth fill", "reverse fill" } },
+}
+
+local GROUP_COPY_SCOPE_DEFAULTS = {
+    general = true,
+    health = true,
+    text = true,
+    font = true,
+    border = true,
+    range = true,
+    indicators = true,
+    auras = true,
+    highlight = true,
+    dstripe = true,
+    features = true,
+}
+
+local GROUP_COPY_SCOPE_SPECS = {
+    { key = "general", aliases = { "general", "basics", "basic settings", "layout", "size", "width", "height", "spacing", "growth", "sort", "sorting", "columns", "raid groups" } },
+    { key = "health", aliases = { "health", "health bars", "bars", "power", "power bar", "power text", "bar texture", "dispel overlay" } },
+    { key = "text", aliases = { "text", "name", "health text", "hp text", "text and name" } },
+    { key = "font", aliases = { "font", "fonts", "font override", "font color", "font outline" } },
+    { key = "border", aliases = { "background", "opacity", "alpha", "transparency", "background opacity" } },
+    { key = "range", aliases = { "range", "range fade", "offline alpha" } },
+    { key = "indicators", aliases = { "indicators", "status icons", "status icon", "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon" } },
+    { key = "auras", aliases = { "auras", "aura", "buffs", "buff", "debuffs", "debuff" } },
+    { key = "highlight", aliases = { "highlight", "aggro", "aggro highlight", "dispel border", "purge border" } },
+    { key = "dstripe", aliases = { "debuff stripe", "stripe" } },
+    { key = "features", aliases = { "corner", "corner indicator", "corner indicators", "corner dots", "spell indicator", "spell indicators", "corner spell" } },
+}
+
+local function CopyScopeDefaults()
+    local UP = M and M.UnitPage
+    if UP and type(UP.NewCopyScopeDefaults) == "function" then
+        local scopes = UP.NewCopyScopeDefaults()
+        if type(scopes) == "table" then return scopes end
+    end
+
+    local scopes = {}
+    local cats = UP and type(UP.UF_COPY_CATEGORIES) == "table" and UP.UF_COPY_CATEGORIES or nil
+    if cats then
+        for i = 1, #cats do
+            local cat = cats[i]
+            if type(cat) == "table" and type(cat.key) == "string" then
+                scopes[cat.key] = cat.default ~= false
+            end
+        end
+        if next(scopes) then return scopes end
+    end
+
+    for key, value in pairs(COPY_SCOPE_DEFAULTS) do scopes[key] = value end
+    return scopes
+end
+
+local function CopyScopeMatches(text, specs)
+    local matches = {}
+    local seen = {}
+    for i = 1, #(specs or {}) do
+        local spec = specs[i]
+        if spec.key and not seen[spec.key] and ContainsAny(text, spec.aliases) then
+            matches[#matches + 1] = spec.key
+            seen[spec.key] = true
+        end
+    end
+    return matches
+end
+
+local function ApplyCopyScopeMatches(scopes, matches)
+    if not matches or #matches == 0 then return false end
+    for key in pairs(scopes) do scopes[key] = false end
+    for i = 1, #matches do scopes[matches[i]] = true end
+    return true
+end
+
+local function WantsFullUnitCopy(text)
+    if ContainsAny(text, { "all settings", "all categories", "everything", "complete settings", "entire unit", "whole unit", "copy to function", "copy-to function", "copyto function", "copy to workflow" }) then
+        return true
+    end
+    if ContainsAny(text, { "profile", "profil", "unit profile", "unitframe profile", "unit frame profile", "frame profile" }) then
+        return #CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS) == 0
+    end
+    return false
+end
+
+local function WantsFullGroupCopy(text)
+    if ContainsAny(text, { "all settings", "all categories", "everything", "complete settings", "entire group", "whole group", "copy to function", "copy-to function", "copyto function", "copy to workflow" }) then
+        return true
+    end
+    if ContainsAny(text, { "profile", "profil", "group profile", "groupframe profile", "group frame profile", "frame profile" }) then
+        return #CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS) == 0
+    end
+    return false
+end
+
+local function CopyScopesForText(text)
+    local scopes = CopyScopeDefaults()
+    if WantsFullUnitCopy(text) then
+        for key in pairs(scopes) do scopes[key] = true end
+    else
+        local matched = ApplyCopyScopeMatches(scopes, CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS))
+        if matched and ContainsAny(text, { "size", "width", "height" }) then scopes.basics = true end
+    end
+    return scopes
+end
+
+local function GroupCopyScopeDefaults()
+    local GP = M and M.GroupPage
+    if GP and type(GP.NewGFCopyScopes) == "function" then
+        local scopes = GP.NewGFCopyScopes()
+        if type(scopes) == "table" then return scopes end
+    end
+
+    local scopes = {}
+    local cats = GP and type(GP.GF_COPY_CATEGORIES) == "table" and GP.GF_COPY_CATEGORIES or nil
+    if cats then
+        for i = 1, #cats do
+            local cat = cats[i]
+            if type(cat) == "table" and type(cat.key) == "string" then scopes[cat.key] = true end
+        end
+        if next(scopes) then return scopes end
+    end
+
+    for key, value in pairs(GROUP_COPY_SCOPE_DEFAULTS) do scopes[key] = value end
+    return scopes
+end
+
+local function GroupCopyScopesForText(text)
+    local scopes = GroupCopyScopeDefaults()
+    if WantsFullGroupCopy(text) then
+        for key in pairs(scopes) do scopes[key] = true end
+    else
+        ApplyCopyScopeMatches(scopes, CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS))
+    end
+    return scopes
+end
+
+local function CleanProfileName(name)
+    name = Trim(tostring(name or ""))
+    name = name:gsub("^profile%s+", "")
+    name = name:gsub("%s+profile$", "")
+    name = name:gsub("^named%s+", "")
+    name = name:gsub("^called%s+", "")
+    name = name:gsub("^to%s+", "")
+    name = name:gsub("^as%s+", "")
+    name = Trim(name)
+    if name == "" then return nil end
+    return name
+end
+
+local function RawAfterPrefix(raw, prefixes)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    for i = 1, #(prefixes or {}) do
+        local prefix = prefixes[i]
+        if lower:sub(1, #prefix) == prefix then
+            return CleanProfileName(raw:sub(#prefix + 1))
+        end
+    end
+    return nil
+end
+
+local function RawBetween(raw, prefix, suffix)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    if lower:sub(1, #prefix) == prefix and lower:sub(-#suffix) == suffix then
+        return CleanProfileName(raw:sub(#prefix + 1, #raw - #suffix))
+    end
+    return nil
+end
+
+local function RawCreateProfileName(raw)
+    return RawAfterPrefix(raw, { "create profile ", "new profile " })
+        or RawBetween(raw, "create ", " profile")
+        or RawBetween(raw, "new ", " profile")
+end
+
+local function RawCopyProfileName(raw)
+    return RawAfterPrefix(raw, { "copy current profile to ", "copy profile to ", "copy profile ", "duplicate profile " })
+        or RawBetween(raw, "duplicate ", " profile")
+end
+
+local function RawRenameProfileNames(raw)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local function splitAfterPrefix(prefix)
+        if lower:sub(1, #prefix) ~= prefix then return nil, nil end
+        local start = #prefix + 1
+        local sepStart, sepEnd = lower:find("%s+to%s+", start)
+        if not sepStart then return nil, nil end
+        return CleanProfileName(raw:sub(start, sepStart - 1)), CleanProfileName(raw:sub(sepEnd + 1))
+    end
+
+    local source, dest = splitAfterPrefix("rename profile ")
+    if source and dest then return source, dest end
+
+    dest = RawAfterPrefix(raw, { "rename current profile to ", "rename profile to " })
+    if dest then return nil, dest end
+
+    source, dest = splitAfterPrefix("rename ")
+    if source and dest then
+        source = CleanProfileName((source:gsub("%s+profile$", "")))
+        return source, dest
+    end
+
+    return nil, nil
+end
+
+local PROFILE_EXPORT_KIND_LABELS = {
+    all = "Full profile",
+    unitframe = "Unitframes",
+    castbar = "Castbars",
+    colors = "Colors",
+    gameplay = "Gameplay",
+    groupframe = "Group Frames",
+}
+
+local function ProfileExportKindForText(text)
+    if ContainsAny(text, { "colors", "color palette", "color settings" }) then return "colors" end
+    if ContainsAny(text, { "castbar", "castbars" }) then return "castbar" end
+    if ContainsAny(text, { "gameplay", "combat timer", "crosshair", "totem frame" }) then return "gameplay" end
+    if ContainsAny(text, { "group frame", "group frames", "groupframe", "party", "raid", "mythicraid" }) then return "groupframe" end
+    if ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames", "player", "target", "focus", "boss", "pet" }) then return "unitframe" end
+    return "all"
+end
+
+local function RawAfterLastConnector(raw, connectors)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local bestEnd
+    for i = 1, #(connectors or {}) do
+        local connector = connectors[i]
+        local start = 1
+        while true do
+            local s, e = lower:find(connector, start, true)
+            if not s then break end
+            if not bestEnd or e > bestEnd then bestEnd = e end
+            start = e + 1
+        end
+    end
+    if not bestEnd then return nil end
+    local value = Trim(raw:sub(bestEnd + 1))
+    if value == "" then return nil end
+    return value
+end
+
+local function CleanSpecName(name)
+    name = Trim(tostring(name or ""))
+    name = name:gsub("^spec%s+", "")
+    name = name:gsub("^specialization%s+", "")
+    name = name:gsub("%s+spec$", "")
+    name = name:gsub("%s+specialization$", "")
+    name = name:gsub("^for%s+", "")
+    name = name:gsub("^to%s+", "")
+    name = Trim(name)
+    if name == "" then return nil end
+    return name
+end
+
+local function ImportNewProfileName(raw, endIndex, text)
+    local after = Trim(tostring(raw or ""):sub((endIndex or 0) + 1))
+    local lower = after:lower()
+    if lower:sub(1, 3) == "as " then return CleanProfileName(after:sub(4)) end
+    if lower:sub(1, 15) == "to new profile " then return CleanProfileName(after:sub(16)) end
+    if lower:sub(1, 12) == "new profile " then return CleanProfileName(after:sub(13)) end
+    local name = text:match("as%s+(.+)$")
+        or text:match("to%s+new%s+profile%s+(.+)$")
+        or text:match("new%s+profile%s+(.+)$")
+    return CleanProfileName(name)
+end
+
+local function BuildSpecAutoSwitch(text)
+    if not ContainsAny(text, {
+        "auto switch profile", "auto-switch profile", "profile auto switch",
+        "profile by specialization", "profile by spec", "spec profile switching",
+        "specialization profile switching",
+    }) then return nil end
+    local value = DetectBoolean(text)
+    if value == nil then return nil end
+    local setting = Registry and Registry:GetSetting("profiles.specAutoSwitch")
+    return setting and {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = (value and "Enable" or "Disable") .. " spec profile switching",
+        summary = "Uses the MSUF Profiles spec auto-switch setting.",
+    } or nil
+end
+
+local function BuildSpecProfileAction(text)
+    if not (ContainsAny(text, { "spec profile", "specialization profile", "profile by spec", "profile by specialization" })
+        or (HasPhrase(text, "profile") and (HasPhrase(text, "spec") or HasPhrase(text, "specialization"))))
+    then
+        return nil
+    end
+    if ContainsAny(text, { "clear", "remove", "unset" }) then
+        local spec = text:match("clear%s+spec%s+profile%s+(.+)$")
+            or text:match("clear%s+(.+)%s+spec%s+profile$")
+            or text:match("remove%s+spec%s+profile%s+(.+)$")
+            or text:match("unset%s+spec%s+profile%s+(.+)$")
+            or text:match("remove%s+profile%s+from%s+(.+)%s+spec$")
+        spec = CleanSpecName(spec)
+        local action = Registry and Registry:GetAction("clear_spec_profile")
+        return spec and action and {
+            kind = "action",
+            action = action,
+            args = { spec = spec },
+            label = "Clear spec profile",
+            summary = "Clears the selected specialization profile assignment.",
+        } or nil
+    end
+    if ContainsAny(text, { "assign", "set" }) then
+        local spec, name = text:match("set%s+spec%s+profile%s+(.+)%s+to%s+(.+)$")
+        if not spec then spec, name = text:match("set%s+(.+)%s+spec%s+profile%s+to%s+(.+)$") end
+        if not spec then name, spec = text:match("assign%s+(.+)%s+profile%s+to%s+(.+)%s+spec$") end
+        if not spec then name, spec = text:match("assign%s+profile%s+(.+)%s+to%s+spec%s+(.+)$") end
+        if not spec then name, spec = text:match("assign%s+(.+)%s+to%s+(.+)%s+spec%s+profile$") end
+        spec = CleanSpecName(spec)
+        name = CleanProfileName(name)
+        local action = Registry and Registry:GetAction("set_spec_profile")
+        return spec and name and action and {
+            kind = "action",
+            action = action,
+            args = { spec = spec, name = name },
+            label = "Set spec profile",
+            summary = "Assigns an existing profile to a specialization.",
+        } or nil
+    end
+    return nil
+end
+
+
+local function ParseWorkflowLifecycle(text)
+    if ContainsAny(text, { "workflow status", "assistant workflow status", "pending workflow", "pending flow", "active workflow", "what workflow", "what is pending" }) then
+        local action = Registry and Registry:GetAction("assistant.workflow.status")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Show Assistant workflow status",
+            summary = "Shows pending confirmations, panels, flows, and Edit Mode lifecycle status.",
+        } or nil
+    end
+    if text == "back" or ContainsAny(text, { "go back", "open previous page", "previous page", "return to previous page", "back to previous page" }) then
+        local action = Registry and Registry:GetAction("dashboard_page_back")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Open previous Dashboard page",
+            summary = "Uses the Assistant page stack when available.",
+        } or nil
+    end
+    if text == "cancel" or ContainsAny(text, { "cancel workflow", "cancel current workflow", "cancel assistant workflow", "stop assistant workflow", "abort workflow" }) then
+        local action = Registry and Registry:GetAction("assistant.workflow.cancel")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Cancel active Assistant workflow",
+            summary = "Cancels the active Assistant confirmation, flow, panel, or guide when available.",
+        } or nil
+    end
+    if ContainsAny(text, { "close import", "cancel import", "close export", "close assistant panel", "close profile import", "cancel profile import", "close profile export" }) then
+        local action = Registry and Registry:GetAction("assistant.panel.close")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Close Assistant panel",
+            summary = "Closes the current Assistant import/export/text panel.",
+        } or nil
+    end
+    return nil
+end
+
+local function BuildMenuSelectorState(args, label, summary)
+    local action = Registry and Registry:GetAction("set_menu_selector_state")
+    return action and {
+        kind = "action",
+        action = action,
+        args = args,
+        label = label or "Set menu selector state",
+        summary = summary or "Selects or stages a Menu2 UI state.",
+    } or nil
+end
+
+local function ParseProfileStagingState(text, raw)
+    if not ContainsAny(text, { "profile", "profiles", "profil" }) then return nil end
+    local hasStagingIntent = ContainsAny(text, {
+        "field", "input", "text box", "textbox", "staging", "stage", "select", "choose", "set", "fill", "paste into",
+        "turn on", "turn off", "enable", "disable",
+    })
+    if not hasStagingIntent then return nil end
+
+    if ContainsAny(text, { "export kind", "export type", "export dropdown", "profile export kind", "profile export type" }) then
+        return BuildMenuSelectorState({
+            selector = "profile_staging",
+            field = "profileExportKind",
+            kind = ProfileExportKindForText(text),
+        }, "Select profile export kind", "Selects the Profiles export-kind dropdown without immediately exporting.")
+    end
+
+    if ContainsAny(text, { "import and create new profile", "import create new", "new profile import", "new-profile import", "import into new profile", "create new profile import" }) then
+        local value = DetectBoolean(text)
+        if value == nil then value = not ContainsAny(text, { "off", "disable", "disabled", "current profile", "active profile" }) end
+        return BuildMenuSelectorState({
+            selector = "profile_staging",
+            field = "profileImportCreateNew",
+            value = value,
+        }, "Set profile import mode", "Sets the Profiles import-and-create-new-profile toggle.")
+    end
+
+    if ContainsAny(text, { "new profile name", "new-profile name", "import new profile name", "import profile name" })
+        and ContainsAny(text, { "import", "new profile", "new-profile" })
+    then
+        local value = CleanProfileName(RawAfterLastConnector(raw, { " to ", " as ", " named ", " called ", " name ", " value " }))
+        if value then
+            return BuildMenuSelectorState({
+                selector = "profile_staging",
+                field = "profileImportNewName",
+                value = value,
+            }, "Set profile import new-profile name", "Stages the Profiles new-profile import name field.")
+        end
+    end
+
+    if ContainsAny(text, { "profile string", "import string", "profile import string" })
+        and ContainsAny(text, { "field", "input", "text box", "textbox", "stage", "staging", "set", "fill", "paste into" })
+    then
+        local value = RawAfterLastConnector(raw, { " to ", " with ", " value ", " text ", " string ", " paste " })
+        if value then
+            return BuildMenuSelectorState({
+                selector = "profile_staging",
+                field = "profileString",
+                value = value,
+            }, "Set profile string field", "Stages the Profiles profile-string field without importing.")
+        end
+    end
+
+    if ContainsAny(text, { "profile name field", "profile name input", "create copy name", "create/copy name", "profile create name", "profile copy name", "profile name for create", "profile name for copy" }) then
+        local value = CleanProfileName(RawAfterLastConnector(raw, { " to ", " as ", " named ", " called ", " name ", " value " }))
+        if value then
+            return BuildMenuSelectorState({
+                selector = "profile_staging",
+                field = "profileCreateCopyName",
+                value = value,
+            }, "Set profile create/copy name", "Stages the Profiles create/copy name field.")
+        end
+    end
+
+    return nil
+end
+
+local function ParseGroupCopyScopeState(text)
+    if not ContainsAny(text, { "group copy", "group frame copy", "group frames copy", "copy category", "copy categories", "copy scope", "copy scopes" }) then return nil end
+    if not ContainsAny(text, { "category", "categories", "scope", "scopes" }) then return nil end
+
+    if ContainsAny(text, { "all categories", "select all", "turn on all", "enable all" })
+        or (ContainsAny(text, { "all" }) and ContainsAny(text, { "turn on", "enable", "select" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "group_copy_scope",
+            command = "all",
+        }, "Select all group copy categories", "Sets every Group Frames copy-popup category checkbox on.")
+    end
+    if ContainsAny(text, { "no categories", "none", "select none", "clear categories", "turn off all", "disable all" })
+        or (ContainsAny(text, { "clear", "disable" }) and ContainsAny(text, { "category", "categories", "scope", "scopes" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "group_copy_scope",
+            command = "none",
+        }, "Clear group copy categories", "Sets every Group Frames copy-popup category checkbox off.")
+    end
+
+    local matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS)
+    if #matches == 0 then return nil end
+    if ContainsAny(text, { "only", "only these", "just" }) then
+        return BuildMenuSelectorState({
+            selector = "group_copy_scope",
+            command = "only",
+            categories = matches,
+        }, "Select only group copy categories", "Sets the Group Frames copy-popup categories to exactly the requested category set.")
+    end
+
+    local value = DetectBoolean(text)
+    if value == nil then
+        if ContainsAny(text, { "exclude", "without", "remove", "disable" }) then value = false else value = true end
+    end
+    return BuildMenuSelectorState({
+        selector = "group_copy_scope",
+        category = matches[1],
+        value = value,
+    }, "Set group copy category", "Sets one Group Frames copy-popup category checkbox.")
+end
+
+local function ParseUnitCopyScopeState(text)
+    if ContainsAny(text, { "group copy", "group frame copy", "group frames copy", "group copy category", "group copy categories", "group copy scope", "group copy scopes" }) then return nil end
+    if not ContainsAny(text, { "category", "categories", "scope", "scopes" }) then return nil end
+    local units = DetectUnits(text)
+    local pageUnit
+    local page = M and M.activeKey
+    for i = 1, #ALL_UNITFRAMES do
+        local unit = ALL_UNITFRAMES[i]
+        if UnitPageKey(unit) == page then
+            pageUnit = unit
+            break
+        end
+    end
+    local explicit = ContainsAny(text, { "unit copy", "unit frame copy", "unit frames copy", "unitframe copy", "unitframes copy", "frame copy" })
+    if not explicit and #units == 0 and not pageUnit then return nil end
+    if ContainsAny(text, { "all categories", "select all", "turn on all", "enable all" })
+        or (ContainsAny(text, { "all" }) and ContainsAny(text, { "turn on", "enable", "select" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "unit_copy_scope",
+            unit = units[1] or pageUnit,
+            command = "all",
+        }, "Select all unit copy categories", "Sets every Unit Copy popup category checkbox on.")
+    end
+    if ContainsAny(text, { "no categories", "none", "select none", "clear categories", "turn off all", "disable all" })
+        or (ContainsAny(text, { "clear", "disable" }) and ContainsAny(text, { "category", "categories", "scope", "scopes" }))
+    then
+        return BuildMenuSelectorState({
+            selector = "unit_copy_scope",
+            unit = units[1] or pageUnit,
+            command = "none",
+        }, "Clear unit copy categories", "Sets every Unit Copy popup category checkbox off.")
+    end
+
+    local matches = CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS)
+    if #matches == 0 then return nil end
+    if ContainsAny(text, { "only", "only these", "just" }) then
+        return BuildMenuSelectorState({
+            selector = "unit_copy_scope",
+            unit = units[1] or pageUnit,
+            command = "only",
+            categories = matches,
+        }, "Select only unit copy categories", "Sets the Unit Copy popup categories to exactly the requested category set.")
+    end
+
+    local value = DetectBoolean(text)
+    if value == nil then
+        if ContainsAny(text, { "exclude", "without", "remove", "disable" }) then value = false else value = true end
+    end
+    return BuildMenuSelectorState({
+        selector = "unit_copy_scope",
+        unit = units[1] or pageUnit,
+        category = matches[1],
+        value = value,
+    }, "Set unit copy category", "Sets one Unit Copy popup category checkbox.")
+end
+
+local function ParseProfile(text, raw)
+    local rawText = tostring(raw or "")
+    local startIndex, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
+    local hasProfile = ContainsAny(text, { "profile", "profiles", "profil" })
+    local rawLower = tostring(raw or ""):lower()
+    if compact and (hasProfile or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^msuf%d+:")) then
+        local legacy = ContainsAny(text, { "legacy import", "import legacy", "old profile import", "legacy profile" })
+        local newName = ImportNewProfileName(rawText, endIndex, text)
+        local action = Registry and Registry:GetAction(legacy and "import_legacy_profile_string" or (newName and "import_profile_string_new" or "import_profile_string"))
+        return action and {
+            kind = "action",
+            action = action,
+            args = newName and { value = compact, name = newName } or { value = compact },
+            confirmRequired = true,
+            label = legacy and "Import legacy profile string" or (newName and ("Import profile string as " .. tostring(newName)) or "Import profile string"),
+            summary = newName and "Imports profile data into a new profile." or "Imports profile data into the active profile.",
+        } or nil
+    end
+    if not hasProfile then return nil end
+
+    local specSwitch = BuildSpecAutoSwitch(text)
+    if specSwitch then return specSwitch end
+
+    local specProfile = BuildSpecProfileAction(text)
+    if specProfile then return specProfile end
+
+    if ContainsAny(text, { "wago profile", "wago profiles", "browse wago profiles", "profile hub" }) then
+        local action = Registry and Registry:GetAction("copy_wago_profiles_link")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Copy Wago profiles link",
+            summary = "Opens a copyable Wago MSUF profiles link.",
+        } or nil
+    end
+
+    if ContainsAny(text, { "export", "backup", "copy string", "exportieren" }) then
+        local kind = ProfileExportKindForText(text)
+        local action = Registry and Registry:GetAction("export_profile")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { kind = kind },
+            label = "Export current profile",
+            summary = "Creates a copyable profile export string.",
+        } or nil
+    end
+
+    if ContainsAny(text, { "import", "importieren", "paste" }) then
+        local action = Registry and Registry:GetAction("open_profile_import")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Open profile import",
+            summary = "Opens the Profiles import UI.",
+        } or nil
+    end
+
+    if ContainsAny(text, { "delete", "remove", "loeschen", "profil loeschen" }) then
+        local name = text:match("delete%s+profile%s+(.+)$")
+            or text:match("delete%s+(.+)%s+profile$")
+            or text:match("remove%s+profile%s+(.+)$")
+            or text:match("remove%s+(.+)%s+profile$")
+            or text:match("loesche%s+profil%s+(.+)$")
+            or text:match("profil%s+(.+)%s+loeschen$")
+        name = CleanProfileName(name)
+        if name then
+            local action = Registry and Registry:GetAction("delete_profile")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { name = name },
+                confirmRequired = true,
+                label = "Delete profile " .. tostring(name),
+                summary = "Deletes an MSUF profile through the existing profile helper.",
+            } or nil
+        end
+    end
+
+    if ContainsAny(text, { "switch", "wechsel", "change profile" }) then
+        local name = text:match("switch%s+to%s+(.+)$")
+            or text:match("switch%s+profile%s+to%s+(.+)$")
+            or text:match("wechsel%s+zu%s+(.+)$")
+        name = CleanProfileName(name)
+        if name then
+            local action = Registry and Registry:GetAction("switch_profile")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { name = name },
+                label = "Switch profile",
+                summary = "Switches the active MSUF profile.",
+            } or nil
+        end
+    end
+
+    if ContainsAny(text, { "create", "new profile", "erstellen" }) then
+        local name = RawCreateProfileName(rawText)
+            or text:match("create%s+profile%s+(.+)$")
+            or text:match("create%s+(.+)%s+profile$")
+            or text:match("new%s+profile%s+(.+)$")
+            or text:match("new%s+(.+)%s+profile$")
+            or text:match("profile%s+(.+)$")
+        name = CleanProfileName(name)
+        if name then
+            local action = Registry and Registry:GetAction("create_profile")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { name = name, switch = true },
+                label = "Create profile",
+                summary = "Creates a new MSUF profile and switches to it.",
+            } or nil
+        end
+    end
+
+    if ContainsAny(text, { "rename", "umbenennen", "profile rename" }) then
+        local source, dest = RawRenameProfileNames(rawText)
+        if not source and not dest then source, dest = text:match("rename%s+profile%s+(.+)%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("rename%s+(.+)%s+profile%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("rename%s+(.+)%s+to%s+(.+)$") end
+        if not source then dest = text:match("rename%s+current%s+profile%s+to%s+(.+)$") or text:match("rename%s+profile%s+to%s+(.+)$") end
+        source = CleanProfileName(source)
+        dest = CleanProfileName(dest)
+        if dest then
+            local action = Registry and Registry:GetAction("rename_profile")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = source, name = dest },
+                confirmRequired = true,
+                label = "Rename profile",
+                summary = "Renames a profile through a shared helper if one exists.",
+            } or nil
+        end
+        if source then
+            local action = Registry and Registry:GetAction("start_profile_rename_flow")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = source },
+                label = "Start profile rename flow",
+                summary = "Asks for the missing destination profile name.",
+            } or nil
+        end
+    end
+
+    if ContainsAny(text, { "copy", "duplicate", "duplizieren" }) then
+        local source, dest = text:match("copy%s+profile%s+(.+)%s+to%s+(.+)$")
+        if not source then source, dest = text:match("copy%s+(.+)%s+profile%s+to%s+(.+)$") end
+        source = CleanProfileName(source)
+        dest = CleanProfileName(dest)
+        if source and dest then
+            local action = Registry and Registry:GetAction("copy_profile_from_to")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = source, name = dest },
+                confirmRequired = true,
+                label = "Copy profile " .. tostring(source) .. " to " .. tostring(dest),
+                summary = "Copies a named source profile to a destination profile.",
+            } or nil
+        end
+
+        local name = RawCopyProfileName(rawText)
+            or text:match("copy%s+current%s+profile%s+to%s+(.+)$")
+            or text:match("copy%s+profile%s+to%s+(.+)$")
+            or text:match("copy%s+profile%s+(.+)$")
+            or text:match("duplicate%s+profile%s+(.+)$")
+            or text:match("duplicate%s+(.+)%s+profile$")
+        name = CleanProfileName(name)
+        if name then
+            local action = Registry and Registry:GetAction("copy_profile")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { name = name },
+                confirmRequired = true,
+                label = "Copy current profile",
+                summary = "Copies the active profile to a new profile name.",
+            } or nil
+        end
+
+        local sourceOnly = RawAfterPrefix(rawText, {
+                "copy from profile ",
+                "copy existing profile ",
+                "copy source profile ",
+            })
+            or text:match("^copy%s+from%s+profile%s+(.+)$")
+            or text:match("^copy%s+existing%s+profile%s+(.+)$")
+            or text:match("^copy%s+source%s+profile%s+(.+)$")
+        sourceOnly = CleanProfileName(sourceOnly)
+        if sourceOnly and not text:match("%s+to%s+") then
+            local action = Registry and Registry:GetAction("start_profile_copy_flow")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { source = sourceOnly },
+                label = "Start profile copy flow",
+                summary = "Asks for the missing destination profile name.",
+            } or nil
+        end
+    end
+
+    if ContainsAny(text, {
+        "list profiles", "show profiles", "profile list", "profile summary",
+        "profile status", "current profile", "active profile", "which profile",
+        "spec profiles", "specialization profiles",
+    }) and not ContainsAny(text, {
+        "reset", "delete", "remove", "switch", "wechsel", "copy", "duplicate",
+        "create", "new profile", "import", "export", "backup",
+    }) then
+        local action = Registry and Registry:GetAction("profile_summary")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Show profile summary",
+            summary = "Shows current profile status and spec profile mappings.",
+        } or nil
+    end
+    return nil
+end
+
+P.COPY_SCOPE_DEFAULTS = COPY_SCOPE_DEFAULTS
+P.UNIT_COPY_SCOPE_SPECS = UNIT_COPY_SCOPE_SPECS
+P.GROUP_COPY_SCOPE_DEFAULTS = GROUP_COPY_SCOPE_DEFAULTS
+P.GROUP_COPY_SCOPE_SPECS = GROUP_COPY_SCOPE_SPECS
+P.CopyScopeDefaults = CopyScopeDefaults
+P.CopyScopeMatches = CopyScopeMatches
+P.ApplyCopyScopeMatches = ApplyCopyScopeMatches
+P.WantsFullUnitCopy = WantsFullUnitCopy
+P.CopyScopesForText = CopyScopesForText
+P.GroupCopyScopeDefaults = GroupCopyScopeDefaults
+P.WantsFullGroupCopy = WantsFullGroupCopy
+P.GroupCopyScopesForText = GroupCopyScopesForText
+P.CleanProfileName = CleanProfileName
+P.RawAfterPrefix = RawAfterPrefix
+P.RawBetween = RawBetween
+P.RawCreateProfileName = RawCreateProfileName
+P.RawCopyProfileName = RawCopyProfileName
+P.RawRenameProfileNames = RawRenameProfileNames
+P.PROFILE_EXPORT_KIND_LABELS = PROFILE_EXPORT_KIND_LABELS
+P.ProfileExportKindForText = ProfileExportKindForText
+P.RawAfterLastConnector = RawAfterLastConnector
+P.CleanSpecName = CleanSpecName
+P.ImportNewProfileName = ImportNewProfileName
+P.BuildSpecAutoSwitch = BuildSpecAutoSwitch
+P.BuildSpecProfileAction = BuildSpecProfileAction
+P.ParseWorkflowLifecycle = ParseWorkflowLifecycle
+P.BuildMenuSelectorState = BuildMenuSelectorState
+P.ParseProfileStagingState = ParseProfileStagingState
+P.ParseGroupCopyScopeState = ParseGroupCopyScopeState
+P.ParseUnitCopyScopeState = ParseUnitCopyScopeState
+P.ParseProfile = ParseProfile

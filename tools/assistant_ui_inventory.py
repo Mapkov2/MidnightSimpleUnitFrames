@@ -170,6 +170,12 @@ UNIT_LABELS = {
     "boss": "Boss",
 }
 
+PAGE_KEYS_BY_FILE = {
+    # Unit Range Fade is registered as a unit-page section, but the section's
+    # own unit table deliberately excludes Player.
+    "MSUF_Menu2_UnitRangeFade.lua": "uf_target,uf_focus,uf_pet,uf_targettarget,uf_focustarget,uf_boss",
+}
+
 
 @dataclass
 class RegistryRow:
@@ -383,7 +389,9 @@ def factory_functions_for_file(path: Path) -> set[str]:
     return FACTORY_FUNCTIONS_BY_FILE.get(path.name, set())
 
 
-def page_keys_for_file(text: str) -> str:
+def page_keys_for_file(text: str, path: Path | None = None) -> str:
+    if path is not None and path.name in PAGE_KEYS_BY_FILE:
+        return PAGE_KEYS_BY_FILE[path.name]
     keys = re.findall(r'M\.RegisterPage\s*\(\s*"([^"]+)"', text)
     if keys:
         return ",".join(dict.fromkeys(keys))
@@ -505,6 +513,9 @@ def synthetic_candidates(row: UiRow, settings: list[RegistryRow]) -> list[Regist
         s for s in settings
         if s.attribute == wanted_attr and s.frame_type == wanted_frame and (not units or s.unit in units)
     ]
+    if "MSUF_Menu2_UnitFrameVisuals.lua" in ui_file and wanted_frame == "castbar":
+        unit_order = {"boss": 0, "player": 1, "target": 2, "focus": 3}
+        out.sort(key=lambda s: (unit_order.get(s.unit, 99), s.key))
     return out
 
 
@@ -737,6 +748,11 @@ def apply_synthetic_mapping(row: UiRow, settings: list[RegistryRow], actions: li
             }, "unitframe"), "Matched selected-slot Y slider to concrete registered slot Y offset settings.")
         if row.function == "SlotControl" and label == "size":
             return mark_registry_family(row, settings_with_suffix(settings, {"hpFontSize", "powerFontSize"}, "unitframe"), "Matched HP/power text size sliders to registered font-size settings.")
+
+    if "MSUF_Menu2_UnitRangeFade.lua" in ui_file and row.db_key_or_helper in {"rangeFadeEnabled", "rangeFadeAlpha", "rangeFadeLayerMode"}:
+        units = ("target", "focus", "pet", "targettarget", "focustarget", "boss")
+        keys = {f"{unit}.{row.db_key_or_helper}" for unit in units}
+        return mark_registry_family(row, settings_with_keys(settings, keys), "Matched supported UnitRangeFade section units by DB key; Player is not exposed by the UI or engine range keys.")
 
     if "MSUF_Menu2_AdvancedGameplay.lua" in ui_file:
         if label == "msuf edit mode":
@@ -1330,7 +1346,7 @@ def scan_ui() -> list[UiRow]:
     seen: set[tuple[str, int, str, str]] = set()
     for path in source_files():
         text = path.read_text(encoding="utf-8", errors="replace")
-        page = page_keys_for_file(text)
+        page = page_keys_for_file(text, path)
         lines = text.splitlines()
         factory_functions = factory_functions_for_file(path)
         current_function = ""

@@ -1807,6 +1807,25 @@ function GF.InvalidateTextFormatCache()
     _cachedUseShort = nil
 end
 
+local _GF_SPACED_DELIMITERS = {
+    [""] = " ",
+    ["-"] = " - ",
+    ["/"] = " / ",
+    ["\\"] = " \\ ",
+    ["|"] = " | ",
+    ["<"] = " < ",
+    [">"] = " > ",
+    ["~"] = " ~ ",
+    [":"] = " : ",
+}
+
+local function _GF_NormalizeTextDelimiter(delimiter, fallback)
+    if delimiter == nil then
+        return fallback or " / "
+    end
+    return _GF_SPACED_DELIMITERS[delimiter] or delimiter
+end
+
 ---
 --- Unified abbreviator (handles secret + non-secret)
 --- Secret: AbbreviateNumbers - secret string (C-side, no Lua arith)
@@ -1941,7 +1960,7 @@ function GF.FormatHealthText(mode, hp, hpMax, delimiter, reverse, unit)
     if not mode or mode == "NONE" then return "" end
     if reverse then mode = REVERSE_HP_MAP[mode] or mode end
 
-    local delim = delimiter or " / "
+    local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
     local hidePct = _GF_GetHidePct()
     local pctSuffix = hidePct and "" or "%"
 
@@ -2039,7 +2058,7 @@ end
 function GF.FormatPowerText(mode, pw, pwMax, delimiter, unit)
     if not mode or mode == "NONE" then return "" end
 
-    local delim = delimiter or " / "
+    local delim = _GF_NormalizeTextDelimiter(delimiter, " / ")
     local hidePct = _GF_GetHidePct()
     local pctSuffix = hidePct and "" or "%"
 

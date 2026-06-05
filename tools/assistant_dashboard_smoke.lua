@@ -41,6 +41,7 @@ _G.MSUF_DB = {
     gf_party = {},
     gf_raid = {},
     gf_mythicraid = {},
+    auras3 = { shared = { showInEditMode = true } },
 }
 _G.MSUF_GlobalDB = {
     global = { dashboard = {} },
@@ -73,6 +74,57 @@ _G.CreateFrame = function()
         UnregisterEvent = function() end,
     }
 end
+_G.MSUF_CurrentEditUnitKey = "target"
+_G.MSUF_UnitEditModeActive = true
+_G.MSUF_UnitPreviewActive = true
+_G.MSUF_SyncAllUnitPreviews = function() MSUF._unitPreviewSync = (MSUF._unitPreviewSync or 0) + 1 end
+_G.MSUF_Auras3_RefreshEditPreview = function() MSUF._auraEditPreview = (MSUF._auraEditPreview or 0) + 1 end
+_G.MSUF_Auras3_RefreshAll = function() MSUF._auraRefreshAll = (MSUF._auraRefreshAll or 0) + 1 end
+_G.MSUF_GF_EM2_ShowPreview = function() MSUF._gfPreviewShown = true; MSUF._gfPreviewShowCount = (MSUF._gfPreviewShowCount or 0) + 1 end
+_G.MSUF_GF_EM2_HidePreview = function() MSUF._gfPreviewShown = false; MSUF._gfPreviewHideCount = (MSUF._gfPreviewHideCount or 0) + 1 end
+_G.MSUF_GF_EM2_IsPreviewShown = function() return MSUF._gfPreviewShown == true end
+_G.MSUF_EM2_ReforcePreviewFrames = function() MSUF._editPreviewForce = (MSUF._editPreviewForce or 0) + 1 end
+_G.MSUF_EnsureAnchorPicker = function()
+    local overlay = {}
+    function overlay:Show()
+        MSUF._anchorPickerOpened = (MSUF._anchorPickerOpened or 0) + 1
+    end
+    MSUF._anchorPickerOverlay = overlay
+    return overlay
+end
+_G.MSUF_EM2 = {
+    State = {
+        GetUnitKey = function() return _G.MSUF_CurrentEditUnitKey end,
+    },
+    Snap = {
+        _enabled = false,
+        IsEnabled = function() return _G.MSUF_EM2.Snap._enabled and true or false end,
+        SetEnabled = function(value) _G.MSUF_EM2.Snap._enabled = value and true or false end,
+    },
+    HUD = {
+        RefreshControls = function() MSUF._editHudRefresh = (MSUF._editHudRefresh or 0) + 1 end,
+        ResetCurrentPosition = function()
+            MSUF._editResetPosition = (MSUF._editResetPosition or 0) + 1
+            local key = _G.MSUF_CurrentEditUnitKey
+            if key and _G.MSUF_DB[key] then
+                _G.MSUF_DB[key].offsetX = 0
+                _G.MSUF_DB[key].offsetY = 0
+            end
+        end,
+        SetStatus = function(text, kind)
+            MSUF._editHudStatus = { text = text, kind = kind }
+        end,
+    },
+    Movers = {
+        SyncAll = function() MSUF._editMoverSync = (MSUF._editMoverSync or 0) + 1 end,
+    },
+    Util = {
+        ApplyAllSettingsSafe = function()
+            MSUF._editApplyAll = (MSUF._editApplyAll or 0) + 1
+            return true
+        end,
+    },
+}
 
 local unpack = table.unpack or unpack
 local M = MSUF.MSUF2
@@ -111,10 +163,26 @@ M.EnsureDB = function()
 end
 M.RequestUnitApply = function(unit, reason) MSUF._lastUnitApply = { unit = unit, reason = reason } end
 M.RequestGeneralApply = function(reason) MSUF._lastGeneralApply = reason end
+_G.MSUF_RequestStatusIconsRefreshForCurrent = function() MSUF._statusRefresh = (MSUF._statusRefresh or 0) + 1 end
 MSUF.MSUF_RequestGameplayApply = function(reason) MSUF._lastGameplayApply = reason end
 M.Open = function(page) M.activeKey = page; return true end
 M.SelectPage = M.Open
 M.InvalidatePage = function() end
+M.SyncGFPagePreviewForKey = function(key, force)
+    MSUF._gfPagePreviewSync = { key = key, force = force, scope = M.gfScope }
+    if _G.MSUF_UnitEditModeActive == true then
+        _G.MSUF2_GFPagePreviewActive = nil
+        _G.MSUF2_GFPagePreviewKind = nil
+        return
+    end
+    if key == "gf_layout" or key == "gf_bars" or key == "gf_indicators" then
+        _G.MSUF2_GFPagePreviewActive = true
+        _G.MSUF2_GFPagePreviewKind = M.gfScope
+    else
+        _G.MSUF2_GFPagePreviewActive = nil
+        _G.MSUF2_GFPagePreviewKind = nil
+    end
+end
 M.PersistMenuStateValue = function(key, value) M[key] = value end
 M.GetPersistentMenuStateTable = function(key)
     M[key] = type(M[key]) == "table" and M[key] or {}
@@ -172,6 +240,14 @@ local assistantFiles = {
     "Assistant/MSUF_AssistantRegistry_Workflows.lua",
     "Assistant/MSUF_AssistantRegistry_Diagnostics.lua",
     "Assistant/MSUF_AssistantMediaResolver.lua",
+    "Assistant/MSUF_AssistantParser_Core.lua",
+    "Assistant/MSUF_AssistantParser_Profiles.lua",
+    "Assistant/MSUF_AssistantParser_Auras.lua",
+    "Assistant/MSUF_AssistantParser_Actions.lua",
+    "Assistant/MSUF_AssistantParser_Registry.lua",
+    "Assistant/MSUF_AssistantParser_Features.lua",
+    "Assistant/MSUF_AssistantParser_Geometry.lua",
+    "Assistant/MSUF_AssistantParser_Followups.lua",
     "Assistant/MSUF_AssistantParser.lua",
     "Assistant/MSUF_Assistant.lua",
 }
@@ -197,8 +273,96 @@ loadAddon("Assistant/MSUF_AssistantRouter.lua")
 
 local A = assert(MSUF.Assistant, "Assistant namespace missing")
 assert(type(A.Submit) == "function", "Assistant Submit path missing")
+assert(type(A.SubmitDeferred) == "function", "Assistant deferred Submit path missing")
 assert(type(A.HandleInput) == "function", "Assistant input handler missing")
 assert(type(A.RouteInput) == "function", "Assistant router missing")
+assert(type(A._ChoiceTextForTest) == "function", "Assistant choice text formatter missing")
+assert(A.IsBusy() == false, "Assistant should not start busy")
+A.SetBusy(true, "Testing busy state")
+local busySubmit = A.SubmitDeferred("turn off target name")
+assert(busySubmit and busySubmit.status == "busy", "Assistant deferred Submit did not guard concurrent requests")
+A.SetBusy(false)
+_G.MSUF_DB.player.showName = true
+local deferredHistoryCount = #A.GetHistory()
+local deferredResult = A.SubmitDeferred("turn off player name")
+assert(deferredResult and deferredResult.status == "applied", "Assistant deferred Submit did not execute through the normal input path")
+assert(A.IsBusy() == false, "Assistant deferred Submit did not clear busy state")
+assert(#A.GetHistory() == deferredHistoryCount + 2, "Assistant deferred Submit did not write user and assistant history")
+assert(_G.MSUF_DB.player.showName == false, "Assistant deferred Submit did not apply the requested setting")
+_G.MSUF_DB.player.showName = true
+local oldScheduler = MSUF.Scheduler
+local scheduledDeferred
+MSUF.Scheduler = {
+    RunNextFrame = function(fn)
+        scheduledDeferred = fn
+    end,
+}
+_G.MSUF_DB.target.showName = true
+local queuedHistoryCount = #A.GetHistory()
+local queuedDeferred = A.SubmitDeferred("turn off target name")
+assert(queuedDeferred and queuedDeferred.status == "queued", "Assistant deferred Submit did not use the next-frame path when a scheduler is available")
+assert(A.IsBusy() == true, "Assistant deferred Submit did not stay busy while queued")
+assert(type(scheduledDeferred) == "function", "Assistant deferred Submit did not schedule the next-frame worker")
+assert(#A.GetHistory() == queuedHistoryCount + 1, "Assistant deferred Submit should write only the user history before the worker runs")
+scheduledDeferred()
+assert(A.IsBusy() == false, "Assistant deferred Submit did not clear busy state after the queued worker")
+assert(#A.GetHistory() == queuedHistoryCount + 2, "Assistant deferred Submit did not write assistant history after the queued worker")
+assert(_G.MSUF_DB.target.showName == false, "Assistant deferred Submit queued worker did not apply the requested setting")
+_G.MSUF_DB.target.showName = true
+MSUF.Scheduler = oldScheduler
+local choiceText = A._ChoiceTextForTest({
+    { label = "Global Bar Texture [] EQOL: Absorb" },
+    { label = "Global Bar Texture [] EQOL: Astral" },
+})
+assert(not choiceText:find("%[%]", 1, false), "Assistant choice text still renders empty [] scope marker")
+assert(choiceText:find("Global Bar Texture EQOL: Absorb", 1, true), "Assistant choice text removed too much content")
+assert(choiceText:find("0. None", 1, true), "Assistant choice text does not show a visible None option")
+local barTextureSetting = assert(A.Registry:GetSetting("general.barTexture"), "Global Bar Texture registry setting missing")
+_G.MSUF_DB.general.barTexture = "Solid"
+A.pendingChoices = {
+    { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
+    { setting = barTextureSetting, value = "EQOL: Astral", label = "Global Bar Texture [] EQOL: Astral" },
+}
+local cancelChoice = A.Submit("no i dont want to change")
+assert(cancelChoice.status == "info" and tostring(cancelChoice.text or ""):find("Cancelled", 1, true), "Assistant did not cancel pending choices from human no-answer")
+assert(A.pendingChoices == nil, "Assistant did not clear pending choices after no-answer")
+assert(_G.MSUF_DB.general.barTexture == "Solid", "Assistant changed a setting after pending choice cancel")
+A.pendingChoices = {
+    { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
+    { setting = barTextureSetting, value = "EQOL: Astral", label = "Global Bar Texture [] EQOL: Astral" },
+}
+local noneChoice = A.Submit("none")
+assert(noneChoice.status == "info" and tostring(noneChoice.text or ""):find("Cancelled", 1, true), "Assistant did not cancel pending choices from none")
+assert(A.pendingChoices == nil, "Assistant did not clear pending choices after none")
+assert(_G.MSUF_DB.general.barTexture == "Solid", "Assistant changed a setting after none")
+A.pendingChoices = {
+    { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
+    { setting = barTextureSetting, value = "EQOL: Astral", label = "Global Bar Texture [] EQOL: Astral" },
+}
+local zeroChoice = A.Submit("0")
+assert(zeroChoice.status == "info" and tostring(zeroChoice.text or ""):find("Cancelled", 1, true), "Assistant did not cancel pending choices from option 0")
+assert(A.pendingChoices == nil, "Assistant did not clear pending choices after option 0")
+assert(_G.MSUF_DB.general.barTexture == "Solid", "Assistant changed a setting after option 0")
+A.pendingChoices = {
+    { setting = barTextureSetting, value = "EQOL: Absorb", label = "Global Bar Texture [] EQOL: Absorb" },
+    { setting = barTextureSetting, value = "EQOL: Astral", label = "Global Bar Texture [] EQOL: Astral" },
+}
+local freshCommand = A.Submit("help")
+assert(freshCommand.status == "applied", "Assistant did not route a fresh command after clearing pending choices")
+assert(A.pendingChoices == nil, "Assistant did not clear pending choices before fresh command")
+assert(_G.MSUF_DB.general.barTexture == "Solid", "Assistant applied stale pending choice instead of the fresh command")
+assert(A.LoginGreetingForHour(8) == "Good morning", "Login greeting did not detect morning")
+assert(A.LoginGreetingForHour(14) == "Good afternoon", "Login greeting did not detect afternoon")
+assert(A.LoginGreetingForHour(20) == "Good evening", "Login greeting did not detect evening")
+assert(A.LoginGreetingForHour(2) == "Good night", "Login greeting did not detect night")
+local greetingHistoryCount = #A.GetHistory()
+A._loginGreetingShown = nil
+local greeted, greetingText = A.AddLoginGreeting("Mapko", 14)
+assert(greeted == true, "Assistant login greeting did not add a session greeting")
+assert(greetingText == "Good afternoon, Mapko. I am ready to help with MSUF.", "Assistant login greeting used the wrong text")
+assert(#A.GetHistory() == greetingHistoryCount + 1, "Assistant login greeting did not write to history")
+local greetedAgain = A.AddLoginGreeting("Mapko", 14)
+assert(greetedAgain == false, "Assistant login greeting should only run once per session")
 
 local function submit(text)
     local result = A.Submit(text)
@@ -240,9 +404,32 @@ assert(searchSubmitQuery == "where is castbar texture", "Search OpenResults chan
 assert(M.activeKey == "home", "Search OpenResults did not return to the Assistant dashboard page")
 A.Submit = originalSubmit
 
-expectApplied("turn off player name", "Done.")
+local supportDB = A.EnsureDB()
+supportDB.powerUserSupportSuccessCount = 99
+supportDB.powerUserSupportHintAt = 0
+_G.MSUF_DB.player.showName = true
+local supportHintHistoryCount = #A.GetHistory()
+local supportHintResult = expectApplied("turn off player name", "I changed")
+assert(tostring(supportHintResult.text or ""):find("from enabled to disabled", 1, true), "Dashboard Assistant success response did not explain the old and new values before the power-user hint")
+assert(#A.GetHistory() == supportHintHistoryCount + 3, "Power-user hint should add user, success, and one info history row")
+local supportHint = A.GetHistory()[#A.GetHistory()]
+assert(supportHint.status == "info" and tostring(supportHint.text or ""):find("links on the Dashboard", 1, true), "Power-user hint did not point to the Dashboard links")
+assert(supportDB.powerUserSupportSuccessCount == 0, "Power-user hint did not reset the success counter after showing")
+supportDB.powerUserSupportSuccessCount = 99
+_G.MSUF_DB.player.showName = true
+local cooldownHintHistoryCount = #A.GetHistory()
+expectApplied("turn off player name", "I changed")
+assert(#A.GetHistory() == cooldownHintHistoryCount + 2, "Power-user hint ignored the weekly cooldown")
+assert(supportDB.powerUserSupportSuccessCount == 100, "Power-user hint should keep the threshold ready while the cooldown is active")
+
+_G.MSUF_DB.player.showName = true
+local humanSingleChange = expectApplied("turn off player name", "I changed")
+assert(tostring(humanSingleChange.text or ""):find("from enabled to disabled", 1, true), "Dashboard Assistant success response did not explain the old and new values")
 assert(_G.MSUF_DB.player.showName == false, "Dashboard Submit did not write player.showName")
 assert(MSUF._lastUnitApply and MSUF._lastUnitApply.unit == "player", "Dashboard Submit did not request player apply")
+_G.MSUF_DB.player.showName = true
+expectApplied("spieler name aus", "Done.")
+assert(_G.MSUF_DB.player.showName == false, "Dashboard Submit did not understand German Player name off")
 _G.MSUF_DB.player.enabled = true
 expectApplied("turn off frame", "Done.")
 assert(_G.MSUF_DB.player.enabled == false, "Dashboard conversation context did not route bare frame toggle to last player unit")
@@ -251,6 +438,64 @@ expectApplied("turn off player frame", "Done.")
 assert(_G.MSUF_DB.player.enabled == false, "Dashboard Submit did not write player.enabled")
 expectApplied("turn it back on", "Done.")
 assert(_G.MSUF_DB.player.enabled == true, "Dashboard context follow-up did not re-enable player.enabled")
+_G.MSUF_DB.player.enabled = false
+expectApplied("spieler frame einschalten", "Done.")
+assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit did not understand German Player frame on")
+_G.MSUF_DB.general.slashMenuSnapEnabled = true
+expectApplied("turn off snapping feature", "Done.")
+assert(_G.MSUF_DB.general.slashMenuSnapEnabled == false, "Dashboard Submit did not turn off Misc menu edge snapping")
+_G.MSUF_DB.general.slashMenuSnapEnabled = true
+expectApplied("turn off menu snapping", "Done.")
+assert(_G.MSUF_DB.general.slashMenuSnapEnabled == false, "Dashboard Submit did not understand menu snapping alias")
+_G.MSUF_DB.general.hideAdvancedMenu = false
+expectApplied("hide advanced menu section", "Done.")
+assert(_G.MSUF_DB.general.hideAdvancedMenu == true, "Dashboard Submit did not hide Advanced menu section")
+expectApplied("show advanced menu section", "Done.")
+assert(_G.MSUF_DB.general.hideAdvancedMenu == false, "Dashboard Submit did not show Advanced menu section")
+_G.MSUF_DB.general.reduceMotion = false
+expectApplied("turn on reduce menu motion", "Done.")
+assert(_G.MSUF_DB.general.reduceMotion == true, "Dashboard Submit did not enable Reduce Menu Motion")
+_G.MSUF_DB.general.showWelcomeMessage = true
+expectApplied("turn off welcome message", "Done.")
+assert(_G.MSUF_DB.general.showWelcomeMessage == false, "Dashboard Submit did not turn off Welcome Message")
+_G.MSUF_DB.general.versionCheckEnabled = true
+expectApplied("turn off peer version check", "Done.")
+assert(_G.MSUF_DB.general.versionCheckEnabled == false, "Dashboard Submit did not turn off Peer Version Check")
+_G.MSUF_DB.general.showMinimapIcon = true
+expectApplied("hide minimap icon", "Done.")
+assert(_G.MSUF_DB.general.showMinimapIcon == false, "Dashboard Submit did not hide MSUF Minimap Icon")
+_G.MSUF_DB.general.playTargetSelectLostSounds = false
+expectApplied("turn on target lost sounds", "Done.")
+assert(_G.MSUF_DB.general.playTargetSelectLostSounds == true, "Dashboard Submit did not enable Target Select/Lost Sounds")
+_G.MSUF_DB.general.disableBlizzardUnitFrames = false
+expectApplied("disable blizzard unitframes", "Done.")
+assert(_G.MSUF_DB.general.disableBlizzardUnitFrames == true, "Dashboard Submit did not disable Blizzard Unitframes")
+expectApplied("enable blizzard unitframes", "Done.")
+assert(_G.MSUF_DB.general.disableBlizzardUnitFrames == false, "Dashboard Submit did not enable Blizzard Unitframes")
+_G.MSUF_DB.general.hardKillBlizzardPlayerFrame = false
+expectApplied("fully hide blizzard player frame", "Done.")
+assert(_G.MSUF_DB.general.hardKillBlizzardPlayerFrame == true, "Dashboard Submit routed Fully Hide Blizzard PlayerFrame to the wrong setting")
+expectApplied("set menu language to german", "Done.")
+assert(_G.MSUF_DB.general.menuLocale == "deDE", "Dashboard Submit did not set Menu Language")
+expectApplied("set tooltip source to msuf", "Done.")
+assert(_G.MSUF_DB.general.unitTooltipProvider == "MSUF", "Dashboard Submit did not set Tooltip Source")
+expectApplied("set tooltip anchor to cursor", "Done.")
+assert(_G.MSUF_DB.general.unitTooltipAnchor == "CURSOR", "Dashboard Submit did not set Tooltip Anchor")
+expectApplied("show tooltips only out of combat", "Done.")
+assert(_G.MSUF_DB.general.unitTooltipMode == "OOC", "Dashboard Submit did not set Tooltip Mode to Out of Combat")
+expectApplied("set tooltip modifier to shift", "Done.")
+assert(_G.MSUF_DB.general.unitTooltipModifier == "SHIFT", "Dashboard Submit did not set Tooltip Modifier")
+for _, unit in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
+    _G.MSUF_DB[unit].portraitMode = "OFF"
+end
+_G.MSUF_DB.targettarget.enabled = false
+_G.MSUF_DB.focustarget.enabled = false
+expectApplied("turn on portraits for all unitframes", "MSUF settings:")
+for _, unit in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
+    assert(_G.MSUF_DB[unit].portraitMode == "LEFT", "Dashboard Submit did not turn on " .. unit .. " portrait")
+end
+assert(_G.MSUF_DB.targettarget.enabled == false, "Dashboard Submit enabled Target of Target frame instead of only portraits")
+assert(_G.MSUF_DB.focustarget.enabled == false, "Dashboard Submit enabled Focus Target frame instead of only portraits")
 _G.MSUF_DB.player.showName = true
 _G.MSUF_DB.target.showName = true
 expectApplied("turn off player name", "Done.")
@@ -332,6 +577,28 @@ expectApplied("remove player power text", "Done.")
 assert(_G.MSUF_DB.player.powerTextLeft == "NONE" and _G.MSUF_DB.player.powerTextCenter == "NONE" and _G.MSUF_DB.player.powerTextRight == "NONE", "Dashboard Submit did not clear all Player Power text slots")
 expectApplied("set player power text right to percent", "Done.")
 assert(_G.MSUF_DB.player.powerTextRight == "PERCENT", "Dashboard Submit did not set Player Power right text to Percent")
+_G.MSUF_DB.target.powerTextLeft = "NONE"
+_G.MSUF_DB.target.powerTextCenter = "NONE"
+_G.MSUF_DB.target.powerTextRight = "CURPERCENT"
+expectApplied("set target power text to percent", "Target Power Right Slot")
+assert(_G.MSUF_DB.target.powerTextRight == "PERCENT", "Dashboard Submit did not reuse the only active Target Power text slot")
+assert(_G.MSUF_DB.target.powerTextCenter == "NONE", "Dashboard Submit incorrectly created a new Target Power center text slot")
+_G.MSUF_DB.target.powerTextLeft = "CURRENT"
+_G.MSUF_DB.target.powerTextCenter = "NONE"
+_G.MSUF_DB.target.powerTextRight = "CURPERCENT"
+ctx.lastTextFrameType = nil
+ctx.lastTextUnit = nil
+ctx.lastTextArea = nil
+ctx.lastTextSlot = nil
+ctx.lastTextSetting = nil
+ctx.lastTextValue = nil
+ctx.selectedTextEditorTarget = nil
+local targetPowerTextChoice = expectStatus("set target power text to percent", "ambiguous", "Target Power Left Slot -> PERCENT")
+assert(tostring(targetPowerTextChoice.text or ""):find("Target Power Right Slot -> PERCENT", 1, true), "Dashboard Submit did not offer the other active Target Power text slot")
+assert(not tostring(targetPowerTextChoice.text or ""):find("Target Power Center Slot", 1, true), "Dashboard Submit offered an inactive Target Power center text slot")
+expectApplied("2", "Done.")
+assert(_G.MSUF_DB.target.powerTextRight == "PERCENT", "Dashboard Submit did not apply selected Target Power text slot choice")
+assert(_G.MSUF_DB.target.powerTextLeft == "CURRENT", "Dashboard Submit changed the wrong active Target Power text slot")
 expectApplied("set target hp text right to current/max", "Done.")
 assert(_G.MSUF_DB.target.textRight == "CURMAX", "Dashboard Submit did not set Target HP right text to Current/Max")
 _G.MSUF_DB.player.textLeft = "NONE"
@@ -400,6 +667,43 @@ assert(_G.MSUF_DB.gf_party.nameOffsetY == -38, "Dashboard Submit did not move Pa
 _G.MSUF_DB.player.hpOffsetY = 0
 expectApplied("move player health down 4", "Done.")
 assert(_G.MSUF_DB.player.hpOffsetY == -4, "Dashboard Submit did not move Player HP text down with health shorthand")
+_G.MSUF_DB.player.hpOffsetY = 0
+expectApplied("verschiebe spieler lebensanzeige runter 4", "Done.")
+assert(_G.MSUF_DB.player.hpOffsetY == -4, "Dashboard Submit did not understand German Player health movement")
+_G.MSUF_DB.target.powerOffsetY = 0
+expectApplied("verschiebe ziel energie hoch 2", "Done.")
+assert(_G.MSUF_DB.target.powerOffsetY == 2, "Dashboard Submit did not understand German Target power movement")
+_G.MSUF_DB.player.width = 200
+expectApplied("setze spieler breite auf 222", "Done.")
+assert(_G.MSUF_DB.player.width == 222, "Dashboard Submit did not understand German Player width set")
+_G.MSUF_DB.general.enableTargetCastbar = true
+expectApplied("ziel zauberleiste ausschalten", "Done.")
+assert(_G.MSUF_DB.general.enableTargetCastbar == false, "Dashboard Submit did not understand German Target castbar off")
+_G.MSUF_DB.targettarget.totInlineSeparator = "|"
+_G.MSUF_DB.targettarget.totInlineCustomSeparator = ""
+local inlinePrompt = submit("change target inline seperator")
+assert(inlinePrompt.status == "ambiguous", "Dashboard Submit did not ask for inline separator value")
+assert(type(A.pendingChoices) == "table" and #A.pendingChoices >= 3, "Dashboard Submit did not expose inline separator choices")
+expectApplied("option 3", "Done.")
+assert(_G.MSUF_DB.targettarget.totInlineSeparator == "/", "Dashboard Submit did not apply inline separator choice")
+_G.MSUF_DB.targettarget.totInlineSeparator = "|"
+expectApplied("change target of target inline seperator to /", "Done.")
+assert(_G.MSUF_DB.targettarget.totInlineSeparator == "/", "Dashboard Submit did not understand misspelled Target of Target inline separator")
+_G.MSUF_DB.targettarget.totInlineSeparator = "|"
+_G.MSUF_DB.targettarget.totInlineCustomSeparator = ""
+expectApplied("change target inline separator to ->", "Done.")
+assert(_G.MSUF_DB.targettarget.totInlineSeparator == "__CUSTOM__", "Dashboard Submit did not switch inline separator to Custom for freeform value")
+assert(_G.MSUF_DB.targettarget.totInlineCustomSeparator == "->", "Dashboard Submit did not write inline custom separator")
+_G.MSUF_DB.targettarget.showToTInTargetName = true
+local inlineTextPrompt = submit("turn off target of target inline")
+assert(inlineTextPrompt.status == "ambiguous", "Dashboard Submit did not suggest a choice for partial Target of Target inline text")
+assert(tostring(inlineTextPrompt.text or ""):find("likely match", 1, true), "Dashboard Submit did not explain single suggested inline text choice")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[1] and A.pendingChoices[1].setting.key == "targettarget.showToTInTargetName", "Dashboard Submit suggested wrong partial inline text setting")
+expectApplied("1", "Done.")
+assert(_G.MSUF_DB.targettarget.showToTInTargetName == false, "Dashboard Submit did not apply partial inline text suggestion")
+_G.MSUF_DB.targettarget.showToTInTargetName = true
+expectApplied("turn off target of target inline text", "Done.")
+assert(_G.MSUF_DB.targettarget.showToTInTargetName == false, "Dashboard Submit regressed exact inline text command")
 _G.MSUF_DB.player.hpOffsetY = -14
 expectApplied("move player hp text up", "Done.")
 assert(_G.MSUF_DB.player.hpOffsetY == -4, "Dashboard Submit did not move Player HP text up before contextual repeat")
@@ -411,6 +715,83 @@ assert(_G.MSUF_DB.target.powerOffsetY == 2, "Dashboard Submit did not move Targe
 _G.MSUF_DB.target.powerTextRight = "NONE"
 expectApplied("create new mana text at target frame anchor right side with mana current max", "Done.")
 assert(_G.MSUF_DB.target.powerTextRight == "CURMAX", "Dashboard Submit did not set Target right power text content")
+M.activeKey = "uf_target"
+_G.MSUF_DB.target.showPowerBar = true
+_G.MSUF_DB.target.powerTextLeft = "CURRENT"
+_G.MSUF_DB.target.powerTextCenter = "MAX"
+_G.MSUF_DB.target.powerTextRight = "PERCENT"
+expectApplied("turn off power bar", "Done.")
+assert(_G.MSUF_DB.target.showPowerBar == false, "Target page context did not turn off Target power bar")
+assert(_G.MSUF_DB.target.powerTextLeft == "CURRENT" and _G.MSUF_DB.target.powerTextCenter == "MAX" and _G.MSUF_DB.target.powerTextRight == "PERCENT", "Power bar command incorrectly changed Target power text slots")
+_G.MSUF_DB.target.showPowerBar = true
+expectApplied("turn off powerbar", "Done.")
+assert(_G.MSUF_DB.target.showPowerBar == false, "Target page context did not normalize compact powerbar wording")
+_G.MSUF_DB.target.powerBarHeight = 3
+expectApplied("set power bar height to 8", "Done.")
+assert(_G.MSUF_DB.target.powerBarHeight == 8, "Target page context did not set Target power bar height")
+M.activeKey = "home"
+_G.MSUF_DB.target.showPowerBar = true
+expectApplied("turn off target power bar", "Done.")
+assert(_G.MSUF_DB.target.showPowerBar == false, "Dashboard Submit did not turn off explicit Target power bar")
+_G.MSUF_DB.target.powerBarHeight = 5
+expectApplied("increase power bar hight target", "Done.")
+assert(_G.MSUF_DB.target.powerBarHeight == 6, "Dashboard Submit did not increase Target power bar height with misspelled hight")
+_G.MSUF_DB.bars.classPowerOutline = 2
+_G.MSUF_DB.player.powerBarBorderEnabled = false
+expectApplied("add for player power bar a border", "Player Power Bar Border")
+assert(_G.MSUF_DB.player.powerBarBorderEnabled == true, "Dashboard Submit changed the wrong setting for Player Power Bar Border")
+assert(_G.MSUF_DB.bars.classPowerOutline == 2, "Dashboard Submit changed Class Resource Outline for a Player Power Bar Border command")
+_G.MSUF_DB.bars.showClassPower = true
+_G.MSUF_DB.player.showPowerBar = true
+expectApplied("no not class resource power bar player", "Player Power Bar")
+assert(_G.MSUF_DB.player.showPowerBar == false, "Dashboard Submit did not route negated Class Resource correction to Player Power Bar")
+assert(_G.MSUF_DB.bars.showClassPower == true, "Dashboard Submit disabled Class Resource after the user said not Class Resource")
+_G.MSUF_DB.bars.classPowerOutline = 2
+expectApplied("increase class resource outline", "Class Resource Outline")
+assert(_G.MSUF_DB.bars.classPowerOutline == 3, "Dashboard Submit regressed explicit Class Resource Outline commands")
+_G.MSUF_DB.target.powerBarDetached = false
+expectApplied("detach target power bar", "Done.")
+assert(_G.MSUF_DB.target.powerBarDetached == true, "Dashboard Submit did not detach Target power bar")
+expectApplied("attach target power bar", "Done.")
+assert(_G.MSUF_DB.target.powerBarDetached == false, "Dashboard Submit did not attach Target power bar back to frame")
+_G.MSUF_DB.player.portraitMode = "LEFT"
+_G.MSUF_DB.player.portraitOffsetX = 0
+expectApplied("move player portrait closer to player unitframe", "Done.")
+assert(_G.MSUF_DB.player.portraitOffsetX == 10, "Dashboard Submit did not move Player portrait closer to the frame")
+expectApplied("move player portrait farther from player unitframe", "Done.")
+assert(_G.MSUF_DB.player.portraitOffsetX == 0, "Dashboard Submit did not move Player portrait farther from the frame")
+_G.MSUF_DB.player.detachedPowerBarOffsetX = 0
+expectApplied("move player detached power bar right 5", "Done.")
+assert(_G.MSUF_DB.player.detachedPowerBarOffsetX == 5, "Dashboard Submit routed detached power bar movement to the wrong setting")
+_G.MSUF_DB.general.castbarTargetIconOffsetX = 0
+expectApplied("move target castbar icon right 4", "Done.")
+assert(_G.MSUF_DB.general.castbarTargetIconOffsetX == 4, "Dashboard Submit moved Target castbar instead of Target castbar icon")
+_G.MSUF_DB.general.focusKickIconOffsetY = 0
+expectApplied("move focus kick icon down 3", "Done.")
+assert(_G.MSUF_DB.general.focusKickIconOffsetY == -3, "Dashboard Submit moved Focus frame instead of Focus Kick icon")
+_G.MSUF_DB.bars.classPowerTextOffsetX = 0
+expectApplied("move class resource text right 5", "Done.")
+assert(_G.MSUF_DB.bars.classPowerTextOffsetX == 5, "Dashboard Submit moved Class Resource frame instead of Class Resource text")
+_G.MSUF_DB.gf_raid.readyCheckY = 0
+expectApplied("move raid ready check icon up 2", "Done.")
+assert(_G.MSUF_DB.gf_raid.readyCheckY == 2, "Dashboard Submit did not move Raid ready check icon")
+_G.MSUF_DB.gf_raid.groupNumberX = 0
+expectApplied("move raid group number right 2", "Done.")
+assert(_G.MSUF_DB.gf_raid.groupNumberX == 2, "Dashboard Submit did not move Raid group number")
+_G.MSUF_DB.player.showPowerBar = true
+_G.MSUF_DB.target.showPowerBar = true
+_G.MSUF_DB.focus.showPowerBar = true
+_G.MSUF_DB.boss.showPowerBar = true
+_G.MSUF_DB.gf_party.powerBarEnabled = true
+_G.MSUF_DB.gf_raid.powerBarEnabled = true
+_G.MSUF_DB.gf_mythicraid.powerBarEnabled = true
+_G.MSUF_DB.bars.smoothPowerBar = true
+local humanBulkChange = expectApplied("turn off all power bars", "MSUF settings:")
+assert(tostring(humanBulkChange.text or ""):find("1. ", 1, true), "Dashboard Assistant bulk success response did not list changed settings")
+assert(tostring(humanBulkChange.text or ""):find("from enabled to disabled", 1, true), "Dashboard Assistant bulk success response did not explain changed values")
+assert(_G.MSUF_DB.player.showPowerBar == false and _G.MSUF_DB.target.showPowerBar == false and _G.MSUF_DB.focus.showPowerBar == false and _G.MSUF_DB.boss.showPowerBar == false, "Dashboard Submit did not turn off all unit power bars")
+assert(_G.MSUF_DB.gf_party.powerBarEnabled == false and _G.MSUF_DB.gf_raid.powerBarEnabled == false and _G.MSUF_DB.gf_mythicraid.powerBarEnabled == false, "Dashboard Submit did not turn off all group power bars")
+assert(_G.MSUF_DB.bars.smoothPowerBar == true, "Dashboard Submit changed Smooth Power Bar instead of only root Power Bar visibility")
 _G.MSUF_DB.gf_raid.hpOffsetY = 0
 expectApplied("move raid health down 4", "Done.")
 assert(_G.MSUF_DB.gf_raid.hpOffsetY == -4, "Dashboard Submit did not move Raid HP text down with health shorthand")
@@ -463,7 +844,127 @@ _G.MSUF_DB.gf_raid.alphaOutOfCombat = 1
 expectApplied("set alpha to 60", "Done.")
 assertNear(_G.MSUF_DB.gf_raid.alphaInCombat, 0.6, "Group page context did not set Raid in-combat opacity")
 assertNear(_G.MSUF_DB.gf_raid.alphaOutOfCombat, 0.6, "Group page context did not set Raid out-of-combat opacity")
+_G.MSUF_DB.gf_raid.powerBarEnabled = true
+_G.MSUF_DB.gf_raid.powerTextLeft = "CURRENT"
+_G.MSUF_DB.gf_raid.powerTextCenter = "PERCENT"
+_G.MSUF_DB.gf_raid.powerTextRight = "MAX"
+expectApplied("turn off power bar", "Done.")
+assert(_G.MSUF_DB.gf_raid.powerBarEnabled == false, "Group page context did not turn off Raid power bar")
+assert(_G.MSUF_DB.gf_raid.powerTextLeft == "CURRENT" and _G.MSUF_DB.gf_raid.powerTextCenter == "PERCENT" and _G.MSUF_DB.gf_raid.powerTextRight == "MAX", "Power bar command incorrectly changed Raid power text slots")
+_G.MSUF_DB.gf_raid.powerHeight = 4
+expectApplied("set power bar height to 9", "Done.")
+assert(_G.MSUF_DB.gf_raid.powerHeight == 9, "Group page context did not set Raid power bar height")
 M.activeKey = "home"
+_G.MSUF_DB.gf_raid.powerBarEnabled = true
+expectApplied("turn off raid power bar", "Done.")
+assert(_G.MSUF_DB.gf_raid.powerBarEnabled == false, "Dashboard Submit did not turn off explicit Raid power bar")
+_G.MSUF_DB.bars.smoothPowerBar = true
+expectApplied("turn off smooth power bar", "Done.")
+assert(_G.MSUF_DB.bars.smoothPowerBar == false, "Dashboard Submit did not turn off global Smooth Power Bar")
+_G.MSUF_DB.player.showInterrupt = true
+_G.MSUF_DB.target.showInterrupt = true
+_G.MSUF_DB.focus.showInterrupt = true
+_G.MSUF_DB.boss.showInterrupt = true
+expectApplied("turn off for all castbars interrupt", "Done.")
+assert(_G.MSUF_DB.player.showInterrupt == false and _G.MSUF_DB.target.showInterrupt == false and _G.MSUF_DB.focus.showInterrupt == false and _G.MSUF_DB.boss.showInterrupt == false, "Dashboard Submit did not turn off all unit castbar interrupt toggles")
+_G.MSUF_DB.player.showInterrupt = true
+_G.MSUF_DB.target.showInterrupt = true
+_G.MSUF_DB.focus.showInterrupt = true
+_G.MSUF_DB.boss.showInterrupt = true
+expectApplied("turn off player target focus castbar interrupt", "Done.")
+assert(_G.MSUF_DB.player.showInterrupt == false and _G.MSUF_DB.target.showInterrupt == false and _G.MSUF_DB.focus.showInterrupt == false, "Dashboard Submit did not turn off explicitly named castbar interrupt toggles")
+assert(_G.MSUF_DB.boss.showInterrupt == true, "Dashboard Submit changed Boss castbar interrupt even though Boss was not requested")
+_G.MSUF_DB.player.enabled = true
+_G.MSUF_DB.gf_raid.showPlayer = true
+_G.MSUF_DB.gf_raid.showSolo = false
+local groupPlayerPrompt = submit("dont show player in group when solo")
+assert(groupPlayerPrompt.status == "ambiguous", "Dashboard Submit should ask which group scope for player-in-group command")
+assert(type(A.pendingChoices) == "table" and A.pendingChoices[2] and A.pendingChoices[2].setting.key == "gf_raid.showPlayer", "Dashboard Submit suggested wrong group player choices")
+expectApplied("2", "Done.")
+assert(_G.MSUF_DB.gf_raid.showPlayer == false, "Dashboard Submit did not apply Raid Show Player choice")
+assert(_G.MSUF_DB.gf_raid.showSolo == false, "Dashboard Submit changed Show While Solo instead of Show Player")
+assert(_G.MSUF_DB.player.enabled == true, "Dashboard Submit changed Player frame instead of group Show Player")
+M.activeKey = "gf_layout"
+M.gfScope = "party"
+_G.MSUF_DB.player.enabled = true
+_G.MSUF_DB.gf_party.showPlayer = true
+_G.MSUF_DB.gf_party.showSolo = false
+expectApplied("dont show player in group when solo", "Done.")
+assert(_G.MSUF_DB.gf_party.showPlayer == false, "Group layout context did not apply Show Player for current Party scope")
+assert(_G.MSUF_DB.gf_party.showSolo == false, "Group layout context changed Show While Solo instead of Show Player")
+assert(_G.MSUF_DB.player.enabled == true, "Group layout context changed Player frame instead of group Show Player")
+M.activeKey = "home"
+_G.MSUF_DB.target.loadCondHideOutOfCombat = false
+_G.MSUF_DB.target.enabled = true
+expectApplied("change load condition from target frame to not show out of combat", "Target Hide Out Of Combat")
+assert(_G.MSUF_DB.target.loadCondHideOutOfCombat == true, "Dashboard Submit did not enable Target Hide Out Of Combat load condition")
+assert(_G.MSUF_DB.target.enabled == true, "Dashboard Submit changed Target Frame Enabled instead of the load condition")
+expectApplied("show target frame out of combat", "Target Hide Out Of Combat")
+assert(_G.MSUF_DB.target.loadCondHideOutOfCombat == false, "Dashboard Submit did not disable Target Hide Out Of Combat for a show-out-of-combat request")
+_G.MSUF_DB.player.loadCondHideMounted = false
+expectApplied("hide player frame when mounted", "Player Hide Mounted")
+assert(_G.MSUF_DB.player.loadCondHideMounted == true, "Dashboard Submit did not enable Player Hide Mounted load condition")
+_G.MSUF_DB.gf_raid.showSolo = false
+expectApplied("change raid group load condition to show while solo", "Raid Show While Solo")
+assert(_G.MSUF_DB.gf_raid.showSolo == true, "Dashboard Submit did not enable Raid Show While Solo from load-condition wording")
+expectApplied("change raid group load condition to not show while solo", "Raid Show While Solo")
+assert(_G.MSUF_DB.gf_raid.showSolo == false, "Dashboard Submit did not disable Raid Show While Solo from not-show wording")
+expectStatus("change raid group load condition to hide out of combat", "info", "do not have a real load-condition")
+
+_G.MSUF_UnitEditModeActive = false
+_G.MSUF_UnitPreviewActive = false
+_G.MSUF2_GFPagePreviewActive = nil
+_G.MSUF2_GFPagePreviewKind = nil
+M.gfScope = "party"
+MSUF._gfPreviewShown = false
+local outsidePreviewEMShowCount = MSUF._gfPreviewShowCount or 0
+expectApplied("turn on raid frame preview", "outside Edit Mode")
+assert(M.gfScope == "raid", "Dashboard Submit did not select Raid scope for Raid frame preview")
+assert(M.activeKey == "gf_layout", "Dashboard Submit did not open Group Layout for Raid frame preview outside Edit Mode")
+assert(_G.MSUF2_GFPagePreviewActive == true and _G.MSUF2_GFPagePreviewKind == "raid", "Dashboard Submit did not enable Raid Group Frame page preview outside Edit Mode")
+assert(_G.MSUF_UnitPreviewActive == false, "Dashboard Submit toggled Unit/Edit Mode preview instead of Raid Group Frame preview")
+assert((MSUF._gfPreviewShowCount or 0) == outsidePreviewEMShowCount, "Dashboard Submit used the Edit Mode Group Preview bridge while Edit Mode was off")
+expectApplied("turn off raid frame preview", "outside Edit Mode")
+assert(_G.MSUF2_GFPagePreviewActive == nil, "Dashboard Submit did not disable Raid Group Frame page preview outside Edit Mode")
+
+_G.MSUF_UnitEditModeActive = true
+M.gfScope = "party"
+MSUF._gfPreviewShown = false
+local editPreviewEMShowCount = MSUF._gfPreviewShowCount or 0
+expectApplied("turn on raid frame preview", "in Edit Mode")
+assert(M.gfScope == "raid", "Dashboard Submit did not keep Raid scope for Raid frame preview in Edit Mode")
+assert(MSUF._gfPreviewShown == true, "Dashboard Submit did not use the Edit Mode Group Preview bridge while Edit Mode was on")
+assert((MSUF._gfPreviewShowCount or 0) > editPreviewEMShowCount, "Dashboard Submit did not show the Edit Mode Group Preview")
+
+_G.MSUF_DB.auras3.shared.showInEditMode = true
+expectApplied("in edit mode turn off preview auras", "Done.")
+assert(_G.MSUF_DB.auras3.shared.showInEditMode == false, "Dashboard Submit did not turn off Edit Mode Auras preview")
+assert((MSUF._auraEditPreview or 0) > 0 and (MSUF._auraRefreshAll or 0) > 0, "Dashboard Submit did not refresh Auras edit preview after toggling the HUD control")
+_G.MSUF_UnitPreviewActive = true
+expectApplied("turn off edit mode preview", "Done.")
+assert(_G.MSUF_UnitPreviewActive == false, "Dashboard Submit did not turn off Edit Mode unit preview")
+assert((MSUF._unitPreviewSync or 0) > 0, "Dashboard Submit did not sync unit previews after toggling Edit Mode Preview")
+MSUF._gfPreviewShown = true
+expectApplied("turn off edit mode gf preview", "Done.")
+assert(MSUF._gfPreviewShown == false and (MSUF._gfPreviewHideCount or 0) > 0, "Dashboard Submit did not hide Edit Mode Group Frames preview")
+_G.MSUF_EM2.Snap._enabled = false
+expectApplied("turn on edit mode snap", "Done.")
+assert(_G.MSUF_EM2.Snap._enabled == true, "Dashboard Submit did not turn on Edit Mode Snap")
+_G.MSUF_DB.general.anchorToCooldown = false
+expectApplied("turn on edit mode cdm", "Done.")
+assert(_G.MSUF_DB.general.anchorToCooldown == true, "Dashboard Submit did not turn on Edit Mode CDM anchor")
+assert((MSUF._editApplyAll or 0) > 0 and (MSUF._editMoverSync or 0) > 0, "Dashboard Submit did not apply and sync after Edit Mode CDM change")
+_G.MSUF_DB.target.offsetX = 12
+_G.MSUF_DB.target.offsetY = -8
+expectApplied("reset selected edit mode frame position", "Done.")
+assert((MSUF._editResetPosition or 0) > 0, "Dashboard Submit did not call Edit Mode HUD reset helper")
+assert(_G.MSUF_DB.target.offsetX == 0 and _G.MSUF_DB.target.offsetY == 0, "Dashboard Submit did not reset selected Edit Mode frame position")
+expectApplied("open edit mode anchor picker", "Opened")
+assert((MSUF._anchorPickerOpened or 0) > 0, "Dashboard Submit did not open the Edit Mode Anchor picker")
+assert(type(MSUF._anchorPickerOverlay) == "table" and type(MSUF._anchorPickerOverlay._onPick) == "function", "Dashboard Submit did not wire the Edit Mode Anchor picker callback")
+MSUF._anchorPickerOverlay._onPick("MSUF_TestAnchorFrame")
+assert(_G.MSUF_DB.general.anchorName == "MSUF_TestAnchorFrame", "Edit Mode Anchor picker callback did not write the global anchor frame")
+assert(_G.MSUF_DB.general.anchorToCooldown == false, "Edit Mode Anchor picker callback did not disable CDM anchoring")
 
 expectApplied("how do i move the player frame", "Edit Mode")
 expectApplied("search castbar texture", "I found")
@@ -472,7 +973,24 @@ expectApplied("how do profiles work", "Profiles help")
 expectApplied("profil hilfe", "Profiles help")
 expectApplied("what can i change here")
 expectApplied("help")
-expectStatus("search zzzqqq yyyxxx", "failed", "I could not find a matching MSUF")
+local firstJoke = expectStatus("tell me a joke", "info", "unit frame")
+local secondJoke = expectStatus("tell me another joke", "info", "castbar")
+assert(firstJoke.text ~= secondJoke.text, "Assistant repeated the same joke for another-joke request")
+local typoJoke = expectStatus("tell me antoher joke", "info", "healer")
+assert(typoJoke.text ~= secondJoke.text, "Assistant did not advance joke rotation for typo another-joke request")
+expectStatus("noch einen witz", "info", "Unit Frame")
+expectStatus("can we talk normal", "info", "local MSUF Assistant")
+expectStatus("can you help me to get better at wow", "info", "https://www.wowhead.com/guides")
+expectStatus("wie werde ich besser in wow", "info", "Wowhead")
+expectStatus("how are you?", "info", "ready to help with MSUF")
+expectStatus("how are yuo?", "info", "ready to help with MSUF")
+expectStatus("I found a bug", "info", "https://discord.gg/2Gf9b2Wprz")
+expectStatus("I found a bgu", "info", "https://discord.gg/2Gf9b2Wprz")
+expectStatus("where do I report felher", "info", "https://discord.gg/2Gf9b2Wprz")
+expectStatus("where do I report bugs", "info", "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
+expectStatus("wo kann ich fehler melden", "info", "MSUF CurseForge-Seite")
+expectStatus("search zzzqqq yyyxxx", "info", "https://discord.gg/2Gf9b2Wprz")
+expectStatus("flibbertigibbet", "info", "https://discord.gg/2Gf9b2Wprz")
 expectApplied("diagnose profiles", "Profile diagnostic:")
 expectApplied("diagnose class resources", "Class Resources diagnostic:")
 expectApplied("diagnose dashboard setup", "Dashboard setup diagnostic:")
@@ -520,6 +1038,13 @@ _G.MSUF_DB.target.unitDispelOverlayAlpha = 0.35
 expectApplied("set only target unitframe dispel overlay opacity to 40", "Done.")
 assert(_G.MSUF_DB.target.hlOverride == true, "Scoped UnitFrame Dispel Overlay command did not enable Target bars override")
 assertNear(_G.MSUF_DB.target.unitDispelOverlayAlpha, 0.4, "Dashboard Submit did not set scoped Target UnitFrame Dispel Overlay opacity")
+_G.MSUF_DB.target.fontOverride = false
+_G.MSUF_DB.target.colorPowerTextByType = false
+expectApplied("only turn on color text by power for target", "Done.")
+assert(_G.MSUF_DB.target.fontOverride == true, "Scoped Power Text Color command did not enable Target font override")
+assert(_G.MSUF_DB.target.colorPowerTextByType == true, "Dashboard Submit did not set Target Power Text Color to Resource")
+expectApplied("turn off color text by power for target", "Done.")
+assert(_G.MSUF_DB.target.colorPowerTextByType == false, "Dashboard Submit did not reset Target Power Text Color to Font Color")
 M.activeKey = "gameplay"
 _G.MSUF_DB.gameplay.enableCombatTimer = false
 expectApplied("turn on timer", "Done.")
@@ -591,6 +1116,9 @@ assert(M.searchIntroSeen == false, "Search intro fallback should remain pending 
 
 A.Workflow.navStack = {}
 M.activeKey = "home"
+expectApplied("oeffne spieler", "Opened Player")
+assert(M.activeKey == "uf_player", "German open Player did not select Player page")
+M.activeKey = "home"
 expectApplied("open player", "Opened Player")
 assert(M.activeKey == "uf_player", "Open player did not select Player page")
 expectApplied("open target", "Opened Target")
@@ -660,6 +1188,36 @@ expectApplied("same for target", "Done.")
 assertNear(_G.MSUF_DB.target.barOutlineColorR, 1, "Target bar outline replay red")
 assertNear(_G.MSUF_DB.target.barOutlineColorG, 128 / 255, "Target bar outline replay green")
 assertNear(_G.MSUF_DB.target.barOutlineColorB, 0, "Target bar outline replay blue")
+expectApplied("change the interrupt castbar color to blue", "Done.")
+assertNear(_G.MSUF_DB.general.castbarInterruptibleR, 0, "Interruptible cast color red")
+assertNear(_G.MSUF_DB.general.castbarInterruptibleG, 0, "Interruptible cast color green")
+assertNear(_G.MSUF_DB.general.castbarInterruptibleB, 1, "Interruptible cast color blue")
+expectStatus("change the interrupt color to blue", "ambiguous", "Interruptible Cast Color")
+assert(_G.MSUF_DB.general.castbarInterruptFeedbackR == nil, "Plain interrupt color should not silently change feedback color")
+expectApplied("3", "Done.")
+assertNear(_G.MSUF_DB.general.castbarInterruptFeedbackR, 0, "Interrupt feedback color red")
+assertNear(_G.MSUF_DB.general.castbarInterruptFeedbackG, 0, "Interrupt feedback color green")
+assertNear(_G.MSUF_DB.general.castbarInterruptFeedbackB, 1, "Interrupt feedback color blue")
+expectApplied("change non interruptible castbar color to blue", "Done.")
+assertNear(_G.MSUF_DB.general.castbarNonInterruptibleR, 0, "Non-interruptible cast color red")
+assertNear(_G.MSUF_DB.general.castbarNonInterruptibleG, 0, "Non-interruptible cast color green")
+assertNear(_G.MSUF_DB.general.castbarNonInterruptibleB, 1, "Non-interruptible cast color blue")
+expectApplied("change raid group border color to blue", "Done.")
+assertNear(_G.MSUF_DB.gf_raid.groupBorderR, 0, "Raid group border red")
+assertNear(_G.MSUF_DB.gf_raid.groupBorderG, 0, "Raid group border green")
+assertNear(_G.MSUF_DB.gf_raid.groupBorderB, 1, "Raid group border blue")
+expectApplied("change party health bar color to blue", "Done.")
+assert(_G.MSUF_DB.gf_party.gfBarMode == "CUSTOM", "Party health color should switch the editable group bar mode to CUSTOM")
+assert(_G.MSUF_DB.gf_party.healthColorMode == "CUSTOM", "Party health color should switch healthColorMode to CUSTOM")
+assertNear(_G.MSUF_DB.gf_party.healthCustomR, 0, "Party health color red")
+assertNear(_G.MSUF_DB.gf_party.healthCustomG, 0, "Party health color green")
+assertNear(_G.MSUF_DB.gf_party.healthCustomB, 1, "Party health color blue")
+expectApplied("change mythic raid focus highlight color to blue", "Done.")
+assertNear(_G.MSUF_DB.gf_mythicraid.hlFocusColorR, 0, "Mythic Raid focus highlight red")
+assertNear(_G.MSUF_DB.gf_mythicraid.hlFocusColorG, 0, "Mythic Raid focus highlight green")
+assertNear(_G.MSUF_DB.gf_mythicraid.hlFocusColorB, 1, "Mythic Raid focus highlight blue")
+expectStatus("change group frame health color to blue", "ambiguous", "Party Health Bar Color")
+expectStatus("none", "info", "Cancelled")
 _G.MSUF_DB.general.darkBarGray = 0.07
 expectApplied("make unitframe dark mode a bit lighter", "Done.")
 assert(_G.MSUF_DB.general.darkBarGray == 0.10, "Dark mode lighter command did not increase darkBarGray")
@@ -707,6 +1265,10 @@ expectApplied("move player hp text up", "Done.")
 assert(_G.MSUF_DB.player.hpOffsetY == 10, "Dashboard Submit did not move Player HP text up")
 expectApplied("more", "Done.")
 assert(_G.MSUF_DB.player.hpOffsetY == 20, "Dashboard follow-up 'more' did not repeat Player HP text movement")
+expectApplied("revert that", "Reverted")
+assert(_G.MSUF_DB.player.hpOffsetY == 10, "Dashboard Assistant did not undo the previous natural-language follow-up change")
+expectApplied("redo that", "Reapplied")
+assert(_G.MSUF_DB.player.hpOffsetY == 20, "Dashboard Assistant did not redo the reverted natural-language follow-up change")
 expectApplied("left", "Done.")
 assert(_G.MSUF_DB.player.hpOffsetX == -10, "Dashboard follow-up 'left' did not switch Player HP text movement to X offset")
 expectApplied("opposite", "Done.")
@@ -757,6 +1319,17 @@ assert(M.unitTextMoveTogether.player.power == false, "Unit text move-together se
 expectApplied("select target advanced status tab", "Selected Target Advanced status tab.")
 assert(M.activeKey == "uf_target", "Unit status selector did not open target page")
 assert(M.unitStatusTabSelection.target == "advanced", "Unit status selector did not select advanced tab")
+MSUF._statusRefresh = 0
+_G.MSUF_DB.target.stateIconsTestMode = false
+expectApplied("show test status icons on target frame", "Done.")
+assert(_G.MSUF_DB.target.stateIconsTestMode == true, "Dashboard Submit did not enable Target Status Icon Test Mode")
+assert((MSUF._statusRefresh or 0) > 0, "Dashboard Submit did not refresh status icons after enabling Target test mode")
+local firstStatusRefresh = MSUF._statusRefresh or 0
+expectApplied("show test status icons on target frame", "Already set.")
+assert((MSUF._statusRefresh or 0) > firstStatusRefresh, "Dashboard Submit did not refresh status icons when Target test mode was already enabled")
+expectApplied("hide test status icons on target frame", "Done.")
+assert(_G.MSUF_DB.target.stateIconsTestMode == false, "Dashboard Submit did not disable Target Status Icon Test Mode")
+expectApplied("show all status icons target", "Showing all status indicators")
 expectApplied("select party leader icon indicator", "Selected Party Leader Icon indicator.")
 assert(M.activeKey == "gf_indicators", "Group status selector did not open Group Indicators")
 assert(M.gfStatusIconSelection == "leaderIcon", "Group status selector did not select leader icon")
@@ -777,6 +1350,38 @@ assert(M.profileImportNewName == "Imported Raid", "Profile import new-profile na
 expectApplied("set profile string field to MSUF5:staged", "Set profile string field.")
 assert(M.profileImportString == "MSUF5:staged", "Profile string staging did not set runtime field")
 M.activeKey = "home"
+local savedUnitPage = M.UnitPage
+local unitCopyCalls = {}
+M.UnitPage = {
+    NewCopyScopeDefaults = function()
+        return {
+            basics = true,
+            text = true,
+            portrait = true,
+            power = true,
+            castbar = true,
+            status = true,
+            load = true,
+            transparency = true,
+            layout = false,
+        }
+    end,
+    CopyUnitSettings = function(source, target, scopes)
+        unitCopyCalls[#unitCopyCalls + 1] = { source = source, target = target, scopes = scopes }
+    end,
+}
+expectStatus("copy target profile to player", "confirmation_needed", "Copy Target settings")
+expectApplied("yes", "Target settings to Player")
+assert(#unitCopyCalls == 1, "Unit profile wording did not execute exactly one Unit Copy call")
+assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "player", "Unit profile wording copied the wrong unit direction")
+assert(unitCopyCalls[1].scopes and unitCopyCalls[1].scopes.text == true and unitCopyCalls[1].scopes.layout == true, "Unit profile wording did not copy all Unit Copy categories")
+unitCopyCalls = {}
+expectApplied("copy only text from target profile to player", "Target settings to Player")
+assert(#unitCopyCalls == 1, "Scoped Unit Copy wording did not execute exactly one Unit Copy call")
+assert(unitCopyCalls[1].source == "target" and unitCopyCalls[1].target == "player", "Scoped Unit Copy wording copied the wrong unit direction")
+assert(unitCopyCalls[1].scopes and unitCopyCalls[1].scopes.text == true, "Scoped Unit Copy wording did not enable text")
+assert(unitCopyCalls[1].scopes.basics == false and unitCopyCalls[1].scopes.layout == false and unitCopyCalls[1].scopes.castbar == false, "Scoped Unit Copy wording copied extra categories")
+M.UnitPage = savedUnitPage
 expectApplied("clear player copy categories", "Cleared all unit copy categories.")
 assert(M.activeKey == "uf_player", "Unit copy staging did not open Player page")
 assert(M.unitCopyScopes and M.unitCopyScopes.text == false and M.unitCopyScopes.castbar == false, "Unit copy clear did not disable categories")

@@ -312,6 +312,17 @@ local function MakeAliases(unit, ...)
     return out
 end
 
+local function AddVerbUnitNounAliases(out, unit, verbs, noun)
+    local unitAliases = (A.UnitAliases and A.UnitAliases[unit]) or { unit }
+    for v = 1, #(verbs or {}) do
+        local verb = verbs[v]
+        for i = 1, #unitAliases do
+            local unitText = unitAliases[i]
+            out[#out + 1] = tostring(verb) .. " " .. tostring(unitText) .. " " .. tostring(noun)
+        end
+    end
+end
+
 local function AllowedMap(values)
     local allowed = {}
     for i = 1, #(values or {}) do allowed[values[i]] = true end
@@ -366,6 +377,7 @@ local function RegisterUnitBooleanSetting(unit, attr, dbKey, label, defaultValue
             end
         end,
         combatSafe = opts.combatSafe == true,
+        applyWhenUnchanged = opts.applyWhenUnchanged == true,
         description = opts.description,
     })
 end
@@ -1030,7 +1042,10 @@ for i = 1, #UNIT_KEYS do
             end,
         })
         RegisterUnitBooleanSetting(unit, "powerSmoothFill", "powerSmoothFill", "Power Bar Smooth Fill", unit == "player", MakeAliases(unit, "power smooth fill", "smooth power bar"), { category = "Power Bar", power = true })
-        RegisterUnitBooleanSetting(unit, "powerBarDetached", "powerBarDetached", "Detach Power Bar From Frame", false, MakeAliases(unit, "detached power bar", "detach power bar", "power bar detached"), {
+        local detachedPowerAliases = MakeAliases(unit, "detached power bar", "detach power bar", "power bar detached")
+        AddVerbUnitNounAliases(detachedPowerAliases, unit, { "detach", "undock", "attach", "dock" }, "power bar")
+        AddVerbUnitNounAliases(detachedPowerAliases, unit, { "abkoppeln", "ankoppeln" }, "power balken")
+        RegisterUnitBooleanSetting(unit, "powerBarDetached", "powerBarDetached", "Detach Power Bar From Frame", false, detachedPowerAliases, {
             category = "Power Bar",
             power = true,
             set = function(unitKey, value)
@@ -1295,7 +1310,17 @@ for i = 1, #UNIT_KEYS do
         end
     end
 
-    RegisterUnitBooleanSetting(unit, "stateIconsTestMode", "stateIconsTestMode", "Status Icon Test Mode", false, MakeAliases(unit, "status icon test mode", "status preview mode"), {
+    RegisterUnitBooleanSetting(unit, "stateIconsTestMode", "stateIconsTestMode", "Status Icon Test Mode", false, MakeAliases(unit,
+        "status icon test mode",
+        "status icons test mode",
+        "test status icons",
+        "test status icon",
+        "status icon preview mode",
+        "status icons preview mode",
+        "status preview mode",
+        "status indicator test mode",
+        "test status indicators"
+    ), {
         category = "Status Icons",
         get = function(unitKey)
             local value = UnitDB(unitKey).stateIconsTestMode
@@ -1304,6 +1329,7 @@ for i = 1, #UNIT_KEYS do
         end,
         refresh = "MSUF_RequestStatusIconsRefreshForCurrent",
         applyOpts = { preview = true, text = true },
+        applyWhenUnchanged = true,
     })
 
     for l = 1, #LOAD_CONDITION_SPECS do
@@ -1553,10 +1579,14 @@ Registry:RegisterAction({
         if not (UP and type(UP.CopyUnitSettings) == "function") then
             return false, "Unit copy is not available yet."
         end
+        local targetLabels = {}
         for i = 1, #targets do
             UP.CopyUnitSettings(src, targets[i], args.scopes)
+            targetLabels[#targetLabels + 1] = tostring(UNIT_LABELS[targets[i]] or targets[i])
         end
-        return true, "Done. Copied " .. tostring(UNIT_LABELS[src] or src) .. " settings."
+        local targetText = table.concat(targetLabels, ", ")
+        if targetText == "" then targetText = "the selected destination" end
+        return true, "Done. I copied " .. tostring(UNIT_LABELS[src] or src) .. " settings to " .. targetText .. "."
     end,
 })
 

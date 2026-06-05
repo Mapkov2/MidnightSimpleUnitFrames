@@ -461,7 +461,9 @@ end
 end
 
 RegisterGeneralBoolean("slashMenuSnapEnabled", "menuSnap", "Menu Edge Snap", true, {
-    "menu edge snap", "edge snap", "window snap", "menu snapping", "fenster andocken",
+    "menu edge snap", "edge snap", "window snap", "menu snapping", "snapping feature", "snap feature",
+    "menu snap feature", "windows style edge snap", "windows-style edge snap", "enable windows style edge snap for this menu",
+    "enable windows-style edge snap for this menu", "fenster andocken",
 }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_MENU_SNAP" })
 Registry:RegisterSetting({
     key = "general.hideAdvancedMenu",
@@ -471,7 +473,7 @@ Registry:RegisterSetting({
     frameType = "misc",
     attribute = "advancedMenuVisible",
     type = "boolean",
-    aliases = { "advanced menu", "advanced menu section", "advanced section", "erweitertes menu" },
+    aliases = { "advanced menu", "advanced menu section", "advanced section", "hide advanced menu", "hide advanced menu section", "show advanced menu", "show advanced menu section", "erweitertes menu" },
     get = function() return GeneralDB().hideAdvancedMenu ~= true end,
     set = function(value) GeneralDB().hideAdvancedMenu = not (value and true or false) end,
     apply = function()
@@ -481,19 +483,20 @@ Registry:RegisterSetting({
     combatSafe = false,
 })
 RegisterGeneralBoolean("reduceMotion", "reduceMotion", "Reduce Menu Motion", false, {
-    "reduce motion", "menu motion", "animations", "reduce animations", "bewegung reduzieren",
+    "reduce motion", "menu motion", "animations", "reduce animations", "reduce menu motion", "menu animations", "bewegung reduzieren",
 }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_REDUCE_MOTION" })
 RegisterGeneralBoolean("showWelcomeMessage", "welcomeMessage", "Welcome Message", true, {
-    "welcome message", "startup welcome", "start message", "willkommensnachricht",
+    "welcome message", "startup welcome", "start message", "show welcome message", "login welcome message", "startup message", "willkommensnachricht",
 }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_WELCOME" })
 RegisterGeneralBoolean("versionCheckEnabled", "versionCheck", "Peer Version Check", true, {
-    "version check", "peer version check", "update check", "versions pruefung", "versionscheck",
+    "version check", "peer version check", "update check", "enable version check", "peer-to-peer version check", "version check peer to peer", "versions pruefung", "versionscheck",
 }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_VERSION_CHECK" })
 RegisterGeneralBoolean("showMinimapIcon", "minimapIcon", "MSUF Minimap Icon", true, {
-    "minimap icon", "minimap button", "show minimap icon", "hide minimap icon", "minikarten symbol",
+    "minimap icon", "minimap button", "msuf minimap icon", "msuf minimap button", "show minimap icon", "hide minimap icon", "minikarten symbol",
 }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_MINIMAP_ICON" })
 RegisterGeneralBoolean("playTargetSelectLostSounds", "targetSounds", "Target Select/Lost Sounds", false, {
-    "target sounds", "target lost sound", "target select sound", "ziel sound", "ziel sounds",
+    "target sounds", "target sound", "target lost sound", "target lost sounds", "target select sound", "target select sounds",
+    "target select lost sounds", "play sound on target", "play sound on target lost", "play sound on target select", "ziel sound", "ziel sounds",
 }, { category = "Global / Misc", frameType = "misc", reason = "MSUF_ASSISTANT_TARGET_SOUNDS" })
 Registry:RegisterSetting({
     key = "general.disableBlizzardUnitFrames",
@@ -503,7 +506,7 @@ Registry:RegisterSetting({
     frameType = "misc",
     attribute = "blizzardFramesVisible",
     type = "boolean",
-    aliases = { "blizzard unitframes", "blizzard frames", "standard frames", "default frames", "blizzard unitframes" },
+    aliases = { "blizzard unitframes", "blizzard unit frames", "disable blizzard unitframes", "disable blizzard unit frames", "enable blizzard unitframes", "enable blizzard unit frames", "blizzard frames", "standard frames", "default frames" },
     get = function() return GeneralDB().disableBlizzardUnitFrames == false end,
     set = function(value) GeneralDB().disableBlizzardUnitFrames = not (value and true or false) end,
     apply = function() ApplyGeneral("MSUF_ASSISTANT_BLIZZARD_FRAMES", { preview = false, applyAll = false }) end,
@@ -523,6 +526,9 @@ Registry:RegisterSetting({
         "fully hide blizzard playerframe", "hard hide blizzard playerframe",
         "hard kill blizzard playerframe", "resource bar compatibility",
         "blizzard player frame compatibility", "hide blizzard player frame completely",
+        "fully hide blizzard player frame", "hard hide blizzard player frame",
+        "hard kill blizzard player frame", "fully hide blizzard playerframe resource bar compatibility",
+        "fully hide blizzard playerframe - resource bar compatibility",
     },
     get = function() return GeneralDB().hardKillBlizzardPlayerFrame == true end,
     set = function(value) GeneralDB().hardKillBlizzardPlayerFrame = value and true or false end,
@@ -600,7 +606,7 @@ Registry:RegisterSetting({
     frameType = "misc",
     attribute = "tooltipProvider",
     type = "enum",
-    aliases = { "tooltip source", "unitframe tooltip source", "unit tooltip source", "group frame tooltip source" },
+    aliases = { "tooltip source", "unitframe tooltip source", "unit tooltip source", "group frame tooltip source", "game tooltip source", "gametooltip source" },
     values = { "GAME", "MSUF" },
     valueAliases = {
         game = "GAME",
@@ -625,7 +631,7 @@ Registry:RegisterSetting({
     frameType = "misc",
     attribute = "tooltipAnchor",
     type = "enum",
-    aliases = { "tooltip anchor", "unitframe tooltip anchor", "unit tooltip anchor", "tooltip position" },
+    aliases = { "tooltip anchor", "unitframe tooltip anchor", "unit tooltip anchor", "tooltip position", "tooltip location" },
     values = { "EXTERNAL", "FIXED", "CURSOR" },
     valueAliases = {
         external = "EXTERNAL",
@@ -651,7 +657,7 @@ Registry:RegisterSetting({
     frameType = "misc",
     attribute = "tooltipMode",
     type = "enum",
-    aliases = { "show unitframe tooltips", "unitframe tooltips", "unit tooltips", "group frame tooltips", "tooltip mode" },
+    aliases = { "show unitframe tooltips", "unitframe tooltips", "unit frame tooltips", "unit tooltips", "group frame tooltips", "tooltips", "show tooltips", "tooltip mode", "tooltip visibility" },
     values = { "ALWAYS", "OOC", "MODIFIER", "NEVER" },
     valueAliases = {
         always = "ALWAYS",
@@ -2392,9 +2398,9 @@ for _, row in ipairs({
 end
 
 for _, row in ipairs({
-    { key = "castbarInterruptible", label = "Interruptible Cast Color", get = "GetInterruptibleCastColor", set = "SetInterruptibleCastColor", dr = 0, dg = 0.9, db = 0.8, aliases = { "interruptible cast color", "interruptible castbar color", "kickable cast color" } },
-    { key = "castbarNonInterruptible", label = "Non-Interruptible Cast Color", get = "GetNonInterruptibleCastColor", set = "SetNonInterruptibleCastColor", dr = 0.4, dg = 0.01, db = 0.01, aliases = { "non interruptible cast color", "noninterruptible cast color", "not interruptible castbar color", "unkickable cast color" } },
-    { key = "castbarInterruptFeedback", label = "Interrupt Feedback Cast Color", get = "GetInterruptFeedbackCastColor", set = "SetInterruptFeedbackCastColor", dr = 1, dg = 0.82, db = 0, aliases = { "interrupt color", "interrupt feedback color", "interrupted cast color", "castbar interrupt color" } },
+    { key = "castbarInterruptible", label = "Interruptible Cast Color", get = "GetInterruptibleCastColor", set = "SetInterruptibleCastColor", dr = 0, dg = 0.9, db = 0.8, aliases = { "interruptible cast color", "interruptible castbar color", "castbar interruptible color", "interrupt castbar color", "castbar interrupt color", "kickable cast color", "kickable castbar color" } },
+    { key = "castbarNonInterruptible", label = "Non-Interruptible Cast Color", get = "GetNonInterruptibleCastColor", set = "SetNonInterruptibleCastColor", dr = 0.4, dg = 0.01, db = 0.01, aliases = { "non interruptible cast color", "non interruptible castbar color", "noninterruptible cast color", "noninterruptible castbar color", "not interruptible castbar color", "uninterruptible cast color", "uninterruptible castbar color", "unkickable cast color", "unkickable castbar color", "not kickable castbar color" } },
+    { key = "castbarInterruptFeedback", label = "Interrupt Feedback Cast Color", get = "GetInterruptFeedbackCastColor", set = "SetInterruptFeedbackCastColor", dr = 1, dg = 0.82, db = 0, aliases = { "interrupt feedback color", "castbar interrupt feedback color", "interrupt color all castbars", "interrupt color for all castbars", "interrupted cast color", "interrupted castbar color", "after interrupt cast color" } },
     { key = "castbarFont", label = "Castbar Text Color", get = "GetCastbarTextColor", set = "SetCastbarTextColor", dr = 1, dg = 1, db = 1, aliases = { "castbar text color", "castbar font color", "cast bar text color", "castbar spell name color", "castbar spell name text color", "castbar spell color", "castbar spell text color", "spell name color", "spell text color" } },
 }) do
     ColorSetting("general." .. row.key .. "Color", row.label, row.aliases, function()

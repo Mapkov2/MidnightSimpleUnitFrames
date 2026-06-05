@@ -485,6 +485,7 @@ function M.RegisterPage(key, spec)
 end
 
 local function HideAllCachedPages()
+    if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("HIDE_ALL_PAGES", nil) end
     if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("HIDE_ALL_PAGES", nil) end
     for _, entry in pairs(M.cache) do
         if entry.wrapper and entry.wrapper.Hide then entry.wrapper:Hide() end
@@ -739,6 +740,7 @@ function M.SelectPage(key)
         if M.activeKey == key then M.activeKey = nil end
     end
     if key == M.activeKey and cached then
+        if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("SELECT_CACHED", key) end
         if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("SELECT_CACHED", key) end
         RunRefreshers(cached)
         SyncBossPagePreviewForKey(key)
@@ -750,6 +752,7 @@ function M.SelectPage(key)
 
     local previousKey = M.activeKey
     local previous = previousKey and M.cache and M.cache[previousKey]
+    if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("SELECT_PAGE", key) end
     if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("SELECT_PAGE", key) end
     if previous and previous.wrapper and previous.wrapper.Hide then
         previous.wrapper:Hide()
@@ -1301,6 +1304,7 @@ local function BuildWindow()
         ResetStatusIndicatorTestModeOnMenuExit()
         SavePersistentMenuState()
         ResetBossPagePreviewCache()
+        if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("WINDOW_HIDE", nil) end
         if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("WINDOW_HIDE", nil) end
         SyncBossPagePreviewForKey(nil)
         SyncGroupPagePreviewForKey(nil)
@@ -1382,11 +1386,13 @@ end
 function M.InvalidatePage(key)
     if key then
         if key ~= "search" then MarkSearchIndexDirty() end
+        if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("INVALIDATE_PAGE", nil, key) end
         if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("INVALIDATE_PAGE", nil) end
         ClearSearchRegistryPage(key)
         if key == "home" then M.dashboardEditModeButton = nil end
         local entry = M.cache[key]
         if entry and entry.wrapper then
+            entry._msuf2Invalidated = true
             entry.wrapper:Hide()
             entry.wrapper:SetParent(nil)
         end

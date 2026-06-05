@@ -35,6 +35,14 @@ local files = {
     "MSUF_AssistantRegistry_EditMode.lua",
     "MSUF_AssistantRegistry_Workflows.lua",
     "MSUF_AssistantRegistry_Diagnostics.lua",
+    "MSUF_AssistantParser_Core.lua",
+    "MSUF_AssistantParser_Profiles.lua",
+    "MSUF_AssistantParser_Auras.lua",
+    "MSUF_AssistantParser_Actions.lua",
+    "MSUF_AssistantParser_Registry.lua",
+    "MSUF_AssistantParser_Features.lua",
+    "MSUF_AssistantParser_Geometry.lua",
+    "MSUF_AssistantParser_Followups.lua",
     "MSUF_AssistantParser.lua",
 }
 
@@ -162,6 +170,11 @@ local function expectAnswer(text, contains)
     end
 end
 
+local function expectKind(text, kind)
+    local parsed = A.Parse(text)
+    assert(parsed.kind == kind, text .. ": expected " .. tostring(kind) .. ", got " .. tostring(parsed.kind))
+end
+
 local function setFollowupContext(frameType, attribute, value)
     local ctx = A.GetContext()
     ctx.lastChangeBundle = {
@@ -229,6 +242,14 @@ expectActionArg("copy profile Test", "copy_profile", "name", "Test")
 expectActionArg("copy from profile Test", "start_profile_copy_flow", "source", "Test")
 expectActionArg("rename profile Test to New", "rename_profile", "source", "Test")
 expectActionArg("rename profile Test to New", "rename_profile", "name", "New")
+expectCopy("copy target profile to player", "copy_unit", "target", { "player" }, { basics = true, text = true, portrait = true, power = true, castbar = true, status = true, load = true, transparency = true, layout = true })
+do
+    local parsed = A.Parse("copy target profile to player")
+    assert(parsed.confirmRequired == true, "unit profile copy should ask for confirmation before copying all categories")
+end
+expectCopy("copy taregt profie to player", "copy_unit", "target", { "player" }, { basics = true, text = true, portrait = true, power = true, castbar = true, status = true, load = true, transparency = true, layout = true })
+expectCopy("copy only text from target profile to player", "copy_unit", "target", { "player" }, { basics = false, text = true, portrait = false, power = false, castbar = false, status = false, load = false, transparency = false, layout = false })
+expectCopy("copy raid profile to party", "copy_group", "raid", { "party" }, { general = true, health = true, text = true, font = true, border = true, range = true, indicators = true, auras = true, highlight = true, dstripe = true, features = true })
 expectCopy("copy player text and castbar to target", "copy_unit", "player", { "target" }, { text = true, castbar = true, basics = false, layout = false })
 expectCopy("copy player size to target", "copy_unit", "player", { "target" }, { layout = true, basics = true, text = false })
 expectCopy("copy player all settings to target", "copy_unit", "player", { "target" }, { basics = true, text = true, portrait = true, power = true, castbar = true, status = true, load = true, transparency = true, layout = true })
@@ -247,8 +268,41 @@ expectAction("enter edit mode", "assistant.action.editMode.enter")
 expectAction("exit edit mode", "assistant.action.editMode.exit")
 expectAction("edit mode status", "assistant.diagnostic.editMode.status")
 expectAction("cancel edit mode", "assistant.action.editMode.cancel")
+expectActionArg("in edit mode turn off preview auras", "assistant.action.editMode.auras", "value", false)
+expectActionArg("turn off edit mode preview", "assistant.action.editMode.preview", "value", false)
+expectActionArg("turn off edit mode gf preview", "assistant.action.editMode.groupPreview", "value", false)
+expectActionArg("turn on raid frame preview", "assistant.action.editMode.groupPreview", "value", true)
+expectActionArg("turn on raid frame preview", "assistant.action.editMode.groupPreview", "scope", "raid")
+expectActionArg("turn on party frame preview", "assistant.action.editMode.groupPreview", "scope", "party")
+expectActionArg("turn on edit mode snap", "assistant.action.editMode.snap", "value", true)
+expectActionArg("turn off edit mode snapping", "assistant.action.editMode.snap", "value", false)
+expectActionArg("turn on edit mode cdm", "assistant.action.editMode.cdm", "value", true)
+expectAction("reset selected edit mode frame position", "assistant.action.editMode.resetPosition")
+expectAction("open edit mode anchor picker", "assistant.action.editMode.anchorPicker")
+expectSetting("turn off snapping feature", "general.slashMenuSnapEnabled", false, "menuSnap")
+expectSetting("turn off snappign feature", "general.slashMenuSnapEnabled", false, "menuSnap")
+expectSetting("turn off menu snapping", "general.slashMenuSnapEnabled", false, "menuSnap")
+expectSetting("hide advanced menu section", "general.hideAdvancedMenu", false, "advancedMenuVisible")
+expectSetting("show advanced menu section", "general.hideAdvancedMenu", true, "advancedMenuVisible")
+expectSetting("turn on reduce menu motion", "general.reduceMotion", true, "reduceMotion")
+expectSetting("turn off welcome message", "general.showWelcomeMessage", false, "welcomeMessage")
+expectSetting("turn off peer version check", "general.versionCheckEnabled", false, "versionCheck")
+expectSetting("hide minimap icon", "general.showMinimapIcon", false, "minimapIcon")
+expectSetting("turn on target lost sounds", "general.playTargetSelectLostSounds", true, "targetSounds")
+expectSetting("disable blizzard unitframes", "general.disableBlizzardUnitFrames", false, "blizzardFramesVisible")
+expectSetting("enable blizzard unitframes", "general.disableBlizzardUnitFrames", true, "blizzardFramesVisible")
+expectSetting("fully hide blizzard player frame", "general.hardKillBlizzardPlayerFrame", true, "hardKillBlizzardPlayerFrame")
+expectSetting("set menu language to german", "general.menuLocale", "deDE", "menuLocale")
+expectSetting("set tooltip source to msuf", "general.unitTooltipProvider", "MSUF", "tooltipProvider")
+expectSetting("set tooltip anchor to cursor", "general.unitTooltipAnchor", "CURSOR", "tooltipAnchor")
+expectSetting("show tooltips only out of combat", "general.unitTooltipMode", "OOC", "tooltipMode")
+expectSetting("set tooltip modifier to shift", "general.unitTooltipModifier", "SHIFT", "tooltipModifier")
 expectAction("undo menu change", "menu_history_undo")
 expectAction("redo menu change", "menu_history_redo")
+expectKind("revert that", "undo")
+expectKind("take it back", "undo")
+expectKind("mach das rueckgaengig", "undo")
+expectKind("redo that", "redo")
 expectAction("reset all menu changes from this session", "menu_history_reset_session")
 expectAction("quick setup class resources", "class_power_quick_setup")
 expectActionArg("diagnose target castbar", "diagnose_castbar_visibility", "unit", "target")
@@ -268,6 +322,11 @@ expectActionArg("reset player bars override", "reset_scoped_global_bars_override
 expectActionArg("reset target font override", "reset_scoped_global_font_override", "scope", "target")
 expectActionArg("reset party spell indicator Rejuvenation", "reset_group_spell_indicator_aura", "scope", "party")
 expectActionArg("reset party status icons", "reset_group_status_icons", "scope", "party")
+expectSetting("show test status icons on target frame", "target.stateIconsTestMode", true, "stateIconsTestMode")
+expectSetting("hide test status icons on target frame", "target.stateIconsTestMode", false, "stateIconsTestMode")
+expectActionArg("show all status icons target", "preview_unit_status_indicator", "unit", "target")
+expectActionArg("show all status icons target", "preview_unit_status_indicator", "mode", "all")
+expectActionArg("show all group status icons", "preview_group_status_icon", "scope", "party")
 expectActionArg("select player hp left slot", "set_menu_selector_state", "selector", "unit_text")
 expectActionArg("select player hp left slot", "set_menu_selector_state", "unit", "player")
 expectActionArg("select player hp left slot", "set_menu_selector_state", "slot", "left")
@@ -336,7 +395,41 @@ expectSetting("turn off focus castbar text", "general.castbarFocusShowSpellName"
 expectSetting("turn off player castbar icon", "general.castbarPlayerShowIcon", false, "icon")
 expectSetting("turn off target castbar time", "general.showTargetCastTime", false, "time")
 expectSetting("turn off boss castbar spell name", "general.showBossCastName", false, "text")
+expectSetting("turn off target power bar", "target.showPowerBar", false, "powerBar")
+expectSetting("turn off target powerbar", "target.showPowerBar", false, "powerBar")
+expectSetting("set target power bar height to 8", "target.powerBarHeight", 8, "powerBarHeight")
+expectSetting("increase power bar hight target", "target.powerBarHeight", nil, "powerBarHeight", 1)
+expectSetting("detach target power bar", "target.powerBarDetached", true, "powerBarDetached")
+expectSetting("attach target power bar", "target.powerBarDetached", false, "powerBarDetached")
+expectSetting("turn off raid power bar", "gf_raid.powerBarEnabled", false, "powerBar")
+expectSetting("set raid power bar height to 9", "gf_raid.powerHeight", 9, "powerHeight")
+expectSetting("turn off smooth power bar", "bars.smoothPowerBar", false, "smoothPower")
+expectSetting("turn off target of target inline text", "targettarget.showToTInTargetName", false, "totInline")
+do
+    local parsed = A.Parse("turn off target of target inline")
+    assert(parsed.kind == "ambiguous", "partial inline text command should suggest a numbered choice")
+    assert(type(parsed.choices) == "table" and #parsed.choices >= 1, "partial inline text choices missing")
+    assert(parsed.choices[1].setting and parsed.choices[1].setting.key == "targettarget.showToTInTargetName", "partial inline text wrong suggested setting")
+    assert(parsed.choices[1].value == false, "partial inline text wrong suggested value")
+end
+expectSetting("change target inline seperator to /", "targettarget.totInlineSeparator", "/", "totInlineSeparator")
+expectSetting("change target of target inline seperator to /", "targettarget.totInlineSeparator", "/", "totInlineSeparator")
+expectSetting("change target inline separator to ->", "targettarget.totInlineCustomSeparator", "->", "totInlineCustomSeparator")
+do
+    local parsed = A.Parse("change target inline seperator")
+    assert(parsed.kind == "ambiguous", "missing inline separator value should ask for a numbered choice")
+    assert(type(parsed.choices) == "table" and #parsed.choices >= 3, "inline separator choices missing")
+    assert(parsed.choices[3].setting and parsed.choices[3].setting.key == "targettarget.totInlineSeparator", "inline separator slash choice wrong setting")
+    assert(parsed.choices[3].value == "/", "inline separator slash choice wrong value")
+end
 expectSetting("turn off player castbar interrupt", "player.showInterrupt", false, "showInterrupt")
+expectSettingAt("turn off for all castbars interrupt", 1, "player.showInterrupt", false, "showInterrupt")
+expectSettingAt("turn off for all castbars interrupt", 2, "target.showInterrupt", false, "showInterrupt")
+expectSettingAt("turn off for all castbars interrupt", 3, "focus.showInterrupt", false, "showInterrupt")
+expectSettingAt("turn off for all castbars interrupt", 4, "boss.showInterrupt", false, "showInterrupt")
+expectSettingAt("turn off player target focus castbar interrupt", 1, "player.showInterrupt", false, "showInterrupt")
+expectSettingAt("turn off player target focus castbar interrupt", 2, "target.showInterrupt", false, "showInterrupt")
+expectSettingAt("turn off player target focus castbar interrupt", 3, "focus.showInterrupt", false, "showInterrupt")
 expectSetting("turn off target castbar channel ticks", "general.castbarShowChannelTicks", false, "channelTicks")
 expectSetting("turn off target castbar glow", "general.castbarShowGlow", false, "glow")
 expectSetting("turn off target castbar spark", "general.castbarShowSpark", false, "spark")
@@ -347,7 +440,52 @@ expectSetting("set player border color to red", "barScope.player.barOutlineColor
 expectColorSetting("set player border color to rgb 255 128 0", "barScope.player.barOutlineColor", 1, 128 / 255, 0, "barOutlineColor")
 expectColorSetting("set player border color to r 0.2 g 0.4 b 0.6", "barScope.player.barOutlineColor", 0.2, 0.4, 0.6, "barOutlineColor")
 expectColorSetting("set castbar text color to #336699", "general.castbarFontColor", 0x33 / 255, 0x66 / 255, 0x99 / 255, "castbarFontColor")
+expectColorSetting("change the interrupt castbar color to blue", "general.castbarInterruptibleColor", 0, 0, 1, "castbarInterruptibleColor")
+expectColorSetting("change the interupt castbar color to blue", "general.castbarInterruptibleColor", 0, 0, 1, "castbarInterruptibleColor")
+expectColorSetting("change non interruptible castbar color to blue", "general.castbarNonInterruptibleColor", 0, 0, 1, "castbarNonInterruptibleColor")
+expectColorSetting("change interrupt feedback color to blue", "general.castbarInterruptFeedbackColor", 0, 0, 1, "castbarInterruptFeedbackColor")
+do
+    local parsed = A.Parse("change the interrupt color to blue")
+    assert(parsed.kind == "ambiguous", "plain interrupt color should ask instead of silently changing feedback color")
+    assert(parsed.choices and parsed.choices[1] and parsed.choices[1].setting and parsed.choices[1].setting.key == "general.castbarInterruptibleColor", "interrupt color first choice should be interruptible cast color")
+    assert(parsed.choices[2] and parsed.choices[2].setting and parsed.choices[2].setting.key == "general.castbarNonInterruptibleColor", "interrupt color second choice should be non-interruptible cast color")
+    assert(parsed.choices[3] and parsed.choices[3].setting and parsed.choices[3].setting.key == "general.castbarInterruptFeedbackColor", "interrupt color third choice should be feedback cast color")
+end
+expectColorSetting("change raid group border color to blue", "gf_raid.groupBorderColor", 0, 0, 1, "groupBorderColor")
+expectColorSetting("change party health bar color to blue", "gf_party.healthBarColor", 0, 0, 1, "healthBarColor")
+expectColorSetting("change raid backdrop color to blue", "gf_raid.bgColor", 0, 0, 1, "groupBackdropColor")
+expectColorSetting("change mythic raid focus highlight color to blue", "gf_mythicraid.hlFocusColor", 0, 0, 1, "focusHighlightColor")
+do
+    local parsed = A.Parse("change group frame health color to blue")
+    assert(parsed.kind == "ambiguous", "unspecified group-frame health color should ask for Party/Raid/Mythic Raid")
+    assert(parsed.choices and #parsed.choices == 3, "group-frame health color should offer the three real group scopes")
+    assert(parsed.choices[1].setting and parsed.choices[1].setting.key == "gf_party.healthBarColor", "group-frame health color first choice should be Party")
+    assert(parsed.choices[2].setting and parsed.choices[2].setting.key == "gf_raid.healthBarColor", "group-frame health color second choice should be Raid")
+    assert(parsed.choices[3].setting and parsed.choices[3].setting.key == "gf_mythicraid.healthBarColor", "group-frame health color third choice should be Mythic Raid")
+end
 expectSetting("move player portrait 5 right", "player.portraitOffsetX", nil, "portraitOffsetX", 5)
+_G.MSUF_DB.player.portraitMode = "LEFT"
+expectSetting("move player portrait closer to player unitframe", "player.portraitOffsetX", nil, "portraitOffsetX", 10)
+expectSetting("move player portrait farther from player unitframe", "player.portraitOffsetX", nil, "portraitOffsetX", -10)
+_G.MSUF_DB.player.portraitMode = "RIGHT"
+expectSetting("move player portrait closer to player unitframe", "player.portraitOffsetX", nil, "portraitOffsetX", -10)
+_G.MSUF_DB.player.portraitMode = "LEFT"
+expectSetting("move player detached power bar right 5", "player.detachedPowerBarOffsetX", nil, "detachedPowerBarOffsetX", 5)
+expectSetting("move player raid marker right 3", "player.raidMarkerOffsetX", nil, "raidmarkerOffsetX", 3)
+expectSetting("move raid ready check icon up 2", "gf_raid.readyCheckY", nil, "statusIconreadyCheckIconY", 2)
+expectSetting("move raid group number right 2", "gf_raid.groupNumberX", nil, "groupNumberX", 2)
+expectSettingAt("turn on portraits for all unitframes", 1, "player.portraitMode", "LEFT", "portraitMode")
+expectSettingAt("turn on portraits for all unitframes", 2, "target.portraitMode", "LEFT", "portraitMode")
+expectSettingAt("turn on portraits for all unitframes", 7, "boss.portraitMode", "LEFT", "portraitMode")
+expectSettingAt("turn off all portraits", 1, "player.portraitMode", "OFF", "portraitMode")
+do
+    local parsed = A.Parse("turn on portraits for all unitframes")
+    assert(parsed.kind == "changes", "all portraits should produce direct changes")
+    assert(parsed.bulkSafe == true, "all portrait changes should not require confirmation")
+    for i = 1, #(parsed.changes or {}) do
+        assert(parsed.changes[i].setting.attribute == "portraitMode", "all portraits routed to non-portrait setting")
+    end
+end
 expectSetting("set player name anchor to right", "player.nameTextAnchor", "RIGHT", "nameTextAnchor")
 expectSetting("move player name text 5 right", "player.nameOffsetX", nil, "nameOffsetX", 5)
 expectSetting("move player unit name label up 2", "player.nameOffsetY", nil, "nameOffsetY", 2)
@@ -398,6 +536,19 @@ expectSettingAt("remove player power text", 1, "player.powerTextLeft", "NONE", "
 expectSettingAt("remove player power text", 2, "player.powerTextCenter", "NONE", "powerTextCenter")
 expectSettingAt("remove player power text", 3, "player.powerTextRight", "NONE", "powerTextRight")
 expectSetting("set player power text right to percent", "player.powerTextRight", "PERCENT", "powerTextRight")
+_G.MSUF_DB.target = _G.MSUF_DB.target or {}
+_G.MSUF_DB.target.powerTextLeft = "NONE"
+_G.MSUF_DB.target.powerTextCenter = "NONE"
+_G.MSUF_DB.target.powerTextRight = "CURPERCENT"
+expectSetting("set target power text to percent", "target.powerTextRight", "PERCENT", "powerTextRight")
+_G.MSUF_DB.target.powerTextLeft = "CURRENT"
+_G.MSUF_DB.target.powerTextCenter = "NONE"
+_G.MSUF_DB.target.powerTextRight = "CURPERCENT"
+local powerTextChoice = A.Parse("set target power text to percent")
+assert(powerTextChoice.kind == "ambiguous", "target power text with two active slots should ask which slot")
+assert(#(powerTextChoice.choices or {}) == 2, "target power text should only offer active slots")
+assert(powerTextChoice.choices[1].setting.key == "target.powerTextLeft", "target power text first active slot should be left")
+assert(powerTextChoice.choices[2].setting.key == "target.powerTextRight", "target power text second active slot should be right")
 setTextContext("unitframe", "player", "hp", "left", "player.textLeft", "MAX")
 expectSetting("change hp text player to only %", "player.textLeft", "PERCENT", "hpTextLeft")
 expectSetting("show only percent on player hp text", "player.textLeft", "PERCENT", "hpTextLeft")
@@ -458,12 +609,15 @@ expectSettingAt("set only target unitframe dispel overlay opacity to 40", 2, "ba
 expectSetting("decrease castbar outline thickness by 1", "general.castbarOutlineThickness", nil, "outline", -1)
 expectSetting("set castbar text color to red", "general.castbarFontColor", nil, "castbarFontColor")
 expectSetting("set target castbar text x offset to 3", "general.castbarTargetTextOffsetX", 3, "textOffsetX")
+expectSetting("move target castbar icon right 4", "general.castbarTargetIconOffsetX", nil, "iconOffsetX", 4)
+expectSetting("move focus kick icon down 3", "general.focusKickIconOffsetY", nil, "focusKickOffsetY", -3)
 expectSetting("make unitframe dark mode a bit lighter", "general.darkBarGray", nil, "darkModeBarColor", 0.03)
 expectSetting("make unitframe dark mode super dark", "general.darkBarGray", 0.01, "darkModeBarColor")
 expectSetting("set unitframe dark mode to 20", "general.darkBarGray", 0.2, "darkModeBarColor")
 expectSetting("make unitframe dark mode 20 percent", "general.darkBarGray", 0.2, "darkModeBarColor")
 expectSetting("make unitframe dark mode darker by 5", "general.darkBarGray", nil, "darkModeBarColor", -0.05)
 expectSetting("move class resource down 5", "bars.classPowerOffsetY", nil, "offsetY", -5)
+expectSetting("move class resource text right 5", "bars.classPowerTextOffsetX", nil, "textOffsetX", 5)
 expectSetting("set class resource width mode to custom", "bars.classPowerWidthMode", "custom", "widthMode")
 expectSetting("set class resource background opacity to 40", "bars.classPowerBgAlpha", 0.4, "backgroundAlpha")
 expectSetting("turn off class resource prediction", "bars.classPowerShowPrediction", false, "prediction")
@@ -514,6 +668,32 @@ expectSetting("increase raid scale at 10 by 5", "gf_raid.scaleAt10", nil, "scale
 expectSetting("set raid backdrop opacity to 50", "gf_raid.bgA", 0.5, "bgAlpha")
 expectSetting("set raid hp fill opacity to 75", "gf_raid.hpBarAlpha", 0.75, "hpBarAlpha")
 expectSetting("set raid hp track opacity to 25", "gf_raid.hpBgAlpha", 0.25, "hpBgAlpha")
+expectSetting("dont show party player in group when solo", "gf_party.showPlayer", false, "showPlayer")
+expectSetting("do not show raid player in group when solo", "gf_raid.showPlayer", false, "showPlayer")
+expectSetting("turn off party show while solo", "gf_party.showSolo", false, "showSolo")
+expectSetting("change load condition from target frame to not show out of combat", "target.loadCondHideOutOfCombat", true, "loadCondHideOutOfCombat")
+expectSetting("change load condtion from taregt frame to not show out of combat", "target.loadCondHideOutOfCombat", true, "loadCondHideOutOfCombat")
+expectSetting("show target frame out of combat", "target.loadCondHideOutOfCombat", false, "loadCondHideOutOfCombat")
+expectSetting("turn off target hide out of combat load condition", "target.loadCondHideOutOfCombat", false, "loadCondHideOutOfCombat")
+expectSetting("hide player frame when mounted", "player.loadCondHideMounted", true, "loadCondHideMounted")
+expectSettingAt("hide all unitframes in combat", 1, "player.loadCondHideInCombat", true, "loadCondHideInCombat")
+expectSettingAt("hide all unitframes in combat", 2, "target.loadCondHideInCombat", true, "loadCondHideInCombat")
+expectSettingAt("hide all unitframes in combat", 7, "boss.loadCondHideInCombat", true, "loadCondHideInCombat")
+expectSetting("change raid group load condition to show while solo", "gf_raid.showSolo", true, "showSolo")
+expectSetting("change raid group load condition to not show while solo", "gf_raid.showSolo", false, "showSolo")
+expectAnswer("change raid group load condition to hide out of combat", "do not have a real load-condition")
+do
+    local parsed = A.Parse("dont show player in group when solo")
+    assert(parsed.kind == "ambiguous", "bare group player solo command should ask for Party/Raid/Mythic Raid")
+    assert(type(parsed.choices) == "table" and #parsed.choices == 3, "bare group player solo choices missing")
+    assert(parsed.choices[1].setting and parsed.choices[1].setting.key == "gf_party.showPlayer", "bare group player solo choice 1 wrong")
+    assert(parsed.choices[2].setting and parsed.choices[2].setting.key == "gf_raid.showPlayer", "bare group player solo choice 2 wrong")
+    assert(parsed.choices[3].setting and parsed.choices[3].setting.key == "gf_mythicraid.showPlayer", "bare group player solo choice 3 wrong")
+end
+MSUF.MSUF2.activeKey = "gf_layout"
+MSUF.MSUF2.gfScope = "raid"
+expectSetting("dont show player in group when solo", "gf_raid.showPlayer", false, "showPlayer")
+MSUF.MSUF2.activeKey = "home"
 expectSetting("turn on raid dispel overlay", "gf_raid.dispelOverlayEnabled", true, "dispelOverlay")
 expectSetting("set raid dispel overlay detects any debuff", "gf_raid.dispelOverlayTrigger", "ANY_DEBUFF", "dispelOverlayTrigger")
 expectSetting("set raid dispel overlay style bottom", "gf_raid.dispelOverlayStyle", "BOTTOM", "dispelOverlayStyle")
@@ -529,6 +709,11 @@ expectSettingAt("set only party bars dispel border off", 1, "barScope.gf_party.o
 expectSettingAt("set only party bars dispel border off", 2, "barScope.gf_party.dispelOutlineMode", "off", "dispelBorder")
 expectSettingAt("set target font outline only to THICKOUTLINE", 1, "fontScope.target.override", true, "override")
 expectSettingAt("set target font outline only to THICKOUTLINE", 2, "fontScope.target.outline", "THICKOUTLINE", "outline")
+expectSettingAt("only turn on color text by power for target", 1, "fontScope.target.override", true, "override")
+expectSettingAt("only turn on color text by power for target", 2, "fontScope.target.colorPowerTextByType", "RESOURCE", "powerTextColor")
+expectSetting("turn off color text by power for target", "fontScope.target.colorPowerTextByType", "DEFAULT", "powerTextColor")
+expectSettingAt("only turn on color text by health for focus", 1, "fontScope.focus.override", true, "override")
+expectSettingAt("only turn on color text by health for focus", 2, "fontScope.focus.colorHealthTextByHealth", "HEALTH", "healthTextColor")
 expectSettingAt("increase only player bar outline thickness by 1", 1, "barScope.player.override", true, "override")
 expectSettingAt("increase only player bar outline thickness by 1", 2, "barScope.player.barOutlineThickness", nil, "outline", 1)
 setFollowupContext("unitframe", "name", false)

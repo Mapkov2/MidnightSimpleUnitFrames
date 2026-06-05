@@ -239,7 +239,16 @@ local function BuildPreview(ctx, builder, unit)
         end
 
         if W and W.AttachPinnedPreview then
-            W.AttachPinnedPreview(sec, box, { stateKey = "unitFramePreview", title = box.title, hint = box.hint, left = 14, right = 14, top = -8 })
+            W.AttachPinnedPreview(sec, box, {
+                stateKey = "unitFramePreview",
+                title = box.title,
+                hint = box.hint,
+                left = 14,
+                right = 14,
+                top = -8,
+                pageKey = ctx and ctx.key,
+                wrapper = ctx and ctx.wrapper,
+            })
         end
 
         return box
@@ -598,6 +607,90 @@ local function BuildTopActions(ctx, builder, unit, label)
     end)
 end
 
+local function AttachBasicsHeaderStatus(sec, unit)
+    local sectionEntry = sec and sec._msuf2CollapsibleEntry
+    if not sectionEntry then return nil end
+    if type(sectionEntry._msuf2BasicsHeaderRefresh) == "function" then
+        return sectionEntry._msuf2BasicsHeaderRefresh
+    end
+
+    local badge
+    local badgeFill
+    local badgeEdge
+    if sectionEntry.header then
+        sectionEntry._msuf2ManualHintLayout = true
+        badge = CreateFrame("Frame", nil, sectionEntry.header)
+        badge:SetSize(116, 18)
+        badgeFill, badgeEdge = T.CreateSuperellipseLayers(badge, "_msuf2DisabledBadge", 1, "ARTWORK", "ARTWORK")
+        local badgeLabel = T.Font(badge, "GameFontDisableSmall", M.Tr("Frame disabled"), { 1.00, 0.86, 0.74, 1 })
+        badgeLabel:SetPoint("CENTER", badge, "CENTER", 0, 0)
+        badgeLabel:SetWidth(104)
+        badgeLabel:SetJustifyH("CENTER")
+        badge:Hide()
+
+        if sectionEntry.hint then
+            sectionEntry.hint:ClearAllPoints()
+            sectionEntry.hint:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -12, 0)
+            sectionEntry.hint:SetWidth(110)
+            sectionEntry.hint:SetJustifyH("RIGHT")
+            badge:SetPoint("RIGHT", sectionEntry.hint, "LEFT", -8, 0)
+        else
+            badge:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -122, 0)
+        end
+        if sectionEntry.label then
+            sectionEntry.label:ClearAllPoints()
+            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 6, 0)
+            sectionEntry.label:SetPoint("RIGHT", badge, "LEFT", -10, 0)
+            sectionEntry.label:SetJustifyH("LEFT")
+        end
+    end
+
+    local function RefreshBasicsState()
+        T.ApplyCollapseVisual(sectionEntry.arrow, sectionEntry.hint, sectionEntry.open)
+
+        local ownOn = ReadBool(unit, "enabled", true)
+        local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
+        local on = ownOn and not parentOff
+        if sectionEntry.headerBg then
+            if on then
+                sectionEntry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
+            else
+                sectionEntry.headerBg:SetColorTexture(WARNING_HEADER_BG[1], WARNING_HEADER_BG[2], WARNING_HEADER_BG[3], WARNING_HEADER_BG[4])
+            end
+        end
+        if sectionEntry.label and sectionEntry.label.SetTextColor then
+            if on then
+                sectionEntry.label:SetTextColor(T.colors.text[1], T.colors.text[2], T.colors.text[3], T.colors.text[4] or 1)
+            else
+                sectionEntry.label:SetTextColor(0.92, 0.88, 0.82, 1)
+            end
+        end
+        if badge then
+            badge:SetShown(not on)
+            if not on and badgeFill and badgeEdge then
+                badgeFill:SetVertexColor(WARNING_BADGE_FILL[1], WARNING_BADGE_FILL[2], WARNING_BADGE_FILL[3], WARNING_BADGE_FILL[4])
+                badgeEdge:SetVertexColor(WARNING_BADGE_EDGE[1], WARNING_BADGE_EDGE[2], WARNING_BADGE_EDGE[3], WARNING_BADGE_EDGE[4])
+            end
+        end
+        if sectionEntry.hint then
+            if on then
+                sectionEntry.hint:SetText(M.Tr("ON"))
+                sectionEntry.hint:SetTextColor(0.52, 0.76, 0.58, 1)
+            else
+                sectionEntry.hint:SetText(M.Tr("OFF"))
+                sectionEntry.hint:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4])
+            end
+        end
+        if sectionEntry.arrow and sectionEntry.arrow.SetVertexColor and not on then
+            sectionEntry.arrow:SetVertexColor(WARNING_ARROW[1], WARNING_ARROW[2], WARNING_ARROW[3], WARNING_ARROW[4])
+        end
+    end
+
+    sectionEntry._msuf2BasicsHeaderRefresh = RefreshBasicsState
+    RefreshBasicsState()
+    return RefreshBasicsState
+end
+
 local function BuildBasics(ctx, builder, unit, label)
     local sec = builder:CollapsibleSection("frame_basics", "Frame Basics", 104, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
@@ -616,7 +709,7 @@ local function BuildBasics(ctx, builder, unit, label)
         function() return ReadBool(unit, "enabled", true) end,
         function(v)
             SetBool(unit, "enabled", v, "MSUF2_FRAME_ENABLED", { preview = true })
-            if M.Refresh then M.Refresh(ctx) end
+            if M.RequestRefresh then M.RequestRefresh(ctx, "frame-basics-enabled") elseif M.Refresh then M.Refresh(ctx) end
         end)
 
     local reverse = W.ToggleAt(sec, "Reverse fill direction", x2, row1, labelW)
@@ -635,35 +728,8 @@ local function BuildBasics(ctx, builder, unit, label)
     end
 
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
-    local badge
-    local badgeFill
-    local badgeEdge
-    local badgeLabel
-    if sectionEntry and sectionEntry.header then
-        sectionEntry._msuf2ManualHintLayout = true
-        badge = CreateFrame("Frame", nil, sectionEntry.header)
-        badge:SetSize(116, 18)
-        badgeFill, badgeEdge = T.CreateSuperellipseLayers(badge, "_msuf2DisabledBadge", 1, "ARTWORK", "ARTWORK")
-        badgeLabel = T.Font(badge, "GameFontDisableSmall", M.Tr("Frame disabled"), { 1.00, 0.86, 0.74, 1 })
-        badgeLabel:SetPoint("CENTER", badge, "CENTER", 0, 0)
-        badgeLabel:SetWidth(104)
-        badgeLabel:SetJustifyH("CENTER")
-        badge:Hide()
-
-        if sectionEntry.hint then
-            sectionEntry.hint:ClearAllPoints()
-            sectionEntry.hint:SetPoint("RIGHT", sectionEntry.header, "RIGHT", -12, 0)
-            sectionEntry.hint:SetWidth(110)
-            sectionEntry.hint:SetJustifyH("RIGHT")
-        end
-        badge:SetPoint("RIGHT", sectionEntry.hint, "LEFT", -8, 0)
-        if sectionEntry.label then
-            sectionEntry.label:ClearAllPoints()
-            sectionEntry.label:SetPoint("LEFT", sectionEntry.arrow, "RIGHT", 6, 0)
-            sectionEntry.label:SetPoint("RIGHT", badge, "LEFT", -10, 0)
-            sectionEntry.label:SetJustifyH("LEFT")
-        end
-    end
+    local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit) or function() end
+    if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
 
     local notice = CreateFrame("Frame", nil, sec)
     notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
@@ -699,52 +765,9 @@ local function BuildBasics(ctx, builder, unit, label)
             SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true })
         end
         SetBool(unit, "enabled", true, "MSUF2_FRAME_ENABLED", { preview = true })
-        if M.Refresh then M.Refresh(ctx) end
+        if M.RequestRefresh then M.RequestRefresh(ctx, "frame-basics-enable-now") elseif M.Refresh then M.Refresh(ctx) end
     end)
     notice:Hide()
-
-    local function RefreshBasicsState()
-        if not sectionEntry then return end
-        T.ApplyCollapseVisual(sectionEntry.arrow, sectionEntry.hint, sectionEntry.open)
-
-        local ownOn = ReadBool(unit, "enabled", true)
-        local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
-        local on = ownOn and not parentOff
-        if sectionEntry.headerBg then
-            if on then
-                sectionEntry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
-            else
-                sectionEntry.headerBg:SetColorTexture(WARNING_HEADER_BG[1], WARNING_HEADER_BG[2], WARNING_HEADER_BG[3], WARNING_HEADER_BG[4])
-            end
-        end
-        if sectionEntry.label and sectionEntry.label.SetTextColor then
-            if on then
-                sectionEntry.label:SetTextColor(T.colors.text[1], T.colors.text[2], T.colors.text[3], T.colors.text[4] or 1)
-            else
-                sectionEntry.label:SetTextColor(0.92, 0.88, 0.82, 1)
-            end
-        end
-        if badge then
-            badge:SetShown(not on)
-            if not on and badgeFill and badgeEdge then
-                badgeFill:SetVertexColor(WARNING_BADGE_FILL[1], WARNING_BADGE_FILL[2], WARNING_BADGE_FILL[3], WARNING_BADGE_FILL[4])
-                badgeEdge:SetVertexColor(WARNING_BADGE_EDGE[1], WARNING_BADGE_EDGE[2], WARNING_BADGE_EDGE[3], WARNING_BADGE_EDGE[4])
-            end
-        end
-        if sectionEntry.hint then
-            if on then
-                sectionEntry.hint:SetText(sectionEntry.open and "" or M.Tr("click to expand"))
-                sectionEntry.hint:SetTextColor(0.45, 0.52, 0.65, 1)
-            else
-                sectionEntry.hint:SetText(M.Tr("OFF"))
-                sectionEntry.hint:SetTextColor(WARNING_HINT[1], WARNING_HINT[2], WARNING_HINT[3], WARNING_HINT[4])
-            end
-        end
-        if sectionEntry.arrow and sectionEntry.arrow.SetVertexColor and not on then
-                sectionEntry.arrow:SetVertexColor(WARNING_ARROW[1], WARNING_ARROW[2], WARNING_ARROW[3], WARNING_ARROW[4])
-        end
-    end
-    if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
 
     local function RefreshBasicsEnabled()
         local ownOn = ReadBool(unit, "enabled", true)
@@ -1169,9 +1192,10 @@ local function BuildBossLayout(ctx, builder, unit)
         end)
 end
 
-local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn)
-    if UP.BuildSectionLazy then
+local function BuildUnitSectionMaybeLazy(ctx, builder, unit, buildFn, opts)
+    if UP.BuildSectionLazy and not (opts and opts.lazy == false) then
         return UP.BuildSectionLazy(ctx, builder, unit, {
+            prepareShell = opts and opts.prepareShell,
             build = function(lazyCtx, lazyBuilder, lazyUnit)
                 return buildFn(lazyCtx, lazyBuilder, lazyUnit)
             end,
@@ -1214,7 +1238,19 @@ local function BuildUnitPage(info)
         BuildPreview(ctx, builder, info.unit)
         BuildUnitSectionMaybeLazy(ctx, builder, info.unit, function(lazyCtx, lazyBuilder, lazyUnit)
             return BuildBasics(lazyCtx, lazyBuilder, lazyUnit, info.label)
-        end)
+        end, {
+            prepareShell = function(lazyCtx, sec, lazyUnit)
+                local refresh = AttachBasicsHeaderStatus(sec, lazyUnit)
+                if refresh then
+                    if M.AddRefresherOnce then
+                        M.AddRefresherOnce(lazyCtx, "frame-basics-header:" .. tostring(lazyUnit), refresh)
+                    else
+                        M.AddRefresher(lazyCtx, refresh)
+                    end
+                end
+                return refresh
+            end,
+        })
         if UNIT_AURAS_MENU_UNITS[info.unit] and type(M.BuildAuras3UnitSection) == "function" then
             if UP.BuildSectionLazy then
                 UP.BuildSectionLazy(ctx, builder, info.unit, {
@@ -1253,6 +1289,6 @@ for key, info in pairs(UNIT_PAGES) do
     M.RegisterPage(key, {
         title = info.title,
         build = BuildUnitPage(info),
-        version = 20,
+        version = 22,
     })
 end

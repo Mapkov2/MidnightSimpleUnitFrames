@@ -1,0 +1,945 @@
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or {}
+_G.MSUF_NS = MSUF
+
+local M = MSUF.MSUF2 or _G.MSUF2 or {}
+MSUF.MSUF2 = M
+_G.MSUF2 = M
+
+local A = MSUF.Assistant or {}
+MSUF.Assistant = A
+M.Assistant = A
+
+local Registry = A.Registry
+local P = A.Parser or {}
+A.Parser = P
+local Trim = P.Trim
+local Normalize = P.Normalize
+local HasPhrase = P.HasPhrase
+local ContainsAny = P.ContainsAny
+local UNIT_ORDER = P.UNIT_ORDER
+local GROUP_ORDER = P.GROUP_ORDER
+local ALL_UNITFRAMES = P.ALL_UNITFRAMES
+local ALL_GROUPS = P.ALL_GROUPS
+local CLASS_POWER_TERMS = P.CLASS_POWER_TERMS
+local GAMEPLAY_TERMS = P.GAMEPLAY_TERMS
+local GLOBAL_BARS_TERMS = P.GLOBAL_BARS_TERMS
+local CASTBAR_ROOT_DETAIL_TERMS = P.CASTBAR_ROOT_DETAIL_TERMS
+local PAGE_TEXT_TARGETS = P.PAGE_TEXT_TARGETS
+local AddUnique = P.AddUnique
+local DetectUnits = P.DetectUnits
+local DetectGroups = P.DetectGroups
+local DetectGlobalScope = P.DetectGlobalScope
+local OFF_WORDS = P.OFF_WORDS
+local ON_WORDS = P.ON_WORDS
+local DetectBoolean = P.DetectBoolean
+local FirstNumber = P.FirstNumber
+local Compact = P.Compact
+local AliasRelationText = P.AliasRelationText
+local TextMatchesAlias = P.TextMatchesAlias
+local ExtractColor = P.ExtractColor
+local DetectFrameType = P.DetectFrameType
+local DetectDirection = P.DetectDirection
+local DetectAttribute = P.DetectAttribute
+local PageForText = P.PageForText
+local FrameTypeForPage = P.FrameTypeForPage
+local UnitPageKey = P.UnitPageKey
+local COPY_SCOPE_DEFAULTS = P.COPY_SCOPE_DEFAULTS
+local UNIT_COPY_SCOPE_SPECS = P.UNIT_COPY_SCOPE_SPECS
+local GROUP_COPY_SCOPE_DEFAULTS = P.GROUP_COPY_SCOPE_DEFAULTS
+local GROUP_COPY_SCOPE_SPECS = P.GROUP_COPY_SCOPE_SPECS
+local CopyScopeDefaults = P.CopyScopeDefaults
+local CopyScopeMatches = P.CopyScopeMatches
+local ApplyCopyScopeMatches = P.ApplyCopyScopeMatches
+local WantsFullUnitCopy = P.WantsFullUnitCopy
+local CopyScopesForText = P.CopyScopesForText
+local GroupCopyScopeDefaults = P.GroupCopyScopeDefaults
+local WantsFullGroupCopy = P.WantsFullGroupCopy
+local GroupCopyScopesForText = P.GroupCopyScopesForText
+local CleanProfileName = P.CleanProfileName
+local RawAfterPrefix = P.RawAfterPrefix
+local RawBetween = P.RawBetween
+local RawCreateProfileName = P.RawCreateProfileName
+local RawCopyProfileName = P.RawCopyProfileName
+local RawRenameProfileNames = P.RawRenameProfileNames
+local PROFILE_EXPORT_KIND_LABELS = P.PROFILE_EXPORT_KIND_LABELS
+local ProfileExportKindForText = P.ProfileExportKindForText
+local RawAfterLastConnector = P.RawAfterLastConnector
+local CleanSpecName = P.CleanSpecName
+local ImportNewProfileName = P.ImportNewProfileName
+local BuildSpecAutoSwitch = P.BuildSpecAutoSwitch
+local BuildSpecProfileAction = P.BuildSpecProfileAction
+local ParseWorkflowLifecycle = P.ParseWorkflowLifecycle
+local BuildMenuSelectorState = P.BuildMenuSelectorState
+local ParseProfileStagingState = P.ParseProfileStagingState
+local ParseGroupCopyScopeState = P.ParseGroupCopyScopeState
+local ParseUnitCopyScopeState = P.ParseUnitCopyScopeState
+local ParseProfile = P.ParseProfile
+local AURA_BLACKLIST_PRESETS = P.AURA_BLACKLIST_PRESETS
+local AuraBlacklistScope = P.AuraBlacklistScope
+local AURA_QUICK_PRESETS = P.AURA_QUICK_PRESETS
+local AuraQuickPresetForText = P.AuraQuickPresetForText
+local ParseAuraQuickPreset = P.ParseAuraQuickPreset
+local AuraBlacklistPresetForText = P.AuraBlacklistPresetForText
+local AuraGroupBlacklistScope = P.AuraGroupBlacklistScope
+local AuraGroupBlacklistLane = P.AuraGroupBlacklistLane
+local AuraGroupBlacklistCategoryForText = P.AuraGroupBlacklistCategoryForText
+local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
+local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
+local ParseAuraBlacklist = P.ParseAuraBlacklist
+
+local function CopyTextParts(text)
+    local src, dst = text:match("^copy%s+(.+)%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^copy%s+.+%s+from%s+(.+)%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^copy%s+from%s+(.+)%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^kopiere%s+(.+)%s+nach%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^kopiere%s+.+%s+von%s+(.+)%s+nach%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^kopieren%s+(.+)%s+nach%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^kopieren%s+.+%s+von%s+(.+)%s+nach%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^uebernehme%s+(.+)%s+fuer%s+(.+)$")
+    if src and dst then return src, dst end
+    return nil, nil
+end
+
+local function RemoveUnit(out, unit)
+    if not unit then return out end
+    local filtered = {}
+    for i = 1, #(out or {}) do
+        if out[i] ~= unit then filtered[#filtered + 1] = out[i] end
+    end
+    return filtered
+end
+
+local function CopyTargetsForText(text, source)
+    if HasPhrase(text, "all") or HasPhrase(text, "all unitframes") or HasPhrase(text, "alle") or HasPhrase(text, "alle unitframes") then
+        local targets = {}
+        for i = 1, #ALL_UNITFRAMES do
+            if ALL_UNITFRAMES[i] ~= source then targets[#targets + 1] = ALL_UNITFRAMES[i] end
+        end
+        return targets
+    end
+    return RemoveUnit(DetectUnits(text), source)
+end
+
+local function CopyGroupTargetsForText(text, source)
+    if HasPhrase(text, "all") or HasPhrase(text, "all groups") or HasPhrase(text, "all group frames") or HasPhrase(text, "alle") or HasPhrase(text, "alle gruppenframes") then
+        return RemoveUnit({ "party", "raid", "mythicraid" }, source)
+    end
+    return RemoveUnit(DetectGroups(text), source)
+end
+
+local function ParseGroupCopy(text)
+    if not ContainsAny(text, { "copy", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    local source, targets
+    local srcText, dstText = CopyTextParts(text)
+    if srcText and dstText then
+        local srcGroups = DetectGroups(srcText)
+        source = srcGroups[1]
+        targets = CopyGroupTargetsForText(dstText, source)
+    end
+    if not source or not targets or #targets == 0 then
+        local groups = DetectGroups(text)
+        if #groups < 2 then return nil end
+        source = groups[1]
+        targets = {}
+        for i = 2, #groups do targets[#targets + 1] = groups[i] end
+    end
+    local action = Registry and Registry:GetAction("copy_group")
+    if not action then return nil end
+    local confirm = (WantsFullGroupCopy and WantsFullGroupCopy(text)) or ContainsAny(text, { "all", "alle" }) or #targets > 1
+    return {
+        kind = "action",
+        action = action,
+        args = { source = source, targets = targets, scopes = GroupCopyScopesForText(text) },
+        confirmRequired = confirm,
+        label = "Copy " .. tostring((A.UnitLabels or {})[source] or source) .. " group settings",
+        summary = "Copies via the existing group-frame copy helper.",
+    }
+end
+
+local function ParseCopy(text)
+    if not ContainsAny(text, { "copy", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    local source, targets
+    local srcText, dstText = CopyTextParts(text)
+    if srcText and dstText then
+        local srcUnits = DetectUnits(srcText)
+        source = srcUnits[1]
+        targets = CopyTargetsForText(dstText, source)
+    end
+    if not source or not targets or #targets == 0 then
+        local units = DetectUnits(text)
+        if #units < 2 then return nil end
+        source = units[1]
+        targets = {}
+        for i = 2, #units do targets[#targets + 1] = units[i] end
+    end
+    local action = Registry and Registry:GetAction("copy_unit")
+    if not action then return nil end
+    local confirm = (WantsFullUnitCopy and WantsFullUnitCopy(text)) or ContainsAny(text, { "all", "alle" }) or #targets > 2
+    return {
+        kind = "action",
+        action = action,
+        args = { source = source, targets = targets, scopes = CopyScopesForText(text) },
+        confirmRequired = confirm,
+        label = "Copy " .. tostring((A.UnitLabels or {})[source] or source) .. " settings",
+        summary = "Copies via the existing unit copy helper.",
+    }
+end
+
+local function BuildContextReset(text, ctx)
+    if not (ctx and type(ctx.lastUnit) == "string") then return nil end
+    if not ContainsAny(text, { "reset", "restore", "zuruecksetzen", "default", "defaults" }) then return nil end
+    if not (HasPhrase(text, "it") or HasPhrase(text, "that") or HasPhrase(text, "das")) then return nil end
+    local setting = ctx.lastSetting and Registry:GetSetting(ctx.lastSetting) or nil
+    local isPosition = setting and (setting.attribute == "offsetX" or setting.attribute == "offsetY")
+    local action = Registry and Registry:GetAction(isPosition and "reset_unit_position" or "reset_unit_page")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { unit = ctx.lastUnit },
+        confirmRequired = not isPosition,
+        label = isPosition and "Reset previous frame position" or "Reset previous frame settings",
+        summary = "Uses the last Assistant unit as context.",
+    } or nil
+end
+
+local GROUP_STATUS_ICON_ALIASES = {
+    { key = "roleIcon", aliases = { "role icon", "role indicator" } },
+    { key = "leaderIcon", aliases = { "leader icon", "leader indicator" } },
+    { key = "assistIcon", aliases = { "assist icon", "assistant icon", "assist indicator" } },
+    { key = "raidMarker", aliases = { "raid marker", "raid marker icon", "target marker" } },
+    { key = "readyCheckIcon", aliases = { "ready check", "ready check icon", "ready icon" } },
+    { key = "summonIcon", aliases = { "summon icon", "summon indicator" } },
+    { key = "resurrectIcon", aliases = { "resurrect icon", "resurrection icon", "rez icon", "incoming resurrection" } },
+    { key = "phaseIcon", aliases = { "phase icon", "phasing icon", "phase indicator" } },
+    { key = "statusText", aliases = { "dead text", "dead status text", "status text" } },
+    { key = "statusGhostText", aliases = { "ghost text", "ghost status text" } },
+    { key = "statusAFKText", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
+}
+
+local function GroupStatusIconForText(text)
+    for i = 1, #GROUP_STATUS_ICON_ALIASES do
+        local row = GROUP_STATUS_ICON_ALIASES[i]
+        if ContainsAny(text, row.aliases) then return row.key end
+    end
+    return nil
+end
+
+local GROUP_STATUS_ICON_TERMS = {
+    "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators",
+    "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon",
+    "resurrect icon", "rez icon", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
+}
+
+local function FirstGroupOrDefault(text)
+    local groups = DetectGroups(text)
+    return groups[1] or "party"
+end
+
+local function AliasValueForText(text, aliases, values)
+    local compactText = Compact(text)
+    if type(aliases) == "table" then
+        local bestValue, bestLen
+        for alias, value in pairs(aliases) do
+            local compactAlias = Compact(alias)
+            if HasPhrase(text, alias) or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true)) then
+                local len = #compactAlias
+                if not bestLen or len > bestLen then bestValue, bestLen = value, len end
+            end
+        end
+        if bestValue ~= nil then return bestValue end
+    end
+    for i = 1, #(values or {}) do
+        local value = values[i]
+        local compactValue = Compact(value)
+        if HasPhrase(text, tostring(value)) or (#compactValue >= 5 and compactText:find(compactValue, 1, true)) then return value end
+    end
+    return nil
+end
+
+local GROUP_SPELL_PLACED_ALIASES = { none = "none", off = "none", disabled = "none", hide = "none", icon = "icon", square = "square", dot = "square", bar = "bar", number = "number", text = "number" }
+local GROUP_SPELL_FRAME_ALIASES = { none = "none", off = "none", disabled = "none", hide = "none", healthtint = "healthtint", ["health tint"] = "healthtint", tint = "healthtint", border = "border", outline = "border", glow = "glow", pulse = "pulse", namecolor = "namecolor", ["name color"] = "namecolor" }
+local GROUP_SPELL_GROWTH_ALIASES = { rightdown = "RIGHTDOWN", ["right down"] = "RIGHTDOWN", ["right then down"] = "RIGHTDOWN", leftdown = "LEFTDOWN", ["left down"] = "LEFTDOWN", ["left then down"] = "LEFTDOWN", rightup = "RIGHTUP", ["right up"] = "RIGHTUP", ["right then up"] = "RIGHTUP", leftup = "LEFTUP", ["left up"] = "LEFTUP", ["left then up"] = "LEFTUP" }
+local GROUP_SPELL_ANCHOR_ALIASES = { topleft = "TOPLEFT", ["top left"] = "TOPLEFT", topright = "TOPRIGHT", ["top right"] = "TOPRIGHT", bottomleft = "BOTTOMLEFT", ["bottom left"] = "BOTTOMLEFT", bottomright = "BOTTOMRIGHT", ["bottom right"] = "BOTTOMRIGHT", center = "CENTER", centre = "CENTER", middle = "CENTER", top = "TOP", bottom = "BOTTOM", left = "LEFT", right = "RIGHT" }
+
+local function ParseGroupSpellIndicatorAction(text, raw)
+    if not ContainsAny(text, { "spell indicator", "spell indicators", "tracked spell", "tracked spells" }) then return nil end
+    local scope = FirstGroupOrDefault(text)
+    local spec = A.ResolveGroupSpellSpec and A.ResolveGroupSpellSpec(text) or nil
+
+    if ContainsAny(text, { "multi spec", "multispec", "track selected multi spec", "track spec" }) and spec and spec ~= "auto" and spec ~= "multi" then
+        local action = Registry and Registry:GetAction("set_group_spell_indicator_multi_spec")
+        local value = DetectBoolean(text)
+        if value == nil then value = not ContainsAny(text, { "remove", "clear", "stop" }) end
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = scope, spec = spec, value = value },
+            label = "Set group spell indicator multi-spec",
+            summary = "Toggles a concrete spec entry in Spell Indicators Multi-Spec mode.",
+        } or nil
+    end
+
+    local aura, resolvedSpec = A.ResolveGroupSpellAura and A.ResolveGroupSpellAura(spec, text) or nil
+    spec = spec or resolvedSpec
+    if ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then
+        local action = Registry and Registry:GetAction("reset_group_spell_indicator_aura")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = scope, spec = spec, aura = aura or text },
+            label = "Reset group spell indicator aura",
+            summary = "Resets one tracked spell indicator entry to its defaults.",
+        } or nil
+    end
+
+    if ContainsAny(text, { "move", "order", "reorder", "first", "last", "slot", "position" }) and aura then
+        local action = Registry and Registry:GetAction("move_group_spell_indicator_order")
+        local position = FirstNumber(text)
+        if ContainsAny(text, { "first", "top", "front" }) then position = 1 end
+        if ContainsAny(text, { "last", "bottom", "end" }) then position = 999 end
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = scope, spec = spec, aura = text, position = position or 1 },
+            label = "Move group spell indicator order",
+            summary = "Changes the tracked spell display order.",
+        } or nil
+    end
+
+    local field, value
+    if ContainsAny(text, { "only my cast", "only mine", "own cast", "cast by me" }) then
+        field, value = "onlyOwn", DetectBoolean(text)
+        if value == nil then value = true end
+    elseif ContainsAny(text, { "cooldown text size", "cooldown font size" }) then
+        field, value = "placedCooldownSize", FirstNumber(text)
+    elseif ContainsAny(text, { "cooldown swipe" }) then
+        field, value = "placedCooldownSwipe", DetectBoolean(text)
+    elseif ContainsAny(text, { "cooldown text", "show cooldown" }) then
+        field, value = "placedCooldown", DetectBoolean(text)
+    elseif ContainsAny(text, { "show when missing", "when missing", "missing indicator" }) then
+        field, value = "placedMissing", DetectBoolean(text)
+        if value == nil then value = true end
+    elseif ContainsAny(text, { "bar width" }) then
+        field, value = "placedBarWidth", FirstNumber(text)
+    elseif ContainsAny(text, { "growth", "grow" }) then
+        field, value = "placedGrowth", AliasValueForText(text, GROUP_SPELL_GROWTH_ALIASES, { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP" })
+    elseif ContainsAny(text, { "frame color", "effect color", "tint color", "glow color", "border color" }) then
+        local r, g, b, label = ExtractColor(raw, text)
+        if r then field, value = "frameColor", { r = r, g = g, b = b, label = label } end
+    elseif ContainsAny(text, { "frame effect", "effect type", "frame type" }) then
+        field, value = "frameType", AliasValueForText(text, GROUP_SPELL_FRAME_ALIASES, { "none", "healthtint", "border", "glow", "pulse", "namecolor" })
+    elseif ContainsAny(text, { "frame priority", "effect priority", "priority" }) then
+        field, value = "framePriority", FirstNumber(text)
+    elseif ContainsAny(text, { "tint alpha", "frame alpha", "effect alpha" }) then
+        field, value = "frameAlpha", FirstNumber(text)
+        if value and value > 1 then value = value / 100 end
+    elseif ContainsAny(text, { "thickness", "border thickness", "glow thickness" }) then
+        field, value = "frameThickness", FirstNumber(text)
+    elseif ContainsAny(text, { "indicator type", "placed indicator", "placed type", "type" }) then
+        field, value = "placedType", AliasValueForText(text, GROUP_SPELL_PLACED_ALIASES, { "none", "icon", "square", "bar", "number" })
+    elseif ContainsAny(text, { "anchor", "position" }) then
+        field, value = "placedAnchor", AliasValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
+    elseif ContainsAny(text, { "x offset", "x position", "x" }) then
+        field, value = "placedX", FirstNumber(text)
+    elseif ContainsAny(text, { "y offset", "y position", "y" }) then
+        field, value = "placedY", FirstNumber(text)
+    elseif ContainsAny(text, { "size", "icon size" }) then
+        field, value = "placedSize", FirstNumber(text)
+    else
+        value = DetectBoolean(text)
+        if value ~= nil then field = "enabled" end
+    end
+
+    if not (field and value ~= nil and aura) then return nil end
+    local action = Registry and Registry:GetAction("set_group_spell_indicator_aura")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { scope = scope, spec = spec, aura = text, field = field, value = value },
+        label = "Set group spell indicator",
+        summary = "Configures one tracked spell indicator entry.",
+    } or nil
+end
+
+local function ParseGroupCornerIndicatorReset(text)
+    if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(text, { "corner indicator", "corner indicators", "corner dot", "corner dots", "custom spell" }) then return nil end
+    local scope = FirstGroupOrDefault(text)
+    local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(text) or nil
+    if slot then
+        local action = Registry and Registry:GetAction("reset_group_corner_indicator_slot")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = scope, slot = text },
+            label = "Reset group corner indicator slot",
+            summary = "Resets one corner indicator slot and clears its custom spell editor state.",
+        } or nil
+    end
+    local action = Registry and Registry:GetAction("reset_group_corner_indicators")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { scope = scope },
+        confirmRequired = true,
+        label = "Reset group corner indicators",
+        summary = "Resets all corner indicator slots for the selected group scope.",
+    } or nil
+end
+
+local function ParseGroupStatusIconReset(text)
+    if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(text, GROUP_STATUS_ICON_TERMS) then return nil end
+    local scope = FirstGroupOrDefault(text)
+    local icon = GroupStatusIconForText(text)
+    if icon then
+        local action = Registry and Registry:GetAction("reset_group_status_icon")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = scope, icon = icon },
+            label = "Reset group status icon",
+            summary = "Resets placement and icon pack for one group status icon.",
+        } or nil
+    end
+    local action = Registry and Registry:GetAction("reset_group_status_icons")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { scope = scope },
+        confirmRequired = true,
+        label = "Reset group status icons",
+        summary = "Resets placement and icon packs for all group status icons in the selected scope.",
+    } or nil
+end
+
+local function ParseGroupStatusPreview(text)
+    if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons" }) then return nil end
+    if not ContainsAny(text, GROUP_STATUS_ICON_TERMS) then return nil end
+    local explicitUnits = DetectUnits(text)
+    local explicitGroups = DetectGroups(text)
+    if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
+    local scope = FirstGroupOrDefault(text)
+    local icon = GroupStatusIconForText(text)
+    local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
+    local action = Registry and Registry:GetAction("preview_group_status_icon")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { scope = scope, icon = icon, mode = mode, text = text },
+        label = mode == "all" and "Show all group status icons" or "Preview group status icon",
+        summary = "Controls the group-frame status icon preview mode.",
+    } or nil
+end
+
+local UNIT_STATUS_RESET_TERMS = {
+    "status indicator", "status indicators", "status icon", "status icons", "indicator position", "level indicator", "level text",
+    "leader icon", "assist icon", "raid marker", "raid marker icon", "raid group", "raid group name",
+    "elite icon", "rare icon", "dead text", "status text", "combat indicator", "combat icon",
+    "rested indicator", "resting indicator", "incoming rez", "incoming resurrection", "resurrection icon",
+}
+
+local function ParseUnitStatusIndicatorReset(text)
+    if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(text, UNIT_STATUS_RESET_TERMS) then return nil end
+    local units = DetectUnits(text)
+    if #units == 0 then return nil end
+    local unit = units[1]
+    local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text)
+    if not spec then return nil end
+    local action = Registry and Registry:GetAction("reset_unit_status_indicator")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { unit = unit, status = spec.value, text = text },
+        label = "Reset " .. tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "status indicator"),
+        summary = "Resets placement and style fields for one unit-frame status indicator.",
+    } or nil
+end
+
+local function ParseUnitStatusPreview(text, ctx)
+    if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons" }) then return nil end
+    if not ContainsAny(text, UNIT_STATUS_RESET_TERMS) then return nil end
+    local units = DetectUnits(text)
+    local unit = units[1] or (ctx and ctx.lastUnit)
+    local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
+    local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
+    local action = Registry and Registry:GetAction("preview_unit_status_indicator")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { unit = unit, status = spec and spec.value, mode = mode, text = text },
+        label = mode == "all" and "Show all status indicators" or "Preview status indicator",
+        summary = "Controls the unit-frame status indicator preview mode.",
+    } or nil
+end
+
+
+local function ParseUnitStatusIndicatorMove(text)
+    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "verschiebe" }) then return nil end
+    local direction = DetectDirection(text)
+    if not direction then return nil end
+    if not ContainsAny(text, UNIT_STATUS_RESET_TERMS) then return nil end
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local currentUnit = CurrentPageUnit and CurrentPageUnit() or nil
+        if currentUnit then units = { currentUnit } end
+    end
+    if #units == 0 then return nil end
+    local unit = units[1]
+    local spec = A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
+    if not spec then return nil end
+    local key = (direction == "left" or direction == "right") and spec.x or spec.y
+    if type(key) ~= "string" or key == "" then return nil end
+    local setting = Registry and Registry:GetSetting(unit .. "." .. key)
+    if not setting then return nil end
+    local amount = FirstNumber(text) or 10
+    if direction == "left" or direction == "down" then amount = -amount end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, relativeDelta = amount, direction = direction } },
+        label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Position",
+        summary = "Moves a unit-frame status indicator through its real X/Y offset setting.",
+    }
+end
+
+local function ParseCustomAnchorWorkflow(text)
+    if not ContainsAny(text, { "custom anchor", "custom anchor picker", "anchor picker", "anchor frame picker" }) then return nil end
+    if ContainsAny(text, { "cancel", "close", "stop", "abort" }) then
+        local action = Registry and Registry:GetAction("cancel_custom_anchor_picker")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Cancel custom anchor picker",
+            summary = "Closes the shared custom anchor picker overlay if it is active.",
+        } or nil
+    end
+    if ContainsAny(text, { "status", "active", "is picker", "show picker" }) then
+        local action = Registry and Registry:GetAction("custom_anchor_picker_status")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Show custom anchor picker status",
+            summary = "Reports whether the custom anchor picker overlay is active.",
+        } or nil
+    end
+    if not ContainsAny(text, { "pick", "picker", "start", "open", "select", "choose" }) then return nil end
+    local groups = DetectGroups(text)
+    if groups[1] then
+        local action = Registry and Registry:GetAction("start_group_custom_anchor_picker")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = groups[1] },
+            label = "Start group custom anchor picker",
+            summary = "Starts the shared custom anchor picker overlay for a group frame.",
+        } or nil
+    end
+    local units = DetectUnits(text)
+    local unit = units[1]
+    if not unit then return nil end
+    local action = Registry and Registry:GetAction("start_unit_custom_anchor_picker")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { unit = unit },
+        label = "Start unit custom anchor picker",
+        summary = "Starts the shared custom anchor picker overlay for a unit frame.",
+    } or nil
+end
+
+local function CleanCustomAnchorFrameName(name)
+    name = Trim(tostring(name or ""))
+    name = name:gsub("[\"'`]", "")
+    name = name:gsub("^frame%s+", "")
+    name = name:gsub("^name%s+", "")
+    name = name:gsub("^named%s+", "")
+    name = name:gsub("^called%s+", "")
+    name = name:gsub("^to%s+", "")
+    name = name:gsub("^as%s+", "")
+    name = name:gsub("[%s%.%,;:!%?]+$", "")
+    name = Trim(name)
+    if name == "" then return nil end
+    local lower = Normalize(name)
+    if lower == "none" or lower == "free" or lower == "clear" or lower == "default" or lower == "global" then return "" end
+    return name
+end
+
+local function RawCustomAnchorFrameName(raw)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local connectors = { " to ", " as ", " named ", " called ", " frame ", " name " }
+    local bestEnd
+    for i = 1, #connectors do
+        local start = 1
+        while true do
+            local s, e = lower:find(connectors[i], start, true)
+            if not s then break end
+            if not bestEnd or e > bestEnd then bestEnd = e end
+            start = e + 1
+        end
+    end
+    if bestEnd then return CleanCustomAnchorFrameName(raw:sub(bestEnd + 1)) end
+    return nil
+end
+
+local function ParseCustomAnchorSet(text, raw)
+    if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
+    if not ContainsAny(text, { "set", "change", "use", "assign", "write", "apply" }) then return nil end
+    local frameName = RawCustomAnchorFrameName(raw)
+    if frameName == nil then return nil end
+
+    local groups = DetectGroups(text)
+    if #groups > 0 then
+        local changes = {}
+        for i = 1, #groups do
+            local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. ".customAnchorFrame")
+            if setting then changes[#changes + 1] = { setting = setting, value = frameName } end
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = "Set group custom anchor frame",
+            summary = "Writes the Group Layout custom anchor frame name directly, matching the custom anchor text box result.",
+        }
+    end
+
+    local units = DetectUnits(text)
+    if #units == 0 then return nil end
+    local setting = Registry and Registry:GetSetting(units[1] .. ".anchorFrameName")
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = frameName } },
+        label = "Set unit custom anchor frame",
+        summary = "Writes the Unit Frame custom anchor frame name directly, matching the custom anchor text box result.",
+    }
+end
+
+local function ParseCustomAnchorClear(text)
+    if not ContainsAny(text, { "clear", "remove", "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
+    if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
+    local groups = DetectGroups(text)
+    if groups[1] then
+        local action = Registry and Registry:GetAction("clear_group_custom_anchor")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = groups[1] },
+            label = "Clear " .. tostring((A.UnitLabels or {})[groups[1]] or groups[1]) .. " custom anchor",
+            summary = "Clears the group-frame custom anchor frame name.",
+        } or nil
+    end
+    local units = DetectUnits(text)
+    if #units == 0 then return nil end
+    local action = Registry and Registry:GetAction("clear_unit_custom_anchor")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { unit = units[1] },
+        label = "Clear " .. tostring((A.UnitLabels or {})[units[1]] or units[1]) .. " custom anchor",
+        summary = "Clears the unit-frame custom anchor frame name.",
+    } or nil
+end
+
+local function ParseReset(text)
+    if not ContainsAny(text, { "reset", "restore", "zuruecksetzen", "default", "defaults" }) then return nil end
+    if ContainsAny(text, { "factory reset", "full reset", "fullreset", "reset all settings", "reset all profiles" }) then
+        local action = Registry and Registry:GetAction("factory_reset_all")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            confirmRequired = true,
+            label = "Factory reset all MSUF settings",
+            summary = "Stages the shared MSUF full factory reset flow without running a slash command.",
+        } or nil
+    end
+    if ContainsAny(text, { "profile", "profil" }) then
+        local action = Registry and Registry:GetAction("reset_profile")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            confirmRequired = true,
+            label = "Reset active profile",
+            summary = "Resets the active profile.",
+        } or nil
+    end
+    if ContainsAny(text, { "focus kick", "focus interrupt tracker", "focus interrupt", "kick tracker" })
+        and ContainsAny(text, { "position", "pos", "placement", "x", "y" })
+    then
+        local action = Registry and Registry:GetAction("reset_focus_kick_position")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = action.label or "Reset Focus Kick position",
+            summary = "Resets the Focus Kick on-screen tracker offsets.",
+        } or nil
+    end
+    if ContainsAny(text, { "all positions", "frame positions", "reset positions", "reset movers", "offscreen", "off screen", "broken layout", "alle positionen" }) then
+        local action = Registry and Registry:GetAction("reset_all_unit_positions")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            confirmRequired = true,
+            label = "Reset all unit-frame positions",
+            summary = "Restores default unit-frame anchors and offsets.",
+        } or nil
+    end
+    local units = DetectUnits(text)
+    if #units == 0 then return nil end
+    local unit = units[1]
+    if ContainsAny(text, { "position", "pos", "placement", "frame position", "x", "y" }) then
+        local action = Registry and Registry:GetAction("reset_unit_position")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { unit = unit },
+            label = "Reset " .. tostring((A.UnitLabels or {})[unit] or unit) .. " position",
+            summary = "Restores default anchor and offsets.",
+        } or nil
+    end
+    local action = Registry and Registry:GetAction("reset_unit_page")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { unit = unit },
+        confirmRequired = true,
+        label = "Reset " .. tostring((A.UnitLabels or {})[unit] or unit) .. " settings",
+        summary = "Resets all settings on that unit page.",
+    } or nil
+end
+
+local function ParseOpen(text, raw)
+    local explicit = ContainsAny(text, { "open", "go to", "show settings", "show me", "find", "search", "oeffne" })
+    local shortcut = false
+    if not explicit and DetectBoolean(text) == nil and FirstNumber(text) == nil then
+        shortcut = ContainsAny(text, { "settings", "menu", "page", "options", "config", "configuration", "einstellungen", "menue", "seite" })
+        if not shortcut then
+            for i = 1, #PAGE_TEXT_TARGETS do
+                local spec = PAGE_TEXT_TARGETS[i]
+                for j = 1, #(spec.terms or {}) do
+                    if text == Normalize(spec.terms[j]) then
+                        shortcut = true
+                        break
+                    end
+                end
+                if shortcut then break end
+            end
+        end
+    end
+    if not explicit and not shortcut then return nil end
+    local page, label = PageForText(text)
+    if not page then return nil end
+    local action = Registry and Registry:GetAction("open_page")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { page = page, label = label, query = raw or text },
+        label = "Open " .. label,
+        summary = "Navigates the Dashboard.",
+    } or nil
+end
+
+local function DashboardPanelForText(text)
+    if ContainsAny(text, { "recovery tools", "display recovery", "recover menu", "reset tools", "dashboard recovery", "recovery panel", "display panel" }) then return "recovery", "recovery tools" end
+    if ContainsAny(text, { "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "scaling panel", "scale panel" }) then return "scaling", "scaling tools" end
+    if ContainsAny(text, { "changelog", "change log", "release notes", "latest changes", "build notes", "changelog panel" }) then return "changelog", "changelog" end
+    return nil, nil
+end
+
+local function ParseDashboardPanelAction(text)
+    local panel, label = DashboardPanelForText(text)
+    if not panel then return nil end
+    local explicit = ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle" })
+    if not explicit then return nil end
+    local open
+    if ContainsAny(text, { "close", "hide", "collapse" }) then
+        open = false
+    elseif ContainsAny(text, { "toggle" }) then
+        open = nil
+    else
+        open = true
+    end
+    local action = Registry and Registry:GetAction("set_dashboard_panel")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { panel = panel, open = open },
+        label = (open == false and "Close " or (open == nil and "Toggle " or "Open ")) .. label,
+        summary = "Controls the persisted Dashboard panel disclosure state.",
+    } or nil
+end
+
+local NAV_SECTION_TEXT_TARGETS = {
+    { section = "groupframes", label = "Group Frames", terms = { "group frames", "groupframes", "raid frames", "party frames", "group frame", "groups" } },
+    { section = "unitframes", label = "Frames", terms = { "frames", "unitframes", "unit frames", "unit frame", "frame list" } },
+    { section = "globalstyle", label = "Appearance", terms = { "appearance", "global style", "globalstyle", "style section", "look section" } },
+    { section = "modules", label = "Advanced", terms = { "advanced", "modules", "module section", "advanced menu" } },
+    { section = "auras", label = "Auras", terms = { "auras", "aura section", "buffs section", "debuffs section" } },
+}
+
+local function NavSectionForText(text)
+    for i = 1, #NAV_SECTION_TEXT_TARGETS do
+        local spec = NAV_SECTION_TEXT_TARGETS[i]
+        if ContainsAny(text, spec.terms) then return spec.section, spec.label end
+    end
+    return nil, nil
+end
+
+local function ParseNavRailAction(text)
+    if ContainsAny(text, { "search intro", "ask msuf intro", "assistant search intro", "search help intro" }) then
+        local command
+        if ContainsAny(text, { "hide", "close", "dismiss", "mark seen", "mark as seen", "dont show" }) then
+            command = "seen"
+        elseif ContainsAny(text, { "reset", "show again", "next time" }) then
+            command = "reset"
+        elseif ContainsAny(text, { "show", "open" }) then
+            command = "show"
+        end
+        if not command then return nil end
+        local action = Registry and Registry:GetAction("set_nav_search_intro")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { command = command },
+            label = "Set search intro",
+            summary = "Controls the NavRail search intro state.",
+        } or nil
+    end
+
+    if not ContainsAny(text, { "navigation section", "nav section", "sidebar section", "left nav section", "section", "navigation group", "nav group", "sidebar group" }) then return nil end
+    if not ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle" }) then return nil end
+    local section, label = NavSectionForText(text)
+    if not section then return nil end
+    local open
+    if ContainsAny(text, { "close", "hide", "collapse" }) then
+        open = false
+    elseif ContainsAny(text, { "toggle" }) then
+        open = nil
+    else
+        open = true
+    end
+    local action = Registry and Registry:GetAction("set_nav_section")
+    return action and {
+        kind = "action",
+        action = action,
+        args = { section = section, open = open },
+        label = (open == false and "Close " or (open == nil and "Toggle " or "Open ")) .. label .. " navigation section",
+        summary = "Controls the NavRail section disclosure state.",
+    } or nil
+end
+
+local function ParseMenuWindowAction(text)
+    if ContainsAny(text, { "panel", "tools", "changelog", "change log", "release notes" }) then return nil end
+    if not ContainsAny(text, { "menu", "dashboard", "options", "options window", "msuf menu", "msuf window" }) then return nil end
+    local actionKey
+    local label
+    if ContainsAny(text, { "minimize", "minimise", "collapse" }) then
+        actionKey = "menu_window_minimize"
+        label = "Minimize MSUF menu"
+    elseif ContainsAny(text, { "maximize", "maximise", "fullscreen", "full screen" }) then
+        actionKey = "menu_window_maximize"
+        label = "Maximize MSUF menu"
+    elseif ContainsAny(text, { "restore", "unminimize", "unminimise", "show minimized" }) then
+        actionKey = "menu_window_restore"
+        label = "Restore MSUF menu"
+    elseif ContainsAny(text, { "close", "hide" }) then
+        actionKey = "menu_window_close"
+        label = "Close MSUF menu"
+    end
+    local action = actionKey and Registry and Registry:GetAction(actionKey)
+    return action and {
+        kind = "action",
+        action = action,
+        args = {},
+        label = label,
+        summary = "Controls the shared MSUF Menu2 window helpers.",
+    } or nil
+end
+
+function A._ParseMenuHistoryAction(text)
+    if not ContainsAny(text, {
+        "menu history", "menu change", "menu changes", "menu session", "session changes",
+        "msuf2 menu changes", "ui change", "ui changes", "navrail history",
+    }) then return nil end
+    local actionKey
+    local label
+    local summary
+    local confirmRequired
+    if ContainsAny(text, { "reset all", "reset", "restore all", "discard all", "revert all", "clear all" }) then
+        actionKey = "menu_history_reset_session"
+        label = "Reset menu session changes"
+        summary = "Uses the same MSUF menu history-session reset helper as Shift-click Undo."
+        confirmRequired = true
+    elseif ContainsAny(text, { "redo", "reapply" }) then
+        actionKey = "menu_history_redo"
+        label = "Redo menu change"
+        summary = "Uses the same MSUF menu redo helper as the NavRail Redo button."
+    elseif ContainsAny(text, { "undo", "revert" }) then
+        actionKey = "menu_history_undo"
+        label = "Undo menu change"
+        summary = "Uses the same MSUF menu undo helper as the NavRail Undo button."
+    end
+    local action = actionKey and Registry and Registry:GetAction(actionKey)
+    return action and {
+        kind = "action",
+        action = action,
+        args = {},
+        confirmRequired = confirmRequired,
+        label = label,
+        summary = summary,
+    } or nil
+end
+
+P.CopyTextParts = CopyTextParts
+P.RemoveUnit = RemoveUnit
+P.CopyTargetsForText = CopyTargetsForText
+P.CopyGroupTargetsForText = CopyGroupTargetsForText
+P.ParseGroupCopy = ParseGroupCopy
+P.ParseCopy = ParseCopy
+P.BuildContextReset = BuildContextReset
+P.GROUP_STATUS_ICON_ALIASES = GROUP_STATUS_ICON_ALIASES
+P.GroupStatusIconForText = GroupStatusIconForText
+P.GROUP_STATUS_ICON_TERMS = GROUP_STATUS_ICON_TERMS
+P.FirstGroupOrDefault = FirstGroupOrDefault
+P.AliasValueForText = AliasValueForText
+P.GROUP_SPELL_PLACED_ALIASES = GROUP_SPELL_PLACED_ALIASES
+P.GROUP_SPELL_FRAME_ALIASES = GROUP_SPELL_FRAME_ALIASES
+P.GROUP_SPELL_GROWTH_ALIASES = GROUP_SPELL_GROWTH_ALIASES
+P.GROUP_SPELL_ANCHOR_ALIASES = GROUP_SPELL_ANCHOR_ALIASES
+P.ParseGroupSpellIndicatorAction = ParseGroupSpellIndicatorAction
+P.ParseGroupCornerIndicatorReset = ParseGroupCornerIndicatorReset
+P.ParseGroupStatusIconReset = ParseGroupStatusIconReset
+P.ParseGroupStatusPreview = ParseGroupStatusPreview
+P.UNIT_STATUS_RESET_TERMS = UNIT_STATUS_RESET_TERMS
+P.ParseUnitStatusIndicatorReset = ParseUnitStatusIndicatorReset
+P.ParseUnitStatusPreview = ParseUnitStatusPreview
+P.ParseUnitStatusIndicatorMove = ParseUnitStatusIndicatorMove
+P.ParseCustomAnchorWorkflow = ParseCustomAnchorWorkflow
+P.CleanCustomAnchorFrameName = CleanCustomAnchorFrameName
+P.RawCustomAnchorFrameName = RawCustomAnchorFrameName
+P.ParseCustomAnchorSet = ParseCustomAnchorSet
+P.ParseCustomAnchorClear = ParseCustomAnchorClear
+P.ParseReset = ParseReset
+P.ParseOpen = ParseOpen
+P.DashboardPanelForText = DashboardPanelForText
+P.ParseDashboardPanelAction = ParseDashboardPanelAction
+P.NAV_SECTION_TEXT_TARGETS = NAV_SECTION_TEXT_TARGETS
+P.NavSectionForText = NavSectionForText
+P.ParseNavRailAction = ParseNavRailAction
+P.ParseMenuWindowAction = ParseMenuWindowAction
