@@ -51,7 +51,9 @@ local function ReadPowerMeta(frame, bar, unit, force)
 
     local powerType, powerToken = ReadPowerType(unit)
     local maxPower
-    if IsNil(powerType) then
+    -- powerType is already secret-sanitised to nil by ReadPowerType, so a plain
+    -- nil test is sufficient here -- no second issecretvalue C call needed.
+    if powerType == nil then
         maxPower = UnitPowerMax(unit)
     else
         maxPower = UnitPowerMax(unit, powerType)
@@ -93,7 +95,9 @@ local function ReadPowerValues(frame, bar, unit, event, animate)
         or event == "MSUF_POWER_LAYOUT"
     local powerType, maxPower, powerToken, powerMetaChanged = ReadPowerMeta(frame, bar, unit, forceMeta)
     local power
-    if not IsNil(powerType) then
+    -- powerType originates from ReadPowerType (secret-sanitised to nil), so a
+    -- plain nil test avoids a redundant issecretvalue C call on every read.
+    if powerType ~= nil then
         power = UnitPower(unit, powerType)
     else
         power = UnitPower(unit)
