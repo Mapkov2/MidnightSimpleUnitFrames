@@ -167,10 +167,64 @@ e:SetStatusBarColor(l,t,n,o)end
 e._msufGlowSkipBase=nil e._msufGlowApplied=true
 end function _G.MSUF_CB_ApplyColor(e,t)if e and e.UpdateColorForInterruptible then local n=e:UpdateColorForInterruptible()if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(e,t)end return n
 end end
+local function G(e,t)if not e or e==""then return e,false end
+t=tonumber(t)or 0 if t<=0 then return"",e~=""end
+local n,r,a=1,#e,0
+while n<=r and a<t do local t=string.byte(e,n)if not t then break end
+if t<128 then n=n+1 elseif t<224 then n=n+2 elseif t<240 then n=n+3 else n=n+4 end
+a=a+1 end
+if n>r then return e,false end
+return string.sub(e,1,n-1),true end
+local function K(e)if not e then return nil end
+local n=e.unit or e.MSUF_unit or e._msufUnit or e.unitKey
+if type(n)=="string"and n~=""then return n end
+local n=e._msufBarKey or e.barKey or e.key
+if type(n)=="string"and n~=""then if n=="player"or n=="target"or n=="focus"or n=="boss"or n:sub(1,4)=="boss"then return n end end
+if e==_G.MSUF_PlayerCastbar or e==_G.MSUF_PlayerCastbarPreview then return"player"end
+if e==_G.MSUF_TargetCastbar or e==_G.MSUF_TargetCastbarPreview then return"target"end
+if e==_G.MSUF_FocusCastbar or e==_G.MSUF_FocusCastbarPreview then return"focus"end
+local e=e.GetName and e:GetName()or nil
+if type(e)=="string"then if e:find("Target",1,true)then return"target"end if e:find("Focus",1,true)then return"focus"end if e:find("Player",1,true)then return"player"end if e:find("boss",1,true)or e:find("Boss",1,true)then return"boss"end end
+return nil end
+local function C(e)if not e then return false end
+t()local n=(MSUF_DB and MSUF_DB.general)or nil
+if not n then return false end
+local a=K(e)local t=tonumber(n.castbarSpellNameShortening)or 0
+if a and tostring(a):match("^boss")and n.bossCastSpellNameShortening~=nil then t=tonumber(n.bossCastSpellNameShortening)or t end
+if t<=0 then return false end
+local r=tonumber(n.castbarSpellNameMaxLen)or 30
+local t=tonumber(n.castbarSpellNameReservedSpace)or 8
+if a and tostring(a):match("^boss")then
+local e=tonumber(n.bossCastSpellNameMaxLen or n.bossCastSpellNameMaxChars or n.bossSpellNameMaxLen)
+local a=tonumber(n.bossCastSpellNameReservedSpace or n.bossCastSpellNameReserved or n.bossSpellNameReservedSpace)
+if e and e>0 then r=e end
+if a and a>=0 then t=a end
+end
+r=math.floor((tonumber(r)or 30)+0.5)if r<1 then r=1 elseif r>80 then r=80 end
+t=math.floor((tonumber(t)or 0)+0.5)if t<0 then t=0 elseif t>160 then t=160 end
+local a=(_G.MSUF_CastbarStyleRevision or 1)..":"..r..":"..t
+return true,r,t,a end
+function _G.MSUF_GetCastbarSpellNameShorteningConfig(e)return C(e)end
+local function A(e,t)if t==nil then return t end
+local n=_G.issecretvalue if type(n)=="function"and n(t)==true then return t end
+local n=type(t)
+if n~="string"and n~="number"and n~="boolean"then return t end
+local n=tostring(t or"")if n==""then if e then e._msufRawCastText=n;e._msufShortCastText=n;e._msufShortCastTextKey=false end return n end
+local r,a,t,S=C(e)
+if not r then if e then e._msufRawCastText=n;e._msufShortCastText=n;e._msufShortCastTextKey=false end return n end
+if e and e._msufRawCastText==n and e._msufShortCastTextKey==S and e._msufShortCastText~=nil then return e._msufShortCastText end
+local r,o=G(n,a)local r=o and(r.."...")or n
+if e then e._msufRawCastText=n;e._msufShortCastText=r;e._msufShortCastTextKey=S end
+return r end
+function _G.MSUF_ShortenCastbarSpellName(e,t)return A(e,t)end
+function _G.MSUF_RefreshCastbarSpellNameText(e)if not(e and e.castText)then return end
+local t=e._msufRawCastText
+if t==nil then return end
+i(e.castText,A(e,t))end
 function _G.MSUF_CB_ApplyTexts(e,r,n,t)if not e then return end
 if r~=nil then if n==nil then n=r.castText end
 if t==nil then t=r.timeText end end
-if n~=nil and e.castText then i(e.castText,n)end if t~=nil and e.timeText then
+if n~=nil and e.castText then i(e.castText,A(e,n))end if t~=nil and e.timeText then
 i(e.timeText,t)end
 end function _G.MSUF_ClearEmpowerState(e)if not e then return end e.isEmpower=nil
 e.empowerStartTime=nil e.empowerStageEnds=nil

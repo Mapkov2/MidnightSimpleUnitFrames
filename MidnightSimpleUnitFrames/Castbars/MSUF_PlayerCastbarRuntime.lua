@@ -172,7 +172,7 @@ n.durationObj=t n.reverseFill=i
 a=_G.MSUF_Castbar_ApplyActiveDuration(e,n,{skipColor=true,skipRegister=true,skipTimeText=true,skipShow=true,})and true or false
 else e.MSUF_durationObj=nil
 e.MSUF_isChanneled=r e.MSUF_timerDriven=nil
-if e.icon then e.icon:SetTexture(h or nil)end if e.castText then MSUF_SetTextIfChanged(e.castText,s or"")end
+if e.icon then e.icon:SetTexture(h or nil)end if e.castText then if type(_G.MSUF_CB_ApplyTexts)=="function"then _G.MSUF_CB_ApplyTexts(e,nil,s or"",nil)else MSUF_SetTextIfChanged(e.castText,s or"")end end
 end e._msufStripeReverseFill=(i and true or false)if r then e.MSUF_channelDirect=nil
 else S(e)end local n=(e.isNotInterruptible==true)if B(C)then n=true end e.isNotInterruptible=n
 p(e,d,u)if(not a)and e._msufPlainTotal and e._msufRemaining then

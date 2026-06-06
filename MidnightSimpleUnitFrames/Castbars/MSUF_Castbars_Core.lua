@@ -271,10 +271,14 @@ else l=o
 end elseif MSUF_IsBossCastbarUnit(u)then
 d=-2+(n(e.bossCastTimeOffsetX)or 0)i=n(e.bossCastTimeOffsetY)or 0
 local e=n(e.bossCastTimeFontSize)or 0 if e and e>0 then l=e end
-end local e=t.castText or t.Text or t.text
-if e then e:SetShown(f)h(e,o)if e.SetPoint then
-e:ClearAllPoints()e:SetPoint("LEFT",r,"LEFT",2+c,0+S)end b(e)end local e=t.timeText
-if e and T(t)then h(e,l or M)if e.SetPoint then e:ClearAllPoints()e:SetPoint("RIGHT",r,"RIGHT",d,i)end
+end local Y=T(t)if type(_G.MSUF_IsCastTimeEnabled)=="function"then Y=_G.MSUF_IsCastTimeEnabled(t)end local e=t.castText or t.Text or t.text
+if e then e:SetShown(f)h(e,o)if e.SetMaxLines then e:SetMaxLines(1)end if e.SetWordWrap then e:SetWordWrap(false)end if e.SetNonSpaceWrap then e:SetNonSpaceWrap(false)end if e.SetPoint then
+e:ClearAllPoints()e:SetPoint("LEFT",r,"LEFT",2+c,0+S)end local _,__,R if type(_G.MSUF_GetCastbarSpellNameShorteningConfig)=="function"then _,__,R=_G.MSUF_GetCastbarSpellNameShorteningConfig(t)end local W=(r.GetWidth and r:GetWidth())or(t.GetWidth and t:GetWidth())or 250
+if W<20 then W=20 end local X=0 if Y and t.timeText then local m=(t.timeText.GetStringWidth and t.timeText:GetStringWidth())or 0 X=math.floor(m+8.5)if X<24 then X=24 end local M=math.floor(W*0.45+0.5)if X>M then X=M end end
+local R=_ and(tonumber(R)or 0)or 0 local w=math.floor(W-X-R-(6+(tonumber(c)or 0))+0.5)if w<20 then w=20 end
+if e.SetWidth and e._msufCastbarTextWidth~=w then e:SetWidth(w)e._msufCastbarTextWidth=w end
+if type(_G.MSUF_RefreshCastbarSpellNameText)=="function"then _G.MSUF_RefreshCastbarSpellNameText(t)end b(e)end local e=t.timeText
+if e and Y then h(e,l or M)if e.SetPoint then e:ClearAllPoints()e:SetPoint("RIGHT",r,"RIGHT",d,i)end
 b(e)end
 end s(MSUF_PlayerCastbar)s(MSUF_TargetCastbar)s(MSUF_FocusCastbar)local t=_G.MSUF_InCombat==true or((_G.InCombatLockdown and _G.InCombatLockdown())and true or false)or((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))and true or false)if not t then
 s(MSUF_PlayerCastbarPreview)s(MSUF_TargetCastbarPreview)s(MSUF_FocusCastbarPreview)if _G.MSUF_BossCastbarPreview then
