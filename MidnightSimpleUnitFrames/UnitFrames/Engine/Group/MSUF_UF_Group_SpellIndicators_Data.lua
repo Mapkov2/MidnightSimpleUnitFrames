@@ -5,7 +5,10 @@ _G.MSUF_NS = ns
 local GF = ns.GF
 if not GF then return end
 
-local SI = {}
+-- Reuse the existing table if another GroupFrames file already created it, so
+-- GF.SpellIndicators and _G.MSUF_GF_SpellIndicators always refer to one table
+-- regardless of script load order (SpellRegistry mirrors this same table to _G).
+local SI = GF.SpellIndicators or {}
 GF.SpellIndicators = SI
 
 SI.SpecMap = {

@@ -14,6 +14,21 @@ local floor = math.floor
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 
+-- Events Blizzard delivers under a distinct name but which mean the exact same
+-- work as an existing hot event. Remapped to the canonical event at dispatch so
+-- they reuse that event's already-compiled per-frame state (runner + element
+-- set) with no separate runner/kind/handler wiring. One hash lookup per
+-- dispatch, independent of how many aliases exist. Frames still subscribe under
+-- the real event name (element event lists + UNIT_EVENT_HAS_UNIT); this only
+-- remaps the dispatch key.
+--   UNIT_MAX_HEALTH_MODIFIERS_CHANGED -> UNIT_MAXHEALTH (effective max changed)
+--   UNIT_ENTERED/EXITED_VEHICLE       -> UNIT_PORTRAIT_UPDATE (model swapped)
+local EVENT_ALIAS = {
+    UNIT_MAX_HEALTH_MODIFIERS_CHANGED = "UNIT_MAXHEALTH",
+    UNIT_ENTERED_VEHICLE = "UNIT_PORTRAIT_UPDATE",
+    UNIT_EXITED_VEHICLE = "UNIT_PORTRAIT_UPDATE",
+}
+
 local EMPTY_METADATA_SET = {}
 local UPDATE_KEYS = UF._updateKeys or {}
 local FrameIsElementEnabled = UF.FrameIsElementEnabled
@@ -737,6 +752,12 @@ function DispatchFrameEvent(frame, event, unit, ...)
     -- non-nil; the outer `frame._msufEventOwners` table is created on first
     -- element registration, so a frame that gets here without owners (e.g.,
     -- because a stale event registration survived a detach) just returns.
+
+    -- Remap aliased events onto their canonical hot event (see EVENT_ALIAS).
+    local alias = EVENT_ALIAS[event]
+    if alias then
+        event = alias
+    end
 
     -- Cross-unit (ToT-style) gating: when the event's unit isn't this frame's
     -- unit, dispatch only if the frame has at least one element in "unitless"

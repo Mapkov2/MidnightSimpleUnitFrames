@@ -445,7 +445,8 @@ local function ShouldManageBlizzardGroups()
     return not (g and g.disableBlizzardUnitFrames == false)
 end
 
-function GF.NormalizeBlizzardFallbackMode(mode)
+-- File-local: only used inside this file (party/raid fallback-mode normalizer).
+local function NormalizeBlizzardFallbackMode(mode)
     if mode == "SHOW" or mode == "BLIZZARD" or mode == true then
         return "SHOW"
     end
@@ -506,7 +507,7 @@ local function BlizzardRaidManagerWantsShown()
 end
 
 local function ApplyDisabledPartyFallback(mode, msufOwnsGroupFrames)
-    mode = GF.NormalizeBlizzardFallbackMode(mode)
+    mode = NormalizeBlizzardFallbackMode(mode)
     if mode == "NONE" then
         HidePartyFrames(true)
     elseif mode == "SHOW" then
@@ -521,7 +522,7 @@ local function ApplyDisabledPartyFallback(mode, msufOwnsGroupFrames)
 end
 
 local function ApplyDisabledRaidFallback(mode, msufOwnsGroupFrames)
-    mode = GF.NormalizeBlizzardFallbackMode(mode)
+    mode = NormalizeBlizzardFallbackMode(mode)
     if mode == "NONE" then
         HideRaidFrames(true)
     elseif mode == "SHOW" then
@@ -581,8 +582,8 @@ function GF.ApplyBlizzardGroupFrameOwnership(reason)
     local msufOwnsGroupFrames = MSUFOwnsLiveGroupFrames()
     local partyActive = PartyScopeActive()
     local raidActive = RaidScopeActive()
-    local partyMode = GF.NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode)
-    local raidMode = GF.NormalizeBlizzardFallbackMode(raidConf.blizzardFallbackMode)
+    local partyMode = NormalizeBlizzardFallbackMode(partyConf.blizzardFallbackMode)
+    local raidMode = NormalizeBlizzardFallbackMode(raidConf.blizzardFallbackMode)
     local wantsShown = (not raidActive and raidMode == "AUTO" and not msufOwnsGroupFrames) and BlizzardRaidManagerWantsShown() or nil
     local sig = "on|" .. tostring(groupCount)
         .. "|" .. tostring(inRaid)

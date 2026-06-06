@@ -744,17 +744,18 @@ local function BlizzardOwnsAuraGroup(root, nativeKey)
     return type(types) ~= "table" or types[nativeKey] ~= false
 end
 
-function GF.IsBlizzardAuraTypeEnabled(confOrRoot, nativeKey)
+-- File-local: only used inside this file (consumed by GF.GetBlizzardAuraTypeFlags).
+local function IsBlizzardAuraTypeEnabled(confOrRoot, nativeKey)
     local root = confOrRoot and confOrRoot.auras or confOrRoot
     return BlizzardOwnsAuraGroup(root, nativeKey)
 end
 
 function GF.GetBlizzardAuraTypeFlags(conf)
-    return GF.IsBlizzardAuraTypeEnabled(conf, "buffs"),
-        GF.IsBlizzardAuraTypeEnabled(conf, "debuffs"),
-        GF.IsBlizzardAuraTypeEnabled(conf, "dispels"),
-        GF.IsBlizzardAuraTypeEnabled(conf, "externals"),
-        GF.IsBlizzardAuraTypeEnabled(conf, "privateAuras")
+    return IsBlizzardAuraTypeEnabled(conf, "buffs"),
+        IsBlizzardAuraTypeEnabled(conf, "debuffs"),
+        IsBlizzardAuraTypeEnabled(conf, "dispels"),
+        IsBlizzardAuraTypeEnabled(conf, "externals"),
+        IsBlizzardAuraTypeEnabled(conf, "privateAuras")
 end
 
 local function AuraBlacklistHash(kind, groupKey, group)

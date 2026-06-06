@@ -19,6 +19,14 @@ local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
+-- Raw secret test captured locally so the per-event hot path (ShowValue, the
+-- Calc* readers) can inline `issecretvalue(x) == true` instead of paying a Lua
+-- call frame for IsSecret()/IsNil() on every check -- the inlining pattern that
+-- MSUF_UF_Secrets.lua is explicitly designed for. Equivalences used below:
+--   IsSecret(x)      -> issecretvalue(x) == true
+--   IsNil(x)         -> (not issecretvalue(x)) and x == nil
+--   not IsNil(x)     -> issecretvalue(x) == true or x ~= nil
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local UnitIncomingHealClampMode = Enum and Enum.UnitIncomingHealClampMode
@@ -152,12 +160,15 @@ local function ReadHealthMax(frame, unit)
 end
 
 local function ShowValue(bar, maxValue, value, forceMax)
-    if not bar or IsNil(value) then
+    -- valueSecret is computed once and reused (was IsNil(value)+IsSecret(value),
+    -- two secret probes of the same value); issecretvalue is pure so hoisting it
+    -- above the `not bar` guard is harmless.
+    local valueSecret = issecretvalue(value) == true
+    if not bar or (not valueSecret and value == nil) then
         HideBar(bar)
         return
     end
 
-    local valueSecret = IsSecret(value)
     if not valueSecret then
         local valueType = type(value)
         if valueType == "number" then
@@ -173,10 +184,11 @@ local function ShowValue(bar, maxValue, value, forceMax)
 
     local maxReady = bar._msufMaxReady == true
     local needMax = forceMax == true or not maxReady
-    if not IsNil(maxValue) then
-        local maxCacheable = not IsSecret(maxValue)
+    local maxSecret = issecretvalue(maxValue) == true
+    if maxSecret or maxValue ~= nil then -- not IsNil(maxValue)
+        local maxCacheable = not maxSecret
         local cachedMax = bar._msufMax
-        if needMax or (maxCacheable and (IsSecret(cachedMax) or cachedMax ~= maxValue)) then
+        if needMax or (maxCacheable and (issecretvalue(cachedMax) == true or cachedMax ~= maxValue)) then
             bar:SetMinMaxValues(0, maxValue)
             bar._msufMax = maxCacheable and maxValue or nil
             bar._msufMaxReady = true
@@ -190,7 +202,7 @@ local function ShowValue(bar, maxValue, value, forceMax)
     end
 
     local cachedValue = bar._msufValue
-    if valueSecret or IsSecret(cachedValue) or cachedValue ~= value then
+    if valueSecret or issecretvalue(cachedValue) == true or cachedValue ~= value then
         bar:SetValue(value)
         bar._msufValue = valueSecret and nil or value
     end
@@ -268,13 +280,13 @@ end
 local function CalcIncomingHeals(calc, unit)
     if calc and calc.GetIncomingHeals then
         local value = calc:GetIncomingHeals()
-        if not IsNil(value) then
+        if issecretvalue(value) == true or value ~= nil then -- not IsNil(value)
             return value
         end
     end
     if calc and calc.GetTotalIncomingHeals then
         local value = calc:GetTotalIncomingHeals()
-        if not IsNil(value) then
+        if issecretvalue(value) == true or value ~= nil then -- not IsNil(value)
             return value
         end
     end
@@ -285,11 +297,11 @@ local function CalcDamageAbsorbs(calc, unit)
     if calc then
         if calc.GetDamageAbsorbs then
             local value = calc:GetDamageAbsorbs()
-            if not IsNil(value) then return value end
+            if issecretvalue(value) == true or value ~= nil then return value end -- not IsNil(value)
         end
         if calc.GetTotalDamageAbsorbs then
             local value = calc:GetTotalDamageAbsorbs()
-            if not IsNil(value) then return value end
+            if issecretvalue(value) == true or value ~= nil then return value end -- not IsNil(value)
         end
     end
     return UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(unit) or nil
@@ -299,11 +311,11 @@ local function CalcHealAbsorbs(calc, unit)
     if calc then
         if calc.GetHealAbsorbs then
             local value = calc:GetHealAbsorbs()
-            if not IsNil(value) then return value end
+            if issecretvalue(value) == true or value ~= nil then return value end -- not IsNil(value)
         end
         if calc.GetTotalHealAbsorbs then
             local value = calc:GetTotalHealAbsorbs()
-            if not IsNil(value) then return value end
+            if issecretvalue(value) == true or value ~= nil then return value end -- not IsNil(value)
         end
     end
     return UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(unit) or nil

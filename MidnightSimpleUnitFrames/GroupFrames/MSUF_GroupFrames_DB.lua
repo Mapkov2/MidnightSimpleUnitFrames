@@ -9,6 +9,52 @@ _G.MSUF_NS = MSUF
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
 
+--==========================================================================--
+-- GroupFrames API surface (MSUF.GF / _G.MSUF_*)
+--==========================================================================--
+-- This is the contract for the GroupFrames module. The module is split across
+-- GroupFrames/*.lua and UnitFrames/Engine/Group/*.lua but shares ONE table
+-- (MSUF.GF, aliased `GF` in every file). Keep the surface minimal:
+--
+--   * Public / external bridges  -> global _G.MSUF_* wrappers (see lists below).
+--       Options, EditMode, the Assistant, slash/debug, LoadOnDemand modules and
+--       third-party addons call these by GLOBAL NAME. Treat them as a stable
+--       ABI: do not rename or delete; if one becomes unused keep it as a thin
+--       wrapper (deprecated) rather than removing it.
+--
+--   * Cross-file internal API    -> GF.* functions used by >1 GroupFrames file
+--       (e.g. GF.GetConf, GF.GetGridMetrics, GF.ApplyButton, GF.CompileSpec,
+--        GF.GetConfigDBKey, GF.GetLiveRaidKind, GF.ForEachFrame, GF.MarkDirty,
+--        the GF.DIRTY_* mask constants, GF.RefreshAll/RefreshVisuals/RebuildAll).
+--       Keep these on GF.*; they are the module's internal contract.
+--
+--   * File-local helpers         -> plain `local function`. If a helper is only
+--       used inside one file it MUST NOT live on GF.*; declare it local instead.
+--
+-- _G.MSUF_* bridge groups (definition file in parentheses):
+--   Refresh/runtime (Runtime):  MSUF_GF_RebuildAll, _RefreshAll, _Refresh,
+--       _RefreshVisuals, _RefreshGeometry, _RefreshOverlays, _RefreshBorder,
+--       _RefreshOutlineGeometry, _RefreshColors, _RefreshFonts,
+--       _UpdateGroupVisibility, _EM2_SetActivePreviewKind, _EM2_NudgePreview,
+--       _InvalidateCooldownTextCurve, _ForceCooldownTextRecolor,
+--       _ForceAuraTextColorRefresh   (EM2 re-wraps _RefreshVisuals/_RebuildAll
+--       in-place to add edit-mode preview sync -- that re-assignment is
+--       intentional, not a duplicate definition).
+--   Preview (Preview):  MSUF_GF_ShowPreview, _HidePreview, _SetPreviewAnchor,
+--       _RefreshPreviewLayout, _RefreshPreviewBox.  NOTE: Preview.lua loads
+--       after Runtime.lua and OWNS the real preview implementation -- Runtime
+--       deliberately does NOT define these to avoid an overwritten duplicate.
+--   DB config (this file):  MSUF_GF_EnsureDB, _GetConf, _Val, _GetHighlightVal,
+--       _InvalidateConfCache, _ResetAllToDefaults.
+--   Status icon packs (this file):  MSUF_RegisterStatusIconPack /
+--       MSUF_RefreshStatusIconPacks are a PUBLIC extension point for other
+--       addons (no internal callers by design -- keep them). Plus
+--       MSUF_GetStatusIconPackValues / MSUF_Get{Role,Leader,Assist}StatusIconTexture.
+--   Spell indicators (DB_SpellIndicators): MSUF_GF_Seed{,Current}SpellIndicator*.
+--   EditMode popups (EM2): MSUF_EM2_*GFPopup*, MSUF_GF_EM2_*.
+--   Blizzard frames (Blizzard): MSUF_GF_DisableBlizzard.
+--==========================================================================--
+
 local math_max = math.max
 local math_min = math.min
 local math_ceil = math.ceil
@@ -2306,6 +2352,8 @@ function GF.RegisterStatusIconPack(key, label, folder, opts)
     return key
 end
 
+-- Public extension point: other addons register/refresh custom status-icon
+-- packs through these globals. No internal callers by design -- keep exported.
 _G.MSUF_RegisterStatusIconPack = function(key, label, folder, opts)
     return GF.RegisterStatusIconPack(key, label, folder, opts)
 end
@@ -2460,7 +2508,8 @@ _G.MSUF_GetAssistStatusIconTexture = function(style, useMidnight)
 end
 
 ---
---- Expose for other modules
+--- Public DB-config bridges: consumed by Options/EditMode/Assistant by global
+--- name. Stable ABI -- keep exported even when internal callers are few.
 ---
 _G.MSUF_GF_EnsureDB   = GF.EnsureDB
 _G.MSUF_GF_GetConf     = GF.GetConf

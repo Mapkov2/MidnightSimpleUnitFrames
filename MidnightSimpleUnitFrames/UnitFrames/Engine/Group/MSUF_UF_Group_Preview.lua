@@ -88,7 +88,8 @@ local function ActivePreviewCount(kind)
     return DefaultPreviewCount(kind)
 end
 
-function GF.GetPositionCount(kind)
+-- File-local: only used inside this file.
+local function GetPositionCount(kind)
     kind = NormalizeKind(kind) or "party"
     local previewCount = ActivePreviewCount(kind)
     if previewCount then return previewCount end
@@ -140,7 +141,7 @@ end
 
 local function PositionContainer(kind, count)
     local conf = GF.GetConf and GF.GetConf(kind) or {}
-    local posCount = GF.GetPositionCount and GF.GetPositionCount(kind) or DefaultPreviewCount(kind)
+    local posCount = GetPositionCount(kind) or DefaultPreviewCount(kind)
     local dx, dy, posW, posH = GF.GetGridMetrics(kind, posCount)
     local _, _, _, _, w, h, spacing, growth, upc, _, _, _, primary, _, _, blockW, blockH = GF.GetGridMetrics(kind, count)
     local parent = GF._previewAnchorFrame and GF._previewAnchorFrame[kind]
@@ -308,7 +309,8 @@ local function ApplyPreviewStatus(frame, kind, index, role)
     SetShown(frame.statusIndicatorText, false)
 end
 
-function GF.ApplyPreviewData(frame, index, kind)
+-- File-local: only used inside this file (preview-frame data population).
+local function ApplyPreviewData(frame, index, kind)
     if not frame then return false end
     kind = NormalizeKind(kind) or "party"
     local class = PREVIEW_CLASSES[((index - 1) % #PREVIEW_CLASSES) + 1]
@@ -351,7 +353,8 @@ function GF.ApplyPreviewData(frame, index, kind)
     return true
 end
 
-function GF.ClearPreviewData(frame)
+-- File-local: only used inside this file (preview-frame data teardown).
+local function ClearPreviewData(frame)
     if not frame then return end
     frame._msufGFPreviewActive = nil
     frame._msufGFPreviewIndex = nil
@@ -467,12 +470,12 @@ function GF.ShowPreview(kind, count)
         if frame.SetAttribute then frame:SetAttribute("unit", "player") end
         if GF.ApplyButton then GF.ApplyButton(frame, kind, "MSUF_GF_PREVIEW") end
         PositionPreviewFrame(frame, layout, i, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
-        GF.ApplyPreviewData(frame, i, kind)
+        ApplyPreviewData(frame, i, kind)
     end
     for i = count + 1, #frames do
         local frame = frames[i]
         if frame then
-            GF.ClearPreviewData(frame)
+            ClearPreviewData(frame)
             frame:Hide()
         end
     end
@@ -488,7 +491,7 @@ function GF.HidePreview(kind)
     if frames then
         for i = 1, #frames do
             if frames[i] then
-                GF.ClearPreviewData(frames[i])
+                ClearPreviewData(frames[i])
                 frames[i]:Hide()
             end
         end
@@ -522,7 +525,7 @@ function GF.RefreshPreviewLayout(kind)
             frame:SetSize(w, h)
             if GF.ApplyButton then GF.ApplyButton(frame, kind, "MSUF_GF_PREVIEW_REFRESH") end
             PositionPreviewFrame(frame, layout, i, kind, w, h, spacing, growth, upc, primary, blockW, blockH)
-            GF.ApplyPreviewData(frame, i, kind)
+            ApplyPreviewData(frame, i, kind)
         end
     end
     return true
