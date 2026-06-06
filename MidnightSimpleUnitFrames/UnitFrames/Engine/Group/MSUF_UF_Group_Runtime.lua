@@ -389,8 +389,10 @@ end
 
 GF.Refresh = GF.RefreshAll
 GF.RefreshGeometry = GF.RebuildAll
-GF.RefreshPreviewLayout = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_VISUAL) end
-GF.RefreshPreviewBox = GF.RefreshPreviewLayout
+-- NOTE: GF.RefreshPreviewLayout / GF.RefreshPreviewBox are owned by
+-- MSUF_UF_Group_Preview.lua (loads after this file), which installs the real
+-- preview-repositioning implementation. Do not alias them here; a duplicate
+-- definition would just be overwritten and confuse the call graph.
 GF.RefreshOverlays = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AURAS) end
 GF.RefreshColors = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_COLOR) end
 GF.RefreshBorder = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_BORDER) end
@@ -525,8 +527,9 @@ _G.MSUF_GF_Refresh = function() return GF.RefreshAll() end
 _G.MSUF_GF_RefreshVisuals = function(kind, mask) return GF.RefreshVisuals(kind, mask) end
 _G.MSUF_GF_RefreshGeometry = function() return GF.RefreshGeometry() end
 _G.MSUF_GF_UpdateGroupVisibility = function() return GF.UpdateGroupVisibility() end
-_G.MSUF_GF_RefreshPreviewLayout = function(kind) return GF.RefreshPreviewLayout(kind) end
-_G.MSUF_GF_RefreshPreviewBox = function(kind) return GF.RefreshPreviewLayout(kind) end
+-- _G.MSUF_GF_RefreshPreviewLayout / _G.MSUF_GF_RefreshPreviewBox are installed by
+-- MSUF_UF_Group_Preview.lua (loads after this file) once the real preview
+-- implementation exists; defining them here would only be overwritten.
 _G.MSUF_GF_RefreshOverlays = function(kind) return GF.RefreshOverlays(kind) end
 _G.MSUF_GF_RefreshBorder = function(kind) return GF.RefreshBorder(kind) end
 _G.MSUF_GF_RefreshOutlineGeometry = function(kind) return GF.RefreshOutlineGeometry(kind) end
