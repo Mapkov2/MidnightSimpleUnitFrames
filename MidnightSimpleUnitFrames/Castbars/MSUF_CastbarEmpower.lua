@@ -142,7 +142,7 @@ e.interruptFeedbackEndTime=nil if e.latencyBar then e.latencyBar:Hide()end
 local n,a,t=UnitCastingInfo("player")if not n then
 n,a,t=UnitChannelInfo("player")end
 if e.icon and t then e.icon:SetTexture(t)end if e.castText then
-MSUF_SetTextIfChanged(e.castText,n or"")end
+if type(_G.MSUF_CB_ApplyTexts)=="function"then _G.MSUF_CB_ApplyTexts(e,nil,n or"",nil)else MSUF_SetTextIfChanged(e.castText,n or"")end end
 local t=h("player")local n=((GetTimePreciseSec and GetTimePreciseSec())or GetTime())e.empowerStartTime=t.castStartSec or n e.empowerStageEnds=t.stageEnds
 e.empowerTotalBase=t.totalBase e.empowerTotalWithGrace=t.totalWithGrace
 e.empowerNextStage=1 e._msufEmpowerStartNum=r(e.empowerStartTime)or n
