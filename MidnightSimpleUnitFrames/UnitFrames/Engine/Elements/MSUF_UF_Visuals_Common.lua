@@ -97,7 +97,14 @@ local function SetFrameAlpha(frame, alpha)
     alpha = Clamp01(alpha, 1)
     if frame._msufLastAlpha == alpha then
         local current = frame.GetAlpha and frame:GetAlpha()
-        if current == nil or not AlphaDiffers(current, alpha) then
+        -- A secret current means another owner has layered alpha on top via
+        -- SetAlphaFromBoolean (group range fade reads our base back through
+        -- CoreAlpha, then fades on top, so it is the outer owner). Yield: re-
+        -- applying our plain base here would strip that fade, and type() would
+        -- still report "number" so AlphaDiffers' subtraction would hard-error.
+        -- Short-circuit before AlphaDiffers. current is nil only when the frame
+        -- has no GetAlpha; trust the cache and skip in that case too.
+        if current == nil or not NotSecretValue(current) or not AlphaDiffers(current, alpha) then
             return
         end
     end

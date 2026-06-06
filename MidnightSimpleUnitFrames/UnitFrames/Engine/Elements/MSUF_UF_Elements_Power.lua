@@ -81,8 +81,7 @@ local function ReadPowerValues(frame, bar, unit, event, animate)
                 and (liveType ~= bar._msufPowerType or liveToken ~= bar._msufPowerToken)
         end
     end
-    local forceMeta = not animate
-        or hotMetaChanged
+    local forceMeta = hotMetaChanged
         or bar._msufPowerMaxReady ~= true
         or bar._msufPowerMaxUnit ~= unit
         or event == "UNIT_MAXPOWER"
