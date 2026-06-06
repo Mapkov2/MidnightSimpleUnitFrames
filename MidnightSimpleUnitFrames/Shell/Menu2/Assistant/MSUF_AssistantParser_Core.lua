@@ -353,23 +353,30 @@ local function DetectGroups(text)
         for i = 1, #ALL_GROUPS do AddUnique(groups, ALL_GROUPS[i]) end
         return groups
     end
-    local aliases = A.UnitAliases or {}
-    for i = 1, #GROUP_ORDER do
-        local scope = GROUP_ORDER[i]
-        local list = aliases[scope] or {}
-        for j = 1, #list do
-            if HasPhrase(text, list[j]) then
-                AddUnique(groups, scope)
-                break
-            end
+    local mythicAliases = { "mythic raid frames", "mythic raid frame", "mythicraidframes", "mythicraidframe", "mythic raid", "mythicraid" }
+    local scopeText = text
+    if ContainsAny(scopeText, mythicAliases) then
+        AddUnique(groups, "mythicraid")
+        scopeText = " " .. Normalize(scopeText) .. " "
+        for i = 1, #mythicAliases do
+            local alias = Normalize(mythicAliases[i])
+            if alias ~= "" then scopeText = scopeText:gsub(" " .. alias:gsub("([^%w%s])", "%%%1") .. " ", " ") end
         end
+        scopeText = Normalize(scopeText)
     end
-    if #groups == 0 then
-        if ContainsAny(text, { "party", "party frame", "party frames", "partyframe", "partyframes" }) then AddUnique(groups, "party") end
-        if ContainsAny(text, { "raid", "raid frame", "raid frames", "raidframe", "raidframes", "schlachtzug" }) then AddUnique(groups, "raid") end
-        if ContainsAny(text, { "mythicraid", "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraidframe", "mythicraidframes" }) then AddUnique(groups, "mythicraid") end
+    if ContainsAny(scopeText, { "party", "party frame", "party frames", "partyframe", "partyframes" }) then AddUnique(groups, "party") end
+    local raidScopeText = " " .. Normalize(scopeText) .. " "
+    local raidDetailTerms = { "preserve raid groups", "raid marker icon", "raid marker indicator", "raid marker symbol", "raid marker", "raid markers" }
+    for i = 1, #raidDetailTerms do
+        local alias = raidDetailTerms[i]
+        alias = Normalize(alias)
+        if alias ~= "" then raidScopeText = raidScopeText:gsub(" " .. alias:gsub("([^%w%s])", "%%%1") .. " ", " ") end
     end
-    if #groups == 0 and (HasPhrase(text, "group frames") or HasPhrase(text, "gruppenframes")) then
+    raidScopeText = Normalize(raidScopeText)
+    if ContainsAny(raidScopeText, { "raid", "raid frame", "raid frames", "raidframe", "raidframes", "schlachtzug" }) then AddUnique(groups, "raid") end
+    if #groups == 0
+        and not ContainsAny(text, { "group copy", "copy group", "copy category", "copy categories", "copy scope" })
+        and ContainsAny(text, { "group frames", "group frame", "groups", "group", "gruppenframes", "gruppe", "gruppen" }) then
         for i = 1, #ALL_GROUPS do AddUnique(groups, ALL_GROUPS[i]) end
     end
     return groups

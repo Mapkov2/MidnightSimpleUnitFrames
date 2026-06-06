@@ -25,22 +25,6 @@ local function ApplyClassPower()
     M.RequestGeneralApply("MSUF2_CLASSPOWER", { preview = true, applyAll = false })
 end
 
-local function ShowClassPowerReloadPrompt()
-    if _G.StaticPopupDialogs and not _G.StaticPopupDialogs["MSUF_CLASSPOWER_ENABLE_RELOAD"] then
-        _G.StaticPopupDialogs["MSUF_CLASSPOWER_ENABLE_RELOAD"] = {
-            text = QuickTr("Class Resources were enabled or disabled.\n\nA UI reload is required to fully apply this change.\n\nReload now?"),
-            button1 = RELOADUI or QuickTr("Reload"),
-            button2 = CANCEL or QuickTr("Cancel"),
-            OnAccept = function() if ReloadUI then ReloadUI() end end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
-    end
-    if StaticPopup_Show then StaticPopup_Show("MSUF_CLASSPOWER_ENABLE_RELOAD") end
-end
-
 local TextureValues = M.StatusBarTextureItems
 local VT = M.ValueTextList
 
@@ -1160,7 +1144,6 @@ local function BuildClassPower(ctx)
 
     local cpEnable = SwitchAt(ctx, display, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, function()
         ApplyClassPower()
-        ShowClassPowerReloadPrompt()
         if RefreshClassPowerControls then RefreshClassPowerControls() end
     end)
     local cpHeight = BindTableSlider(ctx, display, "Height", 1, 40, 1, 300, Bars, "classPowerHeight", 4, ApplyClassPower)

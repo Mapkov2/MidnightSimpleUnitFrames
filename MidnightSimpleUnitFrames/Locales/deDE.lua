@@ -2038,6 +2038,7 @@ L["Background overlay opacity.\nScroll to adjust."] = "Deckkraft des Hintergrund
 L["Backup current profile"] = "Aktuelles Profil sichern"
 L["bar animation"] = "Balkenanimation"
 L["Bars = health + power. HP Bar = health only. Backdrop = frame background."] = "Balken = Gesundheit + Ressource. HP-Balken = nur Gesundheit. Hintergrund = Frame-Hintergrund."
+L["Power Bar = power only. HP Bar = health only. Backdrop = frame background."] = "Powerbar = nur Ressource. HP-Balken = nur Gesundheit. Hintergrund = Frame-Hintergrund."
 L["BG"] = "HG"
 L["Blizzard controls this aura block, so MSUF cannot drag it. Switch to MSUF Custom mode if you want full positioning control. The preview marks the Blizzard-owned area."] = "Blizzard steuert diesen Aurenblock, daher kann MSUF ihn nicht ziehen. Wechsle zu MSUF Custom, wenn du volle Positionskontrolle möchtest. Die Vorschau markiert den Blizzard-Bereich."
 L["Blizzard legacy"] = "Blizzard-Legacy"

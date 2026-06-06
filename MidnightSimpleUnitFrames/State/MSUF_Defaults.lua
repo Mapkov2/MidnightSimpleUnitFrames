@@ -2350,6 +2350,22 @@ local function fill(key, defaults)
             if u.powerSmoothFill == nil then
                 u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar ~= false) or false
             end
+            if u.powerBarDetached == true and u.detachedPowerBarWidth == nil then
+                local syncedClassWidth = unitKey == "player"
+                    and u.detachedPowerBarSyncClassPower ~= false
+                    and bars.classPowerWidthMode == "custom"
+                    and tonumber(bars.classPowerWidth)
+                    or nil
+                local detachedWidth = (syncedClassWidth and syncedClassWidth >= 20 and syncedClassWidth)
+                    or tonumber(u.width)
+                    or (unitKey == "focus" and 180 or 275)
+                if detachedWidth < 20 then
+                    detachedWidth = 20
+                elseif detachedWidth > 800 then
+                    detachedWidth = 800
+                end
+                u.detachedPowerBarWidth = detachedWidth
+            end
         end
     end
     for _, unitKey in ipairs({"player", "target", "targettarget", "focustarget", "focus", "pet", "boss"}) do

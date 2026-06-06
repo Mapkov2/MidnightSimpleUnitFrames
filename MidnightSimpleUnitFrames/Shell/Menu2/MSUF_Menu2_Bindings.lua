@@ -1434,7 +1434,13 @@ function M.BindToggle(ctx, widget, getValue, setValue)
             SyncFromValue(self)
             return
         end
-        local nextValue = not (getValue() and true or false)
+        local currentValue = getValue() and true or false
+        local nativeValue = self.GetChecked and self:GetChecked()
+        local nextValue = nativeValue ~= nil and (nativeValue and true or false) or not currentValue
+        if nextValue == currentValue then
+            SyncFromValue(self)
+            return
+        end
         local label = WidgetHistoryLabel(ctx, self)
         M.CaptureHistory(label, WidgetHistorySource(ctx, self, label), function()
             setValue(nextValue)

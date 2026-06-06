@@ -35,18 +35,20 @@ local function BuildAlpha(ctx, builder, unit)
     local rightX = leftX + leftW + gap
     local rightW = innerW - leftW - gap
 
-    local opacityCard = W.ControlCard(sec, "Opacity", "Combat state alpha.", leftX, -38, leftW, 250)
-    local layerCard = W.ControlCard(sec, "Fade target", "Whole frame or one visual layer.", rightX, -38, rightW, 250)
-
-    local function CurrentOpacityMode()
-        if ReadBool(unit, "alphaExcludeTextPortrait", false) ~= true then
-            return "frame"
-        end
-        return NormalizeAlphaMode(GetConf(unit).alphaLayerMode)
-    end
+    local opacityCard = W.ControlCard(sec, "Frame opacity", "Fade the unit frame in and out of combat.", leftX, -38, leftW, 250)
+    local layerCard = W.ControlCard(sec, "Layer fade", "Keep text and portrait visible while fading one layer.", rightX, -38, rightW, 250)
 
     local function CurrentAlphaKeys()
-        return AlphaKeysForMode(CurrentOpacityMode())
+        if ReadBool(unit, "alphaExcludeTextPortrait", false) ~= true then
+            return "alphaInCombat", "alphaOutOfCombat"
+        end
+        local modeKey = NormalizeAlphaMode(GetConf(unit).alphaLayerMode)
+        if modeKey == "background" then
+            return "alphaBGInCombat", "alphaBGOutOfCombat"
+        elseif modeKey == "health" then
+            return "alphaHPInCombat", "alphaHPOutOfCombat"
+        end
+        return "alphaFGInCombat", "alphaFGOutOfCombat"
     end
 
     local function ReadAlphaValue(inCombat)
@@ -100,37 +102,26 @@ local function BuildAlpha(ctx, builder, unit)
             M.Refresh(ctx)
         end)
 
-    local mode = W.Segment(layerCard, "Affects", VT("frame", "Whole", "foreground", "Bars", "health", "HP", "background", "Backdrop"), rightW - 32)
-    W.MoveWidget(mode, layerCard, 16, -62, rightW - 32, "LEFT")
+    local exclude = W.ToggleAt(layerCard, "Keep text + portrait visible", 16, -62, rightW - 32)
+    M.BindToggle(ctx, exclude,
+        function() return ReadBool(unit, "alphaExcludeTextPortrait", false) end,
+        function(v)
+            SetBool(unit, "alphaExcludeTextPortrait", v, "MSUF2_ALPHA_EXCLUDE", { alpha = true, preview = true })
+            M.Refresh(ctx)
+        end)
+
+    local mode = W.Segment(layerCard, "Layer to fade", VT("foreground", "Power Bar", "health", "HP Bar", "background", "Backdrop"), rightW - 32)
+    W.MoveWidget(mode, layerCard, 16, -108, rightW - 32, "LEFT")
     M.LayoutSegmentButtons(mode)
 
-    local function SetOpacityMode(value)
-        local inValue = ReadAlphaValue(true)
-        local outValue = ReadAlphaValue(false)
-        if value == "frame" then
-            SetBool(unit, "alphaExcludeTextPortrait", false, "MSUF2_ALPHA_MODE_FRAME", { alpha = true, preview = true })
-        else
-            SetBool(unit, "alphaExcludeTextPortrait", true, "MSUF2_ALPHA_MODE_LAYER", { alpha = true, preview = true })
-            SetNumber(unit, "alphaLayerMode", AlphaModeValue and AlphaModeValue(value) or 0, "MSUF2_ALPHA_LAYER", { alpha = true, preview = true })
-            local syncedOut = ReadBool(unit, "alphaSync", false) and inValue or outValue
-            local fgIn, fgOut = AlphaKeysForMode("foreground")
-            local hpIn, hpOut = AlphaKeysForMode("health")
-            local bgIn, bgOut = AlphaKeysForMode("background")
-            SetNumber(unit, fgIn, value == "foreground" and inValue or 1, "MSUF2_ALPHA_LAYER_FG_IN", { alpha = true, preview = true })
-            SetNumber(unit, fgOut, value == "foreground" and syncedOut or 1, "MSUF2_ALPHA_LAYER_FG_OUT", { alpha = true, preview = true })
-            SetNumber(unit, hpIn, value == "health" and inValue or 1, "MSUF2_ALPHA_LAYER_HP_IN", { alpha = true, preview = true })
-            SetNumber(unit, hpOut, value == "health" and syncedOut or 1, "MSUF2_ALPHA_LAYER_HP_OUT", { alpha = true, preview = true })
-            SetNumber(unit, bgIn, value == "background" and inValue or 1, "MSUF2_ALPHA_LAYER_BG_IN", { alpha = true, preview = true })
-            SetNumber(unit, bgOut, value == "background" and syncedOut or 1, "MSUF2_ALPHA_LAYER_BG_OUT", { alpha = true, preview = true })
-        end
-        M.Refresh(ctx)
-    end
-
     M.BindSegment(ctx, mode,
-        function() return CurrentOpacityMode() end,
-        SetOpacityMode)
+        function() return NormalizeAlphaMode(GetConf(unit).alphaLayerMode) end,
+        function(v)
+            SetNumber(unit, "alphaLayerMode", AlphaModeValue and AlphaModeValue(v) or 0, "MSUF2_ALPHA_LAYER", { alpha = true, preview = true })
+            M.Refresh(ctx)
+        end)
 
-    local preserve = W.ToggleAt(layerCard, "Preserve HP color", 16, -124, rightW - 32)
+    local preserve = W.ToggleAt(layerCard, "Preserve HP color", 16, -172, rightW - 32)
     M.BindToggle(ctx, preserve,
         function() return ReadBool(unit, "alphaPreserveHPColor", false) end,
         function(v)
@@ -138,14 +129,21 @@ local function BuildAlpha(ctx, builder, unit)
             if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
         end)
 
+    local layerHint = W.Text(layerCard, "", 16, -206, rightW - 32, nil)
+    if layerHint and layerHint.SetWordWrap then layerHint:SetWordWrap(true) end
+
     local function RefreshAlphaLayerHelp()
-        local showPreserve = CurrentOpacityMode() == "health"
-        if W.SetControlShown then
-            W.SetControlShown(preserve, showPreserve)
-        elseif preserve and preserve.SetShown then
-            preserve:SetShown(showPreserve)
+        local layered = ReadBool(unit, "alphaExcludeTextPortrait", false) == true
+        local modeKey = NormalizeAlphaMode(GetConf(unit).alphaLayerMode)
+        SetControlEnabled(mode, layered)
+        SetControlEnabled(preserve, layered and modeKey == "health")
+        if layerHint and layerHint.SetText then
+            if layered then
+                layerHint:SetText(M.Tr("Power Bar = power only. HP Bar = health only. Backdrop = frame background."))
+            else
+                layerHint:SetText(M.Tr("Layer fade off: sliders fade bars, text, portrait, and backdrop together."))
+            end
         end
-        SetControlEnabled(preserve, showPreserve)
     end
     M.AddRefresher(ctx, RefreshAlphaLayerHelp)
     RefreshAlphaLayerHelp()

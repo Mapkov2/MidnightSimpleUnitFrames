@@ -1384,10 +1384,8 @@ function GF.HasCombatAlpha()
         local conf = GF.GetConf(GF_ALPHA_KINDS[i])
         if conf and conf.enabled == true then
             if conf.alphaExcludeTextPortrait == true then
-                if AlphaPairDiffers(conf, "foreground")
-                    or AlphaPairDiffers(conf, "health")
-                    or AlphaPairDiffers(conf, "background")
-                then
+                local mode = GF.NormalizeAlphaLayerMode(conf.alphaLayerMode)
+                if AlphaPairDiffers(conf, mode) then
                     return true
                 end
             elseif AlphaPairDiffers(conf, "foreground") then
@@ -1417,17 +1415,10 @@ function GF.GetEffectiveHealthAlpha(kind, conf)
     if not conf then return 1 end
     if conf.alphaExcludeTextPortrait == true then
         local mode = GF.NormalizeAlphaLayerMode(conf.alphaLayerMode)
-        if mode == "background" then
-            local aIn = Clamp01(conf.alphaFGInCombat, Clamp01(conf.alphaInCombat, 1))
-            local aOut = Clamp01(conf.alphaFGOutOfCombat, Clamp01(conf.alphaOutOfCombat, 1))
-            local sync = conf.alphaSyncBoth
-            if sync == nil then sync = conf.alphaSync end
-            if sync then aOut = aIn end
-            local inCombat = _G.MSUF_InCombat
-            if inCombat == nil and _G.InCombatLockdown then inCombat = _G.InCombatLockdown() end
-            return (inCombat == true) and aIn or aOut
+        if mode == "health" then
+            return GF.GetCurrentAlpha(conf, "health")
         end
-        return GF.GetCurrentAlpha(conf, mode)
+        return 1
     end
     return Clamp01(conf.hpBarAlpha, 1)
 end
@@ -1436,14 +1427,19 @@ function GF.GetEffectivePowerAlpha(kind, conf)
     conf = conf or GF.GetConf(kind)
     if not conf or conf.alphaExcludeTextPortrait ~= true then return 1 end
     local mode = GF.NormalizeAlphaLayerMode(conf.alphaLayerMode)
-    if mode == "health" or mode == "background" then return 1 end
-    return GF.GetCurrentAlpha(conf, "foreground")
+    if mode == "foreground" then
+        return GF.GetCurrentAlpha(conf, "foreground")
+    end
+    return 1
 end
 
 function GF.GetEffectiveBackgroundAlpha(kind, conf)
     conf = conf or GF.GetConf(kind)
     if not conf or conf.alphaExcludeTextPortrait ~= true then return 1 end
-    return GF.GetCurrentAlpha(conf, "background")
+    if GF.NormalizeAlphaLayerMode(conf.alphaLayerMode) == "background" then
+        return GF.GetCurrentAlpha(conf, "background")
+    end
+    return 1
 end
 
 --- Group Frame power text toggle with legacy-profile compatibility.

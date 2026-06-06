@@ -444,9 +444,9 @@ function Preview.Refresh(box, reason)
     if runtimePower == nil then powerAllowed = D.ReadPowerBarEnabled(conf, key) end
     local detachedPower = CanDetachPowerBarKey(key) and powerAllowed and ((runtimePower and runtimePower.detached == true) or (runtimePower == nil and conf.powerBarDetached == true))
     local classPowerOn = runtimeClassPower and runtimeClassPower.enabled == true
-    if runtimeClassPower == nil then classPowerOn = key == "player" and (bars.showClassPower ~= false or detachedPower) end
+    if runtimeClassPower == nil then classPowerOn = key == "player" and bars.showClassPower ~= false end
     if classPowerPreviewSpec then
-        classPowerOn = (bars.showClassPower ~= false or detachedPower) and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none"
+        classPowerOn = bars.showClassPower ~= false and classPowerPreviewSpec.enabled ~= false and classPowerPreviewSpec.mode ~= "none"
     end
     local powerFrac = tonumber(data.power) or 1
     if not detachedPower and key ~= "player" then powerFrac = 1 end

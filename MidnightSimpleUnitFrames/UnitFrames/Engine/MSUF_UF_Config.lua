@@ -712,11 +712,20 @@ local function CompileAlpha(out, conf, general, key)
     alpha.backgroundOutOfCombat = bgOut
     alpha.healthInCombat = hpIn
     alpha.healthOutOfCombat = hpOut
-    alpha.preserveHPColor = conf.alphaPreserveHPColor == true or general.alphaPreserveHPColor == true
-    alpha.combatEvents = frameIn ~= frameOut
-        or (layered and (fgIn ~= fgOut or bgIn ~= bgOut or hpIn ~= hpOut))
-    alpha.opacityActive = frameIn ~= 1 or frameOut ~= 1
-        or (layered and (fgIn ~= 1 or fgOut ~= 1 or bgIn ~= 1 or bgOut ~= 1 or hpIn ~= 1 or hpOut ~= 1))
+    alpha.preserveHPColor = layerMode == "health" and (conf.alphaPreserveHPColor == true or general.alphaPreserveHPColor == true)
+
+    local activeIn, activeOut = frameIn, frameOut
+    if layered then
+        if layerMode == "background" then
+            activeIn, activeOut = bgIn, bgOut
+        elseif layerMode == "health" then
+            activeIn, activeOut = hpIn, hpOut
+        else
+            activeIn, activeOut = fgIn, fgOut
+        end
+    end
+    alpha.combatEvents = activeIn ~= activeOut
+    alpha.opacityActive = activeIn ~= 1 or activeOut ~= 1
     alpha.active = alpha.opacityActive == true
 end
 

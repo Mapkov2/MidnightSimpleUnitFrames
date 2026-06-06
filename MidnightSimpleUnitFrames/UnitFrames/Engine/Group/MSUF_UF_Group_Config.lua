@@ -956,24 +956,35 @@ local function CompileAlpha(conf)
     local bgIn, bgOut = AlphaPair(conf, "background")
     local hpIn, hpOut = AlphaPair(conf, "health")
     local layered = conf.alphaExcludeTextPortrait == true
-    local active = layered == true
-        or abs((frameIn or 1) - 1) > 0.0001
-        or abs((frameOut or 1) - 1) > 0.0001
+    local layerMode = NormalizeAlphaLayerMode(conf.alphaLayerMode)
+    local activeIn, activeOut = frameIn, frameOut
+    if layered then
+        if layerMode == "background" then
+            activeIn, activeOut = bgIn, bgOut
+        elseif layerMode == "health" then
+            activeIn, activeOut = hpIn, hpOut
+        else
+            activeIn, activeOut = fgIn, fgOut
+        end
+    end
+    local active = abs((activeIn or 1) - 1) > 0.0001
+        or abs((activeOut or 1) - 1) > 0.0001
+    local combatEvents = abs((activeIn or 1) - (activeOut or 1)) > 0.0001
 
     return {
         active = active,
         inCombat = frameIn,
         outCombat = frameOut,
         layered = layered,
-        layerMode = NormalizeAlphaLayerMode(conf.alphaLayerMode),
+        layerMode = layerMode,
         foregroundInCombat = fgIn,
         foregroundOutOfCombat = fgOut,
         backgroundInCombat = bgIn,
         backgroundOutOfCombat = bgOut,
         healthInCombat = hpIn,
         healthOutOfCombat = hpOut,
-        preserveHPColor = conf.alphaPreserveHPColor == true,
-        combatEvents = GF.HasCombatAlpha and GF.HasCombatAlpha() or abs((frameIn or 1) - (frameOut or 1)) > 0.0001,
+        preserveHPColor = conf.alphaPreserveHPColor == true and layerMode == "health",
+        combatEvents = combatEvents,
         rangeEnabled = false,
     }
 end
@@ -1117,6 +1128,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
             smooth = conf.powerSmoothFill == true,
         },
         text = {
+            anchorToBars = true,
             nameClassColor = nameTextOptions.nameClassColor == true,
             nameNpcColor = nameTextOptions.nameNpcColor == true,
             nameColor = nameTextOptions.nameColor,

@@ -74,6 +74,17 @@ local function SetTextureLayerAlpha(texture, alpha, field, force)
     SetAlphaCached(texture, alpha, field or "_msufAlphaLayer", force)
 end
 
+local function RefreshRoundedGroupBackdropAlpha(frame)
+    -- Creation and masking stay owned by RoundedFrames; Alpha only syncs existing backdrop alpha.
+    if not (frame and frame._msufIsGroupFrame == true and frame._msufRGF_Background) then
+        return
+    end
+    local fn = _G.MSUF_RoundedUF_OnGroupBackdropAlphaChanged
+    if type(fn) == "function" then
+        fn(frame, frame._msufGFKind)
+    end
+end
+
 local function SetTextLayerAlpha(frame, alpha, force)
     for i = 1, #TEXT_ALPHA_FIELDS do
         SetAlphaCached(frame and frame[TEXT_ALPHA_FIELDS[i]], alpha, "_msufAlphaText", force)
@@ -113,6 +124,7 @@ local function ResetLegacyLayerAlphas(frame, force)
     SetStatusLayerAlpha(frame, 1, force)
     SetPortraitLayerAlpha(frame, 1, force)
     frame._msufAlphaLayeredMode = nil
+    RefreshRoundedGroupBackdropAlpha(frame)
 end
 
 
@@ -182,15 +194,20 @@ local function CompileAlphaRuntime(frame, cfg, force)
     rt.layered = layered
     rt.frameIn = layered and 1 or baseIn
     rt.frameOut = layered and 1 or baseOut
-    rt.fgIn = Clamp01(cfg.foregroundInCombat, baseIn)
-    rt.fgOut = Clamp01(cfg.foregroundOutOfCombat, baseOut)
-    rt.bgIn = Clamp01(cfg.backgroundInCombat, baseIn)
-    rt.bgOut = Clamp01(cfg.backgroundOutOfCombat, baseOut)
-    rt.hpIn = layerMode == "health" and Clamp01(cfg.healthInCombat or cfg.foregroundInCombat, baseIn) or rt.fgIn
-    rt.hpOut = layerMode == "health" and Clamp01(cfg.healthOutOfCombat or cfg.foregroundOutOfCombat, baseOut) or rt.fgOut
-    rt.powerIn = layerMode == "health" and 1 or rt.fgIn
-    rt.powerOut = layerMode == "health" and 1 or rt.fgOut
-    rt.preserveHPColor = cfg.preserveHPColor == true
+    local fgIn = Clamp01(cfg.foregroundInCombat, baseIn)
+    local fgOut = Clamp01(cfg.foregroundOutOfCombat, baseOut)
+    local bgIn = Clamp01(cfg.backgroundInCombat, baseIn)
+    local bgOut = Clamp01(cfg.backgroundOutOfCombat, baseOut)
+
+    rt.fgIn = 1
+    rt.fgOut = 1
+    rt.bgIn = layerMode == "background" and bgIn or 1
+    rt.bgOut = layerMode == "background" and bgOut or 1
+    rt.hpIn = layerMode == "health" and Clamp01(cfg.healthInCombat or cfg.foregroundInCombat, baseIn) or 1
+    rt.hpOut = layerMode == "health" and Clamp01(cfg.healthOutOfCombat or cfg.foregroundOutOfCombat, baseOut) or 1
+    rt.powerIn = layerMode == "foreground" and fgIn or 1
+    rt.powerOut = layerMode == "foreground" and fgOut or 1
+    rt.preserveHPColor = cfg.preserveHPColor == true and layerMode == "health"
     rt.baseReady = nil
     rt.baseState = nil
     return rt
@@ -234,6 +251,10 @@ local function AlphaNeedsCombatRefresh(cfg)
     return cfg and cfg.combatEvents == true
 end
 
+local function HasCombatTrackedFrames()
+    return (Alpha.combatFrameCount or 0) > 0
+end
+
 local function EnsureAlphaFrameSet(field)
     local frames = Alpha[field]
     if type(frames) ~= "table" then
@@ -247,7 +268,26 @@ local function TrackAlphaFrame(frame, cfg)
     if not frame then
         return
     end
-    EnsureAlphaFrameSet("combatFrames")[frame] = AlphaNeedsCombatRefresh(cfg) and true or nil
+    local shouldTrack = AlphaNeedsCombatRefresh(cfg) and true or false
+    if shouldTrack then
+        local frames = EnsureAlphaFrameSet("combatFrames")
+        local wasTracked = frames[frame] == true
+        if not wasTracked then
+            Alpha.combatFrameCount = (Alpha.combatFrameCount or 0) + 1
+        end
+        frames[frame] = true
+    else
+        local frames = Alpha.combatFrames
+        if not frames then
+            return
+        end
+        local wasTracked = frames[frame] == true
+        if wasTracked then
+            Alpha.combatFrameCount = (Alpha.combatFrameCount or 1) - 1
+            if Alpha.combatFrameCount < 0 then Alpha.combatFrameCount = 0 end
+        end
+        frames[frame] = nil
+    end
 end
 
 local function AlphaCombatStateForEvent(event)
@@ -306,8 +346,11 @@ local function UntrackAlphaFrame(frame)
     if not frame then
         return
     end
-    if Alpha.combatFrames then
-        Alpha.combatFrames[frame] = nil
+    local frames = Alpha.combatFrames
+    if frames and frames[frame] == true then
+        frames[frame] = nil
+        Alpha.combatFrameCount = (Alpha.combatFrameCount or 1) - 1
+        if Alpha.combatFrameCount < 0 then Alpha.combatFrameCount = 0 end
     end
 end
 
@@ -323,6 +366,7 @@ local function ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, p
         SetTextureLayerAlpha(frame.hpBarBG, healthBgAlpha, "_msufAlphaBackground", force)
     end
     SetTextureLayerAlpha(frame.powerBarBG, bgAlpha, "_msufAlphaBackground", force)
+    RefreshRoundedGroupBackdropAlpha(frame)
     SetTextLayerAlpha(frame, 1, force)
     SetStatusLayerAlpha(frame, statusAlpha or fgAlpha, force)
     SetPortraitLayerAlpha(frame, portraitAlpha, force)
@@ -391,6 +435,15 @@ local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
         ResetLegacyLayerAlphas(frame, true)
         return
     end
+    if cfg.active ~= true and RangeMul(frame) == 1 then
+        local effective = frame._msufAlphaEffective
+        if frame._msufAlphaRuntime or frame._msufAlphaLayeredMode == true or (effective ~= nil and effective ~= 1) then
+            Alpha.Disable(frame)
+        else
+            UntrackAlphaFrame(frame)
+        end
+        return
+    end
     local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_VISUALS"
         or event == "MSUF_ALPHA" or event == "MSUF_RANGE_FORCE"
     local rt = CompileAlphaRuntime(frame, cfg, force)
@@ -430,9 +483,19 @@ function Alpha.Disable(frame)
     UntrackAlphaFrame(frame)
     frame._msufAlphaRuntimeCfg = nil
     frame._msufAlphaRuntime = nil
+    frame._msufAlphaEffective = 1
+    frame._msufAlphaLastLayered = nil
+    frame._msufAlphaLastFrame = nil
+    frame._msufAlphaLastFG = nil
+    frame._msufAlphaLastBG = nil
+    frame._msufAlphaLastHP = nil
+    frame._msufAlphaLastPower = nil
+    frame._msufAlphaLastHealthBG = nil
+    frame._msufAlphaLastPortrait = nil
+    frame._msufAlphaLastStatus = nil
     ClearAlphaField(frame, "_msufLastAlpha")
     SetFrameAlpha(frame, 1)
-    ResetLegacyLayerAlphas(frame)
+    ResetLegacyLayerAlphas(frame, true)
 end
 
 do
@@ -464,6 +527,9 @@ do
     end
 
     function Alpha.RequestRefresh(mode)
+        if (mode == true or mode == "combat") and not HasCombatTrackedFrames() then
+            return false
+        end
         if pending then
             pendingMode = MergeAlphaRefreshMode(pendingMode, mode)
             return true
@@ -568,10 +634,14 @@ if CreateFrame and not Alpha.stateDriver then
     driver:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" then
             _G.MSUF_InCombat = true
-            Alpha.RequestRefresh(true)
+            if HasCombatTrackedFrames() then
+                Alpha.RequestRefresh(true)
+            end
         elseif event == "PLAYER_REGEN_ENABLED" then
             _G.MSUF_InCombat = false
-            Alpha.RequestRefresh(true)
+            if HasCombatTrackedFrames() then
+                Alpha.RequestRefresh(true)
+            end
         else
             _G.MSUF_InCombat = InCombatLockdown and InCombatLockdown() and true or false
             Alpha.RequestRefresh(false)
@@ -602,6 +672,10 @@ local function RefreshAlphaFrameSet(frames, token, event, requireCombat)
             end
         else
             frames[frame] = nil
+            if requireCombat == true then
+                Alpha.combatFrameCount = (Alpha.combatFrameCount or 1) - 1
+                if Alpha.combatFrameCount < 0 then Alpha.combatFrameCount = 0 end
+            end
         end
     end
     return refreshed

@@ -3367,6 +3367,7 @@ AddMissing("deDE", {
     ["all rounded frames"] = "alle abgerundeten Frames",
     ["bar animation"] = "Balkenanimation",
     ["Bars = health + power. HP Bar = health only. Backdrop = frame background."] = "Balken = Gesundheit + Ressource. HP-Balken = nur Gesundheit. Hintergrund = Frame-Hintergrund.",
+    ["Power Bar = power only. HP Bar = health only. Backdrop = frame background."] = "Powerbar = nur Ressource. HP-Balken = nur Gesundheit. Hintergrund = Frame-Hintergrund.",
     ["buff cap"] = "Buff-Limit",
     ["Center slot"] = "Mittlerer Slot",
     ["Copy these settings to ALL unitframes?\n\nThis will overwrite existing settings on Player/Target/Focus/Boss/Pet/Target of Target/Focus Target."] = "Diese Einstellungen auf ALLE Unitframes kopieren?\n\nDadurch werden bestehende Einstellungen auf Spieler/Ziel/Fokus/Boss/Begleiter/Ziel des Ziels/Fokusziel überschrieben.",
