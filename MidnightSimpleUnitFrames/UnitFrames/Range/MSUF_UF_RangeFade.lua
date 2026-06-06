@@ -603,21 +603,27 @@ end
 
 local PollNow
 
--- Movement gating. Range fade is a pure function of distance, and distance only
--- changes when the player or the watched unit moves. Blizzard fires no "started
--- moving" event and no range event for non-group units (target/focus/boss), so
--- this poll cannot be fully event-driven -- but it can be made cheap. While
--- everything is stationary the cached range stays valid, so the tick skips the
--- expensive UnitCanAttack/IsSpellInRange evaluation and only reads GetUnitSpeed
--- (a near-free cached value) to notice when movement resumes. Identity changes
--- (target/focus/boss swaps) still re-check instantly through DriverOnEvent,
--- independent of this poll.
-local pollMoving = true         -- assume moving until a tick proves otherwise
+-- Movement gating (out of combat) plus a relaxed combat cadence.
+--
+-- Range fade is a pure function of distance, which only changes when the player
+-- or the watched unit moves. Out of combat GetUnitSpeed is readable, so while
+-- everything is stationary the cached range stays valid and the tick skips the
+-- expensive UnitCanAttack/IsSpellInRange work, only reading GetUnitSpeed to
+-- notice when movement resumes. In combat GetUnitSpeed is a secret value that
+-- cannot be compared, so RangeCanChange returns true and every tick does a full
+-- evaluation -- there the saving comes from the relaxed 0.5s interval instead.
+-- Identity changes (target/focus/boss swaps) always re-check instantly through
+-- DriverOnEvent, independent of this poll.
 local pollSettlePending = false -- run one final eval after movement stops
 
 local function UnitMoving(unit)
     if not GetUnitSpeed then return true end
     local speed = GetUnitSpeed(unit)
+    -- In tainted execution (the poll runs from an addon C_Timer callback) Blizzard
+    -- returns speed as a secret value that cannot be compared. We can't know the
+    -- movement state, so assume moving: that just falls back to a full evaluation,
+    -- never a stale fade.
+    if IsSecret(speed) then return true end
     return type(speed) == "number" and speed > 0
 end
 
@@ -634,13 +640,9 @@ local function RangeCanChange()
 end
 
 local function PollInterval()
-    local active = (InCombatLockdown and InCombatLockdown()) and 0.35 or 0.85
-    if pollMoving then
-        return active
-    end
-    -- Stationary: nothing can change range until movement resumes, so relax the
-    -- watch cadence (never below the active interval) to cut idle wakeups.
-    return active < 0.5 and 0.5 or active
+    -- 0.75s in combat (GetUnitSpeed is secret in combat so the per-tick work cannot
+    -- be skipped there -- the saving is the relaxed cadence), 0.85s out of combat.
+    return (InCombatLockdown and InCombatLockdown()) and 0.75 or 0.85
 end
 
 local function SchedulePoll(delay)
@@ -685,7 +687,6 @@ PollNow = function()
         end
     end
     pollSettlePending = moving
-    pollMoving = moving
     RebuildPollSet()
 end
 
