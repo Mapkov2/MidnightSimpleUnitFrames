@@ -420,12 +420,7 @@ local function BuildGFLayout(ctx)
         local key = inCombat and inKey or outKey
         local value = tonumber(conf and conf[key])
         if value ~= nil then return value end
-        if key == "alphaHPInCombat" then
-            value = tonumber(conf and conf.alphaFGInCombat)
-        elseif key == "alphaHPOutOfCombat" then
-            value = tonumber(conf and conf.alphaFGOutOfCombat)
-        end
-        if value ~= nil then return value end
+        if conf and conf.alphaExcludeTextPortrait == true then return 1 end
         return Num(scope, inCombat and "alphaInCombat" or "alphaOutOfCombat", 1)
     end
 
@@ -493,8 +488,6 @@ local function BuildGFLayout(ctx)
     local function SetOpacityMode(value)
         local scope = CurrentScope()
         local conf = Conf(scope)
-        local inValue = ReadAlphaValue(true)
-        local outValue = ReadAlphaValue(false)
         local changed
         if value == "frame" then
             changed = WriteBool(conf, "alphaExcludeTextPortrait", false) or changed
@@ -505,16 +498,6 @@ local function BuildGFLayout(ctx)
                 conf.alphaLayerMode = modeValue
                 changed = true
             end
-            local syncedOut = Bool(scope, "alphaSync", false) and inValue or outValue
-            local fgIn, fgOut = AlphaKeysForMode("foreground")
-            local hpIn, hpOut = AlphaKeysForMode("health")
-            local bgIn, bgOut = AlphaKeysForMode("background")
-            changed = WriteNumber(conf, fgIn, value == "foreground" and inValue or 1, 1) or changed
-            changed = WriteNumber(conf, fgOut, value == "foreground" and syncedOut or 1, 1) or changed
-            changed = WriteNumber(conf, hpIn, value == "health" and inValue or 1, 1) or changed
-            changed = WriteNumber(conf, hpOut, value == "health" and syncedOut or 1, 1) or changed
-            changed = WriteNumber(conf, bgIn, value == "background" and inValue or 1, 1) or changed
-            changed = WriteNumber(conf, bgOut, value == "background" and syncedOut or 1, 1) or changed
         end
         if changed then QueueGF(scope, "visual") end
         if M.Refresh then M.Refresh(ctx) end

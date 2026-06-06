@@ -7,6 +7,9 @@
 --- Perf note:
 --- This file is an immediate no-op unless the active locale is zhCN.
 --- ============================================================================
+-- Localization files intentionally repeat keys/phrases across entries and menu variants.
+-- Keep syntax checking, but silence duplicate-index noise from intentional translation repetition.
+---@diagnostic disable: duplicate-index
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local L = (MSUF.RegisterLocale and MSUF.RegisterLocale("zhCN")) or (MSUF.L or {})

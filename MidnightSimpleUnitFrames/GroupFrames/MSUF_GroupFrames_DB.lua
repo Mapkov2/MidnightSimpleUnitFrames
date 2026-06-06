@@ -1355,14 +1355,14 @@ function GF.GetAlphaPair(conf, mode)
     local aOut = Clamp01(conf.alphaOutOfCombat, 1)
     if conf.alphaExcludeTextPortrait == true then
         if mode == "background" then
-            aIn = Clamp01(conf.alphaBGInCombat, aIn)
-            aOut = Clamp01(conf.alphaBGOutOfCombat, aOut)
+            aIn = Clamp01(conf.alphaBGInCombat, 1)
+            aOut = Clamp01(conf.alphaBGOutOfCombat, 1)
         elseif mode == "health" then
-            aIn = Clamp01(conf.alphaHPInCombat, Clamp01(conf.alphaFGInCombat, aIn))
-            aOut = Clamp01(conf.alphaHPOutOfCombat, Clamp01(conf.alphaFGOutOfCombat, aOut))
+            aIn = Clamp01(conf.alphaHPInCombat, 1)
+            aOut = Clamp01(conf.alphaHPOutOfCombat, 1)
         else
-            aIn = Clamp01(conf.alphaFGInCombat, aIn)
-            aOut = Clamp01(conf.alphaFGOutOfCombat, aOut)
+            aIn = Clamp01(conf.alphaFGInCombat, 1)
+            aOut = Clamp01(conf.alphaFGOutOfCombat, 1)
         end
     end
 

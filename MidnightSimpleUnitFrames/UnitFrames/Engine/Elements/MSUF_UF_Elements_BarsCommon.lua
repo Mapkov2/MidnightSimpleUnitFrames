@@ -677,6 +677,13 @@ local function PowerColor(frame, unit)
     local powerType, token = UnitPowerType(unit)
     local tokenKey = not IsSecret(token) and token or nil
     local powerTypeKey = not IsSecret(powerType) and powerType or nil
+    local resolved = _G.MSUF_GetResolvedPowerColor
+    if type(resolved) == "function" then
+        local r, g, b = resolved(powerTypeKey, tokenKey)
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
+            return r, g, b
+        end
+    end
     local override = powerSpec.colors and tokenKey ~= nil and powerSpec.colors[tokenKey] or nil
     if override then
         return override.r, override.g, override.b
