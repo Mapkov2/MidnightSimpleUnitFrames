@@ -942,12 +942,28 @@ local function UpdateRaidGroup(frame, status)
     end
     local index = UnitInRaid(unit)
     index = SafeNumber(index)
-    if not index then
-        SetShown(fs, false)
+    local subgroup
+    if index then
+        local _, _, sg = GetRaidRosterInfo(index)
+        if type(sg) == "number" and sg > 0 then
+            subgroup = sg
+        end
+    end
+    -- Change-detection guard mirroring UpdateLeaderPair: a unit's subgroup almost
+    -- never changes mid-fight, yet GROUP_ROSTER_UPDATE bursts re-run this for every
+    -- raid frame. Bail before RaidGroupText() (a string allocation) and the setters
+    -- when the resolved subgroup is unchanged. The compile serial invalidates the
+    -- cache on config/style change; the _msufStatusShown check keeps the cache
+    -- honest if the region's shown state was altered elsewhere.
+    local serial = frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial or 0
+    if frame._msufRaidGroupSubgroup == subgroup
+        and frame._msufRaidGroupSerial == serial
+        and fs._msufStatusShown == (subgroup ~= nil) then
         return
     end
-    local _, _, subgroup = GetRaidRosterInfo(index)
-    if type(subgroup) == "number" and subgroup > 0 then
+    frame._msufRaidGroupSubgroup = subgroup
+    frame._msufRaidGroupSerial = serial
+    if subgroup then
         SetText(fs, RaidGroupText(cfg.style, subgroup))
         SetShown(fs, true)
     else
