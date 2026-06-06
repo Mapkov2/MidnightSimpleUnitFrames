@@ -15,6 +15,7 @@ MSUF.Secrets = Secrets
 -- so removing one Lua call frame per check trims real hot-path cost. IsSecret
 -- stays exported as the single-call public API for callers outside this file.
 local issecretvalue = _G.issecretvalue or function(...) return false end
+local nativeSecrets = _G.issecretvalue ~= nil
 local tonumber = tonumber
 
 local function IsSecret(value)
@@ -81,6 +82,21 @@ local function UnitExistsPlain(unit)
         return true
     end
     return exists == true or exists == 1
+end
+
+-- When issecretvalue is absent the inner stub call in each predicate is pure
+-- overhead: every check pays a full Lua call frame just to return false/nil.
+-- Replace the hot-path predicates with minimal direct stubs. The exports below
+-- happen after this block, so callers that localise these at module load time
+-- (the common pattern) receive the fast versions automatically.
+if not nativeSecrets then
+    IsSecret       = function(_) return false end
+    NotSecret      = function(_) return true end
+    IsNil          = function(v) return v == nil end
+    ValueOrDefault = function(v, fb) return v ~= nil and v or fb end
+    PlainTrue      = function(v) return v == true or v == 1 end
+    PlainFalse     = function(v) return v == false or v == 0 end
+    SafeNumber     = tonumber
 end
 
 Secrets.IsSecret = IsSecret

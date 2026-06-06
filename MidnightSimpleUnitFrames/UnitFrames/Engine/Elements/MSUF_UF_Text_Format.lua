@@ -136,7 +136,15 @@ local function PowerPercent(unit)
     if not UnitPowerPercent then
         return nil
     end
-    return UnitPowerPercent(unit)
+    -- EQoL signature: UnitPowerPercent(unit, powerType, unmodified, curve).
+    -- Without the ScaleTo100 curve this returns a 0-1 fraction, which floors to
+    -- only "0" or "1%" -- pass the curve so we get a real 0-100 percentage.
+    local powerType = UnitPowerType and UnitPowerType(unit) or nil
+    if IsSecret(powerType) then powerType = nil end
+    if SCALE_100 then
+        return UnitPowerPercent(unit, powerType, false, SCALE_100)
+    end
+    return UnitPowerPercent(unit, powerType, false, true)
 end
 
 local function ModeNeedsPercent(mode)
@@ -252,6 +260,15 @@ local function SlotFormatted(slot, pattern, ...)
     end
     fs._aText = nil
     fs:SetFormattedText(pattern, ...)
+end
+
+local function SlotFormatted1(slot, pattern, a)
+    local fs = slot and slot.fs
+    if not fs then
+        return
+    end
+    fs._aText = nil
+    fs:SetFormattedText(pattern, a)
 end
 
 local function SlotValue(slot, value)
@@ -609,12 +626,12 @@ end
 
 local function SecretWriteCurrent(slot, cur)
     local c, cf = SecretSlotValue(slot, cur)
-    SlotFormatted(slot, cf, c)
+    SlotFormatted1(slot, cf, c)
 end
 
 local function SecretWriteMax(slot, cur, maxValue)
     local m, mf = SecretSlotValue(slot, maxValue)
-    SlotFormatted(slot, mf, m)
+    SlotFormatted1(slot, mf, m)
 end
 
 local function SecretWriteCurMax(slot, cur, maxValue)
@@ -631,7 +648,7 @@ end
 
 local function SecretWritePercent(slot, cur, maxValue, pct)
     local p, pf = SecretSlotPercent(slot, pct)
-    SlotFormatted(slot, pf, p)
+    SlotFormatted1(slot, pf, p)
 end
 
 local function SecretWriteCurPercent(slot, cur, maxValue, pct)

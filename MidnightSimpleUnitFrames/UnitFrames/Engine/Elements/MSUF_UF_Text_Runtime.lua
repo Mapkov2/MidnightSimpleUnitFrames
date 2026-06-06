@@ -366,9 +366,24 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
         return
     end
+    -- A target/focus/ToT/pet/boss token gets reused for a different unit without a
+    -- layout reapply, so the cached power type still belongs to the previous unit.
+    -- Drop it on an identity swap (rare, so cheap) so both the per-type color and
+    -- the throttled value path re-resolve for the new unit instead of sticking.
+    local identityChanged = event == "MSUF_UNIT_IDENTITY" or event == "MSUF_UNIT_IDENTITY_SOFT"
+    if identityChanged then
+        frame._msufTextPowerType = nil
+        frame._msufTextPowerToken = nil
+        frame._msufTextPowerTypeKnown = nil
+        frame._msufTextPowerMax = nil
+        if rt.powerColorByType == true then
+            RefreshCachedPowerType(frame, unit)
+        end
+    end
     local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
     if rt.powerColorByType == true
         and animate
+        and frame._msufTextPowerTypeKnown ~= true
         and (not frame.MSUFSpec or not frame.MSUFSpec.power or frame.MSUFSpec.power.mode == nil or frame.MSUFSpec.power.mode == "power") then
         RefreshCachedPowerType(frame, unit)
     end
@@ -387,6 +402,22 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
         frame._msufPowerTextColorInitialized = true
         frame._msufPowerTextColorType = frame._msufTextPowerType
         frame._msufPowerTextColorToken = frame._msufTextPowerToken
+    elseif rt.powerColorByType ~= true
+        and (event == "UNIT_DISPLAYPOWER"
+            or event == "MSUF_APPLY"
+            or event == "MSUF_FORCE_UPDATE"
+            or event == "MSUF_POWER_LAYOUT"
+            or event == "MSUF_POWER_TEXT_COLORS"
+            or frame._msufPowerTextColorInitialized ~= true
+            or frame._msufPowerTextColorType ~= false) then
+        -- Color-by-type is off: restore the configured base text color so a stale
+        -- per-type color doesn't survive the setting being toggled off. (false is
+        -- the sentinel for "base color applied"; real power types are number/nil.)
+        local c = frame.MSUFSpec and frame.MSUFSpec.textColor
+        SetPowerTextColor(frame, c and c.r or 1, c and c.g or 1, c and c.b or 1, c and c.a or 1)
+        frame._msufPowerTextColorInitialized = true
+        frame._msufPowerTextColorType = false
+        frame._msufPowerTextColorToken = nil
     end
 
     local throttle = rt.powerThrottle or 0

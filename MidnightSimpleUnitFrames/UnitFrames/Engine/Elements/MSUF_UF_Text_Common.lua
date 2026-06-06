@@ -146,9 +146,22 @@ local function SetPowerTextColor(frame, r, g, b, a)
         and frame._msufPowerTextA == a then
         return
     end
-    if frame.powerTextLeft then frame.powerTextLeft:SetTextColor(r, g, b, a) end
-    if frame.powerTextCenter then frame.powerTextCenter:SetTextColor(r, g, b, a) end
-    if frame.powerTextRight then frame.powerTextRight:SetTextColor(r, g, b, a) end
+    -- Keep the per-fontstring color cache (fs._msufText*) in sync with the actual
+    -- color we apply here. SetFont() short-circuits on that same cache, so if we
+    -- skip it the stale type color survives when power-color-by-type is toggled off.
+    local left, center, right = frame.powerTextLeft, frame.powerTextCenter, frame.powerTextRight
+    if left then
+        left:SetTextColor(r, g, b, a)
+        left._msufTextR, left._msufTextG, left._msufTextB, left._msufTextA = r, g, b, a
+    end
+    if center then
+        center:SetTextColor(r, g, b, a)
+        center._msufTextR, center._msufTextG, center._msufTextB, center._msufTextA = r, g, b, a
+    end
+    if right then
+        right:SetTextColor(r, g, b, a)
+        right._msufTextR, right._msufTextG, right._msufTextB, right._msufTextA = r, g, b, a
+    end
     frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = r, g, b, a
 end
 
