@@ -1268,7 +1268,15 @@ for i = 1, #UNIT_KEYS do
             if spec.iconStyle then
                 aliases = {}
                 for a = 1, #(spec.aliases or {}) do
-                    local alias = spec.aliases[a] .. " icon pack"
+                    local base = tostring(spec.aliases[a] or "")
+                    local alias
+                    if base:match(" icon pack$") then
+                        alias = base
+                    elseif base:match(" icon$") then
+                        alias = base .. " pack"
+                    else
+                        alias = base .. " icon pack"
+                    end
                     aliases[#aliases + 1] = alias
                     AddAliasesForUnit(aliases, unit, alias)
                 end

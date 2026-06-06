@@ -38,6 +38,28 @@ local function LayoutText(fs, point, relPoint, x, y, justify, relativeTo)
     end
 end
 
+local function LayoutTextSpan(fs, relativeTo, leftX, rightX, y, justify)
+    if not (fs and relativeTo) then
+        return
+    end
+    leftX, rightX, y = tonumber(leftX) or 0, tonumber(rightX) or 0, tonumber(y) or 0
+    if fs._msufPoint ~= "SPAN"
+        or fs._msufRelativeTo ~= relativeTo
+        or fs._msufLeftX ~= leftX
+        or fs._msufRightX ~= rightX
+        or fs._msufY ~= y then
+        fs:ClearAllPoints()
+        fs:SetPoint("LEFT", relativeTo, "LEFT", leftX, y)
+        fs:SetPoint("RIGHT", relativeTo, "RIGHT", rightX, y)
+        fs._msufPoint, fs._msufRelPoint, fs._msufRelativeTo = "SPAN", nil, relativeTo
+        fs._msufLeftX, fs._msufRightX, fs._msufX, fs._msufY = leftX, rightX, nil, y
+    end
+    if fs._msufJustifyH ~= justify then
+        fs:SetJustifyH(justify)
+        fs._msufJustifyH = justify
+    end
+end
+
 local function LayoutName(fs, spec, text)
     if not fs then
         return
@@ -51,6 +73,43 @@ local function LayoutName(fs, spec, text)
         LayoutText(fs, "TOP", "TOP", x, y, "CENTER")
     else
         LayoutText(fs, "TOPLEFT", "TOPLEFT", x, y, "LEFT")
+    end
+    if fs.SetDrawLayer then
+        local layer = tonumber(text and text.nameLayer) or 5
+        local sub = DrawSubLayer(layer, 5)
+        if fs._msufDrawLayer ~= sub then
+            fs:SetDrawLayer("OVERLAY", sub)
+            fs._msufDrawLayer = sub
+        end
+    end
+end
+
+local function BarTextHealthAnchor(frame)
+    return frame and (frame.hpBar or frame.Health or frame.health) or frame
+end
+
+local function BarTextPowerAnchor(frame, power)
+    if power and power.enabled == true then
+        return frame and (frame.targetPowerBar or frame.powerBar or frame.Power or frame.power) or BarTextHealthAnchor(frame)
+    end
+    return BarTextHealthAnchor(frame)
+end
+
+local function LayoutBarAnchoredName(frame, text)
+    local fs = frame and frame.nameText
+    if not fs then
+        return
+    end
+    local health = BarTextHealthAnchor(frame)
+    local anchor = text and text.nameAnchor or "LEFT"
+    local x = tonumber(text and text.nameX) or 0
+    local y = tonumber(text and text.nameY) or 0
+    if anchor == "CENTER" then
+        LayoutTextSpan(fs, health, 3 + x, -3 + x, y, "CENTER")
+    elseif anchor == "RIGHT" then
+        LayoutTextSpan(fs, health, 3 + x, -3 + x, y, "RIGHT")
+    else
+        LayoutTextSpan(fs, health, 3 + x, -3, y, "LEFT")
     end
     if fs.SetDrawLayer then
         local layer = tonumber(text and text.nameLayer) or 5
@@ -486,6 +545,9 @@ local function EnsureFontString(frame, key, template, layer, fallback, layerFiel
     end
     if not fs then
         fs = overlay:CreateFontString(nil, "OVERLAY", template or "GameFontNormalSmall")
+        if fs.SetWordWrap then
+            fs:SetWordWrap(false)
+        end
         frame[key] = fs
     end
     return fs
@@ -518,6 +580,7 @@ local function TextApplySignature(spec, text)
     return concat({
         tostring(spec and spec.key),
         tostring(spec and spec.scope),
+        tostring(text and text.anchorToBars),
         tostring(spec and spec.width),
         tostring(spec and spec.height),
         tostring(spec and spec.showName ~= false),
@@ -651,6 +714,7 @@ function Text.Apply(frame, spec)
     frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
     local power = spec and spec.power or {}
     local detachedPowerText = power.detached == true and power.textOnDetached == true and frame.targetPowerBar
+    local barAnchoredText = text.anchorToBars == true
     if detachedPowerText then
         local detachedTextLayer = max(tonumber(text.powerLayer) or 2, (tonumber(power.detachedLevel) or 6) + 1)
         local overlay = EnsureTextOverlay(frame, "MSUFPowerTextLayer", detachedTextLayer, 2)
@@ -659,7 +723,11 @@ function Text.Apply(frame, spec)
     end
 
     RestoreNameParent(frame)
-    LayoutName(frame.nameText, spec, text)
+    if barAnchoredText then
+        LayoutBarAnchoredName(frame, text)
+    else
+        LayoutName(frame.nameText, spec, text)
+    end
     ApplyNameClip(frame, spec, text)
     if inlineEnabled then
         frame._msufInlineAnchorDynamic = frame.nameText and frame.nameText._msufJustifyH == "LEFT" and text.nameShorten ~= true and true or nil
@@ -679,14 +747,26 @@ function Text.Apply(frame, spec)
         frame._msufInlineAnchorDynamic = nil
         HideDots(frame._msufInlineDotsFS)
     end
-    LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
-    LayoutText(frame.hpTextCenter, "CENTER", "CENTER", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
-    LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
-    if detachedPowerText then
+    if barAnchoredText then
+        local health = BarTextHealthAnchor(frame)
+        local powerAnchor = BarTextPowerAnchor(frame, power)
+        LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 3 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT", health)
+        LayoutTextSpan(frame.hpTextCenter, health, 3 + (text.healthCenterX or 0), -3 + (text.healthCenterX or 0), text.healthCenterY or 0, "CENTER")
+        LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -3 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT", health)
+        LayoutText(frame.powerTextLeft, "LEFT", "LEFT", 2 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT", powerAnchor)
+        LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", powerAnchor)
+        LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -2 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", powerAnchor)
+    elseif detachedPowerText then
+        LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
+        LayoutText(frame.hpTextCenter, "CENTER", "CENTER", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
+        LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
         LayoutText(frame.powerTextLeft, "LEFT", "LEFT", 4 + (text.powerLeftX or 0), text.powerLeftY or 0, "LEFT", frame.targetPowerBar)
         LayoutText(frame.powerTextCenter, "CENTER", "CENTER", text.powerCenterX or 0, text.powerCenterY or 0, "CENTER", frame.targetPowerBar)
         LayoutText(frame.powerTextRight, "RIGHT", "RIGHT", -4 + (text.powerRightX or 0), text.powerRightY or 0, "RIGHT", frame.targetPowerBar)
     else
+        LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 4 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT")
+        LayoutText(frame.hpTextCenter, "CENTER", "CENTER", text.healthCenterX or 0, text.healthCenterY or 0, "CENTER")
+        LayoutText(frame.hpTextRight, "RIGHT", "RIGHT", -4 + (text.healthRightX or 0), text.healthRightY or 0, "RIGHT")
         LayoutText(frame.powerTextLeft, "BOTTOMLEFT", "BOTTOMLEFT", 4 + (text.powerLeftX or 0), 1 + (text.powerLeftY or 0), "LEFT")
         LayoutText(frame.powerTextCenter, "BOTTOM", "BOTTOM", text.powerCenterX or 0, 1 + (text.powerCenterY or 0), "CENTER")
         LayoutText(frame.powerTextRight, "BOTTOMRIGHT", "BOTTOMRIGHT", -4 + (text.powerRightX or 0), 1 + (text.powerRightY or 0), "RIGHT")

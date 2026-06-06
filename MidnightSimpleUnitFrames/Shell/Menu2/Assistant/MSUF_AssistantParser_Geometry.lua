@@ -317,7 +317,32 @@ local function ParsePortraitDetailShortcut(text)
     local relativeDelta
     local direction
 
-    if ContainsAny(text, { "border thickness", "border size", "border thicker", "border thinner", "thicker", "thinner", "dicker", "duenner" }) then
+    if ContainsAny(text, { "render", "type", "2d", "2d portrait", "class portrait", "to class" }) and not ContainsAny(text, { "class portrait style", "portrait class style", "border" }) then
+        attr = "portraitRender"
+        if ContainsAny(text, { "2d", "2d portrait", "normal portrait", "normal render" }) then
+            value = "2D"
+        elseif ContainsAny(text, { "class portrait", "class render", "class icon", "class icons", "to class" }) then
+            value = "CLASS"
+        end
+    elseif ContainsAny(text, { "shape", "square", "circle", "rounded", "round", "diamond" }) then
+        attr = "portraitShape"
+        if ContainsAny(text, { "square" }) then
+            value = "SQUARE"
+        elseif ContainsAny(text, { "rounded" }) then
+            value = "ROUNDED"
+        elseif ContainsAny(text, { "circle", "round" }) then
+            value = "CIRCLE"
+        elseif ContainsAny(text, { "diamond" }) then
+            value = "DIAMOND"
+        end
+    elseif ContainsAny(text, { "fill border", "border gap", "frame gap", "fill portrait border", "fill border into frame gap" }) then
+        attr = "portraitFillBorder"
+        value = DetectBoolean(text)
+        if value == nil and ContainsAny(text, { "fill", "into gap", "frame gap" }) then value = true end
+    elseif ContainsAny(text, { "portrait background", "portrait bg" }) then
+        attr = "portraitBgEnabled"
+        value = DetectBoolean(text)
+    elseif ContainsAny(text, { "border thickness", "border size", "border thicker", "border thinner", "thicker", "thinner", "dicker", "duenner" }) then
         attr = "portraitBorderThickness"
         relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
         if relativeDelta == nil then value = FirstNumber(text) end

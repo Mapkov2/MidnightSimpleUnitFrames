@@ -156,6 +156,12 @@ local function SettingKeyScope(setting)
     return prefix
 end
 
+local function GroupSettingAllowsWantedGroup(setting, wantedGroup)
+    if not wantedGroup then return true end
+    if tostring(setting and setting.unit or "") == wantedGroup then return true end
+    return setting and setting.frameType == "groupAura" and setting.unit == "raid" and wantedGroup == "mythicraid"
+end
+
 local function RemoveScopeWord(text, scope)
     local aliases = A.UnitAliases or {}
     local list = aliases[scope] or { scope }
@@ -171,6 +177,7 @@ end
 
 local function ScopeAdjustedTextForSetting(setting, text)
     if type(setting) ~= "table" or not setting.unit then return text end
+    if setting.unit == "global" or setting.unit == "shared" or setting.frameType == "aura" or setting.frameType == "groupAura" then return text end
     local unit = tostring(setting.unit)
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
@@ -248,6 +255,9 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
+    if setting.frameType == "aura" and unit == "shared" and ContainsAny(text, { "shared", "global", "all auras", "all aura" }) then
+        return true
+    end
     if setting.frameType == "group" or setting.frameType == "groupAura" then
         if #groups > 0 then return ListContains(groups, unit) or ListContains(groups, keyScope) end
         if #units > 0 then return false end
@@ -271,7 +281,7 @@ local function SettingMatchesText(setting, text)
         elseif HasPhrase(text, "raid") then
             wantedGroup = "raid"
         end
-        if wantedGroup and setting.unit ~= wantedGroup then return false end
+        if not GroupSettingAllowsWantedGroup(setting, wantedGroup) then return false end
     end
     local matchText = ScopeAdjustedTextForSetting(setting, text)
     if not matchText then return false end
@@ -306,7 +316,7 @@ local function SettingMatchScore(setting, text)
         elseif HasPhrase(text, "raid") then
             wantedGroup = "raid"
         end
-        if wantedGroup and setting.unit ~= wantedGroup then return 0 end
+        if not GroupSettingAllowsWantedGroup(setting, wantedGroup) then return 0 end
     end
 
     local matchText = ScopeAdjustedTextForSetting(setting, text)
@@ -361,7 +371,21 @@ local function StringValueForText(setting, text, raw)
     local quoted = rawText:match("\"([^\"]*)\"") or rawText:match("'([^']*)'")
     if quoted ~= nil then return quoted end
     local rawLower = rawText:lower()
-    local prefixes = setting and setting.valuePrefixes or setting and setting.aliases or {}
+    local prefixes = {}
+    local seenPrefixes = {}
+    local function addPrefix(value)
+        value = Normalize(value)
+        if value ~= "" and not seenPrefixes[value] then
+            seenPrefixes[value] = true
+            prefixes[#prefixes + 1] = value
+        end
+    end
+    if setting then
+        local source = setting.valuePrefixes or setting.aliases or {}
+        for i = 1, #(source or {}) do addPrefix(source[i]) end
+        for i = 1, #(setting.aliases or {}) do addPrefix(setting.aliases[i]) end
+        if setting.matchLabel ~= false then addPrefix(setting.label) end
+    end
     for i = 1, #(prefixes or {}) do
         local prefix = Normalize(prefixes[i])
         if prefix ~= "" then
@@ -600,7 +624,7 @@ local function SettingPartialSuggestionScore(setting, text)
         elseif HasPhrase(text, "raid") then
             wantedGroup = "raid"
         end
-        if wantedGroup and setting.unit ~= wantedGroup then return 0 end
+        if not GroupSettingAllowsWantedGroup(setting, wantedGroup) then return 0 end
     end
 
     local matchText = ScopeAdjustedTextForSetting(setting, text)

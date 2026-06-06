@@ -230,8 +230,8 @@ function Power.Apply(frame, spec)
             end
             width = classWidth
                 or ExternalFrameWidth(power.detachedClassWidthFrameName, bar)
-                or tonumber(power.detachedClassWidth)
                 or width
+                or tonumber(power.detachedClassWidth)
         else
             width = ExternalFrameWidth(power.detachedWidthFrameName, bar) or width
         end

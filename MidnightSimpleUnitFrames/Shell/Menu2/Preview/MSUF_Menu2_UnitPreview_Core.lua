@@ -481,19 +481,20 @@ local function PreviewAlphaState(conf)
     if _G.MSUF_UnitEditModeActive == true and frameAlpha < 0.35 then frameAlpha = 0.35 end
     if conf and conf.alphaExcludeTextPortrait == true then
         local mode = NormalizeAlphaLayerMode(conf.alphaLayerMode)
-        local fg = PreviewCurrentAlpha(conf, "foreground")
-        local bg = PreviewCurrentAlpha(conf, "background")
-        local hp = mode == "health" and PreviewCurrentAlpha(conf, "health") or fg
+        local fg = 1
+        local power = mode == "foreground" and PreviewCurrentAlpha(conf, "foreground") or 1
+        local bg = mode == "background" and PreviewCurrentAlpha(conf, "background") or 1
+        local hp = mode == "health" and PreviewCurrentAlpha(conf, "health") or 1
         return {
             flat = false,
             frame = 1,
             fg = fg,
             bg = bg,
             hp = hp,
-            power = mode == "health" and 1 or fg,
+            power = power,
             text = 1,
             portrait = 1,
-            preserveHPColor = conf.alphaPreserveHPColor == true,
+            preserveHPColor = mode == "health" and conf.alphaPreserveHPColor == true,
         }
     end
     return {

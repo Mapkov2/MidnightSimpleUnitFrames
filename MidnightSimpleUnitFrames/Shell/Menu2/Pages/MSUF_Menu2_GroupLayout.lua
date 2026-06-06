@@ -486,7 +486,7 @@ local function BuildGFLayout(ctx)
             if M.Refresh then M.Refresh(ctx) end
         end)
 
-    local mode = W.Segment(targetCard, "Affects", VT("frame", "Whole", "foreground", "Bars", "health", "HP", "background", "Backdrop"), transRightW - 32)
+    local mode = W.Segment(targetCard, "Affects", VT("frame", "Whole", "foreground", "Power Bar", "health", "HP Bar", "background", "Backdrop"), transRightW - 32)
     W.MoveWidget(mode, targetCard, 16, -62, transRightW - 32, "LEFT")
     M.LayoutSegmentButtons(mode)
 

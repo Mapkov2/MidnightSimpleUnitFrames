@@ -901,6 +901,42 @@ expectApplied("move player portrait closer to player unitframe", "Done.")
 assert(_G.MSUF_DB.player.portraitOffsetX == 10, "Dashboard Submit did not move Player portrait closer to the frame")
 expectApplied("move player portrait farther from player unitframe", "Done.")
 assert(_G.MSUF_DB.player.portraitOffsetX == 0, "Dashboard Submit did not move Player portrait farther from the frame")
+_G.MSUF_DB.player.portraitMode = "RIGHT"
+_G.MSUF_DB.player.portraitRender = "CLASS"
+expectApplied("change player portrait to 2D", "Done.")
+assert(_G.MSUF_DB.player.portraitRender == "2D", "Dashboard Submit did not change Player portrait render to 2D")
+assert(_G.MSUF_DB.player.portraitMode == "RIGHT", "Dashboard Submit changed Player portrait position while changing render")
+expectApplied("change player portrait to class", "Done.")
+assert(_G.MSUF_DB.player.portraitRender == "CLASS", "Dashboard Submit did not change Player portrait render to Class")
+assert(_G.MSUF_DB.player.portraitMode == "RIGHT", "Dashboard Submit changed Player portrait position while changing render to Class")
+_G.MSUF_DB.player.portraitShape = "SQUARE"
+expectApplied("set player portrait shape to rounded", "Done.")
+assert(_G.MSUF_DB.player.portraitShape == "ROUNDED", "Dashboard Submit did not change Player portrait shape to Rounded")
+_G.MSUF_DB.player.portraitSizeOverride = 0
+expectApplied("set player portrait size to 64", "Done.")
+assert(_G.MSUF_DB.player.portraitSizeOverride == 64, "Dashboard Submit did not change Player portrait size override")
+_G.MSUF_DB.player.portraitOffsetY = 0
+expectApplied("set player portrait y offset to -6", "Done.")
+assert(_G.MSUF_DB.player.portraitOffsetY == -6, "Dashboard Submit did not change Player portrait Y offset")
+_G.MSUF_DB.player.portraitClassStyle = "BLIZZARD"
+expectApplied("set player class portrait style to rondo color", "Done.")
+assert(_G.MSUF_DB.player.portraitClassStyle == "RONDO_COLOR", "Dashboard Submit did not change Player class portrait style")
+_G.MSUF_DB.player.portraitBorderStyle = "NONE"
+expectApplied("set player portrait border to class color", "Done.")
+assert(_G.MSUF_DB.player.portraitBorderStyle == "CLASS_COLOR", "Dashboard Submit did not change Player portrait border style")
+_G.MSUF_DB.player.portraitBorderThickness = 2
+expectApplied("set player portrait border thickness to 6", "Done.")
+assert(_G.MSUF_DB.player.portraitBorderThickness == 6, "Dashboard Submit did not change Player portrait border thickness")
+_G.MSUF_DB.player.portraitBgEnabled = false
+expectApplied("turn on player portrait background", "Done.")
+assert(_G.MSUF_DB.player.portraitBgEnabled == true, "Dashboard Submit did not enable Player portrait background")
+expectApplied("turn off player portrait background", "Done.")
+assert(_G.MSUF_DB.player.portraitBgEnabled == false, "Dashboard Submit did not disable Player portrait background")
+_G.MSUF_DB.player.portraitFillBorder = false
+expectApplied("turn on player portrait fill border into frame gap", "Done.")
+assert(_G.MSUF_DB.player.portraitFillBorder == true, "Dashboard Submit did not enable Player portrait fill border gap")
+expectApplied("turn off player portrait fill border", "Done.")
+assert(_G.MSUF_DB.player.portraitFillBorder == false, "Dashboard Submit did not disable Player portrait fill border gap")
 _G.MSUF_DB.player.detachedPowerBarOffsetX = 0
 expectApplied("move player detached power bar right 5", "Done.")
 assert(_G.MSUF_DB.player.detachedPowerBarOffsetX == 5, "Dashboard Submit routed detached power bar movement to the wrong setting")
@@ -919,6 +955,15 @@ assert(_G.MSUF_DB.gf_raid.readyCheckY == 2, "Dashboard Submit did not move Raid 
 _G.MSUF_DB.gf_raid.groupNumberX = 0
 expectApplied("move raid group number right 2", "Done.")
 assert(_G.MSUF_DB.gf_raid.groupNumberX == 2, "Dashboard Submit did not move Raid group number")
+_G.MSUF_DB.gf_mythicraid.width = 120
+expectApplied("set mythic raid width to 170", "Done.")
+assert(_G.MSUF_DB.gf_mythicraid.width == 170, "Dashboard Submit did not set Mythic Raid width")
+_G.MSUF_DB.gf_party.raidMarkerSize = 14
+expectApplied("set party raid marker size to 23", "Done.")
+assert(_G.MSUF_DB.gf_party.raidMarkerSize == 23, "Dashboard Submit treated Party Raid Marker as Raid group scope")
+_G.MSUF_DB.gf_party.preserveRaidGroups = false
+expectApplied("turn on party preserve raid groups", "Done.")
+assert(_G.MSUF_DB.gf_party.preserveRaidGroups == true, "Dashboard Submit did not enable Party Preserve Raid Groups")
 _G.MSUF_DB.player.showPowerBar = true
 _G.MSUF_DB.target.showPowerBar = true
 _G.MSUF_DB.focus.showPowerBar = true
@@ -1003,6 +1048,11 @@ assert(_G.MSUF_DB.gf_raid.powerBarEnabled == false, "Dashboard Submit did not tu
 _G.MSUF_DB.bars.smoothPowerBar = true
 expectApplied("turn off smooth power bar", "Done.")
 assert(_G.MSUF_DB.bars.smoothPowerBar == false, "Dashboard Submit did not turn off global Smooth Power Bar")
+_G.MSUF_DB.general.bossTargetOutlineMode = 1
+_G.MSUF_DB.general.bossTargetHighlightEnabled = true
+expectApplied("set boss target border to off", "Done.")
+assert(_G.MSUF_DB.general.bossTargetOutlineMode == 0, "Dashboard Submit did not store Boss Target Border as off")
+assert(_G.MSUF_DB.general.bossTargetHighlightEnabled == false, "Dashboard Submit did not sync Boss Target highlight enabled state")
 _G.MSUF_DB.player.showInterrupt = true
 _G.MSUF_DB.target.showInterrupt = true
 _G.MSUF_DB.focus.showInterrupt = true
@@ -1644,6 +1694,9 @@ assert(_G.MSUF_DB.player.restedStateIndicatorLayer == 3, "Dashboard Submit did n
 _G.MSUF_DB.player.leaderIconStyle = "BLIZZARD"
 expectApplied("set player leader icon pack to midnight", "Done.")
 assert(_G.MSUF_DB.player.leaderIconStyle == "MIDNIGHT", "Dashboard Submit did not set Player Leader icon pack")
+_G.MSUF_DB.player.leaderIconStyle = "BLIZZARD"
+expectApplied("set player leader assist icon pack to midnight", "Done.")
+assert(_G.MSUF_DB.player.leaderIconStyle == "MIDNIGHT", "Dashboard Submit did not set Player Leader/Assist icon pack from natural wording")
 expectApplied("turn off rested icon player", "Done.")
 assert(_G.MSUF_DB.player.showRestingIndicator == false, "Dashboard Submit did not still allow explicit Rested Indicator visibility toggles")
 _G.MSUF_DB.player.showCombatStateIndicator = true

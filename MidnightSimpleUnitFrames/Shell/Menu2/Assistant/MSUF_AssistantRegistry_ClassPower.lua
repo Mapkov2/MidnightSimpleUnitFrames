@@ -95,10 +95,9 @@ RegisterBarsBoolean("showClassPower", "enabled", "Class Resource", true, {
     "class power enabled", "class resource enabled", "class resources enabled",
     "class power bar enabled", "class resource bar enabled", "resource bar enabled",
 }, {
-    requiresReload = true,
     reason = "MSUF_ASSISTANT_CLASSPOWER_ENABLED",
     matchLabel = false,
-    description = "Enables or disables MSUF Class Resources. Reload UI is required for the change to fully take effect.",
+    description = "Enables or disables MSUF Class Resources live outside combat.",
 })
 RegisterBarsNumber("classPowerHeight", "height", "Class Resource Height", 4, 1, 40, ClassPowerAliases("height", "class resource bar height"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_HEIGHT",

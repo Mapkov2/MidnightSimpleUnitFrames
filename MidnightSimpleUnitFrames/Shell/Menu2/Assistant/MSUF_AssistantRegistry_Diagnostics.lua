@@ -525,7 +525,7 @@ local function ClassPowerDiagnosticText()
     local issues = {}
     local choices = {}
     if bars.showClassPower == false then
-        issues[#issues + 1] = "Class Resources are disabled. Say 'turn on class resources' to enable them; reload may be required."
+        issues[#issues + 1] = "Class Resources are disabled. Say 'turn on class resources' to enable them."
         AddFixChoice(choices, "bars.showClassPower", true, "Turn on Class Resources")
     end
     if tonumber(bars.classPowerHeight) ~= nil and tonumber(bars.classPowerHeight) < 1 then

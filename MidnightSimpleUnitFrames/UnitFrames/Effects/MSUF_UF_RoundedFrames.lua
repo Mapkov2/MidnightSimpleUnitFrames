@@ -956,6 +956,19 @@ local function ApplyGroupBackdrop(f, kind, enabled)
     end
 end
 
+local function RefreshGroupBackdropAlpha(f, kind)
+    if not (f and RoundedGroupFramesEnabled()) then return end
+    local bg = f._msufRGF_Background
+    if not bg then
+        return
+    end
+    local r, g, b, a = ResolveGroupBackdropColor(f, kind)
+    if f._msufRGF_BgR ~= r or f._msufRGF_BgG ~= g or f._msufRGF_BgB ~= b or f._msufRGF_BgA ~= a then
+        f._msufRGF_BgR, f._msufRGF_BgG, f._msufRGF_BgB, f._msufRGF_BgA = r, g, b, a
+        bg:SetVertexColor(r, g, b, a)
+    end
+end
+
 local function MaskStatusBarFill(f, bar, group)
     if not (bar and type(bar.GetStatusBarTexture) == "function") then return end
     local tex = bar:GetStatusBarTexture()
@@ -1320,6 +1333,9 @@ local function HookOnce()
     _G.MSUF_RoundedUF_OnGroupFrameApplied = function(frame, kind)
         if IsCombatLocked() then DeferApply(); return end
         if frame then ApplyToGroupFrame(frame, kind) end
+    end
+    _G.MSUF_RoundedUF_OnGroupBackdropAlphaChanged = function(frame, kind)
+        RefreshGroupBackdropAlpha(frame, kind)
     end
     _G.MSUF_RoundedUF_OnGroupHighlightChanged = function(border)
         return HandleGroupHighlightChanged(border)

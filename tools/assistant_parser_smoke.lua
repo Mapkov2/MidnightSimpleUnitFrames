@@ -554,6 +554,21 @@ expectSetting("move player portrait farther from player unitframe", "player.port
 _G.MSUF_DB.player.portraitMode = "RIGHT"
 expectSetting("move player portrait closer to player unitframe", "player.portraitOffsetX", nil, "portraitOffsetX", -10)
 _G.MSUF_DB.player.portraitMode = "LEFT"
+expectSetting("change player portrait to 2D", "player.portraitRender", "2D", "portraitRender")
+expectSetting("change player portrait to class portrait", "player.portraitRender", "CLASS", "portraitRender")
+expectSetting("change player portrait to class", "player.portraitRender", "CLASS", "portraitRender")
+expectSetting("set player portrait shape to circle", "player.portraitShape", "CIRCLE", "portraitShape")
+expectSetting("set player portrait shape to rounded", "player.portraitShape", "ROUNDED", "portraitShape")
+expectSetting("set player portrait size to 64", "player.portraitSizeOverride", 64, "portraitSizeOverride")
+expectSetting("set player portrait x offset to 7", "player.portraitOffsetX", 7, "portraitOffsetX")
+expectSetting("set player portrait y offset to -6", "player.portraitOffsetY", -6, "portraitOffsetY")
+expectSetting("set player class portrait style to rondo color", "player.portraitClassStyle", "rondo color", "portraitClassStyle")
+expectSetting("set player portrait border to class color", "player.portraitBorderStyle", "CLASS_COLOR", "portraitBorderStyle")
+expectSetting("set player portrait border thickness to 6", "player.portraitBorderThickness", 6, "portraitBorderThickness")
+expectSetting("turn on player portrait background", "player.portraitBgEnabled", true, "portraitBgEnabled")
+expectSetting("turn off player portrait background", "player.portraitBgEnabled", false, "portraitBgEnabled")
+expectSetting("turn on player portrait fill border into frame gap", "player.portraitFillBorder", true, "portraitFillBorder")
+expectSetting("turn off player portrait fill border", "player.portraitFillBorder", false, "portraitFillBorder")
 expectSetting("move player detached power bar right 5", "player.detachedPowerBarOffsetX", nil, "detachedPowerBarOffsetX", 5)
 expectSetting("move player raid marker right 3", "player.raidMarkerOffsetX", nil, "raidmarkerOffsetX", 3)
 expectSetting("move raid ready check icon up 2", "gf_raid.readyCheckY", nil, "statusIconreadyCheckIconY", 2)
@@ -868,5 +883,88 @@ actionCtx.lastActionMessage = "Done. I copied Target settings to Player."
 actionCtx.lastActionUndoable = true
 expectAnswer("what did you change", "Copy Unit Settings")
 expectAnswer("what did you do", "You can type 'undo' to revert it.")
+expectSetting("set mythic raid width to 170", "gf_mythicraid.width", 170)
+expectSetting("set party raid marker size to 23", "gf_party.raidMarkerSize", 23)
+expectSetting("turn on party preserve raid groups", "gf_party.preserveRaidGroups", true)
+expectSetting("turn on shared buff raid filter", "auras3.shared.buff.filter.raid", true)
+expectSetting("turn on target buff player filter", "auras3.target.buff.filter.onlyMine", true)
+expectSetting("set boss target border to off", "general.bossTargetOutlineMode", "off")
+expectSetting("set player leader assist icon pack to rondo color", "player.leaderIconStyle", "rondo color")
+
+local function smokeTrim(text)
+    return tostring(text or ""):gsub("[%c]", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function smokeEnumCandidates(setting)
+    local out = {}
+    for _, value in ipairs(setting.values or {}) do
+        if tostring(value) ~= "" and tostring(value) ~= "__CUSTOM__" then out[#out + 1] = tostring(value) end
+    end
+    for alias in pairs(setting.valueAliases or {}) do out[#out + 1] = tostring(alias) end
+    if #out == 0 then out[1] = "on" end
+    return out
+end
+
+local function smokeNumberValue(setting)
+    if setting.percent then return "50" end
+    local minValue = tonumber(setting.min)
+    local maxValue = tonumber(setting.max)
+    if minValue and maxValue then return tostring(math.floor((minValue + maxValue) / 2)) end
+    return "1"
+end
+
+local function smokeCommandForSetting(setting, phrase, enumValue)
+    if setting.type == "boolean" then return "turn on " .. phrase end
+    if setting.type == "number" then return "set " .. phrase .. " to " .. smokeNumberValue(setting) end
+    if setting.type == "enum" then return "set " .. phrase .. " to " .. tostring(enumValue or "on") end
+    if setting.type == "color" then return "set " .. phrase .. " to red" end
+    return "set " .. phrase .. " to audit value"
+end
+
+local function smokeRegistryValueOk(setting, normalized, raw)
+    local P = A.Parser
+    local relativeDelta = setting.type == "number" and P.RelativeNumberDeltaForText(setting, normalized) or nil
+    local value = P.ValueForRegistrySetting(setting, normalized, raw)
+    if setting.type == "boolean" then return value ~= nil end
+    return value ~= nil or relativeDelta ~= nil
+end
+
+local function smokeBestRegistryCommand(setting)
+    local phrases = {}
+    local label = smokeTrim(setting.label)
+    if label ~= "" then phrases[#phrases + 1] = label end
+    for _, alias in ipairs(setting.aliases or {}) do
+        alias = smokeTrim(alias)
+        if alias ~= "" then phrases[#phrases + 1] = alias end
+    end
+    if #phrases == 0 then phrases[1] = tostring(setting.key or "") end
+    local values = setting.type == "enum" and smokeEnumCandidates(setting) or { false }
+    local P = A.Parser
+    for _, phrase in ipairs(phrases) do
+        for _, enumValue in ipairs(values) do
+            local raw = smokeCommandForSetting(setting, phrase, enumValue ~= false and enumValue or nil)
+            local normalized = P.Normalize(raw)
+            if P.SettingMatchScore(setting, normalized) > 0 and smokeRegistryValueOk(setting, normalized, raw) then
+                return raw
+            end
+        end
+    end
+    return smokeCommandForSetting(setting, phrases[1], values[1] ~= false and values[1] or nil)
+end
+
+do
+    local P = assert(A.Parser, "Parser helpers missing")
+    assert(type(P.SettingMatchScore) == "function", "SettingMatchScore helper missing")
+    assert(type(P.ValueForRegistrySetting) == "function", "ValueForRegistrySetting helper missing")
+    local failures = {}
+    for _, setting in ipairs(A.Registry:AllSettings() or {}) do
+        local raw = smokeBestRegistryCommand(setting)
+        local normalized = P.Normalize(raw)
+        if P.SettingMatchScore(setting, normalized) <= 0 or not smokeRegistryValueOk(setting, normalized, raw) then
+            failures[#failures + 1] = tostring(setting.key or "?") .. " via " .. raw
+        end
+    end
+    assert(#failures == 0, "Registry setting command coverage failed: " .. table.concat(failures, "; "))
+end
 
 print("assistant_parser_smoke: ok")
