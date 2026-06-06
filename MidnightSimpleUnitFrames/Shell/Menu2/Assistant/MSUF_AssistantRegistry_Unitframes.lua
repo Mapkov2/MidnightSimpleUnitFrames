@@ -700,12 +700,7 @@ local function UnitReadAlpha(unit, inCombat)
     local key = inCombat and inKey or outKey
     local value = tonumber(conf[key])
     if value ~= nil then return value end
-    if key == "alphaHPInCombat" then
-        value = tonumber(conf.alphaFGInCombat)
-    elseif key == "alphaHPOutOfCombat" then
-        value = tonumber(conf.alphaFGOutOfCombat)
-    end
-    if value ~= nil then return value end
+    if conf.alphaExcludeTextPortrait == true then return 1 end
     return tonumber(conf[inCombat and "alphaInCombat" or "alphaOutOfCombat"]) or 1
 end
 
