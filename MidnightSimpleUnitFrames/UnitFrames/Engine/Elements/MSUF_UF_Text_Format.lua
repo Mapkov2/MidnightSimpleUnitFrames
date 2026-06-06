@@ -891,6 +891,7 @@ local function CompileTextRuntime(frame, spec, text)
     rt._lastPowerTextPower = nil
     rt._lastPowerTextMax = nil
     frame._msufTextPowerType = nil
+    frame._msufTextPowerToken = nil
     frame._msufTextPowerTypeKnown = nil
     frame._msufTextPowerMax = nil
     rt.powerThrottle = tonumber(text.powerThrottle) or 0.1
@@ -1049,11 +1050,12 @@ local function ResolvePendingPower(frame, rt, power, powerMax)
     if unit and (IsNil(power) or IsNil(powerMax)) then
         local powerType = frame._msufTextPowerType
         if frame._msufTextPowerTypeKnown ~= true and UnitPowerType then
-            local rawType = UnitPowerType(unit)
-            if not IsSecret(rawType) then
-                powerType = rawType
-                frame._msufTextPowerType = powerType
-            end
+            local rawType, rawToken = UnitPowerType(unit)
+            if IsSecret(rawType) then rawType = nil end
+            if IsSecret(rawToken) then rawToken = nil end
+            powerType = rawType
+            frame._msufTextPowerType = rawType
+            frame._msufTextPowerToken = rawToken
             frame._msufTextPowerTypeKnown = true
         end
 

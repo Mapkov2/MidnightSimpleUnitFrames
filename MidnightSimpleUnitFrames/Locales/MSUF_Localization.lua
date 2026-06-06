@@ -20,6 +20,7 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 _G.MSUF_NS = MSUF
 
+---@diagnostic disable-next-line: undefined-global
 local CLIENT_LOCALE = (type(GetLocale) == "function" and GetLocale()) or "enUS"
 
 MSUF.SUPPORTED_LOCALES = MSUF.SUPPORTED_LOCALES or {
@@ -103,7 +104,9 @@ local function NormalizeLocale(locale)
 end
 
 local function InCombat()
+---@diagnostic disable-next-line: undefined-field
     return (_G.InCombatLockdown and _G.InCombatLockdown())
+---@diagnostic disable-next-line: undefined-field
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
 end
 
@@ -120,7 +123,9 @@ end
 
 local LocaleApplyFrame
 local function EnsureLocaleApplyFrame()
+---@diagnostic disable-next-line: undefined-global
     if LocaleApplyFrame or type(CreateFrame) ~= "function" then return end
+---@diagnostic disable-next-line: undefined-global
     LocaleApplyFrame = CreateFrame("Frame")
     LocaleApplyFrame:SetScript("OnEvent", function(self, event)
         if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end

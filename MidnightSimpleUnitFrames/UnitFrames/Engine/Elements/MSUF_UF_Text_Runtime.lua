@@ -66,16 +66,31 @@ local function ReadPowerValues(unit)
     return power, maxPower
 end
 
+local function RefreshCachedPowerType(frame, unit)
+    if not UnitPowerType then
+        return false
+    end
+    local powerType, powerToken = UnitPowerType(unit)
+    if IsSecret(powerType) then powerType = nil end
+    if IsSecret(powerToken) then powerToken = nil end
+    if powerType == nil and powerToken == nil and frame._msufTextPowerTypeKnown == true then
+        return false
+    end
+    local changed = powerType ~= frame._msufTextPowerType or powerToken ~= frame._msufTextPowerToken
+    frame._msufTextPowerType = powerType
+    frame._msufTextPowerToken = powerToken
+    frame._msufTextPowerTypeKnown = true
+    return changed
+end
+
 local function ReadPowerValuesPlain(frame, unit, event)
     local powerType = frame._msufTextPowerType
     if frame._msufTextPowerTypeKnown ~= true
         or event == "UNIT_DISPLAYPOWER"
         or event == "MSUF_APPLY"
         or event == "MSUF_FORCE_UPDATE" then
-        local rawType = UnitPowerType and UnitPowerType(unit) or nil
-        powerType = IsSecret(rawType) and nil or rawType
-        frame._msufTextPowerType = powerType
-        frame._msufTextPowerTypeKnown = true
+        RefreshCachedPowerType(frame, unit)
+        powerType = frame._msufTextPowerType
     end
 
     local power
@@ -351,12 +366,27 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
         return
     end
+    local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
     if rt.powerColorByType == true
-        and (event == "UNIT_DISPLAYPOWER" or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_POWER_LAYOUT" or event == "MSUF_POWER_TEXT_COLORS" or frame._msufPowerTextColorInitialized ~= true) then
+        and animate
+        and (not frame.MSUFSpec or not frame.MSUFSpec.power or frame.MSUFSpec.power.mode == nil or frame.MSUFSpec.power.mode == "power") then
+        RefreshCachedPowerType(frame, unit)
+    end
+    if rt.powerColorByType == true
+        and (event == "UNIT_DISPLAYPOWER"
+            or event == "MSUF_APPLY"
+            or event == "MSUF_FORCE_UPDATE"
+            or event == "MSUF_POWER_LAYOUT"
+            or event == "MSUF_POWER_TEXT_COLORS"
+            or frame._msufPowerTextColorInitialized ~= true
+            or frame._msufPowerTextColorType ~= frame._msufTextPowerType
+            or frame._msufPowerTextColorToken ~= frame._msufTextPowerToken) then
         local r, g, b = PowerColor(frame, unit)
         local c = frame.MSUFSpec and frame.MSUFSpec.textColor
         SetPowerTextColor(frame, r, g, b, c and c.a or 1)
         frame._msufPowerTextColorInitialized = true
+        frame._msufPowerTextColorType = frame._msufTextPowerType
+        frame._msufPowerTextColorToken = frame._msufTextPowerToken
     end
 
     local throttle = rt.powerThrottle or 0

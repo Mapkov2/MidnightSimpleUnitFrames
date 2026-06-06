@@ -710,6 +710,8 @@ function Text.Apply(frame, spec)
     frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = nil, nil, nil, nil
     frame._msufLastNameRaw, frame._msufLastNameText, frame._msufLastNameShortenStamp = nil, nil, nil
     frame._msufPowerTextColorInitialized = nil
+    frame._msufPowerTextColorType = nil
+    frame._msufPowerTextColorToken = nil
     frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = nil, nil, nil, nil
     frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
     local power = spec and spec.power or {}
@@ -801,6 +803,8 @@ function Text.Apply(frame, spec)
     SetTextSlotShown(frame.powerTextCenter, showPower, text.powerCenter)
     SetTextSlotShown(frame.powerTextRight, showPower, text.powerRight)
     frame._msufPowerTextColorInitialized = nil
+    frame._msufPowerTextColorType = nil
+    frame._msufPowerTextColorToken = nil
     frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
     local rt = CompileTextRuntime(frame, spec, text)
     if UpdateHealthTextColor then

@@ -34,12 +34,22 @@ local IsSecret = C.IsSecret or function(_) return false end
 local IsNil = C.IsNil or function(value) return value == nil end
 local Power = {}
 
+local function ReadPowerType(unit)
+    if not UnitPowerType then
+        return nil, nil
+    end
+    local powerType, powerToken = UnitPowerType(unit)
+    if IsSecret(powerType) then powerType = nil end
+    if IsSecret(powerToken) then powerToken = nil end
+    return powerType, powerToken
+end
+
 local function ReadPowerMeta(frame, bar, unit, force)
     if not force and bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
-        return bar._msufPowerType, bar._msufPowerMax
+        return bar._msufPowerType, bar._msufPowerMax, bar._msufPowerToken, false
     end
 
-    local powerType = UnitPowerType and UnitPowerType(unit) or nil
+    local powerType, powerToken = ReadPowerType(unit)
     local maxPower
     if IsNil(powerType) then
         maxPower = UnitPowerMax(unit)
@@ -48,18 +58,31 @@ local function ReadPowerMeta(frame, bar, unit, force)
     end
     if IsNil(maxPower) then maxPower = 1 end
 
+    local powerMetaChanged = powerType ~= bar._msufPowerType or powerToken ~= bar._msufPowerToken
     bar._msufPowerType = powerType
+    bar._msufPowerToken = powerToken
     bar._msufPowerMax = maxPower
     bar._msufPowerMaxUnit = unit
     bar._msufPowerMaxReady = true
-    frame._msufTextPowerType = IsSecret(powerType) and nil or powerType
+    frame._msufTextPowerType = powerType
+    frame._msufTextPowerToken = powerToken
     frame._msufTextPowerTypeKnown = true
     frame._msufTextPowerMax = maxPower
-    return powerType, maxPower
+    return powerType, maxPower, powerToken, powerMetaChanged
 end
 
 local function ReadPowerValues(frame, bar, unit, event, animate)
+    local hotMetaChanged = false
+    if animate then
+        local powerSpec = frame and frame.MSUFSpec and frame.MSUFSpec.power
+        if not powerSpec or powerSpec.mode == nil or powerSpec.mode == "power" then
+            local liveType, liveToken = ReadPowerType(unit)
+            hotMetaChanged = (liveType ~= nil or liveToken ~= nil)
+                and (liveType ~= bar._msufPowerType or liveToken ~= bar._msufPowerToken)
+        end
+    end
     local forceMeta = not animate
+        or hotMetaChanged
         or bar._msufPowerMaxReady ~= true
         or bar._msufPowerMaxUnit ~= unit
         or event == "UNIT_MAXPOWER"
@@ -69,7 +92,7 @@ local function ReadPowerValues(frame, bar, unit, event, animate)
         or event == "MSUF_APPLY"
         or event == "MSUF_FORCE_UPDATE"
         or event == "MSUF_POWER_LAYOUT"
-    local powerType, maxPower = ReadPowerMeta(frame, bar, unit, forceMeta)
+    local powerType, maxPower, powerToken, powerMetaChanged = ReadPowerMeta(frame, bar, unit, forceMeta)
     local power
     if not IsNil(powerType) then
         power = UnitPower(unit, powerType)
@@ -77,7 +100,7 @@ local function ReadPowerValues(frame, bar, unit, event, animate)
         power = UnitPower(unit)
     end
     if IsNil(power) then power = 0 end
-    return power, maxPower, powerType
+    return power, maxPower, powerType, powerToken, hotMetaChanged or powerMetaChanged
 end
 
 local function EnsurePowerBackground(frame, bar, spec)
@@ -230,8 +253,8 @@ function Power.Apply(frame, spec)
             end
             width = classWidth
                 or ExternalFrameWidth(power.detachedClassWidthFrameName, bar)
-                or width
                 or tonumber(power.detachedClassWidth)
+                or width
         else
             width = ExternalFrameWidth(power.detachedWidthFrameName, bar) or width
         end
@@ -335,13 +358,13 @@ function Power.Update(frame, event, unit)
     end
 
     local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
-    local power, maxPower = ReadPowerValues(frame, bar, unit, event, animate)
+    local power, maxPower, _, _, hotMetaChanged = ReadPowerValues(frame, bar, unit, event, animate)
 
     -- Max power only changes on UNIT_MAXPOWER / UNIT_DISPLAYPOWER (and forced
     -- applies); skip the SetMinMaxValues C call on the frequent value ticks.
     -- Gated on the plain event string -- the (possibly secret) max is never
     -- compared.
-    if not animate or bar._msufMinMaxInit ~= true then
+    if not animate or hotMetaChanged or bar._msufMinMaxInit ~= true then
         SetBarMinMax(bar, maxPower, true)
         bar._msufMinMaxInit = true
     end
@@ -350,7 +373,7 @@ function Power.Update(frame, event, unit)
         SnapBarInterpolation(bar)
     end
 
-    if event == "UNIT_DISPLAYPOWER" or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_POWER_LAYOUT" or bar._msufStatusR == nil then
+    if hotMetaChanged or event == "UNIT_DISPLAYPOWER" or event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_POWER_LAYOUT" or bar._msufStatusR == nil then
         ApplyStatusColor(bar, PowerColor(frame, unit))
     end
     return power, maxPower

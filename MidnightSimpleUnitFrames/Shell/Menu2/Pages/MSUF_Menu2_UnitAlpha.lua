@@ -57,12 +57,7 @@ local function BuildAlpha(ctx, builder, unit)
         local key = inCombat and inKey or outKey
         local value = tonumber(conf and conf[key])
         if value ~= nil then return value end
-        if key == "alphaHPInCombat" then
-            value = tonumber(conf and conf.alphaFGInCombat)
-        elseif key == "alphaHPOutOfCombat" then
-            value = tonumber(conf and conf.alphaFGOutOfCombat)
-        end
-        if value ~= nil then return value end
+        if ReadBool(unit, "alphaExcludeTextPortrait", false) == true then return 1 end
         return ReadNumber(unit, inCombat and "alphaInCombat" or "alphaOutOfCombat", 1)
     end
 

@@ -455,14 +455,14 @@ local function PreviewAlphaPair(conf, mode)
     if conf.alphaExcludeTextPortrait == true then
         mode = NormalizeAlphaLayerMode(mode)
         if mode == "background" then
-            aIn = Clamp01(conf.alphaBGInCombat, aIn)
-            aOut = Clamp01(conf.alphaBGOutOfCombat, aOut)
+            aIn = Clamp01(conf.alphaBGInCombat, 1)
+            aOut = Clamp01(conf.alphaBGOutOfCombat, 1)
         elseif mode == "health" then
-            aIn = Clamp01(conf.alphaHPInCombat, Clamp01(conf.alphaFGInCombat, aIn))
-            aOut = Clamp01(conf.alphaHPOutOfCombat, Clamp01(conf.alphaFGOutOfCombat, aOut))
+            aIn = Clamp01(conf.alphaHPInCombat, 1)
+            aOut = Clamp01(conf.alphaHPOutOfCombat, 1)
         else
-            aIn = Clamp01(conf.alphaFGInCombat, aIn)
-            aOut = Clamp01(conf.alphaFGOutOfCombat, aOut)
+            aIn = Clamp01(conf.alphaFGInCombat, 1)
+            aOut = Clamp01(conf.alphaFGOutOfCombat, 1)
         end
     end
     local sync = conf.alphaSyncBoth
@@ -541,11 +541,7 @@ function Core.ApplyPreviewTransparency(box, conf)
         Core.SetRegionAlpha(mock.roundedBg, 0)
         PreviewSetRoundedEdgeStackAlpha(mock, 0)
     end
-    if alpha.preserveHPColor then
-        Core.SetRegionAlpha(mock.hpBG, alpha.hp)
-    else
-        Core.SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or alpha.bg)
-    end
+    Core.SetRegionAlpha(mock.hpBG, alpha.flat and alpha.frame or alpha.bg)
     Core.SetRegionAlpha(mock.hp, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.healPred, alpha.flat and alpha.frame or alpha.hp)
     Core.SetRegionAlpha(mock.absorb, alpha.flat and alpha.frame or alpha.hp)

@@ -691,12 +691,12 @@ local function CompileAlpha(out, conf, general, key)
 
     local layerMode = NormalizeAlphaLayerMode(conf.alphaLayerMode or general.alphaLayerMode)
     local layered = conf.alphaExcludeTextPortrait == true
-    local fgIn = Clamp01(conf.alphaFGInCombat or general.alphaFGInCombat, frameIn)
-    local fgOut = Clamp01(conf.alphaFGOutOfCombat or general.alphaFGOutOfCombat, frameOut)
-    local bgIn = Clamp01(conf.alphaBGInCombat or general.alphaBGInCombat, frameIn)
-    local bgOut = Clamp01(conf.alphaBGOutOfCombat or general.alphaBGOutOfCombat, frameOut)
-    local hpIn = Clamp01(conf.alphaHPInCombat or general.alphaHPInCombat, fgIn)
-    local hpOut = Clamp01(conf.alphaHPOutOfCombat or general.alphaHPOutOfCombat, fgOut)
+    local fgIn = Clamp01(conf.alphaFGInCombat or general.alphaFGInCombat, 1)
+    local fgOut = Clamp01(conf.alphaFGOutOfCombat or general.alphaFGOutOfCombat, 1)
+    local bgIn = Clamp01(conf.alphaBGInCombat or general.alphaBGInCombat, 1)
+    local bgOut = Clamp01(conf.alphaBGOutOfCombat or general.alphaBGOutOfCombat, 1)
+    local hpIn = Clamp01(conf.alphaHPInCombat or general.alphaHPInCombat, 1)
+    local hpOut = Clamp01(conf.alphaHPOutOfCombat or general.alphaHPOutOfCombat, 1)
     if sync then
         fgOut, bgOut, hpOut = fgIn, bgIn, hpIn
     end

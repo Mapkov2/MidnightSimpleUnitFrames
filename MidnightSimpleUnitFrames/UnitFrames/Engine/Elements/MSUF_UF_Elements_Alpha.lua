@@ -158,12 +158,12 @@ local function AlphaPair(cfg, mode)
         return inAlpha, outAlpha
     end
     if mode == "background" then
-        return cfg.backgroundInCombat or inAlpha, cfg.backgroundOutOfCombat or outAlpha
+        return cfg.backgroundInCombat or 1, cfg.backgroundOutOfCombat or 1
     elseif mode == "health" then
-        return cfg.healthInCombat or cfg.foregroundInCombat or inAlpha,
-            cfg.healthOutOfCombat or cfg.foregroundOutOfCombat or outAlpha
+        return cfg.healthInCombat or 1,
+            cfg.healthOutOfCombat or 1
     end
-    return cfg.foregroundInCombat or inAlpha, cfg.foregroundOutOfCombat or outAlpha
+    return cfg.foregroundInCombat or 1, cfg.foregroundOutOfCombat or 1
 end
 
 local function CompileAlphaRuntime(frame, cfg, force)
@@ -194,17 +194,17 @@ local function CompileAlphaRuntime(frame, cfg, force)
     rt.layered = layered
     rt.frameIn = layered and 1 or baseIn
     rt.frameOut = layered and 1 or baseOut
-    local fgIn = Clamp01(cfg.foregroundInCombat, baseIn)
-    local fgOut = Clamp01(cfg.foregroundOutOfCombat, baseOut)
-    local bgIn = Clamp01(cfg.backgroundInCombat, baseIn)
-    local bgOut = Clamp01(cfg.backgroundOutOfCombat, baseOut)
+    local fgIn = Clamp01(cfg.foregroundInCombat, 1)
+    local fgOut = Clamp01(cfg.foregroundOutOfCombat, 1)
+    local bgIn = Clamp01(cfg.backgroundInCombat, 1)
+    local bgOut = Clamp01(cfg.backgroundOutOfCombat, 1)
 
     rt.fgIn = 1
     rt.fgOut = 1
     rt.bgIn = layerMode == "background" and bgIn or 1
     rt.bgOut = layerMode == "background" and bgOut or 1
-    rt.hpIn = layerMode == "health" and Clamp01(cfg.healthInCombat or cfg.foregroundInCombat, baseIn) or 1
-    rt.hpOut = layerMode == "health" and Clamp01(cfg.healthOutOfCombat or cfg.foregroundOutOfCombat, baseOut) or 1
+    rt.hpIn = layerMode == "health" and Clamp01(cfg.healthInCombat, 1) or 1
+    rt.hpOut = layerMode == "health" and Clamp01(cfg.healthOutOfCombat, 1) or 1
     rt.powerIn = layerMode == "foreground" and fgIn or 1
     rt.powerOut = layerMode == "foreground" and fgOut or 1
     rt.preserveHPColor = cfg.preserveHPColor == true and layerMode == "health"
@@ -242,7 +242,7 @@ local function ApplyRangeMul(frame, frameAlpha, hpAlpha, healthBgAlpha)
         return frameAlpha, hpAlpha, healthBgAlpha, false
     end
     if RangeLayerMode(frame) == "health" then
-        return frameAlpha, hpAlpha * mul, healthBgAlpha * mul, true
+        return frameAlpha, hpAlpha * mul, healthBgAlpha, true
     end
     return frameAlpha * mul, hpAlpha, healthBgAlpha, false
 end
@@ -328,7 +328,7 @@ local function RefreshAlphaBase(frame, rt, event, force)
         rt.baseBG = inCombat and rt.bgIn or rt.bgOut
         rt.baseHP = inCombat and rt.hpIn or rt.hpOut
         rt.basePower = inCombat and rt.powerIn or rt.powerOut
-        rt.baseHealthBG = rt.preserveHPColor == true and rt.baseHP or rt.baseBG
+        rt.baseHealthBG = rt.baseBG
         rt.basePortrait = 1
         rt.baseStatus = rt.baseFG
     else
