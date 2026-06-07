@@ -11,7 +11,6 @@ local tonumber = tonumber
 local type = type
 local pairs = pairs
 local floor = math.floor
-local abs = math.abs
 local GetNumGroupMembers = _G.GetNumGroupMembers
 local GetTime = _G.GetTime
 local wipe = _G.wipe or table.wipe
@@ -694,8 +693,7 @@ local function CompileGroupVisuals(kind, conf)
         deadBgB = Num(conf.deadBgB, 0.05),
         deadBgA = Clamp01(conf.deadBgA, 0.90),
         hpBarAlpha = Clamp01(conf.hpBarAlpha, 1),
-        hpBgAlpha = Clamp01(conf.hpBgAlpha, Num(conf.bgA, 0.85)),
-        hpTextIgnoreAlpha = conf.hpTextIgnoreAlpha ~= false,
+        hpBgAlpha = Clamp01(conf.hpBgAlpha, 0.85),
         hoverHighlightEnabled = not (general and general.highlightEnabled == false),
         hoverHighlightSize = Num(hoverSize, 1),
         hoverHighlightR = hoverR,
@@ -933,66 +931,15 @@ local function CompileCoreAuras(kind, conf)
     }
 end
 
-local function AlphaPair(conf, mode)
-    if GF.GetAlphaPair then
-        return GF.GetAlphaPair(conf, mode)
-    end
-    local aIn = Clamp01(conf and conf.alphaInCombat, 1)
-    local aOut = Clamp01(conf and conf.alphaOutOfCombat, 1)
-    if conf and (conf.alphaSyncBoth == true or conf.alphaSync == true) then
-        aOut = aIn
-    end
-    return aIn, aOut
-end
-
-local function NormalizeAlphaLayerMode(mode)
-    if GF.NormalizeAlphaLayerMode then
-        return GF.NormalizeAlphaLayerMode(mode)
-    end
-    if mode == true or mode == 1 or mode == "background" then
-        return "background"
-    elseif mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then
-        return "health"
-    end
-    return "foreground"
-end
-
+-- Unified, coldpath alpha (mirrors unit CompileAlpha): HP fill opacity + a toggle
+-- to keep text/portrait opaque while bars dim. Background opacity is a colour
+-- concern (hpBgAlpha -> health.background.a) and is not handled here.
 local function CompileAlpha(conf)
-    local frameIn, frameOut = AlphaPair(conf, "foreground")
-    local fgIn, fgOut = AlphaPair(conf, "foreground")
-    local bgIn, bgOut = AlphaPair(conf, "background")
-    local hpIn, hpOut = AlphaPair(conf, "health")
-    local layered = conf.alphaExcludeTextPortrait == true
-    local layerMode = NormalizeAlphaLayerMode(conf.alphaLayerMode)
-    local activeIn, activeOut = frameIn, frameOut
-    if layered then
-        if layerMode == "background" then
-            activeIn, activeOut = bgIn, bgOut
-        elseif layerMode == "health" then
-            activeIn, activeOut = hpIn, hpOut
-        else
-            activeIn, activeOut = fgIn, fgOut
-        end
-    end
-    local active = abs((activeIn or 1) - 1) > 0.0001
-        or abs((activeOut or 1) - 1) > 0.0001
-    local combatEvents = abs((activeIn or 1) - (activeOut or 1)) > 0.0001
-
+    local hpAlpha = Clamp01(conf and conf.hpBarAlpha, 1)
     return {
-        active = active,
-        inCombat = frameIn,
-        outCombat = frameOut,
-        layered = layered,
-        layerMode = layerMode,
-        foregroundInCombat = fgIn,
-        foregroundOutOfCombat = fgOut,
-        backgroundInCombat = bgIn,
-        backgroundOutOfCombat = bgOut,
-        healthInCombat = hpIn,
-        healthOutOfCombat = hpOut,
-        preserveHPColor = conf.alphaPreserveHPColor == true and layerMode == "health",
-        combatEvents = combatEvents,
-        rangeEnabled = false,
+        active = hpAlpha < 1,
+        hpAlpha = hpAlpha,
+        excludeTextPortrait = conf and conf.alphaExcludeTextPortrait == true,
     }
 end
 
@@ -1083,7 +1030,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
         height = h,
         texture = texture,
         backgroundTexture = bgTexture,
-        backgroundAlpha = Num(conf.bgA, 0.85),
+        backgroundAlpha = Num(conf.hpBgAlpha, 0.85),
         font = font,
         fontFlags = fontFlags,
         fontSize = Num(conf.nameFontSize, 12),
@@ -1109,7 +1056,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
                 r = Num(conf.bgR, 0.1),
                 g = Num(conf.bgG, 0.1),
                 b = Num(conf.bgB, 0.1),
-                a = Num(conf.hpBgAlpha, Num(conf.bgA, 0.85)),
+                a = Num(conf.hpBgAlpha, 0.85),
             },
             backgroundMatchHealth = healthVisual.backgroundMatchHealth == true,
             barGradient = ResolveBarGradient(kind, conf, general, "enableGradient"),
@@ -1125,7 +1072,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
                 r = Num(conf.bgR, 0.1),
                 g = Num(conf.bgG, 0.1),
                 b = Num(conf.bgB, 0.1),
-                a = Num(conf.bgA, 0.85),
+                a = Num(conf.hpBgAlpha, 0.85),
             },
             backgroundMatchHealth = false,
             embed = true,

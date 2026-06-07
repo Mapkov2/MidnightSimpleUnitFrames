@@ -437,13 +437,6 @@ function M.AlphaLabel(label, value)
     return tostring(label or "") .. ": " .. M.PercentValue(value)
 end
 
-function M.AlphaKeysForMode(modeKey)
-    if modeKey == "background" then return "alphaBGInCombat", "alphaBGOutOfCombat" end
-    if modeKey == "health" then return "alphaHPInCombat", "alphaHPOutOfCombat" end
-    if modeKey == "foreground" then return "alphaFGInCombat", "alphaFGOutOfCombat" end
-    return "alphaInCombat", "alphaOutOfCombat"
-end
-
 function M.LayoutSegmentButtons(segment, gap, fallbackWidth, height)
     local buttons = segment and segment.buttons or {}
     local count = #buttons

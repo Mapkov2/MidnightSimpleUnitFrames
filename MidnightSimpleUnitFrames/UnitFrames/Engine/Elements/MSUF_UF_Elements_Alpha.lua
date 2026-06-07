@@ -5,15 +5,26 @@ _G.MSUF_NS = MSUF
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
-local CreateFrame = V.CreateFrame or CreateFrame
-local InCombatLockdown = V.InCombatLockdown or InCombatLockdown
 local tonumber = V.tonumber or tonumber
-local type = V.type or type
-local pairs = V.pairs or pairs
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local Clamp01 = V.Clamp01
 local SetFrameAlpha = V.SetFrameAlpha
 local SetAlphaCached = V.SetAlphaCached
+
+-- Unified, coldpath alpha element.
+--
+-- One value drives everything: spec.alpha.hpAlpha (the HP-fill transparency slider).
+-- When spec.alpha.excludeTextPortrait is false, the same value also dims the frame
+-- texts and the portrait so the whole foreground fades together. When true, texts +
+-- portrait stay fully opaque and only the bar textures dim.
+--
+-- Background opacity is NOT handled here -- it is baked into the bar background
+-- colour (out.health.background.a, from hpBgAlpha) by the config compiler.
+--
+-- Range fade is a pure multiplier on top: MSUF_UF_RangeFade stores frame._msufRangeMul
+-- and calls UF.ApplyRangeModifier, which re-applies hpAlpha * mul (or dims the whole
+-- frame, depending on the range layer mode). The element stays disabled while hpAlpha
+-- == 1, but ApplyRangeModifier is self-sufficient so range still works in that case.
 
 local Alpha = {}
 
@@ -32,24 +43,6 @@ local TEXT_ALPHA_FIELDS = {
     "statusIndicatorText",
 }
 
-local STATUS_ALPHA_FIELDS = {
-    "raidTargetIcon",
-    "LeaderIndicator",
-    "levelText",
-    "raidGroupNameText",
-    "eliteIcon",
-    "statusIndicatorText",
-    "combatStateIndicatorIcon",
-    "restingIndicatorIcon",
-    "incomingResIndicatorIcon",
-}
-
-local function ClearAlphaField(obj, field)
-    if obj then
-        obj[field] = nil
-    end
-end
-
 local function StatusBarTexture(bar)
     if not (bar and bar.GetStatusBarTexture) then
         return nil
@@ -62,27 +55,14 @@ local function StatusBarTexture(bar)
     return texture
 end
 
-local function SetStatusBarLayerAlpha(bar, alpha, field, force)
+-- Dim only the fill texture of a StatusBar, never the bar object itself. The bar
+-- object's alpha is owned by other systems (group health-fade, group range fade), so
+-- touching only the fill texture lets those multiply cleanly with our configured alpha.
+local function SetStatusBarFillAlpha(bar, alpha, field, force)
     if not bar then
         return
     end
-    SetAlphaCached(bar, 1, (field or "_msufAlphaStatusBar") .. "Object", force)
     SetAlphaCached(StatusBarTexture(bar), alpha, field or "_msufAlphaStatusTexture", force)
-end
-
-local function SetTextureLayerAlpha(texture, alpha, field, force)
-    SetAlphaCached(texture, alpha, field or "_msufAlphaLayer", force)
-end
-
-local function RefreshRoundedGroupBackdropAlpha(frame)
-    -- Creation and masking stay owned by RoundedFrames; Alpha only syncs existing backdrop alpha.
-    if not (frame and frame._msufIsGroupFrame == true and frame._msufRGF_Background) then
-        return
-    end
-    local fn = _G.MSUF_RoundedUF_OnGroupBackdropAlphaChanged
-    if type(fn) == "function" then
-        fn(frame, frame._msufGFKind)
-    end
 end
 
 local function SetTextLayerAlpha(frame, alpha, force)
@@ -91,137 +71,18 @@ local function SetTextLayerAlpha(frame, alpha, force)
     end
 end
 
-local function SetStatusLayerAlpha(frame, alpha, force)
-    for i = 1, #STATUS_ALPHA_FIELDS do
-        local region = frame and frame[STATUS_ALPHA_FIELDS[i]]
-        if region then
-            local base = tonumber(region._msufStatusAlpha) or 1
-            SetAlphaCached(region, base * alpha, "_msufAlphaStatus", force)
-        end
-    end
-end
-
 local function SetPortraitLayerAlpha(frame, alpha, force)
     SetAlphaCached(frame and frame.MSUFPortraitHolder, alpha, "_msufAlphaPortraitHolder", force)
     SetAlphaCached(frame and frame.portrait, 1, "_msufAlphaPortraitTexture", force)
 end
 
-local function ResetLegacyLayerAlphas(frame, force)
-    if not frame then
-        return
-    end
-    SetStatusBarLayerAlpha(frame.hpBar or frame.Health, 1, "_msufAlphaHealth", force)
-    SetStatusBarLayerAlpha(frame.incomingHealBar, 1, "_msufAlphaPrediction", force)
-    SetStatusBarLayerAlpha(frame.absorbBar, 1, "_msufAlphaPrediction", force)
-    SetStatusBarLayerAlpha(frame.healAbsorbBar, 1, "_msufAlphaPrediction", force)
-    SetStatusBarLayerAlpha(frame.targetPowerBar or frame.Power or frame.powerBar, 1, "_msufAlphaPower", force)
-    SetTextureLayerAlpha(frame.bg or frame.hpBarBG, 1, "_msufAlphaBackground", force)
-    if frame.bg ~= frame.hpBarBG then
-        SetTextureLayerAlpha(frame.hpBarBG, 1, "_msufAlphaBackground", force)
-    end
-    SetTextureLayerAlpha(frame.powerBarBG, 1, "_msufAlphaBackground", force)
-    SetTextLayerAlpha(frame, 1, force)
-    SetStatusLayerAlpha(frame, 1, force)
-    SetPortraitLayerAlpha(frame, 1, force)
-    frame._msufAlphaLayeredMode = nil
-    RefreshRoundedGroupBackdropAlpha(frame)
-end
-
-
-local function NormalizeAlphaLayerMode(mode)
-    if mode == true or mode == 1 or mode == "background" or mode == "backdrop" or mode == "bg" then
-        return "background"
-    elseif mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then
-        return "health"
-    end
-    return "foreground"
-end
-
-local function InCombatForEvent(event)
-    if event == "PLAYER_REGEN_DISABLED" then
-        return true
-    elseif event == "PLAYER_REGEN_ENABLED" then
-        return false
-    elseif _G.MSUF_InCombat ~= nil then
-        return _G.MSUF_InCombat == true
-    end
-    return InCombatLockdown and InCombatLockdown() and true or false
-end
-
-local function AlphaPair(cfg, mode)
-    if not cfg then
-        return 1, 1
-    end
-    local inAlpha = cfg.inCombat or 1
-    local outAlpha = cfg.outCombat or 1
-    if cfg.layered ~= true then
-        return inAlpha, outAlpha
-    end
-    if mode == "background" then
-        return cfg.backgroundInCombat or 1, cfg.backgroundOutOfCombat or 1
-    elseif mode == "health" then
-        return cfg.healthInCombat or 1,
-            cfg.healthOutOfCombat or 1
-    end
-    return cfg.foregroundInCombat or 1, cfg.foregroundOutOfCombat or 1
-end
-
-local function CompileAlphaRuntime(frame, cfg, force)
-    if not frame then
-        return nil
-    end
-    if not cfg then
-        frame._msufAlphaRuntimeCfg = nil
-        frame._msufAlphaRuntime = nil
-        return nil
-    end
-    if force ~= true and frame._msufAlphaRuntimeCfg == cfg and frame._msufAlphaRuntime then
-        return frame._msufAlphaRuntime
-    end
-
-    local rt = frame._msufAlphaRuntime
-    if not rt then
-        rt = {}
-        frame._msufAlphaRuntime = rt
-    end
-    frame._msufAlphaRuntimeCfg = cfg
-
-    local baseIn = Clamp01(cfg.inCombat, 1)
-    local baseOut = Clamp01(cfg.outCombat, 1)
-    local layered = cfg.layered == true
-    local layerMode = NormalizeAlphaLayerMode(cfg.layerMode)
-
-    rt.layered = layered
-    rt.frameIn = layered and 1 or baseIn
-    rt.frameOut = layered and 1 or baseOut
-    local fgIn = Clamp01(cfg.foregroundInCombat, 1)
-    local fgOut = Clamp01(cfg.foregroundOutOfCombat, 1)
-    local bgIn = Clamp01(cfg.backgroundInCombat, 1)
-    local bgOut = Clamp01(cfg.backgroundOutOfCombat, 1)
-
-    rt.fgIn = 1
-    rt.fgOut = 1
-    rt.bgIn = layerMode == "background" and bgIn or 1
-    rt.bgOut = layerMode == "background" and bgOut or 1
-    rt.hpIn = layerMode == "health" and Clamp01(cfg.healthInCombat, 1) or 1
-    rt.hpOut = layerMode == "health" and Clamp01(cfg.healthOutOfCombat, 1) or 1
-    rt.powerIn = layerMode == "foreground" and fgIn or 1
-    rt.powerOut = layerMode == "foreground" and fgOut or 1
-    rt.preserveHPColor = cfg.preserveHPColor == true and layerMode == "health"
-    rt.baseReady = nil
-    rt.baseState = nil
-    return rt
-end
-
-local function CurrentAlpha(cfg, mode, event)
-    local inAlpha, outAlpha = AlphaPair(cfg, mode)
-    return InCombatForEvent(event) and inAlpha or outAlpha
-end
-
-local function RangeLayerMode(frame)
-    local spec = frame and frame.MSUFSpec
-    local range = spec and spec.range
-    return range and range.layerMode == "health" and "health" or "frame"
+-- Apply the HP-fill alpha to the health bar and any prediction bars that sit on top
+-- of it, so absorbs/heal-prediction fade with the health fill.
+local function ApplyHealthFillAlpha(frame, alpha, force)
+    SetStatusBarFillAlpha(frame.hpBar or frame.Health, alpha, "_msufAlphaHealth", force)
+    SetStatusBarFillAlpha(frame.incomingHealBar, alpha, "_msufAlphaPrediction", force)
+    SetStatusBarFillAlpha(frame.absorbBar, alpha, "_msufAlphaPrediction", force)
+    SetStatusBarFillAlpha(frame.healAbsorbBar, alpha, "_msufAlphaPrediction", force)
 end
 
 local function RangeMul(frame)
@@ -236,223 +97,82 @@ local function RangeMul(frame)
     return mul
 end
 
-local function ApplyRangeMul(frame, frameAlpha, hpAlpha, healthBgAlpha)
-    local mul = RangeMul(frame)
-    if mul == 1 then
-        return frameAlpha, hpAlpha, healthBgAlpha, false
+-- "health" range fade dims only the HP fill; anything else dims the whole frame.
+local function RangeFadesWholeFrame(frame)
+    local spec = frame and frame.MSUFSpec
+    local range = spec and spec.range
+    return not (range and range.layerMode == "health")
+end
+
+-- Resolve the configured HP-fill alpha (independent of range), clamped, with the
+-- edit-mode floor so bars never fully vanish while the user is positioning frames.
+local function ConfiguredHPAlpha(cfg)
+    local hp = Clamp01(cfg and cfg.hpAlpha, 1)
+    if _G.MSUF_UnitEditModeActive == true and hp < 0.35 then
+        hp = 0.35
     end
-    if RangeLayerMode(frame) == "health" then
-        return frameAlpha, hpAlpha * mul, healthBgAlpha, true
-    end
-    return frameAlpha * mul, hpAlpha, healthBgAlpha, false
+    return hp
 end
 
-local function AlphaNeedsCombatRefresh(cfg)
-    return cfg and cfg.combatEvents == true
-end
-
-local function HasCombatTrackedFrames()
-    return (Alpha.combatFrameCount or 0) > 0
-end
-
-local function EnsureAlphaFrameSet(field)
-    local frames = Alpha[field]
-    if type(frames) ~= "table" then
-        frames = setmetatable({}, { __mode = "k" })
-        Alpha[field] = frames
-    end
-    return frames
-end
-
-local function TrackAlphaFrame(frame, cfg)
+local function ResetFrameLayers(frame, force)
     if not frame then
         return
     end
-    local shouldTrack = AlphaNeedsCombatRefresh(cfg) and true or false
-    if shouldTrack then
-        local frames = EnsureAlphaFrameSet("combatFrames")
-        local wasTracked = frames[frame] == true
-        if not wasTracked then
-            Alpha.combatFrameCount = (Alpha.combatFrameCount or 0) + 1
-        end
-        frames[frame] = true
-    else
-        local frames = Alpha.combatFrames
-        if not frames then
-            return
-        end
-        local wasTracked = frames[frame] == true
-        if wasTracked then
-            Alpha.combatFrameCount = (Alpha.combatFrameCount or 1) - 1
-            if Alpha.combatFrameCount < 0 then Alpha.combatFrameCount = 0 end
-        end
-        frames[frame] = nil
-    end
-end
-
-local function AlphaCombatStateForEvent(event)
-    if event == "PLAYER_REGEN_DISABLED" then
-        return true
-    elseif event == "PLAYER_REGEN_ENABLED" then
-        return false
-    elseif _G.MSUF_InCombat ~= nil then
-        return _G.MSUF_InCombat == true
-    end
-    return InCombatLockdown and InCombatLockdown() and true or false
-end
-
-local function RefreshAlphaBase(frame, rt, event, force)
-    if not rt then
-        return
-    end
-    local needsRefresh = force == true
-        or rt.baseReady ~= true
-        or event == "MSUF_ALPHA_COMBAT"
-        or event == "PLAYER_REGEN_DISABLED"
-        or event == "PLAYER_REGEN_ENABLED"
-    if not needsRefresh then
-        return
-    end
-
-    local inCombat = AlphaCombatStateForEvent(event)
-    local state = inCombat and 1 or 0
-    if force ~= true and rt.baseReady == true and rt.baseState == state then
-        return
-    end
-
-    rt.baseReady = true
-    rt.baseState = state
-    rt.baseFrame = inCombat and rt.frameIn or rt.frameOut
-    if rt.layered then
-        rt.baseFG = inCombat and rt.fgIn or rt.fgOut
-        rt.baseBG = inCombat and rt.bgIn or rt.bgOut
-        rt.baseHP = inCombat and rt.hpIn or rt.hpOut
-        rt.basePower = inCombat and rt.powerIn or rt.powerOut
-        rt.baseHealthBG = rt.baseBG
-        rt.basePortrait = 1
-        rt.baseStatus = rt.baseFG
-    else
-        rt.baseFG = 1
-        rt.baseBG = 1
-        rt.baseHP = 1
-        rt.basePower = 1
-        rt.baseHealthBG = 1
-        rt.basePortrait = 1
-        rt.baseStatus = 1
-    end
-end
-
-local function UntrackAlphaFrame(frame)
-    if not frame then
-        return
-    end
-    local frames = Alpha.combatFrames
-    if frames and frames[frame] == true then
-        frames[frame] = nil
-        Alpha.combatFrameCount = (Alpha.combatFrameCount or 1) - 1
-        if Alpha.combatFrameCount < 0 then Alpha.combatFrameCount = 0 end
-    end
-end
-
-local function ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, powerAlpha, healthBgAlpha, portraitAlpha, statusAlpha, force)
-    SetFrameAlpha(frame, frameAlpha)
-    SetStatusBarLayerAlpha(frame.hpBar or frame.Health, hpAlpha, "_msufAlphaHealth", force)
-    SetStatusBarLayerAlpha(frame.incomingHealBar, hpAlpha, "_msufAlphaPrediction", force)
-    SetStatusBarLayerAlpha(frame.absorbBar, hpAlpha, "_msufAlphaPrediction", force)
-    SetStatusBarLayerAlpha(frame.healAbsorbBar, hpAlpha, "_msufAlphaPrediction", force)
-    SetStatusBarLayerAlpha(frame.targetPowerBar or frame.Power or frame.powerBar, powerAlpha, "_msufAlphaPower", force)
-    SetTextureLayerAlpha(frame.bg or frame.hpBarBG, healthBgAlpha, "_msufAlphaBackground", force)
-    if frame.bg ~= frame.hpBarBG then
-        SetTextureLayerAlpha(frame.hpBarBG, healthBgAlpha, "_msufAlphaBackground", force)
-    end
-    SetTextureLayerAlpha(frame.powerBarBG, bgAlpha, "_msufAlphaBackground", force)
-    RefreshRoundedGroupBackdropAlpha(frame)
+    SetFrameAlpha(frame, 1)
+    ApplyHealthFillAlpha(frame, 1, force)
     SetTextLayerAlpha(frame, 1, force)
-    SetStatusLayerAlpha(frame, statusAlpha or fgAlpha, force)
-    SetPortraitLayerAlpha(frame, portraitAlpha, force)
-    frame._msufAlphaLayeredMode = true
+    SetPortraitLayerAlpha(frame, 1, force)
+    frame._msufAlphaActive = nil
 end
 
-local function ApplyAlphaRuntime(frame, rt, force, resetLayers)
-    local frameAlpha = rt.baseFrame or 1
-    local fgAlpha = rt.baseFG or 1
-    local bgAlpha = rt.baseBG or 1
-    local hpAlpha = rt.baseHP or 1
-    local powerAlpha = rt.basePower or 1
-    local healthBgAlpha = rt.baseHealthBG or 1
-    local portraitAlpha = rt.basePortrait or 1
-    local statusAlpha = rt.baseStatus or 1
-
-    local forceLayeredForRange
-    frameAlpha, hpAlpha, healthBgAlpha, forceLayeredForRange = ApplyRangeMul(frame, frameAlpha, hpAlpha, healthBgAlpha)
-
-    if _G.MSUF_UnitEditModeActive == true and frameAlpha < 0.35 then
-        frameAlpha = 0.35
-    end
-
-    local useLayeredApply = rt.layered or forceLayeredForRange == true
-    if not force
-        and frame._msufAlphaLastLayered == useLayeredApply
-        and frame._msufAlphaLastFrame == frameAlpha
-        and frame._msufAlphaLastFG == fgAlpha
-        and frame._msufAlphaLastBG == bgAlpha
-        and frame._msufAlphaLastHP == hpAlpha
-        and frame._msufAlphaLastPower == powerAlpha
-        and frame._msufAlphaLastHealthBG == healthBgAlpha
-        and frame._msufAlphaLastPortrait == portraitAlpha
-        and frame._msufAlphaLastStatus == statusAlpha then
-        return true
-    end
-
-    if useLayeredApply then
-        ApplyLayeredAlpha(frame, frameAlpha, fgAlpha, bgAlpha, hpAlpha, powerAlpha, healthBgAlpha, portraitAlpha, statusAlpha, force)
-    else
-        SetFrameAlpha(frame, frameAlpha)
-        if frame._msufAlphaLayeredMode == true or resetLayers == true then
-            ResetLegacyLayerAlphas(frame, force)
-        end
-    end
-
-    frame._msufAlphaEffective = frameAlpha
-    frame._msufAlphaLastLayered = useLayeredApply
-    frame._msufAlphaLastFrame = frameAlpha
-    frame._msufAlphaLastFG = fgAlpha
-    frame._msufAlphaLastBG = bgAlpha
-    frame._msufAlphaLastHP = hpAlpha
-    frame._msufAlphaLastPower = powerAlpha
-    frame._msufAlphaLastHealthBG = healthBgAlpha
-    frame._msufAlphaLastPortrait = portraitAlpha
-    frame._msufAlphaLastStatus = statusAlpha
-    return true
-end
-
-local function ApplyCompiledAlpha(frame, cfg, event, eventUnit, eventRange)
+-- The single apply path. `force` re-writes even when the cached values match.
+local function ApplyAlpha(frame, cfg, force)
     if not frame then
         return
     end
-    if not cfg then
-        SetFrameAlpha(frame, 1)
-        ResetLegacyLayerAlphas(frame, true)
-        return
-    end
-    if cfg.active ~= true and RangeMul(frame) == 1 then
-        local effective = frame._msufAlphaEffective
-        if frame._msufAlphaRuntime or frame._msufAlphaLayeredMode == true or (effective ~= nil and effective ~= 1) then
-            Alpha.Disable(frame)
-        else
-            UntrackAlphaFrame(frame)
+
+    local mul = RangeMul(frame)
+    local wholeFrame = RangeFadesWholeFrame(frame)
+
+    -- No configured alpha and no range fade -> make sure everything is restored,
+    -- then leave the frame alone.
+    if not (cfg and cfg.active == true) and mul == 1 then
+        if frame._msufAlphaActive == true then
+            ResetFrameLayers(frame, force)
         end
         return
     end
-    local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" or event == "MSUF_VISUALS"
-        or event == "MSUF_ALPHA" or event == "MSUF_RANGE_FORCE"
-    local rt = CompileAlphaRuntime(frame, cfg, force)
-    if not rt then
+
+    local hp = ConfiguredHPAlpha(cfg)
+    local excludeTextPortrait = cfg and cfg.excludeTextPortrait == true
+
+    -- Configured foreground opacity (texts + portrait), before range. The toggle keeps
+    -- it fully opaque while the bars dim.
+    local foregroundAlpha = excludeTextPortrait and 1 or hp
+
+    -- Range either fades the whole frame (frame alpha, which cascades to texts/portrait)
+    -- or only the HP fill texture. Text/portrait are never multiplied by range directly:
+    -- in whole-frame mode the frame alpha already covers them; in health mode range is
+    -- meant to touch the bar only.
+    local frameAlpha = wholeFrame and mul or 1
+    local hpAlpha = hp * (wholeFrame and 1 or mul)
+
+    if not force
+        and frame._msufAlphaLastFrame == frameAlpha
+        and frame._msufAlphaLastHP == hpAlpha
+        and frame._msufAlphaLastFG == foregroundAlpha then
         return
     end
 
-    RefreshAlphaBase(frame, rt, event, force)
-    ApplyAlphaRuntime(frame, rt, force, event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE")
+    SetFrameAlpha(frame, frameAlpha)
+    ApplyHealthFillAlpha(frame, hpAlpha, force)
+    SetTextLayerAlpha(frame, foregroundAlpha, force)
+    SetPortraitLayerAlpha(frame, foregroundAlpha, force)
+
+    frame._msufAlphaActive = true
+    frame._msufAlphaLastFrame = frameAlpha
+    frame._msufAlphaLastHP = hpAlpha
+    frame._msufAlphaLastFG = foregroundAlpha
 end
 
 function Alpha.IsEnabled(frame, spec)
@@ -468,89 +188,104 @@ function Alpha.GetUnitlessEvents(frame, spec)
 end
 
 function Alpha.Apply(frame, spec)
-    TrackAlphaFrame(frame, spec and spec.alpha)
-    ApplyCompiledAlpha(frame, spec and spec.alpha, "MSUF_APPLY")
+    ApplyAlpha(frame, spec and spec.alpha, true)
 end
 
-function Alpha.Update(frame, event, unit, ...)
-    ApplyCompiledAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, event, unit, ...)
+function Alpha.Update(frame, event)
+    local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE"
+        or event == "MSUF_VISUALS" or event == "MSUF_ALPHA" or event == "MSUF_RANGE_FORCE"
+    ApplyAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, force)
 end
 
 function Alpha.Disable(frame)
     if not frame then
         return
     end
-    UntrackAlphaFrame(frame)
-    frame._msufAlphaRuntimeCfg = nil
-    frame._msufAlphaRuntime = nil
-    frame._msufAlphaEffective = 1
-    frame._msufAlphaLastLayered = nil
     frame._msufAlphaLastFrame = nil
-    frame._msufAlphaLastFG = nil
-    frame._msufAlphaLastBG = nil
     frame._msufAlphaLastHP = nil
-    frame._msufAlphaLastPower = nil
-    frame._msufAlphaLastHealthBG = nil
-    frame._msufAlphaLastPortrait = nil
-    frame._msufAlphaLastStatus = nil
-    ClearAlphaField(frame, "_msufLastAlpha")
-    SetFrameAlpha(frame, 1)
-    ResetLegacyLayerAlphas(frame, true)
+    frame._msufAlphaLastFG = nil
+    -- Range fade may still want the frame dimmed even though configured alpha is 1.
+    if RangeMul(frame) ~= 1 then
+        ApplyAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, true)
+        return
+    end
+    ResetFrameLayers(frame, true)
 end
 
+-- Range fade entry point. Stores the multiplier and re-applies. Stays self-sufficient
+-- (does not depend on the element being enabled), because the dispatcher disables the
+-- Alpha element whenever hpAlpha == 1 -- but range still needs to dim such frames.
+UF.ApplyRangeModifier = function(frame, mul, force)
+    if not frame then
+        return false
+    end
+    mul = Clamp01(mul, 1)
+    if force ~= true and frame._msufRangeMul == mul then
+        return true
+    end
+    frame._msufRangeMul = mul
+    local cfg = frame.MSUFSpec and frame.MSUFSpec.alpha
+    if cfg or mul ~= 1 then
+        ApplyAlpha(frame, cfg, force == true)
+    else
+        SetFrameAlpha(frame, mul)
+    end
+    return true
+end
+_G.MSUF_UF_ApplyRangeModifier = UF.ApplyRangeModifier
+
+UF.ApplyAlphaFrame = function(frame, event)
+    if not frame then
+        return false
+    end
+    Alpha.Update(frame, event or "MSUF_ALPHA")
+    return true
+end
+
+UF.RegisterElement("Alpha", Alpha)
+
+-- Coalesced refresh of every managed unit frame's alpha. Combat-state alpha no longer
+-- exists, so both "all" and the legacy "combat" request resolve to the same refresh.
 do
     local pending
-    local pendingMode
 
-    local function MergeAlphaRefreshMode(current, requested)
-        if current == "all" or requested == current then
-            return current
-        end
-        if requested == nil or requested == false then
-            return "all"
-        end
-        if requested == true or requested == "combat" then
-            return current and (current == "combat" and "combat" or "all") or "combat"
-        end
-        return "all"
-    end
-
-    local function FlushAlphaRefresh()
-        local mode = pendingMode
+    local function Flush()
         pending = nil
-        pendingMode = nil
-        if mode == "combat" and _G.MSUF_RefreshCombatUnitAlphas then
-            return _G.MSUF_RefreshCombatUnitAlphas()
-        elseif _G.MSUF_RefreshAllUnitAlphas then
+        if _G.MSUF_RefreshAllUnitAlphas then
             return _G.MSUF_RefreshAllUnitAlphas()
         end
     end
 
-    function Alpha.RequestRefresh(mode)
-        if (mode == true or mode == "combat") and not HasCombatTrackedFrames() then
-            return false
-        end
+    function Alpha.RequestRefresh()
         if pending then
-            pendingMode = MergeAlphaRefreshMode(pendingMode, mode)
             return true
         end
         pending = true
-        pendingMode = MergeAlphaRefreshMode(nil, mode)
         if _G.MSUF_ScheduleOnce then
-            _G.MSUF_ScheduleOnce("UF_ALPHA_FLUSH", FlushAlphaRefresh)
+            _G.MSUF_ScheduleOnce("UF_ALPHA_FLUSH", Flush)
         elseif _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0, FlushAlphaRefresh)
+            _G.C_Timer.After(0, Flush)
         else
-            FlushAlphaRefresh()
+            Flush()
         end
         return true
     end
 end
 
-_G.MSUF_RequestAlphaRefresh = function(combatOnly)
-    return Alpha.RequestRefresh(combatOnly)
+_G.MSUF_RequestAlphaRefresh = function()
+    return Alpha.RequestRefresh()
 end
 
+-- Retained for callers (preview API, key bindings). No combat alpha anymore -> refresh
+-- everything.
+_G.MSUF_RefreshCombatUnitAlphas = function()
+    if _G.MSUF_RefreshAllUnitAlphas then
+        return _G.MSUF_RefreshAllUnitAlphas()
+    end
+    return false
+end
+
+-- Returns the configured HP-fill alpha for a unit key (preview helper).
 _G.MSUF_GetDesiredUnitAlpha = function(key)
     local unit = key == "boss" and "boss1" or key
     if unit == "tot" or unit == "targetoftarget" then
@@ -561,133 +296,18 @@ _G.MSUF_GetDesiredUnitAlpha = function(key)
     if not cfg then
         return 1
     end
-    return CurrentAlpha(cfg, cfg.layered == true and cfg.layerMode or "foreground", "MSUF_ALPHA")
-end
-
-local function ResolveFrameSpec(frame, key)
-    if frame and frame.MSUFSpec then
-        return frame.MSUFSpec
-    end
-    local unit = frame and frame.unit or key
-    if key and key ~= "boss" and UF.IsManagedUnit and UF.IsManagedUnit(key) then
-        unit = key
-    end
-    if unit and UF.Config then
-        local getSpec = UF.Config.GetSpec
-        return getSpec and getSpec(unit) or frame and frame.MSUFSpec
-    end
-    return frame and frame.MSUFSpec
+    return Clamp01(cfg.hpAlpha, 1)
 end
 
 _G.MSUF_ApplyUnitAlpha = function(frame, key)
     if not frame then
         return false
     end
-    local spec = ResolveFrameSpec(frame, key)
-    frame.MSUFSpec = spec or frame.MSUFSpec
-    frame.cachedConfig = frame.MSUFSpec
-    TrackAlphaFrame(frame, frame.MSUFSpec and frame.MSUFSpec.alpha)
-    ApplyCompiledAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, "MSUF_ALPHA")
+    Alpha.Update(frame, "MSUF_ALPHA")
     return true
 end
 
-UF.ApplyRangeModifier = function(frame, mul, force)
-    if not frame then
-        return false
-    end
-    mul = Clamp01(mul, 1)
-    if force ~= true and frame._msufRangeMul == mul then
-        return true
-    end
-    frame._msufRangeMul = mul
-    local spec = frame.MSUFSpec
-    local cfg = spec and spec.alpha
-    if cfg then
-        TrackAlphaFrame(frame, cfg)
-        local rt = frame._msufAlphaRuntime
-        if rt and rt.baseReady == true and frame._msufAlphaRuntimeCfg == cfg then
-            ApplyAlphaRuntime(frame, rt, force == true, false)
-        else
-            ApplyCompiledAlpha(frame, cfg, force == true and "MSUF_RANGE_FORCE" or "MSUF_RANGE")
-        end
-    else
-        SetFrameAlpha(frame, mul)
-    end
-    return true
-end
-
-_G.MSUF_UF_ApplyRangeModifier = UF.ApplyRangeModifier
-
-UF.ApplyAlphaFrame = function(frame, event)
-    if not frame then
-        return false
-    end
-    ApplyCompiledAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, event or "MSUF_ALPHA")
-    return true
-end
-
-if CreateFrame and not Alpha.stateDriver then
-    local driver = CreateFrame("Frame")
-    driver:RegisterEvent("PLAYER_REGEN_DISABLED")
-    driver:RegisterEvent("PLAYER_REGEN_ENABLED")
-    driver:RegisterEvent("PLAYER_ENTERING_WORLD")
-    driver:SetScript("OnEvent", function(_, event)
-        if event == "PLAYER_REGEN_DISABLED" then
-            _G.MSUF_InCombat = true
-            if HasCombatTrackedFrames() then
-                Alpha.RequestRefresh(true)
-            end
-        elseif event == "PLAYER_REGEN_ENABLED" then
-            _G.MSUF_InCombat = false
-            if HasCombatTrackedFrames() then
-                Alpha.RequestRefresh(true)
-            end
-        else
-            _G.MSUF_InCombat = InCombatLockdown and InCombatLockdown() and true or false
-            Alpha.RequestRefresh(false)
-        end
-    end)
-    Alpha.stateDriver = driver
-end
-
-UF.RegisterElement("Alpha", Alpha)
-
-local function RefreshAlphaFrameSet(frames, token, event, requireCombat)
-    if type(frames) ~= "table" then
-        return false
-    end
-    local refreshed = false
-    for frame in pairs(frames) do
-        local active = frame and frame._msufActiveElements
-        local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.alpha
-        local valid = frame and active and active.Alpha == true and cfg
-        if valid and requireCombat == true and cfg.combatEvents ~= true then
-            valid = false
-        end
-        if valid then
-            if frame._msufAlphaRefreshToken ~= token then
-                frame._msufAlphaRefreshToken = token
-                ApplyCompiledAlpha(frame, cfg, event)
-                refreshed = true
-            end
-        else
-            frames[frame] = nil
-            if requireCombat == true then
-                Alpha.combatFrameCount = (Alpha.combatFrameCount or 1) - 1
-                if Alpha.combatFrameCount < 0 then Alpha.combatFrameCount = 0 end
-            end
-        end
-    end
-    return refreshed
-end
-
-_G.MSUF_RefreshCombatUnitAlphas = function()
-    Alpha.refreshToken = (Alpha.refreshToken or 0) + 1
-    return RefreshAlphaFrameSet(Alpha.combatFrames, Alpha.refreshToken, "MSUF_ALPHA_COMBAT", true)
-end
-
-_G.MSUF_Alpha_UpdatePreserveMissingHP = function(frame)
-    if frame then
-        ApplyCompiledAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, "MSUF_ALPHA")
-    end
+-- preserveHPColor was removed with the layered model; kept as a no-op so the bar
+-- colour pipeline (MSUF_Colors / BarsCommon) can call it unconditionally.
+_G.MSUF_Alpha_UpdatePreserveMissingHP = function()
 end

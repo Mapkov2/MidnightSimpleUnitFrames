@@ -367,155 +367,52 @@ local function BuildGFLayout(ctx)
     RefreshScalingState()
     M.SetCollapsibleRefreshState(scale, RefreshScalingState)
 
-    local transparency = b:CollapsibleSection("border", "Transparency", 620, false)
+    -- Unified, simple transparency: HP bar fill slider, background slider, background
+    -- colour, and a toggle that keeps text + portrait opaque while bars fade. Range fade
+    -- multiplies these at runtime. All coldpath.
+    local transparency = b:CollapsibleSection("border", "Transparency", 200, false)
     local transparencyW = transparency._msuf2Width or b.width or 720
     local transGap = 16
     local transLeftX = 20
     local transInnerW = max(320, transparencyW - 40)
-    local transLeftW = floor((transInnerW - transGap) * 0.48)
+    local transLeftW = floor((transInnerW - transGap) * 0.5)
     local transRightX = transLeftX + transLeftW + transGap
     local transRightW = transInnerW - transLeftW - transGap
 
-    local opacityCard = W.ControlCard(transparency, "Opacity", "Combat state alpha.", transLeftX, -38, transLeftW, 250)
-    local targetCard = W.ControlCard(transparency, "Fade target", "Whole frame or one visual layer.", transRightX, -38, transRightW, 250)
-    local backdropCard = W.ControlCard(transparency, "Backdrop", "Frame background and base opacity.", transLeftX, -314, transLeftW, 250)
-    local healthCard = W.ControlCard(transparency, "Health layers", "Base opacity for health fill and track.", transRightX, -314, transRightW, 250)
-
-    local AlphaKeysForMode = M.AlphaKeysForMode
     local AlphaLabel = M.AlphaLabel
     local Clamp01 = M.Clamp01
 
-    local function NormalizeAlphaMode(mode)
-        local gf = GF and GF()
-        if gf and type(gf.NormalizeAlphaLayerMode) == "function" then
-            return gf.NormalizeAlphaLayerMode(mode)
-        end
-        if mode == true or mode == 1 or mode == "background" then return "background" end
-        if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then return "health" end
-        return "foreground"
-    end
+    local opacityCard = W.ControlCard(transparency, "Opacity", "Fade the health bar and its background.", transLeftX, -38, transLeftW, 150)
+    local optionsCard = W.ControlCard(transparency, "Background & Options", "Background colour and readability.", transRightX, -38, transRightW, 150)
 
-    local function AlphaModeValue(mode)
-        if mode == "background" then return 1 end
-        if mode == "health" then return 2 end
-        return 0
-    end
-
-    local function CurrentOpacityMode(conf)
-        conf = conf or Conf(CurrentScope())
-        if conf and conf.alphaExcludeTextPortrait == true then
-            return NormalizeAlphaMode(conf.alphaLayerMode)
-        end
-        return "frame"
-    end
-
-    local function CurrentAlphaKeys(conf)
-        return AlphaKeysForMode(CurrentOpacityMode(conf))
-    end
-
-    local function ReadAlphaValue(inCombat)
-        local scope = CurrentScope()
-        local conf = Conf(scope)
-        local inKey, outKey = CurrentAlphaKeys(conf)
-        local key = inCombat and inKey or outKey
-        local value = tonumber(conf and conf[key])
-        if value ~= nil then return value end
-        if conf and conf.alphaExcludeTextPortrait == true then return 1 end
-        return Num(scope, inCombat and "alphaInCombat" or "alphaOutOfCombat", 1)
-    end
-
-    local function WriteNumber(conf, key, value, fallback)
-        value = Clamp01(value, fallback)
-        if conf[key] == value then return false end
-        conf[key] = value
-        return true
-    end
-
-    local function WriteBool(conf, key, value)
-        value = value and true or false
-        if conf[key] == value then return false end
-        conf[key] = value
-        return true
-    end
-
-    local function BindAlphaSlider(widget, inCombat, label)
+    local function BindAlphaSlider(widget, key, default, label)
         M.BindSlider(ctx, widget,
-            function() return ReadAlphaValue(inCombat) end,
+            function() return Num(CurrentScope(), key, default) end,
             function(v)
-                local scope = CurrentScope()
-                local conf = Conf(scope)
-                local inKey, outKey = CurrentAlphaKeys(conf)
-                local changed
-                if inCombat then
-                    changed = WriteNumber(conf, inKey, v, 1) or changed
-                    if Bool(scope, "alphaSync", false) then
-                        changed = WriteNumber(conf, outKey, v, 1) or changed
-                        if M.Refresh then M.Refresh(ctx) end
-                    end
-                else
-                    changed = WriteNumber(conf, outKey, v, 1) or changed
-                end
-                if changed then QueueGF(scope, "visual") end
+                local n = Clamp01(v, default or 0)
+                local conf = Conf(CurrentScope())
+                if conf[key] == n then return end
+                conf[key] = n
+                QueueGF(CurrentScope(), "visual")
             end)
-        return M.BindSliderLiveLabel(ctx, widget, function() return ReadAlphaValue(inCombat) end, function(value) return AlphaLabel(label, value) end, true)
+        return M.BindSliderLiveLabel(ctx, widget, function() return Num(CurrentScope(), key, default) end, function(value) return AlphaLabel(label, tonumber(value) or default or 0) end, true)
     end
 
-    local inCombat = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), true, "In combat")
-    W.MoveWidget(inCombat, opacityCard, 16, -62, transLeftW - 58, "LEFT")
+    local hpAlpha = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), "hpBarAlpha", 1, "HP Bar")
+    W.MoveWidget(hpAlpha, opacityCard, 16, -62, transLeftW - 58, "LEFT")
 
-    local outCombat = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), false, "Out of combat")
-    W.MoveWidget(outCombat, opacityCard, 16, -130, transLeftW - 58, "LEFT")
+    local bgAlpha = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), "hpBgAlpha", 0.85, "Background")
+    W.MoveWidget(bgAlpha, opacityCard, 16, -116, transLeftW - 58, "LEFT")
 
-    local sync = W.ToggleAt(opacityCard, "Sync both", 16, -194, transLeftW - 32)
-    M.BindToggle(ctx, sync,
-        function() return Bool(CurrentScope(), "alphaSync", false) end,
-        function(v)
-            local scope = CurrentScope()
-            local conf = Conf(scope)
-            local changed = WriteBool(conf, "alphaSync", v)
-            if v then
-                local _, outKey = CurrentAlphaKeys(conf)
-                changed = WriteNumber(conf, outKey, ReadAlphaValue(true), 1) or changed
-            end
-            if changed then QueueGF(scope, "visual") end
-            if M.Refresh then M.Refresh(ctx) end
-        end)
-
-    local mode = W.Segment(targetCard, "Affects", VT("frame", "Whole", "foreground", "Power Bar", "health", "HP Bar", "background", "Backdrop"), transRightW - 32)
-    W.MoveWidget(mode, targetCard, 16, -62, transRightW - 32, "LEFT")
-    M.LayoutSegmentButtons(mode)
-
-    local function SetOpacityMode(value)
-        local scope = CurrentScope()
-        local conf = Conf(scope)
-        local changed
-        if value == "frame" then
-            changed = WriteBool(conf, "alphaExcludeTextPortrait", false) or changed
-        else
-            changed = WriteBool(conf, "alphaExcludeTextPortrait", true) or changed
-            local modeValue = AlphaModeValue(value)
-            if conf.alphaLayerMode ~= modeValue then
-                conf.alphaLayerMode = modeValue
-                changed = true
-            end
-        end
-        if changed then QueueGF(scope, "visual") end
-        if M.Refresh then M.Refresh(ctx) end
-    end
-
-    M.BindSegment(ctx, mode,
-        function() return CurrentOpacityMode() end,
-        SetOpacityMode)
-
-    local bgColor = W.Color(backdropCard, "Background Color")
+    local bgColor = W.Color(optionsCard, "Background Color")
     if bgColor._msuf2Title then
         bgColor._msuf2Title:ClearAllPoints()
-        bgColor._msuf2Title:SetPoint("TOPLEFT", backdropCard, "TOPLEFT", 16, -56)
+        bgColor._msuf2Title:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 16, -62)
         bgColor._msuf2Title:SetWidth(120)
         bgColor._msuf2Title:SetJustifyH("LEFT")
     end
     bgColor:ClearAllPoints()
-    bgColor:SetPoint("TOPLEFT", backdropCard, "TOPLEFT", 154, -54)
+    bgColor:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 154, -60)
     bgColor:SetSize(34, 16)
     M.BindColor(ctx, bgColor,
         function()
@@ -528,59 +425,10 @@ local function BuildGFLayout(ctx)
             QueueGF(CurrentScope(), "visual")
         end)
 
-    local function BindTransparencySlider(widget, key, default, labelFn)
-        M.BindSlider(ctx, widget,
-            function() return Num(CurrentScope(), key, default) end,
-            function(v)
-                local n = Clamp01(v, default or 0)
-                local conf = Conf(CurrentScope())
-                if conf[key] == n then return end
-                conf[key] = n
-                QueueGF(CurrentScope(), "visual")
-            end)
-        return M.BindSliderLiveLabel(ctx, widget, function() return Num(CurrentScope(), key, default) end, function(value) return labelFn(tonumber(value) or default or 0) end, true)
-    end
-
-    local bgAlpha = BindTransparencySlider(W.Slider(backdropCard, "", 0, 1, 0.05, transLeftW), "bgA", 0.85,
-        function(v) return AlphaLabel("Backdrop base", v) end)
-    W.MoveWidget(bgAlpha, backdropCard, 16, -100, transLeftW - 58, "LEFT")
-
-    local hpFg = BindTransparencySlider(W.Slider(healthCard, "", 0.3, 1, 0.05, transRightW), "hpBarAlpha", 1,
-        function(v) return AlphaLabel("HP Fill", v) end)
-    W.MoveWidget(hpFg, healthCard, 16, -62, transRightW - 58, "LEFT")
-
-    local hpBg = W.Slider(healthCard, "", 0, 1, 0.05, transRightW)
-    M.BindSlider(ctx, hpBg,
-        function()
-            local conf = Conf(CurrentScope())
-            return tonumber(conf.hpBgAlpha) or tonumber(conf.bgA) or 0.85
-        end,
-        function(v)
-            local n = Clamp01(v, 0.85)
-            local conf = Conf(CurrentScope())
-            if conf.hpBgAlpha == n then return end
-            conf.hpBgAlpha = n
-            QueueGF(CurrentScope(), "visual")
-        end)
-    M.BindSliderLiveLabel(ctx, hpBg, function()
-        local conf = Conf(CurrentScope())
-        return tonumber(conf.hpBgAlpha) or tonumber(conf.bgA) or 0.85
-    end, function(value) return AlphaLabel("HP Track", value) end, true)
-    W.MoveWidget(hpBg, healthCard, 16, -130, transRightW - 58, "LEFT")
-
-    local preserveHP = W.ToggleAt(healthCard, "Preserve HP color", 16, -188, transRightW - 32)
-    M.BindToggle(ctx, preserveHP,
-        function() return Bool(CurrentScope(), "alphaPreserveHPColor", false) end,
-        function(v)
-            v = v and true or false
-            Set(CurrentScope(), "alphaPreserveHPColor", v, "visual")
-            if M.WarnPreserveHPColorIfNeeded then M.WarnPreserveHPColorIfNeeded(v) end
-        end)
-
-    local textIgnore = W.ToggleAt(healthCard, "Text ignores HP opacity", 16, -222, transRightW - 32)
-    M.BindToggle(ctx, textIgnore,
-        function() return Bool(CurrentScope(), "hpTextIgnoreAlpha", true) end,
-        function(v) Set(CurrentScope(), "hpTextIgnoreAlpha", v and true or false, "visual") end)
+    local exclude = W.ToggleAt(optionsCard, "Keep text + portrait visible", 16, -100, transRightW - 32)
+    M.BindToggle(ctx, exclude,
+        function() return Bool(CurrentScope(), "alphaExcludeTextPortrait", false) end,
+        function(v) Set(CurrentScope(), "alphaExcludeTextPortrait", v and true or false, "visual") end)
 
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
 

@@ -157,20 +157,14 @@ local MSUF_DEFAULT_BOSS_OFFSET_Y = 230
 --- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     if not db then  return end
+    --- Unified alpha defaults: HP fill opacity, background texture opacity, and a
+    --- toggle to keep text + portrait opaque while bars dim. Identical for unit and
+    --- group frames.
     local function EnsureUnitAlphaDefaults(conf)
         if not conf then  return end
-        if conf.alphaInCombat == nil then conf.alphaInCombat = 1 end
-        if conf.alphaOutOfCombat == nil then conf.alphaOutOfCombat = 1 end
-        if conf.alphaSync == nil then conf.alphaSync = false end
+        if conf.hpBarAlpha == nil then conf.hpBarAlpha = 1 end
+        if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
         if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
-        if conf.alphaLayerMode == nil then conf.alphaLayerMode = 0 end
-        if conf.alphaFGInCombat == nil then conf.alphaFGInCombat = 1 end
-        if conf.alphaFGOutOfCombat == nil then conf.alphaFGOutOfCombat = 1 end
-        if conf.alphaBGInCombat == nil then conf.alphaBGInCombat = 1 end
-        if conf.alphaBGOutOfCombat == nil then conf.alphaBGOutOfCombat = 1 end
-        if conf.alphaHPInCombat == nil then conf.alphaHPInCombat = 1 end
-        if conf.alphaHPOutOfCombat == nil then conf.alphaHPOutOfCombat = 1 end
-        if conf.alphaPreserveHPColor == nil then conf.alphaPreserveHPColor = false end
      end
     local function ForceFreshUnitframeScreenPosition(conf, x, y)
         if type(conf) ~= "table" then return end
@@ -2378,19 +2372,12 @@ local function fill(key, defaults)
         if u.smoothFill == nil then
             u.smoothFill = true
         end
-        --- Default missing alpha keys to 1 (100%) without overwriting user customizations.
-        if u.alphaInCombat == nil then u.alphaInCombat = 1 end
-        if u.alphaOutOfCombat == nil then u.alphaOutOfCombat = 1 end
-        if u.alphaSync == nil then u.alphaSync = false end
+        --- Unified alpha: HP fill opacity + background texture opacity + a toggle to
+        --- keep text/portrait opaque. Legacy combat/layered keys are wiped once by the
+        --- _msufAlphaUnified_v1 migration below.
+        if u.hpBarAlpha == nil then u.hpBarAlpha = 1 end
+        if u.hpBgAlpha == nil then u.hpBgAlpha = 0.85 end
         if u.alphaExcludeTextPortrait == nil then u.alphaExcludeTextPortrait = false end
-        if u.alphaLayerMode == nil then u.alphaLayerMode = 0 end
-        if u.alphaFGInCombat == nil then u.alphaFGInCombat = 1 end
-        if u.alphaFGOutOfCombat == nil then u.alphaFGOutOfCombat = 1 end
-        if u.alphaBGInCombat == nil then u.alphaBGInCombat = 1 end
-        if u.alphaBGOutOfCombat == nil then u.alphaBGOutOfCombat = 1 end
-        if u.alphaHPInCombat == nil then u.alphaHPInCombat = 1 end
-        if u.alphaHPOutOfCombat == nil then u.alphaHPOutOfCombat = 1 end
-        if u.alphaPreserveHPColor == nil then u.alphaPreserveHPColor = false end
         --- Portrait defaults used by the clean UF Portrait element.
         --- v4.324+: portraits are always per-unit. Older shared/override profiles
         --- are flattened once: override=true keeps unit values, non-overrides adopt
@@ -2434,6 +2421,33 @@ local function fill(key, defaults)
         u.portraitDecoOverride = nil
     end
     g._msufPortraitPerUnitMigrated_v4324 = true
+    --- Unified alpha migration (hard reset): the old combat/layered alpha model was
+    --- replaced by hpBarAlpha (HP fill) + hpBgAlpha (background) + alphaExcludeTextPortrait.
+    --- Wipe every retired key once across all unit and group confs and seed the new
+    --- defaults. dead/offline tint (deadBg*) and background RGB (bgR/bgG/bgB) are kept.
+    if g._msufAlphaUnified_v1 ~= true then
+        local RETIRED_ALPHA_KEYS = {
+            "alphaInCombat", "alphaOutOfCombat", "alphaSync", "alphaSyncBoth",
+            "alphaLayerMode", "alphaFGInCombat", "alphaFGOutOfCombat",
+            "alphaBGInCombat", "alphaBGOutOfCombat", "alphaHPInCombat",
+            "alphaHPOutOfCombat", "alphaPreserveHPColor", "bgA", "hpTextIgnoreAlpha",
+        }
+        for _, key in ipairs({
+            "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",
+            "gf_party", "gf_raid", "gf_mythicraid",
+        }) do
+            local conf = MSUF_DB[key]
+            if type(conf) == "table" then
+                for i = 1, #RETIRED_ALPHA_KEYS do
+                    conf[RETIRED_ALPHA_KEYS[i]] = nil
+                end
+                if conf.hpBarAlpha == nil then conf.hpBarAlpha = 1 end
+                if conf.hpBgAlpha == nil then conf.hpBgAlpha = 0.85 end
+                if conf.alphaExcludeTextPortrait == nil then conf.alphaExcludeTextPortrait = false end
+            end
+        end
+        g._msufAlphaUnified_v1 = true
+    end
     for _, key in ipairs({
         "general",
         "player", "target", "targettarget", "focustarget", "focus", "pet", "boss",

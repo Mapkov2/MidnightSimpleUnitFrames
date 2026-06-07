@@ -208,13 +208,6 @@ local function ApplyAllSceneAlphas()
     ApplyHeaderSceneAlpha("raid")
 end
 
-local function RefreshCombatAlpha()
-    if _G.MSUF_RefreshCombatUnitAlphas then
-        return _G.MSUF_RefreshCombatUnitAlphas()
-    end
-    return false
-end
-
 local function ScheduleRosterSettle()
     if not (C_Timer and C_Timer.After) then
         return
@@ -453,15 +446,10 @@ local function OnEvent(self, event, ...)
         if GF._pendingGroupRuntime then
             GF._pendingGroupRuntime = nil
             GF.RefreshAll()
-        elseif GF.HasCombatAlpha and GF.HasCombatAlpha() then
-            RefreshCombatAlpha()
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
         _G.MSUF_InCombat = true
         UnregisterNameEvents()
-        if GF.HasCombatAlpha and GF.HasCombatAlpha() then
-            RefreshCombatAlpha()
-        end
     elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         _G.MSUF_InCombat = InCombat()
         if _G.MSUF_InCombat then

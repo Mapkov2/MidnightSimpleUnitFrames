@@ -235,7 +235,7 @@ local COPY_TEXT_FIELDS = WL [[showName showHP showPower nameTextAnchor nameOffse
 local COPY_INDICATOR_FIELDS = WL [[showLeaderIcon leaderIconStyle leaderIconOffsetX leaderIconOffsetY leaderIconAnchor leaderIconSize leaderIconLayer showRaidMarker raidMarkerOffsetX raidMarkerOffsetY raidMarkerAnchor raidMarkerSize raidMarkerLayer showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle showLevelIndicator levelIndicatorOffsetX levelIndicatorOffsetY levelIndicatorAnchor levelIndicatorSize levelIndicatorLayer showEliteIcon eliteIconSize eliteIconAnchor eliteIconOffsetX eliteIconOffsetY eliteIconLayer]]
 local COPY_STATUSICON_FIELDS = WL [[statusIconsTestMode statusIconsMidnightStyle statusIconsAlpha statusTextEnabled statusTextOffsetX statusTextOffsetY statusTextAnchor statusTextSize statusTextLayer showCombatStateIndicator showRestingIndicator showIncomingResIndicator combatStateIndicatorOffsetX combatStateIndicatorOffsetY combatStateIndicatorAnchor combatStateIndicatorSize combatStateIndicatorLayer combatStateIndicatorSymbol restedStateIndicatorOffsetX restedStateIndicatorOffsetY restedStateIndicatorAnchor restedStateIndicatorSize restedStateIndicatorLayer restedStateIndicatorSymbol incomingResIndicatorOffsetX incomingResIndicatorOffsetY incomingResIndicatorAnchor incomingResIndicatorSize incomingResIndicatorLayer incomingResIndicatorSymbol]]
 local COPY_FRAME_BASIC_FIELDS = WL [[enabled showName showHP showPower reverseFillBars smoothFill]]
-local COPY_TRANSPARENCY_FIELDS = WL [[alphaInCombat alphaOutOfCombat alphaSync alphaSyncBoth rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
+local COPY_TRANSPARENCY_FIELDS = WL [[hpBarAlpha hpBgAlpha alphaExcludeTextPortrait rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode]]
 local COPY_LOAD_CONDITION_FIELDS = WL [[loadCondHideMounted loadCondHideInVehicle loadCondHideResting loadCondHideInCombat loadCondHideOutOfCombat loadCondHideStealthed loadCondHideSolo loadCondHideInGroup loadCondHideInInstance loadCondActive]]
 local COPY_LAYOUT_FIELDS = WL [[width height offsetX offsetY point relativePoint anchorFrameName anchorToUnitframe]]
 
@@ -783,17 +783,6 @@ local function SetPortraitValue(unit, key, value, reason)
     M.SetUnitValue(unit, key, value, reason or "MSUF2_PORTRAIT", { preview = true })
 end
 
-local function NormalizeAlphaMode(value)
-    if value == 1 or value == "background" then return "background" end
-    if value == 2 or value == "health" then return "health" end
-    return "foreground"
-end
-
-local function AlphaModeValue(mode)
-    if mode == "background" then return 1 end
-    if mode == "health" then return 2 end
-    return 0
-end
 
 local function NormalizeBossLayoutMode(value, legacyInvert)
     if type(value) == "string" and BOSS_LAYOUT_VALID[value] then return value end
@@ -872,7 +861,5 @@ UnitPage.ReadText = ReadText
 UnitPage.SetText = SetText
 UnitPage.NormalizePortrait = NormalizePortrait
 UnitPage.SetPortraitValue = SetPortraitValue
-UnitPage.NormalizeAlphaMode = NormalizeAlphaMode
-UnitPage.AlphaModeValue = AlphaModeValue
 UnitPage.NormalizeBossLayoutMode = NormalizeBossLayoutMode
 UnitPage.UpdateLoadActive = UpdateLoadActive

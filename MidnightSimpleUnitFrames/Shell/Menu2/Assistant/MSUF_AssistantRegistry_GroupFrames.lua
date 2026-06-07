@@ -150,76 +150,6 @@ local function GroupClamp01(value, fallback)
     return value
 end
 
-local function GroupAlphaKeysForMode(mode)
-    if mode == "background" then return "alphaBGInCombat", "alphaBGOutOfCombat" end
-    if mode == "health" then return "alphaHPInCombat", "alphaHPOutOfCombat" end
-    if mode == "foreground" then return "alphaFGInCombat", "alphaFGOutOfCombat" end
-    return "alphaInCombat", "alphaOutOfCombat"
-end
-
-local function GroupOpacityMode(scope)
-    local conf = GroupDB(scope)
-    if conf.alphaExcludeTextPortrait == true then
-        local mode = conf.alphaLayerMode
-        if mode == 1 or mode == "background" then return "background" end
-        if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then return "health" end
-        return "foreground"
-    end
-    return "frame"
-end
-
-local function GroupCurrentAlphaKeys(scope)
-    return GroupAlphaKeysForMode(GroupOpacityMode(scope))
-end
-
-local function GroupReadAlpha(scope, inCombat)
-    local conf = GroupDB(scope)
-    local inKey, outKey = GroupCurrentAlphaKeys(scope)
-    local key = inCombat and inKey or outKey
-    local value = tonumber(conf[key])
-    if value ~= nil then return value end
-    if conf.alphaExcludeTextPortrait == true then return 1 end
-    return tonumber(conf[inCombat and "alphaInCombat" or "alphaOutOfCombat"]) or 1
-end
-
-local function GroupWriteAlpha(scope, inCombat, value)
-    local conf = GroupDB(scope)
-    local inKey, outKey = GroupCurrentAlphaKeys(scope)
-    value = GroupClamp01(value, 1)
-    if inCombat then
-        conf[inKey] = value
-        if conf.alphaSync == true then conf[outKey] = value end
-    else
-        conf[outKey] = value
-    end
-end
-
-local function GroupAlphaModeValue(mode)
-    if mode == "background" then return 1 end
-    if mode == "health" then return 2 end
-    return 0
-end
-
-local function GroupSetOpacityMode(scope, mode)
-    local conf = GroupDB(scope)
-    local inValue = GroupReadAlpha(scope, true)
-    local outValue = GroupReadAlpha(scope, false)
-    if mode == "frame" then
-        conf.alphaExcludeTextPortrait = false
-        return
-    end
-    mode = (mode == "background" or mode == "health" or mode == "foreground") and mode or "foreground"
-    conf.alphaExcludeTextPortrait = true
-    conf.alphaLayerMode = GroupAlphaModeValue(mode)
-    local syncedOut = conf.alphaSync == true and inValue or outValue
-    local fgIn, fgOut = GroupAlphaKeysForMode("foreground")
-    local hpIn, hpOut = GroupAlphaKeysForMode("health")
-    local bgIn, bgOut = GroupAlphaKeysForMode("background")
-    conf[fgIn], conf[fgOut] = mode == "foreground" and inValue or 1, mode == "foreground" and syncedOut or 1
-    conf[hpIn], conf[hpOut] = mode == "health" and inValue or 1, mode == "health" and syncedOut or 1
-    conf[bgIn], conf[bgOut] = mode == "background" and inValue or 1, mode == "background" and syncedOut or 1
-end
-
 local function NormalizeGroupRoleOrder(value)
     local labels = { tank = "TANK", tanks = "TANK", healer = "HEALER", healers = "HEALER", heal = "HEALER", dps = "DAMAGER", damage = "DAMAGER", damager = "DAMAGER", damagers = "DAMAGER", dd = "DAMAGER" }
     local seen, out = {}, {}
@@ -952,85 +882,25 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "opacity affects")
     AddAliasesForUnit(aliases, scope, "transparency affects")
     AddAliasesForUnit(aliases, scope, "alpha target")
-    RegisterGroupEnum(scope, "opacityMode", "opacityMode", "Opacity Affects", "frame", { "frame", "foreground", "health", "background" }, {
-        frame = "frame",
-        whole = "frame",
-        ["whole frame"] = "frame",
-        foreground = "foreground",
-        bars = "foreground",
-        bar = "foreground",
-        hp = "health",
-        health = "health",
-        healthbar = "health",
-        ["health bar"] = "health",
-        background = "background",
-        backdrop = "background",
-        track = "background",
-    }, "visual", aliases, {
-        get = function(scopeKey) return GroupOpacityMode(scopeKey) end,
-        set = function(scopeKey, value) GroupSetOpacityMode(scopeKey, value) end,
-    })
-
+    -- Unified transparency: HP bar fill opacity, background opacity, and a toggle to
+    -- keep text + portrait opaque while bars dim.
     aliases = {}
-    AddAliasesForUnit(aliases, scope, "in combat opacity")
-    AddAliasesForUnit(aliases, scope, "combat opacity")
-    AddAliasesForUnit(aliases, scope, "in combat alpha")
-    RegisterGroupNumber(scope, "alphaInCombat", "alphaCurrentInCombat", "In Combat Opacity", 1, 0, 1, 0.05, "visual", aliases, {
-        percent = true,
-        get = function(scopeKey) return GroupReadAlpha(scopeKey, true) end,
-        set = function(scopeKey, value) GroupWriteAlpha(scopeKey, true, value) end,
-    })
-
-    aliases = {}
-    AddAliasesForUnit(aliases, scope, "out of combat opacity")
-    AddAliasesForUnit(aliases, scope, "outside combat opacity")
-    AddAliasesForUnit(aliases, scope, "out of combat alpha")
-    RegisterGroupNumber(scope, "alphaOutOfCombat", "alphaCurrentOutOfCombat", "Out Of Combat Opacity", 1, 0, 1, 0.05, "visual", aliases, {
-        percent = true,
-        get = function(scopeKey) return GroupReadAlpha(scopeKey, false) end,
-        set = function(scopeKey, value) GroupWriteAlpha(scopeKey, false, value) end,
-    })
-
-    aliases = {}
-    AddAliasesForUnit(aliases, scope, "sync opacity")
-    AddAliasesForUnit(aliases, scope, "sync alpha")
-    AddAliasesForUnit(aliases, scope, "sync both opacity")
-    RegisterGroupBoolean(scope, "alphaSync", "alphaSync", "Sync Combat Opacity", false, "visual", aliases, {
-        set = function(scopeKey, value)
-            local conf = GroupDB(scopeKey)
-            conf.alphaSync = value and true or false
-            if conf.alphaSync then GroupWriteAlpha(scopeKey, false, GroupReadAlpha(scopeKey, true)) end
-        end,
-    })
-
-    aliases = {}
-    AddAliasesForUnit(aliases, scope, "backdrop opacity")
-    AddAliasesForUnit(aliases, scope, "background opacity")
-    AddAliasesForUnit(aliases, scope, "backdrop base opacity")
-    RegisterGroupNumber(scope, "bgAlpha", "bgA", "Backdrop Base Opacity", 0.85, 0, 1, 0.05, "visual", aliases, { percent = true })
-
-    aliases = {}
+    AddAliasesForUnit(aliases, scope, "hp bar opacity")
     AddAliasesForUnit(aliases, scope, "hp fill opacity")
-    AddAliasesForUnit(aliases, scope, "health fill opacity")
     AddAliasesForUnit(aliases, scope, "health bar opacity")
-    RegisterGroupNumber(scope, "hpBarAlpha", "hpBarAlpha", "HP Fill Opacity", 1, 0.3, 1, 0.05, "visual", aliases, { percent = true })
+    RegisterGroupNumber(scope, "hpBarAlpha", "hpBarAlpha", "HP Bar Opacity", 1, 0, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
-    AddAliasesForUnit(aliases, scope, "hp track opacity")
-    AddAliasesForUnit(aliases, scope, "health track opacity")
-    AddAliasesForUnit(aliases, scope, "health background opacity")
-    RegisterGroupNumber(scope, "hpBgAlpha", "hpBgAlpha", "HP Track Opacity", 0.85, 0, 1, 0.05, "visual", aliases, { percent = true })
+    AddAliasesForUnit(aliases, scope, "background opacity")
+    AddAliasesForUnit(aliases, scope, "backdrop opacity")
+    AddAliasesForUnit(aliases, scope, "background alpha")
+    RegisterGroupNumber(scope, "hpBgAlpha", "hpBgAlpha", "Background Opacity", 0.85, 0, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
-    AddAliasesForUnit(aliases, scope, "preserve hp color")
-    AddAliasesForUnit(aliases, scope, "preserve health color")
-    RegisterGroupBoolean(scope, "alphaPreserveHPColor", "alphaPreserveHPColor", "Preserve HP Color", false, "visual", aliases)
-
-    aliases = {}
-    AddAliasesForUnit(aliases, scope, "text ignores hp opacity")
-    AddAliasesForUnit(aliases, scope, "text ignores health opacity")
-    AddAliasesForUnit(aliases, scope, "ignore hp opacity for text")
-    RegisterGroupBoolean(scope, "hpTextIgnoreAlpha", "hpTextIgnoreAlpha", "Text Ignores HP Opacity", true, "visual", aliases)
+    AddAliasesForUnit(aliases, scope, "keep text visible")
+    AddAliasesForUnit(aliases, scope, "exclude text from opacity")
+    AddAliasesForUnit(aliases, scope, "keep portrait visible")
+    RegisterGroupBoolean(scope, "alphaExcludeTextPortrait", "alphaExcludeTextPortrait", "Keep Text & Portrait Visible", false, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "group backdrop color")

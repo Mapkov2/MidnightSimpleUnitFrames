@@ -252,6 +252,9 @@ local function HookButton(frame)
     frame._msufGFHooked = true
     frame:HookScript("OnEnter", function(self)
         ShowHoverHighlight(self)
+        if _G.MSUF_RoundedUF_OnGroupMouseover then
+            _G.MSUF_RoundedUF_OnGroupMouseover(self, true)
+        end
         if not TooltipAllowed() then return end
         self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
         local token = self._msufGFTooltipToken
@@ -266,6 +269,9 @@ local function HookButton(frame)
         end
     end)
     frame:HookScript("OnLeave", function(self)
+        if _G.MSUF_RoundedUF_OnGroupMouseover then
+            _G.MSUF_RoundedUF_OnGroupMouseover(self, false)
+        end
         SetHoverShown(self, false)
         self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
         local tooltips = MSUF and MSUF.Tooltips
