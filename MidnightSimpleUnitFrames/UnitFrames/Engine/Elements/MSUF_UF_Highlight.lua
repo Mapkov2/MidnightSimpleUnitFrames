@@ -119,6 +119,26 @@ local function EnsureBorder(frame)
         hb:SetFrameLevel((frame:GetFrameLevel() or 0) + 5)
     end
 
+    -- Guard against a degenerate parent size. SetBackdrop's NineSlice computes
+    -- repeatX/Y = dimension / edgeSize; a secure group child caught mid-relayout
+    -- (e.g. adjusting layout out of combat) can momentarily be ~0 wide and huge
+    -- tall, which makes repeatY astronomically large and throws "TexCoord out of
+    -- range" from Blizzard's Backdrop.lua -- and once a backdrop is on a frame,
+    -- Blizzard re-runs that NineSlice math on every size change, so it keeps
+    -- throwing while the bad size persists. So: when the size is insane, strip
+    -- any existing backdrop and hide the border; re-apply only once the size is
+    -- sane again (leave _appliedGen unstamped so the next sane show rebuilds it).
+    local w = hb.GetWidth and hb:GetWidth() or 0
+    local h = hb.GetHeight and hb:GetHeight() or 0
+    if not (w and h and w >= 1 and h >= 1 and w < 10000 and h < 10000) then
+        if hb._appliedGen ~= nil then
+            if hb.SetBackdrop then hb:SetBackdrop(nil) end
+            hb._appliedGen = nil
+        end
+        if hb.Hide then hb:Hide() end
+        return hb
+    end
+
     if hb._appliedGen ~= cfgGen then
         hb._appliedGen = cfgGen
         if hb.SetBackdrop then

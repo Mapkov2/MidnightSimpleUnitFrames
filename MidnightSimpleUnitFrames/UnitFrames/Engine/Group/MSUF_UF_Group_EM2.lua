@@ -498,13 +498,30 @@ local function SyncContainer(kind)
     if container._msufGFEditEdge then container._msufGFEditEdge:SetShown(fallbackVisuals) end
     if container._msufGFEditLabel then container._msufGFEditLabel:SetShown(fallbackVisuals) end
     local bounds = runtime and RuntimeBounds(kind) or PreviewBounds(kind)
+    -- Drag-center→grid-center delta. Start from the DETERMINISTIC value
+    -- (GetGridMetrics dx/dy, exactly what the live header uses), then refine
+    -- with the measured child bounds ONLY when that measurement is plausible.
+    -- On a roster join the secure children are created async, so RuntimeBounds
+    -- can still report the OLD layout while the anchor has already re-centred to
+    -- the new count -- using that stale measurement wrote a wildly wrong delta,
+    -- which then baked a wrong offsetX/offsetY on the next drag and shoved the
+    -- raid off the screen edge. Reject any measured delta that exceeds the grid
+    -- extent (a real centering correction is sub-frame-sized) and keep the
+    -- deterministic value until the bounds settle.
     local centerToGridX, centerToGridY = gridDX, gridDY
     if bounds then
         local anchor = runtime or container._msufGFLogicalAnchor
         local anchorCX, anchorCY = FrameCenterToUI(anchor)
         if anchorCX and anchorCY then
-            centerToGridX = anchorCX - ((bounds.l + bounds.r) * 0.5)
-            centerToGridY = anchorCY - ((bounds.b + bounds.t) * 0.5)
+            local mx = anchorCX - ((bounds.l + bounds.r) * 0.5)
+            local my = anchorCY - ((bounds.b + bounds.t) * 0.5)
+            local limX = max(totalW, 1)
+            local limY = max(totalH, 1)
+            if (mx - gridDX) <= limX and (gridDX - mx) <= limX
+                and (my - gridDY) <= limY and (gridDY - my) <= limY then
+                centerToGridX = mx
+                centerToGridY = my
+            end
         end
         SetFrameToBounds(container, bounds)
     end
@@ -982,8 +999,18 @@ local function InstallRuntimeHooks()
         gf.RebuildAll = function(...)
             local ret = origRebuildAll(...)
             RefreshEditModePreviewAfterRuntimeChange()
+            -- EM2 positions its container from the live header's MEASURED child
+            -- bounds (RuntimeBounds). On a roster join the new secure child is
+            -- created asynchronously and the count-driven re-centre runs a tick
+            -- or two later, so a single 0.05s resync can still read stale bounds
+            -- and the edit-mode box ends up offset from the live frames. Re-sync
+            -- across the same window the roster settle uses (≈0.06s and ≈0.25s)
+            -- so the box snaps onto the final layout once the children exist.
+            -- Cheap: SyncAllContainers is a handful of GetRect reads, gated on
+            -- _em2Active, and only fires while Edit Mode is actually open.
             if _em2Active and C_Timer then
-                C_Timer.After(0.05, RefreshEditModePreviewAfterRuntimeChange)
+                C_Timer.After(0.06, RefreshEditModePreviewAfterRuntimeChange)
+                C_Timer.After(0.25, RefreshEditModePreviewAfterRuntimeChange)
             end
             return ret
         end
