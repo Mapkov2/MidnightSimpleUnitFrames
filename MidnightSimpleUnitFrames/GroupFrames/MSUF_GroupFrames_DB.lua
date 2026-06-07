@@ -411,6 +411,14 @@ local PARTY_DEFAULTS = {
     healthFadeEnabled     = false,
     healthFadeThreshold   = 95,    --- % HP above which frame is dimmed
     healthFadeAlpha       = 0.45,  --- alpha when above threshold
+    --- Dead/offline background tint (event-driven; recolors the HP background
+    --- when a member is dead, a ghost, or offline)
+    deadBgEnabled         = false,
+    deadBgOffline         = true,  --- also tint disconnected members
+    deadBgR               = 0.60,
+    deadBgG               = 0.05,
+    deadBgB               = 0.05,
+    deadBgA               = 0.90,
     --- Focus highlight (separate glow when unit is focus)
     hlFocusEnabled        = true,
     hlFocusColorR         = 0.50,

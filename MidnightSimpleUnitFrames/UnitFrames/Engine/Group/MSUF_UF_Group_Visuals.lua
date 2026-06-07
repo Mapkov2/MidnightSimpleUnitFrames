@@ -18,7 +18,10 @@ local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent
 local UnitGUID = UnitGUID
+local UnitIsConnected = _G.UnitIsConnected
+local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local tonumber = tonumber
+local type = type
 local max = math.max
 local floor = math.floor
 local Secrets = MSUF.Secrets or {}
@@ -27,6 +30,8 @@ local IsNil = Secrets.IsNil or function(value) return value == nil end
 
 local EMPTY_EVENTS = {}
 local VISUAL_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
+local VISUAL_OFFLINE_EVENTS = { "UNIT_CONNECTION" }
+local VISUAL_HEALTH_OFFLINE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
 local VISUAL_TARGET_EVENT = { "PLAYER_TARGET_CHANGED" }
 local VISUAL_FOCUS_EVENT = { "PLAYER_FOCUS_CHANGED" }
 local VISUAL_TARGET_FOCUS_EVENTS = { "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED" }
@@ -251,12 +256,97 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP)
     end
 end
 
+-- Dead / ghost / offline background tint. Resolved lazily through the shared bar
+-- helpers so this file stays decoupled from BarsCommon load order (the helpers
+-- are only ever needed at event time, long after every element file has loaded).
+local BarTextCommon
+local function BarHelper(name)
+    BarTextCommon = BarTextCommon or MSUF.UFBarTextCommon
+    return BarTextCommon and BarTextCommon[name]
+end
+
+local function ApplyDeadBgColor(region, texture, r, g, b, a)
+    local fn = BarHelper("ApplyTextureColor")
+    if fn then fn(region, texture, r, g, b, a) end
+end
+
+local function RestoreHealthBackground(frame)
+    -- Re-apply the configured health background only (power untouched). The helper
+    -- is idempotent and cache-gated, so this is a no-op once the colour matches.
+    local fn = BarHelper("ApplyBackgrounds")
+    if fn then fn(frame, true, false) end
+end
+
+-- Returns true when the unit should wear the "gone" tint. The hot UNIT_HEALTH
+-- path never calls a unit API: an offline unit cannot fire UNIT_HEALTH, and a
+-- live unit reads hp > 0, so the only probes happen on the rare corpse->ghost/res
+-- transition (UnitIsDeadOrGhost) and on the rare UNIT_CONNECTION event
+-- (UnitIsConnected). Everything else is decided from the hp value the dispatch
+-- already handed us.
+local function ResolveGone(frame, cfg, unit, seedHP, event)
+    local healthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
+    if cfg.deadBgOffline == true and not healthEvent and UnitIsConnected then
+        local connected = UnitIsConnected(unit)
+        if not IsSecret(connected) and (connected == false or connected == 0) then
+            return true
+        end
+    end
+    if type(seedHP) == "number" and not IsSecret(seedHP) then
+        if seedHP == 0 then
+            return true
+        end
+        -- hp > 0: alive, unless a ghost. A ghost is only reachable from a 0-hp
+        -- corpse, so only probe the API while leaving the tinted state.
+        if frame._msufGFDeadBgState == true and UnitIsDeadOrGhost then
+            local dg = UnitIsDeadOrGhost(unit)
+            if not IsSecret(dg) and (dg == true or dg == 1) then
+                return true
+            end
+        end
+        return false
+    end
+    if UnitIsDeadOrGhost then
+        local dg = UnitIsDeadOrGhost(unit)
+        if not IsSecret(dg) and (dg == true or dg == 1) then
+            return true
+        end
+    end
+    return false
+end
+
+local function UpdateDeadBg(frame, cfg, seedHP, event)
+    local bg = frame.bg
+    local unit = frame.unit
+    if not (bg and unit) then return end
+    local cached = frame._msufGFDeadBgState
+    local gone = ResolveGone(frame, cfg, unit, seedHP, event)
+    if cached == gone then return end
+    local firstResolve = cached == nil
+    frame._msufGFDeadBgState = gone
+    if gone then
+        local health = frame.MSUFSpec and frame.MSUFSpec.health
+        local texture = health and health.backgroundTexture
+        local r, g, b = cfg.deadBgR or 0.6, cfg.deadBgG or 0.05, cfg.deadBgB or 0.05
+        local a = cfg.deadBgA or 0.9
+        ApplyDeadBgColor(bg, texture, r, g, b, a)
+        if frame.hpBarBG and frame.hpBarBG ~= bg then
+            ApplyDeadBgColor(frame.hpBarBG, texture, r, g, b, a)
+        end
+    elseif not firstResolve then
+        -- Transitioned back to alive/online: hand the background back to the
+        -- health element. On the first resolve the configured colour is already
+        -- in place (Health.Apply ran moments earlier), so skip the redundant call.
+        RestoreHealthBackground(frame)
+    end
+end
+
 local function SpecNeedsGroupVisuals(spec)
     local cfg = spec and spec.group
     if not cfg then return false end
     return cfg.healthFadeEnabled == true
         or cfg.targetIndicator == true
         or cfg.focusIndicator == true
+        or cfg.deadBgEnabled == true
 end
 
 local UpdateBordersFromVisualState
@@ -278,6 +368,7 @@ local function CompileVisualRuntime(spec)
         cfg.runtimeOnHealth = cfg.healthFadeEnabled == true and UpdateHealthFade or nil
         cfg.runtimeOnTarget = cfg.targetIndicator == true and UpdateTarget or nil
         cfg.runtimeOnFocus = cfg.focusIndicator == true and UpdateFocus or nil
+        cfg.runtimeOnDeadBg = cfg.deadBgEnabled == true and UpdateDeadBg or nil
         cfg.runtimeOnRangeAlpha = RuntimeOnRangeAlpha
     end
 end
@@ -291,8 +382,11 @@ end
 function GroupVisuals.GetEvents(frame, spec)
     local cfg = spec and spec.group
     if not cfg then return EMPTY_EVENTS end
-    local health = cfg.healthFadeEnabled == true
+    local health = cfg.healthFadeEnabled == true or cfg.deadBgEnabled == true
+    local offline = cfg.deadBgEnabled == true and cfg.deadBgOffline == true
+    if health and offline then return VISUAL_HEALTH_OFFLINE_EVENTS end
     if health then return VISUAL_HEALTH_EVENTS end
+    if offline then return VISUAL_OFFLINE_EVENTS end
     return EMPTY_EVENTS
 end
 
@@ -337,6 +431,16 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
         if fn then
             fn(frame, cfg, updateInfo, seedMaxHP)
         end
+        fn = cfg.runtimeOnDeadBg
+        if fn then
+            fn(frame, cfg, updateInfo, event)
+        end
+        return
+    elseif event == "UNIT_CONNECTION" then
+        local fn = cfg.runtimeOnDeadBg
+        if fn then
+            fn(frame, cfg, nil, event)
+        end
         return
     elseif event == "MSUF_GF_RANGE_ALPHA" then
         local fn = cfg.runtimeOnRangeAlpha
@@ -352,6 +456,8 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     if fn then fn(frame, cfg, event) end
     fn = cfg.runtimeOnHealth
     if fn then fn(frame, cfg) end
+    fn = cfg.runtimeOnDeadBg
+    if fn then fn(frame, cfg, nil, event) end
 
     if event == "MSUF_GF_VISUALS_APPLY" then
         UpdateBordersFromVisualState(frame)
@@ -359,6 +465,10 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
 end
 
 function GroupVisuals.Apply(frame)
+    -- Drop the cached dead/offline state: Health.Apply just restored the
+    -- configured background, so the next resolve must re-tint from scratch (this
+    -- also self-corrects a recycled frame that now holds a different unit).
+    if frame then frame._msufGFDeadBgState = nil end
     CompileVisualRuntime(frame and frame.MSUFSpec)
     local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
     PrepareVisuals(frame, cfg)
@@ -370,6 +480,10 @@ function GroupVisuals.Disable(frame)
     if not frame then return end
     HideEdges(frame.MSUFGFTargetEdges)
     HideEdges(frame.MSUFGFFocusEdges)
+    if frame._msufGFDeadBgState == true then
+        RestoreHealthBackground(frame)
+    end
+    frame._msufGFDeadBgState = nil
 end
 
 UF.RegisterElement("GroupVisuals", GroupVisuals)
