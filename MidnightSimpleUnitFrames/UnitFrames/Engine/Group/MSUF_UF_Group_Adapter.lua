@@ -486,14 +486,75 @@ local function ScanOneChild(child, kind, token)
     return true
 end
 
+-- Returns: found, firstUnitChild. Captures the first unit-carrying child during
+-- the single existing pass (no second loop, no table allocation) so the
+-- first-center measurement is free.
 local function ScanChildVarargs(kind, token, ...)
     local found = false
+    local first
     for i = 1, select("#", ...) do
-        if ScanOneChild(select(i, ...), kind, token) then
+        local child = select(i, ...)
+        if ScanOneChild(child, kind, token) then
             found = true
         end
+        if not first and child and child.GetAttribute and child:GetAttribute("unit") then
+            first = child
+        end
     end
-    return found
+    return found, first
+end
+
+-- Measure the REAL offset from the secure header's centre to its first child's
+-- centre and cache it as GF._measuredFirstCenterDelta[kind]. GetGridMetrics'
+-- dx/dy is built on GetHeaderOriginToFirstCenter, which otherwise only has the
+-- assumption w/2,-h/2 (true for a single column). With point="TOP" + multiple
+-- group columns the real first-cell offset differs, so the assumed value drifts
+-- the whole grid further off-centre the more groups exist -- which is why the
+-- raid slid off-screen once it grew past ~2-3 groups. Measuring the actual
+-- layout (as the 5.5x line does) makes dx/dy exact for any group count. Runs
+-- only inside the cold-path scan, once per scan, on already-positioned children.
+local function MeasureFirstCenterDelta(header, key, kind, firstChild)
+    if not (header and firstChild and header.GetCenter and firstChild.GetCenter) then
+        return
+    end
+    -- Skip while the child is mid-relayout (degenerate size) -- measuring then
+    -- would cache a garbage delta and throw the whole grid off.
+    local fw = firstChild.GetWidth and firstChild:GetWidth() or 0
+    local fh = firstChild.GetHeight and firstChild:GetHeight() or 0
+    if not (fw and fh and fw >= 1 and fh >= 1) then return end
+    local hx, hy = header:GetCenter()
+    local cx, cy = firstChild:GetCenter()
+    if not (hx and hy and cx and cy) then return end
+    local hs = (header.GetEffectiveScale and header:GetEffectiveScale()) or 1
+    local cs = (firstChild.GetEffectiveScale and firstChild:GetEffectiveScale()) or 1
+    if hs == 0 then hs = 1 end
+    if cs == 0 then cs = 1 end
+    local x = (cx * cs - hx * hs) / hs
+    local y = (cy * cs - hy * hs) / hs
+    local store = GF._measuredFirstCenterDelta
+    if not store then
+        store = {}
+        GF._measuredFirstCenterDelta = store
+    end
+    local prev = store[kind]
+    -- Only restamp + re-pin when the measured delta actually moved (a roster that
+    -- only changed membership within the same column count keeps the same first-
+    -- cell offset), so we don't churn SetupHeader every scan.
+    if prev and math.abs((prev.x or 0) - x) < 0.5 and math.abs((prev.y or 0) - y) < 0.5 then
+        return
+    end
+    store[kind] = { x = x, y = y }
+    -- The cached delta feeds GetGridMetrics -> the header pin/clamp on the next
+    -- SetupHeader. Re-run it now (cold path, out of combat) so the correction
+    -- applies immediately instead of waiting for the next roster event. Guard
+    -- against re-entry: SetupHeader -> ScheduleScan -> ScanHeader -> here would
+    -- recurse; the diff-gate above already stops it once the delta settles, but
+    -- the flag makes the first re-pin non-recursive too.
+    if GF.SetupHeader and not InCombat() and not GF._measuringFirstCenter then
+        GF._measuringFirstCenter = true
+        GF.SetupHeader(key, kind)
+        GF._measuringFirstCenter = false
+    end
 end
 
 function GF.ScanHeader(key, kind)
@@ -502,7 +563,13 @@ function GF.ScanHeader(key, kind)
     GF._scanSeenToken = (GF._scanSeenToken or 0) + 1
     local token = GF._scanSeenToken
     if header.GetChildren then
-        return ScanChildVarargs(kind, token, header:GetChildren())
+        local found, first = ScanChildVarargs(kind, token, header:GetChildren())
+        -- Measure the grid origin off the first unit-carrying child (captured in
+        -- the same pass above -- no extra iteration or allocation).
+        if first then
+            MeasureFirstCenterDelta(header, key, kind, first)
+        end
+        return found
     end
     return false
 end

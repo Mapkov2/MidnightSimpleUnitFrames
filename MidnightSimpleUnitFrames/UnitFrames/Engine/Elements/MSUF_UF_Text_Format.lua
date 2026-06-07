@@ -123,7 +123,10 @@ local function ValueArg(value, canSecret)
 end
 
 local function HealthPercent(unit)
-    if not UnitHealthPercent then
+    -- A group frame torn down mid-update (e.g. leaving a raid) can fire a text
+    -- refresh with unit == nil; UnitHealthPercent throws on a nil unit. Guard so
+    -- the teardown is silent instead of erroring.
+    if not UnitHealthPercent or type(unit) ~= "string" or unit == "" then
         return nil
     end
     if SCALE_100 then
@@ -133,7 +136,9 @@ local function HealthPercent(unit)
 end
 
 local function PowerPercent(unit)
-    if not UnitPowerPercent then
+    -- Same nil-unit guard as HealthPercent: a torn-down frame can call this with
+    -- unit == nil, and UnitPowerType / UnitPowerPercent throw on a nil unit.
+    if not UnitPowerPercent or type(unit) ~= "string" or unit == "" then
         return nil
     end
     -- EQoL signature: UnitPowerPercent(unit, powerType, unmodified, curve).

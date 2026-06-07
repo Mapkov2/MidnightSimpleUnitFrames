@@ -201,6 +201,78 @@ local function AnchorPoint(conf)
     return point
 end
 
+-- Fraction (0..1) of a named region point along x/y within a rect.
+local function PointFraction(point)
+    local fx, fy
+    if point == "LEFT" or point == "TOPLEFT" or point == "BOTTOMLEFT" then
+        fx = 0
+    elseif point == "RIGHT" or point == "TOPRIGHT" or point == "BOTTOMRIGHT" then
+        fx = 1
+    else
+        fx = 0.5
+    end
+    if point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT" then
+        fy = 0
+    elseif point == "TOP" or point == "TOPLEFT" or point == "TOPRIGHT" then
+        fy = 1
+    else
+        fy = 0.5
+    end
+    return fx, fy
+end
+
+-- Keep the whole group block (totalW x totalH) on screen. The box edges are
+-- computed DETERMINISTICALLY from the parent rect + anchor point + the freshly
+-- computed totals, NOT from anchor:GetLeft -- because GetLeft lags a layout pass
+-- right after SetSize/SetPoint (the box just changed size on a join), so reading
+-- it would clamp against the OLD geometry and let the new, bigger grid spill off
+-- the edge (the exact "adjust after joining pushes the raid off-screen" bug).
+-- conf.offsetX/offsetY are never mutated -- display-only, recomputed every
+-- SetupHeader, so the block returns to the stored position when the roster
+-- shrinks. Cold path only; no per-frame / per-unit cost.
+local function ClampAnchorOnScreen(anchor, point, parent, offsetX, offsetY, totalW, totalH)
+    if not (anchor and parent and parent.GetLeft and UIParent and UIParent.GetWidth) then
+        return
+    end
+    local screenW, screenH = UIParent:GetWidth(), UIParent:GetHeight()
+    if not (screenW and screenH and screenW > 0 and screenH > 0) then
+        return
+    end
+    local pLeft, pRight = parent:GetLeft(), parent:GetRight()
+    local pBottom, pTop = parent:GetBottom(), parent:GetTop()
+    if not (pLeft and pRight and pBottom and pTop) then
+        return
+    end
+    local fx, fy = PointFraction(point)
+    -- UIParent-space position of the anchor's own `point`, then the box's edges.
+    local px = pLeft + (pRight - pLeft) * fx + (offsetX or 0)
+    local py = pBottom + (pTop - pBottom) * fy + (offsetY or 0)
+    local boxW, boxH = totalW or 0, totalH or 0
+    local left = px - boxW * fx
+    local bottom = py - boxH * fy
+    local right = left + boxW
+    local top = bottom + boxH
+
+    local dx, dy = 0, 0
+    if left < 0 then
+        dx = -left
+    elseif right > screenW then
+        dx = (screenW - right)
+        if left + dx < 0 then dx = -left end   -- box wider than screen: pin left
+    end
+    if bottom < 0 then
+        dy = -bottom
+        if top + dy > screenH then dy = screenH - top end  -- taller than screen: pin top
+    elseif top > screenH then
+        dy = screenH - top
+    end
+    if dx == 0 and dy == 0 then
+        return
+    end
+    anchor:ClearAllPoints()
+    anchor:SetPoint(point, parent, point, (offsetX or 0) + dx, (offsetY or 0) + dy)
+end
+
 local function EnsureAnchor(key, conf, totalW, totalH)
     local anchor = GF.anchors[key]
     if not anchor then
@@ -211,8 +283,10 @@ local function EnsureAnchor(key, conf, totalW, totalH)
     anchor:SetSize(totalW, totalH)
     anchor:ClearAllPoints()
     local point = AnchorPoint(conf)
-    anchor:SetPoint(point, ResolveAnchorFrame(conf), point, conf.offsetX or 0, conf.offsetY or 0)
+    local parent = ResolveAnchorFrame(conf)
+    anchor:SetPoint(point, parent, point, conf.offsetX or 0, conf.offsetY or 0)
     anchor:Show()
+    ClampAnchorOnScreen(anchor, point, parent, conf.offsetX or 0, conf.offsetY or 0, totalW, totalH)
     return anchor
 end
 
@@ -552,15 +626,29 @@ local function ApplySortAttributes(header, state)
 end
 
 local BUTTON_TEMPLATE = "SecureUnitButtonTemplate,SecureHandlerStateTemplate,SecureHandlerEnterLeaveTemplate,PingableUnitFrameTemplate"
-local INITIAL_CONFIG_FUNCTION = [[
-local header = self:GetParent()
+
+-- The child initialConfigFunction bakes the width/height VALUES into the string
+-- (plus a bumping nonce), instead of reading header:GetAttribute('initial-width')
+-- at child-creation time. SecureGroupHeaderTemplate only runs initialConfigFunction
+-- when its TEXT changes, and only consults initial-width/height when a child is
+-- first created -- so the old static string never resized EXISTING children when
+-- width/height changed in the menu, which is why a size change only took effect
+-- after /reload (fresh children). Baking the values + nonce changes the string on
+-- every size change, forcing the secure header to re-run it on ALL children. This
+-- mirrors the working 5.5x line. Cold path (ConfigureHeader, combat-deferred).
+local _initCfgNonce = 0
+local function BuildInitialConfigFunction(w, h)
+    _initCfgNonce = _initCfgNonce + 1
+    return string.format([[
 self:ClearAllPoints()
-self:SetWidth(header:GetAttribute('initial-width'))
-self:SetHeight(header:GetAttribute('initial-height'))
+self:SetWidth(%.3f)
+self:SetHeight(%.3f)
 self:SetAttribute('*type1', 'target')
 self:SetAttribute('*type2', 'togglemenu')
 RegisterUnitWatch(self)
-]]
+-- nonce %d
+]], w, h, _initCfgNonce)
+end
 
 local function ApplyGroupBorder(anchor, conf)
     if not anchor then return end
@@ -613,11 +701,18 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     if columns < requiredColumns then columns = requiredColumns end
     local initialWidth = floor((w or 80) + 0.5)
     local initialHeight = floor((h or 32) + 0.5)
+    -- Regenerate the child config string only when the size actually changes
+    -- (each call bumps the nonce, so generating unconditionally would force a
+    -- reflow every roster tick). The size change is what must re-run it on all
+    -- existing children.
+    local sizeChanged = AttrChanged(header, "initial-width", initialWidth)
+        or AttrChanged(header, "initial-height", initialHeight)
+    local initCfg = sizeChanged and BuildInitialConfigFunction(initialWidth, initialHeight) or nil
     local sortState = BuildSortState(key, kind, conf)
     local groupFilter = sortState.sortMethod == "NAMELIST" and nil or (key == "party" and nil or ResolveGroupFilter(conf))
     local shouldHide = header.IsShown and header:IsShown()
         and (AttrChanged(header, "template", BUTTON_TEMPLATE)
-            or AttrChanged(header, "initialConfigFunction", INITIAL_CONFIG_FUNCTION)
+            or sizeChanged
             or AttrChanged(header, "point", point)
             or AttrChanged(header, "xOffset", xOffset)
             or AttrChanged(header, "yOffset", yOffset)
@@ -625,8 +720,6 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
             or AttrChanged(header, "columnAnchorPoint", columnAnchor)
             or AttrChanged(header, "unitsPerColumn", upc)
             or AttrChanged(header, "maxColumns", columns)
-            or AttrChanged(header, "initial-width", initialWidth)
-            or AttrChanged(header, "initial-height", initialHeight)
             or AttrChanged(header, "groupFilter", groupFilter)
             or SortStateChanged(header, sortState))
 
@@ -638,7 +731,10 @@ local function ConfigureHeader(header, key, kind, conf, w, h, spacing, layoutCou
     changed = SetAttrIfChanged(header, "template", BUTTON_TEMPLATE) or changed
     changed = SetAttrIfChanged(header, "initial-width", initialWidth) or changed
     changed = SetAttrIfChanged(header, "initial-height", initialHeight) or changed
-    changed = SetAttrIfChanged(header, "initialConfigFunction", INITIAL_CONFIG_FUNCTION) or changed
+    if initCfg then
+        header:SetAttribute("initialConfigFunction", initCfg)
+        changed = true
+    end
     changed = SetAttrIfChanged(header, "showPlayer", conf.showPlayer ~= false) or changed
     changed = SetAttrIfChanged(header, "showSolo", conf.showSolo == true) or changed
     changed = SetAttrIfChanged(header, "showParty", key == "party") or changed
@@ -724,12 +820,29 @@ function GF.SetupHeader(key, kind)
     end
     header:ClearAllPoints()
     local point = AnchorPoint(conf)
+    -- Do NOT give the secure header the full totalW x totalH size. Blizzard's
+    -- SecureGroupHeaderTemplate anchors each child at the header's `point`
+    -- (e.g. TOP for DOWN growth); if the header is a big totalW-wide box the
+    -- first column anchors at the box's TOP-CENTRE and the whole grid renders
+    -- horizontally centred / staggered for uneven rosters. The 5.5x line keeps
+    -- the header effectively sizeless so children build straight from the anchor
+    -- point. The anchor frame (separate) still carries totalW x totalH for the
+    -- group border + drag bounds.
     header:SetPoint(point, anchor, point, -dx, -dy)
-    header:SetSize(totalW, totalH)
     if wasHiddenForLayout then
         header:Show()
     end
-    if attrChanged and header.SetAttribute and not InCombat() then
+    -- Bump the layout nonce when a structural attribute changed OR the member
+    -- count changed (someone joined/left). A pure roster join adds a child but
+    -- changes no header attribute, so attrChanged is false -- yet the grid must
+    -- re-flow and re-centre (dx/dy just changed with the new count) or the new
+    -- frame lands outside the block (the "joined member sits off the grid" bug).
+    -- Gating on the cached layoutCount means we bump ONLY on a real size change,
+    -- not on every roster event (promote, role change, marker, etc.) the way an
+    -- unconditional bump would -- so this is cheaper than 5.5x's always-bump.
+    local countChanged = header._msufGFLastLayoutCount ~= layoutCount
+    header._msufGFLastLayoutCount = layoutCount
+    if (attrChanged or countChanged) and header.SetAttribute and not InCombat() then
         header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
     end
     -- Roster updates can make SecureGroupHeaderTemplate create new children
