@@ -231,6 +231,9 @@ local function ShowUnitTooltip(frame)
     if _G.MSUF_RoundedUF_OnUnitMouseover then
         _G.MSUF_RoundedUF_OnUnitMouseover(frame, true)
     end
+    if MSUF.Highlight then
+        MSUF.Highlight.Show(frame)
+    end
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.ShowUnit) == "function" then
         tooltips.ShowUnit(frame, frame and frame.unit)
@@ -244,6 +247,9 @@ end
 local function HideUnitTooltip(frame)
     if _G.MSUF_RoundedUF_OnUnitMouseover then
         _G.MSUF_RoundedUF_OnUnitMouseover(frame, false)
+    end
+    if MSUF.Highlight then
+        MSUF.Highlight.Hide(frame)
     end
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.HideUnit) == "function" then

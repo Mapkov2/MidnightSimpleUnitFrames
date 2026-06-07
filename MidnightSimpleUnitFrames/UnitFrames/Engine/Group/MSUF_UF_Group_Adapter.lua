@@ -184,67 +184,20 @@ local function ShowTooltip(frame)
     end
 end
 
-local function EnsureHoverLine(parent, key)
-    parent._msufGFHoverLines = parent._msufGFHoverLines or {}
-    local tex = parent._msufGFHoverLines[key]
-    if not tex then
-        tex = parent:CreateTexture(nil, "OVERLAY", nil, 7)
-        tex:SetTexture("Interface\\Buttons\\WHITE8x8")
-        parent._msufGFHoverLines[key] = tex
-    end
-    return tex
-end
-
+--- Mouseover highlight is handled by the unified MSUF.Highlight module
+--- (warmpath = Show/Hide only). These thin wrappers keep the call sites local.
 local function SetHoverShown(frame, shown)
-    local holder = frame and frame.highlightBorder
-    if not holder then return end
-    holder:SetShown(shown == true)
+    local hl = MSUF and MSUF.Highlight
+    if not hl then return end
+    if shown then
+        hl.Show(frame)
+    else
+        hl.Hide(frame)
+    end
 end
 
 local function ShowHoverHighlight(frame)
-    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
-    if not (cfg and cfg.hoverHighlightEnabled == true) then
-        SetHoverShown(frame, false)
-        return
-    end
-    local holder = frame.highlightBorder
-    if not holder then
-        holder = CreateFrame("Frame", nil, frame)
-        holder:SetAllPoints(frame)
-        holder:EnableMouse(false)
-        frame.highlightBorder = holder
-    end
-    local edge = tonumber(cfg.hoverHighlightSize) or 1
-    if edge < 1 then edge = 1 end
-    local r, g, b = cfg.hoverHighlightR or 1, cfg.hoverHighlightG or 1, cfg.hoverHighlightB or 1
-    local top = EnsureHoverLine(holder, "top")
-    local bottom = EnsureHoverLine(holder, "bottom")
-    local left = EnsureHoverLine(holder, "left")
-    local right = EnsureHoverLine(holder, "right")
-    top:ClearAllPoints()
-    top:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", -edge, 0)
-    top:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", edge, 0)
-    top:SetHeight(edge)
-    bottom:ClearAllPoints()
-    bottom:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", -edge, 0)
-    bottom:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", edge, 0)
-    bottom:SetHeight(edge)
-    left:ClearAllPoints()
-    left:SetPoint("TOPRIGHT", frame, "TOPLEFT", 0, edge)
-    left:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", 0, -edge)
-    left:SetWidth(edge)
-    right:ClearAllPoints()
-    right:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, edge)
-    right:SetPoint("BOTTOMLEFT", frame, "BOTTOMRIGHT", 0, -edge)
-    right:SetWidth(edge)
-    for _, tex in pairs(holder._msufGFHoverLines) do
-        tex:SetVertexColor(r, g, b, 1)
-        tex:Show()
-    end
-    if holder.SetFrameLevel and frame.GetFrameLevel then
-        holder:SetFrameLevel((frame:GetFrameLevel() or 0) + 2)
-    end
-    holder:Show()
+    SetHoverShown(frame, true)
 end
 
 local function HookButton(frame)
@@ -513,9 +466,8 @@ function GF.ApplyButton(frame, kind, reason)
     MarkApplied(frame, kind, unit, spec)
     attrUnit[frame] = unit
     ApplyClickCast(frame, spec)
-    if not (spec.group and spec.group.hoverHighlightEnabled == true) then
-        SetHoverShown(frame, false)
-    end
+    --- Clear any stale highlight on (re)apply; it re-shows on the next OnEnter.
+    SetHoverShown(frame, false)
     scanNonce[frame] = layoutNonce
     scanUnit[frame] = unit
     scanKind[frame] = kind

@@ -1290,6 +1290,9 @@ local function ApplyAll()
         return
     end
     _G.MSUF_RoundedUF_Active = enabled and true or nil
+    --- Tell the standalone mouseover highlight to stand down while the rounded
+    --- edge owns the hover visual (prevents a doubled/leftover square border).
+    _G.MSUF_RoundedUF_MouseoverActive = (enabled and RoundedMouseoverEnabled()) and true or nil
     ForEachUnitFrame(function(f)
         if IsGroupFrame(f) then
             ApplyToGroupFrame(f)
@@ -1300,6 +1303,7 @@ local function ApplyAll()
     ForEachGroupFrame(ApplyToGroupFrame)
     if not enabled then
         _G.MSUF_RoundedUF_Active = nil
+        _G.MSUF_RoundedUF_MouseoverActive = nil
         local eventFrame = MSUF.__msufRoundedEventFrame
         if eventFrame and eventFrame.UnregisterEvent then
             eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")

@@ -311,8 +311,9 @@ local function SetHighlightRGB(r, g, b)
     G().highlightColor = { r, g, b }
     ApplyColors()
     if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate(nil) end
-    if MSUF and type(MSUF.MSUF_FixMouseoverHighlightBindings) == "function" then
-        pcall(MSUF.MSUF_FixMouseoverHighlightBindings)
+    --- Repaint the mouseover highlight cache so the new colour applies live.
+    if _G.MSUF_RefreshMouseoverHighlight then
+        _G.MSUF_RefreshMouseoverHighlight()
     end
 end
 

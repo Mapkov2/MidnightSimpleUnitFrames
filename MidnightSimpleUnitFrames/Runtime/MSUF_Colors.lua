@@ -14,7 +14,6 @@ MSUF = MSUF or {}
 local EnsureDB              = _G.MSUF_EnsureDB
 local RAID_CLASS_COLORS     = RAID_CLASS_COLORS
 local C_Timer               = C_Timer
-local hooksecurefunc        = hooksecurefunc
 local _G                    = _G
 local type                  = type
 local tonumber              = tonumber
@@ -150,11 +149,9 @@ local function _PushVisualUpdates_Flush()
         _G.MSUF_UFPreview_RequestRefresh("MSUF_COLOR_CHANGE")
     end
 
-    --- Safety: keep mouseover highlight bound to the correct unitframe.
-    if MSUF.MSUF_ScheduleMouseoverHighlightFix then
-        MSUF.MSUF_ScheduleMouseoverHighlightFix()
-    elseif MSUF.MSUF_FixMouseoverHighlightBindings then
-        MSUF.MSUF_FixMouseoverHighlightBindings()
+    --- Repaint the mouseover highlight cache so colour/size edits apply live.
+    if _G.MSUF_RefreshMouseoverHighlight then
+        _G.MSUF_RefreshMouseoverHighlight()
     end
 
     --- Pending flag cleared at END (see header comment for rationale).
@@ -174,215 +171,18 @@ local function PushVisualUpdates()
     RunNextFrame(_PushVisualUpdates_Flush)
 end
 
----
---- Helper: ensure mouseover highlight border stays bound to its unitframe
---- (Prevents "floating highlight box" when the unitframe moves/hides.)
----
-local function MSUF_GetHighlightObject(frame)
-    if not frame then return nil end
-    --- Mouseover highlight is UF-only here. Do not pick up generic
-    --- `highlight` fields from edit-mode, menus, auras, or other helpers.
-    if not (frame.unit and frame.hpBar and frame.highlightBorder) then return nil end
-    return frame.highlightBorder
-end
-
-local function MSUF_GetHighlightRGB()
-    local g = (MSUF_DB and MSUF_DB.general) or {}
-    local hr, hg, hb = 1, 1, 1
-    local hc = g.highlightColor
-    if type(hc) == "table" then
-        hr, hg, hb = hc[1] or 1, hc[2] or 1, hc[3] or 1
-    else
-        local key = (type(hc) == "string" and hc:lower()) or "white"
-        local col = (type(MSUF_FONT_COLORS) == "table" and (MSUF_FONT_COLORS[key] or MSUF_FONT_COLORS.white)) or nil
-        if col then hr, hg, hb = col[1] or 1, col[2] or 1, col[3] or 1 end
-    end
-    return hr, hg, hb
-end
-
-local function MSUF_EnsureHoverLine(hb, key)
-    local lines = hb._msufHoverLines
-    if not lines then
-        lines = {}
-        hb._msufHoverLines = lines
-    end
-    local t = lines[key]
-    if not t and hb.CreateTexture then
-        t = hb:CreateTexture(nil, "OVERLAY")
-        t:SetTexture("Interface\\Buttons\\WHITE8x8")
-        lines[key] = t
-    end
-    return t
-end
-
-local function MSUF_FixHighlightForFrame(frame)
-    local hb = MSUF_GetHighlightObject(frame)
-    if not hb then return end
-
-    --- Ensure the highlight is parented to the unitframe (so it moves/hides with it)
-    if hb.GetParent and hb.SetParent and hb:GetParent() ~= frame then
-        hb:SetParent(frame)
-    end
-
-    --- Use an outside 4-line border. Backdrop edges are drawn partly inside the
-    --- frame, which can put a horizontal line through HP/name text.
-    if hb.SetBackdrop then hb:SetBackdrop(nil) end
-    local edge = tonumber(hb._msufHoverEdgeSize) or 1
-    if edge < 1 then edge = 1 end
-    local r, g, b = MSUF_GetHighlightRGB()
-
-    if hb.ClearAllPoints then
-        hb:ClearAllPoints()
-    end
-
-    if _G.PixelUtil and _G.PixelUtil.SetPoint then
-        _G.PixelUtil.SetPoint(hb, "TOPLEFT", frame, "TOPLEFT", 0, 0)
-        _G.PixelUtil.SetPoint(hb, "BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    elseif hb.SetPoint then
-        hb:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-        hb:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    end
-    if hb.SetClipsChildren then hb:SetClipsChildren(false) end
-
-    local top = MSUF_EnsureHoverLine(hb, "top")
-    local bottom = MSUF_EnsureHoverLine(hb, "bottom")
-    local left = MSUF_EnsureHoverLine(hb, "left")
-    local right = MSUF_EnsureHoverLine(hb, "right")
-    if top then
-        top:ClearAllPoints()
-        top:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", -edge, 0)
-        top:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", edge, 0)
-        top:SetHeight(edge)
-        top:SetVertexColor(r, g, b, 1)
-        top:Show()
-    end
-    if bottom then
-        bottom:ClearAllPoints()
-        bottom:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", -edge, 0)
-        bottom:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", edge, 0)
-        bottom:SetHeight(edge)
-        bottom:SetVertexColor(r, g, b, 1)
-        bottom:Show()
-    end
-    if left then
-        left:ClearAllPoints()
-        left:SetPoint("TOPRIGHT", frame, "TOPLEFT", 0, edge)
-        left:SetPoint("BOTTOMRIGHT", frame, "BOTTOMLEFT", 0, -edge)
-        left:SetWidth(edge)
-        left:SetVertexColor(r, g, b, 1)
-        left:Show()
-    end
-    if right then
-        right:ClearAllPoints()
-        right:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, edge)
-        right:SetPoint("BOTTOMLEFT", frame, "BOTTOMRIGHT", 0, -edge)
-        right:SetWidth(edge)
-        right:SetVertexColor(r, g, b, 1)
-        right:Show()
-    end
-
-    --- Keep it above bar fill, below user-facing text/icon layers where possible.
-    if hb.SetFrameStrata and frame.GetFrameStrata then
-        hb:SetFrameStrata(frame:GetFrameStrata() or "MEDIUM")
-    end
-    if hb.SetFrameLevel and frame.GetFrameLevel then
-        local hp = frame.hpBar
-        local baseLevel = (hp and hp.GetFrameLevel and hp:GetFrameLevel()) or (frame:GetFrameLevel() or 0)
-        local wantLevel = baseLevel + 2
-        local textFrame = frame.textFrame or frame.TextFrame
-        local textLevel = textFrame and textFrame.GetFrameLevel and textFrame:GetFrameLevel()
-        if textLevel and wantLevel >= textLevel then
-            wantLevel = textLevel - 1
-        end
-        local frameLevel = frame:GetFrameLevel() or 0
-        if wantLevel <= frameLevel then
-            wantLevel = frameLevel + 1
-        end
-        hb:SetFrameLevel(wantLevel)
-    end
-
-    --- Safety: if the unitframe hides while hovered, also hide the highlight
-    if not hb.MSUF_hideHooked and hooksecurefunc and frame.Hide then
-        hb.MSUF_hideHooked = true
-        local hideHighlight = hb.Hide
-        local isHighlightShown = hb.IsShown
-        hooksecurefunc(frame, "Hide", function()
-            if hideHighlight and (not isHighlightShown or isHighlightShown(hb)) then
-                hideHighlight(hb)
-            end
-        end)
-    end
-end
---- Export so other files can re-fix highlight anchors (e.g. after detach state changes)
-_G.MSUF_FixHighlightForFrame = MSUF_FixHighlightForFrame
-
+--- ---------------------------------------------------------------------------
+--- Mouseover highlight is now owned by MSUF.Highlight (Engine/Elements/
+--- MSUF_UF_Highlight.lua): coldpath config cache + warmpath Show/Hide on
+--- OnEnter/OnLeave. The old per-frame EnumerateFrames "fix" scan is gone.
+--- These shims keep external callers working; they just repaint the cache.
+--- ---------------------------------------------------------------------------
 function MSUF.MSUF_FixMouseoverHighlightBindings()
-    --- Prefer EnumerateFrames() (safe, doesn't touch _G and avoids odd tables like _G itself).
-    if _G.EnumerateFrames then
-        local f = _G.EnumerateFrames()
-        while f do
-            local name = f.GetName and f:GetName()
-            if type(name) == "string" and name:match("^MSUF_") then
-                if MSUF_GetHighlightObject(f) then
-                    MSUF_FixHighlightForFrame(f)
-                end
-            end
-            f = _G.EnumerateFrames(f)
-        end
-        return
-    end
-
-    --- Fallback: scan globals, but be extremely defensive (some tables may expose GetName accidentally).
-    for _, v in pairs(_G) do
-        local tv = type(v)
-        if v and v ~= _G and (tv == "table" or tv == "userdata") then
-            if type(v.GetName) == "function" and type(v.GetObjectType) == "function" then
-                local name = v:GetName()
-                if type(name) == "string" and name:match("^MSUF_") then
-                    if MSUF_GetHighlightObject(v) then
-                        MSUF_FixHighlightForFrame(v)
-                    end
-                end
-            end
-        end
+    if _G.MSUF_RefreshMouseoverHighlight then
+        _G.MSUF_RefreshMouseoverHighlight()
     end
 end
-
---- Throttled scheduler so we don't repeatedly enumerate frames during rapid UI changes.
---- P1 perf: after one successful scan, never scan again until /reload (session-only).
-do
-    local function _MouseoverHighlightFixFlush()
-        if not (MSUF and MSUF.MSUF_FixMouseoverHighlightBindings) then return end
-
-        MSUF.MSUF_FixMouseoverHighlightBindings()
-
-        --- Mark done for this session. This scan is expensive (EnumerateFrames),
-        --- and should not run again from PushVisualUpdates.
-        MSUF._msufHoverFixDone = true
-    end
-
-    function MSUF.MSUF_ScheduleMouseoverHighlightFix()
-        if MSUF and MSUF._msufHoverFixDone then return end
-
-        local sched = _G.MSUF_ScheduleOnce
-        if sched then
-            sched("COLOR_MOUSEOVER_HIGHLIGHT_FIX", _MouseoverHighlightFixFlush)
-        else
-            RunNextFrame(_MouseoverHighlightFixFlush)
-        end
-    end
-end
-
---- One-time safety pass after load (covers cases where highlight existed before Colors loaded)
-if _G.C_Timer and _G.C_Timer.After then
-    _G.C_Timer.After(1, function()
-        if MSUF and MSUF.MSUF_ScheduleMouseoverHighlightFix then
-            MSUF.MSUF_ScheduleMouseoverHighlightFix()
-        elseif MSUF and MSUF.MSUF_FixMouseoverHighlightBindings then
-            MSUF.MSUF_FixMouseoverHighlightBindings()
-        end
-    end)
-end
+MSUF.MSUF_ScheduleMouseoverHighlightFix = MSUF.MSUF_FixMouseoverHighlightBindings
 
 
 --- -
