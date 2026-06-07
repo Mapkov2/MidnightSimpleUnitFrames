@@ -176,6 +176,26 @@ local function Apply()
     ReapplyAuras(units)
 end
 
+local function ResetPosition()
+    if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return end
+    local a2 = AurasDB(true)
+    if not a2 then return end
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("aura", pf.unit) end
+    local sh = Shared(true)
+    local units = AffectedUnits(pf.unit, sh)
+    local _, spec = ActiveGroup()
+    for i = 1, #units do
+        local layout, unitCfg = UnitLayout(units[i], true)
+        if layout and unitCfg then
+            unitCfg.overrideLayout = true
+            layout[spec.xKey] = spec.defaultX
+            layout[spec.yKey] = spec.defaultY
+        end
+    end
+    ReapplyAuras(units)
+    if pf and pf:IsShown() then Sync() end
+end
+
 local function CommitFields()
     Quick.ClearFocusedBoxes(pf and pf.spacingBox, pf and pf.xBox, pf and pf.yBox, pf and pf.sizeBox)
     Apply()
@@ -262,6 +282,7 @@ local function Build()
     if pf then return pf end
 
     pf = Quick.CreateShell("MSUF_EM2_AuraPopup", {
+        height = 282,
         subtitle = "",
         hoverSource = "aura-popup",
         peelSkin = true,
@@ -279,6 +300,10 @@ local function Build()
     pf.unitAurasBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -190)
     pf.generalAurasBtn = WirePopupFocus(Quick.Button(pf, "General auras", 190, 30, OpenGeneralAuras, ButtonOpts()))
     pf.generalAurasBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 224, -190)
+
+    if Quick.AddFooterControls then
+        Quick.AddFooterControls(pf, { y = -230, onResetPosition = ResetPosition })
+    end
 
     if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
     return pf

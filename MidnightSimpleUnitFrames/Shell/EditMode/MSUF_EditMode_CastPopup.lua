@@ -204,6 +204,20 @@ local function Apply(mode)
     if pf and pf:IsShown() then Sync() end
 end
 
+local function ResetPosition()
+    if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return end
+    local g = EditableGeneral()
+    if not g then return end
+    local unit = pf.unit
+    local xKey, yKey = OffsetKeys(unit)
+    if not (xKey and yKey) then return end
+    if type(_G.MSUF_EM_UndoBeforeChange) == "function" then _G.MSUF_EM_UndoBeforeChange("castbar", unit) end
+    local dx, dy = DefaultOffsets(unit)
+    g[xKey], g[yKey] = dx, dy
+    ReapplyCastbar(unit)
+    if pf and pf:IsShown() then Sync() end
+end
+
 local function ApplyDetach(checked)
     if Quick.BlockConfigCombatLocked() or not (pf and pf.unit) then return end
     local g = EditableGeneral()
@@ -301,12 +315,14 @@ local function Build()
     if pf then return pf end
 
     pf = Quick.CreateShell("MSUF_EM2_CastPopup", {
+        height = 282,
         subtitle = "Castbar bounds",
         hoverSource = "cast-popup",
         hoverWash = true,
         hoverKey = "_msufEM2CastHoverWash",
-        onHide = function()
-            if pf.unit and not _G.MSUF_UnitPreviewActive then SetTest(pf.unit, false) end
+        onHide = function(s)
+            local self = pf or s
+            if self and self.unit and not _G.MSUF_UnitPreviewActive then SetTest(self.unit, false) end
         end,
     })
 
@@ -320,6 +336,10 @@ local function Build()
 
     WirePopupFocus(Quick.Button(pf, "Unitframe castbar", 190, 30, OpenUnitCastbar, ButtonOpts())):SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -190)
     WirePopupFocus(Quick.Button(pf, "General castbar", 190, 30, OpenGeneralCastbars, ButtonOpts())):SetPoint("TOPLEFT", pf, "TOPLEFT", 224, -190)
+
+    if Quick.AddFooterControls then
+        Quick.AddFooterControls(pf, { y = -230, onResetPosition = ResetPosition })
+    end
 
     if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
     return pf

@@ -38,6 +38,30 @@ local function WriteScale(value)
     if g then g.editModePopupScale = ClampScale(value) end
 end
 
+--- Per-popup saved positions (TOPLEFT offsets in the popup's own frame space).
+--- Keyed by frame name so each popup reopens where the user left it.
+local function PopupName(frame)
+    return frame and frame.GetName and frame:GetName() or nil
+end
+
+local function ReadPopupPos(frame)
+    local g = General(false)
+    local name = PopupName(frame)
+    local store = g and g.editModePopupPos
+    local pos = name and store and store[name]
+    if type(pos) == "table" then return tonumber(pos.left), tonumber(pos.top) end
+    return nil, nil
+end
+
+local function WritePopupPos(frame, left, top)
+    local name = PopupName(frame)
+    if not (name and left and top) then return end
+    local g = General(true)
+    if not g then return end
+    g.editModePopupPos = g.editModePopupPos or {}
+    g.editModePopupPos[name] = { left = left, top = top }
+end
+
 local function CursorPositionInUIParent()
     if not (UIParent and GetCursorPosition) then return nil, nil end
     local scale = UIParent.GetEffectiveScale and (UIParent:GetEffectiveScale() or 1) or 1
@@ -46,10 +70,39 @@ local function CursorPositionInUIParent()
     return (x or 0) / scale, (y or 0) / scale
 end
 
+--- Clamp the frame fully inside UIParent. SetClampedToScreen only kicks in
+--- on drag/resize, not on a programmatic SetPoint after a scale change, so a
+--- scaled-up popup can hang off-screen. We pull the TOPLEFT anchor offsets
+--- (which live in the frame's own scaled coordinate space) back into view.
+local function ClampIntoScreen(frame, left, top)
+    if not (frame and UIParent and frame.GetWidth and frame.GetHeight) then return left, top end
+    local fScale = frame.GetScale and (frame:GetScale() or 1) or 1
+    if fScale <= 0 then fScale = 1 end
+    local uScale = UIParent.GetEffectiveScale and (UIParent:GetEffectiveScale() or 1) or 1
+    if uScale <= 0 then uScale = 1 end
+    --- 1 frame-space unit == (fScale / uScale) UIParent-space units.
+    local f2u = fScale / uScale
+    if f2u <= 0 then f2u = 1 end
+    --- Screen extents in UIParent space.
+    local screenW = UIParent:GetWidth() or 0
+    local screenH = UIParent:GetHeight() or 0
+    --- Frame size in UIParent space.
+    local w = (frame:GetWidth() or 0) * f2u
+    local h = (frame:GetHeight() or 0) * f2u
+    --- Anchor is TOPLEFT relative to UIParent BOTTOMLEFT, offsets in frame space.
+    --- Convert to UIParent space, clamp, convert back.
+    local uLeft = (left or 0) * f2u
+    local uTop = (top or 0) * f2u
+    uLeft = max(0, min(uLeft, max(0, screenW - w)))
+    uTop = max(h, min(uTop, screenH))
+    return uLeft / f2u, uTop / f2u
+end
+
 local function AnchorTopLeft(frame, left, top)
     if not (frame and frame.GetLeft and frame.GetTop and frame.ClearAllPoints and frame.SetPoint) then return nil, nil end
     left, top = left or frame:GetLeft(), top or frame:GetTop()
     if not (left and top) then return nil, nil end
+    left, top = ClampIntoScreen(frame, left, top)
     frame:ClearAllPoints()
     frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
     return left, top
@@ -105,8 +158,14 @@ local function ShowScaleProxy(frame, state, scale)
     ApplyProxyPriority(proxy, frame)
     local visualW = (state.baseW or 440) * scale
     local visualH = (state.baseH or 292) * scale
+    --- frame:GetLeft()/GetTop() are in the popup's own (scaled) coordinate
+    --- space; the proxy lives in UIParent space. The popup keeps its TOPLEFT
+    --- anchor offset fixed in frame space across a scale change, so the
+    --- on-screen TOPLEFT is (frame-space offset * new scale) in UIParent units.
+    local left = (state.left or 0) * scale
+    local top = (state.top or 0) * scale
     proxy:ClearAllPoints()
-    proxy:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", state.left, state.top)
+    proxy:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
     proxy:SetSize(visualW, visualH)
     if proxy.sizeLabel then
         proxy.sizeLabel:SetText(format("%d%%  %d x %d", floor(scale * 100 + 0.5), floor(visualW + 0.5), floor(visualH + 0.5)))
@@ -177,8 +236,8 @@ function EM2.AttachPopupScaleGrip(frame)
 
     local function begin(button)
         if button == "RightButton" then
-            AnchorTopLeft(frame)
             EM2.SetPopupScale(DEFAULT_SCALE)
+            AnchorTopLeft(frame)
             return
         end
         if button ~= "LeftButton" then return end
@@ -213,8 +272,11 @@ function EM2.AttachPopupScaleGrip(frame)
         frame._msufEM2ScaleDrag = nil
         HideScaleProxy(frame)
         if apply and state then
-            AnchorTopLeft(frame, state.left, state.top)
+            --- Apply scale first so AnchorTopLeft/ClampIntoScreen see the new
+            --- scale and frame size when pulling the popup back on-screen.
             EM2.SetPopupScale(frame._msufEM2PendingScale or state.startScale or ReadScale())
+            AnchorTopLeft(frame, state.left, state.top)
+            if frame._msufEM2SavePosition then frame._msufEM2SavePosition() end
         end
         frame._msufEM2PendingScale = nil
         frame._msufEM2FinishingScale = nil
@@ -226,8 +288,32 @@ function EM2.AttachPopupScaleGrip(frame)
         finish(true)
     end)
     grip:SetScript("OnHide", function() finish(false) end)
-    frame:HookScript("OnShow", function(self) self:SetScale(ReadScale()) end)
-    frame:HookScript("OnHide", function() finish(false) end)
+
+    local function SavePosition()
+        local left, top = frame:GetLeft(), frame:GetTop()
+        if left and top then WritePopupPos(frame, left, top) end
+    end
+    frame._msufEM2SavePosition = SavePosition
+
+    --- Persist position when the user finishes dragging the popup.
+    frame:HookScript("OnDragStop", SavePosition)
+
+    frame:HookScript("OnShow", function(self)
+        self:SetScale(ReadScale())
+        --- Restore the saved position, then re-clamp: a popup could have been
+        --- left off-screen, or the scale may have changed (via another popup)
+        --- while this one was hidden.
+        local function Place()
+            if not self:IsShown() then return end
+            local left, top = ReadPopupPos(self)
+            AnchorTopLeft(self, left, top)
+        end
+        if C_Timer and C_Timer.After then C_Timer.After(0, Place) else Place() end
+    end)
+    frame:HookScript("OnHide", function(self)
+        finish(false)
+        SavePosition()
+    end)
 
     frame._msufEM2ScaleGrip = grip
     return frame

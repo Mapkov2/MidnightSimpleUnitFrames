@@ -522,9 +522,18 @@ function Quick.CreateShell(name, opts)
 
     pf:EnableKeyboard(true)
     pf:SetScript("OnKeyDown", function(s, key)
+        local ctrl = IsControlKeyDown and IsControlKeyDown()
         if key == "ESCAPE" then
             if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(false) end
             s:Hide()
+        elseif ctrl and key == "Z" then
+            if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(false) end
+            if EM2.Undo then EM2.Undo.DoUndo() end
+            if s._refreshUndoRedo then s._refreshUndoRedo() end
+        elseif ctrl and (key == "Y" or key == "R") then
+            if s.SetPropagateKeyboardInput then s:SetPropagateKeyboardInput(false) end
+            if EM2.Undo then EM2.Undo.DoRedo() end
+            if s._refreshUndoRedo then s._refreshUndoRedo() end
         elseif s.SetPropagateKeyboardInput then
             s:SetPropagateKeyboardInput(true)
         end
@@ -537,6 +546,62 @@ function Quick.CreateShell(name, opts)
     end)
     pf:Hide()
     return pf
+end
+
+--- Shared bottom footer: Undo / Redo + Reset position. Keeps every quick popup
+--- on the same Menu2 visual system and behavior. The host popup supplies:
+---   opts.onResetPosition  -> called when "Reset position" is clicked
+---   opts.resetLabel       -> button label (default "Reset position")
+---   opts.y                -> TOPLEFT y of the footer row (negative, from top)
+--- Exposes pf._refreshUndoRedo() to re-evaluate Undo/Redo enabled state, and
+--- calls it after the row is built and whenever the popup is shown.
+function Quick.AddFooterControls(pf, opts)
+    if not pf then return end
+    opts = opts or {}
+    local btnOpts = opts.buttonOpts or { hoverWash = true, hoverKey = "_msufEM2FooterHoverWash" }
+    local y = opts.y or -206
+
+    local function SetEnabled(btn, enabled)
+        if not btn then return end
+        btn:EnableMouse(enabled and true or false)
+        btn:SetAlpha(enabled and 1 or 0.4)
+    end
+
+    local undoBtn = Quick.Button(pf, "Undo", 90, 26, function()
+        if EM2.Undo then EM2.Undo.DoUndo() end
+        if pf._refreshUndoRedo then pf._refreshUndoRedo() end
+    end, btnOpts)
+    if opts.anchor == "BOTTOM" then
+        --- Anchor to the bottom so popups with a dynamic height keep the footer
+        --- pinned above the bottom edge. Leaves the bottom-right scale grip clear.
+        undoBtn:SetPoint("BOTTOMLEFT", pf, "BOTTOMLEFT", 20, opts.bottomGap or 12)
+    else
+        undoBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, y)
+    end
+
+    local redoBtn = Quick.Button(pf, "Redo", 90, 26, function()
+        if EM2.Undo then EM2.Undo.DoRedo() end
+        if pf._refreshUndoRedo then pf._refreshUndoRedo() end
+    end, btnOpts)
+    redoBtn:SetPoint("TOPLEFT", undoBtn, "TOPRIGHT", 8, 0)
+
+    if opts.onResetPosition then
+        local resetBtn = Quick.Button(pf, opts.resetLabel or "Reset position", 188, 26, function()
+            opts.onResetPosition(pf)
+            if pf._refreshUndoRedo then pf._refreshUndoRedo() end
+        end, btnOpts)
+        resetBtn:SetPoint("TOPLEFT", redoBtn, "TOPRIGHT", 8, 0)
+        pf._resetPosBtn = resetBtn
+    end
+
+    pf._undoBtn, pf._redoBtn = undoBtn, redoBtn
+    function pf._refreshUndoRedo()
+        SetEnabled(undoBtn, EM2.Undo and EM2.Undo.CanUndo())
+        SetEnabled(redoBtn, EM2.Undo and EM2.Undo.CanRedo())
+    end
+    pf._refreshUndoRedo()
+    pf:HookScript("OnShow", function() if pf._refreshUndoRedo then pf._refreshUndoRedo() end end)
+    return undoBtn, redoBtn
 end
 
 --- Panel
