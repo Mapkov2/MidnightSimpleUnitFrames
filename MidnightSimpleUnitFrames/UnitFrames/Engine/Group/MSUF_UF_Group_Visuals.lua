@@ -28,10 +28,14 @@ local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
 
+-- Event subscription lists. DeadBg adds UNIT_FLAGS so the rare dead<->ghost<->res
+-- transition (which always raises UNIT_FLAGS) is what probes UnitIsDeadOrGhost --
+-- the per-UNIT_HEALTH tick stays a single hp==0 comparison with no API call.
 local EMPTY_EVENTS = {}
 local VISUAL_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
+local VISUAL_HEALTH_FLAGS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_FLAGS" }
 local VISUAL_OFFLINE_EVENTS = { "UNIT_CONNECTION" }
-local VISUAL_HEALTH_OFFLINE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
+local VISUAL_HEALTH_OFFLINE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" }
 local VISUAL_TARGET_EVENT = { "PLAYER_TARGET_CHANGED" }
 local VISUAL_FOCUS_EVENT = { "PLAYER_FOCUS_CHANGED" }
 local VISUAL_TARGET_FOCUS_EVENTS = { "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED" }
@@ -263,18 +267,43 @@ local function ApplyDeadBgColor(region, texture, r, g, b, a)
 end
 
 local function RestoreHealthBackground(frame)
-    -- Re-apply the configured health background only (power untouched). The helper
-    -- is idempotent and cache-gated, so this is a no-op once the colour matches.
+    -- Transitioned back to alive/online. Cold-path group frames freeze their
+    -- foreground colour after the first health tick and never register the
+    -- UNIT_FLAGS/UNIT_CONNECTION events that would recolour it, so on resurrect
+    -- the bar fill (and, with backgroundMatchHealth, the matched background) can
+    -- stay stuck on the dead/offline grey -- only a /reload fixed it. Drive the
+    -- Health element with a non-health reason so it re-reads the now-fresh unit
+    -- state and recolours the fill from scratch. This runs only on the rare
+    -- gone->alive edge, never on a health tick.
+    local element = UF.elements and UF.elements.Health
+    local active = frame and frame._msufActiveElements
+    if element and element.Update and active and active.Health == true then
+        local bar = frame.hpBar
+        if bar then
+            -- Force the cold-path recolour branch (updateColor keys off a nil
+            -- cached status colour) and drop the stale RefreshUnitState cache so
+            -- the dead/connected flags are re-probed.
+            bar._msufStatusR = nil
+            if frame._msufUnitState then frame._msufUnitState.ready = nil end
+        end
+        element.Update(frame, "MSUF_GF_VISUALS", frame.unit)
+    end
+    -- Re-apply the configured health background. Health.Update only touches the
+    -- background on the dynamic (backgroundMatchHealth) path, so a static
+    -- background still wears the dead tint until this restores it. The helper is
+    -- idempotent and cache-gated, so it is a no-op when already correct.
     local fn = BarHelper("ApplyBackgrounds")
     if fn then fn(frame, true, false) end
 end
 
 -- Returns true when the unit should wear the "gone" tint. The hot UNIT_HEALTH
--- path never calls a unit API: an offline unit cannot fire UNIT_HEALTH, and a
--- live unit reads hp > 0, so the only probes happen on the rare corpse->ghost/res
--- transition (UnitIsDeadOrGhost) and on the rare UNIT_CONNECTION event
--- (UnitIsConnected). Everything else is decided from the hp value the dispatch
--- already handed us.
+-- path never calls a unit API: a live unit reads hp > 0 and a dead one reads
+-- hp == 0. Dead/ghost/resurrect always raises UNIT_FLAGS and offline raises
+-- UNIT_CONNECTION -- those (seedHP nil) are where the rare API probes happen
+-- (UnitIsDeadOrGhost / UnitIsConnected). A ghost has hp > 0, so the HP tick
+-- alone cannot tell it from alive; the cached tint state carries it across
+-- ticks until UNIT_FLAGS flips it back. Everything else is decided from the hp
+-- value the dispatch already handed us.
 local function ResolveGone(frame, cfg, unit, seedHP, event)
     local healthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
     if cfg.deadBgOffline == true and not healthEvent and UnitIsConnected then
@@ -287,8 +316,9 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
         if seedHP == 0 then
             return true
         end
-        -- hp > 0: alive, unless a ghost. A ghost is only reachable from a 0-hp
-        -- corpse, so only probe the API while leaving the tinted state.
+        -- hp > 0 on a health tick: alive, unless already wearing the ghost tint
+        -- (UNIT_FLAGS set it). Stay tinted without an API call; UNIT_FLAGS is
+        -- what clears it on resurrect.
         if frame._msufGFDeadBgState == true and UnitIsDeadOrGhost then
             local dg = UnitIsDeadOrGhost(unit)
             if not IsSecret(dg) and (dg == true or dg == 1) then
@@ -312,19 +342,35 @@ local function UpdateDeadBg(frame, cfg, seedHP, event)
     if not (bg and unit) then return end
     local cached = frame._msufGFDeadBgState
     local gone = ResolveGone(frame, cfg, unit, seedHP, event)
-    if cached == gone then return end
     local firstResolve = cached == nil
-    frame._msufGFDeadBgState = gone
     if gone then
-        local health = frame.MSUFSpec and frame.MSUFSpec.health
-        local texture = health and health.backgroundTexture
+        -- Fast path: already tinted and nothing can have overwritten frame.bg.
+        -- A static background is only ever written by us, and cold-path group
+        -- frames skip Health's colour update on the high-frequency UNIT_HEALTH
+        -- tick, so a cached gone==true needs no work -- this keeps a ghost's HP
+        -- ticks (hp > 0 keeps firing) at a single comparison. We only fall
+        -- through to re-tint when the Health element shares this bg dynamically
+        -- (backgroundMatchHealth / power match), where its grey dead-colour can
+        -- clobber the tint, or on the first tint. A colour edit comes through
+        -- GroupVisuals.Apply, which resets the cache, so it re-tints there.
+        if cached == true and frame._msufHealthBgDynamic ~= true
+            and frame._msufPowerBgDynamic ~= true then
+            return
+        end
+        frame._msufGFDeadBgState = true
         local r, g, b = cfg.deadBgR or 0.6, cfg.deadBgG or 0.05, cfg.deadBgB or 0.05
         local a = cfg.deadBgA or 0.9
+        local health = frame.MSUFSpec and frame.MSUFSpec.health
+        local texture = health and health.backgroundTexture
         ApplyDeadBgColor(bg, texture, r, g, b, a)
         if frame.hpBarBG and frame.hpBarBG ~= bg then
             ApplyDeadBgColor(frame.hpBarBG, texture, r, g, b, a)
         end
-    elseif not firstResolve then
+        return
+    end
+    if cached == gone then return end
+    frame._msufGFDeadBgState = gone
+    if not firstResolve then
         -- Transitioned back to alive/online: hand the background back to the
         -- health element. On the first resolve the configured colour is already
         -- in place (Health.Apply ran moments earlier), so skip the redundant call.
@@ -376,7 +422,11 @@ function GroupVisuals.GetEvents(frame, spec)
     if not cfg then return EMPTY_EVENTS end
     local health = cfg.healthFadeEnabled == true or cfg.deadBgEnabled == true
     local offline = cfg.deadBgEnabled == true and cfg.deadBgOffline == true
+    -- DeadBg needs UNIT_FLAGS to catch the dead<->ghost<->resurrect transition
+    -- (a ghost has hp > 0, so UNIT_HEALTH alone cannot tell it apart from alive).
+    local flags = cfg.deadBgEnabled == true
     if health and offline then return VISUAL_HEALTH_OFFLINE_EVENTS end
+    if health and flags then return VISUAL_HEALTH_FLAGS_EVENTS end
     if health then return VISUAL_HEALTH_EVENTS end
     if offline then return VISUAL_OFFLINE_EVENTS end
     return EMPTY_EVENTS
@@ -428,7 +478,9 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
             fn(frame, cfg, updateInfo, event)
         end
         return
-    elseif event == "UNIT_CONNECTION" then
+    elseif event == "UNIT_CONNECTION" or event == "UNIT_FLAGS" then
+        -- Connection toggles offline; UNIT_FLAGS fires on the dead/ghost/res
+        -- transition. Both resolve DeadBg through the API fallback (seedHP nil).
         local fn = cfg.runtimeOnDeadBg
         if fn then
             fn(frame, cfg, nil, event)
