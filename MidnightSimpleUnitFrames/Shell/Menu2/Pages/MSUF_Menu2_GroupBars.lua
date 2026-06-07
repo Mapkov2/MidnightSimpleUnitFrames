@@ -84,6 +84,53 @@ local function BuildDispelOverlaySection(ctx, b)
     M.SetCollapsibleRefreshState(dispel, RefreshDispelState)
 end
 
+local function BuildDeadBgSection(ctx, b)
+    local deadW = b.width or 720
+    local deadSec = b:CollapsibleSection("deadbg", "Dead / Offline Background", 300, false)
+    deadW = deadSec._msuf2Width or deadW
+    local deadCardW = min(560, deadW - 40)
+    local deadCard = W.ControlCard(deadSec, "Dead / Offline Background",
+        "Tints the health background when a member is dead, a ghost, or offline. Event-driven, no per-frame polling.",
+        20, -38, deadCardW, 224)
+
+    local deadToggle = BindScopeToggle(ctx, W.SwitchAt(deadCard, "Dead Background", deadCardW - 62, -24, 0, "HIDDEN"), "deadBgEnabled", false, "visual")
+
+    local deadColor = W.Color(deadCard, "Background color")
+    M.BindColor(ctx, deadColor,
+        function()
+            return Num(CurrentScope(), "deadBgR", 0.60), Num(CurrentScope(), "deadBgG", 0.05), Num(CurrentScope(), "deadBgB", 0.05)
+        end,
+        function(r, g, b)
+            local conf = Conf(CurrentScope())
+            conf.deadBgR, conf.deadBgG, conf.deadBgB = r, g, b
+            QueueGF(CurrentScope(), "visual")
+        end)
+    W.MoveWidget(deadColor, deadCard, 16, -74, min(360, deadCardW - 32), "LEFT")
+
+    local deadAlpha = W.Slider(deadCard, "Background opacity", 0.05, 1, 0.05, 340)
+    M.BindSlider(ctx, deadAlpha,
+        function() return Num(CurrentScope(), "deadBgA", 0.90) end,
+        function(value) Set(CurrentScope(), "deadBgA", tonumber(value) or 0.90, "visual") end)
+    W.MoveWidget(deadAlpha, deadCard, 16, -120, min(360, deadCardW - 72), "CENTER")
+
+    local deadOffline = BindScopeToggle(ctx, W.ToggleAt(deadCard, "Also tint offline members", 16, -168, deadCardW - 32), "deadBgOffline", true, "visual")
+
+    local function RefreshDeadBgState()
+        local enabled = Bool(CurrentScope(), "deadBgEnabled", false)
+        SetOptionsEnabled({ deadColor, deadAlpha, deadOffline }, enabled)
+        SetOptionEnabled(deadToggle, true)
+        SetSectionBadges(deadSec, {
+            OnOffBadge(enabled, "Active", "Off"),
+            { text = Bool(CurrentScope(), "deadBgOffline", true) and "Dead + Offline" or "Dead only", kind = enabled and "info" or "muted" },
+            { text = tostring(floor(Num(CurrentScope(), "deadBgA", 0.90) * 100 + 0.5)) .. "%", kind = enabled and "accent" or "muted" },
+        })
+        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(deadSec, nil) end
+    end
+    M.AddRefresher(ctx, RefreshDeadBgState)
+    RefreshDeadBgState()
+    M.SetCollapsibleRefreshState(deadSec, RefreshDeadBgState)
+end
+
 local function HealthModeHint(mode)
     if not mode or mode == "GLOBAL" then return "follows global style" end
     if mode == "CLASS" then return "class-colored health bars" end
@@ -777,6 +824,8 @@ local function BuildGFBars(ctx)
 
     BuildDispelOverlaySection(ctx, b)
 
+    BuildDeadBgSection(ctx, b)
+
     local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 312, false)
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
@@ -870,4 +919,4 @@ local function BuildGFBars(ctx)
     FinalizeScopePage(ctx, b)
 end
 
-M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 12 })
+M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 13 })

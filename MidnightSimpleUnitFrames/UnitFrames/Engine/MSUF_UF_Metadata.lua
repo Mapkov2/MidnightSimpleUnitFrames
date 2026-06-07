@@ -86,6 +86,7 @@ Metadata.hotStateSpecs = {
         { "NameText", "name" },
         { "Portrait", "portrait" },
         { "StatusTextIndicator", "statusText" },
+        { "GroupVisuals", "groupVisuals" },
         { "GroupStatusRuntime", "groupStatus" },
     },
     [4] = {

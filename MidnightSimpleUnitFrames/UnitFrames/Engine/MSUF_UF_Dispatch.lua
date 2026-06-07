@@ -469,6 +469,8 @@ local function RunHotKindConnection(frame, state, event, unit, sameUnit, a, b, c
     if fn then fn(frame, event, unit, hp, maxHP, calc) end
     fn = state.statusText
     if fn then fn(frame, event, unit) end
+    fn = state.groupVisuals
+    if fn then fn(frame, event, unit) end
     fn = state.groupStatus
     if fn then fn(frame, event, unit) end
     return true
