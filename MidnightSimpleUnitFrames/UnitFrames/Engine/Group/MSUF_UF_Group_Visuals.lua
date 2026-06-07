@@ -219,9 +219,14 @@ local function PercentFromValues(hp, maxHP)
     return nil
 end
 
+-- Health-percent fade (dim the bar near full HP) and group range fade, applied as a
+-- multiplier on the hpBar object. The configured HP-fill opacity (hpBarAlpha) is owned
+-- by the unified Alpha element (which sets the bar's fill texture), and the background
+-- opacity (hpBgAlpha) is baked into the background colour -- both compose on top of the
+-- multiplier set here.
 local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP)
     if not frame.hpBar then return end
-    local alpha = Clamp01(cfg.hpBarAlpha, 1)
+    local alpha = 1
     if cfg.healthFadeEnabled == true and frame.unit then
         local pct = PercentFromValues(seedHP, seedMaxHP)
         if pct == nil and UnitHealthPercent then
@@ -241,19 +246,6 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP)
     alpha = alpha * (tonumber(frame._msufGFRangeHealthAlpha) or 1)
     SetAlphaCached(frame.hpBar, alpha, "_msufGFVisualHealthAlpha")
     frame._msufGFVisualHealthAlpha = alpha
-    local textAlpha = cfg.hpTextIgnoreAlpha == false and alpha or 1
-    SetAlphaCached(frame.hpText, textAlpha, "_msufGFVisualTextAlpha")
-    SetAlphaCached(frame.hpTextLeft, textAlpha, "_msufGFVisualTextAlpha")
-    SetAlphaCached(frame.hpTextCenter, textAlpha, "_msufGFVisualTextAlpha")
-    SetAlphaCached(frame.hpTextRight, textAlpha, "_msufGFVisualTextAlpha")
-    local alphaCfg = frame.MSUFSpec and frame.MSUFSpec.alpha
-    if not (alphaCfg and alphaCfg.active == true and alphaCfg.layered == true) then
-        local bgAlpha = Clamp01(cfg.hpBgAlpha, 1) * (tonumber(frame._msufGFRangeHealthAlpha) or 1)
-        SetAlphaCached(frame.bg, bgAlpha, "_msufGFVisualBgAlpha")
-        if frame.hpBarBG and frame.hpBarBG ~= frame.bg then
-            SetAlphaCached(frame.hpBarBG, bgAlpha, "_msufGFVisualBgAlpha")
-        end
-    end
 end
 
 -- Dead / ghost / offline background tint. Resolved lazily through the shared bar

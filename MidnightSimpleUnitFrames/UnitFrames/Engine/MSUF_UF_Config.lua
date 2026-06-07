@@ -319,7 +319,15 @@ local function ResolveTextColor(general, dst)
     return dst
 end
 
-local function ResolveBgAlpha(general, bars)
+-- Background texture opacity. Per-unit `hpBgAlpha` (the unified Background slider,
+-- 0..1) wins when present; otherwise fall back to the global bars/general
+-- `barBackgroundAlpha` (stored 0..100). Background alpha is a colour concern -- it
+-- is baked into out.health.background.a, not handled by the Alpha element.
+local function ResolveBgAlpha(general, bars, conf)
+    local perUnit = conf and conf.hpBgAlpha
+    if type(perUnit) == "number" then
+        return Clamp01(perUnit, 0.85)
+    end
     local alpha = bars and bars.barBackgroundAlpha
     if type(alpha) == "number" then
         return Clamp01(alpha / 100, 0.9)
@@ -335,7 +343,7 @@ local function DarkTint(general, r, g, b)
     return r or 0, g or 0, b or 0
 end
 
-local function ResolveHealthBackground(general, bars, health, dst)
+local function ResolveHealthBackground(general, bars, health, dst, conf)
     dst = dst or {}
     local r, g, b, a
     local getBg = _G.MSUF_GetBarBackgroundTintRGBA
@@ -348,7 +356,7 @@ local function ResolveHealthBackground(general, bars, health, dst)
     if general and general.barBgMatchHPColor == true and health then
         r, g, b = DarkTint(general, health.r, health.g, health.b)
     end
-    CopyColor(dst, r, g, b, (Number(a, 0.9)) * ResolveBgAlpha(general, bars))
+    CopyColor(dst, r, g, b, (Number(a, 0.9)) * ResolveBgAlpha(general, bars, conf))
     return dst
 end
 
@@ -641,15 +649,6 @@ local function NormalizePortraitBorder(style)
     return "NONE"
 end
 
-local function NormalizeAlphaLayerMode(mode)
-    if mode == true or mode == 1 or mode == "background" or mode == "backdrop" or mode == "bg" then
-        return "background"
-    elseif mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then
-        return "health"
-    end
-    return "foreground"
-end
-
 local function NormalizeRangeFadeLayerMode(mode)
     if mode == "health" or mode == "hp" or mode == "hpbar" or mode == 2 then
         return "health"
@@ -667,66 +666,19 @@ local function CompileRange(out, conf, general, key)
     range.layerMode = NormalizeRangeFadeLayerMode(conf.rangeFadeLayerMode or general.rangeFadeLayerMode)
 end
 
+-- Unified, coldpath alpha. Two values + one toggle, identical for unit and group:
+--   hpAlpha             -> HP fill texture opacity (Alpha element applies it)
+--   excludeTextPortrait -> when true, text + portrait stay opaque while bars dim
+-- Background opacity is a colour concern (baked into out.health.background.a via
+-- hpBgAlpha) and is NOT handled here. Range fade multiplies hpAlpha at runtime.
 local function CompileAlpha(out, conf, general, key)
     local alpha = out.alpha or {}
     out.alpha = alpha
 
-    local legacyAlpha = conf.alpha or conf.frameAlpha or general.unitFrameAlpha
-    local fallback = Clamp01(legacyAlpha, 1)
-    local frameIn = Clamp01(conf.alphaInCombat, fallback)
-    local frameOut = Clamp01(conf.alphaOutOfCombat, fallback)
-    local sync = conf.alphaSyncBoth
-    if sync == nil then
-        sync = conf.alphaSync
-    end
-    if legacyAlpha ~= nil
-        and (tonumber(conf.alphaInCombat) or 1) == 1
-        and (tonumber(conf.alphaOutOfCombat) or 1) == 1 then
-        frameIn = fallback
-        frameOut = fallback
-    end
-    if sync then
-        frameOut = frameIn
-    end
-
-    local layerMode = NormalizeAlphaLayerMode(conf.alphaLayerMode or general.alphaLayerMode)
-    local layered = conf.alphaExcludeTextPortrait == true
-    local fgIn = Clamp01(conf.alphaFGInCombat or general.alphaFGInCombat, 1)
-    local fgOut = Clamp01(conf.alphaFGOutOfCombat or general.alphaFGOutOfCombat, 1)
-    local bgIn = Clamp01(conf.alphaBGInCombat or general.alphaBGInCombat, 1)
-    local bgOut = Clamp01(conf.alphaBGOutOfCombat or general.alphaBGOutOfCombat, 1)
-    local hpIn = Clamp01(conf.alphaHPInCombat or general.alphaHPInCombat, 1)
-    local hpOut = Clamp01(conf.alphaHPOutOfCombat or general.alphaHPOutOfCombat, 1)
-    if sync then
-        fgOut, bgOut, hpOut = fgIn, bgIn, hpIn
-    end
-
-    alpha.enabled = true
-    alpha.inCombat = frameIn
-    alpha.outCombat = frameOut
-    alpha.layered = layered
-    alpha.layerMode = layerMode
-    alpha.foregroundInCombat = fgIn
-    alpha.foregroundOutOfCombat = fgOut
-    alpha.backgroundInCombat = bgIn
-    alpha.backgroundOutOfCombat = bgOut
-    alpha.healthInCombat = hpIn
-    alpha.healthOutOfCombat = hpOut
-    alpha.preserveHPColor = layerMode == "health" and (conf.alphaPreserveHPColor == true or general.alphaPreserveHPColor == true)
-
-    local activeIn, activeOut = frameIn, frameOut
-    if layered then
-        if layerMode == "background" then
-            activeIn, activeOut = bgIn, bgOut
-        elseif layerMode == "health" then
-            activeIn, activeOut = hpIn, hpOut
-        else
-            activeIn, activeOut = fgIn, fgOut
-        end
-    end
-    alpha.combatEvents = activeIn ~= activeOut
-    alpha.opacityActive = activeIn ~= 1 or activeOut ~= 1
-    alpha.active = alpha.opacityActive == true
+    local hpAlpha = Clamp01(conf.hpBarAlpha, 1)
+    alpha.hpAlpha = hpAlpha
+    alpha.excludeTextPortrait = conf.alphaExcludeTextPortrait == true
+    alpha.active = hpAlpha < 1
 end
 
 local function ClampStatusLayer(value, fallback)
@@ -1154,7 +1106,7 @@ local function ResolveUnit(db, unit, out)
 
     out.texture = TextureFromScope(conf, general)
     out.backgroundTexture = BackgroundTextureFromScope(conf, general, out.texture)
-    out.backgroundAlpha = ResolveBgAlpha(general, bars)
+    out.backgroundAlpha = ResolveBgAlpha(general, bars, conf)
     if conf.showName ~= nil then
         out.showName = conf.showName == true
     else
@@ -1297,7 +1249,7 @@ local function ResolveUnit(db, unit, out)
     else
         CopyColor(out.health, general.unifiedBarR or 0.1, general.unifiedBarG or 0.6, general.unifiedBarB or 0.9, 1)
     end
-    out.health.background = ResolveHealthBackground(general, bars, out.health, out.health.background or {})
+    out.health.background = ResolveHealthBackground(general, bars, out.health, out.health.background or {}, conf)
     out.health.backgroundMatchHealth = general.barBgMatchHPColor == true
 
     out.power = out.power or {}

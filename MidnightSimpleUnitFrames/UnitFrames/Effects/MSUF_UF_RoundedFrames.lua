@@ -124,20 +124,29 @@ local function RoundedMouseoverEnabled()
     return IsEnabled() and ReadRoundedBool("roundedMouseover", true)
 end
 
-local function ResolveMouseoverEdgeColor()
+local _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = 1, 1, 1, 0.78
+local function UpdateMouseoverEdgeColor()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if gen then
         local c = gen.highlightColor
         if type(c) == "table" and c[1] then
-            return c[1], c[2] or 1, c[3] or 1, 0.78
+            _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = c[1], c[2] or 1, c[3] or 1, 0.78
+            return
         end
         if type(c) == "string" then
             local colors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
             local cc = colors and colors[c]
-            if cc then return cc[1], cc[2], cc[3], 0.78 end
+            if cc then
+                _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = cc[1], cc[2], cc[3], 0.78
+                return
+            end
         end
     end
-    return 1, 1, 1, 0.72
+    _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA = 1, 1, 1, 0.72
+end
+
+local function ResolveMouseoverEdgeColor()
+    return _mouseoverR, _mouseoverG, _mouseoverB, _mouseoverA
 end
 
 local function ClampEdgeSize(value, fallback, maxValue)
@@ -902,12 +911,11 @@ local function ResolveGroupBackdropColor(f, kind)
     local GF = ResolveGF()
     kind = ResolveGroupKind(f, kind)
     local conf = GF and GF.GetConf and GF.GetConf(kind) or nil
-    local layerA = 1
-    if GF and GF.GetEffectiveBackgroundAlpha then
-        layerA = GF.GetEffectiveBackgroundAlpha(kind, conf) or 1
-    end
     if not conf then return 0.1, 0.1, 0.1, 0.85 end
-    return conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, (conf.bgA or 0.85) * layerA
+    -- Background opacity is the unified hpBgAlpha (0..1); the colour keeps RGB only.
+    local a = tonumber(conf.hpBgAlpha)
+    if a == nil then a = 0.85 end
+    return conf.bgR or 0.1, conf.bgG or 0.1, conf.bgB or 0.1, a
 end
 
 local function EnsureGroupBackground(f)
@@ -1032,8 +1040,8 @@ end
 local function HandleGroupMouseover(f, active)
     if not (f and RoundedGroupFramesEnabled() and RoundedMouseoverEnabled()) then return false end
     if not f._msufRGF_Edge and IsCombatLocked() then return false end
-    if f._msufGFHoverBorder and f._msufGFHoverBorder.Hide then
-        f._msufGFHoverBorder:Hide()
+    if f.highlightBorder and f.highlightBorder.Hide then
+        f.highlightBorder:Hide()
     end
     f._msufRUF_GroupMouseoverActive = active and true or nil
     if not SetGroupRoundedEdgeColor(f) and not IsCombatLocked() then
@@ -1312,6 +1320,7 @@ local function HookOnce()
     --- Export callbacks for direct notification (replaces hooksecurefunc hooks).
     --- Source functions call these directly - zero hook overhead.
     _G.MSUF_RoundedUF_OnApplyAll = function()
+        UpdateMouseoverEdgeColor()
         ApplyAll()
     end
     _G.MSUF_RoundedUF_OnGroupMouseover = function(frame, active)

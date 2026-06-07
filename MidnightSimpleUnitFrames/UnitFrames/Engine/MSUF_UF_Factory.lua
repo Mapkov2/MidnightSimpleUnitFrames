@@ -228,6 +228,9 @@ local function RegisterGlobals(unit, frame)
 end
 
 local function ShowUnitTooltip(frame)
+    if _G.MSUF_RoundedUF_OnUnitMouseover then
+        _G.MSUF_RoundedUF_OnUnitMouseover(frame, true)
+    end
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.ShowUnit) == "function" then
         tooltips.ShowUnit(frame, frame and frame.unit)
@@ -239,6 +242,9 @@ local function ShowUnitTooltip(frame)
 end
 
 local function HideUnitTooltip(frame)
+    if _G.MSUF_RoundedUF_OnUnitMouseover then
+        _G.MSUF_RoundedUF_OnUnitMouseover(frame, false)
+    end
     local tooltips = MSUF and MSUF.Tooltips
     if tooltips and type(tooltips.HideUnit) == "function" then
         tooltips.HideUnit(frame)

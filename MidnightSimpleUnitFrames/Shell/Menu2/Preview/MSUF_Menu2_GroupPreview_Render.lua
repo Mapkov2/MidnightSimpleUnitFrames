@@ -222,7 +222,7 @@ function Render.Install(box, ctx, deps)
         mock:SetPoint("TOPLEFT", self._stage, "TOPLEFT", startX + (tonumber(self._zoomPanX) or 0), startY + (tonumber(self._zoomPanY) or 0))
         mock:SetSize(mockW, mockH)
         mock:SetBackdrop({ bgFile = WHITE8X8 })
-        local bgAlpha = conf.bgA or 0.88
+        local bgAlpha = conf.hpBgAlpha or 0.85
         if runtimeSpec and runtimeSpec.backgroundAlpha ~= nil then bgAlpha = runtimeSpec.backgroundAlpha end
         mock:SetBackdropColor(conf.bgR or 0.08, conf.bgG or 0.08, conf.bgB or 0.09, bgAlpha)
         mock:SetBackdropBorderColor(0, 0, 0, 0)
@@ -255,7 +255,7 @@ function Render.Install(box, ctx, deps)
         if not runtimeSpec and gen and gen.barBgClassColor then
             hbr, hbg, hbb = PreviewClassColor(cls, hbr, hbg, hbb)
         end
-        mock._healthBg:SetVertexColor(hbr, hbg, hbb, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or conf.bgA or 0.85)
+        mock._healthBg:SetVertexColor(hbr, hbg, hbb, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85)
 
         local hpTex = mock._health.GetStatusBarTexture and mock._health:GetStatusBarTexture()
         local healPredMode = tonumber(runtimePrediction.healAnchorMode) or H.HealPredAnchorMode(conf)
@@ -340,7 +340,7 @@ function Render.Install(box, ctx, deps)
             mock._power:SetHeight(powerH)
             mock._powerBg:SetTexture(runtimePower.backgroundTexture or bgTex)
             local pbg = runtimePower.background or {}
-            mock._powerBg:SetVertexColor(pbg.r or conf.bgR or 0.06, pbg.g or conf.bgG or 0.06, pbg.b or conf.bgB or 0.07, pbg.a or conf.bgA or 0.85)
+            mock._powerBg:SetVertexColor(pbg.r or conf.bgR or 0.06, pbg.g or conf.bgG or 0.06, pbg.b or conf.bgB or 0.07, pbg.a or conf.hpBgAlpha or 0.85)
             mock._power:Show()
             mock._powerBg:Show()
         else

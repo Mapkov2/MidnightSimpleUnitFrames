@@ -1188,23 +1188,21 @@ local function ParseUnitOpacityShortcut(text)
     local changes = {}
     for i = 1, #units do
         local unit = tostring(units[i])
-        local inCombat = Registry and Registry:GetSetting(unit .. ".alphaInCombat")
-        local outCombat = Registry and Registry:GetSetting(unit .. ".alphaOutOfCombat")
-        if inCombat then changes[#changes + 1] = { setting = inCombat, value = value, relativeDelta = relativeDelta } end
-        if outCombat then changes[#changes + 1] = { setting = outCombat, value = value, relativeDelta = relativeDelta } end
+        local hp = Registry and Registry:GetSetting(unit .. ".hpBarAlpha")
+        if hp then changes[#changes + 1] = { setting = hp, value = value, relativeDelta = relativeDelta } end
     end
     if #changes == 0 then return nil end
     return {
         kind = "changes",
         changes = changes,
         label = "Set unit opacity",
-        summary = "Sets both in-combat and out-of-combat opacity for the requested unitframe.",
+        summary = "Sets the HP bar opacity for the requested unitframe.",
     }
 end
 
 function A._ParseGroupOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
-    if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp", "background", "backdrop", "hp fill", "health fill", "hp track", "health track", "text ignores", "dispel overlay", "debuff overlay" }) then return nil end
+    if ContainsAny(text, { "range fade", "background", "backdrop", "dispel overlay", "debuff overlay" }) then return nil end
 
     local groups = DetectGroups(text)
     if #groups == 0 then
@@ -1237,17 +1235,15 @@ function A._ParseGroupOpacityShortcut(text)
     local changes = {}
     for i = 1, #groups do
         local scope = tostring(groups[i])
-        local inCombat = Registry and Registry:GetSetting("gf_" .. scope .. ".alphaCurrentInCombat")
-        local outCombat = Registry and Registry:GetSetting("gf_" .. scope .. ".alphaCurrentOutOfCombat")
-        if inCombat then changes[#changes + 1] = { setting = inCombat, value = value, relativeDelta = relativeDelta } end
-        if outCombat then changes[#changes + 1] = { setting = outCombat, value = value, relativeDelta = relativeDelta } end
+        local hp = Registry and Registry:GetSetting("gf_" .. scope .. ".hpBarAlpha")
+        if hp then changes[#changes + 1] = { setting = hp, value = value, relativeDelta = relativeDelta } end
     end
     if #changes == 0 then return nil end
     return {
         kind = "changes",
         changes = changes,
         label = "Set group opacity",
-        summary = "Sets both in-combat and out-of-combat opacity for the requested group-frame scope.",
+        summary = "Sets the HP bar opacity for the requested group-frame scope.",
     }
 end
 

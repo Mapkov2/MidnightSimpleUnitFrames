@@ -101,7 +101,6 @@ local PORTRAIT_MODE_VALUES = { "OFF", "LEFT", "RIGHT" }
 local PORTRAIT_RENDER_VALUES = { "2D", "CLASS" }
 local PORTRAIT_SHAPE_VALUES = { "SQUARE", "CIRCLE", "ROUNDED", "DIAMOND" }
 local PORTRAIT_BORDER_VALUES = { "NONE", "SOLID", "CLASS_COLOR", "REACTION", "CUSTOM" }
-local ALPHA_MODE_VALUES = { "frame", "foreground", "health", "background" }
 local RANGE_LAYER_VALUES = { "frame", "health" }
 local STATUS_ANCHOR_VALUES = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT", "NAMERIGHT", "NAMELEFT" }
 local STATUS_CORNER_ANCHOR_VALUES = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
@@ -671,77 +670,6 @@ local function InitDetachedPowerBar(unit)
     if unit == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
 end
 
-local function AlphaKeysForMode(mode)
-    if M and type(M.AlphaKeysForMode) == "function" then return M.AlphaKeysForMode(mode) end
-    if mode == "background" then return "alphaBGInCombat", "alphaBGOutOfCombat" end
-    if mode == "health" then return "alphaHPInCombat", "alphaHPOutOfCombat" end
-    if mode == "foreground" then return "alphaFGInCombat", "alphaFGOutOfCombat" end
-    return "alphaInCombat", "alphaOutOfCombat"
-end
-
-local function UnitOpacityMode(unit)
-    local conf = UnitDB(unit)
-    if conf.alphaExcludeTextPortrait == true then
-        local mode = conf.alphaLayerMode
-        if mode == 1 or mode == "background" then return "background" end
-        if mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then return "health" end
-        return "foreground"
-    end
-    return "frame"
-end
-
-local function UnitCurrentAlphaKeys(unit)
-    return AlphaKeysForMode(UnitOpacityMode(unit))
-end
-
-local function UnitReadAlpha(unit, inCombat)
-    local conf = UnitDB(unit)
-    local inKey, outKey = UnitCurrentAlphaKeys(unit)
-    local key = inCombat and inKey or outKey
-    local value = tonumber(conf[key])
-    if value ~= nil then return value end
-    if conf.alphaExcludeTextPortrait == true then return 1 end
-    return tonumber(conf[inCombat and "alphaInCombat" or "alphaOutOfCombat"]) or 1
-end
-
-local function UnitWriteAlpha(unit, inCombat, value)
-    local conf = UnitDB(unit)
-    local inKey, outKey = UnitCurrentAlphaKeys(unit)
-    value = ClampNumber(value, 0, 1, 0.05) or 1
-    if inCombat then
-        conf[inKey] = value
-        if conf.alphaSync == true then conf[outKey] = value end
-    else
-        conf[outKey] = value
-    end
-end
-
-local function AlphaModeValue(mode)
-    if mode == "background" then return 1 end
-    if mode == "health" then return 2 end
-    return 0
-end
-
-local function SetUnitOpacityMode(unit, mode)
-    local conf = UnitDB(unit)
-    local inValue = UnitReadAlpha(unit, true)
-    local outValue = UnitReadAlpha(unit, false)
-    if mode == "frame" then
-        conf.alphaExcludeTextPortrait = false
-        return
-    end
-    if mode ~= "background" and mode ~= "health" and mode ~= "foreground" then mode = "foreground" end
-    conf.alphaExcludeTextPortrait = true
-    conf.alphaLayerMode = AlphaModeValue(mode)
-    local syncedOut = conf.alphaSync == true and inValue or outValue
-    local fgIn, fgOut = AlphaKeysForMode("foreground")
-    local hpIn, hpOut = AlphaKeysForMode("health")
-    local bgIn, bgOut = AlphaKeysForMode("background")
-    conf[fgIn], conf[fgOut] = mode == "foreground" and inValue or 1, mode == "foreground" and syncedOut or 1
-    conf[hpIn], conf[hpOut] = mode == "health" and inValue or 1, mode == "health" and syncedOut or 1
-    conf[bgIn], conf[bgOut] = mode == "background" and inValue or 1, mode == "background" and syncedOut or 1
-end
-
 local function RegisterUnitTextNumber(unit, attr, dbKey, label, defaultValue, aliases, opts)
     opts = opts or {}
     opts.category = opts.category or "Text"
@@ -1157,64 +1085,20 @@ for i = 1, #UNIT_KEYS do
     RegisterUnitTextNumber(unit, "hpTextLayer", "hpTextLayer", "HP Text Layer", 5, MakeAliases(unit, "hp text layer", "health text layer"), { min = 0, max = 30, fonts = true })
     RegisterUnitTextNumber(unit, "powerTextLayer", "powerTextLayer", "Power Text Layer", 2, MakeAliases(unit, "power text layer", "mana text layer"), { min = 0, max = 30, fonts = true })
 
-    RegisterUnitEnum(unit, "alphaLayerMode", "alphaLayerMode", "Transparency Affects", "frame", ALPHA_MODE_VALUES, MakeAliases(unit, "transparency affects", "opacity affects", "alpha target"), {
-        category = "Transparency",
-        alpha = true,
-        valueAliases = {
-            frame = "frame",
-            whole = "frame",
-            ["whole frame"] = "frame",
-            foreground = "foreground",
-            bars = "foreground",
-            bar = "foreground",
-            hp = "health",
-            health = "health",
-            ["health bar"] = "health",
-            background = "background",
-            backdrop = "background",
-        },
-        get = UnitOpacityMode,
-        set = SetUnitOpacityMode,
-    })
-    RegisterUnitNumberSetting(unit, "alphaInCombat", "alphaInCombat", "In Combat Opacity", 1, 0, 1, MakeAliases(unit, "in combat opacity", "combat opacity", "in combat alpha"), {
+    -- Unified transparency: HP bar fill opacity, background opacity, and a toggle to
+    -- keep text + portrait opaque while the bars dim.
+    RegisterUnitNumberSetting(unit, "hpBarAlpha", "hpBarAlpha", "HP Bar Opacity", 1, 0, 1, MakeAliases(unit, "hp bar opacity", "health bar opacity", "hp opacity", "hp alpha", "bar opacity"), {
         category = "Transparency",
         alpha = true,
         step = 0.05,
         percent = true,
-        get = function(unitKey) return UnitReadAlpha(unitKey, true) end,
-        set = function(unitKey, value) UnitWriteAlpha(unitKey, true, value) end,
     })
-    RegisterUnitNumberSetting(unit, "alphaOutOfCombat", "alphaOutOfCombat", "Out Of Combat Opacity", 1, 0, 1, MakeAliases(unit, "out of combat opacity", "outside combat opacity", "out of combat alpha"), {
+    RegisterUnitNumberSetting(unit, "hpBgAlpha", "hpBgAlpha", "Background Opacity", 0.85, 0, 1, MakeAliases(unit, "background opacity", "backdrop opacity", "background alpha", "bg opacity"), {
         category = "Transparency",
-        alpha = true,
         step = 0.05,
         percent = true,
-        get = function(unitKey) return UnitReadAlpha(unitKey, false) end,
-        set = function(unitKey, value) UnitWriteAlpha(unitKey, false, value) end,
     })
-    RegisterUnitBooleanSetting(unit, "alphaSync", "alphaSync", "Sync Combat Opacity", false, MakeAliases(unit, "sync opacity", "sync alpha", "sync both opacity"), {
-        category = "Transparency",
-        alpha = true,
-        set = function(unitKey, value)
-            local conf = UnitDB(unitKey)
-            conf.alphaSync = value and true or false
-            if conf.alphaSync then UnitWriteAlpha(unitKey, false, UnitReadAlpha(unitKey, true)) end
-        end,
-    })
-    RegisterUnitBooleanSetting(unit, "alphaPreserveHPColor", "alphaPreserveHPColor", "Preserve HP Color", false, MakeAliases(unit, "preserve hp color", "preserve health color"), { category = "Transparency", alpha = true })
-
-    local alphaKeys = {
-        { key = "alphaFGInCombat", label = "Foreground In Combat Opacity", alias = "foreground in combat opacity" },
-        { key = "alphaFGOutOfCombat", label = "Foreground Out Of Combat Opacity", alias = "foreground out of combat opacity" },
-        { key = "alphaHPInCombat", label = "Health In Combat Opacity", alias = "health in combat opacity" },
-        { key = "alphaHPOutOfCombat", label = "Health Out Of Combat Opacity", alias = "health out of combat opacity" },
-        { key = "alphaBGInCombat", label = "Background In Combat Opacity", alias = "background in combat opacity" },
-        { key = "alphaBGOutOfCombat", label = "Background Out Of Combat Opacity", alias = "background out of combat opacity" },
-    }
-    for a = 1, #alphaKeys do
-        local spec = alphaKeys[a]
-        RegisterUnitNumberSetting(unit, spec.key, spec.key, spec.label, 1, 0, 1, MakeAliases(unit, spec.alias, spec.alias:gsub("opacity", "alpha")), { category = "Transparency", alpha = true, step = 0.05, percent = true })
-    end
+    RegisterUnitBooleanSetting(unit, "alphaExcludeTextPortrait", "alphaExcludeTextPortrait", "Keep Text & Portrait Visible", false, MakeAliases(unit, "keep text visible", "exclude text from opacity", "keep portrait visible", "exclude portrait from opacity"), { category = "Transparency", alpha = true })
 
     if RANGE_FADE_UNITS[unit] then
         RegisterUnitNumberSetting(unit, "rangeFadeAlpha", "rangeFadeAlpha", "Range Fade Opacity", 0.4, 0, 1, MakeAliases(unit, "range fade opacity", "range fade alpha"), { category = "Range", alpha = true, step = 0.05, percent = true })

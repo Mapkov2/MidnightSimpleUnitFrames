@@ -322,16 +322,9 @@ local function UnitFrameDiagnosticText(unit)
         issues[#issues + 1] = label .. " height is extremely small. Say 'make " .. tostring(unit) .. " height " .. tostring(UnitDefaultHeight(unit)) .. "'."
         AddFixChoice(choices, unit .. ".height", UnitDefaultHeight(unit), "Set " .. label .. " height to " .. tostring(UnitDefaultHeight(unit)))
     end
-    if LowOpacity(conf.alphaInCombat) and LowOpacity(conf.alphaOutOfCombat) then
-        issues[#issues + 1] = label .. " opacity is near zero in and out of combat. Open Alpha settings or set opacity back to 100%."
-        AddFixChoice(choices, unit .. ".alphaInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
-        AddFixChoice(choices, unit .. ".alphaOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
-    elseif LowOpacity(conf.alphaOutOfCombat) then
-        issues[#issues + 1] = label .. " out-of-combat opacity is near zero. It may disappear while not fighting."
-        AddFixChoice(choices, unit .. ".alphaOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
-    elseif LowOpacity(conf.alphaInCombat) then
-        issues[#issues + 1] = label .. " in-combat opacity is near zero. It may disappear while fighting."
-        AddFixChoice(choices, unit .. ".alphaInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
+    if LowOpacity(conf.hpBarAlpha) then
+        issues[#issues + 1] = label .. " HP bar opacity is near zero. It may be hard to see. Set HP bar opacity back to 100%."
+        AddFixChoice(choices, unit .. ".hpBarAlpha", 1, "Set " .. label .. " HP bar opacity to 100%")
     end
     for i = 1, #LOAD_CONDITION_FIXES do
         local spec = LOAD_CONDITION_FIXES[i]
@@ -379,16 +372,9 @@ local function GroupFrameDiagnosticText(scope)
         issues[#issues + 1] = label .. " frame height is extremely small. Say 'make " .. tostring(scope) .. " height " .. tostring(GroupDefaultHeight(scope)) .. "'."
         AddFixChoice(choices, "gf_" .. scope .. ".height", GroupDefaultHeight(scope), "Set " .. label .. " frame height to " .. tostring(GroupDefaultHeight(scope)))
     end
-    if LowOpacity(conf.alphaCurrentInCombat) and LowOpacity(conf.alphaCurrentOutOfCombat) then
-        issues[#issues + 1] = label .. " opacity is near zero in and out of combat. Set group opacity back to 100%."
-        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
-        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
-    elseif LowOpacity(conf.alphaCurrentOutOfCombat) then
-        issues[#issues + 1] = label .. " out-of-combat opacity is near zero. It may disappear while not fighting."
-        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentOutOfCombat", 1, "Set " .. label .. " out-of-combat opacity to 100%")
-    elseif LowOpacity(conf.alphaCurrentInCombat) then
-        issues[#issues + 1] = label .. " in-combat opacity is near zero. It may disappear while fighting."
-        AddFixChoice(choices, "gf_" .. scope .. ".alphaCurrentInCombat", 1, "Set " .. label .. " in-combat opacity to 100%")
+    if LowOpacity(conf.hpBarAlpha) then
+        issues[#issues + 1] = label .. " HP bar opacity is near zero. It may be hard to see. Set HP bar opacity back to 100%."
+        AddFixChoice(choices, "gf_" .. scope .. ".hpBarAlpha", 1, "Set " .. label .. " HP bar opacity to 100%")
     end
     if conf.hideInClientScene == true then
         issues[#issues + 1] = label .. " frames hide during client scenes by setting; that only applies during those scenes."

@@ -1011,34 +1011,19 @@ aurasOwnBuffHighlightColor = true,
 local function MSUF_IsAuraGeneralKey(key)
     return (type(key) == "string") and (MSUF_AURA_GENERAL_KEYS[key] == true)
 end
+-- Unified, coldpath alpha keys: HP fill opacity, background opacity, and a toggle to
+-- keep text + portrait opaque. Note hpBarAlpha/hpBgAlpha are NOT colour keys here
+-- (MSUF_IsColorKey matches "bg"); listing them keeps them travelling with unitframe
+-- settings rather than colour settings.
 local MSUF_UNITFRAME_ALPHA_KEYS = {
-    alphaInCombat = true,
-    alphaOutOfCombat = true,
-    alphaSync = true,
-    alphaSyncBoth = true,
+    hpBarAlpha = true,
+    hpBgAlpha = true,
     alphaExcludeTextPortrait = true,
-    alphaLayerMode = true,
-    alphaFGInCombat = true,
-    alphaFGOutOfCombat = true,
-    alphaBGInCombat = true,
-    alphaBGOutOfCombat = true,
-    alphaHPInCombat = true,
-    alphaHPOutOfCombat = true,
-    alphaPreserveHPColor = true,
 }
 local MSUF_UNITFRAME_ALPHA_DEFAULTS = {
-    alphaInCombat = 1,
-    alphaOutOfCombat = 1,
-    alphaSync = false,
+    hpBarAlpha = 1,
+    hpBgAlpha = 0.85,
     alphaExcludeTextPortrait = false,
-    alphaLayerMode = 0,
-    alphaFGInCombat = 1,
-    alphaFGOutOfCombat = 1,
-    alphaBGInCombat = 1,
-    alphaBGOutOfCombat = 1,
-    alphaHPInCombat = 1,
-    alphaHPOutOfCombat = 1,
-    alphaPreserveHPColor = false,
 }
 local MSUF_UNITFRAME_UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "pet", "boss" }
 local function MSUF_IsUnitframeAlphaKey(key)
@@ -1098,10 +1083,20 @@ local function MSUF_ApplyGeneralSubset(tbl)
         g[k] = MSUF_DeepCopy(v)
     end
  end
+--- Legacy combat/layered alpha keys retired by the unified alpha rewrite. Imported
+--- profiles may still carry them; strip them so they never resurrect the old model.
+local MSUF_UNITFRAME_LEGACY_ALPHA_KEYS = {
+    "alphaInCombat", "alphaOutOfCombat", "alphaSync", "alphaSyncBoth", "alphaLayerMode",
+    "alphaFGInCombat", "alphaFGOutOfCombat", "alphaBGInCombat", "alphaBGOutOfCombat",
+    "alphaHPInCombat", "alphaHPOutOfCombat", "alphaPreserveHPColor", "bgA", "hpTextIgnoreAlpha",
+}
 local function MSUF_ProfileIO_EnsureUnitframeAlphaDB()
     if type(MSUF_DB) ~= "table" then  return end
     local function ensureAlpha(conf)
         if type(conf) ~= "table" then  return end
+        for i = 1, #MSUF_UNITFRAME_LEGACY_ALPHA_KEYS do
+            conf[MSUF_UNITFRAME_LEGACY_ALPHA_KEYS[i]] = nil
+        end
         for k, v in pairs(MSUF_UNITFRAME_ALPHA_DEFAULTS) do
             if conf[k] == nil then
                 conf[k] = v

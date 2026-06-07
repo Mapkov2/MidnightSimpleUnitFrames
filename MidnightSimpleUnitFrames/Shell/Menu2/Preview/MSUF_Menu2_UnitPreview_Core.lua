@@ -439,73 +439,23 @@ function Core.InCombat()
     return inCombat == true
 end
 
-local function NormalizeAlphaLayerMode(mode)
-    if mode == true or mode == 1 or mode == "background" or mode == "backdrop" or mode == "bg" then
-        return "background"
-    elseif mode == 2 or mode == "health" or mode == "hp" or mode == "hpbar" then
-        return "health"
-    end
-    return "foreground"
-end
-
-local function PreviewAlphaPair(conf, mode)
-    if not conf then return 1, 1 end
-    local aIn = Clamp01(conf.alphaInCombat, 1)
-    local aOut = Clamp01(conf.alphaOutOfCombat, 1)
-    if conf.alphaExcludeTextPortrait == true then
-        mode = NormalizeAlphaLayerMode(mode)
-        if mode == "background" then
-            aIn = Clamp01(conf.alphaBGInCombat, 1)
-            aOut = Clamp01(conf.alphaBGOutOfCombat, 1)
-        elseif mode == "health" then
-            aIn = Clamp01(conf.alphaHPInCombat, 1)
-            aOut = Clamp01(conf.alphaHPOutOfCombat, 1)
-        else
-            aIn = Clamp01(conf.alphaFGInCombat, 1)
-            aOut = Clamp01(conf.alphaFGOutOfCombat, 1)
-        end
-    end
-    local sync = conf.alphaSyncBoth
-    if sync == nil then sync = conf.alphaSync end
-    if sync then aOut = aIn end
-    return aIn, aOut
-end
-
-local function PreviewCurrentAlpha(conf, mode)
-    local aIn, aOut = PreviewAlphaPair(conf, mode)
-    return Core.InCombat() and aIn or aOut
-end
-
+-- Unified preview alpha: hp = hpBarAlpha (HP fill + prediction bars), bg = hpBgAlpha
+-- (bar backgrounds). Foreground (text, portrait, power, cast, icons) follows the HP
+-- value unless the "keep text + portrait visible" toggle is on.
 local function PreviewAlphaState(conf)
-    local frameAlpha = PreviewCurrentAlpha(conf, "foreground")
-    if _G.MSUF_UnitEditModeActive == true and frameAlpha < 0.35 then frameAlpha = 0.35 end
-    if conf and conf.alphaExcludeTextPortrait == true then
-        local mode = NormalizeAlphaLayerMode(conf.alphaLayerMode)
-        local fg = 1
-        local power = mode == "foreground" and PreviewCurrentAlpha(conf, "foreground") or 1
-        local bg = mode == "background" and PreviewCurrentAlpha(conf, "background") or 1
-        local hp = mode == "health" and PreviewCurrentAlpha(conf, "health") or 1
-        return {
-            flat = false,
-            frame = 1,
-            fg = fg,
-            bg = bg,
-            hp = hp,
-            power = power,
-            text = 1,
-            portrait = 1,
-            preserveHPColor = mode == "health" and conf.alphaPreserveHPColor == true,
-        }
-    end
+    local hp = Clamp01(conf and conf.hpBarAlpha, 1)
+    local bg = Clamp01(conf and conf.hpBgAlpha, 0.85)
+    if _G.MSUF_UnitEditModeActive == true and hp < 0.35 then hp = 0.35 end
+    local fg = (conf and conf.alphaExcludeTextPortrait == true) and 1 or hp
     return {
-        flat = true,
-        frame = frameAlpha,
-        fg = 1,
-        bg = 1,
-        hp = 1,
-        power = 1,
-        text = 1,
-        portrait = 1,
+        flat = false,
+        frame = 1,
+        fg = fg,
+        bg = bg,
+        hp = hp,
+        power = fg,
+        text = fg,
+        portrait = fg,
         preserveHPColor = false,
     }
 end
