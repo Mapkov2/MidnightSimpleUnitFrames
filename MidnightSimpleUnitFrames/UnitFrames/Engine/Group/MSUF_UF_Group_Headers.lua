@@ -159,6 +159,15 @@ local function ConfiguredCount(kind, conf)
     return UnknownRaidLayoutCount(kind)
 end
 
+-- The exact member count the live header uses to size/center its anchor. The
+-- preview shares this so an out-of-combat preview box sits where the real header
+-- will (previously the preview centered on 30/20 while an empty raid header
+-- centered on UNKNOWN_RAID_LAYOUT_COUNT=10, so the two drifted apart).
+function GF.GetLiveLayoutCount(kind)
+    local conf = GF.GetConf and GF.GetConf(kind) or {}
+    return ConfiguredCount(kind, conf)
+end
+
 local function LayoutParts(kind, conf)
     local w, h, spacing = 80, 32, 1
     if GF.GetScaledFrameMetrics then
@@ -260,7 +269,13 @@ local function RequiredHeaderColumns(kind, conf, count)
     end
     local upc = ClampInt(conf and conf.unitsPerColumn, 5, 1, 40)
     local columns = floor(((count + upc - 1) / upc))
-    if columns < 1 then columns = 1 elseif columns > 8 then columns = 8 end
+    -- Non-preserve raid: the column count is unitsPerColumn-driven, NOT group
+    -- count, so it is not bounded by 8 groups. With a small unitsPerColumn a full
+    -- 40-man raid needs more than 8 columns (e.g. upc=3 -> 14); capping at 8 here
+    -- stranded the overflow buttons (only ceil(8*upc) of 40 frames got placed),
+    -- which is the "raid frame doesn't build right at high player counts" bug.
+    -- Bound by 40 (one column per unit) instead.
+    if columns < 1 then columns = 1 elseif columns > 40 then columns = 40 end
     return columns
 end
 

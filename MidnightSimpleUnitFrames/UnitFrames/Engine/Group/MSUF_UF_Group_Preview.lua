@@ -105,6 +105,13 @@ local function GetPositionCount(kind)
         if n > 0 then return n end
         return 5
     end
+    -- Raid-like: mirror the exact count the live header uses to center its
+    -- anchor, so the preview box lands on the same spot as the real header
+    -- (empty raid -> the live "unknown" count, not a hardcoded 30/20/40).
+    if GF.GetLiveLayoutCount then
+        local n = tonumber(GF.GetLiveLayoutCount(kind))
+        if n and n > 0 then return floor(n + 0.5) end
+    end
     local n = GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0
     if n > 0 then return n end
     return kind == "mythicraid" and 20 or 40
@@ -394,9 +401,22 @@ local function PlacePreviewFrame(frame, layout, index, w, h, spacing, growth, up
 end
 
 local function SetPreservedPreviewPoint(frame, layout, index, w, h, spacing, growth, primary, blockW, blockH)
-    primary = primary or 5
-    blockW = blockW or w
-    blockH = blockH or h
+    -- primary/blockW/blockH come from GF.GetPreservedRaidGridMetrics so the
+    -- preview's per-group block layout matches the live secure header exactly
+    -- (it is no longer a hardcoded 5-wide assumption). Fall back to the same
+    -- derivation the metrics use (primary = min(unitsPerColumn, 5)) only if the
+    -- caller failed to thread them through, so the two never silently diverge
+    -- when unitsPerColumn ~= 5.
+    if not primary then
+        local conf = layout and layout._msufGFKind and GF.GetConf and GF.GetConf(layout._msufGFKind)
+        local upc = floor((tonumber(conf and conf.unitsPerColumn) or 5) + 0.5)
+        if upc < 1 then upc = 1 end
+        primary = min(upc, 5)
+    end
+    if primary < 1 then primary = 1 end
+    local blockColumns = max(1, floor((5 + primary - 1) / primary))
+    blockW = blockW or (blockColumns * w + max(0, blockColumns - 1) * spacing)
+    blockH = blockH or (primary * h + max(0, primary - 1) * spacing)
     local groupIndex = floor((index - 1) / 5)
     local withinGroup = (index - 1) % 5
     local minor = floor(withinGroup / primary)

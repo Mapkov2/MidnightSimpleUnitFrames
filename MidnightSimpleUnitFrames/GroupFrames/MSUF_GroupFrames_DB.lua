@@ -771,10 +771,16 @@ function GF.GetGridMetrics(kind, count)
 
     local numCols = math_ceil(count / upc)
     if numCols < 1 then numCols = 1 end
+    -- Non-preserve raid columns are unitsPerColumn-driven (up to 40 with a small
+    -- upc), not bounded by 8 groups. RequiredHeaderColumns lets the secure header
+    -- lay out that many, so the anchor sizing here must allow the same range --
+    -- otherwise a 40-man raid at a low upc gets an undersized anchor and the
+    -- centering drifts while the overflow frames sit outside the box.
+    local columnCap = IsRaidLikeKind(kind) and 40 or 8
     local maxColumns = math_floor((tonumber(conf.maxColumns) or numCols) + 0.5)
-    if maxColumns < 1 then maxColumns = 1 elseif maxColumns > 8 then maxColumns = 8 end
+    if maxColumns < 1 then maxColumns = 1 elseif maxColumns > columnCap then maxColumns = columnCap end
     if IsRaidLikeKind(kind) and numCols > maxColumns then
-        maxColumns = math_min(numCols, 8)
+        maxColumns = math_min(numCols, columnCap)
     end
     if numCols > maxColumns then numCols = maxColumns end
     local major = math_min(count, upc)
