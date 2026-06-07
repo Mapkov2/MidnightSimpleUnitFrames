@@ -403,10 +403,8 @@ function State.Enter(key)
         _G.MSUF_EM_UndoClear()
     end
 
-    --- Refresh Auras3
-    if _G.MSUF_Auras3_RefreshAll then
-        _G.MSUF_Auras3_RefreshAll()
-    end
+    --- (Auras3 is refreshed inside MSUF_SyncAllUnitPreviews below; calling it
+    --- here too just doubled the work on the entry frame and spiked the click.)
 
     --- Arrow key nudge
     if _G.MSUF_EnableArrowKeyNudge then
@@ -416,8 +414,17 @@ function State.Enter(key)
     --- Preview must be active before the apply pipeline queues its boss sync.
     _G.MSUF_UnitPreviewActive = true
 
-    --- Visibility drivers: ApplyAllSettings checks MSUF_UnitEditModeActive internally
-    ApplyAllSettingsSafe()
+    --- Entering edit mode changes no actual settings - it only flips preview
+    --- and visibility flags. A full ApplyAllSettings (re-apply every element on
+    --- every frame) was the dominant entry CPU spike. We only need frames that
+    --- are normally hidden (e.g. target with no target) to appear, which is a
+    --- visibility-driver refresh - far cheaper. The heavier per-frame preview
+    --- pass runs deferred via MSUF_SyncAllUnitPreviews on the next frame.
+    if _G.MSUF_RefreshAllUnitVisibilityDrivers then
+        _G.MSUF_RefreshAllUnitVisibilityDrivers(true)
+    else
+        ApplyAllSettingsSafe()
+    end
 
     local function SyncUnitPreviewsAfterEnter()
         if not (EM2.State and EM2.State.IsActive()) then return end
@@ -426,8 +433,10 @@ function State.Enter(key)
         end
     end
 
-    --- Preview: enable immediately, then re-sync after async apply/layout settles.
-    SyncUnitPreviewsAfterEnter()
+    --- Preview: defer the (heavy) preview sync to the next frame so the click
+    --- that opens edit mode stays responsive, then re-sync after the async
+    --- apply/layout settles. Running it synchronously here used to land the
+    --- full preview + Auras3 refresh on the same frame as the click = spike.
     C_Timer.After(0, SyncUnitPreviewsAfterEnter)
     C_Timer.After(0.1, function()
         SyncUnitPreviewsAfterEnter()
@@ -447,11 +456,17 @@ function State.Enter(key)
     --- Start ticker (zero overhead when stopped)
     if EM2.Ticker and EM2.Ticker.Start then EM2.Ticker.Start() end
 
-    --- Show grid + HUD + movers (EM2 modules)
+    --- Show grid + HUD + focus synchronously for instant visual feedback.
     if EM2.Grid   and EM2.Grid.Show   then EM2.Grid.Show()   end
     if EM2.HUD    and EM2.HUD.Show    then EM2.HUD.Show()    end
-    if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
     if EM2.Focus  and EM2.Focus.Show   then EM2.Focus.Show(unitKey) end
+    --- Movers can create a frame per registered element on first entry; defer
+    --- that to the next frame so it doesn't pile onto the entry spike. Guard
+    --- against an immediate exit before the timer fires.
+    C_Timer.After(0, function()
+        if not (EM2.State and EM2.State.IsActive()) then return end
+        if EM2.Movers and EM2.Movers.Show then EM2.Movers.Show() end
+    end)
 end
 
 --- EXIT Edit Mode

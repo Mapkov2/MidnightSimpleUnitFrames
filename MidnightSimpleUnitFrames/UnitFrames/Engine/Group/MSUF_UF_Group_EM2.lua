@@ -1334,7 +1334,7 @@ local function BuildGFPopup(mode)
     local isRaid = (mode == "raid" or mode == "mythicraid")
     local title = (mode == "mythicraid") and "Mythic Raid Frames" or (isRaid and "Raid Frames" or "Party Frames")
     local popup = CreateFrame("Frame", "MSUF_EM2_GFPopup_" .. mode, UIParent, "BackdropTemplate")
-    popup:SetSize(440, 244)
+    popup:SetSize(440, 282)
     popup:SetPoint("CENTER", UIParent, "CENTER", 250, 0)
     popup:SetFrameStrata("DIALOG")
     popup:SetFrameLevel(220)
@@ -1466,6 +1466,20 @@ local function BuildGFPopup(mode)
         if popup and popup:IsShown() then Sync() end
     end
 
+    local function ResetPosition()
+        if BlockConfigLocked() then return end
+        local conf = Conf()
+        if not conf then return end
+        if _G.MSUF_EM_UndoBeforeChange then _G.MSUF_EM_UndoBeforeChange("gf", mode) end
+        conf.offsetX, conf.offsetY = 0, 0
+        RefreshAfterPopupApply(mode)
+        local key = KIND_TO_KEY[mode]
+        if key and EM2.Focus and EM2.Focus.NotifyPositionChanged then
+            EM2.Focus.NotifyPositionChanged(key, true)
+        end
+        if popup and popup:IsShown() then Sync() end
+    end
+
     local function WireGroupFocus(btn, component)
         if not (btn and btn.HookScript) then return btn end
         btn:HookScript("OnEnter", function()
@@ -1493,7 +1507,16 @@ local function BuildGFPopup(mode)
 
     popup:EnableKeyboard(true)
     popup:SetScript("OnKeyDown", function(s, k)
+        local ctrl = IsControlKeyDown and IsControlKeyDown()
         if k == "ESCAPE" then s:SetPropagateKeyboardInput(false); s:Hide()
+        elseif ctrl and k == "Z" then
+            s:SetPropagateKeyboardInput(false)
+            if EM2.Undo then EM2.Undo.DoUndo() end
+            if s._refreshUndoRedo then s._refreshUndoRedo() end
+        elseif ctrl and (k == "Y" or k == "R") then
+            s:SetPropagateKeyboardInput(false)
+            if EM2.Undo then EM2.Undo.DoRedo() end
+            if s._refreshUndoRedo then s._refreshUndoRedo() end
         else s:SetPropagateKeyboardInput(true) end
     end)
     popup:HookScript("OnHide", function(s)
@@ -1509,6 +1532,13 @@ local function BuildGFPopup(mode)
         end
         if C_Timer and C_Timer.After then C_Timer.After(0, RefreshPopupFocus) else RefreshPopupFocus() end
     end)
+
+    local Quick = EM2.QuickPopup or (_G.MSUF_EM2_Menu2Style and _G.MSUF_EM2_Menu2Style.QuickPopup)
+    if Quick and Quick.AddFooterControls then
+        Quick.AddFooterControls(popup, { y = -230, onResetPosition = ResetPosition })
+    end
+
+    if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(popup) end
     popup:Hide()
     return popup
 end

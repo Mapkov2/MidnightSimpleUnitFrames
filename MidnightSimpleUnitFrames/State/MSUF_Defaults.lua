@@ -153,6 +153,24 @@ _G.MSUF_NormalizePortraitRenderDB = MSUF_Defaults_NormalizePortraitRenderDB
 local MSUF_DEFAULT_BOSS_OFFSET_X = 360
 local MSUF_DEFAULT_BOSS_OFFSET_Y = 230
 
+--- Default position offsets per unit, mirrored from the fill() defaults below.
+--- Exposed so Edit Mode popups can offer a "Reset position" action that only
+--- touches the frame's position, not its size or other settings.
+local MSUF_DEFAULT_UNIT_OFFSETS = {
+    player       = { -256, -180 },
+    target       = { 320, -180 },
+    focus        = { -260, -300 },
+    targettarget = { 220, -300 },
+    focustarget  = { 260, 180 },
+    pet          = { -275, -250 },
+    boss         = { MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y },
+}
+function _G.MSUF_GetDefaultUnitOffsets(unit)
+    local o = unit and MSUF_DEFAULT_UNIT_OFFSETS[unit]
+    if o then return o[1], o[2] end
+    return 0, 0
+end
+
 --- Fresh-install overrides (applied only when the factory profile payload is seeded).
 --- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
 local function MSUF_Defaults_ApplyFreshInstallOverrides(db)

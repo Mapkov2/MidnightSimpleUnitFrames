@@ -183,7 +183,8 @@ function Sync()
         pf.detachBtn:SetCheckedVisual(detachedOn)
         if pf.dpbPanel then
             pf.dpbPanel:SetShown(detachedOn)
-            pf:SetHeight(detachedOn and (key == "player" and 526 or 488) or (canDetach and 292 or 244))
+            --- +44 reserved at the bottom for the Undo/Redo/Reset footer row.
+            pf:SetHeight(detachedOn and (key == "player" and 570 or 532) or (canDetach and 336 or 288))
             if detachedOn then pf.dpbPanel:SetHeight(key == "player" and 220 or 184) end
         end
         if detachedOn then
@@ -310,6 +311,24 @@ local function ApplyDetachPower(checked)
     Sync()
 end
 
+local function ResetPosition()
+    if BlockConfigCombatLocked() then return end
+    if not pf or not pf.unit then return end
+    local key = CK(pf.unit)
+    local conf = key and Conf(key)
+    if not conf then return end
+    if type(_G.MSUF_EM_UndoBeforeChange)=="function" then _G.MSUF_EM_UndoBeforeChange("unit", key) end
+    local dx, dy = 0, 0
+    if type(_G.MSUF_GetDefaultUnitOffsets) == "function" then dx, dy = _G.MSUF_GetDefaultUnitOffsets(key) end
+    conf.offsetX, conf.offsetY = dx, dy
+    if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
+    if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_RESETPOS") end
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    RefreshUFPreview("EM2_UNIT_POPUP_RESETPOS", key)
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
+    if pf and pf:IsShown() then Sync() end
+end
+
 local function CopyBoundsTo(targetKey)
     if BlockConfigCombatLocked() then return end
     if not pf or not pf.unit or not targetKey then return end
@@ -344,7 +363,7 @@ local function Build()
     }
 
     pf = Quick.CreateShell("MSUF_EM2_UnitPopup", {
-        height = 292,
+        height = 336,
         title = "Frame",
         subtitle = "Frame bounds",
         hoverSource = "unit-popup",
@@ -398,25 +417,42 @@ local function Build()
         Menu2Style.Shell(menu)
         menu:Hide()
 
+        --- "All units" first, then each individual target.
+        local entries = { { key = "__all__", label = "All units" } }
+        for _, t in ipairs(UNIT_COPY_TARGETS) do entries[#entries + 1] = t end
+
         local itemH = 22
-        menu:SetSize(w, #UNIT_COPY_TARGETS * itemH + 6)
-        for i, src in ipairs(UNIT_COPY_TARGETS) do
+        menu:SetSize(w, #entries * itemH + 6)
+        for i, src in ipairs(entries) do
             local item = CreateFrame("Button", nil, menu)
             item:SetSize(w - 4, itemH)
             item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (i - 1) * itemH))
             local bg = item:CreateTexture(nil, "BACKGROUND")
             bg:SetAllPoints()
             bg:SetColorTexture(0, 0, 0, 0)
-            local fs = FS(item, 10, C.white)
+            --- Subtle divider under the "All units" entry.
+            if src.key == "__all__" then
+                bg:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.08)
+            end
+            local fs = FS(item, 10, src.key == "__all__" and C.title or C.white)
             fs:SetPoint("LEFT", 8, 0)
             fs:SetText(Tr(src.label))
             item:SetScript("OnEnter", function()
                 bg:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.22)
             end)
-            item:SetScript("OnLeave", function() bg:SetColorTexture(0, 0, 0, 0) end)
+            item:SetScript("OnLeave", function()
+                bg:SetColorTexture(src.key == "__all__" and C.btnHover[1] or 0, src.key == "__all__" and C.btnHover[2] or 0, src.key == "__all__" and C.btnHover[3] or 0, src.key == "__all__" and 0.08 or 0)
+            end)
             item:SetScript("OnClick", function()
                 menu:Hide()
-                CopyBoundsTo(src.key)
+                if src.key == "__all__" then
+                    local srcKey = pf and pf.unit and CK(pf.unit)
+                    for _, t in ipairs(UNIT_COPY_TARGETS) do
+                        if t.key ~= srcKey then CopyBoundsTo(t.key) end
+                    end
+                else
+                    CopyBoundsTo(src.key)
+                end
                 if b then
                     Menu2Style.SetButtonText(b, src.label)
                     C_Timer.After(1.2, function() Menu2Style.SetButtonText(b, "Copy to") end)
@@ -487,6 +523,10 @@ local function Build()
     pf.dpbWHRow = MakeValuePairIn(pf.dpbPanel, 16, -126, "Width", "dpbWBox", "Height", "dpbHBox")
     pf.dpbLayerRow = MakeSingleValueIn(pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox")
     pf.dpbPanel:Hide()
+
+    if Quick.AddFooterControls then
+        Quick.AddFooterControls(pf, { anchor = "BOTTOM", bottomGap = 12, onResetPosition = ResetPosition })
+    end
 
     if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
     return pf
