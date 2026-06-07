@@ -228,6 +228,40 @@ local function ScheduleRosterSettle()
     C_Timer.After(0.60, Run)
 end
 
+-- DB-readiness retry. On a /reload (or an early PLAYER_ENTERING_WORLD) the
+-- group rebuild can run before _G.MSUF_DB is populated. In that window
+-- GF.EnsureDB early-returns and GF.GetConf falls back to RAID_DEFAULTS, whose
+-- `enabled` is false -- so wantRaid is false and the raid header is never built,
+-- with no event left to retry on (the player was already out of combat / no
+-- further roster change). Re-arm the build a few times until the DB appears so
+-- the header recovers on its own instead of staying blank until the next roster
+-- change. Bounded retry count; cleared as soon as the DB is ready.
+local dbReadyRetryToken = 0
+local function DBReady()
+    return type(_G.MSUF_DB) == "table"
+end
+
+local function ScheduleDBReadyRetry(builder)
+    if DBReady() or not (C_Timer and C_Timer.After) then
+        return
+    end
+    dbReadyRetryToken = dbReadyRetryToken + 1
+    local token = dbReadyRetryToken
+    local attempt = 0
+    local function Run()
+        if token ~= dbReadyRetryToken then return end
+        if not DBReady() then
+            attempt = attempt + 1
+            if attempt <= 20 then
+                C_Timer.After(0.1, Run)
+            end
+            return
+        end
+        builder()
+    end
+    C_Timer.After(0.1, Run)
+end
+
 local function ScheduleRosterRebuild()
     if rosterRebuildQueued then
         return
@@ -276,6 +310,10 @@ function GF.UpdateGroupVisibility()
         GF.DeferGroupRuntime("visibility")
         return false
     end
+    if not DBReady() then
+        ScheduleDBReadyRetry(GF.RebuildAll)
+        return false
+    end
     if GF.EnsureDB then GF.EnsureDB() end
 
     local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
@@ -316,6 +354,13 @@ end
 function GF.RebuildAll()
     if InCombat() then
         GF.DeferGroupRuntime("rebuild")
+        return false
+    end
+    if not DBReady() then
+        -- SavedVariables not ready yet (early /reload or PLAYER_ENTERING_WORLD
+        -- race). Building now would read RAID_DEFAULTS (enabled=false) and skip
+        -- the raid header permanently; re-arm until the DB exists.
+        ScheduleDBReadyRetry(GF.RebuildAll)
         return false
     end
     InvalidateSpecs()
