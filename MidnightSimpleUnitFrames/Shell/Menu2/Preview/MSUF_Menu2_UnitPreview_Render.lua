@@ -292,7 +292,7 @@ function Render.Install(Preview, deps)
             end
 
             if fs.SetShadowOffset then
-                if useShadow == nil then useShadow = general and general.textBackdrop == true end
+                if useShadow == nil then useShadow = not (general and general.textBackdrop == false) end
                 if useShadow then
                     local strength = tostring(general and general.fontShadowStrength or "NORMAL"):upper()
                     local shadowAlpha, shadowX, shadowY = 1, 1, -1

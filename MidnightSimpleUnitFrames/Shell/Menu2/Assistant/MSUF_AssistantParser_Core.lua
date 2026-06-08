@@ -469,6 +469,60 @@ local function Compact(text)
     return Normalize(text):gsub("%s+", "")
 end
 
+local pluralFoldCache = {}
+local pluralFoldCacheCount = 0
+
+local PLURAL_FOLD_KEEP = {
+    this = true,
+    was = true,
+    yes = true,
+    dps = true,
+}
+
+local function PluralFoldWord(word)
+    word = tostring(word or "")
+    if word == "" or word:match("^[-+]?%d") or PLURAL_FOLD_KEEP[word] then return word end
+    local len = #word
+    if len <= 3 then return word end
+    if word:sub(-3) == "ies" and len > 4 then
+        return word:sub(1, -4) .. "y"
+    end
+    if word:sub(-4) == "izes" and len > 4 then
+        return word:sub(1, -2)
+    end
+    if word:sub(-2) == "es" then
+        local base = word:sub(1, -3)
+        if base:sub(-2) == "ss" or base:sub(-2) == "ch" or base:sub(-2) == "sh"
+            or base:sub(-1) == "s" or base:sub(-1) == "x" or base:sub(-1) == "z" then
+            return base
+        end
+    end
+    if word:sub(-1) == "s" and word:sub(-2) ~= "ss" and word:sub(-2) ~= "us" then
+        return word:sub(1, -2)
+    end
+    return word
+end
+
+local function PluralFoldText(text)
+    text = Normalize(text)
+    local cached = pluralFoldCache[text]
+    if cached ~= nil then return cached end
+    local out = {}
+    for word in text:gmatch("%S+") do
+        out[#out + 1] = PluralFoldWord(word)
+    end
+    local folded = table.concat(out, " ")
+    if #text <= 180 then
+        if pluralFoldCacheCount > 4096 then
+            pluralFoldCache = {}
+            pluralFoldCacheCount = 0
+        end
+        if pluralFoldCache[text] == nil then pluralFoldCacheCount = pluralFoldCacheCount + 1 end
+        pluralFoldCache[text] = folded
+    end
+    return folded
+end
+
 local aliasRelationCacheText
 local aliasRelationCacheValue
 local function AliasRelationText(text)
@@ -492,7 +546,16 @@ local function AliasRelationText(text)
 end
 
 local function TextMatchesAlias(text, relationText, alias)
-    return HasPhrase(text, alias) or HasPhrase(relationText or AliasRelationText(text), alias)
+    if HasPhrase(text, alias) or HasPhrase(relationText or AliasRelationText(text), alias) then return true end
+    local normalizedText = Normalize(text)
+    local normalizedRelation = Normalize(relationText or AliasRelationText(text))
+    local normalizedAlias = Normalize(alias)
+    local foldedText = PluralFoldText(normalizedText)
+    local foldedRelation = PluralFoldText(normalizedRelation)
+    local foldedAlias = PluralFoldText(alias)
+    if foldedText == normalizedText and foldedRelation == normalizedRelation and foldedAlias == normalizedAlias then return false end
+    if HasPhrase(foldedText, foldedAlias) then return true end
+    return HasPhrase(foldedRelation, foldedAlias)
 end
 
 local function ExtractColor(raw, text)
@@ -640,6 +703,8 @@ P.FirstNumber = FirstNumber
 P.Compact = Compact
 P.AliasRelationText = AliasRelationText
 P.TextMatchesAlias = TextMatchesAlias
+P.PluralFoldWord = PluralFoldWord
+P.PluralFoldText = PluralFoldText
 P.ExtractColor = ExtractColor
 P.DetectFrameType = DetectFrameType
 P.DetectDirection = DetectDirection
