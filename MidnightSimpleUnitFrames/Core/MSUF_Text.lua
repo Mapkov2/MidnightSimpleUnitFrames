@@ -231,6 +231,15 @@ local function _MSUF_HpMissingText(self)
         if n <= 0 then return "" end
     end
     local abbr = _G.ShortenNumber or _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers
+    if isSecret then
+        local CSU = _G.C_StringUtil
+        local trunc = CSU and CSU.TruncateWhenZero
+        local txt = (type(trunc) == "function" and trunc(missing))
+            or (abbr and abbr(missing))
+            or nil
+        if txt == nil then return "" end
+        return "-" .. txt
+    end
     local txt = abbr and abbr(missing) or (not isSecret and tostring(missing) or nil)
     if txt == nil or txt == "" then return "" end
     return "-" .. txt

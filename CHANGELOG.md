@@ -1,5 +1,11 @@
 # Changelog
 
+## 5.58 - 2026-06-08
+
+### Fixes
+
+- Fixed missing-health text formatting for imported profiles with secret health values.
+
 ## 5.57 - 2026-06-04
 
 ### Edge Case Fixes
