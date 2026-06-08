@@ -882,6 +882,16 @@ local function BatchBooleanLead(text)
     return nil
 end
 
+local function HasOwnBatchBoolean(text)
+    local norm = NormalizeForBatch(text)
+    if norm == "" then return false end
+    for _, lead in ipairs({ "on", "off", "enable", "disable", "enabled", "disabled", "show", "hide", "true", "false", "yes", "no" }) do
+        if norm == lead or norm:sub(1, #lead + 1) == lead .. " " then return true end
+        if norm:sub(-#lead - 1) == " " .. lead then return true end
+    end
+    return false
+end
+
 local function InheritableActionTail(text)
     text = NormalizeForBatch(text)
     if text == "" or StartsBatchCommand(text) then return false end
@@ -950,6 +960,7 @@ local function InheritedBatchCommand(before, after)
     if not actionTail and not settingTail then return nil end
     local lead = BatchBooleanLead(before)
     if not lead then return nil end
+    if settingTail and HasOwnBatchBoolean(after) then return nil end
     if settingTail and not HasScopedSettingDetail(before) then return nil end
     return Trim(lead .. " " .. after)
 end
