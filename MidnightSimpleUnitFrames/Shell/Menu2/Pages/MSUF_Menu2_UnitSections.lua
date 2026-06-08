@@ -216,6 +216,9 @@ local function BuildPreview(ctx, builder, unit)
         end
         box._msufPanel = panel
         box._msuf2UnitPageHostShown = PreviewHostShown
+        box._msuf2PinnedPreviewPageKey = ctx and ctx.key
+        box._msuf2PinnedPreviewWrapper = ctx and ctx.wrapper
+        box._msuf2PinnedFloating = nil
         box:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
         box:Show()
         if box.title and box.title.SetTextColor then

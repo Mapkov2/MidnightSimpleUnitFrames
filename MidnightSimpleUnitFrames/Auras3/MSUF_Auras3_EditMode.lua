@@ -37,6 +37,8 @@ local GROUPS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        anchorKey = "buffAnchor",
+        layerKey = "buffLayer",
         maxKey = "maxBuffs",
         showKey = "showBuffs",
         perRowKey = "buffPerRow",
@@ -44,12 +46,16 @@ local GROUPS = {
         wrapKey = "buffGrowthY",
         texture = "Interface\\Icons\\Spell_Holy_WordFortitude",
         color = { 0.16, 0.82, 0.35, 0.28 },
+        defaultAnchor = "BOTTOMRIGHT",
+        defaultLayer = 5,
     },
     debuff = {
         label = "Debuffs",
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        anchorKey = "debuffAnchor",
+        layerKey = "debuffLayer",
         maxKey = "maxDebuffs",
         showKey = "showDebuffs",
         perRowKey = "debuffPerRow",
@@ -57,6 +63,8 @@ local GROUPS = {
         wrapKey = "debuffGrowthY",
         texture = "Interface\\Icons\\Spell_Shadow_ShadowWordPain",
         color = { 0.92, 0.20, 0.20, 0.28 },
+        defaultAnchor = "TOPLEFT",
+        defaultLayer = 6,
     },
 }
 
@@ -279,10 +287,23 @@ local function ReadGroupConfig(unit, kind)
         or (shared and shared.rowWrap)
         or "DOWN"
     if rowWrap ~= "UP" and rowWrap ~= "DOWN" then rowWrap = "DOWN" end
+    local anchor = (layout and layout[spec.anchorKey])
+        or (shared and shared[spec.anchorKey])
+        or spec.defaultAnchor
+        or "TOPLEFT"
+    if anchor ~= "TOPLEFT" and anchor ~= "TOPRIGHT" and anchor ~= "BOTTOMLEFT" and anchor ~= "BOTTOMRIGHT" and anchor ~= "CENTER" then
+        anchor = spec.defaultAnchor or "TOPLEFT"
+    end
+    local layer = (layout and layout[spec.layerKey] ~= nil and layout[spec.layerKey])
+        or (shared and shared[spec.layerKey])
+        or spec.defaultLayer
+        or 5
 
     return {
         x = Round(x),
         y = Round(y),
+        anchor = anchor,
+        layer = Clamp(layer, spec.defaultLayer or 5, 1, 15),
         size = Clamp(size, 26, 1, 128),
         spacing = spacing,
         perRow = Clamp(perRow, 12, 1, 40),
@@ -291,6 +312,17 @@ local function ReadGroupConfig(unit, kind)
         rowWrap = rowWrap,
         show = shared and shared[spec.showKey] ~= false,
     }
+end
+
+local function AnchorBase(anchor, frame)
+    local w = frame and frame.GetWidth and frame:GetWidth() or 0
+    local h = frame and frame.GetHeight and frame:GetHeight() or 0
+    anchor = tostring(anchor or "TOPLEFT")
+    if anchor == "TOPRIGHT" then return w, h end
+    if anchor == "BOTTOMLEFT" then return 0, 0 end
+    if anchor == "BOTTOMRIGHT" then return w, 0 end
+    if anchor == "CENTER" then return w * 0.5, h * 0.5 end
+    return 0, h
 end
 
 local function WriteOffset(auras, unit, kind, x, y)
@@ -679,13 +711,14 @@ function EM.RefreshUnit(unit)
             local growthY = (metrics and metrics.growthY) or ((cfg.rowWrap == "UP") and 1 or -1)
             local x = (metrics and metrics.x) or cfg.x
             local y = (metrics and metrics.y) or cfg.y
+            local baseX, baseY = AnchorBase(cfg.anchor, frame)
 
             if group.SetClampedToScreen then group:SetClampedToScreen(false) end
             ApplyGroupScaleForFrame(group, frame)
             group:ClearAllPoints()
-            group:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", x, y)
+            group:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", baseX + x, baseY + y)
             group:SetSize(laneW, laneH + HEADER_H)
-            group:SetFrameLevel(160)
+            group:SetFrameLevel(160 + (tonumber(cfg.layer) or 5))
             if group.Label then
                 group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
                 StyleLabel(group.Label)

@@ -679,6 +679,8 @@ P._BuildRegistryCandidateIndex = function(settings)
     P._registryCandidateIndexCount = #(settings or {})
     P._registryCandidateIndexByToken = byToken
     P._registryCandidateIndexAll = all
+    P._registryCandidateCache = {}
+    P._registryCandidateCacheOrder = {}
 end
 
 P._EnsureRegistryCandidateIndex = function(settings)
@@ -689,6 +691,10 @@ end
 
 P.RegistryCandidateSettings = function(text, settings)
     P._EnsureRegistryCandidateIndex(settings)
+    local cacheKey = Normalize(text)
+    if type(P._registryCandidateCache) == "table" and P._registryCandidateCache[cacheKey] then
+        return P._registryCandidateCache[cacheKey]
+    end
     local _, tokens = MeaningTokens(text)
     if #tokens == 0 then return {} end
     local selectedTokens, selectedCount, hasRareToken = {}, 0, false
@@ -713,6 +719,16 @@ P.RegistryCandidateSettings = function(text, settings)
                 seen[setting] = true
                 out[#out + 1] = setting
             end
+        end
+    end
+    if type(P._registryCandidateCache) == "table" then
+        if not P._registryCandidateCache[cacheKey] then
+            P._registryCandidateCacheOrder[#P._registryCandidateCacheOrder + 1] = cacheKey
+        end
+        P._registryCandidateCache[cacheKey] = out
+        while #P._registryCandidateCacheOrder > 64 do
+            local oldKey = table.remove(P._registryCandidateCacheOrder, 1)
+            P._registryCandidateCache[oldKey] = nil
         end
     end
     return out
@@ -856,6 +872,9 @@ local function HasUnitLoadConditionIntent(text, spec)
 end
 
 local function GroupAvailabilityAttributeForText(text)
+    if ContainsAny(text, { "tint offline", "tint offline members", "also tint offline members", "dead background offline", "dead background offline members", "dead offline tint" }) then
+        return nil
+    end
     if ContainsAny(text, { "offline in combat", "combat offline hide", "hide offline in combat", "offline im kampf" }) then
         return "hideOfflineInCombat", "hide"
     end
@@ -1663,6 +1682,7 @@ end
 P.GROUP_COLOR_TARGETS = {
     { key = "groupBorderColor", title = "Group Border Color", terms = { "group border color", "group frame border color", "frame border color", "border color" } },
     { key = "hlFocusColor", title = "Focus Highlight Color", terms = { "focus highlight color", "focus border color", "focus glow color" } },
+    { key = "deadBgColor", title = "Dead Background Color", terms = { "dead background color", "dead member background color", "dead offline background color", "dead bg color" } },
     { key = "bgColor", title = "Backdrop Color", terms = { "group backdrop color", "group background color", "frame background color", "backdrop color", "background color" } },
     { key = "healthCustomColor", title = "Custom Health Color", terms = { "custom health color", "health custom color", "health bar custom color" } },
     { key = "gfDarkColor", title = "Dark Bar Color", terms = { "dark health color", "dark bar color", "dark mode health color" } },

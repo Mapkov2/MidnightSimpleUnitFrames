@@ -17,6 +17,7 @@ A.Knowledge = K
 
 local MAX_RESULTS = 6
 local INDEX_VERSION = 3
+local SEARCH_CACHE_LIMIT = 32
 local DISCORD_INVITE = "https://discord.gg/2Gf9b2Wprz"
 
 local function Trim(text)
@@ -127,7 +128,11 @@ local function SettingPageBoost(setting, pageKey)
     if unit and setting.unit == unit then return 520 end
     local types = PAGE_FRAME_TYPES[pageKey]
     if types and types[setting.frameType] then return 360 end
-    local category = Normalize(setting.category or "")
+    local category = setting._msufAssistantCategoryNorm
+    if category == nil then
+        category = Normalize(setting.category or "")
+        setting._msufAssistantCategoryNorm = category
+    end
     local terms = PAGE_CATEGORY_TERMS[pageKey]
     if type(terms) == "table" then
         for i = 1, #terms do
@@ -236,6 +241,7 @@ local function AddIndexItem(index, item)
     AddMany(textParts, seen, item.aliases)
     AddMany(textParts, seen, item.keywords)
     item.haystack = Normalize(table.concat(textParts, " "))
+    item.labelNorm = Normalize(item.label)
     item.tokens = SplitTokens(item.haystack)
     index.items[#index.items + 1] = item
 end
@@ -355,6 +361,8 @@ end
 
 function K.MarkDirty()
     K.index = nil
+    K.searchCache = nil
+    K.searchCacheOrder = nil
 end
 
 function K.EnsureIndex()
@@ -422,12 +430,31 @@ local function ExpandQueryText(query)
     return table.concat(parts, " ")
 end
 
-local function TokenScore(item, queryTokens, queryNorm, intent)
+local function RememberCache(cache, order, key, value, limit)
+    if not cache[key] then order[#order + 1] = key end
+    cache[key] = value
+    while #order > limit do
+        local oldKey = table.remove(order, 1)
+        cache[oldKey] = nil
+    end
+end
+
+local function CopySearchResults(results)
+    local out = {}
+    for i = 1, #(results or {}) do
+        local item = results[i]
+        out[i] = { item = item.item, score = item.score }
+    end
+    return out
+end
+
+local function TokenScore(item, queryTokens, queryNorm, intent, pageKey)
     if not item or item.haystack == "" then return 0 end
     local score = 0
     local matched = false
-    if item.label and Normalize(item.label) == queryNorm then score = score + 600; matched = true end
-    if item.label and Normalize(item.label):find(queryNorm, 1, true) then score = score + 280; matched = true end
+    local labelNorm = item.labelNorm or Normalize(item.label or "")
+    if labelNorm == queryNorm then score = score + 600; matched = true end
+    if labelNorm:find(queryNorm, 1, true) then score = score + 280; matched = true end
     if item.haystack:find(queryNorm, 1, true) then score = score + 180; matched = true end
     for i = 1, #queryTokens do
         local token = queryTokens[i]
@@ -449,13 +476,14 @@ local function TokenScore(item, queryTokens, queryNorm, intent)
     elseif intent == "help" then
         if item.kind == "faq" then score = score + 120 end
     end
-    score = score + SettingPageBoost(item.setting, CurrentPageKey())
+    score = score + SettingPageBoost(item.setting, pageKey)
     return score
 end
 
 function K.Search(query, limit, opts)
     opts = opts or {}
     local index = K.EnsureIndex()
+    local pageKey = CurrentPageKey()
     local intent = QueryIntent(query)
     local cleanedQuery = SearchQueryText(query)
     local expandedQuery = ExpandQueryText(cleanedQuery ~= "" and cleanedQuery or query)
@@ -463,10 +491,14 @@ function K.Search(query, limit, opts)
     local queryTokens = SplitTokens(norm)
     if norm == "" or #queryTokens == 0 then return {} end
     limit = tonumber(limit) or MAX_RESULTS
+    local cacheKey = tostring(pageKey) .. "\031" .. tostring(opts.kind or "") .. "\031" .. tostring(limit) .. "\031" .. norm
+    if type(K.searchCache) == "table" and K.searchCache[cacheKey] then
+        return CopySearchResults(K.searchCache[cacheKey])
+    end
     local results = {}
     for i = 1, #(index.items or {}) do
         local item = index.items[i]
-        local score = TokenScore(item, queryTokens, norm, intent)
+        local score = TokenScore(item, queryTokens, norm, intent, pageKey)
         if opts.kind and item.kind ~= opts.kind then score = 0 end
         if score > 0 then
             results[#results + 1] = { item = item, score = score }
@@ -478,6 +510,9 @@ function K.Search(query, limit, opts)
     end)
     local out = {}
     for i = 1, math.min(#results, limit) do out[i] = results[i] end
+    K.searchCache = K.searchCache or {}
+    K.searchCacheOrder = K.searchCacheOrder or {}
+    RememberCache(K.searchCache, K.searchCacheOrder, cacheKey, out, SEARCH_CACHE_LIMIT)
     return out
 end
 
@@ -902,7 +937,7 @@ function K.NoMatch(query)
     local text = Trim(query)
     local suffix = text ~= "" and (": " .. text) or "."
     return {
-        text = "I could not find a safe MSUF match" .. suffix .. "\nPlease ask in Discord and include your exact wording: " .. DISCORD_INVITE,
+        text = "I could not find a safe MSUF match" .. suffix .. "\nTry naming the frame or page and the exact control, for example 'set target castbar height to 20' or 'turn on party dead background'. Aura controls are skipped until their backend is ready.\nIf it still should work, send the exact wording in Discord: " .. DISCORD_INVITE,
         status = "info",
         summary = "Assistant knowledge no match",
     }

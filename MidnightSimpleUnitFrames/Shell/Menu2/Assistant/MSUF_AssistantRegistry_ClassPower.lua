@@ -27,6 +27,7 @@ local RegisterBarsNumber = C.RegisterBarsNumber
 local RegisterBarsEnum = C.RegisterBarsEnum
 local ClassPowerAliases = C.ClassPowerAliases
 local ApplyClassPower = C.ApplyClassPower
+local CallGlobal = C.CallGlobal
 
 local CLASS_POWER_WIDTH_MODE_ALIASES = {
     player = "player",
@@ -90,6 +91,127 @@ local DETACHED_POWER_WIDTH_MODE_ALIASES = {
     trackedbuffs = "tracked_buffs",
     bufftracker = "tracked_buffs",
 }
+
+local CLASS_POWER_PREVIEW_VALUES = {
+    "deathknight_runes",
+    "demonhunter_devourer",
+    "demonhunter_vengeance",
+    "druid_feral",
+    "druid_balance",
+    "evoker_essence",
+    "evoker_augmentation_ebon",
+    "hunter_survival_tip",
+    "mage_arcane",
+    "monk_brewmaster",
+    "monk_windwalker",
+    "paladin_holy_power",
+    "priest_shadow",
+    "rogue_combo",
+    "shaman_elemental",
+    "shaman_enhancement",
+    "warlock_soul_shards",
+    "warlock_destruction",
+    "warrior_whirlwind",
+}
+
+local CLASS_POWER_PREVIEW_LABELS = {
+    deathknight_runes = "Death Knight - Runes",
+    demonhunter_devourer = "Demon Hunter - Soul Fragments",
+    demonhunter_vengeance = "Demon Hunter - Vengeance Fragments",
+    druid_feral = "Druid - Feral Combo Points",
+    druid_balance = "Druid - Balance (no class bar)",
+    evoker_essence = "Evoker - Essence",
+    evoker_augmentation_ebon = "Evoker - Augmentation Ebon Might",
+    hunter_survival_tip = "Hunter - Survival Tip of the Spear",
+    mage_arcane = "Mage - Arcane Charges",
+    monk_brewmaster = "Monk - Brewmaster Stagger",
+    monk_windwalker = "Monk - Windwalker Chi",
+    paladin_holy_power = "Paladin - Holy Power",
+    priest_shadow = "Priest - Shadow Insanity",
+    rogue_combo = "Rogue - Combo Points",
+    shaman_elemental = "Shaman - Elemental Maelstrom",
+    shaman_enhancement = "Shaman - Enhancement Maelstrom Weapon",
+    warlock_soul_shards = "Warlock - Soul Shards",
+    warlock_destruction = "Warlock - Destruction Soul Shards",
+    warrior_whirlwind = "Warrior - Whirlwind Stacks",
+}
+
+local CLASS_POWER_PREVIEW_ALIASES = {
+    ["death knight"] = "deathknight_runes",
+    dk = "deathknight_runes",
+    runes = "deathknight_runes",
+    ["demon hunter soul fragments"] = "demonhunter_devourer",
+    ["soul fragments"] = "demonhunter_devourer",
+    ["vengeance fragments"] = "demonhunter_vengeance",
+    vengeance = "demonhunter_vengeance",
+    ["feral combo points"] = "druid_feral",
+    feral = "druid_feral",
+    ["balance druid"] = "druid_balance",
+    boomkin = "druid_balance",
+    essence = "evoker_essence",
+    evoker = "evoker_essence",
+    ["ebon might"] = "evoker_augmentation_ebon",
+    augmentation = "evoker_augmentation_ebon",
+    aug = "evoker_augmentation_ebon",
+    ["tip of the spear"] = "hunter_survival_tip",
+    hunter = "hunter_survival_tip",
+    ["arcane charges"] = "mage_arcane",
+    mage = "mage_arcane",
+    stagger = "monk_brewmaster",
+    brewmaster = "monk_brewmaster",
+    chi = "monk_windwalker",
+    windwalker = "monk_windwalker",
+    ["holy power"] = "paladin_holy_power",
+    paladin = "paladin_holy_power",
+    insanity = "priest_shadow",
+    shadow = "priest_shadow",
+    ["combo points"] = "rogue_combo",
+    combo = "rogue_combo",
+    rogue = "rogue_combo",
+    maelstrom = "shaman_elemental",
+    elemental = "shaman_elemental",
+    ["maelstrom weapon"] = "shaman_enhancement",
+    enhancement = "shaman_enhancement",
+    ["soul shards"] = "warlock_soul_shards",
+    warlock = "warlock_soul_shards",
+    destruction = "warlock_destruction",
+    whirlwind = "warrior_whirlwind",
+    warrior = "warrior_whirlwind",
+}
+
+local function ClassPowerPreviewValueAliases()
+    local aliases = {}
+    for i = 1, #CLASS_POWER_PREVIEW_VALUES do
+        local key = CLASS_POWER_PREVIEW_VALUES[i]
+        aliases[key] = key
+        aliases[(CLASS_POWER_PREVIEW_LABELS[key] or key):lower()] = key
+        aliases[(CLASS_POWER_PREVIEW_LABELS[key] or key):lower():gsub("%s*%-%s*", " ")] = key
+        aliases[key:gsub("_", " ")] = key
+    end
+    for alias, key in pairs(CLASS_POWER_PREVIEW_ALIASES) do aliases[alias] = key end
+    return aliases
+end
+
+local function ClassPowerPreviewLabel(key)
+    return CLASS_POWER_PREVIEW_LABELS[key] or tostring(key or "rogue_combo")
+end
+
+local function NormalizeClassPowerPreviewKey(key)
+    key = tostring(key or "rogue_combo")
+    for i = 1, #CLASS_POWER_PREVIEW_VALUES do
+        if CLASS_POWER_PREVIEW_VALUES[i] == key then return key end
+    end
+    return "rogue_combo"
+end
+
+local function RefreshClassPowerPreview()
+    if type(CallGlobal) == "function" then CallGlobal("MSUF_UFPreview_RequestRefresh", "MSUF_ASSISTANT_CLASSPOWER_PREVIEW") end
+    if M and type(M.RequestGeneralApply) == "function" then
+        M.RequestGeneralApply("MSUF_ASSISTANT_CLASSPOWER_PREVIEW", { preview = true, applyAll = false, notify = false })
+    end
+    local preview = M and M._msuf2ClassPowerInlinePreview
+    if preview and type(preview.Refresh) == "function" then preview:Refresh() end
+end
 
 RegisterBarsBoolean("showClassPower", "enabled", "Class Resource", true, {
     "class power enabled", "class resource enabled", "class resources enabled",
@@ -294,6 +416,79 @@ RegisterBarsNumber("altManaOffsetY", "offsetY", "Alternative Mana Offset Y", -2,
     category = "Global / Class Resources / Alternative Mana",
     frameType = "altMana",
     reason = "MSUF_ASSISTANT_ALT_MANA_Y",
+})
+
+Registry:RegisterSetting({
+    key = "menu.classPowerPreviewResource",
+    label = "Class Resource Preview Resource",
+    category = "Class Resources / Preview",
+    unit = "global",
+    frameType = "classPower",
+    attribute = "classPowerPreviewResource",
+    type = "enum",
+    aliases = {
+        "class resource preview resource",
+        "class resource preview",
+        "preview class resource",
+        "preview class resources",
+        "class power preview resource",
+        "class power preview",
+        "preview class power",
+        "preview class bar",
+        "preview resource",
+        "resource preview",
+    },
+    values = CLASS_POWER_PREVIEW_VALUES,
+    valueAliases = ClassPowerPreviewValueAliases(),
+    get = function()
+        if M and type(M.GetClassPowerPreviewSpecKey) == "function" then return M.GetClassPowerPreviewSpecKey() end
+        return NormalizeClassPowerPreviewKey(M and M._msuf2ClassPowerPreviewSpecKey)
+    end,
+    set = function(value)
+        value = NormalizeClassPowerPreviewKey(value)
+        if M and type(M.SetClassPowerPreviewSpecKey) == "function" then
+            M.SetClassPowerPreviewSpecKey(value)
+        elseif M then
+            M._msuf2ClassPowerPreviewSpecKey = value
+        end
+    end,
+    apply = RefreshClassPowerPreview,
+    combatSafe = true,
+    description = "Selects the Class Resources page preview dropdown without changing saved class-resource settings.",
+})
+
+Registry:RegisterAction({
+    key = "class_power_preview_animate",
+    label = "Animate Class Resource Preview",
+    type = "classPower",
+    aliases = {
+        "animate class resource preview",
+        "animate class power preview",
+        "animate class resource",
+        "animate class power",
+        "start class resource animation",
+        "stop class resource animation",
+        "start class power animation",
+        "stop class power animation",
+        "turn on class resource animation",
+        "turn off class resource animation",
+        "start class resource preview animation",
+        "stop class resource preview animation",
+        "toggle class resource preview animation",
+        "start resource preview animation",
+        "stop resource preview animation",
+    },
+    combatSafe = true,
+    run = function(args)
+        local preview = M and M._msuf2ClassPowerInlinePreview
+        if not (preview and type(preview.SetPreviewAnimating) == "function") then
+            return false, "Open Class Resources first, then I can animate its preview."
+        end
+        local value = args and args.value
+        if value == nil then value = not preview._msuf2Animating end
+        preview:SetPreviewAnimating(value and true or false)
+        return true, value and "Started the Class Resource preview animation." or "Stopped the Class Resource preview animation."
+    end,
 })
 
 Registry:RegisterAction({

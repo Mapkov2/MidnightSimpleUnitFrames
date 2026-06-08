@@ -18,11 +18,12 @@ local function WordList(text)
     return out
 end
 
-local MENU_STATE_VERSION = 2
+local MENU_STATE_VERSION = 3
 local MENU_STATE_TABLE_FIELDS = WordList [[
     accordionState previewPinState navHeaderState unitTextTabSelection unitTextSlotSelection
     unitStatusSelection unitStatusTabSelection gfTextTabSelection gfTextSlotSelection
     gfStatusIconTabSelection gfSpellMultiSpecSelection gfSpellIndicatorSelection
+    collapseHintClickState
 ]]
 local MENU_STATE_SCALAR_DEFAULTS = {
     lastPage = "home",

@@ -607,7 +607,7 @@ local function EnsureEditModeUIHook()
         local frame = M.frame
         if frame and frame:IsShown() then
             if frame.RefreshStatus then frame:RefreshStatus() end
-            if M.Refresh then M.Refresh() end
+            if M.RequestRefresh then M.RequestRefresh(nil, "edit-mode-ui") elseif M.Refresh then M.Refresh() end
             SyncGroupPagePreviewForKey(M.activeKey)
         else
             RefreshDashboardEditModeButton()
@@ -1359,7 +1359,7 @@ local function BuildWindow()
             RefreshSearchResultsPage()
         end
         f:RefreshStatus()
-        if M.Refresh then M.Refresh() end
+        if M.RequestRefresh then M.RequestRefresh(nil, event or "menu-status-event") elseif M.Refresh then M.Refresh() end
         SyncGroupPagePreviewForKey(M.activeKey)
     end)
     f:SetScript("OnShow", function(self)

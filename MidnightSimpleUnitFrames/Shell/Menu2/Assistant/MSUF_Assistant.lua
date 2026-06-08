@@ -18,6 +18,37 @@ local function Trim(text)
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+local function PerfNowMs()
+    if type(_G.debugprofilestop) == "function" then return _G.debugprofilestop() end
+    local timer = type(_G.GetTimePreciseSec) == "function" and _G.GetTimePreciseSec or _G.GetTime
+    if type(timer) == "function" then return (tonumber(timer()) or 0) * 1000 end
+    return nil
+end
+
+function A.RecordPerfSample(label, startedMs, detail)
+    if not startedMs then return nil end
+    local now = PerfNowMs()
+    if not now then return nil end
+    local elapsed = now - startedMs
+    if elapsed < 0 then elapsed = 0 end
+    local sample = {
+        label = tostring(label or "assistant"),
+        detail = tostring(detail or ""),
+        ms = elapsed,
+    }
+    A.lastAssistantPerf = sample
+    if elapsed >= 250 then A.lastSlowAssistantPerf = sample end
+    return sample
+end
+
+function A.GetLastPerfSample()
+    return A.lastAssistantPerf
+end
+
+function A.GetLastSlowPerfSample()
+    return A.lastSlowAssistantPerf
+end
+
 local function InCombat()
     return _G.InCombatLockdown and _G.InCombatLockdown()
 end
@@ -629,16 +660,22 @@ local function ExecuteAction(plan)
     end
     local before
     local beforeProfile
-    if action.captureSnapshot and A.CaptureSnapshot then before = A.CaptureSnapshot() end
-    if action.captureProfileSnapshot and A.CaptureProfileSnapshot then beforeProfile = A.CaptureProfileSnapshot() end
+    local captureProfile = action.captureProfileSnapshot and A.CaptureProfileSnapshot
+    local captureSnapshot = action.captureSnapshot and not captureProfile and A.CaptureSnapshot
+    local snapshotStart = PerfNowMs()
+    if captureSnapshot then before = A.CaptureSnapshot() end
+    if captureProfile then beforeProfile = A.CaptureProfileSnapshot() end
+    A.RecordPerfSample("assistant.snapshot.before", snapshotStart, action.key)
     local ok, message = action.run(plan.args or {})
     if not ok then
         return { text = message or "Action failed.", status = "failed", summary = plan.summary }
     end
     local undoAvailable = false
     if before or beforeProfile then
-        local after = A.CaptureSnapshot and A.CaptureSnapshot()
-        local afterProfile = action.captureProfileSnapshot and A.CaptureProfileSnapshot and A.CaptureProfileSnapshot() or nil
+        snapshotStart = PerfNowMs()
+        local after = captureSnapshot and A.CaptureSnapshot() or nil
+        local afterProfile = captureProfile and A.CaptureProfileSnapshot() or nil
+        A.RecordPerfSample("assistant.snapshot.after", snapshotStart, action.key)
         undoAvailable = A.PushUndo({
             label = plan.label or action.label or "Assistant action",
             action = action.key,
@@ -798,7 +835,7 @@ end
 local BATCH_COMMAND_STARTERS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset", "copy",
     "add", "put", "clear", "increase", "decrease", "raise", "lower", "detach", "attach", "embed",
-    "remove", "open", "close", "toggle", "diagnose",
+    "remove", "open", "close", "toggle", "diagnose", "start", "stop", "pause", "play", "animate", "preview",
     "select", "use", "apply", "verschiebe", "verschieben", "setze", "stelle", "kopiere", "kopieren", "uebernehmen",
     "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken", "einblenden", "ausblenden",
     "oeffne", "waehle", "nutze",
@@ -837,6 +874,86 @@ local function StartsBatchCommand(text)
     return false
 end
 
+local function BatchBooleanLead(text)
+    local norm = NormalizeForBatch(text)
+    for _, lead in ipairs({ "turn on", "turn off", "enable", "disable", "show", "hide", "start", "stop", "preview" }) do
+        if norm == lead or norm:sub(1, #lead + 1) == lead .. " " then return lead end
+    end
+    return nil
+end
+
+local function InheritableActionTail(text)
+    text = NormalizeForBatch(text)
+    if text == "" or StartsBatchCommand(text) then return false end
+    if text:find("test", 1, true) and (
+        text:find("border", 1, true)
+        or text:find("bar", 1, true)
+        or text:find("bars", 1, true)
+    ) then
+        return true
+    end
+    if text:find("preview", 1, true) and (
+        text:find("resource", 1, true)
+        or text:find("class", 1, true)
+        or text:find("animation", 1, true)
+    ) then
+        return true
+    end
+    return false
+end
+
+local function BatchHasPhrase(text, phrase)
+    local norm = NormalizeForBatch(text)
+    phrase = NormalizeForBatch(phrase)
+    if norm == "" or phrase == "" then return false end
+    return (" " .. norm .. " "):find(" " .. phrase .. " ", 1, true) ~= nil
+end
+
+local function BatchContainsAny(text, phrases)
+    for i = 1, #(phrases or {}) do
+        if BatchHasPhrase(text, phrases[i]) then return true end
+    end
+    return false
+end
+
+local function HasExplicitBatchScope(text)
+    local parser = A.Parser or {}
+    if type(parser.DetectUnits) == "function" and #(parser.DetectUnits(text) or {}) > 0 then return true end
+    if type(parser.DetectGroups) == "function" and #(parser.DetectGroups(text) or {}) > 0 then return true end
+    return BatchContainsAny(text, {
+        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
+        "party", "raid", "party frames", "raid frames", "group frames",
+    })
+end
+
+local function HasScopedSettingDetail(text)
+    text = NormalizeForBatch(text)
+    if text == "" then return false end
+    if not HasExplicitBatchScope(text) then return false end
+    return BatchContainsAny(text, {
+        "frame", "frames", "name", "names", "portrait", "portraits", "power bar", "powerbar", "mana bar",
+        "health bar", "hp bar", "castbar", "cast bar", "text", "raid marker", "leader icon", "assist icon",
+        "ready check", "status icon", "rested icon", "combat indicator", "dead indicator", "ghost indicator",
+        "afk indicator", "dnd indicator", "load condition", "alpha", "opacity", "width", "height",
+    })
+end
+
+local function InheritableSettingTail(text)
+    text = NormalizeForBatch(text)
+    if text == "" or StartsBatchCommand(text) then return false end
+    return HasScopedSettingDetail(text)
+end
+
+local function InheritedBatchCommand(before, after)
+    local actionTail = InheritableActionTail(after)
+    local settingTail = InheritableSettingTail(after)
+    if not actionTail and not settingTail then return nil end
+    local lead = BatchBooleanLead(before)
+    if not lead then return nil end
+    if settingTail and not HasScopedSettingDetail(before) then return nil end
+    return Trim(lead .. " " .. after)
+end
+
 local function SplitBatchCommands(text)
     if A.pendingConfirmation or CurrentPendingChoices() then return nil end
     local parts = { Trim(text) }
@@ -857,6 +974,13 @@ local function SplitBatchCommands(text)
                     if before ~= "" and after ~= "" and StartsBatchCommand(after) then
                         parts[p] = before
                         table.insert(parts, p + 1, after)
+                        changed = true
+                        break
+                    end
+                    local inherited = before ~= "" and after ~= "" and InheritedBatchCommand(before, after) or nil
+                    if inherited then
+                        parts[p] = before
+                        table.insert(parts, p + 1, inherited)
                         changed = true
                         break
                     end
@@ -902,6 +1026,7 @@ local function SubmitNow(text, opts)
     opts = opts or {}
     text = Trim(text)
     if text == "" then return nil end
+    local startedMs = PerfNowMs()
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
     end
@@ -915,6 +1040,7 @@ local function SubmitNow(text, opts)
         end
     end
     if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    A.RecordPerfSample("assistant.submit", startedMs, text)
     return result
 end
 

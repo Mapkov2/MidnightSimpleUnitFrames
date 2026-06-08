@@ -652,6 +652,22 @@ local CASTBAR_REFRESH_FUNCS = {
     "MSUF_UpdateTargetCastbarPreview",
     "MSUF_UpdateFocusCastbarPreview",
 }
+local previewMoverSyncQueued = false
+
+local function SchedulePreviewMoverSync(delay)
+    if not (EM2.Movers and EM2.Movers.SyncAll) then return end
+    if previewMoverSyncQueued then return end
+    previewMoverSyncQueued = true
+    local function Run()
+        previewMoverSyncQueued = false
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(delay or 0.08, Run)
+    else
+        Run()
+    end
+end
 
 local function GetPreviewFrame(unitKey)
     return _G["MSUF_" .. unitKey]
@@ -747,11 +763,7 @@ _G.MSUF_SyncAllUnitPreviews = function()
     end
 
     --- 5) Sync movers
-    if EM2.Movers and EM2.Movers.SyncAll then
-        C_Timer.After(0.08, function()
-            if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
-        end)
-    end
+    SchedulePreviewMoverSync(0.08)
 end
 
 --- --- Auto-reforce hooks ---

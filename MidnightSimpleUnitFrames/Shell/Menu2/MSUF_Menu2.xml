@@ -43,6 +43,7 @@
     <Script file="Assistant\MSUF_AssistantParser_Features.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Geometry.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Followups.lua"/>
+    <Script file="Assistant\MSUF_AssistantParser_Compound.lua"/>
     <Script file="Assistant\MSUF_AssistantParser.lua"/>
     <Script file="Assistant\MSUF_Assistant.lua"/>
     <Script file="Assistant\MSUF_AssistantDashboard.lua"/>

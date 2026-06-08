@@ -678,29 +678,17 @@ classpower_detached_power=detached power|detached power bar|alternate power|dual
 classpower_alt_mana=alternative mana|alt mana|mana bar
 ]])
     elseif pageKey == "auras3" or pageKey == "auras3_buffs" or pageKey == "auras3_debuffs" or pageKey == "auras3_rendering" or pageKey == "auras3_filters" or pageKey == "auras3_styling" then
-        if pageKey == "auras3_rendering" then
-            SearchRouteApplySectionRows(route, pageKey, normalized, [[
-Buffs=buffs|enable buffs|visibility|visible buffs
-]])
-        elseif pageKey == "auras3_debuffs" then
-            SearchRouteApplySectionRows(route, pageKey, normalized, [[
-Debuffs=debuffs|enable debuffs|visibility|visible debuffs|dispellable|harmful
-]])
-        elseif pageKey == "auras3_filters" then
+        if pageKey == "auras3_filters" then
             SearchRouteApplySectionRows(route, pageKey, normalized, [[
 Filter Rules=filters|inclusive filter|exclusive filter|only mine|own buffs|own debuffs|dispellable|stealable|buff filter|debuff filter
 Blacklist=blacklist|ignore list|spell id|blacklist presets
 Group Frame Filters=inclusive filter|exclusive filter|base filter|category blacklist|declassified
 ]])
-        elseif pageKey == "auras3_styling" then
+        else
             SearchRouteApplySectionRows(route, pageKey, normalized, [[
 Unit Aura Text=stack size|cooldown size|stack anchor|timer text|unit aura text
 Group Frame Styling=group frame aura style|stack font|cooldown font|cooldown swipe|tooltip|sort by duration|prefer player|aura behavior
 Colors=timer color|cooldown text color|stack color|own buff|own debuff|safe warning urgent
-]])
-        else
-            SearchRouteApplySectionRows(route, pageKey, normalized, [[
-Buffs=buffs|enable buffs|visible buffs|visible units|active scope
 ]])
         end
         SearchRouteAuraScope(route, normalized)

@@ -310,6 +310,10 @@ end
 local function ParsePortraitDetailShortcut(text)
     if not ContainsAny(text, { "portrait", "portraits" }) then return nil end
     if ContainsAny(text, { "color", "colour", "farbe", "reset" }) then return nil end
+    if ContainsAny(text, {
+        "keep text portrait visible", "keep text and portrait visible", "keep text visible", "keep portrait visible",
+        "exclude text from opacity", "exclude portrait from opacity", "text portrait opacity", "text and portrait opacity",
+    }) then return nil end
     if ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) and DetectDirection(text, {}) then return nil end
 
     local attr
@@ -1153,7 +1157,7 @@ local function ParseUnitOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
     if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar", "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return nil end
     if DetectGroups(text)[1] then return nil end
-    if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp", "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
+    if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp", "background", "backdrop", "track", "hp track", "health track", "bg", "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
     local relativeDelta
     if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
         local amount = FirstNumber(text) or 0.05
@@ -1202,7 +1206,7 @@ end
 
 function A._ParseGroupOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
-    if ContainsAny(text, { "range fade", "background", "backdrop", "dispel overlay", "debuff overlay" }) then return nil end
+    if ContainsAny(text, { "range fade", "background", "backdrop", "track", "hp track", "health track", "bg", "dispel overlay", "debuff overlay" }) then return nil end
 
     local groups = DetectGroups(text)
     if #groups == 0 then
