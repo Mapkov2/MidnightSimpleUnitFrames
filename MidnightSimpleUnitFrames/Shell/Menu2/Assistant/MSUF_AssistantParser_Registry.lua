@@ -555,10 +555,17 @@ local REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT = 260
 local function MeaningTokens(text)
     local set = {}
     local list = {}
-    for word in Normalize(text):gmatch("%S+") do
+    local function add(word)
         if #word >= 2 and not word:match("^[-+]?%d") and not SUGGESTION_IGNORE_TOKENS[word] and not set[word] then
             set[word] = true
             list[#list + 1] = word
+        end
+    end
+    for word in Normalize(text):gmatch("%S+") do
+        add(word)
+        local folded = P.PluralFoldWord and P.PluralFoldWord(word) or word
+        if folded ~= word then
+            add(folded)
         end
     end
     return set, list

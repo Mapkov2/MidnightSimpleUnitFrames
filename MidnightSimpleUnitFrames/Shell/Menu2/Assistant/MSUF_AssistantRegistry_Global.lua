@@ -354,7 +354,7 @@ for _, scope in ipairs({ "shared", "player", "target", "targettarget", "focustar
         reason = "MSUF_ASSISTANT_NAME_COLOR_MODE",
     })
     RegisterScopedSetting("fontScope", scope, "textBackdrop", "textShadow", "Text Shadow", "boolean", true, SharedOrScopedAliases(scope, {
-        "text shadow", "font shadow", "shadow text",
+        "text shadow", "font shadow", "shadow text", "shadow",
     }), {
         flag = "fontOverride",
         apply = ApplyFonts,
