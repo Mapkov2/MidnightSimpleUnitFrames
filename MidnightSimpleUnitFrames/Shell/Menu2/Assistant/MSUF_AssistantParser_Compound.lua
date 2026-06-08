@@ -1794,6 +1794,89 @@ local function SlotValuePairs(text)
     return ParseCommands(commands)
 end
 
+local function SlotWords(text)
+    local out = {}
+    for word in Normalize(text):gmatch("%S+") do out[#out + 1] = word end
+    return out
+end
+
+local function SlotWordsText(words, first, last)
+    if not words or not first or not last or last < first then return "" end
+    return table.concat(words, " ", first, last)
+end
+
+local function SlotBlockStart(words, index)
+    if not words or not index or index > #words then return false end
+    local start = index
+    if words[start] == "and" or words[start] == "und" or words[start] == "then" or words[start] == "dann" then
+        start = start + 1
+    end
+    local slotIndex
+    for i = start, math.min(#words, start + 6) do
+        if SLOT_WORDS[words[i]] then
+            slotIndex = i
+            break
+        end
+    end
+    if not slotIndex or slotIndex <= start then return false end
+    local prefix = SlotWordsText(words, start, slotIndex - 1)
+    return HasScope(prefix) and ContainsAny(prefix, { "text", "label" })
+end
+
+local function SkipSlotBlockLead(words, index)
+    while index <= #words and (words[index] == "and" or words[index] == "und" or words[index] == "then" or words[index] == "dann") do
+        index = index + 1
+    end
+    return index
+end
+
+local function RepeatedSlotValueBlocks(text)
+    local words = SlotWords(StripCommandLead(text or ""))
+    if #words < 8 or #words > 64 then return nil end
+    local commands = {}
+    local blocks = 0
+    local index = 1
+    while index <= #words do
+        index = SkipSlotBlockLead(words, index)
+        if index > #words then break end
+        if not SlotBlockStart(words, index) then return nil end
+
+        local slotIndex
+        for i = index, #words do
+            if SLOT_WORDS[words[i]] then
+                slotIndex = i
+                break
+            end
+        end
+        if not slotIndex then return nil end
+        local prefix = SlotWordsText(words, index, slotIndex - 1)
+        if prefix == "" or not ContainsAny(prefix, { "text", "label" }) or not HasScope(prefix) then return nil end
+        blocks = blocks + 1
+        if blocks > 5 then return nil end
+
+        index = slotIndex
+        while index <= #words and SLOT_WORDS[words[index]] do
+            local slot = words[index]
+            local valueStart = index + 1
+            local valueEnd = valueStart
+            while valueEnd <= #words do
+                if SLOT_WORDS[words[valueEnd]] then break end
+                if valueEnd > valueStart and SlotBlockStart(words, valueEnd) then break end
+                valueEnd = valueEnd + 1
+            end
+            local value = CleanSlotValue(SlotWordsText(words, valueStart, valueEnd - 1))
+            if value == "" then return nil end
+            commands[#commands + 1] = Trim("set " .. prefix .. " " .. slot .. " to " .. value)
+            index = valueEnd
+        end
+    end
+
+    if blocks < 2 or #commands < 2 then return nil end
+    local plan = ParseCommands(commands)
+    if plan then plan.compoundForce = true end
+    return plan
+end
+
 local DIRECTION_WORDS = { left = true, right = true, up = true, down = true }
 
 local function DirectionPairs(text)
@@ -2036,6 +2119,7 @@ function P.ParseCompound(normalized, raw, normalParsed)
     add(AttributeNumberPairs(text))
     add(HybridSizeTail(text))
     add(ValueTokenChain(text))
+    add(RepeatedSlotValueBlocks(text))
     add(SlotValuePairs(text))
     add(DirectionPairs(text))
     add(ExplicitBooleanSegments(text))
