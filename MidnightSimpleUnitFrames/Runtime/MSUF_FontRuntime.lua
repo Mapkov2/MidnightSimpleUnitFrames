@@ -324,7 +324,7 @@ local function UpdateAllFonts(onlyKey)
     local globalNameSize = g.nameFontSize  or baseSize
     local globalHPSize   = g.hpFontSize    or baseSize
     local globalPowSize  = g.powerFontSize or baseSize
-    local useShadow      = g.textBackdrop and true or false
+    local useShadow      = not (g and g.textBackdrop == false)
     local shadowAlpha, shadowX, shadowY = _MSUF_ShadowMetrics(g.fontShadowStrength)
     local textAlpha = _MSUF_ClampTextAlpha(g.fontTextAlpha)
     local colorPowerByType = (g.colorPowerTextByType == true)

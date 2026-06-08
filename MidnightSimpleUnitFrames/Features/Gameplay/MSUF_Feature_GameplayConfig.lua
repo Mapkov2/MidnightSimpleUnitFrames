@@ -220,7 +220,7 @@ local function GetGameplayFontSettings(kind)
         effSize = math.floor(baseSize * 1.6 + 0.5)
     end
 
-    local useShadow = general.textBackdrop and true or false
+    local useShadow = not (general and general.textBackdrop == false)
 
     return fontPath, flags, fr, fg, fb, effSize, useShadow
 end

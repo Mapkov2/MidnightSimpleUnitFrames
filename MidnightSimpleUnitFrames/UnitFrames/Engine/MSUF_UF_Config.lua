@@ -951,7 +951,7 @@ local function ResolveFontBaselineOffset(general, conf)
 end
 
 local function ResolveFontShadow(general, conf)
-    local enabled = general and general.textBackdrop == true
+    local enabled = not (general and general.textBackdrop == false)
     local strength = general and general.fontShadowStrength or "NORMAL"
     if conf and conf.fontOverride == true then
         if conf.textBackdrop ~= nil then enabled = conf.textBackdrop == true end
