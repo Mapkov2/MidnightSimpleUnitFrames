@@ -821,7 +821,7 @@ function Text.Apply(frame, spec)
     frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = nil, nil, nil, nil
     frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
     local power = spec and spec.power or {}
-    local detachedPowerText = power.detached == true and power.textOnDetached == true and frame.targetPowerBar
+    local detachedPowerText = power.enabled == true and power.detached == true and power.textOnDetached == true and frame.targetPowerBar
     local barAnchoredText = text.anchorToBars == true
     local directText = text.directLayout == true
     if detachedPowerText then
@@ -924,7 +924,7 @@ function Text.Apply(frame, spec)
         HideDots(frame._msufInlineDotsFS)
     end
     local showHealth = spec and spec.showHealthText ~= false
-    local showPower = spec and spec.showPowerText ~= false and spec.power and spec.power.enabled == true
+    local showPower = spec and spec.showPowerText ~= false
     local healthLeft, healthCenter, healthRight = ResolveHealthTextModes(text)
     SetTextSlotShown(frame.hpTextLeft, showHealth, healthLeft)
     SetTextSlotShown(frame.hpTextCenter, showHealth, healthCenter)

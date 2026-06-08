@@ -880,7 +880,7 @@ local function CompileTextRuntime(frame, spec, text)
     rt._lastHealthTextMax = nil
     TrimTextSlots(rt.healthSlots, nextIndex)
 
-    local showPower = spec and spec.showPowerText ~= false and spec.power and spec.power.enabled == true
+    local showPower = spec and spec.showPowerText ~= false
     nextIndex = 1
     needsPercent = false
     local needsCurrent = false

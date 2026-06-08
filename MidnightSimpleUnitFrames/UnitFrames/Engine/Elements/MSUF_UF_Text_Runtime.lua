@@ -37,6 +37,7 @@ local AnchorInlineToName = Text.AnchorInlineToName
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local POWER_EVENTS = Text.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
+local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE", "UNIT_CONNECTION" }
 
 local function RegionShown(region)
     if not region then
@@ -558,6 +559,13 @@ local function ModeEnabled(mode)
     return mode ~= nil and mode ~= "NONE"
 end
 
+local function PowerModeNeedsValueTicks(mode)
+    if not ModeEnabled(mode) then
+        return false
+    end
+    return mode ~= "MAX"
+end
+
 local function HealthTextEnabled(spec)
     if not (spec and spec.showHealthText ~= false) then
         return false
@@ -567,11 +575,18 @@ local function HealthTextEnabled(spec)
 end
 
 local function PowerTextEnabled(spec)
-    if not (spec and spec.showPowerText ~= false and spec.power and spec.power.enabled == true) then
+    if not (spec and spec.showPowerText ~= false) then
         return false
     end
     local text = spec.text or {}
     return ModeEnabled(text.powerLeft) or ModeEnabled(text.powerCenter) or ModeEnabled(text.powerRight)
+end
+
+local function PowerTextNeedsValueTicks(spec)
+    local text = spec and spec.text
+    return PowerModeNeedsValueTicks(text and text.powerLeft)
+        or PowerModeNeedsValueTicks(text and text.powerCenter)
+        or PowerModeNeedsValueTicks(text and text.powerRight)
 end
 
 local function InlineEnabled(frame, spec)
@@ -703,6 +718,9 @@ end
 function PowerText.GetEvents(frame, spec)
     if not PowerTextEnabled(spec) then
         return EMPTY_EVENTS
+    end
+    if not PowerTextNeedsValueTicks(spec) then
+        return POWER_TEXT_MAX_EVENTS
     end
     return spec and spec.power and spec.power.frequent == true and POWER_EVENTS_FREQUENT or POWER_EVENTS
 end
