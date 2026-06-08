@@ -605,6 +605,33 @@ local function NumberList(text)
     return leftover == "" and values or nil
 end
 
+local function LeadingNumberList(text, wanted)
+    wanted = tonumber(wanted)
+    if not wanted or wanted <= 0 then return nil end
+    local words = {}
+    for word in Normalize(text or ""):gmatch("%S+") do words[#words + 1] = word end
+    local values = {}
+    local i = 1
+    while i <= #words and #values < wanted do
+        local word = words[i]
+        if word:match("^[-+]?%d+%.?%d*$") then
+            values[#values + 1] = word
+        elseif word == "and" or word == "und" or word == "to" or word == "as" or word == "is" or word == "be"
+            or word == "value" or word == "auf" or word == "zu" or word == "als" or word == "wert" or word == "=" then
+            -- connector between list values
+        else
+            return nil
+        end
+        i = i + 1
+    end
+    if #values ~= wanted then return nil end
+    local tail = {}
+    for j = i, #words do tail[#tail + 1] = words[j] end
+    tail = Trim(table.concat(tail, " "))
+    tail = tail:gsub("^and%s+", ""):gsub("^und%s+", "")
+    return values, Trim(tail)
+end
+
 local function AttributeListPrefix(text)
     text = Normalize(text)
     for pos = 1, #text do
@@ -620,20 +647,22 @@ local function AttributeListPrefix(text)
     return nil
 end
 
+local AddScopedBooleanTailCommands
 local function AttributeListValues(text)
     local s = LastConnector(text, VALUE_CONNECTORS)
     if not s then return nil end
     local body = Trim(text:sub(1, s - 1))
     if body:find("[-+]?%d+%.?%d*") then return nil end
-    local values = NumberList(text:sub(s))
-    if not values or #values < 2 or #values > 6 then return nil end
     local prefix, attrs = AttributeListPrefix(body)
-    if not prefix or prefix == "" or not attrs or #attrs ~= #values then return nil end
+    if not prefix or prefix == "" or not attrs or #attrs < 2 or #attrs > 6 then return nil end
+    local values, tail = LeadingNumberList(text:sub(s), #attrs)
+    if not values then return nil end
 
     local commands = {}
     for i = 1, #attrs do
         if not AddScopedAttributeCommands(commands, StripCommandLead(prefix), attrs[i], values[i]) then return nil end
     end
+    if tail ~= "" and not AddScopedBooleanTailCommands(commands, StripCommandLead(prefix), tail) then return nil end
     local plan = ParseCommands(commands)
     if plan then plan.compoundForce = true end
     return plan
@@ -644,15 +673,70 @@ local function AttributeListTrailingNumbers(text)
     local s = pairText:find("[-+]?%d+%.?%d*")
     if not s then return nil end
     local body = Trim(pairText:sub(1, s - 1))
-    local values = NumberList(pairText:sub(s))
-    if not values or #values < 2 or #values > 6 then return nil end
     local prefix, attrs = AttributeListPrefix(body)
-    if not prefix or prefix == "" or not attrs or #attrs ~= #values then return nil end
+    if not prefix or prefix == "" or not attrs or #attrs < 2 or #attrs > 6 then return nil end
+    local values, tail = LeadingNumberList(pairText:sub(s), #attrs)
+    if not values then return nil end
 
     local commands = {}
     for i = 1, #attrs do
         if not AddScopedAttributeCommands(commands, StripCommandLead(prefix), attrs[i], values[i]) then return nil end
     end
+    if tail ~= "" and not AddScopedBooleanTailCommands(commands, StripCommandLead(prefix), tail) then return nil end
+    local plan = ParseCommands(commands)
+    if plan then plan.compoundForce = true end
+    return plan
+end
+
+local function StripAttributeListBlockLead(text)
+    text = Trim(text or "")
+    while true do
+        local before = text
+        text = text:gsub("^and%s+", ""):gsub("^und%s+", ""):gsub("^then%s+", ""):gsub("^dann%s+", "")
+        text = Trim(text)
+        if text == before then break end
+    end
+    return text
+end
+
+local function RepeatedAttributeListTrailingNumbers(text)
+    local rest = Normalize((text or ""):gsub("=", " "))
+    local commands = {}
+    local touchedScopes, seenTouchedScopes = {}, {}
+    local blocks = 0
+    while rest ~= "" do
+        rest = StripAttributeListBlockLead(rest)
+        if rest == "" then break end
+        local s = rest:find("[-+]?%d+%.?%d*")
+        if not s then
+            if blocks < 2 then return nil end
+            local scope = table.concat(touchedScopes, " ")
+            if #ScopeLabels(rest) > 0 or #touchedScopes <= 1 or not ContainsAny(rest, { "names", "portraits", "power bars", "mana bars", "health bars", "hp bars" }) then
+                scope = touchedScopes[#touchedScopes] or scope
+            end
+            if scope == "" or not AddScopedBooleanTailCommands(commands, scope, rest) then return nil end
+            rest = ""
+            break
+        end
+
+        local body = Trim(rest:sub(1, s - 1))
+        local prefix, attrs = AttributeListPrefix(body)
+        if not prefix or prefix == "" or not attrs or #attrs < 2 or #attrs > 6 then return nil end
+        local values, tail = LeadingNumberList(rest:sub(s), #attrs)
+        if not values then return nil end
+
+        local scope = StripCommandLead(prefix)
+        if scope == "" then return nil end
+        AddScopeLabels(touchedScopes, seenTouchedScopes, scope)
+        for i = 1, #attrs do
+            if not AddScopedAttributeCommands(commands, scope, attrs[i], values[i]) then return nil end
+        end
+        blocks = blocks + 1
+        if blocks > 4 then return nil end
+        rest = tail
+    end
+
+    if blocks < 2 then return nil end
     local plan = ParseCommands(commands)
     if plan then plan.compoundForce = true end
     return plan
@@ -672,6 +756,14 @@ local function DetailScopeForAttr(scope, attr)
         return Trim(scope .. " power text")
     end
     return scope
+end
+
+local function AttributeNamesDetailScope(attr)
+    attr = Normalize(attr or "")
+    return attr:match("^portrait%s+") ~= nil
+        or attr:match("^hp%s+text%s+") ~= nil
+        or attr:match("^health%s+text%s+") ~= nil
+        or attr:match("^power%s+text%s+") ~= nil
 end
 
 local function LooksLikeOnlyScopes(text)
@@ -718,10 +810,177 @@ end
 
 local function StripBooleanWords(text)
     local out = " " .. Normalize(text) .. " "
-    for _, word in ipairs({ "on", "off", "enable", "enabled", "disable", "disabled", "true", "false", "yes", "no", "show", "hide", "visible", "hidden", "keep", "and", "und" }) do
+    for _, word in ipairs({ "on", "off", "enable", "enabled", "disable", "disabled", "true", "false", "yes", "no", "show", "hide", "visible", "hidden", "keep", "and", "und", "for" }) do
         out = out:gsub(" " .. word .. " ", " ")
     end
     return SingularItem(Normalize(out))
+end
+
+local function BooleanWordVerb(word)
+    if word == "on" or word == "enable" or word == "enabled" or word == "true" or word == "yes" or word == "show" then return "turn on" end
+    if word == "off" or word == "disable" or word == "disabled" or word == "false" or word == "no" or word == "hide" then return "turn off" end
+    return nil
+end
+
+local BOOLEAN_TAIL_ITEM_TERMS = {
+    { term = "castbar icon", item = "castbar icon" },
+    { term = "cast bar icon", item = "castbar icon" },
+    { term = "status icon", item = "status icon" },
+    { term = "power bar", item = "power bar" },
+    { term = "mana bar", item = "mana bar" },
+    { term = "health bar", item = "health bar" },
+    { term = "hp bar", item = "hp bar" },
+    { term = "background", item = "background" },
+    { term = "bg", item = "background" },
+    { term = "portrait", item = "portrait" },
+    { term = "name", item = "name" },
+    { term = "castbar", item = "castbar" },
+    { term = "cast bar", item = "castbar" },
+    { term = "icon", item = "icon" },
+}
+
+local function BooleanTailItemsFromText(text)
+    text = SingularItem(Normalize(text or ""))
+    text = text:gsub("%f[%w]power bars%f[%W]", "power bar")
+        :gsub("%f[%w]mana bars%f[%W]", "mana bar")
+        :gsub("%f[%w]health bars%f[%W]", "health bar")
+        :gsub("%f[%w]hp bars%f[%W]", "hp bar")
+        :gsub("%f[%w]castbars%f[%W]", "castbar")
+    if text == "" then return nil end
+    local parts = SplitParts(text)
+    if parts then
+        local out, seen = {}, {}
+        for i = 1, #parts do
+            local items = BooleanTailItemsFromText(parts[i])
+            if not items then return nil end
+            for j = 1, #items do
+                if not seen[items[j]] then
+                    seen[items[j]] = true
+                    out[#out + 1] = items[j]
+                end
+            end
+        end
+        return #out > 0 and out or nil
+    end
+
+    local out, seen = {}, {}
+    local rest = text
+    while rest ~= "" do
+        local matched
+        for i = 1, #BOOLEAN_TAIL_ITEM_TERMS do
+            local spec = BOOLEAN_TAIL_ITEM_TERMS[i]
+            local term = spec.term
+            if rest == term or rest:sub(1, #term + 1) == term .. " " then
+                matched = spec
+                rest = Trim(rest:sub(#term + 1))
+                break
+            end
+        end
+        if not matched then return nil end
+        if not seen[matched.item] then
+            seen[matched.item] = true
+            out[#out + 1] = matched.item
+        end
+    end
+    return #out > 0 and out or nil
+end
+
+local function BooleanTailPairs(tail)
+    local words = {}
+    for word in Normalize(tail):gmatch("%S+") do words[#words + 1] = word end
+    local out, segment = {}, {}
+    for i = 1, #words do
+        local word = words[i]
+        if word == "and" or word == "und" then
+            -- connector between pairs
+        else
+            local verb = BooleanWordVerb(word)
+            if verb then
+                local item = Trim(table.concat(segment, " "))
+                if item == "" then return nil end
+                out[#out + 1] = { verb = verb, item = item }
+                segment = {}
+            else
+                segment[#segment + 1] = word
+            end
+        end
+    end
+    if #out == 0 or #segment > 0 then return nil end
+    return out
+end
+
+local function BooleanRelationScope(text)
+    local item, scoped = text:match("^(.-)%s+for%s+(.+)$")
+    if item and scoped and #ScopeLabels(scoped) > 0 then return Trim(item), Trim(scoped) end
+    return text, nil
+end
+
+local function ParentBooleanScopes(scope)
+    scope = StripCommandLead(scope or "")
+    if scope == "" then return nil end
+    return DistributableScopePrefixes(scope) or (LooksLikeOnlyScopes(scope) and ScopeLabels(scope) or nil) or { scope }
+end
+
+local function AddScopedBooleanItemCommands(commands, verb, scopes, itemText)
+    local items = BooleanTailItemsFromText(StripBooleanWords(itemText))
+    if not items or #(scopes or {}) == 0 then return false end
+    if #items * #scopes > 12 then return false end
+    for s = 1, #scopes do
+        for i = 1, #items do
+            commands[#commands + 1] = Trim(verb .. " " .. scopes[s] .. " " .. items[i])
+        end
+    end
+    return true
+end
+
+AddScopedBooleanTailCommands = function(commands, scope, tail)
+    local pairs = BooleanTailPairs(tail)
+    if pairs and #pairs > 1 then
+        for i = 1, #pairs do
+            if not AddScopedBooleanTailCommands(commands, scope, pairs[i].item .. " " .. (pairs[i].verb == "turn on" and "on" or "off")) then return false end
+        end
+        return true
+    end
+
+    local verb = BooleanVerbForText(tail)
+    if not verb then return false end
+    local itemText, relationScope = BooleanRelationScope(tail)
+    local scopes = ScopeLabels(relationScope or tail)
+    if #scopes > 0 then
+        itemText = RemoveScopeTerms(itemText)
+    else
+        scopes = ParentBooleanScopes(scope)
+    end
+    return AddScopedBooleanItemCommands(commands, verb, scopes, itemText)
+end
+
+local function BooleanScopeText(text)
+    local _, relationScope = BooleanRelationScope(text)
+    local scopes = ScopeLabels(relationScope or text)
+    return #scopes > 0 and table.concat(scopes, " ") or nil
+end
+
+local function BooleanCommandsForText(verb, body, fallbackScope)
+    local commands = {}
+    local itemText, relationScope = BooleanRelationScope(body)
+    local scopes = ScopeLabels(relationScope or body)
+    if #scopes > 0 then
+        itemText = RemoveScopeTerms(itemText)
+    elseif fallbackScope then
+        scopes = ScopeLabels(fallbackScope)
+    end
+    if not AddScopedBooleanItemCommands(commands, verb, scopes, itemText) then return nil end
+    return commands
+end
+
+local function ScopeTextFromCommandList(commands)
+    local scopes, seen = {}, {}
+    for i = 1, #(commands or {}) do AddScopeLabels(scopes, seen, commands[i]) end
+    return #scopes > 0 and table.concat(scopes, " ") or nil
+end
+
+local function AppendCommands(commands, more)
+    for i = 1, #(more or {}) do commands[#commands + 1] = more[i] end
 end
 
 local function AttributeNumberPairs(text)
@@ -742,6 +1001,7 @@ local function AttributeNumberPairs(text)
     local detailScope
     local currentScope
     local commands = {}
+    local touchedScopes, seenTouchedScopes = {}, {}
     for i = 1, #values do
         local rawSegment = segments[i]
         local prefix, attr = ExtractAttr(rawSegment)
@@ -769,21 +1029,24 @@ local function AttributeNumberPairs(text)
             currentScope = detailScope ~= "" and detailScope or firstPrefix
         end
         local scope = currentScope or firstPrefix
+        if i == 1 and AttributeNamesDetailScope(attr) then
+            scope = firstPrefix
+        end
         if not usedPrePlan and prefix ~= "" and HasScope(prefix) then
             scope = prefix
             currentScope = DetailScopeForAttr(prefix, attr)
         elseif prefix == "" and currentScope ~= "" and not attr:find("portrait", 1, true) and not attr:find("hp text", 1, true) and not attr:find("power text", 1, true) then
             scope = currentScope
         end
+        AddScopeLabels(touchedScopes, seenTouchedScopes, scope)
         if not AddScopedAttributeCommands(commands, scope, attr, values[i]) then return nil end
     end
     if tail ~= "" then
-        local verb = BooleanVerbForText(tail)
-        local item = verb and StripBooleanWords(tail) or ""
-        if verb and item ~= "" then
-            local scope = detailScope ~= "" and detailScope or firstPrefix
-            commands[#commands + 1] = Trim(verb .. " " .. scope .. " " .. item)
+        local scope = detailScope ~= "" and detailScope or firstPrefix
+        if #ScopeLabels(tail) == 0 and #touchedScopes > 1 and ContainsAny(tail, { "names", "portraits", "power bars", "mana bars", "health bars", "hp bars" }) then
+            scope = table.concat(touchedScopes, " ")
         end
+        if not AddScopedBooleanTailCommands(commands, scope, tail) then return nil end
     end
     return ParseCommands(commands)
 end
@@ -945,11 +1208,18 @@ local function ScopedRelativeValueTailPairs(text)
         local scope = StripCommandLead(StripRelativeTail(segments[i]))
         scope = scope:gsub("^and%s+", ""):gsub("^und%s+", "")
         scope = Trim(scope)
+        local nextPrefix, nextAttr = ExtractAttr(scope)
+        if nextAttr then
+            nextPrefix = StripCommandLead(nextPrefix or "")
+            local nextScope = nextPrefix ~= "" and nextPrefix or firstPrefix
+            if not AddScopedRelativeAttributeCommands(commands, lead, nextScope, nextAttr, values[i]) then return nil end
+        else
         if not LooksLikeOnlyScopes(scope) then return nil end
         local scopes = ScopeLabels(scope)
         if #scopes == 0 then return nil end
         for s = 1, #scopes do
             commands[#commands + 1] = Trim(lead .. " " .. scopes[s] .. " " .. attr .. " by " .. tostring(values[i]))
+        end
         end
     end
     local plan = ParseCommands(commands)
@@ -1115,16 +1385,20 @@ local function KeepButBoolean(text)
     if not first then first, second = text:match("^(.-)%s+but%s+leave%s+(.+)$") end
     if not first then first, second = text:match("^(.-)%s+but%s+turn%s+(.+)$") end
     if not (first and second) then return nil end
-    local firstPlan = SimpleParse(first)
-    if not (firstPlan and firstPlan.kind == "changes" and #firstPlan.changes > 0) then return nil end
-    local verb = BooleanVerbForText(second)
-    local item = verb and StripBooleanWords(second) or ""
-    if item == "" then return nil end
-    local scope = ScopePhrase(firstPlan.changes)
-    if scope == "" then return nil end
-    local secondPlan = SimpleParse(Trim(verb .. " " .. scope .. " " .. item))
-    if not (secondPlan and secondPlan.kind == "changes" and #secondPlan.changes > 0) then return nil end
-    return MergePlans({ firstPlan, secondPlan })
+    local firstLead, firstBody = BooleanLead(first)
+    if not firstLead then return nil end
+    local secondVerb = BooleanVerbForText(second)
+    if not secondVerb then return nil end
+    local fallbackScope = BooleanScopeText(second)
+    local firstCommands = BooleanCommandsForText(firstLead, firstBody, fallbackScope)
+    if not firstCommands then return nil end
+    local firstScope = ScopeTextFromCommandList(firstCommands) or fallbackScope
+    local secondCommands = BooleanCommandsForText(secondVerb, second, firstScope)
+    if not secondCommands then return nil end
+    local commands = {}
+    AppendCommands(commands, firstCommands)
+    AppendCommands(commands, secondCommands)
+    return ParseCommands(commands)
 end
 
 local BOOL_WORDS = {
@@ -1375,17 +1649,16 @@ local function BooleanItemPairs(text)
     if #pairsOut < 2 or start <= #words then return nil end
 
     local commands = {}
-    local firstCommand = Trim(pairsOut[1].verb .. " " .. pairsOut[1].item)
-    local firstPlan = SimpleParse(firstCommand)
-    if not (firstPlan and firstPlan.kind == "changes" and #firstPlan.changes > 0) then return nil end
-    commands[#commands + 1] = firstCommand
-    local scope = ScopePhrase(firstPlan.changes)
-    if scope == "" then return nil end
-    for i = 2, #pairsOut do
+    local scope
+    for i = 1, #pairsOut do
         local item = pairsOut[i].item
-        if not HasScope(item) then item = Trim(scope .. " " .. item) end
-        commands[#commands + 1] = Trim(pairsOut[i].verb .. " " .. item)
+        if HasScope(item) then
+            local labels = ScopeLabels(item)
+            if #labels > 0 then scope = table.concat(labels, " ") end
+        end
+        if not AddScopedBooleanTailCommands(commands, scope, item .. " " .. (pairsOut[i].verb == "turn on" and "on" or "off")) then return nil end
     end
+    if #commands < 2 then return nil end
     return ParseCommands(commands)
 end
 
@@ -1717,6 +1990,7 @@ local function HasTrailingBooleanMultiScope(text)
 end
 
 local function LooksLikeCompoundCandidate(text, hasJoin)
+    if ContainsAny(text, { "filter", "filters" }) and ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return false end
     if hasJoin then return true end
     if CountNumbers(text) >= 2 then return true end
     if text:find("%d+%.?%d*%s*x%s*%d+%.?%d*") or text:find("%d+%.?%d*%s+by%s+%d+%.?%d*") then return true end
@@ -1753,6 +2027,7 @@ function P.ParseCompound(normalized, raw, normalParsed)
     add(SizePair(text))
     add(AttributeListValues(text))
     add(AttributeListTrailingNumbers(text))
+    add(RepeatedAttributeListTrailingNumbers(text))
     add(AttributeListRelativeValues(text))
     add(SharedAttributeValue(text))
     add(SharedAttributeRelativeValue(text))

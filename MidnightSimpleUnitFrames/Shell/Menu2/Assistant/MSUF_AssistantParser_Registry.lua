@@ -207,6 +207,28 @@ local function HasAllScopeIntent(text)
     })
 end
 
+P.ExplicitAuraFilterScope = P.ExplicitAuraFilterScope or function(text)
+    if not (ContainsAny(text, { "filter", "filters" }) and ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })) then return nil end
+    local scopes = {
+        { scope = "shared", terms = { "shared", "global" } },
+        { scope = "player", terms = { "player", "spieler", "self", "ich" } },
+        { scope = "target", terms = { "target", "ziel" } },
+        { scope = "focus", terms = { "focus", "fokus" } },
+        { scope = "boss", terms = { "boss" } },
+    }
+    local lanes = { "buff", "buffs", "debuff", "debuffs", "aura", "auras" }
+    for i = 1, #scopes do
+        for t = 1, #scopes[i].terms do
+            for l = 1, #lanes do
+                if HasPhrase(text, scopes[i].terms[t] .. " " .. lanes[l]) then
+                    return scopes[i].scope
+                end
+            end
+        end
+    end
+    return nil
+end
+
 local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
     "indicator", "indicators", "status icon", "status icons", "status indicator", "status indicators",
     "icon", "icons", "symbol", "symbols", "portrait", "portraits", "power bar", "mana bar",
@@ -255,6 +277,14 @@ local function SettingAllowedByExplicitScopes(setting, text)
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
+    if setting.frameType == "aura" and ContainsAny(text, { "filter", "filters" })
+        and not tostring(setting.attribute or ""):lower():find("filter", 1, true) then
+        return false
+    end
+    local auraFilterScope = P.ExplicitAuraFilterScope and P.ExplicitAuraFilterScope(text)
+    if setting.frameType == "aura" and auraFilterScope then
+        return unit == auraFilterScope or keyScope == auraFilterScope
+    end
     if setting.frameType == "aura" and unit == "shared" and ContainsAny(text, { "shared", "global", "all auras", "all aura" }) then
         return true
     end
