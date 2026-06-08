@@ -1,168 +1,484 @@
-local e,e=...local a=tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES)or 5
-if a<1 or a>12 then a=5 end
-local f={"UNIT_SPELLCAST_START","UNIT_SPELLCAST_STOP","UNIT_SPELLCAST_DELAYED","UNIT_SPELLCAST_CHANNEL_START","UNIT_SPELLCAST_CHANNEL_STOP","UNIT_SPELLCAST_CHANNEL_UPDATE","UNIT_SPELLCAST_EMPOWER_START","UNIT_SPELLCAST_EMPOWER_STOP","UNIT_SPELLCAST_EMPOWER_UPDATE","UNIT_SPELLCAST_INTERRUPTIBLE","UNIT_SPELLCAST_NOT_INTERRUPTIBLE","UNIT_SPELLCAST_FAILED","UNIT_SPELLCAST_SUCCEEDED","UNIT_SPELLCAST_INTERRUPTED",}local e={"UNIT_HEALTH","INSTANCE_ENCOUNTER_ENGAGE_UNIT","ENCOUNTER_START","ENCOUNTER_END","PLAYER_ENTERING_WORLD",}local function o()if type(_G.EnsureDB)=="function"then _G.EnsureDB()end
+local _ = ...
+
+local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
+if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
+    MAX_BOSS_FRAMES = 5
 end
-local function u()return _G.MSUF_InCombat==true
-or((_G.InCombatLockdown and _G.InCombatLockdown())and true or false)or((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))and true or false)end
-local function s()o()local e=_G.MSUF_DB and _G.MSUF_DB.general
-local t=_G.MSUF_ShouldUseMSUFCastbar
-if type(t)=="function"then return t("boss",e)==true end
-return(not e)or(e.enableBossCastbar~=false)end
-local function l(t,s,a,o,n,e)if not t then return false end
-n=math.floor((tonumber(n)or 0)+0.5)e=math.floor((tonumber(e)or 0)+0.5)local l,r,i,_,d=t:GetPoint(1)if l==s and r==a and i==o
-and math.abs((tonumber(_)or 0)-n)<=0.01
-and math.abs((tonumber(d)or 0)-e)<=0.01 then
-return false
+
+local CAST_EVENTS = {
+    "UNIT_SPELLCAST_START",
+    "UNIT_SPELLCAST_STOP",
+    "UNIT_SPELLCAST_DELAYED",
+    "UNIT_SPELLCAST_CHANNEL_START",
+    "UNIT_SPELLCAST_CHANNEL_STOP",
+    "UNIT_SPELLCAST_CHANNEL_UPDATE",
+    "UNIT_SPELLCAST_EMPOWER_START",
+    "UNIT_SPELLCAST_EMPOWER_STOP",
+    "UNIT_SPELLCAST_EMPOWER_UPDATE",
+    "UNIT_SPELLCAST_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_NOT_INTERRUPTIBLE",
+    "UNIT_SPELLCAST_FAILED",
+    "UNIT_SPELLCAST_SUCCEEDED",
+    "UNIT_SPELLCAST_INTERRUPTED",
+}
+
+local function EnsureDB()
+    if type(_G.EnsureDB) == "function" then
+        _G.EnsureDB()
+    end
 end
-t:ClearAllPoints()t:SetPoint(s,a,o,n,e)return true
+
+local function InCombat()
+    return _G.MSUF_InCombat == true
+        or ((_G.InCombatLockdown and _G.InCombatLockdown()) and true or false)
+        or ((_G.UnitAffectingCombat and _G.UnitAffectingCombat("player")) and true or false)
 end
-local function _(t,e)e=tonumber(e)if not(t and e and e>0)then return false end
-if t.GetWidth and math.abs((t:GetWidth()or 0)-e)<=0.01 then return false end
-t:SetWidth(e)return true
+
+local function BossCastbarsEnabled()
+    EnsureDB()
+
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local shouldUseMSUF = _G.MSUF_ShouldUseMSUFCastbar
+
+    if type(shouldUseMSUF) == "function" then
+        return shouldUseMSUF("boss", general) == true
+    end
+
+    return (not general) or general.enableBossCastbar ~= false
 end
-local function r(t,e)e=tonumber(e)if not(t and e and e>0)then return false end
-if t.GetHeight and math.abs((t:GetHeight()or 0)-e)<=0.01 then return false end
-t:SetHeight(e)return true
+
+local function SetPointIfChanged(frame, point, relativeTo, relativePoint, offsetX, offsetY)
+    if not frame then
+        return false
+    end
+
+    offsetX = math.floor((tonumber(offsetX) or 0) + 0.5)
+    offsetY = math.floor((tonumber(offsetY) or 0) + 0.5)
+
+    local currentPoint, currentRelativeTo, currentRelativePoint, currentX, currentY = frame:GetPoint(1)
+    if currentPoint == point
+        and currentRelativeTo == relativeTo
+        and currentRelativePoint == relativePoint
+        and math.abs((tonumber(currentX) or 0) - offsetX) <= 0.01
+        and math.abs((tonumber(currentY) or 0) - offsetY) <= 0.01
+    then
+        return false
+    end
+
+    frame:ClearAllPoints()
+    frame:SetPoint(point, relativeTo, relativePoint, offsetX, offsetY)
+    return true
 end
-local function S(e)if not(e and e.statusBar)then return end
-o()local t=(_G.MSUF_DB and _G.MSUF_DB.general)or{}local n=e:GetHeight()or 18
-if n<12 then n=12 end
-local a=(t.showBossCastIcon==nil)and(t.castbarShowIcon~=false)or(t.showBossCastIcon~=false)local s=tonumber(t.bossCastIconOffsetX)or tonumber(t.castbarIconOffsetX)or 0
-local o=tonumber(t.bossCastIconOffsetY)or tonumber(t.castbarIconOffsetY)or 0
-local n=tonumber(t.bossCastIconSize)or tonumber(t.castbarIconSize)or n
-if n<6 then n=6 elseif n>128 then n=128 end
-if e.icon then
-local t=((s~=0 or o~=0)and e.statusBar)or e
-if e.icon.SetParent and e.icon:GetParent()~=t then e.icon:SetParent(t)end
-e.icon:ClearAllPoints()e.icon:SetPoint("LEFT",e,"LEFT",s,o)e.icon:SetSize(n,n)e.icon:SetShown(a)end
-e.statusBar:ClearAllPoints()if a and e.icon and s==0 and o==0 then
-e.statusBar:SetPoint("LEFT",e,"LEFT",n+1,0)else
-e.statusBar:SetPoint("LEFT",e,"LEFT",0,0)end
-e.statusBar:SetPoint("TOP",e,"TOP",0,-1)e.statusBar:SetPoint("BOTTOM",e,"BOTTOM",0,1)e.statusBar:SetPoint("RIGHT",e,"RIGHT",-1,0)if e.backgroundBar then
-e.backgroundBar:ClearAllPoints()e.backgroundBar:SetAllPoints(e.statusBar)end
-if type(_G.MSUF_ApplyBossCastbarTextsLayout)=="function"then
-local n=tonumber(t.bossCastSpellNameFontSize)or tonumber(t.castbarSpellNameFontSize)or tonumber(t.fontSize)or 14
-local o=tonumber(t.bossCastTimeFontSize)or n
-_G.MSUF_ApplyBossCastbarTextsLayout(e,{baselineTimeX=-2,baselineTimeY=0,textOffsetX=tonumber(t.bossCastTextOffsetX)or 0,textOffsetY=tonumber(t.bossCastTextOffsetY)or 0,timeOffsetX=tonumber(t.bossCastTimeOffsetX)or-2,timeOffsetY=tonumber(t.bossCastTimeOffsetY)or 0,showName=t.showBossCastName~=false,showTime=t.showBossCastTime~=false,nameFontSize=n,timeFontSize=o,})end
-if type(_G.MSUF_ApplyCastbarOutline)=="function"then _G.MSUF_ApplyCastbarOutline(e,true)end
+
+local function SetWidthIfChanged(frame, width)
+    width = tonumber(width)
+    if not (frame and width and width > 0) then
+        return false
+    end
+
+    if frame.GetWidth and math.abs((frame:GetWidth() or 0) - width) <= 0.01 then
+        return false
+    end
+
+    frame:SetWidth(width)
+    return true
 end
-local function E(t,f)if not t then return false end
-o()local n=(_G.MSUF_DB and _G.MSUF_DB.general)or{}local d=t.unit or"boss1"local i=tonumber(tostring(d):match("boss(%d+)"))or 1
-local o,s
-if type(_G.MSUF_GetCastbarDesiredSize)=="function"then
-o,s=_G.MSUF_GetCastbarDesiredSize(d,n,t,240,12)else
-o,s=tonumber(n.bossCastbarWidth),tonumber(n.bossCastbarHeight)end
-local e=false
-e=r(t,s or t:GetHeight()or 18)or e
-local a=tonumber(n.bossCastbarOffsetX)or 0
-local r=tonumber(n.bossCastbarOffsetY)or 0
-if n.bossCastbarDetached==true then
-local s,n=0,-((i-1)*34)if type(_G.MSUF_GetBossLayoutDelta)=="function"then
-local e=(_G.MSUF_DB and _G.MSUF_DB.boss)or{}s,n=_G.MSUF_GetBossLayoutDelta(i,e)s,n=tonumber(s)or 0,tonumber(n)or n
+
+local function SetHeightIfChanged(frame, height)
+    height = tonumber(height)
+    if not (frame and height and height > 0) then
+        return false
+    end
+
+    if frame.GetHeight and math.abs((frame:GetHeight() or 0) - height) <= 0.01 then
+        return false
+    end
+
+    frame:SetHeight(height)
+    return true
 end
-e=l(t,"CENTER",UIParent,"CENTER",a+s,r+(tonumber(n)or 0))or e
-e=_(t,o or t:GetWidth()or 240)or e
+
+local function ApplyBossCastbarLayout(frame)
+    if not (frame and frame.statusBar) then
+        return
+    end
+
+    EnsureDB()
+
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local height = frame:GetHeight() or 18
+    if height < 12 then
+        height = 12
+    end
+
+    local showIcon = (general.showBossCastIcon == nil)
+        and (general.castbarShowIcon ~= false)
+        or (general.showBossCastIcon ~= false)
+
+    local iconOffsetX = tonumber(general.bossCastIconOffsetX) or tonumber(general.castbarIconOffsetX) or 0
+    local iconOffsetY = tonumber(general.bossCastIconOffsetY) or tonumber(general.castbarIconOffsetY) or 0
+    local iconSize = tonumber(general.bossCastIconSize) or tonumber(general.castbarIconSize) or height
+
+    if iconSize < 6 then
+        iconSize = 6
+    elseif iconSize > 128 then
+        iconSize = 128
+    end
+
+    if frame.icon then
+        local iconParent = ((iconOffsetX ~= 0 or iconOffsetY ~= 0) and frame.statusBar) or frame
+
+        if frame.icon.SetParent and frame.icon:GetParent() ~= iconParent then
+            frame.icon:SetParent(iconParent)
+        end
+
+        frame.icon:ClearAllPoints()
+        frame.icon:SetPoint("LEFT", frame, "LEFT", iconOffsetX, iconOffsetY)
+        frame.icon:SetSize(iconSize, iconSize)
+        frame.icon:SetShown(showIcon)
+    end
+
+    frame.statusBar:ClearAllPoints()
+    if showIcon and frame.icon and iconOffsetX == 0 and iconOffsetY == 0 then
+        frame.statusBar:SetPoint("LEFT", frame, "LEFT", iconSize + 1, 0)
+    else
+        frame.statusBar:SetPoint("LEFT", frame, "LEFT", 0, 0)
+    end
+
+    frame.statusBar:SetPoint("TOP", frame, "TOP", 0, -1)
+    frame.statusBar:SetPoint("BOTTOM", frame, "BOTTOM", 0, 1)
+    frame.statusBar:SetPoint("RIGHT", frame, "RIGHT", -1, 0)
+
+    if frame.backgroundBar then
+        frame.backgroundBar:ClearAllPoints()
+        frame.backgroundBar:SetAllPoints(frame.statusBar)
+    end
+
+    if type(_G.MSUF_ApplyBossCastbarTextsLayout) == "function" then
+        local nameFontSize = tonumber(general.bossCastSpellNameFontSize)
+            or tonumber(general.castbarSpellNameFontSize)
+            or tonumber(general.fontSize)
+            or 14
+        local timeFontSize = tonumber(general.bossCastTimeFontSize) or nameFontSize
+
+        _G.MSUF_ApplyBossCastbarTextsLayout(frame, {
+            baselineTimeX = -2,
+            baselineTimeY = 0,
+            textOffsetX = tonumber(general.bossCastTextOffsetX) or 0,
+            textOffsetY = tonumber(general.bossCastTextOffsetY) or 0,
+            timeOffsetX = tonumber(general.bossCastTimeOffsetX) or -2,
+            timeOffsetY = tonumber(general.bossCastTimeOffsetY) or 0,
+            showName = general.showBossCastName ~= false,
+            showTime = general.showBossCastTime ~= false,
+            nameFontSize = nameFontSize,
+            timeFontSize = timeFontSize,
+        })
+    end
+
+    if type(_G.MSUF_ApplyCastbarOutline) == "function" then
+        _G.MSUF_ApplyCastbarOutline(frame, true)
+    end
+end
+
+local function UpdateBossCastbarAnchor(frame, forceLayout)
+    if not frame then
+        return false
+    end
+
+    EnsureDB()
+
+    local general = (_G.MSUF_DB and _G.MSUF_DB.general) or {}
+    local unit = frame.unit or "boss1"
+    local bossIndex = tonumber(tostring(unit):match("boss(%d+)")) or 1
+
+    local desiredWidth
+    local desiredHeight
+    if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
+        desiredWidth, desiredHeight = _G.MSUF_GetCastbarDesiredSize(unit, general, frame, 240, 12)
+    else
+        desiredWidth = tonumber(general.bossCastbarWidth)
+        desiredHeight = tonumber(general.bossCastbarHeight)
+    end
+
+    local changed = false
+    changed = SetHeightIfChanged(frame, desiredHeight or frame:GetHeight() or 18) or changed
+
+    local offsetX = tonumber(general.bossCastbarOffsetX) or 0
+    local offsetY = tonumber(general.bossCastbarOffsetY) or 0
+
+    if general.bossCastbarDetached == true then
+        local layoutX = 0
+        local layoutY = -((bossIndex - 1) * 34)
+
+        if type(_G.MSUF_GetBossLayoutDelta) == "function" then
+            local bossDB = (_G.MSUF_DB and _G.MSUF_DB.boss) or {}
+            layoutX, layoutY = _G.MSUF_GetBossLayoutDelta(bossIndex, bossDB)
+            layoutX = tonumber(layoutX) or 0
+            layoutY = tonumber(layoutY) or layoutY
+        end
+
+        changed = SetPointIfChanged(frame, "CENTER", UIParent, "CENTER", offsetX + layoutX, offsetY + (tonumber(layoutY) or 0))
+            or changed
+        changed = SetWidthIfChanged(frame, desiredWidth or frame:GetWidth() or 240) or changed
+    else
+        local unitFrame = _G["MSUF_" .. unit]
+        if unitFrame and unitFrame.GetWidth then
+            changed = SetPointIfChanged(frame, "BOTTOMLEFT", unitFrame, "TOPLEFT", offsetX, offsetY + 2) or changed
+            changed = SetWidthIfChanged(frame, desiredWidth or unitFrame:GetWidth() or 240) or changed
+        else
+            changed = SetPointIfChanged(
+                frame,
+                "TOPRIGHT",
+                UIParent,
+                "TOPRIGHT",
+                -420 + offsetX,
+                (-220 + offsetY) - ((bossIndex - 1) * 34)
+            ) or changed
+            changed = SetWidthIfChanged(frame, desiredWidth or frame:GetWidth() or 240) or changed
+        end
+    end
+
+    if changed or forceLayout then
+        ApplyBossCastbarLayout(frame)
+    end
+
+    return changed
+end
+
+local function StopBossCastbar(frame)
+    if not frame then
+        return
+    end
+
+    if type(_G.MSUF_CB_ResetStateOnStop) == "function" then
+        _G.MSUF_CB_ResetStateOnStop(frame, "STOPPED")
+    elseif frame.Hide then
+        frame:Hide()
+    end
+end
+
+local function SetBossEventsRegistered(frame, enabled)
+    if not frame then
+        return
+    end
+
+    if enabled then
+        if frame._msufBossEventsRegistered then
+            return
+        end
+
+        for index = 1, #CAST_EVENTS do
+            frame:RegisterUnitEvent(CAST_EVENTS[index], frame.unit)
+        end
+
+        frame:RegisterUnitEvent("UNIT_HEALTH", frame.unit)
+        frame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+        frame:RegisterEvent("ENCOUNTER_START")
+        frame:RegisterEvent("ENCOUNTER_END")
+        frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+        frame._msufDriverEventsRegistered = true
+        frame._msufBossEventsRegistered = true
+        return
+    end
+
+    frame:UnregisterAllEvents()
+    frame._msufDriverEventsRegistered = nil
+    frame._msufBossEventsRegistered = nil
+end
+
+local function EnsureBossCastbar(index)
+    local unit = "boss" .. index
+    local name = "MSUF_BossCastbar" .. index
+
+    local frame = _G[name]
+    if not frame then
+        local createCastbar = _G.MSUF_CreateCastBar
+        if type(createCastbar) ~= "function" then
+            return nil
+        end
+
+        frame = createCastbar(name, unit)
+    end
+
+    if not frame then
+        return nil
+    end
+
+    frame.unit = unit
+    frame._msufBarKey = unit
+    frame._msufIsBossCastbar = true
+    frame:SetFrameStrata("HIGH")
+    frame:SetFrameLevel(50 + index)
+    frame.ApplyLayout = ApplyBossCastbarLayout
+    frame.UpdateAnchor = UpdateBossCastbarAnchor
+
+    if not frame._msufBossHooked then
+        frame._msufBossHooked = true
+        frame:HookScript("OnEvent", function(eventFrame, event)
+            if event == "ENCOUNTER_END" then
+                StopBossCastbar(eventFrame)
+                return
+            end
+
+            if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT"
+                or event == "ENCOUNTER_START"
+                or event == "PLAYER_ENTERING_WORLD"
+            then
+                if BossCastbarsEnabled() then
+                    eventFrame:UpdateAnchor(true)
+                    if eventFrame.Cast then
+                        eventFrame:Cast()
+                    end
+                end
+            elseif event == "UNIT_HEALTH"
+                and eventFrame:IsShown()
+                and (not UnitExists(eventFrame.unit) or (UnitIsDeadOrGhost and UnitIsDeadOrGhost(eventFrame.unit)))
+            then
+                StopBossCastbar(eventFrame)
+            end
+        end)
+    end
+
+    SetBossEventsRegistered(frame, BossCastbarsEnabled())
+    frame:UpdateAnchor(true)
+    frame:Hide()
+
+    return frame
+end
+
+local function EnsureBossCastbars()
+    if _G.MSUF_BossCastbars then
+        return _G.MSUF_BossCastbars
+    end
+
+    if not BossCastbarsEnabled() then
+        return nil
+    end
+
+    local bossCastbars = {}
+    _G.MSUF_BossCastbars = bossCastbars
+
+    for index = 1, MAX_BOSS_FRAMES do
+        local frame = EnsureBossCastbar(index)
+        bossCastbars[index] = frame
+
+        if frame and UnitExists(frame.unit) and frame.Cast then
+            frame:Cast()
+        end
+    end
+
+    return bossCastbars
+end
+
+local function RefreshBossPreviewIfAllowed()
+    if not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+        _G.MSUF_UpdateBossCastbarPreview()
+    end
+end
+
+function _G.MSUF_ApplyBossCastbarTimeSetting()
+    EnsureDB()
+
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    local showTime = (not general) or general.showBossCastTime ~= false
+    local bossCastbars = _G.MSUF_BossCastbars
+
+    if bossCastbars then
+        for index = 1, #bossCastbars do
+            local frame = bossCastbars[index]
+            if frame and frame.timeText then
+                frame.timeText:Show()
+                frame.timeText:SetAlpha(showTime and 1 or 0)
+
+                if not showTime and frame.timeText.SetText then
+                    frame.timeText:SetText("")
+                end
+            end
+        end
+    end
+
+    RefreshBossPreviewIfAllowed()
+end
+
+function _G.MSUF_ApplyBossCastbarPositionSetting(forceLayout)
+    local bossCastbars = _G.MSUF_BossCastbars or EnsureBossCastbars()
+    if not bossCastbars then
+        return
+    end
+
+    for index = 1, #bossCastbars do
+        local frame = bossCastbars[index]
+        if frame then
+            frame:UpdateAnchor(forceLayout ~= false)
+        end
+    end
+
+    RefreshBossPreviewIfAllowed()
+end
+
+function _G.MSUF_SetBossCastbarsEnabled(enabled)
+    EnsureDB()
+
+    enabled = enabled and true or false
+
+    local general = _G.MSUF_DB and _G.MSUF_DB.general
+    if general then
+        local setBackend = _G.MSUF_SetCastbarBackend
+        if type(setBackend) == "function" then
+            setBackend("boss", enabled and "MSUF" or "HIDE", general)
+        else
+            general.enableBossCastbar = enabled
+        end
+    end
+
+    local bossCastbars = enabled and (_G.MSUF_BossCastbars or EnsureBossCastbars()) or _G.MSUF_BossCastbars
+    if not bossCastbars then
+        return
+    end
+
+    for index = 1, #bossCastbars do
+        local frame = bossCastbars[index]
+        if frame then
+            SetBossEventsRegistered(frame, enabled)
+
+            if enabled then
+                frame:UpdateAnchor(true)
+                if UnitExists(frame.unit) and frame.Cast then
+                    frame:Cast()
+                end
+            else
+                StopBossCastbar(frame)
+            end
+        end
+    end
+
+    if type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        _G.MSUF_UpdateCastbarVisuals()
+    end
+
+    RefreshBossPreviewIfAllowed()
+end
+
+function _G.MSUF_ApplyBossCastbarsEnabled()
+    _G.MSUF_SetBossCastbarsEnabled(BossCastbarsEnabled())
+end
+
+local function OnLogin()
+    EnsureBossCastbars()
+
+    if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
+        _G.MSUF_ApplyBossCastbarPositionSetting(true)
+    end
+end
+
+if type(_G.MSUF_EventBus_Register) == "function" then
+    _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS", OnLogin, nil, true)
+    _G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD", "MSUF_BOSS_CASTBARS_WORLD", OnLogin)
 else
-local n=_G["MSUF_"..d]if n and n.GetWidth then
-e=l(t,"BOTTOMLEFT",n,"TOPLEFT",a,r+2)or e
-e=_(t,o or n:GetWidth()or 240)or e
-else
-e=l(t,"TOPRIGHT",UIParent,"TOPRIGHT",-420+a,(-220+r)-((i-1)*34))or e
-e=_(t,o or t:GetWidth()or 240)or e
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("PLAYER_LOGIN")
+    frame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    frame:SetScript("OnEvent", OnLogin)
 end
-end
-if e or f then S(t)end
-return e
-end
-local function n(e)if not e then return end
-if type(_G.MSUF_CB_ResetStateOnStop)=="function"then
-_G.MSUF_CB_ResetStateOnStop(e,"STOPPED")elseif e.Hide then
-e:Hide()end
-end
-local function i(e,t)if not e then return end
-if t then
-if e._msufBossEventsRegistered then return end
-for t=1,#f do e:RegisterUnitEvent(f[t],e.unit)end
-e:RegisterUnitEvent("UNIT_HEALTH",e.unit)e:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")e:RegisterEvent("ENCOUNTER_START")e:RegisterEvent("ENCOUNTER_END")e:RegisterEvent("PLAYER_ENTERING_WORLD")e._msufDriverEventsRegistered=true
-e._msufBossEventsRegistered=true
-return
-end
-e:UnregisterAllEvents()e._msufDriverEventsRegistered=nil
-e._msufBossEventsRegistered=nil
-end
-local function l(o)local t="boss"..o
-local a="MSUF_BossCastbar"..o
-local e=_G[a]if not e then
-local n=_G.MSUF_CreateCastBar
-if type(n)~="function"then return nil end
-e=n(a,t)end
-if not e then return nil end
-e.unit=t
-e._msufBarKey=t
-e._msufIsBossCastbar=true
-e:SetFrameStrata("HIGH")e:SetFrameLevel(50+o)e.ApplyLayout=S
-e.UpdateAnchor=E
-if not e._msufBossHooked then
-e._msufBossHooked=true
-e:HookScript("OnEvent",function(e,t)if t=="ENCOUNTER_END"then n(e);return end
-if t=="INSTANCE_ENCOUNTER_ENGAGE_UNIT"or t=="ENCOUNTER_START"or t=="PLAYER_ENTERING_WORLD"then
-if s()then
-e:UpdateAnchor(true)if e.Cast then e:Cast()end
-end
-elseif t=="UNIT_HEALTH"and e:IsShown()and(not UnitExists(e.unit)or(UnitIsDeadOrGhost and UnitIsDeadOrGhost(e.unit)))then
-n(e)end
-end)end
-i(e,s())e:UpdateAnchor(true)e:Hide()return e
-end
-local function r()if _G.MSUF_BossCastbars then return _G.MSUF_BossCastbars end
-if not s()then return nil end
-local t={}_G.MSUF_BossCastbars=t
-for n=1,a do
-local e=l(n)t[n]=e
-if e and UnitExists(e.unit)and e.Cast then e:Cast()end
-end
-return t
-end
-local function a()if not u()and type(_G.MSUF_UpdateBossCastbarPreview)=="function"then
-_G.MSUF_UpdateBossCastbarPreview()end
-end
-function _G.MSUF_ApplyBossCastbarTimeSetting()o()local e=_G.MSUF_DB and _G.MSUF_DB.general
-local t=(not e)or(e.showBossCastTime~=false)local e=_G.MSUF_BossCastbars
-if e then
-for n=1,#e do
-local e=e[n]if e and e.timeText then
-e.timeText:Show()e.timeText:SetAlpha(t and 1 or 0)if not t and e.timeText.SetText then e.timeText:SetText("")end
-end
-end
-end
-a()end
-function _G.MSUF_ApplyBossCastbarPositionSetting(n)local e=_G.MSUF_BossCastbars or r()if not e then return end
-for t=1,#e do
-local e=e[t]if e then e:UpdateAnchor(n~=false)end
-end
-a()end
-function _G.MSUF_SetBossCastbarsEnabled(e)o()e=e and true or false
-local t=_G.MSUF_DB and _G.MSUF_DB.general
-if t then
-local n=_G.MSUF_SetCastbarBackend
-if type(n)=="function"then n("boss",e and"MSUF"or"HIDE",t)else t.enableBossCastbar=e end
-end
-local t=e and(_G.MSUF_BossCastbars or r())or _G.MSUF_BossCastbars
-if not t then return end
-for o=1,#t do
-local t=t[o]if t then
-i(t,e)if e then
-t:UpdateAnchor(true)if UnitExists(t.unit)and t.Cast then t:Cast()end
-else
-n(t)end
-end
-end
-if type(_G.MSUF_UpdateCastbarVisuals)=="function"then _G.MSUF_UpdateCastbarVisuals()end
-a()end
-function _G.MSUF_ApplyBossCastbarsEnabled()_G.MSUF_SetBossCastbarsEnabled(s())end
-local function t()r()if type(_G.MSUF_ApplyBossCastbarPositionSetting)=="function"then _G.MSUF_ApplyBossCastbarPositionSetting(true)end
-end
-if type(_G.MSUF_EventBus_Register)=="function"then
-_G.MSUF_EventBus_Register("PLAYER_LOGIN","MSUF_BOSS_CASTBARS",t,nil,true)_G.MSUF_EventBus_Register("PLAYER_ENTERING_WORLD","MSUF_BOSS_CASTBARS_WORLD",t)else
-local e=CreateFrame("Frame")e:RegisterEvent("PLAYER_LOGIN")e:RegisterEvent("PLAYER_ENTERING_WORLD")e:SetScript("OnEvent",t)end
-_G.MSUF_BossCastbar_Stop=n
+
+_G.MSUF_BossCastbar_Stop = StopBossCastbar

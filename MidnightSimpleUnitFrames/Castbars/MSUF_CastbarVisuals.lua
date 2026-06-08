@@ -1,17 +1,49 @@
-local e=_G.MSUF_UpdateCastbarVisuals
-local function r(a)if not(a and a.statusBar)then return end
-if a.ApplyLayout then a:ApplyLayout()end
-if type(_G.MSUF_ApplyCastbarOutline)=="function"then _G.MSUF_ApplyCastbarOutline(a,false)end
-if type(_G.MSUF_KickReady_ApplyLayout)=="function"then _G.MSUF_KickReady_ApplyLayout(a)end
-if type(_G.MSUF_KickReady_RefreshFrame)=="function"and a.MSUF_castActive then _G.MSUF_KickReady_RefreshFrame(a,nil)end
-if a.backgroundBar and type(_G.MSUF_GetCastbarBackgroundColor)=="function"then
-local r,n,t,e=_G.MSUF_GetCastbarBackgroundColor()a.backgroundBar:SetVertexColor(r or 0.176,n or 0.176,t or 0.176,e or 1)end
-if a.statusBar and type(_G.MSUF_RefreshCastbarStyleCache)=="function"then
-_G.MSUF_RefreshCastbarStyleCache(a)if a.MSUF_cachedCastbarTexture then a.statusBar:SetStatusBarTexture(a.MSUF_cachedCastbarTexture)end
-if a.backgroundBar and a.MSUF_cachedCastbarBackgroundTexture then a.backgroundBar:SetTexture(a.MSUF_cachedCastbarBackgroundTexture)end
+local previousUpdateCastbarVisuals = _G.MSUF_UpdateCastbarVisuals
+
+local function RefreshCastbarFrame(frame)
+    if not (frame and frame.statusBar) then
+        return
+    end
+
+    if type(_G.MSUF_ApplyCastbarOutline) == "function" then
+        _G.MSUF_ApplyCastbarOutline(frame, false)
+    end
+
+    if type(_G.MSUF_KickReady_ApplyLayout) == "function" then
+        _G.MSUF_KickReady_ApplyLayout(frame)
+    end
+
+    if type(_G.MSUF_KickReady_RefreshFrame) == "function" and frame.MSUF_castActive then
+        _G.MSUF_KickReady_RefreshFrame(frame, nil)
+    end
+
+    if frame.backgroundBar and type(_G.MSUF_GetCastbarBackgroundColor) == "function" then
+        local red, green, blue, alpha = _G.MSUF_GetCastbarBackgroundColor()
+        frame.backgroundBar:SetVertexColor(red or 0.176, green or 0.176, blue or 0.176, alpha or 1)
+    end
+
+    if frame.statusBar and type(_G.MSUF_RefreshCastbarStyleCache) == "function" then
+        _G.MSUF_RefreshCastbarStyleCache(frame)
+
+        if frame.MSUF_cachedCastbarTexture then
+            frame.statusBar:SetStatusBarTexture(frame.MSUF_cachedCastbarTexture)
+        end
+
+        if frame.backgroundBar and frame.MSUF_cachedCastbarBackgroundTexture then
+            frame.backgroundBar:SetTexture(frame.MSUF_cachedCastbarBackgroundTexture)
+        end
+    end
 end
-end
-function _G.MSUF_UpdateCastbarVisuals(...)if type(e)=="function"and e~=_G.MSUF_UpdateCastbarVisuals then e(...)end
-local a=_G.MSUF_BossCastbars
-if type(a)=="table"then for e=1,#a do r(a[e])end end
+
+function _G.MSUF_UpdateCastbarVisuals(...)
+    if type(previousUpdateCastbarVisuals) == "function" and previousUpdateCastbarVisuals ~= _G.MSUF_UpdateCastbarVisuals then
+        previousUpdateCastbarVisuals(...)
+    end
+
+    local bossCastbars = _G.MSUF_BossCastbars
+    if type(bossCastbars) == "table" then
+        for index = 1, #bossCastbars do
+            RefreshCastbarFrame(bossCastbars[index])
+        end
+    end
 end

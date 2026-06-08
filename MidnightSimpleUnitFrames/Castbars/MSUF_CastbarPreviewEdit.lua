@@ -1,88 +1,381 @@
-local r={player={w="castbarPlayerBarWidth",h="castbarPlayerBarHeight",x="castbarPlayerOffsetX",y="castbarPlayerOffsetY",dx=0,dy=5,reanchor="MSUF_ReanchorPlayerCastBar",test="MSUF_SetPlayerCastbarTestMode"},target={w="castbarTargetBarWidth",h="castbarTargetBarHeight",x="castbarTargetOffsetX",y="castbarTargetOffsetY",dx=65,dy=-15,reanchor="MSUF_ReanchorTargetCastBar",test="MSUF_SetTargetCastbarTestMode"},focus={w="castbarFocusBarWidth",h="castbarFocusBarHeight",x="castbarFocusOffsetX",y="castbarFocusOffsetY",fallbackX="castbarTargetOffsetX",fallbackY="castbarTargetOffsetY",dx=65,dy=-15,reanchor="MSUF_ReanchorFocusCastBar",test="MSUF_SetFocusCastbarTestMode"},boss={w="bossCastbarWidth",h="bossCastbarHeight",x="bossCastbarOffsetX",y="bossCastbarOffsetY",dx=0,dy=0,reanchor="MSUF_ReanchorBossCastBar",test="MSUF_SetBossCastbarTestMode"},}local function s()if type(EnsureDB)=="function"then EnsureDB()end
-MSUF_DB=MSUF_DB or{}MSUF_DB.general=MSUF_DB.general or{}return MSUF_DB.general
+local UNIT_CONFIG = {
+    player = {
+        w = "castbarPlayerBarWidth",
+        h = "castbarPlayerBarHeight",
+        x = "castbarPlayerOffsetX",
+        y = "castbarPlayerOffsetY",
+        dx = 0,
+        dy = 5,
+        reanchor = "MSUF_ReanchorPlayerCastBar",
+        test = "MSUF_SetPlayerCastbarTestMode",
+    },
+    target = {
+        w = "castbarTargetBarWidth",
+        h = "castbarTargetBarHeight",
+        x = "castbarTargetOffsetX",
+        y = "castbarTargetOffsetY",
+        dx = 65,
+        dy = -15,
+        reanchor = "MSUF_ReanchorTargetCastBar",
+        test = "MSUF_SetTargetCastbarTestMode",
+    },
+    focus = {
+        w = "castbarFocusBarWidth",
+        h = "castbarFocusBarHeight",
+        x = "castbarFocusOffsetX",
+        y = "castbarFocusOffsetY",
+        fallbackX = "castbarTargetOffsetX",
+        fallbackY = "castbarTargetOffsetY",
+        dx = 65,
+        dy = -15,
+        reanchor = "MSUF_ReanchorFocusCastBar",
+        test = "MSUF_SetFocusCastbarTestMode",
+    },
+    boss = {
+        w = "bossCastbarWidth",
+        h = "bossCastbarHeight",
+        x = "bossCastbarOffsetX",
+        y = "bossCastbarOffsetY",
+        dx = 0,
+        dy = 0,
+        reanchor = "MSUF_ReanchorBossCastBar",
+        test = "MSUF_SetBossCastbarTestMode",
+    },
+}
+
+local function GeneralDB()
+    if type(EnsureDB) == "function" then
+        EnsureDB()
+    end
+
+    MSUF_DB = MSUF_DB or {}
+    MSUF_DB.general = MSUF_DB.general or {}
+    return MSUF_DB.general
 end
-local function d()return InCombatLockdown and InCombatLockdown()end
-local function o(t)t=tonumber(t)or 0;return t>=0 and math.floor(t+0.5)or math.ceil(t-0.5)end
-local function i(e,t)return tonumber(e[t.x])or(t.fallbackX and tonumber(e[t.fallbackX]))or t.dx or 0 end
-local function c(e,t)return tonumber(e[t.y])or(t.fallbackY and tonumber(e[t.fallbackY]))or t.dy or 0 end
-local function l(t)if type(_G.MSUF_ApplyCastbarUnitAndSync)=="function"then _G.MSUF_ApplyCastbarUnitAndSync(t)else
-local e=r[t]local e=e and e.reanchor and _G[e.reanchor]if type(e)=="function"then e()end
-if type(MSUF_UpdateCastbarVisuals)=="function"then MSUF_UpdateCastbarVisuals()end
-if t=="boss"and not d()and type(_G.MSUF_UpdateBossCastbarPreview)=="function"then _G.MSUF_UpdateBossCastbarPreview()end
+
+local function InCombat()
+    return InCombatLockdown and InCombatLockdown()
 end
-if type(_G.MSUF_PositionCastbarPreviewUnit)=="function"then _G.MSUF_PositionCastbarPreviewUnit(t)end
-if type(MSUF_UpdateCastbarEditInfo)=="function"then MSUF_UpdateCastbarEditInfo(t)end
-if type(MSUF_SyncCastbarPositionPopup)=="function"then MSUF_SyncCastbarPositionPopup(t)end
+
+local function Round(value)
+    value = tonumber(value) or 0
+    return value >= 0 and math.floor(value + 0.5) or math.ceil(value - 0.5)
 end
-local function f(e,t)if type(MSUF_ClampToSlider)~="function"then return end
-local n,a=_G.MSUF_CastbarBossXOffsetSlider,_G.MSUF_CastbarBossYOffsetSlider
-if n then e[t.x]=MSUF_ClampToSlider(n,tonumber(e[t.x])or 0)end
-if a then e[t.y]=MSUF_ClampToSlider(a,tonumber(e[t.y])or 0)end
+
+local function OffsetX(general, config)
+    return tonumber(general[config.x])
+        or (config.fallbackX and tonumber(general[config.fallbackX]))
+        or config.dx
+        or 0
 end
-local function u(t)if not(_G.MSUF_UnitEditModeActive and C_Timer and C_Timer.After)then return end
-local e=r[t]local a=e and _G[e.test]if type(a)~="function"then return end
-a(true,true)_G.MSUF_CastbarPreviewPulseTimers=_G.MSUF_CastbarPreviewPulseTimers or{}local e=_G.MSUF_CastbarPreviewPulseTimers
-if type(e[t])=="table"then e[t].cancelled=true end
-local n={}e[t]=n
-C_Timer.After(8,function()if n.cancelled or e[t]~=n or not _G.MSUF_UnitEditModeActive or d()then return end
-local n=s()if n[(t=="player"and"playerCastbarTestMode")or(t=="target"and"targetCastbarTestMode")or(t=="focus"and"focusCastbarTestMode")or"bossCastbarTestMode"]then return end
-local n=_G.MSUF_EM2 and _G.MSUF_EM2.CastPopup
-if n and n.IsOpen and n:IsOpen()then return end
-e[t]=nil
-a(false,true)end)end
-local function S(e,a,t)local n=_G.MSUF_EM2_SetPreviewNudgeTarget
-if type(n)~="function"then return end
-n({frame=e,IsActive=function()return _G.MSUF_UnitEditModeActive and e.IsShown and e:IsShown()end,Nudge=function(e,r,n)if not _G.MSUF_UnitEditModeActive or d()then return end
-local e=s()if type(_G.MSUF_EM_UndoBeforeChange)=="function"then _G.MSUF_EM_UndoBeforeChange("castbar",a,true)end
-e[t.x]=o(i(e,t)+(r or 0))e[t.y]=o(c(e,t)+(n or 0))if a=="boss"then f(e,t)end
-l(a)end,})end
-local function _(a,t)local t=_G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(t)local e=_G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
-local t=t and a[t]if type(e)=="function"then return e(t)~=nil end
-return t=="unitframe"or t=="essential"or t=="utility"end
-function _G.MSUF_SetupCastbarPreviewEditHandlers(n,a)if not n or n.MSUF_PreviewEditHandlersSetup then return end
-local e=r[a]or r.player
-n.MSUF_PreviewEditHandlersSetup=true
-n:SetClampedToScreen(true)n:SetFrameStrata("DIALOG")n:EnableMouse(true)n:SetScript("OnMouseDown",function(t,n)if _G.MSUF_UnitEditModeActive then S(t,a,e)end
-if n=="RightButton"then
-if _G.MSUF_UnitEditModeActive and not MSUF_EditModeSizing and not d()and type(MSUF_OpenCastbarPositionPopup)=="function"then MSUF_OpenCastbarPositionPopup(a,t)end
-return
+
+local function OffsetY(general, config)
+    return tonumber(general[config.y])
+        or (config.fallbackY and tonumber(general[config.fallbackY]))
+        or config.dy
+        or 0
 end
-if n~="LeftButton"or not _G.MSUF_UnitEditModeActive or d()then return end
-local n=s()if not n.castbarPlayerPreviewEnabled then return end
-t.isDragging,t.dragMoved,t._msufUndoFired=true,false,false
-local r=UIParent:GetEffectiveScale()or 1
-local S,d=GetCursorPosition()t.dragStartCursorX,t.dragStartCursorY=S/r,d/r
-if MSUF_EditModeSizing then
-t.dragMode="SIZE"t.dragStartWidth=tonumber(n[e.w])or tonumber(n.castbarGlobalWidth)or t:GetWidth()or 250
-t.dragStartHeight=tonumber(n[e.h])or tonumber(n.castbarGlobalHeight)or t:GetHeight()or 18
-else
-t.dragMode="MOVE"t.dragStartOffsetX,t.dragStartOffsetY=i(n,e),c(n,e)local e=t:GetEffectiveScale()or 1
-local a,n,o,d=t:GetLeft()or 0,t:GetRight()or 0,t:GetTop()or 0,t:GetBottom()or 0
-t._snapStartCX,t._snapStartCY=(a+n)*0.5*e/r,(o+d)*0.5*e/r
-t._snapHW,t._snapHH=(n-a)*0.5*e/r,(o-d)*0.5*e/r
+
+local function ApplyUnitAndSync(unit)
+    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        _G.MSUF_ApplyCastbarUnitAndSync(unit)
+    else
+        local config = UNIT_CONFIG[unit]
+        local reanchor = config and config.reanchor and _G[config.reanchor]
+
+        if type(reanchor) == "function" then
+            reanchor()
+        end
+
+        if type(MSUF_UpdateCastbarVisuals) == "function" then
+            MSUF_UpdateCastbarVisuals()
+        end
+
+        if unit == "boss" and not InCombat() and type(_G.MSUF_UpdateBossCastbarPreview) == "function" then
+            _G.MSUF_UpdateBossCastbarPreview()
+        end
+    end
+
+    if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then
+        _G.MSUF_PositionCastbarPreviewUnit(unit)
+    end
+
+    if type(MSUF_UpdateCastbarEditInfo) == "function" then
+        MSUF_UpdateCastbarEditInfo(unit)
+    end
+
+    if type(MSUF_SyncCastbarPositionPopup) == "function" then
+        MSUF_SyncCastbarPositionPopup(unit)
+    end
 end
-t:SetScript("OnUpdate",function(t)if not t.isDragging then t:SetScript("OnUpdate",nil);return end
-local n=UIParent:GetEffectiveScale()or 1
-local r,d=GetCursorPosition()local d,i=r/n-(t.dragStartCursorX or r/n),d/n-(t.dragStartCursorY or d/n)if not t.dragMoved and math.abs(d)+math.abs(i)<6 then return end
-if not t.dragMoved then
-t.dragMoved=true
-if type(_G.MSUF_EM_UndoBeforeChange)=="function"then _G.MSUF_EM_UndoBeforeChange("castbar",a,false)end
+
+local function ClampBossOffsets(general, config)
+    if type(MSUF_ClampToSlider) ~= "function" then
+        return
+    end
+
+    local xSlider = _G.MSUF_CastbarBossXOffsetSlider
+    local ySlider = _G.MSUF_CastbarBossYOffsetSlider
+
+    if xSlider then
+        general[config.x] = MSUF_ClampToSlider(xSlider, tonumber(general[config.x]) or 0)
+    end
+
+    if ySlider then
+        general[config.y] = MSUF_ClampToSlider(ySlider, tonumber(general[config.y]) or 0)
+    end
 end
-local n=s()if t.dragMode=="SIZE"then
-if not _(n,a)then n[e.w]=o(math.max(50,(t.dragStartWidth or 250)+d))end
-n[e.h]=o(math.max(8,(t.dragStartHeight or 18)+i))else
-local s,l=d,i
-local r=_G.MSUF_EM2 and _G.MSUF_EM2.Snap
-if r and r.IsEnabled and r.IsEnabled()and r.Apply then
-local a,e=r.Apply((t._snapStartCX or 0)+d,(t._snapStartCY or 0)+i,t._snapHW or 0,t._snapHH or 0,"castbar_"..a)s,l=a-(t._snapStartCX or 0),e-(t._snapStartCY or 0)end
-n[e.x],n[e.y]=o((t.dragStartOffsetX or 0)+s),o((t.dragStartOffsetY or 0)+l)if a=="boss"then f(n,e)end
+
+local function PulsePreview(unit)
+    if not (_G.MSUF_UnitEditModeActive and C_Timer and C_Timer.After) then
+        return
+    end
+
+    local config = UNIT_CONFIG[unit]
+    local setTestMode = config and _G[config.test]
+    if type(setTestMode) ~= "function" then
+        return
+    end
+
+    setTestMode(true, true)
+
+    _G.MSUF_CastbarPreviewPulseTimers = _G.MSUF_CastbarPreviewPulseTimers or {}
+    local timers = _G.MSUF_CastbarPreviewPulseTimers
+
+    if type(timers[unit]) == "table" then
+        timers[unit].cancelled = true
+    end
+
+    local token = {}
+    timers[unit] = token
+
+    C_Timer.After(8, function()
+        if token.cancelled or timers[unit] ~= token or not _G.MSUF_UnitEditModeActive or InCombat() then
+            return
+        end
+
+        local general = GeneralDB()
+        local testModeKey = (unit == "player" and "playerCastbarTestMode")
+            or (unit == "target" and "targetCastbarTestMode")
+            or (unit == "focus" and "focusCastbarTestMode")
+            or "bossCastbarTestMode"
+
+        if general[testModeKey] then
+            return
+        end
+
+        local popup = _G.MSUF_EM2 and _G.MSUF_EM2.CastPopup
+        if popup and popup.IsOpen and popup:IsOpen() then
+            return
+        end
+
+        timers[unit] = nil
+        setTestMode(false, true)
+    end)
 end
-l(a)end)end)n:SetScript("OnMouseUp",function(t,e)if e~="LeftButton"then return end
-local e=t.dragMoved
-if t.isDragging then
-t.isDragging=false
-t:SetScript("OnUpdate",nil)local t=_G.MSUF_EM2 and _G.MSUF_EM2.Snap
-if t and t.HideGuides then t.HideGuides()end
+
+local function RegisterPreviewNudgeTarget(frame, unit, config)
+    local setNudgeTarget = _G.MSUF_EM2_SetPreviewNudgeTarget
+    if type(setNudgeTarget) ~= "function" then
+        return
+    end
+
+    setNudgeTarget({
+        frame = frame,
+        IsActive = function()
+            return _G.MSUF_UnitEditModeActive and frame.IsShown and frame:IsShown()
+        end,
+        Nudge = function(_, deltaX, deltaY)
+            if not _G.MSUF_UnitEditModeActive or InCombat() then
+                return
+            end
+
+            local general = GeneralDB()
+            if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+                _G.MSUF_EM_UndoBeforeChange("castbar", unit, true)
+            end
+
+            general[config.x] = Round(OffsetX(general, config) + (deltaX or 0))
+            general[config.y] = Round(OffsetY(general, config) + (deltaY or 0))
+
+            if unit == "boss" then
+                ClampBossOffsets(general, config)
+            end
+
+            ApplyUnitAndSync(unit)
+        end,
+    })
 end
-u(a)if not e and _G.MSUF_UnitEditModeActive and not d()and type(MSUF_OpenCastbarPositionPopup)=="function"then MSUF_OpenCastbarPositionPopup(a,t)end
-end)end
+
+local function UsesWidthSource(general, unit)
+    local widthSourceKey = _G.MSUF_GetCastbarWidthSourceKey and _G.MSUF_GetCastbarWidthSourceKey(unit)
+    local normalize = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
+    local widthSource = widthSourceKey and general[widthSourceKey]
+
+    if type(normalize) == "function" then
+        return normalize(widthSource) ~= nil
+    end
+
+    return widthSource == "unitframe" or widthSource == "essential" or widthSource == "utility"
+end
+
+function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, unit)
+    if not frame or frame.MSUF_PreviewEditHandlersSetup then
+        return
+    end
+
+    local config = UNIT_CONFIG[unit] or UNIT_CONFIG.player
+
+    frame.MSUF_PreviewEditHandlersSetup = true
+    frame:SetClampedToScreen(true)
+    frame:SetFrameStrata("DIALOG")
+    frame:EnableMouse(true)
+
+    frame:SetScript("OnMouseDown", function(self, button)
+        if _G.MSUF_UnitEditModeActive then
+            RegisterPreviewNudgeTarget(self, unit, config)
+        end
+
+        if button == "RightButton" then
+            if _G.MSUF_UnitEditModeActive
+                and not MSUF_EditModeSizing
+                and not InCombat()
+                and type(MSUF_OpenCastbarPositionPopup) == "function"
+            then
+                MSUF_OpenCastbarPositionPopup(unit, self)
+            end
+            return
+        end
+
+        if button ~= "LeftButton" or not _G.MSUF_UnitEditModeActive or InCombat() then
+            return
+        end
+
+        local general = GeneralDB()
+        if not general.castbarPlayerPreviewEnabled then
+            return
+        end
+
+        self.isDragging = true
+        self.dragMoved = false
+        self._msufUndoFired = false
+
+        local uiScale = UIParent:GetEffectiveScale() or 1
+        local cursorX, cursorY = GetCursorPosition()
+        self.dragStartCursorX = cursorX / uiScale
+        self.dragStartCursorY = cursorY / uiScale
+
+        if MSUF_EditModeSizing then
+            self.dragMode = "SIZE"
+            self.dragStartWidth = tonumber(general[config.w])
+                or tonumber(general.castbarGlobalWidth)
+                or self:GetWidth()
+                or 250
+            self.dragStartHeight = tonumber(general[config.h])
+                or tonumber(general.castbarGlobalHeight)
+                or self:GetHeight()
+                or 18
+        else
+            self.dragMode = "MOVE"
+            self.dragStartOffsetX = OffsetX(general, config)
+            self.dragStartOffsetY = OffsetY(general, config)
+
+            local frameScale = self:GetEffectiveScale() or 1
+            local left = self:GetLeft() or 0
+            local right = self:GetRight() or 0
+            local top = self:GetTop() or 0
+            local bottom = self:GetBottom() or 0
+
+            self._snapStartCX = (left + right) * 0.5 * frameScale / uiScale
+            self._snapStartCY = (top + bottom) * 0.5 * frameScale / uiScale
+            self._snapHW = (right - left) * 0.5 * frameScale / uiScale
+            self._snapHH = (top - bottom) * 0.5 * frameScale / uiScale
+        end
+
+        self:SetScript("OnUpdate", function(dragFrame)
+            if not dragFrame.isDragging then
+                dragFrame:SetScript("OnUpdate", nil)
+                return
+            end
+
+            local scale = UIParent:GetEffectiveScale() or 1
+            local currentCursorX, currentCursorY = GetCursorPosition()
+            local deltaX = currentCursorX / scale - (dragFrame.dragStartCursorX or currentCursorX / scale)
+            local deltaY = currentCursorY / scale - (dragFrame.dragStartCursorY or currentCursorY / scale)
+
+            if not dragFrame.dragMoved and math.abs(deltaX) + math.abs(deltaY) < 6 then
+                return
+            end
+
+            if not dragFrame.dragMoved then
+                dragFrame.dragMoved = true
+
+                if type(_G.MSUF_EM_UndoBeforeChange) == "function" then
+                    _G.MSUF_EM_UndoBeforeChange("castbar", unit, false)
+                end
+            end
+
+            local liveGeneral = GeneralDB()
+            if dragFrame.dragMode == "SIZE" then
+                if not UsesWidthSource(liveGeneral, unit) then
+                    liveGeneral[config.w] = Round(math.max(50, (dragFrame.dragStartWidth or 250) + deltaX))
+                end
+
+                liveGeneral[config.h] = Round(math.max(8, (dragFrame.dragStartHeight or 18) + deltaY))
+            else
+                local snappedDeltaX = deltaX
+                local snappedDeltaY = deltaY
+                local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+
+                if snap and snap.IsEnabled and snap.IsEnabled() and snap.Apply then
+                    local snappedX, snappedY = snap.Apply(
+                        (dragFrame._snapStartCX or 0) + deltaX,
+                        (dragFrame._snapStartCY or 0) + deltaY,
+                        dragFrame._snapHW or 0,
+                        dragFrame._snapHH or 0,
+                        "castbar_" .. unit
+                    )
+
+                    snappedDeltaX = snappedX - (dragFrame._snapStartCX or 0)
+                    snappedDeltaY = snappedY - (dragFrame._snapStartCY or 0)
+                end
+
+                liveGeneral[config.x] = Round((dragFrame.dragStartOffsetX or 0) + snappedDeltaX)
+                liveGeneral[config.y] = Round((dragFrame.dragStartOffsetY or 0) + snappedDeltaY)
+
+                if unit == "boss" then
+                    ClampBossOffsets(liveGeneral, config)
+                end
+            end
+
+            ApplyUnitAndSync(unit)
+        end)
+    end)
+
+    frame:SetScript("OnMouseUp", function(self, button)
+        if button ~= "LeftButton" then
+            return
+        end
+
+        local moved = self.dragMoved
+        if self.isDragging then
+            self.isDragging = false
+            self:SetScript("OnUpdate", nil)
+
+            local snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+            if snap and snap.HideGuides then
+                snap.HideGuides()
+            end
+        end
+
+        PulsePreview(unit)
+
+        if not moved
+            and _G.MSUF_UnitEditModeActive
+            and not InCombat()
+            and type(MSUF_OpenCastbarPositionPopup) == "function"
+        then
+            MSUF_OpenCastbarPositionPopup(unit, self)
+        end
+    end)
+end

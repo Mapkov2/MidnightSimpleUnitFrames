@@ -1,67 +1,234 @@
-local t,n=...n=n or{}local e=n.MSUF_CastbarRegistry local t=n.MSUF_CastbarStyle
-local u=_G.MSUF_CastbarRuntime_PlainNumber or function(t)if t==nil then return nil end
-local e=_G.ToPlain if type(e)=="function"then
-local n=e(t)local n=tonumber(tostring(n))if n~=nil then return n end end
-local e=type(t)if e=="number"or e=="string"then
-return tonumber(tostring(t))end
-return nil end
-n.MSUF_CastbarEngine=n.MSUF_CastbarEngine or{}local t=n.MSUF_CastbarEngine
-local l={}t.VERSION=3
-t._subs=t._subs or{}t._state=t._state or{}local function i(e)if not e then return nil end
-local n=t._subs[e]if not n then
-n={}t._subs[e]=n
-end return n
-end function t:RegisterBar(n,t,r,i)if e and e.Register then e:Register(n,t,r,i)end end
-function t:UnregisterBar(n)if e and e.Unregister then
-e:Unregister(n)end
-end function t:Subscribe(n,t)if not n or type(t)~="function"then return end local n=i(n)n[#n+1]=t end
-function t:Notify(n,e)local n=t._subs and t._subs[n]if not n then return end for t=1,#n do
-local n=n[t]if type(n)=="function"then
-n(e)end
-end end
-function t:ForceRefresh(n)end
-function t:GetState(n)return t._state and t._state[n]end local n=_G.MSUF_EnsureDBLazy or function()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end end
-local function r(e,i)n()local t=(MSUF_DB and MSUF_DB.general)or{}local n=(t.castbarFillDirection=="RTL")and true or false
-if i=="target"and t.castbarOpositeDirectionTarget==true then n=not n
-end local t=(t.castbarUnifiedDirection==true)if e=="CHANNEL"or e=="EMPOWER"then if t then
-return n end
-return not n end
-return n end
-local function a(t,n)if n and n.isNotInterruptible~=nil then
-return(n.isNotInterruptible==true)end
-return false end
-local function o(n)if n~="player"then return false end
-if type(GetUnitEmpowerStageCount)~="function"then return false end local n=GetUnitEmpowerStageCount(n)local n=u(n)if type(n)=="number"and n>0 then
-return true end
-return false end
-function t:BuildState(e,i)if not e then return{active=false}end
-local n=GetTime()if l[e]==n and t._state[e]then
-return t._state[e]end
-l[e]=n local n=t._state[e]if not n then n={}t._state[e]=n end
-n.active=false n.unit=e
-n.castType="NONE"n.spellName=nil
-n.text=nil n.icon=nil
-n.spellId=nil n.startTimeMS=nil
-n.endTimeMS=nil n.durationObj=nil
-n.isNotInterruptible=false n.apiNotInterruptible=nil
-n.apiNotInterruptibleRaw=nil n.reverseFill=nil
-local t,u,s,c,f,p,p,l,d,p=UnitCastingInfo(e)if t then
-local o=o(e)n.castType=o and"EMPOWER"or"CAST"n.spellName=t n.text=u or t
-n.icon=s n.spellId=d
-n.startTimeMS=c n.endTimeMS=f
-n.active=true n.apiNotInterruptible=l
-n.apiNotInterruptibleRaw=l n.isNotInterruptible=a(e,i)if type(UnitCastingDuration)=="function"then n.durationObj=UnitCastingDuration(e)end n.reverseFill=r(n.castType,n.unit)return n end
-local t,s,o,c,d,f,l,u,f=UnitChannelInfo(e)if t then
-n.castType="CHANNEL"n.apiNotInterruptible=l
-n.apiNotInterruptibleRaw=l n.spellName=t
-n.text=s or t n.icon=o
-n.spellId=u n.startTimeMS=c
-n.endTimeMS=d n.active=true
-n.isNotInterruptible=a(e,i)if type(UnitChannelDuration)=="function"then
-n.durationObj=UnitChannelDuration(e)end
-n.reverseFill=r(n.castType,n.unit)return n
-end return n
-end if not _G.MSUF_BuildCastState then
-function _G.MSUF_BuildCastState(e,n)return t:BuildState(e,n)end end
-if not _G.MSUF_GetCastbarEngine then _G.MSUF_GetCastbarEngine=function()return t end
+local _, ns = ...
+ns = ns or {}
+
+local Registry = ns.MSUF_CastbarRegistry
+
+local PlainNumber = _G.MSUF_CastbarRuntime_PlainNumber or function(value)
+    if value == nil then
+        return nil
+    end
+
+    local toPlain = _G.ToPlain
+    if type(toPlain) == "function" then
+        local plain = toPlain(value)
+        plain = tonumber(tostring(plain))
+        if plain ~= nil then
+            return plain
+        end
+    end
+
+    local valueType = type(value)
+    if valueType == "number" or valueType == "string" then
+        return tonumber(tostring(value))
+    end
+
+    return nil
+end
+
+ns.MSUF_CastbarEngine = ns.MSUF_CastbarEngine or {}
+
+local Engine = ns.MSUF_CastbarEngine
+local buildStateCacheTime = {}
+
+Engine.VERSION = 3
+Engine._subs = Engine._subs or {}
+Engine._state = Engine._state or {}
+
+local function SubscriptionList(key)
+    if not key then
+        return nil
+    end
+
+    local subscriptions = Engine._subs[key]
+    if not subscriptions then
+        subscriptions = {}
+        Engine._subs[key] = subscriptions
+    end
+
+    return subscriptions
+end
+
+function Engine:RegisterBar(key, unit, frame, meta)
+    if Registry and Registry.Register then
+        Registry:Register(key, unit, frame, meta)
+    end
+end
+
+function Engine:UnregisterBar(key)
+    if Registry and Registry.Unregister then
+        Registry:Unregister(key)
+    end
+end
+
+function Engine:Subscribe(key, callback)
+    if not key or type(callback) ~= "function" then
+        return
+    end
+
+    local subscriptions = SubscriptionList(key)
+    subscriptions[#subscriptions + 1] = callback
+end
+
+function Engine:Notify(key, payload)
+    local subscriptions = Engine._subs and Engine._subs[key]
+    if not subscriptions then
+        return
+    end
+
+    for index = 1, #subscriptions do
+        local callback = subscriptions[index]
+        if type(callback) == "function" then
+            callback(payload)
+        end
+    end
+end
+
+function Engine:ForceRefresh()
+end
+
+function Engine:GetState(unit)
+    return Engine._state and Engine._state[unit]
+end
+
+local EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
+    if not MSUF_DB and type(EnsureDB) == "function" then
+        EnsureDB()
+    end
+end
+
+local function ReverseFillForCastType(castType, unit)
+    EnsureDBLazy()
+
+    local general = (MSUF_DB and MSUF_DB.general) or {}
+    local reverseFill = (general.castbarFillDirection == "RTL") and true or false
+
+    if unit == "target" and general.castbarOpositeDirectionTarget == true then
+        reverseFill = not reverseFill
+    end
+
+    local unifiedDirection = general.castbarUnifiedDirection == true
+    if castType == "CHANNEL" or castType == "EMPOWER" then
+        if unifiedDirection then
+            return reverseFill
+        end
+
+        return not reverseFill
+    end
+
+    return reverseFill
+end
+
+local function PreserveInterruptState(_, previousState)
+    if previousState and previousState.isNotInterruptible ~= nil then
+        return previousState.isNotInterruptible == true
+    end
+
+    return false
+end
+
+local function UnitIsEmpowering(unit)
+    if unit ~= "player" then
+        return false
+    end
+
+    if type(GetUnitEmpowerStageCount) ~= "function" then
+        return false
+    end
+
+    local stageCount = PlainNumber(GetUnitEmpowerStageCount(unit))
+    return type(stageCount) == "number" and stageCount > 0
+end
+
+function Engine:BuildState(unit, previousState)
+    if not unit then
+        return { active = false }
+    end
+
+    local now = GetTime()
+    if buildStateCacheTime[unit] == now and Engine._state[unit] then
+        return Engine._state[unit]
+    end
+
+    buildStateCacheTime[unit] = now
+
+    local state = Engine._state[unit]
+    if not state then
+        state = {}
+        Engine._state[unit] = state
+    end
+
+    state.active = false
+    state.unit = unit
+    state.castType = "NONE"
+    state.spellName = nil
+    state.text = nil
+    state.icon = nil
+    state.spellId = nil
+    state.startTimeMS = nil
+    state.endTimeMS = nil
+    state.durationObj = nil
+    state.isNotInterruptible = false
+    state.apiNotInterruptible = nil
+    state.apiNotInterruptibleRaw = nil
+    state.reverseFill = nil
+
+    local name, text, icon, startTimeMS, endTimeMS, _, _, apiNotInterruptible, spellId = UnitCastingInfo(unit)
+    if name then
+        local isEmpower = UnitIsEmpowering(unit)
+
+        state.castType = isEmpower and "EMPOWER" or "CAST"
+        state.spellName = name
+        state.text = text or name
+        state.icon = icon
+        state.spellId = spellId
+        state.startTimeMS = startTimeMS
+        state.endTimeMS = endTimeMS
+        state.active = true
+        state.apiNotInterruptible = apiNotInterruptible
+        state.apiNotInterruptibleRaw = apiNotInterruptible
+        state.isNotInterruptible = PreserveInterruptState(unit, previousState)
+
+        if type(UnitCastingDuration) == "function" then
+            state.durationObj = UnitCastingDuration(unit)
+        end
+
+        state.reverseFill = ReverseFillForCastType(state.castType, state.unit)
+        return state
+    end
+
+    name, text, icon, startTimeMS, endTimeMS, _, apiNotInterruptible, spellId = UnitChannelInfo(unit)
+    if name then
+        state.castType = "CHANNEL"
+        state.apiNotInterruptible = apiNotInterruptible
+        state.apiNotInterruptibleRaw = apiNotInterruptible
+        state.spellName = name
+        state.text = text or name
+        state.icon = icon
+        state.spellId = spellId
+        state.startTimeMS = startTimeMS
+        state.endTimeMS = endTimeMS
+        state.active = true
+        state.isNotInterruptible = PreserveInterruptState(unit, previousState)
+
+        if type(UnitChannelDuration) == "function" then
+            state.durationObj = UnitChannelDuration(unit)
+        end
+
+        state.reverseFill = ReverseFillForCastType(state.castType, state.unit)
+        return state
+    end
+
+    return state
+end
+
+if not _G.MSUF_BuildCastState then
+    function _G.MSUF_BuildCastState(unit, previousState)
+        return Engine:BuildState(unit, previousState)
+    end
+end
+
+if not _G.MSUF_GetCastbarEngine then
+    _G.MSUF_GetCastbarEngine = function()
+        return Engine
+    end
 end
