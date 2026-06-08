@@ -229,6 +229,12 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshTextures")
     MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    MSUF_ProfileIO_CallGlobal("MSUF_Castbars_OnSettingsChanged", reason)
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorPlayerCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorTargetCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorFocusCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_ReanchorBossCastBar")
+    MSUF_ProfileIO_CallGlobal("MSUF_UpdateCastbarVisuals")
     MSUF_ProfileIO_RepairUUFRuntimeFrames(reason)
 end
 --- Compact codec (backward compatible)
@@ -1781,6 +1787,85 @@ local function MSUF_ProfileIO_UUFLayout(layout, fallbackAnchor, fallbackX, fallb
         tonumber(layout[4]) or fallbackY or 0
 end
 
+local MSUF_PROFILEIO_RESTING_SYMBOLS = {
+    DEFAULT = "DEFAULT",
+    RESTING0 = "rested_zzz_diag",
+    RESTING1 = "rested_zzz_compact",
+    RESTING2 = "rested_sleep_zzzz",
+    RESTING3 = "rested_sleep_zzzz",
+    RESTING4 = "rested_moonzzz",
+    RESTING5 = "rested_zzz_diag",
+    RESTING6 = "DEFAULT",
+    RESTING7 = "DEFAULT",
+    RESTING8 = "rested_zzz_stack",
+}
+
+local MSUF_PROFILEIO_COMBAT_SYMBOLS = {
+    DEFAULT = "DEFAULT",
+    COMBAT0 = "weapon_swords_crossed",
+    COMBAT1 = "weapon_swords_crossed",
+    COMBAT2 = "weapon_swords_crossed",
+    COMBAT3 = "weapon_fist_crossed",
+    COMBAT4 = "weapon_fist_crossed",
+    COMBAT5 = "DEFAULT",
+    COMBAT6 = "DEFAULT",
+    COMBAT7 = "DEFAULT",
+    COMBAT8 = "weapon_swords_crossed",
+}
+
+local MSUF_PROFILEIO_VALID_STATUS_SYMBOLS = {
+    DEFAULT = true,
+    rested_moonzzz = true,
+    rested_moonzzzz = true,
+    rested_sleep_zzzz = true,
+    rested_zzz_compact = true,
+    rested_zzz_diag = true,
+    rested_zzz_stack = true,
+    weapon_axes_crossed = true,
+    weapon_bows_crossed = true,
+    weapon_crossbows_crossed = true,
+    weapon_daggers_crossed = true,
+    weapon_fishing_poles_crossed = true,
+    weapon_fist_crossed = true,
+    weapon_guns_crossed = true,
+    weapon_maces_crossed = true,
+    weapon_polearms_crossed = true,
+    weapon_shuriken = true,
+    weapon_staves_crossed = true,
+    weapon_swords_crossed = true,
+    weapon_thrown_crossed = true,
+    weapon_wands_crossed = true,
+    weapon_warglaives_crossed = true,
+}
+
+local function MSUF_ProfileIO_UUFStatusTextureKey(texture)
+    if type(texture) ~= "string" or texture == "" then return nil end
+    local normalized = texture:gsub("/", "\\")
+    local file = normalized:match("([^\\]+)$") or normalized
+    file = file:gsub("%.[A-Za-z0-9]+$", "")
+    local key = file:upper()
+    if key == "DEFAULT" or key:match("^RESTING%d+$") or key:match("^COMBAT%d+$") then
+        return key
+    end
+    local upper = normalized:upper()
+    return upper:match("RESTING%d+") or upper:match("COMBAT%d+") or nil
+end
+
+local function MSUF_ProfileIO_MapUUFStatusSymbol(kind, texture)
+    if type(texture) ~= "string" or texture == "" then return nil end
+    if MSUF_PROFILEIO_VALID_STATUS_SYMBOLS[texture] then
+        return texture
+    end
+
+    local key = MSUF_ProfileIO_UUFStatusTextureKey(texture)
+    if kind == "resting" then
+        return (key and MSUF_PROFILEIO_RESTING_SYMBOLS[key]) or "DEFAULT"
+    elseif kind == "combat" then
+        return (key and MSUF_PROFILEIO_COMBAT_SYMBOLS[key]) or "DEFAULT"
+    end
+    return nil
+end
+
 local function MSUF_ProfileIO_ApplyUUFStatus(dst, src, map)
     if type(dst) ~= "table" or type(src) ~= "table" or type(map) ~= "table" then return end
     dst[map.enabled] = src.Enabled ~= false
@@ -1790,7 +1875,10 @@ local function MSUF_ProfileIO_ApplyUUFStatus(dst, src, map)
     dst[map.x] = x
     dst[map.y] = y
     if map.symbol and src.Texture then
-        dst[map.symbol] = src.Texture
+        local symbol = MSUF_ProfileIO_MapUUFStatusSymbol(map.symbolKind, src.Texture)
+        if symbol then
+            dst[map.symbol] = symbol
+        end
     end
 end
 
@@ -2228,7 +2316,9 @@ local function MSUF_ProfileIO_ConvertUUFUnit(unitKey, src, outProfile)
         end
     end
 
-    local castbar = type(src.CastBar) == "table" and src.CastBar or {}
+    local castbar = type(src.CastBar) == "table" and src.CastBar
+        or type(src.Castbar) == "table" and src.Castbar
+        or {}
     if next(castbar) ~= nil then
         dst.castbarEnabled = castbar.Enabled ~= false
         dst.castbarWidth = tonumber(castbar.Width) or dst.castbarWidth
@@ -2254,8 +2344,8 @@ local function MSUF_ProfileIO_ConvertUUFUnit(unitKey, src, outProfile)
     local indicators = type(src.Indicators) == "table" and src.Indicators or {}
     MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.RaidTargetMarker, { enabled = "showRaidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerOffsetX", y = "raidMarkerOffsetY", fallbackAnchor = "TOPLEFT" })
     MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.LeaderAssistantIndicator, { enabled = "showLeaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconOffsetX", y = "leaderIconOffsetY", fallbackAnchor = "TOPLEFT" })
-    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Resting, { enabled = "showRestingIndicator", size = "restedStateIndicatorSize", anchor = "restedStateIndicatorAnchor", x = "restedStateIndicatorOffsetX", y = "restedStateIndicatorOffsetY", fallbackAnchor = "TOPLEFT", symbol = "restedStateIndicatorSymbol" })
-    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Combat, { enabled = "showCombatStateIndicator", size = "combatStateIndicatorSize", anchor = "combatStateIndicatorAnchor", x = "combatStateIndicatorOffsetX", y = "combatStateIndicatorOffsetY", fallbackAnchor = "TOPLEFT", symbol = "combatStateIndicatorSymbol" })
+    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Resting, { enabled = "showRestingIndicator", size = "restedStateIndicatorSize", anchor = "restedStateIndicatorAnchor", x = "restedStateIndicatorOffsetX", y = "restedStateIndicatorOffsetY", fallbackAnchor = "TOPLEFT", symbol = "restedStateIndicatorSymbol", symbolKind = "resting" })
+    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Combat, { enabled = "showCombatStateIndicator", size = "combatStateIndicatorSize", anchor = "combatStateIndicatorAnchor", x = "combatStateIndicatorOffsetX", y = "combatStateIndicatorOffsetY", fallbackAnchor = "TOPLEFT", symbol = "combatStateIndicatorSymbol", symbolKind = "combat" })
     MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Resurrection, { enabled = "showIncomingResIndicator", size = "incomingResIndicatorSize", anchor = "incomingResIndicatorAnchor", x = "incomingResIndicatorOffsetX", y = "incomingResIndicatorOffsetY", fallbackAnchor = "TOPRIGHT" })
 end
 
@@ -2286,16 +2376,27 @@ local function MSUF_ProfileIO_CopyUUFGeneral(src, outProfile)
         g.fontKey = fonts.Font or g.fontKey
         local flag = type(fonts.FontFlag) == "string" and fonts.FontFlag:upper() or nil
         if flag then
-            g.noOutline = flag:find("NONE", 1, true) ~= nil
-            g.boldText = flag:find("THICK", 1, true) ~= nil
+            local compact = flag:gsub("[%s,_%-]", "")
+            local hasOutline = compact:find("OUTLINE", 1, true) ~= nil
+            local hasThick = compact:find("THICKOUTLINE", 1, true) ~= nil
+            g.noOutline = compact == "" or compact == "NONE" or not hasOutline
+            g.boldText = hasThick
             g.fontMonochrome = flag:find("MONOCHROME", 1, true) ~= nil
         end
         local shadow = type(fonts.Shadow) == "table" and fonts.Shadow or nil
         if shadow then
             g.textBackdrop = shadow.Enabled == true
-            local sr, sg, sb, sa = MSUF_ProfileIO_Color(shadow.Colour, nil, nil, nil, nil)
-            if sr and sg and sb then
-                g.fontShadowColor = { sr, sg, sb, sa or 1 }
+            if g.textBackdrop then
+                local _, _, _, sa = MSUF_ProfileIO_Color(shadow.Colour, nil, nil, nil, nil)
+                local sx = math.abs(tonumber(shadow.XPos) or 1)
+                local sy = math.abs(tonumber(shadow.YPos) or -1)
+                if sx >= 2 or sy >= 2 then
+                    g.fontShadowStrength = "DEEP"
+                elseif sa and sa < 0.75 then
+                    g.fontShadowStrength = "SOFT"
+                else
+                    g.fontShadowStrength = "NORMAL"
+                end
             end
         end
     end
@@ -2469,7 +2570,7 @@ local function MSUF_ProfileIO_ConvertUUFProfile(profile, baseProfile)
         end
     end
 
-    local castbar = units.player and units.player.CastBar
+    local castbar = units.player and (units.player.CastBar or units.player.Castbar)
     if type(castbar) == "table" then
         local r, gc, b = MSUF_ProfileIO_Color(castbar.Foreground, nil, nil, nil, nil)
         if r and gc and b then
@@ -2486,7 +2587,6 @@ local function MSUF_ProfileIO_ConvertUUFProfile(profile, baseProfile)
             g.castbarNonInterruptibleCustomR, g.castbarNonInterruptibleCustomG, g.castbarNonInterruptibleCustomB = nr, ng, nb
         end
     end
-    out.general._uufImportConverted = true
     return out
 end
 local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
