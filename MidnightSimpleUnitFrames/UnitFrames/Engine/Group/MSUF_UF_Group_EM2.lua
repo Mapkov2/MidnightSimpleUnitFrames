@@ -49,6 +49,7 @@ local _gfButton
 local DRAG_WIRE_VERSION = 2
 local _childScratch = {}
 local _childScratchCount = 0
+local _syncMoversSoonPending = {}
 
 local function GF()
     return MSUF and MSUF.GF
@@ -551,7 +552,12 @@ end
 
 local function SyncMoversSoon(delay)
     if not C_Timer then return end
-    C_Timer.After(delay or 0, function()
+    delay = tonumber(delay) or 0
+    local bucket = delay <= 0 and "now" or (delay <= 0.06 and "settle" or "late")
+    if _syncMoversSoonPending[bucket] then return end
+    _syncMoversSoonPending[bucket] = true
+    C_Timer.After(delay, function()
+        _syncMoversSoonPending[bucket] = nil
         if not _em2Active then return end
         if ConfigLocked() then return end
         SyncAllContainers()
@@ -700,12 +706,8 @@ local function ShowPreviewOnly()
     for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
         if _containers[kind] then WireDragFrame(_containers[kind], kind, "group-container") end
     end
-    for _, kind in ipairs({ "party", "raid", "mythicraid" }) do
-        if nativeAllowed and gf.RefreshPreviewLayout and gf._previewActive and gf._previewActive[kind] then
-            gf.RefreshPreviewLayout(kind)
-        end
-    end
-    SyncAllContainers()
+    -- GF.ShowPreview already applies the preview layout and dummy data. A
+    -- second RefreshPreviewLayout here repeats that full per-frame pass.
     SyncMoversSoon(0)
     SyncMoversSoon(0.05)
 end

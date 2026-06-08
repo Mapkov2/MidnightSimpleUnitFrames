@@ -402,7 +402,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
         frame._msufPowerTextColorInitialized = true
         frame._msufPowerTextColorType = frame._msufTextPowerType
         frame._msufPowerTextColorToken = frame._msufTextPowerToken
-    elseif rt.powerColorByType ~= true
+    elseif rt.powerColorByType == false
         and (event == "UNIT_DISPLAYPOWER"
             or event == "MSUF_APPLY"
             or event == "MSUF_FORCE_UPDATE"

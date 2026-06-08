@@ -38,6 +38,66 @@ local function LayoutText(fs, point, relPoint, x, y, justify, relativeTo)
     end
 end
 
+local VALID_TEXT_POINTS = {
+    TOPLEFT = true, TOP = true, TOPRIGHT = true,
+    LEFT = true, CENTER = true, RIGHT = true,
+    BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+}
+
+local function DirectTextPoint(value, fallback)
+    value = type(value) == "string" and value:upper() or nil
+    if value == "NAMELEFT" then
+        return "LEFT"
+    elseif value == "NAMERIGHT" then
+        return "RIGHT"
+    end
+    if value and VALID_TEXT_POINTS[value] then
+        return value
+    end
+    return fallback or "CENTER"
+end
+
+local function DirectJustify(point, fallback)
+    point = tostring(point or ""):upper()
+    if point:find("LEFT", 1, true) then
+        return "LEFT"
+    elseif point:find("RIGHT", 1, true) then
+        return "RIGHT"
+    elseif fallback then
+        return fallback
+    end
+    return "CENTER"
+end
+
+local function LayoutDirectText(fs, text, prefix, fallbackPoint, fallbackRelPoint, fallbackX, fallbackY, fallbackJustify, relativeTo)
+    local point = DirectTextPoint(text and text[prefix .. "Point"], fallbackPoint)
+    local relPoint = DirectTextPoint(text and text[prefix .. "RelativePoint"], fallbackRelPoint or point)
+    local x = tonumber(text and text[prefix .. "X"])
+    local y = tonumber(text and text[prefix .. "Y"])
+    if x == nil then x = fallbackX or 0 end
+    if y == nil then y = fallbackY or 0 end
+    LayoutText(fs, point, relPoint, x, y, DirectJustify(point, fallbackJustify), relativeTo)
+end
+
+local function ApplyTextColor(fs, color)
+    if not (fs and type(color) == "table") then
+        return
+    end
+    local r = tonumber(color.r or color[1])
+    local g = tonumber(color.g or color[2])
+    local b = tonumber(color.b or color[3])
+    local a = color.a
+    if a == nil then a = color[4] end
+    a = tonumber(a) or 1
+    if r == nil or g == nil or b == nil then
+        return
+    end
+    if fs._msufTextR ~= r or fs._msufTextG ~= g or fs._msufTextB ~= b or fs._msufTextA ~= a then
+        fs:SetTextColor(r, g, b, a)
+        fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = r, g, b, a
+    end
+end
+
 local function LayoutTextSpan(fs, relativeTo, leftX, rightX, y, justify)
     if not (fs and relativeTo) then
         return
@@ -577,6 +637,15 @@ end
 local function TextApplySignature(spec, text)
     local power = spec and spec.power or EMPTY_EVENTS
     local inline = text and text.inlineToT or EMPTY_EVENTS
+    local function ColorStamp(color)
+        if type(color) ~= "table" then
+            return ""
+        end
+        return tostring(color.r or color[1]) .. ":"
+            .. tostring(color.g or color[2]) .. ":"
+            .. tostring(color.b or color[3]) .. ":"
+            .. tostring(color.a or color[4] or 1)
+    end
     return concat({
         tostring(spec and spec.key),
         tostring(spec and spec.scope),
@@ -619,6 +688,13 @@ local function TextApplySignature(spec, text)
         tostring(text and text.nameShortenMax),
         tostring(text and text.nameShortenWidth),
         tostring(text and text.nameLeftWidth),
+        ColorStamp(text and text.nameColor),
+        tostring(text and text.directLayout),
+        tostring(text and text.directNamePoint),
+        tostring(text and text.directNameRelativePoint),
+        tostring(text and text.directNameX),
+        tostring(text and text.directNameY),
+        ColorStamp(text and text.directNameColor),
         tostring(text and text.healthLayer),
         tostring(text and text.healthLeft),
         tostring(text and text.healthCenter),
@@ -632,6 +708,21 @@ local function TextApplySignature(spec, text)
         tostring(text and text.healthCenterY),
         tostring(text and text.healthRightX),
         tostring(text and text.healthRightY),
+        tostring(text and text.directHealthLeftPoint),
+        tostring(text and text.directHealthLeftRelativePoint),
+        tostring(text and text.directHealthLeftX),
+        tostring(text and text.directHealthLeftY),
+        ColorStamp(text and text.directHealthLeftColor),
+        tostring(text and text.directHealthCenterPoint),
+        tostring(text and text.directHealthCenterRelativePoint),
+        tostring(text and text.directHealthCenterX),
+        tostring(text and text.directHealthCenterY),
+        ColorStamp(text and text.directHealthCenterColor),
+        tostring(text and text.directHealthRightPoint),
+        tostring(text and text.directHealthRightRelativePoint),
+        tostring(text and text.directHealthRightX),
+        tostring(text and text.directHealthRightY),
+        ColorStamp(text and text.directHealthRightColor),
         tostring(text and text.powerLayer),
         tostring(text and text.powerLeft),
         tostring(text and text.powerCenter),
@@ -645,6 +736,21 @@ local function TextApplySignature(spec, text)
         tostring(text and text.powerCenterY),
         tostring(text and text.powerRightX),
         tostring(text and text.powerRightY),
+        tostring(text and text.directPowerLeftPoint),
+        tostring(text and text.directPowerLeftRelativePoint),
+        tostring(text and text.directPowerLeftX),
+        tostring(text and text.directPowerLeftY),
+        ColorStamp(text and text.directPowerLeftColor),
+        tostring(text and text.directPowerCenterPoint),
+        tostring(text and text.directPowerCenterRelativePoint),
+        tostring(text and text.directPowerCenterX),
+        tostring(text and text.directPowerCenterY),
+        ColorStamp(text and text.directPowerCenterColor),
+        tostring(text and text.directPowerRightPoint),
+        tostring(text and text.directPowerRightRelativePoint),
+        tostring(text and text.directPowerRightX),
+        tostring(text and text.directPowerRightY),
+        ColorStamp(text and text.directPowerRightColor),
         tostring(text and text.shortNumbers),
         tostring(text and text.hidePercentSymbol),
         tostring(text and text.hideNameOnDeadOffline),
@@ -717,6 +823,7 @@ function Text.Apply(frame, spec)
     local power = spec and spec.power or {}
     local detachedPowerText = power.detached == true and power.textOnDetached == true and frame.targetPowerBar
     local barAnchoredText = text.anchorToBars == true
+    local directText = text.directLayout == true
     if detachedPowerText then
         local detachedTextLayer = max(tonumber(text.powerLayer) or 2, (tonumber(power.detachedLevel) or 6) + 1)
         local overlay = EnsureTextOverlay(frame, "MSUFPowerTextLayer", detachedTextLayer, 2)
@@ -725,12 +832,18 @@ function Text.Apply(frame, spec)
     end
 
     RestoreNameParent(frame)
-    if barAnchoredText then
+    if directText then
+        LayoutDirectText(frame.nameText, text, "directName", "CENTER", "CENTER", 0, 0, "CENTER")
+    elseif barAnchoredText then
         LayoutBarAnchoredName(frame, text)
     else
         LayoutName(frame.nameText, spec, text)
     end
-    ApplyNameClip(frame, spec, text)
+    if directText then
+        ClearNameClip(frame)
+    else
+        ApplyNameClip(frame, spec, text)
+    end
     if inlineEnabled then
         frame._msufInlineAnchorDynamic = frame.nameText and frame.nameText._msufJustifyH == "LEFT" and text.nameShorten ~= true and true or nil
         if frame._msufInlineAnchorDynamic then
@@ -749,7 +862,14 @@ function Text.Apply(frame, spec)
         frame._msufInlineAnchorDynamic = nil
         HideDots(frame._msufInlineDotsFS)
     end
-    if barAnchoredText then
+    if directText then
+        LayoutDirectText(frame.hpTextLeft, text, "directHealthLeft", "LEFT", "LEFT", 4, 0, "LEFT")
+        LayoutDirectText(frame.hpTextCenter, text, "directHealthCenter", "CENTER", "CENTER", 0, 0, "CENTER")
+        LayoutDirectText(frame.hpTextRight, text, "directHealthRight", "RIGHT", "RIGHT", -4, 0, "RIGHT")
+        LayoutDirectText(frame.powerTextLeft, text, "directPowerLeft", "LEFT", "LEFT", 4, 0, "LEFT")
+        LayoutDirectText(frame.powerTextCenter, text, "directPowerCenter", "CENTER", "CENTER", 0, 0, "CENTER")
+        LayoutDirectText(frame.powerTextRight, text, "directPowerRight", "RIGHT", "RIGHT", -4, 0, "RIGHT")
+    elseif barAnchoredText then
         local health = BarTextHealthAnchor(frame)
         local powerAnchor = BarTextPowerAnchor(frame, power)
         LayoutText(frame.hpTextLeft, "LEFT", "LEFT", 3 + (text.healthLeftX or 0), text.healthLeftY or 0, "LEFT", health)
@@ -779,6 +899,16 @@ function Text.Apply(frame, spec)
     SetTextLayer(frame.powerTextLeft, text.powerLayer)
     SetTextLayer(frame.powerTextCenter, text.powerLayer)
     SetTextLayer(frame.powerTextRight, text.powerLayer)
+    if directText then
+        ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
+        ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
+        ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)
+        if text.powerColorByType ~= true then
+            ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)
+            ApplyTextColor(frame.powerTextCenter, text.directPowerCenterColor)
+            ApplyTextColor(frame.powerTextRight, text.directPowerRightColor)
+        end
+    end
 
     if frame.nameText then
         frame.nameText._msufShown = nil

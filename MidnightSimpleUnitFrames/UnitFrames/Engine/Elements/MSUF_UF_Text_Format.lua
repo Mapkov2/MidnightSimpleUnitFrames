@@ -908,7 +908,11 @@ local function CompileTextRuntime(frame, spec, text)
     rt.powerNeedsPercent = needsPercent
     rt.powerNeedsCurrent = needsCurrent
     rt.powerNeedsMax = needsMax
-    rt.powerColorByType = text.powerColorByType == true
+    if text.directLayout == true and text.powerColorByType ~= true then
+        rt.powerColorByType = "STATIC"
+    else
+        rt.powerColorByType = text.powerColorByType == true
+    end
     rt.powerPlain = frame.unit == "player"
     rt._lastPowerTextPower = nil
     rt._lastPowerTextMax = nil

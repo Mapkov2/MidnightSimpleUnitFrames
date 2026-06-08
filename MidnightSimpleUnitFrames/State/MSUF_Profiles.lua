@@ -55,7 +55,114 @@ local function MSUF_ProfileIO_RunApplyAllSettings()
     end
     return false
 end
-local function MSUF_ProfileIO_CallGlobal(name, ...)
+local function MSUF_ProfileIO_RunDisableBlizzardFrames()
+    local UF = MSUF and MSUF.UF
+    if UF and type(UF.DisableBlizzardFrames) == "function" then
+        UF.DisableBlizzardFrames()
+        return true
+    end
+    return false
+end
+local function MSUF_ProfileIO_SafeMSUFScale()
+    local g = type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table" and MSUF_DB.general or nil
+    local scale = tonumber(g and g.msufUiScale) or 1
+    if scale < 0.25 then
+        scale = 1
+    elseif scale > 1.5 then
+        scale = 1.5
+    end
+    return scale
+end
+local function MSUF_ProfileIO_RunFrameScaleApply()
+    local scale = MSUF_ProfileIO_SafeMSUFScale()
+    if type(_G.MSUF_ApplyMsufScale) == "function" then
+        return pcall(_G.MSUF_ApplyMsufScale, scale)
+    end
+    local UF = MSUF and MSUF.UF
+    local frames = UF and UF.frames
+    if type(frames) == "table" then
+        for _, frame in pairs(frames) do
+            if frame and type(frame.SetScale) == "function" then
+                pcall(frame.SetScale, frame, scale)
+            end
+        end
+        return true
+    end
+    return false
+end
+local MSUF_ProfileIO_CallGlobal
+local function MSUF_ProfileIO_IsUUFRuntimeReason(reason)
+    return type(reason) == "string" and reason:find("UUF", 1, true) ~= nil
+end
+local function MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
+    local bucketFn = _G.MSUF_GetUnitFrameScreenCacheBucket
+    local keyFn = _G.MSUF_GetUnitFrameScreenCacheKey
+    if type(bucketFn) ~= "function" or type(keyFn) ~= "function" then
+        return false
+    end
+    local bucket = bucketFn()
+    if type(bucket) ~= "table" then
+        return false
+    end
+    local units = { "player", "target", "targettarget", "focus", "focustarget", "pet" }
+    for i = 1, #units do
+        local unit = units[i]
+        local id = keyFn(unit, unit)
+        if id then bucket[id] = nil end
+    end
+    for i = 1, 5 do
+        local unit = "boss" .. i
+        local id = keyFn("boss", unit)
+        if id then bucket[id] = nil end
+    end
+    return true
+end
+local function MSUF_ProfileIO_RepairUUFRuntimeFrames(reason)
+    if not MSUF_ProfileIO_IsUUFRuntimeReason(reason) then
+        return false
+    end
+    local UF = MSUF and MSUF.UF
+    local frames = UF and UF.frames
+    if type(frames) ~= "table" then
+        return false
+    end
+
+    local scale = MSUF_ProfileIO_SafeMSUFScale()
+    local repaired = false
+    for unit, frame in pairs(frames) do
+        if frame then
+            local key = (UF.ConfigKeyForUnit and UF.ConfigKeyForUnit(unit)) or unit
+            local conf = type(MSUF_DB) == "table" and type(MSUF_DB[key]) == "table" and MSUF_DB[key] or nil
+            if conf and conf.enabled ~= false and conf.useBlizzardFrame ~= true then
+                frame._msufLoadedFromScreenCache = nil
+                frame._msufHardLockedToUIParent = nil
+                frame._msufRangeMul = 1
+                frame._msufRangeMulApplied = 1
+                frame._msufAlphaLastFrame = nil
+                frame._msufAlphaLastHP = nil
+                frame._msufAlphaLastFG = nil
+                if type(frame.SetScale) == "function" then pcall(frame.SetScale, frame, scale) end
+                if type(frame.SetAlpha) == "function" then pcall(frame.SetAlpha, frame, 1) end
+                local applyRange = (UF and UF.ApplyRangeModifier) or _G.MSUF_UF_ApplyRangeModifier
+                if type(applyRange) == "function" then pcall(applyRange, frame, 1, true) end
+                if unit == "player" and type(frame.Show) == "function" then pcall(frame.Show, frame) end
+                repaired = true
+            end
+        end
+    end
+    if MSUF_ProfileIO_CallGlobal then
+        MSUF_ProfileIO_CallGlobal("MSUF_RefreshAllUnitVisibilityDrivers")
+        MSUF_ProfileIO_CallGlobal("MSUF_RefreshAllUnitAlphas")
+        MSUF_ProfileIO_CallGlobal("MSUF_EM2_ReforcePreviewFrames")
+    end
+    local em2 = _G.MSUF_EM2
+    local movers = em2 and em2.Movers
+    if movers and type(movers.SyncAll) == "function" then
+        pcall(movers.SyncAll)
+    end
+    return repaired
+end
+MSUF_ProfileIO_CallGlobal = function(name, ...)
     local fn = _G[name]
     if type(fn) ~= "function" then
         return false
@@ -96,6 +203,8 @@ local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
     if applyAll == true then
         MSUF_ProfileIO_RunApplyAllSettings()
     end
+    MSUF_ProfileIO_RunDisableBlizzardFrames()
+    MSUF_ProfileIO_RunFrameScaleApply()
     return true
 end
 MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
@@ -106,6 +215,8 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     if applyAll == true then
         MSUF_ProfileIO_RunApplyAllSettings()
     end
+    MSUF_ProfileIO_RunDisableBlizzardFrames()
+    MSUF_ProfileIO_RunFrameScaleApply()
 
     local nsGlobal = _G.MSUF_NS
     local core = nsGlobal and nsGlobal.MSUF_UnitframeCore
@@ -118,6 +229,7 @@ MSUF_ProfileIO_PostProfileRuntimeApply = function(reason, applyAll)
     MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshTextures")
     MSUF_ProfileIO_CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
     MSUF_ProfileIO_CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    MSUF_ProfileIO_RepairUUFRuntimeFrames(reason)
 end
 --- Compact codec (backward compatible)
 --- New export format (preferred):
@@ -1289,10 +1401,21 @@ local function MSUF_SnapshotForKind(kind)
         payload = payload,
     }
 end
+local function MSUF_ProfileIO_IsUUFConvertedPayload(payload)
+    return type(payload) == "table"
+        and type(payload._uufImport) == "table"
+        and payload._uufImport.source == "UnhaltedUnitFrames"
+end
+local function MSUF_ProfileIO_ShouldPersistRootProfileKey(key)
+    return key ~= "_uufImport"
+end
 --- After a profile import we must explicitly refresh Auras/Auras3 so the live UI matches without /reload.
 --- Keep this scoped (Auras only) to avoid unintended regressions in other modules.
 local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload)
     if not payload then  return end
+    if MSUF_ProfileIO_IsUUFConvertedPayload(payload) and payload._uufImport.aurasApplied ~= true then
+        return
+    end
     local touched = false
     if type(payload.auras3) == "table" then
         touched = true
@@ -1321,6 +1444,9 @@ local function MSUF_ProfileIO_PostImportApply_Auras(kind, payload)
  end
 local function MSUF_ProfileIO_PostImportApply_GroupFrames(kind, payload)
     if type(payload) ~= "table" then  return end
+    if MSUF_ProfileIO_IsUUFConvertedPayload(payload) and payload._uufImport.groupFramesApplied ~= true then
+        return
+    end
     local touched = (kind == "groupframe") or (kind == "groupframes")
     if not touched then
         touched = (type(payload.gf_party) == "table") or (type(payload.gf_raid) == "table") or (type(payload.gf_mythicraid) == "table")
@@ -1394,6 +1520,9 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
         MSUF_ProfileIO_NormalizeUnitFramePositionDB(payload)
     end
     MSUF_ProfileIO_RunEnsureDB()
+    if MSUF_ProfileIO_IsUUFConvertedPayload(payload) then
+        MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
+    end
     --- Always keep the profile-table reference stable (important!).
     if type(MSUF_DB) ~= "table" then
         MSUF_DB = {}
@@ -1498,7 +1627,9 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     elseif kind == "all" then
         MSUF_WipeTable(MSUF_DB)
         for kk, vv in pairs(payload) do
-            MSUF_DB[kk] = MSUF_DeepCopy(vv)
+            if MSUF_ProfileIO_ShouldPersistRootProfileKey(kk) then
+                MSUF_DB[kk] = MSUF_DeepCopy(vv)
+            end
         end
     else
          return false, "unknown kind"
@@ -1512,7 +1643,7 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
     MSUF_ProfileIO_PostImportApply_Auras(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_GroupFrames(snapshot.kind, payload)
     MSUF_ProfileIO_PostImportApply_UnitAlphas(kind, payload)
-    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_IMPORT", true)
+    MSUF_ProfileIO_PostProfileRuntimeApply(MSUF_ProfileIO_IsUUFConvertedPayload(payload) and "PROFILE_UUF_IMPORT" or "PROFILE_IMPORT", true)
      return true
 end
 function MSUF_ExportSelectionToString(kind)
@@ -1530,12 +1661,844 @@ function MSUF_ExportSelectionToString(kind)
     --- 0-regression fallback
     return MSUF_SerializeLuaTable(snap)
 end
+
+local UUF_IMPORT_PREFIX = "!UUF_"
+local function MSUF_ProfileIO_IsUUFImportString(str)
+    return type(str) == "string" and str:match("^%s*!UUF_") ~= nil
+end
+
+local function MSUF_ProfileIO_DecodeUUFProfileString(str)
+    if not MSUF_ProfileIO_IsUUFImportString(str) then
+        return nil, "not UUF"
+    end
+    local payload = str:match("^%s*(.-)%s*$")
+    if not payload or payload:sub(1, #UUF_IMPORT_PREFIX) ~= UUF_IMPORT_PREFIX then
+        return nil, "invalid UUF prefix"
+    end
+    if not (_G.LibStub and type(_G.LibStub.GetLibrary) == "function") then
+        return nil, "LibStub unavailable"
+    end
+    local compress = _G.LibStub:GetLibrary("LibDeflate", true)
+    local serializer = _G.LibStub:GetLibrary("AceSerializer-3.0", true)
+    if not (compress and type(compress.DecodeForPrint) == "function" and type(compress.DecompressDeflate) == "function") then
+        return nil, "LibDeflate unavailable"
+    end
+    if not (serializer and type(serializer.Deserialize) == "function") then
+        return nil, "AceSerializer unavailable"
+    end
+    local encoded = payload:sub(#UUF_IMPORT_PREFIX + 1)
+    local okDecode, decoded = pcall(compress.DecodeForPrint, compress, encoded)
+    if not okDecode or type(decoded) ~= "string" then
+        return nil, "print-safe decode failed"
+    end
+    local okInflate, serialized = pcall(compress.DecompressDeflate, compress, decoded)
+    if not okInflate or type(serialized) ~= "string" then
+        return nil, "deflate decode failed"
+    end
+    local okDeserialize, success, data = pcall(serializer.Deserialize, serializer, serialized)
+    if not okDeserialize or success ~= true or type(data) ~= "table" then
+        return nil, "AceSerializer decode failed"
+    end
+    if type(data.profile) ~= "table" then
+        return nil, "UUF payload has no profile table"
+    end
+    return data.profile
+end
+
+local function MSUF_ProfileIO_Color(c, fallbackR, fallbackG, fallbackB, fallbackA)
+    if type(c) ~= "table" then
+        return fallbackR, fallbackG, fallbackB, fallbackA
+    end
+    local r = tonumber(c.r or c[1]) or fallbackR
+    local g = tonumber(c.g or c[2]) or fallbackG
+    local b = tonumber(c.b or c[3]) or fallbackB
+    local a = tonumber(c.a or c[4]) or fallbackA
+    return r, g, b, a
+end
+
+local function MSUF_ProfileIO_CopyColorTable(c)
+    if type(c) ~= "table" then
+        return nil
+    end
+    local r, g, b, a = MSUF_ProfileIO_Color(c, nil, nil, nil, nil)
+    if r == nil or g == nil or b == nil then
+        return nil
+    end
+    local out = { r, g, b }
+    if a ~= nil then out[4] = a end
+    return out
+end
+
+local function MSUF_ProfileIO_MapUUFAnchorParent(anchorParent)
+    if type(anchorParent) ~= "string" or anchorParent == "" then
+        return nil, nil
+    end
+    local token = anchorParent:gsub("^UUF_", ""):gsub("^UnhaltedUnitFrames_", "")
+    token = token:gsub("^MSUF_", "")
+    token = token:gsub("Frame$", "")
+    token = token:lower()
+    if token == "uiparent" or token == "worldframe" then
+        return nil, "GLOBAL"
+    end
+    local map = {
+        player = "player",
+        target = "target",
+        focus = "focus",
+        pet = "pet",
+        party = "gf_party",
+        raid = "gf_raid",
+        boss = "boss",
+        targettarget = "targettarget",
+        targetoftarget = "targettarget",
+        tot = "targettarget",
+        focustarget = "focustarget",
+        focus_target = "focustarget",
+    }
+    if map[token] then
+        return nil, map[token]
+    end
+    return anchorParent, "GLOBAL"
+end
+
+local function MSUF_ProfileIO_NormalizeUUFAnchor(anchor, fallback)
+    if type(anchor) ~= "string" or anchor == "" then return fallback end
+    anchor = anchor:upper():gsub("%s+", "")
+    local valid = {
+        TOPLEFT = true, TOP = true, TOPRIGHT = true,
+        LEFT = true, CENTER = true, RIGHT = true,
+        BOTTOMLEFT = true, BOTTOM = true, BOTTOMRIGHT = true,
+        NAMELEFT = true, NAMERIGHT = true,
+    }
+    return valid[anchor] and anchor or fallback
+end
+
+local function MSUF_ProfileIO_UUFLayout(layout, fallbackAnchor, fallbackX, fallbackY)
+    if type(layout) ~= "table" then
+        return fallbackAnchor, fallbackX or 0, fallbackY or 0
+    end
+    return MSUF_ProfileIO_NormalizeUUFAnchor(layout[1], fallbackAnchor),
+        tonumber(layout[3]) or fallbackX or 0,
+        tonumber(layout[4]) or fallbackY or 0
+end
+
+local function MSUF_ProfileIO_ApplyUUFStatus(dst, src, map)
+    if type(dst) ~= "table" or type(src) ~= "table" or type(map) ~= "table" then return end
+    dst[map.enabled] = src.Enabled ~= false
+    dst[map.size] = tonumber(src.Size) or dst[map.size]
+    local anchor, x, y = MSUF_ProfileIO_UUFLayout(src.Layout, map.fallbackAnchor or "CENTER", 0, 0)
+    dst[map.anchor] = anchor
+    dst[map.x] = x
+    dst[map.y] = y
+    if map.symbol and src.Texture then
+        dst[map.symbol] = src.Texture
+    end
+end
+
+local function MSUF_ProfileIO_PortraitSideFromLayout(layout)
+    if type(layout) ~= "table" then return "LEFT" end
+    local point = tostring(layout[1] or ""):upper()
+    local relative = tostring(layout[2] or ""):upper()
+    if point:find("RIGHT", 1, true) and relative:find("LEFT", 1, true) then
+        return "LEFT"
+    elseif point:find("LEFT", 1, true) and relative:find("RIGHT", 1, true) then
+        return "RIGHT"
+    end
+    return point:find("RIGHT", 1, true) and "LEFT" or "RIGHT"
+end
+
+local function MSUF_ProfileIO_ConvertUUFHealPrediction(src, dst, general)
+    if type(src) ~= "table" then return end
+    dst = type(dst) == "table" and dst or nil
+    general = type(general) == "table" and general or nil
+
+    local incoming = type(src.Incoming) == "table" and src.Incoming or nil
+    if incoming then
+        if dst then dst.healPredEnabled = incoming.Enabled == true end
+        if general then
+            if incoming.Enabled == true then
+                general.enableHealPrediction = true
+                general.showSelfHealPrediction = true
+            elseif general.enableHealPrediction == nil then
+                general.enableHealPrediction = false
+                general.showSelfHealPrediction = false
+            end
+            local r, g, b, a = MSUF_ProfileIO_Color(incoming.Colour, nil, nil, nil, nil)
+            if r and g and b and (incoming.Enabled == true or general.healPredictionColorR == nil) then
+                general.healPredictionColorR, general.healPredictionColorG, general.healPredictionColorB = r, g, b
+                general.healPredictionColorA = a or general.healPredictionColorA or 0.45
+            end
+        end
+    end
+
+    local absorbs = type(src.Absorbs) == "table" and src.Absorbs or nil
+    if absorbs then
+        if dst then dst.enableAbsorbBar = absorbs.Enabled ~= false end
+        if general then
+            if absorbs.Enabled ~= false then
+                general.enableAbsorbBar = true
+            elseif general.enableAbsorbBar == nil then
+                general.enableAbsorbBar = false
+            end
+            local r, g, b, a = MSUF_ProfileIO_Color(absorbs.Colour, nil, nil, nil, nil)
+            if r and g and b and (absorbs.Enabled ~= false or general.absorbBarColorR == nil) then
+                general.absorbBarColorR, general.absorbBarColorG, general.absorbBarColorB = r, g, b
+                general.absorbBarColorA = a or general.absorbBarColorA or 0.75
+            end
+        end
+    end
+
+    local healAbsorbs = type(src.HealAbsorbs) == "table" and src.HealAbsorbs or nil
+    if healAbsorbs then
+        if dst then dst.healAbsorbEnabled = healAbsorbs.Enabled ~= false end
+        if general then
+            if healAbsorbs.Enabled ~= false then
+                general.healAbsorbEnabled = true
+            elseif general.healAbsorbEnabled == nil then
+                general.healAbsorbEnabled = false
+            end
+            local r, g, b, a = MSUF_ProfileIO_Color(healAbsorbs.Colour, nil, nil, nil, nil)
+            if r and g and b and (healAbsorbs.Enabled ~= false or general.healAbsorbBarColorR == nil) then
+                general.healAbsorbBarColorR, general.healAbsorbBarColorG, general.healAbsorbBarColorB = r, g, b
+                general.healAbsorbBarColorA = a or general.healAbsorbBarColorA or 1
+            end
+        end
+    end
+end
+
+local function MSUF_ProfileIO_ApplyUUFCastbarGeneral(unitKey, castbar, general)
+    if type(castbar) ~= "table" or type(general) ~= "table" then return end
+    local map = {
+        player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", memory = "castbarPlayerBackendBeforeHide", w = "castbarPlayerBarWidth", h = "castbarPlayerBarHeight", x = "castbarPlayerOffsetX", y = "castbarPlayerOffsetY", match = "castbarPlayerMatchWidth", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", time = "showPlayerCastTime", textX = "castbarPlayerTextOffsetX", textY = "castbarPlayerTextOffsetY", timeX = "castbarPlayerTimeOffsetX", timeY = "castbarPlayerTimeOffsetY" },
+        target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", memory = "castbarTargetBackendBeforeHide", w = "castbarTargetBarWidth", h = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY", match = "castbarTargetMatchWidth", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", time = "showTargetCastTime", textX = "castbarTargetTextOffsetX", textY = "castbarTargetTextOffsetY", timeX = "castbarTargetTimeOffsetX", timeY = "castbarTargetTimeOffsetY" },
+        focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", memory = "castbarFocusBackendBeforeHide", w = "castbarFocusBarWidth", h = "castbarFocusBarHeight", x = "castbarFocusOffsetX", y = "castbarFocusOffsetY", match = "castbarFocusMatchWidth", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", time = "showFocusCastTime", textX = "castbarFocusTextOffsetX", textY = "castbarFocusTextOffsetY", timeX = "castbarFocusTimeOffsetX", timeY = "castbarFocusTimeOffsetY" },
+        boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", memory = "bossCastbarBackendBeforeHide", w = "bossCastbarWidth", h = "bossCastbarHeight", x = "bossCastbarOffsetX", y = "bossCastbarOffsetY", match = "bossCastbarMatchWidth", icon = "showBossCastIcon", text = "showBossCastName", time = "showBossCastTime", textX = "bossCastTextOffsetX", textY = "bossCastTextOffsetY", timeX = "bossCastTimeOffsetX", timeY = "bossCastTimeOffsetY" },
+    }
+    local keys = map[unitKey]
+    if not keys then return end
+
+    general[keys.enable] = castbar.Enabled ~= false
+    general[keys.backend] = castbar.Enabled ~= false and "MSUF" or "HIDE"
+    general[keys.memory] = castbar.Enabled ~= false and "MSUF" or "HIDE"
+    general[keys.w] = tonumber(castbar.Width) or general[keys.w]
+    general[keys.h] = tonumber(castbar.Height) or general[keys.h]
+    general[keys.match] = castbar.MatchParentWidth == true
+
+    local layout = type(castbar.Layout) == "table" and castbar.Layout or nil
+    if layout then
+        general[keys.x] = tonumber(layout[3]) or general[keys.x]
+        general[keys.y] = tonumber(layout[4]) or general[keys.y]
+    end
+
+    local icon = type(castbar.Icon) == "table" and castbar.Icon or nil
+    if icon then general[keys.icon] = icon.Enabled ~= false end
+
+    local text = type(castbar.Text) == "table" and castbar.Text or {}
+    local spellName = type(text.SpellName) == "table" and text.SpellName or nil
+    if spellName then
+        general[keys.text] = spellName.Enabled ~= false
+        local _, x, y = MSUF_ProfileIO_UUFLayout(spellName.Layout, "LEFT", 0, 0)
+        general[keys.textX], general[keys.textY] = x, y
+        general.castbarSpellNameFontSize = tonumber(spellName.FontSize) or general.castbarSpellNameFontSize
+        if unitKey == "boss" then
+            general.bossCastNameFontSize = tonumber(spellName.FontSize) or general.bossCastNameFontSize
+        end
+    end
+    local duration = type(text.Duration) == "table" and text.Duration or nil
+    if duration then
+        general[keys.time] = duration.Enabled ~= false
+        local _, x, y = MSUF_ProfileIO_UUFLayout(duration.Layout, "RIGHT", -2, 0)
+        general[keys.timeX], general[keys.timeY] = x, y
+        general.castbarTimeFontSize = tonumber(duration.FontSize) or general.castbarTimeFontSize
+        if unitKey == "boss" then
+            general.bossCastTimeFontSize = tonumber(duration.FontSize) or general.bossCastTimeFontSize
+        end
+    end
+
+    local r, gc, b = MSUF_ProfileIO_Color(castbar.Foreground, nil, nil, nil, nil)
+    if r and gc and b and unitKey == "player" then
+        general.castbarCustomR, general.castbarCustomG, general.castbarCustomB = r, gc, b
+        general.playerCastbarOverrideMode = "CUSTOM"
+        general.playerCastbarOverrideR, general.playerCastbarOverrideG, general.playerCastbarOverrideB = r, gc, b
+    end
+    local br, bg, bb = MSUF_ProfileIO_Color(castbar.Background, nil, nil, nil, nil)
+    if br and bg and bb then
+        general.castbarBgR, general.castbarBgG, general.castbarBgB = br, bg, bb
+    end
+    local nr, ng, nb = MSUF_ProfileIO_Color(castbar.NotInterruptibleColour, nil, nil, nil, nil)
+    if nr and ng and nb then
+        general.castbarNonInterruptibleCustomR, general.castbarNonInterruptibleCustomG, general.castbarNonInterruptibleCustomB = nr, ng, nb
+    end
+end
+
+local function MSUF_ProfileIO_TagToTextMode(tag, isPower)
+    if type(tag) ~= "string" or tag == "" then return nil end
+    local s = tag:lower()
+    s = s:gsub("%[powercolor%]", "")
+    local hasCur = s:find(isPower and "curpp" or "curhp", 1, true) ~= nil
+        or s:find("current", 1, true) ~= nil
+    local hasMax = s:find(isPower and "maxpp" or "maxhp", 1, true) ~= nil
+        or s:find("max", 1, true) ~= nil
+    local hasPercent = s:find(isPower and "perpp" or "perhp", 1, true) ~= nil
+        or s:find("percent", 1, true) ~= nil
+        or s:find("perc", 1, true) ~= nil
+    if hasCur and hasMax and hasPercent then return "CURMAXPERCENT" end
+    if hasCur and hasMax then return "CURMAX" end
+    if hasCur and hasPercent then return "CURPERCENT" end
+    if hasMax and hasPercent then return "MAXPERCENT" end
+    if hasCur then return "CURRENT" end
+    if hasMax then return "MAX" end
+    if hasPercent then return "PERCENT" end
+    return nil
+end
+
+local function MSUF_ProfileIO_ColorObject(c)
+    local r, g, b, a = MSUF_ProfileIO_Color(c, nil, nil, nil, nil)
+    if r == nil or g == nil or b == nil then
+        return nil
+    end
+    return { r = r, g = g, b = b, a = a or 1 }
+end
+
+local function MSUF_ProfileIO_UUFTagLayout(tagConf)
+    local layout = type(tagConf) == "table" and type(tagConf.Layout) == "table" and tagConf.Layout or nil
+    local point = MSUF_ProfileIO_NormalizeUUFAnchor(layout and layout[1], "CENTER")
+    local relativePoint = MSUF_ProfileIO_NormalizeUUFAnchor(layout and layout[2], point)
+    local x = tonumber(layout and layout[3]) or 0
+    local y = tonumber(layout and layout[4]) or 0
+    return point, relativePoint, x, y
+end
+
+local function MSUF_ProfileIO_UUFTextSlotFromPoint(point)
+    point = tostring(point or ""):upper()
+    if point:find("LEFT", 1, true) then
+        return "Left"
+    elseif point:find("RIGHT", 1, true) then
+        return "Right"
+    end
+    return "Center"
+end
+
+local function MSUF_ProfileIO_SetUUFTextLayout(dst, prefix, tagConf)
+    local point, relativePoint, x, y = MSUF_ProfileIO_UUFTagLayout(tagConf)
+    dst["direct" .. prefix .. "Point"] = point
+    dst["direct" .. prefix .. "RelativePoint"] = relativePoint
+    dst["direct" .. prefix .. "OffsetX"] = x
+    dst["direct" .. prefix .. "OffsetY"] = y
+    local color = MSUF_ProfileIO_ColorObject(tagConf and tagConf.Colour)
+    if color then
+        dst["direct" .. prefix .. "Color"] = color
+    end
+    return point, relativePoint, x, y
+end
+
+local function MSUF_ProfileIO_ResetUUFText(dst)
+    if type(dst) ~= "table" then return end
+    dst.directTextLayout = true
+    dst.uufTextLayout = nil
+    dst.fontOverride = true
+    dst.showName = false
+    dst.showHPText = false
+    dst.showPowerText = false
+    dst.textLeft, dst.textCenter, dst.textRight = "NONE", "NONE", "NONE"
+    dst.powerTextLeft, dst.powerTextCenter, dst.powerTextRight = "NONE", "NONE", "NONE"
+    dst.hpOffsetX, dst.hpOffsetY = 0, 0
+    dst.powerOffsetX, dst.powerOffsetY = 0, 0
+    dst.nameOffsetX, dst.nameOffsetY = 0, 0
+    dst.nameClassColor = false
+    dst.npcNameRed = false
+    dst.colorHealthTextByHealth = false
+    dst.powerTextColorByType = false
+    dst.nameColor = nil
+    dst.shortenNames = false
+    dst.nameShortenEnabled = false
+    dst.shortenNameMaxChars = nil
+    dst.shortenNameShowDots = nil
+    local prefixes = {
+        "Name",
+        "HealthLeft", "HealthCenter", "HealthRight",
+        "PowerLeft", "PowerCenter", "PowerRight",
+    }
+    for i = 1, #prefixes do
+        local directPrefix = "direct" .. prefixes[i]
+        dst[directPrefix .. "Point"] = nil
+        dst[directPrefix .. "RelativePoint"] = nil
+        dst[directPrefix .. "OffsetX"] = nil
+        dst[directPrefix .. "OffsetY"] = nil
+        dst[directPrefix .. "Color"] = nil
+        local legacyPrefix = "uuf" .. prefixes[i]
+        dst[legacyPrefix .. "Point"] = nil
+        dst[legacyPrefix .. "RelativePoint"] = nil
+        dst[legacyPrefix .. "OffsetX"] = nil
+        dst[legacyPrefix .. "OffsetY"] = nil
+        dst[legacyPrefix .. "Color"] = nil
+    end
+end
+
+local function MSUF_ProfileIO_ApplyUUFTag(dst, tagConf)
+    if type(dst) ~= "table" or type(tagConf) ~= "table" then return end
+    local tag = tostring(tagConf.Tag or "")
+    if tag == "" then return end
+    local lower = tag:lower()
+    local point = MSUF_ProfileIO_UUFTagLayout(tagConf)
+    if lower:find("%[name") or lower:find("name", 1, true) then
+        dst.showName = true
+        dst.nameFontSize = tonumber(tagConf.FontSize) or dst.nameFontSize
+        local _, _, x, y = MSUF_ProfileIO_SetUUFTextLayout(dst, "Name", tagConf)
+        dst.nameOffsetX = x
+        dst.nameOffsetY = y
+        if point:find("RIGHT", 1, true) then
+            dst.nameAnchor = "RIGHT"
+        elseif point:find("CENTER", 1, true) then
+            dst.nameAnchor = "CENTER"
+        else
+            dst.nameAnchor = "LEFT"
+        end
+        local color = dst.directNameColor
+        if color then
+            dst.useGlobalFontColor = false
+            dst.fontR, dst.fontG, dst.fontB = color.r, color.g, color.b
+            dst.nameColor = MSUF_DeepCopy(color)
+        end
+        local maxChars = lower:match("name:short:(%d+)")
+        if maxChars then
+            dst.shortenNames = true
+            dst.nameShortenEnabled = true
+            dst.shortenNameMaxChars = tonumber(maxChars) or dst.shortenNameMaxChars
+            dst.shortenNameShowDots = false
+        end
+        return
+    end
+    local hpMode = MSUF_ProfileIO_TagToTextMode(tag, false)
+    if hpMode then
+        dst.showHPText = true
+        dst.hpFontSize = tonumber(tagConf.FontSize) or dst.hpFontSize
+        local slot = MSUF_ProfileIO_UUFTextSlotFromPoint(point)
+        MSUF_ProfileIO_SetUUFTextLayout(dst, "Health" .. slot, tagConf)
+        if slot == "Left" then
+            dst.textLeft = hpMode
+        elseif slot == "Center" then
+            dst.textCenter = hpMode
+        else
+            dst.textRight = hpMode
+        end
+        return
+    end
+    local powerMode = MSUF_ProfileIO_TagToTextMode(tag, true)
+    if powerMode then
+        dst.showPowerText = true
+        dst.powerFontSize = tonumber(tagConf.FontSize) or dst.powerFontSize
+        local slot = MSUF_ProfileIO_UUFTextSlotFromPoint(point)
+        MSUF_ProfileIO_SetUUFTextLayout(dst, "Power" .. slot, tagConf)
+        if lower:find("%[powercolor%]") then
+            dst.powerTextColorByType = true
+            dst["directPower" .. slot .. "Color"] = nil
+        end
+        if slot == "Left" then
+            dst.powerTextLeft = powerMode
+        elseif slot == "Center" then
+            dst.powerTextCenter = powerMode
+        else
+            dst.powerTextRight = powerMode
+        end
+    end
+end
+
+local function MSUF_ProfileIO_MakeUUFUnitVisible(dst)
+    if type(dst) ~= "table" then return end
+    dst.useBlizzardFrame = false
+    dst.showHP = true
+    dst.showHealth = true
+    dst.hpBarAlpha = tonumber(dst.hpBarAlpha) or 1
+    if dst.hpBarAlpha <= 0 then dst.hpBarAlpha = 1 end
+    dst.hpBgAlpha = tonumber(dst.hpBgAlpha) or 0.85
+    if dst.hpBgAlpha <= 0 then dst.hpBgAlpha = 0.85 end
+    dst.alphaExcludeTextPortrait = dst.alphaExcludeTextPortrait == true
+    dst.loadCondHideMounted = false
+    dst.loadCondHideOutOfCombat = false
+    dst.loadCondHideSolo = false
+    dst.loadCondHideInVehicle = false
+    dst.loadCondHideInGroup = false
+    dst.loadCondHideInInstance = false
+    dst.loadCondHideResting = false
+    dst.loadCondHideInCombat = false
+    dst.loadCondHideStealthed = false
+    dst.loadCondActive = false
+end
+
+local function MSUF_ProfileIO_ConvertUUFUnit(unitKey, src, outProfile)
+    if type(src) ~= "table" or type(outProfile) ~= "table" then return end
+    local dst = outProfile[unitKey] or {}
+    outProfile[unitKey] = dst
+    dst.enabled = src.Enabled ~= false
+    dst.forceHideBlizzard = src.ForceHideBlizzard == true
+    MSUF_ProfileIO_MakeUUFUnitVisible(dst)
+    MSUF_ProfileIO_ResetUUFText(dst)
+
+    local frame = type(src.Frame) == "table" and src.Frame or {}
+    dst.anchorFrameName = nil
+    dst.anchorToUnitframe = "GLOBAL"
+    dst.width = tonumber(frame.Width) or tonumber(frame.width) or dst.width
+    dst.height = tonumber(frame.Height) or tonumber(frame.height) or dst.height
+    dst.frameStrata = frame.FrameStrata or frame.frameStrata or dst.frameStrata
+    local layout = type(frame.Layout) == "table" and frame.Layout or nil
+    if layout then
+        dst.point = layout[1] or dst.point
+        dst.relativePoint = layout[2] or dst.relativePoint or dst.point
+        dst.offsetX = tonumber(layout[3]) or dst.offsetX
+        dst.offsetY = tonumber(layout[4]) or dst.offsetY
+        if unitKey == "boss" and layout[5] ~= nil then
+            dst.spacing = tonumber(layout[5]) or dst.spacing
+        end
+    end
+    local anchorFrameName, anchorUnit = MSUF_ProfileIO_MapUUFAnchorParent(frame.AnchorParent)
+    if anchorFrameName then dst.anchorFrameName = anchorFrameName end
+    if anchorUnit then dst.anchorToUnitframe = anchorUnit end
+
+    local health = type(src.HealthBar) == "table" and src.HealthBar or {}
+    dst.reverseFillBars = health.Inverse == true
+    dst.smoothFill = health.Smooth ~= false
+    dst.hpBarAlpha = tonumber(health.ForegroundOpacity) or dst.hpBarAlpha
+    if dst.hpBarAlpha <= 0 then dst.hpBarAlpha = 1 end
+    dst.hpBgAlpha = tonumber(health.BackgroundOpacity) or dst.hpBgAlpha
+    if dst.hpBgAlpha <= 0 then dst.hpBgAlpha = 0.85 end
+    local fg = MSUF_ProfileIO_CopyColorTable(health.Foreground)
+    local bg = MSUF_ProfileIO_CopyColorTable(health.Background)
+    if fg then dst.importHealthForeground = fg end
+    if bg then
+        local r, g, b = MSUF_ProfileIO_Color(bg, 0, 0, 0, 1)
+        dst.classBarBgR, dst.classBarBgG, dst.classBarBgB = r, g, b
+    end
+
+    local power = type(src.PowerBar) == "table" and src.PowerBar or {}
+    if next(power) ~= nil then
+        dst.showPowerBar = power.Enabled ~= false
+        dst.showPower = dst.showPowerBar
+        dst.powerBarHeight = tonumber(power.Height) or dst.powerBarHeight
+        dst.powerSmoothFill = power.Smooth == true
+        dst.powerBarBgMatchBarColor = power.ColourBackgroundByType == true
+        local pfg = MSUF_ProfileIO_CopyColorTable(power.Foreground)
+        if pfg then dst.importPowerForeground = pfg end
+    end
+
+    if unitKey == "player" and type(outProfile.bars) == "table" then
+        local secondary = type(src.SecondaryPowerBar) == "table" and src.SecondaryPowerBar or nil
+        if secondary then
+            outProfile.bars.showClassPower = secondary.Enabled ~= false
+            outProfile.bars.classPowerHeight = tonumber(secondary.Height) or outProfile.bars.classPowerHeight
+            outProfile.bars.classPowerColorByType = secondary.ColourByType ~= false
+            outProfile.bars.classPowerBgAlpha = secondary.BackgroundOpacity or outProfile.bars.classPowerBgAlpha
+            if secondary.Position == "BOTTOM" then
+                outProfile.bars.classPowerOffsetY = tonumber(outProfile.bars.classPowerOffsetY) or -4
+            elseif secondary.Position == "TOP" and outProfile.bars.classPowerOffsetY == nil then
+                outProfile.bars.classPowerOffsetY = 0
+            end
+        end
+
+        local alternative = type(src.AlternativePowerBar) == "table" and src.AlternativePowerBar or nil
+        if alternative then
+            outProfile.bars.showAltMana = alternative.Enabled == true
+            outProfile.bars.altManaHeight = tonumber(alternative.Height) or outProfile.bars.altManaHeight
+            local al = type(alternative.Layout) == "table" and alternative.Layout or nil
+            if al then
+                outProfile.bars.altManaOffsetY = tonumber(al[4]) or outProfile.bars.altManaOffsetY
+            end
+        end
+    end
+
+    local portrait = type(src.Portrait) == "table" and src.Portrait or {}
+    if next(portrait) ~= nil then
+        dst.showPortrait = portrait.Enabled == true
+        dst.portraitEnabled = portrait.Enabled == true
+        dst.portraitMode = portrait.Enabled == true and MSUF_ProfileIO_PortraitSideFromLayout(portrait.Layout) or "OFF"
+        dst.portraitWidth = tonumber(portrait.Width) or tonumber(portrait.Size) or dst.portraitWidth
+        dst.portraitHeight = tonumber(portrait.Height) or tonumber(portrait.Size) or dst.portraitHeight
+        dst.portraitSizeOverride = tonumber(portrait.Size) or tonumber(portrait.Width) or tonumber(portrait.Height) or dst.portraitSizeOverride
+        local pl = type(portrait.Layout) == "table" and portrait.Layout or nil
+        if pl then
+            dst.portraitPoint = pl[1] or dst.portraitPoint
+            dst.portraitRelativePoint = pl[2] or dst.portraitRelativePoint
+            dst.portraitOffsetX = tonumber(pl[3]) or dst.portraitOffsetX
+            dst.portraitOffsetY = tonumber(pl[4]) or dst.portraitOffsetY
+        end
+        dst.portraitZoom = tonumber(portrait.Zoom) or dst.portraitZoom
+        dst.portraitRender = portrait.UseClassPortrait == true and "CLASS" or portrait.Style or dst.portraitRender
+        dst.portraitUseClass = portrait.UseClassPortrait == true
+        if portrait.UseClassPortrait == true then
+            dst.portraitClassStyle = "BLIZZARD"
+        end
+    end
+
+    local castbar = type(src.CastBar) == "table" and src.CastBar or {}
+    if next(castbar) ~= nil then
+        dst.castbarEnabled = castbar.Enabled ~= false
+        dst.castbarWidth = tonumber(castbar.Width) or dst.castbarWidth
+        dst.castbarHeight = tonumber(castbar.Height) or dst.castbarHeight
+        dst.castbarMatchUnitWidth = castbar.MatchParentWidth == true
+        local cl = type(castbar.Layout) == "table" and castbar.Layout or nil
+        if cl then
+            dst.castbarOffsetX = tonumber(cl[3]) or dst.castbarOffsetX
+            dst.castbarOffsetY = tonumber(cl[4]) or dst.castbarOffsetY
+        end
+        MSUF_ProfileIO_ApplyUUFCastbarGeneral(unitKey, castbar, outProfile.general)
+    end
+
+    MSUF_ProfileIO_ConvertUUFHealPrediction(src.HealPrediction, dst, outProfile.general)
+
+    local tags = type(src.Tags) == "table" and src.Tags or {}
+    MSUF_ProfileIO_ApplyUUFTag(dst, tags.TagOne)
+    MSUF_ProfileIO_ApplyUUFTag(dst, tags.TagTwo)
+    MSUF_ProfileIO_ApplyUUFTag(dst, tags.TagThree)
+    MSUF_ProfileIO_ApplyUUFTag(dst, tags.TagFour)
+    MSUF_ProfileIO_ApplyUUFTag(dst, tags.TagFive)
+
+    local indicators = type(src.Indicators) == "table" and src.Indicators or {}
+    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.RaidTargetMarker, { enabled = "showRaidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerOffsetX", y = "raidMarkerOffsetY", fallbackAnchor = "TOPLEFT" })
+    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.LeaderAssistantIndicator, { enabled = "showLeaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconOffsetX", y = "leaderIconOffsetY", fallbackAnchor = "TOPLEFT" })
+    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Resting, { enabled = "showRestingIndicator", size = "restedStateIndicatorSize", anchor = "restedStateIndicatorAnchor", x = "restedStateIndicatorOffsetX", y = "restedStateIndicatorOffsetY", fallbackAnchor = "TOPLEFT", symbol = "restedStateIndicatorSymbol" })
+    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Combat, { enabled = "showCombatStateIndicator", size = "combatStateIndicatorSize", anchor = "combatStateIndicatorAnchor", x = "combatStateIndicatorOffsetX", y = "combatStateIndicatorOffsetY", fallbackAnchor = "TOPLEFT", symbol = "combatStateIndicatorSymbol" })
+    MSUF_ProfileIO_ApplyUUFStatus(dst, indicators.Resurrection, { enabled = "showIncomingResIndicator", size = "incomingResIndicatorSize", anchor = "incomingResIndicatorAnchor", x = "incomingResIndicatorOffsetX", y = "incomingResIndicatorOffsetY", fallbackAnchor = "TOPRIGHT" })
+end
+
+local function MSUF_ProfileIO_CopyUUFGeneral(src, outProfile)
+    if type(src) ~= "table" then return end
+    local g = outProfile.general or {}
+    local bars = outProfile.bars or {}
+    outProfile.general = g
+    outProfile.bars = bars
+    local ui = type(src.UIScale) == "table" and src.UIScale or nil
+    if ui then
+        g.UIScale = {
+            Enabled = ui.Enabled == true,
+            Scale = tonumber(ui.Scale) or 1.0,
+        }
+        g.globalUiScalePreset = g.UIScale.Enabled and "custom" or "auto"
+        g.globalUiScaleValue = g.UIScale.Enabled and g.UIScale.Scale or nil
+    end
+    local textures = type(src.Textures) == "table" and src.Textures or nil
+    if textures then
+        g.barTexture = textures.Foreground or g.barTexture
+        g.barBackgroundTexture = textures.Background or g.barBackgroundTexture
+        g.castbarTexture = textures.Foreground or g.castbarTexture
+        g.castbarBackgroundTexture = textures.Background or g.castbarBackgroundTexture
+    end
+    local fonts = type(src.Fonts) == "table" and src.Fonts or nil
+    if fonts then
+        g.fontKey = fonts.Font or g.fontKey
+        local flag = type(fonts.FontFlag) == "string" and fonts.FontFlag:upper() or nil
+        if flag then
+            g.noOutline = flag:find("NONE", 1, true) ~= nil
+            g.boldText = flag:find("THICK", 1, true) ~= nil
+            g.fontMonochrome = flag:find("MONOCHROME", 1, true) ~= nil
+        end
+        local shadow = type(fonts.Shadow) == "table" and fonts.Shadow or nil
+        if shadow then
+            g.textBackdrop = shadow.Enabled == true
+            local sr, sg, sb, sa = MSUF_ProfileIO_Color(shadow.Colour, nil, nil, nil, nil)
+            if sr and sg and sb then
+                g.fontShadowColor = { sr, sg, sb, sa or 1 }
+            end
+        end
+    end
+    local range = type(src.Range) == "table" and src.Range or nil
+    if range then
+        g.rangeFadeEnabled = range.Enabled ~= false
+        g.rangeFadeAlpha = tonumber(range.OutOfRange) or g.rangeFadeAlpha
+        for _, unitKey in ipairs({ "target", "targettarget", "focustarget", "focus", "pet", "boss" }) do
+            outProfile[unitKey] = outProfile[unitKey] or {}
+            outProfile[unitKey].rangeFadeEnabled = range.Enabled ~= false
+            outProfile[unitKey].rangeFadeAlpha = tonumber(range.OutOfRange) or outProfile[unitKey].rangeFadeAlpha
+        end
+    end
+    if src.Separator ~= nil then
+        g.hpTextSeparator = tostring(src.Separator)
+        g.powerTextSeparator = tostring(src.Separator)
+    end
+    if src.ToTSeparator ~= nil then
+        g.totInlineSeparator = tostring(src.ToTSeparator)
+    end
+    g.useShortNumbers = src.UseCustomAbbreviations ~= true
+
+    local colours = type(src.Colours) == "table" and src.Colours or nil
+    if colours then
+        if type(colours.Reaction) == "table" then
+            outProfile.npcColors = type(outProfile.npcColors) == "table" and outProfile.npcColors or {}
+            local function CopyReaction(kind, index, fallbackIndex)
+                local c = colours.Reaction[index] or colours.Reaction[fallbackIndex]
+                local r, g, b = MSUF_ProfileIO_Color(c, nil, nil, nil, nil)
+                if r and g and b then
+                    outProfile.npcColors[kind] = { r = r, g = g, b = b }
+                end
+            end
+            CopyReaction("enemy", 2, 1)
+            CopyReaction("neutral", 4, 3)
+            CopyReaction("friendly", 5, 6)
+        end
+        local powerOverrides = {}
+        if type(colours.Power) == "table" then
+            for powerType, color in pairs(colours.Power) do
+                local c = MSUF_ProfileIO_CopyColorTable(color)
+                if c then powerOverrides[powerType] = { r = c[1], g = c[2], b = c[3] } end
+            end
+        end
+        if next(powerOverrides) then
+            g.powerColorOverrides = powerOverrides
+        end
+        local classPowerOverrides = {}
+        if type(colours.SecondaryPower) == "table" then
+            for powerType, color in pairs(colours.SecondaryPower) do
+                local c = MSUF_ProfileIO_CopyColorTable(color)
+                if c then classPowerOverrides[powerType] = { r = c[1], g = c[2], b = c[3] } end
+            end
+        end
+        if next(classPowerOverrides) then
+            g.classPowerColorOverrides = classPowerOverrides
+        end
+        if type(colours.Dispel) == "table" then
+            for dispelType, color in pairs(colours.Dispel) do
+                local r, gc, b = MSUF_ProfileIO_Color(color, nil, nil, nil, nil)
+                if r and gc and b then
+                    local key = tostring(dispelType)
+                    key = key:sub(1, 1):upper() .. key:sub(2):lower()
+                    g["dispelType" .. key .. "R"] = r
+                    g["dispelType" .. key .. "G"] = gc
+                    g["dispelType" .. key .. "B"] = b
+                end
+            end
+        end
+    end
+end
+
+local function MSUF_ProfileIO_StripUUFStoredAuras(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return nil end
+    seen[value] = true
+    local out = {}
+    for k, v in pairs(value) do
+        if k ~= "Auras" and k ~= "PrivateAuras" then
+            out[k] = MSUF_ProfileIO_StripUUFStoredAuras(v, seen)
+        end
+    end
+    seen[value] = nil
+    return out
+end
+
+local function MSUF_ProfileIO_GetUUFImportBase(profileKey)
+    MSUF_ProfileIO_RunEnsureDB(true)
+    if type(profileKey) == "string" and profileKey ~= ""
+        and type(MSUF_GlobalDB) == "table"
+        and type(MSUF_GlobalDB.profiles) == "table"
+        and type(MSUF_GlobalDB.profiles[profileKey]) == "table" then
+        return MSUF_DeepCopy(MSUF_GlobalDB.profiles[profileKey])
+    end
+    if type(MSUF_DB) == "table" then
+        return MSUF_DeepCopy(MSUF_DB)
+    end
+    return {}
+end
+
+local function MSUF_ProfileIO_ConvertUUFProfile(profile, baseProfile)
+    if type(profile) ~= "table" then return nil end
+    local out = type(baseProfile) == "table" and MSUF_DeepCopy(baseProfile) or {}
+    out.general = type(out.general) == "table" and out.general or {}
+    out.bars = type(out.bars) == "table" and out.bars or {}
+    out.gameplay = type(out.gameplay) == "table" and out.gameplay or {}
+    out._uufImport = {
+        source = "UnhaltedUnitFrames",
+        schema = 2,
+        aurasApplied = false,
+        groupFramesApplied = false,
+        rawProfileNoAuras = MSUF_ProfileIO_StripUUFStoredAuras(profile),
+    }
+    out.general.disableBlizzardUnitFrames = true
+    out.general.hardKillBlizzardPlayerFrame = true
+    out.general.anchorToCooldown = false
+    out.general.anchorName = "UIParent"
+    out.general.msufUiScale = 1.0
+    out.general.nameClassColor = false
+    out.general.npcNameRed = false
+    out.general.colorHealthTextByHealth = false
+    out.general.colorPowerTextByType = false
+    out.general.npcColorMode = "reaction"
+    MSUF_ProfileIO_CopyUUFGeneral(profile.General, out)
+
+    local units = type(profile.Units) == "table" and profile.Units or {}
+    MSUF_ProfileIO_ConvertUUFUnit("player", units.player, out)
+    MSUF_ProfileIO_ConvertUUFUnit("target", units.target, out)
+    MSUF_ProfileIO_ConvertUUFUnit("targettarget", units.targettarget or units.targetoftarget or units.tot, out)
+    MSUF_ProfileIO_ConvertUUFUnit("focus", units.focus, out)
+    MSUF_ProfileIO_ConvertUUFUnit("focustarget", units.focustarget or units.focus_target, out)
+    MSUF_ProfileIO_ConvertUUFUnit("pet", units.pet, out)
+    MSUF_ProfileIO_ConvertUUFUnit("boss", units.boss, out)
+    if type(out.targettarget) == "table" then
+        out.targettarget.showToTInTargetName = false
+    end
+
+    local g = out.general
+    local playerHealth = units.player and units.player.HealthBar
+    if type(playerHealth) ~= "table" then
+        playerHealth = units.target and units.target.HealthBar
+    end
+    if type(playerHealth) == "table" then
+        if playerHealth.ColourByClass == false then
+            g.barMode = "unified"
+            g.useClassColors = false
+            g.darkMode = false
+            local r, gc, b = MSUF_ProfileIO_Color(playerHealth.Foreground, 0.1, 0.6, 0.9, 1)
+            g.unifiedBarR, g.unifiedBarG, g.unifiedBarB = r, gc, b
+        else
+            g.barMode = "class"
+            g.useClassColors = true
+            g.darkMode = false
+        end
+        local br, bg, bb = MSUF_ProfileIO_Color(playerHealth.Background, nil, nil, nil, nil)
+        if br and bg and bb then
+            g.classBarBgR, g.classBarBgG, g.classBarBgB = br, bg, bb
+            g.darkBgCustomColor = true
+        end
+    end
+
+    local playerPower = units.player and units.player.PowerBar
+    if type(playerPower) == "table" then
+        if playerPower.ColourByType == false then
+            g.powerColorMode = "static"
+            local r, gc, b = MSUF_ProfileIO_Color(playerPower.Foreground, 0.1, 0.35, 0.95, 1)
+            g.powerBarColorR, g.powerBarColorG, g.powerBarColorB = r, gc, b
+        else
+            g.powerColorMode = "power"
+        end
+    end
+
+    local castbar = units.player and units.player.CastBar
+    if type(castbar) == "table" then
+        local r, gc, b = MSUF_ProfileIO_Color(castbar.Foreground, nil, nil, nil, nil)
+        if r and gc and b then
+            g.castbarCustomR, g.castbarCustomG, g.castbarCustomB = r, gc, b
+            g.playerCastbarOverrideMode = "CUSTOM"
+            g.playerCastbarOverrideR, g.playerCastbarOverrideG, g.playerCastbarOverrideB = r, gc, b
+        end
+        local br, bg, bb = MSUF_ProfileIO_Color(castbar.Background, nil, nil, nil, nil)
+        if br and bg and bb then
+            g.castbarBgR, g.castbarBgG, g.castbarBgB = br, bg, bb
+        end
+        local nr, ng, nb = MSUF_ProfileIO_Color(castbar.NotInterruptibleColour, nil, nil, nil, nil)
+        if nr and ng and nb then
+            g.castbarNonInterruptibleCustomR, g.castbarNonInterruptibleCustomG, g.castbarNonInterruptibleCustomB = nr, ng, nb
+        end
+    end
+    out.general._uufImportConverted = true
+    return out
+end
 local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     if type(tbl) ~= "table" then
         print("|cffff0000MSUF:|r Legacy import failed: not a table.")
          return false
     end
+    local isUUFImport = MSUF_ProfileIO_IsUUFConvertedPayload(tbl)
     MSUF_ProfileIO_RunEnsureDB()
+    if isUUFImport then
+        MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
+    end
     MSUF_ProfileIO_NormalizeUnitFramePositionDB(tbl)
     --- Keep profile table reference stable; wipe + copy.
     if type(MSUF_DB) ~= "table" then
@@ -1543,7 +2506,9 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     end
     MSUF_WipeTable(MSUF_DB)
     for k, v in pairs(tbl) do
-        MSUF_DB[k] = MSUF_DeepCopy(v)
+        if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
+            MSUF_DB[k] = MSUF_DeepCopy(v)
+        end
     end
     if type(MSUF_GlobalDB) == "table" and type(MSUF_GlobalDB.profiles) == "table" and MSUF_ActiveProfile then
         MSUF_GlobalDB.profiles[MSUF_ActiveProfile] = MSUF_DB
@@ -1553,8 +2518,10 @@ local function MSUF_ApplyLegacyTableToActiveProfile(tbl)
     MSUF_ProfileIO_PostImportApply_Auras("all", tbl)
     MSUF_ProfileIO_PostImportApply_GroupFrames("all", tbl)
     MSUF_ProfileIO_PostImportApply_UnitAlphas("all", tbl)
-    MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_LEGACY_IMPORT", true)
-    print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
+    MSUF_ProfileIO_PostProfileRuntimeApply(isUUFImport and "PROFILE_UUF_IMPORT" or "PROFILE_LEGACY_IMPORT", true)
+    if not isUUFImport then
+        print("|cff00ff00MSUF:|r Legacy profile imported into the active profile.")
+    end
      return true
 end
 --- New import: understands snapshots (fmt=2) and applies selection into active profile.
@@ -1563,6 +2530,23 @@ function MSUF_ImportFromString(str)
     if not str or not str:match("%S") then
         print("|cffff0000MSUF:|r Import failed (empty string).")
          return false
+    end
+    if MSUF_ProfileIO_IsUUFImportString(str) then
+        local uufProfile, why = MSUF_ProfileIO_DecodeUUFProfileString(str)
+        if type(uufProfile) ~= "table" then
+            print("|cffff0000MSUF:|r UUF import failed: " .. tostring(why))
+            return false
+        end
+        local converted = MSUF_ProfileIO_ConvertUUFProfile(uufProfile, MSUF_ProfileIO_GetUUFImportBase())
+        if type(converted) ~= "table" then
+            print("|cffff0000MSUF:|r UUF import failed: profile conversion failed.")
+            return false
+        end
+        local ok = MSUF_ApplyLegacyTableToActiveProfile(converted)
+        if ok then
+            print("|cff00ff00MSUF:|r UUF profile imported into the active profile.")
+        end
+        return ok == true
     end
     --- NEW: compact path (no loadstring)
     local tryDec = _G.MSUF_TryDecodeCompactString
@@ -1623,6 +2607,23 @@ function MSUF_ImportLegacyFromString(str)
     if not str or not str:match("%S") then
         print("|cffff0000MSUF:|r Legacy import failed (empty string).")
          return false
+    end
+    if MSUF_ProfileIO_IsUUFImportString(str) then
+        local uufProfile, why = MSUF_ProfileIO_DecodeUUFProfileString(str)
+        if type(uufProfile) ~= "table" then
+            print("|cffff0000MSUF:|r UUF import failed: " .. tostring(why))
+            return false
+        end
+        local converted = MSUF_ProfileIO_ConvertUUFProfile(uufProfile, MSUF_ProfileIO_GetUUFImportBase())
+        if type(converted) ~= "table" then
+            print("|cffff0000MSUF:|r UUF import failed: profile conversion failed.")
+            return false
+        end
+        local ok = MSUF_ApplyLegacyTableToActiveProfile(converted)
+        if ok then
+            print("|cff00ff00MSUF:|r UUF profile imported into the active profile.")
+        end
+        return ok == true
     end
     local function ImportDecodedLegacyTable(tbl)
         if type(tbl) == "table" and tbl.addon == "MSUF" and tonumber(tbl.fmt) == 2 and type(tbl.payload) == "table" then
@@ -1712,33 +2713,48 @@ local function MSUF_ProfileIO_OverwriteProfile(profileKey, newTable)
     MSUF_ProfileIO_EnsureProfilesTable()
     local existing = MSUF_GlobalDB.profiles[profileKey]
     local isActive = (profileKey == MSUF_ActiveProfile)
+    local isUUFImport = MSUF_ProfileIO_IsUUFConvertedPayload(newTable)
     --- Keep references stable for ACTIVE profile (and if someone holds a ref to the existing table).
     if isActive and type(MSUF_DB) == "table" then
         --- Prefer wiping the active table ref (MSUF_DB) to avoid cache/reference drift.
         local target = MSUF_DB
+        local postPayload = isUUFImport and newTable or target
+        if isUUFImport then
+            MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
+        end
         MSUF_WipeTable(target)
         for k, v in pairs(newTable) do
-            target[k] = MSUF_DeepCopy(v)
+            if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
+                target[k] = MSUF_DeepCopy(v)
+            end
         end
         MSUF_GlobalDB.profiles[profileKey] = target
         MSUF_ProfileIO_RunEnsureDB(true)
         MSUF_ProfileIO_EnsureUnitframeAlphaDB()
-        MSUF_ProfileIO_PostImportApply_Auras("all", target)
-        MSUF_ProfileIO_PostImportApply_GroupFrames("all", target)
-        MSUF_ProfileIO_PostImportApply_UnitAlphas("all", target)
-        MSUF_ProfileIO_PostProfileRuntimeApply("PROFILE_EXTERNAL_IMPORT", true)
+        MSUF_ProfileIO_PostImportApply_Auras("all", postPayload)
+        MSUF_ProfileIO_PostImportApply_GroupFrames("all", postPayload)
+        MSUF_ProfileIO_PostImportApply_UnitAlphas("all", postPayload)
+        MSUF_ProfileIO_PostProfileRuntimeApply(isUUFImport and "PROFILE_UUF_EXTERNAL_IMPORT" or "PROFILE_EXTERNAL_IMPORT", true)
          return true
     end
     if type(existing) == "table" then
         --- For non-active profiles we can still preserve reference stability if something else points at it.
         MSUF_WipeTable(existing)
         for k, v in pairs(newTable) do
-            existing[k] = MSUF_DeepCopy(v)
+            if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
+                existing[k] = MSUF_DeepCopy(v)
+            end
         end
         MSUF_GlobalDB.profiles[profileKey] = existing
          return true
     end
-    MSUF_GlobalDB.profiles[profileKey] = MSUF_DeepCopy(newTable)
+    local stored = {}
+    for k, v in pairs(newTable) do
+        if MSUF_ProfileIO_ShouldPersistRootProfileKey(k) then
+            stored[k] = MSUF_DeepCopy(v)
+        end
+    end
+    MSUF_GlobalDB.profiles[profileKey] = stored
      return true
 end
 function MSUF_ExportExternal(profileKey)
@@ -1774,6 +2790,17 @@ function MSUF_ImportExternal(profileString, profileKey)
     end
     if type(profileKey) ~= "string" or profileKey == "" then
          return false, "invalid profileKey"
+    end
+    if MSUF_ProfileIO_IsUUFImportString(profileString) then
+        local uufProfile, why = MSUF_ProfileIO_DecodeUUFProfileString(profileString)
+        if type(uufProfile) ~= "table" then
+            return false, "UUF import failed: " .. tostring(why)
+        end
+        local converted = MSUF_ProfileIO_ConvertUUFProfile(uufProfile, MSUF_ProfileIO_GetUUFImportBase(profileKey))
+        if type(converted) ~= "table" then
+            return false, "UUF import failed: profile conversion failed"
+        end
+        return MSUF_ProfileIO_OverwriteProfile(profileKey, converted)
     end
     --- Prefer compact decode (no loadstring).
     local tryDec = _G.MSUF_TryDecodeCompactString
@@ -1820,16 +2847,16 @@ end
 _G.MSUF_Profiles_ExportExternal = MSUF_ExportExternal
 _G.MSUF_Profiles_ImportExternal = MSUF_ImportExternal
 --- Globals for the Options module.
-_G.MSUF_ExportSelectionToString = _G.MSUF_ExportSelectionToString or MSUF_ExportSelectionToString
-_G.MSUF_ImportFromString        = _G.MSUF_ImportFromString        or MSUF_ImportFromString
-_G.MSUF_ImportLegacyFromString  = _G.MSUF_ImportLegacyFromString  or MSUF_ImportLegacyFromString
+_G.MSUF_ExportSelectionToString = MSUF_ExportSelectionToString
+_G.MSUF_ImportFromString        = MSUF_ImportFromString
+_G.MSUF_ImportLegacyFromString  = MSUF_ImportLegacyFromString
 --- Always expose the real implementations under stable, explicit names.
 --- This lets other modules (or load-order proxies) call the correct logic even if _G.MSUF_ImportFromString was set earlier.
 _G.MSUF_Profiles_ExportSelectionToString = MSUF_ExportSelectionToString
 _G.MSUF_Profiles_ImportFromString        = MSUF_ImportFromString
 _G.MSUF_Profiles_ImportLegacyFromString  = MSUF_ImportLegacyFromString
 if type(MSUF) == "table" then
-    MSUF.MSUF_ExportSelectionToString = MSUF.MSUF_ExportSelectionToString or MSUF_ExportSelectionToString
-    MSUF.MSUF_ImportFromString        = MSUF.MSUF_ImportFromString        or MSUF_ImportFromString
-    MSUF.MSUF_ImportLegacyFromString  = MSUF.MSUF_ImportLegacyFromString  or MSUF_ImportLegacyFromString
+    MSUF.MSUF_ExportSelectionToString = MSUF_ExportSelectionToString
+    MSUF.MSUF_ImportFromString        = MSUF_ImportFromString
+    MSUF.MSUF_ImportLegacyFromString  = MSUF_ImportLegacyFromString
 end
