@@ -1,112 +1,442 @@
-local n,e=...e=e or{}local n=e.MSUF_CastbarRuntime or{}e.MSUF_CastbarRuntime=n
-_G.MSUF_CastbarRuntime=n local t=_G.Enum and _G.Enum.StatusBarInterpolation
-local e=_G.Enum and _G.Enum.StatusBarTimerDirection local l=(type(t)=="table"and type(t.Immediate)=="number")and t.Immediate or nil
-local a=(type(e)=="table"and type(e.ElapsedTime)=="number")and e.ElapsedTime or nil local S=(type(e)=="table"and type(e.RemainingTime)=="number")and e.RemainingTime or nil
-local p="SUCCEEDED"local m="FAILED"local h="INTERRUPTED"local c="STOPPED"local _="HARDHIDE"local s={}local f={"hideTimer","succeededTimer","timer"}local function o()return(GetTimePreciseSec and GetTimePreciseSec())or GetTime()end
-local function d(e)if e==nil then return nil end
-local n=_G.ToPlain if type(n)=="function"then
-local e=n(e)local e=tonumber(tostring(e))if e~=nil then return e end end
-local n=type(e)if n=="number"or n=="string"then
-return tonumber(tostring(e))end
-return nil end
-local function r(e,n,i)local t=e and e[n]if not t then return end local r=_G.MSUF_CB_ApplyTexts
-if type(r)=="function"then if n=="castText"then
-r(e,nil,i or"",nil)elseif n=="timeText"then
-r(e,nil,nil,i or"")end
-elseif t.SetText then t:SetText(i or"")end end
-local function u(e,n)if e and e.isEmpower==true then
-return a end
-if n==true then return S
-end return a
-end local function S(n,e,t)if e and e.reverseFill~=nil then return e.reverseFill==true
-end if type(_G.MSUF_GetCastbarReverseFillForFrame)=="function"then
-return _G.MSUF_GetCastbarReverseFillForFrame(n,t and true or false)==true end
-if type(_G.MSUF_GetReverseFillSafe)=="function"then return _G.MSUF_GetReverseFillSafe(n,t and true or false)==true
-end return false
-end function n:ApplyTimer(e,n,t,i)if not e then return false end if e.SetReverseFill then
-e:SetReverseFill(t and true or false)end
-if not n or not e.SetTimerDuration then return false
-end local t=e.GetParent and e:GetParent()or nil
-local t=u(t,i)if l~=nil and t~=nil then
-e:SetTimerDuration(n,l,t)else
-e:SetTimerDuration(n)end
-return true end
-function n:ClearTimer(e)return false
-end function n:SnapshotDuration(n,e)if not(n and e)then return nil,nil end local t
-if e.GetRemainingDuration then t=e:GetRemainingDuration()elseif e.GetRemaining then t=e:GetRemaining()end local i
-if e.GetTotalDuration then i=e:GetTotalDuration()end local e=d(t)local t=d(i)if e and e>0 then
-n._msufPlainEndTime=o()+e n._msufRemaining=e
-else n._msufPlainEndTime=nil
-n._msufRemaining=nil end
-n._msufPlainTotal=t return e,t
-end function n:ApplyActive(e,n,i)if not(e and n and n.active==true)then return false end local a=n.durationObj
-local l=n.spellName if not a or not l then return false end
-i=i or s local o=n.castType or n.phase or"CAST"local t=(o=="CHANNEL")local u=e.unit or n.unit
-e.interrupted=nil e.MSUF_castActive=true
-e.MSUF_durationObj=a e.MSUF_isChanneled=t
-if i.channelDirect~=nil then e.MSUF_channelDirect=i.channelDirect and true or nil
-elseif t and(u=="target"or u=="focus")then e.MSUF_channelDirect=true
-else e.MSUF_channelDirect=nil
-end if i.resetRuntime~=false then
-e.castDuration=nil e.castElapsed=nil
-e.MSUF_timerDriven=nil e.MSUF_timerRangeSet=nil
-e._msufLastSBValue=nil e._msufHardStopNoChannelSince=nil
-e._msufHardStopNoCastSince=nil end
-if e.icon and n.icon then e.icon:SetTexture(n.icon)end r(e,"castText",n.text or l or"")if i.skipSnapshot~=true then self:SnapshotDuration(e,a)end local r=S(e,n,t)e._msufStripeReverseFill=r and true or false e.MSUF_timerDriven=self:ApplyTimer(e.statusBar,a,r,t)and true or false
-local t=e._msufCastState or n if i.skipCastState~=true then
-e._msufCastState=t t.key=e._msufBarKey or t.key
-t.unit=u t.active=true
-t.phase=o t.castType=o
-t.spellName=l t.text=n.text or l
-t.icon=n.icon t.durationObj=a
-t.holdUntil=nil end
-if i.skipColor~=true and e.UpdateColorForInterruptible then e:UpdateColorForInterruptible()end if i.skipRegister~=true and type(_G.MSUF_RegisterCastbar)=="function"then
-_G.MSUF_RegisterCastbar(e)end
-if i.skipTimeText~=true and e.timeText and type(_G.MSUF_UpdateCastTimeText_FromStatusBar)=="function"then _G.MSUF_UpdateCastTimeText_FromStatusBar(e)end if i.skipShow~=true and e.Show then
-e:Show()end
-return true end
-function n:ApplyInterrupt(t,n)if not t then return end
-n=n or s local e=t.statusBar
-if not e then return end if e.SetMinMaxValues then e:SetMinMaxValues(0,1)end
-if e.SetValue then e:SetValue(n.barValue or 1)end if n.reverseFill~=nil and e.SetReverseFill then
-e:SetReverseFill(n.reverseFill and true or false)end
-local i=n.colorR or 0.8 local l=n.colorG or 0.1
-local a=n.colorB or 0.1 if type(_G.MSUF_SetStatusBarColorIfChanged)=="function"then
-_G.MSUF_SetStatusBarColorIfChanged(e,i,l,a,1)elseif e.SetStatusBarColor then
-e:SetStatusBarColor(i,l,a,1)end
-r(t,"castText",n.label or"Interrupted")r(t,"timeText","")if t.Show then t:Show()end if t.SetAlpha then t:SetAlpha(1)end
-if n.skipShake~=true and type(_G.MSUF_PlayCastbarShake)=="function"then _G.MSUF_PlayCastbarShake(t)end end
-function n:Stop(e,t,n)if not e then return end
-n=n or s local n=t
-if type(t)=="table"then n=t.reason or t.kind or t[1]end if type(n)~="string"then
-n=c end
-if e.SetScript then e:SetScript("OnUpdate",nil)end if type(_G.MSUF_UnregisterCastbar)=="function"then
-_G.MSUF_UnregisterCastbar(e)end
-e.MSUF_durationObj=nil e._msufPlainEndTime=nil
-e._msufRemaining=nil e._msufFastText=nil
-e._msufPlainTotal=nil e.MSUF_isChanneled=nil
-e.MSUF_channelDirect=nil e.MSUF_timerDriven=nil
-e.MSUF_timerRangeSet=nil e._msufLastSBValue=nil
-e.castDuration=nil e.castElapsed=nil
-e.MSUF_castActive=false local t=e._msufCastState
-if t then t.unit=e.unit
-t.key=e._msufBarKey or e.unit t.active=false
-t.phase=(n==h)and"INTERRUPT"or"IDLE"t.durationObj=nil
-t.holdUntil=nil end
-if n==_ then r(e,"timeText","")if e.latencyBar then e.latencyBar:Hide()end if e.Hide then e:Hide()end
-return end
-if n==c then r(e,"timeText","")r(e,"castText","")if e.latencyBar then e.latencyBar:Hide()end
-if not e.interrupted and e.Hide then e:Hide()end return
-end for n=1,#f do
-local t=f[n]local n=e[t]if n and n.Cancel then n:Cancel()end e[t]=nil
-end if e.isEmpower and type(_G.MSUF_ClearEmpowerState)=="function"then
-_G.MSUF_ClearEmpowerState(e)end
-if n==p or n==m then r(e,"castText","")r(e,"timeText","")if e.Hide then e:Hide()end
-return end
-end function n:BuildState(t,n)local e=(_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine())or nil if e and e.BuildState then
-return e:BuildState(t,n)end
-return nil end
-_G.MSUF_ApplyTimerAndFill=function(r,i,t,e)return n:ApplyTimer(r,i,t,e)end _G.MSUF_ApplyCastbarTimerDirection=function(i,e,r,t)return n:ApplyTimer(i,e,r,t)end
-_G.MSUF_ClearCastbarTimerDuration=function(e)return n:ClearTimer(e)end _G.MSUF_Castbar_ApplyActiveDuration=function(t,i,e)return n:ApplyActive(t,i,e)end
-_G.MSUF_ApplyInterruptBarVisuals=function(e,t)return n:ApplyInterrupt(e,t)end _G.MSUF_CB_ResetStateOnStop=function(e,i,t)return n:Stop(e,i,t)end
-_G.MSUF_CastbarRuntime_PlainNumber=d
+local _, ns = ...
+ns = ns or {}
+
+local Runtime = ns.MSUF_CastbarRuntime or {}
+ns.MSUF_CastbarRuntime = Runtime
+_G.MSUF_CastbarRuntime = Runtime
+
+local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
+local StatusBarTimerDirection = _G.Enum and _G.Enum.StatusBarTimerDirection
+
+local INTERPOLATION_IMMEDIATE = (
+    type(StatusBarInterpolation) == "table"
+    and type(StatusBarInterpolation.Immediate) == "number"
+) and StatusBarInterpolation.Immediate or nil
+
+local TIMER_DIRECTION_ELAPSED = (
+    type(StatusBarTimerDirection) == "table"
+    and type(StatusBarTimerDirection.ElapsedTime) == "number"
+) and StatusBarTimerDirection.ElapsedTime or nil
+
+local TIMER_DIRECTION_REMAINING = (
+    type(StatusBarTimerDirection) == "table"
+    and type(StatusBarTimerDirection.RemainingTime) == "number"
+) and StatusBarTimerDirection.RemainingTime or nil
+
+local REASON_SUCCEEDED = "SUCCEEDED"
+local REASON_FAILED = "FAILED"
+local REASON_INTERRUPTED = "INTERRUPTED"
+local REASON_STOPPED = "STOPPED"
+local REASON_HARDHIDE = "HARDHIDE"
+
+local EMPTY_OPTIONS = {}
+local STOP_TIMERS = { "hideTimer", "succeededTimer", "timer" }
+
+local function Now()
+    return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
+end
+
+local function PlainNumber(value)
+    if value == nil then
+        return nil
+    end
+
+    local toPlain = _G.ToPlain
+    if type(toPlain) == "function" then
+        local plain = toPlain(value)
+        plain = tonumber(tostring(plain))
+        if plain ~= nil then
+            return plain
+        end
+    end
+
+    local valueType = type(value)
+    if valueType == "number" or valueType == "string" then
+        return tonumber(tostring(value))
+    end
+
+    return nil
+end
+
+local function SetText(frame, textKey, value)
+    local fontString = frame and frame[textKey]
+    if not fontString then
+        return
+    end
+
+    local applyTexts = _G.MSUF_CB_ApplyTexts
+    if type(applyTexts) == "function" then
+        if textKey == "castText" then
+            applyTexts(frame, nil, value or "", nil)
+        elseif textKey == "timeText" then
+            applyTexts(frame, nil, nil, value or "")
+        end
+    elseif fontString.SetText then
+        fontString:SetText(value or "")
+    end
+end
+
+local function TimerDirection(parent, isChanneled)
+    if parent and parent.isEmpower == true then
+        return TIMER_DIRECTION_ELAPSED
+    end
+
+    if isChanneled == true then
+        return TIMER_DIRECTION_REMAINING
+    end
+
+    return TIMER_DIRECTION_ELAPSED
+end
+
+local function ResolveReverseFill(frame, state, isChanneled)
+    if state and state.reverseFill ~= nil then
+        return state.reverseFill == true
+    end
+
+    if type(_G.MSUF_GetCastbarReverseFillForFrame) == "function" then
+        return _G.MSUF_GetCastbarReverseFillForFrame(frame, isChanneled and true or false) == true
+    end
+
+    if type(_G.MSUF_GetReverseFillSafe) == "function" then
+        return _G.MSUF_GetReverseFillSafe(frame, isChanneled and true or false) == true
+    end
+
+    return false
+end
+
+function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
+    if not statusBar then
+        return false
+    end
+
+    if statusBar.SetReverseFill then
+        statusBar:SetReverseFill(reverseFill and true or false)
+    end
+
+    if not durationObj or not statusBar.SetTimerDuration then
+        return false
+    end
+
+    local parent = statusBar.GetParent and statusBar:GetParent() or nil
+    local timerDirection = TimerDirection(parent, isChanneled)
+
+    if INTERPOLATION_IMMEDIATE ~= nil and timerDirection ~= nil then
+        statusBar:SetTimerDuration(durationObj, INTERPOLATION_IMMEDIATE, timerDirection)
+    else
+        statusBar:SetTimerDuration(durationObj)
+    end
+
+    return true
+end
+
+function Runtime:ClearTimer()
+    return false
+end
+
+function Runtime:SnapshotDuration(frame, durationObj)
+    if not (frame and durationObj) then
+        return nil, nil
+    end
+
+    local remaining
+    if durationObj.GetRemainingDuration then
+        remaining = durationObj:GetRemainingDuration()
+    elseif durationObj.GetRemaining then
+        remaining = durationObj:GetRemaining()
+    end
+
+    local total
+    if durationObj.GetTotalDuration then
+        total = durationObj:GetTotalDuration()
+    end
+
+    remaining = PlainNumber(remaining)
+    total = PlainNumber(total)
+
+    if remaining and remaining > 0 then
+        frame._msufPlainEndTime = Now() + remaining
+        frame._msufRemaining = remaining
+    else
+        frame._msufPlainEndTime = nil
+        frame._msufRemaining = nil
+    end
+
+    frame._msufPlainTotal = total
+    return remaining, total
+end
+
+function Runtime:ApplyActive(frame, state, options)
+    if not (frame and state and state.active == true) then
+        return false
+    end
+
+    local durationObj = state.durationObj
+    local spellName = state.spellName
+    if not durationObj or not spellName then
+        return false
+    end
+
+    options = options or EMPTY_OPTIONS
+
+    local castType = state.castType or state.phase or "CAST"
+    local isChanneled = castType == "CHANNEL"
+    local unit = frame.unit or state.unit
+
+    frame.interrupted = nil
+    frame.MSUF_castActive = true
+    frame.MSUF_durationObj = durationObj
+    frame.MSUF_isChanneled = isChanneled
+
+    if options.channelDirect ~= nil then
+        frame.MSUF_channelDirect = options.channelDirect and true or nil
+    elseif isChanneled and (unit == "target" or unit == "focus") then
+        frame.MSUF_channelDirect = true
+    else
+        frame.MSUF_channelDirect = nil
+    end
+
+    if options.resetRuntime ~= false then
+        frame.castDuration = nil
+        frame.castElapsed = nil
+        frame.MSUF_timerDriven = nil
+        frame.MSUF_timerRangeSet = nil
+        frame._msufLastSBValue = nil
+        frame._msufHardStopNoChannelSince = nil
+        frame._msufHardStopNoCastSince = nil
+    end
+
+    if frame.icon and state.icon then
+        frame.icon:SetTexture(state.icon)
+    end
+
+    SetText(frame, "castText", state.text or spellName or "")
+
+    if options.skipSnapshot ~= true then
+        self:SnapshotDuration(frame, durationObj)
+    end
+
+    local reverseFill = ResolveReverseFill(frame, state, isChanneled)
+    frame._msufStripeReverseFill = reverseFill and true or false
+    frame.MSUF_timerDriven = self:ApplyTimer(frame.statusBar, durationObj, reverseFill, isChanneled) and true or false
+
+    local castState = frame._msufCastState or state
+    if options.skipCastState ~= true then
+        frame._msufCastState = castState
+        castState.key = frame._msufBarKey or castState.key
+        castState.unit = unit
+        castState.active = true
+        castState.phase = castType
+        castState.castType = castType
+        castState.spellName = spellName
+        castState.text = state.text or spellName
+        castState.icon = state.icon
+        castState.durationObj = durationObj
+        castState.holdUntil = nil
+    end
+
+    if options.skipColor ~= true and frame.UpdateColorForInterruptible then
+        frame:UpdateColorForInterruptible()
+    end
+
+    if options.skipRegister ~= true and type(_G.MSUF_RegisterCastbar) == "function" then
+        _G.MSUF_RegisterCastbar(frame)
+    end
+
+    if options.skipTimeText ~= true
+        and frame.timeText
+        and type(_G.MSUF_UpdateCastTimeText_FromStatusBar) == "function"
+    then
+        _G.MSUF_UpdateCastTimeText_FromStatusBar(frame)
+    end
+
+    if options.skipShow ~= true and frame.Show then
+        frame:Show()
+    end
+
+    return true
+end
+
+function Runtime:ApplyInterrupt(frame, options)
+    if not frame then
+        return
+    end
+
+    options = options or EMPTY_OPTIONS
+
+    local statusBar = frame.statusBar
+    if not statusBar then
+        return
+    end
+
+    if statusBar.SetMinMaxValues then
+        statusBar:SetMinMaxValues(0, 1)
+    end
+
+    if statusBar.SetValue then
+        statusBar:SetValue(options.barValue or 1)
+    end
+
+    if options.reverseFill ~= nil and statusBar.SetReverseFill then
+        statusBar:SetReverseFill(options.reverseFill and true or false)
+    end
+
+    local red = options.colorR or 0.8
+    local green = options.colorG or 0.1
+    local blue = options.colorB or 0.1
+
+    if type(_G.MSUF_SetStatusBarColorIfChanged) == "function" then
+        _G.MSUF_SetStatusBarColorIfChanged(statusBar, red, green, blue, 1)
+    elseif statusBar.SetStatusBarColor then
+        statusBar:SetStatusBarColor(red, green, blue, 1)
+    end
+
+    SetText(frame, "castText", options.label or "Interrupted")
+    SetText(frame, "timeText", "")
+
+    if frame.Show then
+        frame:Show()
+    end
+
+    if frame.SetAlpha then
+        frame:SetAlpha(1)
+    end
+
+    if options.skipShake ~= true and type(_G.MSUF_PlayCastbarShake) == "function" then
+        _G.MSUF_PlayCastbarShake(frame)
+    end
+end
+
+function Runtime:Stop(frame, reasonOrOptions)
+    if not frame then
+        return
+    end
+
+    local reason = reasonOrOptions
+    if type(reasonOrOptions) == "table" then
+        reason = reasonOrOptions.reason or reasonOrOptions.kind or reasonOrOptions[1]
+    end
+
+    if type(reason) ~= "string" then
+        reason = REASON_STOPPED
+    end
+
+    if frame.SetScript then
+        frame:SetScript("OnUpdate", nil)
+    end
+
+    if type(_G.MSUF_UnregisterCastbar) == "function" then
+        _G.MSUF_UnregisterCastbar(frame)
+    end
+
+    frame.MSUF_durationObj = nil
+    frame._msufPlainEndTime = nil
+    frame._msufRemaining = nil
+    frame._msufFastText = nil
+    frame._msufPlainTotal = nil
+    frame.MSUF_isChanneled = nil
+    frame.MSUF_channelDirect = nil
+    frame.MSUF_timerDriven = nil
+    frame.MSUF_timerRangeSet = nil
+    frame._msufLastSBValue = nil
+    frame.castDuration = nil
+    frame.castElapsed = nil
+    frame.MSUF_castActive = false
+
+    local castState = frame._msufCastState
+    if castState then
+        castState.unit = frame.unit
+        castState.key = frame._msufBarKey or frame.unit
+        castState.active = false
+        castState.phase = (reason == REASON_INTERRUPTED) and "INTERRUPT" or "IDLE"
+        castState.durationObj = nil
+        castState.holdUntil = nil
+    end
+
+    if reason == REASON_HARDHIDE then
+        SetText(frame, "timeText", "")
+
+        if frame.latencyBar then
+            frame.latencyBar:Hide()
+        end
+
+        if frame.Hide then
+            frame:Hide()
+        end
+
+        return
+    end
+
+    if reason == REASON_STOPPED then
+        SetText(frame, "timeText", "")
+        SetText(frame, "castText", "")
+
+        if frame.latencyBar then
+            frame.latencyBar:Hide()
+        end
+
+        if not frame.interrupted and frame.Hide then
+            frame:Hide()
+        end
+
+        return
+    end
+
+    for index = 1, #STOP_TIMERS do
+        local timerKey = STOP_TIMERS[index]
+        local timer = frame[timerKey]
+
+        if timer and timer.Cancel then
+            timer:Cancel()
+        end
+
+        frame[timerKey] = nil
+    end
+
+    if frame.isEmpower and type(_G.MSUF_ClearEmpowerState) == "function" then
+        _G.MSUF_ClearEmpowerState(frame)
+    end
+
+    if reason == REASON_SUCCEEDED or reason == REASON_FAILED then
+        SetText(frame, "castText", "")
+        SetText(frame, "timeText", "")
+
+        if frame.Hide then
+            frame:Hide()
+        end
+    end
+end
+
+function Runtime:BuildState(unit, previousState)
+    local engine = (_G.MSUF_GetCastbarEngine and _G.MSUF_GetCastbarEngine()) or nil
+    if engine and engine.BuildState then
+        return engine:BuildState(unit, previousState)
+    end
+
+    return nil
+end
+
+_G.MSUF_ApplyTimerAndFill = function(statusBar, durationObj, reverseFill, isChanneled)
+    return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
+end
+
+_G.MSUF_ApplyCastbarTimerDirection = function(statusBar, durationObj, reverseFill, isChanneled)
+    return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
+end
+
+_G.MSUF_ClearCastbarTimerDuration = function(statusBar)
+    return Runtime:ClearTimer(statusBar)
+end
+
+_G.MSUF_Castbar_ApplyActiveDuration = function(frame, state, options)
+    return Runtime:ApplyActive(frame, state, options)
+end
+
+_G.MSUF_ApplyInterruptBarVisuals = function(frame, options)
+    return Runtime:ApplyInterrupt(frame, options)
+end
+
+_G.MSUF_CB_ResetStateOnStop = function(frame, reason, options)
+    return Runtime:Stop(frame, reason, options)
+end
+
+_G.MSUF_CastbarRuntime_PlainNumber = PlainNumber

@@ -1,43 +1,221 @@
-local a=_G
-local function s(t)local e=a.MSUF_NS
-local r=(type(e)=="table"and e.L)or a.MSUF_L
-if type(e)=="table"and type(e.Translate)=="function"then return e.Translate(t)end
-return(type(r)=="table"and rawget(r,t))or t
+local G = _G
+
+local function Translate(text)
+    local ns = G.MSUF_NS
+    local locale = (type(ns) == "table" and ns.L) or G.MSUF_L
+
+    if type(ns) == "table" and type(ns.Translate) == "function" then
+        return ns.Translate(text)
+    end
+
+    return (type(locale) == "table" and rawget(locale, text)) or text
 end
-local function l()return(type(MSUF_GetCastbarTexture)=="function"and MSUF_GetCastbarTexture())or"Interface\\TargetingFrame\\UI-StatusBar"end
-local function n()local t=l()if type(a.MSUF_GetCastbarBackgroundTexture)=="function"then
-local e=a.MSUF_GetCastbarBackgroundTexture()if e and e~=""then t=e end
+
+local function CastbarTexture()
+    return (type(MSUF_GetCastbarTexture) == "function" and MSUF_GetCastbarTexture())
+        or "Interface\\TargetingFrame\\UI-StatusBar"
 end
-return t
+
+local function CastbarBackgroundTexture()
+    local texture = CastbarTexture()
+
+    if type(G.MSUF_GetCastbarBackgroundTexture) == "function" then
+        local backgroundTexture = G.MSUF_GetCastbarBackgroundTexture()
+        if backgroundTexture and backgroundTexture ~= "" then
+            texture = backgroundTexture
+        end
+    end
+
+    return texture
 end
-local function i()if type(a.MSUF_GetCastbarBackgroundColor)=="function"then return a.MSUF_GetCastbarBackgroundColor()end
-return 0.176,0.176,0.176,1
+
+local function CastbarBackgroundColor()
+    if type(G.MSUF_GetCastbarBackgroundColor) == "function" then
+        return G.MSUF_GetCastbarBackgroundColor()
+    end
+
+    return 0.176, 0.176, 0.176, 1
 end
-local function S(t,r)local e=t:CreateTexture(nil,"OVERLAY",nil,6)e:SetTexture(4417031)e:SetTexCoord(0.222168,0.232422,0.294434,0.317383)e:SetDesaturated(true)e:SetVertexColor(1,1,1,1)e:SetBlendMode("ADD")e:SetSize(16,r*2.1)local r=t:GetStatusBarTexture()e:SetPoint("CENTER",r or t,r and"RIGHT"or"LEFT",0,0)e:Hide()return e
+
+local function CreateSpark(statusBar, height)
+    local spark = statusBar:CreateTexture(nil, "OVERLAY", nil, 6)
+    spark:SetTexture(4417031)
+    spark:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
+    spark:SetDesaturated(true)
+    spark:SetVertexColor(1, 1, 1, 1)
+    spark:SetBlendMode("ADD")
+    spark:SetSize(16, height * 2.1)
+
+    local statusBarTexture = statusBar:GetStatusBarTexture()
+    spark:SetPoint("CENTER", statusBarTexture or statusBar, statusBarTexture and "RIGHT" or "LEFT", 0, 0)
+    spark:Hide()
+
+    return spark
 end
-local function T(e,l,t,r,o)local i,a,n=GameFontHighlight:GetFont()local e=e:CreateFontString(nil,"OVERLAY")e:SetFont(i,a,n)e:SetJustifyH(l)e:SetPoint(t,r,t,o or 0,0)return e
+
+local function CreateText(parent, justifyH, point, relativeTo, offsetX)
+    local fontPath, fontSize, fontFlags = GameFontHighlight:GetFont()
+    local text = parent:CreateFontString(nil, "OVERLAY")
+
+    text:SetFont(fontPath, fontSize, fontFlags)
+    text:SetJustifyH(justifyH)
+    text:SetPoint(point, relativeTo, point, offsetX or 0, 0)
+
+    return text
 end
-function a.MSUF_BuildCastbarFrameElements(e)local r=18
-e:SetHeight(r)if(not e:GetWidth())or e:GetWidth()==0 then e:SetWidth(250)end
-e.background=e:CreateTexture(nil,"BACKGROUND")e.background:SetAllPoints(e)e.background:SetColorTexture(0,0,0,1)local t=CreateFrame("StatusBar",nil,e)t:SetPoint("LEFT",e,"LEFT",r+1,0)t:SetSize(e:GetWidth()-r-1,e:GetHeight()-2)t:SetStatusBarTexture(l())if t:GetStatusBarTexture()then t:GetStatusBarTexture():SetHorizTile(true)end
-if type(a.MSUF_ApplyCastbarTimerDirection)=="function"then a.MSUF_ApplyCastbarTimerDirection(t,nil,type(MSUF_GetCastbarReverseFillForFrame)=="function"and MSUF_GetCastbarReverseFillForFrame(e,false))elseif t.SetReverseFill and type(MSUF_GetCastbarReverseFillForFrame)=="function"then t:SetReverseFill(MSUF_GetCastbarReverseFillForFrame(e,false))end
-e.statusBar=t
-e.icon=t:CreateTexture(nil,"OVERLAY",nil,7)e.icon:SetSize(r,r)e.icon:SetPoint("LEFT",e,"LEFT",0,0)e.backgroundBar=t:CreateTexture(nil,"BACKGROUND")e.backgroundBar:SetAllPoints(t)e.backgroundBar:SetTexture(n())e.backgroundBar:SetVertexColor(i())e.castText=t:CreateFontString(nil,"OVERLAY")e.castText:SetFont("Fonts\\FRIZQT__.TTF",12,"OUTLINE")e.castText:SetPoint("LEFT",t,"LEFT",2,0)e.timeText=t:CreateFontString(nil,"OVERLAY")e.timeText:SetFont("Fonts\\FRIZQT__.TTF",12,"OUTLINE")e.timeText:SetPoint("RIGHT",t,"RIGHT",-2,0)e.timeText:SetText("")e.spark=S(t,r)if type(a.MSUF_ApplyCastbarOutline)=="function"then a.MSUF_ApplyCastbarOutline(e,true)end
+
+function G.MSUF_BuildCastbarFrameElements(frame)
+    local barHeight = 18
+
+    frame:SetHeight(barHeight)
+    if (not frame:GetWidth()) or frame:GetWidth() == 0 then
+        frame:SetWidth(250)
+    end
+
+    frame.background = frame:CreateTexture(nil, "BACKGROUND")
+    frame.background:SetAllPoints(frame)
+    frame.background:SetColorTexture(0, 0, 0, 1)
+
+    local statusBar = CreateFrame("StatusBar", nil, frame)
+    statusBar:SetPoint("LEFT", frame, "LEFT", barHeight + 1, 0)
+    statusBar:SetSize(frame:GetWidth() - barHeight - 1, frame:GetHeight() - 2)
+    statusBar:SetStatusBarTexture(CastbarTexture())
+
+    if statusBar:GetStatusBarTexture() then
+        statusBar:GetStatusBarTexture():SetHorizTile(true)
+    end
+
+    if type(G.MSUF_ApplyCastbarTimerDirection) == "function" then
+        G.MSUF_ApplyCastbarTimerDirection(
+            statusBar,
+            nil,
+            type(MSUF_GetCastbarReverseFillForFrame) == "function" and MSUF_GetCastbarReverseFillForFrame(frame, false)
+        )
+    elseif statusBar.SetReverseFill and type(MSUF_GetCastbarReverseFillForFrame) == "function" then
+        statusBar:SetReverseFill(MSUF_GetCastbarReverseFillForFrame(frame, false))
+    end
+
+    frame.statusBar = statusBar
+
+    frame.icon = statusBar:CreateTexture(nil, "OVERLAY", nil, 7)
+    frame.icon:SetSize(barHeight, barHeight)
+    frame.icon:SetPoint("LEFT", frame, "LEFT", 0, 0)
+
+    frame.backgroundBar = statusBar:CreateTexture(nil, "BACKGROUND")
+    frame.backgroundBar:SetAllPoints(statusBar)
+    frame.backgroundBar:SetTexture(CastbarBackgroundTexture())
+    frame.backgroundBar:SetVertexColor(CastbarBackgroundColor())
+
+    frame.castText = statusBar:CreateFontString(nil, "OVERLAY")
+    frame.castText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    frame.castText:SetPoint("LEFT", statusBar, "LEFT", 2, 0)
+
+    frame.timeText = statusBar:CreateFontString(nil, "OVERLAY")
+    frame.timeText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    frame.timeText:SetPoint("RIGHT", statusBar, "RIGHT", -2, 0)
+    frame.timeText:SetText("")
+
+    frame.spark = CreateSpark(statusBar, barHeight)
+
+    if type(G.MSUF_ApplyCastbarOutline) == "function" then
+        G.MSUF_ApplyCastbarOutline(frame, true)
+    end
 end
-function a.MSUF_CreateCastbarPreviewFrame(o,e,r)r=r or{}local t,c,n=r.parent or UIParent,tonumber(r.width)or 250,tonumber(r.height)or 18
-local u=tonumber(r.statusBarHeight)or math.max(4,n-2)local e=CreateFrame("Frame",e,t,r.template or"BackdropTemplate")e.unit,e._msufIsPreview=o,true
-e:SetClampedToScreen(true)e:SetFrameStrata(r.strata or"DIALOG")e:SetSize(c,n)e._msufFrameBG=e:CreateTexture(nil,"BACKGROUND")e._msufFrameBG:SetAllPoints(e)e._msufFrameBG:SetColorTexture(0,0,0,r.bgAlpha or 0.8)local t=CreateFrame("StatusBar",nil,e)if e.GetFrameLevel and t.SetFrameLevel then t:SetFrameLevel(e:GetFrameLevel()+1)end
-t:SetPoint("LEFT",e,"LEFT",0,0)t:SetSize(c,u)t:SetStatusBarTexture(l())if t:GetStatusBarTexture()then t:GetStatusBarTexture():SetHorizTile(true)end
-t:SetMinMaxValues(0,1)t:SetValue(tonumber(r.initialValue)or 0)e.statusBar=t
-e.backgroundBar=t:CreateTexture(nil,"BACKGROUND")e.backgroundBar:SetAllPoints(t)e.backgroundBar:SetTexture("Interface\\Buttons\\WHITE8X8")e.backgroundBar:SetVertexColor(i())e.backgroundBar:SetAlpha(0.25)if r.hideFillTexture and t:GetStatusBarTexture()then t:GetStatusBarTexture():SetAlpha(0);t.MSUF_hideFillTexture=true end
-if o=="player"then
-e.latencyBar=t:CreateTexture(nil,"OVERLAY")e.latencyBar:SetColorTexture(1,0,0,0.25)e.latencyBar:SetPoint("TOPRIGHT",t,"TOPRIGHT")e.latencyBar:SetPoint("BOTTOMRIGHT",t,"BOTTOMRIGHT")e.latencyBar:SetWidth(0)e.latencyBar:Hide()end
-if r.showIcon~=false then
-e.icon=e:CreateTexture(nil,"OVERLAY",nil,7)e.icon:SetSize(tonumber(r.iconSize)or n,tonumber(r.iconSize)or n)e.icon:SetPoint("LEFT",e,"LEFT",0,0)e.icon:SetTexture(r.iconTexture or 136235)end
-local n=CreateFrame("Frame",nil,e)n:SetAllPoints(t)if n.SetFrameLevel and t.GetFrameLevel then n:SetFrameLevel(t:GetFrameLevel()+10)end
-e._msufTextOverlay=n
-local o=r.label or(o=="player"and"Player castbar preview"or o=="target"and"Target castbar preview"or o=="focus"and"Focus castbar preview"or o=="boss"and"Boss castbar preview"or"Castbar preview")e.castText=T(n,"LEFT","LEFT",n,2)e.castText:SetText(s(o))if r.showTime~=false then
-e.timeText=T(n,"RIGHT","RIGHT",n,-2)e.timeText:SetText(r.timeLabel or"3.2")end
-e.spark=S(t,u)if type(a.MSUF_ApplyCastbarOutline)=="function"then a.MSUF_ApplyCastbarOutline(e,true)end
-return e
+
+function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
+    options = options or {}
+
+    local parent = options.parent or UIParent
+    local width = tonumber(options.width) or 250
+    local height = tonumber(options.height) or 18
+    local statusBarHeight = tonumber(options.statusBarHeight) or math.max(4, height - 2)
+
+    local frame = CreateFrame("Frame", name, parent, options.template or "BackdropTemplate")
+    frame.unit = unit
+    frame._msufIsPreview = true
+    frame:SetClampedToScreen(true)
+    frame:SetFrameStrata(options.strata or "DIALOG")
+    frame:SetSize(width, height)
+
+    frame._msufFrameBG = frame:CreateTexture(nil, "BACKGROUND")
+    frame._msufFrameBG:SetAllPoints(frame)
+    frame._msufFrameBG:SetColorTexture(0, 0, 0, options.bgAlpha or 0.8)
+
+    local statusBar = CreateFrame("StatusBar", nil, frame)
+    if frame.GetFrameLevel and statusBar.SetFrameLevel then
+        statusBar:SetFrameLevel(frame:GetFrameLevel() + 1)
+    end
+
+    statusBar:SetPoint("LEFT", frame, "LEFT", 0, 0)
+    statusBar:SetSize(width, statusBarHeight)
+    statusBar:SetStatusBarTexture(CastbarTexture())
+
+    if statusBar:GetStatusBarTexture() then
+        statusBar:GetStatusBarTexture():SetHorizTile(true)
+    end
+
+    statusBar:SetMinMaxValues(0, 1)
+    statusBar:SetValue(tonumber(options.initialValue) or 0)
+    frame.statusBar = statusBar
+
+    frame.backgroundBar = statusBar:CreateTexture(nil, "BACKGROUND")
+    frame.backgroundBar:SetAllPoints(statusBar)
+    frame.backgroundBar:SetTexture("Interface\\Buttons\\WHITE8X8")
+    frame.backgroundBar:SetVertexColor(CastbarBackgroundColor())
+    frame.backgroundBar:SetAlpha(0.25)
+
+    if options.hideFillTexture and statusBar:GetStatusBarTexture() then
+        statusBar:GetStatusBarTexture():SetAlpha(0)
+        statusBar.MSUF_hideFillTexture = true
+    end
+
+    if unit == "player" then
+        frame.latencyBar = statusBar:CreateTexture(nil, "OVERLAY")
+        frame.latencyBar:SetColorTexture(1, 0, 0, 0.25)
+        frame.latencyBar:SetPoint("TOPRIGHT", statusBar, "TOPRIGHT")
+        frame.latencyBar:SetPoint("BOTTOMRIGHT", statusBar, "BOTTOMRIGHT")
+        frame.latencyBar:SetWidth(0)
+        frame.latencyBar:Hide()
+    end
+
+    if options.showIcon ~= false then
+        local iconSize = tonumber(options.iconSize) or height
+
+        frame.icon = frame:CreateTexture(nil, "OVERLAY", nil, 7)
+        frame.icon:SetSize(iconSize, iconSize)
+        frame.icon:SetPoint("LEFT", frame, "LEFT", 0, 0)
+        frame.icon:SetTexture(options.iconTexture or 136235)
+    end
+
+    local textOverlay = CreateFrame("Frame", nil, frame)
+    textOverlay:SetAllPoints(statusBar)
+    if textOverlay.SetFrameLevel and statusBar.GetFrameLevel then
+        textOverlay:SetFrameLevel(statusBar:GetFrameLevel() + 10)
+    end
+
+    frame._msufTextOverlay = textOverlay
+
+    local label = options.label
+        or (unit == "player" and "Player castbar preview")
+        or (unit == "target" and "Target castbar preview")
+        or (unit == "focus" and "Focus castbar preview")
+        or (unit == "boss" and "Boss castbar preview")
+        or "Castbar preview"
+
+    local castTextJustify = unit == "boss" and "LEFT" or "CENTER"
+    frame.castText = CreateText(textOverlay, castTextJustify, "LEFT", textOverlay, 2)
+    frame.castText:SetText(Translate(label))
+
+    if options.showTime ~= false then
+        frame.timeText = CreateText(textOverlay, "RIGHT", "RIGHT", textOverlay, -2)
+        frame.timeText:SetText(options.timeLabel or "3.2")
+    end
+
+    frame.spark = CreateSpark(statusBar, statusBarHeight)
+
+    if type(G.MSUF_ApplyCastbarOutline) == "function" then
+        G.MSUF_ApplyCastbarOutline(frame, true)
+    end
+
+    return frame
 end
