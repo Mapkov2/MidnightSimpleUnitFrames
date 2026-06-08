@@ -4,3 +4,8 @@ dist/
 *.tmp
 .vs/
 .idea/
+
+# Local MSUF developer toolbelt. These scripts are intentionally local-only and
+# should not ship with the addon or be pushed to GitHub.
+tools/
+MidnightSimpleUnitFrames/docs/MSUF_DEBUG_TOOL.md

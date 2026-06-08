@@ -1184,7 +1184,53 @@ local function ResolveUnit(db, unit, out)
     out.text.npcTypeToT = general.npcTypeToT ~= false
     ResolveToTInline(db, general, unit, out.text)
     out.text.healthColorByHealth = ResolveHealthTextColorByHealth(general, conf)
-    out.text.powerColorByType = general.colorPowerTextByType == true
+    if conf.powerTextColorByType ~= nil then
+        out.text.powerColorByType = conf.powerTextColorByType == true
+    else
+        out.text.powerColorByType = general.colorPowerTextByType == true
+    end
+    out.text.directLayout = conf.directTextLayout == true
+    if out.text.directLayout == true then
+        local function CopyLayout(srcPrefix, dstPrefix)
+            out.text[dstPrefix .. "Point"] = conf[srcPrefix .. "Point"]
+            out.text[dstPrefix .. "RelativePoint"] = conf[srcPrefix .. "RelativePoint"]
+            out.text[dstPrefix .. "X"] = Number(conf[srcPrefix .. "OffsetX"], 0)
+            out.text[dstPrefix .. "Y"] = Number(conf[srcPrefix .. "OffsetY"], 0)
+        end
+        local function CopyColor(src)
+            if type(src) ~= "table" then
+                return nil
+            end
+            local r = tonumber(src.r or src[1])
+            local g = tonumber(src.g or src[2])
+            local b = tonumber(src.b or src[3])
+            local a = src.a
+            if a == nil then a = src[4] end
+            a = tonumber(a)
+            if r == nil or g == nil or b == nil then
+                return nil
+            end
+            return { r = r, g = g, b = b, a = a or 1 }
+        end
+        local function CopyColorField(srcPrefix, dstPrefix)
+            out.text[dstPrefix .. "Color"] = CopyColor(conf[srcPrefix .. "Color"])
+        end
+        CopyLayout("directName", "directName")
+        CopyLayout("directHealthLeft", "directHealthLeft")
+        CopyLayout("directHealthCenter", "directHealthCenter")
+        CopyLayout("directHealthRight", "directHealthRight")
+        CopyLayout("directPowerLeft", "directPowerLeft")
+        CopyLayout("directPowerCenter", "directPowerCenter")
+        CopyLayout("directPowerRight", "directPowerRight")
+        CopyColorField("directName", "directName")
+        CopyColorField("directHealthLeft", "directHealthLeft")
+        CopyColorField("directHealthCenter", "directHealthCenter")
+        CopyColorField("directHealthRight", "directHealthRight")
+        CopyColorField("directPowerLeft", "directPowerLeft")
+        CopyColorField("directPowerCenter", "directPowerCenter")
+        CopyColorField("directPowerRight", "directPowerRight")
+        out.text.nameColor = out.text.directNameColor
+    end
     out.text.shortNumbers = general.useShortNumbers ~= false
     out.text.hidePercentSymbol = general.hidePercentSymbol == true
     local healthThrottle = Number(conf.hpTextThrottleMs or conf.healthTextThrottleMs or general.hpTextThrottleMs or general.healthTextThrottleMs, nil)
