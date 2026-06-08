@@ -110,6 +110,14 @@ function A.Workflow.StatusText()
     lines[#lines + 1] = "Edit mode: " .. edit
     lines[#lines + 1] = "Assistant registry: " .. tostring(#(Registry.settings or {})) .. " settings, " .. tostring(#(Registry.actions or {})) .. " actions"
     lines[#lines + 1] = "Queued Assistant changes: " .. tostring(type(A.queuedPlans) == "table" and #A.queuedPlans or 0)
+    local perf = A.GetLastPerfSample and A.GetLastPerfSample() or nil
+    if type(perf) == "table" then
+        lines[#lines + 1] = "Last Assistant timing: " .. tostring(perf.label or "assistant") .. " " .. tostring(math.floor((tonumber(perf.ms) or 0) + 0.5)) .. " ms"
+    end
+    local slow = A.GetLastSlowPerfSample and A.GetLastSlowPerfSample() or nil
+    if type(slow) == "table" then
+        lines[#lines + 1] = "Last slow Assistant timing: " .. tostring(slow.label or "assistant") .. " " .. tostring(math.floor((tonumber(slow.ms) or 0) + 0.5)) .. " ms"
+    end
     return table.concat(lines, "\n")
 end
 

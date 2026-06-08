@@ -700,24 +700,24 @@ local PAGE_RESET_INFO = {
         summary = "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides",
     },
     auras3 = {
-        label = "Aura Buffs",
+        label = "Aura Style",
         kind = "auras",
-        summary = "scope-aware Buff visibility for unit and group frames",
+        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
     },
     auras3_buffs = {
-        label = "Aura Buffs",
+        label = "Aura Style",
         kind = "auras",
-        summary = "scope-aware Buff visibility for unit and group frames",
+        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
     },
     auras3_debuffs = {
-        label = "Aura Debuffs",
+        label = "Aura Style",
         kind = "auras",
-        summary = "scope-aware Debuff visibility for unit and group frames",
+        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
     },
     auras3_rendering = {
-        label = "Auras",
+        label = "Aura Style",
         kind = "auras",
-        summary = "scope-aware Buff and Debuff visibility for unit and group frames",
+        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
     },
     auras3_filters = {
         label = "Aura Filters",

@@ -1278,12 +1278,12 @@ local function BuildClassPower(ctx)
         MoveWidget(cpGap, visual, styleRightX, -410, styleRightControlW)
     end
 
-    local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 196, false)
+    local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 216, false)
     local visibilityW = min(560, (visibility._msuf2Width or ctx.width or 900) - 28)
-    W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -38, visibilityW, 134)
-    local hideOOC = SwitchAt(ctx, visibility, "Hide out of combat", 32, -64, visibilityW - 48, Bars, "classPowerHideOOC", false, ApplyClassPower)
-    local hideFull = SwitchAt(ctx, visibility, "Hide when full", 32, -96, visibilityW - 48, Bars, "classPowerHideWhenFull", false, ApplyClassPower)
-    local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -128, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
+    W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -54, visibilityW, 142)
+    local hideOOC = SwitchAt(ctx, visibility, "Hide out of combat", 32, -86, visibilityW - 48, Bars, "classPowerHideOOC", false, ApplyClassPower)
+    local hideFull = SwitchAt(ctx, visibility, "Hide when full", 32, -118, visibilityW - 48, Bars, "classPowerHideWhenFull", false, ApplyClassPower)
+    local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -150, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
     for _, control in ipairs({ hideOOC, hideFull, hideEmpty }) do cpControls[#cpControls + 1] = control end
 
     local dpb = b:CollapsibleSection("classpower_detached_power", "Detached Power Bar", 382, false)

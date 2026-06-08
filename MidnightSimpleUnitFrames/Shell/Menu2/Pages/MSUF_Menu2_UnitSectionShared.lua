@@ -83,7 +83,7 @@ function Shared.SetSectionHeaderStatus(sec, opts)
                 entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
             end
         else
-            entry.hint:SetText(entry.open and "" or M.Tr("click to expand"))
+            if T.ApplyCollapseVisual then T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open) end
         end
     end
 end

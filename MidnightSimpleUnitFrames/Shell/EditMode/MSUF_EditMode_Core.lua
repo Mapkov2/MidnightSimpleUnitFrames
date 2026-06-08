@@ -433,16 +433,26 @@ function State.Enter(key)
         end
     end
 
+    local function ReforceUnitPreviewsAfterEnter()
+        if not (EM2.State and EM2.State.IsActive()) then return end
+        if _G.MSUF_EM2_ReforcePreviewFrames then
+            _G.MSUF_EM2_ReforcePreviewFrames()
+        elseif _G.MSUF_SyncAllUnitPreviews then
+            _G.MSUF_SyncAllUnitPreviews()
+        end
+        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    end
+
     --- Preview: defer the (heavy) preview sync to the next frame so the click
-    --- that opens edit mode stays responsive, then re-sync after the async
-    --- apply/layout settles. Running it synchronously here used to land the
-    --- full preview + Auras3 refresh on the same frame as the click = spike.
+    --- that opens edit mode stays responsive. Later settle passes only re-force
+    --- preview frames and mover bounds; repeating the full sync reruns Auras3,
+    --- castbar previews, visibility drivers, and boss preview work.
     C_Timer.After(0, SyncUnitPreviewsAfterEnter)
     C_Timer.After(0.1, function()
-        SyncUnitPreviewsAfterEnter()
+        ReforceUnitPreviewsAfterEnter()
     end)
     C_Timer.After(0.25, function()
-        SyncUnitPreviewsAfterEnter()
+        ReforceUnitPreviewsAfterEnter()
     end)
 
     --- Undo transaction

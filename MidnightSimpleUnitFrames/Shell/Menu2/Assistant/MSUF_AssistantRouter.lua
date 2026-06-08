@@ -394,8 +394,8 @@ local function HumanConversationReply(text)
     if ContainsAny(norm, { "who are you", "what are you", "wer bist du", "was bist du" }) then
         return {
             text = german
-                and "Ich bin der lokale MSUF Assistant. Ich nutze keine externe KI und kann nur echte, registrierte MSUF-Funktionen ausfuehren."
-                or "I am the local MSUF Assistant. I do not use external AI, and I only run real registered MSUF controls.",
+                and "Ich bin der lokale MSUF Assistant. Ich kann echte registrierte MSUF-Funktionen aendern, Seiten erklaeren und bei unklaren Befehlen nachfragen. Aura-Regler sind uebersprungen, bis ihr Backend fertig ist."
+                or "I am the local MSUF Assistant. I can change real registered MSUF controls, explain pages, and ask when a command is ambiguous. Aura controls are skipped until their backend is ready.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -408,7 +408,7 @@ local function FriendlyNoMatch(text)
     local noMatch = KnowledgeNoMatch(text)
     if noMatch then return noMatch end
     return {
-        text = "I could not map that to a safe MSUF command yet. Please ask in Discord and include your exact wording: " .. DISCORD_INVITE,
+        text = "I could not match that to a safe MSUF command yet. Try naming the frame or page and the exact control, for example 'set player width to 300' or 'turn off raid range fade'. Aura controls are skipped until their backend is ready. If it still should work, send the exact wording in Discord: " .. DISCORD_INVITE,
         status = "info",
         summary = "Assistant no match",
     }

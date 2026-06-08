@@ -223,6 +223,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or ParseAuraQuickPreset(normalized)
         or ParseAuraGroupCategoryBlacklist(normalized)
         or ParseAuraBlacklist(normalized, raw)
+        or ParseClassPowerAction(normalized)
         or ParseClassPowerRootToggle(normalized)
         or A._ParseClassPowerMoveShortcut(normalized)
         or ParseGameplayRootToggle(normalized)
@@ -336,6 +337,8 @@ function A.Parse(text)
         or A._ParsePipelineGeometry(normalized, raw)
         or A._ParsePipelineFeature(normalized, raw, ctx)
         or A._ParsePipelineFallback(normalized, raw, ctx)
+    local compound = P.ParseCompound and P.ParseCompound(normalized, raw, parsed)
+    if compound then parsed = compound end
     if parsed then
         parsed.raw = raw
         parsed.normalized = normalized

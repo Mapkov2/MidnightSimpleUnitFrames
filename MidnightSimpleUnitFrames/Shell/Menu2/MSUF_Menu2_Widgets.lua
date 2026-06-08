@@ -176,6 +176,23 @@ local function ConsumeMenuFocusRequest(req)
     end
 end
 
+local function GetCollapseHintClickState()
+    if type(M.GetPersistentMenuStateTable) == "function" then
+        M.collapseHintClickState = M.GetPersistentMenuStateTable("collapseHintClickState")
+    else
+        M.collapseHintClickState = M.collapseHintClickState or {}
+    end
+    return M.collapseHintClickState
+end
+
+local function RefreshCollapseHintSuppression(entry)
+    local hint = entry and entry.hint
+    if not hint then return end
+    local counts = GetCollapseHintClickState()
+    local count = tonumber(counts and counts.total) or 0
+    hint._msuf2SuppressCollapseHint = count >= (tonumber(T.collapseHintClickHideThreshold) or 8)
+end
+
 local function CloseAutoFocusedSections(pageKey)
     local entry = M.cache and M.cache[pageKey]
     local sections = entry and entry.sections
@@ -433,6 +450,7 @@ function W.PageBuilder(ctx)
         else
             M.accordionState = M.accordionState or {}
         end
+        local collapseHintClickState = GetCollapseHintClickState()
         local sectionId = tostring(id or title or "section")
         local stateKey = tostring(ctx.key or "page") .. ":" .. sectionId
         local saved = M.accordionState[stateKey]
@@ -498,6 +516,7 @@ function W.PageBuilder(ctx)
             contentHeight = height or 120,
             stateKey = stateKey,
         }
+        RefreshCollapseHintSuppression(entry)
         local function RefreshHeaderLayout()
             local headerW = (header.GetWidth and header:GetWidth()) or self.width or 240
             local reserve = math.max(120, math.min(136, math.floor(headerW * 0.38 + 0.5)))
@@ -591,6 +610,9 @@ function W.PageBuilder(ctx)
             if entry._msuf2MotionActive then return end
             local nextOpen = not entry.open
             M.accordionState[stateKey] = nextOpen
+            local threshold = tonumber(T.collapseHintClickHideThreshold) or 8
+            collapseHintClickState.total = math.min((tonumber(collapseHintClickState.total) or 0) + 1, threshold)
+            RefreshCollapseHintSuppression(entry)
             entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
             local motionSerial = entry._msuf2MotionSerial
 
@@ -1901,6 +1923,11 @@ local function InstallPinnedPreviewUpdater(scroll)
     if not scroll or scroll._msuf2PinnedPreviewUpdater then return end
     scroll._msuf2PinnedPreviewUpdater = true
     scroll:HookScript("OnUpdate", function(self, elapsed)
+        local list = M._pinnedPreviews
+        if type(list) ~= "table" or #list == 0 then
+            self._msuf2PinnedPreviewElapsed = 0
+            return
+        end
         self._msuf2PinnedPreviewElapsed = (self._msuf2PinnedPreviewElapsed or 0) + (elapsed or 0)
         if self._msuf2PinnedPreviewElapsed < 0.04 then return end
         self._msuf2PinnedPreviewElapsed = 0
@@ -1921,7 +1948,7 @@ end
 
 function M.RefreshPinnedPreviews(scroll)
     local list = M._pinnedPreviews
-    if not list then return end
+    if type(list) ~= "table" or #list == 0 then return end
     for i = 1, #list do
         local r = list[i]
         if r and r.update and (not scroll or r.scroll == scroll) then r.update() end
@@ -1953,6 +1980,9 @@ function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
             end
             if box then
                 if box._msuf2PinnedPreviewRecord == record then box._msuf2PinnedPreviewRecord = nil end
+                if box._msuf2PinnedPreviewPageKey == pageKey then box._msuf2PinnedPreviewPageKey = nil end
+                if box._msuf2PinnedPreviewWrapper == (record and record.pageWrapper) then box._msuf2PinnedPreviewWrapper = nil end
+                box._msuf2PinnedFloating = nil
                 if box.Hide then box:Hide() end
             end
         else
@@ -2043,8 +2073,15 @@ function W.AttachPinnedPreview(body, box, opts)
 
     local function RefreshButton()
         local enabled = PinEnabled()
-        pinBtn:SetText(enabled and "Pinned" or "Pin Preview")
-        if pinBtn.SetActive then pinBtn:SetActive(enabled) end
+        local text = enabled and "Pinned" or "Pin Preview"
+        if pinBtn._msuf2PinButtonText ~= text then
+            pinBtn._msuf2PinButtonText = text
+            pinBtn:SetText(text)
+        end
+        if pinBtn._msuf2PinButtonActive ~= enabled then
+            pinBtn._msuf2PinButtonActive = enabled
+            if pinBtn.SetActive then pinBtn:SetActive(enabled) end
+        end
     end
 
     local function Restore()
@@ -2152,6 +2189,8 @@ function W.AttachPinnedPreview(body, box, opts)
     end
     box._msuf2PinnedPreviewRecord = record
     M._pinnedPreviews[#M._pinnedPreviews + 1] = record
+    scroll._msuf2PinnedPreviewLastOffset = nil
+    scroll._msuf2PinnedPreviewLastHeight = nil
     InstallPinnedPreviewUpdater(scroll)
 
     if body.HookScript then

@@ -179,6 +179,15 @@ local function Growth(cfg, kind)
     return gx, gy
 end
 
+local function AnchorBase(anchor, frameW, frameH)
+    anchor = tostring(anchor or "TOPLEFT")
+    if anchor == "TOPRIGHT" then return frameW, frameH end
+    if anchor == "BOTTOMLEFT" then return 0, 0 end
+    if anchor == "BOTTOMRIGHT" then return frameW, 0 end
+    if anchor == "CENTER" then return frameW * 0.5, frameH * 0.5 end
+    return 0, frameH
+end
+
 local function LaneBounds(cfg, kind, frameW, frameH)
     if not cfg then return nil end
     local isBuff = kind == "buff"
@@ -189,6 +198,7 @@ local function LaneBounds(cfg, kind, frameW, frameH)
     local size = max(1, isBuff and cfg.buffSize or cfg.debuffSize)
     local x = isBuff and cfg.buffX or cfg.debuffX
     local y = isBuff and cfg.buffY or cfg.debuffY
+    local anchor = isBuff and cfg.buffAnchor or cfg.debuffAnchor
     local spacing = max(0, cfg.spacing or 0)
     local perRow = max(1, (isBuff and cfg.buffPerRow or cfg.debuffPerRow) or cfg.perRow or 1)
     local shown = min(max(1, count), PREVIEW_ICONS)
@@ -196,16 +206,17 @@ local function LaneBounds(cfg, kind, frameW, frameH)
     local rows = max(1, floor((shown + perRow - 1) / perRow))
     local step = size + spacing
     local growthX, growthY = Growth(cfg, kind)
+    local baseX, baseY = AnchorBase(anchor, frameW, frameH)
     local laneRows = max(1, floor((count + perRow - 1) / perRow))
     local laneW = perRow * size + (perRow - 1) * spacing
     local laneH = laneRows * size + (laneRows - 1) * spacing
-    local anchorBottom = frameH + y
+    local anchorBottom = baseY + y
     local iconMinX = growthX < 0 and -((cols - 1) * step) or 0
     local iconMaxX = growthX < 0 and size or ((cols - 1) * step + size)
     local iconMinY = growthY < 0 and -((rows - 1) * step) or 0
     local iconMaxY = growthY < 0 and size or ((rows - 1) * step + size)
-    local left = x + min(0, iconMinX)
-    local right = x + max(laneW, iconMaxX)
+    local left = baseX + x + min(0, iconMinX)
+    local right = baseX + x + max(laneW, iconMaxX)
     local bottom = anchorBottom + min(0, iconMinY)
     local top = anchorBottom + max(laneH, iconMaxY)
     return {
@@ -224,6 +235,8 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         frameH = frameH,
         laneW = laneW,
         laneH = laneH,
+        baseX = baseX,
+        baseY = baseY,
         iconMinX = iconMinX,
         iconMaxX = iconMaxX,
         iconMinY = iconMinY,
@@ -231,8 +244,9 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         anchorBottom = anchorBottom,
         growthX = growthX,
         growthY = growthY,
+        layer = isBuff and cfg.buffLayer or cfg.debuffLayer,
         point = "BOTTOMLEFT",
-        relativePoint = "TOPLEFT",
+        relativePoint = "BOTTOMLEFT",
         initialAnchor = "BOTTOMLEFT",
     }
 end
@@ -400,23 +414,25 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local cooldownSize = max(7, S(cfg.cooldownSize or 14))
     local cooldownX = S(cfg.cooldownX or 0)
     local cooldownY = S(cfg.cooldownY or 0)
-    local laneX = S(bounds.x)
-    local laneY = S(bounds.y)
-    local handleLeft = S((bounds.x or 0) + (bounds.iconMinX or 0))
-    local handleBottom = S((bounds.y or 0) + (bounds.iconMinY or 0))
+    local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
+    local laneX = S((bounds.baseX or 0) + (bounds.x or 0))
+    local laneY = S((bounds.baseY or 0) + (bounds.y or 0))
+    local handleLeft = S((bounds.baseX or 0) + (bounds.x or 0) + (bounds.iconMinX or 0))
+    local handleBottom = S((bounds.baseY or 0) + (bounds.y or 0) + (bounds.iconMinY or 0))
     local handleW = max(1, S((bounds.iconMaxX or 0) - (bounds.iconMinX or 0)))
     local handleH = max(1, S((bounds.iconMaxY or 0) - (bounds.iconMinY or 0)))
 
     visual:SetSize(max(1, S(bounds.laneW)), max(1, S(bounds.laneH)))
     visual:ClearAllPoints()
-    visual:SetPoint("BOTTOMLEFT", box.mock, "TOPLEFT", laneX, laneY)
+    visual:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", laneX, laneY)
+    if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + layer) end
     visual:Show()
 
-    if handle.SetFrameLevel then handle:SetFrameLevel((baseLevel or 0) + (kind == "buff" and 50 or 51)) end
+    if handle.SetFrameLevel then handle:SetFrameLevel((baseLevel or 0) + max(50, layer + 45)) end
     if handle._selBorder and handle._selBorder.SetFrameLevel then handle._selBorder:SetFrameLevel((handle:GetFrameLevel() or 0) + 5) end
     handle:SetSize(max(18, handleW + 8), max(18, handleH + 8))
     handle:ClearAllPoints()
-    handle:SetPoint("BOTTOMLEFT", box.mock, "TOPLEFT", handleLeft - 4, handleBottom - 4)
+    handle:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", handleLeft - 4, handleBottom - 4)
 
     for i = 1, bounds.shown do
         local icon = EnsureIcon(visual, i)

@@ -76,6 +76,28 @@ local STACK_ANCHORS = {
 }
 local STACK_ANCHOR_OK = { TOPRIGHT=true, TOPLEFT=true, BOTTOMRIGHT=true, BOTTOMLEFT=true }
 
+local AURA_ANCHORS = {
+    { value = "TOPLEFT", text = "Top Left" },
+    { value = "TOPRIGHT", text = "Top Right" },
+    { value = "BOTTOMLEFT", text = "Bottom Left" },
+    { value = "BOTTOMRIGHT", text = "Bottom Right" },
+    { value = "CENTER", text = "Center" },
+}
+local AURA_ANCHOR_OK = { TOPLEFT=true, TOPRIGHT=true, BOTTOMLEFT=true, BOTTOMRIGHT=true, CENTER=true }
+
+local LANE_GROWTH_VALUES = {
+    { value = "RIGHTDOWN", text = "Right then Down" },
+    { value = "LEFTDOWN", text = "Left then Down" },
+    { value = "RIGHTUP", text = "Right then Up" },
+    { value = "LEFTUP", text = "Left then Up" },
+}
+local LANE_GROWTH_PARTS = {
+    RIGHTDOWN = { "RIGHT", "DOWN" },
+    LEFTDOWN = { "LEFT", "DOWN" },
+    RIGHTUP = { "RIGHT", "UP" },
+    LEFTUP = { "LEFT", "UP" },
+}
+
 local LAYOUT_KEYS = {
     iconSize = true,
     spacing = true,
@@ -87,6 +109,10 @@ local LAYOUT_KEYS = {
     debuffGroupOffsetY = true,
     buffGroupIconSize = true,
     debuffGroupIconSize = true,
+    buffAnchor = true,
+    debuffAnchor = true,
+    buffLayer = true,
+    debuffLayer = true,
     stackTextSize = true,
     stackTextOffsetX = true,
     stackTextOffsetY = true,
@@ -96,6 +122,9 @@ local LAYOUT_KEYS = {
 }
 
 local SHARED_LAYOUT_KEYS = {
+    showCooldownSwipe = true,
+    showCooldownText = true,
+    showStackCount = true,
     perRow = true,
     buffPerRow = true,
     debuffPerRow = true,
@@ -117,9 +146,13 @@ local GROUPS = {
         xKey = "buffGroupOffsetX",
         yKey = "buffGroupOffsetY",
         sizeKey = "buffGroupIconSize",
+        anchorKey = "buffAnchor",
+        layerKey = "buffLayer",
         perRowKey = "buffPerRow",
         growthKey = "buffGrowthX",
         wrapKey = "buffGrowthY",
+        defaultAnchor = "BOTTOMRIGHT",
+        defaultLayer = 5,
     },
     debuff = {
         showKey = "showDebuffs",
@@ -127,9 +160,13 @@ local GROUPS = {
         xKey = "debuffGroupOffsetX",
         yKey = "debuffGroupOffsetY",
         sizeKey = "debuffGroupIconSize",
+        anchorKey = "debuffAnchor",
+        layerKey = "debuffLayer",
         perRowKey = "debuffPerRow",
         growthKey = "debuffGrowthX",
         wrapKey = "debuffGrowthY",
+        defaultAnchor = "TOPLEFT",
+        defaultLayer = 6,
     },
 }
 
@@ -163,6 +200,10 @@ local DEFAULT_SHARED = {
     debuffGroupOffsetY = 6,
     buffGroupIconSize = 26,
     debuffGroupIconSize = 26,
+    buffAnchor = "BOTTOMRIGHT",
+    debuffAnchor = "TOPLEFT",
+    buffLayer = 5,
+    debuffLayer = 6,
     stackCountAnchor = "TOPRIGHT",
     stackTextSize = 14,
     stackTextOffsetX = -1,
@@ -650,6 +691,14 @@ function Model.RowWrapValues()
     return ROW_WRAP_VALUES
 end
 
+function Model.AuraAnchorValues()
+    return AURA_ANCHORS
+end
+
+function Model.LaneGrowthValues()
+    return LANE_GROWTH_VALUES
+end
+
 function Model.StackAnchorValues()
     return STACK_ANCHORS
 end
@@ -753,6 +802,16 @@ function Model.WriteNumber(unit, key, value, minValue, maxValue)
     Model.WriteValue(unit, key, value)
 end
 
+function Model.ReadBool(unit, key, defaultValue)
+    local value = Model.ReadValue(unit, key, defaultValue and true or false)
+    if value == nil then return defaultValue and true or false end
+    return value == true
+end
+
+function Model.WriteBool(unit, key, value)
+    Model.WriteValue(unit, key, value and true or false)
+end
+
 function Model.ReadGrowth(unit)
     local v = tostring(Model.ReadValue(unit, "growth", "RIGHT") or "RIGHT")
     return GROWTH_OK[v] and v or "RIGHT"
@@ -801,6 +860,21 @@ function Model.WriteLaneGrowth(unit, kind, value)
     Model.WriteValue(unit, spec and spec.growthKey or "growth", value)
 end
 
+function Model.ReadLaneGrowthPair(unit, kind)
+    kind = NormalizeKind(kind)
+    local growth = Model.ReadLaneGrowth(unit, kind)
+    local rowWrap = Model.ReadLaneRowWrap(unit, kind)
+    local pair = tostring(growth or "RIGHT") .. tostring(rowWrap or "DOWN")
+    return LANE_GROWTH_PARTS[pair] and pair or "RIGHTDOWN"
+end
+
+function Model.WriteLaneGrowthPair(unit, kind, value)
+    kind = NormalizeKind(kind)
+    local parts = LANE_GROWTH_PARTS[value] or LANE_GROWTH_PARTS.RIGHTDOWN
+    Model.WriteLaneGrowth(unit, kind, parts[1])
+    Model.WriteLaneRowWrap(unit, kind, parts[2])
+end
+
 function Model.ReadLaneRowWrap(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
@@ -814,6 +888,33 @@ function Model.WriteLaneRowWrap(unit, kind, value)
     local spec = GROUPS[kind]
     value = ROW_WRAP_OK[value] and value or "DOWN"
     Model.WriteValue(unit, spec and spec.wrapKey or "rowWrap", value)
+end
+
+function Model.ReadLaneAnchor(unit, kind)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    local fallback = spec and spec.defaultAnchor or "TOPLEFT"
+    local value = tostring(Model.ReadValue(unit, spec and spec.anchorKey or "buffAnchor", fallback) or fallback)
+    return AURA_ANCHOR_OK[value] and value or fallback
+end
+
+function Model.WriteLaneAnchor(unit, kind, value)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    value = AURA_ANCHOR_OK[value] and value or (spec and spec.defaultAnchor) or "TOPLEFT"
+    Model.WriteValue(unit, spec and spec.anchorKey or "buffAnchor", value)
+end
+
+function Model.ReadLaneLayer(unit, kind)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    return Model.ReadNumber(unit, spec and spec.layerKey or "buffLayer", spec and spec.defaultLayer or 5, 1, 15)
+end
+
+function Model.WriteLaneLayer(unit, kind, value)
+    kind = NormalizeKind(kind)
+    local spec = GROUPS[kind]
+    Model.WriteNumber(unit, spec and spec.layerKey or "buffLayer", value, 1, 15)
 end
 
 function Model.ReadStackAnchor(unit)
@@ -1387,6 +1488,10 @@ function Model.ReadPreviewConfig(unit)
         buffY = buffMetrics and buffMetrics.y or Model.ReadNumber(unit, "buffGroupOffsetY", 36, -4096, 4096),
         debuffX = debuffMetrics and debuffMetrics.x or Model.ReadNumber(unit, "debuffGroupOffsetX", 0, -4096, 4096),
         debuffY = debuffMetrics and debuffMetrics.y or Model.ReadNumber(unit, "debuffGroupOffsetY", 6, -4096, 4096),
+        buffAnchor = Model.ReadLaneAnchor(unit, "buff"),
+        debuffAnchor = Model.ReadLaneAnchor(unit, "debuff"),
+        buffLayer = Model.ReadLaneLayer(unit, "buff"),
+        debuffLayer = Model.ReadLaneLayer(unit, "debuff"),
         buffSize = buffMetrics and buffMetrics.size or Model.ReadNumber(unit, "buffGroupIconSize", Model.ReadNumber(unit, "iconSize", 26, 1, 128), 1, 128),
         debuffSize = debuffMetrics and debuffMetrics.size or Model.ReadNumber(unit, "debuffGroupIconSize", Model.ReadNumber(unit, "iconSize", 26, 1, 128), 1, 128),
         spacing = runtimeCfg and runtimeCfg.spacing or Model.ReadNumber(unit, "spacing", 2, 0, 64),
@@ -1401,8 +1506,8 @@ function Model.ReadPreviewConfig(unit)
         buffGrowthY = runtimeCfg and runtimeCfg.buffGrowthY or Model.ReadLaneRowWrap(unit, "buff"),
         debuffGrowthX = runtimeCfg and runtimeCfg.debuffGrowthX or Model.ReadLaneGrowth(unit, "debuff"),
         debuffGrowthY = runtimeCfg and runtimeCfg.debuffGrowthY or Model.ReadLaneRowWrap(unit, "debuff"),
-        showStackCount = shared.showStackCount ~= false,
-        showCooldownText = shared.showCooldownText ~= false,
+        showStackCount = Model.ReadBool(unit, "showStackCount", true),
+        showCooldownText = Model.ReadBool(unit, "showCooldownText", true),
         stackAnchor = (runtimeCfg and runtimeCfg.stackAnchor) or Model.ReadStackAnchor(unit),
         stackSize = Model.ReadNumber(unit, "stackTextSize", 14, 6, 40),
         stackX = Model.ReadNumber(unit, "stackTextOffsetX", -1, -2000, 2000),

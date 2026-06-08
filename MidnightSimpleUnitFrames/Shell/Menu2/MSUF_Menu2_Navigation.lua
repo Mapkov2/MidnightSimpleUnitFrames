@@ -43,8 +43,6 @@ P|gf_bars|Health & Text|groupframes
 P|gf_indicators|Indicators|groupframes
 P|gf_auras|Auras|groupframes
 H|Auras|auras|1
-P|auras3|Buffs|auras
-P|auras3_debuffs|Debuffs|auras
 P|auras3_styling|Style|auras
 P|auras3_filters|Filters|auras
 H|Appearance|globalstyle|1
@@ -84,9 +82,8 @@ uf_boss=boss
 uf_pet=pet
 opt_bars=bars
 opt_fonts=fonts
-auras3=aura|auras|auras3|aura_rendering|aurarendering|aura_renderer|aurarenderer|buff|buffs|aura_buffs|aurabuffs
-auras3_debuffs=debuff|debuffs|aura_debuffs|auradebuffs
-auras3_styling=aura_style|aurastyle|aura_styling|aurastyling
+auras3=aura|auras|auras3|aura_rendering|aurarendering|aura_renderer|aurarenderer
+auras3_styling=aura_style|aurastyle|aura_styling|aurastyling|buff|buffs|aura_buffs|aurabuffs|debuff|debuffs|aura_debuffs|auradebuffs
 auras3_filters=aura_filters|aurafilters|aura_filter|blacklist|aura_blacklist|aurablacklist
 opt_castbar=castbar
 opt_colors=colors|colours

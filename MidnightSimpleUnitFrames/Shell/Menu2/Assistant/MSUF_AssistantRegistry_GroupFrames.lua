@@ -894,10 +894,16 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "background opacity")
     AddAliasesForUnit(aliases, scope, "backdrop opacity")
     AddAliasesForUnit(aliases, scope, "background alpha")
+    AddAliasesForUnit(aliases, scope, "hp track opacity")
+    AddAliasesForUnit(aliases, scope, "health track opacity")
+    AddAliasesForUnit(aliases, scope, "track opacity")
+    AddAliasesForUnit(aliases, scope, "bar background opacity")
     RegisterGroupNumber(scope, "hpBgAlpha", "hpBgAlpha", "Background Opacity", 0.85, 0, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "keep text visible")
+    AddAliasesForUnit(aliases, scope, "keep text portrait visible")
+    AddAliasesForUnit(aliases, scope, "keep text and portrait visible")
     AddAliasesForUnit(aliases, scope, "exclude text from opacity")
     AddAliasesForUnit(aliases, scope, "keep portrait visible")
     RegisterGroupBoolean(scope, "alphaExcludeTextPortrait", "alphaExcludeTextPortrait", "Keep Text & Portrait Visible", false, "visual", aliases)
@@ -909,6 +915,35 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "background color")
     AddAliasesForUnit(aliases, scope, "backdrop color")
     RegisterGroupColor(scope, "groupBackdropColor", "bg", "Backdrop Color", 0.10, 0.10, 0.10, aliases)
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "dead background")
+    AddAliasesForUnit(aliases, scope, "dead member background")
+    AddAliasesForUnit(aliases, scope, "dead offline background")
+    AddAliasesForUnit(aliases, scope, "dead background tint")
+    RegisterGroupBoolean(scope, "deadBgEnabled", "deadBgEnabled", "Dead Background", false, "visual", aliases)
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "dead background color")
+    AddAliasesForUnit(aliases, scope, "dead member background color")
+    AddAliasesForUnit(aliases, scope, "dead offline background color")
+    AddAliasesForUnit(aliases, scope, "dead bg color")
+    RegisterGroupColor(scope, "deadBgColor", "deadBg", "Dead Background Color", 0.60, 0.05, 0.05, aliases)
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "dead background opacity")
+    AddAliasesForUnit(aliases, scope, "dead background alpha")
+    AddAliasesForUnit(aliases, scope, "dead member background opacity")
+    AddAliasesForUnit(aliases, scope, "dead offline background opacity")
+    AddAliasesForUnit(aliases, scope, "dead bg opacity")
+    RegisterGroupNumber(scope, "deadBgAlpha", "deadBgA", "Dead Background Opacity", 0.90, 0.05, 1, 0.05, "visual", aliases, { percent = true })
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "tint offline members")
+    AddAliasesForUnit(aliases, scope, "also tint offline members")
+    AddAliasesForUnit(aliases, scope, "dead background offline members")
+    AddAliasesForUnit(aliases, scope, "dead offline tint")
+    RegisterGroupBoolean(scope, "deadBgOffline", "deadBgOffline", "Tint Offline Members", true, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "anchor to")

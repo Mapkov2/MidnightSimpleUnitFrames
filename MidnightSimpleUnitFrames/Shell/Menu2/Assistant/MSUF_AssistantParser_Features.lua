@@ -1141,7 +1141,61 @@ local function ParseScopedOverrideReset(text)
     } or nil
 end
 
+local function HasClassPowerPreviewResourceIntent(text)
+    return ContainsAny(text, {
+        "preview resource", "resource preview", "preview class resource", "preview class resources",
+        "preview class power", "preview class bar", "class resource preview", "class resources preview",
+        "class power preview", "class bar preview", "class resource preview resource",
+        "class power preview resource",
+    })
+end
+
+local function ParseClassPowerPreviewResource(text)
+    local setting = Registry and Registry:GetSetting("menu.classPowerPreviewResource")
+    if not setting then return nil end
+    local value = P.ValueForRegistrySetting and P.ValueForRegistrySetting(setting, text, text) or nil
+    if value == nil then return nil end
+    if not (HasClassPowerPreviewResourceIntent(text) or HasPhrase(text, "preview")) then return nil end
+    return {
+        kind = "changes",
+        changes = {
+            {
+                setting = setting,
+                value = value,
+                valueLabel = P.ValueDisplay and P.ValueDisplay(setting, value) or tostring(value),
+            },
+        },
+        label = "Class resource preview",
+        summary = "Selects the Class Resources preview dropdown without changing saved layout settings.",
+    }
+end
+
 local function ParseClassPowerAction(text)
+    local previewResource = ParseClassPowerPreviewResource(text)
+    if previewResource then return previewResource end
+
+    if (HasClassPowerIntent(text) or ContainsAny(text, { "resource preview animation", "preview resource animation" }))
+        and ContainsAny(text, {
+            "preview animation", "animate preview", "animate", "animation", "start preview", "stop preview",
+            "play preview", "pause preview", "toggle preview animation", "start", "stop", "play", "pause",
+        })
+        and ContainsAny(text, { "preview", "animate", "animation" }) then
+        local action = Registry and Registry:GetAction("class_power_preview_animate")
+        local value = DetectBoolean(text)
+        if ContainsAny(text, { "stop", "pause", "off", "disable" }) then
+            value = false
+        elseif ContainsAny(text, { "start", "play", "animate", "on", "enable" }) then
+            value = true
+        end
+        if ContainsAny(text, { "toggle", "switch", "umschalten" }) then value = nil end
+        return action and {
+            kind = "action",
+            action = action,
+            args = { value = value },
+            label = "Animate class resource preview",
+            summary = "Controls the Class Resources inline preview animation.",
+        } or nil
+    end
     if not ContainsAny(text, { "quick setup", "quicksetup", "setup" }) then return nil end
     if not HasClassPowerIntent(text) then return nil end
     local action = Registry and Registry:GetAction("class_power_quick_setup")
@@ -1284,7 +1338,11 @@ local function ParseGlobalBarsAction(text)
             summary = "Changes the transient dispel border preview type.",
         } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, { "absorb bar", "absorb bars", "prediction bars", "heal absorb" }) then
+    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+        "absorb bar", "absorb bars", "absorb test", "absorb test bar", "absorb test bars",
+        "test absorb bar", "test absorb bars", "absorb prediction bar", "absorb prediction bars",
+        "prediction bars", "heal absorb",
+    }) then
         local action = Registry and Registry:GetAction("toggle_absorb_bar_test")
         return action and {
             kind = "action",
@@ -1304,19 +1362,35 @@ local function ParseGlobalBarsAction(text)
             summary = "Turns off the absorb prediction bar test display.",
         } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, { "aggro border", "threat border" }) then
+    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+        "aggro border", "threat border", "aggro test border", "aggro border test",
+        "threat test border", "threat border test", "border test aggro", "border test for aggro",
+        "border test threat", "border test for threat",
+    }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "aggro", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test aggro border", summary = "Toggles the aggro border test." } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, { "dispel border", "dispellable border" }) then
+    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+        "dispel border", "dispellable border", "dispel test border", "dispel border test",
+        "dispellable test border", "dispellable border test", "border test dispel",
+        "border test for dispel", "border test dispellable", "border test for dispellable",
+    }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "dispel", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test dispel border", summary = "Toggles the dispel border test." } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, { "purge border", "purgeable border" }) then
+    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+        "purge border", "purgeable border", "purge test border", "purge border test",
+        "purgeable test border", "purgeable border test", "border test purge",
+        "border test for purge", "border test purgeable", "border test for purgeable",
+    }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "purge", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test purge border", summary = "Toggles the purge border test." } or nil
     end
-    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, { "boss target border", "boss target highlight" }) then
+    if ContainsAny(text, { "test", "preview" }) and ContainsAny(text, {
+        "boss target border", "boss target highlight", "boss target test border",
+        "boss target border test", "boss target highlight test", "border test boss target",
+        "border test for boss target",
+    }) then
         local action = Registry and Registry:GetAction("toggle_highlight_border_test")
         return action and { kind = "action", action = action, args = { kind = "bossTarget", value = not ContainsAny(text, { "off", "disable", "stop", "clear" }) }, label = "Test boss target border", summary = "Toggles the boss target border test." } or nil
     end

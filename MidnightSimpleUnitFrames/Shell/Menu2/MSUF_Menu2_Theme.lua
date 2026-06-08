@@ -9,6 +9,7 @@ local T = M.Theme or {}
 M.Theme = T
 
 local GLASS_VARIANTS = T.glassVariants or {}
+T.collapseHintClickHideThreshold = T.collapseHintClickHideThreshold or 8
 
 local function Template()
     return _G.BackdropTemplateMixin and "BackdropTemplate" or nil
@@ -797,6 +798,14 @@ function T.ApplyMaterial(frame, material)
     return frame
 end
 
+local function CollapseHintLearned()
+    local state = M.collapseHintClickState
+    if type(state) ~= "table" and type(M.GetPersistentMenuStateTable) == "function" then
+        state = M.GetPersistentMenuStateTable("collapseHintClickState")
+    end
+    return (tonumber(state and state.total) or 0) >= (tonumber(T.collapseHintClickHideThreshold) or 8)
+end
+
 function T.ApplyCollapseVisual(chevron, hint, open)
     if chevron then
         if chevron.SetRotation then chevron:SetRotation(open and (math.pi * 0.5) or 0) end
@@ -809,7 +818,7 @@ function T.ApplyCollapseVisual(chevron, hint, open)
         end
     end
     if hint and hint.SetText then
-        hint:SetText(open and "" or Tr("click to expand"))
+        hint:SetText((open or hint._msuf2SuppressCollapseHint or CollapseHintLearned()) and "" or Tr("click to expand"))
         if hint.SetTextColor then hint:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.74) end
     end
 end
