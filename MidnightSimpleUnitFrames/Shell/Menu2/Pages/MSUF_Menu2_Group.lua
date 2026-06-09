@@ -278,6 +278,8 @@ local function SetSectionBadges(sec, specs)
     end
 end
 
+local ApplyScopeEnabledGate
+
 local function FinalizeScopePage(ctx, builder)
     if type(ApplyScopeEnabledGate) == "function" then
         M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)
@@ -1340,7 +1342,7 @@ local function ForEachGroupPageControl(parent, callback)
     end
 end
 
-local function ApplyScopeEnabledGate(ctx)
+ApplyScopeEnabledGate = function(ctx)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
     local scope = CurrentScope()
