@@ -22,6 +22,15 @@ local function Trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function IsUUFImportString(value)
+    local fn = _G.MSUF_IsUUFImportString
+    if type(fn) == "function" then
+        local ok, result = pcall(fn, value)
+        if ok then return result == true end
+    end
+    return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
+end
+
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
@@ -117,6 +126,24 @@ local function EnsureProfilePopups()
         }
     end
 
+    if not _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT then
+        _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT = {
+            text = M.Tr("This is an UnhaltedUnitFrames profile.\n\nMSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1.\n\nImport anyway?"),
+            button1 = M.Tr("Import"),
+            button2 = _G.CANCEL or M.Tr("Cancel"),
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+            OnAccept = function(_, data)
+                if BlockCombatAction() then return end
+                if data and type(data.after) == "function" then
+                    data.after()
+                end
+            end,
+        }
+    end
+
     if not _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
         _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE = {
             text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
@@ -158,6 +185,22 @@ local function EnsureProfilePopups()
             end,
         }
     end
+end
+
+local function ConfirmUUFBestEffortImport(text, after)
+    if not IsUUFImportString(text) then
+        if type(after) == "function" then return after() end
+        return false
+    end
+    if _G.StaticPopup_Show
+        and _G.StaticPopupDialogs
+        and _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT
+    then
+        _G.StaticPopup_Show("MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT", nil, nil, { after = after })
+        return true
+    end
+    PrintProfileMessage("|cffff0000", "Import blocked: UUF best-effort confirmation is not available.")
+    return false
 end
 
 local function ShowImportReloadPrompt()
@@ -423,19 +466,21 @@ local function BuildProfiles(ctx)
             PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
             return false
         end
-        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
-        if not ok then
-            PrintProfileMessage("|cffff0000", "Import failed: " .. tostring(imported))
-            return false
-        end
-        if imported ~= true then
-            return false
-        end
-        if M.ClearHistory then M.ClearHistory() end
-        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
-        RefreshAfterProfileChange(ctx)
-        ShowImportReloadPrompt()
-        return true
+        return ConfirmUUFBestEffortImport(text, function()
+            local ok, imported = pcall(_G.MSUF_ImportFromString, text)
+            if not ok then
+                PrintProfileMessage("|cffff0000", "Import failed: " .. tostring(imported))
+                return false
+            end
+            if imported ~= true then
+                return false
+            end
+            if M.ClearHistory then M.ClearHistory() end
+            M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
+            RefreshAfterProfileChange(ctx)
+            ShowImportReloadPrompt()
+            return true
+        end)
     end
 
     local function ImportIntoNewProfile(rawName)
@@ -462,38 +507,40 @@ local function BuildProfiles(ctx)
             return false
         end
 
-        local previous = _G.MSUF_ActiveProfile or "Default"
-        pcall(_G.MSUF_CreateProfile, name)
-        if not ProfileExists(name) then
-            PrintProfileMessage("|cffff0000", "Import failed: could not create profile '" .. name .. "'.")
-            return false
-        end
-        local previousExists = ProfileExists(previous)
+        return ConfirmUUFBestEffortImport(text, function()
+            local previous = _G.MSUF_ActiveProfile or "Default"
+            pcall(_G.MSUF_CreateProfile, name)
+            if not ProfileExists(name) then
+                PrintProfileMessage("|cffff0000", "Import failed: could not create profile '" .. name .. "'.")
+                return false
+            end
+            local previousExists = ProfileExists(previous)
 
-        pcall(_G.MSUF_SwitchProfile, name)
-        if _G.MSUF_ActiveProfile ~= name then
-            if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
-            DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '" .. name .. "'.")
-            return false
-        end
+            pcall(_G.MSUF_SwitchProfile, name)
+            if _G.MSUF_ActiveProfile ~= name then
+                if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
+                DeleteCreatedProfile(name)
+                PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '" .. name .. "'.")
+                return false
+            end
 
-        local ok, imported = pcall(_G.MSUF_ImportFromString, text)
-        if not ok or imported ~= true then
-            if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
-            DeleteCreatedProfile(name)
-            PrintProfileMessage("|cffff0000", ok and "Import failed." or ("Import failed: " .. tostring(imported)))
+            local ok, imported = pcall(_G.MSUF_ImportFromString, text)
+            if not ok or imported ~= true then
+                if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
+                DeleteCreatedProfile(name)
+                PrintProfileMessage("|cffff0000", ok and "Import failed." or ("Import failed: " .. tostring(imported)))
+                RefreshAfterProfileChange(ctx)
+                return false
+            end
+
+            if M.ClearHistory then M.ClearHistory() end
+            M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true })
             RefreshAfterProfileChange(ctx)
-            return false
-        end
-
-        if M.ClearHistory then M.ClearHistory() end
-        M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true })
-        RefreshAfterProfileChange(ctx)
-        M.profileImportNewName = ""
-        importProfileName:SetText("")
-        ReloadAfterNewProfileImport(name)
-        return true
+            M.profileImportNewName = ""
+            importProfileName:SetText("")
+            ReloadAfterNewProfileImport(name)
+            return true
+        end)
     end
 
     import:SetScript("OnClick", function()
@@ -530,11 +577,13 @@ local function BuildProfiles(ctx)
         if BlockCombatAction() then return end
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
-            pcall(_G.MSUF_ImportLegacyFromString, text)
-            if M.ClearHistory then M.ClearHistory() end
-            M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true })
-            RefreshAfterProfileChange(ctx)
-            if M.ShowStatusFeedback then M.ShowStatusFeedback("Legacy profile imported", "ok", 1.7) end
+            ConfirmUUFBestEffortImport(text, function()
+                pcall(_G.MSUF_ImportLegacyFromString, text)
+                if M.ClearHistory then M.ClearHistory() end
+                M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true })
+                RefreshAfterProfileChange(ctx)
+                if M.ShowStatusFeedback then M.ShowStatusFeedback("Legacy profile imported", "ok", 1.7) end
+            end)
         elseif M.ShowStatusFeedback then
             M.ShowStatusFeedback("Legacy import unavailable", "danger", 1.8)
         end

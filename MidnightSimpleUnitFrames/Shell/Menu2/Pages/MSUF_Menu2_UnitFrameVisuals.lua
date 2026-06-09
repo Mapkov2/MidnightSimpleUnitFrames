@@ -17,6 +17,19 @@ local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BO
 local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, SetControlEnabled, NormalizePortrait, SetPortraitValue = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool SetControlEnabled NormalizePortrait SetPortraitValue]])
 
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
+local CASTBAR_PREFIX = {
+    player = "castbarPlayer",
+    target = "castbarTarget",
+    focus = "castbarFocus",
+    boss = "bossCast",
+}
+local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT", "Inside Left", "INSIDE_RIGHT", "Inside Right")
+local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
+local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
+local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
+local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
+local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto", "CLIP", "Fixed Clip", "NONE", "No Limit")
+local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
 
 
 local UnitSectionShared = M.UnitSectionsShared or {}
@@ -375,14 +388,79 @@ end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
     if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", 210, false)
+    local sec = builder:CollapsibleSection("castbar", "Castbar", 620, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
-    local leftX = 14
-    local rightX = math.max(340, sectionW - 236)
-    local textX = rightX + 86
+    local leftX = 16
+    local cardGap = 28
+    local leftW = floor((sectionW - 48 - cardGap) * 0.5)
+    leftW = max(310, min(430, leftW))
+    local rightX = leftX + leftW + cardGap
+    local rightW = max(310, min(430, sectionW - rightX - 16))
+    local prefix = CASTBAR_PREFIX[unit]
     local RefreshCastbarEnabled
     local providerMemoryKey = fields.providerMemory or (fields.backend and (fields.backend .. "BeforeHide") or nil)
     local canUseBlizzardProvider = (unit == "player")
+    local allCastbarControls, iconControls, spellControls, timeControls = {}, {}, {}, {}
+
+    local function AddControl(list, control)
+        if control then
+            allCastbarControls[#allCastbarControls + 1] = control
+            if list then list[#list + 1] = control end
+        end
+        return control
+    end
+
+    local function DetailKey(suffix)
+        return prefix and (prefix .. suffix) or suffix
+    end
+
+    local function ReadGeneralValue(key, defaultValue)
+        local value = GetGeneral()[key]
+        if value == nil or value == "" then return defaultValue end
+        return value
+    end
+
+    local function ReadGeneralNumber(key, defaultValue)
+        local value = tonumber(GetGeneral()[key])
+        if value == nil then value = defaultValue or 0 end
+        return value
+    end
+
+    local function SetGeneralValue(key, value, reason)
+        M.SetGeneralValue(key, value, reason, { castbar = true, preview = true, applyAll = false })
+        Call("MSUF_UpdateCastbarVisuals")
+    end
+
+    local function SetGeneralNumber(key, value, reason)
+        value = tonumber(value)
+        if value == nil then return end
+        if math.abs(value - floor(value + 0.5)) < 0.001 then
+            value = floor(value + 0.5)
+        end
+        SetGeneralValue(key, value, reason)
+    end
+
+    local function BindDetailDropdown(parent, list, label, x, y, width, values, key, defaultValue, reason)
+        local control = W.Dropdown(parent, label, values, width)
+        W.MoveWidget(control, parent, x, y, width)
+        AddControl(list, control)
+        if W.AttachEditFocus then W.AttachEditFocus(control, unit, "castbar", nil, { source = "menu2-unit" }) end
+        M.BindDropdown(ctx, control,
+            function() return ReadGeneralValue(key, defaultValue) end,
+            function(v) SetGeneralValue(key, v or defaultValue, reason) end)
+        return control
+    end
+
+    local function BindDetailSlider(parent, list, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason)
+        local control = W.Slider(parent, label, minValue, maxValue, step, width)
+        W.MoveWidget(control, parent, x, y, width)
+        AddControl(list, control)
+        if W.AttachEditFocus then W.AttachEditFocus(control, unit, "castbar", nil, { source = "menu2-unit" }) end
+        M.BindSlider(ctx, control,
+            function() return ReadGeneralNumber(key, defaultValue) end,
+            function(v) SetGeneralNumber(key, v, reason) end)
+        return control
+    end
 
     local function NormalizeBackend(value)
         local fnUnit = _G.MSUF_NormalizeCastbarBackendForUnit
@@ -461,15 +539,60 @@ local function BuildCastbar(ctx, builder, unit)
         end
     end
 
-    local timeLabel = (unit == "boss") and "Show boss cast time" or ("Show " .. UnitTopLabel(unit):lower() .. " cast time")
-    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(sec, -160, "Use MSUF", 96)
+    local controlWLeft = max(220, leftW - 58)
+    local controlWRight = max(220, rightW - 58)
+
+    M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
+    local function CurrentCastbarTab()
+        local key = M.unitCastbarTabSelection[unit] or "general"
+        if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then
+            key = "general"
+        end
+        return key
+    end
+
+    local tabs = W.Segment(sec, "Castbar area", CASTBAR_TAB_VALUES, min(620, sectionW - 48))
+    W.MoveWidget(tabs, sec, 20, -58, min(620, sectionW - 48), "LEFT")
+    local RefreshCastbarTabs
+    M.BindSegment(ctx, tabs,
+        CurrentCastbarTab,
+        function(v)
+            M.unitCastbarTabSelection[unit] = v or "general"
+            if RefreshCastbarTabs then RefreshCastbarTabs() end
+        end)
+
+    local tabFrames = {}
+    local function MakeTabFrame(key)
+        local frame = CreateFrame("Frame", nil, sec)
+        frame:SetPoint("TOPLEFT", sec, "TOPLEFT", 0, -118)
+        frame:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 12)
+        frame._msuf2Width = sectionW
+        tabFrames[key] = frame
+        return frame
+    end
+
+    local generalTab = MakeTabFrame("general")
+    local iconTab = MakeTabFrame("icon")
+    local spellTab = MakeTabFrame("spell")
+    local timeTab = MakeTabFrame("time")
+    local advancedTab = MakeTabFrame("advanced")
+
+    local generalCard = W.ControlCard(generalTab, "General", nil, leftX, -4, leftW, 132)
+    local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
+    local iconCard = W.ControlCard(iconTab, "Icon", nil, leftX, -4, leftW, 332)
+    local spellCard = W.ControlCard(spellTab, "Spell Name Text", nil, leftX, -4, leftW, 332)
+    local timeCard = W.ControlCard(timeTab, "Cast Time Text", nil, leftX, -4, leftW, 332)
+    local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
+    local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)
+
+    local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -156, "Use MSUF", 96)
     if castbarNoticeButton then
         castbarNoticeButton:SetScript("OnClick", function()
             SetCastbarBackend("MSUF")
         end)
     end
 
-    local enabled = W.SwitchAt(sec, "Enable Castbar", leftX, -42, 240)
+    local enabled = W.SwitchAt(generalCard, "Enable Castbar", 16, -52, 220)
     if W.AttachEditFocus then W.AttachEditFocus(enabled, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, enabled,
         function() return ReadCastbarBackend() ~= "HIDE" end,
@@ -477,54 +600,98 @@ local function BuildCastbar(ctx, builder, unit)
 
     local provider
     if canUseBlizzardProvider then
-        provider = W.Dropdown(sec, "Castbar provider", CASTBAR_BACKEND_VALUES, 220)
-        W.MoveWidget(provider, sec, rightX, -42, 220)
+        provider = W.Dropdown(providerCard, "Castbar provider", CASTBAR_BACKEND_VALUES, min(260, controlWRight))
+        W.MoveWidget(provider, providerCard, 16, -52, min(260, controlWRight))
         if W.AttachEditFocus then W.AttachEditFocus(provider, unit, "castbar", nil, { source = "menu2-unit" }) end
         M.BindDropdown(ctx, provider,
             ReadCastbarProvider,
             SetCastbarProvider)
+    else
+        W.Text(providerCard, "MSUF castbar", 16, -58, rightW - 32)
     end
 
-    local time = W.ToggleAt(sec, timeLabel, leftX, -72, 240)
-    if W.AttachEditFocus then W.AttachEditFocus(time, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, time,
-        function() return ReadGeneralBool(fields.time, true) end,
-        function(v) SetGeneralBool(fields.time, v, "MSUF2_CASTBAR_TIME", { castbar = true, preview = true }) end)
-
-    local interrupt = W.ToggleAt(sec, "Show interrupt", leftX, -102, 240)
+    local interrupt = W.ToggleAt(generalCard, "Show interrupt", 16, -84, 240)
     if W.AttachEditFocus then W.AttachEditFocus(interrupt, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, interrupt,
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end)
 
-    local icon = W.ToggleAt(sec, "Icon", rightX, -102, 70)
+    local icon = W.SwitchAt(iconCard, "Enable", 16, -52, 160)
     if W.AttachEditFocus then W.AttachEditFocus(icon, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, icon,
         function() return ReadGeneralBool(fields.icon, true) end,
-        function(v) SetGeneralBool(fields.icon, v, "MSUF2_CASTBAR_ICON", { castbar = true, preview = true }) end)
+        function(v)
+            SetGeneralBool(fields.icon, v, "MSUF2_CASTBAR_ICON", { castbar = true, preview = true })
+            if RefreshCastbarEnabled then RefreshCastbarEnabled() end
+        end)
+    local iconPosition = BindDetailDropdown(iconCard, iconControls, "Position", 16, -88, min(260, controlWLeft), CASTBAR_ICON_POSITIONS, DetailKey("IconPosition"), "LEFT", "MSUF2_CASTBAR_ICON_POSITION")
+    local iconSize = BindDetailSlider(iconCard, iconControls, "Size", 16, -142, controlWLeft, 0, 128, 1, DetailKey("IconSize"), 0, "MSUF2_CASTBAR_ICON_SIZE")
+    local iconX = BindDetailSlider(iconCard, iconControls, "X offset", 16, -196, controlWLeft, -300, 300, 1, DetailKey("IconOffsetX"), 0, "MSUF2_CASTBAR_ICON_X")
+    local iconY = BindDetailSlider(iconCard, iconControls, "Y offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("IconOffsetY"), 0, "MSUF2_CASTBAR_ICON_Y")
+    local iconSpacing = BindDetailSlider(iconCard, iconControls, "Spacing", 16, -304, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING")
 
-    local text = W.ToggleAt(sec, "Text", textX, -102, 70)
+    local text = W.SwitchAt(spellCard, "Enable", 16, -52, 160)
     if W.AttachEditFocus then W.AttachEditFocus(text, unit, "castbar", nil, { source = "menu2-unit" }) end
     M.BindToggle(ctx, text,
         function() return ReadGeneralBool(fields.text, true) end,
-        function(v) SetGeneralBool(fields.text, v, "MSUF2_CASTBAR_TEXT", { castbar = true, preview = true }) end)
+        function(v)
+            SetGeneralBool(fields.text, v, "MSUF2_CASTBAR_TEXT", { castbar = true, preview = true })
+            if RefreshCastbarEnabled then RefreshCastbarEnabled() end
+        end)
+    local spellPosition = BindDetailDropdown(spellCard, spellControls, "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION")
+    local spellSize = BindDetailSlider(spellCard, spellControls, "Size", 16, -142, controlWLeft, 0, 48, 1, DetailKey("SpellNameFontSize"), 0, "MSUF2_CASTBAR_SPELL_SIZE")
+    local spellAlign = BindDetailDropdown(spellCard, spellControls, "Alignment", 16, -196, min(260, controlWLeft), CASTBAR_TEXT_ALIGN, DetailKey("SpellNameAlign"), "LEFT", "MSUF2_CASTBAR_SPELL_ALIGN")
+    local spellX = BindDetailSlider(spellCard, spellControls, "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TextOffsetX"), 0, "MSUF2_CASTBAR_SPELL_X")
+    local spellY = BindDetailSlider(spellCard, spellControls, "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TextOffsetY"), 0, "MSUF2_CASTBAR_SPELL_Y")
+    local spellMax = BindDetailSlider(textAdvancedCard, spellControls, "Max width", 16, -52, controlWLeft, 0, 500, 1, DetailKey("SpellNameMaxWidth"), 0, "MSUF2_CASTBAR_SPELL_MAX_WIDTH")
+    local spellTruncate = BindDetailDropdown(textAdvancedCard, spellControls, "Truncate behavior", 16, -106, min(260, controlWLeft), CASTBAR_TRUNCATE_VALUES, DetailKey("SpellNameTruncate"), "AUTO", "MSUF2_CASTBAR_SPELL_TRUNCATE")
+    local iconBorder = BindDetailDropdown(iconAdvancedCard, iconControls, "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "NONE", "MSUF2_CASTBAR_ICON_BORDER")
+
+    local time = W.SwitchAt(timeCard, "Enable", 16, -52, 160)
+    if W.AttachEditFocus then W.AttachEditFocus(time, unit, "castbar", nil, { source = "menu2-unit" }) end
+    M.BindToggle(ctx, time,
+        function() return ReadGeneralBool(fields.time, true) end,
+        function(v)
+            SetGeneralBool(fields.time, v, "MSUF2_CASTBAR_TIME", { castbar = true, preview = true })
+            if RefreshCastbarEnabled then RefreshCastbarEnabled() end
+        end)
+    local timeFormat = BindDetailDropdown(timeCard, timeControls, "Format", 16, -88, min(260, controlWLeft), CASTBAR_TIME_FORMATS, fields.timeFormat, "CURRENT", "MSUF2_CASTBAR_TIME_FORMAT")
+    local timePosition = BindDetailDropdown(timeCard, timeControls, "Position preset", 16, -142, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("TimePosition"), "RIGHT", "MSUF2_CASTBAR_TIME_POSITION")
+    local timeSize = BindDetailSlider(timeCard, timeControls, "Size", 16, -196, controlWLeft, 0, 48, 1, DetailKey("TimeFontSize"), 0, "MSUF2_CASTBAR_TIME_SIZE")
+    local timeX = BindDetailSlider(timeCard, timeControls, "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetX"), unit == "boss" and 0 or -2, "MSUF2_CASTBAR_TIME_X")
+    local timeY = BindDetailSlider(timeCard, timeControls, "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetY"), 0, "MSUF2_CASTBAR_TIME_Y")
 
     RefreshCastbarEnabled = function()
         local backend = ReadCastbarBackend()
         local enabledOn = (backend ~= "HIDE")
         local msufOn = (backend == "MSUF")
+        local iconOn = msufOn and ReadGeneralBool(fields.icon, true)
+        local spellOn = msufOn and ReadGeneralBool(fields.text, true)
+        local timeOn = msufOn and ReadGeneralBool(fields.time, true)
         SetControlEnabled(time, msufOn)
         SetControlEnabled(interrupt, msufOn)
         SetControlEnabled(icon, msufOn)
         SetControlEnabled(text, msufOn)
         SetControlEnabled(enabled, true)
         if provider then SetControlEnabled(provider, enabledOn) end
+        for i = 1, #allCastbarControls do
+            SetControlEnabled(allCastbarControls[i], msufOn)
+        end
+        for i = 1, #iconControls do
+            SetControlEnabled(iconControls[i], iconOn)
+        end
+        for i = 1, #spellControls do
+            SetControlEnabled(spellControls[i], spellOn)
+        end
+        for i = 1, #timeControls do
+            SetControlEnabled(timeControls[i], timeOn)
+        end
 
         if not msufOn then
             if backend == "HIDE" then
                 castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is off. Turn it on to use the MSUF castbar.", "warning")
             else
-                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar uses Blizzard. Select MSUF to adjust time, interrupt, icon, and text behavior.", "warning")
+                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", "warning")
             end
             castbarNotice:Show()
         else
@@ -532,8 +699,16 @@ local function BuildCastbar(ctx, builder, unit)
         end
         SetSectionHeaderStatus(sec, nil)
     end
+    RefreshCastbarTabs = function()
+        local tab = CurrentCastbarTab()
+        for key, frame in pairs(tabFrames) do
+            frame:SetShown(key == tab)
+        end
+    end
     M.SetCollapsibleRefreshState(sec, RefreshCastbarEnabled)
     M.AddRefresher(ctx, RefreshCastbarEnabled)
+    M.AddRefresher(ctx, RefreshCastbarTabs)
+    RefreshCastbarTabs()
     RefreshCastbarEnabled()
 end
 

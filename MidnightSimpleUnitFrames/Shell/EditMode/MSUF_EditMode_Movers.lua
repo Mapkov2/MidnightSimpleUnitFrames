@@ -46,6 +46,19 @@ end
 local IsConfigCombatLocked = U.IsConfigCombatLocked
 local BlockConfigCombatLocked = U.BlockConfigCombatLocked
 
+local function ReportSafeError(err)
+    local handler = _G.geterrorhandler and _G.geterrorhandler()
+    if type(handler) == "function" then
+        pcall(handler, err)
+    end
+end
+
+local function SafeRefreshCall(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then ReportSafeError(err) end
+    return ok
+end
+
 local function FrameRectToUI(frame)
     if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
         return nil
@@ -751,10 +764,10 @@ _G.MSUF_SyncAllUnitPreviews = function()
 
     --- 3) Castbars
     if _G.MSUF_SyncCastbarEditModeWithUnitEdit then
-        _G.MSUF_SyncCastbarEditModeWithUnitEdit()
+        SafeRefreshCall(_G.MSUF_SyncCastbarEditModeWithUnitEdit)
     end
     for _, fn in ipairs(CASTBAR_TEST_FUNCS) do
-        local f = _G[fn]; if type(f) == "function" then f(want, true) end
+        local f = _G[fn]; if type(f) == "function" then SafeRefreshCall(f, want, true) end
     end
 
     --- 4) Aura refresh
@@ -840,12 +853,12 @@ _G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
 
     for _, name in ipairs(CASTBAR_REFRESH_FUNCS) do
         local fn = _G[name]
-        if type(fn) == "function" then fn() end
+        if type(fn) == "function" then SafeRefreshCall(fn) end
     end
     if not (_G.MSUF_InCombat == true or (InCombatLockdown and InCombatLockdown()))
         and _G.MSUF_UpdateBossCastbarPreview
     then
-        _G.MSUF_UpdateBossCastbarPreview()
+        SafeRefreshCall(_G.MSUF_UpdateBossCastbarPreview)
     end
 end
 

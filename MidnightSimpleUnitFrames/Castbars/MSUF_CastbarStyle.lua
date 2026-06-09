@@ -247,6 +247,10 @@ function Style:ApplyCastbarTimeTextLayout(frame, unit)
     frame.timeText:ClearAllPoints()
     frame.timeText:SetPoint("RIGHT", frame.statusBar, "RIGHT", offsetX, offsetY)
     frame.timeText:SetJustifyH("RIGHT")
+
+    if type(_G.MSUF_ApplyCastbarDetailTextLayout) == "function" then
+        _G.MSUF_ApplyCastbarDetailTextLayout(frame, unit)
+    end
 end
 
 function Style:ApplyBossCastbarTextsLayout(frame, options)
@@ -297,6 +301,10 @@ function Style:ApplyBossCastbarTextsLayout(frame, options)
     if tonumber(options.timeFontSize) then
         local fontPath, _, fontFlags = frame.timeText:GetFont()
         frame.timeText:SetFont(fontPath, tonumber(options.timeFontSize), fontFlags)
+    end
+
+    if type(_G.MSUF_ApplyCastbarDetailTextLayout) == "function" then
+        _G.MSUF_ApplyCastbarDetailTextLayout(frame, "boss")
     end
 end
 
