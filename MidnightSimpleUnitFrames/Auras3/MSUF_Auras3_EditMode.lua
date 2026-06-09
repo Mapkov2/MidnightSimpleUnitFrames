@@ -68,6 +68,27 @@ local GROUPS = {
     },
 }
 
+local LANE_STYLE_KEYS = {
+    buff = {
+        stackCountAnchor = "buffStackCountAnchor",
+        stackTextSize = "buffStackTextSize",
+        stackTextOffsetX = "buffStackTextOffsetX",
+        stackTextOffsetY = "buffStackTextOffsetY",
+        cooldownTextSize = "buffCooldownTextSize",
+        cooldownTextOffsetX = "buffCooldownTextOffsetX",
+        cooldownTextOffsetY = "buffCooldownTextOffsetY",
+    },
+    debuff = {
+        stackCountAnchor = "debuffStackCountAnchor",
+        stackTextSize = "debuffStackTextSize",
+        stackTextOffsetX = "debuffStackTextOffsetX",
+        stackTextOffsetY = "debuffStackTextOffsetY",
+        cooldownTextSize = "debuffCooldownTextSize",
+        cooldownTextOffsetX = "debuffCooldownTextOffsetX",
+        cooldownTextOffsetY = "debuffCooldownTextOffsetY",
+    },
+}
+
 local W8 = "Interface\\Buttons\\WHITE8X8"
 local HEADER_H = 18
 local PREVIEW_ICONS = 4
@@ -216,22 +237,43 @@ local function ReadNumber(shared, layout, key, defaultValue, minValue, maxValue)
     return Clamp(v, defaultValue, minValue, maxValue)
 end
 
-local function ReadTextConfig(unit)
-    local auras, shared = EnsureDB()
-    local layout = GetLayout(auras, unit, false)
-    local ls = GetSharedLayout(auras, unit)
-    local anchor = (ls and ls.stackCountAnchor) or (shared and shared.stackCountAnchor) or "TOPRIGHT"
+local function ReadRawNumber(shared, layout, key)
+    local v = layout and layout[key]
+    if v == nil then v = shared and shared[key] end
+    return tonumber(v)
+end
+
+local function ReadLaneTextNumber(shared, layout, kind, key, defaultValue, minValue, maxValue)
+    kind = NormalizeKind(kind)
+    local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind][key]
+    local v = laneKey and ReadRawNumber(shared, layout, laneKey) or nil
+    if v == nil then v = ReadRawNumber(shared, layout, key) end
+    return Clamp(v, defaultValue, minValue, maxValue)
+end
+
+local function ReadLaneTextAnchor(shared, layoutShared, kind)
+    kind = NormalizeKind(kind)
+    local laneKey = kind and LANE_STYLE_KEYS[kind] and LANE_STYLE_KEYS[kind].stackCountAnchor
+    local anchor = laneKey and ((layoutShared and layoutShared[laneKey]) or (shared and shared[laneKey])) or nil
+    anchor = anchor or (layoutShared and layoutShared.stackCountAnchor) or (shared and shared.stackCountAnchor) or "TOPRIGHT"
     if anchor ~= "TOPLEFT" and anchor ~= "BOTTOMLEFT" and anchor ~= "BOTTOMRIGHT" then
         anchor = "TOPRIGHT"
     end
+    return anchor
+end
+
+local function ReadTextConfig(unit, kind)
+    local auras, shared = EnsureDB()
+    local layout = GetLayout(auras, unit, false)
+    local ls = GetSharedLayout(auras, unit)
     return {
-        stackSize = ReadNumber(shared, layout, "stackTextSize", 14, 6, 40),
-        stackX = ReadNumber(shared, layout, "stackTextOffsetX", -1, -2000, 2000),
-        stackY = ReadNumber(shared, layout, "stackTextOffsetY", 1, -2000, 2000),
-        cooldownSize = ReadNumber(shared, layout, "cooldownTextSize", 14, 6, 40),
-        cooldownX = ReadNumber(shared, layout, "cooldownTextOffsetX", 0, -2000, 2000),
-        cooldownY = ReadNumber(shared, layout, "cooldownTextOffsetY", 0, -2000, 2000),
-        stackAnchor = anchor,
+        stackSize = ReadLaneTextNumber(shared, layout, kind, "stackTextSize", 14, 6, 40),
+        stackX = ReadLaneTextNumber(shared, layout, kind, "stackTextOffsetX", -1, -2000, 2000),
+        stackY = ReadLaneTextNumber(shared, layout, kind, "stackTextOffsetY", 1, -2000, 2000),
+        cooldownSize = ReadLaneTextNumber(shared, layout, kind, "cooldownTextSize", 14, 6, 40),
+        cooldownX = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetX", 0, -2000, 2000),
+        cooldownY = ReadLaneTextNumber(shared, layout, kind, "cooldownTextOffsetY", 0, -2000, 2000),
+        stackAnchor = ReadLaneTextAnchor(shared, ls, kind),
     }
 end
 
@@ -698,7 +740,7 @@ function EM.RefreshUnit(unit)
         if not (cfg.show and cfg.max > 0 and (not metrics or metrics.enabled ~= false)) then
             group:Hide()
         else
-            local textCfg = ReadTextConfig(unit)
+            local textCfg = ReadTextConfig(unit, kind)
             local shownIcons = math_min(PREVIEW_ICONS, (metrics and metrics.num) or cfg.max)
             if shownIcons < 1 then shownIcons = 1 end
             local size = (metrics and metrics.size) or cfg.size

@@ -705,14 +705,14 @@ local PAGE_RESET_INFO = {
         summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
     },
     auras3_buffs = {
-        label = "Aura Style",
+        label = "Aura Buffs",
         kind = "auras",
-        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
+        summary = "Buff text, cooldown and stack styling",
     },
     auras3_debuffs = {
-        label = "Aura Style",
+        label = "Aura Debuffs",
         kind = "auras",
-        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
+        summary = "Debuff text, cooldown and stack styling",
     },
     auras3_rendering = {
         label = "Aura Style",

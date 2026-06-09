@@ -80,6 +80,7 @@ local NAV_HELP_TERMS = {
     "oeffne", "wo", "wo ist", "finde", "suche", "hilfe", "warum", "wie",
 }
 local EXPLICIT_DOMAIN_TERMS = {
+    "unitframe", "unitframes", "unit frame", "unit frames",
     "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target", "party", "raid", "group", "group frames",
     "spieler", "ziel", "fokus", "begleiter", "gruppe", "gruppenframes",
     "castbar", "cast bar", "auras", "aura", "buff", "debuff", "profile", "profiles", "class resource", "class power", "gameplay",
@@ -118,8 +119,9 @@ local PAGE_CONTEXT = {
     gf_bars = { prefix = "group text", label = "Group Health & Text" },
     gf_indicators = { prefix = "group indicator", label = "Group Indicators" },
     gf_auras = { prefix = "group aura", label = "Group Auras" },
-    auras3 = { prefix = "aura buff", label = "Buffs" },
-    auras3_debuffs = { prefix = "aura debuff", label = "Debuffs" },
+    auras3 = { prefix = "aura style", label = "Aura Style" },
+    auras3_buffs = { prefix = "aura buff", label = "Aura Buffs" },
+    auras3_debuffs = { prefix = "aura debuff", label = "Aura Debuffs" },
     auras3_styling = { prefix = "aura style", label = "Aura Style" },
     auras3_filters = { prefix = "aura filter", label = "Aura Filters" },
 }
@@ -457,7 +459,7 @@ local function FriendlyNoMatch(text)
     local noMatch = KnowledgeNoMatch(text)
     if noMatch then return noMatch end
     return {
-        text = "I could not match that to a safe MSUF command yet. Try naming the frame or page and the exact control, for example 'set player width to 300' or 'turn off raid range fade'. Aura controls are skipped until their backend is ready. If it still should work, send the exact wording in Discord: " .. DISCORD_INVITE,
+        text = "I could not safely match that MSUF command yet. I will not guess at settings. Try the frame or page plus the exact control, for example 'set player width to 300' or 'turn off raid range fade'. Aura controls are skipped until their backend is ready. If that wording should work, send the exact text in Discord: " .. DISCORD_INVITE,
         status = "info",
         summary = "Assistant no match",
     }
@@ -534,6 +536,7 @@ local function ShouldSkipContext(text)
     if ContainsAny(norm, NAV_HELP_TERMS) then return true end
     if ContainsAny(norm, EXPLICIT_DOMAIN_TERMS) then return true end
     if ContainsAny(norm, {
+        "unitframe", "unitframes", "unit frame", "unit frames",
         "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
         "party", "raid", "party frames", "raid frames", "group frames",
     }) then return true end
@@ -845,6 +848,7 @@ function A.RouteInput(text, coreHandler)
     local parser = A.Parser or {}
     local normForScope = Normalize(text)
     local hasExplicitScope = ContainsAny(normForScope, {
+        "unitframe", "unitframes", "unit frame", "unit frames",
         "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
         "party", "raid", "party frames", "raid frames", "group frames",
     })

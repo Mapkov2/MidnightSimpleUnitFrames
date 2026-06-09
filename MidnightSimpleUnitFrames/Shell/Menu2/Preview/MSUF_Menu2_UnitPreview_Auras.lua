@@ -369,6 +369,33 @@ function Auras.Hide(box)
     end
 end
 
+local function LaneTextConfig(cfg, kind)
+    if kind == "buff" then
+        return {
+            showStackCount = cfg.buffShowStackCount,
+            showCooldownText = cfg.buffShowCooldownText,
+            stackAnchor = cfg.buffStackAnchor or cfg.stackAnchor,
+            stackSize = cfg.buffStackSize or cfg.stackSize,
+            stackX = cfg.buffStackX or cfg.stackX,
+            stackY = cfg.buffStackY or cfg.stackY,
+            cooldownSize = cfg.buffCooldownSize or cfg.cooldownSize,
+            cooldownX = cfg.buffCooldownX or cfg.cooldownX,
+            cooldownY = cfg.buffCooldownY or cfg.cooldownY,
+        }
+    end
+    return {
+        showStackCount = cfg.debuffShowStackCount,
+        showCooldownText = cfg.debuffShowCooldownText,
+        stackAnchor = cfg.debuffStackAnchor or cfg.stackAnchor,
+        stackSize = cfg.debuffStackSize or cfg.stackSize,
+        stackX = cfg.debuffStackX or cfg.stackX,
+        stackY = cfg.debuffStackY or cfg.stackY,
+        cooldownSize = cfg.debuffCooldownSize or cfg.cooldownSize,
+        cooldownX = cfg.debuffCooldownX or cfg.cooldownX,
+        cooldownY = cfg.debuffCooldownY or cfg.cooldownY,
+    }
+end
+
 local function PlaceStack(fs, icon, cfg, S)
     if not fs then return end
     local stackAnchor = cfg.stackAnchor or "TOPRIGHT"
@@ -402,6 +429,7 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         return
     end
     local cfg = state.cfg
+    local textCfg = LaneTextConfig(cfg, kind)
     local visual = EnsureVisual(box, kind, baseLevel)
     if not visual then
         HideHandle(handle)
@@ -410,10 +438,10 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local textures = AURA_TEXTURES[kind] or AURA_TEXTURES.buff
     local size = max(8, S(bounds.size))
     local step = S((bounds.size or 0) + (bounds.spacing or 0))
-    local stackSize = max(7, S(cfg.stackSize or 14))
-    local cooldownSize = max(7, S(cfg.cooldownSize or 14))
-    local cooldownX = S(cfg.cooldownX or 0)
-    local cooldownY = S(cfg.cooldownY or 0)
+    local stackSize = max(7, S(textCfg.stackSize or 14))
+    local cooldownSize = max(7, S(textCfg.cooldownSize or 14))
+    local cooldownX = S(textCfg.cooldownX or 0)
+    local cooldownY = S(textCfg.cooldownY or 0)
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
     local laneX = S((bounds.baseX or 0) + (bounds.x or 0))
     local laneY = S((bounds.baseY or 0) + (bounds.y or 0))
@@ -445,13 +473,13 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
         icon.tex:SetTexture(textures[((i - 1) % #textures) + 1])
         icon.edge:SetVertexColor(0, 0, 0, 0)
         ApplyAuraFont(icon.stack, stackSize)
-        PlaceStack(icon.stack, icon, cfg, S)
-        icon.stack:SetText(cfg.showStackCount and (i % 3 == 1 and "2" or "") or "")
+        PlaceStack(icon.stack, icon, textCfg, S)
+        icon.stack:SetText(textCfg.showStackCount ~= false and (i % 3 == 1 and "2" or "") or "")
         ApplyAuraFont(icon.timer, cooldownSize)
         icon.timer:ClearAllPoints()
         icon.timer:SetPoint("CENTER", icon, "CENTER", cooldownX, cooldownY)
         icon.timer:SetJustifyH("CENTER")
-        icon.timer:SetText(cfg.showCooldownText and (i % 2 == 0 and "18" or "") or "")
+        icon.timer:SetText(textCfg.showCooldownText ~= false and (i % 2 == 0 and "18" or "") or "")
         icon:Show()
     end
     for i = bounds.shown + 1, #(visual._icons or {}) do

@@ -285,6 +285,7 @@ function A._ParsePipelineGeometry(normalized, raw)
         or ParseUnitDetailMove(normalized)
         or ParseGroupDetailMove(normalized)
         or (P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized))
+        or (P.ParseUnitFrameRootMove and P.ParseUnitFrameRootMove(normalized))
         or P.ParseGenericOffsetMove(normalized)
         or ParseUnsupportedDetailShortcut(normalized)
         or ParseScopedOnlyOverride(normalized, raw)
@@ -392,7 +393,7 @@ function A.Parse(text)
     if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
     if not parsed then parsed = A._ParsePipelineFallback(normalized, raw, ctx) end
     if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
-    if not parsedByEarlyCompound then
+    if not parsedByEarlyCompound and not (parsed and parsed.compoundComplete == true) then
         local compound = P.ParseCompound and P.ParseCompound(normalized, raw, parsed)
         if compound then parsed = compound end
     end

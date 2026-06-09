@@ -101,6 +101,7 @@ local PAGE_FRAME_TYPES = {
     gf_indicators = { group = true },
     gf_auras = { groupAura = true, group = true },
     auras3 = { aura = true },
+    auras3_buffs = { aura = true },
     auras3_debuffs = { aura = true },
     auras3_styling = { aura = true },
     auras3_filters = { aura = true },
@@ -167,7 +168,7 @@ local function SettingLikelyPage(setting)
     if ft == "gameplay" then return "gameplay" end
     if ft == "group" then return "gf_bars" end
     if ft == "groupAura" then return "gf_auras" end
-    if ft == "aura" then return "auras3" end
+    if ft == "aura" then return "auras3_styling" end
     local cat = Normalize(setting.category or "")
     if cat:find("castbar", 1, true) then return "opt_castbar" end
     if cat:find("font", 1, true) then return "opt_fonts" end
@@ -609,8 +610,9 @@ local PAGE_HELP = {
         },
         actions = { "Export Current Profile", "Import Profile", "Create Profile" },
     },
-    auras3 = { title = "Aura help", lines = { "Aura and Group Aura controls are intentionally disabled in the Assistant until that backend is cleared.", "Use the Aura pages manually for now; the Assistant will not change aura settings." }, actions = {} },
-    auras3_debuffs = { title = "Debuffs help", lines = { "Debuff controls are intentionally disabled in the Assistant until the Aura backend is cleared." }, actions = {} },
+    auras3 = { title = "Aura Style help", lines = { "Aura and Group Aura controls are intentionally disabled in the Assistant until that backend is cleared.", "Use Auras > Style manually for text, cooldown and stack styling." }, actions = {} },
+    auras3_buffs = { title = "Aura Buffs help", lines = { "Buff style controls are intentionally disabled in the Assistant until the Aura backend is cleared." }, actions = {} },
+    auras3_debuffs = { title = "Aura Debuffs help", lines = { "Debuff style controls are intentionally disabled in the Assistant until the Aura backend is cleared." }, actions = {} },
     auras3_filters = { title = "Aura Filters help", lines = { "Aura filter controls are intentionally disabled in the Assistant until the Aura backend is cleared." }, actions = {} },
     gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, party/raid/mythic raid controls, and visibility settings." }, actions = { "Open Group Layout" } },
     gf_bars = { title = "Group Health & Text help", lines = { "You can change group health/text controls, text slots/selectors, bar sizes, colors, and layout-related settings where registered." }, actions = { "Open Group Health & Text" } },
@@ -630,7 +632,7 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "color help", "colors help", "farbe hilfe", "farben hilfe" }, page = "opt_colors" },
     { terms = { "font help", "fonts help", "schrift hilfe" }, page = "opt_fonts" },
     { terms = { "profile help", "profiles help", "profil hilfe", "how do profiles work" }, page = "profiles" },
-    { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "auras3" },
+    { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "auras3_styling" },
     { terms = { "edit mode help", "editmode help", "help edit mode" }, page = "home", special = "editmode" },
     { terms = { "group help", "group frames help", "party help", "raid help" }, page = "gf_layout" },
     { terms = { "indicator help", "group indicator help", "corner indicator help" }, page = "gf_indicators" },
@@ -955,7 +957,7 @@ function K.NoMatch(query)
     local text = Trim(query)
     local suffix = text ~= "" and (": " .. text) or "."
     return {
-        text = "I could not find a safe MSUF match" .. suffix .. "\nTry naming the frame or page and the exact control, for example 'set target castbar height to 20' or 'turn on party dead background'. Aura controls are skipped until their backend is ready.\nIf it still should work, send the exact wording in Discord: " .. DISCORD_INVITE,
+        text = "I could not safely match that MSUF command" .. suffix .. "\nI will not guess at settings. Try the frame or page plus the exact control, for example 'set target castbar height to 20' or 'turn on party dead background'. Aura controls are skipped until their backend is ready.\nIf that wording should work, send the exact text in Discord: " .. DISCORD_INVITE,
         status = "info",
         summary = "Assistant knowledge no match",
     }

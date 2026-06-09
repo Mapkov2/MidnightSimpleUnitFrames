@@ -685,9 +685,9 @@ end
 
 local function AnchorValueTerms(value)
     if value == "GLOBAL" then return { "global", "global anchor", "default" } end
-    if value == "EssentialCooldownViewer" then return { "essential cooldown viewer", "ecv" } end
-    if value == "UtilityCooldownViewer" then return { "utility cooldown viewer", "ucv" } end
-    if value == "BuffIconCooldownViewer" then return { "tracked buffs viewer", "buff icon cooldown viewer" } end
+    if value == "EssentialCooldownViewer" then return { "essential cooldown viewer", "essential cooldown manager", "essential cooldownmanager", "essential cooldowns", "cooldown manager", "cooldownmanager", "cooldowns manager", "cdm", "ecv" } end
+    if value == "UtilityCooldownViewer" then return { "utility cooldown viewer", "utility cooldown manager", "utility cooldownmanager", "utility cooldowns", "ucv" } end
+    if value == "BuffIconCooldownViewer" then return { "tracked buffs viewer", "tracked buff viewer", "buff icon cooldown viewer", "tracked buffs", "tracked buffs manager" } end
     if value == "targettarget" then return { "targettarget", "target of target", "tot" } end
     if value == "focustarget" then return { "focustarget", "focus target" } end
     return { value }
@@ -699,11 +699,24 @@ local function BuildAnchorValueAliases(unit)
         default = "GLOBAL",
         ["global anchor"] = "GLOBAL",
         ["essential cooldown viewer"] = "EssentialCooldownViewer",
+        ["essential cooldown manager"] = "EssentialCooldownViewer",
+        ["essential cooldownmanager"] = "EssentialCooldownViewer",
+        ["essential cooldowns"] = "EssentialCooldownViewer",
+        ["cooldown manager"] = "EssentialCooldownViewer",
+        cooldownmanager = "EssentialCooldownViewer",
+        ["cooldowns manager"] = "EssentialCooldownViewer",
+        cdm = "EssentialCooldownViewer",
         ecv = "EssentialCooldownViewer",
         ["utility cooldown viewer"] = "UtilityCooldownViewer",
+        ["utility cooldown manager"] = "UtilityCooldownViewer",
+        ["utility cooldownmanager"] = "UtilityCooldownViewer",
+        ["utility cooldowns"] = "UtilityCooldownViewer",
         ucv = "UtilityCooldownViewer",
         ["tracked buffs viewer"] = "BuffIconCooldownViewer",
+        ["tracked buff viewer"] = "BuffIconCooldownViewer",
         ["buff icon cooldown viewer"] = "BuffIconCooldownViewer",
+        ["tracked buffs"] = "BuffIconCooldownViewer",
+        ["tracked buffs manager"] = "BuffIconCooldownViewer",
         player = "player",
         target = "target",
         targettarget = "targettarget",

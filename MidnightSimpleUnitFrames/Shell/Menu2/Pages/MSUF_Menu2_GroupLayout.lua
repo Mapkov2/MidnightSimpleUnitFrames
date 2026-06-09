@@ -48,7 +48,7 @@ local function BuildGFLayout(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
 
-    local general = b:CollapsibleSection("general", "Availability", 430, false)
+    local general = b:CollapsibleSection("general", "Frame Basics", 430, false)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
     local generalRightX = min(max(430, floor(generalW * 0.52)), max(360, generalW - 360))

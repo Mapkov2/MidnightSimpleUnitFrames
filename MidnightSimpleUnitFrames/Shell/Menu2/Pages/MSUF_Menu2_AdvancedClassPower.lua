@@ -1203,80 +1203,88 @@ local function BuildClassPower(ctx)
     MoveWidget(cpShadow, behavior, behaviorRightX, -102)
     MoveWidget(cpPrediction, behavior, behaviorRightX, -134)
 
-    local styleSeedWidth = ctx.width or 900
-    local compactStyle = styleSeedWidth < 900
-    local visual = b:CollapsibleSection("classpower_visuals", "Style", compactStyle and 568 or 510, false)
-    local cpColor = BindTableToggle(ctx, visual, "Color by resource type", Bars, "classPowerColorByType", true, ApplyClassPower)
-    local cpComboColor = BindTableDropdown(ctx, visual, "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260, Bars, "classPowerComboPointColorMode", "default", ApplyClassPower)
-    local cpFont = BindTableSlider(ctx, visual, "Font size", 6, 32, 1, 300, Bars, "classPowerFontSize", 16, ApplyClassPower)
-    local cpTextX = BindTableSlider(ctx, visual, "Text X", -200, 200, 1, 300, Bars, "classPowerTextOffsetX", 0, ApplyClassPower)
-    local cpTextY = BindTableSlider(ctx, visual, "Text Y", -200, 200, 1, 300, Bars, "classPowerTextOffsetY", 0, ApplyClassPower)
-    local cpBg = BindBarsAlphaPercent(ctx, visual, "BG opacity", "classPowerBgAlpha", 0.3, ApplyClassPower, 1)
-    local cpSeparator = BindTableSlider(ctx, visual, "Separator", 0, 4, 1, 300, Bars, "classPowerTickWidth", 1, ApplyClassPower)
-    local cpOutline = BindTableSlider(ctx, visual, "Outline", 0, 4, 1, 300, Bars, "classPowerOutline", 1, ApplyClassPower)
-    local cpFilled = BindBarsAlphaPercent(ctx, visual, "Filled %", "classPowerFilledAlpha", 1.0, ApplyClassPower, 5)
-    local cpEmpty = BindBarsAlphaPercent(ctx, visual, "Empty %", "classPowerEmptyAlpha", 0.3, ApplyClassPower, 5)
-    local cpGap = BindTableSlider(ctx, visual, "Pip gap", 0, 8, 1, 300, Bars, "classPowerGap", 0, ApplyClassPower)
-    local cpFgTex = BindTableDropdown(ctx, visual, "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, Bars, "classPowerTexture", "", ApplyClassPower)
-    local cpBgTex = BindTableDropdown(ctx, visual, "Background texture", function() return TextureValues("Use foreground texture") end, 300, Bars, "classPowerBgTexture", "", ApplyClassPower)
+    local visual = b:CollapsibleSection("classpower_visuals", "Style", 430, false)
+    local styleWidth = visual._msuf2Width or ctx.width or 900
+    local styleInnerW = max(320, styleWidth - 64)
+    local styleLeftX = 32
+    local styleCardW = min(540, styleInnerW)
+    local styleControlW = min(360, styleCardW - 32)
+    local styleTabFrames = {}
+    local function CurrentStyleTab()
+        local tab = M.classPowerStyleTab or "resources"
+        if tab ~= "resources" and tab ~= "text" and tab ~= "opacity" and tab ~= "pips" then tab = "resources" end
+        return tab
+    end
+    local function RefreshStyleTabs()
+        local tab = CurrentStyleTab()
+        for key, frame in pairs(styleTabFrames) do frame:SetShown(key == tab) end
+    end
+    local function SetStyleTab(tab)
+        tab = (tab == "text" or tab == "opacity" or tab == "pips") and tab or "resources"
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("classPowerStyleTab", tab)
+        else
+            M.classPowerStyleTab = tab
+        end
+        RefreshStyleTabs()
+    end
+
+    local styleTabs = W.Segment(visual, "Style area", VT("resources", "Textures", "text", "Text", "opacity", "Opacity", "pips", "Pips"), min(620, styleInnerW))
+    MoveWidget(styleTabs, visual, styleLeftX, -44, min(620, styleInnerW), "LEFT")
+    M.BindSegment(ctx, styleTabs, CurrentStyleTab, SetStyleTab)
+
+    local function StyleTabFrame(key)
+        local frame = CreateFrame("Frame", nil, visual)
+        frame:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, -88)
+        frame:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, 12)
+        frame._msuf2Width = styleWidth
+        styleTabFrames[key] = frame
+        return frame
+    end
+    local resourcesFrame = StyleTabFrame("resources")
+    local textFrame = StyleTabFrame("text")
+    local opacityFrame = StyleTabFrame("opacity")
+    local pipsFrame = StyleTabFrame("pips")
+    if styleTabs.SetValue then styleTabs:SetValue(CurrentStyleTab()) end
+    M.AddRefresher(ctx, RefreshStyleTabs)
+    RefreshStyleTabs()
+
+    local cpColor = BindTableToggle(ctx, resourcesFrame, "Color by resource type", Bars, "classPowerColorByType", true, ApplyClassPower)
+    local cpComboColor = BindTableDropdown(ctx, resourcesFrame, "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260, Bars, "classPowerComboPointColorMode", "default", ApplyClassPower)
+    local cpFgTex = BindTableDropdown(ctx, resourcesFrame, "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, Bars, "classPowerTexture", "", ApplyClassPower)
+    local cpBgTex = BindTableDropdown(ctx, resourcesFrame, "Background texture", function() return TextureValues("Use foreground texture") end, 300, Bars, "classPowerBgTexture", "", ApplyClassPower)
+    local cpFont = BindTableSlider(ctx, textFrame, "Font size", 6, 32, 1, 300, Bars, "classPowerFontSize", 16, ApplyClassPower)
+    local cpTextX = BindTableSlider(ctx, textFrame, "Text X", -200, 200, 1, 300, Bars, "classPowerTextOffsetX", 0, ApplyClassPower)
+    local cpTextY = BindTableSlider(ctx, textFrame, "Text Y", -200, 200, 1, 300, Bars, "classPowerTextOffsetY", 0, ApplyClassPower)
+    local cpBg = BindBarsAlphaPercent(ctx, opacityFrame, "BG opacity", "classPowerBgAlpha", 0.3, ApplyClassPower, 1)
+    local cpFilled = BindBarsAlphaPercent(ctx, opacityFrame, "Filled %", "classPowerFilledAlpha", 1.0, ApplyClassPower, 5)
+    local cpEmpty = BindBarsAlphaPercent(ctx, opacityFrame, "Empty %", "classPowerEmptyAlpha", 0.3, ApplyClassPower, 5)
+    local cpSeparator = BindTableSlider(ctx, pipsFrame, "Separator", 0, 4, 1, 300, Bars, "classPowerTickWidth", 1, ApplyClassPower)
+    local cpOutline = BindTableSlider(ctx, pipsFrame, "Outline", 0, 4, 1, 300, Bars, "classPowerOutline", 1, ApplyClassPower)
+    local cpGap = BindTableSlider(ctx, pipsFrame, "Pip gap", 0, 8, 1, 300, Bars, "classPowerGap", 0, ApplyClassPower)
     for _, control in ipairs({ cpColor, cpComboColor, cpBg, cpSeparator, cpOutline, cpFilled, cpEmpty, cpGap, cpFgTex, cpBgTex }) do
         cpControls[#cpControls + 1] = control
     end
     textControls[#textControls + 1] = cpFont
     textControls[#textControls + 1] = cpTextX
     textControls[#textControls + 1] = cpTextY
-    local styleWidth = visual._msuf2Width or ctx.width or 900
-    compactStyle = styleWidth < 900
-    local styleLeftX = 32
-    if compactStyle then
-        local gap = 28
-        local colW = max(224, floor((styleWidth - 64 - gap) * 0.5))
-        local styleRightX = styleLeftX + colW + gap
-        local styleControlW = max(200, min(320, colW - 16))
-        W.ControlCard(visual, "Resource & Textures", nil, styleLeftX - 14, -38, colW + 28, 248)
-        W.ControlCard(visual, "Text", nil, styleRightX - 14, -38, colW + 28, 210)
-        W.ControlCard(visual, "Opacity", nil, styleLeftX - 14, -316, colW + 28, 204)
-        W.ControlCard(visual, "Pips & Border", nil, styleRightX - 14, -316, colW + 28, 230)
-        MoveWidget(cpColor, visual, styleLeftX, -72)
-        MoveWidget(cpComboColor, visual, styleLeftX, -104, styleControlW)
-        MoveWidget(cpFgTex, visual, styleLeftX, -192, styleControlW)
-        MoveWidget(cpBgTex, visual, styleLeftX, -246, styleControlW)
-        MoveWidget(cpFont, visual, styleRightX, -84, styleControlW)
-        MoveWidget(cpTextX, visual, styleRightX, -136, styleControlW)
-        MoveWidget(cpTextY, visual, styleRightX, -188, styleControlW)
-        MoveWidget(cpBg, visual, styleLeftX, -362, styleControlW)
-        MoveWidget(cpFilled, visual, styleLeftX, -414, styleControlW)
-        MoveWidget(cpEmpty, visual, styleLeftX, -466, styleControlW)
-        MoveWidget(cpSeparator, visual, styleRightX, -362, styleControlW)
-        MoveWidget(cpOutline, visual, styleRightX, -414, styleControlW)
-        MoveWidget(cpGap, visual, styleRightX, -466, styleControlW)
-    else
-        local styleMidX = min(max(360, floor(styleWidth * 0.36)), max(320, styleWidth - 650))
-        local styleRightX = min(max(styleMidX + 300, floor(styleWidth * 0.66)), max(styleMidX + 270, styleWidth - 390))
-        local styleLeftW = max(240, styleMidX - styleLeftX - 28)
-        local styleMidW = max(240, styleRightX - styleMidX - 28)
-        local styleRightW = max(240, styleWidth - styleRightX - 32)
-        local styleLeftControlW = max(260, min(322, styleMidX - styleLeftX - 20))
-        local styleMidControlW = max(240, min(286, styleRightX - styleMidX - 24))
-        local styleRightControlW = max(240, min(286, styleWidth - styleRightX - 36))
-        W.ControlCard(visual, "Resource & Textures", nil, styleLeftX - 14, -38, styleLeftW + 28, 248)
-        W.ControlCard(visual, "Text", nil, styleMidX - 14, -38, styleMidW + 28, 210)
-        W.ControlCard(visual, "Opacity", nil, styleRightX - 14, -38, styleRightW + 28, 204)
-        W.ControlCard(visual, "Pips & Border", nil, styleRightX - 14, -260, styleRightW + 28, 230)
-        MoveWidget(cpColor, visual, styleLeftX, -72)
-        MoveWidget(cpComboColor, visual, styleLeftX, -104, styleLeftControlW)
-        MoveWidget(cpFgTex, visual, styleLeftX, -192, styleLeftControlW)
-        MoveWidget(cpBgTex, visual, styleLeftX, -246, styleLeftControlW)
-        MoveWidget(cpFont, visual, styleMidX, -84, styleMidControlW)
-        MoveWidget(cpTextX, visual, styleMidX, -136, styleMidControlW)
-        MoveWidget(cpTextY, visual, styleMidX, -188, styleMidControlW)
-        MoveWidget(cpBg, visual, styleRightX, -84, styleRightControlW)
-        MoveWidget(cpFilled, visual, styleRightX, -136, styleRightControlW)
-        MoveWidget(cpEmpty, visual, styleRightX, -188, styleRightControlW)
-        MoveWidget(cpSeparator, visual, styleRightX, -306, styleRightControlW)
-        MoveWidget(cpOutline, visual, styleRightX, -358, styleRightControlW)
-        MoveWidget(cpGap, visual, styleRightX, -410, styleRightControlW)
-    end
+    W.ControlCard(resourcesFrame, "Resource & Textures", nil, styleLeftX - 14, -38, styleCardW + 28, 248)
+    W.ControlCard(textFrame, "Text", nil, styleLeftX - 14, -38, styleCardW + 28, 210)
+    W.ControlCard(opacityFrame, "Opacity", nil, styleLeftX - 14, -38, styleCardW + 28, 204)
+    W.ControlCard(pipsFrame, "Pips & Border", nil, styleLeftX - 14, -38, styleCardW + 28, 230)
+    MoveWidget(cpColor, resourcesFrame, styleLeftX, -72)
+    MoveWidget(cpComboColor, resourcesFrame, styleLeftX, -104, styleControlW)
+    MoveWidget(cpFgTex, resourcesFrame, styleLeftX, -192, styleControlW)
+    MoveWidget(cpBgTex, resourcesFrame, styleLeftX, -246, styleControlW)
+    MoveWidget(cpFont, textFrame, styleLeftX, -84, styleControlW)
+    MoveWidget(cpTextX, textFrame, styleLeftX, -136, styleControlW)
+    MoveWidget(cpTextY, textFrame, styleLeftX, -188, styleControlW)
+    MoveWidget(cpBg, opacityFrame, styleLeftX, -84, styleControlW)
+    MoveWidget(cpFilled, opacityFrame, styleLeftX, -136, styleControlW)
+    MoveWidget(cpEmpty, opacityFrame, styleLeftX, -188, styleControlW)
+    MoveWidget(cpSeparator, pipsFrame, styleLeftX, -84, styleControlW)
+    MoveWidget(cpOutline, pipsFrame, styleLeftX, -136, styleControlW)
+    MoveWidget(cpGap, pipsFrame, styleLeftX, -188, styleControlW)
 
     local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 216, false)
     local visibilityW = min(560, (visibility._msuf2Width or ctx.width or 900) - 28)
@@ -1325,7 +1333,7 @@ local function BuildClassPower(ctx)
         local customWidth = cpOn and ((bars.classPowerWidthMode or "player") == "custom")
         local anyDetached = false
         local db = M.EnsureDB()
-        for _, key in ipairs({ "player", "target", "focus" }) do
+        for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
             if db[key] and db[key].powerBarDetached then anyDetached = true; break end
         end
         for i = 1, #cpControls do SetControlEnabled(cpControls[i], cpOn) end
@@ -1337,6 +1345,7 @@ local function BuildClassPower(ctx)
         SetControlEnabled(altManaToggle, true)
         SetControlEnabled(cpEnable, true)
     end
+    M.RefreshClassPowerDetachedState = RefreshClassPowerControls
     M.AddRefresher(ctx, RefreshClassPowerControls)
     RefreshClassPowerControls()
     MaybeOfferQuickSetup()
@@ -1344,4 +1353,4 @@ local function BuildClassPower(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 7 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 8 })

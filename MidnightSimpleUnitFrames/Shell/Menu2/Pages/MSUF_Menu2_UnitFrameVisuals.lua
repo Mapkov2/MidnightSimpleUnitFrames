@@ -27,6 +27,13 @@ local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT
 local CASTBAR_TEXT_POSITIONS = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right", "ABOVE", "Above", "BELOW", "Below")
 local CASTBAR_TIME_FORMATS = VT("CURRENT", "Remaining", "ELAPSED", "Elapsed", "ELAPSED_MAX", "Elapsed / Total", "CURRENT_MAX", "Remaining / Total")
 local CASTBAR_TAB_VALUES = VT("general", "General", "icon", "Icon", "spell", "Spell Text", "time", "Time Text", "advanced", "Advanced")
+local CASTBAR_TAB_HEIGHTS = {
+    general = 318,
+    icon = 488,
+    spell = 488,
+    time = 488,
+    advanced = 344,
+}
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto", "CLIP", "Fixed Clip", "NONE", "No Limit")
 local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
@@ -35,6 +42,12 @@ local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CA
 local UnitSectionShared = M.UnitSectionsShared or {}
 local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or function() end
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
+
+local function RefreshClassPowerDetachedState()
+    if type(M.RefreshClassPowerDetachedState) == "function" then
+        M.RefreshClassPowerDetachedState()
+    end
+end
 
 local function PortraitClassStyleValues()
     local PM = MSUF and MSUF.PortraitMedia
@@ -313,6 +326,7 @@ local function BuildPower(ctx, builder, unit)
             end
             M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", { power = true, preview = true })
             if RefreshPowerEnabled then RefreshPowerEnabled() end
+            RefreshClassPowerDetachedState()
         end)
 
     local textOnBar = AddDetachedControl(W.ToggleAt(detachedCard, "Text on detached bar", 16, -62, detachedLeftW))
@@ -388,7 +402,20 @@ end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
     if not fields then return end
-    local sec = builder:CollapsibleSection("castbar", "Castbar", 620, false)
+    M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
+    local function NormalizeCastbarTabKey(key)
+        if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then
+            key = "general"
+        end
+        return key
+    end
+    local function CurrentCastbarTab()
+        local key = NormalizeCastbarTabKey(M.unitCastbarTabSelection[unit])
+        M.unitCastbarTabSelection[unit] = key
+        return key
+    end
+
+    local sec = builder:CollapsibleSection("castbar", "Castbar", CASTBAR_TAB_HEIGHTS[CurrentCastbarTab()] or CASTBAR_TAB_HEIGHTS.general, false)
     local sectionW = (sec and sec._msuf2Width) or (ctx and ctx.width) or 720
     local leftX = 16
     local cardGap = 28
@@ -542,13 +569,21 @@ local function BuildCastbar(ctx, builder, unit)
     local controlWLeft = max(220, leftW - 58)
     local controlWRight = max(220, rightW - 58)
 
-    M.unitCastbarTabSelection = M.unitCastbarTabSelection or {}
-    local function CurrentCastbarTab()
-        local key = M.unitCastbarTabSelection[unit] or "general"
-        if key ~= "general" and key ~= "icon" and key ~= "spell" and key ~= "time" and key ~= "advanced" then
-            key = "general"
+    local function SetCastbarSectionHeight(height)
+        height = max(120, floor((tonumber(height) or CASTBAR_TAB_HEIGHTS.general) + 0.5))
+        local entry = sec and sec._msuf2CollapsibleEntry
+        if sec and sec.SetHeight then sec:SetHeight(height) end
+        if entry then
+            local changed = (entry.contentHeight ~= height)
+            entry.contentHeight = height
+            if entry.body and entry.body.SetHeight then entry.body:SetHeight(height) end
+            if entry.outer and entry.outer.SetHeight then
+                entry.outer:SetHeight((entry.headerHeight or 28) + (entry.open and height or 0))
+            end
+            if changed and entry.builder and entry.builder.RelayoutCollapsibles then
+                entry.builder:RelayoutCollapsibles()
+            end
         end
-        return key
     end
 
     local tabs = W.Segment(sec, "Castbar area", CASTBAR_TAB_VALUES, min(620, sectionW - 48))
@@ -704,6 +739,7 @@ local function BuildCastbar(ctx, builder, unit)
         for key, frame in pairs(tabFrames) do
             frame:SetShown(key == tab)
         end
+        SetCastbarSectionHeight(CASTBAR_TAB_HEIGHTS[tab] or CASTBAR_TAB_HEIGHTS.general)
     end
     M.SetCollapsibleRefreshState(sec, RefreshCastbarEnabled)
     M.AddRefresher(ctx, RefreshCastbarEnabled)

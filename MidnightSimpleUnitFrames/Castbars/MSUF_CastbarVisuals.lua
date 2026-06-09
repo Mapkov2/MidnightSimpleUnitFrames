@@ -118,6 +118,12 @@ local function NormalizeJustify(value, fallback)
     return "LEFT"
 end
 
+local function NormalizeSpellNameTruncate(value)
+    value = tostring(value or "AUTO"):upper()
+    if value == "CLIP" or value == "NONE" then return value end
+    return "AUTO"
+end
+
 local function Clamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
     if value < minValue then return minValue end
@@ -408,7 +414,7 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
 
     local statusW = RegionNumber(statusBar, "GetWidth", nil) or RegionNumber(frame, "GetWidth", 250)
     local maxWidth = DetailNum(g, prefix, "SpellNameMaxWidth", nil, 0)
-    local truncate = DetailString(g, prefix, "SpellNameTruncate", nil, "AUTO"):upper()
+    local truncate = NormalizeSpellNameTruncate(DetailString(g, prefix, "SpellNameTruncate", nil, "AUTO"))
     local width
     if truncate == "NONE" then
         width = math.max(statusW, 1000)

@@ -178,6 +178,10 @@ local function ApplyBossCastbarLayout(frame)
     if type(_G.MSUF_ApplyCastbarOutline) == "function" then
         _G.MSUF_ApplyCastbarOutline(frame, true)
     end
+
+    if type(_G.MSUF_ApplyCastbarDetailLayout) == "function" then
+        _G.MSUF_ApplyCastbarDetailLayout(frame, "boss")
+    end
 end
 
 local function UpdateBossCastbarAnchor(frame, forceLayout)

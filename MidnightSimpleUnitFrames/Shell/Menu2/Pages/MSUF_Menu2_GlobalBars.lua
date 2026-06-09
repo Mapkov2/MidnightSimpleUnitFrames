@@ -958,21 +958,60 @@ local function BuildBars(ctx)
     end
     M.AddRefresher(ctx, RefreshRoundedControls)
 
-    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 820, true)
+    local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 606, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
     local hlLeftX = 30
     local hlInnerW = max(320, hlW - 60)
     local hlLeftW = max(220, min(380, floor((hlInnerW - hlGap) * 0.46)))
-    local hlRightX = hlLeftX + hlLeftW + hlGap
-    local hlRightW = max(220, min(420, hlInnerW - hlLeftW - hlGap))
+    local hlPreviewX = hlLeftX
+    local hlPreviewW = max(280, min(440, hlInnerW - 28))
 
-    W.ControlCard(highlights, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 438)
+    local highlightTabFrames = {}
+    local function CurrentHighlightTab()
+        local tab = M.barsHighlightTab or "modes"
+        if tab ~= "modes" and tab ~= "preview" and tab ~= "priority" then tab = "modes" end
+        return tab
+    end
+    local function RefreshHighlightTabs()
+        local tab = CurrentHighlightTab()
+        for key, frame in pairs(highlightTabFrames) do frame:SetShown(key == tab) end
+    end
+    local function SetHighlightTab(tab)
+        tab = (tab == "preview" or tab == "priority") and tab or "modes"
+        if type(M.PersistMenuStateValue) == "function" then
+            M.PersistMenuStateValue("barsHighlightTab", tab)
+        else
+            M.barsHighlightTab = tab
+        end
+        RefreshHighlightTabs()
+    end
+
+    local highlightTabs = W.Segment(highlights, "Highlight area", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"), min(520, hlInnerW))
+    W.MoveWidget(highlightTabs, highlights, hlLeftX, -44, min(520, hlInnerW), "LEFT")
+    M.BindSegment(ctx, highlightTabs, CurrentHighlightTab, SetHighlightTab)
+
+    local function HighlightTabFrame(key)
+        local frame = CreateFrame("Frame", nil, highlights)
+        frame:SetPoint("TOPLEFT", highlights, "TOPLEFT", 0, -88)
+        frame:SetPoint("BOTTOMRIGHT", highlights, "BOTTOMRIGHT", 0, 12)
+        frame._msuf2Width = hlW
+        highlightTabFrames[key] = frame
+        return frame
+    end
+    local modesFrame = HighlightTabFrame("modes")
+    local previewFrame = HighlightTabFrame("preview")
+    local priorityFrame = HighlightTabFrame("priority")
+    if highlightTabs.SetValue then highlightTabs:SetValue(CurrentHighlightTab()) end
+    M.AddRefresher(ctx, RefreshHighlightTabs)
+    RefreshHighlightTabs()
+
+    W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 438)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
-    local priorityCard = W.ControlCard(highlights, "Priority Order", nil, hlLeftX - 14, -492, priorityCardW, 296)
-    W.ControlCard(highlights, "Preview", nil, hlRightX - 14, -38, hlRightW + 28, 248)
+    local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
+    W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
 
-    local highlight = W.Slider(highlights, "Highlight border thickness", 1, 30, 1, hlLeftW)
+    local highlight = W.Slider(modesFrame, "Highlight border thickness", 1, 30, 1, hlLeftW)
     M.BindSlider(ctx, highlight,
         function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
         function(v)
@@ -982,7 +1021,7 @@ local function BuildBars(ctx)
             ApplyBars("MSUF2_HIGHLIGHT_BORDER")
             ApplyAllHighlightBorderRuntime()
         end)
-    W.MoveWidget(highlight, highlights, hlLeftX, -70, hlLeftW, "LEFT")
+    W.MoveWidget(highlight, modesFrame, hlLeftX, -70, hlLeftW, "LEFT")
     local borderModes = VT(0, "Off", 1, "On")
     local function StopBorderTest(flag, setter, value)
         if value == 1 or not _G[flag] then return end
@@ -990,9 +1029,9 @@ local function BuildBars(ctx)
         if type(fn) == "function" then fn(false) end
     end
     local function BindHighlightDropdown(label, values, y, getValue, setValue)
-        local control = W.Dropdown(highlights, label, values, hlLeftW)
+        local control = W.Dropdown(modesFrame, label, values, hlLeftW)
         M.BindDropdown(ctx, control, getValue, setValue)
-        W.MoveWidget(control, highlights, hlLeftX, y, hlLeftW, "LEFT")
+        W.MoveWidget(control, modesFrame, hlLeftX, y, hlLeftW, "LEFT")
         return control
     end
     local function BindBorderModeDropdown(label, key, defaultValue, reason, y, flag, setter, apply)
@@ -1032,7 +1071,7 @@ local function BuildBars(ctx)
             ApplyBossTargetBorderRuntime()
         end)
 
-    local bossSharedHint = W.Text(highlights, "Boss target border is a shared boss-frame setting.", hlLeftX, -414, hlLeftW, T.colors.dim)
+    local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -414, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
 
     local function AggroBorderOn()
@@ -1053,7 +1092,7 @@ local function BuildBars(ctx)
     end
 
     local function BindBorderTestToggle(label, y, flagName, setterName, enabledFn, noScope)
-        local control = W.ToggleAt(highlights, label, hlRightX, y, hlRightW)
+        local control = W.ToggleAt(previewFrame, label, hlPreviewX, y, hlPreviewW)
         M.BindToggle(ctx, control,
             function() return _G[flagName] and true or false end,
             function(v)
@@ -1077,15 +1116,15 @@ local function BuildBars(ctx)
     local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", AggroBorderOn)
     local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", DispelBorderOn)
     _G.MSUF_DispelBorderTestType = _G.MSUF_DispelBorderTestType or "Magic"
-    local dispelType = W.Dropdown(highlights, "Dispel test type",
-        VT("Magic", "Magic", "Curse", "Curse", "Disease", "Disease", "Poison", "Poison", "Bleed", "Bleed"), hlRightW)
+    local dispelType = W.Dropdown(previewFrame, "Dispel test type",
+        VT("Magic", "Magic", "Curse", "Curse", "Disease", "Disease", "Poison", "Poison", "Bleed", "Bleed"), hlPreviewW)
     M.BindDropdown(ctx, dispelType,
         function() return _G.MSUF_DispelBorderTestType or "Magic" end,
         function(v)
             _G.MSUF_DispelBorderTestType = v or "Magic"
             RefreshBorderTestModes()
         end)
-    W.MoveWidget(dispelType, highlights, hlRightX, -150, hlRightW, "LEFT")
+    W.MoveWidget(dispelType, previewFrame, hlPreviewX, -150, hlPreviewW, "LEFT")
 
     local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", PurgeBorderOn)
     local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true)

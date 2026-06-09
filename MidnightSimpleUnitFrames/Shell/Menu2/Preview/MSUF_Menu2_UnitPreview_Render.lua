@@ -94,6 +94,31 @@ local function NormalizeCastbarPreviewJustify(value, fallback)
     return "LEFT"
 end
 
+local function NormalizeCastbarPreviewTruncate(value)
+    value = tostring(value or "AUTO"):upper()
+    if value == "CLIP" or value == "NONE" then return value end
+    return "AUTO"
+end
+
+local function ShortenCastbarPreviewSpellName(key, text, truncate)
+    if truncate ~= "AUTO" then return text end
+    local shorten = _G.MSUF_ShortenCastbarSpellName
+    if type(shorten) ~= "function" then return text end
+    return shorten({ unit = key == "boss" and "boss1" or key }, text)
+end
+
+local function ApplyCastbarPreviewIconBorder(icon, style, g)
+    if not (icon and icon.SetBackdropBorderColor) then return end
+    style = tostring(style or "NONE"):upper()
+    if style == "DARK" then
+        icon:SetBackdropBorderColor(0, 0, 0, 0.95)
+    elseif style == "CASTBAR" then
+        icon:SetBackdropBorderColor(g.castbarBorderR or 0, g.castbarBorderG or 0, g.castbarBorderB or 0, g.castbarBorderA or 1)
+    else
+        icon:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+end
+
 local function AnchorCastbarPreviewText(fs, relativeTo, position, x, y, justify, S)
     fs:ClearAllPoints()
     if position == "CENTER" then
@@ -125,7 +150,9 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
     local sIcon = max(6, S(iconSize))
     local iconPosition = NormalizeCastbarPreviewIconPos(ReadCastbarPreviewString(g, key, detailPrefix, "IconPosition", "bossCastIconPosition", "LEFT"))
     local iconSpacing = max(0, min(40, ReadCastbarNum(g, key, "IconSpacing", "bossCastIconSpacing", 1)))
+    local iconBorderStyle = ReadCastbarPreviewString(g, key, detailPrefix, "IconBorderStyle", "bossCastIconBorderStyle", "NONE")
     if showIcon then
+        ApplyCastbarPreviewIconBorder(mock.cast.icon, iconBorderStyle, g)
         mock.cast.icon:SetSize(sIcon, sIcon)
         mock.cast.icon:ClearAllPoints()
         if iconPosition == "RIGHT" then
@@ -176,12 +203,17 @@ local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, s
         local textJustify = NormalizeCastbarPreviewJustify(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNameAlign", "bossCastSpellNameAlign", textPosition == "RIGHT" and "RIGHT" or textPosition == "CENTER" and "CENTER" or "LEFT"), "LEFT")
         AnchorCastbarPreviewText(mock.cast.text, mock.cast.fill, textPosition, textX, textY, textJustify, S)
         local textMaxWidth = ReadCastbarNum(g, key, "SpellNameMaxWidth", "bossCastSpellNameMaxWidth", 0)
-        if textMaxWidth and textMaxWidth > 0 then
+        local truncate = NormalizeCastbarPreviewTruncate(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNameTruncate", "bossCastSpellNameTruncate", "AUTO"))
+        local spellName = ShortenCastbarPreviewSpellName(key, TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"), truncate)
+        mock.cast.text:SetText(spellName)
+        if truncate == "NONE" then
+            local naturalWidth = (mock.cast.text.GetStringWidth and mock.cast.text:GetStringWidth()) or scw
+            mock.cast.text:SetWidth(max(20, scw, naturalWidth + 10))
+        elseif textMaxWidth and textMaxWidth > 0 then
             mock.cast.text:SetWidth(textMaxWidth)
         else
             mock.cast.text:SetWidth(max(20, scw - timeReserve - 10))
         end
-        mock.cast.text:SetText(TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
         box.handleCastbarText:SetSize(max(34, mock.cast.text:GetStringWidth() + 10), max(18, mock.cast.text:GetStringHeight() + 6))
         if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarText, canvas, { mock.cast.text }, 3) then
             PlaceHandle(box.handleCastbarText, mock.cast.text)
