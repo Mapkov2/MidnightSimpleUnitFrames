@@ -45,7 +45,14 @@ end
 local function SetFocusCastbarSuppressed(suppressed)
     local focusCastbar = G.FocusCastBar or G.MSUF_FocusCastBar or G["MSUF_FocusCastBar"]
     if focusCastbar and focusCastbar.SetAlpha then
-        focusCastbar:SetAlpha(suppressed and 0 or 1)
+        focusCastbar._msufFocusKickSuppressed = suppressed and true or nil
+        if suppressed then
+            focusCastbar:SetAlpha(0)
+        elseif type(G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
+            G.MSUF_UF_ApplyCastbarRangeAlpha(focusCastbar, nil, true)
+        else
+            focusCastbar:SetAlpha(1)
+        end
     end
 end
 

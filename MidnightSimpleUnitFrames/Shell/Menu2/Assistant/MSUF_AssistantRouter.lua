@@ -95,6 +95,8 @@ local AURA_BUFF_TERMS = { "buff", "buffs", "debuff", "debuffs" }
 local AURA_BUFF_CONTEXT_TERMS = {
     "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
     "hidden", "hide", "show", "open", "help", "why", "where", "settings",
+    "turn", "turn on", "turn off", "on", "off", "enable", "disable", "enabled", "disabled",
+    "set", "change", "make", "size", "count", "max", "icon", "icons", "per row", "growth",
     "own", "mine", "only mine", "only player", "raid filter", "player filter",
     "stack", "cooldown", "pandemic",
 }
@@ -436,6 +438,7 @@ end
 local function UnsupportedAuraReply(text)
     local norm = Normalize(text)
     if ContainsAny(norm, { "debuff stripe", "debuff stripes" }) then return nil end
+    if ContainsAny(norm, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
     if not ContainsAny(norm, AURA_OUT_OF_SCOPE_TERMS)
         and not (ContainsAny(norm, AURA_BUFF_TERMS) and ContainsAny(norm, AURA_BUFF_CONTEXT_TERMS))
     then

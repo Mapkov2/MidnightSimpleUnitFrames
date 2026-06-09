@@ -128,22 +128,6 @@ local function DashboardExtractCommandColor(query)
     end
 end
 
-local function DashboardConfiguredFontColor()
-    local fn = _G.MSUF_GetConfiguredFontColor or (type(MSUF) == "table" and MSUF.MSUF_GetConfiguredFontColor)
-    if type(fn) == "function" then
-        local ok, r, g, b = pcall(fn)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return r, g, b
-        end
-    end
-    local g = M.GetGeneralDB and M.GetGeneralDB() or {}
-    if g.useCustomFontColor and type(g.fontColorCustomR) == "number" and type(g.fontColorCustomG) == "number" and type(g.fontColorCustomB) == "number" then
-        return g.fontColorCustomR, g.fontColorCustomG, g.fontColorCustomB
-    end
-    local r, gg, b = DashboardColorFromName(g.fontColor or "white")
-    return r or 1, gg or 1, b or 1
-end
-
 local function DashboardCallGlobal(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then return pcall(fn, ...) end
@@ -619,6 +603,37 @@ local function BuildDashboardUX(ctx)
         if C_Timer and C_Timer.After then C_Timer.After(0, RefreshMenuFramePrioritySafe) end
         RefreshDashboardEditModeButtonSafe()
         if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+    end
+
+    local function StartNewAssistantTask()
+        local A = MSUF and MSUF.Assistant
+        if not A then return end
+
+        if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then
+            pcall(A.Workflow.CancelActiveWorkflow)
+        end
+        if type(A.CloseLargeTextPanel) == "function" then
+            pcall(A.CloseLargeTextPanel)
+        else
+            A.largeTextPanel = nil
+        end
+        if type(A.ClearHistory) == "function" then
+            A.ClearHistory()
+        end
+
+        local ui = A.dashboardUI
+        if ui and ui.input then
+            ui.input:SetText("")
+            if ui.input.ClearFocus then ui.input:ClearFocus() end
+            if ui.input._msufAssistantPlaceholder and ui.input._msufAssistantPlaceholder.SetShown then
+                ui.input._msufAssistantPlaceholder:SetShown(true)
+            end
+        end
+        if type(A.RequestRefreshUI) == "function" then
+            A.RequestRefreshUI("assistant.new_task")
+        elseif type(A.RefreshUI) == "function" then
+            A.RefreshUI()
+        end
     end
 
     local function CopyWagoLink()
@@ -2926,29 +2941,38 @@ local function BuildDashboardUX(ctx)
         return input
     end
 
-    local compactHeader = layoutW < 620
+    M.dashboardEditModeButton = nil
+
+    local compactHeader = layoutW < 640
     local tinyHeader = layoutW < 430
-    local headerH = tinyHeader and 154 or (compactHeader and 122 or 76)
-    local header = Card(root, "Dashboard", x0, y0, layoutW, headerH, { 0.055, 0.070, 0.145, 0.82 }, T.colors.border)
-    local actionX = compactHeader and 16 or max(16, layoutW - 456)
-    local textW = compactHeader and (layoutW - 32) or max(110, actionX - 34)
-    W.Text(header, "Type what you want. MSUF applies known commands and searches everything else.", 16, -42, textW, T.colors.muted)
-    local editW = tinyHeader and (layoutW - 32) or (compactHeader and floor((layoutW - 48) / 2) or 126)
-    local importW = editW
-    local actionY = compactHeader and -78 or -26
-    local edit = Button(header, "Edit frames", actionX, actionY, editW, 28, ToggleEditMode, "primary")
-    M.dashboardEditModeButton = edit
-    AddTooltip(edit, "MSUF Edit Mode", "Drag frames to move them before tuning detailed settings.")
-    RefreshDashboardEditModeButtonSafe()
-    if type(M.RefreshDashboardEditModeButton) == "function" and type(M.AddRefresher) == "function" then
-        M.AddRefresher(ctx, M.RefreshDashboardEditModeButton)
+    local headerH = tinyHeader and 128 or (compactHeader and 104 or 86)
+    local header = Card(root, "Dashboard", x0, y0, layoutW, headerH, { 0.030, 0.036, 0.058, 0.94 }, { 0.100, 0.140, 0.220, 0.82 })
+
+    local editW = 150
+    local taskW = 96
+    local headerTextW = compactHeader and (layoutW - 32) or max(180, layoutW - editW - taskW - 76)
+    W.Text(header, "Ask MSUF, review setup, and open recovery tools when needed.", 16, -42, headerTextW, T.colors.muted)
+
+    if tinyHeader then
+        local available = max(160, layoutW - 32)
+        local smallTaskW = min(taskW, floor((available - 10) * 0.40))
+        local smallEditW = min(editW, available - smallTaskW - 10)
+        Button(header, "New Task", 16, -82, smallTaskW, 26, StartNewAssistantTask)
+        M.dashboardEditModeButton = Button(header, "MSUF Edit Mode", 16 + smallTaskW + 10, -82, smallEditW, 26, ToggleEditMode, "primary")
+    else
+        local actionY = compactHeader and -66 or -26
+        local actionX = layoutW - editW - 16
+        M.dashboardEditModeButton = Button(header, "MSUF Edit Mode", actionX, actionY, editW, 28, ToggleEditMode, "primary")
+        Button(header, "New Task", actionX - taskW - 12, actionY, taskW, 28, StartNewAssistantTask)
     end
-    local import = Button(header, "Import profile", tinyHeader and actionX or (actionX + editW + 12), tinyHeader and (actionY - 36) or actionY, importW, 28, function() Select("profiles") end)
-    AddTooltip(import, "Import profile", "Opens Profiles so you can back up first, then import safely.")
+    RefreshDashboardEditModeButtonSafe()
+    if type(M.AddRefresher) == "function" then
+        M.AddRefresher(ctx, RefreshDashboardEditModeButtonSafe)
+    end
 
     local mainTop = y0 - headerH - 16
     local tinyHero = mainW < 390
-    local heroH = tinyHero and 376 or (mainW < 560 and 360 or 326)
+    local heroH = tinyHero and 398 or (mainW < 560 and 382 or 360)
     local hero = Card(root, "", x0, mainTop, mainW, heroH, { 0.024, 0.050, 0.090, 0.90 }, { 0.085, 0.230, 0.340, 0.70 })
     ApplyDashboardHeroGradient(hero, mainW, heroH)
     if MSUF and MSUF.Assistant and type(MSUF.Assistant.BuildDashboardCard) == "function" then
@@ -2959,47 +2983,22 @@ local function BuildDashboardUX(ctx)
 
     local featureBlockBottom = mainTop - heroH
     local sideTop = sideBySide and mainTop or (featureBlockBottom - 16)
-    local profile = Card(root, "Active profile", sideX, sideTop, sideW, 108)
-    local pText = T.Font(profile, "GameFontDisableSmall", "", T.colors.muted)
-    pText:SetPoint("TOPLEFT", profile, "TOPLEFT", 16, -38)
-    pText:SetWidth(sideW - 86)
-    Pill(profile, "Safe", sideW - 56, -26, 42, T.colors.ok)
-    local manageProfile = Button(profile, "Manage", 16, -66, 70, 22, function() Select("profiles") end)
-    local exportProfile = Button(profile, "Export backup", 94, -66, 104, 22, ExportBackup)
-    local duplicateProfile = Button(profile, "Duplicate", sideW - 98, -66, 82, 22, function() Select("profiles") end)
-    AddTooltip(manageProfile, "Manage profile", "Open Profiles for rename, import, export, and profile maintenance.")
-    AddTooltip(exportProfile, "Export backup", "Copies a full backup string for the current setup.")
-    AddTooltip(duplicateProfile, "Duplicate profile", "Open Profiles to copy this setup into another profile.")
-    local function RefreshProfileCard()
-        pText:SetText(M.Format(M.Tr("%s - manual profile"), tostring(_G.MSUF_ActiveProfile or "Default")))
-    end
-    RefreshProfileCard()
-    M.AddRefresher(ctx, RefreshProfileCard)
-
-    local wagoTop = sideTop - 124
-    local wago = Card(root, "Wago profile hub", sideX, wagoTop, sideW, 164, { 0.040, 0.080, 0.125, 0.92 }, { 0.140, 0.320, 0.430, 0.82 })
-    W.Text(wago, "Browse shared MSUF imports, copy a backup first, then import on the Profiles page.", 16, -40, sideW - 32, T.colors.muted)
-    Button(wago, "Browse Wago profiles", 16, -78, sideW - 32, 30, CopyWagoLink, "primary")
-    Button(wago, "Backup current profile", 16, -116, math.floor((sideW - 40) / 2), 24, ExportBackup)
-    Button(wago, "Import safely", 24 + math.floor((sideW - 40) / 2), -116, math.floor((sideW - 40) / 2), 24, function() Select("profiles") end)
-    AddTooltip(wago, "Wago profile imports", "The Wago button opens a copyable search link. Importing stays on the Profiles page so backup and new-profile import are visible.")
-
-    local checklistTop = wagoTop - 180
-    local checklistH = 292
+    local checklistTop = sideTop
+    local checklistH = 236
     local checklist = Card(root, "Setup checklist", sideX, checklistTop, sideW, checklistH)
     W.Text(checklist, "Useful for first-run orientation.", 16, -38, sideW - 32, T.colors.muted)
     local function Row(i, title, body, state, color, onClick, iconText)
-        local row = Card(checklist, "", 16, -68 - ((i - 1) * 56), sideW - 32, 48, { 0.080, 0.095, 0.170, 0.72 }, T.colors.borderSoft)
+        local row = Card(checklist, "", 16, -60 - ((i - 1) * 42), sideW - 32, 36, { 0.080, 0.095, 0.170, 0.72 }, T.colors.borderSoft)
         Pill(row, iconText or (i < 3 and "OK" or "!"), 10, -14, 28, color or T.colors.ok)
         local label = T.Font(row, "GameFontNormal", M.Tr(title), T.colors.text)
-        label:SetPoint("TOPLEFT", row, "TOPLEFT", 48, -9)
-        W.Text(row, body, 48, -28, sideW - 132, T.colors.muted)
-        Pill(row, state, sideW - 86, -14, 54, color or T.colors.ok)
+        label:SetPoint("TOPLEFT", row, "TOPLEFT", 48, -6)
+        W.Text(row, body, 48, -22, sideW - 132, T.colors.muted)
+        Pill(row, state, sideW - 86, -9, 54, color or T.colors.ok)
         MakeDashboardActionCard(row, title, body, onClick, false)
     end
     local movedFrames = HasMovedFramesInEditMode()
     Row(1, "Profile ready", "Active profile is loaded.", "done", T.colors.ok, function() Select("profiles") end)
-    Row(2, "Preview available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end)
+    Row(2, "Pages available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end)
     Row(3, "Move frames", "Recommended before detail tuning.", movedFrames and "done" or "start", movedFrames and T.colors.ok or T.colors.accent2, ToggleEditMode, movedFrames and "OK" or "!")
     local wagoBackupConfirmed = WagoBackupConfirmed()
     Row(4, "Wago backup", "Confirm backup before using the Wago MSUF page.", wagoBackupConfirmed and "done" or "start", wagoBackupConfirmed and T.colors.ok or T.colors.accent2, ConfirmWagoBackup, wagoBackupConfirmed and "OK" or "!")
@@ -3034,80 +3033,13 @@ local function BuildDashboardUX(ctx)
         return head
     end
 
-    local previewTop = checklistTop - checklistH - 16
-    local preview = Card(root, "", sideX, previewTop, sideW, 150)
-    Kicker(preview, "Live preview", 16, -18)
-    local stage = T.Panel(preview, nil, { 0.015, 0.020, 0.038, 0.96 }, { 0.075, 0.105, 0.190, 0.75 })
-    stage:SetPoint("TOPLEFT", preview, "TOPLEFT", 0, -48)
-    stage:SetPoint("BOTTOMRIGHT", preview, "BOTTOMRIGHT", 0, 0)
-    local sample = CreateFrame("Frame", nil, stage, T.Template and T.Template() or nil)
-    local db = M.EnsureDB and M.EnsureDB() or _G.MSUF_DB or {}
-    local playerConf = (type(db.player) == "table") and db.player or {}
-    local bars = (type(db.bars) == "table") and db.bars or {}
-    local rawW = Clamp(tonumber(playerConf.width) or 220, 90, 420)
-    local rawH = Clamp(tonumber(playerConf.height) or 44, 20, 110)
-    local classPowerH = (bars.showClassPower == true) and Clamp(tonumber(bars.classPowerHeight) or 4, 2, 18) or 0
-    local frameScale = min(1.35, (sideW - 88) / rawW, 72 / (rawH + classPowerH + 8))
-    if frameScale < 0.7 then frameScale = 0.7 end
-    local function S(v) return math.floor((tonumber(v) or 0) * frameScale + 0.5) end
-    local sampleW, sampleH = S(rawW), S(rawH)
-    sample:SetSize(sampleW, sampleH)
-    sample:SetPoint("CENTER", stage, "CENTER", 0, 0)
-    if sample.SetBackdrop then
-        sample:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 2 })
-        sample:SetBackdropColor(0.02, 0.02, 0.025, 0.96)
-        sample:SetBackdropBorderColor(0, 0, 0, 1)
-    end
-    local hpBg = sample:CreateTexture(nil, "BORDER")
-    hpBg:SetTexture("Interface\\Buttons\\WHITE8X8")
-    hpBg:SetPoint("TOPLEFT", sample, "TOPLEFT", S(2), -S(2))
-    hpBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", -S(2), S(6))
-    hpBg:SetVertexColor(0.08, 0.08, 0.085, 1)
-    local hp = sample:CreateTexture(nil, "ARTWORK")
-    hp:SetTexture(type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or "Interface\\Buttons\\WHITE8X8")
-    hp:SetPoint("TOPLEFT", hpBg, "TOPLEFT", 0, 0)
-    hp:SetPoint("BOTTOMLEFT", hpBg, "BOTTOMLEFT", 0, 0)
-    hp:SetWidth(max(1, (sampleW - S(4)) * 0.72))
-    hp:SetVertexColor(0.12, 0.12, 0.13, 1)
-    local powerH = Clamp(tonumber(playerConf.powerBarHeight) or tonumber(bars.powerBarHeight) or 3, 2, 12)
-    local powerBg = sample:CreateTexture(nil, "BORDER")
-    powerBg:SetTexture("Interface\\Buttons\\WHITE8X8")
-    powerBg:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", S(2), S(2))
-    powerBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", -S(2), S(2))
-    powerBg:SetHeight(max(2, S(powerH)))
-    powerBg:SetVertexColor(0.06, 0.02, 0.08, 1)
-    local power = sample:CreateTexture(nil, "ARTWORK")
-    power:SetTexture(type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or "Interface\\Buttons\\WHITE8X8")
-    power:SetPoint("TOPLEFT", powerBg, "TOPLEFT", 0, 0)
-    power:SetPoint("BOTTOMLEFT", powerBg, "BOTTOMLEFT", 0, 0)
-    power:SetWidth(max(1, (sampleW - S(4)) * 0.82))
-    power:SetVertexColor(0.55, 0.17, 0.78, 1)
-    if classPowerH > 0 then
-        local cp = CreateFrame("Frame", nil, stage)
-        cp:SetSize(sampleW, max(2, S(classPowerH)))
-        cp:SetPoint("BOTTOM", sample, "TOP", 0, S(4))
-        local gapPx = max(0, S(tonumber(bars.classPowerGap) or 0))
-        local segW = math.floor((sampleW - (4 * gapPx)) / 5)
-        for i = 1, 5 do
-            local seg = cp:CreateTexture(nil, "ARTWORK")
-            seg:SetTexture("Interface\\Buttons\\WHITE8X8")
-            seg:SetPoint("TOPLEFT", cp, "TOPLEFT", (i - 1) * (segW + gapPx), 0)
-            seg:SetPoint("BOTTOMLEFT", cp, "BOTTOMLEFT", (i - 1) * (segW + gapPx), 0)
-            seg:SetWidth(i == 5 and (sampleW - ((i - 1) * (segW + gapPx))) or segW)
-            seg:SetVertexColor(0.55, 0.17, 0.78, i <= 3 and 0.96 or 0.28)
-        end
-    end
-    local fontR, fontG, fontB = DashboardConfiguredFontColor()
-    local sampleName = T.Font(sample, "GameFontNormal", tostring(_G.UnitName and _G.UnitName("player") or M.Tr("Player")), { fontR, fontG, fontB, 1 })
-    sampleName:SetPoint("LEFT", sample, "LEFT", S(10), 0)
-    local sampleHp = T.Font(sample, "GameFontNormal", "439K - 100.0%", { fontR, fontG, fontB, 1 })
-    sampleHp:SetPoint("RIGHT", sample, "RIGHT", -S(8), 0)
-
-    local recoveryTop = sideBySide and (featureBlockBottom - 16) or (previewTop - 166)
+    local sideBottom = checklistTop - checklistH
+    local recoveryTop = sideBySide and (featureBlockBottom - 16) or (sideBottom - 16)
     local recoveryW = sideBySide and mainW or layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
     local recoveryWrap = recoveryW < 620
-    local recoveryH = recoveryOpen and (recoveryWrap and 154 or 122) or 42
+    local recoveryNarrow = recoveryW < 520
+    local recoveryH = recoveryOpen and (recoveryNarrow and 184 or (recoveryWrap and 154 or 122)) or 42
     local recovery = Card(root, "", x0, recoveryTop, recoveryW, recoveryH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
     local g = M.GetGeneralDB and M.GetGeneralDB() or {}
     DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
@@ -3115,20 +3047,33 @@ local function BuildDashboardUX(ctx)
     end)
 
     if recoveryOpen then
-        local row3 = recoveryW < 520
         W.Text(recovery, "Reset tools, Wago access, and recovery shortcuts live here.", 16, -60, recoveryW - 32, T.colors.muted)
-        Button(recovery, "Wago Profiles", 16, -94, 112, 22, CopyWagoLink, "primary")
-        Button(recovery, "Print Help", 140, -94, 86, 22, function()
+        local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
+            if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then
+                M.ShowStatusFeedback("Reset unavailable", "danger", 1.4)
+            end
+        end, "primary")
+        AddTooltip(resetPositions, "Reset Positions", "Runs /msuf reset for frame positions and visibility.")
+
+        local wagoX, helpX, discordX = 146, 270, 368
+        local helpY, factoryY = -94, (recoveryWrap and -126 or -94)
+        if recoveryNarrow then
+            helpX, helpY, discordX, factoryY = 16, -126, 114, -158
+        end
+        Button(recovery, "Wago Profiles", wagoX, -94, 112, 22, CopyWagoLink)
+        Button(recovery, "Print Help", helpX, helpY, 86, 22, function()
             if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help") end
         end)
-        Button(recovery, "Discord", 238, -94, 80, 22, function()
+        Button(recovery, "Discord", discordX, helpY, 80, 22, function()
             if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
         end)
-        Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), recoveryWrap and -126 or -94, 136, 22, function()
+        Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
             if M.StageFactoryReset then M.StageFactoryReset() end
         end, "danger")
-        if row3 then
-            W.Text(recovery, "Factory reset affects every MSUF setting.", 160, -128, recoveryW - 176, T.colors.muted)
+        if recoveryWrap then
+            local textX = recoveryNarrow and 160 or 160
+            local textY = recoveryNarrow and -160 or -128
+            W.Text(recovery, "Factory reset affects every MSUF setting.", textX, textY, recoveryW - textX - 16, T.colors.muted)
         end
     end
 
@@ -3363,7 +3308,7 @@ local function BuildDashboardUX(ctx)
     local supportCompact = recoveryW < 560
     local supportH = supportCompact and 116 or 78
     local support = Card(root, "", x0, supportTop, recoveryW, supportH, { 0.030, 0.040, 0.078, 0.86 }, T.colors.borderSoft)
-    local supportTitle = T.Font(support, "GameFontNormal", M.Tr("Support MSUF Development"), T.colors.text)
+    local supportTitle = T.Font(support, "GameFontNormal", M.Tr("How to support MSUF"), T.colors.text)
     supportTitle:SetPoint("TOPLEFT", support, "TOPLEFT", 16, -16)
     local supportTextW = max(160, recoveryW - (supportCompact and 32 or 230))
     local supportDesc = W.Text(support, "If MSUF helps your UI, support links are one click away.", 16, -42, supportTextW, T.colors.muted)
@@ -3432,7 +3377,7 @@ local function BuildDashboardUX(ctx)
                 label = data.title,
                 kind = "button",
                 anchor = supportTitle,
-                keywords = { data.tooltip, "Support MSUF Development", "support links", data.url },
+                keywords = { data.tooltip, "How to support MSUF", "support links", data.url },
                 help = data.tooltip,
             })
         end
@@ -3445,7 +3390,7 @@ local function BuildDashboardUX(ctx)
     end
 
     local bottom = supportTop - supportH
-    if sideBySide then bottom = min(bottom, previewTop - 150) end
+    if sideBySide then bottom = min(bottom, sideBottom) end
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
 

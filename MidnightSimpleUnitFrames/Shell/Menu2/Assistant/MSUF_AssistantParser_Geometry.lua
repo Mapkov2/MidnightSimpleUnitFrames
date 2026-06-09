@@ -874,6 +874,223 @@ local function GroupScopesOrCurrentPage(text)
     return {}
 end
 
+function P.CooldownManagerAnchorValueForText(text)
+    if ContainsAny(text, {
+        "utility cooldown", "utility cooldowns", "utility cooldown manager", "utility cooldownmanager",
+        "utility cooldown viewer", "ucv",
+    }) then
+        return "UtilityCooldownViewer"
+    end
+    if ContainsAny(text, {
+        "tracked buff", "tracked buffs", "tracked buffs viewer", "buff icon cooldown viewer",
+        "buff cooldown viewer", "buff tracker",
+    }) then
+        return "BuffIconCooldownViewer"
+    end
+    if ContainsAny(text, {
+        "essential cooldown", "essential cooldowns", "essential cooldown manager", "essential cooldownmanager",
+        "essential cooldown viewer", "cooldown manager", "cooldownmanager", "cooldowns manager", "cdm",
+    }) then
+        return "EssentialCooldownViewer"
+    end
+    return nil
+end
+
+function P.ParseHumanAnchorTarget(text)
+    if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
+    if ContainsAny(text, {
+        "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
+        "text", "icon", "indicator", "raid marker", "status",
+    }) then
+        return nil
+    end
+    local attachIntent = ContainsAny(text, {
+        "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
+        "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
+    }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
+    local detachIntent = ContainsAny(text, {
+        "away from", "farther from", "further from", "move away", "move away from",
+        "detach from", "undock from", "disconnect from",
+    })
+    if not attachIntent and not detachIntent then return nil end
+
+    local units = DetectUnits(text)
+    local groups = DetectGroups(text)
+    local unitframeScope = ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames" })
+    local unitPage = CurrentPageUnit()
+    if #groups == 0 and (#units > 0 or unitframeScope or unitPage) then
+        local probeUnit = (units and units[1]) or unitPage or "player"
+        local valueSetting = Registry and Registry:GetSetting(tostring(probeUnit) .. ".anchorToUnitframe")
+        local value = detachIntent and "GLOBAL" or (valueSetting and EnumValueForText(valueSetting, text)) or P.CooldownManagerAnchorValueForText(text)
+        if value == nil then return nil end
+        if unitframeScope and #units == 0 then
+            units = ALL_UNITFRAMES
+        elseif #units == 0 and unitPage then
+            units = { unitPage }
+        end
+        if #units == 1 and value == units[1] then return nil end
+        if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss") then
+            local filtered = {}
+            for i = 1, #units do
+                if units[i] ~= value then filtered[#filtered + 1] = units[i] end
+            end
+            if #filtered > 0 then units = filtered end
+        end
+        local changes = {}
+        for i = 1, #units do
+            local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".anchorToUnitframe")
+            if setting then changes[#changes + 1] = { setting = setting, value = value } end
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = detachIntent and "Detach unit frame anchor target" or "Set unitframe anchor target",
+            bulkSafe = #changes > 1,
+            compoundComplete = true,
+            summary = "Interprets human placement wording as the registered Unit Frame Anchor To dropdown.",
+        }
+    end
+
+    if #groups == 0 then
+        groups = GroupScopesOrCurrentPage(text)
+    end
+    if #groups == 0 then return nil end
+    local groupAnchorValue
+    if detachIntent then
+        groupAnchorValue = "FREE"
+    else
+        local probeGroup = groups[1] or "party"
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(probeGroup) .. ".anchorToFrame")
+        groupAnchorValue = setting and EnumValueForText(setting, text)
+    end
+
+    local changes = {}
+    if groupAnchorValue ~= nil then
+        for i = 1, #groups do
+            local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. ".anchorToFrame")
+            if setting then changes[#changes + 1] = { setting = setting, value = groupAnchorValue } end
+        end
+    else
+        local frameName = P.CooldownManagerAnchorValueForText(text)
+        if not frameName then return nil end
+        for i = 1, #groups do
+            local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. ".customAnchorFrame")
+            if setting then changes[#changes + 1] = { setting = setting, value = frameName } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = detachIntent and "Detach group frame anchor target" or "Set group frame anchor target",
+        bulkSafe = #changes > 1,
+        compoundComplete = true,
+        summary = "Interprets human placement wording as the registered Group Layout anchor controls.",
+    }
+end
+
+function P.GroupScaleBreakpointAttrForText(text)
+    if ContainsAny(text, {
+        "over 25", "above 25", "more than 25", "over twenty five", "above twenty five",
+        "26 plus", "26+", "26 or more", "large raid", "full raid",
+    }) then
+        return "scaleOver25", 26
+    end
+    local norm = Normalize(text)
+    local number =
+        norm:match("when%s+there%s+are%s+(%d+)%s+players")
+        or norm:match("when%s+there%s+are%s+(%d+)%s+people")
+        or norm:match("when%s+there%s+are%s+(%d+)%s+persons")
+        or norm:match("when%s+there%s+are%s+(%d+)%s+raid%s+members")
+        or norm:match("when%s+(%d+)%s+players")
+        or norm:match("when%s+(%d+)%s+people")
+        or norm:match("when%s+(%d+)%s+raid%s+members")
+        or norm:match("with%s+(%d+)%s+players")
+        or norm:match("with%s+(%d+)%s+people")
+        or norm:match("with%s+(%d+)%s+raid%s+members")
+        or norm:match("for%s+(%d+)%s+players")
+        or norm:match("for%s+(%d+)%s+people")
+        or norm:match("for%s+(%d+)%s+raid%s+members")
+        or norm:match("at%s+(%d+)%s+players")
+        or norm:match("at%s+(%d+)%s+people")
+        or norm:match("at%s+(%d+)%s+raid%s+members")
+        or norm:match("(%d+)%s+players")
+        or norm:match("(%d+)%s+people")
+        or norm:match("(%d+)%s+raid%s+members")
+        or norm:match("scale%s+at%s+(%d+)")
+        or norm:match("scaling%s+at%s+(%d+)")
+    number = tonumber(number)
+    if number == nil then
+        if ContainsAny(text, { "1-10", "1 to 10", "one to ten", "small group" }) then return "scaleAt10", 10 end
+        if ContainsAny(text, { "11-20", "11 to 20", "eleven to twenty" }) then return "scaleAt20", 20 end
+        if ContainsAny(text, { "21-25", "21 to 25", "twenty one to twenty five" }) then return "scaleAt25", 25 end
+        return nil
+    end
+    if number <= 10 then return "scaleAt10", number end
+    if number <= 20 then return "scaleAt20", number end
+    if number <= 25 then return "scaleAt25", number end
+    return "scaleOver25", number
+end
+
+function P.GroupScaleValueForText(text, playerCount)
+    local norm = Normalize(text)
+    local value =
+        norm:match("scale%s+to%s+(%d+%.?%d*)")
+        or norm:match("scaling%s+to%s+(%d+%.?%d*)")
+        or norm:match("to%s+(%d+%.?%d*)%s*%%?%s+scale")
+        or norm:match("to%s+(%d+%.?%d*)%s*$")
+        or norm:match("(%d+%.?%d*)%s*%%?%s+scale")
+        or norm:match("(%d+%.?%d*)%s*%%?%s+scaling")
+    value = tonumber(value)
+    if value ~= nil then return value end
+    local fallback
+    for token in norm:gmatch("%d+%.?%d*") do
+        local number = tonumber(token)
+        if number and (not playerCount or math.abs(number - playerCount) > 0.0001) then
+            fallback = number
+        end
+    end
+    return fallback
+end
+
+function P.ParseGroupScaleBreakpointShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, {
+        "scale", "scaling", "frame scale", "raid scale", "party scale", "mythic raid scale",
+        "players", "people", "persons", "raid members", "player count", "raid size",
+    }) then
+        return nil
+    end
+    if ContainsAny(text, {
+        "increase", "decrease", "raise", "lower", "more", "less", "by",
+        "erhoehe", "senke", "reduziere", "mehr", "weniger", "um",
+    }) then
+        return nil
+    end
+    local attr, playerCount = P.GroupScaleBreakpointAttrForText(text)
+    if not attr then return nil end
+    local value = P.GroupScaleValueForText(text, playerCount)
+    if value == nil then return nil end
+    local groups = DetectGroups(text)
+    if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
+    if #groups == 0 then return nil end
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
+        if setting then changes[#changes + 1] = { setting = setting, value = value } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set group frame player-count scale",
+        bulkSafe = #changes > 1,
+        compoundComplete = true,
+        summary = "Maps player-count wording to the Group Layout scaling breakpoint sliders.",
+    }
+end
+
 P.GROUP_ROOT_FRAME_DETAIL_TERMS = {
     "name", "name text", "hp", "health", "hp text", "health text", "power", "mana", "power text", "mana text", "text slot",
     "status", "status text", "status icon", "indicator", "icon", "ready check", "raid marker",
@@ -1576,7 +1793,12 @@ local function ParseUnitOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
     if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar", "alt mana", "alternative mana", "secondary mana", "dual resource mana" }) then return nil end
     if DetectGroups(text)[1] then return nil end
-    if ContainsAny(text, { "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target", "preserve hp", "background", "backdrop", "track", "hp track", "health track", "bg", "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
+    if ContainsAny(text, {
+        "range fade", "in combat", "out of combat", "outside combat", "sync", "affects", "fade target",
+        "preserve hp", "background", "backdrop", "track", "hp track", "health track", "bg",
+        "text opacity", "text alpha", "font opacity", "font alpha", "absorb", "heal absorb",
+        "dispel overlay", "debuff overlay", "unitframe dispel overlay", "unit frame dispel overlay",
+    }) then return nil end
     local relativeDelta
     if ContainsAny(text, { "more transparent", "more transparency", "more see through", "transparenter" }) then
         local amount = FirstNumber(text) or 0.05

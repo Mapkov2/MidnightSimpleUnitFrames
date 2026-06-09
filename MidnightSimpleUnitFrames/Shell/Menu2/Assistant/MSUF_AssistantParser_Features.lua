@@ -1259,7 +1259,7 @@ local function ParseEditModeHUDControl(text)
         if number == nil and value ~= nil then number = value and 85 or 5 end
         return EditModeAction("assistant.action.editMode.backgroundOpacity", { value = number }, "Set Edit Mode Background opacity")
     end
-    if hasCDM then
+    if hasCDM and hasEditContext then
         return EditModeAction("assistant.action.editMode.cdm", { value = value }, "Set Edit Mode CDM Anchor")
     end
     return nil
@@ -1819,6 +1819,19 @@ local function NameShorteningScope(text)
 end
 
 local function NameShorteningSetting(scope, suffix)
+    if scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid" then
+        local groupSuffix = ({
+            shortenNames = "nameShortenEnabled",
+            shortenNameMaxChars = "nameMaxChars",
+            shortenNameClipSide = "nameClipSide",
+            shortenNameNoEllipsis = "nameNoEllipsis",
+        })[suffix]
+        if groupSuffix and Registry then
+            local setting = Registry:GetSetting(tostring(scope) .. "." .. groupSuffix)
+            if setting then return setting end
+        end
+        if scope == "gf_mythicraid" then scope = "gf_raid" end
+    end
     return Registry and Registry:GetSetting("fontScope." .. tostring(scope or "shared") .. "." .. suffix) or nil
 end
 
@@ -1836,6 +1849,10 @@ local function NameShorteningSide(text)
     end
     if ContainsAny(text, NAME_SHORTENING_KEEP_END_TERMS) then
         return "LEFT", "Keep end (last letters)"
+    end
+    if ContainsAny(text, { "truncation style", "name truncation", "name clip side", "shortening side", "clip side" }) then
+        if ContainsAny(text, { "left", "to left", "left side" }) then return "LEFT", "Left" end
+        if ContainsAny(text, { "right", "to right", "right side" }) then return "RIGHT", "Right" end
     end
     return nil
 end
@@ -1954,6 +1971,9 @@ local function ParseNameShorteningShortcut(text, ctx)
     local enabledSetting = NameShorteningSetting(scope, "shortenNames")
     local maxSetting = NameShorteningSetting(scope, "shortenNameMaxChars")
     local sideSetting = NameShorteningSetting(scope, "shortenNameClipSide")
+    if (scope == "gf_party" or scope == "gf_raid") and not (enabledSetting and maxSetting and sideSetting) then
+        return nil
+    end
     if scope == "player" or not (enabledSetting and maxSetting and sideSetting) then
         local message = "Name shortening is not registered for that scope. Use Shared, Target, Focus, Pet, Boss, Party, or Raid."
         if scope == "player" then
@@ -1969,6 +1989,18 @@ local function ParseNameShorteningShortcut(text, ctx)
     local bool = DetectBoolean(text)
     local maxChars, requestedChars, clampLabel = NameShorteningLength(text, maxSetting)
     local sideValue, sideLabel = NameShorteningSide(text)
+    if sideValue and not maxChars then
+        local changes = {}
+        if bool ~= nil then AddNameShorteningChange(changes, scope, "shortenNames", bool, bool and "enabled" or "disabled") end
+        AddNameShorteningChange(changes, scope, "shortenNameClipSide", sideValue, sideLabel)
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = sideSetting.label or "Name Truncation Style",
+            summary = "Changes the registered name-shortening side control without changing the length.",
+        }
+    end
     if bool ~= nil and not maxChars and not sideValue then
         return {
             kind = "changes",

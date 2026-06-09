@@ -654,6 +654,7 @@ local function ParseSetting(text, ctx)
         candidates = Registry:FindSettings({ frameType = frameType, attribute = attr })
     end
     if #candidates == 0 then
+        if attr == "raidMarker" then return nil end
         return {
             kind = "unknown",
             text = "That setting exists conceptually, but it is not registered for Assistant control yet.",
