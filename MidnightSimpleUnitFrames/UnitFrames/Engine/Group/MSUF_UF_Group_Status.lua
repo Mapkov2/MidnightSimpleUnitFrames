@@ -24,6 +24,7 @@ local STATUS_EVENT_KIND = {
     UNIT_CONNECTION = 8,
     UNIT_FLAGS = 8,
     PLAYER_FLAGS_CHANGED = 8,
+    UNIT_FACTION = 9,
 }
 
 local statusRuntime = MSUF.UFStatusRuntime or {}
@@ -36,6 +37,7 @@ local UpdatePhase = statusRuntime.UpdatePhase
 local UpdateStatusText = statusRuntime.UpdateStatusText
 local UpdateRaidGroup = statusRuntime.UpdateRaidGroup
 local UpdateRole = statusRuntime.UpdateRole
+local UpdatePVP = statusRuntime.UpdatePVP
 local EMPTY_EVENTS = {}
 local UnitIsConnected = _G.UnitIsConnected
 local UnitIsGhost = _G.UnitIsGhost
@@ -57,6 +59,7 @@ local function BindStatusRuntime()
     UpdateStatusText = UpdateStatusText or statusRuntime.UpdateStatusText
     UpdateRaidGroup = UpdateRaidGroup or statusRuntime.UpdateRaidGroup
     UpdateRole = UpdateRole or statusRuntime.UpdateRole
+    UpdatePVP = UpdatePVP or statusRuntime.UpdatePVP
     return UpdateStatusText ~= nil
 end
 
@@ -92,6 +95,12 @@ end
 
 local function RunIncomingRes(frame, status)
     UpdateIncomingRes(frame, status)
+end
+
+local function RunPVP(frame, status)
+    if UpdatePVP then
+        UpdatePVP(frame, status)
+    end
 end
 
 local function RunPhase(frame, status)
@@ -217,6 +226,9 @@ local function RunStatusApply(frame, status, event)
         frame._msufGFStatusTextFlagsKey = nil
         UpdateStatusText(frame, status, event)
     end
+    if status.runtimePVP == true and UpdatePVP then
+        UpdatePVP(frame, status)
+    end
 end
 
 local function CompileStatusDispatch(status)
@@ -257,6 +269,9 @@ local function CompileStatusDispatch(status)
     if status.runtimeStatusText == true then
         dispatch[8] = RunStatusText
     end
+    if status.runtimePVP == true then
+        dispatch[9] = RunPVP
+    end
     dispatch.apply = RunStatusApply
     status.runtimeDispatch = dispatch
     return dispatch
@@ -283,7 +298,7 @@ function GroupStatusRuntime.Update(frame, event)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
     if not status then return end
     local kind = STATUS_EVENT_KIND[event]
-    if (not UpdateStatusText or not UpdateRole) and not BindStatusRuntime() then return end
+    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
     local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
     local runner = kind and dispatch[kind] or dispatch.apply
     if runner then
@@ -294,7 +309,7 @@ end
 function GroupStatusRuntime.Apply(frame)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
     if not status then return end
-    if (not UpdateStatusText or not UpdateRole) and not BindStatusRuntime() then return end
+    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
     local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
     dispatch.apply(frame, status, "MSUF_GF_STATUS_APPLY")
 end

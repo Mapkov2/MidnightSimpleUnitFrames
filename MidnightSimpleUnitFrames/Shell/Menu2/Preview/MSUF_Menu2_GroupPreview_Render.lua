@@ -678,7 +678,7 @@ function Render.Install(box, ctx, deps)
                 if statusHandle._statusText then statusHandle._statusText:Hide() end
                 local tex = statusHandle._statusTex
                 if tex then
-                    local path, l, r, t, b = nil, 0, 1, 0, 1
+                    local path, atlas, l, r, t, b = nil, nil, 0, 1, 0, 1
                     local value = spec.value
                     if value == "roleIcon" and gf and gf.GetRoleTexture then
                         path, l, r, t, b = gf.GetRoleTexture(kind, GF_PREVIEW_ROLE, runtimeCfg and runtimeCfg.style)
@@ -695,12 +695,18 @@ function Render.Install(box, ctx, deps)
                         path = "Interface\\RaidFrame\\Raid-Icon-SummonPending"
                     elseif value == "resurrectIcon" then
                         path = "Interface\\RaidFrame\\Raid-Icon-Rez"
+                    elseif value == "pvpIcon" then
+                        atlas = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
                     elseif value == "phaseIcon" then
                         path = "Interface\\TargetingFrame\\UI-PhasingIcon"
                     end
-                    if path then
-                        tex:SetTexture(path)
-                        tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
+                    if atlas or path then
+                        if atlas and tex.SetAtlas then
+                            tex:SetAtlas(atlas)
+                        else
+                            tex:SetTexture(path or "Interface\\TargetingFrame\\UI-PVP-Alliance")
+                            tex:SetTexCoord(l or 0, r or 1, t or 0, b or 1)
+                        end
                         if enabled then
                             tex:SetVertexColor(1, 1, 1, 1)
                         else

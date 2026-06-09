@@ -33,6 +33,10 @@ local function Bool(value, fallback)
     return value == true
 end
 
+local function PVPIndicatorContextActive()
+    return UF and type(UF.PVPIndicatorContextActive) == "function" and UF.PVPIndicatorContextActive() == true
+end
+
 local function Clamp01(value, fallback)
     value = tonumber(value)
     if value == nil then
@@ -310,7 +314,7 @@ end
 -- registers ZERO events with the framework (and the event-driver never sees
 -- the event for that frame at all — true zero combat overhead). Each `if`
 -- below gates a feature; disabled features add no entries.
-local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextHealth, statusTextFlags, incomingRes)
+local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextHealth, statusTextFlags, incomingRes, pvp)
     local events, unitlessEvents
     if phase then
         events = AddEvent(events, "UNIT_PHASE")
@@ -326,6 +330,9 @@ local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, ph
     end
     if incomingRes then
         events = AddEvent(events, "INCOMING_RESURRECT_CHANGED")
+    end
+    if pvp then
+        events = AddEvent(events, "UNIT_FACTION")
     end
     if raidMarker then
         unitlessEvents = AddEvent(unitlessEvents, "RAID_TARGET_UPDATE")
@@ -352,6 +359,7 @@ local function CompileStatus(kind, conf)
     local readyCheckEnabled = conf.readyCheckIcon ~= false
     local summonEnabled = conf.summonIcon ~= false
     local incomingResEnabled = conf.resurrectIcon ~= false
+    local pvpEnabled = conf.pvpIcon ~= false and PVPIndicatorContextActive()
     local phaseEnabled = conf.phaseIcon ~= false
     local statusHealthTextEnabled = conf.statusText ~= false or conf.statusGhostText ~= false
     local statusFlagTextEnabled = conf.statusAFKText ~= false
@@ -359,16 +367,16 @@ local function CompileStatus(kind, conf)
     local raidGroupEnabled = conf.showGroupNumber == true
     local runtimeEvents, runtimeUnitlessEvents = CompileStatusRuntimeEvents(
         leaderEnabled, assistEnabled, readyCheckEnabled, summonEnabled, phaseEnabled,
-        raidMarkerEnabled, raidGroupEnabled, statusHealthTextEnabled, statusFlagTextEnabled, incomingResEnabled
+        raidMarkerEnabled, raidGroupEnabled, statusHealthTextEnabled, statusFlagTextEnabled, incomingResEnabled, pvpEnabled
     )
     local runtimeEnabled = roleEnabled or leaderEnabled or assistEnabled
         or readyCheckEnabled or summonEnabled or phaseEnabled
-        or raidMarkerEnabled or raidGroupEnabled or statusTextEnabled or incomingResEnabled
+        or raidMarkerEnabled or raidGroupEnabled or statusTextEnabled or incomingResEnabled or pvpEnabled
 
     return {
         enabled = roleEnabled or raidMarkerEnabled or leaderEnabled or assistEnabled
             or readyCheckEnabled or summonEnabled or incomingResEnabled
-            or phaseEnabled or statusTextEnabled or raidGroupEnabled,
+            or pvpEnabled or phaseEnabled or statusTextEnabled or raidGroupEnabled,
         group = true,
         groupRuntimeEnabled = runtimeEnabled,
         groupRuntimeEvents = runtimeEvents,
@@ -381,6 +389,7 @@ local function CompileStatus(kind, conf)
         runtimeRaidGroup = raidGroupEnabled,
         runtimeStatusText = statusTextEnabled,
         runtimeIncomingRes = incomingResEnabled,
+        runtimePVP = pvpEnabled,
         kind = kind,
         alpha = 1,
         useMidnight = conf.useMidnightIcons == true,
@@ -445,6 +454,14 @@ local function CompileStatus(kind, conf)
             x = Num(conf.resurrectX, 0),
             y = Num(conf.resurrectY, 0),
             layer = Layer(conf.resurrectLayer, 4),
+        },
+        pvp = {
+            enabled = pvpEnabled,
+            size = Num(conf.pvpIconSize, 14),
+            anchor = conf.pvpIconAnchor or "TOPLEFT",
+            x = Num(conf.pvpIconX, 14),
+            y = Num(conf.pvpIconY, 0),
+            layer = Layer(conf.pvpIconLayer, 3),
         },
         phase = {
             enabled = phaseEnabled,

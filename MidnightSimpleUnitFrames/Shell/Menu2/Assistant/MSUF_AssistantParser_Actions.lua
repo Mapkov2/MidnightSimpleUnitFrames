@@ -273,6 +273,7 @@ local GROUP_STATUS_ICON_ALIASES = {
     { key = "readyCheckIcon", size = "readyCheckSize", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
     { key = "summonIcon", size = "summonIconSize", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol" } },
     { key = "resurrectIcon", size = "resurrectIconSize", layer = "resurrectLayer", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
+    { key = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", layer = "pvpIconLayer", aliases = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
     { key = "phaseIcon", size = "phaseIconSize", layer = "phaseLayer", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
     { key = "statusText", size = "statusTextSize", layer = "statusTextLayer", aliases = { "dead text", "dead status text", "status text" } },
     { key = "statusGhostText", size = "statusGhostTextSize", layer = "statusGhostTextLayer", aliases = { "ghost text", "ghost status text" } },
@@ -311,7 +312,7 @@ end
 local GROUP_STATUS_ICON_TERMS = {
     "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "symbol", "symbols",
     "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon",
-    "resurrect icon", "rez icon", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
+    "resurrect icon", "rez icon", "pvp flag", "pvp icon", "pvp indicator", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
 }
 
 local GROUP_STATUS_MIDNIGHT_STYLE_TERMS = {
@@ -657,6 +658,7 @@ local UNIT_STATUS_RESET_TERMS = {
     "rested indicator", "resting indicator", "rested icon", "resting icon", "rested symbol", "resting symbol",
     "incoming rez", "incoming rez indicator", "incoming rez symbol", "incoming resurrection", "incoming resurrection indicator", "incoming resurrection symbol",
     "resurrection icon", "resurrection indicator", "resurrection symbol",
+    "pvp flag", "pvp indicator", "pvp icon", "pvp flag indicator", "pvp flag icon", "pvp status", "war mode indicator",
 }
 
 local UNIT_STATUS_RUNTIME_TEXT_TERMS = {

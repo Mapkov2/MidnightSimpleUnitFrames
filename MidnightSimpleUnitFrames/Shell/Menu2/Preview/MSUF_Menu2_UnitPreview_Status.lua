@@ -6,6 +6,8 @@ _G.MSUF_NS = MSUF
 
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local SYMBOL_MEDIA = MEDIA .. "Symbols\\"
+local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
+local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
 
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
@@ -165,6 +167,13 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
     elseif spec.id == "statusIncomingRes" then
         local path = StatusSymbolTexture((runtimeCfg and runtimeCfg.symbol) or conf.incomingResIndicatorSymbol or g.incomingResIndicatorSymbol)
         if tex then tex:SetTexture(path or "Interface\\RaidFrame\\Raid-Icon-Rez") end
+    elseif spec.id == "statusPvp" then
+        if tex and tex.SetAtlas then
+            tex:SetAtlas((key == "target" or key == "focus") and PVP_HORDE_ATLAS or PVP_ALLIANCE_ATLAS)
+        elseif tex then
+            tex:SetTexture((key == "target" or key == "focus") and "Interface\\TargetingFrame\\UI-PVP-Horde" or "Interface\\TargetingFrame\\UI-PVP-Alliance")
+            if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
+        end
     elseif spec.id == "level" or spec.id == "statusText" then
         if tex then tex:Hide() end
         if txt then

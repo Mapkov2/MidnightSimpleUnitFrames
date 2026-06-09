@@ -123,6 +123,7 @@ raidMarker=raidMarker
 readyCheckIcon=readyCheck
 summonIcon=summon
 resurrectIcon=incomingRes
+pvpIcon=pvp
 phaseIcon=phase
 ]],
 

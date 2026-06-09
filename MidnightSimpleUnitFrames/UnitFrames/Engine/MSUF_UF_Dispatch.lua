@@ -239,6 +239,10 @@ local function HotElementAllowed(frame, event, name)
         return not rt or (rt.powerSlotCount or 0) > 0
     elseif name == "StatusTextIndicator" and IsGroupFrame(frame) then
         return false
+    elseif name == "PVPIndicator" then
+        local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
+        local pvp = status and status.pvp
+        return event == "UNIT_FACTION" and pvp and pvp.enabled == true
     elseif name == "NameText" and event == "UNIT_HEALTH" then
         local text = frame and frame.MSUFSpec and frame.MSUFSpec.text
         return text and text.hideNameOnDeadOffline == true
@@ -250,6 +254,9 @@ local function HotElementAllowed(frame, event, name)
             return cfg and cfg.showDead == true
         elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
             return cfg and (cfg.showAFK == true or cfg.showDND == true)
+        elseif event == "UNIT_FACTION" then
+            local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
+            return status and status.runtimePVP == true
         end
     end
     return true
@@ -398,6 +405,26 @@ local function RunHotHealthFlags(frame, state, event, unit, sameUnit, a, b, c)
 end
 
 local function RunHotHealthFaction(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then
+        if state.inlineUnitless then
+            local fn = state.inline
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        return true
+    end
+
+    local fn = state.health
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.name
+    if fn then fn(frame, event, unit) end
+    fn = state.pvp
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotHealthFactionNoPVP(frame, state, event, unit, sameUnit, a, b, c)
     if not sameUnit then
         if state.inlineUnitless then
             local fn = state.inline
@@ -730,6 +757,9 @@ RebuildHotEventState = function(frame, event, owners)
             HotAdd(frame, event, state, owners, item[1], item[2], item[3])
         end
     end
+    if event == "UNIT_FACTION" and state.pvp == nil then
+        state.runner = RunHotHealthFactionNoPVP
+    end
 
     state.inlineUnitless = OwnerModeIsUnitless(state.inlineMode)
     state.predictionUnitless = OwnerModeIsUnitless(state.predictionMode)
@@ -864,6 +894,11 @@ FrameRuntimeUpdate = function(frame, reason)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "CombatIndicator", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RestingIndicator", reason, frame.unit)
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "IncomingResIndicator", reason, frame.unit)
+        local status = frame.MSUFSpec and frame.MSUFSpec.status
+        local pvp = status and status.pvp
+        if pvp and pvp.enabled == true then
+            RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "PVPIndicator", reason, frame.unit)
+        end
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, frame.unit)
     end
     if not mask or mask.prediction then
