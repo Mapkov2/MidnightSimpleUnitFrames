@@ -933,23 +933,23 @@ local function BuildUnitStyle(ctx, b, scope)
 end
 
 local function BuildGroupStyle(ctx, b, scope)
-    local section = b:Section("Group Aura Style", 500)
+    local section = b:Section("Group Aura Style", 548)
     local w = section._msuf2Width or b.width or 720
     local lane = CurrentLane("auraStyleGFLane", "debuff")
     local colW = max(300, floor((w - 66) / 2))
     local rightX = 32 + colW + 18
     local rightW = max(260, w - rightX - 24)
 
-    local text = Card(section, "Group Aura Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. ".", 24, -42, colW, 374)
-    W.LabelAt(text, "Lane", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
-    BuildLaneTabs(ctx, text, "auraStyleGFLane", 80, -46, min(250, colW - 108))
+    local text = Card(section, "Group Aura Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. ".", 24, -42, colW, 422)
+    W.LabelAt(text, "Lane", 16, -72, 70, "GameFontNormalSmall", T.colors.accent)
+    BuildLaneTabs(ctx, text, "auraStyleGFLane", 80, -68, min(250, colW - 108))
 
-    BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -96, colW - 32, scope, lane, "showCooldownSwipe", true, "visual")
-    BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -128, colW - 32, scope, lane, "showCooldown", true, "visual")
-    BindGroupSwitch(ctx, text, "Show Stack Count", 16, -160, colW - 32, scope, lane, "showStacks", true, "visual")
-    BindGroupSlider(ctx, text, "Cooldown Font", 16, -216, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
-    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -274, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
-    BindGroupSlider(ctx, text, "Stack Font", 16, -332, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font")
+    BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -126, colW - 32, scope, lane, "showCooldownSwipe", true, "visual")
+    BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -158, colW - 32, scope, lane, "showCooldown", true, "visual")
+    BindGroupSwitch(ctx, text, "Show Stack Count", 16, -190, colW - 32, scope, lane, "showStacks", true, "visual")
+    BindGroupSlider(ctx, text, "Cooldown Font", 16, -246, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
+    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -304, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
+    BindGroupSlider(ctx, text, "Stack Font", 16, -362, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font")
 
     local behavior = Card(section, "Behavior", "Shared group-frame aura behavior for " .. ScopeLabel(scope) .. ".", rightX, -42, rightW, 306)
     BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 16, -64, rightW - 32, scope, "showTooltip", true, "visual")
@@ -962,7 +962,7 @@ local function BuildGroupStyle(ctx, b, scope)
         if gf and gf.Masque and type(gf.Masque.ReskinAllIcons) == "function" then gf.Masque.ReskinAllIcons() end
     end)
 
-    BuildMiniAuraPreview(ctx, section, scope, rightX, -374, rightW, 92)
+    BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 92)
 end
 
 local function BuildSharedColors(ctx, b)
@@ -1450,17 +1450,19 @@ local function CategoryLabel(cat)
 end
 
 local function BuildGroupFilters(ctx, b, scope)
-    local section = b:Section("Group Frame Filters", 650)
+    local section = b:Section("Group Frame Filters", 690)
     local w = section._msuf2Width or b.width or 720
     local lane = CurrentLane("auraFilterLane", "buff")
     local laneText = lane == "buff" and "Buff" or "Debuff"
-    local filter = Card(section, "Inclusive " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, -42, w - 48, 202)
-    W.LabelAt(filter, "Filter Type", 16, -50, 90, "GameFontNormalSmall", T.colors.accent)
-    BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -46, min(280, w - 160))
-    BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -112, GroupFilterValues(lane), min(340, w - 96), scope, lane, "filterToken", lane == "buff" and "RAID" or "ALL", "visual")
-    W.Text(filter, "Use category blacklist below to exclude public " .. laneText .. " groups.", 380, -112, max(220, w - 452), T.colors.muted)
+    local filterW = w - 48
+    local filter = Card(section, "Inclusive " .. laneText .. " Filter", "Filter token for " .. ScopeLabel(scope) .. " group-frame " .. laneText .. "s.", 24, -42, filterW, 234)
+    W.LabelAt(filter, "Filter Type", 16, -72, 90, "GameFontNormalSmall", T.colors.accent)
+    BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180))
+    local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
+    BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", lane == "buff" and "RAID" or "ALL", "visual")
+    W.Text(filter, "Use category blacklist below to exclude public " .. laneText .. " groups.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
 
-    local blacklist = Card(section, "Category Blacklist", "Checked categories are hidden for " .. ScopeLabel(scope) .. ".", 24, -272, w - 48, 324)
+    local blacklist = Card(section, "Category Blacklist", "Checked categories are hidden for " .. ScopeLabel(scope) .. ".", 24, -304, w - 48, 324)
     W.LabelAt(blacklist, "Active", 16, -50, 70, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(blacklist, lane == "buff" and "Buff category blacklist" or "Debuff category blacklist", 86, -50, 260, "GameFontHighlightSmall", T.colors.text)
 
