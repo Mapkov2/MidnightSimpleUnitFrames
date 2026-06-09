@@ -91,7 +91,11 @@ for i = 1, #UNIT_KEYS do
     end
 end
 
-local POWER_UNITS = { player = true, target = true, focus = true, boss = true }
+local POWER_UNITS = { player = true, target = true, focus = true, targettarget = true, focustarget = true, pet = true, boss = true }
+
+local function UnitDefaultPowerBar(unit)
+    return not (unit == "targettarget" or unit == "focustarget")
+end
 
 local TEXT_ANCHOR_VALUES = { "LEFT", "CENTER", "RIGHT" }
 local HP_MODE_VALUES = { "PERCENT", "CURRENT", "MAX", "DEFICIT", "CURMAX", "CURPERCENT", "CURMAXPERCENT", "MAXPERCENT", "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX", "NONE" }
@@ -972,7 +976,7 @@ for i = 1, #UNIT_KEYS do
     RegisterUnitBooleanSetting(unit, "portraitBgEnabled", "portraitBgEnabled", "Portrait Background", false, MakeAliases(unit, "portrait background", "portrait bg"), { category = "Portrait" })
 
     if POWER_UNITS[unit] then
-        RegisterUnitBooleanSetting(unit, "powerBar", "showPowerBar", "Power Bar", true, MakeAliases(unit, "power bar", "show power bar"), { category = "Power Bar", power = true })
+        RegisterUnitBooleanSetting(unit, "powerBar", "showPowerBar", "Power Bar", UnitDefaultPowerBar(unit), MakeAliases(unit, "power bar", "show power bar"), { category = "Power Bar", power = true })
         RegisterUnitBooleanSetting(unit, "powerBarBorder", "powerBarBorderEnabled", "Power Bar Border", false, MakeAliases(unit, "power bar border", "power border"), {
             category = "Power Bar",
             power = true,

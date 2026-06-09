@@ -634,6 +634,7 @@ function Registry:RegisterSetting(spec)
     spec.aliases = type(spec.aliases) == "table" and spec.aliases or {}
     self.settings[#self.settings + 1] = spec
     self.settingsByKey[spec.key] = spec
+    self._findSettingsIndex = nil
     if A.Knowledge and type(A.Knowledge.MarkDirty) == "function" then A.Knowledge.MarkDirty() end
     return spec
 end
@@ -646,6 +647,53 @@ function Registry:AllSettings()
     return self.settings
 end
 
+local function AddFindIndex(index, bucket, key, setting)
+    key = tostring(key or "")
+    if key == "" then return end
+    local byKey = index[bucket]
+    byKey[key] = byKey[key] or {}
+    byKey[key][#byKey[key] + 1] = setting
+end
+
+function Registry:BuildFindSettingsIndex()
+    local index = {
+        byUnit = {},
+        byFrameType = {},
+        byAttribute = {},
+        byType = {},
+    }
+    for i = 1, #self.settings do
+        local setting = self.settings[i]
+        AddFindIndex(index, "byUnit", setting.unit, setting)
+        AddFindIndex(index, "byFrameType", setting.frameType, setting)
+        AddFindIndex(index, "byAttribute", setting.attribute, setting)
+        AddFindIndex(index, "byType", setting.type, setting)
+    end
+    self._findSettingsIndex = index
+    self._findSettingsIndexCount = #self.settings
+    return index
+end
+
+function Registry:FindSettingsCandidateList(filter, unitSet)
+    local index = self._findSettingsIndex
+    if not index or self._findSettingsIndexCount ~= #self.settings then
+        index = self:BuildFindSettingsIndex()
+    end
+    local best
+    local function consider(list)
+        if type(list) == "table" and (not best or #list < #best) then best = list end
+    end
+    if type(filter.unit) == "string" then
+        consider(index.byUnit[filter.unit])
+    elseif type(filter.units) == "table" and #filter.units == 1 then
+        consider(index.byUnit[filter.units[1]])
+    end
+    if filter.frameType then consider(index.byFrameType[filter.frameType]) end
+    if filter.attribute then consider(index.byAttribute[filter.attribute]) end
+    if filter.type then consider(index.byType[filter.type]) end
+    return best or self.settings
+end
+
 function Registry:FindSettings(filter)
     filter = filter or {}
     local out = {}
@@ -656,8 +704,9 @@ function Registry:FindSettings(filter)
     elseif type(filter.unit) == "string" then
         unitSet = { [filter.unit] = true }
     end
-    for i = 1, #self.settings do
-        local setting = self.settings[i]
+    local candidates = self:FindSettingsCandidateList(filter, unitSet)
+    for i = 1, #candidates do
+        local setting = candidates[i]
         local ok = true
         if unitSet and not unitSet[setting.unit] then ok = false end
         if ok and filter.frameType and setting.frameType ~= filter.frameType then ok = false end

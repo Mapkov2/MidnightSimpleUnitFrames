@@ -33,17 +33,27 @@ local CLASS_POWER_WIDTH_MODE_ALIASES = {
     player = "player",
     frame = "player",
     playerframe = "player",
+    playerwidth = "player",
+    playerframewidth = "player",
+    unitframe = "player",
+    unitframewidth = "player",
     cooldown = "cooldown",
     cooldowns = "cooldown",
     essentialcooldown = "cooldown",
     essentialcooldowns = "cooldown",
+    essentialcooldownmanager = "cooldown",
+    cooldownmanager = "cooldown",
+    cooldownsmanager = "cooldown",
+    cdmwidth = "cooldown",
     cdm = "cooldown",
     utility = "utility",
     utilitycooldown = "utility",
     utilitycooldowns = "utility",
+    utilitycooldownmanager = "utility",
     trackedbuff = "tracked_buffs",
     trackedbuffs = "tracked_buffs",
     bufftracker = "tracked_buffs",
+    trackedbuffwidth = "tracked_buffs",
     custom = "custom",
     manual = "custom",
 }
@@ -243,7 +253,13 @@ RegisterBarsNumber("classPowerFrameLevelOffset", "frameLevel", "Class Resource F
     reason = "MSUF_ASSISTANT_CLASSPOWER_FRAME_LEVEL",
 })
 
-RegisterBarsBoolean("classPowerAnchorToCooldown", "anchorToCooldown", "Class Resource Anchor To Essential Cooldowns", false, ClassPowerAliases("anchor to cooldown", "class resource anchor to essential cooldowns", "class power follow cooldowns"), {
+RegisterBarsBoolean("classPowerAnchorToCooldown", "anchorToCooldown", "Class Resource Anchor To Essential Cooldowns", false, ClassPowerAliases(
+    "anchor to cooldown", "anchor to cooldowns", "anchor to essential cooldowns",
+    "anchor to essential cooldownmanager", "anchor to cooldownmanager",
+    "class resource anchor to essential cooldowns", "class resource anchor to essential cooldownmanager",
+    "class power follow cooldowns", "class resource follow essential cooldowns",
+    "follow essential cooldowns", "follow cooldownmanager", "position above essential cooldowns"
+), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_ANCHOR_COOLDOWN",
 })
 RegisterBarsBoolean("showChargedComboPoints", "chargedComboPoints", "Empowered Combo Points", true, ClassPowerAliases("empowered combo points", "charged combo points", "combo point charges"), {

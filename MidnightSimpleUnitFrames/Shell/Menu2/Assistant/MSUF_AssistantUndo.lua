@@ -46,6 +46,20 @@ local function CallGlobal(name, ...)
     if type(fn) == "function" then fn(...) end
 end
 
+local function ScheduleNextFrame(key, fn)
+    if type(fn) ~= "function" then return false end
+    if type(_G.MSUF_ScheduleOnce) == "function" then
+        _G.MSUF_ScheduleOnce(tostring(key or "MSUF_ASSISTANT_BROAD_APPLY"), fn)
+        return true
+    end
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, fn)
+        return true
+    end
+    fn()
+    return false
+end
+
 local function BroadApply(reason)
     reason = reason or "MSUF_ASSISTANT_UNDO"
     if M and type(M.RequestGeneralApply) == "function" then
@@ -71,6 +85,91 @@ local function BroadApply(reason)
     end
     if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty(reason) end
     if M and M.frame and M.frame.IsShown and M.frame:IsShown() and type(M.Refresh) == "function" then M.Refresh() end
+end
+
+local function BroadApplySteps(reason)
+    reason = reason or "MSUF_ASSISTANT_UNDO"
+    return {
+        function()
+            if M and type(M.RequestGeneralApply) == "function" then
+                M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true })
+            end
+        end,
+        function()
+            CallGlobal("MSUF_UpdateAllFonts_Immediate")
+            CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
+            CallGlobal("MSUF_UpdateAllBarTextures")
+        end,
+        function()
+            CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
+            CallGlobal("MSUF_UpdateCastbarVisuals")
+            CallGlobal("MSUF_RefreshAllIdentityColors")
+            CallGlobal("MSUF_RefreshAllPowerTextColors")
+            CallGlobal("MSUF_RefreshAllUnitAlphas")
+        end,
+        function()
+            CallGlobal("MSUF_RefreshAllFrames")
+            CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, reason)
+        end,
+        function()
+            if MSUF and MSUF.GF then
+                if type(MSUF.GF.RebuildAll) == "function" then MSUF.GF.RebuildAll() end
+                if type(MSUF.GF.RefreshVisuals) == "function" then MSUF.GF.RefreshVisuals() end
+                if type(MSUF.GF.RefreshPreviewLayout) == "function" then MSUF.GF.RefreshPreviewLayout() end
+            end
+        end,
+        function()
+            if MSUF and MSUF.MSUF_Auras3 and type(MSUF.MSUF_Auras3.RequestApply) == "function" then
+                MSUF.MSUF_Auras3.RequestApply()
+            end
+            if M and type(M.MarkMenuDataDirty) == "function" then M.MarkMenuDataDirty(reason) end
+            if M and M.frame and M.frame.IsShown and M.frame:IsShown() and type(M.Refresh) == "function" then M.Refresh() end
+        end,
+    }
+end
+
+function A.RequestBroadApply(reason, opts, callback)
+    if type(opts) == "function" and callback == nil then
+        callback = opts
+        opts = nil
+    end
+    opts = opts or {}
+    A._broadApplyState = A._broadApplyState or { callbacks = {}, reasons = {} }
+    local state = A._broadApplyState
+    state.reason = tostring(reason or state.reason or "MSUF_ASSISTANT_APPLY")
+    state.reasons[#state.reasons + 1] = state.reason
+    if type(callback) == "function" then state.callbacks[#state.callbacks + 1] = callback end
+    if state.running or state.scheduled then return true end
+
+    state.scheduled = true
+    ScheduleNextFrame("MSUF_ASSISTANT_BROAD_APPLY", function()
+        state.scheduled = nil
+        state.running = true
+        local runReason = state.reason or "MSUF_ASSISTANT_APPLY"
+        local callbacks = state.callbacks
+        state.callbacks = {}
+        state.reasons = {}
+        state.reason = nil
+
+        local function Finish(result)
+            state.running = nil
+            if type(result) == "table" and result.status == "failed" and type(A.AddHistory) == "function" then
+                A.AddHistory("assistant", result.text or "Assistant broad apply failed.", result.status)
+            end
+            for i = 1, #callbacks do pcall(callbacks[i], result) end
+            if state.reason and not state.scheduled then
+                A.RequestBroadApply(state.reason)
+            end
+        end
+
+        if type(A.StartJob) == "function" then
+            A.StartJob("assistant.broad_apply", BroadApplySteps(runReason), Finish)
+        else
+            BroadApply(runReason)
+            Finish(true)
+        end
+    end)
+    return true
 end
 
 function A.PushUndo(bundle)
@@ -120,11 +219,31 @@ end
 local function RestoreProfileSnapshot(snapshot)
     if type(snapshot) ~= "table" then return false end
     if type(_G.MSUF_GlobalDB) ~= "table" then _G.MSUF_GlobalDB = {} end
-    DeepReplace(_G.MSUF_GlobalDB, type(snapshot.globalDB) == "table" and snapshot.globalDB or {})
+    if type(snapshot.globalDB) == "table" then
+        DeepReplace(_G.MSUF_GlobalDB, snapshot.globalDB)
+    end
 
     local gdb = _G.MSUF_GlobalDB
     if type(gdb.profiles) ~= "table" then gdb.profiles = {} end
     if type(gdb.char) ~= "table" then gdb.char = {} end
+
+    if type(snapshot.profileStates) == "table" then
+        for name, state in pairs(snapshot.profileStates) do
+            if type(name) == "string" and name ~= "" then
+                if type(state) == "table" and state.exists == true then
+                    gdb.profiles[name] = DeepCopy(type(state.data) == "table" and state.data or {})
+                else
+                    gdb.profiles[name] = nil
+                end
+            end
+        end
+    elseif type(snapshot.profiles) == "table" then
+        for name, profile in pairs(snapshot.profiles) do
+            if type(name) == "string" and name ~= "" then
+                gdb.profiles[name] = DeepCopy(type(profile) == "table" and profile or {})
+            end
+        end
+    end
 
     local active = snapshot.activeProfile
     if type(active) ~= "string" or active == "" then active = "Default" end
@@ -138,7 +257,13 @@ local function RestoreProfileSnapshot(snapshot)
     local charKey = snapshot.charKey
     if type(charKey) ~= "string" or charKey == "" then charKey = CurrentCharKey() end
     if type(charKey) == "string" and charKey ~= "" then
-        if type(gdb.char[charKey]) ~= "table" then gdb.char[charKey] = {} end
+        if snapshot.charExists == false then
+            gdb.char[charKey] = {}
+        elseif type(snapshot.char) == "table" then
+            gdb.char[charKey] = DeepCopy(snapshot.char)
+        elseif type(gdb.char[charKey]) ~= "table" then
+            gdb.char[charKey] = {}
+        end
         gdb.char[charKey].activeProfile = active
     end
     return true
@@ -154,13 +279,13 @@ function A.UndoLast()
     end
     if type(bundle.beforeProfileSnapshot) == "table" then
         if RestoreProfileSnapshot(bundle.beforeProfileSnapshot) then
-            BroadApply("MSUF_ASSISTANT_PROFILE_UNDO")
+            A.RequestBroadApply("MSUF_ASSISTANT_PROFILE_UNDO")
         end
     elseif type(bundle.beforeSnapshot) == "table" then
         local db = M and type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
         if type(db) == "table" then
             DeepReplace(db, bundle.beforeSnapshot)
-            BroadApply("MSUF_ASSISTANT_UNDO")
+            A.RequestBroadApply("MSUF_ASSISTANT_UNDO")
         end
     else
         ApplyChangeList(bundle.changes, true)
@@ -178,13 +303,13 @@ function A.RedoLast()
     end
     if type(bundle.afterProfileSnapshot) == "table" then
         if RestoreProfileSnapshot(bundle.afterProfileSnapshot) then
-            BroadApply("MSUF_ASSISTANT_PROFILE_REDO")
+            A.RequestBroadApply("MSUF_ASSISTANT_PROFILE_REDO")
         end
     elseif type(bundle.afterSnapshot) == "table" then
         local db = M and type(M.EnsureDB) == "function" and M.EnsureDB() or _G.MSUF_DB
         if type(db) == "table" then
             DeepReplace(db, bundle.afterSnapshot)
-            BroadApply("MSUF_ASSISTANT_REDO")
+            A.RequestBroadApply("MSUF_ASSISTANT_REDO")
         end
     else
         ApplyChangeList(bundle.changes, false)
@@ -198,15 +323,64 @@ function A.CaptureSnapshot()
     return DeepCopy(db or {})
 end
 
-function A.CaptureProfileSnapshot()
+local function AddProfileName(names, name)
+    name = type(name) == "string" and name or nil
+    if not name or name == "" then return end
+    if type(A.ResolveProfileName) == "function" then
+        local resolved = A.ResolveProfileName(name)
+        if type(resolved) == "string" and resolved ~= "" then name = resolved end
+    end
+    names[name] = true
+end
+
+local function ProfileNamesForAction(actionKey, args, active)
+    local names = {}
+    AddProfileName(names, active)
+    args = type(args) == "table" and args or {}
+    if actionKey == "switch_profile"
+        or actionKey == "create_profile"
+        or actionKey == "copy_profile"
+        or actionKey == "delete_profile"
+        or actionKey == "import_profile_string_new"
+        or actionKey == "set_spec_profile"
+        or actionKey == "clear_spec_profile"
+    then
+        AddProfileName(names, args.name)
+    end
+    if actionKey == "copy_profile" then
+        AddProfileName(names, args.source)
+        AddProfileName(names, args.from)
+    end
+    return names
+end
+
+function A.CaptureProfileSnapshot(actionKey, args)
+    local active = _G.MSUF_ActiveProfile
+    if type(active) ~= "string" or active == "" then active = "Default" end
+    local charKey = CurrentCharKey()
+    local gdb = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {}
+    local profiles = type(gdb.profiles) == "table" and gdb.profiles or {}
+    local profileStates = {}
+    local names = ProfileNamesForAction(actionKey, args, active)
+    for name in pairs(names) do
+        local profile = profiles[name]
+        profileStates[name] = {
+            exists = type(profile) == "table",
+            data = type(profile) == "table" and DeepCopy(profile) or nil,
+        }
+    end
+    local char = type(gdb.char) == "table" and type(charKey) == "string" and gdb.char[charKey] or nil
     return {
-        globalDB = DeepCopy(_G.MSUF_GlobalDB or {}),
+        version = 2,
+        profileStates = profileStates,
         db = DeepCopy(_G.MSUF_DB or {}),
-        activeProfile = _G.MSUF_ActiveProfile,
-        charKey = CurrentCharKey(),
+        activeProfile = active,
+        charKey = charKey,
+        charExists = type(char) == "table",
+        char = type(char) == "table" and DeepCopy(char) or nil,
     }
 end
 
 function A.ApplyBroad(reason)
-    BroadApply(reason)
+    return A.RequestBroadApply(reason)
 end

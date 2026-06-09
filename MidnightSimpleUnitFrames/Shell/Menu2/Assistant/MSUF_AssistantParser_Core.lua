@@ -270,7 +270,7 @@ local CASTBAR_ROOT_DETAIL_TERMS = {
     "castbar text", "castbar name", "castbar spell name", "spell name", "spell text",
     "interrupt", "interruptible", "kick", "kickable",
     "channel ticks", "channel tick lines", "castbar ticks", "tick lines",
-    "glow", "spark", "latency", "fill direction", "unified direction", "opposite direction",
+    "glow", "spark", "sparks", "latency", "fill direction", "unified direction", "opposite direction",
     "texture", "background texture", "outline", "border thickness", "shake", "shake strength",
     "empower", "empowered", "stage blink", "spell name shortening", "max spell name length", "reserved spell name space",
     "focus kick", "focus interrupt", "interrupt ready",

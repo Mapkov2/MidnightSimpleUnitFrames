@@ -27,6 +27,19 @@ local function Trim(text)
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+local function IsUUFImportString(value)
+    local fn = _G.MSUF_IsUUFImportString
+    if type(fn) == "function" then
+        local ok, result = pcall(fn, value)
+        if ok then return result == true end
+    end
+    return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
+end
+
+local function UUFBestEffortConfirmText()
+    return "This is an UnhaltedUnitFrames profile. MSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1. Type 'yes', 'do it', or 'mach das' to import anyway, or 'cancel'."
+end
+
 local function SetRegionShown(region, shown)
     if not region then return end
     shown = shown and true or false
@@ -107,7 +120,13 @@ local function ScheduleBusyPulse(ui)
             return
         end
         ui._msufAssistantBusyPhase = ((tonumber(ui._msufAssistantBusyPhase) or 1) % 4) + 1
-        if type(A.RefreshUI) == "function" then A.RefreshUI() end
+        if ui._msufAssistantBusyText and ui._msufAssistantBusyText.SetText then
+            ui._msufAssistantBusyText:SetText(BusyText(ui))
+        elseif type(A.RequestRefreshUI) == "function" then
+            A.RequestRefreshUI("assistant.busy.pulse")
+        elseif type(A.RefreshUI) == "function" then
+            A.RefreshUI()
+        end
         _G.C_Timer.After(0.25, Pulse)
     end
     _G.C_Timer.After(0.25, Pulse)
@@ -116,6 +135,7 @@ end
 local function RenderHistory(ui)
     if not (ui and ui.child and ui.scroll) then return end
     ui.rows = ui.rows or {}
+    ui._msufAssistantBusyText = nil
     for i = 1, #ui.rows do ui.rows[i]:Hide() end
 
     local history = A.GetHistory and A.GetHistory() or {}
@@ -196,6 +216,7 @@ local function RenderHistory(ui)
         local c = MessageColor("assistant", "queued")
         if row.text.SetTextColor then row.text:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
         row.text:SetText(BusyText(ui))
+        ui._msufAssistantBusyText = row.text
 
         local h = max(30, floor((row.text.GetStringHeight and row.text:GetStringHeight() or 20) + 12))
         row:SetHeight(h)
@@ -243,6 +264,8 @@ local function RenderLargeTextPanel(ui)
     local spec = A.largeTextPanel
     if not panel then return end
     if type(spec) ~= "table" then
+        panel._msufAssistantRenderedText = nil
+        panel._msufAssistantRenderedKind = nil
         panel:Hide()
         return
     end
@@ -255,8 +278,12 @@ local function RenderLargeTextPanel(ui)
 
     local kind = spec.kind or "export"
     local text = tostring(spec.text or "")
-    panel.box:SetText(text)
-    panel.box:SetCursorPosition(0)
+    if panel._msufAssistantRenderedText ~= text or panel._msufAssistantRenderedKind ~= kind then
+        panel.box:SetText(text)
+        panel.box:SetCursorPosition(0)
+        panel._msufAssistantRenderedText = text
+        panel._msufAssistantRenderedKind = kind
+    end
     panel.box:SetAutoFocus(false)
     panel.box:SetEnabled(true)
     if kind == "export" and panel.box.HighlightText then panel.box:HighlightText() end
@@ -270,25 +297,30 @@ local function RenderLargeTextPanel(ui)
                 panel.status:SetText(Tr("Paste an MSUF profile string first."))
                 return
             end
-            A.largeTextPanel.text = value
             local action = A.Registry and A.Registry:GetAction("import_profile_string")
             if not action then
                 panel.status:SetText(Tr("Profile import is not available right now."))
                 return
             end
             A.AddHistory("user", "Profile import pasted from Assistant panel.", "submitted")
+            local isUUF = IsUUFImportString(value)
             local result = A.ExecutePlan({
                 kind = "action",
                 action = action,
-                args = { value = value },
+                args = { value = value, uufBestEffortAccepted = isUUF == true },
                 confirmRequired = true,
-                label = "Import profile string",
+                confirmText = isUUF and UUFBestEffortConfirmText() or nil,
+                label = isUUF and "Import UnhaltedUnitFrames profile string" or "Import profile string",
                 summary = "Imports profile data into the active profile.",
             })
             if result and result.text then A.AddHistory("assistant", result.text, result.status, result.summary) end
             A.largeTextPanel.status = "Confirmation requested in the conversation. Type yes, do it, or mach das to apply; cancel stops it."
             panel.status:SetText(Tr(A.largeTextPanel.status))
-            A.RefreshUI()
+            if type(A.RequestRefreshUI) == "function" then
+                A.RequestRefreshUI("assistant.profile_import.confirm")
+            elseif type(A.RefreshUI) == "function" then
+                A.RefreshUI()
+            end
         end)
     else
         SetButtonText(panel.primary, "Select all")
@@ -441,7 +473,11 @@ function A.BuildDashboardCard(parent, cardW, cardH)
 
     local function SubmitInput()
         if A.IsBusy and A.IsBusy() then
-            if type(A.RefreshUI) == "function" then A.RefreshUI() end
+            if type(A.RequestRefreshUI) == "function" then
+                A.RequestRefreshUI("assistant.busy.submit")
+            elseif type(A.RefreshUI) == "function" then
+                A.RefreshUI()
+            end
             return
         end
         local query = Trim(input:GetText() or "")
@@ -453,11 +489,13 @@ function A.BuildDashboardCard(parent, cardW, cardH)
         SetRegionShown(input._msufAssistantPlaceholder, true)
         if type(A.SubmitDeferred) == "function" then
             A.SubmitDeferred(query)
-        elseif type(A.Submit) == "function" then
-            A.Submit(query)
         elseif type(A.AddHistory) == "function" then
             A.AddHistory("assistant", "Assistant runtime is not ready yet. Reopen the dashboard and try again.", "failed")
-            if type(A.RefreshUI) == "function" then A.RefreshUI() end
+            if type(A.RequestRefreshUI) == "function" then
+                A.RequestRefreshUI("assistant.not_ready")
+            elseif type(A.RefreshUI) == "function" then
+                A.RefreshUI()
+            end
         end
     end
 

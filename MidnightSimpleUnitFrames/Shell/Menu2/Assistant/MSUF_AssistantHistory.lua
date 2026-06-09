@@ -72,7 +72,11 @@ function A.AddHistory(role, text, status, summary)
     }
     adb.history[#adb.history + 1] = item
     A.TrimHistory()
-    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.history")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
     return item
 end
 
@@ -149,7 +153,11 @@ function A.ClearHistory()
     for key in pairs(adb.history) do
         adb.history[key] = nil
     end
-    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.history.clear")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
 end
 
 function A.GetContext()

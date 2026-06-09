@@ -58,6 +58,11 @@ local function HUD()
     return em2 and type(em2.HUD) == "table" and em2.HUD or nil
 end
 
+local function Grid()
+    local em2 = EM2()
+    return em2 and type(em2.Grid) == "table" and em2.Grid or nil
+end
+
 local function RefreshHUDControls()
     local hud = HUD()
     if hud and type(hud.RefreshControls) == "function" then hud.RefreshControls() end
@@ -116,6 +121,25 @@ local function StateMessage(label, value, changed)
         return "Done. " .. tostring(label) .. " " .. StateWord(value) .. "."
     end
     return "Already set. " .. tostring(label) .. " is " .. StateWord(value) .. "."
+end
+
+local function Clamp(value, minValue, maxValue)
+    value = tonumber(value)
+    if value == nil then return nil end
+    if value < minValue then return minValue end
+    if value > maxValue then return maxValue end
+    return value
+end
+
+local function Round(value)
+    value = tonumber(value)
+    if value == nil then return nil end
+    return math.floor(value + 0.5)
+end
+
+local function FormatPercent(value)
+    value = tonumber(value) or 0
+    return tostring(math.floor(value * 100 + 0.5)) .. "%"
 end
 
 local GROUP_PREVIEW_COUNTS = { party = 5, raid = 30, mythicraid = 20 }
@@ -326,6 +350,56 @@ function EditMode.SetSnap(value)
     return true, StateMessage("Edit Mode Snap", value, changed)
 end
 
+function EditMode.SetGrid(value)
+    local grid = Grid()
+    if not (grid and type(grid.GetEnabled) == "function" and type(grid.SetEnabled) == "function") then
+        return false, "Edit Mode Grid is unavailable because MSUF_EM2.Grid is not loaded."
+    end
+    local current = grid.GetEnabled() and true or false
+    value = ToggleValue(current, value)
+    local changed = current ~= value
+    if changed then grid.SetEnabled(value) end
+    RefreshHUDControls()
+    return true, StateMessage("Edit Mode Grid", value, changed)
+end
+
+function EditMode.SetGridStep(value)
+    local grid = Grid()
+    if not (grid and type(grid.GetGridStep) == "function" and type(grid.SetGridStep) == "function") then
+        return false, "Edit Mode Grid spacing is unavailable because MSUF_EM2.Grid is not loaded."
+    end
+    value = Round(value)
+    if value == nil then
+        return false, "Tell me the Edit Mode grid spacing in pixels, for example 'set edit mode grid to 24'."
+    end
+    value = Clamp(value, 8, 64)
+    local current = Round(grid.GetGridStep())
+    local changed = current == nil or current ~= value
+    if changed then grid.SetGridStep(value) end
+    RefreshHUDControls()
+    if changed then return true, "Done. Edit Mode Grid spacing set to " .. tostring(value) .. "px." end
+    return true, "Already set. Edit Mode Grid spacing is " .. tostring(value) .. "px."
+end
+
+function EditMode.SetBackgroundOpacity(value)
+    local grid = Grid()
+    if not (grid and type(grid.GetBgAlpha) == "function" and type(grid.SetBgAlpha) == "function") then
+        return false, "Edit Mode background opacity is unavailable because MSUF_EM2.Grid is not loaded."
+    end
+    value = tonumber(value)
+    if value == nil then
+        return false, "Tell me the Edit Mode background opacity, for example 'set edit mode background opacity to 50%'."
+    end
+    if value > 1 then value = value / 100 end
+    value = Clamp(value, 0.05, 0.85)
+    local current = tonumber(grid.GetBgAlpha())
+    local changed = current == nil or math.abs(current - value) > 0.0001
+    if changed then grid.SetBgAlpha(value) end
+    RefreshHUDControls()
+    if changed then return true, "Done. Edit Mode Background opacity set to " .. FormatPercent(value) .. "." end
+    return true, "Already set. Edit Mode Background opacity is " .. FormatPercent(value) .. "."
+end
+
 function EditMode.SetCooldownAnchor(value)
     local db = EnsureDB()
     db.general = type(db.general) == "table" and db.general or {}
@@ -339,6 +413,32 @@ function EditMode.SetCooldownAnchor(value)
     end
     RefreshHUDControls()
     return true, StateMessage("Edit Mode CDM Anchor", value, changed)
+end
+
+function EditMode.Undo()
+    local em2 = EM2()
+    local undo = em2 and type(em2.Undo) == "table" and em2.Undo or nil
+    if undo and type(undo.CanUndo) == "function" and not undo.CanUndo() then
+        return true, "Edit Mode has no position change to undo."
+    end
+    local fn = _G.MSUF_EM_UndoUndo
+    if type(fn) ~= "function" then return false, "Edit Mode Undo is unavailable because MSUF_EM_UndoUndo is not loaded." end
+    fn()
+    RefreshHUDControls()
+    return true, "Done. Undid the last Edit Mode position change."
+end
+
+function EditMode.Redo()
+    local em2 = EM2()
+    local undo = em2 and type(em2.Undo) == "table" and em2.Undo or nil
+    if undo and type(undo.CanRedo) == "function" and not undo.CanRedo() then
+        return true, "Edit Mode has no position change to redo."
+    end
+    local fn = _G.MSUF_EM_UndoRedo
+    if type(fn) ~= "function" then return false, "Edit Mode Redo is unavailable because MSUF_EM_UndoRedo is not loaded." end
+    fn()
+    RefreshHUDControls()
+    return true, "Done. Redid the last Edit Mode position change."
 end
 
 function EditMode.ResetCurrentPosition()
@@ -575,6 +675,47 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "assistant.action.editMode.grid",
+    label = "Toggle Edit Mode Grid",
+    type = "setup",
+    combatSafe = false,
+    sourceFile = SOURCE_FILE,
+    sourceControl = SOURCE_HUD .. " Grid",
+    lifecycle = LIFECYCLE,
+    run = function(args)
+        return EditMode.SetGrid(args and args.value)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "assistant.action.editMode.gridStep",
+    label = "Set Edit Mode Grid Spacing",
+    type = "setup",
+    combatSafe = false,
+    captureSnapshot = true,
+    sourceFile = SOURCE_FILE,
+    sourceControl = SOURCE_HUD .. " Grid spacing",
+    lifecycle = LIFECYCLE,
+    run = function(args)
+        return EditMode.SetGridStep(args and args.value)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "assistant.action.editMode.backgroundOpacity",
+    label = "Set Edit Mode Background Opacity",
+    type = "setup",
+    combatSafe = false,
+    captureSnapshot = true,
+    sourceFile = SOURCE_FILE,
+    sourceControl = SOURCE_HUD .. " BG opacity",
+    lifecycle = LIFECYCLE,
+    run = function(args)
+        return EditMode.SetBackgroundOpacity(args and args.value)
+    end,
+})
+
+Registry:RegisterAction({
     key = "assistant.action.editMode.cdm",
     label = "Toggle Edit Mode CDM Anchor",
     type = "setup",
@@ -585,6 +726,32 @@ Registry:RegisterAction({
     lifecycle = LIFECYCLE,
     run = function(args)
         return EditMode.SetCooldownAnchor(args and args.value)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "assistant.action.editMode.undo",
+    label = "Undo Edit Mode Position Change",
+    type = "undo",
+    combatSafe = false,
+    sourceFile = SOURCE_FILE,
+    sourceControl = SOURCE_HUD .. " Undo",
+    lifecycle = LIFECYCLE,
+    run = function()
+        return EditMode.Undo()
+    end,
+})
+
+Registry:RegisterAction({
+    key = "assistant.action.editMode.redo",
+    label = "Redo Edit Mode Position Change",
+    type = "redo",
+    combatSafe = false,
+    sourceFile = SOURCE_FILE,
+    sourceControl = SOURCE_HUD .. " Redo",
+    lifecycle = LIFECYCLE,
+    run = function()
+        return EditMode.Redo()
     end,
 })
 

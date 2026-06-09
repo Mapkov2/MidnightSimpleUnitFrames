@@ -187,7 +187,11 @@ function A.Workflow.StartUnitAnchorPicker(unit)
         if type(A.AddHistory) == "function" then
             A.AddHistory("assistant", "Done. Picked " .. tostring(frameName or "") .. " as " .. tostring(UNIT_LABELS[unit] or unit) .. " custom anchor.", "applied")
         end
-        if type(A.RefreshUI) == "function" then A.RefreshUI() end
+        if type(A.RequestRefreshUI) == "function" then
+            A.RequestRefreshUI("assistant.workflow.anchor_pick")
+        elseif type(A.RefreshUI) == "function" then
+            A.RefreshUI()
+        end
     end
     overlay:Show()
     A.StartPendingFlow("unitAnchorPicker", { source = unit, label = "Unit custom anchor picker" })
@@ -214,7 +218,11 @@ function A.Workflow.StartGroupAnchorPicker(scope)
         if type(A.AddHistory) == "function" then
             A.AddHistory("assistant", "Done. Picked " .. tostring(frameName or "") .. " as " .. tostring(UNIT_LABELS[scope] or scope) .. " custom anchor.", "applied")
         end
-        if type(A.RefreshUI) == "function" then A.RefreshUI() end
+        if type(A.RequestRefreshUI) == "function" then
+            A.RequestRefreshUI("assistant.workflow.group_anchor_pick")
+        elseif type(A.RefreshUI) == "function" then
+            A.RefreshUI()
+        end
     end
     overlay:Show()
     A.StartPendingFlow("groupAnchorPicker", { source = scope, label = "Group custom anchor picker" })

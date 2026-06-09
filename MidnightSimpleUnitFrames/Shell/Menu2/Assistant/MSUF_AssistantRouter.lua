@@ -18,7 +18,7 @@ end
 
 local COMMAND_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset", "copy",
-    "add", "put", "clear", "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "undock", "dock", "embed",
+    "add", "put", "clear", "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "anchor", "follow", "undock", "dock", "embed",
     "export", "import", "create", "delete", "remove", "switch", "assign", "rename", "open", "close", "toggle",
     "diagnose", "why", "help", "undo", "redo", "yes", "cancel", "next", "back", "finish", "start", "stop", "enter", "leave",
     "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken",
@@ -69,7 +69,7 @@ local WOW_JOKES_DE = {
 local MUTATION_TERMS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift", "reset",
     "copy", "export", "import", "create", "delete", "remove", "add", "put", "clear", "switch", "assign", "rename", "close", "toggle",
-    "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "undock", "dock", "embed",
+    "increase", "decrease", "raise", "lower", "bump", "grow", "shrink", "detach", "attach", "anchor", "follow", "undock", "dock", "embed",
     "start", "stop", "enter", "leave", "select", "use", "apply",
     "an", "aus", "aktivieren", "deaktivieren", "einschalten", "ausschalten", "anzeigen", "verstecken",
     "einblenden", "ausblenden", "verschiebe", "verschieben", "setze", "stelle", "erhoehe", "erhoehen", "senke", "reduziere",
@@ -131,6 +131,10 @@ local function Normalize(text)
     return Trim(text)
 end
 
+local function MaybeYield()
+    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+end
+
 local function HasPhrase(text, phrase)
     text = Normalize(text)
     phrase = Normalize(phrase)
@@ -168,6 +172,16 @@ local function LooksLikeMutation(text)
         return false
     end
     return ContainsAny(norm, MUTATION_TERMS)
+end
+
+local function StartsWithMutationCommand(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    for i = 1, #MUTATION_TERMS do
+        local term = Normalize(MUTATION_TERMS[i])
+        if norm == term or norm:sub(1, #term + 1) == term .. " " then return true end
+    end
+    return false
 end
 
 local function LooksLikeKnowledgeRequest(text)
@@ -484,6 +498,13 @@ local function ShouldSkipContext(text)
     if ContainsAny(norm, FLOW_TERMS) then return true end
     if ContainsAny(norm, NAV_HELP_TERMS) then return true end
     if ContainsAny(norm, EXPLICIT_DOMAIN_TERMS) then return true end
+    if ContainsAny(norm, {
+        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
+        "party", "raid", "party frames", "raid frames", "group frames",
+    }) then return true end
+    local parser = A.Parser or {}
+    if type(parser.DetectUnits) == "function" and #(parser.DetectUnits(norm) or {}) > 0 then return true end
+    if type(parser.DetectGroups) == "function" and #(parser.DetectGroups(norm) or {}) > 0 then return true end
     return false
 end
 
@@ -686,6 +707,7 @@ local function TryContext(text, coreHandler)
     local bestAmbiguous
     local bestAmbiguousPending
     for i = 1, #variants do
+        MaybeYield()
         local result = coreHandler(variants[i])
         if result and not IsUnknownResult(result) then
             if not IsAmbiguousResult(result) then
@@ -736,7 +758,9 @@ end
 local function TryMutationFallbacks(text, coreHandler)
     if type(coreHandler) ~= "function" then return nil end
     local variants = MutationFallbackVariants(text)
-    for i = 1, #variants do
+    local limit = math.min(#variants, 4)
+    for i = 1, limit do
+        MaybeYield()
         if variants[i] ~= Normalize(text) then
             local result = coreHandler(variants[i])
             if result and not IsUnknownResult(result) then
@@ -752,25 +776,56 @@ function A.RouteInput(text, coreHandler)
     text = Trim(text)
     if text == "" then return nil end
 
+    local hasCore = type(coreHandler) == "function"
+    local coreCache = {}
+    local function Core(value)
+        if not hasCore then return nil end
+        value = Trim(value)
+        if coreCache[value] == nil then
+            local result = coreHandler(value)
+            coreCache[value] = result or false
+        end
+        return coreCache[value] ~= false and coreCache[value] or nil
+    end
+
     -- Pending confirmations/choices/flows must always win. The core handler owns those.
-    if type(coreHandler) == "function" and (HasPendingAssistantState() or ContainsAny(text, FLOW_TERMS)) then
-        local pendingResult = coreHandler(text)
+    if hasCore and (HasPendingAssistantState() or ContainsAny(text, FLOW_TERMS)) then
+        local pendingResult = Core(text)
         if pendingResult and (not IsUnknownResult(pendingResult) or HasPendingAssistantState()) then return pendingResult end
     end
 
     if LooksLikeBugReportRequest(text) then return BugReportReply(text) end
 
-    if LooksLikeGuidedTourRequest(text) and type(coreHandler) == "function" then
-        local guidedResult = coreHandler(text)
+    if LooksLikeGuidedTourRequest(text) and hasCore then
+        local guidedResult = Core(text)
         if guidedResult and not IsUnknownResult(guidedResult) then return guidedResult end
     end
 
     local humanResult = HumanConversationReply(text)
     if humanResult then return humanResult end
 
+    local parser = A.Parser or {}
+    local normForScope = Normalize(text)
+    local hasExplicitScope = ContainsAny(normForScope, {
+        "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
+        "party", "raid", "party frames", "raid frames", "group frames",
+    })
+        or (type(parser.DetectUnits) == "function" and #(parser.DetectUnits(text) or {}) > 0)
+        or (type(parser.DetectGroups) == "function" and #(parser.DetectGroups(text) or {}) > 0)
+    if hasExplicitScope and hasCore then
+        local scopedCoreResult = Core(text)
+        if scopedCoreResult and not IsUnknownResult(scopedCoreResult) then return scopedCoreResult end
+    end
+
     -- Short page-local commands become useful before falling back to broad global matching.
-    local contextResult = TryContext(text, coreHandler)
+    local contextResult = TryContext(text, Core)
     if contextResult and not IsUnknownResult(contextResult) then return contextResult end
+
+    local coreResult
+    if (LooksLikeMutation(text) or StartsWithMutationCommand(text)) and hasCore then
+        coreResult = Core(text)
+        if not IsUnknownResult(coreResult) then return coreResult end
+    end
 
     -- Release-note questions must not be mistaken for "what did you just change?" follow-ups.
     if LooksLikeChangelogKnowledgeRequest(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
@@ -787,9 +842,8 @@ function A.RouteInput(text, coreHandler)
         if noMatch then return noMatch end
     end
 
-    local coreResult
-    if type(coreHandler) == "function" then
-        coreResult = coreHandler(text)
+    if hasCore then
+        coreResult = coreResult or Core(text)
         if not IsUnknownResult(coreResult) then return coreResult end
     end
 
@@ -802,8 +856,8 @@ function A.RouteInput(text, coreHandler)
 
     -- Mutation-like commands must not be swallowed by Search/FAQ fallback.
     -- If a setting/action command failed, return the parser failure or suggestions instead of a help article.
-    if LooksLikeMutation(text) then
-        local fallbackResult = TryMutationFallbacks(text, coreHandler)
+    if LooksLikeMutation(text) or StartsWithMutationCommand(text) then
+        local fallbackResult = TryMutationFallbacks(text, Core)
         if fallbackResult and not IsUnknownResult(fallbackResult) then return fallbackResult end
         if IsNoClueResult(coreResult) then return FriendlyNoMatch(text) end
         return coreResult or { text = "I could not apply that command. Try being more specific or ask for help.", status = "failed" }

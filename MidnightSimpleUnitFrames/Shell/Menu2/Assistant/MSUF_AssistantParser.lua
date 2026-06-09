@@ -224,6 +224,10 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or ParseAuraGroupCategoryBlacklist(normalized)
         or ParseAuraBlacklist(normalized, raw)
         or ParseClassPowerAction(normalized)
+        or A._ParseClassPowerPlacementShortcut(normalized)
+        or A._ParseClassPowerWidthModeShortcut(normalized)
+        or A._ParseClassPowerVisibilityShortcut(normalized)
+        or A._ParseClassPowerAnchorShortcut(normalized)
         or ParseClassPowerRootToggle(normalized)
         or A._ParseClassPowerMoveShortcut(normalized)
         or ParseGameplayRootToggle(normalized)
@@ -233,6 +237,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or A._ParseGameplayPositionPreset(normalized)
         or A._ParseGameplayMoveShortcut(normalized)
         or ParsePresetWorkflow(normalized)
+        or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))
         or ParseScopedHelp(normalized)
         or P.ParseMiscRegistryShortcut(normalized, raw)
         or ParseDashboardPanelAction(normalized)
@@ -245,8 +250,12 @@ end
 
 function A._ParsePipelineGeometry(normalized, raw)
     return (P.ParseTextVisibilityShortcut and P.ParseTextVisibilityShortcut(normalized))
+        or A._ParseNameTextAnchorShortcut(normalized)
+        or A._ParseTextSlotValueMoveShortcut(normalized)
         or A._ParseTextSlotOffsetShortcut(normalized)
+        or (P.ParseFrameResizeShortcut and P.ParseFrameResizeShortcut(normalized))
         or P.ParseUnitSizeMatchShortcut(normalized)
+        or (P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized))
         or P.ParseGenericOffsetMove(normalized)
         or ParseUnitDetailMove(normalized)
         or ParseGroupDetailMove(normalized)
@@ -271,7 +280,9 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
         or ParseGameplayAction(normalized, raw)
         or ParseDarkModeBrightnessShortcut(normalized)
         or ParseGlobalBarsAction(normalized)
+        or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))
         or ParseCastbarGlobalDetail(normalized)
+        or (P.ParseCastbarDirectionClarification and P.ParseCastbarDirectionClarification(normalized))
         or ParseCastbarPreviewAction(normalized)
         or ParseScopedOverrideReset(normalized)
         or ParseGuidedSetup(normalized)
@@ -301,8 +312,8 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseReset(normalized)
         or ParseOpen(normalized, raw)
         or ParseFontColorAction(normalized, raw)
-        or ParseRegistryAlias(normalized, raw)
         or ParseSetting(normalized, ctx)
+        or ParseRegistryAlias(normalized, raw)
 end
 
 function A.Parse(text)
@@ -316,7 +327,10 @@ function A.Parse(text)
         historyAction.normalized = normalized
         return historyAction
     end
-    if ContainsAny(normalized, {
+    local hasEditModeContext = ContainsAny(normalized, {
+        "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus", "frame edit mode",
+    })
+    if not hasEditModeContext and ContainsAny(normalized, {
         "undo", "undo that", "undo this", "undo last", "undo last change",
         "revert", "revert that", "revert this", "revert last", "revert last change",
         "rollback", "roll back", "roll back that", "roll back last change",
@@ -327,18 +341,30 @@ function A.Parse(text)
     }) then
         return { kind = "undo" }
     end
-    if ContainsAny(normalized, {
+    if not hasEditModeContext and ContainsAny(normalized, {
         "redo", "redo last", "redo that", "redo this", "reapply", "reapply that",
         "apply it again", "do it again", "repeat undo", "wiederholen", "erneut anwenden",
     }) then
         return { kind = "redo" }
     end
     local parsed = A._ParsePipelineWorkflow(normalized, raw, ctx)
-        or A._ParsePipelineGeometry(normalized, raw)
-        or A._ParsePipelineFeature(normalized, raw, ctx)
-        or A._ParsePipelineFallback(normalized, raw, ctx)
-    local compound = P.ParseCompound and P.ParseCompound(normalized, raw, parsed)
-    if compound then parsed = compound end
+    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+    if not parsed then parsed = A._ParsePipelineGeometry(normalized, raw) end
+    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+    if not parsed then parsed = A._ParsePipelineFeature(normalized, raw, ctx) end
+    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+    local parsedByEarlyCompound = false
+    if not parsed and P.ParseCompound then
+        parsed = P.ParseCompound(normalized, raw, nil)
+        parsedByEarlyCompound = parsed ~= nil
+    end
+    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+    if not parsed then parsed = A._ParsePipelineFallback(normalized, raw, ctx) end
+    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+    if not parsedByEarlyCompound then
+        local compound = P.ParseCompound and P.ParseCompound(normalized, raw, parsed)
+        if compound then parsed = compound end
+    end
     if parsed then
         parsed.raw = raw
         parsed.normalized = normalized

@@ -368,32 +368,54 @@ local function SettingMatchScore(setting, text)
 end
 
 local function EnumValueForText(setting, text)
-    local aliases = setting and setting.valueAliases
-    local compactText = Compact(text)
-    if type(aliases) == "table" then
-        local bestValue
-        local bestLen = 0
-        for alias, value in pairs(aliases) do
-            local compactAlias = Compact(alias)
-            if HasPhrase(text, alias) or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true)) then
-                local len = #Compact(alias)
-                if len > bestLen then
-                    bestLen = len
-                    bestValue = value
+    local function matchSegment(segment)
+        segment = Normalize(segment)
+        if segment == "" then return nil end
+        local aliases = setting and setting.valueAliases
+        local compactText = Compact(segment)
+        if type(aliases) == "table" then
+            local bestValue
+            local bestLen = 0
+            for alias, value in pairs(aliases) do
+                local compactAlias = Compact(alias)
+                if HasPhrase(segment, alias) or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true)) then
+                    local len = #Compact(alias)
+                    if len > bestLen then
+                        bestLen = len
+                        bestValue = value
+                    end
                 end
             end
+            if bestValue ~= nil then return bestValue end
         end
-        if bestValue ~= nil then return bestValue end
+        local values = setting and setting.values
+        if type(values) == "table" then
+            for i = 1, #values do
+                local value = values[i]
+                local compactValue = Compact(value)
+                if HasPhrase(segment, tostring(value)) or (#compactValue >= 5 and compactText:find(compactValue, 1, true)) then return value end
+            end
+        end
+        return nil
     end
-    local values = setting and setting.values
-    if type(values) == "table" then
-        for i = 1, #values do
-            local value = values[i]
-            local compactValue = Compact(value)
-            if HasPhrase(text, tostring(value)) or (#compactValue >= 5 and compactText:find(compactValue, 1, true)) then return value end
+    local norm = Normalize(text)
+    local padded = " " .. norm .. " "
+    local connectors = { " to ", " as ", " is ", " be ", " = ", " auf ", " zu ", " als " }
+    local bestEnd
+    for i = 1, #connectors do
+        local startAt = 1
+        while true do
+            local _, endPos = padded:find(connectors[i], startAt, true)
+            if not endPos then break end
+            if not bestEnd or endPos > bestEnd then bestEnd = endPos end
+            startAt = endPos + 1
         end
     end
-    return nil
+    local tail = bestEnd and Trim(padded:sub(bestEnd + 1)) or nil
+    if tail then tail = Trim(tail:gsub("^the%s+", ""):gsub("^a%s+", "")) end
+    local tailValue = tail and tail ~= "" and matchSegment(tail)
+    if tailValue ~= nil then return tailValue end
+    return matchSegment(norm)
 end
 
 local function StringValueForText(setting, text, raw)
@@ -506,13 +528,18 @@ end
 
 local function MissingValueResponse(matches, raw)
     if #matches == 0 then return nil end
-    table.sort(matches, function(a, b)
-        if a.score == b.score then
-            return tostring(a.setting and a.setting.label or "") < tostring(b.setting and b.setting.label or "")
+    local best
+    for i = 1, #matches do
+        if i % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local item = matches[i]
+        if not best
+            or (tonumber(item.score) or 0) > (tonumber(best.score) or 0)
+            or ((tonumber(item.score) or 0) == (tonumber(best.score) or 0)
+                and tostring(item.setting and item.setting.label or "") < tostring(best.setting and best.setting.label or ""))
+        then
+            best = item
         end
-        return (a.score or 0) > (b.score or 0)
-    end)
-    local best = matches[1]
+    end
     local setting = best and best.setting
     if not setting then return nil end
     if setting.type == "enum" and type(setting.values) == "table" and #setting.values > 0 and #setting.values <= 12 then
@@ -687,10 +714,12 @@ P._AddCandidateIndexTokens = function(tokenSet, text)
     end
 end
 
-P._BuildRegistryCandidateIndex = function(settings)
+P._BuildRegistryCandidateIndex = function(settings, includeAliases)
+    includeAliases = includeAliases == true
     local byToken = {}
     local all = {}
     for i = 1, #(settings or {}) do
+        if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         if type(setting) == "table" then
             all[#all + 1] = setting
@@ -698,13 +727,17 @@ P._BuildRegistryCandidateIndex = function(settings)
             P._AddCandidateIndexTokens(tokenSet, setting.key)
             P._AddCandidateIndexTokens(tokenSet, setting.label)
             P._AddCandidateIndexTokens(tokenSet, setting.attribute)
-            local aliases = setting.aliases
-            for j = 1, #(aliases or {}) do
-                P._AddCandidateIndexTokens(tokenSet, aliases[j])
-            end
-            local prefixes = setting.valuePrefixes
-            for j = 1, #(prefixes or {}) do
-                P._AddCandidateIndexTokens(tokenSet, prefixes[j])
+            if includeAliases then
+                local aliases = setting.aliases
+                for j = 1, #(aliases or {}) do
+                    if j % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                    P._AddCandidateIndexTokens(tokenSet, aliases[j])
+                end
+                local prefixes = setting.valuePrefixes
+                for j = 1, #(prefixes or {}) do
+                    if j % 16 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                    P._AddCandidateIndexTokens(tokenSet, prefixes[j])
+                end
             end
             for token in pairs(tokenSet) do
                 byToken[token] = byToken[token] or {}
@@ -714,21 +747,26 @@ P._BuildRegistryCandidateIndex = function(settings)
     end
     P._registryCandidateIndexSettings = settings
     P._registryCandidateIndexCount = #(settings or {})
+    P._registryCandidateIndexFull = includeAliases
     P._registryCandidateIndexByToken = byToken
     P._registryCandidateIndexAll = all
     P._registryCandidateCache = {}
     P._registryCandidateCacheOrder = {}
 end
 
-P._EnsureRegistryCandidateIndex = function(settings)
-    if settings ~= P._registryCandidateIndexSettings or #(settings or {}) ~= (P._registryCandidateIndexCount or -1) then
-        P._BuildRegistryCandidateIndex(settings)
+P._EnsureRegistryCandidateIndex = function(settings, includeAliases)
+    includeAliases = includeAliases == true
+    if settings ~= P._registryCandidateIndexSettings
+        or #(settings or {}) ~= (P._registryCandidateIndexCount or -1)
+        or (includeAliases and P._registryCandidateIndexFull ~= true) then
+        P._BuildRegistryCandidateIndex(settings, includeAliases)
     end
 end
 
-P.RegistryCandidateSettings = function(text, settings)
-    P._EnsureRegistryCandidateIndex(settings)
-    local cacheKey = Normalize(text)
+P.RegistryCandidateSettings = function(text, settings, includeAliases)
+    includeAliases = includeAliases == true
+    P._EnsureRegistryCandidateIndex(settings, includeAliases)
+    local cacheKey = (includeAliases and "full:" or "light:") .. Normalize(text)
     if type(P._registryCandidateCache) == "table" and P._registryCandidateCache[cacheKey] then
         return P._registryCandidateCache[cacheKey]
     end
@@ -748,13 +786,43 @@ P.RegistryCandidateSettings = function(text, settings)
         selectedCount = #tokens
     end
     local out, seen = {}, {}
-    for i = 1, selectedCount do
-        local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[selectedTokens[i]]
-        for j = 1, #(list or {}) do
-            local setting = list[j]
-            if setting and not seen[setting] then
-                seen[setting] = true
+    if selectedCount >= 2 and not includeAliases then
+        local counts = {}
+        local ordered = {}
+        for i = 1, selectedCount do
+            if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+            local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[selectedTokens[i]]
+            for j = 1, #(list or {}) do
+                if j % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                local setting = list[j]
+                if setting then
+                    if counts[setting] == nil then
+                        ordered[#ordered + 1] = setting
+                        counts[setting] = 0
+                    end
+                    counts[setting] = counts[setting] + 1
+                end
+            end
+        end
+        for i = 1, #ordered do
+            local setting = ordered[i]
+            if counts[setting] == selectedCount then
                 out[#out + 1] = setting
+                seen[setting] = true
+            end
+        end
+    end
+    if #out == 0 then
+        for i = 1, selectedCount do
+            if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+            local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[selectedTokens[i]]
+            for j = 1, #(list or {}) do
+                if j % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+                local setting = list[j]
+                if setting and not seen[setting] then
+                    seen[setting] = true
+                    out[#out + 1] = setting
+                end
             end
         end
     end
@@ -1191,14 +1259,85 @@ local function AddMediaResolverChanges(changes, setting, text, raw, score)
     return false
 end
 
-local POWER_UNIT_ORDER = { "player", "target", "focus", "boss" }
+local POWER_UNIT_ORDER = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
 local POWER_GROUP_ORDER = { "party", "raid", "mythicraid" }
 local CASTBAR_INTERRUPT_UNITS = { "player", "target", "focus", "boss" }
 
+P._AddFontTextColorChange = function(changes, key, value)
+    local setting = Registry and Registry:GetSetting(key)
+    if setting then changes[#changes + 1] = { setting = setting, value = value } end
+end
+
+P._ParseAllTextWhiteShortcut = function(text)
+    if not ContainsAny(text, { "white", "weiss" }) then return nil end
+    if not ContainsAny(text, {
+        "everything", "all text", "all texts", "all font", "all fonts", "all names",
+        "all unitframe text", "all unit frame text", "all msuf text", "make everything",
+        "color everything", "colour everything", "text white", "font white",
+    }) then return nil end
+    if ContainsAny(text, {
+        "bar", "bars", "castbar", "cast bar", "border", "outline", "background",
+        "aura", "auras", "buff", "debuff", "class resource", "class resources",
+        "class power", "resource bar",
+    }) then return nil end
+
+    local changes = {}
+    P._AddFontTextColorChange(changes, "general.fontColor", "white")
+    P._AddFontTextColorChange(changes, "general.customFontColor", { r = 1, g = 1, b = 1 })
+    P._AddFontTextColorChange(changes, "fontScope.shared.nameColorMode", "DEFAULT")
+    P._AddFontTextColorChange(changes, "fontScope.shared.npcNameRed", "DEFAULT")
+    P._AddFontTextColorChange(changes, "fontScope.shared.colorHealthTextByHealth", "DEFAULT")
+    P._AddFontTextColorChange(changes, "fontScope.shared.colorPowerTextByType", "DEFAULT")
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Text color white",
+        bulkSafe = true,
+        summary = "Sets shared text color to white and resets automatic text color modes.",
+    }
+end
+
+P._FontTextColorDefaultIntent = function(text, spec)
+    local boolValue = DetectBoolean(text)
+    if boolValue == false or ContainsAny(text, { "default", "font color", "palette", "standard" }) then return true end
+    if not spec then return false end
+    if spec.key == "nameColorMode" then
+        return ContainsAny(text, {
+            "not by class", "not class color", "not class colored", "not colored by class",
+            "without class color", "without class", "no class color", "no class colours",
+            "dont color name by class", "do not color name by class",
+            "dont use class color", "do not use class color", "disable class color names",
+            "turn off class color names", "turn off name class color",
+        })
+    end
+    if spec.key == "colorHealthTextByHealth" then
+        return ContainsAny(text, {
+            "not by health", "not health color", "without health color", "no health color",
+            "dont color by health", "do not color by health", "disable health color",
+        })
+    end
+    if spec.key == "colorPowerTextByType" then
+        return ContainsAny(text, {
+            "not by power", "not by resource", "not power color", "not resource color",
+            "without power color", "without resource color", "no power color", "no resource color",
+            "dont color by power", "do not color by power", "disable power color",
+        })
+    end
+    if spec.key == "npcNameRed" then
+        return ContainsAny(text, {
+            "not red", "not npc red", "without npc red", "without red", "no npc red",
+            "dont make npc red", "do not make npc red",
+        })
+    end
+    return false
+end
+
 local function ParseScopedFontTextColorShortcut(text)
+    local allWhite = P._ParseAllTextWhiteShortcut(text)
+    if allWhite then return allWhite end
+
     local scope = DetectGlobalScope(text)
-    if not scope or scope == "shared" then return nil end
-    if scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid" then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
 
     local spec
@@ -1216,7 +1355,9 @@ local function ParseScopedFontTextColorShortcut(text)
         spec = { key = "colorHealthTextByHealth", on = "HEALTH", label = "Health Text Color Mode" }
     elseif ContainsAny(text, {
         "name text color", "name color", "color name by class", "color name text by class",
-        "name text by class", "class color name text", "class colored name text",
+        "color name not by class", "name text by class", "name text not by class",
+        "name not by class", "names not by class", "unit name not by class",
+        "class color name text", "class colored name text", "not class color name",
     }) then
         spec = { key = "nameColorMode", on = "CLASS", label = "Name Text Color Mode" }
     elseif ContainsAny(text, {
@@ -1225,12 +1366,14 @@ local function ParseScopedFontTextColorShortcut(text)
         spec = { key = "npcNameRed", on = "NPC", label = "NPC Name Text Color" }
     end
     if not spec then return nil end
+    scope = scope or "shared"
+    if scope == "gf_mythicraid" then scope = "gf_raid" end
+    if (scope == "gf_party" or scope == "gf_raid") and spec.key ~= "nameColorMode" then return nil end
 
     local setting = Registry and Registry:GetSetting("fontScope." .. tostring(scope) .. "." .. spec.key)
     if not setting then return nil end
     local value
-    local boolValue = DetectBoolean(text)
-    if boolValue == false or ContainsAny(text, { "default", "font color", "palette", "standard" }) then
+    if P._FontTextColorDefaultIntent(text, spec) then
         value = "DEFAULT"
     else
         value = spec.on
@@ -1466,6 +1609,26 @@ local function PowerBarBorderThicknessIntent(text)
     return FirstNumber(text) ~= nil
 end
 
+P.POWER_BAR_EMBED_FALSE_TERMS = {
+    "unembed", "unembedded", "do not embed", "dont embed", "not embed", "not embedded",
+    "turn off embed", "disable embed", "embed off", "remove embed",
+    "outside health", "outside hp", "out of health", "out of hp",
+    "separate from health", "separate from hp",
+    "aus health", "aus hp",
+}
+
+P.POWER_BAR_EMBED_TRUE_TERMS = {
+    "embed", "embedded", "embed power bar", "embed power into health",
+    "embed power bar into health", "embed power bar into hp",
+    "into health", "into hp", "inside health", "inside hp", "within health", "within hp",
+}
+
+function P.PowerBarEmbedValue(text)
+    if ContainsAny(text, P.POWER_BAR_EMBED_FALSE_TERMS) then return false end
+    if ContainsAny(text, P.POWER_BAR_EMBED_TRUE_TERMS) then return true end
+    return DetectBoolean(text)
+end
+
 local function ParsePowerBarRegistryShortcut(text, raw)
     if not ContainsAny(text, { "power bar", "mana bar", "power balken", "mana balken" }) then return nil end
     if HasClassPowerIntent(text) then return nil end
@@ -1485,6 +1648,23 @@ local function ParsePowerBarRegistryShortcut(text, raw)
                 label = "Power Bar detached state",
                 bulkSafe = true,
                 summary = "Changes registered per-unit Power Bar detach controls.",
+            }
+        end
+        return nil
+    end
+
+    if ContainsAny(text, { "embed", "embedded", "unembed", "unembedded", "into health", "into hp", "inside health", "inside hp", "within health", "within hp", "outside health", "outside hp", "out of health", "out of hp" }) then
+        local value = P.PowerBarEmbedValue(text)
+        if value == nil then return nil end
+        local units = PowerBarScopes(text, true)
+        for i = 1, #units do AddRegisteredChange(changes, tostring(units[i]) .. ".embedPowerBarIntoHealth", value) end
+        if #changes > 0 then
+            return {
+                kind = "changes",
+                changes = changes,
+                label = "Power Bar embed state",
+                bulkSafe = #changes > 1,
+                summary = "Changes registered per-unit Power Bar embed-into-health controls.",
             }
         end
         return nil
@@ -1833,16 +2013,12 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or ParseCastbarInterruptRegistryShortcut(text)
 end
 
-local function ParseRegistryAlias(text, raw)
-    local repeated = ParseRepeatedRegistryShortcut(text, raw)
-    if repeated then return repeated end
-    local groupAvailability = ParseGroupAvailabilityIntent(text)
-    if groupAvailability then return groupAvailability end
-    local settings = P.RegistryCandidateSettings(text, Registry and Registry:AllSettings() or {})
+P.ParseRegistryAliasCandidates = function(text, raw, settings)
     local changes = {}
     local missingValue = {}
     local bestScore = 0
     for i = 1, #settings do
+        if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local setting = settings[i]
         local score = SettingMatchScore(setting, text)
         if score > 0 and A.Knowledge and type(A.Knowledge.SettingPageBoost) == "function" then
@@ -1933,6 +2109,24 @@ local function ParseRegistryAlias(text, raw)
         label = setting and setting.label or "Assistant setting change",
         summary = "Registry-backed settings change.",
     }
+end
+
+local function ParseRegistryAlias(text, raw)
+    local repeated = ParseRepeatedRegistryShortcut(text, raw)
+    if repeated then return repeated end
+    local groupAvailability = ParseGroupAvailabilityIntent(text)
+    if groupAvailability then return groupAvailability end
+
+    local allSettings = Registry and Registry:AllSettings() or {}
+    local lightSettings = P.RegistryCandidateSettings(text, allSettings, false)
+    local result = P.ParseRegistryAliasCandidates(text, raw, lightSettings)
+    if result then return result end
+
+    local fullSettings = P.RegistryCandidateSettings(text, allSettings, true)
+    if fullSettings ~= lightSettings then
+        return P.ParseRegistryAliasCandidates(text, raw, fullSettings)
+    end
+    return nil
 end
 
 local function ScopedOnlyKind(text)

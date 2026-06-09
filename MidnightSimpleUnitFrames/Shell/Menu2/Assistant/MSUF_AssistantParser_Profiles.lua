@@ -391,6 +391,10 @@ local function ImportNewProfileName(raw, endIndex, text)
     return CleanProfileName(name)
 end
 
+local function UUFBestEffortConfirmText()
+    return "This is an UnhaltedUnitFrames profile. MSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1. Type 'yes', 'do it', or 'mach das' to import anyway, or 'cancel'."
+end
+
 local function BuildSpecAutoSwitch(text)
     if not ContainsAny(text, {
         "auto switch profile", "auto-switch profile", "profile auto switch",
@@ -686,7 +690,8 @@ end
 
 local function ParseProfile(text, raw)
     local rawText = tostring(raw or "")
-    local startIndex, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
+    local _, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
+    local _, uufEndIndex, uufCompact = rawText:find("(!UUF_%S+)")
     local hasProfile = ContainsAny(text, { "profile", "profiles", "profil" })
     local rawLower = tostring(raw or ""):lower()
     if compact and (hasProfile or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^msuf%d+:")) then
@@ -700,6 +705,21 @@ local function ParseProfile(text, raw)
             confirmRequired = true,
             label = legacy and "Import legacy profile string" or (newName and ("Import profile string as " .. tostring(newName)) or "Import profile string"),
             summary = newName and "Imports profile data into a new profile." or "Imports profile data into the active profile.",
+        } or nil
+    end
+    if uufCompact and (hasProfile or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^%s*!uuf_")) then
+        local newName = ImportNewProfileName(rawText, uufEndIndex, text)
+        local action = Registry and Registry:GetAction(newName and "import_profile_string_new" or "import_profile_string")
+        return action and {
+            kind = "action",
+            action = action,
+            args = newName
+                and { value = uufCompact, name = newName, uufBestEffortAccepted = true }
+                or { value = uufCompact, uufBestEffortAccepted = true },
+            confirmRequired = true,
+            confirmText = UUFBestEffortConfirmText(),
+            label = newName and ("Import UnhaltedUnitFrames profile string as " .. tostring(newName)) or "Import UnhaltedUnitFrames profile string",
+            summary = newName and "Imports translated UUF profile data into a new profile." or "Imports translated UUF profile data into the active profile.",
         } or nil
     end
     if not hasProfile then return nil end

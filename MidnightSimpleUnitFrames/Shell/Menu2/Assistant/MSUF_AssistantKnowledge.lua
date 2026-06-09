@@ -256,6 +256,7 @@ local function BuildIndex()
     if Registry and type(Registry.AllSettings) == "function" then
         local settings = Registry:AllSettings() or {}
         for i = 1, #settings do
+            if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
             local setting = settings[i]
             local page = SettingLikelyPage(setting)
             AddIndexItem(index, {
@@ -278,6 +279,7 @@ local function BuildIndex()
     if Registry and type(Registry.AllActions) == "function" then
         local actions = Registry:AllActions() or {}
         for i = 1, #actions do
+            if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
             local action = actions[i]
             local page = ActionLikelyPage(action)
             AddIndexItem(index, {
@@ -300,6 +302,7 @@ local function BuildIndex()
     if type(M.navItems) == "table" then
         local Data = M.SearchData or {}
         for i = 1, #M.navItems do
+            if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
             local nav = M.navItems[i]
             if nav.key then
                 local aliases = {}
@@ -329,6 +332,7 @@ local function BuildIndex()
     if type(Data.BuildFAQ) == "function" then
         local rows = Data.BuildFAQ(FaqEnvironment()) or {}
         for i = 1, #rows do
+            if i % 8 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
             local row = rows[i]
             if type(row) == "table" then
                 AddIndexItem(index, {
@@ -352,6 +356,7 @@ local function BuildIndex()
         end
     end
     for i = 1, #index.items do
+        if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local item = index.items[i]
         index.byKind[item.kind] = index.byKind[item.kind] or {}
         index.byKind[item.kind][#index.byKind[item.kind] + 1] = item
@@ -480,6 +485,21 @@ local function TokenScore(item, queryTokens, queryNorm, intent, pageKey)
     return score
 end
 
+local function ResultBefore(a, b)
+    if not b then return true end
+    if a.score ~= b.score then return a.score > b.score end
+    return tostring(a.item.label or "") < tostring(b.item.label or "")
+end
+
+local function InsertTopResult(results, entry, limit)
+    local pos = #results + 1
+    while pos > 1 and ResultBefore(entry, results[pos - 1]) do
+        pos = pos - 1
+    end
+    table.insert(results, pos, entry)
+    if #results > limit then table.remove(results) end
+end
+
 function K.Search(query, limit, opts)
     opts = opts or {}
     local index = K.EnsureIndex()
@@ -497,19 +517,16 @@ function K.Search(query, limit, opts)
     end
     local results = {}
     for i = 1, #(index.items or {}) do
+        if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local item = index.items[i]
         local score = TokenScore(item, queryTokens, norm, intent, pageKey)
         if opts.kind and item.kind ~= opts.kind then score = 0 end
         if score > 0 then
-            results[#results + 1] = { item = item, score = score }
+            InsertTopResult(results, { item = item, score = score }, limit)
         end
     end
-    table.sort(results, function(a, b)
-        if a.score ~= b.score then return a.score > b.score end
-        return tostring(a.item.label or "") < tostring(b.item.label or "")
-    end)
     local out = {}
-    for i = 1, math.min(#results, limit) do out[i] = results[i] end
+    for i = 1, #results do out[i] = results[i] end
     K.searchCache = K.searchCache or {}
     K.searchCacheOrder = K.searchCacheOrder or {}
     RememberCache(K.searchCache, K.searchCacheOrder, cacheKey, out, SEARCH_CACHE_LIMIT)
@@ -638,6 +655,7 @@ local function CountRegisteredForPage(page)
     local index = K.EnsureIndex()
     local settings, actions = 0, 0
     for i = 1, #(index.items or {}) do
+        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local item = index.items[i]
         if item.page == page then
             if item.kind == "setting" then settings = settings + 1 end
@@ -947,6 +965,7 @@ function K.Summary()
     local index = K.EnsureIndex()
     local counts = {}
     for i = 1, #(index.items or {}) do
+        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local kind = index.items[i].kind or "unknown"
         counts[kind] = (counts[kind] or 0) + 1
     end
