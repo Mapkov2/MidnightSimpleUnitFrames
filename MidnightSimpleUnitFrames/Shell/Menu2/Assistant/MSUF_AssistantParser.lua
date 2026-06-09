@@ -208,6 +208,33 @@ local BuildFollowup = P.BuildFollowup
 local BuildBooleanCorrection = P.BuildBooleanCorrection
 local ParseSetting = P.ParseSetting
 
+P.AURA_OUT_OF_SCOPE_TERMS = P.AURA_OUT_OF_SCOPE_TERMS or {
+    "aura", "auras", "auren",
+    "group aura", "group auras", "gruppen aura", "gruppenauren",
+}
+P.AURA_BUFF_TERMS = P.AURA_BUFF_TERMS or { "buff", "buffs", "debuff", "debuffs" }
+P.AURA_BUFF_CONTEXT_TERMS = P.AURA_BUFF_CONTEXT_TERMS or {
+    "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
+    "hidden", "hide", "show", "open", "help", "why", "where", "settings",
+    "own", "mine", "only mine", "only player", "raid filter", "player filter",
+    "stack", "cooldown", "pandemic",
+}
+
+P.ParseUnsupportedAuraCommand = P.ParseUnsupportedAuraCommand or function(text)
+    if ContainsAny(text, { "debuff stripe", "debuff stripes" }) then return nil end
+    if not ContainsAny(text, P.AURA_OUT_OF_SCOPE_TERMS)
+        and not (ContainsAny(text, P.AURA_BUFF_TERMS) and ContainsAny(text, P.AURA_BUFF_CONTEXT_TERMS))
+    then
+        return nil
+    end
+    return {
+        kind = "unsupported",
+        status = "info",
+        summary = "Aura Assistant commands are intentionally disabled.",
+        text = "Aura commands are intentionally disabled in the Assistant right now. I will not change Aura or Group Aura settings until that backend is cleared. Non-aura areas such as Unit Frames, Castbars, Group Frames, Profiles, and Gameplay still work.",
+    }
+end
+
 function A._ParsePipelineWorkflow(normalized, raw, ctx)
     return ParseGuidedSetupFollowup(normalized, ctx)
         or A._ParseFollowupAnswer(normalized, ctx)
@@ -255,10 +282,10 @@ function A._ParsePipelineGeometry(normalized, raw)
         or A._ParseTextSlotOffsetShortcut(normalized)
         or (P.ParseFrameResizeShortcut and P.ParseFrameResizeShortcut(normalized))
         or P.ParseUnitSizeMatchShortcut(normalized)
-        or (P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized))
-        or P.ParseGenericOffsetMove(normalized)
         or ParseUnitDetailMove(normalized)
         or ParseGroupDetailMove(normalized)
+        or (P.ParseGroupFrameRootMove and P.ParseGroupFrameRootMove(normalized))
+        or P.ParseGenericOffsetMove(normalized)
         or ParseUnsupportedDetailShortcut(normalized)
         or ParseScopedOnlyOverride(normalized, raw)
         or ParseGroupFrameColorMode(normalized)
@@ -321,6 +348,10 @@ function A.Parse(text)
     local normalized = Normalize(raw)
     local ctx = A.GetContext and A.GetContext() or {}
     if normalized == "" then return { kind = "empty" } end
+    if P.ParseUnsupportedAuraCommand then
+        local auraUnsupported = P.ParseUnsupportedAuraCommand(normalized)
+        if auraUnsupported then return auraUnsupported end
+    end
     local historyAction = A._ParseMenuHistoryAction(normalized)
     if historyAction then
         historyAction.raw = raw

@@ -721,6 +721,7 @@ end
 
 local function ParseUnitDetailMove(text)
     if ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if ContainsAny(text, { "detached power", "detached power bar", "detached mana", "detached mana bar" }) then return nil end
     if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset" }) then return nil end
     local direction = DetectDirection(text, {})
     if not direction then return nil end
@@ -770,7 +771,7 @@ local function GroupScopesOrCurrentPage(text)
 end
 
 P.GROUP_ROOT_FRAME_DETAIL_TERMS = {
-    "name", "name text", "hp text", "health text", "power text", "mana text", "text slot",
+    "name", "name text", "hp", "health", "hp text", "health text", "power", "mana", "power text", "mana text", "text slot",
     "status", "status text", "status icon", "indicator", "icon", "ready check", "raid marker",
     "summon", "resurrect", "resurrection", "ghost", "dead", "afk", "dnd", "group number",
     "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar", "portrait",
@@ -843,9 +844,11 @@ P.FRAME_RESIZE_DETAIL_BLOCKERS = {
     "power bar", "mana bar", "health bar", "hp bar", "name", "name text", "hp text",
     "health text", "power text", "mana text", "text", "font", "border", "outline",
     "corner", "corner dot", "corner dots", "indicator", "indicators", "status icon",
-    "status indicator", "icon", "icons", "aura", "auras", "buff", "buffs", "debuff",
+    "status indicator", "icon", "icons", "symbol", "symbols", "elite", "elite icon",
+    "elite symbol", "rare icon", "rare symbol", "aura", "auras", "buff", "buffs", "debuff",
     "debuffs", "alpha", "opacity", "transparency", "range fade", "scale", "x offset",
-    "y offset", "offset", "position", "move", "nudge", "shift",
+    "y offset", "offset", "position", "move", "nudge", "shift", "growth",
+    "grow right", "grow left", "grow up", "grow down",
 }
 
 P.FRAME_RESIZE_EXACT_DIMENSION_TERMS = {
@@ -2692,7 +2695,10 @@ local function ParseMenuSelectorState(text)
 
     if ContainsAny(text, { "spell indicator selector", "spell indicator dropdown", "spell indicator spec", "tracked spell selector", "tracked spells selector", "tracked spell", "multi spec entry", "multi-spec entry" }) then
         local spec = A.ResolveGroupSpellSpec and A.ResolveGroupSpellSpec(text) or nil
-        local aura, resolvedSpec = A.ResolveGroupSpellAura and A.ResolveGroupSpellAura(spec, text) or nil
+        local aura, resolvedSpec
+        if type(A.ResolveGroupSpellAura) == "function" then
+            aura, resolvedSpec = A.ResolveGroupSpellAura(spec, text)
+        end
         spec = spec or resolvedSpec
         if spec or aura then
             return MenuSelectorAction({

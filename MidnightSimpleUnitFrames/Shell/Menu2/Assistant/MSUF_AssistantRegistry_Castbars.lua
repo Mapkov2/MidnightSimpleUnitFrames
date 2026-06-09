@@ -38,10 +38,94 @@ local CASTBAR_KEYS = {
 }
 
 local CASTBAR_DETAIL_FIELDS = {
-    player = { time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName" },
-    target = { time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName" },
-    focus = { time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName" },
-    boss = { time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName" },
+    player = { time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
+    target = { time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
+    focus = { time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat" },
+    boss = { time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat" },
+}
+
+local CASTBAR_ICON_POSITION_VALUES = { "LEFT", "RIGHT", "INSIDE_LEFT", "INSIDE_RIGHT" }
+local CASTBAR_TEXT_POSITION_VALUES = { "LEFT", "CENTER", "RIGHT", "ABOVE", "BELOW" }
+local CASTBAR_TEXT_ALIGN_VALUES = { "LEFT", "CENTER", "RIGHT" }
+local CASTBAR_TRUNCATE_VALUES = { "AUTO", "CLIP", "NONE" }
+local CASTBAR_ICON_BORDER_VALUES = { "NONE", "DARK", "CASTBAR" }
+local CASTBAR_TIME_FORMAT_VALUES = { "CURRENT", "ELAPSED", "ELAPSED_MAX", "CURRENT_MAX" }
+
+local CASTBAR_ICON_POSITION_ALIASES = {
+    left = "LEFT",
+    links = "LEFT",
+    right = "RIGHT",
+    rechts = "RIGHT",
+    ["inside left"] = "INSIDE_LEFT",
+    ["inside-left"] = "INSIDE_LEFT",
+    ["inside right"] = "INSIDE_RIGHT",
+    ["inside-right"] = "INSIDE_RIGHT",
+}
+
+local CASTBAR_TEXT_POSITION_ALIASES = {
+    left = "LEFT",
+    links = "LEFT",
+    center = "CENTER",
+    centre = "CENTER",
+    mitte = "CENTER",
+    right = "RIGHT",
+    rechts = "RIGHT",
+    above = "ABOVE",
+    oben = "ABOVE",
+    below = "BELOW",
+    unten = "BELOW",
+}
+
+local CASTBAR_TEXT_ALIGN_ALIASES = {
+    left = "LEFT",
+    links = "LEFT",
+    center = "CENTER",
+    centre = "CENTER",
+    mitte = "CENTER",
+    right = "RIGHT",
+    rechts = "RIGHT",
+}
+
+local CASTBAR_TRUNCATE_ALIASES = {
+    auto = "AUTO",
+    automatic = "AUTO",
+    automatisch = "AUTO",
+    clip = "CLIP",
+    clipped = "CLIP",
+    ["fixed clip"] = "CLIP",
+    none = "NONE",
+    off = "NONE",
+    aus = "NONE",
+    ["no limit"] = "NONE",
+    unlimited = "NONE",
+}
+
+local CASTBAR_ICON_BORDER_ALIASES = {
+    none = "NONE",
+    off = "NONE",
+    aus = "NONE",
+    ["no border"] = "NONE",
+    dark = "DARK",
+    ["dark border"] = "DARK",
+    black = "DARK",
+    castbar = "CASTBAR",
+    ["castbar border"] = "CASTBAR",
+}
+
+local CASTBAR_TIME_FORMAT_ALIASES = {
+    current = "CURRENT",
+    remaining = "CURRENT",
+    rest = "CURRENT",
+    verbleibend = "CURRENT",
+    elapsed = "ELAPSED",
+    vergangen = "ELAPSED",
+    ["elapsed total"] = "ELAPSED_MAX",
+    ["elapsed max"] = "ELAPSED_MAX",
+    ["elapsed / total"] = "ELAPSED_MAX",
+    ["remaining total"] = "CURRENT_MAX",
+    ["remaining max"] = "CURRENT_MAX",
+    ["remaining / total"] = "CURRENT_MAX",
+    total = "CURRENT_MAX",
 }
 
 local function GetCastbarBackend(unit, g)
@@ -150,6 +234,17 @@ local function RegisterGeneralNumber(key, unit, frameType, attr, label, defaultV
         end,
         apply = function() ApplyCastbar("MSUF_ASSISTANT_CASTBAR_GEOMETRY") end,
         combatSafe = false,
+    })
+end
+
+local function RegisterGeneralEnumSetting(key, unit, frameType, attr, label, defaultValue, values, aliases, valueAliases)
+    RegisterGeneralEnum(key, attr, UNIT_LABELS[unit] .. " " .. label, defaultValue, values, aliases, {
+        category = UNIT_LABELS[unit] .. " / Castbar",
+        unit = unit,
+        frameType = frameType,
+        valueAliases = valueAliases,
+        reason = "MSUF_ASSISTANT_CASTBAR_DETAIL",
+        apply = ApplyCastbar,
     })
 end
 
@@ -393,18 +488,36 @@ local function RegisterCastbarDetailNumbers()
         local aliases
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon size"); AddAliasesForUnit(aliases, unit, "castbar spell icon size")
         RegisterGeneralNumber(spec.prefix .. "IconSize", unit, "castbar", "iconSize", "Castbar Icon Size", spec.iconDefault, 0, 128, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon position"); AddAliasesForUnit(aliases, unit, "castbar spell icon position")
+        RegisterGeneralEnumSetting(spec.prefix .. "IconPosition", unit, "castbar", "iconPosition", "Castbar Icon Position", "LEFT", CASTBAR_ICON_POSITION_VALUES, aliases, CASTBAR_ICON_POSITION_ALIASES)
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon x"); AddAliasesForUnit(aliases, unit, "castbar icon x offset")
         RegisterGeneralNumber(spec.prefix .. "IconOffsetX", unit, "castbar", "iconOffsetX", "Castbar Icon X Offset", 0, -300, 300, aliases)
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon y"); AddAliasesForUnit(aliases, unit, "castbar icon y offset")
         RegisterGeneralNumber(spec.prefix .. "IconOffsetY", unit, "castbar", "iconOffsetY", "Castbar Icon Y Offset", 0, -300, 300, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon spacing"); AddAliasesForUnit(aliases, unit, "castbar spell icon spacing")
+        RegisterGeneralNumber(spec.prefix .. "IconSpacing", unit, "castbar", "iconSpacing", "Castbar Icon Spacing", 1, 0, 40, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar icon border"); AddAliasesForUnit(aliases, unit, "castbar icon border style")
+        RegisterGeneralEnumSetting(spec.prefix .. "IconBorderStyle", unit, "castbar", "iconBorderStyle", "Castbar Icon Border Style", "NONE", CASTBAR_ICON_BORDER_VALUES, aliases, CASTBAR_ICON_BORDER_ALIASES)
 
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar spell name position"); AddAliasesForUnit(aliases, unit, "castbar spell text position"); AddAliasesForUnit(aliases, unit, "castbar text position")
+        RegisterGeneralEnumSetting(spec.prefix .. "SpellNamePosition", unit, "castbar", "spellNamePosition", "Castbar Spell Name Position", "LEFT", CASTBAR_TEXT_POSITION_VALUES, aliases, CASTBAR_TEXT_POSITION_ALIASES)
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar text x"); AddAliasesForUnit(aliases, unit, "castbar spell name x"); AddAliasesForUnit(aliases, unit, "castbar spell text x"); AddAliasesForUnit(aliases, unit, "castbar text x offset")
         RegisterGeneralNumber(spec.prefix .. "TextOffsetX", unit, "castbar", "textOffsetX", "Castbar Spell Text X Offset", spec.textX, -300, 300, aliases)
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar text y"); AddAliasesForUnit(aliases, unit, "castbar spell name y"); AddAliasesForUnit(aliases, unit, "castbar spell text y"); AddAliasesForUnit(aliases, unit, "castbar text y offset")
         RegisterGeneralNumber(spec.prefix .. "TextOffsetY", unit, "castbar", "textOffsetY", "Castbar Spell Text Y Offset", spec.textY, -300, 300, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar spell name alignment"); AddAliasesForUnit(aliases, unit, "castbar spell text alignment"); AddAliasesForUnit(aliases, unit, "castbar text alignment")
+        RegisterGeneralEnumSetting(spec.prefix .. "SpellNameAlign", unit, "castbar", "spellNameAlign", "Castbar Spell Name Alignment", "LEFT", CASTBAR_TEXT_ALIGN_VALUES, aliases, CASTBAR_TEXT_ALIGN_ALIASES)
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar spell name font size"); AddAliasesForUnit(aliases, unit, "castbar text font size"); AddAliasesForUnit(aliases, unit, "castbar spell text size")
         RegisterGeneralNumber(spec.prefix .. "SpellNameFontSize", unit, "castbar", "spellNameFontSize", "Castbar Spell Name Font Size", 0, 0, 48, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar spell name max width"); AddAliasesForUnit(aliases, unit, "castbar spell text max width"); AddAliasesForUnit(aliases, unit, "castbar text max width")
+        RegisterGeneralNumber(spec.prefix .. "SpellNameMaxWidth", unit, "castbar", "spellNameMaxWidth", "Castbar Spell Name Max Width", 0, 0, 500, aliases)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar spell name truncate"); AddAliasesForUnit(aliases, unit, "castbar spell text truncate"); AddAliasesForUnit(aliases, unit, "castbar text truncate")
+        RegisterGeneralEnumSetting(spec.prefix .. "SpellNameTruncate", unit, "castbar", "spellNameTruncate", "Castbar Spell Name Truncate Behavior", "AUTO", CASTBAR_TRUNCATE_VALUES, aliases, CASTBAR_TRUNCATE_ALIASES)
 
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar time format"); AddAliasesForUnit(aliases, unit, "cast time format"); AddAliasesForUnit(aliases, unit, "castbar timer format")
+        RegisterGeneralEnumSetting(CASTBAR_DETAIL_FIELDS[unit].timeFormat, unit, "castbar", "timeFormat", "Castbar Time Format", "CURRENT", CASTBAR_TIME_FORMAT_VALUES, aliases, CASTBAR_TIME_FORMAT_ALIASES)
+        aliases = {}; AddAliasesForUnit(aliases, unit, "castbar time position"); AddAliasesForUnit(aliases, unit, "castbar time text position"); AddAliasesForUnit(aliases, unit, "castbar timer position")
+        RegisterGeneralEnumSetting(spec.prefix .. "TimePosition", unit, "castbar", "timePosition", "Castbar Time Position", "RIGHT", CASTBAR_TEXT_POSITION_VALUES, aliases, CASTBAR_TEXT_POSITION_ALIASES)
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar time x"); AddAliasesForUnit(aliases, unit, "castbar time text x"); AddAliasesForUnit(aliases, unit, "castbar timer x"); AddAliasesForUnit(aliases, unit, "castbar time x offset")
         RegisterGeneralNumber(spec.prefix .. "TimeOffsetX", unit, "castbar", "timeOffsetX", "Castbar Time Text X Offset", spec.timeX, -300, 300, aliases)
         aliases = {}; AddAliasesForUnit(aliases, unit, "castbar time y"); AddAliasesForUnit(aliases, unit, "castbar time text y"); AddAliasesForUnit(aliases, unit, "castbar timer y"); AddAliasesForUnit(aliases, unit, "castbar time y offset")

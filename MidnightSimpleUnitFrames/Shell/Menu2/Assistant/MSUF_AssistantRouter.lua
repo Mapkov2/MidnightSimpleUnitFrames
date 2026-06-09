@@ -83,6 +83,19 @@ local EXPLICIT_DOMAIN_TERMS = {
     "player", "target", "focus", "pet", "boss", "targettarget", "target of target", "focustarget", "focus target", "party", "raid", "group", "group frames",
     "spieler", "ziel", "fokus", "begleiter", "gruppe", "gruppenframes",
     "castbar", "cast bar", "auras", "aura", "buff", "debuff", "profile", "profiles", "class resource", "class power", "gameplay",
+    "edit mode", "editmode", "msuf edit mode", "bearbeitungsmodus",
+}
+
+local AURA_OUT_OF_SCOPE_TERMS = {
+    "aura", "auras", "auren",
+    "group aura", "group auras", "gruppen aura", "gruppenauren",
+}
+local AURA_BUFF_TERMS = { "buff", "buffs", "debuff", "debuffs" }
+local AURA_BUFF_CONTEXT_TERMS = {
+    "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
+    "hidden", "hide", "show", "open", "help", "why", "where", "settings",
+    "own", "mine", "only mine", "only player", "raid filter", "player filter",
+    "stack", "cooldown", "pandemic",
 }
 
 local PAGE_CONTEXT = {
@@ -416,6 +429,28 @@ local function HumanConversationReply(text)
     end
 
     return nil
+end
+
+local function UnsupportedAuraReply(text)
+    local norm = Normalize(text)
+    if ContainsAny(norm, { "debuff stripe", "debuff stripes" }) then return nil end
+    if not ContainsAny(norm, AURA_OUT_OF_SCOPE_TERMS)
+        and not (ContainsAny(norm, AURA_BUFF_TERMS) and ContainsAny(norm, AURA_BUFF_CONTEXT_TERMS))
+    then
+        return nil
+    end
+    local german = ContainsAny(norm, {
+        "auren", "gruppenauren", "hilfe", "warum", "wo", "oeffne", "suche", "finde",
+        "einschalten", "ausschalten", "aktivieren", "deaktivieren", "anzeigen", "verstecken",
+    })
+    return {
+        kind = "unsupported",
+        status = "info",
+        summary = "Aura Assistant commands are intentionally disabled.",
+        text = german
+            and "Auren sind im Assistant aktuell bewusst deaktiviert. Ich aendere keine Aura- oder Group-Aura-Einstellungen, bis das Backend dafuer freigegeben ist. Non-Aura-Bereiche wie Unit Frames, Castbars, Gruppenframes, Profile und Gameplay funktionieren weiter."
+            or "Aura commands are intentionally disabled in the Assistant right now. I will not change Aura or Group Aura settings until that backend is cleared. Non-aura areas such as Unit Frames, Castbars, Group Frames, Profiles, and Gameplay still work.",
+    }
 end
 
 local function FriendlyNoMatch(text)
@@ -803,6 +838,9 @@ function A.RouteInput(text, coreHandler)
 
     local humanResult = HumanConversationReply(text)
     if humanResult then return humanResult end
+
+    local auraUnsupported = UnsupportedAuraReply(text)
+    if auraUnsupported then return auraUnsupported end
 
     local parser = A.Parser or {}
     local normForScope = Normalize(text)

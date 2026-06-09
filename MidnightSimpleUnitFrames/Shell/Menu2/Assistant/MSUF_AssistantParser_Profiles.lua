@@ -185,10 +185,12 @@ local function GroupCopyScopeDefaults()
             local cat = cats[i]
             if type(cat) == "table" and type(cat.key) == "string" then scopes[cat.key] = true end
         end
+        scopes.auras = false
         if next(scopes) then return scopes end
     end
 
     for key, value in pairs(GROUP_COPY_SCOPE_DEFAULTS) do scopes[key] = value end
+    scopes.auras = false
     return scopes
 end
 
@@ -199,6 +201,7 @@ local function GroupCopyScopesForText(text)
     else
         ApplyCopyScopeMatches(scopes, CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS))
     end
+    scopes.auras = false
     return scopes
 end
 
