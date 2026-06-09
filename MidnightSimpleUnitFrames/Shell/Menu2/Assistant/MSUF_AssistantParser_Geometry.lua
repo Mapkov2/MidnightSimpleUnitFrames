@@ -576,6 +576,110 @@ function OM.SignedDelta(text, direction, fallback)
     return amount
 end
 
+OM.unitRootFrameDetailTerms = OM.unitRootFrameDetailTerms or {
+    "name", "name text", "hp", "health", "hp text", "health text", "power", "mana", "power text", "mana text",
+    "portrait", "castbar", "cast bar", "aura", "auras", "buff", "buffs", "debuff", "debuffs",
+    "bar", "health bar", "power bar", "mana bar", "border", "outline", "icon", "label", "text",
+    "ready check", "raid marker", "status", "indicator", "combat", "resting", "leader", "assist",
+    "leben", "gesundheit", "lebenspunkte", "lebensanzeige", "energie", "ressource", "ressourcen",
+}
+
+function OM.UnitRootFrameMoveScopes(text)
+    local units = DetectUnits(text)
+    if #units > 0 then return units end
+    if HasAllUnitDetailScopeIntent(text)
+        and ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames", "frame", "frames" })
+        and not ContainsAny(text, { "group", "group frame", "group frames", "party", "raid", "mythic raid", "mythicraid" })
+    then
+        return AllUnitDetailUnits()
+    end
+    local pageUnit = CurrentPageUnit()
+    if pageUnit then return { pageUnit } end
+    return {}
+end
+
+function OM.RootXYValues(text)
+    local norm = Normalize(text)
+    if DetectDirection(norm, {}) then return nil end
+    local xPos = norm:find("%f[%w]x%f[%W]")
+    local yPos = norm:find("%f[%w]y%f[%W]")
+    if not xPos or not yPos then return nil end
+    local numbers = {}
+    for value in norm:gmatch("[-+]?%d+%.?%d*") do
+        numbers[#numbers + 1] = tonumber(value)
+        if #numbers >= 2 then break end
+    end
+    if numbers[1] == nil or numbers[2] == nil then return nil end
+    if xPos < yPos then
+        return { x = numbers[1], y = numbers[2] }
+    end
+    return { x = numbers[2], y = numbers[1] }
+end
+
+function OM.ParseUnitFrameRootMove(text)
+    if ContainsAny(text, OM.unitRootFrameDetailTerms) then return nil end
+    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "pos", "x", "y" }) then return nil end
+
+    local units = OM.UnitRootFrameMoveScopes(text)
+    if #units == 0 then return nil end
+
+    local xy = OM.RootXYValues(text)
+    if xy then
+        local changes = {}
+        for i = 1, #units do
+            local unit = tostring(units[i])
+            local xSetting = Registry and Registry:GetSetting(unit .. ".offsetX")
+            local ySetting = Registry and Registry:GetSetting(unit .. ".offsetY")
+            if xSetting then changes[#changes + 1] = { setting = xSetting, value = xy.x, direction = "x" } end
+            if ySetting then changes[#changes + 1] = { setting = ySetting, value = xy.y, direction = "y" } end
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = "Move unit frame",
+            bulkSafe = #changes > 1,
+            compoundComplete = true,
+            summary = "Moves the registered Unit Frame root X/Y position controls.",
+        }
+    end
+
+    local direction = DetectDirection(text, {})
+    local axis = OM.AxisForDirection(direction) or A._DetailOffsetAxis(text)
+    local value
+    local relativeDelta
+    if direction then
+        relativeDelta = OM.SignedDelta(text, direction, 10)
+    elseif axis then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    else
+        return nil
+    end
+
+    local attr = axis == "y" and "offsetY" or "offsetX"
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
+        if setting then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+                relativeDelta = relativeDelta,
+                direction = direction or axis,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Move unit frame",
+        bulkSafe = #changes > 1,
+        summary = "Moves the registered Unit Frame root X/Y position controls.",
+    }
+end
+
 function OM.ReadValue(setting)
     if setting and type(setting.get) == "function" then
         local ok, value = pcall(setting.get)
@@ -1159,8 +1263,50 @@ end
 
 function A._ParseGroupAnchorTargetShortcut(text)
     if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
-    if not ContainsAny(text, { "anchor to", "attach to", "anchored to", "anchor target", "anchor frame" }) then return nil end
+    if not (ContainsAny(text, { "anchor to", "attach to", "anchored to", "anchor target", "anchor frame" })
+        or (HasPhrase(text, "anchor") and HasPhrase(text, "to")))
+    then
+        return nil
+    end
+
     local groups = GroupScopesOrCurrentPage(text)
+    local units = DetectUnits(text)
+    local unitframeScope = ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames" })
+    local unitPage = CurrentPageUnit()
+    if #groups == 0 and (#units > 0 or unitframeScope or unitPage) then
+        local valueSetting = Registry and Registry:GetSetting(((units and units[1]) or unitPage or "player") .. ".anchorToUnitframe")
+        local value = valueSetting and EnumValueForText(valueSetting, text)
+        if value ~= nil then
+            if unitframeScope and #units == 0 then
+                units = ALL_UNITFRAMES
+            elseif #units == 0 and unitPage then
+                units = { unitPage }
+            end
+            if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss") then
+                local filtered = {}
+                for i = 1, #units do
+                    if units[i] ~= value then filtered[#filtered + 1] = units[i] end
+                end
+                if #filtered > 0 then units = filtered end
+            end
+            local changes = {}
+            for i = 1, #units do
+                local unit = tostring(units[i])
+                local setting = Registry and Registry:GetSetting(unit .. ".anchorToUnitframe")
+                if setting then changes[#changes + 1] = { setting = setting, value = value } end
+            end
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Set unitframe anchor target",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the registered Unit Frame Anchor To dropdown.",
+                }
+            end
+        end
+    end
+
     if #groups == 0 then return nil end
     local changes = {}
     for i = 1, #groups do
@@ -2773,6 +2919,7 @@ P.BuildUnitDetailChoices = BuildUnitDetailChoices
 P.ParsePortraitDetailShortcut = ParsePortraitDetailShortcut
 P.DETAIL_MOVE_SPECS = DETAIL_MOVE_SPECS
 P.GROUP_DETAIL_MOVE_SPECS = GROUP_DETAIL_MOVE_SPECS
+P.ParseUnitFrameRootMove = OM.ParseUnitFrameRootMove
 P.ParseGenericOffsetMove = ParseGenericOffsetMove
 P.ParseUnitDetailMove = ParseUnitDetailMove
 P.GroupScopesOrCurrentPage = GroupScopesOrCurrentPage

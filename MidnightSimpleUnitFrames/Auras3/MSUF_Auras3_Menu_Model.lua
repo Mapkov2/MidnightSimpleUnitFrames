@@ -119,12 +119,32 @@ local LAYOUT_KEYS = {
     cooldownTextSize = true,
     cooldownTextOffsetX = true,
     cooldownTextOffsetY = true,
+    buffStackTextSize = true,
+    buffStackTextOffsetX = true,
+    buffStackTextOffsetY = true,
+    buffCooldownTextSize = true,
+    buffCooldownTextOffsetX = true,
+    buffCooldownTextOffsetY = true,
+    debuffStackTextSize = true,
+    debuffStackTextOffsetX = true,
+    debuffStackTextOffsetY = true,
+    debuffCooldownTextSize = true,
+    debuffCooldownTextOffsetX = true,
+    debuffCooldownTextOffsetY = true,
 }
 
 local SHARED_LAYOUT_KEYS = {
     showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    buffShowCooldownSwipe = true,
+    buffShowCooldownText = true,
+    buffShowStackCount = true,
+    buffStackCountAnchor = true,
+    debuffShowCooldownSwipe = true,
+    debuffShowCooldownText = true,
+    debuffShowStackCount = true,
+    debuffStackCountAnchor = true,
     perRow = true,
     buffPerRow = true,
     debuffPerRow = true,
@@ -170,6 +190,33 @@ local GROUPS = {
     },
 }
 
+local LANE_STYLE_KEYS = {
+    buff = {
+        showCooldownSwipe = "buffShowCooldownSwipe",
+        showCooldownText = "buffShowCooldownText",
+        showStackCount = "buffShowStackCount",
+        stackCountAnchor = "buffStackCountAnchor",
+        stackTextSize = "buffStackTextSize",
+        stackTextOffsetX = "buffStackTextOffsetX",
+        stackTextOffsetY = "buffStackTextOffsetY",
+        cooldownTextSize = "buffCooldownTextSize",
+        cooldownTextOffsetX = "buffCooldownTextOffsetX",
+        cooldownTextOffsetY = "buffCooldownTextOffsetY",
+    },
+    debuff = {
+        showCooldownSwipe = "debuffShowCooldownSwipe",
+        showCooldownText = "debuffShowCooldownText",
+        showStackCount = "debuffShowStackCount",
+        stackCountAnchor = "debuffStackCountAnchor",
+        stackTextSize = "debuffStackTextSize",
+        stackTextOffsetX = "debuffStackTextOffsetX",
+        stackTextOffsetY = "debuffStackTextOffsetY",
+        cooldownTextSize = "debuffCooldownTextSize",
+        cooldownTextOffsetX = "debuffCooldownTextOffsetX",
+        cooldownTextOffsetY = "debuffCooldownTextOffsetY",
+    },
+}
+
 local RUNTIME_FILTER_KEYS = {
     buffs = { "onlyMine", "onlyImportant", "includeStealable", "exclusive" },
     debuffs = { "onlyMine", "onlyImportant", "exclusive" },
@@ -182,6 +229,12 @@ local DEFAULT_SHARED = {
     showCooldownSwipe = true,
     showCooldownText = true,
     showStackCount = true,
+    buffShowCooldownSwipe = true,
+    buffShowCooldownText = true,
+    buffShowStackCount = true,
+    debuffShowCooldownSwipe = true,
+    debuffShowCooldownText = true,
+    debuffShowStackCount = true,
     clickThroughAuras = false,
     iconSize = 26,
     spacing = 2,
@@ -205,12 +258,26 @@ local DEFAULT_SHARED = {
     buffLayer = 5,
     debuffLayer = 6,
     stackCountAnchor = "TOPRIGHT",
+    buffStackCountAnchor = "TOPRIGHT",
+    debuffStackCountAnchor = "TOPRIGHT",
     stackTextSize = 14,
     stackTextOffsetX = -1,
     stackTextOffsetY = 1,
     cooldownTextSize = 14,
     cooldownTextOffsetX = 0,
     cooldownTextOffsetY = 0,
+    buffStackTextSize = 14,
+    buffStackTextOffsetX = -1,
+    buffStackTextOffsetY = 1,
+    buffCooldownTextSize = 14,
+    buffCooldownTextOffsetX = 0,
+    buffCooldownTextOffsetY = 0,
+    debuffStackTextSize = 14,
+    debuffStackTextOffsetX = -1,
+    debuffStackTextOffsetY = 1,
+    debuffCooldownTextSize = 14,
+    debuffCooldownTextOffsetX = 0,
+    debuffCooldownTextOffsetY = 0,
     filters = {
         enabled = true,
         buffs = {
@@ -927,6 +994,48 @@ function Model.WriteStackAnchor(unit, value)
     Model.WriteValue(unit, "stackCountAnchor", value)
 end
 
+local function LaneStyleKey(kind, key)
+    kind = NormalizeKind(kind)
+    local map = LANE_STYLE_KEYS[kind]
+    return map and map[key] or key
+end
+
+function Model.ReadLaneStyleBool(unit, kind, key, defaultValue)
+    local laneKey = LaneStyleKey(kind, key)
+    local value = Model.ReadValue(unit, laneKey, nil)
+    if value == nil and laneKey ~= key then value = Model.ReadValue(unit, key, defaultValue and true or false) end
+    if value == nil then return defaultValue and true or false end
+    return value == true
+end
+
+function Model.WriteLaneStyleBool(unit, kind, key, value)
+    Model.WriteValue(unit, LaneStyleKey(kind, key), value and true or false)
+end
+
+function Model.ReadLaneStyleNumber(unit, kind, key, defaultValue, minValue, maxValue)
+    local laneKey = LaneStyleKey(kind, key)
+    local value = Model.ReadValue(unit, laneKey, nil)
+    if value == nil and laneKey ~= key then value = Model.ReadValue(unit, key, defaultValue) end
+    return ClampNumber(value, defaultValue, minValue, maxValue)
+end
+
+function Model.WriteLaneStyleNumber(unit, kind, key, value, minValue, maxValue)
+    value = ClampNumber(value, 0, minValue, maxValue)
+    if math_floor(value) == value then value = Round(value) end
+    Model.WriteValue(unit, LaneStyleKey(kind, key), value)
+end
+
+function Model.ReadLaneStackAnchor(unit, kind)
+    local laneKey = LaneStyleKey(kind, "stackCountAnchor")
+    local value = tostring(Model.ReadValue(unit, laneKey, nil) or Model.ReadValue(unit, "stackCountAnchor", "TOPRIGHT") or "TOPRIGHT")
+    return STACK_ANCHOR_OK[value] and value or "TOPRIGHT"
+end
+
+function Model.WriteLaneStackAnchor(unit, kind, value)
+    value = STACK_ANCHOR_OK[value] and value or "TOPRIGHT"
+    Model.WriteValue(unit, LaneStyleKey(kind, "stackCountAnchor"), value)
+end
+
 function Model.GroupShown(unit, kind)
     kind = NormalizeKind(kind)
     local spec = GROUPS[kind]
@@ -1508,13 +1617,33 @@ function Model.ReadPreviewConfig(unit)
         debuffGrowthY = runtimeCfg and runtimeCfg.debuffGrowthY or Model.ReadLaneRowWrap(unit, "debuff"),
         showStackCount = Model.ReadBool(unit, "showStackCount", true),
         showCooldownText = Model.ReadBool(unit, "showCooldownText", true),
+        buffShowStackCount = Model.ReadLaneStyleBool(unit, "buff", "showStackCount", true),
+        buffShowCooldownText = Model.ReadLaneStyleBool(unit, "buff", "showCooldownText", true),
+        buffShowCooldownSwipe = Model.ReadLaneStyleBool(unit, "buff", "showCooldownSwipe", true),
+        debuffShowStackCount = Model.ReadLaneStyleBool(unit, "debuff", "showStackCount", true),
+        debuffShowCooldownText = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownText", true),
+        debuffShowCooldownSwipe = Model.ReadLaneStyleBool(unit, "debuff", "showCooldownSwipe", true),
         stackAnchor = (runtimeCfg and runtimeCfg.stackAnchor) or Model.ReadStackAnchor(unit),
+        buffStackAnchor = Model.ReadLaneStackAnchor(unit, "buff"),
+        debuffStackAnchor = Model.ReadLaneStackAnchor(unit, "debuff"),
         stackSize = Model.ReadNumber(unit, "stackTextSize", 14, 6, 40),
         stackX = Model.ReadNumber(unit, "stackTextOffsetX", -1, -2000, 2000),
         stackY = Model.ReadNumber(unit, "stackTextOffsetY", 1, -2000, 2000),
         cooldownSize = Model.ReadNumber(unit, "cooldownTextSize", 14, 6, 40),
         cooldownX = Model.ReadNumber(unit, "cooldownTextOffsetX", 0, -2000, 2000),
         cooldownY = Model.ReadNumber(unit, "cooldownTextOffsetY", 0, -2000, 2000),
+        buffStackSize = Model.ReadLaneStyleNumber(unit, "buff", "stackTextSize", 14, 6, 40),
+        buffStackX = Model.ReadLaneStyleNumber(unit, "buff", "stackTextOffsetX", -1, -2000, 2000),
+        buffStackY = Model.ReadLaneStyleNumber(unit, "buff", "stackTextOffsetY", 1, -2000, 2000),
+        buffCooldownSize = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextSize", 14, 6, 40),
+        buffCooldownX = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextOffsetX", 0, -2000, 2000),
+        buffCooldownY = Model.ReadLaneStyleNumber(unit, "buff", "cooldownTextOffsetY", 0, -2000, 2000),
+        debuffStackSize = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextSize", 14, 6, 40),
+        debuffStackX = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextOffsetX", -1, -2000, 2000),
+        debuffStackY = Model.ReadLaneStyleNumber(unit, "debuff", "stackTextOffsetY", 1, -2000, 2000),
+        debuffCooldownSize = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextSize", 14, 6, 40),
+        debuffCooldownX = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextOffsetX", 0, -2000, 2000),
+        debuffCooldownY = Model.ReadLaneStyleNumber(unit, "debuff", "cooldownTextOffsetY", 0, -2000, 2000),
     }
 end
 

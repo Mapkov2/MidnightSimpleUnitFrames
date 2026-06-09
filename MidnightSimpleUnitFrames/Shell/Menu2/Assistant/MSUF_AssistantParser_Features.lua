@@ -563,6 +563,9 @@ local UNIT_PRESET_DEFAULTS = {
     targettarget = { x = 220, y = -300, width = 250, height = 40 },
     focustarget = { x = 260, y = 180, width = 250, height = 40 },
     boss = { x = 0, y = 160, width = 250, height = 40 },
+    gf_party = { x = -400, y = 0, width = 120, height = 40 },
+    gf_raid = { x = -500, y = 0, width = 80, height = 32 },
+    gf_mythicraid = { x = -500, y = 0, width = 80, height = 32 },
 }
 
 local function GameplayPresetPlacement(text)
@@ -574,34 +577,103 @@ local function GameplayPresetPlacement(text)
     return nil
 end
 
-local function UnitPresetFrame(unit)
-    unit = tostring(unit or "")
-    local fallback = UNIT_PRESET_DEFAULTS[unit]
+function A._GameplayPresetPointOffset(point, width, height)
+    point = tostring(point or "CENTER"):upper()
+    local x = 0
+    local y = 0
+    if point:find("LEFT", 1, true) then
+        x = -(tonumber(width) or 0) / 2
+    elseif point:find("RIGHT", 1, true) then
+        x = (tonumber(width) or 0) / 2
+    end
+    if point:find("TOP", 1, true) then
+        y = (tonumber(height) or 0) / 2
+    elseif point:find("BOTTOM", 1, true) then
+        y = -(tonumber(height) or 0) / 2
+    end
+    return x, y
+end
+
+function A._GameplayPresetFrameFromDB(dbKey, fallback)
     local db = _G.MSUF_DB
-    local conf = db and type(db[unit]) == "table" and db[unit] or {}
+    local conf = db and type(db[dbKey]) == "table" and db[dbKey] or {}
     return {
         x = tonumber(conf.offsetX) or (fallback and fallback.x) or 0,
         y = tonumber(conf.offsetY) or (fallback and fallback.y) or 0,
         width = tonumber(conf.width) or (fallback and fallback.width) or 250,
         height = tonumber(conf.height) or (fallback and fallback.height) or 40,
+        point = tostring(conf.point or conf.anchorPoint or "CENTER"),
+        relativePoint = tostring(conf.relativePoint or conf.point or conf.anchorPoint or "CENTER"),
+        anchorToUnitframe = conf.anchorToUnitframe,
+        anchorToFrame = conf.anchorToFrame,
     }
 end
 
-local function GameplayPresetPosition(spec, unit, placement)
-    local frame = UnitPresetFrame(unit)
-    local bounds = GAMEPLAY_PRESET_BOUNDS[spec and spec.id] or { width = 180, height = 42 }
-    local gap = 8
-    local x, y = frame.x, frame.y
-    if placement == "below" then
-        y = frame.y - (frame.height / 2) - (bounds.height / 2) - gap
-    elseif placement == "above" then
-        y = frame.y + (frame.height / 2) + (bounds.height / 2) + gap
-    elseif placement == "left" then
-        x = frame.x - (frame.width / 2) - (bounds.width / 2) - gap
-    elseif placement == "right" then
-        x = frame.x + (frame.width / 2) + (bounds.width / 2) + gap
+local function UnitPresetFrame(unit, seen)
+    unit = tostring(unit or "")
+    local frame = A._GameplayPresetFrameFromDB(unit, UNIT_PRESET_DEFAULTS[unit])
+    local anchorUnit = tostring(frame.anchorToUnitframe or "")
+    if anchorUnit ~= "" and anchorUnit ~= "GLOBAL" and anchorUnit ~= "global" and anchorUnit ~= "FREE"
+        and anchorUnit ~= unit and UNIT_PRESET_DEFAULTS[anchorUnit] and not (seen and seen[anchorUnit])
+    then
+        seen = seen or {}
+        seen[unit] = true
+        local anchor = UnitPresetFrame(anchorUnit, seen)
+        local relX, relY = A._GameplayPresetPointOffset(frame.relativePoint, anchor.width, anchor.height)
+        local pointX, pointY = A._GameplayPresetPointOffset(frame.point, frame.width, frame.height)
+        frame.x = anchor.x + relX + frame.x - pointX
+        frame.y = anchor.y + relY + frame.y - pointY
+    else
+        local pointX, pointY = A._GameplayPresetPointOffset(frame.point, frame.width, frame.height)
+        frame.x = frame.x - pointX
+        frame.y = frame.y - pointY
     end
-    return math.floor(x + 0.5), math.floor(y + 0.5)
+    return frame
+end
+
+function A._GameplayPresetGroupFrame(scope)
+    scope = tostring(scope or "")
+    local frame = A._GameplayPresetFrameFromDB("gf_" .. scope, UNIT_PRESET_DEFAULTS["gf_" .. scope])
+    local anchorUnit = tostring(frame.anchorToFrame or "")
+    if anchorUnit ~= "" and anchorUnit ~= "FREE" and UNIT_PRESET_DEFAULTS[anchorUnit] then
+        local anchor = UnitPresetFrame(anchorUnit)
+        local relX, relY = A._GameplayPresetPointOffset(frame.point, anchor.width, anchor.height)
+        local pointX, pointY = A._GameplayPresetPointOffset(frame.point, frame.width, frame.height)
+        frame.x = anchor.x + relX + frame.x - pointX
+        frame.y = anchor.y + relY + frame.y - pointY
+    else
+        local pointX, pointY = A._GameplayPresetPointOffset(frame.point, frame.width, frame.height)
+        frame.x = frame.x - pointX
+        frame.y = frame.y - pointY
+    end
+    return frame
+end
+
+function A._GameplayPresetReference(text)
+    local groups = DetectGroups(text)
+    if groups[1] then return A._GameplayPresetGroupFrame(groups[1]), groups[1], "group" end
+    local units = DetectUnits(text)
+    local unit = units[1] or "player"
+    return UnitPresetFrame(unit), unit, "unit"
+end
+
+local function GameplayPresetPosition(spec, text, placement)
+    local frame, key, frameType = A._GameplayPresetReference(text)
+    local bounds = GAMEPLAY_PRESET_BOUNDS[spec and spec.id] or { width = 180, height = 42 }
+    local anchorUnit = frameType == "unit" and spec and spec.id == "combatTimer"
+        and (key == "player" or key == "target" or key == "focus") and key or nil
+    local gap = 8
+    local x, y = anchorUnit and 0 or frame.x, anchorUnit and 0 or frame.y
+    if placement == "below" then
+        y = y - (frame.height / 2) - (bounds.height / 2) - gap
+    elseif placement == "above" then
+        y = y + (frame.height / 2) + (bounds.height / 2) + gap
+    elseif placement == "left" then
+        x = x - (frame.width / 2) - (bounds.width / 2) - gap
+    elseif placement == "right" then
+        x = x + (frame.width / 2) + (bounds.width / 2) + gap
+    end
+    return math.floor(x + 0.5), math.floor(y + 0.5), anchorUnit, frameType
 end
 
 function A._ParseGameplayPositionPreset(text)
@@ -610,20 +682,31 @@ function A._ParseGameplayPositionPreset(text)
     if not placement then return nil end
     local spec = A._GameplayShortcutSpec(text)
     if not spec or not spec.x or not spec.y then return nil end
-    local units = DetectUnits(text)
-    local unit = units[1] or "player"
-    local x, y = GameplayPresetPosition(spec, unit, placement)
+    if spec.id ~= "combatTimer" and spec.id ~= "combatState" and spec.id ~= "firstDance" then
+        return {
+            kind = "unknown",
+            text = tostring(spec.label or "That Gameplay element") .. " uses its own runtime anchoring. I can still move it with pixel nudges or change its registered anchor controls.",
+            status = "failed",
+        }
+    end
+    local x, y, anchorUnit = GameplayPresetPosition(spec, text, placement)
     local xSetting = Registry and Registry:GetSetting(spec.x)
     local ySetting = Registry and Registry:GetSetting(spec.y)
     if not xSetting or not ySetting then return nil end
+    local changes = {}
+    if spec.id == "combatTimer" and spec.anchor then
+        local anchorSetting = Registry and Registry:GetSetting(spec.anchor)
+        if anchorSetting then
+            changes[#changes + 1] = { setting = anchorSetting, value = anchorUnit or "none" }
+        end
+    end
+    changes[#changes + 1] = { setting = xSetting, value = x }
+    changes[#changes + 1] = { setting = ySetting, value = y }
     return {
         kind = "changes",
-        changes = {
-            { setting = xSetting, value = x },
-            { setting = ySetting, value = y },
-        },
+        changes = changes,
         label = "Position " .. tostring(spec.label or "Gameplay element"),
-        summary = "Positions a Gameplay tracker near the selected unit frame using its real X/Y offset settings.",
+        summary = "Positions a Gameplay tracker near the selected MSUF frame using DB geometry and the correct anchor space.",
     }
 end
 

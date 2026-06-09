@@ -264,13 +264,15 @@ local function FinishPage(ctx, b)
     if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 42) end
 end
 
+local SetCurrentLane
+
 local function CurrentLane(stateKey, defaultValue)
     local lane = M[stateKey] or defaultValue or "debuff"
     if lane ~= "buff" and lane ~= "debuff" then lane = defaultValue or "debuff" end
     return lane
 end
 
-local function SetCurrentLane(stateKey, lane)
+function SetCurrentLane(stateKey, lane)
     lane = lane == "buff" and "buff" or "debuff"
     if type(M.PersistMenuStateValue) == "function" then
         M.PersistMenuStateValue(stateKey, lane)
@@ -300,6 +302,58 @@ local function BuildLaneTabs(ctx, parent, stateKey, x, y, width)
         for i = 1, #LANE_VALUES do
             if buttons[i].SetActive then buttons[i]:SetActive(LANE_VALUES[i].value == lane) end
         end
+    end)
+end
+
+local function LaneTitle(kind)
+    return kind == "buff" and "Buff" or "Debuff"
+end
+
+local function LanePlural(kind)
+    return kind == "buff" and "Buffs" or "Debuffs"
+end
+
+local function BuildAuraStyleNav(ctx, b)
+    local h = 54
+    local section = T.Panel(b.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
+    if T.ApplyMaterial then T.ApplyMaterial(section, "card") elseif T.ApplyGlass then T.ApplyGlass(section, "card") end
+    section:SetPoint("TOPLEFT", b.parent, "TOPLEFT", b.x, b.y)
+    section:SetSize(b.width, h)
+    section._msuf2Width = b.width
+
+    b.y = b.y - h - 12
+    if ctx and ctx.SetContentHeight then ctx:SetContentHeight(abs(b.y) + 28) end
+
+    local w = section._msuf2Width or b.width or 720
+    local navW = min(460, w - 32)
+    local gap = 8
+    local bw = floor((navW - gap) / 2)
+    local buttons = {}
+
+    local function NavButton(kind, x)
+        local btn = T.Button(section, LanePlural(kind), bw, 24)
+        if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
+        btn:SetPoint("TOPLEFT", section, "TOPLEFT", x, -15)
+        btn:SetScript("OnClick", function()
+            SetCurrentLane("auraStyleGFLane", kind)
+            local key = (ctx and ctx.key) or M.activeKey
+            if key == "auras3_buffs" or key == "auras3_debuffs" then
+                SelectPage("auras3_styling", CurrentScope())
+            else
+                Rebuild(ctx)
+            end
+        end)
+        buttons[kind] = btn
+        return btn
+    end
+
+    NavButton("buff", 16)
+    NavButton("debuff", 16 + bw + gap)
+
+    M.AddRefresher(ctx, function()
+        local lane = CurrentLane("auraStyleGFLane", "debuff")
+        if buttons.buff and buttons.buff.SetActive then buttons.buff:SetActive(lane == "buff") end
+        if buttons.debuff and buttons.debuff.SetActive then buttons.debuff:SetActive(lane == "debuff") end
     end)
 end
 
@@ -644,7 +698,8 @@ local function CreateAuraPreviewIcon(parent)
     return f
 end
 
-local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height)
+local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lane)
+    lane = lane == "buff" and "buff" or (lane == "debuff" and "debuff" or nil)
     local box = T.Panel(parent, nil, { 0.010, 0.016, 0.034, 0.88 }, T.colors.borderSoft)
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     box:SetSize(width or 300, height or 104)
@@ -660,12 +715,26 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height)
         local count = min(14, max(4, Model.ReadNumber(readScope, "perRow", 12, 1, 40)))
         local showStacks
         local showTimers
+        local stackSize
+        local cooldownSize
         if type(Model.ReadBool) == "function" then
-            showStacks = Model.ReadBool(readScope, "showStackCount", true)
-            showTimers = Model.ReadBool(readScope, "showCooldownText", true)
+            if lane and type(Model.ReadLaneStyleBool) == "function" then
+                showStacks = Model.ReadLaneStyleBool(readScope, lane, "showStackCount", true)
+                showTimers = Model.ReadLaneStyleBool(readScope, lane, "showCooldownText", true)
+            else
+                showStacks = Model.ReadBool(readScope, "showStackCount", true)
+                showTimers = Model.ReadBool(readScope, "showCooldownText", true)
+            end
         else
             showStacks = Model.ReadSharedBool("showStackCount", true)
             showTimers = Model.ReadSharedBool("showCooldownText", true)
+        end
+        if lane and type(Model.ReadLaneStyleNumber) == "function" then
+            stackSize = min(14, max(7, Model.ReadLaneStyleNumber(readScope, lane, "stackTextSize", 14, 6, 40)))
+            cooldownSize = min(14, max(7, Model.ReadLaneStyleNumber(readScope, lane, "cooldownTextSize", 14, 6, 40)))
+        else
+            stackSize = min(14, max(7, Model.ReadNumber(readScope, "stackTextSize", 14, 6, 40)))
+            cooldownSize = min(14, max(7, Model.ReadNumber(readScope, "cooldownTextSize", 14, 6, 40)))
         end
         for i = 1, #icons do
             local icon = icons[i]
@@ -675,9 +744,13 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height)
                 icon:SetSize(size, size)
                 icon:ClearAllPoints()
                 icon:SetPoint("TOPLEFT", box, "TOPLEFT", 10 + col * (size + spacing), -34 - row * (size + spacing))
-                icon.icon:SetTexture(i <= 7 and buffTex[((i - 1) % #buffTex) + 1] or debuffTex[((i - 8) % #debuffTex) + 1])
-                local r, g, b = i <= 7 and 0.20 or 0.78, i <= 7 and 0.72 or 0.20, i <= 7 and 0.42 or 0.24
+                local isBuffIcon = lane and lane == "buff" or (not lane and i <= 7)
+                local tex = isBuffIcon and buffTex or debuffTex
+                icon.icon:SetTexture(tex[((i - 1) % #tex) + 1])
+                local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
                 for e = 1, 4 do icon.edge[e]:SetVertexColor(r, g, b, 0.95) end
+                if icon.stack.SetFont then icon.stack:SetFont(FONT, stackSize, "OUTLINE") end
+                if icon.timer.SetFont then icon.timer:SetFont(FONT, cooldownSize, "OUTLINE") end
                 icon.stack:SetText(showStacks and (i % 3 == 1 and "2" or "") or "")
                 icon.timer:SetText(showTimers and (i % 2 == 0 and "12" or "") or "")
                 icon:Show()
@@ -689,141 +762,11 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height)
     return box
 end
 
-local function BuildVisibilityRow(ctx, card, y, label, buffGet, buffSet, debuffGet, debuffSet, styleScope, filtersScope)
-    local w = card._msuf2Width or 440
-    W.LabelAt(card, label, 16, y + 3, 118, "GameFontHighlightSmall", T.colors.text)
-    local buff = BindSwitch(ctx, card, "Buffs", 148, y, 0, buffGet, buffSet)
-    if buff.text then buff.text:Hide() end
-    local debuff = BindSwitch(ctx, card, "Debuffs", 226, y, 0, debuffGet, debuffSet)
-    if debuff.text then debuff.text:Hide() end
-
-    if w >= 410 then
-        local style = ActionButton(card, "Style", 62)
-        style:SetPoint("TOPRIGHT", card, "TOPRIGHT", -86, y + 1)
-        style:SetScript("OnClick", function() SelectPage("auras3_styling", styleScope) end)
-        local filters = ActionButton(card, "Filters", 72)
-        filters:SetPoint("TOPRIGHT", card, "TOPRIGHT", -10, y + 1)
-        filters:SetScript("OnClick", function() SelectPage("auras3_filters", filtersScope or styleScope) end)
-    end
-end
-
-local function BuildAurasVisibility(ctx)
-    local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader("Auras", "Buff and Debuff visibility per frame.")
-
-    local section = b:Section("Aura Visibility", 390)
-    local w = section._msuf2Width or b.width or 720
-    local gap = 18
-    local twoCol = w >= 760
-    local cardW = twoCol and floor((w - 48 - gap) / 2) or (w - 48)
-    local rightX = twoCol and (24 + cardW + gap) or 24
-    local unitCardH = 292
-    local groupCardH = twoCol and 210 or 204
-    local unit = Card(section, "Unit Frames", "Each unit frame has its own Buff and Debuff switch.", 24, -42, cardW, unitCardH)
-    local groupY = twoCol and -42 or -352
-    local group = Card(section, "Group Frames", "Party and raid visibility writes the group-frame aura config.", rightX, groupY, cardW, groupCardH)
-
-    W.LabelAt(unit, "Frame", 16, -58, 116, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(unit, "Buffs", 148, -58, 56, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(unit, "Debuffs", 226, -58, 70, "GameFontNormalSmall", T.colors.accent)
-    for i = 1, #UNIT_ROWS do
-        local row = UNIT_ROWS[i]
-        local y = -88 - (i - 1) * 42
-        BuildVisibilityRow(ctx, unit, y, row.label,
-            function() return UnitLaneShown(row.unit, "buff") end,
-            function(v) SetUnitLaneShown(ctx, row.unit, "buff", v, "AURAS3_UNIT_BUFF_VISIBILITY") end,
-            function() return UnitLaneShown(row.unit, "debuff") end,
-            function(v) SetUnitLaneShown(ctx, row.unit, "debuff", v, "AURAS3_UNIT_DEBUFF_VISIBILITY") end,
-            row.unit, row.unit)
-    end
-
-    W.Text(unit, "Layout and icon placement stay on each Unit Frame page. This page only decides whether Buffs or Debuffs render for that frame.", 16, -250, cardW - 32, T.colors.muted)
-
-    W.LabelAt(group, "Frame", 16, -58, 116, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(group, "Buffs", 148, -58, 56, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(group, "Debuffs", 226, -58, 70, "GameFontNormalSmall", T.colors.accent)
-    for i = 1, #GROUP_ROWS do
-        local row = GROUP_ROWS[i]
-        local y = -88 - (i - 1) * 42
-        BuildVisibilityRow(ctx, group, y, row.label,
-            function() return GroupLaneShown(row.scope, "buff") end,
-            function(v) SetGroupLaneShown(row.scope, "buff", v) end,
-            function() return GroupLaneShown(row.scope, "debuff") end,
-            function(v) SetGroupLaneShown(row.scope, "debuff", v) end,
-            row.scope, row.scope)
-    end
-    W.Text(group, "Position and grid controls are in Group Frames > Auras.", 16, -174, cardW - 32, T.colors.muted)
-
-    if not twoCol then section:SetHeight(560); b.y = b.y - 170 end
-    FinishPage(ctx, b)
-end
-
-local function BuildAuraLaneRow(ctx, card, y, label, laneLabel, getValue, setValue, styleScope, filtersScope)
-    local w = card._msuf2Width or 440
-    W.LabelAt(card, label, 16, y + 3, 136, "GameFontHighlightSmall", T.colors.text)
-    local lane = BindSwitch(ctx, card, laneLabel, 164, y, 0, getValue, setValue)
-    if lane.text then lane.text:Hide() end
-
-    if w >= 382 then
-        local style = ActionButton(card, "Style", 62)
-        style:SetPoint("TOPRIGHT", card, "TOPRIGHT", -86, y + 1)
-        style:SetScript("OnClick", function() SelectPage("auras3_styling", styleScope) end)
-        local filters = ActionButton(card, "Filters", 72)
-        filters:SetPoint("TOPRIGHT", card, "TOPRIGHT", -10, y + 1)
-        filters:SetScript("OnClick", function() SelectPage("auras3_filters", filtersScope or styleScope) end)
-    end
-end
-
-local function BuildAuraLaneVisibility(ctx, kind)
-    kind = kind == "debuff" and "debuff" or "buff"
-    local laneLabel = kind == "buff" and "Buffs" or "Debuffs"
-    local title = kind == "buff" and "Buffs" or "Debuffs"
-    local b = W.PageBuilder(ctx)
-    b:GlobalStyleHeader(title, laneLabel .. " visibility per unit frame and group frame.")
-
-    local section = b:Section(laneLabel .. " Visibility", 390)
-    local w = section._msuf2Width or b.width or 720
-    local gap = 18
-    local twoCol = w >= 760
-    local cardW = twoCol and floor((w - 48 - gap) / 2) or (w - 48)
-    local rightX = twoCol and (24 + cardW + gap) or 24
-    local unitCardH = 292
-    local groupCardH = twoCol and 210 or 204
-    local unitCard = Card(section, "Unit Frames", laneLabel .. " are enabled per unit frame.", 24, -42, cardW, unitCardH)
-    local groupY = twoCol and -42 or -352
-    local groupCard = Card(section, "Group Frames", laneLabel .. " are enabled per Party and Raid / Mythic scope.", rightX, groupY, cardW, groupCardH)
-
-    W.LabelAt(unitCard, "Frame", 16, -58, 136, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(unitCard, laneLabel, 164, -58, 80, "GameFontNormalSmall", T.colors.accent)
-    for i = 1, #UNIT_ROWS do
-        local row = UNIT_ROWS[i]
-        local y = -88 - (i - 1) * 42
-        BuildAuraLaneRow(ctx, unitCard, y, row.label, laneLabel,
-            function() return UnitLaneShown(row.unit, kind) end,
-            function(v) SetUnitLaneShown(ctx, row.unit, kind, v, "AURAS3_UNIT_" .. kind .. "_VISIBILITY") end,
-            row.unit, row.unit)
-    end
-    W.Text(unitCard, "Placement stays on each Unit Frame page. Style is shared between Buffs and Debuffs.", 16, -250, cardW - 32, T.colors.muted)
-
-    W.LabelAt(groupCard, "Frame", 16, -58, 136, "GameFontNormalSmall", T.colors.accent)
-    W.LabelAt(groupCard, laneLabel, 164, -58, 80, "GameFontNormalSmall", T.colors.accent)
-    for i = 1, #GROUP_ROWS do
-        local row = GROUP_ROWS[i]
-        local y = -88 - (i - 1) * 42
-        BuildAuraLaneRow(ctx, groupCard, y, row.label, laneLabel,
-            function() return GroupLaneShown(row.scope, kind) end,
-            function(v) SetGroupLaneShown(row.scope, kind, v) end,
-            row.scope, row.scope)
-    end
-    W.Text(groupCard, "Group placement stays in Group Frames > Auras.", 16, -174, cardW - 32, T.colors.muted)
-
-    if not twoCol then section:SetHeight(560); b.y = b.y - 170 end
-    FinishPage(ctx, b)
-end
-
 local function BuildUnitStyle(ctx, b, scope)
     local unit = scope == "shared" and "shared" or scope
-    local section = b:Section("Unit Aura Style", 510)
+    local lane = CurrentLane("auraStyleGFLane", "debuff")
+    local laneName = LanePlural(lane)
+    local section = b:Section("Unit Aura " .. LaneTitle(lane) .. " Style", 510)
     local w = section._msuf2Width or b.width or 720
     local colW = max(300, floor((w - 66) / 2))
     local rightX = 32 + colW + 18
@@ -843,19 +786,35 @@ local function BuildUnitStyle(ctx, b, scope)
     end
 
     local function ReadScopeBool(key, defaultValue)
+        if type(Model.ReadLaneStyleBool) == "function" then return Model.ReadLaneStyleBool(unit, lane, key, defaultValue) end
         if type(Model.ReadBool) == "function" then return Model.ReadBool(unit, key, defaultValue) end
         return Model.ReadSharedBool(key, defaultValue)
     end
 
     local function WriteScopeBool(key, value)
-        if type(Model.WriteBool) == "function" then
+        if type(Model.WriteLaneStyleBool) == "function" then
+            Model.WriteLaneStyleBool(unit, lane, key, value)
+        elseif type(Model.WriteBool) == "function" then
             Model.WriteBool(unit, key, value)
         else
             Model.WriteSharedBool(key, value)
         end
     end
 
-    local text = Card(section, "Text Features", "Stack-count and cooldown text for the selected scope.", 24, topY, colW, 388)
+    local function ReadScopeNumber(key, defaultValue, minValue, maxValue)
+        if type(Model.ReadLaneStyleNumber) == "function" then return Model.ReadLaneStyleNumber(unit, lane, key, defaultValue, minValue, maxValue) end
+        return Model.ReadNumber(unit, key, defaultValue, minValue, maxValue)
+    end
+
+    local function WriteScopeNumber(key, value, minValue, maxValue)
+        if type(Model.WriteLaneStyleNumber) == "function" then
+            Model.WriteLaneStyleNumber(unit, lane, key, value, minValue, maxValue)
+        else
+            Model.WriteNumber(unit, key, value, minValue, maxValue)
+        end
+    end
+
+    local text = Card(section, laneName .. " Text Features", "Stack-count and cooldown text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, topY, colW, 388)
     styleControls[#styleControls + 1] = BindSwitch(ctx, text, "Show Stack Count", 16, -66, colW - 32,
         function() return ReadScopeBool("showStackCount", true) end,
         function(v)
@@ -877,52 +836,59 @@ local function BuildUnitStyle(ctx, b, scope)
 
     W.LabelAt(text, "Stack Count", 16, -178, colW - 32, "GameFontNormalSmall", T.colors.accent)
     styleControls[#styleControls + 1] = BindDropdown(ctx, text, "Anchor", 16, -214, Model.StackAnchorValues(), colW - 32,
-        function() return Model.ReadStackAnchor(unit) end,
+        function()
+            if type(Model.ReadLaneStackAnchor) == "function" then return Model.ReadLaneStackAnchor(unit, lane) end
+            return Model.ReadStackAnchor(unit)
+        end,
         function(v)
-            Model.WriteStackAnchor(unit, v)
+            if type(Model.WriteLaneStackAnchor) == "function" then
+                Model.WriteLaneStackAnchor(unit, lane, v)
+            else
+                Model.WriteStackAnchor(unit, v)
+            end
             ApplyUnit(ctx, unit, "AURAS3_STACK_ANCHOR")
         end)
     styleControls[#styleControls + 1] = BindSlider(ctx, text, "Text Size", 16, -272, 6, 40, 1, colW - 32,
-        function() return Model.ReadNumber(unit, "stackTextSize", 14, 6, 40) end,
+        function() return ReadScopeNumber("stackTextSize", 14, 6, 40) end,
         function(v)
-            Model.WriteNumber(unit, "stackTextSize", v, 6, 40)
+            WriteScopeNumber("stackTextSize", v, 6, 40)
             ApplyUnit(ctx, unit, "AURAS3_STACK_SIZE")
         end)
     local smallW = max(120, floor((colW - 44) / 2))
     styleControls[#styleControls + 1] = BindSlider(ctx, text, "X", 16, -332, -40, 40, 1, smallW,
-        function() return Model.ReadNumber(unit, "stackTextOffsetX", -1, -2000, 2000) end,
+        function() return ReadScopeNumber("stackTextOffsetX", -1, -2000, 2000) end,
         function(v)
-            Model.WriteNumber(unit, "stackTextOffsetX", v, -2000, 2000)
+            WriteScopeNumber("stackTextOffsetX", v, -2000, 2000)
             ApplyUnit(ctx, unit, "AURAS3_STACK_X")
         end)
     styleControls[#styleControls + 1] = BindSlider(ctx, text, "Y", 24 + smallW, -332, -40, 40, 1, smallW,
-        function() return Model.ReadNumber(unit, "stackTextOffsetY", 1, -2000, 2000) end,
+        function() return ReadScopeNumber("stackTextOffsetY", 1, -2000, 2000) end,
         function(v)
-            Model.WriteNumber(unit, "stackTextOffsetY", v, -2000, 2000)
+            WriteScopeNumber("stackTextOffsetY", v, -2000, 2000)
             ApplyUnit(ctx, unit, "AURAS3_STACK_Y")
         end)
 
-    local cooldown = Card(section, "Cooldown Text", "Timer font size and center offset for the selected scope.", rightX, topY, rightW, 268)
+    local cooldown = Card(section, laneName .. " Cooldown Text", "Timer font size and center offset for " .. ScopeLabel(scope) .. " " .. laneName .. ".", rightX, topY, rightW, 268)
     styleControls[#styleControls + 1] = BindSlider(ctx, cooldown, "Text Size", 16, -62, 6, 40, 1, rightW - 32,
-        function() return Model.ReadNumber(unit, "cooldownTextSize", 14, 6, 40) end,
+        function() return ReadScopeNumber("cooldownTextSize", 14, 6, 40) end,
         function(v)
-            Model.WriteNumber(unit, "cooldownTextSize", v, 6, 40)
+            WriteScopeNumber("cooldownTextSize", v, 6, 40)
             ApplyUnit(ctx, unit, "AURAS3_COOLDOWN_SIZE")
         end)
     styleControls[#styleControls + 1] = BindSlider(ctx, cooldown, "X", 16, -122, -40, 40, 1, rightW - 32,
-        function() return Model.ReadNumber(unit, "cooldownTextOffsetX", 0, -2000, 2000) end,
+        function() return ReadScopeNumber("cooldownTextOffsetX", 0, -2000, 2000) end,
         function(v)
-            Model.WriteNumber(unit, "cooldownTextOffsetX", v, -2000, 2000)
+            WriteScopeNumber("cooldownTextOffsetX", v, -2000, 2000)
             ApplyUnit(ctx, unit, "AURAS3_COOLDOWN_X")
         end)
     styleControls[#styleControls + 1] = BindSlider(ctx, cooldown, "Y", 16, -182, -40, 40, 1, rightW - 32,
-        function() return Model.ReadNumber(unit, "cooldownTextOffsetY", 0, -2000, 2000) end,
+        function() return ReadScopeNumber("cooldownTextOffsetY", 0, -2000, 2000) end,
         function(v)
-            Model.WriteNumber(unit, "cooldownTextOffsetY", v, -2000, 2000)
+            WriteScopeNumber("cooldownTextOffsetY", v, -2000, 2000)
             ApplyUnit(ctx, unit, "AURAS3_COOLDOWN_Y")
         end)
 
-    BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 292, rightW, 118)
+    BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 292, rightW, 118, lane)
     local hint = W.Text(section, "", 24, topY - 424, w - 48, T.colors.muted)
     M.AddRefresher(ctx, function()
         local editable = unit == "shared" or not Model.UseSharedVisuals(unit)
@@ -936,20 +902,19 @@ local function BuildGroupStyle(ctx, b, scope)
     local section = b:Section("Group Aura Style", 548)
     local w = section._msuf2Width or b.width or 720
     local lane = CurrentLane("auraStyleGFLane", "debuff")
+    local laneName = LanePlural(lane)
     local colW = max(300, floor((w - 66) / 2))
     local rightX = 32 + colW + 18
     local rightW = max(260, w - rightX - 24)
 
-    local text = Card(section, "Group Aura Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. ".", 24, -42, colW, 422)
-    W.LabelAt(text, "Lane", 16, -72, 70, "GameFontNormalSmall", T.colors.accent)
-    BuildLaneTabs(ctx, text, "auraStyleGFLane", 80, -68, min(250, colW - 108))
+    local text = Card(section, "Group Aura " .. LaneTitle(lane) .. " Text", "Cooldown and stack text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, -42, colW, 374)
 
-    BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -126, colW - 32, scope, lane, "showCooldownSwipe", true, "visual")
-    BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -158, colW - 32, scope, lane, "showCooldown", true, "visual")
-    BindGroupSwitch(ctx, text, "Show Stack Count", 16, -190, colW - 32, scope, lane, "showStacks", true, "visual")
-    BindGroupSlider(ctx, text, "Cooldown Font", 16, -246, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
-    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -304, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
-    BindGroupSlider(ctx, text, "Stack Font", 16, -362, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font")
+    BindGroupSwitch(ctx, text, "Show Cooldown Swipe", 16, -78, colW - 32, scope, lane, "showCooldownSwipe", true, "visual")
+    BindGroupSwitch(ctx, text, "Show Cooldown Text", 16, -110, colW - 32, scope, lane, "showCooldown", true, "visual")
+    BindGroupSwitch(ctx, text, "Show Stack Count", 16, -142, colW - 32, scope, lane, "showStacks", true, "visual")
+    BindGroupSlider(ctx, text, "Cooldown Font", 16, -198, 6, 24, 1, colW - 32, scope, lane, "cooldownSize", 8, "font")
+    BindGroupDropdown(ctx, text, "Cooldown Anchor", 16, -256, GFAnchorValues(), colW - 32, scope, lane, "cooldownAnchor", "CENTER", "geometry")
+    BindGroupSlider(ctx, text, "Stack Font", 16, -314, 6, 24, 1, colW - 32, scope, lane, "stackSize", 10, "font")
 
     local behavior = Card(section, "Behavior", "Shared group-frame aura behavior for " .. ScopeLabel(scope) .. ".", rightX, -42, rightW, 306)
     BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 16, -64, rightW - 32, scope, "showTooltip", true, "visual")
@@ -1055,6 +1020,7 @@ end
 local function BuildAuraStylePage(ctx)
     local b = W.PageBuilder(ctx)
     local scope = BuildAuraChrome(ctx, b, "Aura Style", "Text, cooldown, stack and marker styling.")
+    BuildAuraStyleNav(ctx, b)
     if IsGroupScope(scope) then
         BuildGroupStyle(ctx, b, scope)
     else
@@ -1062,6 +1028,11 @@ local function BuildAuraStylePage(ctx)
     end
     BuildSharedColors(ctx, b)
     FinishPage(ctx, b)
+end
+
+local function BuildAuraStyleLanePage(ctx, lane)
+    SetCurrentLane("auraStyleGFLane", lane)
+    BuildAuraStylePage(ctx)
 end
 
 local function BuildUnitFilterRules(ctx, b, scope)
@@ -1127,7 +1098,7 @@ local function BuildUnitFilterRules(ctx, b, scope)
             ApplyUnit(ctx, scope, "AURAS3_FILTER_DEBUFF_EXCLUSIVE", true)
         end)
 
-    W.Text(section, "Visibility is on Auras. These filters apply to the selected unit-frame scope.", 24, -436, w - 48, T.colors.muted)
+    W.Text(section, "On/off and placement are on each Unit Frame page. These filters apply to the selected unit-frame scope.", 24, -436, w - 48, T.colors.muted)
     M.AddRefresher(ctx, function()
         local customRules = scope == "shared" or not Model.UseSharedRules(scope)
         local filtersOn = customRules and Model.ScopeFiltersEnabled(scope)
@@ -1607,17 +1578,17 @@ end
 
 function M.BuildAuras3UnitSection(ctx, builder, unit)
     if not Model.UnitSupported(unit) then return end
-    local sec = builder:CollapsibleSection("auras3", "Auras", 602, false)
+    local sec = builder:CollapsibleSection("auras3", "Auras", 622, false)
     local sectionW = sec._msuf2Width or builder.width or 720
     local laneCardW = sectionW - 36
-    local top = Card(sec, "Aura Area", "Visibility, placement and icon grid for this unit frame.", 18, -38, sectionW - 36, 92)
+    local top = Card(sec, "Aura Area", "Visibility, placement and icon grid for this unit frame.", 18, -38, sectionW - 36, 112)
 
-    W.LabelAt(top, "Lane", 16, -52, 54, "GameFontNormalSmall", T.colors.accent)
+    W.LabelAt(top, "Lane", 16, -66, 54, "GameFontNormalSmall", T.colors.accent)
     local laneButtons = {}
     local function LaneButton(kind, x)
         local label = kind == "buff" and "Buffs" or "Debuffs"
         local btn = ActionButton(top, label, 96)
-        btn:SetPoint("TOPLEFT", top, "TOPLEFT", x, -48)
+        btn:SetPoint("TOPLEFT", top, "TOPLEFT", x, -62)
         btn:SetScript("OnClick", function()
             M.unitAuraTabSelection = M.unitAuraTabSelection or {}
             M.unitAuraTabSelection[unit] = kind
@@ -1631,7 +1602,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
 
     local actionsX = max(360, sectionW - 206)
     local style = ActionButton(top, "Style", 72)
-    style:SetPoint("TOPLEFT", top, "TOPLEFT", actionsX, -50)
+    style:SetPoint("TOPLEFT", top, "TOPLEFT", actionsX, -62)
     style:SetScript("OnClick", function() SelectPage("auras3_styling", unit) end)
     local filters = ActionButton(top, "Filters", 82)
     filters:SetPoint("LEFT", style, "RIGHT", 8, 0)
@@ -1647,7 +1618,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local tabFrames = {}
     local function MakeTabFrame(key)
         local frame = CreateFrame("Frame", nil, sec)
-        frame:SetPoint("TOPLEFT", sec, "TOPLEFT", 0, -150)
+        frame:SetPoint("TOPLEFT", sec, "TOPLEFT", 0, -170)
         frame:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 12)
         frame._msuf2Width = sectionW
         tabFrames[key] = frame
@@ -1670,18 +1641,18 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
         RefreshTabs()
         if W.SetCollapsibleBadges then
             W.SetCollapsibleBadges(sec, {
-                { text = UnitLaneShown(unit, "buff") and "Buffs on" or "Buffs off", kind = UnitLaneShown(unit, "buff") and "ok" or "muted" },
-                { text = UnitLaneShown(unit, "debuff") and "Debuffs on" or "Debuffs off", kind = UnitLaneShown(unit, "debuff") and "ok" or "muted" },
-                { text = CurrentTab() == "debuff" and "Debuffs" or "Buffs", kind = "accent" },
+                { text = UnitLaneShown(unit, "buff") and "Buffs on" or "Buffs off", kind = UnitLaneShown(unit, "buff") and "ok" or "muted", onlyWhenOpen = true },
+                { text = UnitLaneShown(unit, "debuff") and "Debuffs on" or "Debuffs off", kind = UnitLaneShown(unit, "debuff") and "ok" or "muted", onlyWhenOpen = true },
+                { text = CurrentTab() == "debuff" and "Debuffs" or "Buffs", kind = "accent", onlyWhenOpen = true },
             })
         end
     end)
     RefreshTabs()
 end
 
-M.RegisterPage("auras3", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 62 })
-M.RegisterPage("auras3_buffs", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 2 })
-M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 2 })
-M.RegisterPage("auras3_rendering", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 62 })
-M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 20 })
+M.RegisterPage("auras3", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 69 })
+M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 9 })
+M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 9 })
+M.RegisterPage("auras3_rendering", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 69 })
+M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 26 })
 M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 20 })

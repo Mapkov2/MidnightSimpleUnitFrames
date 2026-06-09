@@ -686,12 +686,13 @@ Group Frame Filters=inclusive filter|exclusive filter|base filter|category black
 ]])
         else
             SearchRouteApplySectionRows(route, pageKey, normalized, [[
+Aura Type=buffs|debuffs|buff|debuff|back|style
 Unit Aura Text=stack size|cooldown size|stack anchor|timer text|unit aura text
 Group Frame Styling=group frame aura style|stack font|cooldown font|cooldown swipe|tooltip|sort by duration|prefer player|aura behavior
 Colors=timer color|cooldown text color|stack color|own buff|own debuff|safe warning urgent
 ]])
+            SearchRouteAuraScope(route, normalized)
         end
-        SearchRouteAuraScope(route, normalized)
     elseif pageKey == "opt_colors" then
         SearchRouteApplySectionRows(route, pageKey, normalized, [[
 colors_font=global font color|font color

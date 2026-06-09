@@ -35,12 +35,12 @@ local function BuildGFAuras(ctx)
         buff = {
             enabledLabel = "Buffs", maxLabel = "Max icons", maxMax = 20,
             anchor = "BOTTOMRIGHT", growth = "LEFTUP", size = 22, perRow = 4, max = 6, spacing = 1, layer = 5,
-            height = 360,
+            height = 404,
         },
         debuff = {
             enabledLabel = "Debuffs", maxLabel = "Max icons", maxMax = 20,
             anchor = "TOPLEFT", growth = "RIGHTDOWN", size = 20, perRow = 3, max = 6, spacing = 1, layer = 6,
-            height = 360,
+            height = 404,
         },
     }
 
@@ -56,7 +56,7 @@ local function BuildGFAuras(ctx)
         do
             W.ControlCardBackdrop(section, leftX - 14, -38, leftW + 28, 42)
             W.ControlCard(section, "Placement", nil, leftX - 14, -84, leftW + 28, 232)
-            W.ControlCard(section, "Icon Grid", nil, rightX - 14, -84, rightW + 28, 282)
+            W.ControlCard(section, "Icon Grid", nil, rightX - 14, -84, rightW + 28, 326)
         end
 
         local enable = BindNestedToggle(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), function() return AuraGroup(CurrentScope(), groupKey) end, "enabled", true, "visual")
