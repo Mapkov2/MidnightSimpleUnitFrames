@@ -12,7 +12,7 @@
 ## X-Website: https://discord.gg/2Gf9b2Wprz
 ## X-MSUF-StatusIconPack: 1
 ## X-MSUF-IconPack-Name: UX Pro
-## X-MSUF-IconFolder: Icons\UXPro
+## X-MSUF-IconFolder: Media\Icons\UXPro
 ## X-MSUF-HasMidnightSuffix: 1
 ## X-Localizations: enUS, deDE, zhCN, zhTW, frFR, esES, esMX, itIT, koKR, ptBR, ruRU, enGB
 ## AddonCompartmentFunc: MSUF_AddonCompartment_OnClick

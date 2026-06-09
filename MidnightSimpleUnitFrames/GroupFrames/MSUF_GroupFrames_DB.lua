@@ -2202,13 +2202,23 @@ function GF.RefreshExternalStatusIconPacks(force)
         if type(addonName) == "string" and addonName ~= "" then
             local marked = IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-StatusIconPack"))
                 or IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-IconPack"))
-            local iconFolder = NormalizeIconFolderPath(GetAddonMetadata(addonName, "X-MSUF-IconFolder") or "Icons") or "Icons"
+            local metadataFolder = NormalizeIconFolderPath(GetAddonMetadata(addonName, "X-MSUF-IconFolder"))
             local label = GetAddonMetadata(addonName, "X-MSUF-IconPack-Name") or title or addonName
             local noMidnight = IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-NoMidnightSuffix"))
             local hasMidnight = IsTruthyMetadata(GetAddonMetadata(addonName, "X-MSUF-HasMidnightSuffix"))
-            local folder = "Interface\\AddOns\\" .. addonName .. "\\" .. iconFolder
-            if marked or IconFolderLooksComplete(folder) then
-                AddExternalIconPack(ADDON_ICON_STYLE_PREFIX .. addonName, label, folder, noMidnight, hasMidnight)
+            local iconFolders = metadataFolder and { metadataFolder } or { "Media\\Icons", "Icons" }
+            local fallbackFolder
+            for _, iconFolder in ipairs(iconFolders) do
+                local folder = "Interface\\AddOns\\" .. addonName .. "\\" .. iconFolder
+                if not fallbackFolder then fallbackFolder = folder end
+                if IconFolderLooksComplete(folder) then
+                    AddExternalIconPack(ADDON_ICON_STYLE_PREFIX .. addonName, label, folder, noMidnight, hasMidnight)
+                    fallbackFolder = nil
+                    break
+                end
+            end
+            if marked and fallbackFolder then
+                AddExternalIconPack(ADDON_ICON_STYLE_PREFIX .. addonName, label, fallbackFolder, noMidnight, hasMidnight)
             end
         end
     end

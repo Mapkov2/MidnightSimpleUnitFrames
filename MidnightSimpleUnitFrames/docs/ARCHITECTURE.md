@@ -28,7 +28,7 @@ subsystems own the frames players see.
 - `Features/`: optional gameplay or cold-path product features, grouped by
   purpose (`Gameplay`, `Telemetry`, `Versioning`, `Diagnostics`).
 - `Integrations/`: adapters for other addons or external frame anchors.
-- `Locales/`, `Media/`, `Icons/`: assets and localization data.
+- `Locales/`, `Media/`: assets and localization data. Status icon packs live under `Media/Icons/`.
 
 ## Load Order Contract
 
