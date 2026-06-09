@@ -440,7 +440,7 @@ for _, scope in ipairs({ "shared", "player", "target", "targettarget", "focustar
                 "max name length", "name max length", "name max characters", "short name length",
             }), {
                 flag = "fontOverride",
-                min = 6,
+                min = 4,
                 max = 30,
                 apply = ApplyFonts,
                 reason = "MSUF_ASSISTANT_NAME_MAX_LENGTH",

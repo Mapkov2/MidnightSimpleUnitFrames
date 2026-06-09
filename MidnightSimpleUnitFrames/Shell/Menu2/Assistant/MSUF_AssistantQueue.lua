@@ -41,16 +41,50 @@ function A.FlushQueue()
         return false
     end
     if _G.InCombatLockdown and _G.InCombatLockdown() then return false end
+    if A._queueFlushRunning then return true end
 
     local plans = A.queuedPlans
     A.queuedPlans = {}
     if queueFrame then queueFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
 
-    for i = 1, #plans do
-        local result = A.ExecutePlan and A.ExecutePlan(plans[i], { fromQueue = true, confirmed = true })
+    local function RequeueFrom(index)
+        A.queuedPlans = A.queuedPlans or {}
+        for i = index, #plans do
+            A.queuedPlans[#A.queuedPlans + 1] = plans[i]
+        end
+        EnsureQueueFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+
+    local function RunOne(index)
+        if _G.InCombatLockdown and _G.InCombatLockdown() then
+            RequeueFrom(index)
+            return false, { text = "Combat started again. Remaining queued Assistant changes will wait.", status = "queued" }
+        end
+        local result = A.ExecutePlan and A.ExecutePlan(plans[index], { fromQueue = true, confirmed = true })
         if type(result) == "table" and result.text and A.AddHistory then
             A.AddHistory("assistant", "Applied queued change: " .. tostring(result.text), result.status or "applied", result.summary)
         end
+        return true
+    end
+
+    if type(A.StartJob) == "function" then
+        local steps = {}
+        for i = 1, #plans do
+            steps[#steps + 1] = function() return RunOne(i) end
+        end
+        A._queueFlushRunning = true
+        A.StartJob("assistant.queue.flush", steps, function()
+            A._queueFlushRunning = nil
+            if A.HasQueuedPlans() and not (_G.InCombatLockdown and _G.InCombatLockdown()) then
+                A.FlushQueue()
+            end
+        end)
+        return true
+    end
+
+    for i = 1, #plans do
+        local ok = RunOne(i)
+        if ok == false then return false end
     end
     return true
 end

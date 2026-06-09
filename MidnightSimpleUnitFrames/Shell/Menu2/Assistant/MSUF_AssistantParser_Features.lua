@@ -176,6 +176,179 @@ local function ParseClassPowerRootToggle(text)
     } or nil
 end
 
+local CLASS_POWER_COOLDOWN_TARGET_TERMS = {
+    "essential cooldown", "essential cooldowns", "essential cooldown manager", "essential cooldownmanager",
+    "cooldown manager", "cooldownmanager", "cooldowns manager", "cdm", "cooldowns",
+}
+
+local CLASS_POWER_PLAYER_TARGET_TERMS = {
+    "player frame", "player unitframe", "player unit frame", "player width", "player frame width",
+    "same width as player", "match player", "match player frame", "to player",
+}
+
+local function ClassPowerSetting(key)
+    return Registry and Registry:GetSetting(key)
+end
+
+local function ClassPowerWidthModeForText(text)
+    if ContainsAny(text, CLASS_POWER_COOLDOWN_TARGET_TERMS) then return "cooldown" end
+    if ContainsAny(text, { "utility cooldown", "utility cooldowns", "utility cooldown manager", "utility cooldownmanager" }) then return "utility" end
+    if ContainsAny(text, { "tracked buff", "tracked buffs", "buff tracker", "tracked-buffs" }) then return "tracked_buffs" end
+    if ContainsAny(text, { "custom width", "manual width", "custom mode", "manual mode" }) then return "custom" end
+    if ContainsAny(text, CLASS_POWER_PLAYER_TARGET_TERMS) then return "player" end
+    return nil
+end
+
+function A._ParseClassPowerWidthModeShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "detached power", "alt mana", "alternative mana" }) then return nil end
+    local mode = ClassPowerWidthModeForText(text)
+    if not mode then return nil end
+    local widthIntent = ContainsAny(text, {
+        "width", "wide", "match", "same width", "width mode", "width source", "match width",
+        "player width", "player frame width",
+    })
+    if not widthIntent then return nil end
+    if FirstNumber(text) and not ContainsAny(text, { "width mode", "width source", "match", "same width", "player width", "cooldown", "cooldowns", "tracked buff", "utility" }) then
+        return nil
+    end
+    local setting = ClassPowerSetting("bars.classPowerWidthMode")
+    return setting and {
+        kind = "changes",
+        changes = { { setting = setting, value = mode } },
+        label = "Class Resource Width Mode",
+        summary = "Sets the Class Resources width dropdown to the requested source.",
+    } or nil
+end
+
+local function ClassPowerHideRuleValue(text)
+    if ContainsAny(text, {
+        "turn off hide", "disable hide", "dont hide", "do not hide", "never hide",
+        "always show", "show when", "show while", "show out of combat", "show class resource",
+    }) then
+        return false
+    end
+    if ContainsAny(text, { "turn on hide", "enable hide", "hide when", "hide while", "hide out of combat", "hide ooc" }) then
+        return true
+    end
+    if ContainsAny(text, { "hide class resource", "hide class resources", "hide class power", "hide class bar", "hide resource bar", "hide" }) then
+        return true
+    end
+    local value = DetectBoolean(text)
+    if value == false then return false end
+    if value == true then return true end
+    return nil
+end
+
+function A._ParseClassPowerVisibilityShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    local rule
+    if ContainsAny(text, { "out of combat", "ooc" }) then
+        rule = { key = "bars.classPowerHideOOC", label = "Class Resource Hide Out Of Combat" }
+    elseif ContainsAny(text, { "when full", "if full", "full resource", "full resources", "full" }) then
+        rule = { key = "bars.classPowerHideWhenFull", label = "Class Resource Hide When Full" }
+    elseif ContainsAny(text, { "when empty", "if empty", "empty resource", "empty resources", "empty" }) then
+        rule = { key = "bars.classPowerHideWhenEmpty", label = "Class Resource Hide When Empty" }
+    end
+    if not rule then return nil end
+    local value = ClassPowerHideRuleValue(text)
+    if value == nil then return nil end
+    local setting = ClassPowerSetting(rule.key)
+    return setting and {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = rule.label,
+        summary = "Changes the Class Resources auto-hide toggle using show/hide wording.",
+    } or nil
+end
+
+function A._ParseClassPowerAnchorShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "detached power", "alt mana", "alternative mana", "text anchor" }) then return nil end
+    local hasAnchorIntent = ContainsAny(text, {
+        "anchor", "anchored", "follow", "attach", "attached", "dock", "to cooldown", "to cooldowns",
+        "to player", "player frame", "cooldownmanager", "cooldown manager",
+    })
+    if not hasAnchorIntent then return nil end
+    local targetCooldown = ContainsAny(text, CLASS_POWER_COOLDOWN_TARGET_TERMS)
+    local targetPlayer = ContainsAny(text, CLASS_POWER_PLAYER_TARGET_TERMS)
+    local value = DetectBoolean(text)
+    if targetCooldown then
+        value = value ~= false
+    elseif targetPlayer then
+        value = false
+    elseif value == nil and ContainsAny(text, { "anchor", "follow", "attach", "dock" }) then
+        value = true
+    end
+    if value == nil then return nil end
+    local anchor = ClassPowerSetting("bars.classPowerAnchorToCooldown")
+    if not anchor then return nil end
+    local changes = { { setting = anchor, value = value } }
+    if targetPlayer then
+        local widthMode = ClassPowerSetting("bars.classPowerWidthMode")
+        if widthMode then changes[#changes + 1] = { setting = widthMode, value = "player" } end
+    elseif value == true and ContainsAny(text, { "width", "match width", "same width" }) then
+        local widthMode = ClassPowerSetting("bars.classPowerWidthMode")
+        if widthMode then changes[#changes + 1] = { setting = widthMode, value = "cooldown" } end
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = value and "Anchor Class Resource to Essential Cooldowns" or "Anchor Class Resource to Player Frame",
+        summary = "Changes the Class Resources cooldown-anchor toggle.",
+    }
+end
+
+local function ClassPowerPlacement(text)
+    if ContainsAny(text, { "under", "below", "beneath", "bottom of", "underneath", "unter", "darunter" }) then return "below" end
+    if ContainsAny(text, { "above", "over", "top of", "ueber", "darueber" }) then return "above" end
+    if ContainsAny(text, { "on player", "on the player", "inside player", "inside the player" }) then return "top" end
+    return nil
+end
+
+local function ClassPowerPlacementOffsets(placement)
+    local db = _G.MSUF_DB or {}
+    local player = type(db.player) == "table" and db.player or {}
+    local bars = type(db.bars) == "table" and db.bars or {}
+    local playerH = tonumber(player.height) or 40
+    local cpH = tonumber(bars.classPowerHeight) or 4
+    if placement == "below" then return 0, -math.floor(playerH + cpH + 6 + 0.5) end
+    if placement == "above" then return 0, math.floor(cpH + 6 + 0.5) end
+    return 0, 0
+end
+
+function A._ParseClassPowerPlacementShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "detached power", "alt mana", "alternative mana", "text" }) then return nil end
+    local placement = ClassPowerPlacement(text)
+    if not placement then return nil end
+    local units = DetectUnits(text)
+    if units[1] and units[1] ~= "player" then
+        return {
+            kind = "unknown",
+            text = "Class Resources are attached to the Player frame in MSUF. I can place them above or below the Player frame, or anchor them to Essential Cooldowns.",
+            status = "failed",
+        }
+    end
+    local anchor = ClassPowerSetting("bars.classPowerAnchorToCooldown")
+    local widthMode = ClassPowerSetting("bars.classPowerWidthMode")
+    local xSetting = ClassPowerSetting("bars.classPowerOffsetX")
+    local ySetting = ClassPowerSetting("bars.classPowerOffsetY")
+    if not xSetting or not ySetting then return nil end
+    local x, y = ClassPowerPlacementOffsets(placement)
+    local changes = {}
+    if anchor then changes[#changes + 1] = { setting = anchor, value = false } end
+    if widthMode then changes[#changes + 1] = { setting = widthMode, value = "player" } end
+    changes[#changes + 1] = { setting = xSetting, value = x }
+    changes[#changes + 1] = { setting = ySetting, value = y }
+    return {
+        kind = "changes",
+        changes = changes,
+        label = placement == "below" and "Place Class Resource Below Player" or "Place Class Resource Near Player",
+        summary = "Positions Class Resources relative to the Player frame with the registered Class Resource offsets.",
+    }
+end
+
 function A._ParseClassPowerMoveShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     if ContainsAny(text, { "text", "number", "font", "detached power", "alt mana", "alternative mana" }) then return nil end
@@ -882,29 +1055,69 @@ local function GroupPreviewScopeForText(text)
     return groups and groups[1] or nil
 end
 
+local function HasEditModeHUDControlIntent(text)
+    if not HasEditModeContext(text) then return false end
+    return ContainsAny(text, {
+        "preview", "previews", "aura", "auras", "group preview", "group previews",
+        "party preview", "party previews", "raid preview", "raid previews",
+        "mythic raid preview", "mythic raid previews", "snap", "snapping",
+        "grid", "grid lines", "grid spacing", "grid size", "background opacity",
+        "background alpha", "bg opacity", "bg alpha", "background overlay",
+        "cdm", "cooldown manager", "anchor picker", "pick anchor", "select anchor",
+        "reset", "undo", "redo",
+    })
+end
+
 local function ParseEditModeHUDControl(text)
     local hasEditContext = HasEditModeContext(text)
+    local previewWord = ContainsAny(text, { "preview", "previews", "preview mode", "preview modes", "vorschau" })
     local hasAuraPreview = ContainsAny(text, {
-        "preview auras", "preview aura", "aura preview", "aura previews", "aura icons",
+        "preview auras", "preview aura", "preview aura icons", "preview auras icons",
+        "aura preview", "aura previews", "aura icon preview", "aura icon previews", "aura icons",
         "aura preview icons", "aura mover", "aura movers", "aura mover boxes",
         "auren vorschau", "vorschau auren", "auren symbole", "auren icons",
-    }) or (hasEditContext and ContainsAny(text, { "auras", "aura", "auren" }))
-    local hasUnitPreview = ContainsAny(text, {
-        "unit preview", "unit previews", "preview frames", "preview frame", "frame preview",
-        "frame previews", "placeholder data", "preview placeholders", "vorschau frames",
-        "frame vorschau",
-    }) or (hasEditContext and ContainsAny(text, { "preview", "vorschau" }) and not hasAuraPreview)
+    }) or (hasEditContext and ContainsAny(text, { "auras", "aura", "auren" }) and (previewWord or DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
     local hasGroupPreview = ContainsAny(text, {
-        "gf preview", "group frame preview", "group frames preview", "group preview",
-        "party frame preview", "party frames preview", "party preview",
-        "raid frame preview", "raid frames preview", "raid preview",
-        "mythic raid frame preview", "mythic raid frames preview", "mythic raid preview",
-        "party raid preview", "gruppenframes preview", "gruppen preview",
-    }) or (hasEditContext and ContainsAny(text, { "gf" }) and (DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
+        "gf preview", "gf previews", "group frame preview", "group frame previews",
+        "group frames preview", "group frames previews", "group preview", "group previews",
+        "party frame preview", "party frame previews", "party frames preview",
+        "party frames previews", "party preview", "party previews",
+        "raid frame preview", "raid frame previews", "raid frames preview",
+        "raid frames previews", "raid preview", "raid previews",
+        "mythic raid frame preview", "mythic raid frame previews",
+        "mythic raid frames preview", "mythic raid frames previews",
+        "mythic raid preview", "mythic raid previews",
+        "party raid preview", "party raid previews", "gruppenframes preview",
+        "gruppenframes previews", "gruppen preview", "gruppen previews",
+    }) or (hasEditContext and previewWord and ContainsAny(text, {
+        "gf", "group frame", "group frames", "party", "party frame", "party frames",
+        "raid", "raid frame", "raid frames", "mythic raid", "mythicraid",
+    }))
+        or (hasEditContext and ContainsAny(text, { "gf" }) and (DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
+    local hasUnitPreview = ContainsAny(text, {
+        "edit mode preview", "edit mode previews", "unit preview", "unit previews",
+        "unit frame preview", "unit frame previews", "unitframe preview", "unitframe previews",
+        "preview frames", "preview frame", "frame preview", "frame previews",
+        "mover preview", "mover previews", "placeholder data", "placeholder frame",
+        "placeholder frames", "preview placeholders", "fake frame", "fake frames",
+        "test frame", "test frames", "vorschau frames", "frame vorschau",
+    }) or (hasEditContext and previewWord and not hasAuraPreview and not hasGroupPreview)
     local hasSnap = ContainsAny(text, {
         "snap", "snapping", "grid snap", "snap frames", "snap to grid", "einrasten",
         "raster snap", "raster einrasten",
     })
+    local hasGrid = (hasEditContext and ContainsAny(text, {
+        "grid", "grid line", "grid lines", "grid overlay", "grid overlays",
+        "edit mode grid", "raster", "raster lines",
+    })) or ContainsAny(text, { "edit mode grid", "msuf edit mode grid", "grid lines in edit mode" })
+    local hasGridStep = hasGrid and FirstNumber(text) ~= nil and ContainsAny(text, {
+        "grid", "grid spacing", "grid size", "grid step", "spacing", "space",
+        "size", "step", "pixel", "pixels", "px",
+    })
+    local hasBackgroundOpacity = (hasEditContext and ContainsAny(text, {
+        "background opacity", "background alpha", "bg opacity", "bg alpha",
+        "background overlay", "overlay opacity", "edit mode background", "edit mode bg",
+    })) or ContainsAny(text, { "edit mode background opacity", "edit mode bg opacity" })
     local hasCDM = ContainsAny(text, {
         "cdm", "cooldown manager", "essential cooldown manager", "anchor to cooldown",
         "cooldown anchor", "cooldown manager anchor",
@@ -915,9 +1128,25 @@ local function ParseEditModeHUDControl(text)
     }) and (hasEditContext or ContainsAny(text, { "global anchor picker", "anchor picker" }))
     local hasResetPosition = hasEditContext and ContainsAny(text, { "reset", "restore", "default", "zuruecksetzen" })
         and ContainsAny(text, { "position", "selected frame", "current frame", "selected", "selection", "frame position", "mover" })
+    local hasUndo = hasEditContext and ContainsAny(text, {
+        "edit mode undo", "undo edit mode", "undo in edit mode", "undo last edit mode",
+        "undo edit mode position", "undo last position", "undo position change",
+        "undo last change", "undo edit mode change",
+    })
+    local hasRedo = hasEditContext and ContainsAny(text, {
+        "edit mode redo", "redo edit mode", "redo in edit mode", "redo last edit mode",
+        "redo edit mode position", "redo last position", "redo position change",
+        "redo last change", "redo edit mode change",
+    })
 
     if hasAnchorPicker then
         return EditModeAction("assistant.action.editMode.anchorPicker", {}, "Open Edit Mode Anchor picker")
+    end
+    if hasUndo then
+        return EditModeAction("assistant.action.editMode.undo", {}, "Undo Edit Mode position change")
+    end
+    if hasRedo then
+        return EditModeAction("assistant.action.editMode.redo", {}, "Redo Edit Mode position change")
     end
     if hasResetPosition then
         return EditModeAction("assistant.action.editMode.resetPosition", {}, "Reset selected Edit Mode position")
@@ -935,6 +1164,17 @@ local function ParseEditModeHUDControl(text)
     end
     if hasSnap and (hasEditContext or ContainsAny(text, { "snap frames", "grid snap", "snap to grid" })) then
         return EditModeAction("assistant.action.editMode.snap", { value = value }, "Set Edit Mode Snap")
+    end
+    if hasGridStep then
+        return EditModeAction("assistant.action.editMode.gridStep", { value = FirstNumber(text) }, "Set Edit Mode Grid spacing")
+    end
+    if hasGrid and not hasSnap then
+        return EditModeAction("assistant.action.editMode.grid", { value = value }, "Set Edit Mode Grid")
+    end
+    if hasBackgroundOpacity then
+        local number = FirstNumber(text)
+        if number == nil and value ~= nil then number = value and 85 or 5 end
+        return EditModeAction("assistant.action.editMode.backgroundOpacity", { value = number }, "Set Edit Mode Background opacity")
     end
     if hasCDM then
         return EditModeAction("assistant.action.editMode.cdm", { value = value }, "Set Edit Mode CDM Anchor")
@@ -976,8 +1216,8 @@ local function ParseSupportWorkflow(text)
     if editModeControl then return editModeControl end
 
     if ContainsAny(text, { "edit mode", "move frames", "drag frames", "position frames" }) then
-        local actionKey = "assistant.action.editMode.enter"
-        local label = "Enter MSUF Edit Mode"
+        local actionKey
+        local label
         local args = {}
         if ContainsAny(text, {
             "am i in edit mode", "is edit mode on", "is edit mode active", "edit mode status",
@@ -999,7 +1239,11 @@ local function ParseSupportWorkflow(text)
         }) then
             actionKey = "assistant.action.editMode.exit"
             label = "Exit MSUF Edit Mode"
+        elseif not HasEditModeHUDControlIntent(text) then
+            actionKey = "assistant.action.editMode.enter"
+            label = "Enter MSUF Edit Mode"
         end
+        if not actionKey then return nil end
         local action = Registry and Registry:GetAction(actionKey)
         return action and {
             kind = "action",
@@ -1436,6 +1680,259 @@ local function ParseDarkModeBrightnessShortcut(text)
     }
 end
 
+local NAME_SHORTENING_TERMS = {
+    "shorten names", "shorten name", "short names", "short name", "name shortening",
+    "truncate names", "truncate name", "name truncation", "unit name shortening",
+    "unit names short", "names short", "names shorter",
+}
+
+local NAME_SHORTENING_DOT_TERMS = {
+    "dots", "dot", "ellipsis", "ellipses", "name dots", "name ellipsis",
+    "truncate dots", "truncate ellipsis", "shortening dots", "shortening ellipsis",
+}
+
+local NAME_SHORTENING_NON_NAME_DOT_TERMS = {
+    "corner dot", "corner dots", "corner indicator", "corner indicators",
+    "status dot", "status dots", "status indicator", "status indicators",
+    "spell indicator", "spell indicators",
+}
+
+local NAME_SHORTENING_KEEP_START_TERMS = {
+    "keep start", "keep the start", "keep beginning", "keep the beginning",
+    "keep first", "keep first letters", "first letters", "start letters",
+    "beginning letters", "from right", "from the right", "remove end",
+    "remove the end", "cut end", "cut the end", "truncate end", "truncate the end",
+    "shorten from right", "shorten from the right",
+}
+
+local NAME_SHORTENING_KEEP_END_TERMS = {
+    "keep end", "keep the end", "keep ending", "keep the ending",
+    "keep last", "keep last letters", "last letters", "end letters",
+    "ending letters", "from left", "from the left", "remove start",
+    "remove the start", "remove beginning", "remove the beginning",
+    "cut start", "cut the start", "cut beginning", "cut the beginning",
+    "truncate start", "truncate the start", "shorten from left", "shorten from the left",
+}
+
+local function HasNameShorteningIntent(text)
+    if ContainsAny(text, NAME_SHORTENING_TERMS) then return true end
+    if ContainsAny(text, { "shorten", "truncate", "truncation" })
+        and ContainsAny(text, { "name", "names", "unit name", "unit names" }) then
+        return true
+    end
+    return false
+end
+
+local function NameShorteningScope(text)
+    if ContainsAny(text, {
+        "everything", "all names", "all unit names", "all unitframes", "all unitframe",
+        "every unitframe", "every unitframes", "all frames", "every frame",
+    }) then
+        return "shared"
+    end
+    local scope = DetectGlobalScope and DetectGlobalScope(text) or nil
+    if scope == "gf_mythicraid" then scope = "gf_raid" end
+    return scope or "shared"
+end
+
+local function NameShorteningSetting(scope, suffix)
+    return Registry and Registry:GetSetting("fontScope." .. tostring(scope or "shared") .. "." .. suffix) or nil
+end
+
+local function AddNameShorteningChange(changes, scope, suffix, value, valueLabel)
+    local setting = NameShorteningSetting(scope, suffix)
+    if setting then
+        changes[#changes + 1] = { setting = setting, value = value, valueLabel = valueLabel }
+    end
+    return setting
+end
+
+local function NameShorteningSide(text)
+    if ContainsAny(text, NAME_SHORTENING_KEEP_START_TERMS) then
+        return "RIGHT", "Keep start (first letters)"
+    end
+    if ContainsAny(text, NAME_SHORTENING_KEEP_END_TERMS) then
+        return "LEFT", "Keep end (last letters)"
+    end
+    return nil
+end
+
+local function NameShorteningLength(text, setting)
+    local requested = FirstNumber(text)
+    if not requested then return nil, nil, nil end
+    local value = math.floor((tonumber(requested) or 0) + 0.5)
+    local minValue = tonumber(setting and setting.min)
+    local maxValue = tonumber(setting and setting.max)
+    local clampLabel
+    if minValue and value < minValue then
+        value = minValue
+        clampLabel = "minimum"
+    end
+    if maxValue and value > maxValue then
+        value = maxValue
+        clampLabel = "maximum"
+    end
+    return value, math.floor((tonumber(requested) or value) + 0.5), clampLabel
+end
+
+local function NameShorteningValueLabel(value, requested, clampLabel)
+    local label = tostring(value) .. " letters"
+    if clampLabel and requested and requested ~= value then
+        label = label .. " (" .. clampLabel .. ")"
+    end
+    return label
+end
+
+local function NameShorteningSideChoice(scope, sideValue, sideLabel, maxChars, requestedChars, clampLabel)
+    local changes = {}
+    AddNameShorteningChange(changes, scope, "shortenNames", true, "enabled")
+    AddNameShorteningChange(changes, scope, "shortenNameMaxChars", maxChars, NameShorteningValueLabel(maxChars, requestedChars, clampLabel))
+    AddNameShorteningChange(changes, scope, "shortenNameClipSide", sideValue, sideLabel)
+    if #changes == 0 then return nil end
+    return {
+        changes = changes,
+        valueLabel = sideLabel,
+        label = sideLabel .. ", max " .. NameShorteningValueLabel(maxChars, requestedChars, clampLabel),
+        summary = "Applies name shortening length and direction together.",
+    }
+end
+
+local function IsNameShorteningContext(ctx)
+    if not ctx then return false end
+    local key = tostring(ctx.lastSetting or "")
+    if key:find("shortenName", 1, true) or key:find("shortenNames", 1, true) then return true end
+    if key:find("nameShorten", 1, true) or key:find("nameNoEllipsis", 1, true) then return true end
+    local bundle = ctx.lastChangeBundle
+    if type(bundle) == "table" then
+        for i = 1, #bundle do
+            local item = bundle[i]
+            key = tostring(item and item.key or "")
+            if key:find("shortenName", 1, true) or key:find("shortenNames", 1, true)
+                or key:find("nameShorten", 1, true) or key:find("nameNoEllipsis", 1, true) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function ParseNameShorteningDots(text, ctx)
+    if not ContainsAny(text, NAME_SHORTENING_DOT_TERMS) then return nil end
+    if ContainsAny(text, NAME_SHORTENING_NON_NAME_DOT_TERMS) and not HasNameShorteningIntent(text) then return nil end
+    if ContainsAny(text, { "castbar", "spell name", "spell names" }) then return nil end
+    local explicitNameContext = HasNameShorteningIntent(text)
+        or ContainsAny(text, { "name", "names", "unit name", "unit names", "truncate", "truncation" })
+    if not explicitNameContext and not IsNameShorteningContext(ctx) then
+        local value = DetectBoolean(text)
+        if value == nil then return nil end
+    end
+
+    local value = DetectBoolean(text)
+    local noEllipsis
+    if ContainsAny(text, { "no dots", "without dots", "hide dots", "no ellipsis", "without ellipsis", "hide ellipsis" }) then
+        noEllipsis = true
+    elseif ContainsAny(text, { "show dots", "with dots", "dots on", "show ellipsis", "with ellipsis", "ellipsis on" }) then
+        noEllipsis = false
+    elseif value ~= nil then
+        noEllipsis = not value
+    else
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Should shortened names show the trailing dots? Say 'turn off name dots' to hide them, or 'turn on name dots' to show them.",
+            summary = "Asks whether name-shortening ellipsis dots should be shown.",
+        }
+    end
+
+    local scope = NameShorteningScope(text)
+    local setting = NameShorteningSetting(scope, "shortenNameNoEllipsis")
+    if not setting then
+        return {
+            kind = "unknown",
+            status = "failed",
+            text = "Name-shortening dots are not registered for that scope. Use Shared, Target, Focus, Pet, Boss, Party, or Raid.",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = noEllipsis, valueLabel = noEllipsis and "hidden" or "shown" } },
+        label = setting.label or "Name No Ellipsis",
+        summary = "Changes whether shortened names show trailing dots.",
+    }
+end
+
+local function ParseNameShorteningShortcut(text, ctx)
+    local dots = ParseNameShorteningDots(text, ctx)
+    if dots then return dots end
+    if ContainsAny(text, { "castbar", "spell name", "spell names" }) then return nil end
+    if not HasNameShorteningIntent(text) then return nil end
+
+    local scope = NameShorteningScope(text)
+    local enabledSetting = NameShorteningSetting(scope, "shortenNames")
+    local maxSetting = NameShorteningSetting(scope, "shortenNameMaxChars")
+    local sideSetting = NameShorteningSetting(scope, "shortenNameClipSide")
+    if scope == "player" or not (enabledSetting and maxSetting and sideSetting) then
+        local message = "Name shortening is not registered for that scope. Use Shared, Target, Focus, Pet, Boss, Party, or Raid."
+        if scope == "player" then
+            message = "Name shortening is not registered for Player in Global Fonts. Use Shared, Target, Focus, Pet, Boss, Party, or Raid."
+        end
+        return {
+            kind = "unknown",
+            status = "failed",
+            text = message,
+        }
+    end
+
+    local bool = DetectBoolean(text)
+    local maxChars, requestedChars, clampLabel = NameShorteningLength(text, maxSetting)
+    local sideValue, sideLabel = NameShorteningSide(text)
+    if bool ~= nil and not maxChars and not sideValue then
+        return {
+            kind = "changes",
+            changes = { { setting = enabledSetting, value = bool, valueLabel = bool and "enabled" or "disabled" } },
+            label = enabledSetting.label or "Name Shortening",
+            summary = "Toggles name shortening without changing its length or direction.",
+        }
+    end
+
+    if maxChars and sideValue then
+        local changes = {}
+        AddNameShorteningChange(changes, scope, "shortenNames", true, "enabled")
+        AddNameShorteningChange(changes, scope, "shortenNameMaxChars", maxChars, NameShorteningValueLabel(maxChars, requestedChars, clampLabel))
+        AddNameShorteningChange(changes, scope, "shortenNameClipSide", sideValue, sideLabel)
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = "Set name shortening",
+            summary = "Enables name shortening and sets its length and direction.",
+        }
+    end
+
+    if maxChars then
+        local choices = {}
+        local keepStart = NameShorteningSideChoice(scope, "RIGHT", "Keep start (first letters)", maxChars, requestedChars, clampLabel)
+        local keepEnd = NameShorteningSideChoice(scope, "LEFT", "Keep end (last letters)", maxChars, requestedChars, clampLabel)
+        if keepStart then choices[#choices + 1] = keepStart end
+        if keepEnd then choices[#choices + 1] = keepEnd end
+        if #choices > 0 then
+            return {
+                kind = "ambiguous",
+                choices = choices,
+                label = "Which side should name shortening keep?",
+                summary = "Asks which side of the unit name should remain visible before applying name shortening.",
+            }
+        end
+    end
+
+    return {
+        kind = "answer",
+        status = "ambiguous",
+        text = "How many letters should names keep, and which side should remain visible? For example: 'shorten names to 10 letters keeping first letters' or 'shorten names to 10 letters keeping last letters'.",
+        summary = "Asks for the missing name-shortening length or direction.",
+    }
+end
+
 local function ParseCastbarPreviewAction(text)
     if not ContainsAny(text, { "test", "preview", "show preview" }) then return nil end
     if not ContainsAny(text, { "castbar", "cast bar" }) then return nil end
@@ -1491,6 +1988,63 @@ local function ParseCastbarGlobalDetail(text)
         end
     end
     return nil
+end
+
+local function ParseCastbarDirectionClarification(text)
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if not ContainsAny(text, { "target", "target castbar", "target cast bar", "ziel" }) then return nil end
+    if not ContainsAny(text, {
+        "other direction", "opposite direction", "opposite fill direction", "fill in the other direction",
+        "fill the other direction", "other way", "opposite way", "reverse direction",
+    }) then return nil end
+
+    local opposite = Registry and Registry:GetSetting("general.castbarOpositeDirectionTarget")
+    if not opposite then return nil end
+    local value = DetectBoolean(text)
+    if value == nil and ContainsAny(text, {
+        "use opposite", "use opposite direction", "use opposite fill direction",
+        "use target opposite", "use target opposite direction",
+    }) then
+        value = true
+    end
+    if value ~= nil then
+        return {
+            kind = "changes",
+            changes = { { setting = opposite, value = value } },
+            label = opposite.label or "Use Opposite Fill Direction For Target",
+            summary = "Changes the target castbar opposite-fill checkbox.",
+        }
+    end
+
+    local choices = {
+        {
+            setting = opposite,
+            value = true,
+            valueLabel = "enabled",
+            label = "Use Opposite Fill Direction For Target -> enabled",
+        },
+    }
+    local fill = Registry and Registry:GetSetting("general.castbarFillDirection")
+    if fill then
+        choices[#choices + 1] = {
+            setting = fill,
+            value = "RTL",
+            valueLabel = "rtl",
+            label = "Castbar Fill Direction -> rtl",
+        }
+        choices[#choices + 1] = {
+            setting = fill,
+            value = "LTR",
+            valueLabel = "ltr",
+            label = "Castbar Fill Direction -> ltr",
+        }
+    end
+    return {
+        kind = "ambiguous",
+        choices = choices,
+        label = "Which target castbar direction option?",
+        summary = "The command could mean the target opposite-fill checkbox or the global castbar fill direction.",
+    }
 end
 
 local function ParseGuidedSetup(text)
@@ -1589,8 +2143,10 @@ P.ParseGameplayRootToggle = ParseGameplayRootToggle
 P.ParseGameplayAction = ParseGameplayAction
 P.ParseGlobalBarsAction = ParseGlobalBarsAction
 P.ParseDarkModeBrightnessShortcut = ParseDarkModeBrightnessShortcut
+P.ParseNameShorteningShortcut = ParseNameShorteningShortcut
 P.ParseCastbarPreviewAction = ParseCastbarPreviewAction
 P.CASTBAR_GLOBAL_BOOLEAN_DETAILS = CASTBAR_GLOBAL_BOOLEAN_DETAILS
 P.ParseCastbarGlobalDetail = ParseCastbarGlobalDetail
+P.ParseCastbarDirectionClarification = ParseCastbarDirectionClarification
 P.ParseGuidedSetup = ParseGuidedSetup
 P.ParseGuidedSetupFollowup = ParseGuidedSetupFollowup

@@ -230,54 +230,61 @@ local function ScoreItem(query, item)
     return best
 end
 
+local function MediaResultBefore(a, b)
+    if not b then return true end
+    if (a._score or 0) ~= (b._score or 0) then return (a._score or 0) > (b._score or 0) end
+    return tostring(a.label or a.value):lower() < tostring(b.label or b.value):lower()
+end
+
+local function InsertTopMediaResult(top, item, limit)
+    local pos = #top + 1
+    while pos > 1 and MediaResultBefore(item, top[pos - 1]) do
+        pos = pos - 1
+    end
+    table.insert(top, pos, item)
+    if #top > limit then table.remove(top) end
+end
+
 function R.Find(mediaType, query, opts)
     opts = opts or {}
     query = Trim(query or "")
     if query == "" then return nil end
     local items = mediaType == "font" and R.FontItems() or R.StatusbarItems()
-    local matches = {}
+    local limit = tonumber(opts.limit) or 8
+    local top = {}
+    local exacts = {}
+    local matchCount = 0
     local best = 0
+    local normQuery = Normalize(query)
+    local compactQuery = Compact(query)
     for i = 1, #(items or {}) do
+        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local item = items[i]
         local score = ScoreItem(query, item)
         if score > 0 then
             item._score = score
-            matches[#matches + 1] = item
+            matchCount = matchCount + 1
+            InsertTopMediaResult(top, item, limit)
             if score > best then best = score end
-        end
-    end
-    if #matches == 0 then return { status = "none", query = query, mediaType = mediaType } end
-    table.sort(matches, function(a, b)
-        if (a._score or 0) ~= (b._score or 0) then return (a._score or 0) > (b._score or 0) end
-        return tostring(a.label or a.value):lower() < tostring(b.label or b.value):lower()
-    end)
-    local top = {}
-    local limit = tonumber(opts.limit) or 8
-    for i = 1, math.min(#matches, limit) do
-        top[#top + 1] = matches[i]
-    end
-
-    local normQuery = Normalize(query)
-    local compactQuery = Compact(query)
-    local exacts = {}
-    for i = 1, #matches do
-        local item = matches[i]
-        local labels = { item.label, item.value }
-        for j = 1, #labels do
-            local label = labels[j]
-            if type(label) == "string" and label ~= "" then
-                if Normalize(label) == normQuery or Compact(label) == compactQuery then
-                    exacts[#exacts + 1] = item
-                    break
+            local labels = { item.label, item.value }
+            for j = 1, #labels do
+                local label = labels[j]
+                if type(label) == "string" and label ~= "" then
+                    if Normalize(label) == normQuery or Compact(label) == compactQuery then
+                        exacts[#exacts + 1] = item
+                        break
+                    end
                 end
             end
         end
     end
+    if matchCount == 0 then return { status = "none", query = query, mediaType = mediaType } end
     if #exacts == 1 then
         return { status = "exact", mediaType = mediaType, query = query, item = exacts[1], value = exacts[1].value, label = exacts[1].label }
     end
-    if #matches == 1 then
-        return { status = "exact", mediaType = mediaType, query = query, item = matches[1], value = matches[1].value, label = matches[1].label }
+    if matchCount == 1 then
+        local item = top[1]
+        return { status = "exact", mediaType = mediaType, query = query, item = item, value = item.value, label = item.label }
     end
     return { status = "choices", mediaType = mediaType, query = query, choices = top }
 end

@@ -12,12 +12,18 @@ M.Assistant = A
 
 local P = A.Parser or {}
 A.Parser = P
+local Registry = A.Registry
 
 local Trim = P.Trim
 local Normalize = P.Normalize
 local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 local DetectGroups = P.DetectGroups
+local ExtractColor = P.ExtractColor
+
+local function MaybeYield()
+    if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+end
 
 local COMMAND_STARTERS = {
     "set", "change", "make", "turn", "enable", "disable", "show", "hide", "move", "nudge", "shift",
@@ -952,6 +958,294 @@ AddScopedBooleanTailCommands = function(commands, scope, tail)
         scopes = ParentBooleanScopes(scope)
     end
     return AddScopedBooleanItemCommands(commands, verb, scopes, itemText)
+end
+
+local function FastSettingChange(changes, scope, attr, rawValue)
+    scope = Normalize(scope or "")
+    if scope == "mythic raid" then scope = "mythicraid" end
+    local dbScope = scope
+    if scope == "party" then dbScope = "gf_party" end
+    if scope == "raid" then dbScope = "gf_raid" end
+    if scope == "mythicraid" then dbScope = "gf_mythicraid" end
+    local settingKey, value
+    if attr == "width" or attr == "height" then
+        settingKey = dbScope .. "." .. attr
+        value = tonumber(rawValue)
+    elseif attr == "alpha" then
+        settingKey = dbScope .. ".hpBarAlpha"
+        value = tonumber(rawValue)
+        if value and value > 1 then value = value / 100 end
+    else
+        return false
+    end
+    local setting = Registry and Registry.GetSetting and Registry:GetSetting(settingKey)
+    if not (setting and value ~= nil) then return false end
+    changes[#changes + 1] = { setting = setting, value = value }
+    return true
+end
+
+local function FastBooleanChange(changes, scope, item, verb)
+    scope = Normalize(scope or "")
+    if scope == "mythic raid" then scope = "mythicraid" end
+    local dbScope = scope
+    if scope == "party" then dbScope = "gf_party" end
+    if scope == "raid" then dbScope = "gf_raid" end
+    if scope == "mythicraid" then dbScope = "gf_mythicraid" end
+    local on = verb == "turn on"
+    local settingKey, value
+    item = SingularItem(Normalize(item or ""))
+    if item == "name" then
+        settingKey = dbScope .. ".showName"
+        value = on
+    elseif item == "portrait" then
+        settingKey = dbScope .. ".portraitMode"
+        value = on and "LEFT" or "OFF"
+    elseif item == "power bar" or item == "mana bar" then
+        settingKey = dbScope .. ".showPowerBar"
+        value = on
+    else
+        return false
+    end
+    local setting = Registry and Registry.GetSetting and Registry:GetSetting(settingKey)
+    if not setting then return false end
+    changes[#changes + 1] = { setting = setting, value = value }
+    return true
+end
+
+local function FastBooleanItemsForText(text)
+    return BooleanTailItemsFromText(StripBooleanWords(RemoveScopeTerms(text)))
+        or BooleanTailItemsFromText(StripBooleanWords(text))
+end
+
+local function FastApplyBooleanItems(changes, scopes, items, verb)
+    if #(scopes or {}) == 0 or #(items or {}) == 0 then return false end
+    if #scopes * #items > 16 then return false end
+    for s = 1, #scopes do
+        for i = 1, #items do
+            if not FastBooleanChange(changes, scopes[s], items[i], verb) then return false end
+        end
+    end
+    return true
+end
+
+local function FastKeepBoolean(text)
+    local first, second = text:match("^(.-)%s+but%s+keep%s+(.+)$")
+    if not first then first, second = text:match("^(.-)%s+but%s+leave%s+(.+)$") end
+    if not first then first, second = text:match("^(.-)%s+but%s+turn%s+(.+)$") end
+    if not (first and second) then return nil end
+
+    local firstVerb, firstBody = BooleanLead(first)
+    local secondVerb = BooleanVerbForText(second)
+    if not (firstVerb and secondVerb) then return nil end
+
+    local secondItemText, relationScope = BooleanRelationScope(second)
+    local secondScopes = ScopeLabels(relationScope or second)
+    if #secondScopes > 0 then secondItemText = RemoveScopeTerms(secondItemText) end
+    local firstScopes = ScopeLabels(firstBody)
+    if #firstScopes == 0 then firstScopes = secondScopes end
+    if #secondScopes == 0 then secondScopes = firstScopes end
+    if #firstScopes == 0 or #secondScopes == 0 then return nil end
+
+    local firstItems = FastBooleanItemsForText(firstBody)
+    local secondItems = FastBooleanItemsForText(secondItemText)
+    if not (firstItems and secondItems) then return nil end
+
+    local changes = {}
+    if not FastApplyBooleanItems(changes, firstScopes, firstItems, firstVerb) then return nil end
+    if not FastApplyBooleanItems(changes, secondScopes, secondItems, secondVerb) then return nil end
+    if #changes < 2 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Combined Assistant setting change",
+        summary = "Combined natural-language setting changes.",
+        bulkSafe = true,
+        compoundForce = true,
+    }
+end
+
+local function FastBooleanScopeList(text)
+    local verb, body = BooleanLead(text)
+    if not verb then return nil end
+    if BooleanVerbForText(body) ~= nil then return nil end
+    local scopes = ScopeLabels(body)
+    if #scopes == 0 then return nil end
+    local items = FastBooleanItemsForText(body)
+    if not items or #items == 0 then return nil end
+    if #items > 1 then return nil end
+    local changes = {}
+    if not FastApplyBooleanItems(changes, scopes, items, verb) then return nil end
+    if #changes < 2 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Combined Assistant setting change",
+        summary = "Combined natural-language setting changes.",
+        bulkSafe = true,
+        compoundForce = true,
+    }
+end
+
+local function FastNumericBooleanChain(text)
+    local pairText = Normalize((text or ""):gsub("=", " "))
+    local segments, values = {}, {}
+    local pos = 1
+    while true do
+        local s, e = pairText:find("[-+]?%d+%.?%d*", pos)
+        if not s then break end
+        segments[#segments + 1] = Trim(pairText:sub(pos, s - 1))
+        values[#values + 1] = pairText:sub(s, e)
+        pos = e + 1
+    end
+    local tail = Trim(pairText:sub(pos))
+    if #values < 2 or #values > 8 then return nil end
+
+    local changes, currentScopes = {}, nil
+    local touchedScopes, seenTouchedScopes = {}, {}
+    for i = 1, #values do
+        local prefix, attr = ExtractAttr(segments[i])
+        if not attr or (attr ~= "width" and attr ~= "height" and attr ~= "alpha") then return nil end
+        prefix = StripCommandLead(prefix or "")
+        prefix = Trim(prefix:gsub("^and%s+", ""):gsub("^und%s+", ""))
+        if RemoveScopeTerms(prefix) ~= "" then return nil end
+        if prefix ~= "" then
+            local scopes = ScopeLabels(prefix)
+            if #scopes == 0 then return nil end
+            currentScopes = scopes
+        elseif not currentScopes then
+            return nil
+        end
+        for s = 1, #currentScopes do
+            if not FastSettingChange(changes, currentScopes[s], attr, values[i]) then return nil end
+        end
+        AddScopeLabels(touchedScopes, seenTouchedScopes, table.concat(currentScopes, " "))
+    end
+
+    if tail ~= "" then
+        local pairs = BooleanTailPairs(tail)
+        if pairs and #pairs > 1 then
+            for i = 1, #pairs do
+                local items = BooleanTailItemsFromText(StripBooleanWords(pairs[i].item))
+                if not items then return nil end
+                for s = 1, #touchedScopes do
+                    for itemIndex = 1, #items do
+                        if not FastBooleanChange(changes, touchedScopes[s], items[itemIndex], pairs[i].verb) then return nil end
+                    end
+                end
+            end
+        else
+            local verb = BooleanVerbForText(tail)
+            if not verb then return nil end
+            local itemText, relationScope = BooleanRelationScope(tail)
+            local scopes = ScopeLabels(relationScope or tail)
+            if #scopes > 0 then
+                itemText = RemoveScopeTerms(itemText)
+            else
+                scopes = touchedScopes
+            end
+            local items = BooleanTailItemsFromText(StripBooleanWords(itemText))
+            if not items then return nil end
+            for s = 1, #scopes do
+                for itemIndex = 1, #items do
+                    if not FastBooleanChange(changes, scopes[s], items[itemIndex], verb) then return nil end
+                end
+            end
+        end
+    end
+
+    if #changes < 2 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Combined Assistant setting change",
+        summary = "Combined natural-language setting changes.",
+        bulkSafe = true,
+        compoundForce = true,
+    }
+end
+
+local function FastApplyBooleanTail(changes, scopes, tail)
+    tail = Normalize(tail or "")
+    if tail == "" then return true end
+    local tailPairs = BooleanTailPairs(tail)
+    if tailPairs and #tailPairs > 1 then
+        for i = 1, #tailPairs do
+            local items = BooleanTailItemsFromText(StripBooleanWords(tailPairs[i].item))
+            if not items then return false end
+            for s = 1, #scopes do
+                for itemIndex = 1, #items do
+                    if not FastBooleanChange(changes, scopes[s], items[itemIndex], tailPairs[i].verb) then return false end
+                end
+            end
+        end
+        return true
+    end
+
+    local verb = BooleanVerbForText(tail)
+    if not verb then return false end
+    local itemText, relationScope = BooleanRelationScope(tail)
+    local tailScopes = ScopeLabels(relationScope or tail)
+    if #tailScopes > 0 then
+        itemText = RemoveScopeTerms(itemText)
+    else
+        tailScopes = scopes
+    end
+    local items = BooleanTailItemsFromText(StripBooleanWords(itemText))
+    return FastApplyBooleanItems(changes, tailScopes, items, verb)
+end
+
+local function FastAttributeListTrailingNumbers(text)
+    local rest = Normalize((text or ""):gsub("=", " "))
+    local changes = {}
+    local touchedScopes, seenTouchedScopes = {}, {}
+    local blocks = 0
+    while rest ~= "" do
+        rest = StripAttributeListBlockLead(rest)
+        if rest == "" then break end
+        local s = rest:find("[-+]?%d+%.?%d*")
+        if not s then
+            if blocks < 1 then return nil end
+            local scopeText = table.concat(touchedScopes, " ")
+            if #ScopeLabels(rest) > 0 or #touchedScopes <= 1 or not ContainsAny(rest, { "names", "portraits", "power bars", "mana bars" }) then
+                scopeText = touchedScopes[#touchedScopes] or scopeText
+            end
+            local scopes = ScopeLabels(scopeText)
+            if #scopes == 0 or not FastApplyBooleanTail(changes, scopes, rest) then return nil end
+            rest = ""
+            break
+        end
+
+        local body = Trim(rest:sub(1, s - 1))
+        local prefix, attrs = AttributeListPrefix(body)
+        if not prefix or prefix == "" or not attrs or #attrs < 2 or #attrs > 4 then return nil end
+        local values, tail = LeadingNumberList(rest:sub(s), #attrs)
+        if not values then return nil end
+
+        local scopeText = StripCommandLead(prefix)
+        local scopes = ScopeLabels(scopeText)
+        if #scopes == 0 then return nil end
+        AddScopeLabels(touchedScopes, seenTouchedScopes, scopeText)
+        for i = 1, #attrs do
+            local attr = attrs[i]
+            if attr ~= "width" and attr ~= "height" and attr ~= "alpha" then return nil end
+            for scopeIndex = 1, #scopes do
+                if not FastSettingChange(changes, scopes[scopeIndex], attr, values[i]) then return nil end
+            end
+        end
+        blocks = blocks + 1
+        if blocks > 4 then return nil end
+        rest = tail
+    end
+
+    if #changes < 2 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Combined Assistant setting change",
+        summary = "Combined natural-language setting changes.",
+        bulkSafe = true,
+        compoundForce = true,
+    }
 end
 
 local function BooleanScopeText(text)
@@ -2047,6 +2341,58 @@ local function ValueTokenChain(text)
     return ParseCommands(commands)
 end
 
+local function FastBarScope(scope)
+    scope = Normalize(scope or "")
+    if scope == "mythic raid" or scope == "mythicraid" or scope == "raid" then return "gf_raid" end
+    if scope == "party" then return "gf_party" end
+    return scope
+end
+
+local function FastScopedBorderColorChain(text)
+    local segments = ValueTokenSegments(text)
+    if not segments then return nil end
+    local changes = {}
+    for i = 1, #segments do
+        local words = Words(segments[i])
+        if #words < 4 then return nil end
+        local colorWord = words[#words]
+        if not COLOR_VALUE_WORDS[colorWord] then return nil end
+        local r, g, b, label = ExtractColor and ExtractColor(colorWord, colorWord)
+        if not r then return nil end
+
+        local prefix = StripCommandLead(WordsText(words, 1, #words - 1))
+        local detail = RemoveScopeTerms(prefix)
+        if detail ~= "border color"
+            and detail ~= "outline color"
+            and detail ~= "bar border color"
+            and detail ~= "bar outline color"
+            and detail ~= "frame border color"
+            and detail ~= "frame outline color" then
+            return nil
+        end
+        local scopes = ScopeLabels(prefix)
+        if #scopes == 0 then return nil end
+        for scopeIndex = 1, #scopes do
+            local setting = Registry and Registry.GetSetting and Registry:GetSetting("barScope." .. FastBarScope(scopes[scopeIndex]) .. ".barOutlineColor")
+            if not setting then return nil end
+            changes[#changes + 1] = {
+                setting = setting,
+                value = { r = r, g = g, b = b, label = label },
+                valueLabel = label,
+            }
+        end
+    end
+    if #changes < 2 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Combined Assistant setting change",
+        summary = "Combined natural-language setting changes.",
+        bulkSafe = true,
+        compoundForce = true,
+    }
+end
+
 local function CountNumbers(text)
     local count = 0
     for _ in tostring(text or ""):gmatch("[-+]?%d+%.?%d*") do
@@ -2101,6 +2447,45 @@ function P.ParseCompound(normalized, raw, normalParsed)
     local hasJoin = text:find(" and ", 1, true) or text:find(" und ", 1, true)
     if not LooksLikeCompoundCandidate(text, hasJoin) then return nil end
     local normalCount = ChangeCount(normalParsed)
+    local normalSignature
+    local function accepted(candidate)
+        local count = ChangeCount(candidate)
+        if count <= 0 then return false, count end
+        if candidate.compoundForce == true or count > math.max(1, normalCount) then return true, count end
+        if count >= 2 and count == normalCount then
+            normalSignature = normalSignature or PlanSignature(normalParsed)
+            return PlanSignature(candidate) ~= normalSignature, count
+        end
+        return false, count
+    end
+
+    if text:find(" but ", 1, true) then
+        local keep = FastKeepBoolean(text) or KeepButBoolean(text)
+        local ok, count = accepted(keep)
+        if ok and count >= 3 then return keep end
+    end
+
+    local fastBoolean = FastBooleanScopeList(text)
+    local fastBooleanOk, fastBooleanCount = accepted(fastBoolean)
+    if fastBooleanOk and fastBooleanCount >= 2 then return fastBoolean end
+
+    if CountNumbers(text) >= 2 then
+        local numeric = FastNumericBooleanChain(text)
+            or FastAttributeListTrailingNumbers(text)
+            or RepeatedAttributeListTrailingNumbers(text)
+            or AttributeNumberPairs(text)
+            or AttributeListTrailingNumbers(text)
+            or AttributeListValues(text)
+        local ok, count = accepted(numeric)
+        if ok and count >= 2 then return numeric end
+    end
+
+    if CountKnownWords(text, COLOR_VALUE_WORDS) >= 2 then
+        local color = FastScopedBorderColorChain(text)
+        local ok, count = accepted(color)
+        if ok and count >= 2 then return color end
+    end
+
     local noJoinCommands = (not hasJoin) and NoJoinScopeItemCommands(text) or nil
     local candidates = {}
     local function add(candidate)
@@ -2110,41 +2495,47 @@ function P.ParseCompound(normalized, raw, normalParsed)
     add(SizePair(text))
     add(AttributeListValues(text))
     add(AttributeListTrailingNumbers(text))
+    MaybeYield()
     add(RepeatedAttributeListTrailingNumbers(text))
     add(AttributeListRelativeValues(text))
     add(SharedAttributeValue(text))
     add(SharedAttributeRelativeValue(text))
+    MaybeYield()
     add(ScopedValueTailPairs(text))
     add(ScopedRelativeValueTailPairs(text))
     add(AttributeNumberPairs(text))
     add(HybridSizeTail(text))
+    MaybeYield()
     add(ValueTokenChain(text))
     add(RepeatedSlotValueBlocks(text))
     add(SlotValuePairs(text))
     add(DirectionPairs(text))
+    MaybeYield()
     add(ExplicitBooleanSegments(text))
     add(BooleanTailItemList(text))
     add(BooleanLeadItemList(text))
     add(BooleanItemPairs(text))
+    MaybeYield()
     add(SharedLeadingScopesItems(text))
     add(BooleanScopeItemChain(text))
     add(SharedScopeValue(text))
     add(SharedScopeRelativeValue(text))
+    MaybeYield()
     if noJoinCommands then add(ParseCommands(noJoinCommands)) end
     if hasJoin then
         local parts = SplitParts(text)
         local trailing = parts and TrailingScopeItemCommands(parts) or nil
         if trailing then add(ParseCommands(trailing)) end
+        MaybeYield()
         add(SharedValue(text))
         add(SharedScope(text))
         add(ContextSplit(text))
     end
     local best
     for i = 1, #candidates do
+        if i % 4 == 0 then MaybeYield() end
         local candidate = candidates[i]
-        if candidate and (candidate.compoundForce == true
-            or ChangeCount(candidate) > math.max(1, normalCount)
-            or (ChangeCount(candidate) >= 2 and ChangeCount(candidate) == normalCount and PlanSignature(candidate) ~= PlanSignature(normalParsed))) then
+        if candidate and accepted(candidate) then
             if not best or ChangeCount(candidate) > ChangeCount(best) then best = candidate end
         end
     end

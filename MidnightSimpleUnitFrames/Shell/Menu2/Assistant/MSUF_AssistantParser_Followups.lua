@@ -570,6 +570,23 @@ local function ParseSetting(text, ctx)
     local movementIntent = direction and ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y" }) and not ContainsAny(text, { "anchor" })
     local attr = movementIntent and ((direction == "left" or direction == "right") and "offsetX" or "offsetY") or DetectAttribute(text, frameType)
     if not attr then return nil end
+    if attr == "enabled" and ContainsAny(text, {
+        "in group", "when solo", "while solo", "show player", "hide player", "player in group",
+        "show while solo", "while in group", "group when solo",
+        "out of combat", "outside combat", "in combat", "while mounted", "when mounted", "mounted",
+        "in vehicle", "while in vehicle", "when in vehicle", "resting", "stealthed", "load condition",
+        "dispel overlay", "unitframe dispel", "debuff overlay",
+    }) then
+        return nil
+    end
+    if (attr == "width" or attr == "height") and ContainsAny(text, {
+        "width mode", "height mode", "width source", "height source",
+        "power bar height", "mana bar height", "energy bar height",
+        "portrait height", "portrait width", "castbar height", "castbar width",
+        "icon height", "icon width", "text height", "text width",
+    }) then
+        return nil
+    end
     local useLastUnit = ShouldUseLastUnitContext(text)
     if useLastUnit and frameType == "unitframe" and ctx and IsGroupContextUnit(ctx.lastUnit) then
         frameType = "group"
@@ -603,6 +620,29 @@ local function ParseSetting(text, ctx)
         value = DetectBoolean(text)
     end
 
+    if value == nil and relativeDelta == nil and (attr == "width" or attr == "height") then
+        local candidates
+        if #units > 0 then
+            candidates = Registry:FindSettings({ units = units, frameType = frameType, attribute = attr })
+        else
+            candidates = Registry:FindSettings({ frameType = frameType, attribute = attr })
+        end
+        if #candidates == 1 then
+            local setting = candidates[1]
+            local parts = {}
+            if setting.min ~= nil then parts[#parts + 1] = "min " .. tostring(setting.min) end
+            if setting.max ~= nil then parts[#parts + 1] = "max " .. tostring(setting.max) end
+            if setting.step ~= nil then parts[#parts + 1] = "step " .. tostring(setting.step) end
+            local hint = #parts > 0 and ("Use a number (" .. table.concat(parts, ", ") .. ").") or "Use a number."
+            return {
+                kind = "answer",
+                status = "ambiguous",
+                text = "What should " .. tostring(setting.label or "this setting") .. " be set to? " .. hint,
+                summary = "Registry-backed value clarification.",
+            }
+        end
+    end
+
     if value == nil and relativeDelta == nil and attr ~= "enabled" then return nil end
     if value == nil and relativeDelta == nil and attr == "enabled" then value = DetectBoolean(text) end
     if value == nil and relativeDelta == nil then return nil end
@@ -621,6 +661,15 @@ local function ParseSetting(text, ctx)
         }
     end
     if #units == 0 and #candidates > 1 then
+        if ContainsAny(text, { "all", "all of", "every", "each", "alle", "alles", "jede", "jeder", "jedes" }) then
+            return {
+                kind = "changes",
+                changes = BuildChanges(candidates, value, relativeDelta, direction),
+                label = "Assistant setting change",
+                bulkSafe = true,
+                summary = "Registry-backed settings change.",
+            }
+        end
         return {
             kind = "ambiguous",
             choices = BuildChanges(candidates, value, relativeDelta, direction),

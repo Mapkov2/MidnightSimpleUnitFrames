@@ -769,6 +769,276 @@ local function GroupScopesOrCurrentPage(text)
     return {}
 end
 
+P.GROUP_ROOT_FRAME_DETAIL_TERMS = {
+    "name", "name text", "hp text", "health text", "power text", "mana text", "text slot",
+    "status", "status text", "status icon", "indicator", "icon", "ready check", "raid marker",
+    "summon", "resurrect", "resurrection", "ghost", "dead", "afk", "dnd", "group number",
+    "aura", "auras", "buff", "buffs", "debuff", "debuffs", "castbar", "cast bar", "portrait",
+    "bar", "health bar", "power bar", "mana bar", "border", "outline",
+}
+
+function P.ParseGroupFrameRootMove(text)
+    if ContainsAny(text, P.GROUP_ROOT_FRAME_DETAIL_TERMS) then return nil end
+    if not ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "pos", "x", "y" }) then return nil end
+    local groups = GroupScopesOrCurrentPage(text)
+    if #groups == 0 then return nil end
+
+    local direction = DetectDirection(text, {})
+    local axis = OM.AxisForDirection(direction) or A._DetailOffsetAxis(text)
+    local value
+    local relativeDelta
+
+    if direction then
+        relativeDelta = FirstNumber(text) or 10
+        if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
+    elseif axis then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    else
+        return nil
+    end
+
+    local attr = axis == "y" and "offsetY" or "offsetX"
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
+        if setting then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+                relativeDelta = relativeDelta,
+                direction = direction or axis,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Move group frame",
+        bulkSafe = #changes > 1,
+        summary = "Moves the registered Group Frame root X/Y position controls.",
+    }
+end
+
+P.FRAME_RESIZE_INCREASE_TERMS = {
+    "bigger", "larger", "grow", "make bigger", "make larger", "increase size",
+    "bigger frame", "larger frame", "frame bigger", "frame larger",
+    "groesser", "vergroessern", "groesser machen",
+}
+
+P.FRAME_RESIZE_DECREASE_TERMS = {
+    "smaller", "shrink", "reduce size", "make smaller", "decrease size",
+    "smaller frame", "frame smaller", "kleiner", "verkleinern", "kleiner machen",
+}
+
+P.FRAME_RESIZE_INTENT_TERMS = {
+    "resize frame", "resize unitframe", "resize unit frame", "frame size", "unitframe size", "unit frame size",
+    "make frame bigger", "make frame smaller", "make unitframe bigger", "make unitframe smaller",
+    "make unit frame bigger", "make unit frame smaller",
+}
+
+P.FRAME_RESIZE_DETAIL_BLOCKERS = {
+    "portrait", "castbar", "cast bar", "class power", "class resource", "class resources",
+    "power bar", "mana bar", "health bar", "hp bar", "name", "name text", "hp text",
+    "health text", "power text", "mana text", "text", "font", "border", "outline",
+    "corner", "corner dot", "corner dots", "indicator", "indicators", "status icon",
+    "status indicator", "icon", "icons", "aura", "auras", "buff", "buffs", "debuff",
+    "debuffs", "alpha", "opacity", "transparency", "range fade", "scale", "x offset",
+    "y offset", "offset", "position", "move", "nudge", "shift",
+}
+
+P.FRAME_RESIZE_EXACT_DIMENSION_TERMS = {
+    "width", "wide", "wider", "narrower", "breite", "breiter", "schmaler",
+    "height", "tall", "taller", "shorter", "hoehe", "hoeher",
+}
+
+function P.FrameResizeDirection(text)
+    if ContainsAny(text, P.FRAME_RESIZE_INCREASE_TERMS) then return "increase" end
+    if ContainsAny(text, P.FRAME_RESIZE_DECREASE_TERMS) then return "decrease" end
+    if ContainsAny(text, { "increase", "raise" }) and ContainsAny(text, { "size", "frame size", "unitframe size", "unit frame size" }) then return "increase" end
+    if ContainsAny(text, { "decrease", "reduce", "lower" }) and ContainsAny(text, { "size", "frame size", "unitframe size", "unit frame size" }) then return "decrease" end
+    return nil
+end
+
+function P.FrameResizeHasIntent(text)
+    if P.FrameResizeDirection(text) then return true end
+    return ContainsAny(text, P.FRAME_RESIZE_INTENT_TERMS)
+end
+
+function P.FrameResizeDelta(text, axis, direction)
+    local amount = FirstNumber(text)
+    if not amount then
+        local subtle = ContainsAny(text, { "a bit", "bit", "little", "slightly", "small amount" })
+        local large = ContainsAny(text, { "a lot", "lot", "much", "massive", "huge", "big amount" })
+        if axis == "width" then
+            amount = large and 50 or (subtle and 10 or 25)
+        else
+            amount = large and 10 or (subtle and 2 or 5)
+        end
+    end
+    amount = tonumber(amount) or 0
+    if direction == "decrease" then amount = -amount end
+    return amount
+end
+
+function P.FrameResizeActionLabel(direction)
+    return direction == "decrease" and "Decrease" or "Increase"
+end
+
+function P.FrameResizeUnitLabel(unit)
+    local labels = A.UnitLabels or {}
+    return tostring(labels[unit] or unit or "Unitframe")
+end
+
+function P.FrameResizeGroupLabel(scope)
+    if scope == "party" then return "Party" end
+    if scope == "raid" then return "Raid" end
+    if scope == "mythicraid" then return "Mythic Raid" end
+    return tostring(scope or "Group")
+end
+
+function P.FrameResizeTargetLabel(kind, targets)
+    targets = targets or {}
+    if #targets == 1 then
+        return kind == "group" and (P.FrameResizeGroupLabel(targets[1]) .. " frame") or (P.FrameResizeUnitLabel(targets[1]) .. " frame")
+    end
+    if kind == "group" then
+        if #targets >= #ALL_GROUPS then return "all group frames" end
+        return tostring(#targets) .. " group frames"
+    end
+    if #targets >= #ALL_UNITFRAMES then return "all unitframes" end
+    return tostring(#targets) .. " unitframes"
+end
+
+function P.FrameResizeSettingKey(kind, target, attr)
+    if kind == "group" then return "gf_" .. tostring(A._TextGroupScopeName and A._TextGroupScopeName(target) or target) .. "." .. attr end
+    return tostring(target) .. "." .. attr
+end
+
+function P.BuildFrameResizeChanges(kind, targets, dimension, widthDelta, heightDelta)
+    local changes = {}
+    for i = 1, #(targets or {}) do
+        local target = targets[i]
+        if dimension == "both" or dimension == "width" then
+            local setting = Registry and Registry:GetSetting(P.FrameResizeSettingKey(kind, target, "width"))
+            if setting then changes[#changes + 1] = { setting = setting, relativeDelta = widthDelta, direction = widthDelta < 0 and "decrease" or "increase" } end
+        end
+        if dimension == "both" or dimension == "height" then
+            local setting = Registry and Registry:GetSetting(P.FrameResizeSettingKey(kind, target, "height"))
+            if setting then changes[#changes + 1] = { setting = setting, relativeDelta = heightDelta, direction = heightDelta < 0 and "decrease" or "increase" } end
+        end
+    end
+    return changes
+end
+
+function P.FrameResizeChoice(kind, targets, dimension, widthDelta, heightDelta, direction)
+    local changes = P.BuildFrameResizeChanges(kind, targets, dimension, widthDelta, heightDelta)
+    if #changes == 0 then return nil end
+    local action = P.FrameResizeActionLabel(direction)
+    local targetLabel = P.FrameResizeTargetLabel(kind, targets)
+    local label
+    if dimension == "both" then
+        label = action .. " " .. targetLabel .. " width and height"
+    elseif dimension == "width" then
+        label = action .. " " .. targetLabel .. " width only"
+    else
+        label = action .. " " .. targetLabel .. " height only"
+    end
+    return {
+        changes = changes,
+        label = label,
+        bulkSafe = #changes >= 6,
+        summary = "Applies a relative frame size change to registered width/height controls.",
+    }
+end
+
+function P.ParseFrameResizeShortcut(text)
+    if not P.FrameResizeHasIntent(text) then return nil end
+    if ContainsAny(text, P.FRAME_RESIZE_DETAIL_BLOCKERS) then return nil end
+    if ContainsAny(text, P.FRAME_RESIZE_EXACT_DIMENSION_TERMS) then return nil end
+
+    local direction = P.FrameResizeDirection(text)
+    local groups = DetectGroups(text)
+    local units = {}
+    local kind
+    local targets
+    if #groups > 0 then
+        kind = "group"
+        targets = groups
+    else
+        units = DetectUnits(text)
+        if #units > 0 then
+            kind = "unitframe"
+            targets = units
+        end
+    end
+
+    if not targets or #targets == 0 then
+        local pageGroups = GroupScopesOrCurrentPage(text)
+        if #pageGroups > 0 then
+            kind = "group"
+            targets = pageGroups
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then
+                kind = "unitframe"
+                targets = { pageUnit }
+            end
+        end
+    end
+
+    if not targets or #targets == 0 then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Which frame should I resize? For example: 'make player frame bigger', 'make target frame smaller', or 'make party frame bigger'.",
+            summary = "Asks for the missing frame target before resizing.",
+        }
+    end
+    if not direction then
+        return {
+            kind = "answer",
+            status = "ambiguous",
+            text = "Should I make " .. P.FrameResizeTargetLabel(kind, targets) .. " bigger or smaller? You can also say 'width only' or 'height only'.",
+            summary = "Asks for the missing resize direction.",
+        }
+    end
+
+    local widthDelta = P.FrameResizeDelta(text, "width", direction)
+    local heightDelta = P.FrameResizeDelta(text, "height", direction)
+    local forceBoth = ContainsAny(text, {
+        "both", "width and height", "height and width", "whole frame", "entire frame",
+        "overall", "all around", "in both directions",
+    })
+    if forceBoth then
+        local changes = P.BuildFrameResizeChanges(kind, targets, "both", widthDelta, heightDelta)
+        if #changes == 0 then return nil end
+        return {
+            kind = "changes",
+            changes = changes,
+            label = P.FrameResizeActionLabel(direction) .. " frame width and height",
+            bulkSafe = #changes >= 6,
+            summary = "Applies a relative frame size change to registered width and height controls.",
+        }
+    end
+
+    local choices = {}
+    local both = P.FrameResizeChoice(kind, targets, "both", widthDelta, heightDelta, direction)
+    local width = P.FrameResizeChoice(kind, targets, "width", widthDelta, heightDelta, direction)
+    local height = P.FrameResizeChoice(kind, targets, "height", widthDelta, heightDelta, direction)
+    if both then choices[#choices + 1] = both end
+    if width then choices[#choices + 1] = width end
+    if height then choices[#choices + 1] = height end
+    if #choices == 0 then return nil end
+    return {
+        kind = "ambiguous",
+        choices = choices,
+        label = "Which frame size should change?",
+        summary = "The command named a frame and a broad resize direction, so the Assistant asks which registered size controls to adjust.",
+    }
+end
+
 P.TEXT_VISIBILITY_VALUE_TERMS = {
     "current", "actual", "max", "maximum", "percent", "percentage", "pct", "%",
     "current max", "current maximum", "current percent", "current percentage",
@@ -1363,7 +1633,7 @@ local function TextSelectorSlot(text)
         return "left"
     end
     if ContainsAny(text, { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", "center text slot", "centre text slot", "middle text slot" })
-        or ContainsAny(text, { "center anchor", "centre anchor", "middle anchor", "anchor center", "anchor centre", "anchor middle", "anchor to center", "anchor to centre", "anchor to middle", "to center", "to centre", "to middle", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle", "center side", "centre side", "middle" })
+        or ContainsAny(text, { "center anchor", "centre anchor", "middle anchor", "anchor center", "anchor centre", "anchor middle", "anchor to center", "anchor to centre", "anchor to middle", "to center", "to centre", "to middle", "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle", "center side", "centre side", "middle" })
         or ((HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle")) and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
     then
         return "center"
@@ -1514,9 +1784,12 @@ function A._TextSlotForDetail(text, tab)
         if ContainsAny(text, { "center power text", "centre power text", "middle power text", "power center text", "power centre text", "power middle text", "power text center", "power text centre", "power text middle", "center mana text", "centre mana text", "middle mana text", "mana center text", "mana centre text", "mana middle text", "mana text center", "mana text centre", "mana text middle", "center power slot", "centre power slot", "middle power slot", "power center slot", "power centre slot", "power middle slot", "power slot center", "power slot centre", "power slot middle", "center mana slot", "centre mana slot", "middle mana slot", "mana center slot", "mana centre slot", "mana middle slot", "mana slot center", "mana slot centre", "mana slot middle", "center power label", "centre power label", "middle power label", "power center label", "power centre label", "power middle label", "power label center", "power label centre", "power label middle", "center mana label", "centre mana label", "middle mana label", "mana center label", "mana centre label", "mana middle label", "mana label center", "mana label centre", "mana label middle" }) then return "Center" end
         if ContainsAny(text, { "right power text", "power right text", "power text right", "right mana text", "mana right text", "mana text right", "right power slot", "power right slot", "power slot right", "right mana slot", "mana right slot", "mana slot right", "right power label", "power right label", "power label right", "right mana label", "mana right label", "mana label right" }) then return "Right" end
     end
+    if ContainsAny(text, { "left of", "left side of", "to left of", "to the left of", "in left of", "in the left of" }) then return "Left" end
+    if ContainsAny(text, { "center of", "centre of", "middle of", "center side of", "centre side of", "middle side of", "to center of", "to centre of", "to middle of", "to the center of", "to the centre of", "to the middle of", "in center of", "in centre of", "in middle of", "in the center of", "in the centre of", "in the middle of" }) then return "Center" end
+    if ContainsAny(text, { "right of", "right side of", "to right of", "to the right of", "in right of", "in the right of" }) then return "Right" end
     local slot = TextSelectorSlot(text)
     if (slot == "left" or slot == "center" or slot == "right")
-        and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "side", "left side", "right side", "center side", "centre side", "middle side" })
+        and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "side", "left side", "right side", "center side", "centre side", "middle side", "to left", "to right", "to center", "to centre", "to middle", "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle" })
     then
         return slot == "left" and "Left" or (slot == "right" and "Right" or "Center")
     end
@@ -1628,6 +1901,177 @@ function A._SelectedTextTargetFromContext(tab)
     return nil
 end
 
+function A._ParseNameTextAnchorShortcut(text)
+    if ContainsAny(text, {
+        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
+        "class power", "class resource", "class resources", "resource bar",
+        "power bar", "powerbar", "mana bar",
+    }) then
+        return nil
+    end
+
+    local tab = TextSelectorTab(text)
+    if tab == "hp" or tab == "power" or tab == "advanced" then return nil end
+    if ContainsAny(text, {
+        "status", "status text", "status icon", "indicator", "icon",
+        "raid marker", "ready check", "summon", "resurrect", "resurrection",
+        "ghost", "dead", "afk", "dnd", "group number",
+    }) and not ContainsAny(text, {
+        "name", "name text", "unit name", "unitframe name", "unit frame name", "name label",
+    }) then
+        return nil
+    end
+
+    local value
+    if ContainsAny(text, {
+        "middle", "center", "centre", "centered", "centred",
+        "to middle", "to the middle", "in middle", "in the middle",
+        "to center", "to the center", "in center", "in the center",
+        "to centre", "to the centre", "in centre", "in the centre",
+    }) then
+        value = "CENTER"
+    elseif ContainsAny(text, {
+        "to left", "to the left", "on left", "on the left", "left side",
+        "anchor left", "left anchor", "anchor to left", "align left",
+    }) or (HasPhrase(text, "left") and ContainsAny(text, { "anchor", "anchoring", "align", "alignment", "justify" })) then
+        value = "LEFT"
+    elseif ContainsAny(text, {
+        "to right", "to the right", "on right", "on the right", "right side",
+        "anchor right", "right anchor", "anchor to right", "align right",
+    }) or (HasPhrase(text, "right") and ContainsAny(text, { "anchor", "anchoring", "align", "alignment", "justify" })) then
+        value = "RIGHT"
+    end
+    if not value then return nil end
+
+    local ctx = A.GetContext and A.GetContext() or nil
+    local contextReference = ContainsAny(text, { "it", "that", "this", "selected", "same" })
+    local explicitName = tab == "name" or ContainsAny(text, {
+        "name", "name text", "unit name", "unitframe name", "unit frame name",
+        "name label", "player name", "target name", "focus name", "pet name", "boss name",
+    })
+    local genericText = tab == nil
+        and ContainsAny(text, { "text", "unit text", "unitframe text", "unit frame text", "frame text" })
+        and ContainsAny(text, { "unitframe", "unit frame", "frame", "middle of", "center of", "centre of" })
+    local placementIntent = ContainsAny(text, {
+        "move", "put", "place", "set", "align", "anchor", "position",
+        "center", "centre", "middle", "justify",
+    })
+    if not placementIntent then return nil end
+    if not explicitName and not genericText and not contextReference then return nil end
+
+    local function IsNameContext(key, attr)
+        key = tostring(key or "")
+        attr = tostring(attr or "")
+        if attr == "name" or attr == "showName" or attr == "nameTextAnchor" or attr == "nameAnchor"
+            or attr == "nameOffsetX" or attr == "nameOffsetY" or attr == "nameFontSize" or attr == "nameTextLayer"
+        then
+            return true
+        end
+        return key:find(".showName", 1, true)
+            or key:find(".nameTextAnchor", 1, true)
+            or key:find(".nameAnchor", 1, true)
+            or key:find(".nameOffsetX", 1, true)
+            or key:find(".nameOffsetY", 1, true)
+            or key:find(".nameFontSize", 1, true)
+            or key:find(".nameTextLayer", 1, true)
+    end
+
+    local function ContextNameTarget()
+        if not ctx then return nil, nil end
+        if IsNameContext(ctx.lastSetting, ctx.lastAttribute)
+            and (ctx.lastFrameType == "unitframe" or ctx.lastFrameType == "group")
+            and type(ctx.lastUnit) == "string" and ctx.lastUnit ~= ""
+        then
+            return ctx.lastFrameType, ctx.lastFrameType == "group" and A._TextGroupScopeName(ctx.lastUnit) or ctx.lastUnit
+        end
+        local bundle = ctx.lastChangeBundle
+        if type(bundle) ~= "table" then return nil, nil end
+        for i = #bundle, 1, -1 do
+            local item = bundle[i]
+            if type(item) == "table" and IsNameContext(item.key, item.attribute)
+                and (item.frameType == "unitframe" or item.frameType == "group")
+                and type(item.unit) == "string" and item.unit ~= ""
+            then
+                return item.frameType, item.frameType == "group" and A._TextGroupScopeName(item.unit) or item.unit
+            end
+        end
+        return nil, nil
+    end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+
+    if #groups == 0 and #units == 0 and contextReference then
+        local frameType, unitOrScope = ContextNameTarget()
+        if frameType == "group" then
+            groups = { unitOrScope }
+        elseif frameType == "unitframe" then
+            units = { unitOrScope }
+        elseif not explicitName and not genericText then
+            return nil
+        end
+    end
+
+    if #groups == 0 and #units == 0 and not contextReference then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+
+    if #groups == 0 and #units == 0 then return nil end
+
+    local changes = {}
+    local function AddTarget(settingKey, showKey)
+        local showSetting = Registry and Registry:GetSetting(showKey)
+        if showSetting and ReadSettingValue(showSetting) == false then
+            changes[#changes + 1] = {
+                setting = showSetting,
+                value = true,
+                valueLabel = "enabled",
+                label = tostring(showSetting.label or "Name") .. " -> enabled",
+            }
+        end
+        local setting = Registry and Registry:GetSetting(settingKey)
+        if setting and A._EnumAllowsValue(setting, value) then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+                valueLabel = value == "CENTER" and "center" or (value == "LEFT" and "left" or "right"),
+            }
+        end
+    end
+
+    for i = 1, #groups do
+        local scope = A._TextGroupScopeName(groups[i])
+        AddTarget("gf_" .. tostring(scope) .. ".nameAnchor", "gf_" .. tostring(scope) .. ".showName")
+    end
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        AddTarget(unit .. ".nameTextAnchor", unit .. ".showName")
+    end
+
+    if #changes == 0 then return nil end
+    if #changes > 1 and (#groups + #units) > 1 then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Multiple matching name text anchor settings",
+            summary = "The command matched more than one Name anchor dropdown, so the Assistant is asking which real setting to change.",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set name text anchor",
+        summary = "Changes the registered Name anchor dropdown for the selected unit or group scope.",
+    }
+end
+
 function A._EnumAllowsValue(setting, value)
     local values = setting and setting.values
     if type(values) ~= "table" then return false end
@@ -1737,6 +2181,135 @@ function A._TextSlotDropdownValueForText(setting, text)
     return nil
 end
 
+P.TEXT_SLOT_SHOW_INTENT_TERMS = {
+    "show", "display", "visible", "add", "create", "create new", "new", "put",
+    "turn on", "enable", "enabled",
+    "anzeigen", "zeigen", "einblenden", "sichtbar", "aktivieren", "einschalten",
+}
+
+function A._HasTextSlotShowIntent(text)
+    if ContainsAny(text, OFF_WORDS) then return false end
+    return ContainsAny(text, P.TEXT_SLOT_SHOW_INTENT_TERMS)
+end
+
+function A._AddTextSlotVisibilityChange(out, frameType, unitOrScope, tab)
+    if tab ~= "hp" and tab ~= "power" then return end
+    local key
+    if frameType == "group" then
+        key = "gf_" .. tostring(A._TextGroupScopeName(unitOrScope)) .. "." .. (tab == "hp" and "showHPText" or "showPowerText")
+    else
+        key = tostring(unitOrScope) .. "." .. (tab == "hp" and "showHP" or "showPower")
+    end
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return end
+    out[#out + 1] = {
+        setting = setting,
+        value = true,
+        valueLabel = "on",
+        textArea = tab,
+        label = tostring(setting.label or "Text visibility") .. " -> on",
+    }
+end
+
+local function TextSlotMoveValueIntent(text)
+    return ContainsAny(text, {
+        "move", "move the", "move max", "move current", "move percent",
+        "relocate", "transfer", "send", "shift",
+        "verschieben", "umsetzen",
+    })
+end
+
+function A._ParseTextSlotValueMoveShortcut(text)
+    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
+    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
+    if not TextSlotMoveValueIntent(text) then return nil end
+    local tab = TextSelectorTab(text)
+    if tab ~= "hp" and tab ~= "power" then return nil end
+    local slot = A._TextSlotForDetail(text, tab)
+    if not slot then return nil end
+
+    local groups = DetectGroups(text)
+    local units = {}
+    if #groups == 0 then units = DetectUnits(text) end
+    if #groups == 0 and #units == 0 then
+        local page = M and M.activeKey
+        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
+            groups = GroupScopesOrCurrentPage(text)
+        else
+            local pageUnit = CurrentPageUnit()
+            if pageUnit then units = { pageUnit } end
+        end
+    end
+    if #groups == 0 and #units == 0 then return nil end
+
+    local function AddMoveTarget(out, frameType, unitOrScope)
+        local dst = TextSlotSetting(frameType, unitOrScope, tab, slot)
+        if not dst then return nil end
+        local value, invalid = A._TextSlotDropdownValueForText(dst, text)
+        if value == nil then return invalid end
+
+        out[#out + 1] = {
+            setting = dst,
+            value = value,
+            textArea = tab,
+            textSlot = A._TextSlotLower(slot),
+            label = tostring(dst.label or "Text slot") .. " -> " .. tostring(value),
+            valueLabel = value,
+        }
+
+        if value ~= "NONE" then
+            for _, sourceSlot in ipairs({ "Left", "Center", "Right" }) do
+                if sourceSlot ~= slot then
+                    local source = TextSlotSetting(frameType, unitOrScope, tab, sourceSlot)
+                    if source and ReadSettingValue(source) == value then
+                        out[#out + 1] = {
+                            setting = source,
+                            value = "NONE",
+                            textArea = tab,
+                            textSlot = A._TextSlotLower(sourceSlot),
+                            label = tostring(source.label or "Text slot") .. " -> NONE",
+                            valueLabel = "NONE",
+                        }
+                    end
+                end
+            end
+            A._AddTextSlotVisibilityChange(out, frameType, unitOrScope, tab)
+        end
+        return nil
+    end
+
+    local changes = {}
+    local invalidValue
+    for i = 1, #groups do
+        invalidValue = AddMoveTarget(changes, "group", A._TextGroupScopeName(groups[i])) or invalidValue
+    end
+    for i = 1, #units do
+        invalidValue = AddMoveTarget(changes, "unitframe", tostring(units[i])) or invalidValue
+    end
+    if #changes == 0 and invalidValue then
+        return {
+            kind = "unknown",
+            text = "That text-slot value is not available for the selected MSUF dropdown.",
+            status = "failed",
+        }
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and (#groups + #units) > 1 then
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Multiple matching text-slot move targets",
+            summary = "The command matched more than one text-slot target, so the Assistant is asking which real slot to change.",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Move text slot content",
+        summary = "Moves a concrete HP/Power text value into the requested left/center/right text slot and clears the same value from its old slot.",
+    }
+end
+
 function A._ParseTextSlotDropdownShortcut(text)
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
@@ -1820,7 +2393,10 @@ function A._ParseTextSlotDropdownShortcut(text)
         slots[1], slots[2], slots[3] = "Left", "Center", "Right"
     end
 
-    local function AddTextSlotChange(out, setting, slotName)
+    local shouldShowTextArea = A._HasTextSlotShowIntent(text)
+    local pendingVisibility = {}
+
+    local function AddTextSlotChange(out, setting, slotName, frameType, unitOrScope)
         if not setting then return nil end
         local value, invalid = A._TextSlotDropdownValueForText(setting, text)
         if value ~= nil then
@@ -1832,6 +2408,9 @@ function A._ParseTextSlotDropdownShortcut(text)
                 label = tostring(setting.label or "Text slot") .. " -> " .. tostring(value),
                 valueLabel = value,
             }
+            if shouldShowTextArea and value ~= "NONE" then
+                pendingVisibility[#pendingVisibility + 1] = { frameType = frameType, unitOrScope = unitOrScope }
+            end
         end
         return invalid
     end
@@ -1842,14 +2421,14 @@ function A._ParseTextSlotDropdownShortcut(text)
         for j = 1, #slots do
             local keyName = A._TextSlotSettingKey(tab, slots[j])
             local setting = keyName and Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. keyName)
-            invalidValue = AddTextSlotChange(changes, setting, slots[j]) or invalidValue
+            invalidValue = AddTextSlotChange(changes, setting, slots[j], "group", groups[i]) or invalidValue
         end
     end
     for i = 1, #units do
         for j = 1, #slots do
             local keyName = A._TextSlotSettingKey(tab, slots[j])
             local setting = keyName and Registry and Registry:GetSetting(tostring(units[i]) .. "." .. keyName)
-            invalidValue = AddTextSlotChange(changes, setting, slots[j]) or invalidValue
+            invalidValue = AddTextSlotChange(changes, setting, slots[j], "unitframe", units[i]) or invalidValue
         end
     end
     if #changes == 0 and invalidValue then
@@ -1867,6 +2446,17 @@ function A._ParseTextSlotDropdownShortcut(text)
             label = "Multiple matching text-slot dropdown settings",
             summary = "The command did not identify one concrete text slot, so the Assistant is asking which real slot to change.",
         }
+    end
+    if #pendingVisibility > 0 then
+        local seenVisibility = {}
+        for i = 1, #pendingVisibility do
+            local target = pendingVisibility[i]
+            local id = tostring(target.frameType) .. ":" .. tostring(target.unitOrScope) .. ":" .. tostring(tab)
+            if not seenVisibility[id] then
+                seenVisibility[id] = true
+                A._AddTextSlotVisibilityChange(changes, target.frameType, target.unitOrScope, tab)
+            end
+        end
     end
     return {
         kind = "changes",

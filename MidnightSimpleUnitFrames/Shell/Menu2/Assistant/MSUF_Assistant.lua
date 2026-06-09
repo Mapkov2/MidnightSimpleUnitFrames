@@ -25,6 +25,37 @@ local function PerfNowMs()
     return nil
 end
 
+local PERF_TRACE_LIMIT = 80
+local JOB_BUDGET_MS = 4
+local JOB_MAX_STEPS = 8
+A.JOB_YIELD = A.JOB_YIELD or {}
+
+local function ScheduleNextFrame(key, fn)
+    if type(fn) ~= "function" then return false end
+    if type(_G.MSUF_ScheduleOnce) == "function" then
+        _G.MSUF_ScheduleOnce(tostring(key or "MSUF_ASSISTANT"), fn)
+        return true
+    end
+    local scheduler = (MSUF and MSUF.Scheduler) or _G.MSUF_Scheduler
+    if scheduler and type(scheduler.RunNextFrame) == "function" then
+        scheduler.RunNextFrame(fn)
+        return true
+    end
+    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, fn)
+        return true
+    end
+    fn()
+    return false
+end
+
+local function PushPerfTrace(sample)
+    if type(sample) ~= "table" then return end
+    A._perfTrace = A._perfTrace or {}
+    A._perfTrace[#A._perfTrace + 1] = sample
+    while #A._perfTrace > PERF_TRACE_LIMIT do table.remove(A._perfTrace, 1) end
+end
+
 function A.RecordPerfSample(label, startedMs, detail)
     if not startedMs then return nil end
     local now = PerfNowMs()
@@ -37,7 +68,8 @@ function A.RecordPerfSample(label, startedMs, detail)
         ms = elapsed,
     }
     A.lastAssistantPerf = sample
-    if elapsed >= 250 then A.lastSlowAssistantPerf = sample end
+    if elapsed >= 250 and sample.label ~= "assistant.submit.deferred" then A.lastSlowAssistantPerf = sample end
+    PushPerfTrace(sample)
     return sample
 end
 
@@ -47,6 +79,151 @@ end
 
 function A.GetLastSlowPerfSample()
     return A.lastSlowAssistantPerf
+end
+
+function A.GetPerfTrace(limit)
+    local trace = A._perfTrace or {}
+    local count = tonumber(limit) or #trace
+    if count < 1 then count = #trace end
+    local first = math.max(1, #trace - count + 1)
+    local out = {}
+    for i = first, #trace do out[#out + 1] = trace[i] end
+    return out
+end
+
+local function ScheduleJobPump()
+    if A._assistantJobPumpScheduled then return end
+    A._assistantJobPumpScheduled = true
+    ScheduleNextFrame("MSUF_ASSISTANT_JOB_PUMP", function()
+        A._assistantJobPumpScheduled = nil
+        if type(A._RunJobPump) == "function" then A._RunJobPump() end
+    end)
+end
+
+function A._RunJobPump()
+    local jobs = A._assistantJobs
+    if type(jobs) ~= "table" or #jobs == 0 then return end
+
+    local sliceStart = PerfNowMs()
+    local budget = tonumber(A.jobBudgetMs) or JOB_BUDGET_MS
+    local maxSteps = tonumber(A.jobMaxStepsPerFrame) or JOB_MAX_STEPS
+    if budget <= 0 then budget = JOB_BUDGET_MS end
+    if maxSteps <= 0 then maxSteps = JOB_MAX_STEPS end
+
+    local stepsRun = 0
+    while #jobs > 0 and stepsRun < maxSteps do
+        local job = jobs[1]
+        local step = job and job.steps and job.steps[job.index]
+        if type(step) ~= "function" then
+            table.remove(jobs, 1)
+            if type(job.callback) == "function" then pcall(job.callback, job.result, job) end
+        else
+            local stepStart = PerfNowMs()
+            local ok, result, stopResult = pcall(step, job)
+            A.RecordPerfSample("assistant.job.step", stepStart, tostring(job.label or "assistant.job") .. "#" .. tostring(job.index))
+            stepsRun = stepsRun + 1
+            if not ok then
+                local failed = {
+                    text = "Something went wrong while MSUF processed that request: " .. tostring(result),
+                    status = "failed",
+                }
+                job.result = failed
+                table.remove(jobs, 1)
+                if type(job.callback) == "function" then
+                    pcall(job.callback, failed, job)
+                elseif type(A.AddHistory) == "function" then
+                    A.AddHistory("assistant", failed.text, failed.status)
+                end
+            elseif result == false then
+                table.remove(jobs, 1)
+                if stopResult ~= nil then job.result = stopResult end
+                if type(job.callback) == "function" then pcall(job.callback, job.result, job) end
+            elseif result == A.JOB_YIELD then
+                break
+            else
+                if result ~= nil then job.result = result end
+                job.index = job.index + 1
+            end
+        end
+
+        if sliceStart and budget > 0 then
+            local now = PerfNowMs()
+            if now and (now - sliceStart) >= budget then break end
+        end
+    end
+
+    A.RecordPerfSample("assistant.job.slice", sliceStart, tostring(stepsRun) .. " step(s)")
+    if #jobs > 0 then ScheduleJobPump() end
+end
+
+function A.MaybeYield(force)
+    if type(coroutine) ~= "table" or type(coroutine.running) ~= "function" or type(coroutine.yield) ~= "function" then return false end
+    local co, isMain = coroutine.running()
+    if not co or isMain then return false end
+    local started = A._jobYieldStartedMs
+    if not started then return false end
+    local now = PerfNowMs()
+    if not now then return false end
+    local budget = tonumber(A._jobYieldBudgetMs) or JOB_BUDGET_MS
+    if force or (budget > 0 and (now - started) >= budget) then
+        A._jobYieldStartedMs = nil
+        coroutine.yield(A.JOB_YIELD)
+        A._jobYieldStartedMs = PerfNowMs()
+        return true
+    end
+    return false
+end
+
+function A.CoroutineStep(fn)
+    if type(fn) ~= "function" then return fn end
+    local co
+    return function(job)
+        if not co then
+            co = coroutine.create(function()
+                return fn(job)
+            end)
+        end
+        A._jobYieldStartedMs = PerfNowMs()
+        A._jobYieldBudgetMs = tonumber(A.jobBudgetMs) or JOB_BUDGET_MS
+        local ok, result = coroutine.resume(co, job)
+        A._jobYieldStartedMs = nil
+        A._jobYieldBudgetMs = nil
+        if not ok then error(result) end
+        if coroutine.status(co) ~= "dead" then return A.JOB_YIELD end
+        return result
+    end
+end
+
+function A.StartJob(label, steps, callback)
+    if type(steps) ~= "table" or #steps == 0 then
+        if type(callback) == "function" then pcall(callback, nil) end
+        return nil
+    end
+    A._assistantJobs = A._assistantJobs or {}
+    A._assistantJobSerial = (tonumber(A._assistantJobSerial) or 0) + 1
+    local job = {
+        id = A._assistantJobSerial,
+        label = tostring(label or "assistant.job"),
+        steps = steps,
+        index = 1,
+        callback = callback,
+    }
+    A._assistantJobs[#A._assistantJobs + 1] = job
+    ScheduleJobPump()
+    return job
+end
+
+function A.RequestRefreshUI(reason)
+    A._refreshReason = tostring(reason or A._refreshReason or "assistant")
+    if A._refreshPending then return true end
+    A._refreshPending = true
+    ScheduleNextFrame("MSUF_ASSISTANT_REFRESH_UI", function()
+        A._refreshPending = nil
+        local started = PerfNowMs()
+        if type(A.RefreshUI) == "function" then A.RefreshUI() end
+        A.RecordPerfSample("assistant.refresh_ui", started, A._refreshReason)
+    end)
+    return true
 end
 
 local function InCombat()
@@ -112,17 +289,41 @@ local function SerializeChoices(choices)
         local choice = choices[i]
         local setting = choice and choice.setting
         local action = choice and choice.action
+        local changes
+        if choice and type(choice.changes) == "table" then
+            changes = {}
+            for j = 1, #choice.changes do
+                local change = choice.changes[j]
+                local changeSetting = change and change.setting
+                if changeSetting and changeSetting.key then
+                    changes[#changes + 1] = {
+                        key = changeSetting.key,
+                        value = change.value,
+                        relativeDelta = change.relativeDelta,
+                        direction = change.direction,
+                        valueLabel = change.valueLabel,
+                        mediaType = change.mediaType,
+                        textArea = change.textArea,
+                        textSlot = change.textSlot,
+                    }
+                end
+            end
+            if #changes == 0 then changes = nil end
+        end
         out[#out + 1] = {
             key = setting and setting.key,
             actionKey = (action and action.key) or choice and choice.actionKey,
             args = choice and choice.args,
             confirmRequired = choice and choice.confirmRequired,
             diagnosticFix = choice and choice.diagnosticFix,
+            changes = changes,
+            bulkSafe = choice and choice.bulkSafe,
             value = choice and choice.value,
             relativeDelta = choice and choice.relativeDelta,
             direction = choice and choice.direction,
             label = choice and choice.label,
             valueLabel = choice and choice.valueLabel,
+            summary = choice and choice.summary,
             mediaType = choice and choice.mediaType,
             textArea = choice and choice.textArea,
             textSlot = choice and choice.textSlot,
@@ -137,7 +338,37 @@ local function RehydrateChoices(serialized)
     for i = 1, #serialized do
         local item = serialized[i]
         local setting = item and Registry:GetSetting(item.key)
-        if setting then
+        local changes
+        if item and type(item.changes) == "table" then
+            changes = {}
+            for j = 1, #item.changes do
+                local changeItem = item.changes[j]
+                local changeSetting = changeItem and Registry:GetSetting(changeItem.key)
+                if changeSetting then
+                    changes[#changes + 1] = {
+                        setting = changeSetting,
+                        value = changeItem.value,
+                        relativeDelta = changeItem.relativeDelta,
+                        direction = changeItem.direction,
+                        valueLabel = changeItem.valueLabel,
+                        mediaType = changeItem.mediaType,
+                        textArea = changeItem.textArea,
+                        textSlot = changeItem.textSlot,
+                    }
+                end
+            end
+            if #changes == 0 then changes = nil end
+        end
+        if changes then
+            choices[#choices + 1] = {
+                changes = changes,
+                label = item.label,
+                valueLabel = item.valueLabel,
+                diagnosticFix = item.diagnosticFix,
+                summary = item.summary,
+                bulkSafe = item.bulkSafe,
+            }
+        elseif setting then
             choices[#choices + 1] = {
                 setting = setting,
                 value = item.value,
@@ -214,6 +445,9 @@ local function PlanNeedsConfirmation(plan)
 end
 
 local function ConfirmationText(plan)
+    if type(plan) == "table" and type(plan.confirmText) == "string" and plan.confirmText ~= "" then
+        return plan.confirmText
+    end
     local label = tostring(plan and plan.label or "this action")
     return "This will apply: " .. label .. ". Type 'yes', 'do it', or 'mach das' to apply, or 'cancel'."
 end
@@ -412,6 +646,15 @@ local function SingleNaturalFixChoice(text, choices)
 end
 
 local function ExecuteChoice(choice)
+    if choice and type(choice.changes) == "table" and #choice.changes > 0 then
+        return A.ExecutePlan({
+            kind = "changes",
+            changes = choice.changes,
+            label = choice.label or "Assistant selected settings",
+            summary = choice.summary or "Assistant selected settings.",
+            bulkSafe = choice.bulkSafe,
+        })
+    end
     if choice and choice.setting then
         return A.ExecutePlan({ kind = "changes", changes = { choice }, label = "Assistant selected setting" })
     end
@@ -664,7 +907,7 @@ local function ExecuteAction(plan)
     local captureSnapshot = action.captureSnapshot and not captureProfile and A.CaptureSnapshot
     local snapshotStart = PerfNowMs()
     if captureSnapshot then before = A.CaptureSnapshot() end
-    if captureProfile then beforeProfile = A.CaptureProfileSnapshot() end
+    if captureProfile then beforeProfile = A.CaptureProfileSnapshot(action.key, plan.args or {}) end
     A.RecordPerfSample("assistant.snapshot.before", snapshotStart, action.key)
     local ok, message = action.run(plan.args or {})
     if not ok then
@@ -674,7 +917,7 @@ local function ExecuteAction(plan)
     if before or beforeProfile then
         snapshotStart = PerfNowMs()
         local after = captureSnapshot and A.CaptureSnapshot() or nil
-        local afterProfile = captureProfile and A.CaptureProfileSnapshot() or nil
+        local afterProfile = captureProfile and A.CaptureProfileSnapshot(action.key, plan.args or {}) or nil
         A.RecordPerfSample("assistant.snapshot.after", snapshotStart, action.key)
         undoAvailable = A.PushUndo({
             label = plan.label or action.label or "Assistant action",
@@ -700,13 +943,21 @@ end
 function A.ShowLargeTextPanel(spec)
     if type(spec) ~= "table" then return false end
     A.largeTextPanel = spec
-    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.large_text.show")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
     return true
 end
 
 function A.CloseLargeTextPanel()
     A.largeTextPanel = nil
-    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.large_text.close")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
 end
 
 function A.ExecutePlan(plan, opts)
@@ -828,7 +1079,11 @@ function A.SetBusy(active, text)
     A._busy = active and true or false
     A._busyText = A._busy and Trim(text or "I am working on that") or nil
     A._busySerial = (tonumber(A._busySerial) or 0) + 1
-    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.busy")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
     return A._busy
 end
 
@@ -1012,6 +1267,46 @@ local function BatchLine(text)
     return Trim(first)
 end
 
+local NORMAL_INPUT_MAX_CHARS = 20000
+
+local function ExtractProfileString(text)
+    text = tostring(text or "")
+    local compact = text:match("(MSUF%d+:%S+)")
+    if compact then return compact, false end
+    local uuf = text:match("(!UUF_%S+)")
+    if uuf then return uuf, true end
+    return nil, false
+end
+
+local function UUFBestEffortConfirmText()
+    return "This is an UnhaltedUnitFrames profile. MSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1. Type 'yes', 'do it', or 'mach das' to import anyway, or 'cancel'."
+end
+
+local function LongInputResult(text)
+    text = tostring(text or "")
+    if #text <= NORMAL_INPUT_MAX_CHARS then return nil end
+    local value, isUUF = ExtractProfileString(text)
+    if value and Registry and type(Registry.GetAction) == "function" then
+        local action = Registry:GetAction("import_profile_string")
+        if action then
+            return A.ExecutePlan({
+                kind = "action",
+                action = action,
+                args = { value = value, uufBestEffortAccepted = isUUF == true },
+                confirmRequired = true,
+                confirmText = isUUF and UUFBestEffortConfirmText() or nil,
+                label = isUUF and "Import UnhaltedUnitFrames profile string" or "Import profile string",
+                summary = "Imports profile data into the active profile.",
+            })
+        end
+    end
+    return {
+        text = "That message is too long for the inline Assistant input. Please shorten it, or use the profile import panel for large profile strings.",
+        status = "failed",
+        summary = "Inline Assistant input length guard.",
+    }
+end
+
 local function TrySubmitBatch(text)
     local parts = SplitBatchCommands(text)
     if not parts then return nil end
@@ -1033,15 +1328,7 @@ local function TrySubmitBatch(text)
     return { text = textOut, status = applied > 0 and "applied" or "info", summary = "Executed multiple Assistant commands." }
 end
 
-local function SubmitNow(text, opts)
-    opts = opts or {}
-    text = Trim(text)
-    if text == "" then return nil end
-    local startedMs = PerfNowMs()
-    if opts.skipUserHistory ~= true then
-        A.AddHistory("user", text, "submitted")
-    end
-    local result = TrySubmitBatch(text) or A.HandleInput(text)
+local function RecordAssistantResult(result)
     if result and result.text then
         A.AddHistory("assistant", result.text, result.status, result.summary)
         if result.status == "applied" and type(A.RecordSuccessfulAssistantAction) == "function" and type(A.MaybePowerUserSupportHint) == "function" then
@@ -1050,13 +1337,104 @@ local function SubmitNow(text, opts)
             if hint then A.AddHistory("assistant", hint, "info", "Assistant power-user dashboard links hint") end
         end
     end
-    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+end
+
+local function SubmitNow(text, opts)
+    opts = opts or {}
+    text = Trim(text)
+    if text == "" then return nil end
+    local startedMs = PerfNowMs()
+    if opts.skipUserHistory ~= true then
+        A.AddHistory("user", text, "submitted")
+    end
+    local result = LongInputResult(text) or TrySubmitBatch(text) or A.HandleInput(text)
+    RecordAssistantResult(result)
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.submit")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
     A.RecordPerfSample("assistant.submit", startedMs, text)
     return result
 end
 
 function A.Submit(text)
     return SubmitNow(text)
+end
+
+local function BuildDeferredSubmitSteps(text, callback)
+    local steps = {}
+    local startedMs = PerfNowMs()
+    local parts = SplitBatchCommands(text)
+    local finalResult
+    local finished = false
+
+    local function Complete(result)
+        if finished then return end
+        finished = true
+        finalResult = result
+        RecordAssistantResult(finalResult)
+        A.RecordPerfSample("assistant.submit.deferred", startedMs, text)
+        A.SetBusy(false)
+        if type(callback) == "function" then pcall(callback, finalResult) end
+    end
+
+    steps[#steps + 1] = function()
+        A.AddHistory("user", text, "submitted")
+    end
+
+    if parts then
+        local lines = {}
+        local applied = 0
+        local stopped = false
+        for i = 1, #parts do
+            local partIndex = i
+            steps[#steps + 1] = A.CoroutineStep(function()
+                if stopped then return end
+                local part = parts[partIndex]
+                local result = LongInputResult(part) or A.HandleInput(part)
+                if not result then
+                    result = { text = "I could not process command " .. tostring(partIndex) .. ": " .. tostring(part), status = "failed" }
+                end
+                if result.status ~= "applied" and result.status ~= "info" then
+                    finalResult = result
+                    stopped = true
+                    return
+                end
+                if result.status == "applied" then applied = applied + 1 end
+                lines[#lines + 1] = tostring(partIndex) .. ". " .. BatchLine(result.text)
+            end)
+        end
+        steps[#steps + 1] = function()
+            if not finalResult then
+                local textOut = "Done. I handled " .. tostring(#parts) .. " commands:\n" .. table.concat(lines, "\n")
+                if applied > 0 then textOut = AppendUndoFollowupHint(textOut) end
+                finalResult = {
+                    text = textOut,
+                    status = applied > 0 and "applied" or "info",
+                    summary = "Executed multiple Assistant commands.",
+                }
+            end
+            Complete(finalResult)
+            return finalResult
+        end
+    else
+        steps[#steps + 1] = A.CoroutineStep(function()
+            finalResult = LongInputResult(text) or A.HandleInput(text)
+        end)
+        steps[#steps + 1] = function()
+            Complete(finalResult)
+            return finalResult
+        end
+    end
+
+    return steps, function(result)
+        if finished then return end
+        Complete(type(result) == "table" and result or {
+            text = "Something went wrong while MSUF processed that request.",
+            status = "failed",
+        })
+    end
 end
 
 function A.SubmitDeferred(text, callback)
@@ -1066,37 +1444,46 @@ function A.SubmitDeferred(text, callback)
         return { text = "I am still working on the previous request.", status = "busy" }
     end
 
-    A.AddHistory("user", text, "submitted")
     A.SetBusy(true, "I am working on that")
 
-    local result
-    local function Finish()
-        local ok, err = pcall(function()
-            result = SubmitNow(text, { skipUserHistory = true })
-        end)
-        if not ok then
-            result = {
-                text = "Something went wrong while MSUF processed that request: " .. tostring(err),
-                status = "failed",
-            }
-            A.AddHistory("assistant", result.text, result.status)
-        end
-        A.SetBusy(false)
-        if type(callback) == "function" then pcall(callback, result) end
+    local steps, onDone = BuildDeferredSubmitSteps(text, callback)
+    local job = A.StartJob("assistant.submit", steps, onDone)
+    if job and type(job.result) == "table" and not A.IsBusy() then
+        return job.result
     end
+    return { text = A.GetBusyText(), status = "queued" }
+end
 
-    local scheduler = (MSUF and MSUF.Scheduler) or _G.MSUF_Scheduler
-    if scheduler and type(scheduler.RunNextFrame) == "function" then
-        scheduler.RunNextFrame(Finish)
-        return { text = A.GetBusyText(), status = "queued" }
-    end
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(0, Finish)
-        return { text = A.GetBusyText(), status = "queued" }
-    end
+function A.WarmupPerformanceIndexes(reason)
+    if A._performanceWarmupStarted then return false end
+    if InCombat() then return false end
+    A._performanceWarmupStarted = true
 
-    Finish()
-    return result
+    local steps = {
+        A.CoroutineStep(function()
+            local parser = A.Parser
+            local registry = A.Registry
+            local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+            if parser and settings and type(parser._EnsureRegistryCandidateIndex) == "function" then
+                parser._EnsureRegistryCandidateIndex(settings, false)
+            end
+        end),
+        A.CoroutineStep(function()
+            local parser = A.Parser
+            local registry = A.Registry
+            local settings = registry and type(registry.AllSettings) == "function" and registry:AllSettings() or nil
+            if parser and settings and type(parser._EnsureRegistryCandidateIndex) == "function" then
+                parser._EnsureRegistryCandidateIndex(settings, true)
+            end
+        end),
+        A.CoroutineStep(function()
+            if A.Knowledge and type(A.Knowledge.EnsureIndex) == "function" then
+                A.Knowledge.EnsureIndex()
+            end
+        end),
+    }
+    A.StartJob("assistant.warmup", steps)
+    return true, tostring(reason or "assistant")
 end
 
 function A.RegisteredSettingSummary()

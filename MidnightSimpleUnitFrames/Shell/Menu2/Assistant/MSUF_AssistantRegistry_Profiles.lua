@@ -56,6 +56,22 @@ local function ActiveProfileName()
     return name
 end
 
+local function IsUUFImportString(value)
+    local fn = _G.MSUF_IsUUFImportString
+    if type(fn) == "function" then
+        local ok, result = pcall(fn, value)
+        if ok then return result == true end
+    end
+    return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
+end
+
+local function RequireUUFBestEffortAccepted(value, args)
+    if IsUUFImportString(value) and not (args and args.uufBestEffortAccepted == true) then
+        return false, "UnhaltedUnitFrames imports need best-effort confirmation first."
+    end
+    return true
+end
+
 local Profile = {
     KindLabels = {
         all = "Full profile",
@@ -412,6 +428,8 @@ Registry:RegisterAction({
     run = function(args)
         local value = args and args.value
         if type(value) ~= "string" or value == "" then return false, "No profile string was provided." end
+        local allowed, why = RequireUUFBestEffortAccepted(value, args)
+        if not allowed then return false, why end
         local fn = _G.MSUF_ImportFromString
         if type(fn) ~= "function" then return false, "Profile import is not available right now." end
         if fn(value) == true then
@@ -438,6 +456,8 @@ Registry:RegisterAction({
         local value = args and args.value
         local name = args and args.name
         if type(value) ~= "string" or value == "" then return false, "No profile string was provided." end
+        local allowed, why = RequireUUFBestEffortAccepted(value, args)
+        if not allowed then return false, why end
         if type(name) ~= "string" or name == "" then return false, "I need a new profile name for this import." end
         if ProfileExists(name) then return false, "Profile " .. tostring(name) .. " already exists." end
         if type(_G.MSUF_CreateProfile) ~= "function"
@@ -483,6 +503,8 @@ Registry:RegisterAction({
     run = function(args)
         local value = args and args.value
         if type(value) ~= "string" or value == "" then return false, "No legacy profile string was provided." end
+        local allowed, why = RequireUUFBestEffortAccepted(value, args)
+        if not allowed then return false, why end
         local fn = _G.MSUF_ImportLegacyFromString
         if type(fn) ~= "function" then return false, "Legacy profile import is not available right now." end
         if fn(value) == false then return false, "Legacy profile import failed." end

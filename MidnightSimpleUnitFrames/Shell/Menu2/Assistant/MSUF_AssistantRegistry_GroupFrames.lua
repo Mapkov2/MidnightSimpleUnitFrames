@@ -604,6 +604,26 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     RegisterGroupNumber(scope, "height", "height", "Height", heightDefault, 16, 120, 1, "rebuild", aliases)
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "frame", "frame")
+    AddAliasesForUnit(aliases, scope, "frame position", "frame position")
+    AddAliasesForUnit(aliases, scope, "x position", "x position")
+    AddAliasesForUnit(aliases, scope, "x offset", "x versatz")
+    AddAliasesForUnit(aliases, scope, "frame x", "frame x")
+    AddAliasesForUnit(aliases, scope, "frame x offset", "frame x versatz")
+    AddAliasesForUnit(aliases, scope, "horizontal position", "horizontale position")
+    RegisterGroupNumber(scope, "offsetX", "offsetX", "X Position", 0, -4096, 4096, 1, "rebuild", aliases)
+
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "frame", "frame")
+    AddAliasesForUnit(aliases, scope, "frame position", "frame position")
+    AddAliasesForUnit(aliases, scope, "y position", "y position")
+    AddAliasesForUnit(aliases, scope, "y offset", "y versatz")
+    AddAliasesForUnit(aliases, scope, "frame y", "frame y")
+    AddAliasesForUnit(aliases, scope, "frame y offset", "frame y versatz")
+    AddAliasesForUnit(aliases, scope, "vertical position", "vertikale position")
+    RegisterGroupNumber(scope, "offsetY", "offsetY", "Y Position", 0, -4096, 4096, 1, "rebuild", aliases)
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "spacing", "abstand")
     AddAliasesForUnit(aliases, scope, "frame spacing", "frame abstand")
     RegisterGroupNumber(scope, "spacing", "spacing", "Spacing", 1, 0, 20, 1, "rebuild", aliases)
@@ -1139,24 +1159,24 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name anchor")
     AddAliasesForUnit(aliases, scope, "name text anchor")
-    RegisterGroupEnum(scope, "nameAnchor", "nameAnchor", "Name Anchor", "LEFT", GROUP_ANCHOR_VALUES, GROUP_ANCHOR_ALIASES, "geometry", aliases)
+    RegisterGroupEnum(scope, "nameAnchor", "nameAnchor", "Name Anchor", "LEFT", GROUP_ANCHOR_VALUES, GROUP_ANCHOR_ALIASES, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name x")
     AddAliasesForUnit(aliases, scope, "name x offset")
     AddAliasesForUnit(aliases, scope, "name text x offset")
-    RegisterGroupNumber(scope, "nameOffsetX", "nameOffsetX", "Name X Offset", 0, -100, 100, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "nameOffsetX", "nameOffsetX", "Name X Offset", 0, -100, 100, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name y")
     AddAliasesForUnit(aliases, scope, "name y offset")
     AddAliasesForUnit(aliases, scope, "name text y offset")
-    RegisterGroupNumber(scope, "nameOffsetY", "nameOffsetY", "Name Y Offset", 0, -100, 100, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "nameOffsetY", "nameOffsetY", "Name Y Offset", 0, -100, 100, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name layer")
     AddAliasesForUnit(aliases, scope, "name text layer")
-    RegisterGroupNumber(scope, "nameTextLayer", "nameTextLayer", "Name Text Layer", 5, 1, 15, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "nameTextLayer", "nameTextLayer", "Name Text Layer", 5, 1, 15, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp left text")
@@ -1186,18 +1206,18 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "hp text x")
     AddAliasesForUnit(aliases, scope, "hp text x offset")
     AddAliasesForUnit(aliases, scope, "health text x offset")
-    RegisterGroupNumber(scope, "healthTextOffsetX", "hpOffsetX", "HP Text X Offset", 0, -100, 100, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "healthTextOffsetX", "hpOffsetX", "HP Text X Offset", 0, -100, 100, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp text y")
     AddAliasesForUnit(aliases, scope, "hp text y offset")
     AddAliasesForUnit(aliases, scope, "health text y offset")
-    RegisterGroupNumber(scope, "healthTextOffsetY", "hpOffsetY", "HP Text Y Offset", 0, -100, 100, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "healthTextOffsetY", "hpOffsetY", "HP Text Y Offset", 0, -100, 100, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp text layer")
     AddAliasesForUnit(aliases, scope, "health text layer")
-    RegisterGroupNumber(scope, "healthTextLayer", "textLayer", "HP Text Layer", 5, 1, 15, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "healthTextLayer", "textLayer", "HP Text Layer", 5, 1, 15, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power left text")
@@ -1223,16 +1243,16 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power text x")
     AddAliasesForUnit(aliases, scope, "power text x offset")
-    RegisterGroupNumber(scope, "powerTextOffsetX", "powerOffsetX", "Power Text X Offset", 0, -100, 100, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "powerTextOffsetX", "powerOffsetX", "Power Text X Offset", 0, -100, 100, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power text y")
     AddAliasesForUnit(aliases, scope, "power text y offset")
-    RegisterGroupNumber(scope, "powerTextOffsetY", "powerOffsetY", "Power Text Y Offset", 0, -100, 100, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "powerTextOffsetY", "powerOffsetY", "Power Text Y Offset", 0, -100, 100, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power text layer")
-    RegisterGroupNumber(scope, "powerTextLayer", "powerTextLayer", "Power Text Layer", 2, 1, 15, 1, "geometry", aliases)
+    RegisterGroupNumber(scope, "powerTextLayer", "powerTextLayer", "Power Text Layer", 2, 1, 15, 1, "font", aliases)
 
     for _, slotInfo in ipairs({
         { label = "HP Left Text", prefix = "hpTextLeft", words = { "hp left slot", "health left slot", "left hp slot" } },
@@ -1247,14 +1267,14 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
             AddAliasesForUnit(aliases, scope, slotInfo.words[i] .. " x")
             AddAliasesForUnit(aliases, scope, slotInfo.words[i] .. " x offset")
         end
-        RegisterGroupNumber(scope, slotInfo.prefix .. "OffsetX", slotInfo.prefix .. "OffsetX", slotInfo.label .. " Slot X Offset", 0, -100, 100, 1, "geometry", aliases)
+        RegisterGroupNumber(scope, slotInfo.prefix .. "OffsetX", slotInfo.prefix .. "OffsetX", slotInfo.label .. " Slot X Offset", 0, -100, 100, 1, "font", aliases)
 
         aliases = {}
         for i = 1, #slotInfo.words do
             AddAliasesForUnit(aliases, scope, slotInfo.words[i] .. " y")
             AddAliasesForUnit(aliases, scope, slotInfo.words[i] .. " y offset")
         end
-        RegisterGroupNumber(scope, slotInfo.prefix .. "OffsetY", slotInfo.prefix .. "OffsetY", slotInfo.label .. " Slot Y Offset", 0, -100, 100, 1, "geometry", aliases)
+        RegisterGroupNumber(scope, slotInfo.prefix .. "OffsetY", slotInfo.prefix .. "OffsetY", slotInfo.label .. " Slot Y Offset", 0, -100, 100, 1, "font", aliases)
     end
 
     aliases = {}

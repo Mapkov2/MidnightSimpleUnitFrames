@@ -1066,7 +1066,7 @@ local function ParseReset(text)
 end
 
 local function ParseOpen(text, raw)
-    local explicit = ContainsAny(text, { "open", "go to", "show settings", "show me", "find", "search", "oeffne" })
+    local explicit = ContainsAny(text, { "open", "go to", "show settings", "show me", "find", "search", "where", "where is", "where are", "wo", "oeffne" })
     local shortcut = false
     if not explicit and DetectBoolean(text) == nil and FirstNumber(text) == nil then
         shortcut = ContainsAny(text, { "settings", "menu", "page", "options", "config", "configuration", "einstellungen", "menue", "seite" })
