@@ -1050,22 +1050,39 @@ _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
     end
 
     local function Update(powerType, maxPower)
-        local cur = UnitStagger and UnitStagger("player") or 0
-        local mx = UnitHealthMax("player") or 1
-        if cur == nil then cur = 0 end
-        if mx == nil then mx = 1 end
+        local rawCur
+        if UnitStagger then
+            rawCur = UnitStagger("player")
+        end
+        local rawMx = UnitHealthMax("player")
 
         local bar = CP.bars[1]
         if not bar then return end
 
-        CP_StampMinMax(bar, 0, mx)
-        bar:SetValue(cur)
+        local curSafe = NotSecret(rawCur)
+        local mxSafe = NotSecret(rawMx)
+        local cur, mx
+
+        if mxSafe then
+            mx = tonumber(rawMx) or 1
+            if mx <= 0 then mx = 1 end
+            CP_StampMinMax(bar, 0, mx)
+        else
+            CP_StampMinMax(bar, 0, rawMx)
+        end
+
+        if curSafe then
+            cur = tonumber(rawCur) or 0
+            bar:SetValue(cur)
+        else
+            bar:SetValue(rawCur)
+        end
+
         local visual = CP_GetVisual(E)
         CP_StampAlpha(bar, visual and visual.filledAlpha or GetFilledAlpha())
         CP_StampShown(bar, true)
 
-        if NotSecret(cur) and NotSecret(mx) then
-            if mx <= 0 then mx = 1 end
+        if curSafe and mxSafe then
             local perc = cur / mx
             local tier
             if perc >= (STAGGER_CONST.RED_TRANSITION or 0.6) then tier = 3
