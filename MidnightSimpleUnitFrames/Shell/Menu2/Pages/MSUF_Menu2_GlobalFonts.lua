@@ -719,7 +719,7 @@ local function BuildFonts(ctx)
                 ApplyNameShorteningChange("MSUF2_SHORTEN_SIDE", true)
             end)
 
-        chars = W.Slider(names, "Max name length", 6, 30, 1, 300)
+        chars = W.Slider(names, "Max name length", 4, 30, 1, 300)
         M.BindSlider(ctx, chars,
             function() return tonumber(FontScopeGet("shortenNameMaxChars", 6)) or 6 end,
             function(v)

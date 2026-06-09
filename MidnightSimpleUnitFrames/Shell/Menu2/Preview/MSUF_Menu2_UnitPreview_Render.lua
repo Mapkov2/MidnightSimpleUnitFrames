@@ -59,6 +59,166 @@ local function IsChargedComboPreviewSlot(spec, bars, slot)
         and spec.chargedSlots and spec.chargedSlots[slot] == true
 end
 
+local function CastbarPreviewDetailPrefix(unitKey)
+    if unitKey == "player" then return "castbarPlayer" end
+    if unitKey == "target" then return "castbarTarget" end
+    if unitKey == "focus" then return "castbarFocus" end
+    if unitKey == "boss" then return "bossCast" end
+    return nil
+end
+
+local function ReadCastbarPreviewString(g, key, detailPrefix, suffix, bossKey, fallback)
+    local value = detailPrefix and g[detailPrefix .. suffix] or nil
+    if (value == nil or value == "") and key == "boss" and bossKey then value = g[bossKey] end
+    if value == nil or value == "" then value = fallback end
+    return tostring(value or fallback or "")
+end
+
+local function NormalizeCastbarPreviewIconPos(value)
+    value = tostring(value or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
+    if value == "INSIDELEFT" then value = "INSIDE_LEFT" end
+    if value == "INSIDERIGHT" then value = "INSIDE_RIGHT" end
+    if value == "RIGHT" or value == "INSIDE_LEFT" or value == "INSIDE_RIGHT" then return value end
+    return "LEFT"
+end
+
+local function NormalizeCastbarPreviewTextPos(value, fallback)
+    value = tostring(value or fallback or "LEFT"):upper():gsub("%s+", "_"):gsub("-", "_")
+    if value == "CENTER" or value == "RIGHT" or value == "ABOVE" or value == "BELOW" then return value end
+    return "LEFT"
+end
+
+local function NormalizeCastbarPreviewJustify(value, fallback)
+    value = tostring(value or fallback or "LEFT"):upper()
+    if value == "CENTER" or value == "RIGHT" then return value end
+    return "LEFT"
+end
+
+local function AnchorCastbarPreviewText(fs, relativeTo, position, x, y, justify, S)
+    fs:ClearAllPoints()
+    if position == "CENTER" then
+        fs:SetPoint("CENTER", relativeTo, "CENTER", S(x), S(y))
+        fs:SetJustifyH(justify or "CENTER")
+    elseif position == "RIGHT" then
+        fs:SetPoint("RIGHT", relativeTo, "RIGHT", S(x), S(y))
+        fs:SetJustifyH(justify or "RIGHT")
+    elseif position == "ABOVE" then
+        fs:SetPoint("BOTTOM", relativeTo, "TOP", S(x), S(y + 2))
+        fs:SetJustifyH(justify or "CENTER")
+    elseif position == "BELOW" then
+        fs:SetPoint("TOP", relativeTo, "BOTTOM", S(x), S(y - 2))
+        fs:SetJustifyH(justify or "CENTER")
+    else
+        fs:SetPoint("LEFT", relativeTo, "LEFT", S(2 + x), S(y))
+        fs:SetJustifyH(justify or "LEFT")
+    end
+end
+
+local function ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, CastbarShowIcon, CastbarShowText, ReadCastbarNum, FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle)
+    local detailPrefix = CastbarPreviewDetailPrefix(key)
+    local showIcon = CastbarShowIcon(key, g)
+    mock.cast.icon:SetShown(showIcon)
+    local iconX = ReadCastbarNum(g, key, "IconOffsetX", "bossCastIconOffsetX", 0)
+    local iconY = ReadCastbarNum(g, key, "IconOffsetY", "bossCastIconOffsetY", 0)
+    local iconSize = ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH)
+    if iconSize < 6 then iconSize = 6 elseif iconSize > 128 then iconSize = 128 end
+    local sIcon = max(6, S(iconSize))
+    local iconPosition = NormalizeCastbarPreviewIconPos(ReadCastbarPreviewString(g, key, detailPrefix, "IconPosition", "bossCastIconPosition", "LEFT"))
+    local iconSpacing = max(0, min(40, ReadCastbarNum(g, key, "IconSpacing", "bossCastIconSpacing", 1)))
+    if showIcon then
+        mock.cast.icon:SetSize(sIcon, sIcon)
+        mock.cast.icon:ClearAllPoints()
+        if iconPosition == "RIGHT" then
+            mock.cast.icon:SetPoint("RIGHT", mock.cast, "RIGHT", S(iconX), S(iconY))
+        elseif iconPosition == "INSIDE_RIGHT" then
+            mock.cast.icon:SetPoint("RIGHT", mock.cast, "RIGHT", S(iconX - iconSpacing), S(iconY))
+        elseif iconPosition == "INSIDE_LEFT" then
+            mock.cast.icon:SetPoint("LEFT", mock.cast, "LEFT", S(iconX + iconSpacing), S(iconY))
+        else
+            mock.cast.icon:SetPoint("LEFT", mock.cast, "LEFT", S(iconX), S(iconY))
+        end
+        box.handleCastbarIcon:SetSize(max(18, sIcon + 8), max(18, sIcon + 8))
+        PlaceHandle(box.handleCastbarIcon, mock.cast.icon)
+    else
+        box.handleCastbarIcon:Hide()
+    end
+
+    mock.cast.fill:ClearAllPoints()
+    if showIcon and iconPosition == "LEFT" then
+        mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", sIcon + S(iconSpacing), -S(1))
+    else
+        mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", S(1), -S(1))
+    end
+    local timeReserve = max(S(2), min(S(60), floor(scw * 0.34 + 0.5)))
+    if showIcon and iconPosition == "RIGHT" then
+        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -(sIcon + S(iconSpacing)), S(1))
+    else
+        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -timeReserve, S(1))
+    end
+
+    local showText = CastbarShowText(key, g)
+    mock.cast.text:SetShown(showText)
+    if showText then
+        local tr, tg, tb = fr, fg, fb
+        if type(_G.MSUF_GetCastbarTextColor) == "function" then
+            tr, tg, tb = _G.MSUF_GetCastbarTextColor()
+        end
+        tr = g[(detailPrefix or "") .. "SpellNameColorR"] or tr
+        tg = g[(detailPrefix or "") .. "SpellNameColorG"] or tg
+        tb = g[(detailPrefix or "") .. "SpellNameColorB"] or tb
+        mock.cast.text:SetTextColor(tr, tg, tb, 1)
+        local textSize = ReadCastbarNum(g, key, "SpellNameFontSize", "bossCastSpellNameFontSize", g.castbarSpellNameFontSize or g.fontSize or 14)
+        if not textSize or textSize <= 0 then textSize = g.fontSize or 14 end
+        ApplyPreviewFont(mock.cast.text, max(7, S(textSize)))
+        local textX = ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0)
+        local textY = ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0)
+        local textPosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNamePosition", "bossCastSpellNamePosition", "LEFT"), "LEFT")
+        local textJustify = NormalizeCastbarPreviewJustify(ReadCastbarPreviewString(g, key, detailPrefix, "SpellNameAlign", "bossCastSpellNameAlign", textPosition == "RIGHT" and "RIGHT" or textPosition == "CENTER" and "CENTER" or "LEFT"), "LEFT")
+        AnchorCastbarPreviewText(mock.cast.text, mock.cast.fill, textPosition, textX, textY, textJustify, S)
+        local textMaxWidth = ReadCastbarNum(g, key, "SpellNameMaxWidth", "bossCastSpellNameMaxWidth", 0)
+        if textMaxWidth and textMaxWidth > 0 then
+            mock.cast.text:SetWidth(textMaxWidth)
+        else
+            mock.cast.text:SetWidth(max(20, scw - timeReserve - 10))
+        end
+        mock.cast.text:SetText(TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
+        box.handleCastbarText:SetSize(max(34, mock.cast.text:GetStringWidth() + 10), max(18, mock.cast.text:GetStringHeight() + 6))
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarText, canvas, { mock.cast.text }, 3) then
+            PlaceHandle(box.handleCastbarText, mock.cast.text)
+        end
+    else
+        box.handleCastbarText:Hide()
+    end
+
+    local showTime = key == "boss" and g.showBossCastTime ~= false
+        or (key == "target" and g.showTargetCastTime ~= false)
+        or (key == "focus" and g.showFocusCastTime ~= false)
+        or (key == "player" and g.showPlayerCastTime ~= false)
+    mock.cast.time:SetShown(showTime)
+    mock.cast.time:SetText(FormatCastbarPreviewTime(g, key, 1.4, 2.0))
+    if showTime then
+        local timeX = ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", g.castbarPlayerTimeOffsetX or -2)
+        local timeY = ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", g.castbarPlayerTimeOffsetY or 0)
+        if key == "boss" then
+            timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
+            timeY = tonumber(g.bossCastTimeOffsetY) or 0
+        end
+        local timeSize = ReadCastbarNum(g, key, "TimeFontSize", "bossCastTimeFontSize", g.castbarTimeFontSize or g.fontSize or 14)
+        if not timeSize or timeSize <= 0 then timeSize = g.fontSize or 14 end
+        ApplyPreviewFont(mock.cast.time, max(7, S(timeSize)))
+        local tr, tg, tb = g[(detailPrefix or "") .. "TimeColorR"], g[(detailPrefix or "") .. "TimeColorG"], g[(detailPrefix or "") .. "TimeColorB"]
+        if tr or tg or tb then mock.cast.time:SetTextColor(tr or fr, tg or fg, tb or fb, 1) else mock.cast.time:SetTextColor(fr, fg, fb, 1) end
+        local timePosition = NormalizeCastbarPreviewTextPos(ReadCastbarPreviewString(g, key, detailPrefix, "TimePosition", "bossCastTimePosition", "RIGHT"), "RIGHT")
+        AnchorCastbarPreviewText(mock.cast.time, mock.cast.fill, timePosition, timeX, timeY, timePosition == "LEFT" and "LEFT" or timePosition == "CENTER" and "CENTER" or "RIGHT", S)
+        box.handleCastbarTime:SetSize(max(28, mock.cast.time:GetStringWidth() + 10), max(18, mock.cast.time:GetStringHeight() + 6))
+        if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTime, canvas, { mock.cast.time }, 3) then
+            PlaceHandle(box.handleCastbarTime, mock.cast.time)
+        end
+    else
+        box.handleCastbarTime:Hide()
+    end
+end
+
 function Render.Install(Preview, deps)
     if type(Preview) ~= "table" then return end
     deps = deps or Preview.RefreshDeps or {}
@@ -1164,80 +1324,7 @@ function Preview.Refresh(box, reason)
             cr, cg, cb = _G.MSUF_GetInterruptibleCastColor()
         end
         mock.cast.fill:SetVertexColor(cr or 0.0, cg or 0.9, cb or 0.8, 1)
-        local showIcon = CastbarShowIcon(key, g)
-        mock.cast.icon:SetShown(showIcon)
-        local iconX = ReadCastbarNum(g, key, "IconOffsetX", "bossCastIconOffsetX", 0)
-        local iconY = ReadCastbarNum(g, key, "IconOffsetY", "bossCastIconOffsetY", 0)
-        local iconSize = ReadCastbarNum(g, key, "IconSize", "bossCastIconSize", castBarH)
-        if iconSize < 6 then iconSize = 6 elseif iconSize > 128 then iconSize = 128 end
-        local sIcon = max(6, S(iconSize))
-        local iconDetached = showIcon and (iconX ~= 0 or iconY ~= 0)
-        if showIcon then
-            mock.cast.icon:SetSize(sIcon, sIcon)
-            mock.cast.icon:ClearAllPoints()
-            mock.cast.icon:SetPoint("LEFT", mock.cast, "LEFT", S(iconX), S(iconY))
-            box.handleCastbarIcon:SetSize(max(18, sIcon + 8), max(18, sIcon + 8))
-            PlaceHandle(box.handleCastbarIcon, mock.cast.icon)
-        else
-            box.handleCastbarIcon:Hide()
-        end
-        mock.cast.fill:ClearAllPoints()
-        if showIcon and not iconDetached then
-            mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", sIcon + S(1), -S(1))
-        else
-            mock.cast.fill:SetPoint("TOPLEFT", mock.cast, "TOPLEFT", S(1), -S(1))
-        end
-        local timeReserve = max(S(2), min(S(60), floor(scw * 0.34 + 0.5)))
-        mock.cast.fill:SetPoint("BOTTOMRIGHT", mock.cast, "BOTTOMRIGHT", -timeReserve, S(1))
-        local showText = CastbarShowText(key, g)
-        mock.cast.text:SetShown(showText)
-        if showText then
-            local tr, tg, tb = fr, fg, fb
-            if type(_G.MSUF_GetCastbarTextColor) == "function" then
-                tr, tg, tb = _G.MSUF_GetCastbarTextColor()
-            end
-            mock.cast.text:SetTextColor(tr, tg, tb, 1)
-            local textSize = ReadCastbarNum(g, key, "SpellNameFontSize", "bossCastSpellNameFontSize", g.castbarSpellNameFontSize or g.fontSize or 14)
-            if not textSize or textSize <= 0 then textSize = g.fontSize or 14 end
-            ApplyPreviewFont(mock.cast.text, max(7, S(textSize)))
-            mock.cast.text:ClearAllPoints()
-            local textX = ReadCastbarNum(g, key, "TextOffsetX", "bossCastTextOffsetX", 0)
-            local textY = ReadCastbarNum(g, key, "TextOffsetY", "bossCastTextOffsetY", 0)
-            mock.cast.text:SetPoint("LEFT", mock.cast.fill, "LEFT", S(2 + textX), S(textY))
-            mock.cast.text:SetPoint("RIGHT", mock.cast.time, "LEFT", -S(6), 0)
-            mock.cast.text:SetText(TR(key == "boss" and "Celestial Ruin" or "Arcane Surge"))
-            box.handleCastbarText:SetSize(max(34, mock.cast.text:GetStringWidth() + 10), max(18, mock.cast.text:GetStringHeight() + 6))
-            if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarText, canvas, { mock.cast.text }, 3) then
-                PlaceHandle(box.handleCastbarText, mock.cast.text)
-            end
-        else
-            box.handleCastbarText:Hide()
-        end
-        local showTime = key == "boss" and g.showBossCastTime ~= false
-            or (key == "target" and g.showTargetCastTime ~= false)
-            or (key == "focus" and g.showFocusCastTime ~= false)
-            or (key == "player" and g.showPlayerCastTime ~= false)
-        mock.cast.time:SetShown(showTime)
-        mock.cast.time:SetText(FormatCastbarPreviewTime(g, key, 1.4, 2.0))
-        if showTime then
-            local timeX = ReadCastbarNum(g, key, "TimeOffsetX", "bossCastTimeOffsetX", g.castbarPlayerTimeOffsetX or -2)
-            local timeY = ReadCastbarNum(g, key, "TimeOffsetY", "bossCastTimeOffsetY", g.castbarPlayerTimeOffsetY or 0)
-            if key == "boss" then
-                timeX = -2 + (tonumber(g.bossCastTimeOffsetX) or 0)
-                timeY = tonumber(g.bossCastTimeOffsetY) or 0
-            end
-            local timeSize = ReadCastbarNum(g, key, "TimeFontSize", "bossCastTimeFontSize", g.castbarTimeFontSize or g.fontSize or 14)
-            if not timeSize or timeSize <= 0 then timeSize = g.fontSize or 14 end
-            ApplyPreviewFont(mock.cast.time, max(7, S(timeSize)))
-            mock.cast.time:ClearAllPoints()
-            mock.cast.time:SetPoint("RIGHT", mock.cast.fill, "RIGHT", S(timeX), S(timeY))
-            box.handleCastbarTime:SetSize(max(28, mock.cast.time:GetStringWidth() + 10), max(18, mock.cast.time:GetStringHeight() + 6))
-            if not UnitPreviewText.PlaceHandleAroundRegions(box.handleCastbarTime, canvas, { mock.cast.time }, 3) then
-                PlaceHandle(box.handleCastbarTime, mock.cast.time)
-            end
-        else
-            box.handleCastbarTime:Hide()
-        end
+        ApplyCastbarPreviewDetails(box, mock, canvas, g, key, castBarH, scw, S, max, min, floor, fr, fg, fb, TR, ApplyPreviewFont, CastbarShowIcon, CastbarShowText, ReadCastbarNum, FormatCastbarPreviewTime, UnitPreviewText, PlaceHandle)
         box.handleCastbar:SetSize(max(36, scw), max(18, sch + 8))
         PlaceHandle(box.handleCastbar, mock.cast)
     else

@@ -64,6 +64,13 @@ local function Proxy_ImportLegacyFromString(str)
     end
     print("|cffff0000MSUF:|r Legacy import failed: profiles system not loaded.")
  end
+local function Proxy_IsUUFImportString(str)
+    local real = _G.MSUF_Profiles_IsUUFImportString
+    if type(real) == "function" then
+        return real(str)
+    end
+    return type(str) == "string" and str:match("^%s*!UUF_") ~= nil
+end
 --- External API (Wago UI Packs / other tools):
 --- We expose stable globals that can export/import a SPECIFIC profile by key without switching the active profile.
 --- These are thin proxies so load-order never breaks: real implementations live in MSUF_Profiles.lua.
@@ -88,6 +95,7 @@ _G.MSUF_SerializeDB = _G.MSUF_SerializeDB or MSUF_SerializeDB
 _G.MSUF_ExportSelectionToString = _G.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString
 _G.MSUF_ImportFromString        = _G.MSUF_ImportFromString        or Proxy_ImportFromString
 _G.MSUF_ImportLegacyFromString  = _G.MSUF_ImportLegacyFromString  or Proxy_ImportLegacyFromString
+_G.MSUF_IsUUFImportString       = _G.MSUF_IsUUFImportString       or Proxy_IsUUFImportString
 _G.MSUF_ExportExternal = _G.MSUF_ExportExternal or Proxy_ExportExternal
 _G.MSUF_ImportExternal = _G.MSUF_ImportExternal or Proxy_ImportExternal
 if type(MSUF) == "table" then
@@ -95,6 +103,7 @@ if type(MSUF) == "table" then
     MSUF.MSUF_ExportSelectionToString = MSUF.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString
     MSUF.MSUF_ImportFromString = MSUF.MSUF_ImportFromString or Proxy_ImportFromString
     MSUF.MSUF_ImportLegacyFromString = MSUF.MSUF_ImportLegacyFromString or Proxy_ImportLegacyFromString
+    MSUF.MSUF_IsUUFImportString = MSUF.MSUF_IsUUFImportString or Proxy_IsUUFImportString
     MSUF.MSUF_ExportExternal = MSUF.MSUF_ExportExternal or Proxy_ExportExternal
     MSUF.MSUF_ImportExternal = MSUF.MSUF_ImportExternal or Proxy_ImportExternal
 end

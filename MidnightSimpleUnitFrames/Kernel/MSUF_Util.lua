@@ -50,6 +50,15 @@ local MSUF_POWER_BAR_SHOW_KEYS = {
     focus  = "showFocusPowerBar",
     boss   = "showBossPowerBar",
 }
+local MSUF_POWER_BAR_DEFAULTS = {
+    player = true,
+    target = true,
+    focus = true,
+    targettarget = false,
+    focustarget = false,
+    pet = true,
+    boss = true,
+}
 
 if type(_G.MSUF_CanonPowerBarUnitKey) ~= "function" then
     function _G.MSUF_CanonPowerBarUnitKey(unitKey)
@@ -60,7 +69,9 @@ if type(_G.MSUF_CanonPowerBarUnitKey) ~= "function" then
         elseif _G.MSUF_GetBossIndexFromToken(unitKey) then
             unitKey = "boss"
         end
-        if unitKey == "player" or unitKey == "target" or unitKey == "focus" or unitKey == "boss" then
+        if unitKey == "player" or unitKey == "target" or unitKey == "focus"
+            or unitKey == "targettarget" or unitKey == "focustarget"
+            or unitKey == "pet" or unitKey == "boss" then
             return unitKey
         end
         return nil
@@ -81,7 +92,7 @@ if type(_G.MSUF_ReadUnitPowerBarEnabled) ~= "function" then
         if legacyKey and bars and bars[legacyKey] ~= nil then
             return bars[legacyKey] ~= false
         end
-        return true
+        return MSUF_POWER_BAR_DEFAULTS[k] ~= false
     end
 end
 
@@ -414,6 +425,7 @@ end
 local MSUF_CASTBAR_TIME_FORMAT_CURRENT = "CURRENT"
 local MSUF_CASTBAR_TIME_FORMATS = {
     CURRENT = true,
+    ELAPSED = true,
     CURRENT_MAX = true,
     MAX_CURRENT = true,
     ELAPSED_MAX = true,
@@ -428,6 +440,9 @@ function MSUF_NormalizeCastbarTimeFormat(value)
     value = value:gsub("-", "_")
     if value == "CURRENTONLY" or value == "CURRENT_ONLY" or value == "REMAINING" or value == "REMAINING_ONLY" then
         return "CURRENT"
+    end
+    if value == "ELAPSEDONLY" or value == "ELAPSED_ONLY" then
+        return "ELAPSED"
     end
     if value == "REMAINING_MAX" then return "CURRENT_MAX" end
     if value == "MAX_REMAINING" then return "MAX_CURRENT" end
@@ -468,6 +483,10 @@ function MSUF_FormatCastbarTimeText(mode, current, total)
 
     if mode == "CURRENT_MAX" then
         return string.format("%.1f / %.1f", cur, maxTime)
+    elseif mode == "ELAPSED" then
+        local elapsed = maxTime - cur
+        if elapsed < 0 then elapsed = 0 end
+        return string.format("%.1f", elapsed)
     elseif mode == "MAX_CURRENT" then
         return string.format("%.1f / %.1f", maxTime, cur)
     elseif mode == "ELAPSED_MAX" then

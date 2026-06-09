@@ -22,7 +22,7 @@ local UNIT_PAGES = {
     uf_boss = { unit = "boss", title = "MSUF Boss Frames", label = "Boss" },
 }
 
-local POWER_UNITS = KSW("player target focus boss")
+local POWER_UNITS = KSW("player target focus targettarget focustarget pet boss")
 
 local CASTBAR_FIELDS = {
     player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
@@ -337,6 +337,15 @@ local PB_SHOW_KEY_MAP = {
     focus = "showFocusPowerBar",
     boss = "showBossPowerBar",
 }
+local PB_SHOW_DEFAULTS = {
+    player = true,
+    target = true,
+    focus = true,
+    targettarget = false,
+    focustarget = false,
+    pet = true,
+    boss = true,
+}
 
 local function ReadPowerBarEnabled(conf, unitKey)
     if conf and conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
@@ -344,7 +353,7 @@ local function ReadPowerBarEnabled(conf, unitKey)
     if type(fn) == "function" then return fn(unitKey) end
     local b, bk = _G.MSUF_DB and _G.MSUF_DB.bars, PB_SHOW_KEY_MAP[unitKey]
     if b and bk and b[bk] ~= nil then return b[bk] ~= false end
-    return true
+    return PB_SHOW_DEFAULTS[unitKey] ~= false
 end
 
 local function ReadPowerBarHeight(conf, unitKey)
@@ -415,6 +424,24 @@ local function CopyCastbar(g, src, dst)
     g[d.icon] = g[s.icon]
     g[d.text] = g[s.text]
     g[d.timeFormat] = g[s.timeFormat]
+
+    local prefixByUnit = {
+        player = "castbarPlayer",
+        target = "castbarTarget",
+        focus = "castbarFocus",
+        boss = "bossCast",
+    }
+    local srcPrefix = prefixByUnit[src]
+    local dstPrefix = prefixByUnit[dst]
+    if not srcPrefix or not dstPrefix then return end
+    local suffixes = {
+        "IconPosition", "IconSize", "IconOffsetX", "IconOffsetY", "IconSpacing", "IconBorderStyle",
+        "SpellNamePosition", "SpellNameFontSize", "TextOffsetX", "TextOffsetY", "SpellNameAlign", "SpellNameMaxWidth", "SpellNameTruncate",
+        "TimePosition", "TimeFontSize", "TimeOffsetX", "TimeOffsetY",
+    }
+    for i = 1, #suffixes do
+        g[dstPrefix .. suffixes[i]] = g[srcPrefix .. suffixes[i]]
+    end
 end
 
 local function EnsureCopyDialog()

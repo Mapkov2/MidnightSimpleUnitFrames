@@ -1212,6 +1212,9 @@ end
     if g.castbarSpellNameFontSize == nil then
         g.castbarSpellNameFontSize = 0
     end
+    if g.castbarTimeFontSize == nil then
+        g.castbarTimeFontSize = 0
+    end
     if g.castbarIconOffsetX == nil then
         g.castbarIconOffsetX = 0
     end
@@ -1367,6 +1370,23 @@ end
     if g.castbarFocusIconOffsetY == nil then g.castbarFocusIconOffsetY = 0 end
     if g.castbarPlayerIconOffsetX == nil then g.castbarPlayerIconOffsetX = 0 end
     if g.castbarPlayerIconOffsetY == nil then g.castbarPlayerIconOffsetY = 0 end
+    local function InitCastbarDetailDefaults(prefix)
+        if g[prefix .. "IconPosition"] == nil then g[prefix .. "IconPosition"] = "LEFT" end
+        if g[prefix .. "IconSpacing"] == nil then g[prefix .. "IconSpacing"] = 1 end
+        if g[prefix .. "IconBorderStyle"] == nil then g[prefix .. "IconBorderStyle"] = "NONE" end
+        if g[prefix .. "SpellNamePosition"] == nil then g[prefix .. "SpellNamePosition"] = "LEFT" end
+        if g[prefix .. "SpellNameFont"] == nil then g[prefix .. "SpellNameFont"] = "GLOBAL" end
+        if g[prefix .. "SpellNameOutline"] == nil then g[prefix .. "SpellNameOutline"] = "GLOBAL" end
+        if g[prefix .. "SpellNameAlign"] == nil then g[prefix .. "SpellNameAlign"] = "LEFT" end
+        if g[prefix .. "SpellNameMaxWidth"] == nil then g[prefix .. "SpellNameMaxWidth"] = 0 end
+        if g[prefix .. "SpellNameTruncate"] == nil then g[prefix .. "SpellNameTruncate"] = "AUTO" end
+        if g[prefix .. "TimePosition"] == nil then g[prefix .. "TimePosition"] = "RIGHT" end
+        if g[prefix .. "TimeFont"] == nil then g[prefix .. "TimeFont"] = "GLOBAL" end
+        if g[prefix .. "TimeOutline"] == nil then g[prefix .. "TimeOutline"] = "GLOBAL" end
+    end
+    InitCastbarDetailDefaults("castbarPlayer")
+    InitCastbarDetailDefaults("castbarTarget")
+    InitCastbarDetailDefaults("castbarFocus")
     --- Boss castbar UI bits (BossCastbars module reads these from general)
     if g.showBossCastIcon == nil then g.showBossCastIcon = true end
     if g.showBossCastName == nil then g.showBossCastName = true end
@@ -1377,6 +1397,7 @@ end
     if g.bossCastTextOffsetY == nil then g.bossCastTextOffsetY = 0 end
     if g.bossCastTimeOffsetX == nil then g.bossCastTimeOffsetX = 0 end
     if g.bossCastTimeOffsetY == nil then g.bossCastTimeOffsetY = 0 end
+    InitCastbarDetailDefaults("bossCast")
     --- Focus Kick Icon defaults
     if g.enableFocusKickIcon == nil then g.enableFocusKickIcon = false end
     if g.focusKickIconWidth == nil then g.focusKickIconWidth = 40 end
@@ -2339,13 +2360,17 @@ local function fill(key, defaults)
             focus  = "showFocusPowerBar",
             boss   = "showBossPowerBar",
         }
-        for _, unitKey in ipairs({"player", "target", "focus", "boss"}) do
+        for _, unitKey in ipairs({"player", "target", "focus", "targettarget", "focustarget", "pet", "boss"}) do
             MSUF_DB[unitKey] = MSUF_DB[unitKey] or {}
             local u = MSUF_DB[unitKey]
             local legacyShowKey = showKeys[unitKey]
             if u.showPowerBar == nil then
                 local legacyShow = legacyShowKey and bars[legacyShowKey]
-                u.showPowerBar = (legacyShow ~= false)
+                if legacyShow ~= nil then
+                    u.showPowerBar = legacyShow ~= false
+                else
+                    u.showPowerBar = u.showPower ~= false
+                end
             end
             if u.powerBarHeight == nil then
                 u.powerBarHeight = tonumber(bars.powerBarHeight) or 3

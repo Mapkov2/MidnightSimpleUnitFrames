@@ -1346,12 +1346,16 @@ local function SubmitAssistantSearchQuery(query)
     query = TrimText(query)
     if query == "" then return false end
     local A = (MSUF and MSUF.Assistant) or M.Assistant
-    if not (A and type(A.Submit) == "function") then return false end
+    if not (A and type(A.SubmitDeferred) == "function") then return false end
     if type(M.SelectPage) == "function" and M.activeKey ~= "home" then
         M.SelectPage("home")
     end
-    A.Submit(query)
-    if type(A.RefreshUI) == "function" then A.RefreshUI() end
+    A.SubmitDeferred(query)
+    if type(A.RequestRefreshUI) == "function" then
+        A.RequestRefreshUI("assistant.search")
+    elseif type(A.RefreshUI) == "function" then
+        A.RefreshUI()
+    end
     return true
 end
 
