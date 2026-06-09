@@ -1054,6 +1054,9 @@ function A.HandleCommandInput(text)
     if parsed.kind == "unknown" then
         return { text = parsed.text or "I do not know that setting yet.", status = parsed.status or "failed", kind = "unknown" }
     end
+    if parsed.kind == "unsupported" then
+        return { text = parsed.text or "That Assistant command is not supported yet.", status = parsed.status or "info", kind = "unsupported", summary = parsed.summary }
+    end
     if parsed.kind == "answer" then
         return { text = parsed.text or "", status = parsed.status or "info", summary = parsed.summary }
     end
@@ -1362,7 +1365,8 @@ function A.Submit(text)
     return SubmitNow(text)
 end
 
-local function BuildDeferredSubmitSteps(text, callback)
+local function BuildDeferredSubmitSteps(text, callback, opts)
+    opts = opts or {}
     local steps = {}
     local startedMs = PerfNowMs()
     local parts = SplitBatchCommands(text)
@@ -1379,8 +1383,10 @@ local function BuildDeferredSubmitSteps(text, callback)
         if type(callback) == "function" then pcall(callback, finalResult) end
     end
 
-    steps[#steps + 1] = function()
-        A.AddHistory("user", text, "submitted")
+    if opts.userHistoryRecorded ~= true then
+        steps[#steps + 1] = function()
+            A.AddHistory("user", text, "submitted")
+        end
     end
 
     if parts then
@@ -1446,7 +1452,8 @@ function A.SubmitDeferred(text, callback)
 
     A.SetBusy(true, "I am working on that")
 
-    local steps, onDone = BuildDeferredSubmitSteps(text, callback)
+    A.AddHistory("user", text, "submitted")
+    local steps, onDone = BuildDeferredSubmitSteps(text, callback, { userHistoryRecorded = true })
     local job = A.StartJob("assistant.submit", steps, onDone)
     if job and type(job.result) == "table" and not A.IsBusy() then
         return job.result
