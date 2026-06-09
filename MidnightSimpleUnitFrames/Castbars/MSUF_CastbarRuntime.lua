@@ -253,6 +253,10 @@ function Runtime:ApplyActive(frame, state, options)
         frame:Show()
     end
 
+    if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
+        _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
+    end
+
     return true
 end
 
@@ -299,6 +303,10 @@ function Runtime:ApplyInterrupt(frame, options)
 
     if frame.SetAlpha then
         frame:SetAlpha(1)
+    end
+
+    if type(_G.MSUF_UF_ApplyCastbarRangeAlpha) == "function" then
+        _G.MSUF_UF_ApplyCastbarRangeAlpha(frame, nil, true)
     end
 
     if options.skipShake ~= true and type(_G.MSUF_PlayCastbarShake) == "function" then

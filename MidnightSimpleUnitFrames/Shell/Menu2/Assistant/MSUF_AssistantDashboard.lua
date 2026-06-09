@@ -356,8 +356,8 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     title:SetWidth(cardW - 44)
     title:SetJustifyH("LEFT")
 
-    local subtitle = W.Text and W.Text(parent, "Configure MSUF by typing what you want to change.", 22, -76, cardW - 44, T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
-        or Font(parent, "GameFontDisableSmall", "Configure MSUF by typing what you want to change.", T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
+    local subtitle = W.Text and W.Text(parent, "This is the main place to change settings or find the right page.", 22, -76, cardW - 44, T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
+        or Font(parent, "GameFontDisableSmall", "This is the main place to change settings or find the right page.", T.colors and T.colors.muted or { 0.65, 0.70, 0.78, 1 })
     if subtitle.SetPoint and not subtitle:GetPoint() then subtitle:SetPoint("TOPLEFT", parent, "TOPLEFT", 22, -76) end
 
     local inputH = 30
@@ -417,10 +417,10 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     end)
 
     local chipPrompts = {
-        { "Hide player name", "hide player name" },
-        { "Move target down", "move target 10 down" },
-        { "Copy player to target", "copy player layout to target" },
-        { "Export profile", "export current profile" },
+        { "Move frames", "start edit mode" },
+        { "Make text bigger", "make text bigger" },
+        { "Import safely", "import profile safely" },
+        { "Find auras", "where do I change auras" },
     }
     local chipX = 22
     local chips = {}
@@ -452,7 +452,7 @@ function A.BuildDashboardCard(parent, cardW, cardH)
     placeholder:SetJustifyH("LEFT")
     if placeholder.SetWordWrap then placeholder:SetWordWrap(false) end
     if T.StyleFontString then T.StyleFontString(placeholder, T.colors and T.colors.dim or { 0.45, 0.50, 0.60, 1 }, 0) end
-    placeholder:SetText(Tr("hide player name"))
+    placeholder:SetText(Tr("make raid frames wider"))
     input._msufAssistantPlaceholder = placeholder
 
     local send = Button(parent, "Send", sendW, inputH, "primary")

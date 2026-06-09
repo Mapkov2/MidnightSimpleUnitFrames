@@ -233,7 +233,7 @@ local ROOT_FRAME_ENABLED_DETAIL_TERMS = {
     "indicator", "indicators", "status icon", "status icons", "status indicator", "status indicators",
     "icon", "icons", "symbol", "symbols", "portrait", "portraits", "power bar", "mana bar",
     "health bar", "hp bar", "castbar", "cast bar", "name", "names", "text", "border", "outline",
-    "alpha", "opacity", "range fade",
+    "alpha", "opacity", "range fade", "offline", "solo", "sort", "sorting", "role", "scale", "scaling",
 }
 
 local function RootFrameEnabledBlockedByDetail(setting, text)
@@ -972,7 +972,12 @@ local function HasUnitLoadConditionIntent(text, spec)
     if #groups > 0 and #units == 0 then return false end
     if HasLoadConditionPhrase(text) then return true end
     if not spec or ContainsAny(text, LOAD_CONDITION_DETAIL_BLOCKERS) then return false end
-    if #groups > 0 then return false end
+    if #groups > 0 then
+        return spec.key == "loadCondHideInGroup"
+            and #units > 0
+            and not ContainsAny(text, { "group frame", "group frames", "group when solo", "player in group when solo", "when solo", "while solo" })
+            and ContainsAny(text, { "hide in group", "hide while in group", "hide when in group", "group load condition" })
+    end
     return #units > 0 and HasVisibilityVerb(text)
 end
 
@@ -999,8 +1004,10 @@ local function GroupAvailabilityAttributeForText(text)
     end
     if ContainsAny(text, {
         "show while solo", "show solo", "solo mode", "show group while solo",
+        "show party frames while solo", "show raid frames while solo", "show mythic raid frames while solo",
         "show group frames while solo", "group while solo", "group frames while solo",
         "hide while solo", "hide solo", "not show while solo", "dont show while solo", "do not show while solo",
+        "hide party frames while solo", "hide raid frames while solo", "hide mythic raid frames while solo",
         "solo anzeigen", "solo modus",
     }) then
         return "showSolo", "show"
@@ -1413,6 +1420,115 @@ local function AddRegisteredChange(out, key, value, relativeDelta, direction)
         direction = direction,
         valueLabel = ValueDisplay(setting, value),
     }
+end
+
+P.GroupShortcutScopes = function(text)
+    local scopes, concrete = GroupAvailabilityScopes(text)
+    local allGroups = HasAllScopeIntent(text) or ContainsAny(text, {
+        "all group frames", "all groups", "group frames", "party raid", "party and raid",
+    })
+    return scopes, concrete or allGroups
+end
+
+P.GroupShortcutResponse = function(text, changes, concrete, title, summary)
+    if #changes == 0 then return nil end
+    if concrete or #changes == 1 or ShouldApplyMultipleRegistryChanges(text, changes) then
+        return {
+            kind = "changes",
+            changes = changes,
+            label = title,
+            bulkSafe = #changes > 1,
+            summary = summary,
+        }
+    end
+    return {
+        kind = "ambiguous",
+        choices = changes,
+        label = title,
+        summary = summary,
+    }
+end
+
+P.ParseGroupSortShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, { "sort", "sorting", "order", "first" }) then return nil end
+    if not ContainsAny(text, {
+        "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "frames",
+        "role", "roles", "tank", "tanks", "healer", "healers", "heal", "dps", "damager", "name", "alphabetical", "group",
+    }) then return nil end
+
+    local sortValue
+    local roleOrderValue
+    if ContainsAny(text, { "sort by group and role", "sort by group role", "group and role", "group plus role", "group role" }) then
+        sortValue = "GROUP_ROLE"
+    elseif ContainsAny(text, { "sort by group", "raid group order", "by raid group", "by group" }) then
+        sortValue = "GROUP"
+    elseif ContainsAny(text, { "sort by name", "by name", "alphabetical", "alphabetically", "name order" }) then
+        sortValue = "NAME"
+    elseif ContainsAny(text, { "sort by role", "by role", "role sorting", "sort roles", "roles" }) then
+        sortValue = "ROLE"
+    elseif ContainsAny(text, { "tank first", "tanks first", "tank on top", "tanks on top", "tank role first", "tanks role first" }) then
+        sortValue = "ROLE"
+        roleOrderValue = "TANK,HEALER,DAMAGER"
+    elseif ContainsAny(text, { "healer first", "healers first", "heal first", "heals first", "healer on top", "healers on top" }) then
+        sortValue = "ROLE"
+        roleOrderValue = "HEALER,TANK,DAMAGER"
+    elseif ContainsAny(text, { "dps first", "damage first", "damager first", "damagers first", "dps on top" }) then
+        sortValue = "ROLE"
+        roleOrderValue = "DAMAGER,TANK,HEALER"
+    else
+        return nil
+    end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".sortMode", sortValue)
+        if roleOrderValue then AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".roleOrder", roleOrderValue) end
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame sorting", "Changes registered Group Frame sort mode and role order controls.")
+end
+
+P.ParseGroupScaleModeShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, { "scale", "scaling", "frame scale", "frame scaling", "group scale", "group scaling" }) then return nil end
+    if FirstNumber(text) ~= nil then return nil end
+
+    local value
+    if ContainsAny(text, { "auto", "automatic", "automatically", "breakpoint", "breakpoints", "dynamic" }) then
+        value = "auto"
+    elseif ContainsAny(text, { "manual", "custom" }) then
+        value = "manual"
+    elseif ContainsAny(text, { "off", "disable", "disabled", "turn off", "none", "no scaling" }) then
+        value = "off"
+    elseif ContainsAny(text, { "on", "enable", "enabled", "turn on" }) then
+        value = "manual"
+    end
+    if value == nil then return nil end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".frameScaleMode", value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame scaling mode", "Changes the registered Group Layout Frame Scaling Mode control.")
+end
+
+P.ParseGroupOfflineDelayShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, { "offline", "offline members", "offline players" }) then return nil end
+    if not ContainsAny(text, { "delay", "after", "seconds", "sec", "hide offline" }) then return nil end
+    local value = FirstNumber(text)
+    if value == nil then return nil end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    local enableHide = ContainsAny(text, { "hide", "hide offline", "offline members", "offline players" })
+    for i = 1, #scopes do
+        if enableHide then AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".hideOfflineEnabled", true) end
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".hideOfflineDelay", value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline delay", "Changes registered Group Frame offline-member hiding controls.")
 end
 
 P.ParseMiscRegistryShortcut = function(text, raw)
@@ -2007,6 +2123,9 @@ local function ParseRepeatedRegistryShortcut(text, raw)
     return ParseScopedFontTextColorShortcut(text)
         or P.ParseCastbarColorShortcut(text, raw)
         or P.ParseGroupFrameColorShortcut(text, raw)
+        or P.ParseGroupSortShortcut(text)
+        or P.ParseGroupScaleModeShortcut(text)
+        or P.ParseGroupOfflineDelayShortcut(text)
         or ParseUnitLoadConditionShortcut(text)
         or ParsePowerBarRegistryShortcut(text, raw)
         or ParseStatusIconTestModeRegistryShortcut(text)

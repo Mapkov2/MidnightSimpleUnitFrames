@@ -598,6 +598,10 @@ local function DetectFrameType(text, ctx)
     if ContainsAny(text, { "first dance" }) then return "firstDance" end
     if ContainsAny(text, { "combat crosshair", "crosshair", "fadenkreuz", "melee range spell" }) then return "combatCrosshair" end
     if HasPhrase(text, "castbar") or HasPhrase(text, "zauberleiste") then return "castbar" end
+    if ContainsAny(text, { "raid marker", "raidmarker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker" })
+        and not ContainsAny(text, { "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames", "mythic raid frame", "mythic raid frames" }) then
+        return "unitframe"
+    end
     if HasPhrase(text, "group frames") or HasPhrase(text, "gruppenframes") or HasPhrase(text, "party") or HasPhrase(text, "raid") then return "group" end
     if (HasPhrase(text, "it") or HasPhrase(text, "that") or HasPhrase(text, "das")) and ctx and type(ctx.lastFrameType) == "string" then
         return ctx.lastFrameType
@@ -637,8 +641,9 @@ local function DetectAttribute(text, frameType)
         and ContainsAny(text, { "frame", "frames", "unitframe", "unitframes", "group", "gruppe" })
         and not ContainsAny(text, {
             "indicator", "indicators", "status icon", "status indicator", "icon", "icons", "symbol", "symbols",
-            "border", "outline", "portrait", "alpha", "opacity", "texture", "font", "text", "color", "farbe",
+            "border", "outline", "portrait", "alpha", "opacity", "texture", "font", "text", "name", "names", "color", "farbe",
             "power bar", "mana bar", "health bar", "hp bar", "castbar", "cast bar", "load condition",
+            "offline", "solo", "sort", "sorting", "role", "scale", "scaling", "shorten", "shortening", "truncate", "truncation",
         }) then
         return "enabled"
     end

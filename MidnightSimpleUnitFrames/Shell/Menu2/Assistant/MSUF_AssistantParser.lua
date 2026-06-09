@@ -216,12 +216,15 @@ P.AURA_BUFF_TERMS = P.AURA_BUFF_TERMS or { "buff", "buffs", "debuff", "debuffs" 
 P.AURA_BUFF_CONTEXT_TERMS = P.AURA_BUFF_CONTEXT_TERMS or {
     "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
     "hidden", "hide", "show", "open", "help", "why", "where", "settings",
+    "turn", "turn on", "turn off", "on", "off", "enable", "disable", "enabled", "disabled",
+    "set", "change", "make", "size", "count", "max", "icon", "icons", "per row", "growth",
     "own", "mine", "only mine", "only player", "raid filter", "player filter",
     "stack", "cooldown", "pandemic",
 }
 
 P.ParseUnsupportedAuraCommand = P.ParseUnsupportedAuraCommand or function(text)
     if ContainsAny(text, { "debuff stripe", "debuff stripes" }) then return nil end
+    if ContainsAny(text, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
     if not ContainsAny(text, P.AURA_OUT_OF_SCOPE_TERMS)
         and not (ContainsAny(text, P.AURA_BUFF_TERMS) and ContainsAny(text, P.AURA_BUFF_CONTEXT_TERMS))
     then
@@ -280,6 +283,8 @@ function A._ParsePipelineGeometry(normalized, raw)
         or A._ParseNameTextAnchorShortcut(normalized)
         or A._ParseTextSlotValueMoveShortcut(normalized)
         or A._ParseTextSlotOffsetShortcut(normalized)
+        or (P.ParseHumanAnchorTarget and P.ParseHumanAnchorTarget(normalized))
+        or (P.ParseGroupScaleBreakpointShortcut and P.ParseGroupScaleBreakpointShortcut(normalized))
         or (P.ParseFrameResizeShortcut and P.ParseFrameResizeShortcut(normalized))
         or P.ParseUnitSizeMatchShortcut(normalized)
         or ParseUnitDetailMove(normalized)

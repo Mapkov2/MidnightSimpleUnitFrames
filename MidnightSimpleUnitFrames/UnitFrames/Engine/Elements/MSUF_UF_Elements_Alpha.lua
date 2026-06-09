@@ -28,6 +28,56 @@ local SetAlphaCached = V.SetAlphaCached
 
 local Alpha = {}
 
+local function CastbarForUnit(unit)
+    if not unit then
+        return nil
+    end
+    if unit == "target" then
+        return _G.MSUF_TargetCastbar or _G.MSUF_TargetCastBar or _G.TargetCastBar
+    elseif unit == "focus" then
+        return _G.MSUF_FocusCastbar or _G.MSUF_FocusCastBar or _G.FocusCastBar
+    end
+
+    local bossIndex = tostring(unit):match("^boss(%d+)$")
+    if bossIndex then
+        local index = tonumber(bossIndex)
+        local bossCastbars = _G.MSUF_BossCastbars
+        return (bossCastbars and bossCastbars[index])
+            or _G["MSUF_BossCastbar" .. bossIndex]
+            or _G["MSUF_boss" .. bossIndex .. "CastBar"]
+            or _G["MSUF_Boss" .. bossIndex .. "CastBar"]
+    end
+
+    return nil
+end
+
+local function CastbarRangeAlpha(frame, mul)
+    if not frame then
+        return 1
+    end
+    local spec = frame.MSUFSpec
+    local range = spec and spec.range
+    if not (range and range.active == true) or range.layerMode == "health" then
+        return 1
+    end
+    return Clamp01(mul, 1)
+end
+
+local function ApplyCastbarRangeAlpha(frame, mul, force)
+    local unit = frame and frame.unit
+    local castbar = CastbarForUnit(unit)
+    if not (castbar and castbar.SetAlpha) then
+        return false
+    end
+    if castbar._msufFocusKickSuppressed == true then
+        return false
+    end
+
+    local alpha = CastbarRangeAlpha(frame, mul)
+    SetAlphaCached(castbar, alpha, "_msufRangeCastbarAlpha", force)
+    return true
+end
+
 local TEXT_ALPHA_FIELDS = {
     "nameText",
     "levelText",
@@ -119,6 +169,7 @@ local function ResetFrameLayers(frame, force)
         return
     end
     SetFrameAlpha(frame, 1)
+    ApplyCastbarRangeAlpha(frame, 1, force)
     ApplyHealthFillAlpha(frame, 1, force)
     SetTextLayerAlpha(frame, 1, force)
     SetPortraitLayerAlpha(frame, 1, force)
@@ -165,6 +216,7 @@ local function ApplyAlpha(frame, cfg, force)
     end
 
     SetFrameAlpha(frame, frameAlpha)
+    ApplyCastbarRangeAlpha(frame, mul, force)
     ApplyHealthFillAlpha(frame, hpAlpha, force)
     SetTextLayerAlpha(frame, foregroundAlpha, force)
     SetPortraitLayerAlpha(frame, foregroundAlpha, force)
@@ -229,10 +281,27 @@ UF.ApplyRangeModifier = function(frame, mul, force)
         ApplyAlpha(frame, cfg, force == true)
     else
         SetFrameAlpha(frame, mul)
+        ApplyCastbarRangeAlpha(frame, mul, force == true)
     end
     return true
 end
 _G.MSUF_UF_ApplyRangeModifier = UF.ApplyRangeModifier
+
+_G.MSUF_UF_ApplyCastbarRangeAlpha = function(castbarOrUnit, mul, force)
+    local unit = type(castbarOrUnit) == "string" and castbarOrUnit
+        or castbarOrUnit and castbarOrUnit.unit
+    if not unit then
+        return false
+    end
+    local frame = UF.frames and UF.frames[unit]
+    if not frame and tostring(unit):match("^boss%d+$") then
+        frame = UF.frames and UF.frames.boss
+    end
+    if not frame then
+        return false
+    end
+    return ApplyCastbarRangeAlpha(frame, mul or RangeMul(frame), force == true)
+end
 
 UF.ApplyAlphaFrame = function(frame, event)
     if not frame then
