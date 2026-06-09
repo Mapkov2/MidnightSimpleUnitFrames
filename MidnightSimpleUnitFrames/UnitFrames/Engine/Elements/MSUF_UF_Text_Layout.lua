@@ -315,7 +315,11 @@ local function ApproxNameWidth(fs, maxChars)
     if type(w) == "number" and w > 0 then
         return floor((w / 52) * maxChars + 0.5)
     end
-    local _, size = fs and fs.GetFont and fs:GetFont()
+    local size
+    if fs and fs.GetFont then
+        local _, fontSize = fs:GetFont()
+        size = fontSize
+    end
     return floor(((tonumber(size) or 12) * 0.62 * maxChars) + 0.5)
 end
 

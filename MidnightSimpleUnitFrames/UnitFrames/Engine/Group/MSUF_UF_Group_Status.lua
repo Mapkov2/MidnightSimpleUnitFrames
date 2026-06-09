@@ -36,6 +36,7 @@ local UpdatePhase = statusRuntime.UpdatePhase
 local UpdateStatusText = statusRuntime.UpdateStatusText
 local UpdateRaidGroup = statusRuntime.UpdateRaidGroup
 local UpdateRole = statusRuntime.UpdateRole
+local EMPTY_EVENTS = {}
 local UnitIsConnected = _G.UnitIsConnected
 local UnitIsGhost = _G.UnitIsGhost
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost

@@ -59,7 +59,11 @@ local function PlainNumber(value)
 end
 
 local function ResolveInterruptSpellID()
-    local _, classToken = UnitClass and UnitClass("player")
+    local classToken
+    if UnitClass then
+        local _, token = UnitClass("player")
+        classToken = token
+    end
     state.classToken = classToken
 
     local classSpells = classToken and INTERRUPT_SPELLS[classToken]

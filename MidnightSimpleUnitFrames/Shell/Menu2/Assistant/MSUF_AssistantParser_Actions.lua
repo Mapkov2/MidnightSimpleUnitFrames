@@ -368,7 +368,10 @@ local function ParseGroupSpellIndicatorAction(text, raw)
         } or nil
     end
 
-    local aura, resolvedSpec = A.ResolveGroupSpellAura and A.ResolveGroupSpellAura(spec, text) or nil
+    local aura, resolvedSpec
+    if type(A.ResolveGroupSpellAura) == "function" then
+        aura, resolvedSpec = A.ResolveGroupSpellAura(spec, text)
+    end
     spec = spec or resolvedSpec
     if ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then
         local action = Registry and Registry:GetAction("reset_group_spell_indicator_aura")
@@ -759,7 +762,8 @@ end
 local function UnitStatusUnitsOrCurrent(text)
     local units = DetectUnits(text)
     if #units == 0 then
-        local currentUnit = CurrentPageUnit and CurrentPageUnit() or nil
+        local currentPageUnit = P.CurrentPageUnit
+        local currentUnit = type(currentPageUnit) == "function" and currentPageUnit() or nil
         if currentUnit then units = { currentUnit } end
     end
     return units

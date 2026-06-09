@@ -27,6 +27,8 @@ local RegisterBarsNumber = C.RegisterBarsNumber
 local RegisterBarsEnum = C.RegisterBarsEnum
 local ClassPowerAliases = C.ClassPowerAliases
 local ApplyClassPower = C.ApplyClassPower
+local ApplyDetachedPowerBar = C.ApplyDetachedPowerBar
+local ApplyDetachedPowerBarOutline = C.ApplyDetachedPowerBarOutline
 local CallGlobal = C.CallGlobal
 
 local CLASS_POWER_WIDTH_MODE_ALIASES = {

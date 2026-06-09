@@ -38,7 +38,11 @@ if type(SI.GetPlayerSpec) ~= "function" then
     function SI.GetPlayerSpec()
         local specIndex = GetSpecialization and GetSpecialization() or nil
         if not specIndex then return nil end
-        local _, classToken = UnitClass and UnitClass("player")
+        local classToken
+        if UnitClass then
+            local _, token = UnitClass("player")
+            classToken = token
+        end
         local mapped = classToken and SI.SpecMap and SI.SpecMap[classToken .. "_" .. specIndex]
         if mapped then return mapped end
         local specID, specName

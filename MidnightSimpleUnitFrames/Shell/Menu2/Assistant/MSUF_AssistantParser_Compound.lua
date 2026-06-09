@@ -2357,7 +2357,10 @@ local function FastScopedBorderColorChain(text)
         if #words < 4 then return nil end
         local colorWord = words[#words]
         if not COLOR_VALUE_WORDS[colorWord] then return nil end
-        local r, g, b, label = ExtractColor and ExtractColor(colorWord, colorWord)
+        local r, g, b, label
+        if type(ExtractColor) == "function" then
+            r, g, b, label = ExtractColor(colorWord, colorWord)
+        end
         if not r then return nil end
 
         local prefix = StripCommandLead(WordsText(words, 1, #words - 1))

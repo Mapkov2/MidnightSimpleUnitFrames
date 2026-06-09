@@ -47,6 +47,7 @@ local ApplyAbsorbBars = C.ApplyAbsorbBars
 local ApplyClassPower = C.ApplyClassPower
 local ApplyDetachedPowerBar = C.ApplyDetachedPowerBar
 local ApplyDetachedPowerBarOutline = C.ApplyDetachedPowerBarOutline
+local ApplyCastbar = C.ApplyCastbar
 local RegisterGeneralBoolean = C.RegisterGeneralBoolean
 local RegisterGeneralNumberSetting = C.RegisterGeneralNumberSetting
 local RegisterGeneralEnum = C.RegisterGeneralEnum

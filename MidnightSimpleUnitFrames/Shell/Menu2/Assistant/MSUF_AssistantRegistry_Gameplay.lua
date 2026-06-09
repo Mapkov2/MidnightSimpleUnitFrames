@@ -26,6 +26,7 @@ local RegisterGameplayNumber = C.RegisterGameplayNumber
 local RegisterGameplayEnum = C.RegisterGameplayEnum
 local RegisterGameplayString = C.RegisterGameplayString
 local GameplayAliases = C.GameplayAliases
+local GameplayDB = C.GameplayDB
 local ApplyGameplay = C.ApplyGameplay
 
 local GAMEPLAY_ANCHOR_VALUES = { "none", "player", "target", "focus" }
