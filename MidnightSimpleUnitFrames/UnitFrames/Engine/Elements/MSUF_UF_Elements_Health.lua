@@ -22,7 +22,15 @@ local ApplyBarGradient = C.ApplyBarGradient
 local IsNil = C.IsNil or function(value) return value == nil end
 local IsSecret = C.IsSecret or function(_) return false end
 local floor = C.floor or math.floor
+local GetTime = C.GetTime or _G.GetTime
 local type = type
+
+-- In combat the boss/raid health values are secret, so the integer percent
+-- bucket below can't be computed (it would require comparing secret values) and
+-- the gradient recolor would otherwise run on every UNIT_HEALTH tick. Cap the
+-- gradient recolor rate per bar instead: at this interval the color step is
+-- imperceptible, and the next tick within the window carries the update.
+local GRADIENT_SECRET_THROTTLE = 0.1
 local Health = {
     events = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_CONNECTION", "UNIT_FLAGS", "UNIT_FACTION" },
 }
@@ -164,12 +172,28 @@ function Health.Update(frame, event, unit)
     -- to nil whenever the dead/offline (grey) path runs, so a later tick at the
     -- same percent still recolors back to the gradient.
     local gradientBucket
-    if event == "UNIT_HEALTH" and frame._msufHealthColorByHealth == true
-        and not (IsSecret(hp) or IsSecret(maxHP))
-        and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
-        gradientBucket = floor((hp / maxHP) * 100 + 0.5)
-        if bar._msufGradientPct == gradientBucket then
-            updateColor = false
+    if event == "UNIT_HEALTH" and frame._msufHealthColorByHealth == true then
+        if not (IsSecret(hp) or IsSecret(maxHP))
+            and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
+            gradientBucket = floor((hp / maxHP) * 100 + 0.5)
+            if bar._msufGradientPct == gradientBucket then
+                updateColor = false
+            end
+        elseif GetTime then
+            -- Secret health (combat): the bucket above can't be computed, so the
+            -- value-based skip is unavailable. Throttle the gradient recolor by
+            -- time instead -- recolor at most once per window, letting the next
+            -- in-window tick carry the change. The first recolor (no timestamp
+            -- yet) is never suppressed. A stale per-percent bucket left from the
+            -- plain path is cleared so the next plain tick recomputes from scratch.
+            bar._msufGradientPct = nil
+            local now = GetTime()
+            local nextAt = bar._msufGradientThrottleAt
+            if nextAt and now < nextAt then
+                updateColor = false
+            else
+                bar._msufGradientThrottleAt = now + GRADIENT_SECRET_THROTTLE
+            end
         end
     end
 

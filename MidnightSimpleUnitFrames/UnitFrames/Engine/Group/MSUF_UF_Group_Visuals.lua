@@ -28,6 +28,10 @@ local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
 
+local function IsUnitToken(unit)
+    return type(unit) == "string" and unit ~= ""
+end
+
 -- Event subscription lists. DeadBg adds UNIT_FLAGS so the rare dead<->ghost<->res
 -- transition (which always raises UNIT_FLAGS) is what probes UnitIsDeadOrGhost --
 -- the per-UNIT_HEALTH tick stays a single hp==0 comparison with no API call.
@@ -277,7 +281,8 @@ local function RestoreHealthBackground(frame)
     -- gone->alive edge, never on a health tick.
     local element = UF.elements and UF.elements.Health
     local active = frame and frame._msufActiveElements
-    if element and element.Update and active and active.Health == true then
+    local unit = frame and frame.unit
+    if element and element.Update and active and active.Health == true and IsUnitToken(unit) then
         local bar = frame.hpBar
         if bar then
             -- Force the cold-path recolour branch (updateColor keys off a nil
@@ -286,7 +291,7 @@ local function RestoreHealthBackground(frame)
             bar._msufStatusR = nil
             if frame._msufUnitState then frame._msufUnitState.ready = nil end
         end
-        element.Update(frame, "MSUF_GF_VISUALS", frame.unit)
+        element.Update(frame, "MSUF_GF_VISUALS", unit)
     end
     -- Re-apply the configured health background. Health.Update only touches the
     -- background on the dynamic (backgroundMatchHealth) path, so a static

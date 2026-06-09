@@ -44,12 +44,21 @@ local function ReadPowerType(unit)
     return powerType, powerToken
 end
 
-local function ReadPowerMeta(frame, bar, unit, force)
+local function ReadPowerMeta(frame, bar, unit, force, preType, preToken, preRead)
     if not force and bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
         return bar._msufPowerType, bar._msufPowerMax, bar._msufPowerToken, false
     end
 
-    local powerType, powerToken = ReadPowerType(unit)
+    -- The animate path in ReadPowerValues already reads the live (secret-
+    -- sanitised) power type/token to detect a hot meta-change; when it did, pass
+    -- those values in via preRead so we skip a second UnitPowerType C call + two
+    -- IsSecret checks on every forced power tick. Otherwise read fresh here.
+    local powerType, powerToken
+    if preRead then
+        powerType, powerToken = preType, preToken
+    else
+        powerType, powerToken = ReadPowerType(unit)
+    end
     local maxPower
     -- powerType is already secret-sanitised to nil by ReadPowerType, so a plain
     -- nil test is sufficient here -- no second issecretvalue C call needed.
@@ -75,10 +84,12 @@ end
 
 local function ReadPowerValues(frame, bar, unit, event, animate)
     local hotMetaChanged = false
+    local liveType, liveToken, liveRead = nil, nil, false
     if animate then
         local powerSpec = frame and frame.MSUFSpec and frame.MSUFSpec.power
         if not powerSpec or powerSpec.mode == nil or powerSpec.mode == "power" then
-            local liveType, liveToken = ReadPowerType(unit)
+            liveType, liveToken = ReadPowerType(unit)
+            liveRead = true
             hotMetaChanged = (liveType ~= nil or liveToken ~= nil)
                 and (liveType ~= bar._msufPowerType or liveToken ~= bar._msufPowerToken)
         end
@@ -93,7 +104,10 @@ local function ReadPowerValues(frame, bar, unit, event, animate)
         or event == "MSUF_APPLY"
         or event == "MSUF_FORCE_UPDATE"
         or event == "MSUF_POWER_LAYOUT"
-    local powerType, maxPower, powerToken, powerMetaChanged = ReadPowerMeta(frame, bar, unit, forceMeta)
+    -- Reuse the live read above (when taken) so ReadPowerMeta doesn't re-call
+    -- UnitPowerType for the same unit on a forced animate tick.
+    local powerType, maxPower, powerToken, powerMetaChanged =
+        ReadPowerMeta(frame, bar, unit, forceMeta, liveType, liveToken, liveRead)
     local power
     -- powerType originates from ReadPowerType (secret-sanitised to nil), so a
     -- plain nil test avoids a redundant issecretvalue C call on every read.

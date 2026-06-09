@@ -660,6 +660,9 @@ local function TextApplySignature(spec, text)
         tostring(spec and spec.nameFontSize),
         tostring(spec and spec.healthFontSize),
         tostring(spec and spec.powerFontSize),
+        tostring(spec and spec.textColor and spec.textColor.r),
+        tostring(spec and spec.textColor and spec.textColor.g),
+        tostring(spec and spec.textColor and spec.textColor.b),
         tostring(spec and spec.textColor and spec.textColor.a),
         tostring(spec and spec.fontShadow),
         tostring(spec and spec.fontShadowAlpha),
@@ -900,9 +903,11 @@ function Text.Apply(frame, spec)
     SetTextLayer(frame.powerTextCenter, text.powerLayer)
     SetTextLayer(frame.powerTextRight, text.powerLayer)
     if directText then
-        ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
-        ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
-        ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)
+        if text.healthColorByHealth ~= true then
+            ApplyTextColor(frame.hpTextLeft, text.directHealthLeftColor)
+            ApplyTextColor(frame.hpTextCenter, text.directHealthCenterColor)
+            ApplyTextColor(frame.hpTextRight, text.directHealthRightColor)
+        end
         if text.powerColorByType ~= true then
             ApplyTextColor(frame.powerTextLeft, text.directPowerLeftColor)
             ApplyTextColor(frame.powerTextCenter, text.directPowerCenterColor)
