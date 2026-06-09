@@ -1706,6 +1706,24 @@ end
     if g.combatStateIndicatorLayer == nil then
         g.combatStateIndicatorLayer = 7
     end
+    if g.showPvpIndicator == nil then
+        g.showPvpIndicator = true
+    end
+    if g.pvpIndicatorAnchor == nil then
+        g.pvpIndicatorAnchor = "TOPRIGHT"
+    end
+    if g.pvpIndicatorOffsetX == nil then
+        g.pvpIndicatorOffsetX = 0
+    end
+    if g.pvpIndicatorOffsetY == nil then
+        g.pvpIndicatorOffsetY = 0
+    end
+    if g.pvpIndicatorSize == nil then
+        g.pvpIndicatorSize = 18
+    end
+    if g.pvpIndicatorLayer == nil then
+        g.pvpIndicatorLayer = 7
+    end
     --- Status Icons (Summon / Resting)
     --- These are used by the Unitframe Status element (player/target) and can be overridden per-unit in the Frames menu.
     if g.showRestingIndicator == nil then
@@ -1790,6 +1808,17 @@ for _, key in ipairs({"player","target","focus","targettarget","focustarget","pe
     end
     if conf.raidMarkerSize == nil then conf.raidMarkerSize = 14 end
     if conf.raidMarkerLayer == nil then conf.raidMarkerLayer = 7 end
+end
+--- PvP flag defaults (per-unit)
+for _, key in ipairs({"player","target","focus","targettarget","focustarget"}) do
+    MSUF_DB[key] = MSUF_DB[key] or {}
+    local conf = MSUF_DB[key]
+    if conf.showPvpIndicator == nil then conf.showPvpIndicator = true end
+    if conf.pvpIndicatorSize == nil then conf.pvpIndicatorSize = 18 end
+    if conf.pvpIndicatorAnchor == nil then conf.pvpIndicatorAnchor = "TOPRIGHT" end
+    if conf.pvpIndicatorOffsetX == nil then conf.pvpIndicatorOffsetX = 0 end
+    if conf.pvpIndicatorOffsetY == nil then conf.pvpIndicatorOffsetY = 0 end
+    if conf.pvpIndicatorLayer == nil then conf.pvpIndicatorLayer = 7 end
 end
 --- Elite / Rare icon defaults (per-unit)
 for _, key in ipairs({"target","focus","targettarget","focustarget","boss"}) do

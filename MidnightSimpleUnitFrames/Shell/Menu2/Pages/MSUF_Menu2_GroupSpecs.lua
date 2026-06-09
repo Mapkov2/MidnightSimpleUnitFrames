@@ -122,6 +122,7 @@ raidMarker|Raid Marker|raidMarker|0|raidMarkerSize|raidMarkerAnchor|raidMarkerX|
 readyCheckIcon|Ready Check|readyCheckIcon|0|readyCheckSize|readyCheckAnchor|readyCheckX|readyCheckY|readyCheckLayer|16|CENTER|4
 summonIcon|Summon|summonIcon|0|summonIconSize|summonAnchor|summonX|summonY|summonLayer|16|CENTER|4
 resurrectIcon|Resurrect|resurrectIcon|0|resurrectIconSize|resurrectAnchor|resurrectX|resurrectY|resurrectLayer|16|CENTER|4
+pvpIcon|PvP Flag|pvpIcon|0|pvpIconSize|pvpIconAnchor|pvpIconX|pvpIconY|pvpIconLayer|14|TOPLEFT|3
 phaseIcon|Phase|phaseIcon|0|phaseIconSize|phaseAnchor|phaseX|phaseY|phaseLayer|14|TOPLEFT|3
 statusText|Dead Text|statusText|0|statusTextSize|statusTextAnchor|statusOffsetX|statusOffsetY|statusTextLayer|14|CENTER|7
 statusGhostText|Ghost Text|statusGhostText|0|statusGhostTextSize|statusGhostTextAnchor|statusGhostOffsetX|statusGhostOffsetY|statusGhostTextLayer|14|CENTER|7

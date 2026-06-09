@@ -53,6 +53,7 @@ statusText|statusTextEnabled|statusTextSize|statusTextAnchor|statusTextOffsetX|s
 statusCombat|showCombatStateIndicator|combatStateIndicatorSize|combatStateIndicatorAnchor|combatStateIndicatorOffsetX|combatStateIndicatorOffsetY|combatStateIndicatorLayer|7|18|TOPLEFT|0|0|C|1.0,0.22,0.16|Combat icon|MSUF_RequestStatusCombatIndicatorRefresh||player target
 statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicatorAnchor|restedStateIndicatorOffsetX|restedStateIndicatorOffsetY|restedStateIndicatorLayer|7|18|TOPLEFT|0|0|Z|0.34,0.62,1.0|Rested icon|MSUF_RequestStatusRestingIndicatorRefresh|false|player
 statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target
+statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget
 ]]
 
 specs.PreviewLayers = LayerRows [[

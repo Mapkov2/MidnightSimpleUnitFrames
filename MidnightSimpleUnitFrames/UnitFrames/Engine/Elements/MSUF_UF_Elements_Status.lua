@@ -16,6 +16,10 @@ local UnitLevel = UnitLevel
 local UnitClassification = UnitClassification or GetUnitClassification
 local UnitIsConnected = UnitIsConnected
 local UnitIsPlayer = UnitIsPlayer
+local UnitIsPVP = UnitIsPVP
+local UnitIsPVPFreeForAll = UnitIsPVPFreeForAll
+local UnitFactionGroup = UnitFactionGroup
+local UnitIsMercenary = UnitIsMercenary
 local UnitIsGhost = UnitIsGhost
 local UnitIsDead = UnitIsDead
 local UnitIsDeadOrGhost = UnitIsDeadOrGhost
@@ -98,6 +102,11 @@ local READY_TEXTURE_WAITING = "Interface\\RaidFrame\\ReadyCheck-Waiting"
 local READY_REZ_TEXTURE = "Interface\\RaidFrame\\Raid-Icon-Rez"
 local PHASE_TEXTURE = "Interface\\TargetingFrame\\UI-PhasingIcon"
 local STATE_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
+local PVP_FFA_ATLAS = "UI-HUD-UnitFrame-Player-PVP-FFAIcon"
+local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
+local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
+local PVP_ALLIANCE_TEXTURE = "Interface\\TargetingFrame\\UI-PVP-Alliance"
+local PVP_HORDE_TEXTURE = "Interface\\TargetingFrame\\UI-PVP-Horde"
 local SYMBOL_BASE = ADDON_PATH .. "\\Media\\Symbols\\"
 local SUMMON_TEXTURES = {
     [1] = "Interface\\RaidFrame\\Raid-Icon-SummonPending",
@@ -115,6 +124,7 @@ local STATUS_REFRESH = {
     "CombatIndicator",
     "RestingIndicator",
     "IncomingResIndicator",
+    "PVPIndicator",
     "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}
@@ -436,6 +446,90 @@ local function ApplyStateIconTexture(tex, kind, cfg, status)
     end
 end
 
+local function UnitFramePVPContextualDisabled()
+    local gameRules = _G.C_GameRules
+    local enum = _G.Enum
+    local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
+    if gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil then
+        local ok, disabled = pcall(gameRules.IsGameRuleActive, rule)
+        return ok and disabled == true
+    end
+    return false
+end
+
+local function PVPAtlasForFaction(factionGroup)
+    if factionGroup == "Horde" then
+        return PVP_HORDE_ATLAS
+    elseif factionGroup == "Alliance" then
+        return PVP_ALLIANCE_ATLAS
+    end
+    return nil
+end
+
+local function PVPFallbackTextureForAtlas(atlas)
+    if atlas == PVP_HORDE_ATLAS then
+        return PVP_HORDE_TEXTURE
+    elseif atlas == PVP_ALLIANCE_ATLAS then
+        return PVP_ALLIANCE_TEXTURE
+    end
+    return nil
+end
+
+local function ResolvePVPAtlas(unit)
+    if not (unit and UnitExistsSafe(unit)) then
+        return nil
+    end
+    if UnitFramePVPContextualDisabled() then
+        return nil
+    end
+    if UnitIsPVPFreeForAll and BoolTrue(UnitIsPVPFreeForAll(unit)) then
+        return PVP_FFA_ATLAS
+    end
+    if not (UnitIsPVP and UnitFactionGroup and BoolTrue(UnitIsPVP(unit))) then
+        return nil
+    end
+    local factionGroup = UnitFactionGroup(unit)
+    if IsSecret(factionGroup) or not factionGroup or factionGroup == "Neutral" then
+        return nil
+    end
+    if unit == "player" and UnitIsMercenary and BoolTrue(UnitIsMercenary(unit)) then
+        if factionGroup == "Horde" then
+            factionGroup = "Alliance"
+        elseif factionGroup == "Alliance" then
+            factionGroup = "Horde"
+        end
+    end
+    return PVPAtlasForFaction(factionGroup)
+end
+
+local function ResolvePVPTestAtlas(unit)
+    local factionGroup
+    if UnitFactionGroup then
+        factionGroup = UnitFactionGroup("player")
+    end
+    if IsSecret(factionGroup) then
+        factionGroup = nil
+    end
+    return PVPAtlasForFaction(factionGroup) or PVP_ALLIANCE_ATLAS
+end
+
+local function ApplyPVPTexture(tex, atlas)
+    if not (tex and atlas) then
+        return false
+    end
+    if tex.SetAtlas then
+        SetAtlas(tex, atlas)
+        return true
+    end
+    local fallback = PVPFallbackTextureForAtlas(atlas)
+    if fallback then
+        SetTexture(tex, fallback)
+        SetTexCoord(tex, 0, 1, 0, 1)
+        return true
+    end
+    return false
+end
+
 local function ApplyLeaderTexture(tex, cfg, status, assist)
     local gf = MSUF and MSUF.GF
     local kind = status and status.kind
@@ -591,6 +685,17 @@ local function ApplyConfiguredRegions(frame, spec)
     else
         HideField(frame, "resurrectIcon")
         HideField(frame, "incomingResIndicatorIcon")
+    end
+
+    cfg = status.pvp
+    if cfg and cfg.enabled then
+        local tex = EnsureTexture(frame, status.group and "pvpIcon" or "pvpIndicatorIcon", cfg.layer)
+        frame.pvpIndicatorIcon = tex
+        frame.pvpIcon = tex
+        LayoutRegion(tex, frame, spec, cfg)
+    else
+        HideField(frame, "pvpIcon")
+        HideField(frame, "pvpIndicatorIcon")
     end
 
     cfg = status.readyCheck
@@ -1210,6 +1315,22 @@ local function UpdateIncomingRes(frame, status)
     SetShown(tex, active == true)
 end
 
+local function UpdatePVP(frame, status)
+    local cfg = status and status.pvp
+    local tex = frame and frame.pvpIndicatorIcon
+    local unit = frame and frame.unit
+    if not (cfg and cfg.enabled and tex and unit) then
+        SetShown(tex, false)
+        return
+    end
+    local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(unit)
+    if ApplyPVPTexture(tex, atlas) then
+        SetShown(tex, true)
+    else
+        SetShown(tex, false)
+    end
+end
+
 function Status.IsEnabled(frame, spec)
     return spec and spec.status and spec.status.enabled == true
 end
@@ -1244,6 +1365,8 @@ function Status.Disable(frame)
     HideField(frame, "combatStateIndicatorIcon")
     HideField(frame, "restingIndicatorIcon")
     HideField(frame, "incomingResIndicatorIcon")
+    HideField(frame, "pvpIcon")
+    HideField(frame, "pvpIndicatorIcon")
     HideField(frame, "resurrectIcon")
     HideField(frame, "readyCheckIcon")
     HideField(frame, "summonIcon")
@@ -1270,6 +1393,7 @@ local COMBAT_EVENTS = { "UNIT_FLAGS" }
 local COMBAT_PLAYER_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
 local RESTING_PLAYER_EVENTS = { "PLAYER_UPDATE_RESTING", "PLAYER_ENTERING_WORLD" }
 local INCOMING_RES_EVENTS = { "INCOMING_RESURRECT_CHANGED" }
+local PVP_EVENTS = { "UNIT_FACTION" }
 
 local function StatusEnabled(spec, key)
     local status = spec and spec.status
@@ -1302,6 +1426,10 @@ local function StatusTextUnitlessEvents(spec)
     return (cfg.showAFK == true or cfg.showDND == true) and STATUS_TEXT_UNITLESS_EVENTS or EMPTY_EVENTS
 end
 
+local function PVPEvents(spec)
+    return StatusEnabled(spec, "pvp") and PVP_EVENTS or EMPTY_EVENTS
+end
+
 local Runtime = {
     EMPTY_EVENTS = EMPTY_EVENTS,
     RAID_MARKER_EVENTS = RAID_MARKER_EVENTS,
@@ -1318,6 +1446,7 @@ local Runtime = {
     COMBAT_PLAYER_EVENTS = COMBAT_PLAYER_EVENTS,
     RESTING_PLAYER_EVENTS = RESTING_PLAYER_EVENTS,
     INCOMING_RES_EVENTS = INCOMING_RES_EVENTS,
+    PVP_EVENTS = PVP_EVENTS,
     StatusEnabled = StatusEnabled,
     HideField = HideField,
     ApplyConfiguredRegions = ApplyConfiguredRegions,
@@ -1337,6 +1466,7 @@ local Runtime = {
     UpdateCombat = UpdateCombat,
     UpdateResting = UpdateResting,
     UpdateIncomingRes = UpdateIncomingRes,
+    UpdatePVP = UpdatePVP,
 }
 MSUF.UFStatusRuntime = Runtime
 
@@ -1414,6 +1544,7 @@ local STATUS_INDICATOR_DEFS = {
     { name = "CombatIndicator", key = "combat", events = COMBAT_EVENTS, playerUnitlessEvents = COMBAT_PLAYER_EVENTS, update = UpdateCombat, hide = "combatStateIndicatorIcon" },
     { name = "RestingIndicator", key = "resting", playerOnly = true, unitlessEvents = RESTING_PLAYER_EVENTS, update = UpdateResting, hide = "restingIndicatorIcon" },
     { name = "IncomingResIndicator", key = "incomingRes", noGroup = true, events = INCOMING_RES_EVENTS, update = UpdateIncomingRes, hide = "incomingResIndicatorIcon" },
+    { name = "PVPIndicator", key = "pvp", noGroup = true, getEvents = PVPEvents, update = UpdatePVP, hide = "pvpIndicatorIcon" },
 }
 
 for i = 1, #STATUS_INDICATOR_DEFS do
@@ -1434,6 +1565,7 @@ _G.MSUF_RequestStatusTextRefresh = function() return RefreshStatus(nil, "MSUF_ST
 _G.MSUF_RequestStatusCombatIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
 _G.MSUF_RequestStatusRestingIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
 _G.MSUF_RequestStatusIncomingResIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
+_G.MSUF_RequestStatusPvpIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
 _G.MSUF_RefreshLeaderIconFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end
 _G.MSUF_RefreshRaidMarkerFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end
 _G.MSUF_RefreshLevelIndicatorFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end

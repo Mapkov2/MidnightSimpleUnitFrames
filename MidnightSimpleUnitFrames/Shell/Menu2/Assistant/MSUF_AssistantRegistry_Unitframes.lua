@@ -799,6 +799,13 @@ local STATUS_CONTROL_SPECS = {
         symbolValues = RESS_SYMBOL_VALUES, statusRuntime = true, units = { player = true, target = true },
         aliases = { "incoming rez indicator", "incoming resurrection indicator", "incoming rez icon", "incoming resurrection icon", "incoming rez symbol", "incoming resurrection symbol", "rez indicator", "rez icon", "rez symbol", "resurrection indicator", "resurrection icon", "resurrection symbol" },
     },
+    {
+        value = "statusPvp", label = "PvP Flag Indicator", show = "showPvpIndicator", defaultShow = true, size = "pvpIndicatorSize", defaultSize = 18,
+        anchor = "pvpIndicatorAnchor", defaultAnchor = "TOPRIGHT", x = "pvpIndicatorOffsetX", defaultX = 0, y = "pvpIndicatorOffsetY", defaultY = 0,
+        layer = "pvpIndicatorLayer", defaultLayer = 7, refresh = "MSUF_RequestStatusPvpIndicatorRefresh", statusRuntime = true,
+        units = { player = true, target = true, focus = true, targettarget = true, focustarget = true },
+        aliases = { "pvp flag indicator", "pvp indicator", "pvp icon", "pvp flag icon", "pvp status indicator", "pvp status icon", "war mode indicator", "flagged indicator" },
+    },
 }
 for i = 1, #STATUS_CONTROL_SPECS do
     STATUS_CONTROL_SPECS[i].aliases = ExpandStatusAliases(STATUS_CONTROL_SPECS[i].aliases)

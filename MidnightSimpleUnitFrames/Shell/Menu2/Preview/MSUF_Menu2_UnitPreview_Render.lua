@@ -312,6 +312,7 @@ function Render.Install(Preview, deps)
         statusCombat = "combat",
         statusResting = "resting",
         statusIncomingRes = "incomingRes",
+        statusPvp = "pvp",
     }
     local ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or function() end
 
@@ -1455,7 +1456,7 @@ function Preview.Refresh(box, reason)
                     PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, true)
                 elseif spec.id == "leader" or spec.id == "elite" then
                     PositionRuntimeLayoutIconPreview(icon, anchor, x, y, mock, false)
-                elseif spec.id == "statusCombat" or spec.id == "statusResting" or spec.id == "statusIncomingRes" then
+                elseif spec.id == "statusCombat" or spec.id == "statusResting" or spec.id == "statusIncomingRes" or spec.id == "statusPvp" then
                     PositionStatusCornerPreview(icon, anchor, x, y, mock, S(2))
                 else
                     PositionFromAnchor(icon, anchor, x, y, mock, sz)

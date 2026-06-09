@@ -11,9 +11,16 @@ local type = type
 local tonumber = tonumber
 local tostring = tostring
 local pairs = pairs
+local pcall = pcall
 local byte, sub = string.byte, string.sub
 local max, abs, floor = math.max, math.abs, math.floor
+local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
+local IsInInstance = _G.IsInInstance
+local GetInstanceInfo = _G.GetInstanceInfo
+local IsPVPTimerRunning = _G.IsPVPTimerRunning
+local UnitIsPVP = _G.UnitIsPVP
+local UnitIsPVPFreeForAll = _G.UnitIsPVPFreeForAll
 local wipe = _G.wipe or table.wipe or function(t)
     for k in pairs(t) do
         t[k] = nil
@@ -706,6 +713,117 @@ local function StatusBool(conf, general, key, fallback, legacyKey)
     return Bool(value, fallback)
 end
 
+local Secrets = MSUF.Secrets or {}
+local PlainTrue = Secrets.PlainTrue or function(value) return value == true or value == 1 end
+
+local function APIBool(fn, ...)
+    if type(fn) ~= "function" then
+        return false
+    end
+    local ok, value = pcall(fn, ...)
+    return ok and PlainTrue(value) == true
+end
+
+local function CurrentInstanceType()
+    if IsInInstance then
+        local _, instanceType = IsInInstance()
+        if type(instanceType) == "string" and instanceType ~= "" then
+            return instanceType
+        end
+    end
+    if GetInstanceInfo then
+        local ok, _, instanceType = pcall(GetInstanceInfo)
+        if ok and type(instanceType) == "string" and instanceType ~= "" then
+            return instanceType
+        end
+    end
+    return nil
+end
+
+local _pvpContextKnown, _pvpContextActive = false, false
+
+local function ComputePVPIndicatorContextActive()
+    local instanceType = CurrentInstanceType()
+    if instanceType == "pvp" or instanceType == "arena" then
+        return true
+    elseif instanceType == "party" or instanceType == "raid" then
+        return false
+    end
+
+    local cpvp = _G.C_PvP
+    if cpvp then
+        if APIBool(cpvp.IsWarModeActive) or APIBool(cpvp.IsWarModeDesired) then
+            return true
+        end
+    end
+    return APIBool(UnitIsPVPFreeForAll, "player")
+        or APIBool(UnitIsPVP, "player")
+        or APIBool(IsPVPTimerRunning)
+end
+
+function UF.InvalidatePVPIndicatorContext()
+    _pvpContextKnown = false
+end
+
+function UF.PVPIndicatorContextActive()
+    if not _pvpContextKnown then
+        _pvpContextActive = ComputePVPIndicatorContextActive() == true
+        _pvpContextKnown = true
+    end
+    return _pvpContextActive == true
+end
+
+local PVP_CONTEXT_REFRESH_ELEMENTS = { "StatusIndicators", "PVPIndicator", "GroupStatusRuntime" }
+
+function UF.RefreshPVPIndicatorContext(reason, force)
+    local oldKnown, oldActive = _pvpContextKnown, _pvpContextActive
+    UF.InvalidatePVPIndicatorContext()
+    local active = UF.PVPIndicatorContextActive()
+    if force ~= true and oldKnown and oldActive == active then
+        return false
+    end
+    if UF.RefreshElements then
+        UF.RefreshElements(nil, PVP_CONTEXT_REFRESH_ELEMENTS, reason or "MSUF_PVP_CONTEXT")
+    end
+    local gf = MSUF.GF
+    if gf then
+        if gf.RefreshVisuals then
+            gf.RefreshVisuals(nil, gf.DIRTY_VISUAL)
+        elseif gf.RefreshAll then
+            gf.RefreshAll()
+        end
+    end
+    return true
+end
+
+local function RegisterPVPContextEvent(frame, event, unit)
+    if not (frame and event) then
+        return
+    end
+    if unit and frame.RegisterUnitEvent then
+        pcall(frame.RegisterUnitEvent, frame, event, unit)
+    elseif frame.RegisterEvent then
+        pcall(frame.RegisterEvent, frame, event)
+    end
+end
+
+if CreateFrame and not UF.pvpIndicatorContextDriver then
+    local pvpDriver = CreateFrame("Frame")
+    pvpDriver:SetScript("OnEvent", function(_, event, unit)
+        if unit and unit ~= "player" then
+            return
+        end
+        UF.RefreshPVPIndicatorContext("MSUF_PVP_CONTEXT_" .. tostring(event), event == "PLAYER_ENTERING_WORLD")
+    end)
+    RegisterPVPContextEvent(pvpDriver, "PLAYER_ENTERING_WORLD")
+    RegisterPVPContextEvent(pvpDriver, "ZONE_CHANGED_NEW_AREA")
+    RegisterPVPContextEvent(pvpDriver, "PVP_TIMER_UPDATE")
+    RegisterPVPContextEvent(pvpDriver, "PLAYER_FLAGS_CHANGED")
+    RegisterPVPContextEvent(pvpDriver, "WAR_MODE_STATUS_UPDATE")
+    RegisterPVPContextEvent(pvpDriver, "UNIT_FACTION", "player")
+    UF.pvpIndicatorContextDriver = pvpDriver
+end
+
 local function StatusNumber(conf, general, key, fallback, legacyKey)
     local value = conf and conf[key]
     if value == nil and legacyKey then
@@ -740,6 +858,8 @@ end
 local function StatusAllowed(key, id)
     if id == "leader" or id == "combat" or id == "incomingRes" then
         return key == "player" or key == "target"
+    elseif id == "pvp" then
+        return key == "player" or key == "target" or key == "focus" or key == "targettarget" or key == "focustarget"
     elseif id == "resting" then
         return key == "player"
     elseif id == "raidGroup" then
@@ -1549,6 +1669,11 @@ local function ResolveUnit(db, unit, out)
     resting.symbol = StatusString(conf, general, "restedStateIndicatorSymbol", "DEFAULT", "restingStateIndicatorSymbol")
     local incomingRes = CompileStatusEntry(status, "incomingRes", conf, general, key, "showIncomingResIndicator", true, "incomingResIndicatorSize", 18, "incomingResIndicatorAnchor", "TOPRIGHT", "incomingResIndicatorOffsetX", 0, "incomingResIndicatorOffsetY", 0, "incomingResIndicatorLayer", 7)
     incomingRes.symbol = StatusString(conf, general, "incomingResIndicatorSymbol", "DEFAULT")
+    local pvp = CompileStatusEntry(status, "pvp", conf, general, key, "showPvpIndicator", true, "pvpIndicatorSize", 18, "pvpIndicatorAnchor", "TOPRIGHT", "pvpIndicatorOffsetX", 0, "pvpIndicatorOffsetY", 0, "pvpIndicatorLayer", 7)
+    if pvp.enabled and UF.PVPIndicatorContextActive and not UF.PVPIndicatorContextActive() then
+        pvp.enabled = false
+        pvp.contextDisabled = true
+    end
 
     status.enabled = false
     if status.raidMarker.enabled then
@@ -1576,6 +1701,9 @@ local function ResolveUnit(db, unit, out)
         status.enabled = true
     end
     if status.incomingRes.enabled then
+        status.enabled = true
+    end
+    if status.pvp.enabled then
         status.enabled = true
     end
 

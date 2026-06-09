@@ -634,6 +634,7 @@ local function GFPreviewStatusLabel(spec)
     if value == "readyCheckIcon" then return "Ready" end
     if value == "summonIcon" then return "Summon" end
     if value == "resurrectIcon" then return "Rez" end
+    if value == "pvpIcon" then return "PvP" end
     if value == "phaseIcon" then return "Phase" end
     if value == "statusText" then return "Dead Text" end
     if value == "statusGhostText" then return "Ghost Text" end

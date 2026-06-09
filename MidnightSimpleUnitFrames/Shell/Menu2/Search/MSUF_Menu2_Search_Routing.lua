@@ -400,6 +400,7 @@ end
 
 local UNIT_STATUS_TERMS = SearchTermRows [[
 statusIncomingRes=incoming rez|incoming res|incoming resurrect|incoming resurrection|ress|resurrect
+statusPvp=pvp|pvp flag|pvp icon|pvp indicator|pvp status|war mode|flagged
 statusResting=rested|resting|rest icon
 statusCombat=combat icon|combat state|in combat icon
 statusText=dead text|dead status|offline text|status text
@@ -414,6 +415,7 @@ local GROUP_STATUS_TERMS = SearchTermRows [[
 readyCheckIcon=ready check
 summonIcon=summon|summoning
 resurrectIcon=resurrect|resurrection|rez|ress
+pvpIcon=pvp|pvp flag|pvp icon|pvp indicator|pvp status|war mode|flagged
 phaseIcon=phase|phased
 statusGhostText=ghost
 leaderIcon=leader

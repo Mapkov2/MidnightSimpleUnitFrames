@@ -301,6 +301,18 @@ local function ApplyPreviewStatus(frame, kind, index, role)
     else
         SetShown(frame.resurrectIcon or frame.incomingResIndicatorIcon, false)
     end
+    local pvpIcon = frame.pvpIcon or frame.pvpIndicatorIcon
+    if pvpIcon and index == 2 then
+        if pvpIcon.SetAtlas then
+            pvpIcon:SetAtlas("UI-HUD-UnitFrame-Player-PVP-AllianceIcon")
+        else
+            pvpIcon:SetTexture("Interface\\TargetingFrame\\UI-PVP-Alliance")
+            if pvpIcon.SetTexCoord then pvpIcon:SetTexCoord(0, 1, 0, 1) end
+        end
+        pvpIcon:Show()
+    else
+        SetShown(pvpIcon, false)
+    end
     if frame.phaseIcon and index == 4 then
         frame.phaseIcon:SetTexture("Interface\\TargetingFrame\\UI-PhasingIcon")
         frame.phaseIcon:Show()
@@ -378,6 +390,7 @@ local function ClearPreviewData(frame)
     SetShown(frame.assistIcon, false)
     SetShown(frame.readyCheckIcon, false)
     SetShown(frame.resurrectIcon or frame.incomingResIndicatorIcon, false)
+    SetShown(frame.pvpIcon or frame.pvpIndicatorIcon, false)
     SetShown(frame.phaseIcon, false)
     SetShown(frame.raidGroupNameText, false)
     SetShown(frame.statusIndicatorText, false)

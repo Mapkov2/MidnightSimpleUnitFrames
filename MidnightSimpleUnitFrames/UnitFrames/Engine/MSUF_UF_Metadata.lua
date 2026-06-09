@@ -69,6 +69,7 @@ Metadata.hotStateSpecs = {
         { "NameText", "name" },
         { "StatusTextIndicator", "statusText" },
         { "CombatIndicator", "combat" },
+        { "PVPIndicator", "pvp" },
         { "GroupVisuals", "groupVisuals" },
         { "GroupStatusRuntime", "groupStatus" },
     },
@@ -156,7 +157,7 @@ Metadata.runtimeUpdateOwners = BuildNameSet({
     "InlineToT", "Portrait", "Alpha", "StatusIndicators", "RaidMarkerIndicator",
     "LeaderIndicator", "LevelIndicator", "RaidGroupIndicator", "EliteIndicator",
     "StatusTextIndicator", "CombatIndicator", "RestingIndicator", "IncomingResIndicator",
-    "Prediction", "Borders", "GroupStatusRuntime",
+    "PVPIndicator", "Prediction", "Borders", "GroupStatusRuntime",
     "RangeFade", "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators",
 })
 
@@ -228,7 +229,7 @@ Metadata.refreshElementGroups = {
         "Health", "Power", "Text", "NameText", "HealthText", "PowerText", "InlineToT",
         "Portrait", "StatusIndicators", "RaidMarkerIndicator", "LeaderIndicator", "Prediction",
         "LevelIndicator", "RaidGroupIndicator", "EliteIndicator", "StatusTextIndicator",
-        "CombatIndicator", "RestingIndicator", "IncomingResIndicator", "Alpha", "Borders",
+        "CombatIndicator", "RestingIndicator", "IncomingResIndicator", "PVPIndicator", "Alpha", "Borders",
         "RangeFade",
     },
     powerText = { "Power", "Text", "PowerText" },
