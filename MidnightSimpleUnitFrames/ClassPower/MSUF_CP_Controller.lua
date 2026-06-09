@@ -1391,7 +1391,7 @@ local function CP_EnsureHiddenAnchorGeometry(playerFrame, cpHeight)
     if maxP > CPConst.MAX_CLASS_POWER then maxP = CPConst.MAX_CLASS_POWER end
 
     CP_EnsureBars(playerFrame, maxP)
-    CP_Layout(playerFrame, maxP, cpHeight)
+    CP_Layout(playerFrame, maxP, cpHeight, CP.powerType)
     CP._pf = playerFrame
     CP._layoutH = cpHeight
 
@@ -1534,7 +1534,7 @@ local function FullRefresh()
 
         CP_EnsureBars(playerFrame, maxP)
         CP._outlineEdge = -1  --- force outline rebuild on mode/size changes
-        CP_Layout(playerFrame, maxP, cpHeight)
+        CP_Layout(playerFrame, maxP, cpHeight, powerType)
         --- Cache layout params for lightweight CDM relayout (avoids FullRefresh)
         CP._pf = playerFrame
         CP._layoutH = cpHeight
@@ -1858,7 +1858,7 @@ function CP.CDMWidthSyncLayouts(force)
 
     if cpChanged and CP.visible and CP._pf and CP.currentMax and CP.currentMax > 0 and CP_Layout then
         local b = _cpDB.bars or {}
-        CP_Layout(CP._pf, CP.currentMax, CP._layoutH or (b.classPowerHeight or 4))
+        CP_Layout(CP._pf, CP.currentMax, CP._layoutH or (b.classPowerHeight or 4), CP.powerType)
     end
     if pbChanged and type(_G.MSUF_ApplyPowerBarEmbedLayout_All) == "function" then
         _G.MSUF_ApplyPowerBarEmbedLayout_All()

@@ -85,7 +85,11 @@ local function BuildGFLayout(ctx)
     local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -300, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
     local hideOffline = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(general, "Hide offline after", 0, 120, 1, offlineSliderW), "layout"), "hideOfflineDelay", 0, "visual")
     W.MoveWidget(hideOffline, general, generalLeftX, -334, offlineSliderW, "LEFT")
-    local generalNotice, _, generalNoticeButton = CreateSectionNotice and CreateSectionNotice(general, -374, "Enable Scope", 104)
+    local generalNotice, generalNoticeButton
+    if type(CreateSectionNotice) == "function" then
+        local _
+        generalNotice, _, generalNoticeButton = CreateSectionNotice(general, -374, "Enable Scope", 104)
+    end
     if generalNoticeButton then
         generalNoticeButton:SetScript("OnClick", function()
             Set(CurrentScope(), "enabled", true, "rebuild")

@@ -9,6 +9,7 @@ MSUF.UF.Elements = MSUF.UF.Elements or {}
 local UF = MSUF.UF
 local Elements = UF.Elements
 local Metadata = UF.Metadata or {}
+local EMPTY_METADATA_SET = {}
 -- Events with a compiled hot-state runner (Metadata.hotEventKind) never read the
 -- flat per-event element list; only non-hot events fall back to it. Captured here
 -- so RebuildFrameEventList can skip building a dead array for hot events.

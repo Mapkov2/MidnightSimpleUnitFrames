@@ -155,7 +155,7 @@ builders.LAYOUT = function(E)
     local SetEmptyAlpha = E.SetEmptyAlpha
     local SetAutoHideActive = E.SetAutoHideActive
 
-    local function CP_Layout(playerFrame, maxPower, height)
+    local function CP_Layout(playerFrame, maxPower, height, powerType)
         if not CP.container or maxPower <= 0 then return end
 
         local inLockdown = (type(_G.MSUF_IsUnitFramePositionLocked) == "function" and _G.MSUF_IsUnitFramePositionLocked())
@@ -367,7 +367,7 @@ builders.LAYOUT = function(E)
         if totalBarSpace < maxPower then totalBarSpace = maxPower end
 
         local bgA = tonumber(b.classPowerBgAlpha) or 0.3
-        local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType)
+        local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType or CP.powerType)
         CP.bgTex:SetVertexColor(bgR, bgG, bgB, bgA)
 
         local filledAlpha = tonumber(b.classPowerFilledAlpha) or 1.0
@@ -734,7 +734,7 @@ builders.RUNTIME = function(env)
             local pf = CP._pf or GetPlayerFrame()
             if pf then
                 CP_EnsureBars(pf, maxP)
-                CP_Layout(pf, maxP, CP._layoutH or ((env._cpDB.bars and env._cpDB.bars.classPowerHeight) or 4))
+                CP_Layout(pf, maxP, CP._layoutH or ((env._cpDB.bars and env._cpDB.bars.classPowerHeight) or 4), CP.powerType)
             else
                 CP.currentMax = maxP
             end
