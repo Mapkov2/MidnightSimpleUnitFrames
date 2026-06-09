@@ -13,9 +13,16 @@ local C_Timer = C_Timer
 local InCombatLockdown = InCombatLockdown
 local IsInGroup = IsInGroup
 local IsInRaid = IsInRaid
+local GetNumGroupMembers = GetNumGroupMembers
+local GetNumSubgroupMembers = GetNumSubgroupMembers
+local GetRaidRosterInfo = GetRaidRosterInfo
 local UnitGUID = UnitGUID
+local UnitName = UnitName
+local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local floor = math.floor
+local table_concat = table.concat
 local type = type
+local tostring = tostring
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 
@@ -23,7 +30,9 @@ local eventFrame
 local rosterRebuildQueued = false
 local rosterSettleToken = 0
 local nameEventsRegistered = false
+local rosterEventsRegistered = false
 local lastRosterMode
+local lastRosterSignature
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -139,6 +148,24 @@ local function UnregisterNameEvents()
     end
 end
 
+local function RegisterRosterEvents()
+    if eventFrame and not rosterEventsRegistered and not InCombat() then
+        eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+        eventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
+        eventFrame:RegisterEvent("ROLE_CHANGED_INFORM")
+        rosterEventsRegistered = true
+    end
+end
+
+local function UnregisterRosterEvents()
+    if eventFrame and rosterEventsRegistered then
+        eventFrame:UnregisterEvent("GROUP_ROSTER_UPDATE")
+        eventFrame:UnregisterEvent("PLAYER_ROLES_ASSIGNED")
+        eventFrame:UnregisterEvent("ROLE_CHANGED_INFORM")
+        rosterEventsRegistered = false
+    end
+end
+
 local function LiveRaidKind()
     return GF.GetLiveRaidKind and GF.GetLiveRaidKind() or "raid"
 end
@@ -171,6 +198,60 @@ local function MarkRosterMode()
     end
     lastRosterMode = mode
     return mode
+end
+
+local function UnitIdentity(unit)
+    if UnitGUID and unit then
+        local guid = UnitGUID(unit)
+        if guid and not IsSecret(guid) then return guid end
+    end
+    if UnitName and unit then
+        local name, realm = UnitName(unit)
+        if name and name ~= "" then
+            return realm and realm ~= "" and (name .. "-" .. realm) or name
+        end
+    end
+    return unit or ""
+end
+
+local function UnitRoleToken(unit)
+    return (UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit)) or ""
+end
+
+local function CurrentRosterSignature()
+    local mode = RosterMode()
+    local parts = { mode }
+    if mode == "raid" then
+        local count = GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0
+        parts[#parts + 1] = tostring(count)
+        for i = 1, count do
+            local unit = "raid" .. i
+            local subgroup = GetRaidRosterInfo and select(3, GetRaidRosterInfo(i)) or ""
+            parts[#parts + 1] = UnitIdentity(unit)
+            parts[#parts + 1] = UnitRoleToken(unit)
+            parts[#parts + 1] = tostring(subgroup or "")
+        end
+    elseif mode == "party" then
+        local count = GetNumSubgroupMembers and (GetNumSubgroupMembers() or 0) or 0
+        parts[#parts + 1] = tostring(count)
+        parts[#parts + 1] = UnitIdentity("player")
+        parts[#parts + 1] = UnitRoleToken("player")
+        for i = 1, count do
+            local unit = "party" .. i
+            parts[#parts + 1] = UnitIdentity(unit)
+            parts[#parts + 1] = UnitRoleToken(unit)
+        end
+    end
+    return table_concat(parts, "\031")
+end
+
+local function RefreshRosterSignature()
+    lastRosterSignature = CurrentRosterSignature()
+end
+
+local function RosterSignatureChanged()
+    local current = CurrentRosterSignature()
+    return current ~= lastRosterSignature
 end
 
 local function HeaderKindForKey(key)
@@ -351,7 +432,7 @@ function GF.UpdateGroupVisibility()
     return true
 end
 
-function GF.RebuildAll()
+function GF.RebuildAll(preInvalidated)
     if InCombat() then
         GF.DeferGroupRuntime("rebuild")
         return false
@@ -363,7 +444,9 @@ function GF.RebuildAll()
         ScheduleDBReadyRetry(GF.RebuildAll)
         return false
     end
-    InvalidateSpecs()
+    if preInvalidated ~= true then
+        InvalidateSpecs()
+    end
     if GF.EnsureDB then GF.EnsureDB() end
 
     local wantParty = ShouldShowParty() and not PreviewSuppressesHeader("party")
@@ -393,15 +476,18 @@ function GF.RebuildAll()
     end
     GF._forceScanHeaders = nil
     GF._forceRecreateHeaders = nil
+    RefreshRosterSignature()
     return true
 end
 
-function GF.RefreshVisuals(kind, mask)
+function GF.RefreshVisuals(kind, mask, preInvalidated)
     if InCombat() then
         GF.DeferGroupRuntime("refresh")
         return false
     end
-    InvalidateSpecs(kind)
+    if preInvalidated ~= true then
+        InvalidateSpecs(kind)
+    end
     if GF.ForEachFrame then
         GF.ForEachFrame(function(frame, unit, frameKind)
             if not kind or kind == frameKind then
@@ -412,16 +498,18 @@ function GF.RefreshVisuals(kind, mask)
     return true
 end
 
-function GF.RefreshAll()
+function GF.RefreshAll(preInvalidated)
     if InCombat() then
         GF.DeferGroupRuntime("refresh")
         return false
     end
     -- Invalidate once up front; RebuildAll/RefreshVisuals would each invalidate
     -- again (all 3 wipes are idempotent but pointless extra table churn).
-    InvalidateSpecs()
-    GF.RebuildAll()
-    GF.RefreshVisuals(nil, GF.DIRTY_ALL)
+    if preInvalidated ~= true then
+        InvalidateSpecs()
+    end
+    GF.RebuildAll(true)
+    GF.RefreshVisuals(nil, GF.DIRTY_ALL, true)
     return true
 end
 
@@ -445,15 +533,15 @@ function GF.MarkDirty(frame, mask)
     if frame and frame._msufGFKind then
         return ApplyFrameDirty(frame, frame._msufGFKind, mask, "MSUF_GF_MARK_DIRTY")
     end
-    return GF.RefreshVisuals(nil, mask)
+    return GF.RefreshVisuals(nil, mask, true)
 end
 
 function GF.MarkAllDirty(mask)
     InvalidateSpecs()
     if not mask or mask == GF.DIRTY_ALL or Has(mask, GF.DIRTY_GEOMETRY) or Has(mask, GF.DIRTY_LAYOUT) then
-        return GF.RefreshAll()
+        return GF.RefreshAll(true)
     end
-    return GF.RefreshVisuals(nil, mask)
+    return GF.RefreshVisuals(nil, mask, true)
 end
 
 function GF.BuildFrameCache(frame)
@@ -484,23 +572,34 @@ local function OnEvent(self, event, ...)
     if event == "PLAYER_REGEN_ENABLED" then
         _G.MSUF_InCombat = false
         RegisterNameEvents()
-        GF.RefreshGroupNames()
-        if GF.RefreshClickCastFrames then
-            GF.RefreshClickCastFrames()
+        RegisterRosterEvents()
+        local rosterChanged = RosterSignatureChanged()
+        if rosterChanged then
+            MarkRosterMode()
+            if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
+            GF._forceScanHeaders = true
         end
-        if GF._pendingGroupRuntime then
+        if GF._pendingGroupRuntime or rosterChanged then
             GF._pendingGroupRuntime = nil
             GF.RefreshAll()
+        else
+            GF.RefreshGroupNames()
+            if GF.RefreshClickCastFrames then
+                GF.RefreshClickCastFrames()
+            end
         end
     elseif event == "PLAYER_REGEN_DISABLED" then
         _G.MSUF_InCombat = true
         UnregisterNameEvents()
+        UnregisterRosterEvents()
     elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
         _G.MSUF_InCombat = InCombat()
         if _G.MSUF_InCombat then
             UnregisterNameEvents()
+            UnregisterRosterEvents()
         else
             RegisterNameEvents()
+            RegisterRosterEvents()
         end
         MarkRosterMode()
         if event == "PLAYER_ENTERING_WORLD" then
@@ -508,13 +607,12 @@ local function OnEvent(self, event, ...)
         end
         GF.RebuildAll()
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
+        if InCombat() then
+            return
+        end
         local mode = MarkRosterMode()
         if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
         GF._forceScanHeaders = true
-        if InCombat() then
-            GF.DeferGroupRuntime("roster")
-            return
-        end
         ScheduleRosterRebuild()
         if event == "GROUP_ROSTER_UPDATE" and mode == "raid" then
             ScheduleRosterSettle()
@@ -538,9 +636,6 @@ eventFrame = CreateFrame("Frame")
 eventFrame:SetScript("OnEvent", OnEvent)
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
-eventFrame:RegisterEvent("PLAYER_ROLES_ASSIGNED")
-eventFrame:RegisterEvent("ROLE_CHANGED_INFORM")
 eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
 eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -548,6 +643,7 @@ eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("BARBER_SHOP_OPEN")
 eventFrame:RegisterEvent("BARBER_SHOP_CLOSE")
 RegisterNameEvents()
+RegisterRosterEvents()
 
 -- Public globals route through the granular GF.* variants so the DIRTY_*
 -- mask and per-kind filter survive the boundary. Previously several aliases

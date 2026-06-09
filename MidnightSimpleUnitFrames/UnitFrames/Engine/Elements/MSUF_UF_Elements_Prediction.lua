@@ -64,6 +64,23 @@ local PREDICTION_HEALTH_EVENTS = {
     [7] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
 }
 
+local PLAN_REFRESH_HEAL = 1
+local PLAN_REFRESH_ABSORB = 2
+local PLAN_REFRESH_HEAL_ABSORB = 3
+local PLAN_SHOW_HEAL = 4
+local PLAN_SHOW_ABSORB = 5
+local PLAN_SHOW_HEAL_ABSORB = 6
+local PLAN_FORCE_MAX = 7
+local PLAN_NEED_HP = 8
+local PLAN_NEED_MAX_HP = 9
+
+local GATED_PREDICTION_EVENTS = {
+    UNIT_HEAL_PREDICTION = true,
+    UNIT_ABSORB_AMOUNT_CHANGED = true,
+    UNIT_HEAL_ABSORB_AMOUNT_CHANGED = true,
+    UNIT_HEALTH = true,
+}
+
 local calcUnsupported
 
 local function SetTextureCached(bar, texture)
@@ -460,7 +477,8 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
         return
     end
     mode = NormalizeAnchorMode(mode, 2)
-    local follow = (mode == 3 or mode == 4) and (followBar and StatusTexture(followBar) or StatusTexture(hpBar)) or nil
+    local followSource = (mode == 3 or mode == 4) and followBar or nil
+    local follow = (mode == 3 or mode == 4) and (followSource and StatusTexture(followSource) or StatusTexture(hpBar)) or nil
     local width = (hpBar.GetWidth and hpBar:GetWidth()) or tonumber(frame.MSUFSpec and frame.MSUFSpec.width) or 1
     if not width or width <= 0 then
         width = tonumber(frame.MSUFSpec and frame.MSUFSpec.width) or 1
@@ -470,6 +488,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
 
     if bar._msufPredictionMode == mode
         and bar._msufPredictionReverse == reverse
+        and bar._msufPredictionFollowBar == followSource
         and bar._msufPredictionAnchorTarget == anchorTarget
         and bar._msufPredictionWidth == width
         and bar._msufPredictionParent == parent
@@ -486,9 +505,11 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
     end
     if bar._msufPredictionMode ~= mode
         or bar._msufPredictionReverse ~= reverse
+        or bar._msufPredictionFollowBar ~= followSource
         or bar._msufPredictionAnchorTarget ~= anchorTarget
         or bar._msufPredictionWidth ~= width
         or bar._msufPredictionParent ~= parent
+        or bar._msufPredictionLevelOffset ~= levelOffset
         or parentChanged then
         bar:ClearAllPoints()
         if follow then
@@ -505,6 +526,7 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
         end
         bar._msufPredictionMode = mode
         bar._msufPredictionReverse = reverse
+        bar._msufPredictionFollowBar = followSource
         bar._msufPredictionAnchorTarget = anchorTarget
         bar._msufPredictionWidth = width
         bar._msufPredictionParent = parent
@@ -514,6 +536,31 @@ local function LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
         bar:SetReverseFill(reverse)
         bar._msufReverseFill = reverse
     end
+end
+
+local function PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar)
+    local hpBar = frame and (frame.hpBar or frame.Health)
+    if not (bar and hpBar) then
+        return false
+    end
+    mode = NormalizeAnchorMode(mode, 2)
+    local followSource = (mode == 3 or mode == 4) and followBar or nil
+    local parent = (mode == 4) and frame or hpBar
+    local width = tonumber(frame._msufWidth) or tonumber(frame.MSUFSpec and frame.MSUFSpec.width)
+    return bar._msufPredictionMode == mode
+        and bar._msufPredictionReverse == reverse
+        and bar._msufPredictionFollowBar == followSource
+        and (not width or width <= 0 or bar._msufPredictionWidth == width)
+        and bar._msufPredictionParent == parent
+        and bar._msufPredictionLevelOffset == levelOffset
+        and bar._msufReverseFill == reverse
+end
+
+local function LayoutBarIfNeeded(frame, bar, levelOffset, mode, reverse, followBar, force)
+    if not force and PredictionLayoutCurrent(frame, bar, levelOffset, mode, reverse, followBar) then
+        return
+    end
+    LayoutBar(frame, bar, levelOffset, mode, reverse, followBar)
 end
 
 local function NeedsHealthEvent(cfg)
@@ -537,6 +584,50 @@ local function PredictionMask(cfg)
     return (cfg.heal == true and 1 or 0)
         + (cfg.absorb == true and 2 or 0)
         + (cfg.healAbsorb == true and 4 or 0)
+end
+
+local function PredictionPlan(refreshHeal, refreshAbsorb, refreshHealAbsorb, showHeal, showAbsorb, showHealAbsorb, forceMax, needHP, needMaxHP)
+    return {
+        refreshHeal or nil,
+        refreshAbsorb or nil,
+        refreshHealAbsorb or nil,
+        showHeal or nil,
+        showAbsorb or nil,
+        showHealAbsorb or nil,
+        forceMax or nil,
+        needHP or nil,
+        needMaxHP or nil,
+    }
+end
+
+local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
+    local heal = cfg and cfg.heal == true
+    local absorb = cfg and cfg.absorb == true
+    local healAbsorb = cfg and cfg.healAbsorb == true
+    local clampHeal = heal and healMode == 3
+    local clampAbsorb = absorb and absorbMode == 3
+    local plans = {}
+
+    if heal then
+        plans.UNIT_HEAL_PREDICTION = PredictionPlan(true, nil, nil, true, followAbsorb, nil, nil, clampHeal, clampHeal)
+    end
+    if absorb then
+        plans.UNIT_ABSORB_AMOUNT_CHANGED = PredictionPlan(nil, true, nil, nil, true, nil, nil, clampAbsorb, clampAbsorb)
+    end
+    if healAbsorb then
+        plans.UNIT_HEAL_ABSORB_AMOUNT_CHANGED = PredictionPlan(nil, nil, true, nil, nil, true, nil, true, nil)
+    end
+    if clampHeal then
+        plans.UNIT_HEALTH = PredictionPlan(nil, nil, nil, true, followAbsorb, nil, nil, true, true)
+    end
+    if heal or absorb or healAbsorb then
+        plans.UNIT_MAXHEALTH = PredictionPlan(clampHeal, clampAbsorb, nil, heal, absorb, healAbsorb, true, clampHeal or clampAbsorb or healAbsorb, heal or absorb or healAbsorb)
+    end
+
+    local fullNeedHP = healAbsorb or clampHeal or clampAbsorb
+    local fullNeedMaxHP = heal or absorb or healAbsorb or fullNeedHP
+    local fullPlan = PredictionPlan(heal, absorb, healAbsorb, heal, absorb, healAbsorb, true, fullNeedHP, fullNeedMaxHP)
+    return plans, fullPlan
 end
 
 local Prediction = {}
@@ -580,6 +671,7 @@ local function CompilePredictionRuntime(frame, cfg, spec)
     frame._msufPredictionFollowAbsorb = followAbsorb
     frame._msufPredictionClampHealToMissing = cfg.heal == true and healMode == 3
     frame._msufPredictionClampAbsorbToMissing = cfg.absorb == true and absorbMode == 3
+    frame._msufPredictionEventPlans, frame._msufPredictionFullPlan = CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
 end
 
 function Prediction.IsEnabled(frame, spec)
@@ -687,6 +779,8 @@ function Prediction.Disable(frame)
     frame._msufPredictionHealAbsorbActive = nil
     frame._msufPredictionAbsorbOnly = nil
     frame._msufPredictionMask = 0
+    frame._msufPredictionEventPlans = nil
+    frame._msufPredictionFullPlan = nil
     frame._msufPredictionDisabled = true
 end
 
@@ -801,74 +895,31 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         return
     end
 
-    local followAbsorb = frame._msufPredictionFollowAbsorb == true
     local cacheReady = frame._msufPredictionCacheReady == true
         and frame._msufPredictionCacheUnit == unit
         and frame._msufPredictionCacheCfg == cfg
-    local fullRefresh = not cacheReady
-    local refreshHeal, refreshAbsorb, refreshHealAbsorb
-    local showHeal, showAbsorb, showHealAbsorb
-    local forceMax = not cacheReady
-    local needHP, needMaxHP
-
-    if event == "UNIT_HEAL_PREDICTION" then
-        refreshHeal = cfg.heal == true
-        showHeal = refreshHeal
-        showAbsorb = followAbsorb and cfg.heal == true
-        needHP = refreshHeal and frame._msufPredictionClampHealToMissing == true
-        needMaxHP = needHP
-    elseif event == "UNIT_ABSORB_AMOUNT_CHANGED" then
-        refreshAbsorb = cfg.absorb == true
-        showAbsorb = refreshAbsorb
-        needHP = refreshAbsorb and frame._msufPredictionClampAbsorbToMissing == true
-        needMaxHP = needHP
-    elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
-        refreshHealAbsorb = cfg.healAbsorb == true
-        showHealAbsorb = refreshHealAbsorb
-        needHP = refreshHealAbsorb
-    elseif event == "UNIT_HEALTH" then
-        showHeal = cfg.heal == true and healMode == 3
-        showAbsorb = followAbsorb and showHeal
-        needHP = showHeal or showAbsorb
-        needMaxHP = showHeal or showAbsorb
-    elseif event == "UNIT_MAXHEALTH" then
-        forceMax = true
-        refreshHeal = cfg.heal == true and frame._msufPredictionClampHealToMissing == true
-        refreshAbsorb = cfg.absorb == true and frame._msufPredictionClampAbsorbToMissing == true
-        refreshHealAbsorb = false
-        showHeal = cfg.heal == true
-        showAbsorb = cfg.absorb == true
-        showHealAbsorb = cfg.healAbsorb == true
-        needHP = refreshHeal or refreshAbsorb or showHealAbsorb
-        needMaxHP = showHeal or showAbsorb or showHealAbsorb or needHP
-    else
-        fullRefresh = true
-        refreshHeal = cfg.heal == true
-        refreshAbsorb = cfg.absorb == true
-        refreshHealAbsorb = cfg.healAbsorb == true
-        showHeal = refreshHeal
-        showAbsorb = refreshAbsorb
-        showHealAbsorb = refreshHealAbsorb
-        forceMax = true
-        needHP = refreshHealAbsorb
-            or (refreshHeal and frame._msufPredictionClampHealToMissing == true)
-            or (refreshAbsorb and frame._msufPredictionClampAbsorbToMissing == true)
-        needMaxHP = showHeal or showAbsorb or showHealAbsorb or needHP
+    local plans = frame._msufPredictionEventPlans
+    local plan = event and plans and plans[event] or nil
+    if not plan then
+        if event and GATED_PREDICTION_EVENTS[event] then
+            return
+        end
+        plan = frame._msufPredictionFullPlan
+    elseif not cacheReady then
+        plan = frame._msufPredictionFullPlan
     end
-
-    if fullRefresh then
-        refreshHeal = cfg.heal == true
-        refreshAbsorb = cfg.absorb == true
-        refreshHealAbsorb = cfg.healAbsorb == true
-        showHeal = cfg.heal == true or showHeal
-        showAbsorb = cfg.absorb == true or showAbsorb
-        showHealAbsorb = cfg.healAbsorb == true or showHealAbsorb
-        forceMax = true
-        needHP = refreshHealAbsorb
-            or (refreshHeal and frame._msufPredictionClampHealToMissing == true)
-            or (refreshAbsorb and frame._msufPredictionClampAbsorbToMissing == true)
-        needMaxHP = showHeal or showAbsorb or showHealAbsorb or needHP
+    if not plan then
+        return
     end
+    local refreshHeal = plan[PLAN_REFRESH_HEAL]
+    local refreshAbsorb = plan[PLAN_REFRESH_ABSORB]
+    local refreshHealAbsorb = plan[PLAN_REFRESH_HEAL_ABSORB]
+    local showHeal = plan[PLAN_SHOW_HEAL]
+    local showAbsorb = plan[PLAN_SHOW_ABSORB]
+    local showHealAbsorb = plan[PLAN_SHOW_HEAL_ABSORB]
+    local forceMax = plan[PLAN_FORCE_MAX]
+    local needHP = plan[PLAN_NEED_HP]
+    local needMaxHP = plan[PLAN_NEED_MAX_HP]
 
     if not (refreshHeal or refreshAbsorb or refreshHealAbsorb or showHeal or showAbsorb or showHealAbsorb) then
         return
@@ -913,8 +964,8 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
 
     if showAbsorb and frame.absorbBar then
         if absorbMode == 3 or absorbMode == 4 then
-            local follow = VisibleFollowBar(cfg, frame.incomingHealBar)
-            LayoutBar(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
+            local follow = cfg.heal == true and frame.incomingHealBar and frame.incomingHealBar._msufShown == true and frame.incomingHealBar or nil
+            LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow, forceMax == true)
         end
         if (forceMax == true or frame.absorbBar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
             maxHP = ReadHealthMax(frame, unit)

@@ -17,6 +17,7 @@ local table_concat = table.concat
 local table_sort = table.sort
 local UnitName = UnitName
 local UnitGUID = UnitGUID
+local UnitClass = UnitClass
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local IsSecret = Secrets.IsSecret or function(_) return false end
@@ -122,6 +123,10 @@ end
 
 -- Transient 0 roster reads must not center the live raid header as a full 40.
 local UNKNOWN_RAID_LAYOUT_COUNT = 10
+
+local function IsRaidLikeKind(kind)
+    return kind == "raid" or kind == "mythicraid"
+end
 
 local function RememberLayoutCount(kind, count)
     count = floor((tonumber(count) or 0) + 0.5)
@@ -404,7 +409,7 @@ local function ResolveGroupFilter(conf)
     return nil
 end
 
-local function GroupFilterAllows(conf, groupIndex)
+local function GroupFilterAllows(conf, groupIndex, classFile, role)
     local filter = conf and conf.groupFilter
     if type(filter) == "table" then
         local value = filter[groupIndex]
@@ -414,9 +419,12 @@ local function GroupFilterAllows(conf, groupIndex)
         return value ~= false
     elseif type(filter) == "string" and filter ~= "" then
         local wanted = tostring(groupIndex)
+        classFile = type(classFile) == "string" and classFile:upper() or nil
+        role = type(role) == "string" and role:upper() or nil
+        if role == "DPS" then role = "DAMAGER" end
         for token in filter:gmatch("[^,]+") do
-            token = token:match("^%s*(.-)%s*$")
-            if token == wanted then
+            token = token:match("^%s*(.-)%s*$"):upper()
+            if token == wanted or token == classFile or token == role or (token == "DPS" and role == "DAMAGER") then
                 return true
             end
         end
@@ -445,6 +453,12 @@ local function UnitRole(unit)
     return "DAMAGER"
 end
 
+local function UnitClassFile(unit)
+    if not (UnitClass and unit) then return nil end
+    local _, fileName = UnitClass(unit)
+    return fileName
+end
+
 local function IsPlayerUnit(unit)
     if not unit or unit == "" then
         return false
@@ -467,9 +481,12 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
     if UnitMissing(unit) then
         return
     end
+    local subgroup
+    local role = UnitRole(unit)
+    local classFile = UnitClassFile(unit)
     if raidIndex and GetRaidRosterInfo then
-        local _, _, subgroup = GetRaidRosterInfo(raidIndex)
-        if subgroup and not GroupFilterAllows(conf, subgroup) then
+        subgroup = select(3, GetRaidRosterInfo(raidIndex))
+        if subgroup and not GroupFilterAllows(conf, subgroup, classFile, role) then
             return
         end
     end
@@ -479,9 +496,10 @@ local function AddNameListEntry(entries, unit, index, conf, raidIndex)
     end
     entries[#entries + 1] = {
         name = name,
-        role = UnitRole(unit),
+        role = role,
         index = index or 0,
         player = IsPlayerUnit(unit),
+        group = subgroup or 0,
     }
 end
 
@@ -540,6 +558,67 @@ local function BuildPlayerFirstRoleNameList(key, kind, conf)
     return table_concat(names, ",")
 end
 
+local function EntryRolePriority(entry, priority)
+    return priority and priority[entry and entry.role] or 999
+end
+
+local function BuildRaidFreezeNameList(kind, conf, mode, descending)
+    if not IsRaidLikeKind(kind) then
+        return nil
+    end
+    local count = GetNumGroupMembers and GetNumGroupMembers() or 0
+    if count <= 0 then
+        return nil
+    end
+
+    local entries = {}
+    for i = 1, count do
+        AddNameListEntry(entries, "raid" .. i, i, conf, i)
+    end
+    if #entries == 0 then
+        return nil
+    end
+
+    local priority = RolePriority(conf)
+    local function SortBefore(a, b)
+        if mode == "NAME" and a.name ~= b.name then
+            return a.name < b.name
+        elseif mode == "ROLE" then
+            local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
+            if ar ~= br then return ar < br end
+            if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
+        elseif mode == "GROUP" or mode == "GROUP_ROLE" then
+            local ag, bg = a.group or 0, b.group or 0
+            if ag ~= bg then return ag < bg end
+            if mode == "GROUP_ROLE" then
+                local ar, br = EntryRolePriority(a, priority), EntryRolePriority(b, priority)
+                if ar ~= br then return ar < br end
+                if conf.playerFirstInRole == true and a.player ~= b.player then return a.player == true end
+            end
+        end
+        return (a.index or 0) < (b.index or 0)
+    end
+    table_sort(entries, function(a, b)
+        if descending == true then
+            return SortBefore(b, a)
+        end
+        return SortBefore(a, b)
+    end)
+
+    local names, seen = {}, {}
+    for i = 1, #entries do
+        local name = entries[i].name
+        if name and not seen[name] then
+            seen[name] = true
+            names[#names + 1] = name
+        end
+    end
+    if #names == 0 then
+        return nil
+    end
+    return table_concat(names, ",")
+end
+
 local function ResolveSortMode(key, conf)
     local mode = conf.sortMode
     if mode ~= "INDEX" and mode ~= "NAME" and mode ~= "ROLE" and mode ~= "GROUP" and mode ~= "GROUP_ROLE" then
@@ -564,7 +643,15 @@ local function BuildSortState(key, kind, conf)
     local sortMethod = "INDEX"
     local groupBy, groupingOrder, nameList
 
-    if mode == "ROLE" and conf.playerFirstInRole == true then
+    if key ~= "party" then
+        -- Keep the secure raid roster membership frozen through combat. The
+        -- nameList is rebuilt out of combat on roster changes, then left intact
+        -- while locked so joiners are not inserted/reflowed mid-fight.
+        nameList = BuildRaidFreezeNameList(kind, conf, mode, conf.sortDescending == true)
+        if nameList then
+            sortMethod = "NAMELIST"
+        end
+    elseif mode == "ROLE" and conf.playerFirstInRole == true then
         nameList = BuildPlayerFirstRoleNameList(key, kind, conf)
         if nameList then
             sortMethod = "NAMELIST"
@@ -587,7 +674,7 @@ local function BuildSortState(key, kind, conf)
     return {
         mode = mode,
         sortMethod = sortMethod,
-        sortDir = conf.sortDescending == true and "DESC" or "ASC",
+        sortDir = (nameList and key ~= "party") and "ASC" or (conf.sortDescending == true and "DESC" or "ASC"),
         groupBy = groupBy,
         groupingOrder = groupingOrder,
         nameList = nameList,

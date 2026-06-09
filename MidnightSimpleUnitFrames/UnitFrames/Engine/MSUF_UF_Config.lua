@@ -1186,6 +1186,8 @@ local function ResolveUnit(db, unit, out)
     out.text.healthColorByHealth = ResolveHealthTextColorByHealth(general, conf)
     if conf.powerTextColorByType ~= nil then
         out.text.powerColorByType = conf.powerTextColorByType == true
+    elseif conf.colorPowerTextByType ~= nil then
+        out.text.powerColorByType = conf.colorPowerTextByType == true
     else
         out.text.powerColorByType = general.colorPowerTextByType == true
     end
@@ -1229,7 +1231,11 @@ local function ResolveUnit(db, unit, out)
         CopyColorField("directPowerLeft", "directPowerLeft")
         CopyColorField("directPowerCenter", "directPowerCenter")
         CopyColorField("directPowerRight", "directPowerRight")
-        out.text.nameColor = out.text.directNameColor
+        if out.text.nameClassColor ~= true and out.text.nameNpcColor ~= true then
+            out.text.nameColor = out.text.directNameColor
+        else
+            out.text.nameColor = nil
+        end
     end
     out.text.shortNumbers = general.useShortNumbers ~= false
     out.text.hidePercentSymbol = general.hidePercentSymbol == true

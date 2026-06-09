@@ -79,13 +79,16 @@ local function LayoutBorder(frame, thickness)
     if thickness < 1 then
         thickness = 1
     end
+    local edges = frame.MSUFBorderEdges
+    if frame._msufBorderThickness == thickness
+        and frame._msufBorderLayoutReady == true
+        and edges and edges.top and edges.bottom and edges.left and edges.right then
+        return
+    end
     local top = EnsureEdge(frame, "top")
     local bottom = EnsureEdge(frame, "bottom")
     local left = EnsureEdge(frame, "left")
     local right = EnsureEdge(frame, "right")
-    if frame._msufBorderThickness == thickness and frame._msufBorderLayoutReady == true then
-        return
-    end
     top:ClearAllPoints()
     bottom:ClearAllPoints()
     left:ClearAllPoints()

@@ -33,6 +33,7 @@ local pendingRestore = {}
 local lastOwnershipSig
 local partyReconcileScheduled
 local partyReconcileHideSolo
+local rosterEventRegistered = false
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -96,6 +97,20 @@ local function EnsureEventFrame()
     end
     eventFrame = CreateFrame("Frame")
     return eventFrame
+end
+
+local function RegisterRosterEvent()
+    if not rosterEventRegistered and not InCombat() then
+        EnsureEventFrame():RegisterEvent("GROUP_ROSTER_UPDATE")
+        rosterEventRegistered = true
+    end
+end
+
+local function UnregisterRosterEvent()
+    if eventFrame and rosterEventRegistered then
+        eventFrame:UnregisterEvent("GROUP_ROSTER_UPDATE")
+        rosterEventRegistered = false
+    end
 end
 
 local function DeferHide(frame)
@@ -656,17 +671,25 @@ end
 
 local function OnEvent(self, event, arg1)
     if event == "PLAYER_REGEN_ENABLED" then
+        RegisterRosterEvent()
         FlushPending()
         if GF._pendingBlizzardGroupOwnership then
             local reason = GF._pendingBlizzardGroupOwnership
             GF._pendingBlizzardGroupOwnership = nil
             ScheduleApply(reason)
+        else
+            ScheduleApply("regen-enabled")
         end
+    elseif event == "PLAYER_REGEN_DISABLED" then
+        UnregisterRosterEvent()
     elseif event == "ADDON_LOADED" then
         if arg1 == "Blizzard_CompactRaidFrames" or arg1 == "Blizzard_UnitFrame" or arg1 == addonName then
             ScheduleApply("addon-loaded:" .. tostring(arg1))
         end
     else
+        if event == "GROUP_ROSTER_UPDATE" and InCombat() then
+            return
+        end
         ScheduleApply(event)
     end
 end
@@ -676,7 +699,9 @@ eventFrame:SetScript("OnEvent", OnEvent)
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
-eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+RegisterRosterEvent()
 
 _G.MSUF_GF_DisableBlizzard = function()
     return GF.ApplyBlizzardGroupFrameOwnership("legacy-global")

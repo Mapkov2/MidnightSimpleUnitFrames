@@ -330,9 +330,6 @@ local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, ph
     if raidMarker then
         unitlessEvents = AddEvent(unitlessEvents, "RAID_TARGET_UPDATE")
     end
-    if raidGroup or leader or assist then
-        unitlessEvents = AddEvent(unitlessEvents, "GROUP_ROSTER_UPDATE")
-    end
     if leader or assist then
         unitlessEvents = AddEvent(unitlessEvents, "PARTY_LEADER_CHANGED")
     end
