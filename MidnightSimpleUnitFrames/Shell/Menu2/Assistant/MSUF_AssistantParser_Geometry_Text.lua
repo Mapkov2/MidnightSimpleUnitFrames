@@ -91,6 +91,7 @@ end
 
 function A._ParseTextFontSizeShortcut(text)
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, { "status icon", "status icons", "status indicator", "status indicators", "raid marker", "ready check", "leader icon", "assist icon" }) then return nil end
     if ContainsAny(text, {
         "layer", "text layer", "draw layer", "draw level", "level",
         "offset", "position", "pos", "x offset", "y offset",
@@ -98,12 +99,27 @@ function A._ParseTextFontSizeShortcut(text)
     }) then
         return nil
     end
-    if not TextFontSizeIntent(text) then
+    local allTextIntent = ContainsAny(text, {
+        "all text", "all texts", "all frame text", "all unit text", "all unitframe text",
+        "every text", "every text label", "all labels", "all numbers",
+    }) and ContainsAny(text, {
+        "font size", "text size", "bigger", "larger", "increase", "raise", "grow",
+        "smaller", "decrease", "reduce", "lower", "shrink",
+        "groesser", "kleiner", "erhoehe", "senke", "reduziere",
+    })
+    if not allTextIntent and not TextFontSizeIntent(text) then
         return nil
     end
     local tab = TextSelectorTab(text)
-    if tab ~= "name" and tab ~= "hp" and tab ~= "power" then return nil end
-    local attr = tab == "name" and "nameFontSize" or (tab == "hp" and "hpFontSize" or "powerFontSize")
+    local allText = tab == nil and allTextIntent
+    if tab ~= "name" and tab ~= "hp" and tab ~= "power" and not allText then return nil end
+
+    local attrs
+    if allText then
+        attrs = { "nameFontSize", "hpFontSize", "powerFontSize" }
+    else
+        attrs = { tab == "name" and "nameFontSize" or (tab == "hp" and "hpFontSize" or "powerFontSize") }
+    end
     local relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
     local value
     if relativeDelta == nil then value = FirstNumber(text) end
@@ -125,15 +141,19 @@ function A._ParseTextFontSizeShortcut(text)
 
     local changes = {}
     for i = 1, #groups do
-        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+        for j = 1, #attrs do
+            local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attrs[j])
+            if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+        end
     end
     for i = 1, #units do
-        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+        for j = 1, #attrs do
+            local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attrs[j])
+            if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+        end
     end
     if #changes == 0 then return nil end
-    if #changes > 1 and #groups > 1 then
+    if #changes > 1 and #groups > 1 and not allText then
         return {
             kind = "ambiguous",
             choices = changes,
@@ -143,8 +163,11 @@ function A._ParseTextFontSizeShortcut(text)
     return {
         kind = "changes",
         changes = changes,
-        label = "Set text font size",
-        summary = "Changes the registered Name/HP/Power text font-size slider for the selected unit or group scope.",
+        label = allText and "Set all text font sizes" or "Set text font size",
+        bulkSafe = allText and #changes > 1 or nil,
+        summary = allText
+            and "Changes only the registered Name, HP, and Power text font-size sliders for the selected unit or group scope."
+            or "Changes the registered Name/HP/Power text font-size slider for the selected unit or group scope.",
     }
 end
 
@@ -249,6 +272,24 @@ function A._TextSlotLower(slot)
     if slot == "Left" then return "left" end
     if slot == "Center" then return "center" end
     if slot == "Right" then return "right" end
+    return nil
+end
+
+function A._BareTextSlotForValueText(text)
+    if ContainsAny(text, {
+        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
+        "layer", "size", "font size", "anchor", "anchoring", "align", "alignment",
+    }) then
+        return nil
+    end
+    local left = ContainsAny(text, { "left", "links" })
+    local center = ContainsAny(text, { "center", "centre", "middle", "mitte" })
+    local right = ContainsAny(text, { "right", "rechts" })
+    local count = (left and 1 or 0) + (center and 1 or 0) + (right and 1 or 0)
+    if count ~= 1 then return nil end
+    if left then return "Left" end
+    if center then return "Center" end
+    if right then return "Right" end
     return nil
 end
 
@@ -528,12 +569,18 @@ function A._ParseNameTextVerticalPlacementShortcut(text)
         return nil
     end
     if not ContainsAny(text, { "put", "place", "set", "move", "position", "stick", "keep" }) then return nil end
-    if not ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" }) then return nil end
+    local verticalAnchorIntent = ContainsAny(text, { "anchor", "anchoring", "position" })
+        and ContainsAny(text, { "top", "upper", "above", "over", "bottom", "lower", "below", "under" })
+    if not verticalAnchorIntent and not ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" }) then return nil end
 
     local direction
-    if ContainsAny(text, { "above", "over", "top of", "on top of" }) then
+    if ContainsAny(text, { "above", "over", "top of", "on top of" })
+        or (verticalAnchorIntent and ContainsAny(text, { "top", "upper" }))
+    then
         direction = "up"
-    elseif ContainsAny(text, { "below", "under", "bottom of", "underneath" }) then
+    elseif ContainsAny(text, { "below", "under", "bottom of", "underneath" })
+        or (verticalAnchorIntent and ContainsAny(text, { "bottom", "lower" }))
+    then
         direction = "down"
     end
     if not direction then return nil end
@@ -829,6 +876,7 @@ function A._ParseTextSlotDropdownShortcut(text)
     if not tab and contextReference then tab = ctxTab end
     if tab ~= "hp" and tab ~= "power" then return nil end
     local slot = A._TextSlotForDetail(text, tab)
+    if not slot then slot = A._BareTextSlotForValueText(text) end
     if ContainsAny(text, { "offset", "position", "pos", "x", "y", "up", "down", "move", "nudge", "shift", "layer", "size", "font size" }) then return nil end
 
     local groups = DetectGroups(text)

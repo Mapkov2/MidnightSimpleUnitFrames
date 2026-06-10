@@ -1483,6 +1483,8 @@ end
 function A.WarmupPerformanceIndexes(reason)
     if A._performanceWarmupStarted then return false end
     if InCombat() then return false end
+    if A.IsBusy and A.IsBusy() then return false end
+    if type(A._assistantJobs) == "table" and #A._assistantJobs > 0 then return false end
     A._performanceWarmupStarted = true
 
     local steps = {

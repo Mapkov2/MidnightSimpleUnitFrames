@@ -548,8 +548,8 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
         size = "gameplay.combatFontSize",
         anchor = "gameplay.combatTimerAnchor",
         booleans = {
-            { key = "gameplay.lockCombatTimer", terms = { "lock", "locked", "lock position" } },
-            { key = "gameplay.combatTimerClickThrough", terms = { "click through", "click-through", "mouse clicks", "mouse input" } },
+            { key = "gameplay.lockCombatTimer", terms = { "lock", "locked", "unlock", "unlocked", "lock position" } },
+            { key = "gameplay.combatTimerClickThrough", terms = { "click through", "click-through", "clickable", "mouse clicks", "mouse input", "accept clicks" } },
         },
     },
     {
@@ -563,8 +563,12 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
         size = "gameplay.combatStateFontSize",
         duration = "gameplay.combatStateDuration",
         booleans = {
-            { key = "gameplay.lockCombatState", terms = { "lock", "locked", "lock position" } },
-            { key = "gameplay.combatStateColorSync", terms = { "sync color", "sync colors", "color sync" } },
+            { key = "gameplay.lockCombatState", terms = { "lock", "locked", "unlock", "unlocked", "lock position" } },
+            { key = "gameplay.combatStateColorSync", terms = {
+                "sync color", "sync colors", "color sync",
+                "sync combat state colors", "sync combat enter leave colors",
+                "same combat state colors", "combat state color sync",
+            } },
         },
     },
     {
@@ -589,8 +593,8 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
         y = "gameplay.firstDanceOffsetY",
         size = "gameplay.firstDanceIconSize",
         booleans = {
-            { key = "gameplay.lockFirstDance", terms = { "lock", "locked", "lock position" } },
-            { key = "gameplay.firstDanceClickThrough", terms = { "click through", "click-through", "mouse input" } },
+            { key = "gameplay.lockFirstDance", terms = { "lock", "locked", "unlock", "unlocked", "lock position" } },
+            { key = "gameplay.firstDanceClickThrough", terms = { "click through", "click-through", "clickable", "mouse input", "accept clicks" } },
             { key = "gameplay.firstDanceShowIcon", terms = { "icon", "icon mode", "cooldown swipe" } },
             { key = "gameplay.firstDanceShowReady", terms = { "show ready", "ready visible", "keep visible", "ready" } },
         },
@@ -1162,7 +1166,14 @@ local function ParseColorAction(text)
 end
 
 local function ParseDiagnostic(text)
-    if not ContainsAny(text, { "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum", "not showing", "not visible", "missing", "doesnt show", "does not show", "hidden", "nicht sichtbar", "zeigt nicht" }) then return nil end
+    if not ContainsAny(text, {
+        "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum",
+        "not showing", "not visible", "not appearing", "not displayed", "not there",
+        "doesnt show", "does not show", "doesnt appear", "does not appear",
+        "cant see", "cannot see", "missing", "hidden", "invisible",
+        "disappeared", "gone", "vanished", "broken",
+        "nicht sichtbar", "zeigt nicht",
+    }) then return nil end
     local gameplayFeature
     if ContainsAny(text, { "combat timer", "kampf timer", "kampftimer" }) then
         gameplayFeature = "combatTimer"
@@ -1499,7 +1510,10 @@ end
 local function ParseSupportWorkflow(text)
     if ContainsAny(text, {
         "msuf status", "assistant status", "status report", "diagnostic report",
-        "diagnostics", "debug summary", "version info", "locale info",
+        "diagnostics", "debug summary", "debug report", "debug info",
+        "assistant debug report", "version info", "locale info",
+        "assistant performance", "assistant timing", "assistant slow",
+        "is the assistant slow", "performance report", "perf report", "lag report",
     }) then
         local action = Registry and Registry:GetAction("assistant_status")
         return action and {

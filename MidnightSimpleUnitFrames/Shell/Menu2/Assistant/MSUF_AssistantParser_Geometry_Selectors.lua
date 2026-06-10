@@ -92,6 +92,26 @@ local function TextMoveTogetherValue(text)
     return true
 end
 
+local function NaturalTextSelectorSlot(text)
+    if not ContainsAny(text, { "put", "place", "align", "anchor", "anchoring" }) then return nil end
+    if ContainsAny(text, {
+        "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down",
+        "size", "font size", "layer", "current", "percent", "percentage", "max", "maximum",
+        "deficit", "missing", "hide", "clear", "remove", "none", "off",
+    }) then
+        return nil
+    end
+    local left = ContainsAny(text, { "left", "links" })
+    local center = ContainsAny(text, { "center", "centre", "middle", "mitte" })
+    local right = ContainsAny(text, { "right", "rechts" })
+    local count = (left and 1 or 0) + (center and 1 or 0) + (right and 1 or 0)
+    if count ~= 1 then return nil end
+    if left then return "left" end
+    if center then return "center" end
+    if right then return "right" end
+    return nil
+end
+
 local function StatusSelectorTab(text)
     if ContainsAny(text, { "advanced status tab", "advanced status icon tab", "advanced indicator tab", "advanced status controls", "advanced status" }) then return "advanced" end
     if ContainsAny(text, { "basic status tab", "basic status icon tab", "basic indicator tab", "basic status controls", "basic status" }) then return "basic" end
@@ -166,6 +186,7 @@ local function ParseMenuSelectorState(text)
 
     local anchorTextTab = TextSelectorTab(text)
     local anchorTextSlot = TextSelectorSlot(text)
+    if not anchorTextSlot then anchorTextSlot = NaturalTextSelectorSlot(text) end
     if (anchorTextTab == "hp" or anchorTextTab == "power") and TextSelectorIntent(text, anchorTextTab, anchorTextSlot) then
         local groups = DetectGroups(text)
         if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then

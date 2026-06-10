@@ -866,6 +866,54 @@ local function ChangelogAnswer(query)
     return { text = table.concat(lines, "\n"), status = "applied", summary = "Assistant changelog answer" }
 end
 
+local KNOWLEDGE_INTENT_TERMS = {
+    "explain", "what is", "what does", "what are", "where", "where is", "where do", "where can",
+    "how", "how do", "how can", "help", "change", "make", "set", "move", "open", "find",
+}
+
+local GROUP_FRAME_SCOPE_TERMS = {
+    "group frame", "group frames", "party frame", "party frames", "raid frame", "raid frames",
+    "mythic raid frame", "mythic raid frames", "group", "party", "raid", "mythic raid",
+}
+
+local GROUP_LAYOUT_HELP_TERMS = {
+    "width", "height", "size", "wider", "narrower", "taller", "shorter",
+    "spacing", "space", "gap", "growth", "grow", "direction", "column", "columns",
+    "offline", "hide offline", "show offline", "range fade", "range check", "out of range",
+}
+
+local GROUP_HEALTH_TEXT_HELP_TERMS = {
+    "health text", "hp text", "power text", "mana text", "health bar", "power bar", "bar color",
+    "health color", "power color", "text slot", "text slots", "font size", "range fade", "range check",
+    "out of range", "dispel overlay", "debuff stripe",
+}
+
+local GROUP_INDICATOR_HELP_TERMS = {
+    "indicator", "indicators", "status icon", "status icons", "spell indicator", "spell indicators",
+    "corner indicator", "corner indicators", "ready check", "role icon", "leader icon", "assist icon",
+    "raid marker", "resurrection", "resurrect", "incoming res", "summon", "threat", "aggro", "dispel",
+}
+
+local UNIT_FRAME_SCOPE_TERMS = {
+    "player", "target", "focus", "pet", "target of target", "targettarget", "focus target", "focustarget",
+    "boss", "unit frame", "unit frames", "unitframe", "unitframes",
+}
+
+local UNIT_TEXT_HELP_TERMS = {
+    "health text", "hp text", "power text", "mana text", "name text", "level text", "status text",
+    "text slot", "text slots", "left text", "right text", "font size", "text offset", "text anchor",
+}
+
+local CASTBAR_TEXT_HELP_TERMS = {
+    "castbar text", "cast bar text", "spell text", "timer text", "cast text", "castbar timer",
+    "castbar name", "castbar font", "castbar text offset", "castbar text position",
+}
+
+local CLASS_RESOURCE_HELP_TERMS = {
+    "class resource", "class resources", "class power", "class powers", "combo point", "combo points",
+    "holy power", "chi", "soul shard", "rune", "runes", "arcane charge", "arcane charges",
+}
+
 local function DirectHelpAnswer(query, opts)
     local norm = Normalize(query)
     if norm == "help" or norm == "hilfe" or norm == "show commands" or norm == "commands" or norm == "what can you do" or norm == "what can you do?" then
@@ -883,8 +931,110 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant undo help",
         }
     end
-    if ContainsAny(norm, { "raid scaling", "raid scale", "frame scaling", "scale at", "scaling breakpoint", "scaling breakpoints" })
-        and ContainsAny(norm, { "explain", "what is", "what does", "how", "help", "mean", "breakpoint", "players", "raid size" })
+    if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
+        and ContainsAny(norm, GROUP_INDICATOR_HELP_TERMS)
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Group Indicators help\nGroup frame indicators live on Group Frames > Indicators. You can change ready-check, role, leader/assist, raid-marker, incoming-res, summon, threat/aggro, dispel, spell, and corner indicators where registered.\nExamples: show raid ready check icon; move raid role icon left; set party ready check size to 18; open group indicators.\nActions: Open Group Indicators",
+            status = "applied",
+            summary = "Assistant group indicators help",
+        }
+    end
+    if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
+        and ContainsAny(norm, GROUP_HEALTH_TEXT_HELP_TERMS)
+        and not ContainsAny(norm, { "role power", "healer power", "healer power bar", "tank power", "tank power bar", "dps power", "dps power bar", "damager power", "damager power bar" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Group Health & Text help\nGroup health, power, role power, text slots, text font sizes, bar colors, range fade, dispel overlay, and debuff stripe controls live on Group Frames > Health & Text where registered.\nExamples: change party health text; hide healer power bars in raid frames; set raid range fade to 40; open group health and text.\nActions: Open Group Health & Text",
+            status = "applied",
+            summary = "Assistant group health text help",
+        }
+    end
+    if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
+        and ContainsAny(norm, GROUP_LAYOUT_HELP_TERMS)
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Group frame layout help\nGroup frame sizing, spacing, growth direction, anchoring, range fade, offline behavior, and raid-size scaling live across Group Layout and Group Health & Text.\nExamples: set raid width to 140; make party frames taller; set raid growth direction to down; hide offline players in raid frames; set raid range fade to 40.\nActions: Open Group Layout | Open Group Health & Text",
+            status = "applied",
+            summary = "Assistant group layout help",
+        }
+    end
+    if ContainsAny(norm, UNIT_FRAME_SCOPE_TERMS)
+        and ContainsAny(norm, UNIT_TEXT_HELP_TERMS)
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Unit frame text help\nPlayer, Target, Focus, Pet, Target of Target, Focus Target, and Boss pages expose registered name, health, power, level, status, font-size, anchor, slot, and offset text controls where that unit supports them.\nExamples: move target HP text left; set target power text to percent; make player name text bigger; open target text selector.\nActions: Open Player | Open Target | Open Boss Frames",
+            status = "applied",
+            summary = "Assistant unit text help",
+        }
+    end
+    if ContainsAny(norm, { "castbar", "cast bar" })
+        and ContainsAny(norm, CASTBAR_TEXT_HELP_TERMS)
+        and not ContainsAny(norm, { "texture", "textures", "bar texture", "castbar texture", "cast bar texture" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Castbar text help\nCastbar text controls live on Castbars. The Assistant can change registered castbar text size, X/Y offsets, visibility, and related castbar detail controls where exposed.\nExamples: move target castbar text left; set focus castbar text size to 14; make boss castbar text bigger.\nActions: Open Castbars",
+            status = "applied",
+            summary = "Assistant castbar text help",
+        }
+    end
+    if ContainsAny(norm, { "interrupt color", "interruptible color", "uninterruptible color", "castbar interrupt color", "cast bar interrupt color" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Castbar interrupt color help\nInterruptible and uninterruptible cast colors are Castbar color controls. They are separate from the Interrupt Ready indicator, which shows whether your interrupt is available.\nExamples: set interruptible cast color to blue; set uninterruptible cast color to red; explain kick ready indicator.\nActions: Open Castbars",
+            status = "applied",
+            summary = "Assistant castbar interrupt color help",
+        }
+    end
+    if ContainsAny(norm, CLASS_RESOURCE_HELP_TERMS)
+        and ContainsAny(norm, { "width", "height", "size", "wider", "taller", "gap", "spacing", "color", "colors", "anchor", "position", "placement", "style", "mode" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Class Resources help\nClass Resources controls cover visibility, size, width/height, gap, placement, anchor, style, and token colors such as Combo Points where registered.\nExamples: make class resources wider; set combo point color to red; move class resources above player; open class resources.\nActions: Open Class Resources | Open Colors",
+            status = "applied",
+            summary = "Assistant class resources help",
+        }
+    end
+    if ContainsAny(norm, { "diagnostic", "diagnostics", "debug report", "debug", "health check", "repair", "check broken", "run checks" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Diagnostics help\nAssistant diagnostics can summarize registered settings, find profile/setup problems, produce debug text, and guide safe repair actions where registered.\nExamples: run diagnostics; assistant debug report; fix broken profile mappings; open display recovery.\nActions: Run Diagnostics | Open Display & Recovery",
+            status = "applied",
+            summary = "Assistant diagnostics help",
+        }
+    end
+    if not ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
+        and ContainsAny(norm, { "menu scale", "ui scale", "msuf frame scale", "msuf frames scale", "dashboard scale", "dashboard scaling", "options scale", "menu bigger", "menu smaller" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Dashboard scaling help\nDashboard scaling controls live on the Dashboard under Scaling. They cover UI scale, Menu scale, and MSUF frame scale, with apply/revert behavior handled by the Dashboard controls.\nExamples: open dashboard scaling; make menu bigger; set MSUF frame scale to 100.\nActions: Open Dashboard Scaling",
+            status = "applied",
+            summary = "Assistant dashboard scaling help",
+        }
+    end
+    if ContainsAny(norm, { "edit mode", "editmode", "frame edit mode", "anchor picker", "move frames mode" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
+    then
+        return {
+            text = "Edit Mode help\nUse MSUF Edit Mode to move frames visually, open the anchor picker, or reset the currently edited position. The Assistant can enter, exit, toggle, and check Edit Mode.\nExamples: enter MSUF edit mode; open anchor picker; exit edit mode; am I in edit mode?\nActions: Enter Edit Mode | Open Edit Mode Anchor Picker | Exit Edit Mode",
+            status = "applied",
+            summary = "Assistant Edit Mode help",
+        }
+    end
+    if (ContainsAny(norm, { "raid scaling", "raid scale", "frame scaling", "scale at", "scaling breakpoint", "scaling breakpoints", "player count scaling", "player-count scaling", "raid frame player count" })
+            or (ContainsAny(norm, { "raid", "raid frame", "raid frames" })
+                and ContainsAny(norm, { "players", "player count", "10 players", "20 players", "25 players", "26 players", "10m", "20m", "25m", "mythic size" })
+                and ContainsAny(norm, { "scale", "scaling", "smaller", "bigger", "larger", "increase", "decrease" })))
+        and ContainsAny(norm, { "explain", "what is", "what does", "how", "where", "where do", "where can", "change", "make", "help", "mean", "breakpoint", "players", "raid size" })
     then
         return {
             text = "Group frame scaling breakpoints\nRaid scaling can use player-count breakpoints: 1-10, 11-20, 21-25, and 26+ players. MSUF applies the matching scale for the current raid size when Group Layout scaling is enabled.\nExamples: set raid scale for 20 players to 80; scale raid for 10m to 95; increase raid scale for 20m by 5.\nActions: Open Group Layout",
@@ -899,6 +1049,15 @@ local function DirectHelpAnswer(query, opts)
             text = "Detached Power Bar help\nPer-unit detached Power Bar options live on each unit page under Power Bar. The detached X/Y offsets move the separated bar only after that unit's Power Bar is detached.\nExamples: detach target power bar; move target powerbar left; set target powerbar x offset to 12; attach target power bar.\nActions: Open Player | Open Target | Open Class Resources",
             status = "applied",
             summary = "Assistant detached power help",
+        }
+    end
+    if ContainsAny(norm, { "powerbar offset", "power bar offset", "powerbar x", "powerbar y", "power bar x", "power bar y", "powerbar position", "power bar position" })
+        and ContainsAny(norm, { "where", "where do", "where can", "change", "set", "move", "offset", "position", "help", "explain" })
+    then
+        return {
+            text = "Power Bar offset help\nNormal Power text offsets live on each unit page under Text/Power text. If you mean the separated bar itself, first detach that unit's Power Bar, then use Detached Power Bar X/Y Offset.\nExamples: move target power text left; detach target power bar; move target powerbar left; set target powerbar x offset to 12.\nActions: Open Player | Open Target",
+            status = "applied",
+            summary = "Assistant power bar offset help",
         }
     end
     if ContainsAny(norm, { "role power", "healer power", "healer power bar", "tank power", "tank power bar", "dps power", "dps power bar", "damager power", "damager power bar" })
@@ -918,6 +1077,74 @@ local function DirectHelpAnswer(query, opts)
             status = "applied",
             summary = "Assistant cooldown manager anchor help",
         }
+    end
+    if ContainsAny(norm, { "interrupt ready", "kick ready", "ready interrupt", "ready kick" })
+        and ContainsAny(norm, { "explain", "what is", "what does", "where", "where is", "where do", "help", "mean", "indicator", "icon", "border" })
+    then
+        return {
+            text = "Interrupt Ready Indicator help\nInterrupt Ready is a Castbar helper that can show whether your interrupt is ready on Target, Focus, or Boss castbars. Its style, anchor, size, auto-size, offsets, and ready/not-ready colors are registered Castbar controls.\nExamples: show kick ready on target; put kick ready indicator left; move kick ready indicator down 3; make kick ready icon bigger.\nActions: Open Castbars",
+            status = "applied",
+            summary = "Assistant interrupt ready help",
+        }
+    end
+    if ContainsAny(norm, { "focus kick", "focus kick tracker", "focus kick icon", "focus interrupt tracker", "focus interrupt icon" })
+        and ContainsAny(norm, { "explain", "what is", "what does", "where", "where is", "where do", "help", "tracker", "icon", "position", "size" })
+    then
+        return {
+            text = "Focus Kick Tracker help\nFocus Kick is the Castbar Focus Interrupt Tracker. It has registered controls for visibility, preview, width, height, text size, and X/Y offsets.\nExamples: show focus kick tracker; move focus kick tracker left 10; make focus kick tracker bigger; reset focus kick position.\nActions: Open Castbars",
+            status = "applied",
+            summary = "Assistant focus kick help",
+        }
+    end
+    if ContainsAny(norm, { "castbar fill", "cast bar fill", "fill direction", "castbar direction", "cast bar direction", "left to right fill", "right to left fill", "opposite fill" })
+        and ContainsAny(norm, { "castbar", "cast bar", "fill", "direction", "left to right", "right to left", "opposite", "where", "explain", "what", "help" })
+    then
+        return {
+            text = "Castbar fill direction help\nCastbar Fill Direction controls the shared direction for cast progress. Target can also use the opposite fill direction through its Target Opposite Direction option.\nExamples: make castbar fill left to right; make castbar fill right to left; make target castbar fill opposite.\nActions: Open Castbars",
+            status = "applied",
+            summary = "Assistant castbar fill help",
+        }
+    end
+    if ContainsAny(norm, { "combat timer" })
+        and ContainsAny(norm, { "lock", "locked", "unlock", "click through", "click-through", "clickable", "where", "what", "explain", "help" })
+    then
+        return {
+            text = "Combat Timer controls help\nCombat Timer lives on the Gameplay page. You can enable it, set its anchor, move it, resize its text, lock its position, or make it click-through. Click-through means the timer ignores mouse clicks; clickable turns click-through off.\nExamples: lock combat timer; unlock combat timer; make combat timer click through; make combat timer clickable; move combat timer up 10.\nActions: Open Gameplay",
+            status = "applied",
+            summary = "Assistant combat timer help",
+        }
+    end
+    if ContainsAny(norm, { "totem icon", "totem icons", "totem frame", "totems", "statue frame" })
+        and ContainsAny(norm, { "where", "where can", "where do", "make", "bigger", "smaller", "size", "move", "offset", "position", "help", "explain" })
+    then
+        return {
+            text = "Totem Frame controls help\nTotem/Statue frame controls live on Gameplay. The Assistant can enable the frame, resize the icons, move the frame by X/Y offset, change its anchor points, preview it, or reset its layout.\nExamples: show totem frame; make totem icons bigger; move totem icons right 6; set totem frame to anchor to bottom left.\nActions: Open Gameplay",
+            status = "applied",
+            summary = "Assistant totem frame help",
+        }
+    end
+    if ContainsAny(norm, { "first dance", "first dance tracker", "first dancer" })
+        and ContainsAny(norm, { "explain", "what is", "what does", "where", "where is", "where do", "help", "tracker", "icon", "ready" })
+    then
+        return {
+            text = "First Dance Tracker help\nFirst Dance is a Gameplay tracker for the Rogue First Dance buff. Registered controls include visibility, lock, click-through, icon mode, ready visibility, size, and X/Y offsets.\nExamples: show first dance; move first dance icon right 5; set first dance icon size to 40; hide first dance ready.\nActions: Open Gameplay",
+            status = "applied",
+            summary = "Assistant first dance help",
+        }
+    end
+    if ContainsAny(norm, { "role sorting", "role sort", "sort by role", "group role sorting", "group frame role sorting", "party role sort", "raid role sort" })
+        and ContainsAny(norm, { "where", "where is", "where do", "what", "explain", "help", "sorting", "sort" })
+    then
+        return {
+            text = "Group role sorting help\nGroup Frame sorting lives on Group Layout. MSUF can sort party/raid groups by the registered sort controls where the current group scope supports them.\nExamples: set raid sort to role; set party sort to group; put player first in role.\nActions: Open Group Layout",
+            status = "applied",
+            summary = "Assistant group role sorting help",
+        }
+    end
+    if ContainsAny(norm, { "what can i change", "what settings can i change", "what can i do" })
+        and ContainsAny(norm, { "raid frame", "raid frames", "party frame", "party frames", "group frame", "group frames" })
+    then
+        return PageHelp("gf_layout")
     end
     for i = 1, #SCOPED_HELP_ALIASES do
         local spec = SCOPED_HELP_ALIASES[i]

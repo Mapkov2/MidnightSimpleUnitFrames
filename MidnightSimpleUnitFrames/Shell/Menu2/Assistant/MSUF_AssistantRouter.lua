@@ -629,6 +629,10 @@ local function ShouldSkipContext(text)
     if ContainsAny(norm, NAV_HELP_TERMS) then return true end
     if ContainsAny(norm, EXPLICIT_DOMAIN_TERMS) then return true end
     if ContainsAny(norm, {
+        "it", "that", "this", "same", "do it", "do that", "again", "more", "less",
+        "opposite", "other way", "hide it", "clear it", "remove it", "move it",
+    }) then return true end
+    if ContainsAny(norm, {
         "unitframe", "unitframes", "unit frame", "unit frames",
         "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
         "party", "raid", "party frames", "raid frames", "group frames",
@@ -938,6 +942,12 @@ function A.RouteInput(text, coreHandler)
     if hasCore and LooksLikeExactAssistantKey(text) and (LooksLikeMutation(text) or StartsWithMutationCommand(text)) then
         local exactKeyResult = Core(text)
         if exactKeyResult and not IsUnknownResult(exactKeyResult) then return exactKeyResult end
+    end
+
+    do
+        local parser = A.Parser or {}
+        local broadAnchor = parser.ParseBroadHumanAnchorTargetAnswer and parser.ParseBroadHumanAnchorTargetAnswer(Normalize(text), text)
+        if broadAnchor then return broadAnchor end
     end
 
     local auraUnsupported = UnsupportedAuraReply(text)
