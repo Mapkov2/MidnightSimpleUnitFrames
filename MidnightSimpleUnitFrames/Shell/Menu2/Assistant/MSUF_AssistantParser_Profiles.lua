@@ -328,36 +328,68 @@ local function RawCurrentProfileCopyName(raw)
     raw = tostring(raw or "")
     local lower = raw:lower()
     local prefixes = {
+        "copy current profile called ",
+        "copy current profile named ",
         "clone current profile to ",
         "clone current profile as ",
+        "clone current profile called ",
+        "clone current profile named ",
         "clone active profile to ",
         "clone active profile as ",
+        "clone active profile called ",
+        "clone active profile named ",
         "clone my profile to ",
         "clone my profile as ",
+        "clone my profile called ",
+        "clone my profile named ",
         "clone my active profile to ",
         "clone my active profile as ",
+        "clone my active profile called ",
+        "clone my active profile named ",
         "dupe current profile to ",
         "dupe current profile as ",
+        "dupe current profile called ",
+        "dupe current profile named ",
         "dupe active profile to ",
         "dupe active profile as ",
+        "dupe active profile called ",
+        "dupe active profile named ",
         "dupe my profile to ",
         "dupe my profile as ",
+        "dupe my profile called ",
+        "dupe my profile named ",
         "dupe my active profile to ",
         "dupe my active profile as ",
+        "dupe my active profile called ",
+        "dupe my active profile named ",
         "copy current profile to ",
         "copy current profile as ",
+        "copy active profile called ",
+        "copy active profile named ",
         "copy active profile to ",
         "copy active profile as ",
+        "copy my current profile called ",
+        "copy my current profile named ",
         "copy my profile to ",
         "copy my profile as ",
+        "copy my profile called ",
+        "copy my profile named ",
         "copy my active profile to ",
         "copy my active profile as ",
+        "copy my active profile called ",
+        "copy my active profile named ",
         "duplicate current profile to ",
         "duplicate current profile as ",
+        "duplicate current profile called ",
+        "duplicate current profile named ",
         "duplicate active profile to ",
         "duplicate active profile as ",
+        "duplicate active profile called ",
+        "duplicate active profile named ",
         "duplicate my profile to ",
         "duplicate my profile as ",
+        "duplicate my profile called ",
+        "duplicate my profile named ",
         "duplicate my active profile to ",
         "duplicate my active profile as ",
         "duplicate my active profile called ",
@@ -380,6 +412,32 @@ local function RawCurrentProfileCopyName(raw)
         end
     end
     return nil
+end
+
+local function RawCreateProfileFromCurrentCopyName(raw)
+    return RawAfterPrefix(raw, {
+        "create profile from current called ",
+        "create profile from current named ",
+        "create profile from current as ",
+        "create profile from active called ",
+        "create profile from active named ",
+        "create profile from active as ",
+        "create new profile from current called ",
+        "create new profile from current named ",
+        "create new profile from current as ",
+        "make profile from current called ",
+        "make profile from current named ",
+        "make profile from current as ",
+        "make new profile from current called ",
+        "make new profile from current named ",
+        "make new profile from current as ",
+        "make a new profile from current called ",
+        "make a new profile from current named ",
+        "make a new profile from current as ",
+        "new profile from current called ",
+        "new profile from current named ",
+        "new profile from current as ",
+    })
 end
 
 local function IsCurrentProfileName(name)
@@ -478,6 +536,15 @@ end
 
 local function HasProfileExportIntent(text)
     if ContainsAny(text, {
+        "profile string", "export string", "profile export string", "copy profile string",
+    }) and ContainsAny(text, {
+        "show", "show me", "copy", "export", "share", "give me", "generate",
+    }) and not ContainsAny(text, {
+        "where", "paste", "import", "how", "how do", "how to", "why",
+    }) then
+        return true
+    end
+    if ContainsAny(text, {
         "where", "where is", "where are", "find", "search", "show me",
         "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
         "how", "how do", "how to", "why", "faq",
@@ -563,6 +630,8 @@ local function ImportNewProfileName(raw, startIndex, endIndex, text)
     end
     local after = Trim(tostring(raw or ""):sub((endIndex or 0) + 1))
     local lower = after:lower()
+    if lower:sub(1, 15) == "as new profile " then return CleanProfileName(StripProfileImportString(after:sub(16))) end
+    if lower:sub(1, 11) == "as profile " then return CleanProfileName(StripProfileImportString(after:sub(12))) end
     if lower:sub(1, 3) == "as " then return CleanProfileName(StripProfileImportString(after:sub(4))) end
     if lower:sub(1, 15) == "to new profile " then return CleanProfileName(StripProfileImportString(after:sub(16))) end
     if lower:sub(1, 12) == "new profile " then return CleanProfileName(StripProfileImportString(after:sub(13))) end
@@ -877,6 +946,20 @@ local function ParseProfile(text, raw)
     local hasExportIntent = HasProfileExportIntent(text)
     local hasProfile = hasProfileWord or hasExportIntent
     local rawLower = tostring(raw or ""):lower()
+    local implicitSwitchName
+    if not hasProfile and ContainsAny(text, { "switch to", "wechsel zu" }) then
+        local maybeName = CleanProfileName(RawAfterPrefix(rawText, { "switch to ", "wechsel zu " })
+            or text:match("^switch%s+to%s+(.+)$")
+            or text:match("^wechsel%s+zu%s+(.+)$"))
+        if maybeName then
+            local resolved, how
+            if type(A.ResolveProfileName) == "function" then resolved, how = A.ResolveProfileName(maybeName) end
+            if how == "exact" or how == "partial" or M.activeKey == "profiles" then
+                implicitSwitchName = resolved or maybeName
+                hasProfile = true
+            end
+        end
+    end
     if compact and (hasProfileWord or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^msuf%d+:")) then
         local legacy = ContainsAny(text, { "legacy import", "import legacy", "old profile import", "legacy profile" })
         local newName = ImportNewProfileName(rawText, compactStart, endIndex, text)
@@ -906,6 +989,20 @@ local function ParseProfile(text, raw)
         } or nil
     end
     if not hasProfile then return nil end
+
+    if ContainsAny(text, {
+        "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
+        "broken profile mapping", "broken profile mappings", "broken spec mapping", "broken spec mappings",
+    }) and ContainsAny(text, { "clear", "fix", "repair", "remove", "clean" }) then
+        local action = Registry and Registry:GetAction("clear_broken_spec_profile_mappings")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Clear broken spec profile mappings",
+            summary = "Removes specialization profile assignments that point to missing profiles.",
+        } or nil
+    end
 
     local specSwitch = BuildSpecAutoSwitch(text)
     if specSwitch then return specSwitch end
@@ -959,8 +1056,8 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, { "switch", "wechsel", "change profile", "use profile", "use the", "activate profile", "load profile", "select profile" }) then
-        local name = RawAfterPrefix(rawText, {
+    if implicitSwitchName or ContainsAny(text, { "switch", "wechsel", "change profile", "use profile", "use the", "activate", "load", "select profile" }) then
+        local name = implicitSwitchName or RawAfterPrefix(rawText, {
                 "switch to profile ",
                 "switch profile to ",
                 "switch profile ",
@@ -968,7 +1065,9 @@ local function ParseProfile(text, raw)
                 "use profile ",
                 "use the ",
                 "activate profile ",
+                "activate ",
                 "load profile ",
+                "load ",
                 "select profile ",
             })
             or text:match("switch%s+to%s+(.+)$")
@@ -978,8 +1077,11 @@ local function ParseProfile(text, raw)
             or text:match("use%s+the%s+(.+)%s+profile$")
             or text:match("use%s+(.+)%s+profile$")
             or text:match("activate%s+profile%s+(.+)$")
+            or text:match("activate%s+(.+)%s+profile$")
             or text:match("load%s+profile%s+(.+)$")
+            or text:match("load%s+(.+)%s+profile$")
             or text:match("select%s+profile%s+(.+)$")
+            or text:match("select%s+(.+)%s+profile$")
             or text:match("wechsel%s+zu%s+(.+)$")
         name = CleanProfileName(name)
         if name then
@@ -990,6 +1092,25 @@ local function ParseProfile(text, raw)
                 args = { name = name },
                 label = "Switch profile",
                 summary = "Switches the active MSUF profile.",
+            } or nil
+        end
+    end
+
+    do
+        local name = RawCreateProfileFromCurrentCopyName(rawText)
+            or text:match("create%s+profile%s+from%s+current%s+called%s+(.+)$")
+            or text:match("create%s+profile%s+from%s+current%s+named%s+(.+)$")
+            or text:match("create%s+profile%s+from%s+current%s+as%s+(.+)$")
+        name = CleanProfileName(name)
+        if name then
+            local action = Registry and Registry:GetAction("copy_profile")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { name = name },
+                confirmRequired = true,
+                label = "Copy current profile",
+                summary = "Copies the active profile to a new profile name.",
             } or nil
         end
     end
@@ -1151,6 +1272,8 @@ local function ParseProfile(text, raw)
     if ContainsAny(text, {
         "list profiles", "show profiles", "profile list", "profile summary",
         "profile status", "current profile", "active profile", "which profile",
+        "what profile", "what profile am i using", "which profile am i using",
+        "profile am i using", "profile i am using",
         "spec profiles", "specialization profiles",
     }) and not ContainsAny(text, {
         "reset", "delete", "remove", "switch", "wechsel", "copy", "duplicate", "clone", "dupe",

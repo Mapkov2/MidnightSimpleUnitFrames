@@ -1165,6 +1165,37 @@ local function HumanAnchorFrameNameForText(text, raw)
     return frameName
 end
 
+local function BroadHumanAnchorAnswer(frameName)
+    local target = frameName == "EssentialCooldownViewer" and "cooldownmanager" or tostring(frameName or "that frame")
+    return {
+        kind = "answer",
+        status = "info",
+        text = table.concat({
+            "I can anchor real MSUF frame families, but 'all frames' is too broad to change safely.",
+            "Use a concrete target, for example: anchor unitframes to " .. target .. "; anchor party and raid frames to " .. target .. "; anchor class resources to " .. target .. ".",
+        }, "\n"),
+        summary = "Explains ambiguous broad frame anchor wording.",
+    }
+end
+
+function P.ParseBroadHumanAnchorTargetAnswer(text, raw)
+    local externalFrameName = HumanAnchorFrameNameForText(text, raw)
+    if externalFrameName == nil then return nil end
+    local attachIntent = ContainsAny(text, {
+        "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
+        "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
+        "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
+    }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
+        or (HasPhrase(text, "attach") and HasPhrase(text, "to"))
+        or (HasPhrase(text, "dock") and HasPhrase(text, "to"))
+        or (HasPhrase(text, "snap") and HasPhrase(text, "to"))
+    if not attachIntent then return nil end
+    if #DetectUnits(text) > 0 or #DetectGroups(text) > 0 then return nil end
+    if ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames", "group frame", "group frames", "party frames", "raid frames" }) then return nil end
+    if not ContainsAny(text, { "frame", "frames", "all frames", "everything", "all msuf", "all ui" }) then return nil end
+    return BroadHumanAnchorAnswer(externalFrameName)
+end
+
 function P.ParseHumanAnchorTarget(text, raw)
     if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
     if ContainsAny(text, {
@@ -1199,6 +1230,11 @@ function P.ParseHumanAnchorTarget(text, raw)
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
     local unitframeScope = ContainsAny(text, { "unitframe", "unitframes", "unit frame", "unit frames" })
+    if #units == 0 and #groups == 0 and not unitframeScope and externalFrameName ~= nil
+        and ContainsAny(text, { "frame", "frames", "all frames", "everything", "all msuf", "all ui" })
+    then
+        return BroadHumanAnchorAnswer(externalFrameName)
+    end
     local unitPage = CurrentPageUnit()
     if #groups == 0 and (#units > 0 or unitframeScope or unitPage) then
         local probeUnit = (units and units[1]) or unitPage or "player"
@@ -1461,6 +1497,28 @@ function P.GroupScaleRelativeDeltaForText(text)
     return direction * math.abs(amount)
 end
 
+local GROUP_SCALE_BREAKPOINT_LABELS = {
+    scaleAt10 = "1-10 players",
+    scaleAt20 = "11-20 players",
+    scaleAt25 = "21-25 players",
+    scaleOver25 = "26+ players",
+}
+
+local function GroupScaleMissingValueAnswer(groups, attr, playerCount)
+    local scope = groups and groups[1] or nil
+    local label = (P.FrameResizeGroupLabel and P.FrameResizeGroupLabel(scope)) or tostring(scope or "Group")
+    local breakpoint = GROUP_SCALE_BREAKPOINT_LABELS[attr] or "that player count"
+    local targetText = playerCount
+        and ("at " .. tostring(playerCount) .. " players (" .. tostring(breakpoint) .. " breakpoint)")
+        or ("for " .. tostring(breakpoint))
+    local scopeText = scope == "mythicraid" and "mythic raid" or (scope or "raid")
+    return table.concat({
+        "Group frame scaling breakpoints",
+        "I can change " .. tostring(label) .. " scaling " .. targetText .. ", but I need the target percent or a relative direction.",
+        "Examples: set " .. tostring(scopeText) .. " scale for 20 players to 80; make " .. tostring(scopeText) .. " frames smaller when 20 people; increase " .. tostring(scopeText) .. " scale for 20m by 5.",
+    }, "\n")
+end
+
 function P.ParseGroupScaleBreakpointShortcut(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, {
@@ -1472,15 +1530,22 @@ function P.ParseGroupScaleBreakpointShortcut(text)
     end
     local attr, playerCount = P.GroupScaleBreakpointAttrForText(text)
     if not attr then return nil end
+    local groups = DetectGroups(text)
+    if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
+    if #groups == 0 then return nil end
     local value = P.GroupScaleValueForText(text, playerCount)
     local relativeDelta
     if value == nil then
         relativeDelta = P.GroupScaleRelativeDeltaForText(text)
-        if relativeDelta == nil then return nil end
+        if relativeDelta == nil then
+            return {
+                kind = "answer",
+                status = "info",
+                text = GroupScaleMissingValueAnswer(groups, attr, playerCount),
+                summary = "Explains the missing group player-count scale value.",
+            }
+        end
     end
-    local groups = DetectGroups(text)
-    if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
-    if #groups == 0 then return nil end
     local changes = {}
     for i = 1, #groups do
         local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)

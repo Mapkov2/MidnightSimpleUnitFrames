@@ -243,6 +243,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or A._ParseFollowupAnswer(normalized, ctx)
         or BuildFollowup(normalized, ctx)
         or BuildBooleanCorrection(normalized, ctx)
+        or (P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw))
         or ParseWorkflowLifecycle(normalized)
         or ParseGroupCopy(normalized)
         or P.ParseUnsupportedMixedCopy(normalized)
@@ -383,6 +384,12 @@ function A.Parse(text)
         exactKeyParsed.raw = raw
         exactKeyParsed.normalized = normalized
         return exactKeyParsed
+    end
+    local broadHumanAnchor = P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw)
+    if broadHumanAnchor then
+        broadHumanAnchor.raw = raw
+        broadHumanAnchor.normalized = normalized
+        return broadHumanAnchor
     end
     if P.ParseUnsupportedAuraCommand then
         local auraUnsupported = P.ParseUnsupportedAuraCommand(normalized)

@@ -443,6 +443,7 @@ local function BuildFollowup(text, ctx)
     local hasIntent = positiveIntent or negativeIntent or neutralIntent or oppositeIntent or reverseCorrectionIntent
         or tooPositiveIntent or tooNegativeIntent or notEnoughIntent or exactValueIntent
         or leftIntent or rightIntent or targetReplayIntent
+        or ContainsAny(text, { "hide it", "clear it", "remove it", "empty it", "turn it off", "disable it", "hide that", "clear that", "remove that" })
     if not hasIntent then return nil end
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
@@ -486,6 +487,180 @@ local function BuildFollowup(text, ctx)
         end
         if setting and setting.percent == true and amount > 1 then amount = amount / 100 end
         return amount
+    end
+
+    local function TextSlotInfoFromPrevious(prev)
+        local key = tostring((prev and prev.key) or "")
+        local frameType, unit, area, slot
+        unit, slot = key:match("^gf_([^%.]+)%.text(Left)$")
+        if unit then frameType, area = "group", "hp" end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.text(Center)$")
+            if unit then frameType, area = "group", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.text(Right)$")
+            if unit then frameType, area = "group", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.powerText(Left)$")
+            if unit then frameType, area = "group", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.powerText(Center)$")
+            if unit then frameType, area = "group", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.powerText(Right)$")
+            if unit then frameType, area = "group", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.text(Left)$")
+            if unit then frameType, area = "unitframe", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.text(Center)$")
+            if unit then frameType, area = "unitframe", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.text(Right)$")
+            if unit then frameType, area = "unitframe", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.powerText(Left)$")
+            if unit then frameType, area = "unitframe", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.powerText(Center)$")
+            if unit then frameType, area = "unitframe", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.powerText(Right)$")
+            if unit then frameType, area = "unitframe", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.hpText(Left)Offset[XY]$")
+            if unit then frameType, area = "group", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.hpText(Center)Offset[XY]$")
+            if unit then frameType, area = "group", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.hpText(Right)Offset[XY]$")
+            if unit then frameType, area = "group", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.powerText(Left)Offset[XY]$")
+            if unit then frameType, area = "group", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.powerText(Center)Offset[XY]$")
+            if unit then frameType, area = "group", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^gf_([^%.]+)%.powerText(Right)Offset[XY]$")
+            if unit then frameType, area = "group", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.hpText(Left)Offset[XY]$")
+            if unit then frameType, area = "unitframe", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.hpText(Center)Offset[XY]$")
+            if unit then frameType, area = "unitframe", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.hpText(Right)Offset[XY]$")
+            if unit then frameType, area = "unitframe", "hp" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.powerText(Left)Offset[XY]$")
+            if unit then frameType, area = "unitframe", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.powerText(Center)Offset[XY]$")
+            if unit then frameType, area = "unitframe", "power" end
+        end
+        if not unit then
+            unit, slot = key:match("^([^%.]+)%.powerText(Right)Offset[XY]$")
+            if unit then frameType, area = "unitframe", "power" end
+        end
+        if not (frameType and unit and area and slot) then return nil end
+        return {
+            frameType = frameType,
+            unit = unit,
+            area = area,
+            slot = slot,
+            slotLower = slot:lower(),
+            key = key,
+        }
+    end
+
+    local function TextSlotSettingKey(info)
+        if not info then return nil end
+        if info.frameType == "group" then
+            return "gf_" .. tostring(info.unit) .. "." .. (info.area == "hp" and "text" or "powerText") .. tostring(info.slot)
+        end
+        return tostring(info.unit) .. "." .. (info.area == "hp" and "text" or "powerText") .. tostring(info.slot)
+    end
+
+    local function TextSlotOffsetKey(info, direction)
+        if not (info and direction) then return nil end
+        local axis = (direction == "left" or direction == "right") and "OffsetX" or "OffsetY"
+        local prefix = info.area == "hp" and "hpText" or "powerText"
+        if info.frameType == "group" then
+            return "gf_" .. tostring(info.unit) .. "." .. prefix .. tostring(info.slot) .. axis
+        end
+        return tostring(info.unit) .. "." .. prefix .. tostring(info.slot) .. axis
+    end
+
+    local function TextSlotFontKey(info)
+        if not info then return nil end
+        local attr = info.area == "hp" and "hpFontSize" or "powerFontSize"
+        if info.frameType == "group" then return "gf_" .. tostring(info.unit) .. "." .. attr end
+        return tostring(info.unit) .. "." .. attr
+    end
+
+    if #units == 0 and #groups == 0 then
+        local hideTextSlot = ContainsAny(text, { "hide it", "clear it", "remove it", "empty it", "turn it off", "disable it", "hide that", "clear that", "remove that" })
+        local moveTextSlot = followDirection and ContainsAny(text, { "move", "nudge", "shift", "left", "right", "up", "down" })
+        local resizeTextSlot = ContainsAny(text, { "make it bigger", "make it larger", "bigger", "larger", "increase it", "make it smaller", "smaller", "decrease it", "shrink it" })
+        local textSlotFollowupReference = explicitFollowupReference or bareDirectionalFollowup or hideTextSlot
+        if textSlotFollowupReference and (hideTextSlot or moveTextSlot or resizeTextSlot) then
+            local textSlotChanges = {}
+            for i = 1, #ctx.lastChangeBundle do
+                local info = TextSlotInfoFromPrevious(ctx.lastChangeBundle[i])
+                if info then
+                    if hideTextSlot then
+                        local setting = Registry:GetSetting(TextSlotSettingKey(info))
+                        if setting then textSlotChanges[#textSlotChanges + 1] = { setting = setting, value = "NONE", textArea = info.area, textSlot = info.slotLower } end
+                    elseif moveTextSlot then
+                        local setting = Registry:GetSetting(TextSlotOffsetKey(info, followDirection))
+                        if setting then
+                            local amount = A._RelativeNumberAmountForText(text) or FirstNumber(text) or 10
+                            if followDirection == "left" or followDirection == "down" then amount = -amount end
+                            textSlotChanges[#textSlotChanges + 1] = { setting = setting, relativeDelta = amount, direction = followDirection }
+                        end
+                    elseif resizeTextSlot then
+                        local setting = Registry:GetSetting(TextSlotFontKey(info))
+                        if setting then
+                            local sign = negativeIntent and -1 or 1
+                            local amount = A._RelativeNumberAmountForText(text) or FirstNumber(text) or 1
+                            textSlotChanges[#textSlotChanges + 1] = { setting = setting, relativeDelta = amount * sign }
+                        end
+                    end
+                end
+            end
+            if #textSlotChanges > 0 then
+                return {
+                    kind = "changes",
+                    changes = textSlotChanges,
+                    label = "Adjust previous text slot",
+                    summary = "Uses the last HP/Power text-slot change as context.",
+                }
+            end
+        end
     end
 
     if #units == 0 and #groups == 0 and exactValueIntent then
@@ -579,8 +754,48 @@ local function BuildFollowup(text, ctx)
         return scope
     end
 
-    local function AddReplayTarget(out, settingUnit, frameType, attribute, value)
+    local UNIT_TO_GROUP_REPLAY_ATTR = {
+        nameTextAnchor = "nameAnchor",
+        hpTextLeft = "healthTextLeft",
+        hpTextCenter = "healthTextCenter",
+        hpTextRight = "healthTextRight",
+        hpTextSeparator = "healthTextDelimiter",
+        hpTextReverse = "healthTextReverse",
+        hpOffsetX = "healthTextOffsetX",
+        hpOffsetY = "healthTextOffsetY",
+        hpTextLayer = "healthTextLayer",
+        powerOffsetX = "powerTextOffsetX",
+        powerOffsetY = "powerTextOffsetY",
+    }
+
+    local GROUP_TO_UNIT_REPLAY_ATTR = {
+        nameAnchor = "nameTextAnchor",
+        healthTextLeft = "hpTextLeft",
+        healthTextCenter = "hpTextCenter",
+        healthTextRight = "hpTextRight",
+        healthTextDelimiter = "hpTextSeparator",
+        healthTextReverse = "hpTextReverse",
+        healthTextOffsetX = "hpOffsetX",
+        healthTextOffsetY = "hpOffsetY",
+        healthTextLayer = "hpTextLayer",
+        powerTextOffsetX = "powerOffsetX",
+        powerTextOffsetY = "powerOffsetY",
+    }
+
+    local function ReplayAttributeForTarget(sourceFrameType, targetFrameType, attribute)
+        attribute = tostring(attribute or "")
+        if sourceFrameType == "unitframe" and targetFrameType == "group" then
+            return UNIT_TO_GROUP_REPLAY_ATTR[attribute] or attribute
+        end
+        if sourceFrameType == "group" and targetFrameType == "unitframe" then
+            return GROUP_TO_UNIT_REPLAY_ATTR[attribute] or attribute
+        end
+        return attribute
+    end
+
+    local function AddReplayTarget(out, settingUnit, frameType, attribute, value, sourceFrameType)
         if not (settingUnit and frameType and attribute) then return end
+        attribute = ReplayAttributeForTarget(sourceFrameType, frameType, attribute)
         local found = Registry:FindSettings({ unit = settingUnit, frameType = frameType, attribute = attribute })
         local setting = found[1]
         if setting then
@@ -629,7 +844,7 @@ local function BuildFollowup(text, ctx)
         if prev and prev.attribute ~= nil and prev.value ~= nil then
             for j = 1, #units do
                 local targetFrameType = prev.frameType == "group" and "unitframe" or prev.frameType
-                AddReplayTarget(changes, units[j], targetFrameType, prev.attribute, prev.value)
+                AddReplayTarget(changes, units[j], targetFrameType, prev.attribute, prev.value, prev.frameType)
             end
             for j = 1, #groups do
                 local scope = groups[j]
@@ -638,7 +853,7 @@ local function BuildFollowup(text, ctx)
                 if targetFrameType == "globalBars" or targetFrameType == "fonts" then
                     settingUnit = GlobalScopeForGroup(scope)
                 end
-                AddReplayTarget(changes, settingUnit, targetFrameType, prev.attribute, prev.value)
+                AddReplayTarget(changes, settingUnit, targetFrameType, prev.attribute, prev.value, prev.frameType)
             end
             AddAnchorReplayTargets(changes, prev)
         end
@@ -648,10 +863,10 @@ local function BuildFollowup(text, ctx)
             local prev = ctx.lastChangeBundle[i]
             if prev and prev.attribute ~= nil and prev.value ~= nil and (prev.frameType == "unitframe" or prev.frameType == "group") then
                 for j = 1, #units do
-                    AddReplayTarget(changes, units[j], "unitframe", prev.attribute, prev.value)
+                    AddReplayTarget(changes, units[j], "unitframe", prev.attribute, prev.value, prev.frameType)
                 end
                 for j = 1, #groups do
-                    AddReplayTarget(changes, groups[j], "group", prev.attribute, prev.value)
+                    AddReplayTarget(changes, groups[j], "group", prev.attribute, prev.value, prev.frameType)
                 end
                 AddAnchorReplayTargets(changes, prev)
             end

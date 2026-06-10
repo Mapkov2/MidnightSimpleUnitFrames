@@ -1757,6 +1757,10 @@ end
 function P.ParseCastbarPositionRegistryShortcut(text)
     if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, {
+        "alignment", "align", "text alignment", "text align",
+        "spell name alignment", "spell text alignment", "castbar text alignment", "cast bar text alignment",
+    }) then return nil end
     local direction = DetectDirection(text, {})
     local naturalPlacement = (direction or ContainsAny(text, { "middle", "center", "centre", "mitte" }))
         and ContainsAny(text, { "put", "place", "set", "position", "on the", "to the", "in the", "middle", "center", "centre", "mitte" })
@@ -1981,6 +1985,35 @@ P.ParseGroupRolePowerVisibilityShortcut = function(text)
     return P.GroupShortcutResponse(text, changes, concrete, "Group frame role power", "Changes role-specific Group Frame power visibility controls for " .. label .. ".")
 end
 
+P.ParseGroupRoleIconVisibilityShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols" }) then return nil end
+
+    local attr
+    local label
+    if ContainsAny(text, { "tank", "tanks", "tank role", "tank players" }) then
+        attr = "roleIconShowTank"
+        label = "Tank Role Icon"
+    elseif ContainsAny(text, { "healer", "healers", "heal role", "healer role" }) then
+        attr = "roleIconShowHealer"
+        label = "Healer Role Icon"
+    elseif ContainsAny(text, { "dps", "damage dealer", "damage dealers", "damager", "damagers", "damage role" }) then
+        attr = "roleIconShowDPS"
+        label = "DPS Role Icon"
+    else
+        return nil
+    end
+
+    local value = ShowSettingValueForText(text)
+    if value == nil then return nil end
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame role icon visibility", "Changes role-specific Group Frame role-icon visibility controls for " .. label .. ".")
+end
+
 P.ParseGroupOfflineAlphaShortcut = function(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
     if not ContainsAny(text, { "offline", "offline member", "offline members", "offline player", "offline players" }) then return nil end
@@ -2131,15 +2164,25 @@ P.ParseGroupScaleModeShortcut = function(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, { "scale", "scaling", "frame scale", "frame scaling", "group scale", "group scaling" }) then return nil end
     if FirstNumber(text) ~= nil then return nil end
+    local explicitMode = ContainsAny(text, {
+        "scale mode", "scaling mode", "frame scale mode", "frame scaling mode",
+        "group scale mode", "group scaling mode",
+    })
 
     local value
-    if ContainsAny(text, { "auto", "automatic", "automatically", "breakpoint", "breakpoints", "dynamic" }) then
+    if ContainsAny(text, {
+        "auto", "automatic", "automatically", "breakpoint", "breakpoints", "dynamic",
+        "by player count", "by players", "by group size", "by raid size",
+        "based on player count", "based on players", "based on group size", "based on raid size",
+        "depending on player count", "depending on players", "depending on group size", "depending on raid size",
+        "scale by player count", "scale by raid size", "scale by group size",
+    }) then
         value = "auto"
     elseif ContainsAny(text, { "manual", "custom" }) then
         value = "manual"
-    elseif ContainsAny(text, { "off", "disable", "disabled", "turn off", "none", "no scaling" }) then
+    elseif explicitMode and ContainsAny(text, { "off", "disable", "disabled", "turn off", "none", "no scaling" }) then
         value = "off"
-    elseif ContainsAny(text, { "on", "enable", "enabled", "turn on" }) then
+    elseif explicitMode and ContainsAny(text, { "on", "enable", "enabled", "turn on" }) then
         value = "manual"
     end
     if value == nil then return nil end
@@ -2188,6 +2231,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if unitHPTextReverse then return unitHPTextReverse end
     local groupRolePower = P.ParseGroupRolePowerVisibilityShortcut and P.ParseGroupRolePowerVisibilityShortcut(text)
     if groupRolePower then return groupRolePower end
+    local groupRoleIcon = P.ParseGroupRoleIconVisibilityShortcut and P.ParseGroupRoleIconVisibilityShortcut(text)
+    if groupRoleIcon then return groupRoleIcon end
     local groupOfflineAlpha = P.ParseGroupOfflineAlphaShortcut and P.ParseGroupOfflineAlphaShortcut(text)
     if groupOfflineAlpha then return groupOfflineAlpha end
     local groupColumns = P.ParseGroupColumnLayoutShortcut and P.ParseGroupColumnLayoutShortcut(text)
@@ -3114,6 +3159,7 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or P.ParseAlphaExcludeTextPortraitShortcut(text)
         or P.ParseUnitHPTextReverseShortcut(text)
         or P.ParseGroupRolePowerVisibilityShortcut(text)
+        or P.ParseGroupRoleIconVisibilityShortcut(text)
         or P.ParseGroupOfflineAlphaShortcut(text)
         or P.ParseGroupColumnLayoutShortcut(text)
         or P.ParseGroupPlayerFirstInRoleShortcut(text)

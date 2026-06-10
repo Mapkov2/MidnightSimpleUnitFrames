@@ -585,7 +585,7 @@ local function ParseGroupStatusIconReset(text)
 end
 
 local function ParseGroupStatusPreview(text)
-    if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons" }) then return nil end
+    if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons", "test", "test mode", "preview mode" }) then return nil end
     if not ContainsAny(text, GROUP_STATUS_ICON_TERMS) then return nil end
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
@@ -637,6 +637,20 @@ local function BuildGroupStatusChanges(scopes, dbKey, value, relativeDelta)
     return changes
 end
 
+local RAID_MARKER_SYMBOL_WORDS = {
+    "star", "circle", "diamond", "triangle", "moon", "square", "cross", "x", "skull",
+    "raid star", "raid circle", "raid diamond", "raid triangle", "raid moon", "raid square", "raid cross", "raid skull",
+}
+
+local function RaidMarkerSymbolAnswer()
+    return {
+        kind = "answer",
+        status = "info",
+        text = "Raid Marker shows the actual WoW raid target marker. MSUF can show, hide, move, resize, anchor, and layer that indicator, but choosing Star/Circle/Skull is done on the unit in WoW.",
+        summary = "Explains why raid-marker symbol words are not a real MSUF setting.",
+    }
+end
+
 local function ParseGroupStatusIconDetail(text)
     local hasGroupStatus = ContainsAny(text, GROUP_STATUS_ICON_TERMS)
     if not hasGroupStatus and not ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS) then return nil end
@@ -644,6 +658,11 @@ local function ParseGroupStatusIconDetail(text)
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
+    if ContainsAny(text, { "preview", "test", "test mode", "preview mode" })
+        and not ContainsAny(text, { "turn on", "turn off", "enable", "disable", "hide", "show midnight", "classic style", "midnight style" })
+    then
+        return nil
+    end
 
     local scopes = GroupStatusScopesForText(text)
     if ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS) then
@@ -671,6 +690,9 @@ local function ParseGroupStatusIconDetail(text)
 
     local iconSpec = GroupStatusIconSpecForText(text)
     if not iconSpec then return nil end
+    if iconSpec.key == "raidMarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) then
+        return RaidMarkerSymbolAnswer()
+    end
     local anchorIntent = StatusAnchorIntent(text)
 
     local enabledKey = iconSpec.enabled or iconSpec.key
@@ -935,7 +957,7 @@ local function ParseUnitStatusPreview(text, ctx)
     if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons" }) then return nil end
     if not UnitStatusHasIntent(text) then return nil end
     local units = UnitStatusUnitsOrCurrent(text)
-    local unit = units[1] or (ctx and ctx.lastUnit)
+    local unit = units[1] or (ctx and ctx.lastUnit) or "player"
     local spec = ResolveUnitStatusSpecOrSelected(unit, text)
     local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
     local action = Registry and Registry:GetAction("preview_unit_status_indicator")
@@ -979,6 +1001,9 @@ local function ParseUnitStatusIndicatorDetail(text)
     local unit = units[1]
     local spec = ResolveUnitStatusSpecOrSelected(unit, text)
     if not spec then return nil end
+    if spec.value == "raidmarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) then
+        return RaidMarkerSymbolAnswer()
+    end
 
     if ContainsAny(text, { "icon pack", "icon style" }) and spec.iconStyle then
         local value = AliasValueForText(text, UNIT_STATUS_ICON_PACK_ALIASES, { "BLIZZARD", "CLASSIC", "MIDNIGHT" })
