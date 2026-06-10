@@ -887,7 +887,10 @@ end
 local function ParseColorAction(text)
     if not ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then return nil end
     if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return nil end
-    if ContainsAny(text, { "combo point slot", "combo point slots", "combo slot", "combo slots" }) then
+    if ContainsAny(text, {
+        "combo point slot", "combo point slots", "combo slot", "combo slots",
+        "combo point colors", "combo colors", "all combo point colors",
+    }) then
         local action = Registry and Registry:GetAction("reset_class_power_combo_slot_colors")
         return action and {
             kind = "action",
@@ -912,7 +915,11 @@ local function ParseColorAction(text)
         } or nil
     end
     local cpToken = ClassPowerColorTokenForText(text)
-    if cpToken and ContainsAny(text, { "class power", "class resource", "resource", "combo", "soul", "maelstrom", "astral", "eclipse", "stagger", "icicles", "ebon", "whirlwind", "tip of the spear", "insanity", "runes", "chi", "essence" }) then
+    if cpToken and ContainsAny(text, {
+        "class power", "class resource", "resource", "combo", "holy power", "soul", "soul shard",
+        "maelstrom", "astral", "arcane charge", "arcane charges", "eclipse", "stagger",
+        "icicles", "ebon", "whirlwind", "tip of the spear", "insanity", "runes", "chi", "essence",
+    }) then
         local action = Registry and Registry:GetAction("reset_class_power_color_token")
         return action and {
             kind = "action",
@@ -1208,7 +1215,8 @@ local function ParseEditModeHUDControl(text)
     local hasAnchorPicker = ContainsAny(text, {
         "anchor picker", "global anchor picker", "pick anchor", "select anchor",
         "choose anchor", "open anchor", "anker picker", "anker auswahl", "anker waehlen",
-    }) and (hasEditContext or ContainsAny(text, { "global anchor picker", "anchor picker" }))
+    }) and not ContainsAny(text, { "custom anchor", "custom anchor picker", "custom anchor frame", "anchor frame picker" })
+        and (hasEditContext or ContainsAny(text, { "global anchor picker", "anchor picker" }))
     local hasResetPosition = hasEditContext and ContainsAny(text, { "reset", "restore", "default", "zuruecksetzen" })
         and ContainsAny(text, { "position", "selected frame", "current frame", "selected", "selection", "frame position", "mover" })
     local hasUndo = hasEditContext and ContainsAny(text, {
@@ -1413,7 +1421,8 @@ local function GlobalScalePresetForText(text)
     if ContainsAny(text, { "1440p", "1440" }) then return "1440p" end
     if ContainsAny(text, { "4k", "2160p", "2160" }) then return "4k" end
     if ContainsAny(text, { "pixel perfect", "pixel" }) then return "pixel" end
-    if ContainsAny(text, { "turn off", "disable", "off", "auto" }) then return "off" end
+    if ContainsAny(text, { "auto" }) then return "off" end
+    if ContainsAny(text, { "turn off", "disable", "off" }) and ContainsAny(text, { "preset", "scale preset" }) then return "off" end
     return nil
 end
 
@@ -1813,8 +1822,9 @@ local function NameShorteningScope(text)
     }) then
         return "shared"
     end
+    local groups = DetectGroups and DetectGroups(text) or {}
+    if groups[1] then return "gf_" .. tostring(groups[1]) end
     local scope = DetectGlobalScope and DetectGlobalScope(text) or nil
-    if scope == "gf_mythicraid" then scope = "gf_raid" end
     return scope or "shared"
 end
 

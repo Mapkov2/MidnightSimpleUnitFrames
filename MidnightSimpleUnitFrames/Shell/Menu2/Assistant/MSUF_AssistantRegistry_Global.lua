@@ -2544,9 +2544,9 @@ for i = 1, #COLOR_POWER_TOKENS do
     local token = COLOR_POWER_TOKENS[i].key
     local label = COLOR_POWER_TOKENS[i].label
     local lower = label:lower()
-    ColorSetting("general.powerColorOverrides." .. token, label .. " Power Bar Color", {
-        lower .. " power color", lower .. " bar color", lower .. " resource color",
-    }, function()
+    local aliases = { lower .. " power color", lower .. " bar color", lower .. " resource color" }
+    if token ~= "FOCUS" then aliases[#aliases + 1] = lower .. " color" end
+    ColorSetting("general.powerColorOverrides." .. token, label .. " Power Bar Color", aliases, function()
         return PowerOverrideRGB(token)
     end, function(r, g, b)
         SetPowerOverrideRGB(token, r, g, b)
@@ -2613,7 +2613,7 @@ for i = 1, #COLOR_CP_TOKENS do
     local label = COLOR_CP_TOKENS[i].label
     local lower = label:lower()
     ColorSetting("general.classPowerColorOverrides." .. token, label .. " Color", {
-        lower .. " color", lower .. " class power color", lower .. " resource color",
+        lower .. " color", lower .. " class power color", lower .. " class resource color", lower .. " resource color",
     }, function()
         return ClassPowerRGB(token)
     end, function(r, g, b)
@@ -2630,7 +2630,9 @@ end
 for i = 1, 7 do
     local token = "COMBO_POINTS_" .. tostring(i)
     ColorSetting("general.classPowerColorOverrides." .. token, "Combo Point " .. tostring(i) .. " Color", {
-        "combo point " .. tostring(i) .. " color", "combo point slot " .. tostring(i) .. " color", "cp " .. tostring(i) .. " color",
+        "combo point " .. tostring(i), "combo point " .. tostring(i) .. " color",
+        "combo point slot " .. tostring(i), "combo point slot " .. tostring(i) .. " color",
+        "cp " .. tostring(i), "cp " .. tostring(i) .. " color",
     }, function()
         return ClassPowerRGB(token)
     end, function(r, g, b)

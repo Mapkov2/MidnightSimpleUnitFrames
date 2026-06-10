@@ -294,7 +294,7 @@ RegisterBarsBoolean("classPowerColorByType", "colorByType", "Class Resource Colo
 })
 RegisterBarsEnum("classPowerComboPointColorMode", "comboPointColorMode", "Combo Point Color Mode", "default", {
     "default", "ramp", "custom",
-}, ClassPowerAliases("combo point color mode", "combo point colors", "combo colors"), {
+}, ClassPowerAliases("combo point color mode", "combo point slot mode", "combo slot mode", "combo point colors", "combo colors"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_COMBO_COLOR_MODE",
     valueAliases = COMBO_POINT_COLOR_MODE_ALIASES,
 })

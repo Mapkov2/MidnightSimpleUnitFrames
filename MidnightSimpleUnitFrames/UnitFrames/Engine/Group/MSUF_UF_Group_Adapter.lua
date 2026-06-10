@@ -34,6 +34,7 @@ local appliedUnit = setmetatable({}, { __mode = "k" })
 local appliedKind = setmetatable({}, { __mode = "k" })
 local appliedPowerEnabled = setmetatable({}, { __mode = "k" })
 local appliedPowerHeight = setmetatable({}, { __mode = "k" })
+local appliedRoleValue = setmetatable({}, { __mode = "k" })
 local UNIT_ATTR = "unit"
 local UNIT_CHANGED_REASON = "MSUF_UNIT_IDENTITY"
 
@@ -324,15 +325,18 @@ end
 
 local function MarkApplied(frame, kind, unit, spec)
     local power = spec and spec.power
+    local status = spec and spec.status
     appliedSerial[frame] = spec and spec._msufGFCompileSerial or 0
     appliedUnit[frame] = unit
     appliedKind[frame] = kind
     appliedPowerEnabled[frame] = power and power.enabled or false
     appliedPowerHeight[frame] = power and power.height or 0
+    appliedRoleValue[frame] = status and status.roleValue or false
 end
 
 local function HasSameApplyState(frame, kind, unit, spec)
     local power = spec and spec.power
+    local status = spec and spec.status
     return frame
         and frame.MSUFSpec
         and appliedSerial[frame] == (spec and spec._msufGFCompileSerial or 0)
@@ -340,6 +344,7 @@ local function HasSameApplyState(frame, kind, unit, spec)
         and appliedKind[frame] == kind
         and appliedPowerEnabled[frame] == (power and power.enabled or false)
         and appliedPowerHeight[frame] == (power and power.height or 0)
+        and appliedRoleValue[frame] == (status and status.roleValue or false)
 end
 
 ApplyUnitChangeFast = function(frame, kind, unit)
@@ -400,6 +405,7 @@ function GF.UntrackFrame(frame)
     appliedKind[frame] = nil
     appliedPowerEnabled[frame] = nil
     appliedPowerHeight[frame] = nil
+    appliedRoleValue[frame] = nil
     local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
     local uf = _G.MSUF_UnitFrames
     if type(unit) == "string" and uf and uf[unit] == frame then

@@ -960,6 +960,14 @@ end
 local compiledSpecCache = GF._compiledSpec or {}
 GF._compiledSpec = compiledSpecCache
 GF._compiledSpecSerial = GF._compiledSpecSerial or 1
+local compiledSpecKey = GF._compiledSpecKey or {}
+GF._compiledSpecKey = compiledSpecKey
+local compiledSpecSerialByKind = GF._compiledSpecSerialByKind or {}
+GF._compiledSpecSerialByKind = compiledSpecSerialByKind
+local compiledSpecSettingsGenByKind = GF._compiledSpecSettingsGenByKind or {}
+GF._compiledSpecSettingsGenByKind = compiledSpecSettingsGenByKind
+local compiledSpecSettingsGenAll = GF._compiledSpecSettingsGenAll or 1
+GF._compiledSpecSettingsGenAll = compiledSpecSettingsGenAll
 
 local function CompileSpecUncached(kind, frame, unit, conf)
     kind = kind or "party"
@@ -1172,12 +1180,55 @@ local function CompileSpecUncached(kind, frame, unit, conf)
 end
 
 function GF.InvalidateCompiledSpecs(kind)
-    GF._compiledSpecSerial = (GF._compiledSpecSerial or 1) + 1
+    if kind then
+        compiledSpecSettingsGenByKind[kind] = (compiledSpecSettingsGenByKind[kind] or 1) + 1
+    else
+        compiledSpecSettingsGenAll = compiledSpecSettingsGenAll + 1
+        GF._compiledSpecSettingsGenAll = compiledSpecSettingsGenAll
+    end
     if kind then
         compiledSpecCache[kind] = nil
     else
         wipe(compiledSpecCache)
     end
+end
+
+function GF.DropCompiledSpecs(kind)
+    if kind then
+        compiledSpecCache[kind] = nil
+    else
+        wipe(compiledSpecCache)
+    end
+end
+
+local function CompiledSpecSettingsToken(kind)
+    return tostring(compiledSpecSettingsGenAll) .. ":" .. tostring(compiledSpecSettingsGenByKind[kind] or 1)
+end
+
+local function CompiledSpecContentKey(kind, base)
+    local auras = base and base.auras
+    local status = base and base.status
+    return table.concat({
+        tostring(kind or ""),
+        tostring(base and base.width or ""),
+        tostring(base and base.height or ""),
+        tostring(auras and auras.dynamicScaleValue or 1),
+        tostring(status and status.runtimePVP == true and 1 or 0),
+        CompiledSpecSettingsToken(kind),
+    }, "|")
+end
+
+local function StampCompiledSpec(kind, base)
+    if not (kind and base) then
+        return
+    end
+    local key = CompiledSpecContentKey(kind, base)
+    if compiledSpecKey[kind] ~= key then
+        compiledSpecKey[kind] = key
+        GF._compiledSpecSerial = (GF._compiledSpecSerial or 1) + 1
+        compiledSpecSerialByKind[kind] = GF._compiledSpecSerial
+    end
+    base._msufGFCompileSerial = compiledSpecSerialByKind[kind] or GF._compiledSpecSerial or 1
 end
 
 local function CopyShallow(dst, src)
@@ -1241,6 +1292,7 @@ function GF.CompileSpec(kind, frame, unit)
         end
         conf = GF.GetConf and GF.GetConf(kind) or {}
         base = CompileSpecUncached(kind, nil, nil, conf)
+        StampCompiledSpec(kind, base)
         base._msufGFConf = conf
         compiledSpecCache[kind] = base
     elseif not conf then

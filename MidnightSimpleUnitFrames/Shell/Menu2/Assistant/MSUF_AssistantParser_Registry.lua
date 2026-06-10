@@ -1422,6 +1422,360 @@ local function AddRegisteredChange(out, key, value, relativeDelta, direction)
     }
 end
 
+function P.HasInterruptReadyIntent(text)
+    if ContainsAny(text, { "interrupt ready", "kick ready", "ready interrupt", "ready kick" }) then return true end
+    return ContainsAny(text, { "interrupt", "kick" })
+        and ContainsAny(text, { "ready indicator", "ready icon", "ready border", "ready box" })
+end
+
+function P.ParseInterruptReadyRegistryShortcut(text, raw)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return nil end
+    if not P.HasInterruptReadyIntent(text) then return nil end
+
+    local key
+    local relativeDelta
+    if ContainsAny(text, { "auto size", "autosize", "automatic size", "automatic sizing", "auto-size" }) then
+        key = "general.kickReadyAutoSize"
+    elseif ContainsAny(text, { "style", "border", "box", "outline", "square" }) then
+        key = "general.kickReadyStyle"
+    elseif ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) then
+        key = "general.kickReadyAnchor"
+    elseif ContainsAny(text, { "x offset", "horizontal offset", "offset x", "move left", "move right", "nudge left", "nudge right", "left by", "right by" }) then
+        key = "general.kickReadyOffsetX"
+    elseif ContainsAny(text, { "y offset", "vertical offset", "offset y", "move up", "move down", "nudge up", "nudge down", "up by", "down by" }) then
+        key = "general.kickReadyOffsetY"
+    elseif ContainsAny(text, { "size", "scale", "groesse", "grosse" }) then
+        key = "general.kickReadySize"
+    elseif ContainsAny(text, { "target", "target castbar", "target cast bar" }) then
+        key = "general.kickReadyShowTarget"
+    elseif ContainsAny(text, { "focus", "focus castbar", "focus cast bar" }) then
+        key = "general.kickReadyShowFocus"
+    elseif ContainsAny(text, { "boss", "bosses", "boss castbar", "boss castbars", "boss cast bar", "boss cast bars" }) then
+        key = "general.kickReadyShowBoss"
+    end
+    if not key then return nil end
+
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    local value
+    if setting.type == "number" then
+        relativeDelta = RelativeNumberDeltaForText(setting, text)
+        if relativeDelta == nil then value = A._NumberValueForText(setting, text) end
+    else
+        value = ValueForRegistrySetting(setting, text, raw)
+        if value == nil and setting.type == "boolean" then
+            if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "true", "yes" }) then value = true end
+            if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "false", "no" }) then value = false end
+        end
+    end
+    if value == nil and relativeDelta == nil then return nil end
+
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta, valueLabel = value ~= nil and ValueDisplay(setting, value) or nil } },
+        label = setting.label or "Interrupt Ready setting",
+        summary = "Changes the registered Castbar Interrupt Ready control.",
+    }
+end
+
+P.UNIT_STATUS_SYMBOL_SPECS = {
+    {
+        attr = "combatStateIndicatorSymbol",
+        label = "Combat Indicator Symbol",
+        terms = { "combat indicator", "combat state indicator", "combat status indicator", "combat icon", "combat state icon", "combat symbol", "combat state symbol" },
+    },
+    {
+        attr = "restedStateIndicatorSymbol",
+        label = "Rested Indicator Symbol",
+        terms = { "rested indicator", "resting indicator", "rested icon", "resting icon", "rested symbol", "resting symbol" },
+    },
+    {
+        attr = "incomingResIndicatorSymbol",
+        label = "Incoming Rez Indicator Symbol",
+        terms = { "incoming rez indicator", "incoming resurrection indicator", "incoming rez icon", "incoming resurrection icon", "incoming rez symbol", "incoming resurrection symbol", "rez indicator", "rez icon", "rez symbol", "resurrection indicator", "resurrection icon", "resurrection symbol" },
+    },
+}
+
+function P.UnitStatusSymbolSpecForText(text)
+    if not ContainsAny(text, { "symbol", "icon" }) then return nil end
+    if ContainsAny(text, { "icon pack", "icon style", "midnight style", "classic style" }) then return nil end
+    for i = 1, #(P.UNIT_STATUS_SYMBOL_SPECS or {}) do
+        local spec = P.UNIT_STATUS_SYMBOL_SPECS[i]
+        if ContainsAny(text, spec.terms) then return spec end
+    end
+    return nil
+end
+
+function P.ParseUnitStatusSymbolRegistryShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    local spec = P.UnitStatusSymbolSpecForText(text)
+    if not spec then return nil end
+
+    local units = {}
+    if HasAllScopeIntent(text) then
+        for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
+    else
+        local explicitUnits = ExplicitScopes(text)
+        for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
+        if #units == 0 then
+            local pageUnit = CurrentRegistryPageUnit()
+            if pageUnit then units[#units + 1] = pageUnit end
+        end
+    end
+    if #units == 0 then return nil end
+
+    local changes = {}
+    for i = 1, #units do
+        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. spec.attr)
+        local value = setting and EnumValueForText(setting, text) or nil
+        if value == nil and setting and ContainsAny(text, { "default", "reset", "restore", "standard" }) then value = "DEFAULT" end
+        if setting and value ~= nil then
+            changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = spec.label,
+        bulkSafe = #changes > 1,
+        summary = "Changes registered unit-frame status indicator symbol dropdowns.",
+    }
+end
+
+function P.ParseAlphaExcludeTextPortraitShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, {
+        "keep text portrait visible", "keep text and portrait visible", "keep text & portrait visible",
+        "keep text visible", "keep portrait visible", "exclude text from opacity", "exclude portrait from opacity",
+        "text portrait opacity", "text and portrait opacity", "text & portrait opacity",
+        "keep names visible when transparent", "keep name visible when transparent",
+        "names visible when transparent", "name visible when transparent",
+        "keep text visible when transparent", "text visible when transparent",
+    }) then return nil end
+
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+    local explicitUnits, explicitGroups = ExplicitScopes(text)
+    local units = {}
+    local groups = {}
+    local concrete = false
+
+    if HasAllScopeIntent(text) then
+        if ContainsAny(text, { "group frame", "group frames", "all groups", "all group" }) or #explicitGroups > 0 then
+            for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
+            concrete = true
+        elseif ContainsAny(text, { "unitframe", "unit frame", "unitframes", "unit frames", "all units" }) or #explicitUnits > 0 then
+            for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
+            concrete = true
+        end
+    else
+        for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
+        for i = 1, #explicitGroups do groups[#groups + 1] = explicitGroups[i] end
+        concrete = #units > 0 or #groups > 0
+    end
+
+    if #units == 0 and #groups == 0 then
+        local pageUnit = CurrentRegistryPageUnit()
+        if pageUnit then
+            units[#units + 1] = pageUnit
+            concrete = true
+        else
+            local groupScope = CurrentGroupScopeForRegistry()
+            if groupScope and GROUP_AVAILABILITY_PAGES[M and M.activeKey] then
+                groups[#groups + 1] = groupScope
+                concrete = true
+            elseif ContainsAny(text, { "group", "groups", "group frame", "group frames" }) then
+                local scopeChoices = GroupAvailabilityScopes(text)
+                for i = 1, #scopeChoices do groups[#groups + 1] = scopeChoices[i] end
+            end
+        end
+    end
+
+    local changes = {}
+    if #units == 0 and #groups == 0 then
+        for i = 1, #ALL_UNITFRAMES do AddRegisteredChange(changes, tostring(ALL_UNITFRAMES[i]) .. ".alphaExcludeTextPortrait", value) end
+        if #changes == 0 then return nil end
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Which Unit Frame?",
+            summary = "The command matched Keep Text & Portrait Visible but did not name a unit or group frame.",
+        }
+    end
+
+    for i = 1, #units do AddRegisteredChange(changes, tostring(units[i]) .. ".alphaExcludeTextPortrait", value) end
+    for i = 1, #groups do AddRegisteredChange(changes, "gf_" .. tostring(groups[i]) .. ".alphaExcludeTextPortrait", value) end
+    if #changes == 0 then return nil end
+    if concrete or #changes == 1 or ShouldApplyMultipleRegistryChanges(text, changes) then
+        return {
+            kind = "changes",
+            changes = changes,
+            label = "Keep Text & Portrait Visible",
+            bulkSafe = #changes > 1,
+            summary = "Changes registered unit/group transparency controls.",
+        }
+    end
+    return {
+        kind = "ambiguous",
+        choices = changes,
+        label = "Which Group Frame?",
+        summary = "The command matched Keep Text & Portrait Visible but did not name a concrete group frame.",
+    }
+end
+
+function P.ParseCastbarPositionRegistryShortcut(text)
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, { "position", "position preset", "placement" }) then return nil end
+    if ContainsAny(text, { "move", "nudge", "shift", "offset", "x offset", "y offset" }) then return nil end
+
+    local field
+    local label
+    if ContainsAny(text, { "icon position", "spell icon position", "castbar icon position", "cast bar icon position" }) then
+        field = "IconPosition"
+        label = "Castbar Icon Position"
+    elseif ContainsAny(text, { "spell name position", "spell text position", "castbar text position", "cast bar text position", "castbar name position" }) then
+        field = "SpellNamePosition"
+        label = "Castbar Spell Name Position"
+    elseif ContainsAny(text, { "time position", "time text position", "timer position", "cast time position", "castbar time position", "cast bar time position" }) then
+        field = "TimePosition"
+        label = "Castbar Time Position"
+    else
+        return nil
+    end
+
+    local prefixes = {
+        player = "castbarPlayer",
+        target = "castbarTarget",
+        focus = "castbarFocus",
+        boss = "bossCast",
+    }
+    local explicitUnits = DetectUnits(text)
+    local units = {}
+    local concrete = false
+    for i = 1, #explicitUnits do
+        local unit = explicitUnits[i]
+        if prefixes[unit] then units[#units + 1] = unit end
+    end
+    if #units > 0 then
+        concrete = true
+    elseif HasAllScopeIntent(text) then
+        units = { "player", "target", "focus", "boss" }
+        concrete = true
+    else
+        local pageUnit = CurrentRegistryPageUnit()
+        if pageUnit and prefixes[pageUnit] then
+            units[#units + 1] = pageUnit
+            concrete = true
+        else
+            units = { "player", "target", "focus", "boss" }
+        end
+    end
+
+    local changes = {}
+    for i = 1, #units do
+        local key = "general." .. tostring(prefixes[units[i]]) .. tostring(field)
+        local setting = Registry and Registry:GetSetting(key)
+        local value = setting and EnumValueForText(setting, text) or nil
+        if setting and value ~= nil then
+            changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
+        end
+    end
+    if #changes == 0 then return nil end
+    if concrete or #changes == 1 or ShouldApplyMultipleRegistryChanges(text, changes) then
+        return {
+            kind = "changes",
+            changes = changes,
+            label = label,
+            bulkSafe = #changes > 1,
+            summary = "Changes registered castbar position dropdown controls.",
+        }
+    end
+    return {
+        kind = "ambiguous",
+        choices = changes,
+        label = "Which Castbar?",
+        summary = "The command matched a castbar position dropdown but did not name Player, Target, Focus, or Boss.",
+    }
+end
+
+function P.ParsePowerBarGradientRegistryShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, { "power bar gradient", "power gradient", "mana gradient" }) then return nil end
+
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+
+    local explicitUnits, explicitGroups = ExplicitScopes(text)
+    local units = {}
+    local groups = {}
+    local concrete = false
+
+    if HasAllScopeIntent(text) then
+        if ContainsAny(text, { "group frame", "group frames", "all groups", "all group" }) or #explicitGroups > 0 then
+            for i = 1, #ALL_GROUPS do groups[#groups + 1] = ALL_GROUPS[i] end
+            concrete = true
+        elseif ContainsAny(text, { "unitframe", "unit frame", "unitframes", "unit frames", "all units" }) or #explicitUnits > 0 then
+            for i = 1, #ALL_UNITFRAMES do units[#units + 1] = ALL_UNITFRAMES[i] end
+            concrete = true
+        end
+    else
+        for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
+        for i = 1, #explicitGroups do groups[#groups + 1] = explicitGroups[i] end
+        concrete = #units > 0 or #groups > 0
+    end
+
+    if #units == 0 and #groups == 0 then
+        local pageUnit = CurrentRegistryPageUnit()
+        if pageUnit then
+            units[#units + 1] = pageUnit
+            concrete = true
+        elseif M and (M.activeKey == "gf_layout" or M.activeKey == "gf_bars" or M.activeKey == "gf_indicators") then
+            local scope = CurrentGroupScopeForRegistry()
+            if scope then
+                groups[#groups + 1] = scope
+                concrete = true
+            end
+        end
+    end
+
+    local changes = {}
+    local only = ContainsAny(text, { "only", "just", "nur" })
+    local seenScopes = {}
+    local function AddScopedGradient(scope)
+        if scope == "gf_mythicraid" then scope = "gf_raid" end
+        if seenScopes[scope] then return end
+        seenScopes[scope] = true
+        local key = "barScope." .. tostring(scope) .. ".enablePowerGradient"
+        if only and scope ~= "shared" then AddRegisteredChange(changes, "barScope." .. tostring(scope) .. ".override", true) end
+        AddRegisteredChange(changes, key, value)
+    end
+
+    for i = 1, #units do AddScopedGradient(units[i]) end
+    for i = 1, #groups do AddScopedGradient("gf_" .. tostring(groups[i])) end
+
+    if #changes == 0 then
+        local setting = Registry and Registry:GetSetting("general.enablePowerGradient")
+        if not setting then return nil end
+        return {
+            kind = "changes",
+            changes = { { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) } },
+            label = setting.label or "Power Bar Gradient",
+            summary = "Changes the shared Power Bar Gradient setting.",
+        }
+    end
+
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Power Bar Gradient",
+        bulkSafe = #changes > 1,
+        summary = "Changes registered scoped Power Bar Gradient controls.",
+    }
+end
+
 P.GroupShortcutScopes = function(text)
     local scopes, concrete = GroupAvailabilityScopes(text)
     local allGroups = HasAllScopeIntent(text) or ContainsAny(text, {
@@ -1452,6 +1806,7 @@ end
 P.ParseGroupSortShortcut = function(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, { "sort", "sorting", "order", "first" }) then return nil end
+    if DetectBoolean(text) ~= nil and ContainsAny(text, { "sort by role", "role sorting", "sort roles" }) then return nil end
     if not ContainsAny(text, {
         "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "frames",
         "role", "roles", "tank", "tanks", "healer", "healers", "heal", "dps", "damager", "name", "alphabetical", "group",
@@ -1532,9 +1887,44 @@ P.ParseGroupOfflineDelayShortcut = function(text)
 end
 
 P.ParseMiscRegistryShortcut = function(text, raw)
-    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, { "aura", "auras", "buff" }) then return nil end
+    if ContainsAny(text, { "debuff" }) and not ContainsAny(text, { "debuff stripe" }) then return nil end
+    local interruptReady = P.ParseInterruptReadyRegistryShortcut and P.ParseInterruptReadyRegistryShortcut(text, raw)
+    if interruptReady then return interruptReady end
+    local unitStatusSymbol = P.ParseUnitStatusSymbolRegistryShortcut and P.ParseUnitStatusSymbolRegistryShortcut(text)
+    if unitStatusSymbol then return unitStatusSymbol end
+    local castbarPosition = P.ParseCastbarPositionRegistryShortcut and P.ParseCastbarPositionRegistryShortcut(text)
+    if castbarPosition then return castbarPosition end
+    local powerGradient = P.ParsePowerBarGradientRegistryShortcut and P.ParsePowerBarGradientRegistryShortcut(text)
+    if powerGradient then return powerGradient end
+    local alphaExclude = P.ParseAlphaExcludeTextPortraitShortcut and P.ParseAlphaExcludeTextPortraitShortcut(text)
+    if alphaExclude then return alphaExclude end
+    local unitHPTextReverse = P.ParseUnitHPTextReverseShortcut and P.ParseUnitHPTextReverseShortcut(text)
+    if unitHPTextReverse then return unitHPTextReverse end
+    local groupBoolean = P.ParseGroupBooleanRegistryShortcut and P.ParseGroupBooleanRegistryShortcut(text)
+    if groupBoolean then return groupBoolean end
+    local groupNumber = P.ParseGroupNumberRegistryShortcut and P.ParseGroupNumberRegistryShortcut(text)
+    if groupNumber then return groupNumber end
+    local detachedPower = P.ParseDetachedPowerBarRegistryShortcut and P.ParseDetachedPowerBarRegistryShortcut(text, raw)
+    if detachedPower then return detachedPower end
     local key
-    if ContainsAny(text, { "snap", "snapping", "edge snap", "window snap", "menu snap", "snapping feature", "snap feature" }) then
+    local forcedValue
+    if ContainsAny(text, { "midnight status icons", "status icons midnight style", "status icon midnight style", "midnight status icon style", "use midnight status icons" }) then
+        if #DetectGroups(text) > 0 and #DetectUnits(text) == 0 then return nil end
+        key = "general.statusIconsUseMidnightStyle"
+        forcedValue = DetectBoolean(text)
+        if forcedValue == nil then forcedValue = true end
+    elseif ContainsAny(text, { "global ui scale", "global ui scale override", "wow ui scale", "wow ui scale override", "ui scale override" }) then
+        key = "general.globalUiScaleEnabled"
+    elseif ContainsAny(text, { "realtime power text", "real time power text", "live power text", "instant power text" }) then
+        key = "bars.realtimePowerText"
+    elseif ContainsAny(text, { "sync combat state colors", "sync combat enter leave colors", "same combat state colors", "combat state color sync" }) then
+        key = "gameplay.combatStateColorSync"
+        forcedValue = DetectBoolean(text)
+        if forcedValue == nil and ContainsAny(text, { "sync", "same" }) then forcedValue = true end
+    elseif ContainsAny(text, { "nameplate melee spell id", "melee nameplate spell id", "melee range spell id", "crosshair melee spell id", "crosshair spell id" }) then
+        key = "gameplay.nameplateMeleeSpellID"
+    elseif ContainsAny(text, { "snap", "snapping", "edge snap", "window snap", "menu snap", "snapping feature", "snap feature" }) then
         if ContainsAny(text, { "edit mode", "grid snap", "snap to grid", "snap frames", "mover snap", "raster snap" }) then return nil end
         key = "general.slashMenuSnapEnabled"
     elseif ContainsAny(text, { "advanced menu", "advanced menu section", "advanced section", "erweitertes menu" }) then
@@ -1568,7 +1958,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
 
     local setting = Registry and Registry:GetSetting(key)
     if not setting then return nil end
-    local value = ValueForRegistrySetting(setting, text, raw)
+    local value = forcedValue
+    if value == nil then value = ValueForRegistrySetting(setting, text, raw) end
     if value == nil then return nil end
     return {
         kind = "changes",
@@ -1745,11 +2136,65 @@ function P.PowerBarEmbedValue(text)
     return DetectBoolean(text)
 end
 
+function P.ParseDetachedPowerBarRegistryShortcut(text, raw)
+    if not ContainsAny(text, { "detached power", "detached power bar", "detached mana", "detached mana bar" }) then return nil end
+    if HasClassPowerIntent(text) then return nil end
+
+    local attr
+    local label
+    local value
+    local relativeDelta
+    if ContainsAny(text, { "text on bar", "text on detached", "text on detached power", "text on detached power bar", "detached power text on bar" }) then
+        attr = "detachedPowerBarTextOnBar"
+        label = "Text On Detached Power Bar"
+        value = DetectBoolean(text)
+        if value == nil then value = true end
+    elseif ContainsAny(text, { "frame level", "framelevel", "layer", "strata offset" }) then
+        attr = "detachedPowerBarFrameLevelOffset"
+        label = "Detached Power Bar Layer"
+    elseif ContainsAny(text, { "width", "wide", "wider", "narrower" }) and not ContainsAny(text, { "width mode", "width source" }) then
+        attr = "detachedPowerBarWidth"
+        label = "Detached Power Bar Width"
+    elseif ContainsAny(text, { "height", "tall", "higher", "lower" }) then
+        attr = "detachedPowerBarHeight"
+        label = "Detached Power Bar Height"
+    else
+        return nil
+    end
+
+    local units = PowerBarScopes(text, true)
+    if #units == 0 then return nil end
+    local changes = {}
+    for i = 1, #units do
+        local key = tostring(units[i]) .. "." .. tostring(attr)
+        local setting = Registry and Registry:GetSetting(key)
+        if setting then
+            if setting.type == "number" then
+                relativeDelta = RelativeNumberDeltaForText(setting, text)
+                value = nil
+                if relativeDelta == nil then value = A._NumberValueForText(setting, text) end
+            end
+            if value ~= nil or relativeDelta ~= nil then AddRegisteredChange(changes, key, value, relativeDelta) end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Changes registered detached Power Bar detail controls.",
+    }
+end
+
 local function ParsePowerBarRegistryShortcut(text, raw)
-    if not ContainsAny(text, { "power bar", "mana bar", "power balken", "mana balken" }) then return nil end
+    if not ContainsAny(text, { "power bar", "mana bar", "power border", "mana border", "power outline", "mana outline", "power balken", "mana balken" }) then return nil end
     if HasClassPowerIntent(text) then return nil end
 
     local changes = {}
+    local detachedDetail = P.ParseDetachedPowerBarRegistryShortcut(text, raw)
+    if detachedDetail then return detachedDetail end
+
     if ContainsAny(text, { "detach", "detached", "undock", "attach", "reattach", "dock", "abkoppeln", "ankoppeln" }) then
         local units = PowerBarScopes(text, true)
         for i = 1, #units do
@@ -2119,10 +2564,225 @@ local function ParseStatusIconTestModeRegistryShortcut(text)
     }
 end
 
+function P.ParseGroupBooleanRegistryShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    local explicitUnits = DetectUnits(text)
+    local explicitGroups = DetectGroups(text)
+    if #explicitUnits > 0 then return nil end
+    local attr
+    local label
+    local value = DetectBoolean(text)
+
+    if ContainsAny(text, {
+        "hide name on dead", "hide name when dead", "hide name on offline", "hide name when offline",
+        "hide name on dead or offline", "hide name when dead or offline", "dead or offline",
+    }) then
+        attr = "hideNameOnDeadOffline"
+        label = "Hide Name On Dead Or Offline"
+        if ContainsAny(text, { "turn off", "disable", "disabled", "deactivate", "deactivated", "ausschalten", "deaktivieren" }) then
+            value = false
+        else
+            value = true
+        end
+    elseif ContainsAny(text, { "reverse hp text", "hp text reverse", "reverse health text", "health text reverse" }) then
+        attr = "hpTextReverse"
+        label = "Reverse HP Text"
+        if value == nil then value = true end
+    elseif ContainsAny(text, { "group number", "group index", "group number label" })
+        and not ContainsAny(text, { "size", "font size", "anchor", "x offset", "y offset", "offset", "color", "colour", "style" })
+        and not ContainsAny(text, {
+            "move", "nudge", "shift", "position", "right", "left", "up", "down", "oben", "unten", "links", "rechts",
+            "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink", "groesser", "kleiner",
+        })
+        and FirstNumber(text) == nil
+    then
+        attr = "showGroupNumber"
+        label = "Group Number"
+        if value == nil then value = true end
+    else
+        return nil
+    end
+
+    if value == nil then return nil end
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes a registered Group Frame boolean control.")
+end
+
+function P.ParseUnitHPTextReverseShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, {
+        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
+        "reverse hp text order", "hp text reverse order", "reverse health text order", "health text reverse order",
+    }) then return nil end
+
+    local explicitUnits, explicitGroups = ExplicitScopes(text)
+    local hasUnitFrameIntent = ContainsAny(text, { "unitframe", "unit frame", "unitframes", "unit frames" })
+    local hasGroupFrameIntent = ContainsAny(text, { "group frame", "group frames", "groupframe", "groupframes" })
+    if #explicitUnits == 0 and hasGroupFrameIntent and not hasUnitFrameIntent then return nil end
+    if #explicitGroups > 0 and #explicitUnits == 0 and not hasUnitFrameIntent then return nil end
+
+    local value = DetectBoolean(text)
+    if value == nil then value = true end
+
+    local units = {}
+    local concrete = false
+    if HasAllScopeIntent(text) and hasUnitFrameIntent then
+        for i = 1, #POWER_UNIT_ORDER do units[#units + 1] = POWER_UNIT_ORDER[i] end
+        concrete = true
+    else
+        for i = 1, #explicitUnits do units[#units + 1] = explicitUnits[i] end
+        concrete = #units > 0
+        if #units == 0 then
+            local pageUnit = CurrentRegistryPageUnit()
+            if pageUnit then
+                units[#units + 1] = pageUnit
+                concrete = true
+            end
+        end
+    end
+
+    local changes = {}
+    if #units == 0 then
+        for i = 1, #POWER_UNIT_ORDER do
+            AddRegisteredChange(changes, tostring(POWER_UNIT_ORDER[i]) .. ".hpTextReverse", value)
+        end
+        if #changes == 0 then return nil end
+        return {
+            kind = "ambiguous",
+            choices = changes,
+            label = "Which Unit Frame?",
+            summary = "The command matched Reverse HP Text Order but did not name a unit frame.",
+        }
+    end
+
+    for i = 1, #units do
+        AddRegisteredChange(changes, tostring(units[i]) .. ".hpTextReverse", value)
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Unit Frame Reverse HP Text Order",
+        bulkSafe = #changes > 1,
+        summary = "Changes registered Unit Frame Reverse HP Text Order controls.",
+    }
+end
+
+function P.ParseExactRegistryKeyShortcut(text, raw)
+    local hay = tostring(raw or text or ""):lower()
+    if not hay:find("[%a_][%w_]*%.") then return nil end
+    local settings = Registry and Registry:AllSettings() or {}
+    local bestSetting
+    local bestKeyLen = 0
+    for i = 1, #settings do
+        local setting = settings[i]
+        local key = tostring(setting and setting.key or "")
+        local keyLower = key:lower()
+        local startPos = keyLower ~= "" and hay:find(keyLower, 1, true) or nil
+        local before = startPos == nil or startPos == 1 or not hay:sub(startPos - 1, startPos - 1):match("[%w_]")
+        local afterIndex = startPos and (startPos + #keyLower) or nil
+        local after = afterIndex == nil or afterIndex > #hay or not hay:sub(afterIndex, afterIndex):match("[%w_]")
+        if startPos and before and after then
+            local frameType = tostring(setting.frameType or "")
+            local attrLower = tostring(setting.attribute or ""):lower()
+            if frameType ~= "aura" and frameType ~= "groupAura"
+                and not keyLower:find("shape", 1, true)
+                and not keyLower:find("rounded", 1, true)
+                and not attrLower:find("shape", 1, true)
+                and not attrLower:find("rounded", 1, true)
+            then
+                if #keyLower > bestKeyLen then
+                    bestSetting = setting
+                    bestKeyLen = #keyLower
+                end
+            end
+        end
+    end
+    if bestSetting then
+        local value = ValueForRegistrySetting(bestSetting, text, raw)
+        local relativeDelta
+        if value == nil and bestSetting.type == "number" then relativeDelta = RelativeNumberDeltaForText(bestSetting, text) end
+        if value ~= nil or relativeDelta ~= nil then
+            return {
+                kind = "changes",
+                changes = {
+                    {
+                        setting = bestSetting,
+                        value = value,
+                        relativeDelta = relativeDelta,
+                        valueLabel = value ~= nil and ValueDisplay(bestSetting, value) or nil,
+                    },
+                },
+                label = bestSetting.label or bestSetting.key,
+                summary = "Changes the registered setting addressed by its exact MSUF key.",
+            }
+        end
+        return MissingValueResponse({ { setting = bestSetting, score = 100 } }, raw)
+    end
+    return nil
+end
+
+function P.ParseGroupNumberRegistryShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff" }) then return nil end
+    local attr
+    local label
+    if ContainsAny(text, { "group number", "group index", "group number label" })
+        and ContainsAny(text, { "size", "font size", "scale", "bigger", "larger", "smaller", "increase", "decrease", "reduce", "grow", "shrink", "groesser", "kleiner" })
+    then
+        attr = "groupNumberSize"
+        label = "Group Number Size"
+    elseif ContainsAny(text, { "group border padding", "border padding", "padding around", "padding around frames", "padding around group", "frame padding" }) then
+        attr = "groupBorderPadding"
+        label = "Group Border Padding"
+    elseif ContainsAny(text, { "group border", "group frame border", "frame border" })
+        and ContainsAny(text, { "thickness", "size", "border size", "border thickness", "thicker", "thinner", "increase", "decrease", "reduce", "bigger", "smaller", "dicker", "duenner" })
+    then
+        attr = "groupBorderSize"
+        label = "Group Border Thickness"
+    elseif ContainsAny(text, { "power height", "power bar height", "mana height", "mana bar height" }) then
+        attr = "powerHeight"
+        label = "Power Bar Height"
+    elseif ContainsAny(text, { "debuff stripe height", "debuff stripe size" }) then
+        attr = "debuffStripeHeight"
+        label = "Debuff Stripe Height"
+    else
+        return nil
+    end
+
+    local explicitGroups = DetectGroups(text)
+    local activePage = M and M.activeKey
+    local groupPage = activePage == "gf_layout" or activePage == "gf_bars" or activePage == "gf_indicators"
+    if #explicitGroups == 0 and not groupPage and not ContainsAny(text, { "group frame", "group frames", "all group", "all groups" }) then return nil end
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        local key = "gf_" .. tostring(scopes[i]) .. "." .. attr
+        local setting = Registry and Registry:GetSetting(key)
+        local relativeDelta = setting and setting.type == "number" and RelativeNumberDeltaForText(setting, text) or nil
+        local value
+        if relativeDelta == nil then value = FirstNumber(text) end
+        if value ~= nil or relativeDelta ~= nil then AddRegisteredChange(changes, key, value, relativeDelta) end
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes a registered Group Frame numeric control.")
+end
+
 local function ParseRepeatedRegistryShortcut(text, raw)
-    return ParseScopedFontTextColorShortcut(text)
+    return P.ParseExactRegistryKeyShortcut(text, raw)
+        or ParseScopedFontTextColorShortcut(text)
         or P.ParseCastbarColorShortcut(text, raw)
+        or P.ParseInterruptReadyRegistryShortcut(text, raw)
+        or P.ParseUnitStatusSymbolRegistryShortcut(text)
+        or P.ParseCastbarPositionRegistryShortcut(text)
+        or P.ParsePowerBarGradientRegistryShortcut(text)
         or P.ParseGroupFrameColorShortcut(text, raw)
+        or P.ParseAlphaExcludeTextPortraitShortcut(text)
+        or P.ParseUnitHPTextReverseShortcut(text)
+        or P.ParseGroupBooleanRegistryShortcut(text)
+        or P.ParseGroupNumberRegistryShortcut(text)
         or P.ParseGroupSortShortcut(text)
         or P.ParseGroupScaleModeShortcut(text)
         or P.ParseGroupOfflineDelayShortcut(text)

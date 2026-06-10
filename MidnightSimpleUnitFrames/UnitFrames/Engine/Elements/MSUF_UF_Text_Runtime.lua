@@ -26,6 +26,7 @@ local HealthPercent = Text.HealthPercent
 local PowerPercent = Text.PowerPercent
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Text.IsSecret or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local UpdateTextSlots = Text.UpdateTextSlots
 local UpdateTextSlotsPlain = Text.UpdateTextSlotsPlain or UpdateTextSlots
@@ -55,15 +56,15 @@ local function ReadPowerValues(unit)
         powerType = UnitPowerType(unit)
     end
     local power, maxPower
-    if not IsSecret(powerType) and powerType ~= nil then
+    if issecretvalue(powerType) ~= true and powerType ~= nil then
         power = UnitPower(unit, powerType)
         maxPower = UnitPowerMax(unit, powerType)
     else
         power = UnitPower(unit)
         maxPower = UnitPowerMax(unit)
     end
-    if not IsSecret(power) and power == nil then power = 0 end
-    if not IsSecret(maxPower) and maxPower == nil then maxPower = 1 end
+    if issecretvalue(power) ~= true and power == nil then power = 0 end
+    if issecretvalue(maxPower) ~= true and maxPower == nil then maxPower = 1 end
     return power, maxPower
 end
 
@@ -72,8 +73,8 @@ local function RefreshCachedPowerType(frame, unit)
         return false
     end
     local powerType, powerToken = UnitPowerType(unit)
-    if IsSecret(powerType) then powerType = nil end
-    if IsSecret(powerToken) then powerToken = nil end
+    if issecretvalue(powerType) == true then powerType = nil end
+    if issecretvalue(powerToken) == true then powerToken = nil end
     if powerType == nil and powerToken == nil and frame._msufTextPowerTypeKnown == true then
         return false
     end
@@ -259,15 +260,15 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
 
     if rt.healthPlain == true then
-        local hpSecret = IsSecret(hp)
-        local hpMaxSecret = IsSecret(hpMax)
+        local hpSecret = issecretvalue(hp) == true
+        local hpMaxSecret = issecretvalue(hpMax) == true
         if not hpSecret and hp == nil then
             hp = UnitHealth(unit)
-            hpSecret = IsSecret(hp)
+            hpSecret = issecretvalue(hp) == true
         end
         if not hpMaxSecret and hpMax == nil then
             hpMax = UnitHealthMax(unit)
-            hpMaxSecret = IsSecret(hpMax)
+            hpMaxSecret = issecretvalue(hpMax) == true
         end
 
         if rt.healthNeedsMissing == true then
@@ -277,7 +278,7 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
             rt.healthMissing = nil
         end
 
-        if not (hpSecret or hpMaxSecret or IsSecret(rt.healthMissing)) then
+        if not (hpSecret or hpMaxSecret or issecretvalue(rt.healthMissing) == true) then
             hp = hp or 0
             hpMax = hpMax or 1
             if event == "UNIT_HEALTH"
@@ -301,15 +302,15 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
         rt._lastHealthTextMissing = nil
     end
 
-    local hpSecret = IsSecret(hp)
-    local hpMaxSecret = IsSecret(hpMax)
+    local hpSecret = issecretvalue(hp) == true
+    local hpMaxSecret = issecretvalue(hpMax) == true
     if not hpSecret and hp == nil then
         hp = UnitHealth(unit)
-        hpSecret = IsSecret(hp)
+        hpSecret = issecretvalue(hp) == true
     end
     if not hpMaxSecret and hpMax == nil then
         hpMax = UnitHealthMax(unit)
-        hpMaxSecret = IsSecret(hpMax)
+        hpMaxSecret = issecretvalue(hpMax) == true
     end
 
     -- Non-player units can return protected values. Do not probe them for
@@ -444,17 +445,17 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     end
 
     if rt.powerPlain == true then
-        local powerSecret = IsSecret(power)
-        local powerMaxSecret = IsSecret(powerMax)
+        local powerSecret = issecretvalue(power) == true
+        local powerMaxSecret = issecretvalue(powerMax) == true
         if not (powerSecret or powerMaxSecret) and (power == nil or powerMax == nil) then
             local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event)
             if power == nil then
                 power = currentPower
-                powerSecret = IsSecret(power)
+                powerSecret = issecretvalue(power) == true
             end
             if powerMax == nil then
                 powerMax = currentMax
-                powerMaxSecret = IsSecret(powerMax)
+                powerMaxSecret = issecretvalue(powerMax) == true
             end
         end
         rt.healthMissing = nil
@@ -477,17 +478,17 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
         rt._lastPowerTextMax = nil
     end
 
-    local powerSecret = IsSecret(power)
-    local powerMaxSecret = IsSecret(powerMax)
+    local powerSecret = issecretvalue(power) == true
+    local powerMaxSecret = issecretvalue(powerMax) == true
     if not powerSecret and not powerMaxSecret and (power == nil or powerMax == nil) then
         local currentPower, currentMax = ReadPowerValues(unit)
         if power == nil then
             power = currentPower
-            powerSecret = IsSecret(power)
+            powerSecret = issecretvalue(power) == true
         end
         if powerMax == nil then
             powerMax = currentMax
-            powerMaxSecret = IsSecret(powerMax)
+            powerMaxSecret = issecretvalue(powerMax) == true
         end
     end
     rt.healthMissing = nil
