@@ -24,9 +24,7 @@ local tonumber = tonumber
 local type = type
 local max = math.max
 local floor = math.floor
-local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
-local IsNil = Secrets.IsNil or function(value) return value == nil end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local function IsUnitToken(unit)
     return type(unit) == "string" and unit ~= ""
@@ -153,7 +151,7 @@ local function SameUnitByGUID(unit, otherUnit)
     end
     local guid = UnitGUID(unit)
     local otherGuid = UnitGUID(otherUnit)
-    if IsSecret(guid) or IsSecret(otherGuid) then
+    if issecretvalue(guid) == true or issecretvalue(otherGuid) == true then
         return false
     end
     return guid ~= nil and guid == otherGuid
@@ -217,7 +215,10 @@ local function UpdateFocus(frame, cfg)
 end
 
 local function PercentFromValues(hp, maxHP)
-    if IsNil(hp) or IsNil(maxHP) or IsSecret(hp) or IsSecret(maxHP) then
+    if issecretvalue(hp) == true or hp == nil then
+        return nil
+    end
+    if issecretvalue(maxHP) == true or maxHP == nil then
         return nil
     end
     hp, maxHP = tonumber(hp), tonumber(maxHP)
@@ -239,11 +240,14 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP)
         local pct = PercentFromValues(seedHP, seedMaxHP)
         if pct == nil and UnitHealthPercent then
             local raw = UnitHealthPercent(frame.unit)
-            if not IsSecret(raw) then
+            if issecretvalue(raw) ~= true then
                 pct = tonumber(raw)
             end
         end
-        if pct == nil and IsNil(seedHP) and IsNil(seedMaxHP) and UnitHealth and UnitHealthMax then
+        if pct == nil
+            and issecretvalue(seedHP) ~= true and seedHP == nil
+            and issecretvalue(seedMaxHP) ~= true and seedMaxHP == nil
+            and UnitHealth and UnitHealthMax then
             local hp, maxHP = UnitHealth(frame.unit), UnitHealthMax(frame.unit)
             pct = PercentFromValues(hp, maxHP)
         end
@@ -313,11 +317,11 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
     local healthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
     if cfg.deadBgOffline == true and not healthEvent and UnitIsConnected then
         local connected = UnitIsConnected(unit)
-        if not IsSecret(connected) and (connected == false or connected == 0) then
+        if issecretvalue(connected) ~= true and (connected == false or connected == 0) then
             return true
         end
     end
-    if type(seedHP) == "number" and not IsSecret(seedHP) then
+    if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
         if seedHP == 0 then
             return true
         end
@@ -326,7 +330,7 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
         -- what clears it on resurrect.
         if frame._msufGFDeadBgState == true and UnitIsDeadOrGhost then
             local dg = UnitIsDeadOrGhost(unit)
-            if not IsSecret(dg) and (dg == true or dg == 1) then
+            if issecretvalue(dg) ~= true and (dg == true or dg == 1) then
                 return true
             end
         end
@@ -334,7 +338,7 @@ local function ResolveGone(frame, cfg, unit, seedHP, event)
     end
     if UnitIsDeadOrGhost then
         local dg = UnitIsDeadOrGhost(unit)
-        if not IsSecret(dg) and (dg == true or dg == 1) then
+        if issecretvalue(dg) ~= true and (dg == true or dg == 1) then
             return true
         end
     end

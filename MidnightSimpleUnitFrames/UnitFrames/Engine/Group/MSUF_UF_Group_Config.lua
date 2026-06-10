@@ -314,18 +314,19 @@ end
 -- registers ZERO events with the framework (and the event-driver never sees
 -- the event for that frame at all — true zero combat overhead). Each `if`
 -- below gates a feature; disabled features add no entries.
-local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextHealth, statusTextFlags, incomingRes, pvp)
+local function CompileStatusRuntimeEvents(leader, assist, readyCheck, summon, phase, raidMarker, raidGroup, statusTextConnection, statusTextFlags, statusTextPlayerFlags, incomingRes, pvp)
     local events, unitlessEvents
     if phase then
         events = AddEvent(events, "UNIT_PHASE")
         events = AddEvent(events, "UNIT_OTHER_PARTY_CHANGED")
     end
-    if statusTextHealth then
-        events = AddEvent(events, "UNIT_HEALTH")
+    if statusTextConnection then
         events = AddEvent(events, "UNIT_CONNECTION")
     end
     if statusTextFlags then
         events = AddEvent(events, "UNIT_FLAGS")
+    end
+    if statusTextPlayerFlags then
         unitlessEvents = AddEvent(unitlessEvents, "PLAYER_FLAGS_CHANGED")
     end
     if incomingRes then
@@ -361,13 +362,15 @@ local function CompileStatus(kind, conf)
     local incomingResEnabled = conf.resurrectIcon ~= false
     local pvpEnabled = conf.pvpIcon ~= false and PVPIndicatorContextActive()
     local phaseEnabled = conf.phaseIcon ~= false
-    local statusHealthTextEnabled = conf.statusText ~= false or conf.statusGhostText ~= false
-    local statusFlagTextEnabled = conf.statusAFKText ~= false
-    local statusTextEnabled = statusHealthTextEnabled or statusFlagTextEnabled
+    local statusDeadGhostTextEnabled = conf.statusText ~= false or conf.statusGhostText ~= false
+    local statusConnectionTextEnabled = conf.statusText ~= false
+    local statusPlayerFlagTextEnabled = conf.statusAFKText ~= false
+    local statusFlagTextEnabled = statusDeadGhostTextEnabled or statusPlayerFlagTextEnabled
+    local statusTextEnabled = statusConnectionTextEnabled or statusFlagTextEnabled
     local raidGroupEnabled = conf.showGroupNumber == true
     local runtimeEvents, runtimeUnitlessEvents = CompileStatusRuntimeEvents(
         leaderEnabled, assistEnabled, readyCheckEnabled, summonEnabled, phaseEnabled,
-        raidMarkerEnabled, raidGroupEnabled, statusHealthTextEnabled, statusFlagTextEnabled, incomingResEnabled, pvpEnabled
+        raidMarkerEnabled, raidGroupEnabled, statusConnectionTextEnabled, statusFlagTextEnabled, statusPlayerFlagTextEnabled, incomingResEnabled, pvpEnabled
     )
     local runtimeEnabled = roleEnabled or leaderEnabled or assistEnabled
         or readyCheckEnabled or summonEnabled or phaseEnabled

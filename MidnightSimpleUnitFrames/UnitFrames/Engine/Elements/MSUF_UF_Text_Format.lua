@@ -27,7 +27,6 @@ local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local IsSecret = Text.IsSecret or function(_) return false end
-local IsNil = Text.IsNil or function(value) return value == nil end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local ApplyText = Apply.Text or function(fs, text)
     if not fs then return end
@@ -735,7 +734,7 @@ local function SetModeText(fs, mode, cur, max, delimiter, unit, percentFn, short
         else
             pct = percentFn and percentFn(unit)
         end
-        pctKnown = not IsNil(pct)
+        pctKnown = issecretvalue(pct) == true or pct ~= nil
     end
 
     local slot = Text._modeTextSlot
@@ -980,7 +979,7 @@ local function UpdateTextSlots(slots, count, cur, max, unit, percentFn, needsPer
     local pctKnown = false
     if needsPercent == true then
         pct = percentFn and percentFn(unit)
-        pctKnown = not IsNil(pct)
+        pctKnown = issecretvalue(pct) == true or pct ~= nil
     end
     for i = 1, count do
         local slot = slots[i]
@@ -1076,7 +1075,9 @@ end
 
 local function ResolvePendingPower(frame, rt, power, powerMax)
     local unit = frame and frame.unit
-    if unit and ((issecretvalue(power) ~= true and power == nil) or (issecretvalue(powerMax) ~= true and powerMax == nil)) then
+    local needPower = issecretvalue(power) ~= true and power == nil
+    local needPowerMax = issecretvalue(powerMax) ~= true and powerMax == nil
+    if unit and (needPower or needPowerMax) then
         local powerType = frame._msufTextPowerType
         if frame._msufTextPowerTypeKnown ~= true and UnitPowerType then
             local rawType, rawToken = UnitPowerType(unit)
@@ -1088,14 +1089,14 @@ local function ResolvePendingPower(frame, rt, power, powerMax)
             frame._msufTextPowerTypeKnown = true
         end
 
-        if issecretvalue(power) ~= true and power == nil and UnitPower then
+        if needPower and UnitPower then
             if powerType ~= nil then
                 power = UnitPower(unit, powerType)
             else
                 power = UnitPower(unit)
             end
         end
-        if issecretvalue(powerMax) ~= true and powerMax == nil and UnitPowerMax then
+        if needPowerMax and UnitPowerMax then
             if powerType ~= nil then
                 powerMax = UnitPowerMax(unit, powerType)
             else

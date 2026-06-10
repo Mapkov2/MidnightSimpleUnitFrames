@@ -44,8 +44,7 @@ local UnitIsGhost = _G.UnitIsGhost
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitIsAFK = _G.UnitIsAFK
 local UnitIsDND = _G.UnitIsDND
-local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local function BindStatusRuntime()
     statusRuntime = MSUF.UFStatusRuntime or statusRuntime
@@ -109,28 +108,38 @@ end
 
 local function StatusTextEventRelevant(cfg, event)
     if event == "UNIT_HEALTH" then
-        return cfg.showDead == true or cfg.showGhost == true
+        return false
     elseif event == "UNIT_CONNECTION" then
         return cfg.showDead == true
     elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
-        return cfg.showAFK == true or cfg.showDND == true
+        return cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
     end
     return true
 end
 
-local function StatusTextHealthKey(frame, cfg)
+local function StatusTextFlagsKey(frame, cfg)
     local unit = frame and frame.unit
     if not unit then return nil end
     local key = 0
     if cfg.showGhost == true and UnitIsGhost then
         local ghost = UnitIsGhost(unit)
-        if IsSecret(ghost) then return nil end
+        if issecretvalue(ghost) == true then return nil end
         if ghost == true or ghost == 1 then key = key + 2 end
     end
     if cfg.showDead == true and UnitIsDeadOrGhost then
         local dead = UnitIsDeadOrGhost(unit)
-        if IsSecret(dead) then return nil end
+        if issecretvalue(dead) == true then return nil end
         if dead == true or dead == 1 then key = key + 4 end
+    end
+    if cfg.showAFK == true and UnitIsAFK then
+        local afk = UnitIsAFK(unit)
+        if issecretvalue(afk) == true then return nil end
+        if afk == true or afk == 1 then key = key + 8 end
+    end
+    if cfg.showDND == true and UnitIsDND then
+        local dnd = UnitIsDND(unit)
+        if issecretvalue(dnd) == true then return nil end
+        if dnd == true or dnd == 1 then key = key + 16 end
     end
     return key
 end
@@ -141,25 +150,8 @@ local function StatusTextConnectionKey(frame, cfg)
     local key = 0
     if cfg.showDead == true and UnitIsConnected then
         local connected = UnitIsConnected(unit)
-        if IsSecret(connected) then return nil end
+        if issecretvalue(connected) == true then return nil end
         if connected == false or connected == 0 then key = key + 1 end
-    end
-    return key
-end
-
-local function StatusTextFlagsKey(frame, cfg)
-    local unit = frame and frame.unit
-    if not unit then return nil end
-    local key = 0
-    if cfg.showAFK == true and UnitIsAFK then
-        local afk = UnitIsAFK(unit)
-        if IsSecret(afk) then return nil end
-        if afk == true or afk == 1 then key = key + 8 end
-    end
-    if cfg.showDND == true and UnitIsDND then
-        local dnd = UnitIsDND(unit)
-        if IsSecret(dnd) then return nil end
-        if dnd == true or dnd == 1 then key = key + 16 end
     end
     return key
 end
@@ -171,8 +163,7 @@ local function StatusTextChanged(frame, status, event)
     if not StatusTextEventRelevant(cfg, event) then return false end
     local storeKey, key
     if event == "UNIT_HEALTH" then
-        storeKey = "_msufGFStatusTextHealthKey"
-        key = StatusTextHealthKey(frame, cfg)
+        return false
     elseif event == "UNIT_CONNECTION" then
         storeKey = "_msufGFStatusTextConnectionKey"
         key = StatusTextConnectionKey(frame, cfg)
@@ -221,7 +212,6 @@ local function RunStatusApply(frame, status, event)
         UpdateRaidGroup(frame, status)
     end
     if status.runtimeStatusText == true then
-        frame._msufGFStatusTextHealthKey = nil
         frame._msufGFStatusTextConnectionKey = nil
         frame._msufGFStatusTextFlagsKey = nil
         UpdateStatusText(frame, status, event)

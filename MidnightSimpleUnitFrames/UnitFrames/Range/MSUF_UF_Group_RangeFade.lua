@@ -20,8 +20,7 @@ local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
 
 local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
-local IsNil = Secrets.IsNil or function(value) return value == nil end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local RANGE_EVENTS = {
     "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE",
@@ -62,7 +61,7 @@ function GroupRangeFade.GetUnitlessEvents(frame, spec)
 end
 
 local function SafeBool(value)
-    if IsSecret(value) then
+    if issecretvalue(value) == true then
         return nil
     end
     if value == true or value == 1 then
@@ -95,7 +94,8 @@ local function StoreRange(frame, inRange)
     local unitChanged = frame._msufGFRangeUnit ~= unit
     frame._msufGFRangeUnit = unit
 
-    if IsNil(inRange) then
+    local inRangeSecret = issecretvalue(inRange) == true
+    if not inRangeSecret and inRange == nil then
         if not unitChanged and frame._msufGFRangeKnown == nil and frame._msufGFInRangeRaw == nil then
             return false
         end
@@ -105,7 +105,7 @@ local function StoreRange(frame, inRange)
         return true
     end
 
-    local cacheable = not IsSecret(inRange)
+    local cacheable = not inRangeSecret
     if cacheable and not unitChanged and frame._msufGFRangeCacheable == true
         and frame._msufGFRangeKnown == true and frame._msufGFInRangeRaw == inRange then
         return false
@@ -127,7 +127,7 @@ local function UnitIsPlayer(unit)
     if UnitGUID then
         local guid = UnitGUID(unit)
         local playerGuid = UnitGUID("player")
-        if IsSecret(guid) or IsSecret(playerGuid) then
+        if issecretvalue(guid) == true or issecretvalue(playerGuid) == true then
             return false
         end
         return guid ~= nil and guid == playerGuid
@@ -161,7 +161,7 @@ local function PlainUnitExists(unit)
         return true
     end
     local exists = UnitExists(unit)
-    if IsSecret(exists) then
+    if issecretvalue(exists) == true then
         return true
     end
     return exists == true or exists == 1
@@ -175,7 +175,7 @@ local function PollCurrentRange(unit)
         return nil, false
     end
     local inRange, checked = UnitInRange(unit)
-    if IsSecret(checked) then
+    if issecretvalue(checked) == true then
         return inRange, true
     end
     if checked == true or checked == 1 then
@@ -331,8 +331,11 @@ local function ApplyHealthRangeAlpha(frame, alpha)
     SetStatusAlpha(frame.healAbsorbBar, alpha, "_msufGFRangePredict")
 end
 
-local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha)
-    local cacheable = not IsSecret(value)
+local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha, valueSecret)
+    if valueSecret == nil then
+        valueSecret = issecretvalue(value) == true
+    end
+    local cacheable = not valueSecret
     if cacheable
         and frame._msufGFRangeHealthBool == value
         and frame._msufGFRangeHealthBoolIn == inAlpha
@@ -415,10 +418,10 @@ local function BaseAlpha(frame)
     local exists = unit ~= nil
     if UnitExists then
         local existsRaw = UnitExists(unit)
-        exists = IsSecret(existsRaw) or existsRaw == true or existsRaw == 1
+        exists = issecretvalue(existsRaw) == true or existsRaw == true or existsRaw == 1
     end
     local connected = UnitIsConnected and exists and UnitIsConnected(unit)
-    if not IsSecret(connected) and (connected == false or connected == 0) then
+    if issecretvalue(connected) ~= true and (connected == false or connected == 0) then
         if cfg.hideOfflineEnabled == true and (not (InCombatLockdown and InCombatLockdown()) or cfg.hideOfflineInCombat == true) then
             if OfflineHideReady(frame, cfg) then
                 return 0, true
@@ -442,10 +445,12 @@ function ApplyAlpha(frame)
 
     if cfg and cfg.rangeFadeEnabled == true and frame._msufGFRangeKnown == true then
         local inRange = frame._msufGFInRangeRaw
+        local inRangeSecret = issecretvalue(inRange) == true
+        local inRangeKnown = inRangeSecret or inRange ~= nil
         if cfg.rangeFadeLayerMode == "health" then
             SetAlphaCached(frame, baseAlpha, "_msufGFRangeFrameAlpha")
             local rangeAlpha = cfg.rangeFadeAlpha or 0.4
-            if not IsNil(inRange) and ApplyHealthRangeAlphaFromBoolean(frame, inRange, 1, rangeAlpha) then
+            if inRangeKnown and ApplyHealthRangeAlphaFromBoolean(frame, inRange, 1, rangeAlpha, inRangeSecret) then
                 return
             end
             local safe = SafeBool(inRange)
@@ -457,7 +462,7 @@ function ApplyAlpha(frame)
             return
         end
         ApplyHealthRangeAlpha(frame, 1)
-        if frame.SetAlphaFromBoolean and not IsNil(inRange) then
+        if frame.SetAlphaFromBoolean and inRangeKnown then
             frame:SetAlphaFromBoolean(inRange, baseAlpha, baseAlpha * (cfg.rangeFadeAlpha or 0.4))
             frame._msufGFRangeFrameAlpha = nil
             return
@@ -477,7 +482,7 @@ end
 function GroupRangeFade.Apply(frame)
     ClearAlphaCaches(frame)
     local isPlayer = UnitIsPlayer and UnitIsPlayer(frame and frame.unit)
-    if not IsSecret(isPlayer) and isPlayer then
+    if issecretvalue(isPlayer) ~= true and isPlayer then
         StoreRange(frame, true)
     else
         -- No initial range poll here. Group range fade is driven only by

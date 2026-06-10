@@ -24,9 +24,8 @@ local pairs = pairs
 local floor = math.floor
 local max = math.max
 local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
-local IsNil = Secrets.IsNil or function(value) return value == nil end
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local Apply = MSUF.Apply or {}
 local ApplyColorTexture = Apply.ColorTexture or function(tex, r, g, b, a)
     if not tex then return end
@@ -125,7 +124,7 @@ end
 local function HasThreat(unit)
     if not UnitThreatSituation or not unit then return false end
     local status = UnitThreatSituation(unit)
-    if IsNil(status) or IsSecret(status) then return false end
+    if issecretvalue(status) == true or status == nil then return false end
     status = tonumber(status)
     return status ~= nil and status >= 1
 end

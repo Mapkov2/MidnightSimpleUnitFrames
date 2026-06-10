@@ -40,10 +40,28 @@ local function InCombat()
 end
 
 local band = bit and bit.band or bit32 and bit32.band
+local bor = bit and bit.bor or bit32 and bit32.bor
 local function Has(mask, flag)
     if not mask then return false end
     if band then return band(mask, flag) ~= 0 end
     return mask % (flag * 2) >= flag
+end
+
+local function OrMask(a, b)
+    if a == nil or b == nil then return nil end
+    if bor then return bor(a, b) end
+    local out = a
+    local flags = {
+        GF.DIRTY_GEOMETRY, GF.DIRTY_VISUAL, GF.DIRTY_FONT, GF.DIRTY_COLOR,
+        GF.DIRTY_BORDER, GF.DIRTY_LAYOUT, GF.DIRTY_AURAS,
+    }
+    for i = 1, #flags do
+        local flag = flags[i]
+        if flag and Has(b, flag) and not Has(out, flag) then
+            out = out + flag
+        end
+    end
+    return out
 end
 
 local MASK_RUNTIME = Metadata.MASK_RUNTIME or {}
@@ -98,11 +116,41 @@ local function ApplyFrameDirty(frame, kind, mask, reason)
     return UF.ApplySpec(frame, spec, DirtyRuntimeReason(mask, reason), applyMask)
 end
 
-function GF.DeferGroupRuntime(reason)
-	GF._pendingGroupRuntime = reason or true
-	if eventFrame then
-		eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-	end
+local function AddPendingRefresh(kind, mask)
+    if GF._pendingGroupRefresh == true then
+        if GF._pendingGroupRefreshKind ~= kind then
+            GF._pendingGroupRefreshKind = nil
+        end
+        if GF._pendingGroupRefreshMaskSet == true then
+            GF._pendingGroupRefreshMask = OrMask(GF._pendingGroupRefreshMask, mask)
+        else
+            GF._pendingGroupRefreshMask = mask
+            GF._pendingGroupRefreshMaskSet = true
+        end
+        return
+    end
+    GF._pendingGroupRefresh = true
+    GF._pendingGroupRefreshKind = kind
+    GF._pendingGroupRefreshMask = mask
+    GF._pendingGroupRefreshMaskSet = true
+end
+
+function GF.DeferGroupRuntime(reason, kind, mask)
+    reason = reason or "refresh"
+    GF._pendingGroupRuntime = reason
+    if reason == "roster" or reason == "zone" then
+        GF._pendingGroupRebuild = true
+        GF._pendingGroupDropSpecs = true
+    elseif reason == "rebuild" then
+        GF._pendingGroupRebuild = true
+    elseif reason == "visibility" then
+        GF._pendingGroupVisibility = true
+    else
+        AddPendingRefresh(kind, mask)
+    end
+    if eventFrame then
+        eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
 end
 
 local function GroupUnitMatches(frame, unit)
@@ -515,7 +563,7 @@ end
 
 function GF.RefreshVisuals(kind, mask, preInvalidated)
     if InCombat() then
-        GF.DeferGroupRuntime("refresh")
+        GF.DeferGroupRuntime("refresh", kind, mask)
         return false
     end
     if preInvalidated ~= true then
@@ -533,7 +581,7 @@ end
 
 function GF.RefreshAll(preInvalidated)
     if InCombat() then
-        GF.DeferGroupRuntime("refresh")
+        GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_ALL)
         return false
     end
     -- Invalidate once up front; RebuildAll/RefreshVisuals would each invalidate
@@ -572,6 +620,11 @@ end
 function GF.MarkAllDirty(mask)
     InvalidateSpecs()
     if not mask or mask == GF.DIRTY_ALL or Has(mask, GF.DIRTY_GEOMETRY) or Has(mask, GF.DIRTY_LAYOUT) then
+        if InCombat() then
+            GF.DeferGroupRuntime("rebuild")
+            GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_ALL)
+            return false
+        end
         return GF.RefreshAll(true)
     end
     return GF.RefreshVisuals(nil, mask, true)
@@ -601,6 +654,69 @@ function GF.EM2_NudgePreview(key, dx, dy)
     return true
 end
 
+local function TakePendingGroupRuntime(rosterChanged)
+    local pending = GF._pendingGroupRuntime
+    local rebuild = GF._pendingGroupRebuild == true
+    local dropSpecs = GF._pendingGroupDropSpecs == true
+    local visibility = GF._pendingGroupVisibility == true
+    local refresh = GF._pendingGroupRefresh == true
+    local refreshKind = GF._pendingGroupRefreshKind
+    local refreshMask = GF._pendingGroupRefreshMask
+
+    GF._pendingGroupRuntime = nil
+    GF._pendingGroupRebuild = nil
+    GF._pendingGroupDropSpecs = nil
+    GF._pendingGroupVisibility = nil
+    GF._pendingGroupRefresh = nil
+    GF._pendingGroupRefreshKind = nil
+    GF._pendingGroupRefreshMask = nil
+    GF._pendingGroupRefreshMaskSet = nil
+
+    if pending and not (rebuild or dropSpecs or visibility or refresh) then
+        if pending == "roster" or pending == "zone" then
+            rebuild = true
+            dropSpecs = true
+        elseif pending == "rebuild" then
+            rebuild = true
+        elseif pending == "visibility" then
+            visibility = true
+        else
+            refresh = true
+        end
+    end
+
+    if rosterChanged then
+        rebuild = true
+        dropSpecs = true
+    end
+
+    return pending or rosterChanged, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask
+end
+
+local function FlushPendingGroupRuntime(rosterChanged)
+    local hasPending, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask = TakePendingGroupRuntime(rosterChanged)
+    if not hasPending then
+        return false
+    end
+
+    -- Do not promote combat-deferred work into RefreshAll here. Runtime combat
+    -- events may request narrow refresh/visibility/rebuild work, but full layout
+    -- plus full visual apply belongs to explicit cold paths.
+    if dropSpecs then
+        DropSpecs()
+    end
+    if rebuild then
+        GF.RebuildAll(dropSpecs == true)
+    end
+    if visibility and not rebuild then
+        GF.UpdateGroupVisibility()
+    end
+    if refresh then
+        GF.RefreshVisuals(refreshKind, refreshMask, dropSpecs == true)
+    end
+    return true
+end
+
 local function OnEvent(self, event, ...)
     if event == "PLAYER_REGEN_ENABLED" then
         _G.MSUF_InCombat = false
@@ -612,16 +728,7 @@ local function OnEvent(self, event, ...)
             if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
             GF._forceScanHeaders = true
         end
-        local pendingRuntime = GF._pendingGroupRuntime
-        if pendingRuntime or rosterChanged then
-            GF._pendingGroupRuntime = nil
-            if pendingRuntime == "roster" or pendingRuntime == "zone" or (pendingRuntime == nil and rosterChanged) then
-                DropSpecs()
-                GF.RefreshAll(true)
-            else
-                GF.RefreshAll()
-            end
-        else
+        if not FlushPendingGroupRuntime(rosterChanged) then
             GF.RefreshGroupNames()
             if GF.RefreshClickCastFrames then
                 GF.RefreshClickCastFrames()
