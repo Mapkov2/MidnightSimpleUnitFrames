@@ -110,6 +110,10 @@ local function CopyTextParts(text)
     if src and dst then return src, dst end
     src, dst = text:match("^copy%s+from%s+(.+)%s+to%s+(.+)$")
     if src and dst then return src, dst end
+    src, dst = text:match("^copy%s+(.+)%s+over%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    src, dst = text:match("^copy%s+(.+)%s+onto%s+(.+)$")
+    if src and dst then return src, dst end
     src, dst = text:match("^copy%s+(.+)%s+to%s+(.+)$")
     if src and dst then return src, dst end
     src, dst = text:match("^use%s+.-%s+from%s+(.+)%s+for%s+(.+)$")
@@ -163,7 +167,7 @@ local function CopyGroupTargetsForText(text, source)
 end
 
 local function ParseGroupCopy(text)
-    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen" }) then return nil end
     local source, targets
     local srcText, dstText = CopyTextParts(text)
     if srcText and dstText then
@@ -174,6 +178,13 @@ local function ParseGroupCopy(text)
     if not source or not targets or #targets == 0 then
         local groups = DetectGroups(text)
         if #groups < 2 then
+            if srcText and dstText then
+                local srcUnits = DetectUnits(srcText)
+                local srcGroups = DetectGroups(srcText)
+                local dstUnits = DetectUnits(dstText)
+                local dstGroups = DetectGroups(dstText)
+                if (#srcUnits > 0 and #dstGroups > 0) or (#srcGroups > 0 and #dstUnits > 0) then return nil end
+            end
             if ContainsAny(text, {
                 "group setting", "group settings", "group frame setting", "group frame settings",
                 "group frames", "group frame", "party setting", "party settings",
@@ -206,7 +217,7 @@ local function ParseGroupCopy(text)
 end
 
 local function ParseUnsupportedMixedCopy(text)
-    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen" }) then return nil end
     local srcText, dstText = CopyTextParts(text)
     if not (srcText and dstText) then return nil end
 
@@ -234,7 +245,7 @@ local function ParseUnsupportedMixedCopy(text)
 end
 
 local function ParseCopy(text)
-    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehmen" }) then return nil end
+    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen" }) then return nil end
     local source, targets
     local srcText, dstText = CopyTextParts(text)
     if srcText and dstText then
@@ -280,9 +291,9 @@ local function BuildContextReset(text, ctx)
 end
 
 local GROUP_STATUS_ICON_ALIASES = {
-    { key = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role indicator", "role symbol" } },
-    { key = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader indicator", "leader symbol" } },
-    { key = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
+    { key = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols" } },
+    { key = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader icons", "leader indicator", "leader indicators", "leader symbol", "leader symbols" } },
+    { key = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assist icons", "assistant icon", "assistant icons", "assist indicator", "assist indicators", "assistant indicator", "assistant indicators", "assist symbol", "assist symbols", "assistant symbol", "assistant symbols" } },
     { key = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", layer = "raidMarkerLayer", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
     { key = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
     { key = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol" } },
@@ -335,8 +346,11 @@ end
 
 local GROUP_STATUS_ICON_TERMS = {
     "status icon", "status icons", "status indicator", "status indicators", "indicator", "indicators", "symbol", "symbols",
-    "role icon", "leader icon", "assist icon", "raid marker", "ready check", "summon icon",
-    "resurrect icon", "rez icon", "pvp flag", "pvp icon", "pvp indicator", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
+    "role icon", "role icons", "leader icon", "leader icons", "assist icon", "assist icons",
+    "raid marker", "raid markers", "ready check", "ready icon", "summon", "summon icon",
+    "resurrect", "resurrect icon", "resurrection", "resurrection icon", "incoming resurrection",
+    "incoming resurrection icon", "incoming rez", "incoming rez icon", "rez icon",
+    "pvp flag", "pvp icon", "pvp indicator", "phase icon", "dead text", "ghost text", "afk text", "dnd text",
 }
 
 local GROUP_STATUS_MIDNIGHT_STYLE_TERMS = {
@@ -374,6 +388,41 @@ local GROUP_SPELL_PLACED_ALIASES = { none = "none", off = "none", disabled = "no
 local GROUP_SPELL_FRAME_ALIASES = { none = "none", off = "none", disabled = "none", hide = "none", healthtint = "healthtint", ["health tint"] = "healthtint", tint = "healthtint", border = "border", outline = "border", glow = "glow", pulse = "pulse", namecolor = "namecolor", ["name color"] = "namecolor" }
 local GROUP_SPELL_GROWTH_ALIASES = { rightdown = "RIGHTDOWN", ["right down"] = "RIGHTDOWN", ["right then down"] = "RIGHTDOWN", leftdown = "LEFTDOWN", ["left down"] = "LEFTDOWN", ["left then down"] = "LEFTDOWN", rightup = "RIGHTUP", ["right up"] = "RIGHTUP", ["right then up"] = "RIGHTUP", leftup = "LEFTUP", ["left up"] = "LEFTUP", ["left then up"] = "LEFTUP" }
 local GROUP_SPELL_ANCHOR_ALIASES = { topleft = "TOPLEFT", ["top left"] = "TOPLEFT", topright = "TOPRIGHT", ["top right"] = "TOPRIGHT", bottomleft = "BOTTOMLEFT", ["bottom left"] = "BOTTOMLEFT", bottomright = "BOTTOMRIGHT", ["bottom right"] = "BOTTOMRIGHT", center = "CENTER", centre = "CENTER", middle = "CENTER", top = "TOP", bottom = "BOTTOM", left = "LEFT", right = "RIGHT" }
+
+local function StatusAnchorIntent(text)
+    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) then return true end
+    if ContainsAny(text, {
+        "to top", "to the top", "to bottom", "to the bottom", "to left", "to the left", "to right", "to the right",
+        "on top", "on the top", "on bottom", "on the bottom", "on left", "on the left", "on right", "on the right",
+        "top left", "top right", "bottom left", "bottom right", "upper left", "upper right", "lower left", "lower right",
+        "above frame", "above the frame", "over frame", "over the frame", "below frame", "below the frame", "under frame", "under the frame",
+        "left side", "right side", "right of name", "left of name", "right to name", "left to name",
+    }) and ContainsAny(text, { "put", "place", "set", "move", "position", "stick", "keep" }) then
+        return true
+    end
+    if ContainsAny(text, { "above", "over", "below", "under" })
+        and ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" })
+        and ContainsAny(text, { "put", "place", "set", "move", "position", "stick", "keep" })
+    then
+        return true
+    end
+    return false
+end
+
+local function StatusAnchorValueForText(text, aliases, values)
+    if not StatusAnchorIntent(text) then return nil end
+    if ContainsAny(text, { "above frame", "above the frame", "over frame", "over the frame" })
+        or (ContainsAny(text, { "above", "over" }) and ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" }))
+    then
+        return AliasValueForText("top", aliases, values) or AliasValueForText("top left", aliases, values)
+    end
+    if ContainsAny(text, { "below frame", "below the frame", "under frame", "under the frame" })
+        or (ContainsAny(text, { "below", "under" }) and ContainsAny(text, { "frame", "frames", "unitframe", "unit frame", "group frame", "group frames" }))
+    then
+        return AliasValueForText("bottom", aliases, values) or AliasValueForText("bottom left", aliases, values)
+    end
+    return AliasValueForText(text, aliases, values)
+end
 
 local function ParseGroupSpellIndicatorAction(text, raw)
     if not ContainsAny(text, { "spell indicator", "spell indicators", "tracked spell", "tracked spells" }) then return nil end
@@ -622,9 +671,10 @@ local function ParseGroupStatusIconDetail(text)
 
     local iconSpec = GroupStatusIconSpecForText(text)
     if not iconSpec then return nil end
+    local anchorIntent = StatusAnchorIntent(text)
 
     local enabledKey = iconSpec.enabled or iconSpec.key
-    if enabledKey then
+    if enabledKey and not anchorIntent then
         local value = DetectBoolean(text)
         if value == nil then
             if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "remove" }) then
@@ -663,9 +713,9 @@ local function ParseGroupStatusIconDetail(text)
         end
     end
 
-    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) and iconSpec.anchor then
+    if anchorIntent and iconSpec.anchor then
         local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.anchor))
-        local value = setting and AliasValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, setting.values or { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
+        local value = setting and StatusAnchorValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, setting.values or { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
         if value ~= nil then
             local changes = BuildGroupStatusChanges(scopes, iconSpec.anchor, value)
             if #changes > 0 then
@@ -943,11 +993,11 @@ local function ParseUnitStatusIndicatorDetail(text)
         end
     end
 
-    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" })
+    if (ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) or StatusAnchorIntent(text))
         and type(spec.anchor) == "string" and spec.anchor ~= ""
     then
         local setting = Registry and Registry:GetSetting(unit .. "." .. spec.anchor)
-        local value = setting and AliasValueForText(text, UNIT_STATUS_ANCHOR_ALIASES, setting.values or {
+        local value = setting and StatusAnchorValueForText(text, UNIT_STATUS_ANCHOR_ALIASES, setting.values or {
             "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT", "NAMERIGHT", "NAMELEFT",
         }) or nil
         if setting and value ~= nil then
@@ -1308,8 +1358,8 @@ local function ParseOpen(text, raw)
 end
 
 local function DashboardPanelForText(text)
-    if ContainsAny(text, { "recovery tools", "display recovery", "recover menu", "reset tools", "dashboard recovery", "recovery panel", "display panel" }) then return "recovery", "recovery tools" end
-    if ContainsAny(text, { "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "scaling panel", "scale panel" }) then return "scaling", "scaling tools" end
+    if ContainsAny(text, { "recovery tools", "display recovery", "recover menu", "reset tools", "dashboard recovery", "recovery panel", "recovery section", "display panel" }) then return "recovery", "recovery tools" end
+    if ContainsAny(text, { "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "scaling panel", "scale panel", "scale section", "scaling section", "ui scaling panel", "ui scaling section" }) then return "scaling", "scaling tools" end
     if ContainsAny(text, { "changelog", "change log", "release notes", "latest changes", "build notes", "changelog panel" }) then return "changelog", "changelog" end
     return nil, nil
 end
@@ -1486,6 +1536,7 @@ end
 
 function P.ParseExactActionKeyShortcut(text, raw)
     local hay = tostring(raw or text or ""):lower()
+    if not hay:find("_", 1, true) and not hay:find(".", 1, true) then return nil end
     if not hay:find("[%a_][%w_%.]*", 1) then return nil end
     local actions = Registry and Registry:AllActions() or {}
     local bestAction

@@ -506,9 +506,11 @@ local function RegisterUnitString(unit, attr, dbKey, label, defaultValue, aliase
         aliases = aliases,
         valuePrefixes = opts.valuePrefixes or aliases,
         mediaType = opts.mediaType,
+        normalizesValue = opts.normalizeValue ~= nil,
         get = function()
             local value = UnitDB(unit)[dbKey]
-            if type(value) ~= "string" or value == "" then return defaultValue or "" end
+            if type(value) ~= "string" or value == "" then value = defaultValue or "" end
+            if opts.normalizeValue then value = opts.normalizeValue(value) end
             return value
         end,
         set = function(value)
@@ -544,9 +546,11 @@ local function RegisterGeneralNestedBoolean(rootKey, dbKey, attr, label, default
         aliases = aliases,
         get = function()
             local root = GeneralDB()[rootKey]
-            local value = type(root) == "table" and root[dbKey] or nil
-            if value == nil then return defaultValue and true or false end
-            return value and true or false
+            if type(root) == "table" then
+                local value = root[dbKey]
+                if value ~= nil then return value and true or false end
+            end
+            return defaultValue and true or false
         end,
         set = function(value)
             local g = GeneralDB()
@@ -800,11 +804,12 @@ local STATUS_CONTROL_SPECS = {
         aliases = { "incoming rez indicator", "incoming resurrection indicator", "incoming rez icon", "incoming resurrection icon", "incoming rez symbol", "incoming resurrection symbol", "rez indicator", "rez icon", "rez symbol", "resurrection indicator", "resurrection icon", "resurrection symbol" },
     },
     {
-        value = "statusPvp", label = "PvP Flag Indicator", show = "showPvpIndicator", defaultShow = true, size = "pvpIndicatorSize", defaultSize = 18,
+        value = "statusPvp", label = "PvP Flag Indicator (War Mode/PvP)", show = "showPvpIndicator", defaultShow = true, size = "pvpIndicatorSize", defaultSize = 18,
         anchor = "pvpIndicatorAnchor", defaultAnchor = "TOPRIGHT", x = "pvpIndicatorOffsetX", defaultX = 0, y = "pvpIndicatorOffsetY", defaultY = 0,
         layer = "pvpIndicatorLayer", defaultLayer = 7, refresh = "MSUF_RequestStatusPvpIndicatorRefresh", statusRuntime = true,
         units = { player = true, target = true, focus = true, targettarget = true, focustarget = true },
-        aliases = { "pvp flag indicator", "pvp indicator", "pvp icon", "pvp flag icon", "pvp status indicator", "pvp status icon", "war mode indicator", "flagged indicator" },
+        description = "Only active in War Mode, Arena/Battleground, or while the player is PvP flagged; PvE instances keep it cold.",
+        aliases = { "pvp flag", "pvp flag indicator", "pvp indicator", "pvp icon", "pvp flag icon", "pvp status", "pvp status indicator", "pvp status icon", "war mode indicator", "flagged indicator" },
     },
 }
 for i = 1, #STATUS_CONTROL_SPECS do
@@ -1165,7 +1170,7 @@ for i = 1, #UNIT_KEYS do
                 refresh = spec.refresh,
                 text = true,
                 applyOpts = { preview = true, text = true },
-                description = "Status icon visibility for " .. spec.label .. ".",
+                description = spec.description or ("Status icon visibility for " .. spec.label .. "."),
             })
 
             if spec.iconStyle then

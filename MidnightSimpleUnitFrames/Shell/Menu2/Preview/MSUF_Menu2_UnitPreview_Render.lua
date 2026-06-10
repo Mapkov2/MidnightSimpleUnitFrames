@@ -1380,6 +1380,9 @@ function Preview.Refresh(box, reason)
         local show
         if statusCfg then
             show = statusCfg.enabled == true
+            if not show and spec.id == "statusPvp" and statusCfg.contextDisabled == true then
+                show = true
+            end
         else
             local showVal = conf[spec.show]
             if showVal == nil then showVal = g[spec.show] end

@@ -418,6 +418,35 @@ local function EnumValueForText(setting, text)
     return matchSegment(norm)
 end
 
+P._ExactEnumValueForText = P._ExactEnumValueForText or function(setting, text)
+    local segment = Normalize(text)
+    if segment == "" then return nil end
+    local compactText = Compact(segment)
+    local values = setting and setting.values
+    if type(values) == "table" then
+        for i = 1, #values do
+            local value = tostring(values[i] or "")
+            if value ~= "" then
+                if Normalize(value) == segment or Compact(value) == compactText then return values[i] end
+            end
+        end
+    end
+    return nil
+end
+
+P._StripExactValueConnector = P._StripExactValueConnector or function(text)
+    text = Trim(text)
+    text = text:gsub("^=%s*", "")
+    text = text:gsub("^[Tt][Oo]%s+", "")
+    text = text:gsub("^[Aa][Ss]%s+", "")
+    text = text:gsub("^[Ii][Ss]%s+", "")
+    text = text:gsub("^[Bb][Ee]%s+", "")
+    text = text:gsub("^[Aa][Uu][Ff]%s+", "")
+    text = text:gsub("^[Zz][Uu]%s+", "")
+    text = text:gsub("^[Aa][Ll][Ss]%s+", "")
+    return Trim(text)
+end
+
 local function StringValueForText(setting, text, raw)
     local rawText = tostring(raw or "")
     local quoted = rawText:match("\"([^\"]*)\"") or rawText:match("'([^']*)'")
@@ -507,6 +536,16 @@ end
 local function ValueDisplay(setting, value)
     if value == nil then return "value" end
     if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
+    if setting and setting.type == "color" and type(value) == "table" then
+        if type(value.label) == "string" and value.label ~= "" then return value.label end
+        local r = math.floor(((tonumber(value.r or value[1]) or 0) * 255) + 0.5)
+        local g = math.floor(((tonumber(value.g or value[2]) or 0) * 255) + 0.5)
+        local b = math.floor(((tonumber(value.b or value[3]) or 0) * 255) + 0.5)
+        if r < 0 then r = 0 elseif r > 255 then r = 255 end
+        if g < 0 then g = 0 elseif g > 255 then g = 255 end
+        if b < 0 then b = 0 elseif b > 255 then b = 255 end
+        return string.format("#%02X%02X%02X", r, g, b)
+    end
     if tostring(value) == "" then return "blank" end
     if tostring(value) == "__CUSTOM__" then return "Custom" end
     if setting and type(setting.valueAliases) == "table" then
@@ -985,7 +1024,15 @@ local function GroupAvailabilityAttributeForText(text)
     if ContainsAny(text, { "tint offline", "tint offline members", "also tint offline members", "dead background offline", "dead background offline members", "dead offline tint" }) then
         return nil
     end
-    if ContainsAny(text, { "offline in combat", "combat offline hide", "hide offline in combat", "offline im kampf" }) then
+    if (ContainsAny(text, { "offline", "offline member", "offline members", "offline player", "offline players" })
+        and ContainsAny(text, { "combat", "in combat" })
+        and ContainsAny(text, { "hide", "hidden", "not show", "dont show", "do not show", "never show" }))
+        or ContainsAny(text, {
+        "offline in combat", "offline members in combat", "offline players in combat",
+        "hide offline in combat", "hide offline members in combat", "hide offline players in combat",
+        "only hide offline in combat", "only hide offline members in combat", "only hide offline players in combat",
+        "combat offline hide", "offline im kampf",
+    }) then
         return "hideOfflineInCombat", "hide"
     end
     if ContainsAny(text, { "offline members", "offline member", "offline players", "hide offline members", "offline spieler" }) then
@@ -1005,9 +1052,16 @@ local function GroupAvailabilityAttributeForText(text)
     if ContainsAny(text, {
         "show while solo", "show solo", "solo mode", "show group while solo",
         "show party frames while solo", "show raid frames while solo", "show mythic raid frames while solo",
+        "show party frame while solo", "show raid frame while solo", "show mythic raid frame while solo",
+        "show party frame when solo", "show raid frame when solo", "show mythic raid frame when solo",
+        "show group frame while solo", "show group frame when solo",
         "show group frames while solo", "group while solo", "group frames while solo",
+        "group frame while solo", "group frame when solo",
         "hide while solo", "hide solo", "not show while solo", "dont show while solo", "do not show while solo",
         "hide party frames while solo", "hide raid frames while solo", "hide mythic raid frames while solo",
+        "hide party frame while solo", "hide raid frame while solo", "hide mythic raid frame while solo",
+        "hide party frame when solo", "hide raid frame when solo", "hide mythic raid frame when solo",
+        "hide group frame while solo", "hide group frame when solo",
         "solo anzeigen", "solo modus",
     }) then
         return "showSolo", "show"
@@ -1435,17 +1489,25 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
 
     local key
     local relativeDelta
+    local direction = DetectDirection(text, {})
     if ContainsAny(text, { "auto size", "autosize", "automatic size", "automatic sizing", "auto-size" }) then
         key = "general.kickReadyAutoSize"
     elseif ContainsAny(text, { "style", "border", "box", "outline", "square" }) then
         key = "general.kickReadyStyle"
-    elseif ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) then
+    elseif ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown", "put", "place", "position" })
+        and direction
+        and not ContainsAny(text, { "move", "nudge", "shift", "offset", "x offset", "y offset" })
+    then
         key = "general.kickReadyAnchor"
     elseif ContainsAny(text, { "x offset", "horizontal offset", "offset x", "move left", "move right", "nudge left", "nudge right", "left by", "right by" }) then
         key = "general.kickReadyOffsetX"
     elseif ContainsAny(text, { "y offset", "vertical offset", "offset y", "move up", "move down", "nudge up", "nudge down", "up by", "down by" }) then
         key = "general.kickReadyOffsetY"
-    elseif ContainsAny(text, { "size", "scale", "groesse", "grosse" }) then
+    elseif ContainsAny(text, { "move", "nudge", "shift" }) and (direction == "left" or direction == "right") then
+        key = "general.kickReadyOffsetX"
+    elseif ContainsAny(text, { "move", "nudge", "shift" }) and (direction == "up" or direction == "down") then
+        key = "general.kickReadyOffsetY"
+    elseif ContainsAny(text, { "size", "scale", "groesse", "grosse", "bigger", "larger", "smaller", "grow", "shrink", "icon bigger", "icon smaller" }) then
         key = "general.kickReadySize"
     elseif ContainsAny(text, { "target", "target castbar", "target cast bar" }) then
         key = "general.kickReadyShowTarget"
@@ -1461,9 +1523,21 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
     local value
     if setting.type == "number" then
         relativeDelta = RelativeNumberDeltaForText(setting, text)
+        if relativeDelta == nil and direction then
+            local amount = FirstNumber(text) or 3
+            if direction == "left" or direction == "down" then amount = -amount end
+            relativeDelta = amount
+        end
         if relativeDelta == nil then value = A._NumberValueForText(setting, text) end
     else
-        value = ValueForRegistrySetting(setting, text, raw)
+        if setting.type == "enum" and key == "general.kickReadyAnchor" and direction then
+            value = direction == "left" and "LEFT"
+                or direction == "right" and "RIGHT"
+                or direction == "up" and "TOP"
+                or direction == "down" and "BOTTOM"
+                or nil
+        end
+        if value == nil then value = ValueForRegistrySetting(setting, text, raw) end
         if value == nil and setting.type == "boolean" then
             if ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "true", "yes" }) then value = true end
             if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "false", "no" }) then value = false end
@@ -1476,6 +1550,58 @@ function P.ParseInterruptReadyRegistryShortcut(text, raw)
         changes = { { setting = setting, value = value, relativeDelta = relativeDelta, valueLabel = value ~= nil and ValueDisplay(setting, value) or nil } },
         label = setting.label or "Interrupt Ready setting",
         summary = "Changes the registered Castbar Interrupt Ready control.",
+    }
+end
+
+function P.ParseFocusKickRegistryShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, { "focus kick", "focus interrupt tracker", "focus interrupt icon", "focus kick tracker", "focus kick icon" }) then return nil end
+    if ContainsAny(text, { "reset", "restore", "default", "defaults" }) then return nil end
+
+    local changes = {}
+    local direction = DetectDirection(text, {})
+    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "x", "y", "horizontal", "vertical" }) and direction then
+        local key = (direction == "left" or direction == "right") and "general.focusKickIconOffsetX" or "general.focusKickIconOffsetY"
+        local amount = FirstNumber(text) or 10
+        if direction == "left" or direction == "down" then amount = -amount end
+        AddRegisteredChange(changes, key, nil, amount, direction)
+    elseif ContainsAny(text, { "x offset", "offset x", "horizontal" }) then
+        AddRegisteredChange(changes, "general.focusKickIconOffsetX", FirstNumber(text))
+    elseif ContainsAny(text, { "y offset", "offset y", "vertical" }) then
+        AddRegisteredChange(changes, "general.focusKickIconOffsetY", FirstNumber(text))
+    elseif ContainsAny(text, { "text size", "font size", "text bigger", "text smaller" }) then
+        local setting = Registry and Registry:GetSetting("general.focusKickTextSize")
+        local relativeDelta = setting and RelativeNumberDeltaForText(setting, text) or nil
+        local value = relativeDelta == nil and FirstNumber(text) or nil
+        AddRegisteredChange(changes, "general.focusKickTextSize", value, relativeDelta)
+    elseif ContainsAny(text, { "size", "scale", "bigger", "larger", "smaller", "grow", "shrink", "width", "height" }) then
+        local width = Registry and Registry:GetSetting("general.focusKickIconWidth")
+        local height = Registry and Registry:GetSetting("general.focusKickIconHeight")
+        local relativeWidth = width and RelativeNumberDeltaForText(width, text) or nil
+        local relativeHeight = height and RelativeNumberDeltaForText(height, text) or nil
+        local value = (relativeWidth == nil and relativeHeight == nil) and FirstNumber(text) or nil
+        if ContainsAny(text, { "width", "wide", "wider", "narrower" }) and not ContainsAny(text, { "height", "tall", "taller", "shorter" }) then
+            AddRegisteredChange(changes, "general.focusKickIconWidth", value, relativeWidth)
+        elseif ContainsAny(text, { "height", "tall", "taller", "shorter" }) and not ContainsAny(text, { "width", "wide", "wider", "narrower" }) then
+            AddRegisteredChange(changes, "general.focusKickIconHeight", value, relativeHeight)
+        else
+            AddRegisteredChange(changes, "general.focusKickIconWidth", value, relativeWidth)
+            AddRegisteredChange(changes, "general.focusKickIconHeight", value, relativeHeight)
+        end
+    else
+        local value = DetectBoolean(text)
+        if value == nil and ContainsAny(text, { "show", "enable", "turn on", "on" }) then value = true end
+        if value == nil and ContainsAny(text, { "hide", "disable", "turn off", "off" }) then value = false end
+        if value ~= nil then AddRegisteredChange(changes, "general.enableFocusKickIcon", value) end
+    end
+
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Focus Kick Tracker",
+        bulkSafe = #changes > 1,
+        summary = "Changes registered Focus Kick tracker controls.",
     }
 end
 
@@ -1553,6 +1679,9 @@ function P.ParseAlphaExcludeTextPortraitShortcut(text)
         "keep names visible when transparent", "keep name visible when transparent",
         "names visible when transparent", "name visible when transparent",
         "keep text visible when transparent", "text visible when transparent",
+        "keep names visible when faded", "keep name visible when faded",
+        "names visible when faded", "name visible when faded",
+        "keep text visible when faded", "text visible when faded",
     }) then return nil end
 
     local value = DetectBoolean(text)
@@ -1628,18 +1757,27 @@ end
 function P.ParseCastbarPositionRegistryShortcut(text)
     if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, { "position", "position preset", "placement" }) then return nil end
+    local direction = DetectDirection(text, {})
+    local naturalPlacement = (direction or ContainsAny(text, { "middle", "center", "centre", "mitte" }))
+        and ContainsAny(text, { "put", "place", "set", "position", "on the", "to the", "in the", "middle", "center", "centre", "mitte" })
+    if not ContainsAny(text, { "position", "position preset", "placement" }) and not naturalPlacement then return nil end
     if ContainsAny(text, { "move", "nudge", "shift", "offset", "x offset", "y offset" }) then return nil end
 
     local field
     local label
-    if ContainsAny(text, { "icon position", "spell icon position", "castbar icon position", "cast bar icon position" }) then
+    if ContainsAny(text, { "icon position", "spell icon position", "castbar icon position", "cast bar icon position" })
+        or (naturalPlacement and ContainsAny(text, { "icon", "spell icon" }))
+    then
         field = "IconPosition"
         label = "Castbar Icon Position"
-    elseif ContainsAny(text, { "spell name position", "spell text position", "castbar text position", "cast bar text position", "castbar name position" }) then
+    elseif ContainsAny(text, { "spell name position", "spell text position", "castbar text position", "cast bar text position", "castbar name position" })
+        or (naturalPlacement and ContainsAny(text, { "spell name", "spell text", "castbar text", "cast bar text", "text", "name" }))
+    then
         field = "SpellNamePosition"
         label = "Castbar Spell Name Position"
-    elseif ContainsAny(text, { "time position", "time text position", "timer position", "cast time position", "castbar time position", "cast bar time position" }) then
+    elseif ContainsAny(text, { "time position", "time text position", "timer position", "cast time position", "castbar time position", "cast bar time position" })
+        or (naturalPlacement and ContainsAny(text, { "time", "timer", "cast time" }))
+    then
         field = "TimePosition"
         label = "Castbar Time Position"
     else
@@ -1679,6 +1817,16 @@ function P.ParseCastbarPositionRegistryShortcut(text)
         local key = "general." .. tostring(prefixes[units[i]]) .. tostring(field)
         local setting = Registry and Registry:GetSetting(key)
         local value = setting and EnumValueForText(setting, text) or nil
+        if setting and value == nil and direction then
+            value = direction == "left" and "LEFT"
+                or direction == "right" and "RIGHT"
+                or direction == "up" and "ABOVE"
+                or direction == "down" and "BELOW"
+                or nil
+        end
+        if setting and value == nil and ContainsAny(text, { "middle", "center", "centre", "mitte" }) then
+            value = "CENTER"
+        end
         if setting and value ~= nil then
             changes[#changes + 1] = { setting = setting, value = value, valueLabel = ValueDisplay(setting, value) }
         end
@@ -1803,6 +1951,132 @@ P.GroupShortcutResponse = function(text, changes, concrete, title, summary)
     }
 end
 
+P.ParseGroupRolePowerVisibilityShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, { "role icon", "role indicator", "status icon", "status indicator", "symbol" }) then return nil end
+    if not ContainsAny(text, { "power", "mana", "resource", "power bar", "mana bar" }) then return nil end
+
+    local attr
+    local label
+    if ContainsAny(text, { "tank", "tanks", "tank role", "tank players" }) then
+        attr = "powerShowTank"
+        label = "Tank Power"
+    elseif ContainsAny(text, { "healer", "healers", "heal role", "healer role", "healer mana", "healer power" }) then
+        attr = "powerShowHealer"
+        label = "Healer Power"
+    elseif ContainsAny(text, { "dps", "damage dealer", "damage dealers", "damager", "damagers", "damage role" }) then
+        attr = "powerShowDamager"
+        label = "DPS Power"
+    else
+        return nil
+    end
+
+    local value = ShowSettingValueForText(text)
+    if value == nil then return nil end
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame role power", "Changes role-specific Group Frame power visibility controls for " .. label .. ".")
+end
+
+P.ParseGroupOfflineAlphaShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, { "offline", "offline member", "offline members", "offline player", "offline players" }) then return nil end
+    if ContainsAny(text, { "delay", "after", "seconds", "in combat", "hide offline in combat", "offline members in combat", "offline players in combat" }) then return nil end
+    if not ContainsAny(text, {
+        "alpha", "opacity", "transparency", "transparent", "fade", "faded",
+        "more visible", "less visible", "more transparent", "less transparent",
+    }) then
+        return nil
+    end
+
+    local value
+    local relativeDelta
+    if ContainsAny(text, { "more transparent", "less visible", "fade more", "more faded", "stronger fade" }) then
+        local amount = FirstNumber(text) or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = -amount
+    elseif ContainsAny(text, { "less transparent", "more visible", "fade less", "less faded", "weaker fade" }) then
+        local amount = FirstNumber(text) or 0.05
+        if amount > 1 then amount = amount / 100 end
+        relativeDelta = amount
+    else
+        value = FirstNumber(text)
+        if value == nil then return nil end
+        if value > 1 then value = value / 100 end
+    end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".offlineAlpha", value, relativeDelta)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame offline opacity", "Changes the registered Group Frame Offline Opacity slider.")
+end
+
+P.ParseGroupColumnLayoutShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, { "column", "columns", "per column", "spalte", "spalten" }) then return nil end
+    if not ContainsAny(text, { "party", "raid", "mythic raid", "mythicraid", "group frame", "group frames", "frames", "member", "members", "players" }) then return nil end
+    local value = FirstNumber(text)
+    if value == nil then
+        if HasPhrase(text, "one") then value = 1
+        elseif HasPhrase(text, "two") then value = 2
+        elseif HasPhrase(text, "three") then value = 3
+        elseif HasPhrase(text, "four") then value = 4
+        elseif HasPhrase(text, "five") then value = 5
+        elseif HasPhrase(text, "six") then value = 6
+        elseif HasPhrase(text, "seven") then value = 7
+        elseif HasPhrase(text, "eight") then value = 8
+        elseif HasPhrase(text, "nine") then value = 9
+        elseif HasPhrase(text, "ten") then value = 10 end
+    end
+    if value == nil then return nil end
+
+    local attr = "maxColumns"
+    local label = "Group frame max columns"
+    if ContainsAny(text, {
+        "per column", "members per column", "players per column", "frames per column", "units per column",
+        "new column after", "column after", "columns after", "start new column after", "break column after",
+        "break columns after", "after players", "after members",
+    }) then
+        attr = "unitsPerColumn"
+        label = "Group frame units per column"
+    end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. "." .. attr, value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, label, "Changes registered Group Layout column controls.")
+end
+
+P.ParseGroupPlayerFirstInRoleShortcut = function(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, { "role", "role sorting", "sort by role", "sorting" }) then return nil end
+    if not ContainsAny(text, {
+        "player first", "me first", "myself first", "put me first", "put myself first",
+        "keep me first", "keep myself first", "me at top", "me at the top",
+        "myself at top", "myself at the top", "put me at top", "put me at the top",
+        "put myself at top", "put myself at the top", "keep me at top", "keep me at the top",
+        "keep myself at top", "keep myself at the top",
+    }) then
+        return nil
+    end
+    local value = DetectBoolean(text)
+    if value == nil then value = not ContainsAny(text, { "do not", "dont", "don't", "disable", "turn off", "off", "false", "no" }) end
+
+    local scopes, concrete = P.GroupShortcutScopes(text)
+    local changes = {}
+    for i = 1, #scopes do
+        AddRegisteredChange(changes, "gf_" .. tostring(scopes[i]) .. ".playerFirstInRole", value)
+    end
+    return P.GroupShortcutResponse(text, changes, concrete, "Group frame player first in role", "Changes the registered Player First In Role sorting toggle.")
+end
+
 P.ParseGroupSortShortcut = function(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, { "sort", "sorting", "order", "first" }) then return nil end
@@ -1814,7 +2088,12 @@ P.ParseGroupSortShortcut = function(text)
 
     local sortValue
     local roleOrderValue
-    if ContainsAny(text, { "sort by group and role", "sort by group role", "group and role", "group plus role", "group role" }) then
+    if ContainsAny(text, {
+        "sort by group and role", "sort by group role", "group and role", "group plus role",
+        "group role", "group then role", "group then roles", "groups then role", "groups then roles",
+        "by group then role", "by group then roles", "by groups then role", "by groups then roles",
+        "raid groups then roles", "raid groups then role", "groups first then roles", "groups first then role",
+    }) then
         sortValue = "GROUP_ROLE"
     elseif ContainsAny(text, { "sort by group", "raid group order", "by raid group", "by group" }) then
         sortValue = "GROUP"
@@ -1822,7 +2101,11 @@ P.ParseGroupSortShortcut = function(text)
         sortValue = "NAME"
     elseif ContainsAny(text, { "sort by role", "by role", "role sorting", "sort roles", "roles" }) then
         sortValue = "ROLE"
-    elseif ContainsAny(text, { "tank first", "tanks first", "tank on top", "tanks on top", "tank role first", "tanks role first" }) then
+    elseif ContainsAny(text, {
+        "tank first", "tanks first", "tank on top", "tanks on top", "tank at top", "tanks at top",
+        "tank at the top", "tanks at the top", "with tanks at top", "with tanks at the top",
+        "tank role first", "tanks role first",
+    }) then
         sortValue = "ROLE"
         roleOrderValue = "TANK,HEALER,DAMAGER"
     elseif ContainsAny(text, { "healer first", "healers first", "heal first", "heals first", "healer on top", "healers on top" }) then
@@ -1891,6 +2174,8 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if ContainsAny(text, { "debuff" }) and not ContainsAny(text, { "debuff stripe" }) then return nil end
     local interruptReady = P.ParseInterruptReadyRegistryShortcut and P.ParseInterruptReadyRegistryShortcut(text, raw)
     if interruptReady then return interruptReady end
+    local focusKick = P.ParseFocusKickRegistryShortcut and P.ParseFocusKickRegistryShortcut(text)
+    if focusKick then return focusKick end
     local unitStatusSymbol = P.ParseUnitStatusSymbolRegistryShortcut and P.ParseUnitStatusSymbolRegistryShortcut(text)
     if unitStatusSymbol then return unitStatusSymbol end
     local castbarPosition = P.ParseCastbarPositionRegistryShortcut and P.ParseCastbarPositionRegistryShortcut(text)
@@ -1901,6 +2186,14 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     if alphaExclude then return alphaExclude end
     local unitHPTextReverse = P.ParseUnitHPTextReverseShortcut and P.ParseUnitHPTextReverseShortcut(text)
     if unitHPTextReverse then return unitHPTextReverse end
+    local groupRolePower = P.ParseGroupRolePowerVisibilityShortcut and P.ParseGroupRolePowerVisibilityShortcut(text)
+    if groupRolePower then return groupRolePower end
+    local groupOfflineAlpha = P.ParseGroupOfflineAlphaShortcut and P.ParseGroupOfflineAlphaShortcut(text)
+    if groupOfflineAlpha then return groupOfflineAlpha end
+    local groupColumns = P.ParseGroupColumnLayoutShortcut and P.ParseGroupColumnLayoutShortcut(text)
+    if groupColumns then return groupColumns end
+    local groupPlayerFirst = P.ParseGroupPlayerFirstInRoleShortcut and P.ParseGroupPlayerFirstInRoleShortcut(text)
+    if groupPlayerFirst then return groupPlayerFirst end
     local groupBoolean = P.ParseGroupBooleanRegistryShortcut and P.ParseGroupBooleanRegistryShortcut(text)
     if groupBoolean then return groupBoolean end
     local groupNumber = P.ParseGroupNumberRegistryShortcut and P.ParseGroupNumberRegistryShortcut(text)
@@ -1922,6 +2215,12 @@ P.ParseMiscRegistryShortcut = function(text, raw)
         key = "gameplay.combatStateColorSync"
         forcedValue = DetectBoolean(text)
         if forcedValue == nil and ContainsAny(text, { "sync", "same" }) then forcedValue = true end
+    elseif ContainsAny(text, { "castbar fill left to right", "cast bar fill left to right", "castbar fills left to right", "cast bar fills left to right", "castbar direction left to right", "cast bar direction left to right" }) then
+        key = "general.castbarFillDirection"
+        forcedValue = "LTR"
+    elseif ContainsAny(text, { "castbar fill right to left", "cast bar fill right to left", "castbar fills right to left", "cast bar fills right to left", "castbar direction right to left", "cast bar direction right to left" }) then
+        key = "general.castbarFillDirection"
+        forcedValue = "RTL"
     elseif ContainsAny(text, { "nameplate melee spell id", "melee nameplate spell id", "melee range spell id", "crosshair melee spell id", "crosshair spell id" }) then
         key = "gameplay.nameplateMeleeSpellID"
     elseif ContainsAny(text, { "snap", "snapping", "edge snap", "window snap", "menu snap", "snapping feature", "snap feature" }) then
@@ -2400,7 +2699,6 @@ P.BuildCastbarColorChoices = function(keys, value, valueLabel)
 end
 
 P.ParseCastbarColorShortcut = function(text, raw)
-    if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return nil end
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, {
         "castbar", "cast bar", "cast color", "cast colour", "zauberleiste",
@@ -2672,12 +2970,39 @@ function P.ParseUnitHPTextReverseShortcut(text)
     }
 end
 
+function P.LooksLikeExactKeyLookup(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    return norm:find("what is ", 1, true) == 1
+        or norm:find("what are ", 1, true) == 1
+        or norm:find("explain ", 1, true) == 1
+        or norm:find("where is ", 1, true) == 1
+        or norm:find("where are ", 1, true) == 1
+        or norm:find("where ", 1, true) == 1
+        or norm:find("find ", 1, true) == 1
+        or norm:find("search ", 1, true) == 1
+        or norm:find("help ", 1, true) == 1
+        or norm:find("how do ", 1, true) == 1
+        or norm:find("how ", 1, true) == 1
+        or norm:find("why ", 1, true) == 1
+        or norm:find("wo ist ", 1, true) == 1
+        or norm:find("wo ", 1, true) == 1
+        or norm:find("suche ", 1, true) == 1
+        or norm:find("finde ", 1, true) == 1
+        or norm:find("hilfe ", 1, true) == 1
+        or norm:find("erklaere ", 1, true) == 1
+        or norm:find("warum ", 1, true) == 1
+        or norm:find("wie ", 1, true) == 1
+end
+
 function P.ParseExactRegistryKeyShortcut(text, raw)
+    if P.LooksLikeExactKeyLookup(raw or text) then return nil end
     local hay = tostring(raw or text or ""):lower()
     if not hay:find("[%a_][%w_]*%.") then return nil end
     local settings = Registry and Registry:AllSettings() or {}
     local bestSetting
     local bestKeyLen = 0
+    local bestKeyEnd
     for i = 1, #settings do
         local setting = settings[i]
         local key = tostring(setting and setting.key or "")
@@ -2698,12 +3023,18 @@ function P.ParseExactRegistryKeyShortcut(text, raw)
                 if #keyLower > bestKeyLen then
                     bestSetting = setting
                     bestKeyLen = #keyLower
+                    bestKeyEnd = startPos + #keyLower - 1
                 end
             end
         end
     end
     if bestSetting then
-        local value = ValueForRegistrySetting(bestSetting, text, raw)
+        local rawText = tostring(raw or text or "")
+        local exactTail = bestKeyEnd and P._StripExactValueConnector(rawText:sub(bestKeyEnd + 1)) or ""
+        local value
+        if bestSetting.type == "enum" then value = P._ExactEnumValueForText(bestSetting, exactTail) end
+        if value == nil then value = ValueForRegistrySetting(bestSetting, text, raw) end
+        if value == nil and bestSetting.type == "string" then value = ExplicitFreeformValue(raw or text) end
         local relativeDelta
         if value == nil and bestSetting.type == "number" then relativeDelta = RelativeNumberDeltaForText(bestSetting, text) end
         if value ~= nil or relativeDelta ~= nil then
@@ -2777,10 +3108,15 @@ local function ParseRepeatedRegistryShortcut(text, raw)
         or P.ParseInterruptReadyRegistryShortcut(text, raw)
         or P.ParseUnitStatusSymbolRegistryShortcut(text)
         or P.ParseCastbarPositionRegistryShortcut(text)
+        or (P.ParseFocusKickRegistryShortcut and P.ParseFocusKickRegistryShortcut(text))
         or P.ParsePowerBarGradientRegistryShortcut(text)
         or P.ParseGroupFrameColorShortcut(text, raw)
         or P.ParseAlphaExcludeTextPortraitShortcut(text)
         or P.ParseUnitHPTextReverseShortcut(text)
+        or P.ParseGroupRolePowerVisibilityShortcut(text)
+        or P.ParseGroupOfflineAlphaShortcut(text)
+        or P.ParseGroupColumnLayoutShortcut(text)
+        or P.ParseGroupPlayerFirstInRoleShortcut(text)
         or P.ParseGroupBooleanRegistryShortcut(text)
         or P.ParseGroupNumberRegistryShortcut(text)
         or P.ParseGroupSortShortcut(text)

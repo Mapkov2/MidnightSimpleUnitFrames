@@ -48,6 +48,7 @@ local function RegisterGroupBoolean(scope, attr, dbKey, label, defaultValue, mod
             GroupDB(scope)[dbKey] = value and true or false
         end,
         apply = function() ApplyGroup(scope, opts.mode or mode or "visual") end,
+        description = opts.description,
         combatSafe = false,
     })
 end
@@ -376,14 +377,14 @@ local GROUP_STATUS_ICON_PACK_ALIASES = {
 }
 
 local GROUP_STATUS_ICON_SPECS = {
-    { value = "roleIcon", label = "Role Icon", enabled = "roleIcon", iconStyle = "roleIconStyle", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1, terms = { "role icon", "role indicator", "role symbol" } },
-    { value = "leaderIcon", label = "Leader Icon", enabled = "leaderIcon", iconStyle = "leaderIconStyle", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "leader icon", "leader indicator", "leader symbol" } },
-    { value = "assistIcon", label = "Assist Icon", enabled = "assistIcon", iconStyle = "assistIconStyle", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
+    { value = "roleIcon", label = "Role Icon", enabled = "roleIcon", iconStyle = "roleIconStyle", size = "roleIconSize", anchor = "roleIconAnchor", x = "roleIconX", y = "roleIconY", layer = "roleIconLayer", defaultSize = 12, defaultAnchor = "TOPLEFT", defaultLayer = 1, terms = { "role icon", "role icons", "role indicator", "role indicators", "role symbol", "role symbols" } },
+    { value = "leaderIcon", label = "Leader Icon", enabled = "leaderIcon", iconStyle = "leaderIconStyle", size = "leaderIconSize", anchor = "leaderIconAnchor", x = "leaderIconX", y = "leaderIconY", layer = "leaderIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "leader icon", "leader icons", "leader indicator", "leader indicators", "leader symbol", "leader symbols" } },
+    { value = "assistIcon", label = "Assist Icon", enabled = "assistIcon", iconStyle = "assistIconStyle", size = "assistIconSize", anchor = "assistIconAnchor", x = "assistIconX", y = "assistIconY", layer = "assistIconLayer", defaultSize = 12, defaultAnchor = "TOPRIGHT", defaultLayer = 2, terms = { "assist icon", "assist icons", "assistant icon", "assistant icons", "assist indicator", "assist indicators", "assistant indicator", "assistant indicators", "assist symbol", "assist symbols", "assistant symbol", "assistant symbols" } },
     { value = "raidMarker", label = "Raid Marker", enabled = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", x = "raidMarkerX", y = "raidMarkerY", layer = "raidMarkerLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 3, terms = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
     { value = "readyCheckIcon", label = "Ready Check Icon", enabled = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", x = "readyCheckX", y = "readyCheckY", layer = "readyCheckLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
     { value = "summonIcon", label = "Summon Icon", enabled = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", x = "summonX", y = "summonY", layer = "summonLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "summon icon", "summon indicator", "summon symbol" } },
     { value = "resurrectIcon", label = "Resurrect Icon", enabled = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", x = "resurrectX", y = "resurrectY", layer = "resurrectLayer", defaultSize = 16, defaultAnchor = "CENTER", defaultLayer = 4, terms = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
-    { value = "pvpIcon", label = "PvP Flag Icon", enabled = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", x = "pvpIconX", y = "pvpIconY", layer = "pvpIconLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3, terms = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
+    { value = "pvpIcon", label = "PvP Flag Icon (War Mode/PvP)", enabled = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", x = "pvpIconX", y = "pvpIconY", layer = "pvpIconLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3, description = "Only active in War Mode, Arena/Battleground, or while the player is PvP flagged; PvE instances keep it cold.", terms = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
     { value = "phaseIcon", label = "Phase Icon", enabled = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", x = "phaseX", y = "phaseY", layer = "phaseLayer", defaultSize = 14, defaultAnchor = "TOPLEFT", defaultLayer = 3, terms = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
     { value = "statusText", label = "Dead Text", enabled = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", x = "statusOffsetX", y = "statusOffsetY", layer = "statusTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7, terms = { "dead text", "dead status text", "status text" } },
     { value = "statusGhostText", label = "Ghost Text", enabled = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", x = "statusGhostOffsetX", y = "statusGhostOffsetY", layer = "statusGhostTextLayer", defaultSize = 14, defaultAnchor = "CENTER", defaultLayer = 7, terms = { "ghost text", "ghost status text" } },
@@ -484,8 +485,16 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "show solo", "solo anzeigen")
     AddAliasesForUnit(aliases, scope, "solo mode", "solo modus")
     AddAliasesForUnit(aliases, scope, "show while solo")
+    AddAliasesForUnit(aliases, scope, "show frame while solo")
+    AddAliasesForUnit(aliases, scope, "show frame when solo")
     AddAliasesForUnit(aliases, scope, "show group while solo")
+    AddAliasesForUnit(aliases, scope, "show group frame while solo")
+    AddAliasesForUnit(aliases, scope, "show group frame when solo")
     AddAliasesForUnit(aliases, scope, "show group frames while solo")
+    AddAliasesForUnit(aliases, scope, "hide frame while solo")
+    AddAliasesForUnit(aliases, scope, "hide frame when solo")
+    AddAliasesForUnit(aliases, scope, "hide group frame while solo")
+    AddAliasesForUnit(aliases, scope, "hide group frame when solo")
     RegisterGroupBoolean(scope, "showSolo", "showSolo", "Show While Solo", false, "rebuild", aliases)
 
     aliases = {}
@@ -628,16 +637,26 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "spacing", "abstand")
     AddAliasesForUnit(aliases, scope, "frame spacing", "frame abstand")
+    AddAliasesForUnit(aliases, scope, "space between frames")
+    AddAliasesForUnit(aliases, scope, "gap between frames")
+    AddAliasesForUnit(aliases, scope, "closer together")
+    AddAliasesForUnit(aliases, scope, "farther apart")
+    AddAliasesForUnit(aliases, scope, "more space between frames")
+    AddAliasesForUnit(aliases, scope, "less space between frames")
     RegisterGroupNumber(scope, "spacing", "spacing", "Spacing", 1, 0, 20, 1, "rebuild", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "units per column", "einheiten pro spalte")
     AddAliasesForUnit(aliases, scope, "members per column", "spieler pro spalte")
+    AddAliasesForUnit(aliases, scope, "players per column")
+    AddAliasesForUnit(aliases, scope, "frames per column")
     RegisterGroupNumber(scope, "unitsPerColumn", "unitsPerColumn", "Units Per Column", 5, 1, 40, 1, "rebuild", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "max columns", "max spalten")
     AddAliasesForUnit(aliases, scope, "columns", "spalten")
+    AddAliasesForUnit(aliases, scope, "frames in columns")
+    AddAliasesForUnit(aliases, scope, "number of columns")
     RegisterGroupNumber(scope, "maxColumns", "maxColumns", "Max Columns", maxColumnsDefault, 1, 8, 1, "rebuild", aliases)
 
     aliases = {}
@@ -653,16 +672,22 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name font size", "name schriftgroesse")
     AddAliasesForUnit(aliases, scope, "name size", "name groesse")
+    AddAliasesForUnit(aliases, scope, "names font size")
+    AddAliasesForUnit(aliases, scope, "names size")
     RegisterGroupNumber(scope, "nameFontSize", "nameFontSize", "Name Font Size", nameFontDefault, 6, 24, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "hp font size", "leben schriftgroesse")
     AddAliasesForUnit(aliases, scope, "health font size", "gesundheit schriftgroesse")
+    AddAliasesForUnit(aliases, scope, "hp text size")
+    AddAliasesForUnit(aliases, scope, "health text size")
     RegisterGroupNumber(scope, "hpFontSize", "hpFontSize", "HP Font Size", hpFontDefault, 6, 24, 1, "font", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "power font size", "power schriftgroesse")
     AddAliasesForUnit(aliases, scope, "mana font size", "mana schriftgroesse")
+    AddAliasesForUnit(aliases, scope, "power text size")
+    AddAliasesForUnit(aliases, scope, "mana text size")
     RegisterGroupNumber(scope, "powerFontSize", "powerFontSize", "Power Font Size", 9, 6, 24, 1, "font", aliases)
 
     aliases = {}
@@ -698,6 +723,8 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "range fade alpha", "reichweite fade alpha")
     AddAliasesForUnit(aliases, scope, "out of range alpha", "ausser reichweite alpha")
+    AddAliasesForUnit(aliases, scope, "range fade opacity")
+    AddAliasesForUnit(aliases, scope, "out of range opacity")
     RegisterGroupNumber(scope, "rangeFadeAlpha", "rangeFadeAlpha", "Range Fade Alpha", 0.4, 0, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
@@ -948,6 +975,8 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "keep text and portrait visible")
     AddAliasesForUnit(aliases, scope, "exclude text from opacity")
     AddAliasesForUnit(aliases, scope, "keep portrait visible")
+    AddAliasesForUnit(aliases, scope, "keep text visible when faded")
+    AddAliasesForUnit(aliases, scope, "keep names visible when faded")
     RegisterGroupBoolean(scope, "alphaExcludeTextPortrait", "alphaExcludeTextPortrait", "Keep Text & Portrait Visible", false, "visual", aliases)
 
     aliases = {}
@@ -1057,6 +1086,11 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "bar color mode")
     AddAliasesForUnit(aliases, scope, "health bar color mode")
     AddAliasesForUnit(aliases, scope, "group bar style")
+    AddAliasesForUnit(aliases, scope, "use class colors")
+    AddAliasesForUnit(aliases, scope, "class colored bars")
+    AddAliasesForUnit(aliases, scope, "colored by class")
+    AddAliasesForUnit(aliases, scope, "use global colors")
+    AddAliasesForUnit(aliases, scope, "use default colors")
     RegisterGroupEnum(scope, "groupBarMode", "gfBarMode", "Bar Color Mode", "GLOBAL", GROUP_BAR_MODE_VALUES, {
         global = "GLOBAL",
         inherit = "GLOBAL",
@@ -1157,18 +1191,29 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "show tank power")
     AddAliasesForUnit(aliases, scope, "tank power bar")
+    AddAliasesForUnit(aliases, scope, "tank power bars")
+    AddAliasesForUnit(aliases, scope, "tank mana")
+    AddAliasesForUnit(aliases, scope, "tank mana bars")
     AddAliasesForUnit(aliases, scope, "power for tanks")
     RegisterGroupBoolean(scope, "powerShowTank", "powerShowTank", "Show Tank Power", true, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "show healer power")
     AddAliasesForUnit(aliases, scope, "healer power bar")
+    AddAliasesForUnit(aliases, scope, "healer power bars")
+    AddAliasesForUnit(aliases, scope, "healer mana")
+    AddAliasesForUnit(aliases, scope, "healer mana bars")
     AddAliasesForUnit(aliases, scope, "power for healers")
     RegisterGroupBoolean(scope, "powerShowHealer", "powerShowHealer", "Show Healer Power", true, "visual", aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "show dps power")
     AddAliasesForUnit(aliases, scope, "dps power bar")
+    AddAliasesForUnit(aliases, scope, "dps power bars")
+    AddAliasesForUnit(aliases, scope, "dps mana")
+    AddAliasesForUnit(aliases, scope, "dps mana bars")
+    AddAliasesForUnit(aliases, scope, "damage dealer power")
+    AddAliasesForUnit(aliases, scope, "damage dealer mana")
     AddAliasesForUnit(aliases, scope, "power for dps")
     RegisterGroupBoolean(scope, "powerShowDamager", "powerShowDamager", "Show DPS Power", false, "visual", aliases)
 
@@ -1399,6 +1444,9 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "offline alpha")
     AddAliasesForUnit(aliases, scope, "offline opacity")
     AddAliasesForUnit(aliases, scope, "offline member opacity")
+    AddAliasesForUnit(aliases, scope, "offline transparency")
+    AddAliasesForUnit(aliases, scope, "fade offline members")
+    AddAliasesForUnit(aliases, scope, "offline member fade")
     RegisterGroupNumber(scope, "offlineAlpha", "offlineAlpha", "Offline Opacity", 0.5, 0, 1, 0.05, "visual", aliases, { percent = true })
 
     aliases = {}
@@ -1525,7 +1573,7 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
         aliases = {}
         AddGroupStatusIconAliases(aliases, scope, spec)
         AddGroupStatusIconAliases(aliases, scope, spec, "enabled")
-        RegisterGroupBoolean(scope, "statusIcon" .. spec.value .. "Enabled", spec.enabled, spec.label, true, "visual", aliases)
+        RegisterGroupBoolean(scope, "statusIcon" .. spec.value .. "Enabled", spec.enabled, spec.label, true, "visual", aliases, { description = spec.description })
 
         aliases = {}
         AddGroupStatusIconAliases(aliases, scope, spec, "size")

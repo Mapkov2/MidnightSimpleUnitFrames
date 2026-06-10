@@ -796,6 +796,39 @@ local function SetProfileStagingSelector(args)
     return false, "I do not know which profile staging field to set."
 end
 
+local function ResolveClassPowerStyleTab(tab)
+    local key = NormalizeKey(tab)
+    if key == "texture" or key == "textures" or key == "resource" or key == "resources" then return "resources", "Textures" end
+    if key == "text" or key == "texts" then return "text", "Text" end
+    if key == "opacity" or key == "alpha" or key == "transparency" then return "opacity", "Opacity" end
+    if key == "pip" or key == "pips" or key == "separator" or key == "separators" then return "pips", "Pips" end
+    return nil
+end
+
+local function SetClassPowerStyleTabSelector(args)
+    local tab, label = ResolveClassPowerStyleTab(args and args.tab)
+    if not tab then return false, "I do not know which Class Resources style tab to select." end
+    PersistScalar("classPowerStyleTab", tab)
+    OpenMenuPage("classpower")
+    return true, "Selected Class Resources Style " .. tostring(label or tab) .. " tab."
+end
+
+local function ResolveBarsHighlightTab(tab)
+    local key = NormalizeKey(tab)
+    if key == "mode" or key == "modes" or key == "border" or key == "borders" then return "modes", "Modes" end
+    if key == "preview" or key == "test" or key == "tests" then return "preview", "Preview" end
+    if key == "priority" or key == "priorities" or key == "order" or key == "ordering" then return "priority", "Priority" end
+    return nil
+end
+
+local function SetBarsHighlightTabSelector(args)
+    local tab, label = ResolveBarsHighlightTab(args and args.tab)
+    if not tab then return false, "I do not know which Highlight Borders tab to select." end
+    PersistScalar("barsHighlightTab", tab)
+    OpenMenuPage("opt_bars")
+    return true, "Selected Highlight Borders " .. tostring(label or tab) .. " tab."
+end
+
 local function CurrentUnitPage()
     local page = M and M.activeKey
     if type(page) ~= "string" then return nil end
@@ -908,6 +941,8 @@ function A.Workflow.SetMenuSelectorState(args)
     if selector == "group_corner" then return SetGroupCornerSelector(args) end
     if selector == "color_token" then return SetColorTokenSelector(args) end
     if selector == "profile_staging" then return SetProfileStagingSelector(args) end
+    if selector == "class_power_style_tab" then return SetClassPowerStyleTabSelector(args) end
+    if selector == "bars_highlight_tab" then return SetBarsHighlightTabSelector(args) end
     if selector == "unit_copy_scope" then return SetUnitCopyScopeSelector(args) end
     if selector == "group_copy_scope" then return SetGroupCopyScopeSelector(args) end
     return false, "I do not know which menu selector to set."
@@ -1044,6 +1079,8 @@ Registry:RegisterAction({
         "select text tab", "select text slot", "select status tab", "select status indicator",
         "select group status icon", "select spell indicator", "select corner editor slot",
         "select power color token", "select class resource color token",
+        "select class power style tab", "select class resource style tab", "select class resources style area",
+        "select highlight borders tab", "select bars highlight tab", "select highlight area",
         "move text as one group", "move text per slot", "text move together",
         "select profile export kind", "set profile staging field", "set profile string field",
         "set unit copy category", "select unit copy categories",

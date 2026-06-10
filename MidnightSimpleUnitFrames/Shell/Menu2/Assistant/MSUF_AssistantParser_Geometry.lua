@@ -1072,6 +1072,55 @@ function P.ParsePairwiseFrameSpacingShortcut(text)
     }
 end
 
+function P.ParseGroupFrameSpacingShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
+    if ContainsAny(text, {
+        "portrait", "name", "hp text", "health text", "power text", "mana text", "status icon",
+        "indicator", "border padding", "group border", "power bar", "health bar",
+    }) then
+        return nil
+    end
+
+    local mode
+    if ContainsAny(text, {
+        "closer together", "closer to each other", "nearer together", "bring together",
+        "less space", "less spacing", "reduce spacing", "decrease spacing", "tighten spacing",
+        "smaller spacing", "smaller gap", "less gap", "compact spacing",
+    }) then
+        mode = "closer"
+    elseif ContainsAny(text, {
+        "farther apart", "further apart", "spread apart", "spread out", "space out",
+        "more space", "more spacing", "more distance", "increase spacing", "add spacing",
+        "add space between", "bigger spacing", "larger spacing", "bigger gap", "larger gap",
+    }) or (ContainsAny(text, { "spread", "space" }) and ContainsAny(text, { "apart", "out" })) then
+        mode = "apart"
+    else
+        return nil
+    end
+
+    local groups = DetectGroups(text)
+    if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
+    if #groups ~= 1 then return nil end
+
+    local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[1]) .. ".spacing")
+    if not setting then return nil end
+    local amount = FirstNumber(text) or 1
+    if mode == "closer" then amount = -amount end
+    return {
+        kind = "changes",
+        changes = {
+            {
+                setting = setting,
+                relativeDelta = amount,
+                direction = mode == "closer" and "decrease" or "increase",
+            },
+        },
+        label = mode == "closer" and "Reduce group frame spacing" or "Increase group frame spacing",
+        summary = "Maps natural group-frame spacing wording to the registered Group Layout Spacing slider.",
+    }
+end
+
 function P.CooldownManagerAnchorValueForText(text)
     if ContainsAny(text, {
         "utility cooldown", "utility cooldowns", "utility cooldown manager", "utility cooldownmanager",
@@ -1094,21 +1143,53 @@ function P.CooldownManagerAnchorValueForText(text)
     return nil
 end
 
-function P.ParseHumanAnchorTarget(text)
+local HUMAN_ANCHOR_FRAME_NAME_CONNECTORS = {
+    " to ", " near ", " next to ", " under ", " below ", " above ", " over ",
+    " toward ", " towards ", " by ",
+}
+
+local function HumanAnchorFrameNameForText(text, raw)
+    local cooldownFrame = P.CooldownManagerAnchorValueForText(text)
+    if cooldownFrame then return cooldownFrame end
+    local frameName
+    if RawAfterLastConnector then
+        frameName = RawAfterLastConnector(raw or text, HUMAN_ANCHOR_FRAME_NAME_CONNECTORS)
+    end
+    if not frameName and RawCustomAnchorFrameName then
+        frameName = RawCustomAnchorFrameName(raw or text)
+    end
+    if CleanCustomAnchorFrameName then frameName = CleanCustomAnchorFrameName(frameName) end
+    if frameName == "" then return nil end
+    if type(frameName) ~= "string" or frameName == "" then return nil end
+    if frameName:find("%s") then return nil end
+    return frameName
+end
+
+function P.ParseHumanAnchorTarget(text, raw)
     if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
     if ContainsAny(text, {
         "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
         "text", "icon", "indicator", "raid marker", "status", "level", "level indicator",
         "raid group name", "group number", "leader", "assist", "elite", "rare",
         "combat indicator", "rested", "resting", "incoming rez", "incoming resurrection",
+        "ready check", "ready icon", "role icon", "leader icon", "assist icon", "summon icon",
+        "resurrect icon", "resurrection icon", "rez icon", "pvp icon", "phase icon",
+        "dead text", "ghost text", "afk text", "dnd text",
     }) then
         return nil
     end
+    local externalFrameName = HumanAnchorFrameNameForText(text, raw)
     local attachIntent = ContainsAny(text, {
         "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
         "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
         "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
     }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
+        or (HasPhrase(text, "attach") and HasPhrase(text, "to"))
+        or (HasPhrase(text, "dock") and HasPhrase(text, "to"))
+        or (HasPhrase(text, "snap") and HasPhrase(text, "to"))
+        or (externalFrameName ~= nil
+            and ContainsAny(text, { "put", "place", "move", "anchor", "attach" })
+            and ContainsAny(text, { "under", "below", "above", "over" }))
     local detachIntent = ContainsAny(text, {
         "away from", "farther from", "further from", "move away", "move away from",
         "detach from", "undock from", "disconnect from",
@@ -1122,13 +1203,35 @@ function P.ParseHumanAnchorTarget(text)
     if #groups == 0 and (#units > 0 or unitframeScope or unitPage) then
         local probeUnit = (units and units[1]) or unitPage or "player"
         local valueSetting = Registry and Registry:GetSetting(tostring(probeUnit) .. ".anchorToUnitframe")
-        local value = detachIntent and "GLOBAL" or (valueSetting and EnumValueForText(valueSetting, text)) or P.CooldownManagerAnchorValueForText(text)
-        if value == nil then return nil end
         if unitframeScope and #units == 0 then
             units = ALL_UNITFRAMES
         elseif #units == 0 and unitPage then
             units = { unitPage }
         end
+        local enumValue = valueSetting and EnumValueForText(valueSetting, text)
+        local cooldownValue = P.CooldownManagerAnchorValueForText(text)
+        local value = detachIntent and "GLOBAL" or enumValue or cooldownValue
+        if value ~= nil and #units == 1 and value == units[1] and cooldownValue then
+            value = cooldownValue
+        end
+        local selfAnchor = value ~= nil and #units == 1 and value == units[1]
+        if (value == nil or (selfAnchor and externalFrameName ~= nil and externalFrameName ~= units[1])) and externalFrameName ~= nil then
+            local changes = {}
+            for i = 1, #units do
+                local setting = Registry and Registry:GetSetting(tostring(units[i]) .. ".anchorFrameName")
+                if setting then changes[#changes + 1] = { setting = setting, value = externalFrameName } end
+            end
+            if #changes == 0 then return nil end
+            return {
+                kind = "changes",
+                changes = changes,
+                label = "Set unit custom anchor frame",
+                bulkSafe = #changes > 1,
+                compoundComplete = true,
+                summary = "Interprets human placement wording as the registered Unit Frame Custom Anchor Frame field.",
+            }
+        end
+        if value == nil then return nil end
         if #units == 1 and value == units[1] then return nil end
         if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss") then
             local filtered = {}
@@ -1173,7 +1276,7 @@ function P.ParseHumanAnchorTarget(text)
             if setting then changes[#changes + 1] = { setting = setting, value = groupAnchorValue } end
         end
     else
-        local frameName = P.CooldownManagerAnchorValueForText(text)
+        local frameName = externalFrameName
         if not frameName then return nil end
         for i = 1, #groups do
             local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. ".customAnchorFrame")
@@ -1194,45 +1297,103 @@ end
 function P.GroupScaleBreakpointAttrForText(text)
     if ContainsAny(text, {
         "over 25", "above 25", "more than 25", "over twenty five", "above twenty five",
-        "26 plus", "26+", "26 or more", "large raid", "full raid",
+        "25 plus", "25+", "25 or more", "26 plus", "26+", "26 or more", "large raid", "full raid",
     }) then
         return "scaleOver25", 26
     end
     local norm = Normalize(text):gsub("%-", " ")
     local number =
         norm:match("when%s+there%s+are%s+(%d+)%s+players")
+        or norm:match("when%s+there%s+are%s+(%d+)%s+raiders")
         or norm:match("when%s+there%s+are%s+(%d+)%s+people")
         or norm:match("when%s+there%s+are%s+(%d+)%s+persons")
         or norm:match("when%s+there%s+are%s+(%d+)%s+raid%s+members")
         or norm:match("when%s+there%s+are%s+(%d+)%s+members")
+        or norm:match("when%s+there%s+is%s+(%d+)%s+player")
+        or norm:match("when%s+there%s+is%s+(%d+)%s+raider")
+        or norm:match("when%s+there%s+is%s+(%d+)%s+person")
+        or norm:match("when%s+there%s+is%s+(%d+)%s+raid%s+member")
+        or norm:match("when%s+there%s+is%s+(%d+)%s+member")
         or norm:match("when%s+(%d+)%s+players")
+        or norm:match("when%s+(%d+)%s+player")
+        or norm:match("when%s+(%d+)%s+raiders")
+        or norm:match("when%s+(%d+)%s+raider")
         or norm:match("when%s+(%d+)%s+people")
+        or norm:match("when%s+(%d+)%s+person")
         or norm:match("when%s+(%d+)%s+raid%s+members")
+        or norm:match("when%s+(%d+)%s+raid%s+member")
         or norm:match("when%s+(%d+)%s+members")
+        or norm:match("when%s+(%d+)%s+member")
         or norm:match("with%s+(%d+)%s+players")
+        or norm:match("with%s+(%d+)%s+player")
+        or norm:match("with%s+(%d+)%s+raiders")
+        or norm:match("with%s+(%d+)%s+raider")
         or norm:match("with%s+(%d+)%s+people")
+        or norm:match("with%s+(%d+)%s+person")
         or norm:match("with%s+(%d+)%s+raid%s+members")
+        or norm:match("with%s+(%d+)%s+raid%s+member")
         or norm:match("with%s+(%d+)%s+members")
+        or norm:match("with%s+(%d+)%s+member")
+        or norm:match("with%s+a%s+(%d+)%s+player%s+group")
+        or norm:match("with%s+(%d+)%s+player%s+group")
         or norm:match("for%s+(%d+)%s+players")
+        or norm:match("for%s+(%d+)%s+player")
+        or norm:match("for%s+(%d+)%s+raiders")
+        or norm:match("for%s+(%d+)%s+raider")
         or norm:match("for%s+(%d+)%s+people")
+        or norm:match("for%s+(%d+)%s+person")
         or norm:match("for%s+(%d+)%s+raid%s+members")
+        or norm:match("for%s+(%d+)%s+raid%s+member")
         or norm:match("for%s+(%d+)%s+members")
+        or norm:match("for%s+(%d+)%s+member")
+        or norm:match("for%s+a%s+(%d+)%s+player%s+group")
+        or norm:match("for%s+(%d+)%s+player%s+group")
         or norm:match("for%s+a%s+(%d+)%s+player%s+raid")
         or norm:match("for%s+(%d+)%s+player%s+raid")
         or norm:match("for%s+a%s+(%d+)%s+man%s+raid")
         or norm:match("for%s+(%d+)%s+man%s+raid")
+        or norm:match("for%s+a%s+(%d+)%s*m%s+raid")
+        or norm:match("for%s+(%d+)%s*m%s+raid")
+        or norm:match("for%s+a%s+(%d+)%s*man%s+raid")
+        or norm:match("for%s+(%d+)%s*man%s+raid")
+        or norm:match("for%s+(%d+)%s*m%f[%W]")
+        or norm:match("for%s+(%d+)%s*man%f[%W]")
+        or norm:match("for%s+(%d+)%s*%+%s+players")
+        or norm:match("for%s+(%d+)%s*%+%s+people")
+        or norm:match("for%s+(%d+)%s*%+%s+raiders")
+        or norm:match("for%s+(%d+)%s*%+%s+members")
         or norm:match("at%s+(%d+)%s+players")
+        or norm:match("at%s+(%d+)%s+player")
+        or norm:match("at%s+(%d+)%s+raiders")
+        or norm:match("at%s+(%d+)%s+raider")
         or norm:match("at%s+(%d+)%s+people")
+        or norm:match("at%s+(%d+)%s+person")
         or norm:match("at%s+(%d+)%s+raid%s+members")
+        or norm:match("at%s+(%d+)%s+raid%s+member")
         or norm:match("at%s+(%d+)%s+members")
+        or norm:match("at%s+(%d+)%s+member")
         or norm:match("raid%s+of%s+(%d+)")
         or norm:match("(%d+)%s+players")
+        or norm:match("(%d+)%s+player%s+group")
         or norm:match("(%d+)%s+player%s+raid")
+        or norm:match("(%d+)%s+raiders")
+        or norm:match("(%d+)%s+raider")
         or norm:match("(%d+)%s+people")
+        or norm:match("(%d+)%s+person")
         or norm:match("(%d+)%s+raid%s+members")
+        or norm:match("(%d+)%s+raid%s+member")
         or norm:match("(%d+)%s+members")
+        or norm:match("(%d+)%s+member")
         or norm:match("(%d+)%s+man%s+raid")
+        or norm:match("(%d+)%s*m%s+raid")
+        or norm:match("(%d+)%s*man%s+raid")
         or norm:match("(%d+)%s+man")
+        or norm:match("(%d+)%s*m%f[%W]")
+        or norm:match("(%d+)%s*man%f[%W]")
+        or norm:match("(%d+)%s*%+%s+players")
+        or norm:match("(%d+)%s*%+%s+people")
+        or norm:match("(%d+)%s*%+%s+raiders")
+        or norm:match("(%d+)%s*%+%s+members")
         or norm:match("scale%s+at%s+(%d+)")
         or norm:match("scaling%s+at%s+(%d+)")
     number = tonumber(number)
@@ -1259,6 +1420,7 @@ function P.GroupScaleValueForText(text, playerCount)
         or norm:match("(%d+%.?%d*)%s*%%?%s+scaling")
     value = tonumber(value)
     if value ~= nil then return value end
+    if P.GroupScaleRelativeDeltaForText and P.GroupScaleRelativeDeltaForText(text) ~= nil then return nil end
     local fallback
     for token in norm:gmatch("%d+%.?%d*") do
         local number = tonumber(token)
@@ -1269,37 +1431,66 @@ function P.GroupScaleValueForText(text, playerCount)
     return fallback
 end
 
+function P.GroupScaleRelativeDeltaForText(text)
+    local direction
+    if ContainsAny(text, {
+        "decrease", "lower", "reduce", "smaller", "shrink", "scale down",
+        "less scale", "less scaling", "kleiner", "senke", "reduziere", "weniger",
+    }) then
+        direction = -1
+    elseif ContainsAny(text, {
+        "increase", "raise", "higher", "bigger", "larger", "grow", "scale up",
+        "more scale", "more scaling", "groesser", "erhoehe", "mehr",
+    }) then
+        direction = 1
+    end
+    if not direction then return nil end
+
+    local norm = Normalize(text)
+    local amount = tonumber(norm:match("by%s+([-+]?%d+%.?%d*)"))
+        or tonumber(norm:match("um%s+([-+]?%d+%.?%d*)"))
+    if not amount then
+        if ContainsAny(text, { "a little", "a bit", "slightly", "small amount", "klein wenig" }) then
+            amount = 2
+        elseif ContainsAny(text, { "a lot", "much", "massive", "huge", "large amount", "stark" }) then
+            amount = 10
+        else
+            amount = 5
+        end
+    end
+    return direction * math.abs(amount)
+end
+
 function P.ParseGroupScaleBreakpointShortcut(text)
     if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
     if not ContainsAny(text, {
         "scale", "scaling", "frame scale", "raid scale", "party scale", "mythic raid scale",
-        "players", "people", "persons", "raid members", "player count", "raid size",
-    }) then
-        return nil
-    end
-    if ContainsAny(text, {
-        "increase", "decrease", "raise", "lower", "more", "less", "by",
-        "erhoehe", "senke", "reduziere", "mehr", "weniger", "um",
+        "players", "raider", "raiders", "people", "persons", "members",
+        "raid member", "raid members", "player count", "raid size",
     }) then
         return nil
     end
     local attr, playerCount = P.GroupScaleBreakpointAttrForText(text)
     if not attr then return nil end
     local value = P.GroupScaleValueForText(text, playerCount)
-    if value == nil then return nil end
+    local relativeDelta
+    if value == nil then
+        relativeDelta = P.GroupScaleRelativeDeltaForText(text)
+        if relativeDelta == nil then return nil end
+    end
     local groups = DetectGroups(text)
     if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
     if #groups == 0 then return nil end
     local changes = {}
     for i = 1, #groups do
         local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value } end
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
     end
     if #changes == 0 then return nil end
     return {
         kind = "changes",
         changes = changes,
-        label = "Set group frame player-count scale",
+        label = value == nil and "Adjust group frame player-count scale" or "Set group frame player-count scale",
         bulkSafe = #changes > 1,
         compoundComplete = true,
         summary = "Maps player-count wording to the Group Layout scaling breakpoint sliders.",
@@ -1377,11 +1568,13 @@ P.FRAME_RESIZE_INTENT_TERMS = {
 
 P.FRAME_RESIZE_DETAIL_BLOCKERS = {
     "portrait", "castbar", "cast bar", "class power", "class resource", "class resources",
-    "power bar", "mana bar", "health bar", "hp bar", "name", "name text", "hp text",
+    "power bar", "mana bar", "health bar", "hp bar", "name", "names", "name text", "hp text",
     "health text", "power text", "mana text", "text", "font", "border", "outline",
     "corner", "corner dot", "corner dots", "indicator", "indicators", "status icon",
     "status indicator", "icon", "icons", "symbol", "symbols", "elite", "elite icon",
     "elite symbol", "rare icon", "rare symbol", "aura", "auras", "buff", "buffs", "debuff",
+    "raid marker", "target marker", "ready check", "summon icon", "resurrect icon",
+    "resurrection icon", "incoming rez", "incoming resurrection", "pvp flag", "pvp icon", "phase icon",
     "debuffs", "alpha", "opacity", "transparency", "range fade", "scale", "x offset",
     "y offset", "offset", "position", "move", "nudge", "shift", "growth",
     "grow right", "grow left", "grow up", "grow down",
@@ -1614,9 +1807,15 @@ function P.ParseTextVisibilityShortcut(text)
     local value = DetectBoolean(text)
     if value == nil then return nil end
     local spec
-    if ContainsAny(text, { "power text", "mana text", "energy text", "resource text", "energie text", "ressource text" }) then
+    if ContainsAny(text, {
+        "power text", "mana text", "energy text", "resource text", "energie text", "ressource text",
+        "power number", "power numbers", "mana number", "mana numbers", "energy number", "energy numbers",
+    }) then
         spec = { unitAttr = "showPower", groupAttr = "showPowerText", label = "Power Text" }
-    elseif ContainsAny(text, { "hp text", "health text", "life text", "leben text", "gesundheit text" }) then
+    elseif ContainsAny(text, {
+        "hp text", "health text", "life text", "leben text", "gesundheit text",
+        "hp number", "hp numbers", "health number", "health numbers", "life number", "life numbers",
+    }) then
         spec = { unitAttr = "showHP", groupAttr = "showHPText", label = "HP Text" }
     elseif ContainsAny(text, { "name text" }) then
         spec = { unitAttr = "showName", groupAttr = "showName", label = "Name Text" }
@@ -1965,6 +2164,13 @@ local CASTBAR_DETAIL_PREFIXES = {
     boss = "bossCast",
 }
 
+local CASTBAR_ROOT_FIELDS = {
+    player = { width = "castbarPlayerBarWidth", height = "castbarPlayerBarHeight", x = "castbarPlayerOffsetX", y = "castbarPlayerOffsetY" },
+    target = { width = "castbarTargetBarWidth", height = "castbarTargetBarHeight", x = "castbarTargetOffsetX", y = "castbarTargetOffsetY" },
+    focus = { width = "castbarFocusBarWidth", height = "castbarFocusBarHeight", x = "castbarFocusOffsetX", y = "castbarFocusOffsetY" },
+    boss = { width = "bossCastbarWidth", height = "bossCastbarHeight", x = "bossCastbarOffsetX", y = "bossCastbarOffsetY" },
+}
+
 local function CastbarDetailUnitsOrCurrentPage(text)
     local units = DetectUnits(text)
     local filtered = {}
@@ -1976,6 +2182,161 @@ local function CastbarDetailUnitsOrCurrentPage(text)
     local pageUnit = CurrentPageUnit()
     if pageUnit and CASTBAR_DETAIL_PREFIXES[pageUnit] then return { pageUnit } end
     return { "player", "target", "focus", "boss" }
+end
+
+local function CastbarRootUnitsOrCurrentPage(text)
+    local units = DetectUnits(text)
+    local filtered = {}
+    for i = 1, #units do
+        local unit = units[i]
+        if CASTBAR_ROOT_FIELDS[unit] then filtered[#filtered + 1] = unit end
+    end
+    if #filtered > 0 then return filtered end
+    local pageUnit = CurrentPageUnit()
+    if pageUnit and CASTBAR_ROOT_FIELDS[pageUnit] then return { pageUnit } end
+    return { "player", "target", "focus", "boss" }
+end
+
+local function CastbarSizeDirection(text)
+    if ContainsAny(text, { "wider", "wider bar", "make wider", "increase width", "raise width", "larger width", "more width", "breiter" }) then return "increase", "width" end
+    if ContainsAny(text, { "narrower", "make narrower", "decrease width", "reduce width", "smaller width", "less width", "schmaler" }) then return "decrease", "width" end
+    if ContainsAny(text, { "taller", "higher", "make taller", "increase height", "raise height", "larger height", "more height", "hoeher" }) then return "increase", "height" end
+    if ContainsAny(text, { "shorter", "lower", "make shorter", "decrease height", "reduce height", "smaller height", "less height", "niedriger" }) then return "decrease", "height" end
+    if ContainsAny(text, { "bigger", "larger", "increase size", "make bigger", "make larger" }) then return "increase", "both" end
+    if ContainsAny(text, { "smaller", "decrease size", "reduce size", "make smaller", "shrink" }) then return "decrease", "both" end
+    return nil, nil
+end
+
+function P.ParseCastbarSizeShortcut(text)
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, {
+        "icon", "spell name", "spell text", "castbar text", "castbar name", "timer", "time text",
+        "border", "outline", "spark", "latency", "focus kick", "interrupt ready",
+    }) then
+        return nil
+    end
+    local direction, dimension = CastbarSizeDirection(text)
+    if not direction then return nil end
+
+    local widthDelta = P.FrameResizeDelta and P.FrameResizeDelta(text, "width", direction) or (direction == "decrease" and -25 or 25)
+    local heightDelta = P.FrameResizeDelta and P.FrameResizeDelta(text, "height", direction) or (direction == "decrease" and -5 or 5)
+    local units = CastbarRootUnitsOrCurrentPage(text)
+    local changes = {}
+    for i = 1, #units do
+        local fields = CASTBAR_ROOT_FIELDS[units[i]]
+        if fields and (dimension == "width" or dimension == "both") then
+            local setting = Registry and Registry:GetSetting("general." .. fields.width)
+            if setting then changes[#changes + 1] = { setting = setting, relativeDelta = widthDelta, direction = direction } end
+        end
+        if fields and (dimension == "height" or dimension == "both") then
+            local setting = Registry and Registry:GetSetting("general." .. fields.height)
+            if setting then changes[#changes + 1] = { setting = setting, relativeDelta = heightDelta, direction = direction } end
+        end
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
+        return { kind = "ambiguous", choices = changes, label = "Which castbar should I resize?" }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Resize castbar",
+        bulkSafe = #changes > 1,
+        summary = "Maps natural castbar size wording to registered Castbar Width and Height controls.",
+    }
+end
+
+function P.ParseCastbarPlacementShortcut(text)
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, { "icon", "spell name", "spell text", "timer", "time text", "interrupt ready", "focus kick" }) then return nil end
+    if not ContainsAny(text, { "move", "put", "place", "position" }) then return nil end
+
+    local direction
+    if ContainsAny(text, { "under", "below", "beneath", "underneath" }) then
+        direction = "down"
+    elseif ContainsAny(text, { "above", "over", "on top of" }) then
+        direction = "up"
+    else
+        return nil
+    end
+
+    local amount = FirstNumber(text) or 20
+    if direction == "down" then amount = -math.abs(amount) else amount = math.abs(amount) end
+    local units = CastbarRootUnitsOrCurrentPage(text)
+    local changes = {}
+    for i = 1, #units do
+        local fields = CASTBAR_ROOT_FIELDS[units[i]]
+        local setting = fields and Registry and Registry:GetSetting("general." .. fields.y)
+        if setting then changes[#changes + 1] = { setting = setting, relativeDelta = amount, direction = direction } end
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
+        return { kind = "ambiguous", choices = changes, label = "Which castbar should I move?" }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = direction == "down" and "Move castbar below frame" or "Move castbar above frame",
+        bulkSafe = #changes > 1,
+        summary = "Maps above/below castbar placement wording to the registered Castbar Y Offset control.",
+    }
+end
+
+function P.ParseCastbarTextSizeShortcut(text)
+    if not ContainsAny(text, { "castbar", "cast bar", "zauberleiste" }) then return nil end
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position" }) then return nil end
+    if not ContainsAny(text, { "font size", "text size", "size", "bigger", "larger", "smaller", "increase", "decrease", "raise", "reduce" }) then
+        return nil
+    end
+    if not ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "timer", "time text", "cast time" }) then
+        return nil
+    end
+
+    local field
+    local label
+    if ContainsAny(text, { "timer", "time text", "cast time" }) then
+        field = "TimeFontSize"
+        label = "Castbar time text size"
+    elseif ContainsAny(text, { "spell name", "spell text", "castbar text", "castbar name", "text" }) then
+        field = "SpellNameFontSize"
+        label = "Castbar spell text size"
+    else
+        return nil
+    end
+
+    local relativeDelta
+    if ContainsAny(text, { "bigger", "larger", "increase", "raise", "more", "groesser" }) then
+        relativeDelta = FirstNumber(text) or 1
+    elseif ContainsAny(text, { "smaller", "decrease", "reduce", "lower", "less", "kleiner" }) then
+        relativeDelta = -(FirstNumber(text) or 1)
+    end
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+
+    local units = CastbarDetailUnitsOrCurrentPage(text)
+    local changes = {}
+    for i = 1, #units do
+        local prefix = CASTBAR_DETAIL_PREFIXES[units[i]]
+        local setting = prefix and Registry and Registry:GetSetting("general." .. prefix .. field)
+        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
+    end
+    if #changes == 0 then return nil end
+    if #changes > 1 and #DetectUnits(text) == 0 and not CurrentPageUnit() then
+        return { kind = "ambiguous", choices = changes, label = "Which castbar text should I resize?" }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = label,
+        bulkSafe = #changes > 1,
+        summary = "Maps natural castbar text size wording to registered Castbar font size controls.",
+    }
 end
 
 local function ParseCastbarTextMoveShortcut(text)
@@ -2124,6 +2485,75 @@ function A._ParseGroupOpacityShortcut(text)
     }
 end
 
+function A._ParseGroupRangeFadeShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, { "affects", "layer", "mode", "health only", "current health only" }) then return nil end
+    if ContainsAny(text, { "keep", "visible", "text visible", "names visible" }) then return nil end
+    if not ContainsAny(text, {
+        "range fade", "range fading", "out of range", "outside range",
+        "when out of range", "while out of range",
+    }) then
+        return nil
+    end
+
+    local groups = DetectGroups(text)
+    if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
+    if #groups == 0 then return nil end
+
+    local value
+    local relativeDelta
+    local alphaIntent = ContainsAny(text, {
+        "alpha", "opacity", "transparency", "transparent", "out of range alpha",
+        "out of range opacity", "range fade alpha", "range fade opacity",
+    })
+    if alphaIntent then
+        if ContainsAny(text, { "more transparent", "more transparency", "fade more", "stronger fade" }) then
+            local amount = FirstNumber(text) or 0.05
+            if amount > 1 then amount = amount / 100 end
+            relativeDelta = -amount
+        elseif ContainsAny(text, { "less transparent", "less transparency", "more opaque", "fade less", "weaker fade" }) then
+            local amount = FirstNumber(text) or 0.05
+            if amount > 1 then amount = amount / 100 end
+            relativeDelta = amount
+        else
+            local number = FirstNumber(text)
+            if number ~= nil then
+                value = number
+                if value > 1 then value = value / 100 end
+            end
+        end
+    end
+
+    local bool = DetectBoolean(text)
+    local enableIntent = bool ~= nil
+        or ContainsAny(text, {
+            "transparent when out of range", "transparent out of range",
+            "fade when out of range", "fade out of range", "fade outside range",
+            "range fade", "range fading",
+        })
+
+    local changes = {}
+    for i = 1, #groups do
+        local scope = tostring(groups[i])
+        if enableIntent then
+            local enabled = Registry and Registry:GetSetting("gf_" .. scope .. ".rangeFadeEnabled")
+            if enabled then changes[#changes + 1] = { setting = enabled, value = bool == false and false or true } end
+        end
+        if value ~= nil or relativeDelta ~= nil then
+            local alpha = Registry and Registry:GetSetting("gf_" .. scope .. ".rangeFadeAlpha")
+            if alpha then changes[#changes + 1] = { setting = alpha, value = value, relativeDelta = relativeDelta } end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set group range fade",
+        bulkSafe = #changes > 1,
+        summary = "Maps out-of-range transparency wording to registered Group Frame Range Fade controls.",
+    }
+end
+
 local function GroupColorModeScopes(text)
     local scopes = {}
     local explicitGroupGeneric = ContainsAny(text, { "group frames", "group frame", "gruppenframes", "groups" })
@@ -2146,14 +2576,21 @@ end
 
 local function GroupBarColorModeForText(text)
     local bool = DetectBoolean(text)
-    if ContainsAny(text, { "class color", "class colors", "class colored", "class mode" }) then
+    if ContainsAny(text, {
+        "class color", "class colors", "class colored", "class mode", "use class color",
+        "use class colors", "use class colour", "use class colours", "colored by class",
+        "coloured by class", "by class", "class colored bars", "class color bars",
+    }) then
         return bool == false and "GLOBAL" or "CLASS"
     end
     if ContainsAny(text, { "gradient", "health gradient" }) then return bool == false and "GLOBAL" or "GRADIENT" end
     if ContainsAny(text, { "custom", "manual" }) then return bool == false and "GLOBAL" or "CUSTOM" end
     if ContainsAny(text, { "dark mode", "dark bars", "dark" }) then return bool == false and "GLOBAL" or "dark" end
     if ContainsAny(text, { "unified", "unified color", "unified bars" }) then return bool == false and "GLOBAL" or "unified" end
-    if ContainsAny(text, { "global", "global style", "inherit", "default" }) then return "GLOBAL" end
+    if ContainsAny(text, {
+        "global", "global style", "global color", "global colors", "global colour", "global colours",
+        "inherit", "inherit color", "inherit colors", "default", "default color", "default colors",
+    }) then return "GLOBAL" end
     return nil
 end
 
@@ -2167,6 +2604,10 @@ local function ParseGroupFrameColorMode(text)
     if not ContainsAny(text, {
         "bar color mode", "health bar color mode", "class color mode", "health color mode",
         "group bar style", "bar mode", "class colored health", "class color health",
+        "use class color", "use class colors", "use class colour", "use class colours",
+        "class colored", "class colors", "colored by class", "coloured by class",
+        "use global color", "use global colors", "use default color", "use default colors",
+        "global colors", "default colors", "inherit colors",
     }) then
         return nil
     end
@@ -2188,1249 +2629,6 @@ local function ParseGroupFrameColorMode(text)
         label = "Set group-frame bar color mode",
         summary = "Changes the real Group Frames > Health & Text Bar Color Mode instead of the global unitframe bar mode.",
     }
-end
-
-local MENU_SELECTOR_VERBS = {
-    "select", "choose", "pick", "open", "show", "switch to", "go to", "edit",
-}
-
-local function HasMenuSelectorVerb(text)
-    return ContainsAny(text, MENU_SELECTOR_VERBS)
-end
-
-local function MenuSelectorAction(args, label, summary)
-    local action = Registry and Registry:GetAction("set_menu_selector_state")
-    return action and {
-        kind = "action",
-        action = action,
-        args = args,
-        label = label or "Set menu selector state",
-        summary = summary or "Selects a visible Menu2 tab, dropdown entry, or editor slot without changing the underlying setting value.",
-    } or nil
-end
-
-local function SelectorUnit(text)
-    local units = DetectUnits(text)
-    return units[1] or CurrentPageUnit()
-end
-
-local function SelectorGroupScope(text)
-    local groups = DetectGroups(text)
-    if groups[1] then return groups[1] end
-    if M and (M.gfScope == "party" or M.gfScope == "raid" or M.gfScope == "mythicraid") then return M.gfScope end
-    return "party"
-end
-
-local function TextSelectorTab(text)
-    if ContainsAny(text, { "advanced text tab", "advanced text", "text advanced", "text layers", "advanced tab" }) then return "advanced" end
-    if ContainsAny(text, { "power text tab", "power text", "mana text", "power tab", "mana tab", "power", "mana" }) then return "power" end
-    if ContainsAny(text, { "hp text tab", "health text tab", "hp text", "health text", "hp tab", "health tab", "hp", "health" }) then return "hp" end
-    if ContainsAny(text, { "name text tab", "name text", "name tab", "name" }) then return "name" end
-    return nil
-end
-
-local function TextSelectorSlot(text)
-    if ContainsAny(text, { "left slot", "slot left", "left text slot", "left anchor", "anchor left", "anchor to left", "to left", "on left", "on the left", "left side" })
-        or (HasPhrase(text, "left") and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
-    then
-        return "left"
-    end
-    if ContainsAny(text, { "center slot", "centre slot", "middle slot", "slot center", "slot centre", "slot middle", "center text slot", "centre text slot", "middle text slot" })
-        or ContainsAny(text, { "center anchor", "centre anchor", "middle anchor", "anchor center", "anchor centre", "anchor middle", "anchor to center", "anchor to centre", "anchor to middle", "to center", "to centre", "to middle", "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle", "on center", "on centre", "on middle", "on the center", "on the centre", "on the middle", "center side", "centre side", "middle" })
-        or ((HasPhrase(text, "center") or HasPhrase(text, "centre") or HasPhrase(text, "middle")) and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
-    then
-        return "center"
-    end
-    if ContainsAny(text, { "right slot", "slot right", "right text slot", "right anchor", "anchor right", "anchor to right", "to right", "on right", "on the right", "right side" })
-        or (HasPhrase(text, "right") and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "align", "alignment" }))
-    then
-        return "right"
-    end
-    return nil
-end
-
-local function TextSelectorIntent(text, tab, slot)
-    if tab == "name" and ContainsAny(text, { "anchor", "anchoring", "align", "alignment" }) then return false end
-    if (tab == "hp" or tab == "power") and slot and ContainsAny(text, { "anchor", "anchoring", "align", "alignment" }) then return true end
-    if ContainsAny(text, {
-        "text area", "text tab", "text tabs", "text editor", "text slot", "slot selector", "slot dropdown",
-        "selected slot", "left slot", "center slot", "centre slot", "right slot",
-    }) then
-        return true
-    end
-    return tab and ContainsAny(text, { "name text", "hp text", "health text", "power text", "mana text" }) and (HasPhrase(text, "tab") or slot ~= nil)
-end
-
-function A._ParseTextFontSizeShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff" }) then return nil end
-    if not ContainsAny(text, {
-        "font size", "text size", "name size", "name font size", "hp font size", "health font size",
-        "power font size", "mana font size", "schriftgroesse", "schrift groesse",
-    }) then
-        return nil
-    end
-    local tab = TextSelectorTab(text)
-    if tab ~= "name" and tab ~= "hp" and tab ~= "power" then return nil end
-    local attr = tab == "name" and "nameFontSize" or (tab == "hp" and "hpFontSize" or "powerFontSize")
-    local relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
-    local value
-    if relativeDelta == nil then value = FirstNumber(text) end
-    if value == nil and relativeDelta == nil then return nil end
-
-    local groups = DetectGroups(text)
-    local units = {}
-    if #groups == 0 then units = DetectUnits(text) end
-
-    if #groups == 0 and #units == 0 then
-        local page = M and M.activeKey
-        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
-            groups = GroupScopesOrCurrentPage(text)
-        else
-            local pageUnit = CurrentPageUnit()
-            if pageUnit then units = { pageUnit } end
-        end
-    end
-
-    local changes = {}
-    for i = 1, #groups do
-        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
-    end
-    for i = 1, #units do
-        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
-    end
-    if #changes == 0 then return nil end
-    if #changes > 1 and #groups > 1 then
-        return {
-            kind = "ambiguous",
-            choices = changes,
-            label = "Multiple matching group text font-size settings",
-        }
-    end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Set text font size",
-        summary = "Changes the registered Name/HP/Power text font-size slider for the selected unit or group scope.",
-    }
-end
-
-function A._ParseTextLayerShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff" }) then return nil end
-    if ContainsAny(text, { "class power", "class resource", "class resources", "resource bar" }) then return nil end
-    if not ContainsAny(text, { "text layer", "draw layer", "text level", "draw level", "layer" }) then return nil end
-    local tab = TextSelectorTab(text)
-    if tab ~= "name" and tab ~= "hp" and tab ~= "power" then return nil end
-
-    local relativeDelta = RelativeNumberDeltaForText({ step = 1 }, text, 1)
-    if relativeDelta == nil then
-        if ContainsAny(text, { "bring forward", "move forward", "raise forward", "forward", "front", "above", "up" }) then
-            relativeDelta = 1
-        elseif ContainsAny(text, { "send back", "move back", "backward", "behind", "below" }) then
-            relativeDelta = -1
-        end
-    end
-    local value
-    if relativeDelta == nil then value = FirstNumber(text) end
-    if value == nil and relativeDelta == nil then return nil end
-
-    local unitAttr = tab == "name" and "nameTextLayer" or (tab == "hp" and "hpTextLayer" or "powerTextLayer")
-    local groupAttr = tab == "name" and "nameTextLayer" or (tab == "hp" and "textLayer" or "powerTextLayer")
-    local groups = DetectGroups(text)
-    local units = {}
-    if #groups == 0 then units = DetectUnits(text) end
-
-    if #groups == 0 and #units == 0 then
-        local page = M and M.activeKey
-        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
-            groups = GroupScopesOrCurrentPage(text)
-        else
-            local pageUnit = CurrentPageUnit()
-            if pageUnit then units = { pageUnit } end
-        end
-    end
-
-    local changes = {}
-    for i = 1, #groups do
-        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. groupAttr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
-    end
-    for i = 1, #units do
-        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. unitAttr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta } end
-    end
-    if #changes == 0 then return nil end
-    if #changes > 1 and #groups > 1 then
-        return {
-            kind = "ambiguous",
-            choices = changes,
-            label = "Multiple matching group text-layer settings",
-        }
-    end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Set text layer",
-        summary = "Changes the registered Name/HP/Power text-layer slider for the selected unit or group scope.",
-    }
-end
-
-function A._TextSlotForDetail(text, tab)
-    if tab ~= "hp" and tab ~= "power" then return nil end
-    if tab == "hp" then
-        if ContainsAny(text, { "left hp text", "hp left text", "hp text left", "left health text", "health left text", "health text left", "left hp slot", "hp left slot", "hp slot left", "left health slot", "health left slot", "health slot left", "left hp label", "hp left label", "hp label left", "left health label", "health left label", "health label left" }) then return "Left" end
-        if ContainsAny(text, { "center hp text", "centre hp text", "middle hp text", "hp center text", "hp centre text", "hp middle text", "hp text center", "hp text centre", "hp text middle", "center health text", "centre health text", "middle health text", "health center text", "health centre text", "health middle text", "health text center", "health text centre", "health text middle", "center hp slot", "centre hp slot", "middle hp slot", "hp center slot", "hp centre slot", "hp middle slot", "hp slot center", "hp slot centre", "hp slot middle", "center health slot", "centre health slot", "middle health slot", "health center slot", "health centre slot", "health middle slot", "health slot center", "health slot centre", "health slot middle", "center hp label", "centre hp label", "middle hp label", "hp center label", "hp centre label", "hp middle label", "hp label center", "hp label centre", "hp label middle", "center health label", "centre health label", "middle health label", "health center label", "health centre label", "health middle label", "health label center", "health label centre", "health label middle" }) then return "Center" end
-        if ContainsAny(text, { "right hp text", "hp right text", "hp text right", "right health text", "health right text", "health text right", "right hp slot", "hp right slot", "hp slot right", "right health slot", "health right slot", "health slot right", "right hp label", "hp right label", "hp label right", "right health label", "health right label", "health label right" }) then return "Right" end
-    else
-        if ContainsAny(text, { "left power text", "power left text", "power text left", "left mana text", "mana left text", "mana text left", "left power slot", "power left slot", "power slot left", "left mana slot", "mana left slot", "mana slot left", "left power label", "power left label", "power label left", "left mana label", "mana left label", "mana label left" }) then return "Left" end
-        if ContainsAny(text, { "center power text", "centre power text", "middle power text", "power center text", "power centre text", "power middle text", "power text center", "power text centre", "power text middle", "center mana text", "centre mana text", "middle mana text", "mana center text", "mana centre text", "mana middle text", "mana text center", "mana text centre", "mana text middle", "center power slot", "centre power slot", "middle power slot", "power center slot", "power centre slot", "power middle slot", "power slot center", "power slot centre", "power slot middle", "center mana slot", "centre mana slot", "middle mana slot", "mana center slot", "mana centre slot", "mana middle slot", "mana slot center", "mana slot centre", "mana slot middle", "center power label", "centre power label", "middle power label", "power center label", "power centre label", "power middle label", "power label center", "power label centre", "power label middle", "center mana label", "centre mana label", "middle mana label", "mana center label", "mana centre label", "mana middle label", "mana label center", "mana label centre", "mana label middle" }) then return "Center" end
-        if ContainsAny(text, { "right power text", "power right text", "power text right", "right mana text", "mana right text", "mana text right", "right power slot", "power right slot", "power slot right", "right mana slot", "mana right slot", "mana slot right", "right power label", "power right label", "power label right", "right mana label", "mana right label", "mana label right" }) then return "Right" end
-    end
-    if ContainsAny(text, { "left of", "left side of", "to left of", "to the left of", "in left of", "in the left of" }) then return "Left" end
-    if ContainsAny(text, { "center of", "centre of", "middle of", "center side of", "centre side of", "middle side of", "to center of", "to centre of", "to middle of", "to the center of", "to the centre of", "to the middle of", "in center of", "in centre of", "in middle of", "in the center of", "in the centre of", "in the middle of" }) then return "Center" end
-    if ContainsAny(text, { "right of", "right side of", "to right of", "to the right of", "in right of", "in the right of" }) then return "Right" end
-    local slot = TextSelectorSlot(text)
-    if (slot == "left" or slot == "center" or slot == "right")
-        and ContainsAny(text, { "slot", "text slot", "anchor", "anchoring", "side", "left side", "right side", "center side", "centre side", "middle side", "to left", "to right", "to center", "to centre", "to middle", "in center", "in centre", "in middle", "in the center", "in the centre", "in the middle" })
-    then
-        return slot == "left" and "Left" or (slot == "right" and "Right" or "Center")
-    end
-    return nil
-end
-
-function A._TextSlotName(slot)
-    slot = tostring(slot or ""):lower()
-    if slot == "left" then return "Left" end
-    if slot == "center" or slot == "centre" or slot == "middle" then return "Center" end
-    if slot == "right" then return "Right" end
-    return nil
-end
-
-function A._TextSlotLower(slot)
-    slot = A._TextSlotName(slot)
-    if slot == "Left" then return "left" end
-    if slot == "Center" then return "center" end
-    if slot == "Right" then return "right" end
-    return nil
-end
-
-function A._TextSlotSettingKey(tab, slot)
-    slot = A._TextSlotName(slot)
-    if not slot then return nil end
-    if tab == "hp" then
-        return slot == "Left" and "textLeft" or (slot == "Center" and "textCenter" or "textRight")
-    elseif tab == "power" then
-        return "powerText" .. slot
-    end
-    return nil
-end
-
-local function ReadSettingValue(setting)
-    if setting and type(setting.get) == "function" then
-        local ok, value = pcall(setting.get)
-        if ok then return value end
-    end
-    return nil
-end
-
-local function TextSlotSetting(frameType, unitOrScope, tab, slotName)
-    local keyName = A._TextSlotSettingKey(tab, slotName)
-    if not keyName or not Registry then return nil end
-    local prefix = frameType == "group" and ("gf_" .. tostring(unitOrScope)) or tostring(unitOrScope)
-    return Registry:GetSetting(prefix .. "." .. keyName)
-end
-
-local function ActiveTextSlotsForTarget(frameType, unitOrScope, tab)
-    local active = {}
-    for _, slotName in ipairs({ "Left", "Center", "Right" }) do
-        local setting = TextSlotSetting(frameType, unitOrScope, tab, slotName)
-        local value = ReadSettingValue(setting)
-        if setting and value ~= nil and value ~= "NONE" then
-            active[#active + 1] = slotName
-        end
-    end
-    return active
-end
-
-local function InferSingleActiveTextSlot(frameType, unitOrScope, tab)
-    local active = ActiveTextSlotsForTarget(frameType, unitOrScope, tab)
-    return #active == 1 and active[1] or nil, active
-end
-
-function A._TextGroupScopeName(scope)
-    scope = tostring(scope or "")
-    if scope == "gf_party" then return "party" end
-    if scope == "gf_raid" then return "raid" end
-    if scope == "gf_mythicraid" then return "mythicraid" end
-    return scope
-end
-
-function A._SelectedTextSlotFromContext(frameType, unitOrScope, tab)
-    if tab ~= "hp" and tab ~= "power" then return nil end
-    if frameType == "group" then unitOrScope = A._TextGroupScopeName(unitOrScope) end
-    local ctx = A.GetContext and A.GetContext() or nil
-    local selected = ctx and ctx.selectedTextEditorTarget
-    if type(selected) == "table"
-        and selected.tab == tab
-        and selected.frameType == frameType
-        and tostring(frameType == "group" and A._TextGroupScopeName(selected.unit) or selected.unit or "") == tostring(unitOrScope or "")
-    then
-        return A._TextSlotName(selected.slot)
-    end
-    if ctx and ctx.lastTextArea == tab
-        and ctx.lastTextFrameType == frameType
-        and tostring(frameType == "group" and A._TextGroupScopeName(ctx.lastTextUnit) or ctx.lastTextUnit or "") == tostring(unitOrScope or "")
-    then
-        return A._TextSlotName(ctx.lastTextSlot)
-    end
-    if frameType == "group" then
-        local byScope = M and M.gfTextSlotSelection and M.gfTextSlotSelection[unitOrScope]
-        return A._TextSlotName(byScope and byScope[tab])
-    end
-    local byUnit = M and M.unitTextSlotSelection and M.unitTextSlotSelection[unitOrScope]
-    return A._TextSlotName(byUnit and byUnit[tab])
-end
-
-function A._SelectedTextTargetFromContext(tab)
-    local ctx = A.GetContext and A.GetContext() or nil
-    local selected = ctx and ctx.selectedTextEditorTarget
-    if type(selected) == "table" and (not tab or selected.tab == tab) then
-        return selected.frameType, selected.frameType == "group" and A._TextGroupScopeName(selected.unit) or selected.unit, selected.tab, A._TextSlotName(selected.slot)
-    end
-    if ctx and ctx.lastTextArea and (not tab or ctx.lastTextArea == tab) then
-        return ctx.lastTextFrameType, ctx.lastTextFrameType == "group" and A._TextGroupScopeName(ctx.lastTextUnit) or ctx.lastTextUnit, ctx.lastTextArea, A._TextSlotName(ctx.lastTextSlot)
-    end
-    return nil
-end
-
-function A._ParseNameTextAnchorShortcut(text)
-    if ContainsAny(text, {
-        "castbar", "cast bar", "aura", "auras", "buff", "debuff",
-        "class power", "class resource", "class resources", "resource bar",
-        "power bar", "powerbar", "mana bar",
-    }) then
-        return nil
-    end
-
-    local tab = TextSelectorTab(text)
-    if tab == "hp" or tab == "power" or tab == "advanced" then return nil end
-    if ContainsAny(text, {
-        "status", "status text", "status icon", "indicator", "icon",
-        "raid marker", "ready check", "summon", "resurrect", "resurrection",
-        "ghost", "dead", "afk", "dnd", "group number",
-    }) and not ContainsAny(text, {
-        "name", "name text", "unit name", "unitframe name", "unit frame name", "name label",
-    }) then
-        return nil
-    end
-
-    local value
-    if ContainsAny(text, {
-        "middle", "center", "centre", "centered", "centred",
-        "to middle", "to the middle", "in middle", "in the middle",
-        "to center", "to the center", "in center", "in the center",
-        "to centre", "to the centre", "in centre", "in the centre",
-    }) then
-        value = "CENTER"
-    elseif ContainsAny(text, {
-        "to left", "to the left", "on left", "on the left", "left side",
-        "anchor left", "left anchor", "anchor to left", "align left",
-    }) or (HasPhrase(text, "left") and ContainsAny(text, { "anchor", "anchoring", "align", "alignment", "justify" })) then
-        value = "LEFT"
-    elseif ContainsAny(text, {
-        "to right", "to the right", "on right", "on the right", "right side",
-        "anchor right", "right anchor", "anchor to right", "align right",
-    }) or (HasPhrase(text, "right") and ContainsAny(text, { "anchor", "anchoring", "align", "alignment", "justify" })) then
-        value = "RIGHT"
-    end
-    if not value then return nil end
-
-    local ctx = A.GetContext and A.GetContext() or nil
-    local contextReference = ContainsAny(text, { "it", "that", "this", "selected", "same" })
-    local explicitName = tab == "name" or ContainsAny(text, {
-        "name", "name text", "unit name", "unitframe name", "unit frame name",
-        "name label", "player name", "target name", "focus name", "pet name", "boss name",
-    })
-    local genericText = tab == nil
-        and ContainsAny(text, { "text", "unit text", "unitframe text", "unit frame text", "frame text" })
-        and ContainsAny(text, { "unitframe", "unit frame", "frame", "middle of", "center of", "centre of" })
-    local placementIntent = ContainsAny(text, {
-        "move", "put", "place", "set", "align", "anchor", "position",
-        "center", "centre", "middle", "justify",
-    })
-    if not placementIntent then return nil end
-    if not explicitName and not genericText and not contextReference then return nil end
-
-    local function IsNameContext(key, attr)
-        key = tostring(key or "")
-        attr = tostring(attr or "")
-        if attr == "name" or attr == "showName" or attr == "nameTextAnchor" or attr == "nameAnchor"
-            or attr == "nameOffsetX" or attr == "nameOffsetY" or attr == "nameFontSize" or attr == "nameTextLayer"
-        then
-            return true
-        end
-        return key:find(".showName", 1, true)
-            or key:find(".nameTextAnchor", 1, true)
-            or key:find(".nameAnchor", 1, true)
-            or key:find(".nameOffsetX", 1, true)
-            or key:find(".nameOffsetY", 1, true)
-            or key:find(".nameFontSize", 1, true)
-            or key:find(".nameTextLayer", 1, true)
-    end
-
-    local function ContextNameTarget()
-        if not ctx then return nil, nil end
-        if IsNameContext(ctx.lastSetting, ctx.lastAttribute)
-            and (ctx.lastFrameType == "unitframe" or ctx.lastFrameType == "group")
-            and type(ctx.lastUnit) == "string" and ctx.lastUnit ~= ""
-        then
-            return ctx.lastFrameType, ctx.lastFrameType == "group" and A._TextGroupScopeName(ctx.lastUnit) or ctx.lastUnit
-        end
-        local bundle = ctx.lastChangeBundle
-        if type(bundle) ~= "table" then return nil, nil end
-        for i = #bundle, 1, -1 do
-            local item = bundle[i]
-            if type(item) == "table" and IsNameContext(item.key, item.attribute)
-                and (item.frameType == "unitframe" or item.frameType == "group")
-                and type(item.unit) == "string" and item.unit ~= ""
-            then
-                return item.frameType, item.frameType == "group" and A._TextGroupScopeName(item.unit) or item.unit
-            end
-        end
-        return nil, nil
-    end
-
-    local groups = DetectGroups(text)
-    local units = {}
-    if #groups == 0 then units = DetectUnits(text) end
-
-    if #groups == 0 and #units == 0 and contextReference then
-        local frameType, unitOrScope = ContextNameTarget()
-        if frameType == "group" then
-            groups = { unitOrScope }
-        elseif frameType == "unitframe" then
-            units = { unitOrScope }
-        elseif not explicitName and not genericText then
-            return nil
-        end
-    end
-
-    if #groups == 0 and #units == 0 and not contextReference then
-        local page = M and M.activeKey
-        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
-            groups = GroupScopesOrCurrentPage(text)
-        else
-            local pageUnit = CurrentPageUnit()
-            if pageUnit then units = { pageUnit } end
-        end
-    end
-
-    if #groups == 0 and #units == 0 then return nil end
-
-    local changes = {}
-    local function AddTarget(settingKey, showKey)
-        local showSetting = Registry and Registry:GetSetting(showKey)
-        if showSetting and ReadSettingValue(showSetting) == false then
-            changes[#changes + 1] = {
-                setting = showSetting,
-                value = true,
-                valueLabel = "enabled",
-                label = tostring(showSetting.label or "Name") .. " -> enabled",
-            }
-        end
-        local setting = Registry and Registry:GetSetting(settingKey)
-        if setting and A._EnumAllowsValue(setting, value) then
-            changes[#changes + 1] = {
-                setting = setting,
-                value = value,
-                valueLabel = value == "CENTER" and "center" or (value == "LEFT" and "left" or "right"),
-            }
-        end
-    end
-
-    for i = 1, #groups do
-        local scope = A._TextGroupScopeName(groups[i])
-        AddTarget("gf_" .. tostring(scope) .. ".nameAnchor", "gf_" .. tostring(scope) .. ".showName")
-    end
-    for i = 1, #units do
-        local unit = tostring(units[i])
-        AddTarget(unit .. ".nameTextAnchor", unit .. ".showName")
-    end
-
-    if #changes == 0 then return nil end
-    if #changes > 1 and (#groups + #units) > 1 then
-        return {
-            kind = "ambiguous",
-            choices = changes,
-            label = "Multiple matching name text anchor settings",
-            summary = "The command matched more than one Name anchor dropdown, so the Assistant is asking which real setting to change.",
-        }
-    end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Set name text anchor",
-        summary = "Changes the registered Name anchor dropdown for the selected unit or group scope.",
-    }
-end
-
-function A._EnumAllowsValue(setting, value)
-    local values = setting and setting.values
-    if type(values) ~= "table" then return false end
-    for i = 1, #values do
-        if values[i] == value then return true end
-    end
-    return false
-end
-
-function A._TextSlotDropdownValueForText(setting, text)
-    local aliases = {
-        { "current max percent", "CURMAXPERCENT" },
-        { "current maximum percent", "CURMAXPERCENT" },
-        { "current max percentage", "CURMAXPERCENT" },
-        { "current maximum percentage", "CURMAXPERCENT" },
-        { "percent current max", "PERCENTCURMAX" },
-        { "percent current maximum", "PERCENTCURMAX" },
-        { "percent max current", "PERCENTCURMAX" },
-        { "percent maximum current", "PERCENTCURMAX" },
-        { "current and max", "CURMAX" },
-        { "current and maximum", "CURMAX" },
-        { "current/max", "CURMAX" },
-        { "current / max", "CURMAX" },
-        { "current max", "CURMAX" },
-        { "current maximum", "CURMAX" },
-        { "current and percent", "CURPERCENT" },
-        { "current and percentage", "CURPERCENT" },
-        { "current/percent", "CURPERCENT" },
-        { "current / percent", "CURPERCENT" },
-        { "current percent", "CURPERCENT" },
-        { "current percentage", "CURPERCENT" },
-        { "max percent", "MAXPERCENT" },
-        { "maximum percent", "MAXPERCENT" },
-        { "max percentage", "MAXPERCENT" },
-        { "maximum percentage", "MAXPERCENT" },
-        { "percent current", "PERCENTCUR" },
-        { "percentage current", "PERCENTCUR" },
-        { "percent max", "PERCENTMAX" },
-        { "percentage max", "PERCENTMAX" },
-        { "percent maximum", "PERCENTMAX" },
-        { "percentage maximum", "PERCENTMAX" },
-        { "current health", "CURRENT" },
-        { "current hp", "CURRENT" },
-        { "hp current", "CURRENT" },
-        { "health current", "CURRENT" },
-        { "current power", "CURRENT" },
-        { "current mana", "CURRENT" },
-        { "power current", "CURRENT" },
-        { "mana current", "CURRENT" },
-        { "current", "CURRENT" },
-        { "actual", "CURRENT" },
-        { "max health", "MAX" },
-        { "maximum health", "MAX" },
-        { "health max", "MAX" },
-        { "health maximum", "MAX" },
-        { "max hp", "MAX" },
-        { "maximum hp", "MAX" },
-        { "hp max", "MAX" },
-        { "hp maximum", "MAX" },
-        { "max power", "MAX" },
-        { "maximum power", "MAX" },
-        { "power max", "MAX" },
-        { "power maximum", "MAX" },
-        { "max mana", "MAX" },
-        { "maximum mana", "MAX" },
-        { "mana max", "MAX" },
-        { "mana maximum", "MAX" },
-        { "maximum", "MAX" },
-        { "max", "MAX" },
-        { "missing health", "DEFICIT" },
-        { "missing hp", "DEFICIT" },
-        { "health deficit", "DEFICIT" },
-        { "hp deficit", "DEFICIT" },
-        { "deficit", "DEFICIT" },
-        { "missing", "DEFICIT" },
-        { "only %", "PERCENT" },
-        { "% only", "PERCENT" },
-        { "%", "PERCENT" },
-        { "only percent", "PERCENT" },
-        { "only percentage", "PERCENT" },
-        { "just percent", "PERCENT" },
-        { "just percentage", "PERCENT" },
-        { "percent only", "PERCENT" },
-        { "percentage only", "PERCENT" },
-        { "percentage", "PERCENT" },
-        { "percent", "PERCENT" },
-        { "pct", "PERCENT" },
-        { "clear", "NONE" },
-        { "remove", "NONE" },
-        { "removed", "NONE" },
-        { "nothing", "NONE" },
-        { "empty", "NONE" },
-        { "none", "NONE" },
-        { "hidden", "NONE" },
-        { "hide", "NONE" },
-        { "off", "NONE" },
-    }
-    for i = 1, #aliases do
-        local alias, value = aliases[i][1], aliases[i][2]
-        if HasPhrase(text, alias) then
-            if A._EnumAllowsValue(setting, value) then return value end
-            return nil, value
-        end
-    end
-    local value = EnumValueForText(setting, text)
-    if value ~= nil and A._EnumAllowsValue(setting, value) then return value end
-    return nil
-end
-
-P.TEXT_SLOT_SHOW_INTENT_TERMS = {
-    "show", "display", "visible", "add", "create", "create new", "new", "put",
-    "turn on", "enable", "enabled",
-    "anzeigen", "zeigen", "einblenden", "sichtbar", "aktivieren", "einschalten",
-}
-
-function A._HasTextSlotShowIntent(text)
-    if ContainsAny(text, OFF_WORDS) then return false end
-    return ContainsAny(text, P.TEXT_SLOT_SHOW_INTENT_TERMS)
-end
-
-function A._AddTextSlotVisibilityChange(out, frameType, unitOrScope, tab)
-    if tab ~= "hp" and tab ~= "power" then return end
-    local key
-    if frameType == "group" then
-        key = "gf_" .. tostring(A._TextGroupScopeName(unitOrScope)) .. "." .. (tab == "hp" and "showHPText" or "showPowerText")
-    else
-        key = tostring(unitOrScope) .. "." .. (tab == "hp" and "showHP" or "showPower")
-    end
-    local setting = Registry and Registry:GetSetting(key)
-    if not setting then return end
-    out[#out + 1] = {
-        setting = setting,
-        value = true,
-        valueLabel = "on",
-        textArea = tab,
-        label = tostring(setting.label or "Text visibility") .. " -> on",
-    }
-end
-
-local function TextSlotMoveValueIntent(text)
-    return ContainsAny(text, {
-        "move", "move the", "move max", "move current", "move percent",
-        "relocate", "transfer", "send", "shift",
-        "verschieben", "umsetzen",
-    })
-end
-
-function A._ParseTextSlotValueMoveShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
-    if not TextSlotMoveValueIntent(text) then return nil end
-    local tab = TextSelectorTab(text)
-    if tab ~= "hp" and tab ~= "power" then return nil end
-    local slot = A._TextSlotForDetail(text, tab)
-    if not slot then return nil end
-
-    local groups = DetectGroups(text)
-    local units = {}
-    if #groups == 0 then units = DetectUnits(text) end
-    if #groups == 0 and #units == 0 then
-        local page = M and M.activeKey
-        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
-            groups = GroupScopesOrCurrentPage(text)
-        else
-            local pageUnit = CurrentPageUnit()
-            if pageUnit then units = { pageUnit } end
-        end
-    end
-    if #groups == 0 and #units == 0 then return nil end
-
-    local function AddMoveTarget(out, frameType, unitOrScope)
-        local dst = TextSlotSetting(frameType, unitOrScope, tab, slot)
-        if not dst then return nil end
-        local value, invalid = A._TextSlotDropdownValueForText(dst, text)
-        if value == nil then return invalid end
-
-        out[#out + 1] = {
-            setting = dst,
-            value = value,
-            textArea = tab,
-            textSlot = A._TextSlotLower(slot),
-            label = tostring(dst.label or "Text slot") .. " -> " .. tostring(value),
-            valueLabel = value,
-        }
-
-        if value ~= "NONE" then
-            for _, sourceSlot in ipairs({ "Left", "Center", "Right" }) do
-                if sourceSlot ~= slot then
-                    local source = TextSlotSetting(frameType, unitOrScope, tab, sourceSlot)
-                    if source and ReadSettingValue(source) == value then
-                        out[#out + 1] = {
-                            setting = source,
-                            value = "NONE",
-                            textArea = tab,
-                            textSlot = A._TextSlotLower(sourceSlot),
-                            label = tostring(source.label or "Text slot") .. " -> NONE",
-                            valueLabel = "NONE",
-                        }
-                    end
-                end
-            end
-            A._AddTextSlotVisibilityChange(out, frameType, unitOrScope, tab)
-        end
-        return nil
-    end
-
-    local changes = {}
-    local invalidValue
-    for i = 1, #groups do
-        invalidValue = AddMoveTarget(changes, "group", A._TextGroupScopeName(groups[i])) or invalidValue
-    end
-    for i = 1, #units do
-        invalidValue = AddMoveTarget(changes, "unitframe", tostring(units[i])) or invalidValue
-    end
-    if #changes == 0 and invalidValue then
-        return {
-            kind = "unknown",
-            text = "That text-slot value is not available for the selected MSUF dropdown.",
-            status = "failed",
-        }
-    end
-    if #changes == 0 then return nil end
-    if #changes > 1 and (#groups + #units) > 1 then
-        return {
-            kind = "ambiguous",
-            choices = changes,
-            label = "Multiple matching text-slot move targets",
-            summary = "The command matched more than one text-slot target, so the Assistant is asking which real slot to change.",
-        }
-    end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Move text slot content",
-        summary = "Moves a concrete HP/Power text value into the requested left/center/right text slot and clears the same value from its old slot.",
-    }
-end
-
-function A._ParseTextSlotDropdownShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
-    if ContainsAny(text, { "dispel overlay", "debuff overlay", "current health only", "on current health only", "on health only" }) then return nil end
-    if ContainsAny(text, { "dark mode", "dark bars", "dark bar", "bar color", "brightness" }) then return nil end
-    if not ContainsAny(text, { "set", "show", "display", "use", "put", "make", "change", "hide", "turn off", "turn on", "create", "create new", "add", "new", "remove", "clear" }) then return nil end
-    local tab = TextSelectorTab(text)
-    local ctxFrame, ctxUnit, ctxTab, ctxSlot = A._SelectedTextTargetFromContext(tab)
-    local contextReference = ContainsAny(text, { "it", "that", "this", "selected", "here", "there", "same", "now" })
-    if not tab and contextReference then tab = ctxTab end
-    if tab ~= "hp" and tab ~= "power" then return nil end
-    local slot = A._TextSlotForDetail(text, tab)
-    if ContainsAny(text, { "offset", "position", "pos", "x", "y", "up", "down", "move", "nudge", "shift", "layer", "size", "font size" }) then return nil end
-
-    local groups = DetectGroups(text)
-    local units = {}
-    if #groups == 0 then units = DetectUnits(text) end
-    if #groups == 0 and #units == 0 and contextReference and ctxFrame and ctxUnit and ctxTab == tab then
-        if ctxFrame == "group" then
-            groups = { tostring(ctxUnit) }
-        else
-            units = { tostring(ctxUnit) }
-        end
-    end
-    if #groups == 0 and #units == 0 then
-        local page = M and M.activeKey
-        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
-            groups = GroupScopesOrCurrentPage(text)
-        else
-            local pageUnit = CurrentPageUnit()
-            if pageUnit then units = { pageUnit } end
-        end
-    end
-    if #groups == 0 and #units == 0 and ctxFrame and ctxUnit and ctxTab == tab then
-        if ctxFrame == "group" then
-            groups = { tostring(ctxUnit) }
-        else
-            units = { tostring(ctxUnit) }
-        end
-    end
-
-    local clearAllSlots = slot == nil
-        and ContainsAny(text, { "remove", "clear", "hide", "turn off", "disable", "empty", "none", "off" })
-        and not ContainsAny(text, { "it", "that", "this", "selected", "here" })
-    local ambiguousActiveSlots
-
-    if not slot and contextReference then
-        if #groups == 1 then
-            slot = A._SelectedTextSlotFromContext("group", groups[1], tab)
-        elseif #units == 1 then
-            slot = A._SelectedTextSlotFromContext("unitframe", units[1], tab)
-        end
-        if not slot and ctxSlot and ctxTab == tab then slot = ctxSlot end
-    end
-    if not slot and not clearAllSlots then
-        if #groups == 1 then
-            slot = A._SelectedTextSlotFromContext("group", groups[1], tab)
-        elseif #units == 1 then
-            slot = A._SelectedTextSlotFromContext("unitframe", units[1], tab)
-        end
-    end
-    if not slot and not clearAllSlots then
-        local active
-        if #groups == 1 then
-            slot, active = InferSingleActiveTextSlot("group", groups[1], tab)
-        elseif #units == 1 then
-            slot, active = InferSingleActiveTextSlot("unitframe", units[1], tab)
-        end
-        if not slot and type(active) == "table" and #active > 1 then
-            ambiguousActiveSlots = active
-        end
-    end
-    if not slot and ctxSlot and ctxTab == tab and contextReference then slot = ctxSlot end
-
-    local slots = {}
-    if slot then
-        slots[1] = slot
-    elseif ambiguousActiveSlots and #ambiguousActiveSlots > 0 then
-        slots = ambiguousActiveSlots
-    else
-        slots[1], slots[2], slots[3] = "Left", "Center", "Right"
-    end
-
-    local shouldShowTextArea = A._HasTextSlotShowIntent(text)
-    local pendingVisibility = {}
-
-    local function AddTextSlotChange(out, setting, slotName, frameType, unitOrScope)
-        if not setting then return nil end
-        local value, invalid = A._TextSlotDropdownValueForText(setting, text)
-        if value ~= nil then
-            out[#out + 1] = {
-                setting = setting,
-                value = value,
-                textArea = tab,
-                textSlot = A._TextSlotLower(slotName),
-                label = tostring(setting.label or "Text slot") .. " -> " .. tostring(value),
-                valueLabel = value,
-            }
-            if shouldShowTextArea and value ~= "NONE" then
-                pendingVisibility[#pendingVisibility + 1] = { frameType = frameType, unitOrScope = unitOrScope }
-            end
-        end
-        return invalid
-    end
-
-    local changes = {}
-    local invalidValue
-    for i = 1, #groups do
-        for j = 1, #slots do
-            local keyName = A._TextSlotSettingKey(tab, slots[j])
-            local setting = keyName and Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. keyName)
-            invalidValue = AddTextSlotChange(changes, setting, slots[j], "group", groups[i]) or invalidValue
-        end
-    end
-    for i = 1, #units do
-        for j = 1, #slots do
-            local keyName = A._TextSlotSettingKey(tab, slots[j])
-            local setting = keyName and Registry and Registry:GetSetting(tostring(units[i]) .. "." .. keyName)
-            invalidValue = AddTextSlotChange(changes, setting, slots[j], "unitframe", units[i]) or invalidValue
-        end
-    end
-    if #changes == 0 and invalidValue then
-        return {
-            kind = "unknown",
-            text = "That text-slot value is not available for the selected MSUF dropdown.",
-            status = "failed",
-        }
-    end
-    if #changes == 0 then return nil end
-    if #changes > 1 and not clearAllSlots then
-        return {
-            kind = "ambiguous",
-            choices = changes,
-            label = "Multiple matching text-slot dropdown settings",
-            summary = "The command did not identify one concrete text slot, so the Assistant is asking which real slot to change.",
-        }
-    end
-    if #pendingVisibility > 0 then
-        local seenVisibility = {}
-        for i = 1, #pendingVisibility do
-            local target = pendingVisibility[i]
-            local id = tostring(target.frameType) .. ":" .. tostring(target.unitOrScope) .. ":" .. tostring(tab)
-            if not seenVisibility[id] then
-                seenVisibility[id] = true
-                A._AddTextSlotVisibilityChange(changes, target.frameType, target.unitOrScope, tab)
-            end
-        end
-    end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Set text slot content",
-        summary = "Changes the registered HP/Power left/center/right text-slot dropdown for the selected unit or group scope.",
-    }
-end
-
-function A._ParseTextSlotOffsetShortcut(text)
-    if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
-    if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down" }) then return nil end
-    local tab = TextSelectorTab(text)
-    if tab ~= "hp" and tab ~= "power" then return nil end
-    local slot = A._TextSlotForDetail(text, tab)
-    if not slot then return nil end
-
-    local axis = A._DetailOffsetAxis(text)
-    local direction
-    if ContainsAny(text, { "down", "lower", "tiefer", "runter", "unten" }) then
-        direction = "down"
-    elseif ContainsAny(text, { "up", "higher", "hoeher", "hoch", "oben" }) then
-        direction = "up"
-    else
-        direction = DetectDirection(text, {})
-    end
-    if (direction == "left" or direction == "right") and (slot == "Left" or slot == "Right")
-        and not ContainsAny(text, {
-            "left hp text", "hp left text", "left health text", "health left text", "left power text", "power left text", "left mana text", "mana left text",
-            "right hp text", "hp right text", "right health text", "health right text", "right power text", "power right text", "right mana text", "mana right text",
-            "left slot", "slot left", "right slot", "slot right", "left side", "right side", "left label", "right label",
-        })
-    then
-        return nil
-    end
-    if not axis and direction then
-        axis = (direction == "left" or direction == "right") and "x" or "y"
-    end
-    if not axis then return nil end
-
-    local value
-    local relativeDelta
-    if ContainsAny(text, { "move", "nudge", "shift" }) and direction then
-        relativeDelta = FirstNumber(text) or 10
-        if direction == "left" or direction == "down" then relativeDelta = -relativeDelta end
-    else
-        value = FirstNumber(text)
-    end
-    if value == nil and relativeDelta == nil then return nil end
-
-    local prefix = (tab == "hp" and "hpText" or "powerText") .. slot
-    local attr = prefix .. (axis == "x" and "OffsetX" or "OffsetY")
-    local groups = DetectGroups(text)
-    local units = {}
-    if #groups == 0 then units = DetectUnits(text) end
-
-    if #groups == 0 and #units == 0 then
-        local page = M and M.activeKey
-        if page == "gf_layout" or page == "gf_bars" or page == "gf_indicators" then
-            groups = GroupScopesOrCurrentPage(text)
-        else
-            local pageUnit = CurrentPageUnit()
-            if pageUnit then units = { pageUnit } end
-        end
-    end
-
-    local changes = {}
-    for i = 1, #groups do
-        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. "." .. attr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
-    end
-    for i = 1, #units do
-        local setting = Registry and Registry:GetSetting(tostring(units[i]) .. "." .. attr)
-        if setting then changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, direction = direction or axis } end
-    end
-    if #changes == 0 then return nil end
-    if #changes > 1 and #groups > 1 then
-        return {
-            kind = "ambiguous",
-            choices = changes,
-            label = "Multiple matching text-slot offset settings",
-        }
-    end
-    return {
-        kind = "changes",
-        changes = changes,
-        label = "Set text slot offset",
-        summary = "Changes the registered HP/Power left/center/right text-slot offset slider for the selected unit or group scope.",
-    }
-end
-
-local function TextMoveTogetherIntent(text)
-    if ContainsAny(text, { "individual", "separate", "separately", "each" })
-        and ContainsAny(text, { "hp text", "health text", "power text", "mana text" })
-        and ContainsAny(text, { "unit", "units", "slot", "slots", "text unit", "text units", "text slot", "text slots" })
-    then
-        return true
-    end
-    return ContainsAny(text, {
-        "move text as one group", "move as one group", "text as one group",
-        "move text together", "text move together", "move together",
-        "move text per slot", "text per slot", "per slot", "selected slot mode",
-        "individual slot", "individual slots", "separate slot", "separate slots",
-        "move text separately", "text separately", "individual text unit", "individual text units",
-        "separate text unit", "separate text units", "move individual text", "move each text",
-    })
-end
-
-local function TextMoveTogetherValue(text)
-    if ContainsAny(text, { "individual", "separate", "separately", "each" })
-        and ContainsAny(text, { "hp text", "health text", "power text", "mana text" })
-        and ContainsAny(text, { "unit", "units", "slot", "slots", "text unit", "text units", "text slot", "text slots" })
-    then
-        return false
-    end
-    if ContainsAny(text, {
-        "per slot", "selected slot mode", "individual slot", "individual slots",
-        "separate slot", "separate slots", "separately", "text separately",
-        "individual text unit", "individual text units", "separate text unit", "separate text units",
-        "move individual text", "move each text",
-    }) then
-        return false
-    end
-    local value = DetectBoolean(text)
-    if value ~= nil then return value end
-    return true
-end
-
-local function StatusSelectorTab(text)
-    if ContainsAny(text, { "advanced status tab", "advanced status icon tab", "advanced indicator tab", "advanced status controls", "advanced status" }) then return "advanced" end
-    if ContainsAny(text, { "basic status tab", "basic status icon tab", "basic indicator tab", "basic status controls", "basic status" }) then return "basic" end
-    return nil
-end
-
-local function StatusSelectorIntent(text)
-    if ContainsAny(text, {
-        "status tab", "status icon tab", "status indicator tab", "indicator tab",
-        "status selector", "status dropdown", "indicator selector", "indicator dropdown",
-        "status controls", "status icon controls", "selected indicator",
-    }) then
-        return true
-    end
-    return ContainsAny(text, { "indicator", "status icon" })
-end
-
-local function ParseMenuSelectorState(text)
-    if TextMoveTogetherIntent(text) then
-        local textTab = TextSelectorTab(text)
-        if textTab == "hp" or textTab == "power" then
-            local groups = DetectGroups(text)
-            if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
-                return MenuSelectorAction({
-                    selector = "group_text_move_together",
-                    scope = groups[1] or SelectorGroupScope(text),
-                    tab = textTab,
-                    value = TextMoveTogetherValue(text),
-                }, "Set group text move mode")
-            end
-            local unit = SelectorUnit(text)
-            if unit then
-                return MenuSelectorAction({
-                    selector = "unit_text_move_together",
-                    unit = unit,
-                    tab = textTab,
-                    value = TextMoveTogetherValue(text),
-                }, "Set unit text move mode")
-            end
-        end
-    end
-
-    local anchorTextTab = TextSelectorTab(text)
-    local anchorTextSlot = TextSelectorSlot(text)
-    if (anchorTextTab == "hp" or anchorTextTab == "power") and TextSelectorIntent(text, anchorTextTab, anchorTextSlot) then
-        local groups = DetectGroups(text)
-        if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
-            return MenuSelectorAction({
-                selector = "group_text",
-                scope = groups[1] or SelectorGroupScope(text),
-                tab = anchorTextTab,
-                slot = anchorTextSlot,
-            }, "Select group text editor state")
-        end
-        local unit = SelectorUnit(text)
-        if unit then
-            return MenuSelectorAction({
-                selector = "unit_text",
-                unit = unit,
-                tab = anchorTextTab,
-                slot = anchorTextSlot,
-            }, "Select unit text editor state")
-        end
-    end
-
-    local genericMenuSelectorIntent = ContainsAny(text, {
-        "select text tab", "select text slot", "text move together", "move text as one group", "move text per slot",
-        "select status tab", "select status indicator", "select group status icon",
-        "select spell indicator", "select corner editor slot",
-        "select power color token", "select class resource color token", "select class power color token",
-        "set profile staging field", "set profile string field",
-        "set unit copy category", "select unit copy categories", "set group copy category", "select group copy categories",
-    })
-    if not HasMenuSelectorVerb(text) and not genericMenuSelectorIntent then return nil end
-
-    if ContainsAny(text, { "class power color token", "class resource color token", "class power token", "class resource token" })
-        or (ContainsAny(text, { "class power color", "class resource color", "resource color" })
-            and ContainsAny(text, { "combo point", "combo points", "holy power", "soul shard", "soul shards", "chi", "arcane charge", "arcane charges", "runes", "essence", "maelstrom", "astral", "stagger", "ebon", "whirlwind", "tip of the spear", "insanity" }))
-    then
-        local token = ClassPowerColorTokenForText(text)
-        if token then
-            return MenuSelectorAction({ selector = "color_token", kind = "classPower", token = token }, "Select class resource color token")
-        end
-    end
-    if ContainsAny(text, { "power color token", "power token", "power type", "resource type", "resource color token" })
-        and not ContainsAny(text, { "class power", "class resource", "combo point", "combo points" })
-    then
-        local token = PowerColorTokenForText(text)
-        if token then
-            return MenuSelectorAction({ selector = "color_token", kind = "power", token = token }, "Select power color token")
-        end
-    end
-
-    local textTab = TextSelectorTab(text)
-    local textSlot = TextSelectorSlot(text)
-    if textTab and TextSelectorIntent(text, textTab, textSlot) then
-        local groups = DetectGroups(text)
-        if groups[1] or ContainsAny(text, { "group text", "group health and text", "party text", "raid text", "mythic raid text" }) then
-            return MenuSelectorAction({
-                selector = "group_text",
-                scope = groups[1] or SelectorGroupScope(text),
-                tab = textTab,
-                slot = textSlot,
-            }, "Select group text editor state")
-        end
-        local unit = SelectorUnit(text)
-        if unit then
-            return MenuSelectorAction({
-                selector = "unit_text",
-                unit = unit,
-                tab = textTab,
-                slot = textSlot,
-            }, "Select unit text editor state")
-        end
-    end
-
-    if ContainsAny(text, { "spell indicator selector", "spell indicator dropdown", "spell indicator spec", "tracked spell selector", "tracked spells selector", "tracked spell", "multi spec entry", "multi-spec entry" }) then
-        local spec = A.ResolveGroupSpellSpec and A.ResolveGroupSpellSpec(text) or nil
-        local aura, resolvedSpec
-        if type(A.ResolveGroupSpellAura) == "function" then
-            aura, resolvedSpec = A.ResolveGroupSpellAura(spec, text)
-        end
-        spec = spec or resolvedSpec
-        if spec or aura then
-            return MenuSelectorAction({
-                selector = "group_spell",
-                scope = SelectorGroupScope(text),
-                spec = spec,
-                aura = aura,
-                text = text,
-            }, "Select group spell indicator editor state")
-        end
-    end
-
-    if ContainsAny(text, { "corner editor slot", "editor slot", "corner slot", "custom spell editor" }) then
-        local slot = A.ResolveGroupCornerSlot and A.ResolveGroupCornerSlot(text) or nil
-        if slot then
-            return MenuSelectorAction({
-                selector = "group_corner",
-                scope = SelectorGroupScope(text),
-                slot = slot.key or slot.value or text,
-                text = text,
-            }, "Select group corner editor slot")
-        end
-    end
-
-    local statusTab = StatusSelectorTab(text)
-    local statusIntent = StatusSelectorIntent(text)
-    if statusIntent then
-        local groups = DetectGroups(text)
-        local groupStatusIcon = GroupStatusIconForText(text)
-        if groups[1] or ContainsAny(text, { "group status", "group indicator", "party indicator", "raid indicator", "mythic raid indicator" }) then
-            if statusTab or groupStatusIcon then
-                return MenuSelectorAction({
-                    selector = "group_status",
-                    scope = groups[1] or SelectorGroupScope(text),
-                    tab = statusTab,
-                    icon = groupStatusIcon,
-                    text = text,
-                }, "Select group status icon editor state")
-            end
-        end
-
-        local unit = SelectorUnit(text)
-        local unitStatus = unit and A.ResolveUnitStatusSpec and A.ResolveUnitStatusSpec(unit, text) or nil
-        if unit and (statusTab or unitStatus) then
-            return MenuSelectorAction({
-                selector = "unit_status",
-                unit = unit,
-                tab = statusTab,
-                status = unitStatus and unitStatus.value,
-                text = text,
-            }, "Select unit status editor state")
-        end
-
-        if groupStatusIcon then
-            return MenuSelectorAction({
-                selector = "group_status",
-                scope = SelectorGroupScope(text),
-                icon = groupStatusIcon,
-                text = text,
-            }, "Select group status icon editor state")
-        end
-    end
-
-    if ContainsAny(text, { "select text tab", "select text slot", "text move together", "move text as one group", "move text per slot" }) then
-        return {
-            kind = "answer",
-            status = "info",
-            text = "Tell me the frame, text area, and slot or mode. For example: select player hp left slot, select party power text right slot, turn off party hp move text as one group, or use individual player power text units.",
-            summary = "Explains the missing target details for a text selector request.",
-        }
-    end
-    if ContainsAny(text, { "select status tab", "select status indicator", "select group status icon" }) then
-        return {
-            kind = "answer",
-            status = "info",
-            text = "Tell me the frame and indicator. For example: select target advanced status tab, select party leader icon indicator, or select party ready check icon indicator.",
-            summary = "Explains the missing target details for a status selector request.",
-        }
-    end
-    if ContainsAny(text, { "select spell indicator" }) then
-        return {
-            kind = "answer",
-            status = "info",
-            text = "Tell me the group frame and tracked spell entry. For example: select party spell indicator for priest, or select raid tracked spell prayer of mending.",
-            summary = "Explains the missing target details for a spell-indicator selector request.",
-        }
-    end
-    if ContainsAny(text, { "select corner editor slot", "corner editor slot", "editor slot" }) then
-        return {
-            kind = "answer",
-            status = "info",
-            text = "Tell me which corner slot. For example: select bottom right corner editor slot, or select top left corner editor slot.",
-            summary = "Explains the missing target details for a corner editor selector request.",
-        }
-    end
-    if ContainsAny(text, { "select power color token", "select class resource color token", "select class power color token" }) then
-        return {
-            kind = "answer",
-            status = "info",
-            text = "Tell me the token. For example: select mana power color token, select rage power color token, or select combo point class resource color.",
-            summary = "Explains the missing token for a color-token selector request.",
-        }
-    end
-    if ContainsAny(text, { "set profile staging field", "set profile string field" }) then
-        return {
-            kind = "answer",
-            status = "info",
-            text = "Tell me which profile field and value. For example: set profile name field to Raid Draft, set profile import new profile name to Imported Raid, or set profile string field to MSUF5:staged.",
-            summary = "Explains the missing profile field or value for a profile selector request.",
-        }
-    end
-    if ContainsAny(text, { "set unit copy category", "select unit copy categories", "set group copy category", "select group copy categories" }) then
-        return {
-            kind = "answer",
-            status = "info",
-            text = "Tell me which copy categories to set. For example: select only unit copy text and castbar categories, turn off unit copy portrait category, or select only group copy health and text categories.",
-            summary = "Explains the missing copy-category details for a selector request.",
-        }
-    end
-
-    return nil
 end
 
 P.BuildChanges = BuildChanges
@@ -3456,16 +2654,3 @@ P.ParseUnitOpacityShortcut = ParseUnitOpacityShortcut
 P.GroupColorModeScopes = GroupColorModeScopes
 P.GroupBarColorModeForText = GroupBarColorModeForText
 P.ParseGroupFrameColorMode = ParseGroupFrameColorMode
-P.MENU_SELECTOR_VERBS = MENU_SELECTOR_VERBS
-P.HasMenuSelectorVerb = HasMenuSelectorVerb
-P.MenuSelectorAction = MenuSelectorAction
-P.SelectorUnit = SelectorUnit
-P.SelectorGroupScope = SelectorGroupScope
-P.TextSelectorTab = TextSelectorTab
-P.TextSelectorSlot = TextSelectorSlot
-P.TextSelectorIntent = TextSelectorIntent
-P.TextMoveTogetherIntent = TextMoveTogetherIntent
-P.TextMoveTogetherValue = TextMoveTogetherValue
-P.StatusSelectorTab = StatusSelectorTab
-P.StatusSelectorIntent = StatusSelectorIntent
-P.ParseMenuSelectorState = ParseMenuSelectorState

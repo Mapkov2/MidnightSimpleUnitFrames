@@ -167,6 +167,35 @@ local function ContainsAny(text, words)
     return false
 end
 
+local exactAssistantKeyCache
+local exactAssistantKeyCacheCount = 0
+
+local function LooksLikeExactAssistantKey(text)
+    local raw = tostring(text or "")
+    if not raw:find("[%.%_]") then return false end
+    local registry = A.Registry
+    if not registry then return false end
+    local settings = type(registry.AllSettings) == "function" and registry:AllSettings() or {}
+    local actions = type(registry.AllActions) == "function" and registry:AllActions() or {}
+    local count = #settings + #actions
+    if type(exactAssistantKeyCache) ~= "table" or exactAssistantKeyCacheCount ~= count then
+        exactAssistantKeyCache = {}
+        exactAssistantKeyCacheCount = count
+        for i = 1, #settings do
+            local key = tostring(settings[i] and settings[i].key or ""):lower()
+            if key ~= "" then exactAssistantKeyCache[key] = true end
+        end
+        for i = 1, #actions do
+            local key = tostring(actions[i] and actions[i].key or ""):lower()
+            if key ~= "" then exactAssistantKeyCache[key] = true end
+        end
+    end
+    for token in raw:gmatch("[%w_%.]+") do
+        if token:find("[%.%_]") and exactAssistantKeyCache[token:lower()] then return true end
+    end
+    return false
+end
+
 local function LooksLikeBareLookup(text)
     local norm = Normalize(text)
     if norm == "" then return false end
@@ -191,9 +220,41 @@ local function LooksLikeMutation(text)
     return ContainsAny(norm, MUTATION_TERMS)
 end
 
+local function LooksLikeKnowledgeQuestionPrefix(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    if norm:match("^how%s+do%s+i%s+undo") or norm:match("^how%s+can%s+i%s+undo") then return true end
+    if norm:match("^how%s+do%s+i%s+redo") or norm:match("^how%s+can%s+i%s+redo") then return true end
+    if (norm:match("^how%s+do%s+i%s+") or norm:match("^how%s+can%s+i%s+"))
+        and ContainsAny(norm, { "move", "drag", "position", "place", "verschiebe", "positionieren" })
+    then
+        return true
+    end
+    if norm:match("^help%s+with%s+")
+        and ContainsAny(norm, { "cooldown manager", "cooldownmanager", "essential cooldown", "essential cooldowns", "cdm" })
+    then
+        return true
+    end
+    if ContainsAny(norm, {
+        "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you set", "last change", "previous change", "what is it now",
+        "what is it set to", "current value", "value now", "show last change",
+    }) then
+        return false
+    end
+    if norm:match("^explain%s+") or norm:match("^erklaere%s+") then return true end
+    if norm:match("^what%s+does%s+") or norm:match("^what%s+is%s+") or norm:match("^what%s+are%s+") then return true end
+    if norm:match("^where%s+do%s+") or norm:match("^where%s+can%s+") or norm:match("^where%s+to%s+") then return true end
+    if norm:match("^where%s+is%s+") or norm:match("^where%s+are%s+") then return true end
+    if norm:match("^show%s+me%s+.+settings") or norm:match("^show%s+me%s+.+options") then return true end
+    if norm:match("^wo%s+ist%s+") or norm:match("^wo%s+kann%s+") or norm:match("^was%s+ist%s+") then return true end
+    return false
+end
+
 local function StartsWithMutationCommand(text)
     local norm = Normalize(text)
     if norm == "" then return false end
+    if LooksLikeKnowledgeQuestionPrefix(norm) then return false end
     for i = 1, #MUTATION_TERMS do
         local term = Normalize(MUTATION_TERMS[i])
         if norm == term or norm:sub(1, #term + 1) == term .. " " then return true end
@@ -214,6 +275,7 @@ end
 local function LooksLikeKnowledgeFirstRequest(text)
     local norm = Normalize(text)
     if norm == "" then return false end
+    if LooksLikeKnowledgeQuestionPrefix(norm) then return true end
     if ContainsAny(norm, MUTATION_TERMS) then return false end
     if ContainsAny(norm, { "open", "go to", "show settings", "show me settings", "oeffne" }) then return false end
     if ContainsAny(norm, {
@@ -307,6 +369,34 @@ local function LooksLikeGuidedTourRequest(text)
         return true
     end
     return false
+end
+
+local SCOPED_HELP_SCOPE_TERMS = {
+    "player", "player frame", "target", "target frame", "focus", "focus frame", "pet", "pet frame",
+    "boss", "boss frame", "boss frames", "castbar", "castbars", "cast bar", "cast bars",
+    "bar", "bars", "texture", "textures", "color", "colors", "font", "fonts",
+    "profile", "profiles", "group", "group frame", "group frames", "party", "party frame",
+    "party frames", "raid", "raid frame", "raid frames", "layout", "health text",
+    "group text", "indicator", "indicators", "corner indicator", "corner indicators",
+    "class resource", "class resources", "class power", "gameplay", "status icon",
+    "status icons", "text slot", "text slots", "copy", "export", "import",
+    "spieler", "ziel", "fokus", "begleiter", "gruppe", "gruppenframe", "gruppenframes",
+    "profil", "profile", "farben", "farbe", "schrift", "zauberleiste",
+}
+
+local SCOPED_HELP_INTENT_TERMS = {
+    "help", "help for", "help with", "help me with", "commands for", "show commands for",
+    "what can i change", "what settings can i change", "what can i do",
+    "what can i change here", "what can i do here", "how do profiles work",
+    "hilfe", "hilfe fuer", "hilfe mit", "befehle fuer", "was kann ich aendern",
+}
+
+local function LooksLikeScopedHelpKnowledgeRequest(text)
+    local norm = Normalize(text)
+    if norm == "" then return false end
+    if ContainsAny(norm, { "what did you change", "what changed", "what was changed", "last change", "previous change" }) then return false end
+    if ContainsAny(norm, { "open", "go to", "show settings", "show me settings", "oeffne" }) then return false end
+    return ContainsAny(norm, SCOPED_HELP_INTENT_TERMS) and ContainsAny(norm, SCOPED_HELP_SCOPE_TERMS)
 end
 
 local function BugReportReply(text)
@@ -830,7 +920,7 @@ function A.RouteInput(text, coreHandler)
     end
 
     -- Pending confirmations/choices/flows must always win. The core handler owns those.
-    if hasCore and (HasPendingAssistantState() or ContainsAny(text, FLOW_TERMS)) then
+    if hasCore and (HasPendingAssistantState() or (ContainsAny(text, FLOW_TERMS) and not LooksLikeKnowledgeQuestionPrefix(text))) then
         local pendingResult = Core(text)
         if pendingResult and (not IsUnknownResult(pendingResult) or HasPendingAssistantState()) then return pendingResult end
     end
@@ -845,8 +935,27 @@ function A.RouteInput(text, coreHandler)
     local humanResult = HumanConversationReply(text)
     if humanResult then return humanResult end
 
+    if hasCore and LooksLikeExactAssistantKey(text) and (LooksLikeMutation(text) or StartsWithMutationCommand(text)) then
+        local exactKeyResult = Core(text)
+        if exactKeyResult and not IsUnknownResult(exactKeyResult) then return exactKeyResult end
+    end
+
     local auraUnsupported = UnsupportedAuraReply(text)
     if auraUnsupported then return auraUnsupported end
+
+    if LooksLikeScopedHelpKnowledgeRequest(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
+        local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+        if answer then return answer end
+        local noMatch = KnowledgeNoMatch(text)
+        if noMatch then return noMatch end
+    end
+
+    if LooksLikeKnowledgeFirstRequest(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
+        local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })
+        if answer then return answer end
+        local noMatch = KnowledgeNoMatch(text)
+        if noMatch then return noMatch end
+    end
 
     local parser = A.Parser or {}
     local normForScope = Normalize(text)
@@ -857,7 +966,7 @@ function A.RouteInput(text, coreHandler)
     })
         or (type(parser.DetectUnits) == "function" and #(parser.DetectUnits(text) or {}) > 0)
         or (type(parser.DetectGroups) == "function" and #(parser.DetectGroups(text) or {}) > 0)
-    if hasExplicitScope and hasCore then
+    if hasExplicitScope and hasCore and not LooksLikeKnowledgeFirstRequest(text) then
         local scopedCoreResult = Core(text)
         if scopedCoreResult and not IsUnknownResult(scopedCoreResult) then return scopedCoreResult end
     end
