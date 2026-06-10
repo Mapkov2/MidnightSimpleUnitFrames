@@ -131,6 +131,7 @@ local activeCount = 0
 local pollCount = 0
 local pollQueued = false
 local pollToken = 0
+local pollSetDirty = true
 local targetChecked = 0
 local targetInRange = 0
 local spellsBuilt = false
@@ -616,6 +617,10 @@ local PollNow
 -- DriverOnEvent, independent of this poll.
 local pollSettlePending = false -- run one final eval after movement stops
 
+local function MarkPollSetDirty()
+    pollSetDirty = true
+end
+
 local function UnitMoving(unit)
     if not GetUnitSpeed then return true end
     local speed = GetUnitSpeed(unit)
@@ -657,6 +662,7 @@ local function SchedulePoll(delay)
 end
 
 local function RebuildPollSet()
+    pollSetDirty = false
     pollCount = 0
     for unit in pairs(activeUnits) do
         if UnitNeedsPoll(unit) then
@@ -675,6 +681,22 @@ local function RebuildPollSet()
     SchedulePoll()
 end
 
+local function HookFrameVisibility(frame)
+    if not (frame and frame.HookScript) or frame._msufRangeVisibilityHooked == true then
+        return
+    end
+    frame._msufRangeVisibilityHooked = true
+    frame:HookScript("OnShow", function(self)
+        MarkPollSetDirty()
+        EvaluateIfActive(self._msufRangeUnit or self.unit, true)
+        RebuildPollSet()
+    end)
+    frame:HookScript("OnHide", function()
+        MarkPollSetDirty()
+        RebuildPollSet()
+    end)
+end
+
 PollNow = function()
     -- Pay for the full range evaluation only while something is moving, plus one
     -- settling pass right after movement stops (to capture the resting position).
@@ -687,7 +709,11 @@ PollNow = function()
         end
     end
     pollSettlePending = moving
-    RebuildPollSet()
+    if moving or pollSetDirty then
+        RebuildPollSet()
+    else
+        SchedulePoll()
+    end
 end
 
 local driver
@@ -702,11 +728,16 @@ local function DriverOnEvent(_, event, unit, a, b, c)
         or event == "PLAYER_TALENT_UPDATE"
         or event == "ACTIVE_PLAYER_SPECIALIZATION_CHANGED"
         or event == "TRAIT_CONFIG_UPDATED" then
+        MarkPollSetDirty()
         RebuildSpells()
         EvaluateAll(true)
         RebuildPollSet()
         return
-    elseif event == "PLAYER_TARGET_CHANGED" then
+    else
+        MarkPollSetDirty()
+    end
+
+    if event == "PLAYER_TARGET_CHANGED" then
         EvaluateTargetUnits(true)
     elseif event == "PLAYER_FOCUS_CHANGED" then
         EvaluateFocusUnits(true)
@@ -870,6 +901,7 @@ local function SyncRuntime()
     if activeCount > 0 then
         RegisterDriver()
         SyncTargetSpells()
+        MarkPollSetDirty()
         RebuildPollSet()
         return
     end
@@ -884,10 +916,12 @@ end
 
 function Range.RegisterFrame(frame, spec)
     if not frame then return false end
+    HookFrameVisibility(frame)
     local unit = frame.unit
     if frame._msufRangeUnit and frame._msufRangeUnit ~= unit and activeUnits[frame._msufRangeUnit] then
         activeUnits[frame._msufRangeUnit] = nil
         activeCount = activeCount - 1
+        MarkPollSetDirty()
     end
 
     frame._msufRangeUnit = unit
@@ -895,6 +929,7 @@ function Range.RegisterFrame(frame, spec)
         if activeUnits[unit] then
             activeUnits[unit] = nil
             activeCount = activeCount - 1
+            MarkPollSetDirty()
         end
         ClearUnit(unit, true)
         SyncRuntime()
@@ -904,6 +939,7 @@ function Range.RegisterFrame(frame, spec)
     if not activeUnits[unit] then
         activeUnits[unit] = true
         activeCount = activeCount + 1
+        MarkPollSetDirty()
     end
     if not spellsBuilt then
         RebuildSpells()
@@ -918,6 +954,7 @@ function Range.UnregisterFrame(frame)
     if unit and activeUnits[unit] then
         activeUnits[unit] = nil
         activeCount = activeCount - 1
+        MarkPollSetDirty()
     end
     if frame then
         frame._msufRangeUnit = nil
@@ -932,6 +969,7 @@ function Range.Refresh(unit)
     else
         EvaluateAll(true)
     end
+    MarkPollSetDirty()
     RebuildPollSet()
 end
 

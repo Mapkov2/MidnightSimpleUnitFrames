@@ -19,8 +19,7 @@ local ApplyHealthStatusColor = C.ApplyHealthStatusColor
 local ApplyBackgrounds = C.ApplyBackgrounds
 local RefreshUnitState = C.RefreshUnitState
 local ApplyBarGradient = C.ApplyBarGradient
-local IsNil = C.IsNil or function(value) return value == nil end
-local IsSecret = C.IsSecret or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local floor = C.floor or math.floor
 local GetTime = C.GetTime or _G.GetTime
 local type = type
@@ -119,7 +118,7 @@ function Health.Update(frame, event, unit)
     end
 
     local hp = UnitHealth(unit)
-    if IsNil(hp) then hp = 0 end
+    if issecretvalue(hp) ~= true and hp == nil then hp = 0 end
     bar._msufHealthValue = hp
 
     local animate = event == "UNIT_HEALTH"
@@ -129,7 +128,7 @@ function Health.Update(frame, event, unit)
         maxHP = bar._msufHealthMax
     else
         maxHP = UnitHealthMax(unit)
-        if IsNil(maxHP) then maxHP = 1 end
+        if issecretvalue(maxHP) ~= true and maxHP == nil then maxHP = 1 end
         bar._msufHealthMax = maxHP
         bar._msufHealthMaxUnit = unit
         bar._msufHealthMaxReady = true
@@ -173,7 +172,9 @@ function Health.Update(frame, event, unit)
     -- same percent still recolors back to the gradient.
     local gradientBucket
     if event == "UNIT_HEALTH" and frame._msufHealthColorByHealth == true then
-        if not (IsSecret(hp) or IsSecret(maxHP))
+        local hpSecret = issecretvalue(hp) == true
+        local maxSecret = issecretvalue(maxHP) == true
+        if not (hpSecret or maxSecret)
             and type(hp) == "number" and type(maxHP) == "number" and maxHP > 0 then
             gradientBucket = floor((hp / maxHP) * 100 + 0.5)
             if bar._msufGradientPct == gradientBucket then

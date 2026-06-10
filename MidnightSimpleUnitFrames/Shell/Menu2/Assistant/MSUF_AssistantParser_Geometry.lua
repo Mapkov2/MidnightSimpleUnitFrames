@@ -874,6 +874,204 @@ local function GroupScopesOrCurrentPage(text)
     return {}
 end
 
+function P.UnitPowerBarIsDetached(unit)
+    local setting = Registry and Registry:GetSetting(tostring(unit or "") .. ".powerBarDetached")
+    if setting and type(setting.get) == "function" then
+        local ok, value = pcall(setting.get)
+        if ok then return value == true end
+    end
+    return false
+end
+
+function P.ParseDetachedPowerBarMoveShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
+    if #DetectGroups(text) > 0 then return nil end
+    if ContainsAny(text, {
+        "power text", "mana text", "power value", "mana value", "power number", "mana number",
+        "power label", "mana label", "energie text", "resource text", "resource label",
+    }) then
+        return nil
+    end
+    if not ContainsAny(text, {
+        "powerbar", "power bar", "mana bar", "manabar", "power balken", "mana balken",
+    }) then
+        return nil
+    end
+
+    local direction = DetectDirection(text, {})
+    local axis = OM.AxisForDirection(direction) or A._DetailOffsetAxis(text)
+    if not direction and not axis then return nil end
+
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local pageUnit = CurrentPageUnit()
+        if pageUnit then units = { pageUnit } end
+    end
+    if #units == 0 then return nil end
+
+    local explicitDetached = ContainsAny(text, { "detached", "undocked", "separate", "separated", "abgekoppelt" })
+    local attr = axis == "y" and "detachedPowerBarOffsetY" or "detachedPowerBarOffsetX"
+    local relativeDelta
+    local value
+    if direction then
+        relativeDelta = OM.SignedDelta(text, direction, 10)
+    else
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+
+    local changes = {}
+    local skippedAttached = {}
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        if explicitDetached or P.UnitPowerBarIsDetached(unit) then
+            local setting = Registry and Registry:GetSetting(unit .. "." .. attr)
+            if setting then
+                changes[#changes + 1] = {
+                    setting = setting,
+                    value = value,
+                    relativeDelta = relativeDelta,
+                    direction = direction or axis,
+                }
+            end
+        else
+            skippedAttached[#skippedAttached + 1] = unit
+        end
+    end
+    if #changes == 0 then
+        local labels = A.UnitLabels or {}
+        local unitLabel = labels[skippedAttached[1]] or skippedAttached[1] or "that unit"
+        return {
+            kind = "unknown",
+            text = tostring(unitLabel) .. " Power Bar is attached to the unit frame, so the bar itself has no separate position. Detach it first, or say 'move " .. tostring(unitLabel):lower() .. " power text left' to move only the text.",
+            status = "failed",
+        }
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Move detached Power Bar",
+        bulkSafe = #changes > 1,
+        summary = "Moves the registered Detached Power Bar X/Y offset controls when the unit power bar is detached.",
+    }
+end
+
+function P.PairwiseFrameSpacingMode(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if ContainsAny(text, CLASS_POWER_TERMS) then return nil end
+    if ContainsAny(text, {
+        "closer together", "closer to each other", "closer", "nearer together", "nearer to each other",
+        "bring closer", "bring together", "naeher zusammen", "zusammen naeher",
+    }) then
+        return "closer"
+    end
+    if ContainsAny(text, {
+        "farther apart", "further apart", "move apart", "spread apart", "more space", "more spacing",
+        "more distance", "space between", "away from each other", "weiter auseinander", "mehr abstand",
+    }) then
+        return "apart"
+    end
+    return nil
+end
+
+function P.PairwiseFrameSpacingTargets(text)
+    local units = DetectUnits(text)
+    local groups = DetectGroups(text)
+    if #units == 2 and #groups == 0 then
+        return "unit", { units[1], units[2] }
+    end
+    if #groups == 2 and #units == 0 then
+        return "group", { groups[1], groups[2] }
+    end
+    return nil, nil
+end
+
+function P.PairwiseFrameSpacingAxis(text, firstSettingX, firstSettingY, secondSettingX, secondSettingY)
+    if ContainsAny(text, { "horizontal", "horizontally", "x axis", "x-axis", "left right", "left/right" }) then return "x" end
+    if ContainsAny(text, { "vertical", "vertically", "y axis", "y-axis", "up down", "up/down" }) then return "y" end
+    local x1 = tonumber(OM.ReadValue(firstSettingX)) or 0
+    local x2 = tonumber(OM.ReadValue(secondSettingX)) or 0
+    local y1 = tonumber(OM.ReadValue(firstSettingY)) or 0
+    local y2 = tonumber(OM.ReadValue(secondSettingY)) or 0
+    local dx = math.abs(x2 - x1)
+    local dy = math.abs(y2 - y1)
+    if dx == 0 and dy == 0 then return nil end
+    if dx >= dy then return "x" end
+    return "y"
+end
+
+function P.PairwiseFrameSpacingDirection(delta)
+    if delta == nil then return nil end
+    if delta > 0 then return "right" end
+    if delta < 0 then return "left" end
+    return nil
+end
+
+function P.PairwiseFrameSpacingChangeFor(kind, name, axis, delta)
+    local prefix = kind == "group" and ("gf_" .. tostring(name)) or tostring(name)
+    local attr = axis == "y" and "offsetY" or "offsetX"
+    local setting = Registry and Registry:GetSetting(prefix .. "." .. attr)
+    if not setting then return nil end
+    return {
+        setting = setting,
+        relativeDelta = delta,
+        direction = axis == "y" and (delta >= 0 and "up" or "down") or P.PairwiseFrameSpacingDirection(delta),
+    }
+end
+
+function P.ParsePairwiseFrameSpacingShortcut(text)
+    local mode = P.PairwiseFrameSpacingMode(text)
+    if not mode then return nil end
+    local kind, names = P.PairwiseFrameSpacingTargets(text)
+    if not kind or not names or #names ~= 2 or names[1] == names[2] then return nil end
+
+    local prefix1 = kind == "group" and ("gf_" .. tostring(names[1])) or tostring(names[1])
+    local prefix2 = kind == "group" and ("gf_" .. tostring(names[2])) or tostring(names[2])
+    local firstX = Registry and Registry:GetSetting(prefix1 .. ".offsetX")
+    local firstY = Registry and Registry:GetSetting(prefix1 .. ".offsetY")
+    local secondX = Registry and Registry:GetSetting(prefix2 .. ".offsetX")
+    local secondY = Registry and Registry:GetSetting(prefix2 .. ".offsetY")
+    if not (firstX and firstY and secondX and secondY) then return nil end
+
+    local axis = P.PairwiseFrameSpacingAxis(text, firstX, firstY, secondX, secondY)
+    if not axis then return nil end
+    local firstValue = tonumber(OM.ReadValue(axis == "y" and firstY or firstX)) or 0
+    local secondValue = tonumber(OM.ReadValue(axis == "y" and secondY or secondX)) or 0
+    local diff = secondValue - firstValue
+    if diff == 0 then return nil end
+
+    local amount = FirstNumber(text) or 10
+    if mode == "closer" then
+        local half = math.abs(diff) / 2
+        if amount > half then amount = half end
+    end
+    if amount == 0 then return nil end
+
+    local sign = diff > 0 and 1 or -1
+    local firstDelta
+    local secondDelta
+    if mode == "closer" then
+        firstDelta = sign * amount
+        secondDelta = -sign * amount
+    else
+        firstDelta = -sign * amount
+        secondDelta = sign * amount
+    end
+
+    local firstChange = P.PairwiseFrameSpacingChangeFor(kind, names[1], axis, firstDelta)
+    local secondChange = P.PairwiseFrameSpacingChangeFor(kind, names[2], axis, secondDelta)
+    if not firstChange or not secondChange then return nil end
+    return {
+        kind = "changes",
+        changes = { firstChange, secondChange },
+        label = mode == "closer" and "Move frames closer together" or "Move frames farther apart",
+        bulkSafe = true,
+        compoundComplete = true,
+        summary = "Moves two registered frame root offsets along their strongest separation axis.",
+    }
+end
+
 function P.CooldownManagerAnchorValueForText(text)
     if ContainsAny(text, {
         "utility cooldown", "utility cooldowns", "utility cooldown manager", "utility cooldownmanager",
@@ -900,12 +1098,15 @@ function P.ParseHumanAnchorTarget(text)
     if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
     if ContainsAny(text, {
         "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
-        "text", "icon", "indicator", "raid marker", "status",
+        "text", "icon", "indicator", "raid marker", "status", "level", "level indicator",
+        "raid group name", "group number", "leader", "assist", "elite", "rare",
+        "combat indicator", "rested", "resting", "incoming rez", "incoming resurrection",
     }) then
         return nil
     end
     local attachIntent = ContainsAny(text, {
         "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
+        "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
         "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
     }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
     local detachIntent = ContainsAny(text, {
@@ -997,27 +1198,41 @@ function P.GroupScaleBreakpointAttrForText(text)
     }) then
         return "scaleOver25", 26
     end
-    local norm = Normalize(text)
+    local norm = Normalize(text):gsub("%-", " ")
     local number =
         norm:match("when%s+there%s+are%s+(%d+)%s+players")
         or norm:match("when%s+there%s+are%s+(%d+)%s+people")
         or norm:match("when%s+there%s+are%s+(%d+)%s+persons")
         or norm:match("when%s+there%s+are%s+(%d+)%s+raid%s+members")
+        or norm:match("when%s+there%s+are%s+(%d+)%s+members")
         or norm:match("when%s+(%d+)%s+players")
         or norm:match("when%s+(%d+)%s+people")
         or norm:match("when%s+(%d+)%s+raid%s+members")
+        or norm:match("when%s+(%d+)%s+members")
         or norm:match("with%s+(%d+)%s+players")
         or norm:match("with%s+(%d+)%s+people")
         or norm:match("with%s+(%d+)%s+raid%s+members")
+        or norm:match("with%s+(%d+)%s+members")
         or norm:match("for%s+(%d+)%s+players")
         or norm:match("for%s+(%d+)%s+people")
         or norm:match("for%s+(%d+)%s+raid%s+members")
+        or norm:match("for%s+(%d+)%s+members")
+        or norm:match("for%s+a%s+(%d+)%s+player%s+raid")
+        or norm:match("for%s+(%d+)%s+player%s+raid")
+        or norm:match("for%s+a%s+(%d+)%s+man%s+raid")
+        or norm:match("for%s+(%d+)%s+man%s+raid")
         or norm:match("at%s+(%d+)%s+players")
         or norm:match("at%s+(%d+)%s+people")
         or norm:match("at%s+(%d+)%s+raid%s+members")
+        or norm:match("at%s+(%d+)%s+members")
+        or norm:match("raid%s+of%s+(%d+)")
         or norm:match("(%d+)%s+players")
+        or norm:match("(%d+)%s+player%s+raid")
         or norm:match("(%d+)%s+people")
         or norm:match("(%d+)%s+raid%s+members")
+        or norm:match("(%d+)%s+members")
+        or norm:match("(%d+)%s+man%s+raid")
+        or norm:match("(%d+)%s+man")
         or norm:match("scale%s+at%s+(%d+)")
         or norm:match("scaling%s+at%s+(%d+)")
     number = tonumber(number)
@@ -1390,6 +1605,10 @@ P.TEXT_VISIBILITY_VERBS = {
 function P.ParseTextVisibilityShortcut(text)
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
+    if ContainsAny(text, {
+        "reverse hp text", "hp text reverse", "reverse health text", "health text reverse",
+        "hide name on dead", "hide name when dead", "hide name on offline", "hide name when offline", "dead or offline",
+    }) then return nil end
     if ContainsAny(text, P.TEXT_VISIBILITY_VALUE_TERMS) then return nil end
     if not ContainsAny(text, P.TEXT_VISIBILITY_VERBS) then return nil end
     local value = DetectBoolean(text)
@@ -1480,6 +1699,12 @@ end
 
 function A._ParseGroupAnchorTargetShortcut(text)
     if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
+    if ContainsAny(text, {
+        "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
+        "text", "icon", "indicator", "raid marker", "status", "level", "level indicator",
+        "raid group name", "group number", "leader", "assist", "elite", "rare",
+        "combat indicator", "rested", "resting", "incoming rez", "incoming resurrection",
+    }) then return nil end
     if not (ContainsAny(text, { "anchor to", "attach to", "anchored to", "anchor target", "anchor frame" })
         or (HasPhrase(text, "anchor") and HasPhrase(text, "to")))
     then
@@ -1499,6 +1724,7 @@ function A._ParseGroupAnchorTargetShortcut(text)
             elseif #units == 0 and unitPage then
                 units = { unitPage }
             end
+            if #units == 1 and value == units[1] then return nil end
             if #units > 1 and (value == "player" or value == "target" or value == "targettarget" or value == "focustarget" or value == "focus" or value == "pet" or value == "boss") then
                 local filtered = {}
                 for i = 1, #units do
@@ -1656,7 +1882,7 @@ end
 
 local function ParseBorderThicknessShortcut(text)
     if not ContainsAny(text, { "border", "outline" }) then return nil end
-    if ContainsAny(text, { "portrait", "castbar", "cast bar", "class power", "class resource" }) then return nil end
+    if ContainsAny(text, { "portrait", "castbar", "cast bar", "class power", "class resource", "power bar", "mana bar", "power border", "mana border", "detached power", "group border", "group frame border" }) then return nil end
     if ContainsAny(text, { "color", "colour", "farbe", "reset" }) then return nil end
     if ContainsAny(text, { "aggro", "threat", "dispel", "dispellable", "purge", "purgeable", "boss target", "highlight" }) then return nil end
 
@@ -1848,6 +2074,12 @@ end
 function A._ParseGroupOpacityShortcut(text)
     if not ContainsAny(text, { "alpha", "opacity", "transparency", "transparent", "opaque" }) then return nil end
     if ContainsAny(text, { "range fade", "background", "backdrop", "track", "hp track", "health track", "bg", "dispel overlay", "debuff overlay" }) then return nil end
+    if ContainsAny(text, {
+        "debuff stripe opacity", "debuff stripe alpha", "offline opacity", "offline alpha", "offline member opacity",
+        "corner indicator opacity", "corner indicator alpha", "corner dot opacity", "corner dot alpha",
+        "text opacity", "text alpha", "absorb bar opacity", "absorb bar alpha", "heal absorb opacity", "heal absorb alpha",
+        "heal absorb bar opacity", "heal absorb bar alpha",
+    }) then return nil end
 
     local groups = DetectGroups(text)
     if #groups == 0 then
@@ -1959,7 +2191,7 @@ local function ParseGroupFrameColorMode(text)
 end
 
 local MENU_SELECTOR_VERBS = {
-    "select", "choose", "pick", "open", "show", "switch to", "go to", "focus", "edit",
+    "select", "choose", "pick", "open", "show", "switch to", "go to", "edit",
 }
 
 local function HasMenuSelectorVerb(text)
@@ -3021,9 +3253,20 @@ local function ParseMenuSelectorState(text)
         end
     end
 
-    if not HasMenuSelectorVerb(text) then return nil end
+    local genericMenuSelectorIntent = ContainsAny(text, {
+        "select text tab", "select text slot", "text move together", "move text as one group", "move text per slot",
+        "select status tab", "select status indicator", "select group status icon",
+        "select spell indicator", "select corner editor slot",
+        "select power color token", "select class resource color token", "select class power color token",
+        "set profile staging field", "set profile string field",
+        "set unit copy category", "select unit copy categories", "set group copy category", "select group copy categories",
+    })
+    if not HasMenuSelectorVerb(text) and not genericMenuSelectorIntent then return nil end
 
-    if ContainsAny(text, { "class power color token", "class resource color token", "class power token", "class resource token" }) then
+    if ContainsAny(text, { "class power color token", "class resource color token", "class power token", "class resource token" })
+        or (ContainsAny(text, { "class power color", "class resource color", "resource color" })
+            and ContainsAny(text, { "combo point", "combo points", "holy power", "soul shard", "soul shards", "chi", "arcane charge", "arcane charges", "runes", "essence", "maelstrom", "astral", "stagger", "ebon", "whirlwind", "tip of the spear", "insanity" }))
+    then
         local token = ClassPowerColorTokenForText(text)
         if token then
             return MenuSelectorAction({ selector = "color_token", kind = "classPower", token = token }, "Select class resource color token")
@@ -3128,6 +3371,63 @@ local function ParseMenuSelectorState(text)
                 text = text,
             }, "Select group status icon editor state")
         end
+    end
+
+    if ContainsAny(text, { "select text tab", "select text slot", "text move together", "move text as one group", "move text per slot" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Tell me the frame, text area, and slot or mode. For example: select player hp left slot, select party power text right slot, turn off party hp move text as one group, or use individual player power text units.",
+            summary = "Explains the missing target details for a text selector request.",
+        }
+    end
+    if ContainsAny(text, { "select status tab", "select status indicator", "select group status icon" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Tell me the frame and indicator. For example: select target advanced status tab, select party leader icon indicator, or select party ready check icon indicator.",
+            summary = "Explains the missing target details for a status selector request.",
+        }
+    end
+    if ContainsAny(text, { "select spell indicator" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Tell me the group frame and tracked spell entry. For example: select party spell indicator for priest, or select raid tracked spell prayer of mending.",
+            summary = "Explains the missing target details for a spell-indicator selector request.",
+        }
+    end
+    if ContainsAny(text, { "select corner editor slot", "corner editor slot", "editor slot" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Tell me which corner slot. For example: select bottom right corner editor slot, or select top left corner editor slot.",
+            summary = "Explains the missing target details for a corner editor selector request.",
+        }
+    end
+    if ContainsAny(text, { "select power color token", "select class resource color token", "select class power color token" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Tell me the token. For example: select mana power color token, select rage power color token, or select combo point class resource color.",
+            summary = "Explains the missing token for a color-token selector request.",
+        }
+    end
+    if ContainsAny(text, { "set profile staging field", "set profile string field" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Tell me which profile field and value. For example: set profile name field to Raid Draft, set profile import new profile name to Imported Raid, or set profile string field to MSUF5:staged.",
+            summary = "Explains the missing profile field or value for a profile selector request.",
+        }
+    end
+    if ContainsAny(text, { "set unit copy category", "select unit copy categories", "set group copy category", "select group copy categories" }) then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "Tell me which copy categories to set. For example: select only unit copy text and castbar categories, turn off unit copy portrait category, or select only group copy health and text categories.",
+            summary = "Explains the missing copy-category details for a selector request.",
+        }
     end
 
     return nil

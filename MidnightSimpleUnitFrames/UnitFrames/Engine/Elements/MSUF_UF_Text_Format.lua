@@ -28,6 +28,7 @@ local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
 local IsSecret = Text.IsSecret or function(_) return false end
 local IsNil = Text.IsNil or function(value) return value == nil end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local ApplyText = Apply.Text or function(fs, text)
     if not fs then return end
     if IsSecret(text) then
@@ -998,14 +999,16 @@ local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, nee
     if not slots or not count or count <= 0 then
         return
     end
-    if IsSecret(cur) or IsSecret(max) or (rt and IsSecret(rt.healthMissing)) then
+    if issecretvalue(cur) == true
+        or issecretvalue(max) == true
+        or (rt and issecretvalue(rt.healthMissing) == true) then
         return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
     end
     local pct
     local pctKnown = false
     if needsPercent == true and percentFn then
         pct = percentFn(unit)
-        if IsSecret(pct) then
+        if issecretvalue(pct) == true then
             return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
         end
         pctKnown = pct ~= nil
@@ -1050,10 +1053,10 @@ local FlushPendingPowerText
 local function ResolvePendingHealth(frame, rt, hp, hpMax)
     local unit = frame and frame.unit
     if unit then
-        if IsNil(hp) and UnitHealth then
+        if issecretvalue(hp) ~= true and hp == nil and UnitHealth then
             hp = UnitHealth(unit)
         end
-        if IsNil(hpMax) then
+        if issecretvalue(hpMax) ~= true and hpMax == nil then
             local bar = frame.hpBar or frame.Health
             if bar and bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
                 hpMax = bar._msufHealthMax
@@ -1073,26 +1076,26 @@ end
 
 local function ResolvePendingPower(frame, rt, power, powerMax)
     local unit = frame and frame.unit
-    if unit and (IsNil(power) or IsNil(powerMax)) then
+    if unit and ((issecretvalue(power) ~= true and power == nil) or (issecretvalue(powerMax) ~= true and powerMax == nil)) then
         local powerType = frame._msufTextPowerType
         if frame._msufTextPowerTypeKnown ~= true and UnitPowerType then
             local rawType, rawToken = UnitPowerType(unit)
-            if IsSecret(rawType) then rawType = nil end
-            if IsSecret(rawToken) then rawToken = nil end
+            if issecretvalue(rawType) == true then rawType = nil end
+            if issecretvalue(rawToken) == true then rawToken = nil end
             powerType = rawType
             frame._msufTextPowerType = rawType
             frame._msufTextPowerToken = rawToken
             frame._msufTextPowerTypeKnown = true
         end
 
-        if IsNil(power) and UnitPower then
+        if issecretvalue(power) ~= true and power == nil and UnitPower then
             if powerType ~= nil then
                 power = UnitPower(unit, powerType)
             else
                 power = UnitPower(unit)
             end
         end
-        if IsNil(powerMax) and UnitPowerMax then
+        if issecretvalue(powerMax) ~= true and powerMax == nil and UnitPowerMax then
             if powerType ~= nil then
                 powerMax = UnitPowerMax(unit, powerType)
             else

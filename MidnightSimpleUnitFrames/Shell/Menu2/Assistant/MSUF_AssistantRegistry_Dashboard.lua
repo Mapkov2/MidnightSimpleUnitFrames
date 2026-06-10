@@ -1081,7 +1081,7 @@ Registry:RegisterAction({
     key = "menu_window_maximize",
     label = "Maximize MSUF Menu",
     type = "navigation",
-    aliases = { "maximize menu", "maximize msuf menu", "maximize dashboard", "fullscreen menu", "restore maximized menu" },
+    aliases = { "maximize menu", "maximize msuf menu", "maximize dashboard", "fullscreen menu" },
     combatSafe = true,
     run = function()
         return A.Workflow.ControlMenuWindow("maximize")
@@ -1092,7 +1092,7 @@ Registry:RegisterAction({
     key = "menu_window_restore",
     label = "Restore MSUF Menu",
     type = "navigation",
-    aliases = { "restore menu", "restore msuf menu", "restore dashboard", "unminimize menu", "show minimized menu" },
+    aliases = { "restore menu", "restore msuf menu", "restore dashboard", "restore maximized menu", "unminimize menu", "show minimized menu" },
     combatSafe = true,
     run = function()
         return A.Workflow.ControlMenuWindow("restore")

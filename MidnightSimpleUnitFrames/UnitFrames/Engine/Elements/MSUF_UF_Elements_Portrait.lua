@@ -8,6 +8,7 @@ local UF = V.UF or MSUF.UF
 local CreateFrame = V.CreateFrame or CreateFrame
 local UnitClass = V.UnitClass or UnitClass
 local UnitReaction = V.UnitReaction or UnitReaction
+local UnitGUID = V.UnitGUID or UnitGUID
 local SetPortraitTexture = V.SetPortraitTexture or SetPortraitTexture
 local tonumber = V.tonumber or tonumber
 local type = V.type or type
@@ -35,7 +36,14 @@ local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
     UNIT_CONNECTION = true,
     MSUF_UNIT_IDENTITY_SOFT = true,
 }
+local PORTRAIT_GUID_BUST_EVENTS = {
+    UNIT_PORTRAIT_UPDATE = true,
+    UNIT_MODEL_CHANGED = true,
+    UNIT_CONNECTION = true,
+    MSUF_UNIT_IDENTITY_SOFT = true,
+}
 local SetShown = V.SetShown
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local Portrait = {}
 local portraitQueue = {}
@@ -52,6 +60,7 @@ local function SetTextureCached(texture, value)
         texture:SetTexture(value)
         texture._msufTexture = value
         texture._msufAtlas = nil
+        texture._msufPortraitGUID = nil
     end
 end
 
@@ -67,7 +76,14 @@ local function SetAtlasCached(texture, atlas)
         texture:SetAtlas(atlas)
         texture._msufAtlas = atlas
         texture._msufTexture = nil
+        texture._msufPortraitGUID = nil
         texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
+    end
+end
+
+local function ClearPortraitGUID(texture)
+    if texture then
+        texture._msufPortraitGUID = nil
     end
 end
 
@@ -85,6 +101,7 @@ local function ClearPortraitTexture(texture)
     texture:SetTexture(nil)
     texture._msufTexture = nil
     texture._msufAtlas = nil
+    texture._msufPortraitGUID = nil
 end
 
 local function PortraitFrameVisible(frame)
@@ -118,6 +135,10 @@ local function FlushQueuedPortraits()
             local texture = frame.portrait
             if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
                 frame._msufPortraitNeedsVisibleRefresh = nil
+                if frame._msufPortraitForceRefresh == true then
+                    frame._msufPortraitForceRefresh = nil
+                    ClearPortraitGUID(texture)
+                end
                 ApplyUnitPortrait(texture, frame.unit, frame)
                 if PortraitBorderNeedsUpdate("MSUF_PORTRAIT_FLUSH", p) then
                     LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
@@ -318,11 +339,22 @@ ApplyUnitPortrait = function(texture, unit, frame)
         SetVertexColorCached(texture, 1, 1, 1, 1)
         return
     end
+    local guid
+    if UnitGUID and unit then
+        guid = UnitGUID(unit)
+        if issecretvalue(guid) == true then
+            guid = nil
+        end
+    end
+    if guid ~= nil and texture._msufPortraitGUID == guid then
+        return
+    end
     SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
     texture._msufTexture = nil
     texture._msufAtlas = nil
     if SetPortraitTexture then
         SetPortraitTexture(texture, unit, true)
+        texture._msufPortraitGUID = guid
     else
         SetTextureCached(texture, QUESTION_MARK)
     end
@@ -466,6 +498,10 @@ end
 function Portrait.Disable(frame)
     local holder = frame.MSUFPortraitHolder
     frame._msufPortraitNeedsVisibleRefresh = nil
+    frame._msufPortraitForceRefresh = nil
+    if frame.portrait then
+        ClearPortraitGUID(frame.portrait)
+    end
     if holder then
         SetShown(holder, false)
         if holder.bg then SetShown(holder.bg, false) end
@@ -486,6 +522,10 @@ function Portrait.Update(frame, event, unit)
         return
     end
     unit = unit or frame.unit
+    if PORTRAIT_GUID_BUST_EVENTS[event] == true then
+        frame._msufPortraitForceRefresh = true
+        ClearPortraitGUID(texture)
+    end
     if not PortraitFrameVisible(frame) then
         frame._msufPortraitNeedsVisibleRefresh = true
         if p.render ~= "CLASS" and event == "MSUF_UNIT_IDENTITY_SOFT" then
@@ -498,6 +538,7 @@ function Portrait.Update(frame, event, unit)
     if p.render == "CLASS" then
         frame._msufPortraitNeedsVisibleRefresh = nil
         frame._msufPortraitQueued = nil
+        frame._msufPortraitForceRefresh = nil
         class = UnitClassToken(unit)
         ApplyClassPortrait(texture, unit, p, class, frame)
     else
@@ -509,6 +550,10 @@ function Portrait.Update(frame, event, unit)
         else
             frame._msufPortraitNeedsVisibleRefresh = nil
             frame._msufPortraitQueued = nil
+            if frame._msufPortraitForceRefresh == true then
+                frame._msufPortraitForceRefresh = nil
+                ClearPortraitGUID(texture)
+            end
             ApplyUnitPortrait(texture, unit, frame)
         end
     end

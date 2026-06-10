@@ -173,7 +173,21 @@ local function ParseGroupCopy(text)
     end
     if not source or not targets or #targets == 0 then
         local groups = DetectGroups(text)
-        if #groups < 2 then return nil end
+        if #groups < 2 then
+            if ContainsAny(text, {
+                "group setting", "group settings", "group frame setting", "group frame settings",
+                "group frames", "group frame", "party setting", "party settings",
+                "raid setting", "raid settings", "mythic raid setting", "mythic raid settings",
+            }) then
+                return {
+                    kind = "answer",
+                    status = "info",
+                    text = "Tell me the source and target group frames. For example: copy party to raid, copy raid settings to party, or copy just health and text options from party to raid.",
+                    summary = "Explains the missing source or target for a group-frame copy request.",
+                }
+            end
+            return nil
+        end
         source = groups[1]
         targets = {}
         for i = 2, #groups do targets[#targets + 1] = groups[i] end
@@ -266,18 +280,18 @@ local function BuildContextReset(text, ctx)
 end
 
 local GROUP_STATUS_ICON_ALIASES = {
-    { key = "roleIcon", size = "roleIconSize", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role indicator", "role symbol" } },
-    { key = "leaderIcon", size = "leaderIconSize", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader indicator", "leader symbol" } },
-    { key = "assistIcon", size = "assistIconSize", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
-    { key = "raidMarker", size = "raidMarkerSize", layer = "raidMarkerLayer", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
-    { key = "readyCheckIcon", size = "readyCheckSize", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
-    { key = "summonIcon", size = "summonIconSize", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol" } },
-    { key = "resurrectIcon", size = "resurrectIconSize", layer = "resurrectLayer", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
+    { key = "roleIcon", size = "roleIconSize", anchor = "roleIconAnchor", layer = "roleIconLayer", style = "roleIconStyle", aliases = { "role icon", "role indicator", "role symbol" } },
+    { key = "leaderIcon", size = "leaderIconSize", anchor = "leaderIconAnchor", layer = "leaderIconLayer", style = "leaderIconStyle", aliases = { "leader icon", "leader indicator", "leader symbol" } },
+    { key = "assistIcon", size = "assistIconSize", anchor = "assistIconAnchor", layer = "assistIconLayer", style = "assistIconStyle", aliases = { "assist icon", "assistant icon", "assist indicator", "assistant indicator", "assist symbol", "assistant symbol" } },
+    { key = "raidMarker", size = "raidMarkerSize", anchor = "raidMarkerAnchor", layer = "raidMarkerLayer", aliases = { "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "target marker", "target marker icon", "target marker indicator", "target marker symbol" } },
+    { key = "readyCheckIcon", size = "readyCheckSize", anchor = "readyCheckAnchor", layer = "readyCheckLayer", aliases = { "ready check", "ready check icon", "ready check indicator", "ready check symbol", "ready icon", "ready indicator", "ready symbol" } },
+    { key = "summonIcon", size = "summonIconSize", anchor = "summonAnchor", layer = "summonLayer", aliases = { "summon icon", "summon indicator", "summon symbol" } },
+    { key = "resurrectIcon", size = "resurrectIconSize", anchor = "resurrectAnchor", layer = "resurrectLayer", aliases = { "resurrect icon", "resurrect indicator", "resurrect symbol", "resurrection icon", "resurrection indicator", "resurrection symbol", "rez icon", "rez indicator", "rez symbol", "incoming resurrection", "incoming resurrection icon", "incoming resurrection indicator", "incoming resurrection symbol" } },
     { key = "pvpIcon", size = "pvpIconSize", anchor = "pvpIconAnchor", layer = "pvpIconLayer", aliases = { "pvp flag", "pvp icon", "pvp flag icon", "pvp indicator", "pvp flag indicator", "pvp status", "war mode indicator", "flagged indicator" } },
-    { key = "phaseIcon", size = "phaseIconSize", layer = "phaseLayer", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
-    { key = "statusText", size = "statusTextSize", layer = "statusTextLayer", aliases = { "dead text", "dead status text", "status text" } },
-    { key = "statusGhostText", size = "statusGhostTextSize", layer = "statusGhostTextLayer", aliases = { "ghost text", "ghost status text" } },
-    { key = "statusAFKText", size = "statusAFKTextSize", layer = "statusAFKTextLayer", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
+    { key = "phaseIcon", size = "phaseIconSize", anchor = "phaseAnchor", layer = "phaseLayer", aliases = { "phase icon", "phasing icon", "phase indicator", "phasing indicator", "phase symbol", "phasing symbol" } },
+    { key = "statusText", size = "statusTextSize", anchor = "statusTextAnchor", layer = "statusTextLayer", aliases = { "dead text", "dead status text", "status text" } },
+    { key = "statusGhostText", size = "statusGhostTextSize", anchor = "statusGhostTextAnchor", layer = "statusGhostTextLayer", aliases = { "ghost text", "ghost status text" } },
+    { key = "statusAFKText", size = "statusAFKTextSize", anchor = "statusAFKTextAnchor", layer = "statusAFKTextLayer", aliases = { "afk text", "dnd text", "afk dnd text", "away text" } },
 }
 
 local GROUP_STATUS_ICON_PACK_ALIASES = {
@@ -298,6 +312,16 @@ local function GroupStatusIconForText(text)
         if ContainsAny(text, row.aliases) then return row.key end
     end
     return nil
+end
+
+local function HasGroupStatusScopeIntent(text)
+    if #DetectGroups(text) > 0 then return true end
+    if ContainsAny(text, {
+        "group", "groups", "group frame", "group frames", "group status", "group icon", "group icons",
+        "party", "party frame", "party frames", "raid", "raid frame", "raid frames", "mythic raid",
+    }) then return true end
+    local icon = GroupStatusIconForText(text)
+    return icon == "readyCheckIcon" or icon == "summonIcon" or icon == "phaseIcon"
 end
 
 local function GroupStatusIconSpecForText(text)
@@ -483,6 +507,11 @@ end
 local function ParseGroupStatusIconReset(text)
     if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
     if not ContainsAny(text, GROUP_STATUS_ICON_TERMS) then return nil end
+    local explicitUnits = DetectUnits(text)
+    local explicitGroups = DetectGroups(text)
+    if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
+    if #explicitGroups == 0 and not HasGroupStatusScopeIntent(text) then return nil end
+    if #explicitGroups == 0 and ContainsAny(text, { "selected status indicator", "selected status icon", "current status indicator", "current status icon", "unit status indicator", "unit status icon" }) then return nil end
     local scope = FirstGroupOrDefault(text)
     local icon = GroupStatusIconForText(text)
     if icon then
@@ -512,6 +541,8 @@ local function ParseGroupStatusPreview(text)
     local explicitUnits = DetectUnits(text)
     local explicitGroups = DetectGroups(text)
     if #explicitUnits > 0 and #explicitGroups == 0 then return nil end
+    if #explicitGroups == 0 and not HasGroupStatusScopeIntent(text) then return nil end
+    if #explicitGroups == 0 and ContainsAny(text, { "selected status indicator", "selected status icon", "current status indicator", "current status icon", "unit status indicator", "unit status icon" }) then return nil end
     local scope = FirstGroupOrDefault(text)
     local icon = GroupStatusIconForText(text)
     local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
@@ -592,6 +623,30 @@ local function ParseGroupStatusIconDetail(text)
     local iconSpec = GroupStatusIconSpecForText(text)
     if not iconSpec then return nil end
 
+    local enabledKey = iconSpec.enabled or iconSpec.key
+    if enabledKey then
+        local value = DetectBoolean(text)
+        if value == nil then
+            if ContainsAny(text, { "hide", "disable", "disabled", "turn off", "off", "remove" }) then
+                value = false
+            elseif ContainsAny(text, { "show", "enable", "enabled", "turn on", "on", "display" }) then
+                value = true
+            end
+        end
+        if value ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, enabledKey, value)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icon Visibility",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the selected group status icon visibility toggle.",
+                }
+            end
+        end
+    end
+
     if ContainsAny(text, { "icon pack", "icon style" }) and iconSpec.style then
         local value = AliasValueForText(text, GROUP_STATUS_ICON_PACK_ALIASES, { "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT" })
         if value ~= nil then
@@ -603,6 +658,23 @@ local function ParseGroupStatusIconDetail(text)
                     label = "Group Status Icon Pack",
                     bulkSafe = #changes > 1,
                     summary = "Changes the selected group status icon pack/style dropdown.",
+                }
+            end
+        end
+    end
+
+    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" }) and iconSpec.anchor then
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[1] or "") .. "." .. tostring(iconSpec.anchor))
+        local value = setting and AliasValueForText(text, GROUP_SPELL_ANCHOR_ALIASES, setting.values or { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" })
+        if value ~= nil then
+            local changes = BuildGroupStatusChanges(scopes, iconSpec.anchor, value)
+            if #changes > 0 then
+                return {
+                    kind = "changes",
+                    changes = changes,
+                    label = "Group Status Icon Anchor",
+                    bulkSafe = #changes > 1,
+                    summary = "Changes the selected group status icon anchor dropdown.",
                 }
             end
         end
@@ -689,6 +761,40 @@ local UNIT_STATUS_ICON_PACK_ALIASES = {
     msuf = "MIDNIGHT",
 }
 
+local UNIT_STATUS_ANCHOR_ALIASES = {
+    topleft = "TOPLEFT",
+    ["top left"] = "TOPLEFT",
+    upperleft = "TOPLEFT",
+    ["upper left"] = "TOPLEFT",
+    topright = "TOPRIGHT",
+    ["top right"] = "TOPRIGHT",
+    upperright = "TOPRIGHT",
+    ["upper right"] = "TOPRIGHT",
+    bottomleft = "BOTTOMLEFT",
+    ["bottom left"] = "BOTTOMLEFT",
+    lowerleft = "BOTTOMLEFT",
+    ["lower left"] = "BOTTOMLEFT",
+    bottomright = "BOTTOMRIGHT",
+    ["bottom right"] = "BOTTOMRIGHT",
+    lowerright = "BOTTOMRIGHT",
+    ["lower right"] = "BOTTOMRIGHT",
+    center = "CENTER",
+    centre = "CENTER",
+    middle = "CENTER",
+    top = "TOP",
+    bottom = "BOTTOM",
+    left = "LEFT",
+    right = "RIGHT",
+    nameright = "NAMERIGHT",
+    ["name right"] = "NAMERIGHT",
+    ["right of name"] = "NAMERIGHT",
+    ["right to name"] = "NAMERIGHT",
+    nameleft = "NAMELEFT",
+    ["name left"] = "NAMELEFT",
+    ["left of name"] = "NAMELEFT",
+    ["left to name"] = "NAMELEFT",
+}
+
 local function UnitStatusHasIntent(text)
     return ContainsAny(text, UNIT_STATUS_RESET_TERMS) or ContainsAny(text, UNIT_STATUS_RUNTIME_TEXT_TERMS)
 end
@@ -703,15 +809,69 @@ local function ResolveUnitStatusSpecForText(unit, text)
     return nil
 end
 
-local function ParseUnitStatusIndicatorReset(text)
+local function UnitStatusUnitsOrCurrent(text)
+    local units = DetectUnits(text)
+    if #units == 0 then
+        local currentPageUnit = P.CurrentPageUnit
+        local currentUnit = type(currentPageUnit) == "function" and currentPageUnit() or nil
+        if currentUnit then units = { currentUnit } end
+    end
+    return units
+end
+
+local function CurrentUnitStatusValue(unit)
+    local selection = M and M.unitStatusSelection
+    if type(selection) == "table" and type(selection[unit]) == "string" and selection[unit] ~= "" then
+        return selection[unit]
+    end
+    return nil
+end
+
+local function ResolveUnitStatusSpecOrSelected(unit, text)
+    local spec = ResolveUnitStatusSpecForText(unit, text)
+    if spec then return spec end
+    if ContainsAny(text, { "selected status indicator", "selected status icon", "current status indicator", "current status icon" }) then
+        local selected = CurrentUnitStatusValue(unit)
+        if selected then return ResolveUnitStatusSpecForText(unit, selected) end
+    end
+    return nil
+end
+
+local function UnitStatusNeedsUnitContext(text)
+    return ContainsAny(text, {
+        "selected status indicator", "selected status icon", "current status indicator", "current status icon",
+        "unit status indicator", "unit status icon", "status indicator", "status icon",
+    })
+end
+
+local function ParseUnitStatusIndicatorReset(text, ctx)
     if not ContainsAny(text, { "reset", "restore", "default", "defaults", "zuruecksetzen" }) then return nil end
     if not UnitStatusHasIntent(text) then return nil end
-    local units = DetectUnits(text)
+    local units = UnitStatusUnitsOrCurrent(text)
+    if #units == 0 and ctx and ctx.lastUnit then units = { ctx.lastUnit } end
+    local action = Registry and Registry:GetAction("reset_unit_status_indicator")
+    if #units == 0 and UnitStatusNeedsUnitContext(text) then
+        return action and {
+            kind = "action",
+            action = action,
+            args = { text = text },
+            label = "Reset unit status indicator",
+            summary = "Needs a unit frame or selected status indicator before resetting placement and style fields.",
+        } or nil
+    end
     if #units == 0 then return nil end
     local unit = units[1]
-    local spec = ResolveUnitStatusSpecForText(unit, text)
+    local spec = ResolveUnitStatusSpecOrSelected(unit, text)
+    if not spec and UnitStatusNeedsUnitContext(text) then
+        return action and {
+            kind = "action",
+            action = action,
+            args = { unit = unit, text = text },
+            label = "Reset unit status indicator",
+            summary = "Needs a selected status indicator before resetting placement and style fields.",
+        } or nil
+    end
     if not spec then return nil end
-    local action = Registry and Registry:GetAction("reset_unit_status_indicator")
     return action and {
         kind = "action",
         action = action,
@@ -724,9 +884,9 @@ end
 local function ParseUnitStatusPreview(text, ctx)
     if not ContainsAny(text, { "preview", "show all", "current indicator", "all indicators", "all status icons" }) then return nil end
     if not UnitStatusHasIntent(text) then return nil end
-    local units = DetectUnits(text)
+    local units = UnitStatusUnitsOrCurrent(text)
     local unit = units[1] or (ctx and ctx.lastUnit)
-    local spec = ResolveUnitStatusSpecForText(unit, text)
+    local spec = ResolveUnitStatusSpecOrSelected(unit, text)
     local mode = ContainsAny(text, { "show all", "all indicators", "all status icons", "preview all" }) and "all" or "current"
     local action = Registry and Registry:GetAction("preview_unit_status_indicator")
     return action and {
@@ -761,23 +921,13 @@ local function ParseUnitStatusIconStyle(text)
     } or nil
 end
 
-local function UnitStatusUnitsOrCurrent(text)
-    local units = DetectUnits(text)
-    if #units == 0 then
-        local currentPageUnit = P.CurrentPageUnit
-        local currentUnit = type(currentPageUnit) == "function" and currentPageUnit() or nil
-        if currentUnit then units = { currentUnit } end
-    end
-    return units
-end
-
 local function ParseUnitStatusIndicatorDetail(text)
     if not UnitStatusHasIntent(text) then return nil end
 
     local units = UnitStatusUnitsOrCurrent(text)
     if #units == 0 then return nil end
     local unit = units[1]
-    local spec = ResolveUnitStatusSpecForText(unit, text)
+    local spec = ResolveUnitStatusSpecOrSelected(unit, text)
     if not spec then return nil end
 
     if ContainsAny(text, { "icon pack", "icon style" }) and spec.iconStyle then
@@ -789,6 +939,23 @@ local function ParseUnitStatusIndicatorDetail(text)
                 changes = { { setting = setting, value = value } },
                 label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Icon Pack",
                 summary = "Changes the registered icon-pack dropdown for one unit-frame status indicator.",
+            }
+        end
+    end
+
+    if ContainsAny(text, { "anchor", "anchor point", "anchor position", "position dropdown" })
+        and type(spec.anchor) == "string" and spec.anchor ~= ""
+    then
+        local setting = Registry and Registry:GetSetting(unit .. "." .. spec.anchor)
+        local value = setting and AliasValueForText(text, UNIT_STATUS_ANCHOR_ALIASES, setting.values or {
+            "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT", "NAMERIGHT", "NAMELEFT",
+        }) or nil
+        if setting and value ~= nil then
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = value } },
+                label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Anchor",
+                summary = "Changes the registered anchor dropdown for one unit-frame status indicator.",
             }
         end
     end
@@ -893,8 +1060,23 @@ local function ParseCustomAnchorWorkflow(text)
         } or nil
     end
     local units = DetectUnits(text)
-    local unit = units[1]
-    if not unit then return nil end
+    local currentPageUnit = P.CurrentPageUnit
+    local unit = units[1] or (type(currentPageUnit) == "function" and currentPageUnit() or nil)
+    if not unit then
+        local groupResolver = P.GroupScopesOrCurrentPage
+        groups = type(groupResolver) == "function" and groupResolver(text) or {}
+        if groups[1] then
+            local action = Registry and Registry:GetAction("start_group_custom_anchor_picker")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { scope = groups[1] },
+                label = "Start group custom anchor picker",
+                summary = "Starts the shared custom anchor picker overlay for a group frame.",
+            } or nil
+        end
+        return nil
+    end
     local action = Registry and Registry:GetAction("start_unit_custom_anchor_picker")
     return action and {
         kind = "action",
@@ -989,13 +1171,36 @@ local function ParseCustomAnchorClear(text)
         } or nil
     end
     local units = DetectUnits(text)
-    if #units == 0 then return nil end
+    local currentPageUnit = P.CurrentPageUnit
+    local unit = units[1] or (type(currentPageUnit) == "function" and currentPageUnit() or nil)
+    if not unit then
+        local groupResolver = P.GroupScopesOrCurrentPage
+        groups = type(groupResolver) == "function" and groupResolver(text) or {}
+        if groups[1] then
+            local action = Registry and Registry:GetAction("clear_group_custom_anchor")
+            return action and {
+                kind = "action",
+                action = action,
+                args = { scope = groups[1] },
+                label = "Clear " .. tostring((A.UnitLabels or {})[groups[1]] or groups[1]) .. " custom anchor",
+                summary = "Clears the group-frame custom anchor frame name.",
+            } or nil
+        end
+        local action = Registry and Registry:GetAction("clear_unit_custom_anchor")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { text = text },
+            label = "Clear custom anchor",
+            summary = "Needs a unit frame or group frame before clearing the custom anchor frame name.",
+        } or nil
+    end
     local action = Registry and Registry:GetAction("clear_unit_custom_anchor")
     return action and {
         kind = "action",
         action = action,
-        args = { unit = units[1] },
-        label = "Clear " .. tostring((A.UnitLabels or {})[units[1]] or units[1]) .. " custom anchor",
+        args = { unit = unit },
+        label = "Clear " .. tostring((A.UnitLabels or {})[unit] or unit) .. " custom anchor",
         summary = "Clears the unit-frame custom anchor frame name.",
     } or nil
 end
@@ -1111,9 +1316,27 @@ end
 
 local function ParseDashboardPanelAction(text)
     local panel, label = DashboardPanelForText(text)
-    if not panel then return nil end
     local explicit = ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle" })
     if not explicit then return nil end
+    if not panel and ContainsAny(text, { "dashboard panel", "dashboard panels" }) then
+        local open
+        if ContainsAny(text, { "close", "hide", "collapse" }) then
+            open = false
+        elseif ContainsAny(text, { "toggle" }) then
+            open = nil
+        else
+            open = true
+        end
+        local action = Registry and Registry:GetAction("set_dashboard_panel")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { open = open },
+            label = "Set Dashboard panel",
+            summary = "Needs a specific Dashboard panel such as recovery tools, scaling tools, or changelog.",
+        } or nil
+    end
+    if not panel then return nil end
     local open
     if ContainsAny(text, { "close", "hide", "collapse" }) then
         open = false
@@ -1151,7 +1374,7 @@ end
 local function ParseNavRailAction(text)
     if ContainsAny(text, { "search intro", "ask msuf intro", "assistant search intro", "search help intro" }) then
         local command
-        if ContainsAny(text, { "hide", "close", "dismiss", "mark seen", "mark as seen", "dont show" }) then
+        if ContainsAny(text, { "hide", "close", "dismiss", "mark seen", "mark as seen", "mark search intro seen", "dont show" }) then
             command = "seen"
         elseif ContainsAny(text, { "reset", "show again", "next time" }) then
             command = "reset"
@@ -1172,7 +1395,6 @@ local function ParseNavRailAction(text)
     if not ContainsAny(text, { "navigation section", "nav section", "sidebar section", "left nav section", "section", "navigation group", "nav group", "sidebar group" }) then return nil end
     if not ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle" }) then return nil end
     local section, label = NavSectionForText(text)
-    if not section then return nil end
     local open
     if ContainsAny(text, { "close", "hide", "collapse" }) then
         open = false
@@ -1182,6 +1404,15 @@ local function ParseNavRailAction(text)
         open = true
     end
     local action = Registry and Registry:GetAction("set_nav_section")
+    if not section then
+        return action and {
+            kind = "action",
+            action = action,
+            args = { open = open },
+            label = "Set navigation section",
+            summary = "Needs a specific navigation section such as Frames, Group Frames, Appearance, or Advanced.",
+        } or nil
+    end
     return action and {
         kind = "action",
         action = action,
@@ -1251,6 +1482,44 @@ function A._ParseMenuHistoryAction(text)
         label = label,
         summary = summary,
     } or nil
+end
+
+function P.ParseExactActionKeyShortcut(text, raw)
+    local hay = tostring(raw or text or ""):lower()
+    if not hay:find("[%a_][%w_%.]*", 1) then return nil end
+    local actions = Registry and Registry:AllActions() or {}
+    local bestAction
+    local bestKeyLen = 0
+    for i = 1, #actions do
+        local action = actions[i]
+        local key = tostring(action and action.key or "")
+        local keyLower = key:lower()
+        local startPos = keyLower ~= "" and hay:find(keyLower, 1, true) or nil
+        local before = startPos == nil or startPos == 1 or not hay:sub(startPos - 1, startPos - 1):match("[%w_%.]")
+        local afterIndex = startPos and (startPos + #keyLower) or nil
+        local after = afterIndex == nil or afterIndex > #hay or not hay:sub(afterIndex, afterIndex):match("[%w_%.]")
+        if startPos and before and after then
+            local combined = (keyLower .. " " .. tostring(action.label or ""):lower() .. " " .. tostring(action.type or ""):lower())
+            if not combined:find("aura", 1, true)
+                and not combined:find("shape", 1, true)
+                and not combined:find("rounded", 1, true)
+            then
+                if #keyLower > bestKeyLen then
+                    bestAction = action
+                    bestKeyLen = #keyLower
+                end
+            end
+        end
+    end
+    if not bestAction then return nil end
+    return {
+        kind = "action",
+        action = bestAction,
+        args = {},
+        confirmRequired = bestAction.confirmRequired == true,
+        label = bestAction.label or bestAction.key,
+        summary = "Runs the registered action addressed by its exact MSUF action key.",
+    }
 end
 
 P.CopyTextParts = CopyTextParts

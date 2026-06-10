@@ -28,6 +28,7 @@ local IsSecret = Secrets.IsSecret or function(_) return false end
 
 local eventFrame
 local rosterRebuildQueued = false
+local zoneRefreshQueued = false
 local rosterSettleToken = 0
 local nameEventsRegistered = false
 local rosterEventsRegistered = false
@@ -77,6 +78,14 @@ local function InvalidateSpecs(kind)
     end
 end
 
+local function DropSpecs(kind)
+    if GF.DropCompiledSpecs then
+        GF.DropCompiledSpecs(kind)
+    elseif GF.InvalidateCompiledSpecs then
+        GF.InvalidateCompiledSpecs(kind)
+    end
+end
+
 local function ApplyFrameDirty(frame, kind, mask, reason)
     local applyMask = DirtyApplyMask(mask)
     if not applyMask then
@@ -90,10 +99,10 @@ local function ApplyFrameDirty(frame, kind, mask, reason)
 end
 
 function GF.DeferGroupRuntime(reason)
-    GF._pendingGroupRuntime = reason or true
-    if eventFrame then
-        eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
-    end
+	GF._pendingGroupRuntime = reason or true
+	if eventFrame then
+		eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+	end
 end
 
 local function GroupUnitMatches(frame, unit)
@@ -350,10 +359,34 @@ local function ScheduleRosterRebuild()
     rosterRebuildQueued = true
     local function Run()
         rosterRebuildQueued = false
-        GF.RebuildAll()
+        DropSpecs()
+        GF.RebuildAll(true)
     end
     if _G.MSUF_ScheduleOnce then
         _G.MSUF_ScheduleOnce("MSUF_GF_ROSTER_REBUILD", Run)
+    elseif C_Timer and C_Timer.After then
+        C_Timer.After(0, Run)
+    else
+        Run()
+    end
+end
+
+local function ScheduleZoneRefresh()
+    if zoneRefreshQueued then
+        return
+    end
+    zoneRefreshQueued = true
+    local function Run()
+        zoneRefreshQueued = false
+        if InCombat() then
+            GF.DeferGroupRuntime("zone")
+            return
+        end
+        DropSpecs()
+        GF.RefreshAll(true)
+    end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("MSUF_GF_ZONE_REFRESH", Run)
     elseif C_Timer and C_Timer.After then
         C_Timer.After(0, Run)
     else
@@ -579,9 +612,15 @@ local function OnEvent(self, event, ...)
             if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
             GF._forceScanHeaders = true
         end
-        if GF._pendingGroupRuntime or rosterChanged then
+        local pendingRuntime = GF._pendingGroupRuntime
+        if pendingRuntime or rosterChanged then
             GF._pendingGroupRuntime = nil
-            GF.RefreshAll()
+            if pendingRuntime == "roster" or pendingRuntime == "zone" or (pendingRuntime == nil and rosterChanged) then
+                DropSpecs()
+                GF.RefreshAll(true)
+            else
+                GF.RefreshAll()
+            end
         else
             GF.RefreshGroupNames()
             if GF.RefreshClickCastFrames then
@@ -605,9 +644,13 @@ local function OnEvent(self, event, ...)
         if event == "PLAYER_ENTERING_WORLD" then
             GF._forceRecreateHeaders = true
         end
-        GF.RebuildAll()
+        DropSpecs()
+        GF.RebuildAll(true)
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
         if InCombat() then
+            if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
+            GF._forceScanHeaders = true
+            GF.DeferGroupRuntime("roster")
             return
         end
         local mode = MarkRosterMode()
@@ -619,7 +662,7 @@ local function OnEvent(self, event, ...)
         end
     elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
         GF._forceRecreateHeaders = true
-        GF.RefreshAll()
+        ScheduleZoneRefresh()
     elseif event == "BARBER_SHOP_OPEN" then
         GF._clientSceneActive = true
         ApplyAllSceneAlphas()

@@ -280,6 +280,85 @@ function A._ParseFollowupAnswer(text, ctx)
     return nil
 end
 
+function A._FollowupCopyColorValue(value)
+    if type(value) ~= "table" then return nil end
+    local r = value.r or value[1]
+    local g = value.g or value[2]
+    local b = value.b or value[3]
+    if tonumber(r) == nil or tonumber(g) == nil or tonumber(b) == nil then return nil end
+    local out = { r = r, g = g, b = b }
+    local a = value.a or value[4]
+    if tonumber(a) ~= nil then out.a = a end
+    return out
+end
+
+function A._FollowupComboPointSlotToken(text, previousToken)
+    if type(previousToken) ~= "string" or not previousToken:match("^COMBO_POINTS_%d+$") then return nil end
+    local normalized = Normalize and Normalize(text) or tostring(text or ""):lower()
+    local slot = normalized:match("^%s*(%d+)%s*$")
+        or normalized:match("combo%s+point%s+slot%s+(%d+)")
+        or normalized:match("combo%s+point%s+(%d+)")
+        or normalized:match("slot%s+(%d+)")
+        or normalized:match("same%s+for%s+(%d+)")
+        or normalized:match("same%s+to%s+(%d+)")
+        or normalized:match("same%s+on%s+(%d+)")
+        or normalized:match("also%s+(%d+)")
+        or normalized:match("too%s+(%d+)")
+        or normalized:match("for%s+(%d+)")
+        or normalized:match("fuer%s+(%d+)")
+        or normalized:match("fur%s+(%d+)")
+    slot = tonumber(slot)
+    if not slot or slot < 1 or slot > 7 then return nil end
+    return "COMBO_POINTS_" .. tostring(slot)
+end
+
+function A._FollowupAddColorTokenChange(changes, seen, key, color)
+    if not (Registry and type(key) == "string" and key ~= "" and color) then return end
+    if seen[key] then return end
+    local setting = Registry:GetSetting(key)
+    if not setting or setting.type ~= "color" then return end
+    seen[key] = true
+    changes[#changes + 1] = { setting = setting, value = color }
+end
+
+function A._BuildColorTokenFollowup(text, ctx)
+    if not (ctx and type(ctx.lastChangeBundle) == "table") then return nil end
+    local powerToken = PowerColorTokenForText and PowerColorTokenForText(text) or nil
+    local classToken = ClassPowerColorTokenForText and ClassPowerColorTokenForText(text) or nil
+    local changes = {}
+    local seen = {}
+    for i = 1, #ctx.lastChangeBundle do
+        local prev = ctx.lastChangeBundle[i]
+        local key = tostring((prev and prev.key) or "")
+        local color = A._FollowupCopyColorValue(prev and prev.value)
+        local previousPower = key:match("^general%.powerColorOverrides%.([%w_]+)$")
+        if previousPower and powerToken then
+            A._FollowupAddColorTokenChange(changes, seen, "general.powerColorOverrides." .. powerToken, color)
+        end
+        local previousClass = key:match("^general%.classPowerColorOverrides%.([%w_]+)$")
+        if previousClass then
+            local token = classToken or A._FollowupComboPointSlotToken(text, previousClass)
+            if token then
+                A._FollowupAddColorTokenChange(changes, seen, "general.classPowerColorOverrides." .. token, color)
+            end
+        end
+        local previousClassBg = key:match("^general%.classPowerBgColorOverrides%.([%w_]+)$")
+        if previousClassBg then
+            local token = classToken or A._FollowupComboPointSlotToken(text, previousClassBg)
+            if token then
+                A._FollowupAddColorTokenChange(changes, seen, "general.classPowerBgColorOverrides." .. token, color)
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Apply previous color to another token",
+        summary = "Uses the last Assistant color change as context for another power or class-resource token.",
+    }
+end
+
 local function BuildFollowup(text, ctx)
     if not (ctx and type(ctx.lastChangeBundle) == "table") then return nil end
     local positiveTerms = {
@@ -486,6 +565,10 @@ local function BuildFollowup(text, ctx)
                 summary = "Uses the previous Assistant numeric adjustment as context.",
             }
         end
+    end
+    if #units == 0 and #groups == 0 and (targetReplayIntent or pureNumberIntent) then
+        local colorFollowup = A._BuildColorTokenFollowup(text, ctx)
+        if colorFollowup then return colorFollowup end
     end
     if #units == 0 and #groups == 0 then return nil end
     if not targetReplayIntent then return nil end
