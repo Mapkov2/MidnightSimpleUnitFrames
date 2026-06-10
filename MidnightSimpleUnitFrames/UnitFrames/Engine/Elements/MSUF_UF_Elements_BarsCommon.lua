@@ -42,6 +42,7 @@ local CreateColor = _G.CreateColor
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
+local SafeNumber = Secrets.SafeNumber or tonumber
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local SCALE_100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
@@ -119,7 +120,9 @@ local function SetBarMinMax(bar, maxValue, directValue)
         bar:SetMinMaxValues(0, maxValue)
         bar._msufMaxValue = nil
         return true
-    elseif bar._msufMaxValue ~= maxValue then
+    end
+    maxValue = SafeNumber(maxValue) or 0
+    if bar._msufMaxValue ~= maxValue then
         bar:SetMinMaxValues(0, maxValue)
         bar._msufMaxValue = maxValue
         return true
@@ -139,7 +142,7 @@ local function SetBarValue(bar, value, directValue, animate)
         bar._msufValue = nil
         return true
     end
-    value = tonumber(value) or 0
+    value = SafeNumber(value) or 0
     if bar._msufValue ~= value then
         if interp then
             bar:SetValue(value, interp)

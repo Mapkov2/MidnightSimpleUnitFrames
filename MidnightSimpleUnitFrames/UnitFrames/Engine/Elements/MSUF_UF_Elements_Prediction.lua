@@ -16,8 +16,6 @@ local tonumber = tonumber
 local type = type
 local Enum = _G.Enum
 local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
-local IsNil = Secrets.IsNil or function(value) return value == nil end
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
 -- Raw secret test captured locally so the per-event hot path (ShowValue, the
 -- Calc* readers) can inline `issecretvalue(x) == true` instead of paying a Lua
@@ -339,7 +337,7 @@ local function CalcHealAbsorbs(calc, unit)
 end
 
 local function ClampIncomingToMissing(value, hp, maxHP)
-    if IsSecret(value) or IsSecret(hp) or IsSecret(maxHP) then
+    if issecretvalue(value) == true or issecretvalue(hp) == true or issecretvalue(maxHP) == true then
         return value
     end
     if type(value) ~= "number" or type(hp) ~= "number" or type(maxHP) ~= "number" then
@@ -372,7 +370,7 @@ local function ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
 end
 
 local function ClampToValue(value, maxValue)
-    if IsSecret(value) or IsSecret(maxValue) then
+    if issecretvalue(value) == true or issecretvalue(maxValue) == true then
         return value
     end
     if type(value) ~= "number" or type(maxValue) ~= "number" then
@@ -805,15 +803,15 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
     end
 
     local hp, maxHP
-    if not IsNil(seedHP) then hp = seedHP end
-    if not IsNil(seedMaxHP) then maxHP = seedMaxHP end
+    if issecretvalue(seedHP) == true or seedHP ~= nil then hp = seedHP end
+    if issecretvalue(seedMaxHP) == true or seedMaxHP ~= nil then maxHP = seedMaxHP end
 
     local calc
     if refreshAbsorb then
         calc = UpdateCalc(frame, unit, cfg)
         if not calc and frame._msufPredictionClampAbsorbToMissing == true then
-            if IsNil(hp) and UnitHealth then hp = UnitHealth(unit) end
-            if IsNil(maxHP) then maxHP = ReadHealthMax(frame, unit) end
+            if issecretvalue(hp) ~= true and hp == nil and UnitHealth then hp = UnitHealth(unit) end
+            if issecretvalue(maxHP) ~= true and maxHP == nil then maxHP = ReadHealthMax(frame, unit) end
         end
         frame._msufPredictionAbsorb = ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
         frame._msufPredictionCacheReady = true
@@ -821,7 +819,7 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
         frame._msufPredictionCacheCfg = cfg
     end
 
-    if (forceMax == true or bar._msufMaxReady ~= true) and IsNil(maxHP) then
+    if (forceMax == true or bar._msufMaxReady ~= true) and issecretvalue(maxHP) ~= true and maxHP == nil then
         maxHP = ReadHealthMax(frame, unit)
     end
     ShowValue(bar, maxHP, frame._msufPredictionAbsorb, forceMax)

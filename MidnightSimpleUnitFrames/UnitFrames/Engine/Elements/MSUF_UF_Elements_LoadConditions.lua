@@ -187,11 +187,19 @@ function LoadConditions.Disable(frame)
     if not frame then
         return
     end
+    if UnregisterStateDriver and InCombatLockdown and InCombatLockdown() then
+        UF.MarkDirty(frame.unit)
+        if UF.Factory and UF.Factory.EnsureDeferredDriver then
+            UF.Factory.EnsureDeferredDriver()
+        end
+        return false
+    end
     frame._msufVisibilityManaged = nil
     frame._msufVisibilityExpr = nil
     if UnregisterStateDriver then
         UnregisterStateDriver(frame, "visibility")
     end
+    return true
 end
 
 UF.RegisterElement("LoadConditions", LoadConditions)

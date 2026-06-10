@@ -30,8 +30,7 @@ local ApplyBarGradient = C.ApplyBarGradient
 local HideBarGradient = C.HideBarGradient
 local PowerColor = C.PowerColor
 local RefreshUnitState = C.RefreshUnitState
-local IsSecret = C.IsSecret or function(_) return false end
-local IsNil = C.IsNil or function(value) return value == nil end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local Power = {}
 
 local function ReadPowerType(unit)
@@ -39,8 +38,8 @@ local function ReadPowerType(unit)
         return nil, nil
     end
     local powerType, powerToken = UnitPowerType(unit)
-    if IsSecret(powerType) then powerType = nil end
-    if IsSecret(powerToken) then powerToken = nil end
+    if issecretvalue(powerType) == true then powerType = nil end
+    if issecretvalue(powerToken) == true then powerToken = nil end
     return powerType, powerToken
 end
 
@@ -67,7 +66,7 @@ local function ReadPowerMeta(frame, bar, unit, force, preType, preToken, preRead
     else
         maxPower = UnitPowerMax(unit, powerType)
     end
-    if IsNil(maxPower) then maxPower = 1 end
+    if issecretvalue(maxPower) ~= true and maxPower == nil then maxPower = 1 end
 
     local powerMetaChanged = powerType ~= bar._msufPowerType or powerToken ~= bar._msufPowerToken
     bar._msufPowerType = powerType
@@ -116,7 +115,7 @@ local function ReadPowerValues(frame, bar, unit, event, animate)
     else
         power = UnitPower(unit)
     end
-    if IsNil(power) then power = 0 end
+    if issecretvalue(power) ~= true and power == nil then power = 0 end
     return power, maxPower, powerType, powerToken, hotMetaChanged or powerMetaChanged
 end
 
