@@ -71,6 +71,9 @@ local Text = MSUF.UFText or {}
 MSUF.UFText = Text
 local Secrets = MSUF.Secrets or {}
 local IsSecret = C.IsSecret or Secrets.IsSecret or function(_) return false end
+-- Hot paths call the C predicate directly (no cross-module Lua wrapper);
+-- IsSecret stays for cold paths / API parity.
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
@@ -194,7 +197,8 @@ end
 
 local function SetHealthTextColor(frame, rt, r, g, b, a)
     a = a or 1
-    if IsSecret(r) or IsSecret(g) or IsSecret(b) or IsSecret(a) then
+    if issecretvalue(r) == true or issecretvalue(g) == true
+        or issecretvalue(b) == true or issecretvalue(a) == true then
         if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
             SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
             SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
@@ -224,7 +228,7 @@ local function BaseTextColor(frame)
 end
 
 local function HealthGradientFromValues(hp, hpMax)
-    if IsSecret(hp) or IsSecret(hpMax) then
+    if issecretvalue(hp) == true or issecretvalue(hpMax) == true then
         return nil
     end
     hp = tonumber(hp)
@@ -244,16 +248,25 @@ local function HealthGradientFromValues(hp, hpMax)
     return (1 - pct) * 2, 1, 0, 1
 end
 
-local function HealthTextColor(frame, unit, hp, hpMax)
+local function HealthTextColor(frame, unit, hp, hpMax, rt)
     local calc = frame and frame._msufHealthCalc
+    -- Alpha is compile-time stable (spec.textColor.a); CompileTextRuntime caches
+    -- it on rt so the hot path skips the per-tick BaseTextColor table walk.
+    local a = rt and rt.healthTextAlpha
     local r, g, b, raw = GradientColor(unit, calc)
     if raw == true then
-        local _, _, _, a = BaseTextColor(frame)
+        if a == nil then
+            local _
+            _, _, _, a = BaseTextColor(frame)
+        end
         return r, g, b, a
     end
     r, g, b = HealthGradientFromValues(hp, hpMax)
     if r then
-        local _, _, _, a = BaseTextColor(frame)
+        if a == nil then
+            local _
+            _, _, _, a = BaseTextColor(frame)
+        end
         return r, g, b, a
     end
     return BaseTextColor(frame)
@@ -263,7 +276,25 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
     if not (rt and rt.healthColorByHealth == true and frame) then
         return
     end
-    SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax))
+    -- The gradient text color is a pure function of the integer health percent
+    -- bucket (no dead/exists branch in HealthTextColor), so the recolor can be
+    -- skipped when the bucket is unchanged -- same memo the health bar uses
+    -- (_msufGradientPct in Health.Update). The memo is only trusted on the plain
+    -- path: secret values cannot be bucketed, so the secret path clears it and
+    -- always recolors (the flush throttle already caps that rate). Reset points:
+    -- CompileTextRuntime (settings/spec change) and every secret/unknown tick.
+    if issecretvalue(hp) ~= true and issecretvalue(hpMax) ~= true
+        and type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
+        local bucket = floor((hp / hpMax) * 100 + 0.5)
+        if rt._textGradientPct == bucket then
+            return
+        end
+        SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax, rt))
+        rt._textGradientPct = bucket
+        return
+    end
+    rt._textGradientPct = nil
+    SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax, rt))
 end
 
 local function SetNameTextColor(frame, r, g, b, a)
