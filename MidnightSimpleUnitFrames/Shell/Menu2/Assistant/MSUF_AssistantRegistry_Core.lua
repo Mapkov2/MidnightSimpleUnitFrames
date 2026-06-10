@@ -962,9 +962,11 @@ local function RegisterGeneralString(dbKey, attr, label, defaultValue, aliases, 
         aliases = aliases,
         valuePrefixes = opts.valuePrefixes or aliases,
         mediaType = opts.mediaType,
+        normalizesValue = opts.normalizeValue ~= nil,
         get = function()
             local value = GeneralDB()[dbKey]
-            if type(value) ~= "string" or value == "" then return defaultValue or "" end
+            if type(value) ~= "string" or value == "" then value = defaultValue or "" end
+            if opts.normalizeValue then value = opts.normalizeValue(value) end
             return value
         end,
         set = function(value)
@@ -1356,6 +1358,7 @@ local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingTyp
         max = opts.max,
         step = opts.step or 1,
         percent = opts.percent == true,
+        normalizesValue = opts.normalizeValue ~= nil,
         get = function()
             if opts.get then return opts.get(scope) end
             local value = GlobalScopeRead(scope, opts.flag, ScopedSharedTable(opts.shared), dbKey, defaultValue)
@@ -1369,6 +1372,7 @@ local function RegisterScopedSetting(kind, scope, dbKey, attr, label, settingTyp
                 return defaultValue
             elseif settingType == "string" then
                 if type(value) ~= "string" or value == "" then return defaultValue or "" end
+                if opts.normalizeValue then value = opts.normalizeValue(value) end
                 return value
             end
             return value

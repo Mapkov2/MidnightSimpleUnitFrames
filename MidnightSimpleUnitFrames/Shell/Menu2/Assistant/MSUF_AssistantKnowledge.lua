@@ -232,6 +232,7 @@ local function AddIndexItem(index, item)
     if item.label == "" then return end
     item.aliases = type(item.aliases) == "table" and item.aliases or {}
     local textParts, seen = {}, {}
+    AddUnique(textParts, seen, item.key)
     AddUnique(textParts, seen, item.label)
     AddUnique(textParts, seen, item.category)
     AddUnique(textParts, seen, item.pageLabel)
@@ -242,6 +243,7 @@ local function AddIndexItem(index, item)
     AddMany(textParts, seen, item.aliases)
     AddMany(textParts, seen, item.keywords)
     item.haystack = Normalize(table.concat(textParts, " "))
+    item.keyNorm = Normalize(item.key)
     item.labelNorm = Normalize(item.label)
     item.tokens = SplitTokens(item.haystack)
     index.items[#index.items + 1] = item
@@ -399,6 +401,11 @@ local function QueryIntent(text)
 end
 
 local QUERY_PREFIXES = {
+    "where do i turn off ", "where can i turn off ", "where do i turn on ", "where can i turn on ",
+    "where do i hide ", "where can i hide ", "where do i show ", "where can i show ",
+    "where do i change ", "where can i change ", "where do i set ", "where can i set ",
+    "where do i configure ", "where can i configure ",
+    "where do i ", "where can i ", "where to ",
     "where is ", "where are ", "where ", "search for ", "search ", "find ", "show me ",
     "faq ", "explain ", "what is ", "what are ", "what can ", "how do ", "how ",
     "wo ist ", "wo ", "suche nach ", "suche ", "finde ", "zeige mir ",
@@ -454,11 +461,14 @@ local function CopySearchResults(results)
     return out
 end
 
-local function TokenScore(item, queryTokens, queryNorm, intent, pageKey)
+local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQueryNorm)
     if not item or item.haystack == "" then return 0 end
     local score = 0
     local matched = false
+    local keyNorm = item.keyNorm or Normalize(item.key or "")
     local labelNorm = item.labelNorm or Normalize(item.label or "")
+    local exactNorm = exactQueryNorm or queryNorm
+    if keyNorm ~= "" and keyNorm == exactNorm then score = score + 1800; matched = true end
     if labelNorm == queryNorm then score = score + 600; matched = true end
     if labelNorm:find(queryNorm, 1, true) then score = score + 280; matched = true end
     if item.haystack:find(queryNorm, 1, true) then score = score + 180; matched = true end
@@ -507,6 +517,7 @@ function K.Search(query, limit, opts)
     local pageKey = CurrentPageKey()
     local intent = QueryIntent(query)
     local cleanedQuery = SearchQueryText(query)
+    local exactNorm = Normalize(cleanedQuery ~= "" and cleanedQuery or query)
     local expandedQuery = ExpandQueryText(cleanedQuery ~= "" and cleanedQuery or query)
     local norm = Normalize(expandedQuery)
     local queryTokens = SplitTokens(norm)
@@ -520,7 +531,7 @@ function K.Search(query, limit, opts)
     for i = 1, #(index.items or {}) do
         if i % 32 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
         local item = index.items[i]
-        local score = TokenScore(item, queryTokens, norm, intent, pageKey)
+        local score = TokenScore(item, queryTokens, norm, intent, pageKey, exactNorm)
         if opts.kind and item.kind ~= opts.kind then score = 0 end
         if score > 0 then
             InsertTopResult(results, { item = item, score = score }, limit)
@@ -628,16 +639,16 @@ local SCOPED_HELP_ALIASES = {
     { terms = { "pet help", "help pet", "pet frame help" }, page = "uf_pet" },
     { terms = { "boss help", "boss frames help", "help boss frames" }, page = "uf_boss" },
     { terms = { "castbar help", "castbars help", "help castbar", "target castbar help", "zauberleiste hilfe" }, page = "opt_castbar" },
-    { terms = { "bar help", "bars help", "texture help" }, page = "opt_bars" },
-    { terms = { "color help", "colors help", "farbe hilfe", "farben hilfe" }, page = "opt_colors" },
-    { terms = { "font help", "fonts help", "schrift hilfe" }, page = "opt_fonts" },
-    { terms = { "profile help", "profiles help", "profil hilfe", "how do profiles work" }, page = "profiles" },
+    { terms = { "bar help", "bars help", "help bar", "help bars", "texture help", "help texture" }, page = "opt_bars" },
+    { terms = { "color help", "colors help", "help color", "help colors", "farbe hilfe", "farben hilfe" }, page = "opt_colors" },
+    { terms = { "font help", "fonts help", "help font", "help fonts", "schrift hilfe" }, page = "opt_fonts" },
+    { terms = { "profile help", "profiles help", "help profile", "help profiles", "profil hilfe", "how do profiles work" }, page = "profiles" },
     { terms = { "aura help", "auras help", "buff help", "debuff help" }, page = "auras3_styling" },
     { terms = { "edit mode help", "editmode help", "help edit mode" }, page = "home", special = "editmode" },
-    { terms = { "group help", "group frames help", "party help", "raid help" }, page = "gf_layout" },
-    { terms = { "indicator help", "group indicator help", "corner indicator help" }, page = "gf_indicators" },
-    { terms = { "class resource help", "class power help" }, page = "classpower" },
-    { terms = { "gameplay help" }, page = "gameplay" },
+    { terms = { "group help", "group frames help", "help group", "help group frames", "party help", "help party", "raid help", "help raid" }, page = "gf_layout" },
+    { terms = { "indicator help", "help indicator", "group indicator help", "help group indicator", "corner indicator help", "help corner indicator" }, page = "gf_indicators" },
+    { terms = { "class resource help", "help class resource", "class power help", "help class power" }, page = "classpower" },
+    { terms = { "gameplay help", "help gameplay" }, page = "gameplay" },
 }
 
 local function JoinLines(lines)
@@ -862,6 +873,51 @@ local function DirectHelpAnswer(query, opts)
     end
     if norm == "what can i change here" or norm == "what can i change here?" or norm == "help here" or norm == "current page help" or norm == "this page help" then
         return PageHelp((opts and opts.currentPage) or CurrentPageKey(), "Current page help")
+    end
+    if ContainsAny(norm, { "undo", "redo" })
+        and ContainsAny(norm, { "explain", "what is", "what does", "how do", "how can", "help" })
+    then
+        return {
+            text = "Undo and redo help\nUndo reverts the last Assistant-applied setting change. Redo reapplies the last reverted Assistant change.\nExamples: undo; redo; what did you change?\nActions: Undo | Redo",
+            status = "applied",
+            summary = "Assistant undo help",
+        }
+    end
+    if ContainsAny(norm, { "raid scaling", "raid scale", "frame scaling", "scale at", "scaling breakpoint", "scaling breakpoints" })
+        and ContainsAny(norm, { "explain", "what is", "what does", "how", "help", "mean", "breakpoint", "players", "raid size" })
+    then
+        return {
+            text = "Group frame scaling breakpoints\nRaid scaling can use player-count breakpoints: 1-10, 11-20, 21-25, and 26+ players. MSUF applies the matching scale for the current raid size when Group Layout scaling is enabled.\nExamples: set raid scale for 20 players to 80; scale raid for 10m to 95; increase raid scale for 20m by 5.\nActions: Open Group Layout",
+            status = "applied",
+            summary = "Assistant group scaling help",
+        }
+    end
+    if ContainsAny(norm, { "detached power", "detached power bar", "detached mana", "power bar detached" })
+        and ContainsAny(norm, { "explain", "what is", "what does", "how", "where", "offset", "position", "help" })
+    then
+        return {
+            text = "Detached Power Bar help\nPer-unit detached Power Bar options live on each unit page under Power Bar. The detached X/Y offsets move the separated bar only after that unit's Power Bar is detached.\nExamples: detach target power bar; move target powerbar left; set target powerbar x offset to 12; attach target power bar.\nActions: Open Player | Open Target | Open Class Resources",
+            status = "applied",
+            summary = "Assistant detached power help",
+        }
+    end
+    if ContainsAny(norm, { "role power", "healer power", "healer power bar", "tank power", "tank power bar", "dps power", "dps power bar", "damager power", "damager power bar" })
+        and ContainsAny(norm, { "where", "help", "how", "show", "hide", "turn on", "turn off", "enable", "disable" })
+    then
+        return {
+            text = "Group role Power Bar help\nGroup Frames can show or hide Power Bars by role through the registered Tank, Healer, and DPS Power controls.\nRelevant settings: Party Show Tank Power, Party Show Healer Power, Party Show DPS Power, Raid Show Tank Power, Raid Show Healer Power, Raid Show DPS Power.\nExamples: hide healer power bars in raid frames; show tank power in party frames; hide dps power in raid frames.\nActions: Open Group Health & Text",
+            status = "applied",
+            summary = "Assistant group role power help",
+        }
+    end
+    if ContainsAny(norm, { "cooldown manager", "cooldownmanager", "essential cooldown", "essential cooldowns", "cdm" })
+        and ContainsAny(norm, { "anchor", "anchoring", "attach", "where", "help", "explain", "how" })
+    then
+        return {
+            text = "Cooldown Manager anchoring help\nUnitframes can anchor to the Essential Cooldown Viewer through their anchor target setting. Group frames use a custom anchor frame, and Class Resources have their own Essential Cooldowns anchor toggle.\nExamples: anchor unitframes to cooldownmanager; put player and target near cooldownmanager; put raid frames near cooldownmanager; anchor class resources to essential cooldownmanager.\nActions: Open Player | Open Group Layout | Open Class Resources",
+            status = "applied",
+            summary = "Assistant cooldown manager anchor help",
+        }
     end
     for i = 1, #SCOPED_HELP_ALIASES do
         local spec = SCOPED_HELP_ALIASES[i]

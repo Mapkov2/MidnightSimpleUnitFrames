@@ -197,7 +197,13 @@ local function ApplyChangeList(changes, useOld)
         local change = changes[i]
         local setting = registry:GetSetting(change.key)
         if setting and type(setting.set) == "function" then
-            setting.set(useOld and change.oldValue or change.newValue)
+            local value
+            if useOld then
+                value = change.oldValue
+            else
+                value = change.newValue
+            end
+            setting.set(value)
             changed = true
             if type(setting.apply) == "function" then
                 applied[#applied + 1] = setting

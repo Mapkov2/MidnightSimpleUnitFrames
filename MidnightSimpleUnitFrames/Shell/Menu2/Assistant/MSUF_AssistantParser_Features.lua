@@ -159,7 +159,9 @@ local function ClassPowerMentionIsNegated(text)
 end
 
 local function HasClassPowerIntent(text)
-    return ContainsAny(text, CLASS_POWER_TERMS) and not ClassPowerMentionIsNegated(text)
+    if ClassPowerMentionIsNegated(text) then return false end
+    return ContainsAny(text, CLASS_POWER_TERMS)
+        or ContainsAny(text, { "resource numbers", "resource number", "resource text", "resource texts" })
 end
 
 local function ParseClassPowerRootToggle(text)
@@ -222,6 +224,13 @@ function A._ParseClassPowerWidthModeShortcut(text)
 end
 
 local function ClassPowerHideRuleValue(text)
+    if ContainsAny(text, { "show", "visible", "turn on" }) and ContainsAny(text, {
+        "when full", "if full", "full resource", "full resources",
+        "when empty", "if empty", "empty resource", "empty resources",
+        "out of combat", "ooc",
+    }) then
+        return false
+    end
     if ContainsAny(text, {
         "turn off hide", "disable hide", "dont hide", "do not hide", "never hide",
         "always show", "show when", "show while", "show out of combat", "show class resource",
@@ -273,7 +282,12 @@ function A._ParseClassPowerAnchorShortcut(text)
     local targetCooldown = ContainsAny(text, CLASS_POWER_COOLDOWN_TARGET_TERMS)
     local targetPlayer = ContainsAny(text, CLASS_POWER_PLAYER_TARGET_TERMS)
     local value = DetectBoolean(text)
-    if targetCooldown then
+    if targetCooldown and ContainsAny(text, {
+        "detach", "detach from", "undock", "undock from", "disconnect", "disconnect from",
+        "stop following", "dont follow", "do not follow", "remove from",
+    }) then
+        value = false
+    elseif targetCooldown then
         value = value ~= false
     elseif targetPlayer then
         value = false
@@ -349,6 +363,160 @@ function A._ParseClassPowerPlacementShortcut(text)
     }
 end
 
+function A._ParseClassPowerDisplayStyleShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "color", "colour", "background", "font size", "text size", "move", "offset" }) then return nil end
+    local value
+    if ContainsAny(text, { "as text", "show text", "show numbers", "show number", "numbers only", "text only" })
+        or (ContainsAny(text, { "show", "turn on", "enable" }) and ContainsAny(text, { "number", "numbers", "text" })) then
+        value = true
+    elseif ContainsAny(text, {
+        "as pips", "as dots", "as bars", "show pips", "show dots", "show bars",
+        "pips only", "dots only", "hide numbers", "hide number", "hide text",
+        "turn off numbers", "turn off number", "turn off text", "disable numbers",
+        "disable number", "disable text", "without numbers", "no numbers",
+    }) or (ContainsAny(text, { "hide", "turn off", "disable", "without", "no" }) and ContainsAny(text, { "number", "numbers", "text" })) then
+        value = false
+    else
+        return nil
+    end
+    local textSetting = ClassPowerSetting("bars.classPowerShowText")
+    if not textSetting then return nil end
+    local changes = { { setting = textSetting, value = value } }
+    if ContainsAny(text, { "show", "turn on", "enable" }) then
+        local root = ClassPowerSetting("bars.showClassPower")
+        if root then table.insert(changes, 1, { setting = root, value = true }) end
+    end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = value and "Show Class Resource Text" or "Show Class Resource Pips",
+        bulkSafe = #changes > 1,
+        summary = "Maps text/pips wording to the registered Class Resource Text toggle.",
+    }
+end
+
+function A._ParseClassPowerTextSizeShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "move", "nudge", "shift", "offset", "position" }) then return nil end
+    if not ContainsAny(text, { "text", "number", "numbers", "font", "font size", "text size", "number size" }) then return nil end
+    if not ContainsAny(text, { "size", "bigger", "larger", "smaller", "increase", "decrease", "raise", "reduce", "set", "make" }) then return nil end
+    local setting = ClassPowerSetting("bars.classPowerFontSize")
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = "Class Resource Font Size",
+        summary = "Maps natural Class Resource text-size wording to the registered font-size slider.",
+    }
+end
+
+function A._ParseClassPowerSizeShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, {
+        "text", "number", "numbers", "font", "outline", "border", "gap", "gaps", "spacing",
+        "space", "spaces", "distance", "separator", "separators", "divider", "dividers", "tick",
+        "ticks", "background", "opacity", "alpha", "texture",
+    }) then return nil end
+    if not ContainsAny(text, { "width", "wide", "wider", "narrower", "height", "tall", "taller", "shorter", "size", "bigger", "larger", "smaller" }) then return nil end
+    local key
+    local fallback
+    if ContainsAny(text, { "width", "wide", "wider", "narrower" }) then
+        key = "bars.classPowerWidth"
+        fallback = 10
+    else
+        key = "bars.classPowerHeight"
+        fallback = 1
+    end
+    local setting = ClassPowerSetting(key)
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, fallback)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = key == "bars.classPowerWidth" and "Class Resource Width" or "Class Resource Height",
+        summary = "Maps natural Class Resource size wording to the registered width/height sliders.",
+    }
+end
+
+function A._ParseClassPowerSeparatorShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if not ContainsAny(text, { "separator", "separators", "divider", "dividers", "tick", "ticks" }) then return nil end
+    if ContainsAny(text, { "gap", "gaps", "spacing", "space", "spaces", "distance", "text", "font" }) then return nil end
+    local setting = ClassPowerSetting("bars.classPowerTickWidth")
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = "Class Resource Separator Width",
+        summary = "Maps natural Class Resource separator wording to the registered separator-width slider.",
+    }
+end
+
+function A._ParseClassPowerGapShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if not ContainsAny(text, { "gap", "gaps", "spacing", "space", "spaces", "distance", "pip gap", "point gap" }) then return nil end
+    if ContainsAny(text, { "text", "font", "outline", "border" }) then return nil end
+    local setting = ClassPowerSetting("bars.classPowerGap")
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 1)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value == nil then return nil end
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = "Class Resource Pip Gap",
+        summary = "Maps natural Class Resource spacing wording to the registered pip-gap slider.",
+    }
+end
+
+function A._ParseClassPowerBackgroundShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if not ContainsAny(text, { "background", "bg", "empty background" }) then return nil end
+    if ContainsAny(text, { "color", "colour", "texture" }) then return nil end
+    local setting = ClassPowerSetting("bars.classPowerBgAlpha")
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 0.05)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value ~= nil and value > 1 then value = value / 100 end
+    end
+    if value == nil and relativeDelta == nil then
+        local bool = DetectBoolean(text)
+        if bool == nil and ContainsAny(text, { "hide", "remove", "without", "no background" }) then bool = false end
+        if bool == nil and ContainsAny(text, { "show", "enable", "turn on", "with background" }) then bool = true end
+        if bool == nil then return nil end
+        value = bool and 0.3 or 0
+    end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = "Class Resource Background Opacity",
+        summary = "Maps background show/hide wording to the registered Class Resource Background Opacity slider.",
+    }
+end
+
 function A._ParseClassPowerMoveShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     if ContainsAny(text, { "text", "number", "font", "detached power", "alt mana", "alternative mana" }) then return nil end
@@ -402,7 +570,7 @@ A._GameplayShortcutSpecs = A._GameplayShortcutSpecs or {
     {
         id = "playerTotems",
         label = "Totem Frame",
-        terms = { "totem frame", "totemframe", "blizzard totem", "statue frame" },
+        terms = { "totem frame", "totemframe", "blizzard totem", "statue frame", "totem icon", "totem icons", "totems" },
         pageTerms = { "totem", "totems", "statue" },
         enable = "gameplay.enablePlayerTotems",
         x = "gameplay.playerTotemsOffsetX",
@@ -473,7 +641,6 @@ end
 
 function A._ParseGameplayBooleanShortcut(text)
     local value = DetectBoolean(text)
-    if value == nil then return nil end
     local spec = A._GameplayShortcutSpec(text)
     if not spec then return nil end
     local key
@@ -484,6 +651,16 @@ function A._ParseGameplayBooleanShortcut(text)
             break
         end
     end
+    if key and value == nil then
+        if ContainsAny(text, { "unlock", "unlocked" }) then
+            value = false
+        elseif ContainsAny(text, { "clickable", "mouse input on", "enable mouse input", "accept clicks" }) and tostring(key):find("ClickThrough", 1, true) then
+            value = false
+        elseif ContainsAny(text, { "lock", "locked", "click through", "click-through", "sync", "same", "ready", "icon", "cooldown swipe" }) then
+            value = true
+        end
+    end
+    if value == nil then return nil end
     if not key then
         if ContainsAny(text, { "anchor", "attach", "size", "font", "duration", "offset", "position", "move", "x", "y", "thickness", "thick", "thin", "spell" }) then
             return nil
@@ -884,6 +1061,25 @@ local function ClassPowerColorTokenForText(text)
     return bestToken
 end
 
+function A._ParseClassPowerColorShortcut(text, raw)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then return nil end
+    local token = ClassPowerColorTokenForText(text)
+    if not token then return nil end
+    local r, g, b, label = ExtractColor(raw, text)
+    if not r then return nil end
+    local background = ContainsAny(text, { "background", "bg", "backdrop" })
+    local key = (background and "general.classPowerBgColorOverrides." or "general.classPowerColorOverrides.") .. token
+    local setting = ClassPowerSetting(key)
+    if not setting then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = { r = r, g = g, b = b, label = label } } },
+        label = background and "Class Resource Background Color" or "Class Resource Color",
+        summary = "Maps natural Class Resource color wording to the registered foreground/background token color.",
+    }
+end
+
 local function ParseColorAction(text)
     if not ContainsAny(text, { "reset", "default", "defaults", "restore", "zuruecksetzen" }) then return nil end
     if not ContainsAny(text, { "color", "colors", "colour", "colours", "farbe", "farben", "tint" }) then return nil end
@@ -1067,24 +1263,51 @@ local function ParseDiagnostic(text)
     return nil
 end
 
-local function ParseScopedHelp(text)
-    if not ContainsAny(text, {
+local function HasScopedHelpIntent(text, page)
+    if ContainsAny(text, {
+        "help me setup", "help me set up", "help me configure", "help me build",
+        "guide me", "setup guide", "guided setup", "start guide", "start tour",
+    }) then
+        return false
+    end
+    if ContainsAny(text, {
         "what can i change", "what can change", "what settings can i change",
         "what can i do here", "what can i change here", "commands for",
         "show commands for", "help for", "help with", "help me with",
-    }) then return nil end
+    }) then
+        return true
+    end
+    if not page and not ContainsAny(text, { "edit mode", "editmode" }) then return false end
+    if ContainsAny(text, {
+        "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
+        "commands", "command examples",
+    }) then
+        return true
+    end
+    return page == "profiles" and ContainsAny(text, { "how", "how do", "how to", "why" })
+end
+
+local function ParseScopedHelp(text)
     local action = Registry and Registry:GetAction("assistant_scope_help")
     if not action then return nil end
     local page, label = PageForText(text)
+    local editModeHelp = ContainsAny(text, { "edit mode", "editmode" })
+        and ContainsAny(text, { "help", "hilfe", "explain", "erklaere", "what is", "what can", "how", "how do", "how to", "commands" })
+    if not HasScopedHelpIntent(text, page) and not editModeHelp then return nil end
     if not page and ContainsAny(text, { "here", "current page", "this page" }) then
         page = M and M.activeKey
         label = "current page"
+    end
+    if editModeHelp then
+        page = "home"
+        label = "Edit Mode"
     end
     local units = DetectUnits(text)
     local groups = DetectGroups(text)
     local unit = units[1]
     local group = groups[1]
     local frameType = FrameTypeForPage(page)
+    if editModeHelp then frameType = "editMode" end
     if group then
         frameType = ContainsAny(text, { "aura", "auras", "buff", "debuff" }) and "groupAura" or "group"
         label = (A.UnitLabels and A.UnitLabels[group]) or label
@@ -1427,8 +1650,8 @@ local function GlobalScalePresetForText(text)
 end
 
 local function ParsePresetWorkflow(text)
-    if not ContainsAny(text, { "preset", "global ui scale", "wow ui scale", "global scale", "scale preset" }) then return nil end
-    if not ContainsAny(text, { "global ui scale", "wow ui scale", "global scale", "scale preset" }) then return nil end
+    if not ContainsAny(text, { "preset", "global ui scale", "wow ui scale", "global scale", "scale preset", "ui preset", "ui scale preset" }) then return nil end
+    if not ContainsAny(text, { "global ui scale", "wow ui scale", "global scale", "scale preset", "ui preset", "ui scale preset" }) then return nil end
     local preset = GlobalScalePresetForText(text)
     if not preset then return nil end
     local action = Registry and Registry:GetAction("apply_global_scale_preset")
@@ -1439,6 +1662,55 @@ local function ParsePresetWorkflow(text)
         label = "Apply global UI scale preset",
         summary = "Applies one of the Dashboard global WoW UI scale presets.",
     } or nil
+end
+
+local function DashboardScaleTargetForText(text)
+    if ContainsAny(text, { "preset", "panel", "section", "tools", "open", "close", "toggle" }) then return nil end
+    if ContainsAny(text, {
+        "msuf menu", "menu scale", "dashboard scale", "options menu", "config menu",
+        "configuration menu", "assistant menu",
+    }) then
+        return "general.slashMenuScale", "MSUF Menu Scale"
+    end
+    if ContainsAny(text, {
+        "msuf frame scale", "msuf frames", "all msuf frames", "msuf ui scale",
+        "unit frame scale", "unitframes scale", "frames globally", "all frames globally",
+    }) then
+        return "general.msufUiScale", "MSUF Frame Scale"
+    end
+    if ContainsAny(text, {
+        "wow ui", "global ui", "global scale", "wow scale", "whole ui",
+        "ui scale", "interface scale",
+    }) then
+        return "general.globalUiScale", "Global WoW UI Scale"
+    end
+    return nil
+end
+
+local function ParseDashboardScaleShortcut(text)
+    local key, label = DashboardScaleTargetForText(text)
+    if not key then return nil end
+    if not ContainsAny(text, {
+        "scale", "bigger", "larger", "smaller", "increase", "decrease", "raise", "lower",
+        "grow", "shrink", "set", "make",
+    }) then
+        return nil
+    end
+    local setting = Registry and Registry:GetSetting(key)
+    if not setting then return nil end
+    local relativeDelta = RelativeNumberDeltaForText and RelativeNumberDeltaForText(setting, text, 5)
+    local value
+    if relativeDelta == nil then
+        value = FirstNumber(text)
+        if value ~= nil and setting.percent == true and value > 1 then value = value / 100 end
+    end
+    if value == nil and relativeDelta == nil then return nil end
+    return {
+        kind = "changes",
+        changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
+        label = label,
+        summary = "Maps natural Dashboard scaling wording to the registered scale slider.",
+    }
 end
 
 local function ParseScopedOverrideReset(text)
@@ -2120,7 +2392,7 @@ local function ParseCastbarDirectionClarification(text)
     if not ContainsAny(text, { "target", "target castbar", "target cast bar", "ziel" }) then return nil end
     if not ContainsAny(text, {
         "other direction", "opposite direction", "opposite fill direction", "fill in the other direction",
-        "fill the other direction", "other way", "opposite way", "reverse direction",
+        "fill the other direction", "other way", "opposite way", "reverse direction", "fill opposite", "opposite fill",
     }) then return nil end
 
     local opposite = Registry and Registry:GetSetting("general.castbarOpositeDirectionTarget")
@@ -2128,7 +2400,7 @@ local function ParseCastbarDirectionClarification(text)
     local value = DetectBoolean(text)
     if value == nil and ContainsAny(text, {
         "use opposite", "use opposite direction", "use opposite fill direction",
-        "use target opposite", "use target opposite direction",
+        "use target opposite", "use target opposite direction", "fill opposite", "opposite fill",
     }) then
         value = true
     end
@@ -2261,6 +2533,7 @@ P.SupportLinkForText = SupportLinkForText
 P.ParseSupportWorkflow = ParseSupportWorkflow
 P.GlobalScalePresetForText = GlobalScalePresetForText
 P.ParsePresetWorkflow = ParsePresetWorkflow
+P.ParseDashboardScaleShortcut = ParseDashboardScaleShortcut
 P.ParseScopedOverrideReset = ParseScopedOverrideReset
 P.ParseClassPowerAction = ParseClassPowerAction
 P.GAMEPLAY_ROOT_TOGGLES = GAMEPLAY_ROOT_TOGGLES

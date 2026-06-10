@@ -261,7 +261,11 @@ local UNIT_ORDER = { "targettarget", "focustarget", "player", "target", "focus",
 local GROUP_ORDER = { "mythicraid", "party", "raid" }
 local ALL_UNITFRAMES = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
 local ALL_GROUPS = { "party", "raid", "mythicraid" }
-local CLASS_POWER_TERMS = { "class power", "class resource", "class resources", "class bar", "resource bar" }
+local CLASS_POWER_TERMS = {
+    "class power", "class resource", "class resources", "class bar", "resource bar",
+    "combo point", "combo points", "holy power", "soul shard", "soul shards",
+    "chi", "arcane charge", "arcane charges", "rune", "runes",
+}
 local GAMEPLAY_TERMS = { "gameplay", "combat timer", "combat state", "combat enter", "combat leave", "totem frame", "totemframe", "blizzard totem", "statue frame", "first dance", "combat crosshair", "crosshair", "fadenkreuz", "melee range spell" }
 local GLOBAL_BARS_TERMS = { "bar texture", "bar background", "bar gradient", "gradient direction", "absorb bar", "absorb bars", "heal prediction", "heal absorb", "bar outline", "rounded frames", "rounded frame", "rounded texture", "highlight border", "aggro border", "dispel border", "purge border", "boss target border", "dispel overlay", "power text" }
 local CASTBAR_ROOT_DETAIL_TERMS = {

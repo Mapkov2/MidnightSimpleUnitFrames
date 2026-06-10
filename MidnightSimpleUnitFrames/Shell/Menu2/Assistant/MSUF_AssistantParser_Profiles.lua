@@ -58,7 +58,7 @@ local COPY_SCOPE_DEFAULTS = {
 }
 
 local UNIT_COPY_SCOPE_SPECS = {
-    { key = "layout", aliases = { "layout", "position", "size", "anchoring", "anchor", "width", "height" } },
+    { key = "layout", aliases = { "layout", "position", "positioning", "placement", "location", "size", "anchoring", "anchor", "width", "height" } },
     { key = "text", aliases = { "text", "name", "hp", "health text", "hp text", "power text", "mana text", "energy text", "resource text", "font", "fonts" } },
     { key = "portrait", aliases = { "portrait", "portrait settings" } },
     { key = "power", aliases = { "power", "mana", "energy", "resource", "power settings", "mana settings", "energy settings", "resource settings", "power bar", "powerbar", "detached power", "detached power bar", "resource bar" } },
@@ -84,7 +84,7 @@ local GROUP_COPY_SCOPE_DEFAULTS = {
 }
 
 local GROUP_COPY_SCOPE_SPECS = {
-    { key = "general", aliases = { "general", "basics", "basic settings", "layout", "size", "width", "height", "spacing", "growth", "sort", "sorting", "columns", "raid groups" } },
+    { key = "general", aliases = { "general", "basics", "basic settings", "layout", "position", "positioning", "placement", "size", "width", "height", "spacing", "growth", "sort", "sorting", "columns", "raid groups" } },
     { key = "health", aliases = { "health", "health bars", "bars", "power", "power bar", "power text", "bar texture", "dispel overlay" } },
     { key = "text", aliases = { "text", "name", "health text", "hp text", "text and name" } },
     { key = "font", aliases = { "font", "fonts", "font override", "font color", "font outline" } },
@@ -209,6 +209,9 @@ local function CleanProfileName(name)
     name = Trim(tostring(name or ""))
     name = name:gsub("^profile%s+", "")
     name = name:gsub("^profil%s+", "")
+    name = name:gsub("^the%s+profile%s+", "")
+    name = name:gsub("^the%s+", "")
+    name = name:gsub("^my%s+", "")
     name = name:gsub("%s+profile$", "")
     name = name:gsub("%s+profil$", "")
     name = name:gsub("^named%s+", "")
@@ -259,6 +262,130 @@ end
 local function RawCopyProfileName(raw)
     return RawAfterPrefix(raw, { "copy current profile to ", "copy profile to ", "copy profile ", "duplicate profile " })
         or RawBetween(raw, "duplicate ", " profile")
+end
+
+local function SplitRawProfileBody(body, connectors)
+    body = tostring(body or "")
+    local lower = body:lower()
+    for i = 1, #(connectors or {}) do
+        local sepStart, sepEnd = lower:find(connectors[i])
+        if sepStart then
+            return CleanProfileName(body:sub(1, sepStart - 1)), CleanProfileName(body:sub(sepEnd + 1))
+        end
+    end
+    return nil, nil
+end
+
+local function RawCopyProfileSourceDestination(raw)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local connectors = { "%s+to%s+", "%s+as%s+", "%s+called%s+", "%s+named%s+" }
+    local prefixes = {
+        "clone ",
+        "clone profile ",
+        "clone current profile ",
+        "clone active profile ",
+        "clone my profile ",
+        "clone my active profile ",
+        "dupe ",
+        "dupe profile ",
+        "dupe current profile ",
+        "dupe active profile ",
+        "dupe my profile ",
+        "dupe my active profile ",
+        "copy profile ",
+        "copy current profile ",
+        "copy active profile ",
+        "copy my profile ",
+        "copy my active profile ",
+        "duplicate profile ",
+        "duplicate current profile ",
+        "duplicate active profile ",
+        "duplicate my profile ",
+        "duplicate my active profile ",
+        "make backup of ",
+        "make a backup of ",
+        "save backup of ",
+        "save a backup of ",
+        "backup profile ",
+        "backup current profile ",
+        "backup active profile ",
+        "make a copy of profile ",
+        "make copy of profile ",
+        "create a copy of profile ",
+        "create copy of profile ",
+    }
+    for i = 1, #prefixes do
+        local prefix = prefixes[i]
+        if lower:sub(1, #prefix) == prefix then
+            return SplitRawProfileBody(raw:sub(#prefix + 1), connectors)
+        end
+    end
+    return nil, nil
+end
+
+local function RawCurrentProfileCopyName(raw)
+    raw = tostring(raw or "")
+    local lower = raw:lower()
+    local prefixes = {
+        "clone current profile to ",
+        "clone current profile as ",
+        "clone active profile to ",
+        "clone active profile as ",
+        "clone my profile to ",
+        "clone my profile as ",
+        "clone my active profile to ",
+        "clone my active profile as ",
+        "dupe current profile to ",
+        "dupe current profile as ",
+        "dupe active profile to ",
+        "dupe active profile as ",
+        "dupe my profile to ",
+        "dupe my profile as ",
+        "dupe my active profile to ",
+        "dupe my active profile as ",
+        "copy current profile to ",
+        "copy current profile as ",
+        "copy active profile to ",
+        "copy active profile as ",
+        "copy my profile to ",
+        "copy my profile as ",
+        "copy my active profile to ",
+        "copy my active profile as ",
+        "duplicate current profile to ",
+        "duplicate current profile as ",
+        "duplicate active profile to ",
+        "duplicate active profile as ",
+        "duplicate my profile to ",
+        "duplicate my profile as ",
+        "duplicate my active profile to ",
+        "duplicate my active profile as ",
+        "duplicate my active profile called ",
+        "duplicate my active profile named ",
+        "make backup of current profile called ",
+        "make backup of current profile named ",
+        "make a backup of current profile called ",
+        "make a backup of current profile named ",
+        "save backup of current profile as ",
+        "save a backup of current profile as ",
+        "backup current profile to ",
+        "backup current profile as ",
+        "backup active profile to ",
+        "backup active profile as ",
+    }
+    for i = 1, #prefixes do
+        local prefix = prefixes[i]
+        if lower:sub(1, #prefix) == prefix then
+            return CleanProfileName(raw:sub(#prefix + 1))
+        end
+    end
+    return nil
+end
+
+local function IsCurrentProfileName(name)
+    name = Normalize(name)
+    return name == "current" or name == "active" or name == "this"
+        or name == "current profile" or name == "active profile" or name == "this profile"
 end
 
 local function RawRenameProfileNames(raw)
@@ -349,6 +476,38 @@ local function ProfileExportKindForText(text)
     return "all"
 end
 
+local function HasProfileExportIntent(text)
+    if ContainsAny(text, {
+        "where", "where is", "where are", "find", "search", "show me",
+        "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
+        "how", "how do", "how to", "why", "faq",
+    }) then
+        return false
+    end
+    if ContainsAny(text, {
+        "export", "exportieren", "share profile", "share current profile", "share active profile",
+        "share my profile", "share msuf profile", "share my msuf profile",
+        "copy string", "copy profile string", "profile string", "export string", "profile export string",
+        "save backup", "save a backup", "save profile backup",
+    }) then
+        return true
+    end
+    if ContainsAny(text, { "backup profile", "backup current profile", "backup active profile", "profile backup" })
+        and not ContainsAny(text, { " as ", " to ", " named ", " called " })
+    then
+        return true
+    end
+    return false
+end
+
+local function HasProfileReadOnlyQueryIntent(text)
+    return ContainsAny(text, {
+        "where", "where is", "where are", "find", "search", "show me",
+        "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
+        "how", "how do", "how to", "why", "faq",
+    })
+end
+
 local function RawAfterLastConnector(raw, connectors)
     raw = tostring(raw or "")
     local lower = raw:lower()
@@ -382,15 +541,34 @@ local function CleanSpecName(name)
     return name
 end
 
-local function ImportNewProfileName(raw, endIndex, text)
+local function StripProfileImportString(value)
+    value = tostring(value or "")
+    value = value:gsub("%s+[Mm][Ss][Uu][Ff]%d+:%S+.*$", "")
+    value = value:gsub("%s+![Uu][Uu][Ff]_%S+.*$", "")
+    return value
+end
+
+local function ImportNewProfileName(raw, startIndex, endIndex, text)
+    if text == nil then
+        text = endIndex
+        endIndex = startIndex
+        startIndex = nil
+    end
+    raw = tostring(raw or "")
+    if startIndex then
+        local before = StripProfileImportString(Trim(raw:sub(1, startIndex - 1)))
+        local beforeName = RawAfterLastConnector(before, { " as ", " to new profile ", " new profile ", " named ", " called " })
+        beforeName = CleanProfileName(beforeName)
+        if beforeName then return beforeName end
+    end
     local after = Trim(tostring(raw or ""):sub((endIndex or 0) + 1))
     local lower = after:lower()
-    if lower:sub(1, 3) == "as " then return CleanProfileName(after:sub(4)) end
-    if lower:sub(1, 15) == "to new profile " then return CleanProfileName(after:sub(16)) end
-    if lower:sub(1, 12) == "new profile " then return CleanProfileName(after:sub(13)) end
-    local name = text:match("as%s+(.+)$")
+    if lower:sub(1, 3) == "as " then return CleanProfileName(StripProfileImportString(after:sub(4))) end
+    if lower:sub(1, 15) == "to new profile " then return CleanProfileName(StripProfileImportString(after:sub(16))) end
+    if lower:sub(1, 12) == "new profile " then return CleanProfileName(StripProfileImportString(after:sub(13))) end
+    local name = StripProfileImportString(text:match("as%s+(.+)$")
         or text:match("to%s+new%s+profile%s+(.+)$")
-        or text:match("new%s+profile%s+(.+)$")
+        or text:match("new%s+profile%s+(.+)$"))
     return CleanProfileName(name)
 end
 
@@ -693,13 +871,15 @@ end
 
 local function ParseProfile(text, raw)
     local rawText = tostring(raw or "")
-    local _, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
-    local _, uufEndIndex, uufCompact = rawText:find("(!UUF_%S+)")
-    local hasProfile = ContainsAny(text, { "profile", "profiles", "profil" })
+    local compactStart, endIndex, compact = rawText:find("(MSUF%d+:%S+)")
+    local uufStart, uufEndIndex, uufCompact = rawText:find("(!UUF_%S+)")
+    local hasProfileWord = ContainsAny(text, { "profile", "profiles", "profil" })
+    local hasExportIntent = HasProfileExportIntent(text)
+    local hasProfile = hasProfileWord or hasExportIntent
     local rawLower = tostring(raw or ""):lower()
-    if compact and (hasProfile or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^msuf%d+:")) then
+    if compact and (hasProfileWord or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^msuf%d+:")) then
         local legacy = ContainsAny(text, { "legacy import", "import legacy", "old profile import", "legacy profile" })
-        local newName = ImportNewProfileName(rawText, endIndex, text)
+        local newName = ImportNewProfileName(rawText, compactStart, endIndex, text)
         local action = Registry and Registry:GetAction(legacy and "import_legacy_profile_string" or (newName and "import_profile_string_new" or "import_profile_string"))
         return action and {
             kind = "action",
@@ -710,8 +890,8 @@ local function ParseProfile(text, raw)
             summary = newName and "Imports profile data into a new profile." or "Imports profile data into the active profile.",
         } or nil
     end
-    if uufCompact and (hasProfile or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^%s*!uuf_")) then
-        local newName = ImportNewProfileName(rawText, uufEndIndex, text)
+    if uufCompact and (hasProfileWord or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^%s*!uuf_")) then
+        local newName = ImportNewProfileName(rawText, uufStart, uufEndIndex, text)
         local action = Registry and Registry:GetAction(newName and "import_profile_string_new" or "import_profile_string")
         return action and {
             kind = "action",
@@ -744,19 +924,7 @@ local function ParseProfile(text, raw)
         } or nil
     end
 
-    if ContainsAny(text, { "export", "backup", "copy string", "exportieren" }) then
-        local kind = ProfileExportKindForText(text)
-        local action = Registry and Registry:GetAction("export_profile")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { kind = kind },
-            label = "Export current profile",
-            summary = "Creates a copyable profile export string.",
-        } or nil
-    end
-
-    if ContainsAny(text, { "import", "importieren", "paste" }) then
+    if ContainsAny(text, { "import", "importieren", "paste" }) and not HasProfileReadOnlyQueryIntent(text) then
         local action = Registry and Registry:GetAction("open_profile_import")
         return action and {
             kind = "action",
@@ -768,9 +936,12 @@ local function ParseProfile(text, raw)
     end
 
     if ContainsAny(text, { "delete", "remove", "loeschen", "profil loeschen" }) then
-        local name = text:match("delete%s+profile%s+(.+)$")
+        local name = RawAfterPrefix(rawText, { "delete profile ", "delete the profile ", "remove profile ", "remove the profile " })
+            or text:match("delete%s+profile%s+(.+)$")
+            or text:match("delete%s+the%s+profile%s+(.+)$")
             or text:match("delete%s+(.+)%s+profile$")
             or text:match("remove%s+profile%s+(.+)$")
+            or text:match("remove%s+the%s+profile%s+(.+)$")
             or text:match("remove%s+(.+)%s+profile$")
             or text:match("loesche%s+profil%s+(.+)$")
             or text:match("profil%s+(.+)%s+loeschen$")
@@ -788,9 +959,27 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, { "switch", "wechsel", "change profile" }) then
-        local name = text:match("switch%s+to%s+(.+)$")
+    if ContainsAny(text, { "switch", "wechsel", "change profile", "use profile", "use the", "activate profile", "load profile", "select profile" }) then
+        local name = RawAfterPrefix(rawText, {
+                "switch to profile ",
+                "switch profile to ",
+                "switch profile ",
+                "switch to ",
+                "use profile ",
+                "use the ",
+                "activate profile ",
+                "load profile ",
+                "select profile ",
+            })
+            or text:match("switch%s+to%s+(.+)$")
             or text:match("switch%s+profile%s+to%s+(.+)$")
+            or text:match("switch%s+profile%s+(.+)$")
+            or text:match("use%s+profile%s+(.+)$")
+            or text:match("use%s+the%s+(.+)%s+profile$")
+            or text:match("use%s+(.+)%s+profile$")
+            or text:match("activate%s+profile%s+(.+)$")
+            or text:match("load%s+profile%s+(.+)$")
+            or text:match("select%s+profile%s+(.+)$")
             or text:match("wechsel%s+zu%s+(.+)$")
         name = CleanProfileName(name)
         if name then
@@ -856,12 +1045,33 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, { "copy", "duplicate", "duplizieren" }) then
-        local source, dest = text:match("copy%s+profile%s+(.+)%s+to%s+(.+)$")
+    if ContainsAny(text, { "copy", "duplicate", "clone", "dupe", "backup", "duplizieren" }) then
+        local source, dest = RawCopyProfileSourceDestination(rawText)
+        if not source then source, dest = text:match("copy%s+profile%s+(.+)%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("copy%s+profile%s+(.+)%s+as%s+(.+)$") end
         if not source then source, dest = text:match("copy%s+(.+)%s+profile%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("duplicate%s+profile%s+(.+)%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("duplicate%s+profile%s+(.+)%s+as%s+(.+)$") end
+        if not source then source, dest = text:match("clone%s+profile%s+(.+)%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("clone%s+profile%s+(.+)%s+as%s+(.+)$") end
+        if not source then source, dest = text:match("dupe%s+profile%s+(.+)%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("dupe%s+profile%s+(.+)%s+as%s+(.+)$") end
+        if not source then source, dest = text:match("backup%s+profile%s+(.+)%s+to%s+(.+)$") end
+        if not source then source, dest = text:match("backup%s+profile%s+(.+)%s+as%s+(.+)$") end
         source = CleanProfileName(source)
         dest = CleanProfileName(dest)
         if source and dest then
+            if IsCurrentProfileName(source) then
+                local action = Registry and Registry:GetAction("copy_profile")
+                return action and {
+                    kind = "action",
+                    action = action,
+                    args = { name = dest },
+                    confirmRequired = true,
+                    label = "Copy current profile",
+                    summary = "Copies the active profile to a new profile name.",
+                } or nil
+            end
             local action = Registry and Registry:GetAction("copy_profile_from_to")
             return action and {
                 kind = "action",
@@ -873,12 +1083,25 @@ local function ParseProfile(text, raw)
             } or nil
         end
 
-        local name = RawCopyProfileName(rawText)
+        local name = RawCurrentProfileCopyName(rawText)
+            or RawCopyProfileName(rawText)
             or text:match("copy%s+current%s+profile%s+to%s+(.+)$")
+            or text:match("copy%s+current%s+profile%s+as%s+(.+)$")
             or text:match("copy%s+profile%s+to%s+(.+)$")
             or text:match("copy%s+profile%s+(.+)$")
+            or text:match("duplicate%s+current%s+profile%s+to%s+(.+)$")
+            or text:match("duplicate%s+current%s+profile%s+as%s+(.+)$")
+            or text:match("clone%s+current%s+profile%s+to%s+(.+)$")
+            or text:match("clone%s+current%s+profile%s+as%s+(.+)$")
+            or text:match("clone%s+profile%s+(.+)$")
+            or text:match("dupe%s+current%s+profile%s+to%s+(.+)$")
+            or text:match("dupe%s+current%s+profile%s+as%s+(.+)$")
+            or text:match("dupe%s+profile%s+(.+)$")
             or text:match("duplicate%s+profile%s+(.+)$")
             or text:match("duplicate%s+(.+)%s+profile$")
+            or text:match("backup%s+current%s+profile%s+to%s+(.+)$")
+            or text:match("backup%s+current%s+profile%s+as%s+(.+)$")
+            or text:match("backup%s+profile%s+to%s+(.+)$")
         name = CleanProfileName(name)
         if name then
             local action = Registry and Registry:GetAction("copy_profile")
@@ -913,12 +1136,24 @@ local function ParseProfile(text, raw)
         end
     end
 
+    if hasExportIntent then
+        local kind = ProfileExportKindForText(text)
+        local action = Registry and Registry:GetAction("export_profile")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { kind = kind },
+            label = "Export current profile",
+            summary = "Creates a copyable profile export string.",
+        } or nil
+    end
+
     if ContainsAny(text, {
         "list profiles", "show profiles", "profile list", "profile summary",
         "profile status", "current profile", "active profile", "which profile",
         "spec profiles", "specialization profiles",
     }) and not ContainsAny(text, {
-        "reset", "delete", "remove", "switch", "wechsel", "copy", "duplicate",
+        "reset", "delete", "remove", "switch", "wechsel", "copy", "duplicate", "clone", "dupe",
         "create", "new profile", "import", "export", "backup",
     }) then
         local action = Registry and Registry:GetAction("profile_summary")

@@ -21,6 +21,7 @@ if type(C) ~= "table" then return end
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit
+local EnsureDB = C.EnsureDB
 local GeneralDB = C.GeneralDB
 local BarsDB = C.BarsDB
 local GameplayDB = C.GameplayDB
@@ -1562,10 +1563,14 @@ local function ColorSetting(key, label, aliases, getRGB, setRGB, opts)
     })
 end
 
-local function ApiRGB(getName, dr, dg, db)
+local function ApiRGB(getName, dr, dg, db, fallback)
     local fn = ColorAPI()[getName]
     if type(fn) == "function" then
         local r, g, b = fn()
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
+    end
+    if type(fallback) == "function" then
+        local r, g, b = fallback()
         if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
     end
     return dr, dg, db
@@ -1665,7 +1670,7 @@ local function ClassPowerDefaultRGB(token)
     local slot = CP_SLOT_DEFAULTS[token]
     if slot then return slot[1], slot[2], slot[3] end
     if token == "CHARGED" then return 0.60, 0.20, 0.80 end
-    if token == "RESOURCE_TEXT" then return ApiRGB("GetGlobalFontColor", 1, 1, 1) end
+    if token == "RESOURCE_TEXT" then return ApiRGB("GetGlobalFontColor", 1, 1, 1, function() return GeneralRGB("fontColorCustom", 1, 1, 1) end) end
     if token == "SOUL_FRAGMENTS" then return 0.00, 0.80, 0.00 end
     if token == "SOUL_FRAGMENTS_META" then return 0.60, 0.20, 0.93 end
     if token == "MAELSTROM" or token == "MAELSTROM_POWER" then return PowerDefaultRGB("MAELSTROM") end
@@ -1704,16 +1709,16 @@ local function SetClassPowerBgRGB(token, r, gCol, b)
 end
 
 local function AuraSharedDB()
-    local db = EnsureDB()
+    local db = GeneralDB()
     db.auras3 = type(db.auras3) == "table" and db.auras3 or {}
     db.auras3.shared = type(db.auras3.shared) == "table" and db.auras3.shared or {}
     return db.auras3.shared
 end
 
 local function SetAllPortraitRGB(prefix, r, gCol, b)
+    local general = GeneralDB()
+    general[prefix .. "R"], general[prefix .. "G"], general[prefix .. "B"] = r, gCol, b
     local db = EnsureDB()
-    db.general = type(db.general) == "table" and db.general or {}
-    db.general[prefix .. "R"], db.general[prefix .. "G"], db.general[prefix .. "B"] = r, gCol, b
     for _, unit in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
         db[unit] = type(db[unit]) == "table" and db[unit] or {}
         db[unit][prefix .. "R"], db[unit][prefix .. "G"], db[unit][prefix .. "B"] = r, gCol, b
@@ -2048,7 +2053,7 @@ local function RegisterAssistantColorSettings()
 ColorSetting("general.customFontColor", "Global Font Color", {
     "custom font color", "main font color", "global custom font color",
 }, function()
-    return ApiRGB("GetGlobalFontColor", 1, 1, 1)
+    return ApiRGB("GetGlobalFontColor", 1, 1, 1, function() return GeneralRGB("fontColorCustom", 1, 1, 1) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetGlobalFontColor", r, g, b) then
         local gen = GeneralDB()
@@ -2086,7 +2091,7 @@ for i = 1, #COLOR_CLASS_TOKENS do
     }, function()
         local fn = ColorAPI().GetClassColor
         if type(fn) == "function" then return fn(token) end
-        local db = EnsureDB()
+        local db = GeneralDB()
         if type(db.classColors) == "table" then
             local color = db.classColors[token]
             if type(color) == "table" then return color.r or color[1] or 1, color.g or color[2] or 1, color.b or color[3] or 1 end
@@ -2099,7 +2104,7 @@ for i = 1, #COLOR_CLASS_TOKENS do
         if type(fn) == "function" then
             fn(token, r, g, b)
         else
-            local db = EnsureDB()
+            local db = GeneralDB()
             db.classColors = type(db.classColors) == "table" and db.classColors or {}
             db.classColors[token] = { r = r, g = g, b = b }
         end
@@ -2109,7 +2114,7 @@ end
 ColorSetting("general.classBarBgColor", "Bar Background Tint", {
     "bar background tint", "bar tint", "class bar background color", "bar background color",
 }, function()
-    return ApiRGB("GetClassBarBgColor", 0, 0, 0)
+    return ApiRGB("GetClassBarBgColor", 0, 0, 0, function() return GeneralRGB("classBarBg", 0, 0, 0) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetClassBarBgColor", r, g, b) then SetGeneralRGB("classBarBg", r, g, b) end
 end, { category = "Colors / Bar Background", attribute = "barBackgroundTint", defaultR = 0, defaultG = 0, defaultB = 0, apply = ApplyColors })
@@ -2202,13 +2207,13 @@ for i = 1, #COLOR_NPC_ROWS do
     ColorSetting("npcColors." .. row.key, row.label, row.aliases, function()
         local fn = ColorAPI().GetNPCColor
         if type(fn) == "function" then return fn(row.key) end
-        return row.dr, row.dg, row.db
+        return TableRGB(GeneralDB().npcColors, row.key, row.dr, row.dg, row.db)
     end, function(r, g, b)
         local fn = ColorAPI().SetNPCColor
         if type(fn) == "function" then
             fn(row.key, r, g, b)
         else
-            local db = EnsureDB()
+            local db = GeneralDB()
             db.npcColors = type(db.npcColors) == "table" and db.npcColors or {}
             db.npcColors[row.key] = { r = r, g = g, b = b }
         end
@@ -2218,7 +2223,7 @@ end
 ColorSetting("general.petFrameColor", "Pet Frame Color", {
     "pet frame color", "pet color", "pet bar color",
 }, function()
-    return ApiRGB("GetPetFrameColor", 0, 0.8, 0)
+    return ApiRGB("GetPetFrameColor", 0, 0.8, 0, function() return GeneralRGB("petFrameColor", 0, 0.8, 0) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetPetFrameColor", r, g, b) then SetGeneralRGB("petFrameColor", r, g, b) end
 end, { category = "Colors / Unitframe Colors", attribute = "petColor", defaultR = 0, defaultG = 0.8, defaultB = 0, apply = ApplyColors })
@@ -2277,13 +2282,13 @@ for i = 1, #COLOR_NPC_TYPE_ROWS do
     ColorSetting("npcColors." .. row.key, row.label, row.aliases, function()
         local fn = ColorAPI().GetNPCColor
         if type(fn) == "function" then return fn(row.key) end
-        return row.dr, row.dg, row.db
+        return TableRGB(GeneralDB().npcColors, row.key, row.dr, row.dg, row.db)
     end, function(r, g, b)
         local fn = ColorAPI().SetNPCColor
         if type(fn) == "function" then
             fn(row.key, r, g, b)
         else
-            local db = EnsureDB()
+            local db = GeneralDB()
             db.npcColors = type(db.npcColors) == "table" and db.npcColors or {}
             db.npcColors[row.key] = { r = r, g = g, b = b }
         end
@@ -2293,28 +2298,28 @@ end
 ColorSetting("general.absorbBarColor", "Absorb Bar Color", {
     "absorb bar color", "absorb color", "absorb overlay color",
 }, function()
-    return ApiRGB("GetAbsorbOverlayColor", 1, 1, 1)
+    return ApiRGB("GetAbsorbOverlayColor", 1, 1, 1, function() return GeneralRGB("absorbBarColor", 1, 1, 1) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetAbsorbOverlayColor", r, g, b, 0.45) then SetGeneralRGB("absorbBarColor", r, g, b) end
 end, { category = "Colors / Bar Colors", attribute = "absorbColor", apply = ApplyColors })
 ColorSetting("general.healAbsorbBarColor", "Heal-Absorb Bar Color", {
     "heal absorb bar color", "heal absorb color", "heal-absorb color",
 }, function()
-    return ApiRGB("GetHealAbsorbOverlayColor", 0.7, 0, 0)
+    return ApiRGB("GetHealAbsorbOverlayColor", 0.7, 0, 0, function() return GeneralRGB("healAbsorbBarColor", 0.7, 0, 0) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetHealAbsorbOverlayColor", r, g, b, 0.45) then SetGeneralRGB("healAbsorbBarColor", r, g, b) end
 end, { category = "Colors / Bar Colors", attribute = "healAbsorbColor", defaultR = 0.7, apply = ApplyColors })
 ColorSetting("general.powerBarBgColor", "Power Bar Background Color", {
     "power bar background color", "power background color", "mana bar background color",
 }, function()
-    return ApiRGB("GetPowerBarBackgroundColor", 0, 0, 0)
+    return ApiRGB("GetPowerBarBackgroundColor", 0, 0, 0, function() return GeneralRGB("powerBarBgColor", 0, 0, 0) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetPowerBarBackgroundColor", r, g, b) then SetGeneralRGB("powerBarBgColor", r, g, b) end
 end, { category = "Colors / Bar Colors", attribute = "powerBackgroundColor", defaultR = 0, defaultG = 0, defaultB = 0, apply = ApplyColors })
 ColorSetting("general.aggroBorderColor", "Aggro Border Color", {
     "aggro border color", "threat border color", "aggro outline color",
 }, function()
-    return ApiRGB("GetAggroBorderColor", 1, 0.5, 0)
+    return ApiRGB("GetAggroBorderColor", 1, 0.5, 0, function() return GeneralRGBAlias("hlAggroColor", "aggroBorderColor", 1, 0.5, 0) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetAggroBorderColor", r, g, b) then SetGeneralRGBAlias("hlAggroColor", "aggroBorderColor", r, g, b) end
 end, { category = "Colors / Bar Colors", attribute = "aggroBorderColor", defaultR = 1, defaultG = 0.5, defaultB = 0, apply = ApplyColors })
@@ -2328,7 +2333,7 @@ end, { category = "Colors / Bar Colors", attribute = "purgeBorderColor", default
 ColorSetting("general.barOutlineColor", "Bar Outline Color", {
     "bar outline color", "frame outline color", "bar border color", "bars border color", "border outline color", "outline border color",
 }, function()
-    return ApiRGB("GetBarOutlineColor", 0, 0, 0)
+    return ApiRGB("GetBarOutlineColor", 0, 0, 0, function() return GeneralRGB("barOutlineColor", 0, 0, 0) end)
 end, function(r, g, b)
     local gdb = GeneralDB()
     gdb.barOutlineColorMode = nil
@@ -2405,7 +2410,7 @@ for _, row in ipairs({
     { key = "castbarFont", label = "Castbar Text Color", get = "GetCastbarTextColor", set = "SetCastbarTextColor", dr = 1, dg = 1, db = 1, aliases = { "castbar text color", "castbar font color", "cast bar text color", "castbar spell name color", "castbar spell name text color", "castbar spell color", "castbar spell text color", "spell name color", "spell text color" } },
 }) do
     ColorSetting("general." .. row.key .. "Color", row.label, row.aliases, function()
-        return ApiRGB(row.get, row.dr, row.dg, row.db)
+        return ApiRGB(row.get, row.dr, row.dg, row.db, function() return GeneralRGB(row.key, row.dr, row.dg, row.db) end)
     end, function(r, g, b)
         local fallbackPrefix = row.key
         if row.key == "castbarFont" then fallbackPrefix = "castbarFont" end
@@ -2416,7 +2421,7 @@ end
 ColorSetting("general.castbarBorderColor", "Castbar Border Color", {
     "castbar border color", "cast bar border color", "castbar outline color",
 }, function()
-    return ApiRGB("GetCastbarBorderColor", 0, 0, 0)
+    return ApiRGB("GetCastbarBorderColor", 0, 0, 0, function() return GeneralRGB("castbarBorder", 0, 0, 0) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetCastbarBorderColor", r, g, b, 1) then SetGeneralRGB("castbarBorder", r, g, b) end
 end, { category = "Colors / Castbar", attribute = "castbarBorderColor", defaultR = 0, defaultG = 0, defaultB = 0, apply = ApplyCastbarColors })
@@ -2424,7 +2429,7 @@ end, { category = "Colors / Castbar", attribute = "castbarBorderColor", defaultR
 ColorSetting("general.castbarBackgroundColor", "Castbar Background Color", {
     "castbar background color", "cast bar background color", "castbar bg color",
 }, function()
-    return ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10)
+    return ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10, function() return GeneralRGB("castbarBg", 0.10, 0.10, 0.10) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetCastbarBackgroundColor", r, g, b, 0.85) then SetGeneralRGB("castbarBg", r, g, b) end
 end, { category = "Colors / Castbar", attribute = "castbarBackgroundColor", defaultR = 0.10, defaultG = 0.10, defaultB = 0.10, apply = ApplyCastbarColors })
@@ -2444,7 +2449,7 @@ RegisterGeneralEnum("playerCastbarOverrideMode", "playerCastbarOverrideMode", "P
 ColorSetting("general.playerCastbarOverrideColor", "Player Castbar Override Color", {
     "player castbar override color", "player castbar custom color", "player cast custom color",
 }, function()
-    return ApiRGB("GetPlayerCastbarOverrideColor", 0, 0.6, 1)
+    return ApiRGB("GetPlayerCastbarOverrideColor", 0, 0.6, 1, function() return GeneralRGB("playerCastbarOverride", 0, 0.6, 1) end)
 end, function(r, g, b)
     if not ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, b) then SetGeneralRGB("playerCastbarOverride", r, g, b) end
 end, { category = "Colors / Castbar", attribute = "playerCastbarOverrideColor", defaultR = 0, defaultG = 0.6, defaultB = 1, apply = ApplyCastbarColors })
@@ -2756,7 +2761,7 @@ Registry:RegisterAction({
     captureSnapshot = true,
     run = function()
         local fn = ColorAPI().ResetAllClassColors
-        if type(fn) == "function" then fn() else EnsureDB().classColors = nil end
+        if type(fn) == "function" then fn() else GeneralDB().classColors = nil end
         ApplyColors("MSUF_ASSISTANT_RESET_CLASS_COLORS")
         return true, "Done. Class bar colors reset."
     end,
@@ -2789,7 +2794,7 @@ Registry:RegisterAction({
     captureSnapshot = true,
     run = function()
         local fn = ColorAPI().ResetAllNPCColors
-        if type(fn) == "function" then fn() else EnsureDB().npcColors = nil end
+        if type(fn) == "function" then fn() else GeneralDB().npcColors = nil end
         ApplyColors("MSUF_ASSISTANT_RESET_UNITFRAME_COLORS")
         return true, "Done. Unitframe colors reset."
     end,
@@ -2803,7 +2808,7 @@ Registry:RegisterAction({
     captureSnapshot = true,
     run = function()
         local fn = ColorAPI().ResetNPCTypeColors
-        if type(fn) == "function" then fn() else EnsureDB().npcColors = nil end
+        if type(fn) == "function" then fn() else GeneralDB().npcColors = nil end
         ApplyColors("MSUF_ASSISTANT_RESET_NPC_TYPE_COLORS")
         return true, "Done. NPC type colors reset."
     end,

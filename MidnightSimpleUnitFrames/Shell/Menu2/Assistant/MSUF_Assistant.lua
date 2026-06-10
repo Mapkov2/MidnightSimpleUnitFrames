@@ -250,6 +250,13 @@ local function ValuesEqual(setting, oldValue, newValue)
     if setting and type(setting.sameValue) == "function" then
         return setting.sameValue(oldValue, newValue) == true
     end
+    if setting and setting.type == "number" then
+        local oldNumber = tonumber(oldValue)
+        local newNumber = tonumber(newValue)
+        if oldNumber ~= nil and newNumber ~= nil then
+            return math.abs(oldNumber - newNumber) < 0.0001
+        end
+    end
     return oldValue == newValue
 end
 
@@ -834,22 +841,34 @@ local function ExecuteChanges(plan)
             end
             if not ValuesEqual(setting, oldValue, newValue) then
                 setting.set(newValue)
-                undoChanges[#undoChanges + 1] = {
-                    key = setting.key,
-                    oldValue = oldValue,
-                    newValue = newValue,
-                    valueLabel = item.valueLabel,
-                }
-                item.newValue = newValue
-                changedSettings[#changedSettings + 1] = setting
-                lastSetting = setting.key
-                lastUnit = setting.unit
-                lastFrameType = setting.frameType
-                lastCategory = setting.category
-                lastValue = newValue
-                if setting.requiresReload == true then requiresReload = true end
-                if item.direction then A.SetContextValue("lastDirection", item.direction) end
-                RememberTextChangeContext(setting, item, newValue)
+                local actualNewValue = newValue
+                if setting.verifyAfterSet == true or setting.normalizesValue == true or setting.type == "color" then
+                    actualNewValue = setting.get()
+                end
+                if not ValuesEqual(setting, oldValue, actualNewValue) then
+                    local valueLabel = item.valueLabel
+                    if not ValuesEqual(setting, newValue, actualNewValue) then
+                        valueLabel = SettingValueLabel(setting, actualNewValue)
+                    end
+                    undoChanges[#undoChanges + 1] = {
+                        key = setting.key,
+                        oldValue = oldValue,
+                        newValue = actualNewValue,
+                        valueLabel = valueLabel,
+                    }
+                    item.newValue = actualNewValue
+                    changedSettings[#changedSettings + 1] = setting
+                    lastSetting = setting.key
+                    lastUnit = setting.unit
+                    lastFrameType = setting.frameType
+                    lastCategory = setting.category
+                    lastValue = actualNewValue
+                    if setting.requiresReload == true then requiresReload = true end
+                    if item.direction then A.SetContextValue("lastDirection", item.direction) end
+                    RememberTextChangeContext(setting, item, actualNewValue)
+                elseif setting.applyWhenUnchanged == true then
+                    unchangedApplySettings[#unchangedApplySettings + 1] = setting
+                end
             elseif setting.applyWhenUnchanged == true then
                 unchangedApplySettings[#unchangedApplySettings + 1] = setting
             end

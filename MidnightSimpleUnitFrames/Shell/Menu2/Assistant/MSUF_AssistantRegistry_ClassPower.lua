@@ -170,6 +170,7 @@ local CLASS_POWER_PREVIEW_ALIASES = {
     ["arcane charges"] = "mage_arcane",
     mage = "mage_arcane",
     stagger = "monk_brewmaster",
+    monk = "monk_windwalker",
     brewmaster = "monk_brewmaster",
     chi = "monk_windwalker",
     windwalker = "monk_windwalker",

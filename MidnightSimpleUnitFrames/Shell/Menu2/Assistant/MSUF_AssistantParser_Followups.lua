@@ -582,8 +582,44 @@ local function BuildFollowup(text, ctx)
     local function AddReplayTarget(out, settingUnit, frameType, attribute, value)
         if not (settingUnit and frameType and attribute) then return end
         local found = Registry:FindSettings({ unit = settingUnit, frameType = frameType, attribute = attribute })
-        if found[1] then
-            out[#out + 1] = { setting = found[1], value = value }
+        local setting = found[1]
+        if setting then
+            for i = 1, #out do
+                if out[i] and out[i].setting and out[i].setting.key == setting.key then return end
+            end
+            out[#out + 1] = { setting = setting, value = value }
+        end
+    end
+
+    local ANCHOR_FRAME_VALUES = {
+        EssentialCooldownViewer = true,
+        UtilityCooldownViewer = true,
+        BuffIconCooldownViewer = true,
+    }
+
+    local function AddAnchorReplayTargets(out, prev)
+        if not (prev and prev.attribute and prev.value ~= nil) then return end
+        local attr = tostring(prev.attribute)
+        local frameType = tostring(prev.frameType or "")
+        local value = prev.value
+        if frameType == "unitframe" and attr == "anchorFrameName" then
+            for j = 1, #groups do AddReplayTarget(out, groups[j], "group", "customAnchorFrame", value) end
+        elseif frameType == "group" and attr == "customAnchorFrame" then
+            for j = 1, #units do AddReplayTarget(out, units[j], "unitframe", "anchorFrameName", value) end
+        elseif frameType == "unitframe" and attr == "anchorToUnitframe" then
+            if ANCHOR_FRAME_VALUES[tostring(value)] then
+                for j = 1, #groups do AddReplayTarget(out, groups[j], "group", "customAnchorFrame", value) end
+            elseif value == "GLOBAL" then
+                for j = 1, #groups do AddReplayTarget(out, groups[j], "group", "anchorToFrame", "FREE") end
+            else
+                for j = 1, #groups do AddReplayTarget(out, groups[j], "group", "anchorToFrame", value) end
+            end
+        elseif frameType == "group" and attr == "anchorToFrame" then
+            if value == "FREE" then
+                for j = 1, #units do AddReplayTarget(out, units[j], "unitframe", "anchorToUnitframe", "GLOBAL") end
+            else
+                for j = 1, #units do AddReplayTarget(out, units[j], "unitframe", "anchorToUnitframe", value) end
+            end
         end
     end
 
@@ -604,6 +640,7 @@ local function BuildFollowup(text, ctx)
                 end
                 AddReplayTarget(changes, settingUnit, targetFrameType, prev.attribute, prev.value)
             end
+            AddAnchorReplayTargets(changes, prev)
         end
     end
     if #changes == 0 then
@@ -616,6 +653,7 @@ local function BuildFollowup(text, ctx)
                 for j = 1, #groups do
                     AddReplayTarget(changes, groups[j], "group", prev.attribute, prev.value)
                 end
+                AddAnchorReplayTargets(changes, prev)
             end
         end
     end

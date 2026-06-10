@@ -632,6 +632,7 @@ Registry:RegisterSetting({
     end,
     apply = function() end,
     combatSafe = true,
+    verifyAfterSet = true,
     description = "Runtime preview toggle; backed by MSUF_FocusKick_SetPreviewEnabled when loaded.",
 })
 RegisterCastbarNumber("focusKickIconWidth", "focusKickWidth", "Focus Kick Width", 40, 16, 128, CastbarAliases("focus kick width", "focus interrupt tracker width"), {

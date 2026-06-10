@@ -236,6 +236,15 @@ local function SettingPreviewLines(settings, limit)
 end
 
 local function ScopeHelpExamples(frameType, unit, group, page)
+    if frameType == "editMode" then
+        return {
+            "start edit mode",
+            "show edit mode grid",
+            "set edit mode grid spacing to 20",
+            "turn on edit mode snap",
+            "cancel edit mode",
+        }
+    end
     if frameType == "castbar" or page == "opt_castbar" then
         return {
             "show target castbar",
