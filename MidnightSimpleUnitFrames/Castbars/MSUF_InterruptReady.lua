@@ -26,6 +26,7 @@ local SPECIALIZATION_KEYS = {
 local state = {}
 local cooldownTimer
 local cooldownTimerGeneration = 0
+local cooldownTimerEndTime
 
 local function GeneralDB()
     if type(_G.MSUF_EnsureDB) == "function" then
@@ -56,6 +57,10 @@ local function PlainNumber(value)
     end
 
     return nil
+end
+
+local function Now()
+    return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 end
 
 local function ResolveInterruptSpellID()
@@ -93,36 +98,55 @@ local function InterruptCooldown()
     return SpellAPI.GetSpellCooldownDuration(spellID)
 end
 
-local function InterruptReady()
-    local cooldown = InterruptCooldown()
-    if not cooldown then
-        return false
-    end
-
-    if cooldown.IsZero then
-        return cooldown:IsZero() and true or false
-    end
-
-    local remaining = cooldown.GetRemainingDuration and cooldown:GetRemainingDuration()
-        or (cooldown.GetRemaining and cooldown:GetRemaining())
-
-    return (PlainNumber(remaining) or 0) <= 0.05
-end
-
-local function InterruptRemaining()
-    local cooldown = InterruptCooldown()
+local function CooldownRemaining(cooldown)
     if not cooldown then
         return nil
     end
 
-    return PlainNumber(
-        cooldown.GetRemainingDuration and cooldown:GetRemainingDuration()
-        or (cooldown.GetRemaining and cooldown:GetRemaining())
-    )
+    local remaining
+    if cooldown.GetRemainingDuration then
+        remaining = cooldown:GetRemainingDuration()
+    elseif cooldown.GetRemaining then
+        remaining = cooldown:GetRemaining()
+    end
+
+    return PlainNumber(remaining)
 end
 
-local function ColorFromDB(key, defaultR, defaultG, defaultB)
-    local color = GeneralDB()[key]
+local function InterruptStatus()
+    local remaining = CooldownRemaining(InterruptCooldown())
+    if remaining == nil then
+        return false, nil
+    end
+
+    return remaining <= 0.05, remaining
+end
+
+local function ResolveStatus(status)
+    if type(status) == "table" then
+        if not status.resolved then
+            status.ready, status.remaining = InterruptStatus()
+            status.resolved = true
+        end
+
+        return status.ready
+    end
+
+    local ready = InterruptStatus()
+    return ready
+end
+
+local function InterruptReady()
+    local ready = InterruptStatus()
+    return ready
+end
+
+local function InterruptRemaining()
+    return CooldownRemaining(InterruptCooldown())
+end
+
+local function ColorFromDB(general, key, defaultR, defaultG, defaultB)
+    local color = general[key]
     if type(color) == "table" then
         defaultR = tonumber(color[1] or color["1"]) or defaultR
         defaultG = tonumber(color[2] or color["2"]) or defaultG
@@ -132,27 +156,51 @@ local function ColorFromDB(key, defaultR, defaultG, defaultB)
     return defaultR, defaultG, defaultB, 1
 end
 
-local function ReadyColors()
-    local readyR, readyG, readyB, readyA = ColorFromDB("kickReadyColor", 0, 1, 0)
-    local notReadyR, notReadyG, notReadyB, notReadyA = ColorFromDB("kickNotReadyColor", 1, 0, 0)
+local function ReadyColors(general)
+    general = general or GeneralDB()
 
-    if _G.CreateColor then
-        return _G.CreateColor(readyR, readyG, readyB, readyA), _G.CreateColor(notReadyR, notReadyG, notReadyB, notReadyA)
+    local readyR, readyG, readyB, readyA = ColorFromDB(general, "kickReadyColor", 0, 1, 0)
+    local notReadyR, notReadyG, notReadyB, notReadyA = ColorFromDB(general, "kickNotReadyColor", 1, 0, 0)
+
+    if state.readyR == readyR
+        and state.readyG == readyG
+        and state.readyB == readyB
+        and state.readyA == readyA
+        and state.notReadyR == notReadyR
+        and state.notReadyG == notReadyG
+        and state.notReadyB == notReadyB
+        and state.notReadyA == notReadyA
+        and state.readyColor
+        and state.notReadyColor
+    then
+        return state.readyColor, state.notReadyColor
     end
 
-    return {
+    state.readyR, state.readyG, state.readyB, state.readyA = readyR, readyG, readyB, readyA
+    state.notReadyR, state.notReadyG, state.notReadyB, state.notReadyA = notReadyR, notReadyG, notReadyB, notReadyA
+
+    if _G.CreateColor then
+        state.readyColor = _G.CreateColor(readyR, readyG, readyB, readyA)
+        state.notReadyColor = _G.CreateColor(notReadyR, notReadyG, notReadyB, notReadyA)
+        return state.readyColor, state.notReadyColor
+    end
+
+    state.readyColor = {
         GetRGBA = function()
             return readyR, readyG, readyB, readyA
         end,
-    }, {
+    }
+    state.notReadyColor = {
         GetRGBA = function()
             return notReadyR, notReadyG, notReadyB, notReadyA
         end,
     }
+
+    return state.readyColor, state.notReadyColor
 end
 
-local function ColorForReady(isReady)
-    local readyColor, notReadyColor = ReadyColors()
+local function ColorForReady(isReady, general)
+    local readyColor, notReadyColor = ReadyColors(general)
     return isReady and readyColor or notReadyColor
 end
 
@@ -192,8 +240,8 @@ local function EnsureBox(frame)
     return box
 end
 
-local function ApplyBoxLayout(frame)
-    local general = GeneralDB()
+local function ApplyBoxLayout(frame, general)
+    general = general or GeneralDB()
     local box = EnsureBox(frame)
     local castbarHeight = frame.statusBar and frame.statusBar:GetHeight() or frame:GetHeight() or 16
     local boxSize = general.kickReadyAutoSize == false and tonumber(general.kickReadySize) or castbarHeight
@@ -274,15 +322,23 @@ local function ResolveRawNotInterruptible(frame, castState)
     return nil
 end
 
-local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible)
-    local color = ColorForReady(isReady)
+local function NotInterruptibleColor()
+    if not state.notInterruptibleColor and _G.CreateColor then
+        state.notInterruptibleColor = _G.CreateColor(0.6, 0.6, 0.6, 1)
+    end
+
+    return state.notInterruptibleColor
+end
+
+local function EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
+    local color = ColorForReady(isReady, general)
 
     if HasKnownValue(rawNotInterruptible)
         and _G.CreateColor
         and _G.C_CurveUtil
         and _G.C_CurveUtil.EvaluateColorFromBoolean
     then
-        color = _G.C_CurveUtil.EvaluateColorFromBoolean(rawNotInterruptible, _G.CreateColor(0.6, 0.6, 0.6, 1), color)
+        color = _G.C_CurveUtil.EvaluateColorFromBoolean(rawNotInterruptible, NotInterruptibleColor(), color)
     end
 
     if color and color.GetRGBA then
@@ -305,12 +361,12 @@ local function HideIndicator(frame)
     RestoreOutline(frame)
 end
 
-local function RefreshFrame(frame, castState)
+local function RefreshFrame(frame, castState, status, general)
     if not (frame and frame.statusBar) then
         return
     end
 
-    local general = GeneralDB()
+    general = general or GeneralDB()
     if not ShouldShow(general, frame.unit) or not (frame.MSUF_castActive or (castState and castState.active)) then
         HideIndicator(frame)
         return
@@ -324,9 +380,9 @@ local function RefreshFrame(frame, castState)
         return
     end
 
-    local isReady = InterruptReady()
+    local isReady = ResolveStatus(status)
     local rawNotInterruptible = ResolveRawNotInterruptible(frame, castState)
-    local red, green, blue, alpha = EvaluateIndicatorRGBA(isReady, rawNotInterruptible)
+    local red, green, blue, alpha = EvaluateIndicatorRGBA(isReady, rawNotInterruptible, general)
 
     if IndicatorStyle(general) == "border" then
         if frame.kickReadyBox then
@@ -340,7 +396,7 @@ local function RefreshFrame(frame, castState)
 
     RestoreOutline(frame)
 
-    local box = ApplyBoxLayout(frame)
+    local box = ApplyBoxLayout(frame, general)
     box.fill:SetVertexColor(red, green, blue, alpha)
 
     if HasKnownValue(rawNotInterruptible) and box.SetAlphaFromBoolean then
@@ -366,29 +422,58 @@ local function ForEachCastbar(callback)
 end
 
 local function RefreshAll()
+    local status = {}
+    local general = GeneralDB()
+
     ForEachCastbar(function(frame)
-        RefreshFrame(frame)
+        RefreshFrame(frame, nil, status, general)
     end)
+
+    return status.remaining, status.resolved == true
 end
 
-local function ScheduleCooldownRefresh()
+local function ScheduleCooldownRefresh(remaining, remainingResolved)
     if cooldownTimer and cooldownTimer.Cancel then
+        if remaining and remaining > 0.05 and cooldownTimerEndTime and TimerAPI and TimerAPI.NewTimer then
+            local delay = math.min(remaining + 0.05, 90)
+            local fireAt = Now() + delay
+            local drift = fireAt - cooldownTimerEndTime
+            if drift < 0 then
+                drift = -drift
+            end
+
+            if drift <= 0.10 then
+                return
+            end
+        end
+
         cooldownTimer:Cancel()
     end
 
     cooldownTimer = nil
+    cooldownTimerEndTime = nil
 
-    local remaining = InterruptRemaining()
+    if remaining == nil and not remainingResolved then
+        remaining = InterruptRemaining()
+    end
+
     if not (remaining and remaining > 0.05 and TimerAPI and TimerAPI.NewTimer) then
         return
     end
 
     cooldownTimerGeneration = cooldownTimerGeneration + 1
     local generation = cooldownTimerGeneration
+    local delay = math.min(remaining + 0.05, 90)
+    cooldownTimerEndTime = Now() + delay
 
-    cooldownTimer = TimerAPI.NewTimer(math.min(remaining + 0.05, 90), function()
+    cooldownTimer = TimerAPI.NewTimer(delay, function()
         if generation == cooldownTimerGeneration then
-            RefreshAll()
+            cooldownTimer = nil
+            cooldownTimerEndTime = nil
+            local remaining, resolved = RefreshAll()
+            if resolved then
+                ScheduleCooldownRefresh(remaining, true)
+            end
         end
     end)
 end
@@ -399,8 +484,8 @@ function _G.MSUF_KickReady_Init()
 end
 
 function _G.MSUF_KickReady_IsReady()
-    local ready = InterruptReady()
-    ScheduleCooldownRefresh()
+    local ready, remaining = InterruptStatus()
+    ScheduleCooldownRefresh(remaining, true)
     return ready
 end
 
@@ -409,14 +494,18 @@ function _G.MSUF_KickReady_EvaluateColor(ready)
 end
 
 function _G.MSUF_KickReady_ApplyLayout(frame)
-    if frame and ShouldShow(GeneralDB(), frame.unit) then
-        ApplyBoxLayout(frame)
+    local general = GeneralDB()
+    if frame and ShouldShow(general, frame.unit) then
+        ApplyBoxLayout(frame, general)
     end
 end
 
 function _G.MSUF_KickReady_RefreshFrame(frame, castState)
-    RefreshFrame(frame, castState)
-    ScheduleCooldownRefresh()
+    local status = {}
+    RefreshFrame(frame, castState, status)
+    if status.resolved then
+        ScheduleCooldownRefresh(status.remaining, true)
+    end
 end
 
 local eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
@@ -426,5 +515,8 @@ eventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
 eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
 eventFrame:SetScript("OnEvent", function()
     ResolveInterruptSpellID()
-    RefreshAll()
+    local remaining, resolved = RefreshAll()
+    if resolved then
+        ScheduleCooldownRefresh(remaining, true)
+    end
 end)
