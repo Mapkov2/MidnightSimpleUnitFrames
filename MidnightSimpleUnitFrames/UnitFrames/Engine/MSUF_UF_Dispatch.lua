@@ -11,8 +11,7 @@ local wipe = wipe
 local tonumber = tonumber
 local type = type
 local floor = math.floor
-local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 -- Events Blizzard delivers under a distinct name but which mean the exact same
 -- work as an existing hot event. Remapped to the canonical event at dispatch so
@@ -182,7 +181,7 @@ local function PowerTextNeedsUpdate(frame, event, power, powerMax)
     if not (rt and rt.powerPlain == true) then
         return true
     end
-    if IsSecret(power) or IsSecret(powerMax) then
+    if issecretvalue(power) == true or issecretvalue(powerMax) == true then
         return true
     end
     if power == nil or powerMax == nil then
