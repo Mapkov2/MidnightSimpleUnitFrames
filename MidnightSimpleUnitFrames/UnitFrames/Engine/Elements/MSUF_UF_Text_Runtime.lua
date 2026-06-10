@@ -25,7 +25,6 @@ local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local HealthPercent = Text.HealthPercent
 local PowerPercent = Text.PowerPercent
 local Secrets = MSUF.Secrets or {}
-local IsSecret = Text.IsSecret or function(_) return false end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local UpdateTextSlots = Text.UpdateTextSlots
@@ -205,9 +204,9 @@ function Text.UpdateName(frame, event, unit)
         local connected = UnitIsConnected and UnitIsConnected(unit)
         local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
         local hidden = false
-        if not IsSecret(connected) and connected == false then
+        if issecretvalue(connected) ~= true and connected == false then
             hidden = true
-        elseif not IsSecret(dead) and dead == true then
+        elseif issecretvalue(dead) ~= true and dead == true then
             hidden = true
         end
         if event == "UNIT_HEALTH"

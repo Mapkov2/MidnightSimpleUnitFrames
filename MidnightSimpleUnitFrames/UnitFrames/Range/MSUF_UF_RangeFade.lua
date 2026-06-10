@@ -34,7 +34,7 @@ local Enum = _G.Enum
 local SPELL_BANK_PLAYER = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
 
 local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function() return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitExistsPlain = Secrets.UnitExistsPlain or function(unit)
     return not UnitExists or UnitExists(unit) == true or UnitExists(unit) == 1
 end
@@ -147,7 +147,7 @@ local function WipeTable(t)
 end
 
 local function PlainBool(value)
-    if IsSecret(value) then return nil end
+    if issecretvalue(value) == true then return nil end
     if value == true or value == 1 then return true end
     if value == false or value == 0 then return false end
     return nil
@@ -299,7 +299,7 @@ end
 local function UnitInRangeChecked(unit)
     if not UnitInRange then return nil, false end
     local inRange, checked = UnitInRange(unit)
-    if IsSecret(inRange) or IsSecret(checked) then return nil, false end
+    if issecretvalue(inRange) == true or issecretvalue(checked) == true then return nil, false end
     if checked == true or checked == 1 then
         return (inRange == true or inRange == 1), true
     end
@@ -628,7 +628,7 @@ local function UnitMoving(unit)
     -- returns speed as a secret value that cannot be compared. We can't know the
     -- movement state, so assume moving: that just falls back to a full evaluation,
     -- never a stale fade.
-    if IsSecret(speed) then return true end
+    if issecretvalue(speed) == true then return true end
     return type(speed) == "number" and speed > 0
 end
 
@@ -709,7 +709,7 @@ PollNow = function()
         end
     end
     pollSettlePending = moving
-    if moving or pollSetDirty then
+    if pollSetDirty then
         RebuildPollSet()
     else
         SchedulePoll()
