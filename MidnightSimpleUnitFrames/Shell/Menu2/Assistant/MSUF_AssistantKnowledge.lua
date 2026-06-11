@@ -18,6 +18,7 @@ A.Knowledge = K
 local MAX_RESULTS = 6
 local INDEX_VERSION = 3
 local SEARCH_CACHE_LIMIT = 32
+local SEARCH_TEXT_LIMIT = 360
 local DISCORD_INVITE = "https://discord.gg/2Gf9b2Wprz"
 
 local function Trim(text)
@@ -26,11 +27,22 @@ local function Trim(text)
 end
 
 local function Normalize(text)
-    if A.Normalize then return A.Normalize(text) end
     text = tostring(text or ""):lower()
+    text = text:gsub("\195\164", "ae")
+    text = text:gsub("\195\182", "oe")
+    text = text:gsub("\195\188", "ue")
+    text = text:gsub("\195\159", "ss")
     text = text:gsub("[,;:!?%(%)]", " ")
     text = text:gsub("%s+", " ")
-    return Trim(text)
+    text = Trim(text)
+    text = text:gsub("target%s+of%s+target", "targettarget")
+    text = text:gsub("target%s+target", "targettarget")
+    text = text:gsub("focus%s+target", "focustarget")
+    text = text:gsub("cast%s+bar", "castbar")
+    text = text:gsub("power%s+bar", "powerbar")
+    text = text:gsub("health%s+bar", "healthbar")
+    text = text:gsub("unit%s+frames", "unitframes")
+    return text
 end
 
 local function AddUnique(list, seen, value)
@@ -40,6 +52,13 @@ local function AddUnique(list, seen, value)
     if norm == "" or seen[norm] then return end
     seen[norm] = true
     list[#list + 1] = value
+end
+
+local function AddSearchSnippet(list, seen, value)
+    value = Trim(value)
+    if value == "" then return end
+    if #value > SEARCH_TEXT_LIMIT then value = value:sub(1, SEARCH_TEXT_LIMIT) end
+    AddUnique(list, seen, value)
 end
 
 local function AddMany(list, seen, values)
@@ -236,8 +255,8 @@ local function AddIndexItem(index, item)
     AddUnique(textParts, seen, item.label)
     AddUnique(textParts, seen, item.category)
     AddUnique(textParts, seen, item.pageLabel)
-    AddUnique(textParts, seen, item.description)
-    AddUnique(textParts, seen, item.answer)
+    AddSearchSnippet(textParts, seen, item.description)
+    AddSearchSnippet(textParts, seen, item.answer)
     AddUnique(textParts, seen, item.target)
     AddUnique(textParts, seen, item.controlType)
     AddMany(textParts, seen, item.aliases)

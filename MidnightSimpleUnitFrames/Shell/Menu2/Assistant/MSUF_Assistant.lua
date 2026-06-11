@@ -1506,6 +1506,10 @@ function A.SubmitDeferred(text, callback)
 end
 
 function A.WarmupPerformanceIndexes(reason)
+    if A.allowPerformanceWarmup ~= true and _G.MSUF_ASSISTANT_ALLOW_WARMUP ~= true then
+        A._performanceWarmupSuppressed = tostring(reason or "assistant")
+        return false, "disabled"
+    end
     if A._performanceWarmupStarted then return false end
     if InCombat() then return false end
     if A.IsBusy and A.IsBusy() then return false end
