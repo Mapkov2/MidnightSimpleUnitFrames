@@ -22,6 +22,7 @@ local UnitClass = UnitClass
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local IsSecret = Secrets.IsSecret or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
@@ -39,6 +40,11 @@ GF._headerPool = GF._headerPool or {}
 GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 
 local NIL_ATTR = {}
+
+local function IsUnitToken(unit)
+    if issecretvalue(unit) == true then return false end
+    return type(unit) == "string" and unit ~= ""
+end
 
 local VALID_POINTS = {
     CENTER = true,
@@ -461,7 +467,7 @@ local function UnitClassFile(unit)
 end
 
 local function IsPlayerUnit(unit)
-    if not unit or unit == "" then
+    if not IsUnitToken(unit) then
         return false
     end
     if unit == "player" then

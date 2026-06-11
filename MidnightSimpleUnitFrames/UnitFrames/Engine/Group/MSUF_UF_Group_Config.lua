@@ -532,6 +532,76 @@ local function GroupScopeValue(kind, conf, general, key, fallback)
     return fallback
 end
 
+local BORDER_PRIORITY_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget" }
+local BORDER_PRIORITY_ALLOWED = {
+    dispel = true,
+    aggro = true,
+    purge = true,
+    bossTarget = true,
+}
+local BORDER_PRIORITY_ALIAS = {
+    Dispel = "dispel",
+    DISPEL = "dispel",
+    Magic = "dispel",
+    MAGIC = "dispel",
+    Curse = "dispel",
+    CURSE = "dispel",
+    Disease = "dispel",
+    DISEASE = "dispel",
+    Poison = "dispel",
+    POISON = "dispel",
+    Bleed = "dispel",
+    BLEED = "dispel",
+    Aggro = "aggro",
+    AGGRO = "aggro",
+    Purge = "purge",
+    PURGE = "purge",
+    BossTarget = "bossTarget",
+    Boss_Target = "bossTarget",
+    ["Boss Target"] = "bossTarget",
+    ["boss target"] = "bossTarget",
+    boss_target = "bossTarget",
+    bosstarget = "bossTarget",
+    BOSS_TARGET = "bossTarget",
+}
+
+local function GroupScopeAliasValue(conf, general, key, legacyKey, fallback)
+    if conf and conf.hlOverride == true then
+        if conf[key] ~= nil then return conf[key] end
+        if legacyKey and conf[legacyKey] ~= nil then return conf[legacyKey] end
+    end
+    if general then
+        if general[key] ~= nil then return general[key] end
+        if legacyKey and general[legacyKey] ~= nil then return general[legacyKey] end
+    end
+    return fallback
+end
+
+local function CompileBorderPriority(conf, general)
+    local enabled = GroupScopeAliasValue(conf, general, "hlPrioEnabled", "highlightPrioEnabled", false)
+    enabled = enabled == true or enabled == 1 or enabled == "1"
+    local raw = GroupScopeAliasValue(conf, general, "hlPrioOrder", "highlightPrioOrder", nil)
+    local order, used = {}, {}
+    if type(raw) == "table" then
+        for i = 1, #raw do
+            local key = raw[i]
+            if type(key) == "string" then key = BORDER_PRIORITY_ALIAS[key] or key end
+            if BORDER_PRIORITY_ALLOWED[key] and not used[key] then
+                order[#order + 1] = key
+                used[key] = true
+            end
+        end
+    end
+    for i = 1, #BORDER_PRIORITY_DEFAULTS do
+        local key = BORDER_PRIORITY_DEFAULTS[i]
+        if not used[key] then
+            order[#order + 1] = key
+            used[key] = true
+        end
+    end
+    return enabled, order
+end
+
 local GRADIENT_DIR_KEYS = {
     LEFT = "gradientDirLeft",
     RIGHT = "gradientDirRight",
@@ -780,7 +850,7 @@ function GF.GetBlizzardAuraTypeFlags(conf)
 end
 
 local function AuraBlacklistHash(kind, groupKey, group)
-    local filter = GF.AuraFilter
+    local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
     if filter and filter.GetBlacklistHashForGroup then
         return filter.GetBlacklistHashForGroup(kind, groupKey)
     end
@@ -791,7 +861,7 @@ local function AuraBlacklistHash(kind, groupKey, group)
 end
 
 local function AuraFilterString(groupKey, group)
-    local filter = GF.AuraFilter
+    local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
     local token = group and group.filterToken
     if groupKey == "buff" then
         return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL|RAID"
@@ -865,10 +935,9 @@ local function CompileCoreAuras(kind, conf)
         showStacks = true,
         stackAnchor = "BOTTOMRIGHT",
         sortByDuration = root and root.sortByDuration == true,
-        preferPlayer = root == nil or root.preferPlayer ~= false,
+        preferPlayer = root and root.preferPlayer == true,
         dynamicScale = root and root.dynamicScale == true,
         dynamicScaleValue = auraScale,
-        masqueEnabled = conf.masqueEnabled == true,
         cooldownSwipeDarkenOnLoss = conf.cooldownSwipeDarkenOnLoss == true,
         maxBuffs = Num(buff.max, Num(conf.auraMaxIcons, 4)),
         maxDebuffs = Num(debuff.max, Num(conf.auraMaxIcons, 4)),
@@ -931,7 +1000,7 @@ local function CompileCoreAuras(kind, conf)
         buffStackSize = S(buff.stackSize, 10, 6),
         debuffStackSize = S(debuff.stackSize, 10, 6),
         externalStackSize = S(externals.stackSize, 10, 6),
-        debuffShowDispelBorder = debuff.showDispelBorder ~= false,
+        debuffShowDispelBorder = debuff.showDispelBorder == true,
         showStealableBuffs = false,
         private = {
             enabled = showPrivate,
@@ -1044,6 +1113,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
             or GroupScopeValue(kind, conf, general, "hlAggroSize", nil)
     end
     local dispelBorderTrigger = GroupScopeValue(kind, conf, general, "dispelBorderTrigger", "BY_ME")
+    local prioEnabled, prioOrder = CompileBorderPriority(conf, general)
 
     return {
         _msufGFCompileSerial = GF._compiledSpecSerial or 1,
@@ -1169,6 +1239,8 @@ local function CompileSpecUncached(kind, frame, unit, conf)
             purgeB = Num(general.hlPurgeColorB or general.purgeBorderColorB, 0.00),
             dispel = dispelBorderEnabled == true,
             dispelTrigger = NormalizeDispelDetectTrigger(dispelBorderTrigger),
+            prioEnabled = prioEnabled,
+            prioOrder = prioOrder,
         },
         alpha = alpha,
         auras = CompileCoreAuras(kind, conf),

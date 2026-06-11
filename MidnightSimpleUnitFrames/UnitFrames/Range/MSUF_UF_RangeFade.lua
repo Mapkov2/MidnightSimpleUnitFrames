@@ -143,7 +143,12 @@ local pollToken = 0
 local pollSetDirty = true
 local targetChecked = 0
 local targetInRange = 0
+local targetSpellSyncDirty = true
 local spellsBuilt = false
+
+local function MarkTargetSpellSyncDirty()
+    targetSpellSyncDirty = true
+end
 
 local function WipeTable(t)
     if wipe then
@@ -260,6 +265,7 @@ local function RebuildSpells()
     resSpell = PickFirstKnown(RES_SPELLS[class])
     targetFriendlySpell = PickKnownSet(TARGET_FRIENDLY_SPELLS[class], targetFriendlySpells) or friendlySpell
     spellsBuilt = true
+    MarkTargetSpellSyncDirty()
     if SyncTargetSpells then
         SyncTargetSpells()
     end
@@ -439,12 +445,10 @@ local function EvaluateTargetUnits(force)
     if activeUnits.target then
         TargetRefresh(force)
     end
-    EvaluateIfActive("targettarget", force)
 end
 
 local function EvaluateFocusUnits(force)
     EvaluateIfActive("focus", force)
-    EvaluateIfActive("focustarget", force)
 end
 
 local function EvaluateBossUnits(force)
@@ -496,9 +500,14 @@ local function TargetUnregisterSpells()
     end
     WipeTable(targetRegistered)
     TargetClearStates()
+    targetSpellSyncDirty = nil
 end
 
 SyncTargetSpells = function()
+    if targetSpellSyncDirty ~= true then
+        return
+    end
+    targetSpellSyncDirty = nil
     if not (TargetActive() and EnableSpellRangeCheck) then
         TargetUnregisterSpells()
         return
@@ -699,6 +708,51 @@ local function RebuildPollSet()
     SchedulePoll()
 end
 
+local pendingTargetTargetRange = false
+local pendingFocusTargetRange = false
+
+local function RunPendingTargetTargetRange()
+    if not pendingTargetTargetRange then
+        return
+    end
+    pendingTargetTargetRange = false
+    EvaluateIfActive("targettarget", false)
+    RebuildPollSet()
+end
+
+local function RunPendingFocusTargetRange()
+    if not pendingFocusTargetRange then
+        return
+    end
+    pendingFocusTargetRange = false
+    EvaluateIfActive("focustarget", false)
+    RebuildPollSet()
+end
+
+local function ScheduleTargetTargetRange()
+    if not activeUnits.targettarget or pendingTargetTargetRange then
+        return
+    end
+    if C_Timer and C_Timer.After then
+        pendingTargetTargetRange = true
+        C_Timer.After(0, RunPendingTargetTargetRange)
+        return
+    end
+    EvaluateIfActive("targettarget", false)
+end
+
+local function ScheduleFocusTargetRange()
+    if not activeUnits.focustarget or pendingFocusTargetRange then
+        return
+    end
+    if C_Timer and C_Timer.After then
+        pendingFocusTargetRange = true
+        C_Timer.After(0, RunPendingFocusTargetRange)
+        return
+    end
+    EvaluateIfActive("focustarget", false)
+end
+
 local function RangeFrameOnShow(self)
     MarkPollSetDirty()
     EvaluateIfActive(self._msufRangeUnit or self.unit, true)
@@ -760,19 +814,21 @@ local function DriverOnEvent(_, event, unit, a, b, c)
     end
 
     if event == "PLAYER_TARGET_CHANGED" then
-        EvaluateTargetUnits(true)
+        EvaluateTargetUnits(false)
+        ScheduleTargetTargetRange()
     elseif event == "PLAYER_FOCUS_CHANGED" then
-        EvaluateFocusUnits(true)
+        EvaluateFocusUnits(false)
+        ScheduleFocusTargetRange()
     elseif event == "UNIT_PET" then
-        if unit == "player" then EvaluateIfActive("pet", true) end
+        if unit == "player" then EvaluateIfActive("pet", false) end
     elseif event == "UNIT_TARGET" then
         if unit == "target" then
-            EvaluateIfActive("targettarget", true)
+            ScheduleTargetTargetRange()
         elseif unit == "focus" then
-            EvaluateIfActive("focustarget", true)
+            ScheduleFocusTargetRange()
         end
     elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
-        EvaluateBossUnits(true)
+        EvaluateBossUnits(false)
     elseif event == "PLAYER_ENTERING_WORLD"
         or event == "PLAYER_REGEN_DISABLED"
         or event == "PLAYER_REGEN_ENABLED" then
@@ -942,6 +998,9 @@ function Range.RegisterFrame(frame, spec)
     HookFrameVisibility(frame)
     local unit = frame.unit
     if frame._msufRangeUnit and frame._msufRangeUnit ~= unit and activeUnits[frame._msufRangeUnit] then
+        if frame._msufRangeUnit == "target" then
+            MarkTargetSpellSyncDirty()
+        end
         activeUnits[frame._msufRangeUnit] = nil
         activeCount = activeCount - 1
         MarkPollSetDirty()
@@ -956,6 +1015,9 @@ function Range.RegisterFrame(frame, spec)
     frame._msufRangeOutAlpha = active and (tonumber(range.alpha) or 1) or nil
     if not active then
         if activeUnits[unit] then
+            if unit == "target" then
+                MarkTargetSpellSyncDirty()
+            end
             activeUnits[unit] = nil
             activeCount = activeCount - 1
             MarkPollSetDirty()
@@ -968,10 +1030,15 @@ function Range.RegisterFrame(frame, spec)
     if not activeUnits[unit] then
         activeUnits[unit] = true
         activeCount = activeCount + 1
+        if unit == "target" then
+            MarkTargetSpellSyncDirty()
+        end
         MarkPollSetDirty()
     end
     if not spellsBuilt then
         RebuildSpells()
+    elseif unit == "target" and targetSpellSyncDirty == true then
+        SyncTargetSpells()
     end
     EvaluateUnit(unit, true)
     SyncRuntime()
@@ -981,6 +1048,9 @@ end
 function Range.UnregisterFrame(frame)
     local unit = frame and (frame._msufRangeUnit or frame.unit)
     if unit and activeUnits[unit] then
+        if unit == "target" then
+            MarkTargetSpellSyncDirty()
+        end
         activeUnits[unit] = nil
         activeCount = activeCount - 1
         MarkPollSetDirty()

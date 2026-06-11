@@ -306,7 +306,7 @@ local DEFAULT_SHARED = {
 }
 
 local DEFAULT_GENERAL = {
-    aurasCooldownTextUseBuckets = true,
+    aurasCooldownTextUseBuckets = false,
     aurasCooldownTextSafeColor = { 1.00, 1.00, 1.00 },
     aurasCooldownTextWarningColor = { 1.00, 0.85, 0.20 },
     aurasCooldownTextUrgentColor = { 1.00, 0.55, 0.10 },
@@ -547,6 +547,75 @@ end
 local function PublicAuraPresetMeta()
     local af = AuraFilter()
     return (af and (af.PUBLIC_AURA_PRESET_META or af.DECLASSIFIED_META)) or FALLBACK_PUBLIC_AURA_META
+end
+
+local _gfBlacklistHashCache = setmetatable({}, { __mode = "k" })
+
+local function GroupBlacklistSignature(cats)
+    if type(cats) ~= "table" then return nil end
+    local keys, count = nil, 0
+    for key, enabled in pairs(cats) do
+        if enabled == true and type(key) == "string" and key ~= "" then
+            if not keys then keys = {} end
+            count = count + 1
+            keys[count] = key
+        end
+    end
+    if count == 0 then return nil end
+    table_sort(keys)
+    return table.concat(keys, "\001")
+end
+
+local function BuildGroupBlacklistHash(group)
+    if type(group) ~= "table" then return nil end
+    local cats = group.blacklistCats
+    local signature = GroupBlacklistSignature(cats)
+    if not signature then return nil end
+
+    local cached = _gfBlacklistHashCache[group]
+    if cached and cached.signature == signature then return cached.hash end
+
+    local presets = PublicAuraPresetSpells()
+    local hash, n = nil, 0
+    for catKey, enabled in pairs(cats) do
+        if enabled == true then
+            local spells = presets and presets[catKey]
+            if type(spells) == "table" then
+                for spellID, value in pairs(spells) do
+                    if value == true then
+                        spellID = tonumber(spellID)
+                        if spellID then
+                            if not hash then hash = {} end
+                            hash[math_floor(spellID + 0.5)] = true
+                            n = n + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if n == 0 then
+        _gfBlacklistHashCache[group] = nil
+        return nil
+    end
+
+    _gfBlacklistHashCache[group] = { signature = signature, hash = hash }
+    return hash
+end
+
+local GF_AURA_FILTER = _G.MSUF_GF_AuraFilter
+if type(GF_AURA_FILTER) ~= "table" then
+    GF_AURA_FILTER = {}
+    _G.MSUF_GF_AuraFilter = GF_AURA_FILTER
+end
+GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS = GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS or FALLBACK_PUBLIC_AURA_SPELLS
+GF_AURA_FILTER.PUBLIC_AURA_PRESET_META = GF_AURA_FILTER.PUBLIC_AURA_PRESET_META or FALLBACK_PUBLIC_AURA_META
+GF_AURA_FILTER.DECLASSIFIED_SPELLS = GF_AURA_FILTER.DECLASSIFIED_SPELLS or GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS
+GF_AURA_FILTER.DECLASSIFIED_META = GF_AURA_FILTER.DECLASSIFIED_META or GF_AURA_FILTER.PUBLIC_AURA_PRESET_META
+GF_AURA_FILTER.BuildBlacklistHash = GF_AURA_FILTER.BuildBlacklistHash or BuildGroupBlacklistHash
+GF_AURA_FILTER.InvalidateBlacklistHash = GF_AURA_FILTER.InvalidateBlacklistHash or function(group)
+    if type(group) == "table" then _gfBlacklistHashCache[group] = nil end
 end
 
 local function GroupConf(kind)

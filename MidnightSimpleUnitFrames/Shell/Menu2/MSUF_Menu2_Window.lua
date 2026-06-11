@@ -110,25 +110,6 @@ end
 
 M.ShowPreviewWarning = ShowPreviewWarning
 
-local function WarmupAssistantPerformance(reason)
-    local assistant = (MSUF and MSUF.Assistant) or (M and M.Assistant)
-    if not (assistant and type(assistant.WarmupPerformanceIndexes) == "function") then return false end
-    return assistant.WarmupPerformanceIndexes(reason or "menu")
-end
-
-local function ScheduleAssistantPerformanceWarmup(reason)
-    local function RunWarmup()
-        WarmupAssistantPerformance(reason)
-    end
-    if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-        _G.C_Timer.After(0.2, RunWarmup)
-    elseif type(_G.MSUF_ScheduleOnce) == "function" then
-        _G.MSUF_ScheduleOnce("MSUF_ASSISTANT_PERFORMANCE_WARMUP", RunWarmup)
-    else
-        RunWarmup()
-    end
-end
-
 do
     local loginWarningFrame = CreateFrame("Frame")
     loginWarningFrame:RegisterEvent("PLAYER_LOGIN")
@@ -1387,7 +1368,6 @@ local function BuildWindow()
             return
         end
         ShowPreviewWarning("menu")
-        ScheduleAssistantPerformanceWarmup("menu.show")
         ApplyMenuFramePriority(self)
         self._msuf2Minimized = nil
         if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end

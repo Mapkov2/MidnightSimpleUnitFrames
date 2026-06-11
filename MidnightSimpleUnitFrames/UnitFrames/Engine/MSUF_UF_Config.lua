@@ -193,6 +193,76 @@ local function ScopedValue(conf, general, key, fallback)
     return fallback
 end
 
+local BORDER_PRIORITY_DEFAULTS = { "dispel", "aggro", "purge", "bossTarget" }
+local BORDER_PRIORITY_ALLOWED = {
+    dispel = true,
+    aggro = true,
+    purge = true,
+    bossTarget = true,
+}
+local BORDER_PRIORITY_ALIAS = {
+    Dispel = "dispel",
+    DISPEL = "dispel",
+    Magic = "dispel",
+    MAGIC = "dispel",
+    Curse = "dispel",
+    CURSE = "dispel",
+    Disease = "dispel",
+    DISEASE = "dispel",
+    Poison = "dispel",
+    POISON = "dispel",
+    Bleed = "dispel",
+    BLEED = "dispel",
+    Aggro = "aggro",
+    AGGRO = "aggro",
+    Purge = "purge",
+    PURGE = "purge",
+    BossTarget = "bossTarget",
+    Boss_Target = "bossTarget",
+    ["Boss Target"] = "bossTarget",
+    ["boss target"] = "bossTarget",
+    boss_target = "bossTarget",
+    bosstarget = "bossTarget",
+    BOSS_TARGET = "bossTarget",
+}
+
+local function ScopedAliasValue(conf, general, key, legacyKey, fallback)
+    if conf and conf.hlOverride == true then
+        if conf[key] ~= nil then return conf[key] end
+        if legacyKey and conf[legacyKey] ~= nil then return conf[legacyKey] end
+    end
+    if general then
+        if general[key] ~= nil then return general[key] end
+        if legacyKey and general[legacyKey] ~= nil then return general[legacyKey] end
+    end
+    return fallback
+end
+
+local function CompileBorderPriority(conf, general)
+    local enabled = ScopedAliasValue(conf, general, "hlPrioEnabled", "highlightPrioEnabled", false)
+    enabled = enabled == true or enabled == 1 or enabled == "1"
+    local raw = ScopedAliasValue(conf, general, "hlPrioOrder", "highlightPrioOrder", nil)
+    local order, used = {}, {}
+    if type(raw) == "table" then
+        for i = 1, #raw do
+            local key = raw[i]
+            if type(key) == "string" then key = BORDER_PRIORITY_ALIAS[key] or key end
+            if BORDER_PRIORITY_ALLOWED[key] and not used[key] then
+                order[#order + 1] = key
+                used[key] = true
+            end
+        end
+    end
+    for i = 1, #BORDER_PRIORITY_DEFAULTS do
+        local key = BORDER_PRIORITY_DEFAULTS[i]
+        if not used[key] then
+            order[#order + 1] = key
+            used[key] = true
+        end
+    end
+    return enabled, order
+end
+
 local GRADIENT_DIR_KEYS = {
     LEFT = "gradientDirLeft",
     RIGHT = "gradientDirRight",
@@ -1598,6 +1668,7 @@ local function ResolveUnit(db, unit, out)
     out.border.bossTargetR = Number(type(bossColor) == "table" and bossColor[1], 1.00)
     out.border.bossTargetG = Number(type(bossColor) == "table" and bossColor[2], 0.82)
     out.border.bossTargetB = Number(type(bossColor) == "table" and bossColor[3], 0.00)
+    out.border.prioEnabled, out.border.prioOrder = CompileBorderPriority(conf, general)
     local legacyDispelBorder = general.dispelBorderEnabled == true or general.hlDispelBorderEnabled == true
     if general.dispelBorderEnabled == nil and general.hlDispelBorderEnabled == nil then
         legacyDispelBorder = true

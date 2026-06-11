@@ -36,11 +36,11 @@ Metadata.MASK_COLOR = BuildNameSet({
     "Borders",
 })
 Metadata.MASK_BORDER = BuildNameSet({ "Borders", "GroupVisuals" })
-Metadata.MASK_AURAS = BuildNameSet({})
+Metadata.MASK_AURAS = BuildNameSet({ "Auras" })
 Metadata.MASK_VISUAL = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
     "StatusIndicators", "Prediction", "Alpha", "GroupStatusRuntime", "GroupRangeFade",
-    "GroupVisuals", "Borders",
+    "GroupVisuals", "Borders", "Auras",
 })
 Metadata.MASK_RUNTIME = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",

@@ -12,6 +12,7 @@ local tostring = tostring
 local tonumber = tonumber
 local select = select
 local CreateFrame = CreateFrame
+local C_Timer = C_Timer
 local pairs = pairs
 local InCombatLockdown = InCombatLockdown
 local math_floor = math.floor
@@ -466,18 +467,61 @@ local function ForceUnits(reason, ...)
     end
 end
 
+local pendingTargetTargetUpdate = false
+local pendingFocusTargetUpdate = false
+
+local function RunPendingTargetTargetUpdate()
+    if not pendingTargetTargetUpdate then
+        return
+    end
+    pendingTargetTargetUpdate = false
+    UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
+end
+
+local function RunPendingFocusTargetUpdate()
+    if not pendingFocusTargetUpdate then
+        return
+    end
+    pendingFocusTargetUpdate = false
+    UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+end
+
+local function ScheduleTargetTargetUpdate()
+    if pendingTargetTargetUpdate then
+        return
+    end
+    if C_Timer and C_Timer.After then
+        pendingTargetTargetUpdate = true
+        C_Timer.After(0, RunPendingTargetTargetUpdate)
+        return
+    end
+    UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
+end
+
+local function ScheduleFocusTargetUpdate()
+    if pendingFocusTargetUpdate then
+        return
+    end
+    if C_Timer and C_Timer.After then
+        pendingFocusTargetUpdate = true
+        C_Timer.After(0, RunPendingFocusTargetUpdate)
+        return
+    end
+    UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+end
+
 local function DriverOnEvent(self, event, unit)
     if event == "PLAYER_TARGET_CHANGED" then
         UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY")
-        UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
+        ScheduleTargetTargetUpdate()
     elseif event == "PLAYER_FOCUS_CHANGED" then
         UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY")
-        UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+        ScheduleFocusTargetUpdate()
     elseif event == "UNIT_TARGET" then
         if unit == "target" then
-            UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
+            ScheduleTargetTargetUpdate()
         elseif unit == "focus" then
-            UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+            ScheduleFocusTargetUpdate()
         end
     elseif event == "UNIT_PET" then
         if unit == "player" then
