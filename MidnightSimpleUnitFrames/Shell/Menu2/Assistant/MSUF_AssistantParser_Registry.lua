@@ -1407,7 +1407,15 @@ local function ParseScopedFontTextColorShortcut(text)
         "color text by mana", "text color by mana", "color power text", "power color text",
         "mana color text", "resource color text", "power text color", "mana text color",
         "resource text color", "power text by type", "power text by power",
-    }) then
+    }) or (
+        ContainsAny(text, {
+            "power text", "mana text", "resource text", "power value", "mana value", "resource value",
+        }) and ContainsAny(text, {
+            "power color", "power colour", "power colors", "power colours",
+            "resource color", "resource colour", "mana color", "mana colour",
+            "font color",
+        })
+    ) then
         spec = { key = "colorPowerTextByType", on = "RESOURCE", label = "Power Text Color Mode" }
     elseif ContainsAny(text, {
         "color text by health", "text color by health", "color health text", "health color text",
@@ -1446,6 +1454,9 @@ local function ParseScopedFontTextColorShortcut(text)
         changes[#changes + 1] = { setting = override, value = true }
     end
     changes[#changes + 1] = { setting = setting, value = value }
+    if scope ~= "shared" and spec.key == "colorPowerTextByType" and override and #changes == 1 then
+        changes[#changes + 1] = { setting = override, value = true }
+    end
     return {
         kind = "changes",
         changes = changes,
@@ -2266,6 +2277,20 @@ P.ParseMiscRegistryShortcut = function(text, raw)
     elseif ContainsAny(text, { "castbar fill right to left", "cast bar fill right to left", "castbar fills right to left", "cast bar fills right to left", "castbar direction right to left", "cast bar direction right to left" }) then
         key = "general.castbarFillDirection"
         forcedValue = "RTL"
+    elseif ContainsAny(text, {
+        "castbar fill backwards", "cast bar fill backwards", "castbar fills backwards", "cast bar fills backwards",
+        "castbar fill backward", "cast bar fill backward", "castbar reverse fill", "cast bar reverse fill",
+        "reverse castbar fill", "reverse cast bar fill", "castbar reverse direction", "cast bar reverse direction",
+    }) then
+        key = "general.castbarFillDirection"
+        forcedValue = "RTL"
+    elseif ContainsAny(text, {
+        "castbar fill normal", "cast bar fill normal", "castbar normal fill", "cast bar normal fill",
+        "castbar normal direction", "cast bar normal direction", "castbar fill forward", "cast bar fill forward",
+        "castbar forward fill", "cast bar forward fill",
+    }) then
+        key = "general.castbarFillDirection"
+        forcedValue = "LTR"
     elseif ContainsAny(text, { "nameplate melee spell id", "melee nameplate spell id", "melee range spell id", "crosshair melee spell id", "crosshair spell id" }) then
         key = "gameplay.nameplateMeleeSpellID"
     elseif ContainsAny(text, { "snap", "snapping", "edge snap", "window snap", "menu snap", "snapping feature", "snap feature" }) then
@@ -3273,6 +3298,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
 end
 
 local function ParseRegistryAlias(text, raw)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(raw or text) then return nil end
     local repeated = ParseRepeatedRegistryShortcut(text, raw)
     if repeated then return repeated end
     local groupAvailability = ParseGroupAvailabilityIntent(text)

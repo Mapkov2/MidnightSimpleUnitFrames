@@ -774,6 +774,7 @@ local function TextSlotMoveValueIntent(text)
 end
 
 function A._ParseTextSlotValueMoveShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
     if not TextSlotMoveValueIntent(text) then return nil end
@@ -865,6 +866,7 @@ function A._ParseTextSlotValueMoveShortcut(text)
 end
 
 function A._ParseTextSlotDropdownShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
     if ContainsAny(text, { "dispel overlay", "debuff overlay", "current health only", "on current health only", "on health only" }) then return nil end
@@ -1027,6 +1029,7 @@ function A._ParseTextSlotDropdownShortcut(text)
 end
 
 function A._ParseTextSlotOffsetShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if not ContainsAny(text, { "move", "nudge", "shift", "offset", "position", "pos", "x", "y", "up", "down" }) then return nil end
     local tab = TextSelectorTab(text)

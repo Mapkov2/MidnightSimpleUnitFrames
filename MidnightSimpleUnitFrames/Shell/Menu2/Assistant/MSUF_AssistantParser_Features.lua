@@ -396,6 +396,88 @@ function A._ParseClassPowerDisplayStyleShortcut(text)
     }
 end
 
+function A._ParseClassPowerFillDirectionShortcut(text)
+    if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "detached power", "alternative mana", "alt mana" }) then return nil end
+    if not ContainsAny(text, {
+        "fill", "direction", "reverse", "reversed", "backwards", "backward",
+        "right to left", "left to right", "normal", "forward",
+    }) then return nil end
+
+    local value
+    local boolValue = DetectBoolean(text)
+    if boolValue == false and ContainsAny(text, { "reverse", "reversed", "backwards", "backward", "right to left" }) then
+        value = false
+    elseif ContainsAny(text, {
+        "right to left", "fill right", "fill backwards", "fill backward",
+        "fills backwards", "fills backward", "reverse fill", "reverse direction",
+        "fill reverse", "fill reversed", "other way",
+    }) then
+        value = true
+    elseif ContainsAny(text, {
+        "left to right", "fill left", "normal direction", "normal fill",
+        "fill normal", "forward fill", "fill forward", "same direction",
+    }) then
+        value = false
+    elseif ContainsAny(text, { "reverse", "reversed" }) then
+        value = boolValue
+        if value == nil then value = true end
+    end
+    if value == nil then return nil end
+
+    local setting = ClassPowerSetting("bars.classPowerFillReverse")
+    return setting and {
+        kind = "changes",
+        changes = { { setting = setting, value = value } },
+        label = setting.label or "Class Resource Reverse Fill",
+        summary = "Changes the Class Resource fill direction.",
+    } or nil
+end
+
+P.ParseGroupFrameFillDirectionShortcut = function(text)
+    local scopes = DetectGroups(text)
+    if #scopes == 0 then return nil end
+    if not ContainsAny(text, {
+        "fill", "direction", "reverse", "reversed", "backwards", "backward",
+        "right to left", "left to right", "normal", "forward",
+    }) then return nil end
+
+    local value
+    local boolValue = DetectBoolean(text)
+    if boolValue == false and ContainsAny(text, { "reverse", "reversed", "backwards", "backward", "right to left" }) then
+        value = false
+    elseif ContainsAny(text, {
+        "right to left", "fill right", "fill backwards", "fill backward",
+        "fills backwards", "fills backward", "reverse fill", "reverse direction",
+        "fill reverse", "fill reversed", "other way",
+    }) then
+        value = true
+    elseif ContainsAny(text, {
+        "left to right", "fill left", "normal direction", "normal fill",
+        "fill normal", "forward fill", "fill forward", "same direction",
+    }) then
+        value = false
+    elseif ContainsAny(text, { "reverse", "reversed" }) then
+        value = boolValue
+        if value == nil then value = true end
+    end
+    if value == nil then return nil end
+
+    local changes = {}
+    for i = 1, #scopes do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(scopes[i]) .. ".reverseFill")
+        if setting then changes[#changes + 1] = { setting = setting, value = value } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Group Frame Reverse Fill",
+        bulkSafe = #changes > 1,
+        summary = "Changes the Group Frame health fill direction.",
+    }
+end
+
 function A._ParseClassPowerTextSizeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
     if ContainsAny(text, { "move", "nudge", "shift", "offset", "position" }) then return nil end
@@ -1170,10 +1252,17 @@ local function ParseDiagnostic(text)
         "diagnose", "diagnostic", "troubleshoot", "why", "wieso", "warum",
         "not showing", "not visible", "not appearing", "not displayed", "not there",
         "doesnt show", "does not show", "doesnt appear", "does not appear",
-        "cant see", "cannot see", "missing", "hidden", "invisible",
-        "disappeared", "gone", "vanished", "broken",
-        "nicht sichtbar", "zeigt nicht",
+        "cant see", "can't see", "cannot see", "can not see", "missing", "hidden", "invisible",
+        "disappeared", "disappear", "gone", "vanished", "broken", "not working", "doesnt work",
+        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
+        "nicht sichtbar", "zeigt nicht", "verschwunden", "kaputt", "haengt",
     }) then return nil end
+    if ContainsAny(text, {
+        "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
+        "broken profile mapping", "broken profile mappings", "broken spec mapping", "broken spec mappings",
+    }) and ContainsAny(text, { "fix", "repair", "clear", "remove", "delete", "loeschen", "reparieren", "beheben" }) then
+        return nil
+    end
     local gameplayFeature
     if ContainsAny(text, { "combat timer", "kampf timer", "kampftimer" }) then
         gameplayFeature = "combatTimer"
@@ -1210,7 +1299,9 @@ local function ParseDiagnostic(text)
             summary = "Inspects profile storage, active profile, spec mappings, staging fields, and helper availability.",
         } or nil
     end
-    if ContainsAny(text, { "class resource", "class resources", "class power", "class bar", "resource bar" }) then
+    if ContainsAny(text, CLASS_POWER_TERMS)
+        or ContainsAny(text, { "class resource", "class resources", "class power", "class bar", "resource bar", "combo point", "combo points", "holy power", "soul shard", "soul shards", "rune", "runes" })
+    then
         local action = Registry and Registry:GetAction("diagnose_class_power_status")
         return action and {
             kind = "action",
@@ -1231,6 +1322,17 @@ local function ParseDiagnostic(text)
             label = "Diagnose " .. tostring((A.UnitLabels or {})[unit] or unit) .. " castbar",
             summary = "Inspects current castbar settings and suggests the next safe fix.",
         } or nil
+    end
+    if ContainsAny(text, { "detached power", "detached power bar", "power bar", "powerbar", "resource bar" }) then
+        local units = DetectUnits(text)
+        if #units == 0 then
+            return {
+                kind = "answer",
+                status = "info",
+                text = "Tell me which Unit Frame power bar to diagnose, for example: 'why is target detached power bar gone' or 'diagnose player power bar'.",
+                summary = "Asks for the missing unit before diagnosing a detached power bar.",
+            }
+        end
     end
     local groups = DetectGroups(text)
     if #groups > 0 or ContainsAny(text, { "group frames", "gruppenframes", "party frames", "raid frames", "mythic raid frames" }) then
@@ -1257,7 +1359,7 @@ local function ParseDiagnostic(text)
             summary = "Inspects current unit-frame settings and suggests the next safe fix.",
         } or nil
     end
-    if ContainsAny(text, { "dashboard", "assistant setup", "menu setup", "navigation", "page stack", "workflow", "setup checklist", "guided setup" })
+    if ContainsAny(text, { "dashboard", "assistant", "menu", "menu2", "assistant setup", "menu setup", "navigation", "page stack", "workflow", "setup checklist", "guided setup" })
         or text == "diagnose setup"
         or text == "diagnostic setup"
         or text == "troubleshoot setup"
@@ -1293,6 +1395,14 @@ local function HasScopedHelpIntent(text, page)
         "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
         "commands", "command examples",
     }) then
+        return true
+    end
+    if page and ContainsAny(text, { "how", "how do", "how can", "how to", "where", "where do", "where can", "where is" })
+        and ContainsAny(text, {
+            "change", "set", "make", "move", "hide", "show", "turn on", "turn off", "enable", "disable",
+            "configure", "adjust", "bigger", "larger", "smaller", "wider", "taller", "lock", "unlock",
+        })
+    then
         return true
     end
     return page == "profiles" and ContainsAny(text, { "how", "how do", "how to", "why" })
@@ -2407,6 +2517,8 @@ local function ParseCastbarDirectionClarification(text)
     if not ContainsAny(text, {
         "other direction", "opposite direction", "opposite fill direction", "fill in the other direction",
         "fill the other direction", "other way", "opposite way", "reverse direction", "fill opposite", "opposite fill",
+        "filling opposite", "fills opposite", "normal direction", "normal fill", "same direction", "same fill",
+        "not opposite", "no opposite", "stop opposite", "stop filling opposite",
     }) then return nil end
 
     local opposite = Registry and Registry:GetSetting("general.castbarOpositeDirectionTarget")
@@ -2417,6 +2529,15 @@ local function ParseCastbarDirectionClarification(text)
         "use target opposite", "use target opposite direction", "fill opposite", "opposite fill",
     }) then
         value = true
+    end
+    if value == nil and ContainsAny(text, {
+        "normal direction", "normal fill", "same direction", "same fill",
+        "not opposite", "no opposite", "stop opposite", "stop filling opposite",
+    }) then
+        value = false
+    end
+    if value == nil and ContainsAny(text, { "stop", "clear", "remove" }) and ContainsAny(text, { "opposite", "other way", "reverse" }) then
+        value = false
     end
     if value ~= nil then
         return {
@@ -2532,6 +2653,86 @@ local function ParseGuidedSetupFollowup(text, ctx)
     } or nil
 end
 
+function P.ParseProfileBackupImportQuestion(text)
+    if not ContainsAny(text, {
+        "backup before import", "backup before importing", "backup before profile import", "backup before importing profile",
+        "make backup before import", "make a backup before import", "make backup before importing", "make a backup before importing",
+    }) then return nil end
+    return {
+        kind = "answer",
+        status = "info",
+        text = table.concat({
+            "Before importing a profile, export your current profile first.",
+            "Type 'backup before importing profile' to create a copyable full-profile backup string. Then paste or import the new profile string from the Profiles page.",
+        }, "\n"),
+        summary = "Explains the safe profile backup-before-import workflow without changing settings.",
+    }
+end
+
+function P.ParseCustomAnchorLookupQuestion(text)
+    if not ContainsAny(text, { "custom anchor", "custom anchor picker", "anchor picker", "anchor settings" }) then return nil end
+    return {
+        kind = "answer",
+        status = "info",
+        text = "The custom anchor picker needs a concrete MSUF frame or the current Unit/Group page. Try: open player custom anchor picker, open target custom anchor picker, open raid custom anchor picker, or set target custom anchor to cooldownmanager.",
+        summary = "Explains custom anchor picker usage without guessing a frame.",
+    }
+end
+
+function P.ParseGroupScaleLookupQuestion(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff" }) then return nil end
+    if not ContainsAny(text, {
+        "scale", "scaling", "frame scale", "raid scale", "party scale", "mythic raid scale",
+        "players", "raider", "raiders", "people", "members", "player count", "raid size",
+        "full raid", "when full", "large raid", "small raid", "five man", "5 man", "5m",
+    }) then return nil end
+    if type(P.GroupScaleBreakpointAttrForText) ~= "function" then return nil end
+    local attr, playerCount = P.GroupScaleBreakpointAttrForText(text)
+    if not attr then return nil end
+    local groups = DetectGroups(text)
+    if #groups == 0 and type(P.GroupScopesOrCurrentPage) == "function" then
+        groups = P.GroupScopesOrCurrentPage(text)
+    end
+    if #groups == 0 then return nil end
+    local scope = groups[1]
+    local label = type(P.FrameResizeGroupLabel) == "function" and P.FrameResizeGroupLabel(scope) or tostring((A.UnitLabels or {})[scope] or scope or "Group")
+    local breakpoint = ({ scaleAt10 = "1-10 players", scaleAt20 = "11-20 players", scaleAt25 = "21-25 players", scaleOver25 = "26+ players" })[attr] or "that player count"
+    local targetText = playerCount
+        and ("at " .. tostring(playerCount) .. " players (" .. tostring(breakpoint) .. " breakpoint)")
+        or ("for " .. tostring(breakpoint))
+    local scopeText = scope == "mythicraid" and "mythic raid" or (scope or "raid")
+    return {
+        kind = "answer",
+        status = "info",
+        text = table.concat({
+            "Group frame scaling breakpoints",
+            "I can change " .. tostring(label) .. " scaling " .. targetText .. " with the Group Layout scaling sliders.",
+            "Examples: set " .. tostring(scopeText) .. " scale for 20 players to 80; make " .. tostring(scopeText) .. " frames smaller when 20 people; increase " .. tostring(scopeText) .. " scale for 20m by 5.",
+        }, "\n"),
+        summary = "Explains group player-count scaling without changing settings.",
+    }
+end
+
+local function ParseLookupQuestion(text, raw)
+    if not (P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text)) then return nil end
+    return ParseDiagnostic(text)
+        or P.ParseProfileBackupImportQuestion(text)
+        or P.ParseCustomAnchorLookupQuestion(text)
+        or P.ParseGroupScaleLookupQuestion(text)
+        or ParseGuidedSetup(text)
+        or ParseScopedHelp(text)
+        or ParseDashboardPanelAction(text)
+        or ParseOpen(text, raw)
+        or ParseSupportWorkflow(text)
+        or ParseMenuWindowAction(text)
+        or {
+            kind = "unknown",
+            status = "info",
+            text = "I treated that as a question, so I did not change settings. Ask from the Assistant Dashboard or name the frame/page and control, for example 'where can I change target power text'.",
+            summary = "Lookup question was not treated as a setting change.",
+        }
+end
+
 P.CLASS_POWER_DETAIL_TERMS = CLASS_POWER_DETAIL_TERMS
 P.ParseClassPowerRootToggle = ParseClassPowerRootToggle
 P.ParseFontColorAction = ParseFontColorAction
@@ -2543,6 +2744,7 @@ P.ClassPowerColorTokenForText = ClassPowerColorTokenForText
 P.ParseColorAction = ParseColorAction
 P.ParseDiagnostic = ParseDiagnostic
 P.ParseScopedHelp = ParseScopedHelp
+P.ParseLookupQuestion = ParseLookupQuestion
 P.SupportLinkForText = SupportLinkForText
 P.ParseSupportWorkflow = ParseSupportWorkflow
 P.GlobalScalePresetForText = GlobalScalePresetForText

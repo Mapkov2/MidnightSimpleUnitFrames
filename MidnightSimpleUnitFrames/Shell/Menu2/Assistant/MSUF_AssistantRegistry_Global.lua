@@ -771,12 +771,14 @@ RegisterGeneralBoolean("castbarUnifiedDirection", "unifiedDirection", "Unified C
 }, { category = "Global / Castbar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_UNIFIED_DIRECTION" })
 RegisterGeneralBoolean("castbarOpositeDirectionTarget", "oppositeTargetDirection", "Opposite Fill Direction For Target", false, {
     "opposite target castbar direction", "target opposite fill direction", "target castbar opposite direction",
+    "target castbar normal direction", "target castbar same direction", "target castbar not opposite",
 }, { category = "Global / Castbar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_TARGET_DIRECTION" })
 RegisterGeneralNumberSetting("castbarShakeStrength", "shakeStrength", "Castbar Shake Strength", 8, 0, 30, {
     "castbar shake strength", "shake strength", "interrupt shake strength",
 }, { category = "Global / Castbar", frameType = "castbarGlobal", apply = ApplyCastbar, reason = "MSUF_ASSISTANT_CASTBAR_SHAKE_STRENGTH" })
 RegisterGeneralEnum("castbarFillDirection", "fillDirection", "Castbar Fill Direction", "RTL", { "RTL", "LTR" }, {
     "castbar fill direction", "fill direction", "cast direction", "zauberleiste fuellrichtung",
+    "castbar reverse fill", "castbar fill backwards", "castbar fill normal", "castbar normal direction",
 }, {
     category = "Global / Castbar",
     frameType = "castbarGlobal",
@@ -786,10 +788,16 @@ RegisterGeneralEnum("castbarFillDirection", "fillDirection", "Castbar Fill Direc
         left = "RTL",
         rtl = "RTL",
         righttoleft = "RTL",
+        backwards = "RTL",
+        backward = "RTL",
+        reverse = "RTL",
+        reversed = "RTL",
         links = "RTL",
         right = "LTR",
         ltr = "LTR",
         lefttoright = "LTR",
+        normal = "LTR",
+        forward = "LTR",
         rechts = "LTR",
     },
 })

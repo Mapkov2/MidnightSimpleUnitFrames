@@ -208,35 +208,78 @@ local BuildFollowup = P.BuildFollowup
 local BuildBooleanCorrection = P.BuildBooleanCorrection
 local ParseSetting = P.ParseSetting
 
-P.AURA_OUT_OF_SCOPE_TERMS = P.AURA_OUT_OF_SCOPE_TERMS or {
-    "aura", "auras", "auren",
-    "group aura", "group auras", "gruppen aura", "gruppenauren",
-}
-P.AURA_BUFF_TERMS = P.AURA_BUFF_TERMS or { "buff", "buffs", "debuff", "debuffs" }
-P.AURA_BUFF_CONTEXT_TERMS = P.AURA_BUFF_CONTEXT_TERMS or {
-    "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
-    "hidden", "hide", "show", "open", "help", "why", "where", "settings",
-    "turn", "turn on", "turn off", "on", "off", "enable", "disable", "enabled", "disabled",
-    "set", "change", "make", "size", "count", "max", "icon", "icons", "per row", "growth",
-    "own", "mine", "only mine", "only player", "raid filter", "player filter",
-    "stack", "cooldown", "pandemic",
-}
+if not P.InitUnsupportedAuraCommand then
+    function P.InitUnsupportedAuraCommand()
+        if not P.AURA_OUT_OF_SCOPE_TERMS then
+            P.AURA_OUT_OF_SCOPE_TERMS = {
+                "aura", "auras", "auren",
+                "group aura", "group auras", "gruppen aura", "gruppenauren",
+            }
+        end
+        if not P.AURA_BUFF_TERMS then
+            P.AURA_BUFF_TERMS = { "buff", "buffs", "debuff", "debuffs" }
+        end
+        if not P.AURA_BUFF_CONTEXT_TERMS then
+            P.AURA_BUFF_CONTEXT_TERMS = {
+                "filter", "filters", "blacklist", "whitelist", "preset", "quick setup", "setup",
+                "hidden", "hide", "show", "open", "help", "why", "where", "settings",
+                "turn", "turn on", "turn off", "on", "off", "enable", "disable", "enabled", "disabled",
+                "set", "change", "make", "size", "count", "max", "icon", "icons", "per row", "growth",
+                "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen",
+                "own", "mine", "only mine", "only player", "raid filter", "player filter",
+                "stack", "cooldown", "pandemic",
+            }
+        end
+        if not P.AURA_COPY_COMMAND_TERMS then
+            P.AURA_COPY_COMMAND_TERMS = {
+                "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen",
+                "look like", "looks like", "same as", "the same as", "match", "mirror", "clone",
+            }
+        end
+        if not P.AURA_COPY_EXCLUDE_TERMS then
+            P.AURA_COPY_EXCLUDE_TERMS = {
+                "not aura", "not auras", "no aura", "no auras",
+                "without aura", "without auras", "except aura", "except auras",
+                "excluding aura", "excluding auras", "exclude aura", "exclude auras",
+                "but not aura", "but not auras", "aber keine aura", "aber keine auren",
+                "ohne aura", "ohne auras", "ohne auren",
+            }
+        end
+        if not P.AURA_DEBUFF_STRIPE_TERMS then
+            P.AURA_DEBUFF_STRIPE_TERMS = { "debuff stripe", "debuff stripes" }
+        end
+        if not P.AURA_DISPEL_OVERLAY_TERMS then
+            P.AURA_DISPEL_OVERLAY_TERMS = { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay" }
+        end
 
-P.ParseUnsupportedAuraCommand = P.ParseUnsupportedAuraCommand or function(text)
-    if ContainsAny(text, { "debuff stripe", "debuff stripes" }) then return nil end
-    if ContainsAny(text, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
-    if not ContainsAny(text, P.AURA_OUT_OF_SCOPE_TERMS)
-        and not (ContainsAny(text, P.AURA_BUFF_TERMS) and ContainsAny(text, P.AURA_BUFF_CONTEXT_TERMS))
-    then
-        return nil
+        if not P.CopyCommandExcludesAuras then
+            function P.CopyCommandExcludesAuras(text)
+                if not ContainsAny(text, P.AURA_COPY_COMMAND_TERMS) then return false end
+                return ContainsAny(text, P.AURA_COPY_EXCLUDE_TERMS)
+            end
+        end
+
+        if not P.ParseUnsupportedAuraCommand then
+            function P.ParseUnsupportedAuraCommand(text)
+                if P.CopyCommandExcludesAuras and P.CopyCommandExcludesAuras(text) then return nil end
+                if ContainsAny(text, P.AURA_DEBUFF_STRIPE_TERMS) then return nil end
+                if ContainsAny(text, P.AURA_DISPEL_OVERLAY_TERMS) then return nil end
+                if not ContainsAny(text, P.AURA_OUT_OF_SCOPE_TERMS)
+                    and not (ContainsAny(text, P.AURA_BUFF_TERMS) and ContainsAny(text, P.AURA_BUFF_CONTEXT_TERMS))
+                then
+                    return nil
+                end
+                return {
+                    kind = "unsupported",
+                    status = "info",
+                    summary = "Aura Assistant commands are intentionally disabled.",
+                    text = "Aura commands are intentionally disabled in the Assistant right now. I will not change Aura or Group Aura settings until that backend is cleared. Non-aura areas such as Unit Frames, Castbars, Group Frames, Profiles, and Gameplay still work.",
+                }
+            end
+        end
     end
-    return {
-        kind = "unsupported",
-        status = "info",
-        summary = "Aura Assistant commands are intentionally disabled.",
-        text = "Aura commands are intentionally disabled in the Assistant right now. I will not change Aura or Group Aura settings until that backend is cleared. Non-aura areas such as Unit Frames, Castbars, Group Frames, Profiles, and Gameplay still work.",
-    }
 end
+P.InitUnsupportedAuraCommand()
 
 function A._ParsePipelineWorkflow(normalized, raw, ctx)
     return ParseGuidedSetupFollowup(normalized, ctx)
@@ -245,12 +288,13 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or BuildBooleanCorrection(normalized, ctx)
         or (P.ParseBroadHumanAnchorTargetAnswer and P.ParseBroadHumanAnchorTargetAnswer(normalized, raw))
         or ParseWorkflowLifecycle(normalized)
+        or (P.ParseProfileRepairShortcut and P.ParseProfileRepairShortcut(normalized))
+        or ParseDiagnostic(normalized)
         or ParseGroupCopy(normalized)
         or P.ParseUnsupportedMixedCopy(normalized)
         or ParseCopy(normalized)
         or ParseProfileStagingState(normalized, raw)
         or ParseProfile(normalized, raw)
-        or ParseDiagnostic(normalized)
         or (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
         or ParseAuraQuickPreset(normalized)
@@ -261,6 +305,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or A._ParseClassPowerWidthModeShortcut(normalized)
         or A._ParseClassPowerColorShortcut(normalized, raw)
         or A._ParseClassPowerDisplayStyleShortcut(normalized)
+        or A._ParseClassPowerFillDirectionShortcut(normalized)
         or A._ParseClassPowerTextSizeShortcut(normalized)
         or (A._ParseClassPowerSeparatorShortcut and A._ParseClassPowerSeparatorShortcut(normalized))
         or A._ParseClassPowerSizeShortcut(normalized)
@@ -280,6 +325,9 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))
         or ParseGuidedSetup(normalized)
         or ParseScopedHelp(normalized)
+        or (P.ParseGroupGrowthDirectionShortcut and P.ParseGroupGrowthDirectionShortcut(normalized))
+        or (P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized))
+        or (P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized))
         or P.ParseMiscRegistryShortcut(normalized, raw)
         or ParseDashboardPanelAction(normalized)
         or ParseNavRailAction(normalized)
@@ -299,9 +347,13 @@ function A._ParsePipelineGeometry(normalized, raw)
         or A._ParseTextSlotOffsetShortcut(normalized)
         or (P.ParseHumanAnchorTarget and P.ParseHumanAnchorTarget(normalized, raw))
         or (P.ParseGroupScaleBreakpointShortcut and P.ParseGroupScaleBreakpointShortcut(normalized))
+        or (P.ParseGroupGrowthDirectionShortcut and P.ParseGroupGrowthDirectionShortcut(normalized))
+        or (P.ParseGroupFrameFillDirectionShortcut and P.ParseGroupFrameFillDirectionShortcut(normalized))
         or (P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized))
         or (P.ParseCastbarSizeShortcut and P.ParseCastbarSizeShortcut(normalized))
         or (P.ParseCastbarPlacementShortcut and P.ParseCastbarPlacementShortcut(normalized))
+        or (P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized))
+        or (P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized))
         or A._ParseTextFontSizeShortcut(normalized)
         or (P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized))
         or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
@@ -420,6 +472,12 @@ function A.Parse(text)
         "apply it again", "do it again", "repeat undo", "wiederholen", "erneut anwenden",
     }) then
         return { kind = "redo" }
+    end
+    local lookupQuestion = P.ParseLookupQuestion and P.ParseLookupQuestion(normalized, raw)
+    if lookupQuestion then
+        lookupQuestion.raw = raw
+        lookupQuestion.normalized = normalized
+        return lookupQuestion
     end
     local parsed = A._ParsePipelineWorkflow(normalized, raw, ctx)
     if A and type(A.MaybeYield) == "function" then A.MaybeYield() end

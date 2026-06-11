@@ -176,6 +176,7 @@ function A.RememberAppliedBundle(bundle)
     ctx.lastActionLabel = bundle and bundle.actionLabel or bundle and bundle.label
     ctx.lastActionMessage = bundle and bundle.actionMessage
     ctx.lastActionUndoable = bundle and bundle.undoAvailable == true or nil
+    ctx.lastActionArgs = bundle and bundle.actionArgs or nil
     ctx.lastValue = bundle and bundle.lastValue
     ctx.lastSetting = bundle and bundle.lastSetting
     ctx.lastUnit = bundle and bundle.lastUnit

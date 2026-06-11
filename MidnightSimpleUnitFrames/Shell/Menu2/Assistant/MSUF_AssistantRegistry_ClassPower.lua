@@ -274,7 +274,11 @@ RegisterBarsBoolean("classPowerShowText", "text", "Class Resource Text", false, 
 RegisterBarsBoolean("runeShowTime", "runeTime", "Rune Time", true, ClassPowerAliases("rune time", "rune timers", "rune timer text"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_RUNE_TIME",
 })
-RegisterBarsBoolean("classPowerFillReverse", "reverseFill", "Class Resource Reverse Fill", false, ClassPowerAliases("reverse fill", "fill right to left", "right to left fill"), {
+RegisterBarsBoolean("classPowerFillReverse", "reverseFill", "Class Resource Reverse Fill", false, ClassPowerAliases(
+    "reverse fill", "reverse direction", "fill right to left", "right to left fill",
+    "fill backwards", "backwards fill", "fill backward", "class resource fill normal",
+    "class resource normal direction", "class resource fill left to right"
+), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_REVERSE_FILL",
 })
 RegisterBarsBoolean("showEleMaelstrom", "elementalMaelstrom", "Elemental Maelstrom Bar", false, ClassPowerAliases("elemental maelstrom", "maelstrom bar", "ele maelstrom bar"), {

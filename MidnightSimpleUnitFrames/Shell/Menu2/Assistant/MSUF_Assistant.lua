@@ -19,7 +19,6 @@ local function Trim(text)
 end
 
 local function PerfNowMs()
-    if type(_G.debugprofilestop) == "function" then return _G.debugprofilestop() end
     local timer = type(_G.GetTimePreciseSec) == "function" and _G.GetTimePreciseSec or _G.GetTime
     if type(timer) == "function" then return (tonumber(timer()) or 0) * 1000 end
     return nil
@@ -755,12 +754,31 @@ local function BuildSerializable(changes)
             unit = setting and setting.unit,
             frameType = setting and setting.frameType,
             attribute = setting and setting.attribute,
+            oldValue = changes[i].oldValue,
             value = changes[i].newValue,
+            valueLabel = changes[i].valueLabel,
             relativeDelta = changes[i].relativeDelta,
             direction = changes[i].direction,
             textArea = changes[i].textArea,
             textSlot = changes[i].textSlot,
         }
+    end
+    return out
+end
+
+local function CopySerializableActionArgs(value, depth)
+    depth = (depth or 0) + 1
+    if depth > 4 then return nil end
+    local valueType = type(value)
+    if valueType == "string" or valueType == "number" or valueType == "boolean" then return value end
+    if valueType ~= "table" then return nil end
+    local out = {}
+    for k, v in pairs(value) do
+        local keyType = type(k)
+        if keyType == "string" or keyType == "number" then
+            local copied = CopySerializableActionArgs(v, depth)
+            if copied ~= nil then out[k] = copied end
+        end
     end
     return out
 end
@@ -856,7 +874,9 @@ local function ExecuteChanges(plan)
                         newValue = actualNewValue,
                         valueLabel = valueLabel,
                     }
+                    item.oldValue = oldValue
                     item.newValue = actualNewValue
+                    item.valueLabel = valueLabel
                     changedSettings[#changedSettings + 1] = setting
                     lastSetting = setting.key
                     lastUnit = setting.unit
@@ -948,11 +968,16 @@ local function ExecuteAction(plan)
         })
     end
     local text = ActionResponse(action, plan, message)
+    local actionArgs
+    if action.key == "copy_unit" or action.key == "copy_group" then
+        actionArgs = CopySerializableActionArgs(plan.args or {})
+    end
     A.RememberAppliedBundle({
         action = action.key,
         actionLabel = plan.label or action.label,
         actionMessage = text,
         undoAvailable = undoAvailable,
+        actionArgs = actionArgs,
         serializable = {},
     })
     if undoAvailable then text = AppendUndoFollowupHint(text) end
@@ -1007,7 +1032,7 @@ local function HandlePending(text)
             A.pendingConfirmation = nil
             local ctx = A.GetContext and A.GetContext()
             if ctx then ctx.pendingConfirmation = nil end
-            return { text = "Cancelled.", status = "failed" }
+            return { text = "Cancelled.", status = NormalizeReply(text) == "cancel" and "applied" or "failed" }
         end
         if IsConfirmationApply(text) then
             local plan = A.pendingConfirmation
