@@ -44,6 +44,8 @@ local MANAGED_UNITS = {
     player = true, target = true, focus = true,
     boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
+local EMPTY_EVENTS = {}
+local COMBAT_AURA_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }
 
 local UNIT_FLAG = {
     player = "showPlayer",
@@ -357,12 +359,20 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local includeDispellable = kind == "debuff" and filters and (filters.includeDispellable == true or filters.dispellable == true)
     local notDispellable = kind == "debuff" and filters and filters.notDispellable == true
     local boss = kind == "debuff" and filters and filters.boss == true
-    local hasInclusive = onlyMine or raid or includeStealable or includeDispellable or notDispellable or boss
+    local raidInCombat = filters and (
+        filters.raidInCombat == true
+        or filters.raidInCombatPlayer == true
+        or filters.RaidInCombat == true
+        or filters.RaidInCombatPlayer == true
+    )
+    local hasInclusive = onlyMine or raid or includeStealable or includeDispellable or notDispellable or boss or raidInCombat
     local black = CompileBlacklist(blacklist)
     local enabled = show and maxCount > 0
     local step = size + spacing
     local cols = math_min(math_max(maxCount, 1), math_max(perRow, 1))
     local rows = math_ceil(math_max(maxCount, 1) / math_max(perRow, 1))
+    local showCooldownSwipe = ReadBool(sharedLayout, shared, spec.showSwipeKey, ReadShared(shared, "showCooldownSwipe") ~= false)
+    local showCooldownText = ReadBool(sharedLayout, shared, spec.showTextKey, ReadShared(shared, "showCooldownText") ~= false)
 
     return {
         kind = kind,
@@ -373,6 +383,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         playerFilter = spec.filter .. "|PLAYER",
         importantFilter = spec.filter .. "|IMPORTANT",
         raidFilter = spec.filter .. "|RAID",
+        raidInCombatFilter = spec.filter .. "|RAID_IN_COMBAT",
         stealableFilter = "HELPFUL|STEALABLE",
         dispellableFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE",
         bossFilter = "HARMFUL|BOSS",
@@ -396,8 +407,9 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         initialAnchor = ButtonAnchor(xSign, ySign),
         clickThrough = ReadBool(nil, shared, "clickThroughAuras", false),
         showTooltip = ReadBool(nil, shared, "showTooltip", true),
-        showCooldownSwipe = ReadBool(sharedLayout, shared, spec.showSwipeKey, ReadShared(shared, "showCooldownSwipe") ~= false),
-        showCooldownText = ReadBool(sharedLayout, shared, spec.showTextKey, ReadShared(shared, "showCooldownText") ~= false),
+        showCooldownSwipe = showCooldownSwipe,
+        showCooldownText = showCooldownText,
+        showCooldown = showCooldownSwipe ~= false or showCooldownText ~= false,
         showStacks = ReadBool(sharedLayout, shared, spec.showStackKey, ReadShared(shared, "showStackCount") ~= false),
         stackAnchor = stackAnchor,
         stackSize = ReadNumber(layout, shared, spec.stackSizeKey, ReadShared(shared, "stackTextSize"), 6, 40),
@@ -413,8 +425,10 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         includeDispellable = includeDispellable == true,
         notDispellable = notDispellable == true,
         boss = boss == true,
+        raidInCombat = raidInCombat == true,
         hasInclusive = hasInclusive == true,
         needsPlayerFlag = onlyMine == true,
+        needsCombatRefresh = raidInCombat == true,
     }
 end
 
@@ -546,8 +560,12 @@ local function ApplyButtonLayout(lane, button, index)
     button:SetSize(cfg.size, cfg.size)
     button:EnableMouse(not cfg.clickThrough)
     if button.Cooldown then
-        if button.Cooldown.SetDrawSwipe then button.Cooldown:SetDrawSwipe(cfg.showCooldownSwipe ~= false) end
+        if button.Cooldown.SetDrawSwipe then button.Cooldown:SetDrawSwipe(cfg.showCooldown == true and cfg.showCooldownSwipe ~= false) end
         if button.Cooldown.SetHideCountdownNumbers then button.Cooldown:SetHideCountdownNumbers(cfg.showCooldownText == false) end
+        if cfg.showCooldown ~= true then
+            button.Cooldown:Hide()
+            button._msufA3CooldownShown = nil
+        end
     end
     if button.Count then
         if cfg.showStacks == false then
@@ -585,6 +603,7 @@ local function CreateAuraButton(lane, index)
     button:SetScript("OnEnter", OnAuraEnter)
     button:SetScript("OnLeave", OnAuraLeave)
     ApplyButtonLayout(lane, button, index)
+    button:Hide()
 
     lane[index] = button
     lane.createdButtons = index
@@ -617,6 +636,8 @@ local function ApplyLaneLayout(lane)
     end
 end
 
+local HideButton
+
 local function ClearLane(lane)
     lane.all = WipeTable(lane.all)
     lane.active = WipeTable(lane.active)
@@ -627,7 +648,7 @@ local function ClearLane(lane)
         local button = lane[i]
         if button then
             button.auraInstanceID = nil
-            button:Hide()
+            HideButton(button)
         end
     end
 end
@@ -762,6 +783,7 @@ local function ShouldShowAura(lane, unit, data)
     if cfg.hasInclusive then
         if cfg.onlyMine and data.isPlayerAura then return true end
         if cfg.raid and MatchFilter(unit, auraInstanceID, cfg.raidFilter) then return true end
+        if cfg.raidInCombat and MatchFilter(unit, auraInstanceID, cfg.raidInCombatFilter) then return true end
         if cfg.includeStealable and MatchFilter(unit, auraInstanceID, cfg.stealableFilter) then return true end
         if cfg.includeDispellable and MatchFilter(unit, auraInstanceID, cfg.dispellableFilter) then return true end
         if cfg.notDispellable and not MatchFilter(unit, auraInstanceID, cfg.dispellableFilter) then return true end
@@ -834,6 +856,36 @@ local function FullScanLane(lane, unit)
 end
 
 local UpdateButton
+
+local function ShowButton(button)
+    if button._msufA3Shown ~= true then
+        button._msufA3Shown = true
+        button:Show()
+    end
+end
+
+HideButton = function(button)
+    if button._msufA3Shown ~= nil then
+        button._msufA3Shown = nil
+        button:Hide()
+    elseif button.auraInstanceID ~= nil then
+        button:Hide()
+    end
+end
+
+local function ShowCooldown(button, cooldown)
+    if button._msufA3CooldownShown ~= true then
+        button._msufA3CooldownShown = true
+        cooldown:Show()
+    end
+end
+
+local function HideCooldown(button, cooldown)
+    if button._msufA3CooldownShown ~= nil then
+        button._msufA3CooldownShown = nil
+        cooldown:Hide()
+    end
+end
 
 local function UpdateLaneFromDelta(lane, unit, updateInfo)
     local cfg = lane.config
@@ -969,7 +1021,7 @@ local function UpdateCooldown(button, cooldown, unit, data)
                 button._msufA3CooldownDuration = duration
                 button._msufA3CooldownPlain = true
             end
-            cooldown:Show()
+            ShowCooldown(button, cooldown)
             return
         end
     end
@@ -982,9 +1034,9 @@ local function UpdateCooldown(button, cooldown, unit, data)
         if cooldown.SetCooldownFromDurationObject then
             cooldown:SetCooldownFromDurationObject(durationObject)
         end
-        cooldown:Show()
+        ShowCooldown(button, cooldown)
     else
-        cooldown:Hide()
+        HideCooldown(button, cooldown)
     end
 end
 
@@ -993,8 +1045,10 @@ UpdateButton = function(lane, button, unit, data)
     button.isHarmfulAura = lane.config.harmful == true
     SetIcon(button, data.icon)
     local cooldown = button.Cooldown
-    if cooldown then
+    if cooldown and lane.config.showCooldown == true then
         UpdateCooldown(button, cooldown, unit, data)
+    elseif cooldown then
+        HideCooldown(button, cooldown)
     end
     if lane.config.showStacks ~= false then
         local applications = data.applications
@@ -1006,7 +1060,7 @@ UpdateButton = function(lane, button, unit, data)
             SetCount(button, "")
         end
     end
-    button:Show()
+    ShowButton(button)
 end
 
 local function RenderLane(lane, unit)
@@ -1043,7 +1097,7 @@ local function RenderLane(lane, unit)
                 visibleByID[button.auraInstanceID] = nil
             end
             button.auraInstanceID = nil
-            button:Hide()
+            HideButton(button)
         end
     end
     lane.visible = visible
@@ -1159,6 +1213,14 @@ local function RenderCachedAuras(frame)
     return changed
 end
 
+local function NeedsCombatAuraEvents(cfg)
+    if not (cfg and cfg.enabled and cfg.lanes) then return false end
+    local lane = cfg.lanes.buff
+    if lane and lane.enabled and lane.needsCombatRefresh == true then return true end
+    lane = cfg.lanes.debuff
+    return lane and lane.enabled and lane.needsCombatRefresh == true or false
+end
+
 function A3.EnableFrame(frame)
     if not (frame and frame.unit and MANAGED_UNITS[frame.unit]) then return false end
     local cfg = A3.ResolveUnitFrameConfig(frame.unit)
@@ -1271,11 +1333,16 @@ end
 
 local AurasElement = {
     events = { "UNIT_AURA" },
-    unitlessEvents = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" },
+    unitlessEvents = EMPTY_EVENTS,
 }
 
 function AurasElement.IsEnabled(frame)
     return frame and frame.unit and A3.UnitFrameAuraEnabled(frame.unit) == true
+end
+
+function AurasElement.GetUnitlessEvents(frame)
+    local cfg = frame and frame.unit and A3.ResolveUnitFrameConfig(frame.unit)
+    return NeedsCombatAuraEvents(cfg) and COMBAT_AURA_EVENTS or EMPTY_EVENTS
 end
 
 function AurasElement.Create(frame)
