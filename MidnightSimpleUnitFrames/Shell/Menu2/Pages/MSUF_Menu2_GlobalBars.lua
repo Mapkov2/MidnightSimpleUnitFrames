@@ -136,6 +136,13 @@ local function BuildBars(ctx)
         RefreshUnitBorders({ "boss1", "boss2", "boss3", "boss4", "boss5" })
     end
 
+    local function ApplyHighlightPriorityRuntime()
+        Call("MSUF_UFCore_RefreshSettingsCache", "MSUF2_HIGHLIGHT_PRIORITY_RUNTIME")
+        RefreshUnitBorders({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss1", "boss2", "boss3", "boss4", "boss5" })
+        RefreshGroupFrameBorders()
+        Call("MSUF_UFPreview_RequestRefresh", "MSUF2_HIGHLIGHT_PRIORITY")
+    end
+
     local function ApplyAllHighlightBorderRuntime()
         ApplyAggroBorderRuntime()
         ApplyDispelPurgeBorderRuntime()
@@ -1011,6 +1018,12 @@ local function BuildBars(ctx)
     local priorityCard = W.ControlCard(priorityFrame, "Priority Order", nil, hlLeftX - 14, -38, priorityCardW, 296)
     W.ControlCard(previewFrame, "Preview", nil, hlPreviewX - 14, -38, hlPreviewW + 28, 248)
 
+    local function HighlightPriorityEnabled()
+        local value = BarScopeGet("hlPrioEnabled", nil)
+        if value == nil then value = BarScopeGet("highlightPrioEnabled", false) end
+        return value == true or value == 1 or value == "1"
+    end
+
     local highlight = W.Slider(modesFrame, "Highlight border thickness", 1, 30, 1, hlLeftW)
     M.BindSlider(ctx, highlight,
         function() return tonumber(BarScopeGet("highlightBorderThickness", BarScopeGet("hlAggroSize", 2))) or 2 end,
@@ -1247,16 +1260,12 @@ local function BuildBars(ctx)
 
     local prio = W.SwitchAt(priorityCard, "Custom highlight priority", 16, -54, priorityCardW - 32)
     M.BindToggle(ctx, prio,
-        function()
-            local value = BarScopeGet("hlPrioEnabled", false)
-            return value == true or value == 1
-        end,
+        HighlightPriorityEnabled,
         function(v)
             local on = v and true or false
             BarScopeSet("hlPrioEnabled", on, "MSUF2_HIGHLIGHT_PRIORITY")
             if CurrentBarsScope() == "shared" then G().highlightPrioEnabled = on and 1 or 0 end
-            ApplyBars("MSUF2_HIGHLIGHT_PRIORITY")
-            ApplyAllHighlightBorderRuntime()
+            ApplyHighlightPriorityRuntime()
         end)
 
     local rowH, rowGap, rowMax = 22, 4, 4
@@ -1288,8 +1297,7 @@ local function BuildBars(ctx)
             local order = {}
             for i = 1, prioCount do order[i] = sorted[i].key end
             SetPriorityOrder(order)
-            ApplyBars("MSUF2_HIGHLIGHT_PRIORITY_ORDER")
-            ApplyAllHighlightBorderRuntime()
+            ApplyHighlightPriorityRuntime()
         end
         if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
             M.CaptureHistory("Highlight Priority Order", "global:highlightPriorityOrder", WritePriorityRows)
@@ -1328,9 +1336,7 @@ local function BuildBars(ctx)
         num:SetPoint("RIGHT", rowFrame, "RIGHT", -8, 0)
         rowFrame._numText = num
         rowFrame:SetScript("OnDragStart", function(self)
-            local prioEnabled = BarScopeGet("hlPrioEnabled", false)
-            prioEnabled = prioEnabled == true or prioEnabled == 1
-            if not (HighlightControlsActive() and prioEnabled) then return end
+            if not (HighlightControlsActive() and HighlightPriorityEnabled()) then return end
             if GameTooltip then GameTooltip:Hide() end
             self._msuf2OldStrata = self:GetFrameStrata()
             self:StartMoving()
@@ -1394,9 +1400,7 @@ local function BuildBars(ctx)
             row.frame._numText:SetText(tostring(i))
         end
         SnapPriorityRows()
-        local prioEnabled = BarScopeGet("hlPrioEnabled", false)
-        prioEnabled = prioEnabled == true or prioEnabled == 1
-        SetPriorityRowsEnabled(HighlightControlsActive() and prioEnabled)
+        SetPriorityRowsEnabled(HighlightControlsActive() and HighlightPriorityEnabled())
     end
     RefreshPriorityRows()
     M.AddRefresher(ctx, function()

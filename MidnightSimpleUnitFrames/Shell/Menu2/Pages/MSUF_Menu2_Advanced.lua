@@ -269,12 +269,6 @@ local function AuraDebuffFilters()
     return f.debuffs
 end
 
-local function BossHealAuras()
-    local a2 = AurasDB()
-    a2.bossHealAuras = a2.bossHealAuras or {}
-    return a2.bossHealAuras
-end
-
 local function AuraIgnoreCats()
     local scope = AuraScope()
     local shared = AuraShared()
@@ -364,7 +358,6 @@ local AURA_STACK_ANCHORS = AuraSpecs.AURA_STACK_ANCHORS or {}
 local AURA_IGNORE_CATEGORIES = AuraSpecs.AURA_IGNORE_CATEGORIES or {}
 local AURA_REMINDERS = AuraSpecs.AURA_REMINDERS or {}
 local AURA_SORT_ORDER = AuraSpecs.AURA_SORT_ORDER or {}
-local PANDEMIC_MODES = AuraSpecs.PANDEMIC_MODES or {}
 local AURA_OPTIONS = {
     SCOPES = AURA_SCOPES,
     GROWTH = AURA_GROWTH,
@@ -373,7 +366,6 @@ local AURA_OPTIONS = {
     IGNORE_CATEGORIES = AURA_IGNORE_CATEGORIES,
     REMINDERS = AURA_REMINDERS,
     SORT_ORDER = AURA_SORT_ORDER,
-    PANDEMIC_MODES = PANDEMIC_MODES,
 }
 
 local function MoveWidget(widget, parent, x, y)
@@ -558,32 +550,6 @@ local function FitInlineToggle(toggle, width)
     if not (toggle and toggle._msuf2Label and toggle._msuf2Label.SetWidth) then return toggle end
     toggle._msuf2Label:SetWidth(max(80, (tonumber(width) or 140) - 32))
     return toggle
-end
-
-local function NormalizePandemicMode(value)
-    if value == true then return "PULSE" end
-    if value == "BORDER" or value == "PULSE" or value == "GLOW" then return value end
-    return "OFF"
-end
-
-local function GetPandemicMode()
-    local shared = AuraShared()
-    return NormalizePandemicMode(shared.pandemicMode ~= nil and shared.pandemicMode or shared.showPandemic)
-end
-
-local function SetPandemicMode(value)
-    local shared = AuraShared()
-    value = NormalizePandemicMode(value)
-    if value ~= "OFF" then
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("lastPandemicMode", value)
-        else
-            M.lastPandemicMode = value
-        end
-    end
-    shared.pandemicMode = value
-    shared.showPandemic = nil
-    ApplyAuras()
 end
 
 local function AuraHasOverride(key)
@@ -900,11 +866,6 @@ local function BuildAuras(ctx)
         function() return BoolValue(AuraShared(), "showInEditMode", true) end,
         function(v) SetValue(AuraShared(), "showInEditMode", v, ApplyAuras) end,
         sharedOnlyControls)
-    EssentialSwitch(4, "Masque",
-        function() return BoolValue(AuraShared(), "masqueEnabled", false) end,
-        function(v) SetValue(AuraShared(), "masqueEnabled", v, ApplyAuras) end,
-        sharedOnlyControls)
-
     local unitY = compactSetup and -106 or -88
     LabelAt(essentials, "Visible units", 16, unitY + 4, 88, "GameFontNormalSmall", T.colors.muted)
     local unitPillPos = FlowTopLeft({ 90, 90, 90, 96 }, 112, unitY + 8, leftW - 16, 6, 28, 22)
@@ -1286,7 +1247,6 @@ local function BuildAuras(ctx)
     local master = b:CollapsibleSection("a2_display", "Display", masterH, true)
     LabelAt(master, "|cff6EB5FFBuffs|r", displayCol1, -12, displayCol1W)
     LabelAt(master, "|cff6EB5FFDebuffs|r", displayCol2, -12, displayCol2W)
-    LabelAt(master, "|cff6EB5FFBoss Heal Auras|r", displayCol3, bossLabelY, displayCol3W)
     local hidePermanentTooltip = "Hides buffs with no duration. Debuffs are never hidden by this option.\n\nThis filter is applied out of combat only. Target/Focus APIs may still show permanent buffs during combat due to API limitations."
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Show Buffs", displayCol1 - 2, -28, AuraShared, "showBuffs", true, ApplyAuras), displayCol1W))
     Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, master, "Only my buffs", displayCol1 - 2, -50, AuraBuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras), displayCol1W))
@@ -1295,8 +1255,6 @@ local function BuildAuras(ctx)
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Show Debuffs", displayCol2 - 2, -28, AuraShared, "showDebuffs", true, ApplyAuras), displayCol2W))
     Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, master, "Only my debuffs", displayCol2 - 2, -50, AuraDebuffFilters, "onlyMine", false, ForceAuraFilterOverride, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Highlight own debuffs", displayCol2 - 2, -74, AuraShared, "highlightOwnDebuffs", false, ApplyAuras), displayCol2W))
-    Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Highlight own healer buffs", displayCol3 - 2, bossToggleY, BossHealAuras, "highlightOwn", false, ApplyAuras), displayCol3W))
-    Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Hide other healer buffs", displayCol3 - 2, bossToggleY - 22, BossHealAuras, "hideOthers", false, ApplyAuras), displayCol3W))
     DividerAt(master, dividerY)
     LabelAt(master, "|cff6EB5FFIcons|r", displayCol1, lowerLabelY, displayCol1W)
     LabelAt(master, "|cff6EB5FFCooldown|r", displayCol2, lowerLabelY, displayCol2W)
@@ -1308,7 +1266,6 @@ local function BuildAuras(ctx)
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Swipe darkens on loss", displayCol2 - 2, lowerToggleY - 22, AuraShared, "cooldownSwipeDarkenOnLoss", false, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Show cooldown text", displayCol2 - 2, lowerToggleY - 44, AuraShared, "showCooldownText", true, ApplyAuras), displayCol2W))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Dispel-type borders", displayCol3 - 2, borderToggleY, AuraShared, "useDebuffTypeBorders", false, ApplyAuras), displayCol3W))
-    Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, master, "Hide Masque borders", displayCol3 - 2, borderToggleY - 22, AuraShared, "masqueHideBorder", false, ApplyAuras), displayCol3W))
     local displayScopeHint = W.Text(master, "Player-only buff hiding uses Custom caps and Max Buffs 0 because Show Buffs is shared.", 14, displayHintY, contentW - 28, T.colors.muted)
     if displayScopeHint.SetWordWrap then displayScopeHint:SetWordWrap(true) end
     if displayScopeHint.SetHeight then displayScopeHint:SetHeight(52) end
@@ -1341,17 +1298,12 @@ local function BuildAuras(ctx)
     Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Max Buffs", layoutCol1, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxBuffs", 8, ForceAuraCapsOverride, ApplyAuras))
     Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Max Debuffs", layoutCol2, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "maxDebuffs", 15, ForceAuraCapsOverride, ApplyAuras))
     Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Icons per row", layoutCol3, -64, 1, 20, 1, layoutSliderW, function() return AuraCaps() end, "perRow", 11, ForceAuraCapsOverride, ApplyAuras))
-    Track(capsOverrideControls, ScopedSliderAt(ctx, layout, "Block spacing", layoutCol4, -64, 0, 40, 1, layoutSliderW, function() return AuraCaps() end, "splitSpacing", 0, ForceAuraCapsOverride, ApplyAuras))
 
     DividerAt(layout, -138, layoutPad, 32)
     LabelAt(layout, "Icon Layout", layoutCol1, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
-    LabelAt(layout, "Rows", layoutCol3, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
+    LabelAt(layout, "Stack Text", layoutCol4, -160, layoutColW, "GameFontNormalSmall", T.colors.accent)
     Track(layoutOverrideControls, ScopedSliderAt(ctx, layout, "Icon size", layoutCol1, -186, 12, 64, 1, layoutSliderW, function() return AuraLayout() end, "iconSize", 26, ForceAuraLayoutOverride, ApplyAuras))
     Track(layoutOverrideControls, ScopedSliderAt(ctx, layout, "Spacing", layoutCol2, -186, 0, 12, 1, layoutSliderW, function() return AuraLayout() end, "spacing", 2, ForceAuraLayoutOverride, ApplyAuras))
-    Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Row layout", layoutCol3, -186, {
-        { value = "SEPARATE", text = "Separate rows" },
-        { value = "SINGLE", text = "Single row (Mixed)" },
-    }, layoutDropdownW, function() return AuraCaps() end, "layoutMode", "SEPARATE", ForceAuraCapsOverride, ApplyAuras))
     Track(capsOverrideControls, ScopedDropdownAt(ctx, layout, "Stack Anchor", layoutCol4, -186, AO.STACK_ANCHORS, layoutDropdownW, function() return AuraCaps() end, "stackCountAnchor", "TOPRIGHT", ForceAuraCapsOverride, ApplyAuras))
 
     DividerAt(layout, -260, layoutPad, 32)
@@ -1411,11 +1363,10 @@ local function BuildAuras(ctx)
     if ctx.refreshers and ctx.refreshers[#ctx.refreshers] then ctx.refreshers[#ctx.refreshers]() end
 
     if IsAdvancedUXMode() then
-    local visual = b:CollapsibleSection("a2_text_coloring", "Text Coloring", 520, false)
+    local visual = b:CollapsibleSection("a2_text_coloring", "Text Coloring", 390, false)
     LabelAt(visual, "Cooldown Timer Text", 12, -10, 240, "GameFontNormal", T.colors.text)
-    W.Text(visual, "Blizzard native timer text keeps aura countdowns cheap; MSUF only applies the configured colors.", 12, -34, 650, T.colors.muted)
-    Track(sharedOnlyControls, ToggleAt(ctx, visual, "Use Blizzard timer text (max performance)", 12, -66, AuraShared, "useBlizzardTimerText", true, ApplyAuras))
-    Track(sharedOnlyControls, ToggleAt(ctx, visual, "Color aura timers by remaining time", 12, -92, G, "aurasCooldownTextUseBuckets", true, ApplyAuras))
+    W.Text(visual, "Blizzard native timer text keeps aura countdowns cheap; optional colors only touch the native text object.", 12, -34, 650, T.colors.muted)
+    Track(sharedOnlyControls, ToggleAt(ctx, visual, "Color aura timers by remaining time", 12, -66, G, "aurasCooldownTextUseBuckets", false, ApplyAuras))
 
     local preview = T.Panel(visual, nil, { 0.030, 0.040, 0.070, 0.62 }, T.colors.borderSoft)
     preview:SetPoint("TOPLEFT", visual, "TOPLEFT", 12, -124)
@@ -1443,7 +1394,7 @@ local function BuildAuras(ctx)
         local safeR, safeG, safeB = ReadRGB(g, "aurasCooldownTextSafeColor", 1, 1, 1)
         local warnR, warnG, warnB = ReadRGB(g, "aurasCooldownTextWarningColor", 1, 0.85, 0.20)
         local urgR, urgG, urgB = ReadRGB(g, "aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
-        local buckets = g.aurasCooldownTextUseBuckets ~= false
+        local buckets = g.aurasCooldownTextUseBuckets == true
         if samples[1].box.value then samples[1].box.value:SetTextColor(safeR, safeG, safeB, 1) end
         if samples[2].box.value then samples[2].box.value:SetTextColor(buckets and warnR or safeR, buckets and warnG or safeG, buckets and warnB or safeB, 1) end
         if samples[3].box.value then samples[3].box.value:SetTextColor(buckets and urgR or safeR, buckets and urgG or safeG, buckets and urgB or safeB, 1) end
@@ -1458,32 +1409,6 @@ local function BuildAuras(ctx)
     Track(sharedOnlyControls, SliderAt(ctx, visual, "Urgent (<=)", 532, -270, 0, 15, 1, 150, G, "aurasCooldownTextUrgentSeconds", 5, ApplyAuras))
     Track(layoutOverrideControls, ScopedSliderAt(ctx, visual, "Cooldown text size", 12, -330, 6, 32, 1, 190, function() return AuraLayout() end, "cooldownTextSize", 14, ForceAuraLayoutOverride, ApplyAuras))
     Track(layoutOverrideControls, ScopedSliderAt(ctx, visual, "Stack text size", 272, -330, 6, 32, 1, 190, function() return AuraLayout() end, "stackTextSize", 14, ForceAuraLayoutOverride, ApplyAuras))
-    DividerAt(visual, -392)
-    LabelAt(visual, "Pandemic Window", 16, -408, 240, "GameFontNormal", T.colors.text)
-    Track(sharedOnlyControls, ValueSwitchAt(ctx, visual, "Enable Pandemic Window", 12, -436, 240,
-        function() return GetPandemicMode() ~= "OFF" end,
-        function(v)
-            if v then
-                SetPandemicMode(M.lastPandemicMode or "PULSE")
-            else
-                local mode = GetPandemicMode()
-                if mode ~= "OFF" then
-                    if type(M.PersistMenuStateValue) == "function" then
-                        M.PersistMenuStateValue("lastPandemicMode", mode)
-                    else
-                        M.lastPandemicMode = mode
-                    end
-                end
-                SetPandemicMode("OFF")
-            end
-        end))
-    local pandemicDD = ValueDropdownAt(ctx, visual, "Mode", 284, -420, AO.PANDEMIC_MODES, 150,
-        function()
-            local mode = GetPandemicMode()
-            return mode ~= "OFF" and mode or (M.lastPandemicMode or "PULSE")
-        end,
-        function(v) SetPandemicMode(v or "PULSE") end)
-    W.Text(visual, "Best-effort: fixed 30% remaining-duration threshold for all auras. Color is configured in Global Style > Colors.", 12, -468, 650, T.colors.muted)
 
     local filters = b:CollapsibleSection("a2_filters", "Aura Filters & Sorting", 300, false)
     LabelAt(filters, "Include", 12, -10, 140, "GameFontNormal", T.colors.accent)
@@ -1584,8 +1509,6 @@ local function BuildAuras(ctx)
         W.SetControlsEnabled(capsOverrideControls, sharedScope or UnitOverrideEnabled("overrideSharedLayout"))
         W.SetControlsEnabled(layoutOverrideControls, sharedScope or UnitOverrideEnabled("overrideLayout"))
 
-        SetControlEnabled(pandemicDD, sharedScope and GetPandemicMode() ~= "OFF")
-
         local shared = AuraShared()
         local remindersEnabled = sharedScope and shared.showReminders ~= false
         SetControlEnabled(remMaster, sharedScope)
@@ -1595,9 +1518,10 @@ local function BuildAuras(ctx)
         local key = AuraScope()
         local ignoreEditable = key == "shared" or key == "boss1" or key == "boss2" or key == "boss3" or key == "boss4" or key == "boss5" or AurasUnit(key).overrideIgnore == true
         local bossOnly = BoolValue(AuraFilters(), "onlyBossAuras", false)
+        local colorBuckets = G().aurasCooldownTextUseBuckets == true
         SetAuraSectionBadges(visual, {
-            { text = BoolValue(shared, "useBlizzardTimerText", true) and "Blizzard text" or "Custom text", kind = sharedScope and "info" or "muted" },
-            { text = GetPandemicMode() ~= "OFF" and "Pandemic on" or "Pandemic off", kind = (sharedScope and GetPandemicMode() ~= "OFF") and "accent" or "muted" },
+            { text = "Blizzard text", kind = sharedScope and "info" or "muted" },
+            { text = colorBuckets and "Color on" or "Native color", kind = (sharedScope and colorBuckets) and "accent" or "muted" },
         })
         SetAuraSectionBadges(filters, {
             { text = bossOnly and "Boss only" or "Standard", kind = bossOnly and "accent" or "info" },

@@ -13,13 +13,50 @@ local max = math.max
 local min = math.min
 local VT = M.ValueTextList
 
-local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, BindNestedToggle, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, BadgeNumber = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup BindNestedToggle BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge BadgeNumber]])
+local AURA_ANCHORS, STATUS_ICON_ANCHORS, SPELL_GROWTH_VALUES, ScopeSection, CurrentScope, AuraGroup, AurasRoot, QueueGF, RefreshContext, BindNestedSlider, BindNestedDropdown, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, BadgeNumber = M.Pick(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS SPELL_GROWTH_VALUES ScopeSection CurrentScope AuraGroup AurasRoot QueueGF RefreshContext BindNestedSlider BindNestedDropdown SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge BadgeNumber]])
 AURA_ANCHORS = AURA_ANCHORS or {}
 STATUS_ICON_ANCHORS = STATUS_ICON_ANCHORS or {}
 SPELL_GROWTH_VALUES = SPELL_GROWTH_VALUES or {}
 SetSectionBadges = SetSectionBadges or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
+
+local function NativeAuraKey(groupKey)
+    return groupKey == "buff" and "buffs" or "debuffs"
+end
+
+local function LaneBackendEnabled(scope, groupKey)
+    local root = AurasRoot and AurasRoot(scope)
+    local group = AuraGroup(scope, groupKey)
+    if not root then return group.enabled ~= false end
+    local nativeKey = NativeAuraKey(groupKey)
+    local blizzardTypes = root.blizzardTypes
+    local blizzardOwns = (root.renderer or "BLIZZARD") ~= "CUSTOM"
+        and (type(blizzardTypes) ~= "table" or blizzardTypes[nativeKey] ~= false)
+    return root.enabled ~= false and group.enabled ~= false and blizzardOwns ~= true
+end
+
+local function BindAuraLaneEnabled(ctx, widget, groupKey)
+    M.BindToggle(ctx, widget,
+        function()
+            return LaneBackendEnabled(CurrentScope(), groupKey)
+        end,
+        function(v)
+            local scope = CurrentScope()
+            local root = AurasRoot and AurasRoot(scope)
+            local group = AuraGroup(scope, groupKey)
+            local enabled = v and true or false
+            if root then
+                root.enabled = true
+                root.blizzardTypes = root.blizzardTypes or {}
+                root.blizzardTypes[NativeAuraKey(groupKey)] = false
+            end
+            group.enabled = enabled
+            if QueueGF then QueueGF(scope, "rebuild") end
+            if RefreshContext then RefreshContext(ctx) end
+        end)
+    return widget
+end
 
 
 local function BuildGFAuras(ctx)
@@ -59,7 +96,7 @@ local function BuildGFAuras(ctx)
             W.ControlCard(section, "Icon Grid", nil, rightX - 14, -84, rightW + 28, 326)
         end
 
-        local enable = BindNestedToggle(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), function() return AuraGroup(CurrentScope(), groupKey) end, "enabled", true, "visual")
+        local enable = BindAuraLaneEnabled(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), groupKey)
         enable._msuf2GroupFrameGateAlwaysEnabled = true
 
         local anchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "anchor", def.anchor, "geometry")
@@ -93,7 +130,7 @@ local function BuildGFAuras(ctx)
 
         local function RefreshAuraGroupState()
             local cfg = AuraGroup(CurrentScope(), groupKey)
-            local groupEnabled = cfg.enabled ~= false
+            local groupEnabled = LaneBackendEnabled(CurrentScope(), groupKey)
             SetOptionsEnabled(controls, groupEnabled)
             SetOptionEnabled(enable, true)
             SetSectionBadges(section, {

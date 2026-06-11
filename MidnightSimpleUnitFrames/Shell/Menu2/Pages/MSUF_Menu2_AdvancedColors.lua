@@ -602,7 +602,7 @@ local function BuildAuraAndPortraitColors(ctx, b, CH)
     CH.TableColorAt(ctx, auras, "Own debuff highlight color", 12, -46, G, "aurasOwnDebuffHighlightColor", 1.0, 0.85, 0.2, ApplyAuraColors)
     CH.TableColorAt(ctx, auras, "Stack count text color", 12, -82, G, "aurasStackCountColor", 1, 1, 1, ApplyAuraColors)
     ColorValueAt(ctx, auras, "Pandemic window color", 12, -118, GetPandemicRGB, SetPandemicRGB)
-    local bucketToggle = BindTableToggle(ctx, auras, "Color aura timers by remaining time", G, "aurasCooldownTextUseBuckets", true, ApplyAuraColors)
+    local bucketToggle = BindTableToggle(ctx, auras, "Color aura timers by remaining time", G, "aurasCooldownTextUseBuckets", false, ApplyAuraColors)
     MoveWidget(bucketToggle, auras, 12, -154)
     ColorValueAt(ctx, auras, "Cooldown text: Safe", 360, -10,
         function()
