@@ -31,6 +31,7 @@ local GetTime = _G.GetTime
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local function IsUnitToken(unit)
+    if issecretvalue(unit) == true then return false end
     return type(unit) == "string" and unit ~= ""
 end
 
@@ -94,6 +95,27 @@ end
 local function SetColorTextureCached(tex, r, g, b, a)
     if not (tex and tex.SetColorTexture) then return end
     r, g, b, a = r or 1, g or 1, b or 1, a or 1
+    if issecretvalue(r) == true or issecretvalue(g) == true
+        or issecretvalue(b) == true or issecretvalue(a) == true then
+        tex:SetColorTexture(r, g, b, a)
+        tex._msufGFVisualTextureKind = nil
+        tex._msufGFVisualTexture = nil
+        tex._msufGFVisualColorR = nil
+        tex._msufGFVisualColorG = nil
+        tex._msufGFVisualColorB = nil
+        tex._msufGFVisualColorA = nil
+        return
+    end
+    if issecretvalue(tex._msufGFVisualColorR) == true
+        or issecretvalue(tex._msufGFVisualColorG) == true
+        or issecretvalue(tex._msufGFVisualColorB) == true
+        or issecretvalue(tex._msufGFVisualColorA) == true then
+        tex._msufGFVisualTextureKind = nil
+        tex._msufGFVisualColorR = nil
+        tex._msufGFVisualColorG = nil
+        tex._msufGFVisualColorB = nil
+        tex._msufGFVisualColorA = nil
+    end
     if tex._msufGFVisualTextureKind ~= "color" or tex._msufGFVisualColorR ~= r
         or tex._msufGFVisualColorG ~= g or tex._msufGFVisualColorB ~= b
         or tex._msufGFVisualColorA ~= a then
@@ -148,7 +170,7 @@ local function HideEdges(edges)
 end
 
 local function SameUnit(unit, otherUnit)
-    if not (unit and otherUnit) then
+    if not (IsUnitToken(unit) and IsUnitToken(otherUnit)) then
         return false
     end
     if unit == otherUnit then
@@ -235,6 +257,103 @@ local function UpdateFocus(frame, cfg)
     end
     local show = cfg.focusIndicator == true and frame.unit and SameUnit(frame.unit, "focus") or false
     SetEdgesShown(frame.MSUFGFFocusEdges, show)
+end
+
+local function AuraVisualTarget(frame, onHealth)
+    if onHealth ~= false then
+        return frame and (frame.hpBar or frame.Health or frame.health) or frame
+    end
+    return frame
+end
+
+local function LayoutAuraVisual(tex, target, edge, size)
+    if not (tex and target) then return end
+    edge = edge or "FULL"
+    if edge ~= "TOP" and edge ~= "BOTTOM" and edge ~= "LEFT" and edge ~= "RIGHT" then
+        edge = "FULL"
+    end
+    size = max(1, floor((tonumber(size) or 3) + 0.5))
+    if tex._msufGFVisualTarget == target
+        and tex._msufGFVisualEdge == edge
+        and tex._msufGFVisualSize == size then
+        return
+    end
+    tex:ClearAllPoints()
+    if edge == "FULL" then
+        tex:SetAllPoints(target)
+    elseif edge == "TOP" then
+        tex:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        tex:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        SetHeightCached(tex, size, "_msufGFAuraVisualHeight")
+    elseif edge == "BOTTOM" then
+        tex:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        tex:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        SetHeightCached(tex, size, "_msufGFAuraVisualHeight")
+    elseif edge == "LEFT" then
+        tex:SetPoint("TOPLEFT", target, "TOPLEFT", 0, 0)
+        tex:SetPoint("BOTTOMLEFT", target, "BOTTOMLEFT", 0, 0)
+        SetWidthCached(tex, size, "_msufGFAuraVisualWidth")
+    else
+        tex:SetPoint("TOPRIGHT", target, "TOPRIGHT", 0, 0)
+        tex:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 0, 0)
+        SetWidthCached(tex, size, "_msufGFAuraVisualWidth")
+    end
+    tex._msufGFVisualTarget = target
+    tex._msufGFVisualEdge = edge
+    tex._msufGFVisualSize = size
+end
+
+local function EnsureAuraTexture(frame, key)
+    local tex = frame and frame[key]
+    if tex then return tex end
+    if not frame then return nil end
+    tex = frame:CreateTexture(nil, "OVERLAY", nil, 5)
+    tex:SetColorTexture(1, 1, 1, 1)
+    tex:Hide()
+    frame[key] = tex
+    return tex
+end
+
+local function UpdateDispelOverlay(frame, cfg)
+    local tex = frame and frame.MSUFGFDispelOverlay
+    if not (cfg and cfg.dispelOverlayEnabled == true and frame and frame._msufA3DispelOverlayActive == true) then
+        SetShown(tex, false)
+        return
+    end
+    tex = tex or EnsureAuraTexture(frame, "MSUFGFDispelOverlay")
+    if not tex then return end
+    local target = AuraVisualTarget(frame, cfg.dispelOverlayOnHealth)
+    LayoutAuraVisual(tex, target, cfg.dispelOverlayStyle or "FULL", cfg.highlightThickness or 3)
+    SetColorTextureCached(tex,
+        frame._msufA3DispelOverlayR or frame._msufA3DispelR or 0.25,
+        frame._msufA3DispelOverlayG or frame._msufA3DispelG or 0.75,
+        frame._msufA3DispelOverlayB or frame._msufA3DispelB or 1,
+        cfg.dispelOverlayAlpha or 0.35)
+    SetShown(tex, true)
+end
+
+local function UpdateDebuffStripe(frame, cfg)
+    local tex = frame and frame.MSUFGFDebuffStripe
+    if not (cfg and cfg.debuffStripeEnabled == true and frame and frame._msufA3DebuffStripeActive == true) then
+        SetShown(tex, false)
+        return
+    end
+    tex = tex or EnsureAuraTexture(frame, "MSUFGFDebuffStripe")
+    if not tex then return end
+    local target = frame.hpBar or frame.Health or frame
+    LayoutAuraVisual(tex, target, frame._msufA3DebuffStripeEdge or cfg.debuffStripeEdge or "BOTTOM",
+        frame._msufA3DebuffStripeHeight or cfg.debuffStripeHeight or 3)
+    SetColorTextureCached(tex,
+        frame._msufA3DebuffStripeR or cfg.debuffStripeColorR or 0.8,
+        frame._msufA3DebuffStripeG or cfg.debuffStripeColorG or 0.2,
+        frame._msufA3DebuffStripeB or cfg.debuffStripeColorB or 0.2,
+        frame._msufA3DebuffStripeA or cfg.debuffStripeAlpha or 0.6)
+    SetShown(tex, true)
+end
+
+local function UpdateAuraVisuals(frame, cfg)
+    UpdateDispelOverlay(frame, cfg)
+    UpdateDebuffStripe(frame, cfg)
 end
 
 local indicatorDriver
@@ -693,6 +812,8 @@ local function SpecNeedsGroupVisuals(spec)
         or cfg.targetIndicator == true
         or cfg.focusIndicator == true
         or cfg.deadBgEnabled == true
+        or cfg.dispelOverlayEnabled == true
+        or cfg.debuffStripeEnabled == true
 end
 
 local UpdateBordersFromVisualState
@@ -732,6 +853,7 @@ local function CompileVisualRuntime(spec)
         cfg.runtimeOnFocus = cfg.focusIndicator == true and UpdateFocus or nil
         cfg.runtimeOnDeadBg = cfg.deadBgEnabled == true and UpdateDeadBg or nil
         cfg.runtimeOnRangeAlpha = RuntimeOnRangeAlpha
+        cfg.runtimeOnAuraVisuals = (cfg.dispelOverlayEnabled == true or cfg.debuffStripeEnabled == true) and UpdateAuraVisuals or nil
     end
 end
 
@@ -805,6 +927,12 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
             fn(frame, cfg, event)
         end
         return
+    elseif event == "MSUF_A3_AURA_VISUAL" then
+        local fn = cfg.runtimeOnAuraVisuals
+        if fn then
+            fn(frame, cfg, event)
+        end
+        return
     end
 
     local fn = cfg.runtimeOnTarget
@@ -815,6 +943,8 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     if fn then fn(frame, cfg, updateInfo, seedMaxHP, event) end
     fn = cfg.runtimeOnDeadBg
     if fn then fn(frame, cfg, nil, event) end
+    fn = cfg.runtimeOnAuraVisuals
+    if fn then fn(frame, cfg, event) end
 
     if event == "MSUF_GF_VISUALS_APPLY" then
         UpdateBordersFromVisualState(frame)
@@ -862,6 +992,8 @@ function GroupVisuals.Disable(frame)
     SetIndicatorRegistration(frame, false, false)
     HideEdges(frame.MSUFGFTargetEdges)
     HideEdges(frame.MSUFGFFocusEdges)
+    SetShown(frame.MSUFGFDispelOverlay, false)
+    SetShown(frame.MSUFGFDebuffStripe, false)
     if frame._msufGFDeadBgState == true then
         RestoreHealthBackground(frame)
     end

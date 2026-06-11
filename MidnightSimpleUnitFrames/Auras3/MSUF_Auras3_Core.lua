@@ -20,7 +20,6 @@ A3.version = 3
 A3.frontendOnly = false
 A3.backendEnabled = true
 A3.unitFrameAuras = true
-A3.masqueEnabled = false
 A3._runtimeConfigGen = A3._runtimeConfigGen or 1
 A3._unitFrameOwners = A3._unitFrameOwners or {}
 
@@ -74,10 +73,6 @@ end
 
 function A3.BackendEnabled()
     return A3.backendEnabled == true
-end
-
-function A3.DisablesMasque()
-    return false
 end
 
 function A3.BumpRuntimeConfig()

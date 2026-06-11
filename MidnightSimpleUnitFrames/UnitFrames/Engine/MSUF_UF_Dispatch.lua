@@ -7,12 +7,14 @@ MSUF.UF = MSUF.UF or {}
 
 local UF = MSUF.UF
 local Metadata = UF.Metadata or {}
+local Secrets = MSUF.Secrets or {}
 local wipe = wipe
 local tonumber = tonumber
 local type = type
 local floor = math.floor
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local UnitMissing = Secrets.UnitMissing or function(_) return false end
 
 -- Events Blizzard delivers under a distinct name but which mean the exact same
 -- work as an existing hot event. They reuse that event's already-compiled
@@ -1650,12 +1652,41 @@ UF.DispatchFrameEvent = DispatchFrameEvent
 
 local RUNTIME_UPDATE_OWNERS = Metadata.runtimeUpdateOwners or EMPTY_METADATA_SET
 local RUNTIME_REASON_MASKS = Metadata.runtimeReasonMasks or EMPTY_METADATA_SET
+local RUNTIME_IDENTITY_MISSING_EXIT = {
+    MSUF_UNIT_IDENTITY = true,
+    MSUF_UNIT_IDENTITY_SOFT = true,
+    MSUF_GF_UNIT_IDENTITY = true,
+}
+local BOSS_IDENTITY_UNITS = {
+    boss1 = true,
+    boss2 = true,
+    boss3 = true,
+    boss4 = true,
+    boss5 = true,
+}
+
+local function RuntimeCanSkipMissingUnit(frame, reason)
+    if not (frame and RUNTIME_IDENTITY_MISSING_EXIT[reason]) then
+        return false
+    end
+    if _G.MSUF_PreviewTestMode == true then
+        return false
+    end
+    if BOSS_IDENTITY_UNITS[frame.unit] == true
+        and (_G.MSUF_BossTestMode == true or _G.MSUF2_BossUnitframePreviewActive == true) then
+        return false
+    end
+    return UnitMissing(frame.unit)
+end
 
 FrameRuntimeUpdate = function(frame, reason)
     if not frame then
         return
     end
     reason = reason or "MSUF_FORCE_UPDATE"
+    if RuntimeCanSkipMissingUnit(frame, reason) then
+        return
+    end
     local mask = RUNTIME_REASON_MASKS[reason]
     local hp, maxHP, calc
     if not mask or mask.load then
@@ -1705,10 +1736,10 @@ FrameRuntimeUpdate = function(frame, reason)
     if not mask or mask.alpha then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Alpha", reason, frame.unit)
     end
-    if not mask or mask.alpha or mask.range then
+    if not mask or mask.range then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RangeFade", reason, frame.unit)
     end
-    if not mask or mask.alpha or mask.groupRange then
+    if not mask or mask.groupRange then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupRangeFade", reason, frame.unit)
     end
     if not mask or mask.borders then

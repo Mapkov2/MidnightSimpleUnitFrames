@@ -74,6 +74,20 @@ local function SafeBool(value)
     return nil
 end
 
+local function IsUnitToken(unit)
+    if issecretvalue(unit) == true then return false end
+    return type(unit) == "string" and unit ~= ""
+end
+
+local function UnitEventMatchesFrame(frame, unit)
+    if unit == nil then return true end
+    if issecretvalue(unit) == true then return false end
+    if type(unit) ~= "string" then return false end
+    if unit == "" then return true end
+    local frameUnit = frame and frame.unit
+    return IsUnitToken(frameUnit) and frameUnit == unit
+end
+
 local function ClearRange(frame)
     if not frame then return end
     frame._msufGFRangeUnit = frame.unit
@@ -107,7 +121,21 @@ end
 local function StoreRange(frame, inRange)
     if not frame then return false end
     local unit = frame.unit
-    local unitChanged = frame._msufGFRangeUnit ~= unit
+    if not IsUnitToken(unit) then
+        local oldUnit = frame._msufGFRangeUnit
+        local oldKnown = frame._msufGFRangeKnown
+        local oldRaw = frame._msufGFInRangeRaw
+        local hadState = issecretvalue(oldUnit) == true or oldUnit ~= nil
+            or issecretvalue(oldKnown) == true or oldKnown ~= nil
+            or issecretvalue(oldRaw) == true or oldRaw ~= nil
+        frame._msufGFRangeUnit = nil
+        frame._msufGFRangeKnown = nil
+        frame._msufGFInRangeRaw = nil
+        frame._msufGFRangeCacheable = nil
+        return hadState
+    end
+    local oldUnit = frame._msufGFRangeUnit
+    local unitChanged = issecretvalue(oldUnit) == true or oldUnit ~= unit
     frame._msufGFRangeUnit = unit
 
     local inRangeSecret = issecretvalue(inRange) == true
@@ -135,7 +163,7 @@ end
 
 local playerGUID
 local function UnitIsPlayer(unit)
-    if not (unit and unit ~= "") then
+    if not IsUnitToken(unit) then
         return false
     end
     if unit == "player" then
@@ -167,7 +195,7 @@ end
 
 local function FrameIsPlayerUnit(frame)
     local unit = frame and frame.unit
-    if not unit then
+    if not IsUnitToken(unit) then
         return false
     end
     if frame._msufGFRangePlayerUnit == unit and frame._msufGFRangeIsPlayerUnit ~= nil then
@@ -227,7 +255,7 @@ local rangeSettleFrames = {}
 local rangeSettleIndex = {}
 
 local function PollCurrentRange(unit)
-    if not (UnitInRange and unit and unit ~= "") then
+    if not (UnitInRange and IsUnitToken(unit)) then
         return nil, false
     end
     local inRange, checked = UnitInRange(unit)
@@ -648,7 +676,7 @@ local function FlushOfflineDelayFrames()
             local unit = frame._msufGFOfflineDelayUnit
             RemoveOfflineDelayFrame(frame)
             frame._msufGFOfflineDelayPending = nil
-            if frame.unit == unit then
+            if UnitEventMatchesFrame(frame, unit) then
                 frame._msufGFOfflineDelayReady = true
                 if ApplyAlpha then
                     ApplyAlpha(frame, "MSUF_GF_OFFLINE_DELAY")
@@ -695,6 +723,10 @@ local function OfflineHideReady(frame)
         return true
     end
     local unit = frame and frame.unit
+    if not IsUnitToken(unit) then
+        ClearOfflineDelay(frame)
+        return true
+    end
     if frame._msufGFOfflineDelayUnit == unit and frame._msufGFOfflineDelayReady == true then
         return true
     end
@@ -714,6 +746,9 @@ local function DispatchToken(frame)
 end
 
 local function FreshUnitState(frame, unit)
+    if not IsUnitToken(unit) then
+        return nil
+    end
     local state = frame and frame._msufUnitState
     if state
         and state.ready == true
@@ -726,6 +761,9 @@ local function FreshUnitState(frame, unit)
 end
 
 local function ReadConnectedCached(frame, unit)
+    if not IsUnitToken(unit) then
+        return true, false
+    end
     local state = FreshUnitState(frame, unit)
     if state and state.connectedKnown == true then
         return state.connected == true, true
@@ -760,7 +798,7 @@ local function ReadConnectedCached(frame, unit)
 end
 
 local function OfflineGone(frame, unit, force)
-    if not unit then
+    if not IsUnitToken(unit) then
         return false
     end
     if not force and frame._msufGFOfflineUnit == unit and frame._msufGFOfflineGone ~= nil then
@@ -790,7 +828,13 @@ end
 local function BaseAlpha(frame, event)
     if not frame then return 1, false end
     local unit = frame.unit
-    if frame._msufGFRangeUnit ~= unit then
+    if not IsUnitToken(unit) then
+        ClearRange(frame)
+        ClearOfflineDelay(frame)
+        return CoreAlpha(frame), false
+    end
+    local rangeUnit = frame._msufGFRangeUnit
+    if issecretvalue(rangeUnit) == true or rangeUnit ~= unit then
         ClearRange(frame)
     end
     local base = CoreAlpha(frame)
@@ -880,11 +924,11 @@ end
 function GroupRangeFade.Update(frame, event, unit, inRange)
     local changed = false
     if event == "UNIT_IN_RANGE_UPDATE" then
-        if not unit or unit == "" or unit == frame.unit then
+        if UnitEventMatchesFrame(frame, unit) then
             changed = StoreRange(frame, FrameIsPlayerUnit(frame) and true or inRange)
         end
     elseif event == "UNIT_PHASE" or event == "UNIT_CTR_OPTIONS" or event == "UNIT_OTHER_PARTY_CHANGED" then
-        if not unit or unit == "" or unit == frame.unit then
+        if UnitEventMatchesFrame(frame, unit) then
             changed = StoreRange(frame, FrameIsPlayerUnit(frame) and true or nil)
         end
     elseif event == "UNIT_CONNECTION" then

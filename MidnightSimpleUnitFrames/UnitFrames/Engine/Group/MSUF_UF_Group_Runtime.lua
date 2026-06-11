@@ -33,6 +33,12 @@ local wipe = wipe or function(t)
 end
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
+
+local function IsUnitToken(unit)
+    if issecretvalue(unit) == true then return false end
+    return type(unit) == "string" and unit ~= ""
+end
 
 local eventFrame
 local rosterRebuildQueued = false
@@ -171,9 +177,13 @@ end
 
 local function GroupUnitMatches(frame, unit)
     local frameUnit = frame and frame.unit
-    if not unit or unit == "" then
+    if unit == nil then
         return true
     end
+    if issecretvalue(unit) == true then return false end
+    if type(unit) ~= "string" then return false end
+    if unit == "" then return true end
+    if not IsUnitToken(frameUnit) then return false end
     if frameUnit == unit then
         return true
     end

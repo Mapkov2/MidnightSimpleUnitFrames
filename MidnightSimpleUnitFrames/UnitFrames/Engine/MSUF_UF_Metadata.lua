@@ -172,6 +172,7 @@ local MASK_POWER = { power = true }
 local MASK_ALPHA = { alpha = true }
 local MASK_BORDERS = { borders = true }
 local MASK_BAR_OUTLINE = { power = true, borders = true }
+local MASK_DISPEL_VISUAL = { borders = true, auras = true }
 local MASK_PREDICTION = { prediction = true }
 local MASK_FONT_RUNTIME = { health = true, power = true, name = true }
 local MASK_TEXT_STATUS_RUNTIME = { health = true, power = true, name = true, status = true }
@@ -212,6 +213,7 @@ local MASK_GROUP_UNIT_IDENTITY = {
     groupVisuals = true,
     groupRange = true,
     borders = true,
+    auras = true,
 }
 
 local runtimeReasonMasks = {}
@@ -223,6 +225,12 @@ AddRuntimeReasonMasks(runtimeReasonMasks, MASK_GROUP_UNIT_IDENTITY, { "MSUF_GF_U
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_ALPHA, { "MSUF_ALPHA" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BORDERS, { "MSUF_BORDER_LAYOUT", "MSUF2_BORDER" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BAR_OUTLINE, { "MSUF2_BAR_OUTLINE", "MSUF2_BAR_OUTLINE_COLOR" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_DISPEL_VISUAL, {
+    "MSUF2_DISPEL_BORDER", "MSUF2_DISPEL_TRIGGER",
+    "MSUF2_UF_DISPEL_OVERLAY", "MSUF2_UF_DISPEL_OVERLAY_TRIGGER",
+    "MSUF2_UF_DISPEL_OVERLAY_STYLE", "MSUF2_UF_DISPEL_OVERLAY_HEALTH",
+    "MSUF2_UF_DISPEL_OVERLAY_ALPHA",
+})
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BORDERS, { "MSUF_GF_DIRTY_BORDER" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_DISABLED, { "MSUF_GF_DIRTY_AURAS" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_TEXT_STATUS_RUNTIME, { "MSUF_GF_DIRTY_FONT" })
@@ -262,7 +270,7 @@ Metadata.refreshElementGroups = {
         "Portrait", "StatusIndicators", "RaidMarkerIndicator", "LeaderIndicator", "Prediction",
         "LevelIndicator", "RaidGroupIndicator", "EliteIndicator", "StatusTextIndicator",
         "CombatIndicator", "RestingIndicator", "IncomingResIndicator", "PVPIndicator", "Alpha", "Borders",
-        "RangeFade",
+        "RangeFade", "Auras",
     },
     powerText = { "Power", "Text", "PowerText" },
     text = { "Text", "NameText", "HealthText", "PowerText", "InlineToT" },

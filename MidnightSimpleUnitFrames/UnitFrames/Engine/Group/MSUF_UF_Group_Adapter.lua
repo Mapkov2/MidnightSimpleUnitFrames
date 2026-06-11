@@ -55,7 +55,7 @@ local APPLY_MASK = {
     GroupStatusRuntime = true, Prediction = true,
     Alpha = true,
     Borders = true, GroupRangeFade = true, GroupVisuals = true,
-    GroupCornerIndicators = true,
+    GroupCornerIndicators = true, Auras = true,
 }
 GF.GROUP_APPLY_MASK = APPLY_MASK
 
