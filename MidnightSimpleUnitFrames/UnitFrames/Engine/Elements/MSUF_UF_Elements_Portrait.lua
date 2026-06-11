@@ -15,6 +15,7 @@ local type = V.type or type
 local max = V.max or math.max
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local PORTRAIT_2D_EVENTS = V.PORTRAIT_2D_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_CONNECTION" }
+local PORTRAIT_2D_PLAYER_EVENTS = V.PORTRAIT_2D_PLAYER_EVENTS or { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED", "UNIT_ENTERED_VEHICLE", "UNIT_EXITED_VEHICLE" }
 local WHITE = V.WHITE or "Interface\\Buttons\\WHITE8x8"
 local QUESTION_MARK = V.QUESTION_MARK or "Interface\\ICONS\\INV_Misc_QuestionMark"
 local BOSS_PREVIEW_PORTRAIT = V.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achievement_Boss_LichKing"
@@ -467,6 +468,9 @@ end
 function Portrait.GetEvents(frame, spec)
     local p = spec and spec.portrait
     if p and p.enabled == true and p.render ~= "CLASS" then
+        if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+            return PORTRAIT_2D_PLAYER_EVENTS
+        end
         return PORTRAIT_2D_EVENTS
     end
     return EMPTY_EVENTS
@@ -487,6 +491,7 @@ function Portrait.Apply(frame, spec)
         Portrait.Disable(frame)
         return
     end
+    frame._msufUpdatePortraitConnection = Portrait.UpdateConnectionState
     LayoutPortrait(frame, p)
     ApplyPortraitMask(holder, p)
     ApplyPortraitBackground(holder, p)
@@ -499,6 +504,7 @@ function Portrait.Disable(frame)
     local holder = frame.MSUFPortraitHolder
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
+    frame._msufUpdatePortraitConnection = nil
     if frame.portrait then
         ClearPortraitGUID(frame.portrait)
     end
@@ -512,6 +518,24 @@ function Portrait.Disable(frame)
         end
     elseif frame.portrait then
         SetShown(frame.portrait, false)
+    end
+end
+
+function Portrait.UpdateConnectionState(frame, event, unit)
+    local p = frame.MSUFSpec and frame.MSUFSpec.portrait
+    local texture = frame.portrait
+    if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
+        return
+    end
+    frame._msufPortraitForceRefresh = true
+    ClearPortraitGUID(texture)
+    if not PortraitFrameVisible(frame) then
+        frame._msufPortraitNeedsVisibleRefresh = true
+        return
+    end
+    QueuePortraitUpdate(frame)
+    if PortraitBorderNeedsUpdate(event, p) then
+        LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
     end
 end
 

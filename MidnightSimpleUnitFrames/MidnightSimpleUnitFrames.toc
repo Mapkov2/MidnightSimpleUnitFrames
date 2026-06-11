@@ -91,7 +91,6 @@ Kernel\MSUF_BlizzardFrames.lua
 # ---------------------------------------------------------------
 # AURAS
 # ---------------------------------------------------------------
-Auras3\MSUF_Auras3_Runtime.xml
 
 # ---------------------------------------------------------------
 # FEATURES
@@ -113,6 +112,7 @@ Runtime\MSUF_FontRegistry.lua
 UnitFrames\MSUF_UnitFrames_Elements.xml
 Integrations\MSUF_Integration_ThirdPartyAnchors.lua
 UnitFrames\MSUF_UnitFrames_Factory.xml
+Auras3\MSUF_Auras3_Runtime.xml
 Runtime\MSUF_SwapRecolor.lua
 Runtime\MSUF_FontRuntime.lua
 Runtime\MSUF_TextureRuntime.lua

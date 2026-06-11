@@ -31,6 +31,7 @@ MSUF.Apply = Apply
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 Apply.IsSecret = IsSecret
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 -- Texture (file ID or path). Aura icons are pre-filtered non-secret upstream,
 -- but the guard makes the helper safe to call from anywhere.
@@ -115,16 +116,19 @@ end
 -- SetText to avoid C calls and string churn on unchanged text updates.
 function Apply.Text(region, text)
     if not region then return end
-    if IsSecret(text) then
+    if issecretvalue(text) == true then
         region:SetText(text)
         region._aText = nil
+        region._aTextPlain = nil
         return
     end
     text = text or ""
-    if region._aText ~= text then
-        region:SetText(text)
-        region._aText = text
+    if region._aTextPlain == true and region._aText == text then
+        return
     end
+    region:SetText(text)
+    region._aText = text
+    region._aTextPlain = true
 end
 
 -- StatusBar fill colour. Colours in 6.0 are plain RGBA (class tables, config,
@@ -176,6 +180,7 @@ function Apply.Invalidate(region)
     region._aCTB = nil
     region._aCTA = nil
     region._aText = nil
+    region._aTextPlain = nil
     region._aW = nil
     region._aH = nil
     region._aPt = nil

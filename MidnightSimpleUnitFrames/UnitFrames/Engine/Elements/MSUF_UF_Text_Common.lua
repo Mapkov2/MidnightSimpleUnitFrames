@@ -73,6 +73,7 @@ local Secrets = MSUF.Secrets or {}
 local IsSecret = C.IsSecret or Secrets.IsSecret or function(_) return false end
 -- Hot paths call the C predicate directly (no cross-module Lua wrapper);
 -- IsSecret stays for cold paths / API parity.
+local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
@@ -197,6 +198,15 @@ end
 
 local function SetHealthTextColor(frame, rt, r, g, b, a)
     a = a or 1
+    if nativeSecrets then
+        if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
+            SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
+            SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
+            SetHealthTextSlotColorSecret(frame.hpTextRight, r, g, b, a)
+        end
+        frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
+        return
+    end
     if issecretvalue(r) == true or issecretvalue(g) == true
         or issecretvalue(b) == true or issecretvalue(a) == true then
         if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
@@ -228,7 +238,7 @@ local function BaseTextColor(frame)
 end
 
 local function HealthGradientFromValues(hp, hpMax)
-    if issecretvalue(hp) == true or issecretvalue(hpMax) == true then
+    if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(hpMax) == true) then
         return nil
     end
     hp = tonumber(hp)
@@ -253,6 +263,22 @@ local function HealthTextColor(frame, unit, hp, hpMax, rt)
     -- Alpha is compile-time stable (spec.textColor.a); CompileTextRuntime caches
     -- it on rt so the hot path skips the per-tick BaseTextColor table walk.
     local a = rt and rt.healthTextAlpha
+    -- Reuse the bar's just-evaluated gradient (stash written by
+    -- ApplyHealthStatusColor) when the bar runs the same gradient mode and
+    -- the stash is fresh. The stashed r/g/b may be secret: forwarded only,
+    -- never compared. Dispatch order recolors the bar before the text flush,
+    -- so the stash is normally from this very tick; the freshness window
+    -- (0.2s) caps staleness at the same level as the bar's own throttle.
+    if frame and frame._msufHealthColorByHealth == true then
+        local at = frame._msufGradStashAt
+        if at and ((GetTime and GetTime() or 0) - at) < 0.2 then
+            if a == nil then
+                local _
+                _, _, _, a = BaseTextColor(frame)
+            end
+            return frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB, a
+        end
+    end
     local r, g, b, raw = GradientColor(unit, calc)
     if raw == true then
         if a == nil then
@@ -261,7 +287,16 @@ local function HealthTextColor(frame, unit, hp, hpMax, rt)
         end
         return r, g, b, a
     end
-    r, g, b = HealthGradientFromValues(hp, hpMax)
+    if nativeSecrets ~= true then
+        local gr, gg, gb = HealthGradientFromValues(hp, hpMax)
+        if gr then
+            r, g, b = gr, gg, gb
+        else
+            r = nil
+        end
+    else
+        r = nil
+    end
     if r then
         if a == nil then
             local _
@@ -283,7 +318,7 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
     -- path: secret values cannot be bucketed, so the secret path clears it and
     -- always recolors (the flush throttle already caps that rate). Reset points:
     -- CompileTextRuntime (settings/spec change) and every secret/unknown tick.
-    if issecretvalue(hp) ~= true and issecretvalue(hpMax) ~= true
+    if nativeSecrets ~= true
         and type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
         local bucket = floor((hp / hpMax) * 100 + 0.5)
         if rt._textGradientPct == bucket then

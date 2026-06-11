@@ -45,7 +45,7 @@ Metadata.hotEventKind = BuildEventKindMap({
     },
     [3] = { "UNIT_CONNECTION" },
     [4] = { "UNIT_NAME_UPDATE" },
-    [5] = {},
+    [5] = { "UNIT_AURA" },
     [6] = { "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE" },
     [8] = { "UNIT_PORTRAIT_UPDATE", "UNIT_MODEL_CHANGED" },
     [9] = { "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" },
@@ -89,12 +89,16 @@ Metadata.hotStateSpecs = {
         { "StatusTextIndicator", "statusText" },
         { "GroupVisuals", "groupVisuals" },
         { "GroupStatusRuntime", "groupStatus" },
+        { "RangeFade", "range" },
+        { "GroupRangeFade", "groupRange" },
     },
     [4] = {
         { "NameText", "name" },
         { "InlineToT", "inline", "inlineMode" },
     },
-    [5] = {},
+    [5] = {
+        { "Auras", "auras" },
+    },
     [6] = {
         { "GroupVisuals", "groupVisuals" },
         { "GroupCornerIndicators", "groupCorners" },
@@ -118,6 +122,7 @@ Metadata.hotStateSpecs = {
         { "Alpha", "alpha" },
         { "CombatIndicator", "combat" },
         { "LoadConditions", "load" },
+        { "Auras", "auras" },
     },
     [12] = {
         { "RaidMarkerIndicator", "raidMarker" },
@@ -157,8 +162,9 @@ Metadata.runtimeUpdateOwners = BuildNameSet({
     "InlineToT", "Portrait", "Alpha", "StatusIndicators", "RaidMarkerIndicator",
     "LeaderIndicator", "LevelIndicator", "RaidGroupIndicator", "EliteIndicator",
     "StatusTextIndicator", "CombatIndicator", "RestingIndicator", "IncomingResIndicator",
-    "PVPIndicator", "Prediction", "Borders", "GroupStatusRuntime",
+    "PVPIndicator", "Prediction", "Borders", "LoadConditions", "GroupStatusRuntime",
     "RangeFade", "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators",
+    "Auras",
 })
 
 local MASK_HEALTH = { health = true }
@@ -173,6 +179,7 @@ local MASK_DISABLED = {}
 local MASK_CASTBAR_SYNC = { health = true, power = true, name = true, portrait = true, status = true, borders = true }
 local MASK_BARS_BORDERS = { health = true, power = true, borders = true }
 local MASK_UNIT_IDENTITY = {
+    load = true,
     health = true,
     power = true,
     name = true,
@@ -182,12 +189,37 @@ local MASK_UNIT_IDENTITY = {
     prediction = true,
     alpha = true,
     borders = true,
+    auras = true,
+}
+local MASK_UNIT_IDENTITY_SOFT = {
+    load = true,
+    health = true,
+    power = true,
+    name = true,
+    inline = true,
+    portrait = true,
+    status = true,
+    prediction = true,
+    auras = true,
+}
+local MASK_GROUP_UNIT_IDENTITY = {
+    load = true,
+    health = true,
+    power = true,
+    name = true,
+    groupStatus = true,
+    prediction = true,
+    groupVisuals = true,
+    groupRange = true,
+    borders = true,
 }
 
 local runtimeReasonMasks = {}
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_FONT_RUNTIME, { "FONT_RUNTIME", "MSUF2_HP_TEXT_COLOR" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_CASTBAR_SYNC, { "CASTBAR_SYNC" })
-AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY, { "MSUF_UNIT_IDENTITY", "MSUF_UNIT_IDENTITY_SOFT" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY, { "MSUF_UNIT_IDENTITY" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT, { "MSUF_UNIT_IDENTITY_SOFT" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_GROUP_UNIT_IDENTITY, { "MSUF_GF_UNIT_IDENTITY" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_ALPHA, { "MSUF_ALPHA" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BORDERS, { "MSUF_BORDER_LAYOUT", "MSUF2_BORDER" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BAR_OUTLINE, { "MSUF2_BAR_OUTLINE", "MSUF2_BAR_OUTLINE_COLOR" })
@@ -219,8 +251,8 @@ Metadata.runtimeReasonMasks = runtimeReasonMasks
 
 Metadata.defaultApplyMask = BuildNameSet({
     "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-    "StatusIndicators", "Prediction", "Borders",
-    "RangeFade",
+    "StatusIndicators", "Prediction", "Borders", "LoadConditions",
+    "RangeFade", "Auras",
 })
 
 Metadata.refreshElementGroups = {

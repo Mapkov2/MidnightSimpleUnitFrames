@@ -11,15 +11,16 @@ local wipe = wipe
 local tonumber = tonumber
 local type = type
 local floor = math.floor
+local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 -- Events Blizzard delivers under a distinct name but which mean the exact same
--- work as an existing hot event. Remapped to the canonical event at dispatch so
--- they reuse that event's already-compiled per-frame state (runner + element
--- set) with no separate runner/kind/handler wiring. One hash lookup per
--- dispatch, independent of how many aliases exist. Frames still subscribe under
--- the real event name (element event lists + UNIT_EVENT_HAS_UNIT); this only
--- remaps the dispatch key.
+-- work as an existing hot event. They reuse that event's already-compiled
+-- per-frame state (runner + element set) with no separate runner/kind/handler
+-- wiring. The remap lookup runs only when the direct hot-state lookup misses, so
+-- UNIT_HEALTH / UNIT_POWER traffic does not pay for rare aliases. Frames still
+-- subscribe under the real event name (element event lists + UNIT_EVENT_HAS_UNIT);
+-- this only remaps the dispatch key.
 --   UNIT_MAX_HEALTH_MODIFIERS_CHANGED -> UNIT_MAXHEALTH (effective max changed)
 --   UNIT_ENTERED/EXITED_VEHICLE       -> UNIT_PORTRAIT_UPDATE (model swapped)
 local EVENT_ALIAS = {
@@ -35,6 +36,18 @@ local RebuildHotEventState
 local DispatchFrameEvent
 local FrameRuntimeUpdate
 local RunCompiledPowerText
+local RunCompiledPowerTextTick
+
+local function MissingHealthFromValues(hp, maxHP)
+    if issecretvalue(hp) == true or issecretvalue(maxHP) == true then
+        return nil
+    end
+    if type(hp) ~= "number" or type(maxHP) ~= "number" then
+        return nil
+    end
+    local missing = maxHP - hp
+    return missing > 0 and missing or 0
+end
 
 local function OwnerModeIsUnitless(mode)
     return mode == "unitless" or mode == "both"
@@ -173,27 +186,33 @@ local function IsGroupFrame(frame)
     return frame and (frame._msufIsGroupFrame == true or frame._msufCoreScope == "group" or (spec and spec.scope == "group"))
 end
 
-local function PowerTextNeedsUpdate(frame, event, power, powerMax)
-    if event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT" then
-        return true
-    end
+local function PowerTextNeedsTickUpdate(frame, power, powerMax)
     local rt = frame and frame._msufTextRuntime
     if not (rt and rt.powerPlain == true) then
         return true
     end
-    if issecretvalue(power) == true or issecretvalue(powerMax) == true then
+    if nativeSecrets and (issecretvalue(power) == true or issecretvalue(powerMax) == true) then
         return true
     end
     if power == nil or powerMax == nil then
         return true
     end
-    local keyPower = rt.powerNeedsCurrent == true and power or false
-    local keyMax = rt.powerNeedsMax == true and powerMax or false
-    if rt.powerNeedsPercent == true and rt.powerNeedsCurrent ~= true then
+    local keyPower, keyMax
+    local mode = rt.powerDispatchKeyMode or 0
+    if mode == 1 then
+        keyPower, keyMax = power, false
+    elseif mode == 2 then
+        keyPower, keyMax = false, powerMax
+    elseif mode == 3 then
+        keyPower, keyMax = power, powerMax
+    elseif mode == 4 or mode == 5 then
         if type(power) ~= "number" or type(powerMax) ~= "number" or powerMax <= 0 then
             return true
         end
         keyPower = floor((power / powerMax) * 100 + 0.5)
+        keyMax = mode == 5 and powerMax or false
+    else
+        keyPower, keyMax = false, false
     end
     if rt._dispatchPowerTextPower == keyPower and rt._dispatchPowerTextMax == keyMax then
         return false
@@ -203,15 +222,99 @@ local function PowerTextNeedsUpdate(frame, event, power, powerMax)
     return true
 end
 
+local function PowerTextNeedsUpdate(frame, powerTick, power, powerMax)
+    if not powerTick then
+        return true
+    end
+    return PowerTextNeedsTickUpdate(frame, power, powerMax)
+end
+
+local function HealthTextNeedsTickUpdate(frame, hp, maxHP)
+    local rt = frame and frame._msufTextRuntime
+    if not (rt and rt.healthPlain == true) then
+        return true
+    end
+    if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(maxHP) == true) then
+        rt._dispatchHealthMissing = nil
+        rt._dispatchHealthMissingReady = nil
+        rt.healthMissing = nil
+        return true
+    end
+    if hp == nil or maxHP == nil then
+        rt._dispatchHealthMissing = nil
+        rt._dispatchHealthMissingReady = nil
+        rt.healthMissing = nil
+        return true
+    end
+    local keyMissing = false
+    if rt.healthNeedsMissing == true then
+        local missing = MissingHealthFromValues(hp, maxHP)
+        if missing == nil then
+            local calc = frame and frame._msufHealthCalc
+            missing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+        end
+        if issecretvalue(missing) == true then
+            return true
+        end
+        rt._dispatchHealthMissing = missing
+        rt._dispatchHealthMissingReady = true
+        rt.healthMissing = missing
+        keyMissing = missing or false
+    else
+        rt._dispatchHealthMissing = nil
+        rt._dispatchHealthMissingReady = nil
+        rt.healthMissing = nil
+    end
+    local keyHP, keyMax
+    local mode = rt.healthDispatchKeyMode or 0
+    if mode == 1 then
+        keyHP, keyMax = hp, false
+    elseif mode == 2 then
+        keyHP, keyMax = false, maxHP
+    elseif mode == 3 then
+        keyHP, keyMax = hp, maxHP
+    elseif mode == 4 or mode == 5 then
+        if type(hp) ~= "number" or type(maxHP) ~= "number" or maxHP <= 0 then
+            return true
+        end
+        keyHP = floor((hp / maxHP) * 100 + 0.5)
+        keyMax = mode == 5 and maxHP or false
+    else
+        keyHP, keyMax = false, false
+    end
+    if rt._dispatchHealthTextHP == keyHP
+        and rt._dispatchHealthTextMax == keyMax
+        and rt._dispatchHealthTextMissing == keyMissing then
+        return false
+    end
+    rt._dispatchHealthTextHP = keyHP
+    rt._dispatchHealthTextMax = keyMax
+    rt._dispatchHealthTextMissing = keyMissing
+    return true
+end
+
+local function HealthTextNeedsUpdate(frame, healthTick, hp, maxHP)
+    if not healthTick then
+        return true
+    end
+    return HealthTextNeedsTickUpdate(frame, hp, maxHP)
+end
+
 RunCompiledPowerText = function(frame, fn, event, unit, power, powerMax, dirtyFn)
-    if fn and PowerTextNeedsUpdate(frame, event, power, powerMax) then
-        local rt = frame and frame._msufTextRuntime
-        if dirtyFn
-            and rt
-            and rt.powerPlain ~= true
-            and rt.powerThrottle
-            and rt.powerThrottle > 0
-            and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
+    if not fn then return end
+    local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+    if PowerTextNeedsUpdate(frame, powerTick, power, powerMax) then
+        if dirtyFn and powerTick then
+            return dirtyFn(frame, event, unit, power, powerMax)
+        end
+        fn(frame, event, unit, power, powerMax)
+    end
+end
+
+RunCompiledPowerTextTick = function(frame, fn, event, unit, power, powerMax, dirtyFn)
+    if not fn then return end
+    if PowerTextNeedsTickUpdate(frame, power, powerMax) then
+        if dirtyFn then
             return dirtyFn(frame, event, unit, power, powerMax)
         end
         fn(frame, event, unit, power, powerMax)
@@ -236,23 +339,24 @@ local function HotElementAllowed(frame, event, name)
     elseif name == "PowerText" then
         local rt = frame and frame._msufTextRuntime
         return not rt or (rt.powerSlotCount or 0) > 0
-    elseif name == "StatusTextIndicator" and IsGroupFrame(frame) then
-        return false
+    elseif name == "StatusTextIndicator" then
+        if event == "UNIT_HEALTH" or IsGroupFrame(frame) then
+            return false
+        end
     elseif name == "PVPIndicator" then
         local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
         local pvp = status and status.pvp
         return event == "UNIT_FACTION" and pvp and pvp.enabled == true
     elseif name == "NameText" and event == "UNIT_HEALTH" then
-        local text = frame and frame.MSUFSpec and frame.MSUFSpec.text
-        return text and text.hideNameOnDeadOffline == true
+        return false
     elseif name == "GroupStatusRuntime" then
         local cfg = StatusTextConfig(frame)
         if event == "UNIT_HEALTH" then
-            return cfg and (cfg.showDead == true or cfg.showGhost == true)
+            return false
         elseif event == "UNIT_CONNECTION" then
             return cfg and cfg.showDead == true
         elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
-            return cfg and (cfg.showAFK == true or cfg.showDND == true)
+            return cfg and (cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true)
         elseif event == "UNIT_FACTION" then
             local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
             return status and status.runtimePVP == true
@@ -265,8 +369,11 @@ local function HotAdd(frame, event, state, owners, name, fnKey, modeKey)
     local mode = owners[name]
     if mode == nil then return end
     if HotElementAllowed(frame, event, name) ~= true then return end
-    local element = UF.elements[name]
-    local update = element and element.Update
+    local update = frame and frame[UPDATE_KEYS[name]]
+    if not update then
+        local element = UF.elements[name]
+        update = element and element.Update
+    end
     if not update then return end
     state.hasWork = true
     state[fnKey] = update
@@ -278,13 +385,198 @@ end
 local function RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
     local textFn = state.healthText
     if not textFn then return end
-    if event == "UNIT_HEALTH" then
+    local healthTick = event == "UNIT_HEALTH"
+    if not HealthTextNeedsUpdate(frame, healthTick, hp, maxHP) then
+        return
+    end
+    if healthTick then
         local dirtyFn = state.healthTextDirty
         if dirtyFn then
             return dirtyFn(frame, event, unit, hp, maxHP)
         end
     end
     return textFn(frame, event, unit, hp, maxHP)
+end
+
+local function RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
+    local textFn = state.healthText
+    if not textFn then return end
+    if not HealthTextNeedsTickUpdate(frame, hp, maxHP) then
+        return
+    end
+    local dirtyFn = state.healthTextDirty
+    if dirtyFn then
+        return dirtyFn(frame, event, unit, hp, maxHP)
+    end
+    return textFn(frame, event, unit, hp, maxHP)
+end
+
+local function RunHotHealthOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        state.health(frame, event, unit)
+    end
+    return true
+end
+
+local function RunHotHealthNameOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        state.health(frame, event, unit)
+        state.name(frame, event, unit)
+    end
+    return true
+end
+
+local function RunHotHealthTextOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP = state.health(frame, event, unit)
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthTextTickOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP = state.health(frame, event, unit)
+        RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthPredictionOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP, calc = state.health(frame, event, unit)
+        state.prediction(frame, event, unit, hp, maxHP, calc)
+    end
+    return true
+end
+
+local function RunHotHealthTextPredictionOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP, calc = state.health(frame, event, unit)
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+        state.prediction(frame, event, unit, hp, maxHP, calc)
+    end
+    return true
+end
+
+local function RunHotHealthTextPredictionTickOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP, calc = state.health(frame, event, unit)
+        RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
+        state.prediction(frame, event, unit, hp, maxHP, calc)
+    end
+    return true
+end
+
+local function RunHotHealthGroupVisualsOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP = state.health(frame, event, unit)
+        state.groupVisuals(frame, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthTextGroupVisuals(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP = state.health(frame, event, unit)
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+        state.groupVisuals(frame, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthTextTickGroupVisuals(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP = state.health(frame, event, unit)
+        RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
+        state.groupVisuals(frame, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthPredictionGroupVisuals(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP, calc = state.health(frame, event, unit)
+        state.prediction(frame, event, unit, hp, maxHP, calc)
+        state.groupVisuals(frame, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthTextPredictionGroupVisuals(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP, calc = state.health(frame, event, unit)
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+        state.prediction(frame, event, unit, hp, maxHP, calc)
+        state.groupVisuals(frame, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthTextPredictionTickGroupVisuals(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local hp, maxHP, calc = state.health(frame, event, unit)
+        RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
+        state.prediction(frame, event, unit, hp, maxHP, calc)
+        state.groupVisuals(frame, event, unit, hp, maxHP)
+    end
+    return true
+end
+
+local function RunHotHealthFlagsGroupState(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local fn = state.health
+        if fn then fn(frame, event, unit) end
+        fn = state.groupVisuals
+        if fn then fn(frame, event, unit) end
+        fn = state.groupStatus
+        if fn then fn(frame, event, unit) end
+    end
+    return true
+end
+
+local function RunHotPowerOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        state.power(frame, event, unit)
+    end
+    return true
+end
+
+local function RunHotPowerTickOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        state.power(frame, event, unit)
+    end
+    return true
+end
+
+local function RunHotPowerTextOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local power, maxPower = state.power(frame, event, unit)
+        RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    end
+    return true
+end
+
+local function RunHotPowerTextTickOnly(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        local power, maxPower = state.power(frame, event, unit)
+        RunCompiledPowerTextTick(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    end
+    return true
+end
+
+local function RunHotPowerTextStandalone(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        RunCompiledPowerText(frame, state.powerText, event, unit, nil, nil, state.powerTextDirty)
+    end
+    return true
+end
+
+local function RunHotPowerTextTickStandalone(frame, state, event, unit, sameUnit)
+    if sameUnit then
+        RunCompiledPowerTextTick(frame, state.powerText, event, unit, nil, nil, state.powerTextDirty)
+    end
+    return true
 end
 
 local function RunHotKindHealth(frame, state, event, unit, sameUnit, a, b, c)
@@ -295,9 +587,7 @@ local function RunHotKindHealth(frame, state, event, unit, sameUnit, a, b, c)
         end
         if state.predictionUnitless then
             local fn = state.prediction
-            if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                fn(frame, event, unit, a, b, c)
-            end
+            if fn then fn(frame, event, unit, a, b, c) end
         end
         return true
     end
@@ -307,14 +597,20 @@ local function RunHotKindHealth(frame, state, event, unit, sameUnit, a, b, c)
         local fn = state.health
         if fn then
             hp, maxHP, calc = fn(frame, event, unit)
-            RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+            if event == "UNIT_HEALTH" then
+                RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
+            else
+                RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+            end
         else
-            RunCompiledHealthText(frame, state, event, unit)
+            if event == "UNIT_HEALTH" then
+                RunCompiledHealthTextTick(frame, state, event, unit)
+            else
+                RunCompiledHealthText(frame, state, event, unit)
+            end
         end
         fn = state.prediction
-        if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-            fn(frame, event, unit, hp, maxHP, calc)
-        end
+        if fn then fn(frame, event, unit, hp, maxHP, calc) end
         fn = state.name
         if fn then fn(frame, event, unit) end
         fn = state.statusText
@@ -349,9 +645,7 @@ local function RunHotHealthValue(frame, state, event, unit, sameUnit, a, b, c)
         end
         if state.predictionUnitless then
             local fn = state.prediction
-            if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-                fn(frame, event, unit, a, b, c)
-            end
+            if fn then fn(frame, event, unit, a, b, c) end
         end
         return true
     end
@@ -365,9 +659,7 @@ local function RunHotHealthValue(frame, state, event, unit, sameUnit, a, b, c)
         RunCompiledHealthText(frame, state, event, unit)
     end
     fn = state.prediction
-    if fn and (event ~= "UNIT_HEALTH" or frame._msufPredictionNeedsHealth == true) then
-        fn(frame, event, unit, hp, maxHP, calc)
-    end
+    if fn then fn(frame, event, unit, hp, maxHP, calc) end
     fn = state.name
     if fn then fn(frame, event, unit) end
     fn = state.statusText
@@ -395,6 +687,28 @@ local function RunHotHealthFlags(frame, state, event, unit, sameUnit, a, b, c)
     fn = state.statusText
     if fn then fn(frame, event, unit, a, b, c) end
     fn = state.combat
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupVisuals
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit, a, b, c) end
+    return true
+end
+
+local function RunHotHealthFlagsNoCombat(frame, state, event, unit, sameUnit, a, b, c)
+    if not sameUnit then
+        if state.inlineUnitless then
+            local fn = state.inline
+            if fn then fn(frame, event, unit, a, b, c) end
+        end
+        return true
+    end
+
+    local fn = state.health
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.name
+    if fn then fn(frame, event, unit) end
+    fn = state.statusText
     if fn then fn(frame, event, unit, a, b, c) end
     fn = state.groupVisuals
     if fn then fn(frame, event, unit, a, b, c) end
@@ -452,7 +766,7 @@ local function RunHotKindPower(frame, state, event, unit, sameUnit, a, b, c)
         RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty)
     else
         fn = state.powerText
-        if fn then fn(frame, event, unit) end
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
     end
     return true
 end
@@ -474,9 +788,17 @@ local function RunHotKindConnection(frame, state, event, unit, sameUnit, a, b, c
     local fn = state.health
     if fn then
         hp, maxHP, calc = fn(frame, event, unit)
-        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+        if event == "UNIT_HEALTH" then
+            RunCompiledHealthTextTick(frame, state, event, unit, hp, maxHP)
+        else
+            RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+        end
     else
-        RunCompiledHealthText(frame, state, event, unit)
+        if event == "UNIT_HEALTH" then
+            RunCompiledHealthTextTick(frame, state, event, unit)
+        else
+            RunCompiledHealthText(frame, state, event, unit)
+        end
     end
     fn = state.power
     if fn then
@@ -485,7 +807,7 @@ local function RunHotKindConnection(frame, state, event, unit, sameUnit, a, b, c
         RunCompiledPowerText(frame, textFn, event, unit, power, maxPower, state.powerTextDirty)
     else
         fn = state.powerText
-        if fn then fn(frame, event, unit) end
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
     end
     fn = state.name
     if fn then fn(frame, event, unit) end
@@ -499,6 +821,285 @@ local function RunHotKindConnection(frame, state, event, unit, sameUnit, a, b, c
     if fn then fn(frame, event, unit) end
     fn = state.groupStatus
     if fn then fn(frame, event, unit) end
+    fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionRangeOnly(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+    local fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionLightState(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit)
+    end
+    local fn = state.groupVisuals
+    if fn then fn(frame, event, unit) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit) end
+    fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionHealthRangeState(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP = state.health(frame, event, unit)
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+    local fn = state.groupVisuals
+    if fn then fn(frame, event, unit) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit) end
+    fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionHealthRangeOnly(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP = state.health(frame, event, unit)
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+    local fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionHealthGroupState(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP = state.health(frame, event, unit)
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+    local fn = state.groupVisuals
+    if fn then fn(frame, event, unit) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit) end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionBarsOnly(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP
+    local fn = state.health
+    if fn then
+        hp, maxHP = fn(frame, event, unit)
+    end
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+
+    fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    else
+        fn = state.powerText
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionBarsName(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP
+    local fn = state.health
+    if fn then
+        hp, maxHP = fn(frame, event, unit)
+    end
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+
+    fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    else
+        fn = state.powerText
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    end
+
+    state.name(frame, event, unit)
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionPrimary(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP, calc
+    local fn = state.health
+    if fn then
+        hp, maxHP, calc = fn(frame, event, unit)
+    end
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+
+    fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    else
+        fn = state.powerText
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    end
+
+    fn = state.name
+    if fn then fn(frame, event, unit) end
+    fn = state.portrait
+    if fn then fn(frame, event, unit) end
+    fn = state.prediction
+    if fn then fn(frame, event, unit, hp, maxHP, calc) end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionBarsGroupState(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP
+    local fn = state.health
+    if fn then
+        hp, maxHP = fn(frame, event, unit)
+    end
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+
+    fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    else
+        fn = state.powerText
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    end
+
+    fn = state.groupVisuals
+    if fn then fn(frame, event, unit) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit) end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionBarsRange(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP
+    local fn = state.health
+    if fn then
+        hp, maxHP = fn(frame, event, unit)
+    end
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+
+    fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    else
+        fn = state.powerText
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    end
+
+    fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+    return true
+end
+
+local function RunHotConnectionBarsGroupRange(frame, state, event, unit, sameUnit)
+    if not sameUnit then
+        return true
+    end
+
+    local hp, maxHP
+    local fn = state.health
+    if fn then
+        hp, maxHP = fn(frame, event, unit)
+    end
+    if state.healthText then
+        RunCompiledHealthText(frame, state, event, unit, hp, maxHP)
+    end
+
+    fn = state.power
+    if fn then
+        local power, maxPower = fn(frame, event, unit)
+        RunCompiledPowerText(frame, state.powerText, event, unit, power, maxPower, state.powerTextDirty)
+    else
+        fn = state.powerText
+        RunCompiledPowerText(frame, fn, event, unit, nil, nil, state.powerTextDirty)
+    end
+
+    fn = state.groupVisuals
+    if fn then fn(frame, event, unit) end
+    fn = state.groupStatus
+    if fn then fn(frame, event, unit) end
+    fn = state.range
+    if fn then fn(frame, event, unit) end
+    fn = state.groupRange
+    if fn then fn(frame, event, unit) end
+    fn = state.statusText
+    if fn then fn(frame, event, unit) end
     return true
 end
 
@@ -506,15 +1107,7 @@ local function RunHotKindAura(frame, state, event, unit, sameUnit, a, b, c)
     if not sameUnit then
         return true
     end
-    local fn = state.dispel
-    if fn then fn(frame, event, unit, a, b, c) end
-    fn = state.groupVisuals
-    if fn then fn(frame, event, unit, a, b, c) end
-    fn = state.groupCorners
-    if fn then fn(frame, event, unit, a, b, c) end
-    fn = state.groupSpells
-    if fn then fn(frame, event, unit, a, b, c) end
-    fn = state.borders
+    local fn = state.auras
     if fn then fn(frame, event, unit, a, b, c) end
     return true
 end
@@ -587,6 +1180,8 @@ local function RunHotKindCombat(frame, state, event, unit, sameUnit, a, b, c)
     fn = state.combat
     if fn then fn(frame, event, unit, a, b, c) end
     fn = state.load
+    if fn then fn(frame, event, unit, a, b, c) end
+    fn = state.auras
     if fn then fn(frame, event, unit, a, b, c) end
     return true
 end
@@ -663,6 +1258,134 @@ local function RunHotKindCooldown(frame, state, event, unit, sameUnit, a, b, c)
     fn = state.borders
     if fn then fn(frame, event, unit, a, b, c) end
     return true
+end
+
+local function SelectHotHealthValueRunner(state, event)
+    if state.inline or state.inlineUnitless or state.predictionUnitless
+        or state.name or state.statusText or state.combat or state.pvp or state.groupStatus then
+        return nil
+    end
+    local hasHealthText = state.healthText ~= nil
+    local hasPrediction = state.prediction ~= nil
+    local healthTick = event == "UNIT_HEALTH"
+    if not state.health then
+        return nil
+    end
+    if state.groupVisuals then
+        if hasPrediction and hasHealthText then
+            return healthTick and RunHotHealthTextPredictionTickGroupVisuals or RunHotHealthTextPredictionGroupVisuals
+        elseif hasPrediction then
+            return RunHotHealthPredictionGroupVisuals
+        elseif hasHealthText then
+            return healthTick and RunHotHealthTextTickGroupVisuals or RunHotHealthTextGroupVisuals
+        end
+        return RunHotHealthGroupVisualsOnly
+    elseif hasPrediction and hasHealthText then
+        return healthTick and RunHotHealthTextPredictionTickOnly or RunHotHealthTextPredictionOnly
+    elseif hasPrediction then
+        return RunHotHealthPredictionOnly
+    elseif hasHealthText then
+        return healthTick and RunHotHealthTextTickOnly or RunHotHealthTextOnly
+    end
+    return RunHotHealthOnly
+end
+
+local function SelectHotPowerRunner(state, event)
+    local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+    if state.powerText and state.power then
+        return powerTick and RunHotPowerTextTickOnly or RunHotPowerTextOnly
+    elseif state.power then
+        return powerTick and RunHotPowerTickOnly or RunHotPowerOnly
+    elseif state.powerText then
+        return powerTick and RunHotPowerTextTickStandalone or RunHotPowerTextStandalone
+    end
+    return nil
+end
+
+local function SelectHotConnectionRunner(state)
+    if state.inline or state.inlineUnitless or state.predictionUnitless then
+        return nil
+    end
+    local hasRange = state.range ~= nil or state.groupRange ~= nil
+    if not (state.health or state.healthText or state.power or state.powerText
+        or state.name or state.portrait or state.prediction or state.groupVisuals or state.groupStatus
+        or state.statusText or hasRange) then
+        return nil
+    end
+    if not (state.health or state.power or state.powerText or state.name or state.portrait or state.prediction) then
+        if hasRange and not (state.healthText or state.groupVisuals or state.groupStatus or state.statusText) then
+            return RunHotConnectionRangeOnly
+        end
+        if state.healthText or state.groupVisuals or state.groupStatus or state.statusText or hasRange then
+            return RunHotConnectionLightState
+        end
+    end
+    if hasRange then
+        if state.health
+            and not (state.power or state.powerText or state.name or state.portrait or state.prediction) then
+            if not (state.groupVisuals or state.groupStatus or state.statusText) then
+                return RunHotConnectionHealthRangeOnly
+            end
+            return RunHotConnectionHealthRangeState
+        end
+        if not (state.name or state.portrait or state.prediction) then
+            if not (state.groupVisuals or state.groupStatus or state.statusText) then
+                return RunHotConnectionBarsRange
+            end
+            return RunHotConnectionBarsGroupRange
+        end
+        return nil
+    end
+    if not (state.power or state.powerText or state.portrait) then
+        local healthRunner = SelectHotHealthValueRunner(state)
+        if healthRunner then
+            return healthRunner
+        end
+        if state.health and (state.groupVisuals or state.groupStatus)
+            and not (state.name or state.prediction) then
+            return RunHotConnectionHealthGroupState
+        end
+    end
+    if not (state.name or state.portrait or state.prediction) then
+        if state.groupVisuals or state.groupStatus then
+            return RunHotConnectionBarsGroupState
+        end
+        return RunHotConnectionBarsOnly
+    elseif state.name and not (state.portrait or state.prediction or state.groupVisuals or state.groupStatus) then
+        return RunHotConnectionBarsName
+    end
+    if state.groupVisuals or state.groupStatus then
+        return nil
+    end
+    return RunHotConnectionPrimary
+end
+
+local function SelectHotHealthFlagsRunner(state)
+    if state.inline or state.inlineUnitless or state.predictionUnitless
+        or state.combat then
+        return nil
+    end
+    if state.statusText then
+        return RunHotHealthFlagsNoCombat
+    end
+    if state.name then
+        return state.health and RunHotHealthNameOnly or nil
+    end
+    if state.groupVisuals or state.groupStatus then
+        return RunHotHealthFlagsGroupState
+    end
+    return state.health and RunHotHealthOnly or nil
+end
+
+local function SelectHotHealthFactionRunner(state)
+    if state.inline or state.inlineUnitless or state.predictionUnitless
+        or state.pvp or state.groupStatus then
+        return nil
+    end
+    if state.name then
+        return state.health and RunHotHealthNameOnly or nil
+    end
+    return state.health and RunHotHealthOnly or nil
 end
 
 -- Kind -> runner. Each runner inlines the element call-order for its kind and
@@ -774,7 +1497,64 @@ RebuildHotEventState = function(frame, event, owners)
         state.powerText = rt and rt.powerHot or (text and text.UpdatePower) or state.powerText
         state.powerTextDirty = rt and rt.powerDirty or nil
     end
-    state.needsDispatchContext = state.health ~= nil or state.power ~= nil
+    if state.health and event == "UNIT_HEALTH" then
+        state.health = frame._msufUpdateHealthValue or state.health
+    elseif state.health and event == "UNIT_MAXHEALTH" then
+        state.health = frame._msufUpdateHealthMaxValue or state.health
+    elseif state.health and event == "UNIT_CONNECTION" then
+        state.health = frame._msufUpdateHealthConnection or state.health
+    end
+    if state.power and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
+        state.power = frame._msufUpdatePowerValue or state.power
+    end
+    if state.prediction and event == "UNIT_HEALTH" then
+        state.prediction = frame._msufUpdatePredictionHealthValue or state.prediction
+    elseif state.prediction and event == "UNIT_CONNECTION" then
+        state.prediction = frame._msufUpdatePredictionConnectionState or state.prediction
+    end
+    if state.groupVisuals and (event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH") then
+        state.groupVisuals = frame._msufUpdateGroupVisualsHealthValue or state.groupVisuals
+    elseif state.groupVisuals and (event == "UNIT_CONNECTION" or event == "UNIT_FLAGS") then
+        state.groupVisuals = frame._msufUpdateGroupVisualsGoneState or state.groupVisuals
+    end
+    if state.groupStatus and (event == "UNIT_CONNECTION" or event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED") then
+        state.groupStatus = frame._msufUpdateGroupStatusState or state.groupStatus
+    end
+    if state.groupRange and event == "UNIT_CONNECTION" then
+        state.groupRange = frame._msufUpdateGroupRangeConnection or state.groupRange
+    end
+    if state.portrait and event == "UNIT_CONNECTION" then
+        state.portrait = frame._msufUpdatePortraitConnection or state.portrait
+    end
+    if event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
+        state.runner = SelectHotHealthValueRunner(state, event) or state.runner
+    elseif event == "UNIT_FLAGS" then
+        state.runner = SelectHotHealthFlagsRunner(state) or state.runner
+    elseif event == "UNIT_FACTION" then
+        state.runner = SelectHotHealthFactionRunner(state) or state.runner
+    elseif kind == 2 then
+        state.runner = SelectHotPowerRunner(state, event) or state.runner
+    elseif kind == 3 then
+        state.runner = SelectHotConnectionRunner(state) or state.runner
+    end
+    state.unitScoped = not (frame._msufEventUnitless and frame._msufEventUnitless[event])
+    state.frameUnitFiltered = state.unitScoped == true
+        and frame._msufFrameUnitEvents
+        and frame._msufFrameUnitEvents[event] == frame.unit
+    local statusEvent = event == "UNIT_CONNECTION" or event == "UNIT_FLAGS"
+    if statusEvent then
+        local statusConsumers = 0
+        if state.name ~= nil then statusConsumers = statusConsumers + 1 end
+        if state.prediction ~= nil then statusConsumers = statusConsumers + 1 end
+        if state.groupVisuals ~= nil then statusConsumers = statusConsumers + 1 end
+        if state.groupStatus ~= nil then statusConsumers = statusConsumers + 1 end
+        if state.range ~= nil then statusConsumers = statusConsumers + 1 end
+        if state.groupRange ~= nil then statusConsumers = statusConsumers + 1 end
+        if state.statusText ~= nil then statusConsumers = statusConsumers + 1 end
+        state.needsDispatchContext = (state.health ~= nil and statusConsumers > 0) or statusConsumers > 1
+    else
+        state.needsDispatchContext = nil
+    end
     state.empty = state.hasWork ~= true
 end
 
@@ -784,25 +1564,6 @@ function DispatchFrameEvent(frame, event, unit, ...)
     -- element registration, so a frame that gets here without owners (e.g.,
     -- because a stale event registration survived a detach) just returns.
 
-    -- Remap aliased events onto their canonical hot event (see EVENT_ALIAS).
-    local alias = EVENT_ALIAS[event]
-    if alias then
-        event = alias
-    end
-
-    -- Cross-unit (ToT-style) gating: when the event's unit isn't this frame's
-    -- unit, dispatch only if the frame has at least one element in "unitless"
-    -- mode for this event. Per-frame RegisterUnitEvent already filters at the C
-    -- side for the common same-unit path, so this check is just a safety net
-    -- for central-driver delivery. A frame with no registration for `event` has
-    -- no unitless entry either, so this still returns early in the stale case.
-    if unit and unit ~= frame.unit then
-        local unitless = frame._msufEventUnitless
-        if not (unitless and unitless[event]) then
-            return
-        end
-    end
-
     -- Hot path first. A compiled runner exists for every event a frame normally
     -- registers (Metadata.hotEventKind), and a hot state is only ever created
     -- while owners exist for the event -- so the owner-map guards are redundant
@@ -810,19 +1571,39 @@ function DispatchFrameEvent(frame, event, unit, ...)
     -- UNIT_HEALTH / UNIT_POWER traffic to a single per-event state lookup.
     local hotStates = frame._msufHotEventState
     local hotState = hotStates and hotStates[event]
+    if not hotState then
+        local alias = EVENT_ALIAS[event]
+        if alias then
+            event = alias
+            hotState = hotStates and hotStates[event]
+        end
+    end
     if hotState then
         if hotState.empty == true then
             return
         end
         local runner = hotState.runner
         if runner then
+            local unitScoped = hotState.unitScoped == true
+            if unitScoped and hotState.frameUnitFiltered ~= true and unit and unit ~= frame.unit then
+                return
+            elseif not unitScoped and unit and unit ~= frame.unit then
+                local unitless = frame._msufEventUnitless
+                if not (unitless and unitless[event]) then
+                    return
+                end
+            end
             local needsContext = hotState.needsDispatchContext == true
             if needsContext then
                 frame._msufDispatchToken = frame._msufDispatchToken + 1
                 frame._msufDispatchActive = true
             end
-            local sameUnit = (not unit) or unit == frame.unit
-            local eventUnit = sameUnit and (unit or frame.unit) or unit
+            local sameUnit = true
+            local eventUnit = unit or frame.unit
+            if not unitScoped then
+                sameUnit = (not unit) or unit == frame.unit
+                eventUnit = sameUnit and eventUnit or unit
+            end
             if runner(frame, hotState, event, eventUnit, sameUnit, ...) then
                 if needsContext then
                     frame._msufDispatchActive = nil
@@ -832,6 +1613,15 @@ function DispatchFrameEvent(frame, event, unit, ...)
             if needsContext then
                 frame._msufDispatchActive = nil
             end
+        end
+    end
+
+    -- Cross-unit (ToT-style) gating for non-hot fallback: when the event's unit
+    -- isn't this frame's unit, dispatch only if the frame has a unitless owner.
+    if unit and unit ~= frame.unit then
+        local unitless = frame._msufEventUnitless
+        if not (unitless and unitless[event]) then
+            return
         end
     end
 
@@ -868,6 +1658,9 @@ FrameRuntimeUpdate = function(frame, reason)
     reason = reason or "MSUF_FORCE_UPDATE"
     local mask = RUNTIME_REASON_MASKS[reason]
     local hp, maxHP, calc
+    if not mask or mask.load then
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LoadConditions", reason, frame.unit)
+    end
     if not mask or mask.health then
         hp, maxHP, calc = RunHealthHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
     end
@@ -900,17 +1693,34 @@ FrameRuntimeUpdate = function(frame, reason)
         end
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, frame.unit)
     end
+    if mask and mask.groupStatus and not mask.status then
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, frame.unit)
+    end
+    if not mask or mask.groupVisuals then
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupVisuals", reason, frame.unit, hp, maxHP)
+    end
     if not mask or mask.prediction then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Prediction", reason, frame.unit, hp, maxHP, calc)
     end
     if not mask or mask.alpha then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Alpha", reason, frame.unit)
+    end
+    if not mask or mask.alpha or mask.range then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RangeFade", reason, frame.unit)
+    end
+    if not mask or mask.alpha or mask.groupRange then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupRangeFade", reason, frame.unit)
     end
     if not mask or mask.borders then
         RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Borders", reason, frame.unit)
     end
+    if not mask or mask.auras then
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Auras", reason, frame.unit)
+    end
+end
+
+local function RuntimeUpdateFrame(frame, _, reason)
+    FrameRuntimeUpdate(frame, reason)
 end
 
 function UF.UpdateRuntime(unit, reason)
@@ -924,9 +1734,7 @@ function UF.UpdateRuntime(unit, reason)
         end
         return true
     end
-    UF.ForEachFrame(function(frame)
-        FrameRuntimeUpdate(frame, reason)
-    end)
+    UF.ForEachFrame(RuntimeUpdateFrame, reason)
     return true
 end
 

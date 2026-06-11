@@ -17,6 +17,7 @@ local table_concat = table.concat
 local table_sort = table.sort
 local UnitName = UnitName
 local UnitGUID = UnitGUID
+local UnitIsUnit = _G.UnitIsUnit
 local UnitClass = UnitClass
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
@@ -465,6 +466,13 @@ local function IsPlayerUnit(unit)
     end
     if unit == "player" then
         return true
+    end
+    if UnitIsUnit then
+        local same = UnitIsUnit(unit, "player")
+        if IsSecret(same) then
+            return false
+        end
+        return same == true or same == 1
     end
     if UnitGUID then
         local guid = UnitGUID(unit)
