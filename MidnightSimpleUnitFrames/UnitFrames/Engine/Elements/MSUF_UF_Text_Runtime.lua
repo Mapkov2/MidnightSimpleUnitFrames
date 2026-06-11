@@ -23,8 +23,12 @@ local InlineTextColor = Text.InlineTextColor
 local SetPowerTextColor = Text.SetPowerTextColor
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local HealthPercent = Text.HealthPercent
+local HealthPercentAvailable = Text.UnitHealthPercent ~= nil
 local PowerPercent = Text.PowerPercent
+local PowerPercentAvailable = Text.UnitPowerPercent ~= nil
+local floor = Text.floor or math.floor
 local Secrets = MSUF.Secrets or {}
+local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
 local UpdateTextSlots = Text.UpdateTextSlots
@@ -37,7 +41,20 @@ local AnchorInlineToName = Text.AnchorInlineToName
 local EMPTY_EVENTS = Text.EMPTY_EVENTS
 local POWER_EVENTS = Text.POWER_EVENTS
 local POWER_EVENTS_FREQUENT = Text.POWER_EVENTS_FREQUENT
-local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE", "UNIT_CONNECTION" }
+local POWER_TEXT_MAX_EVENTS = { "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+
+local function MissingHealthFromValues(hp, hpMax)
+    if issecretvalue(hp) == true or issecretvalue(hpMax) == true then
+        return nil
+    end
+    if type(hp) ~= "number" or type(hpMax) ~= "number" then
+        return nil
+    end
+    local missing = hpMax - hp
+    return missing > 0 and missing or 0
+end
 
 local function RegionShown(region)
     if not region then
@@ -49,81 +66,191 @@ local function RegionShown(region)
     return region.IsShown and region:IsShown() or false
 end
 
-local function ReadPowerValues(unit)
-    local powerType
-    if UnitPowerType then
-        powerType = UnitPowerType(unit)
-    end
-    local power, maxPower
-    if issecretvalue(powerType) ~= true and powerType ~= nil then
-        power = UnitPower(unit, powerType)
-        maxPower = UnitPowerMax(unit, powerType)
-    else
-        power = UnitPower(unit)
-        maxPower = UnitPowerMax(unit)
-    end
-    if issecretvalue(power) ~= true and power == nil then power = 0 end
-    if issecretvalue(maxPower) ~= true and maxPower == nil then maxPower = 1 end
-    return power, maxPower
-end
-
 local function RefreshCachedPowerType(frame, unit)
     if not UnitPowerType then
+        frame._msufTextPowerType = nil
+        frame._msufTextPowerToken = nil
+        frame._msufTextPowerTypeKnown = true
+        frame._msufTextPowerTypeUnit = unit
         return false
     end
     local powerType, powerToken = UnitPowerType(unit)
     if issecretvalue(powerType) == true then powerType = nil end
     if issecretvalue(powerToken) == true then powerToken = nil end
-    if powerType == nil and powerToken == nil and frame._msufTextPowerTypeKnown == true then
+    if powerType == nil
+        and powerToken == nil
+        and frame._msufTextPowerTypeKnown == true
+        and frame._msufTextPowerTypeUnit == unit then
         return false
     end
-    local changed = powerType ~= frame._msufTextPowerType or powerToken ~= frame._msufTextPowerToken
+    local changed = powerType ~= frame._msufTextPowerType
+        or powerToken ~= frame._msufTextPowerToken
+        or frame._msufTextPowerTypeUnit ~= unit
     frame._msufTextPowerType = powerType
     frame._msufTextPowerToken = powerToken
     frame._msufTextPowerTypeKnown = true
+    frame._msufTextPowerTypeUnit = unit
     return changed
 end
 
-local function ReadPowerValuesPlain(frame, unit, event)
-    local powerType = frame._msufTextPowerType
-    if frame._msufTextPowerTypeKnown ~= true
-        or event == "UNIT_DISPLAYPOWER"
-        or event == "MSUF_APPLY"
-        or event == "MSUF_FORCE_UPDATE" then
-        RefreshCachedPowerType(frame, unit)
+local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powerTick)
+    local powerType
+    if frame._msufTextPowerNeedsType == true then
         powerType = frame._msufTextPowerType
+        if frame._msufTextPowerTypeKnown ~= true
+            or frame._msufTextPowerTypeUnit ~= unit
+            or (not powerTick
+                and (event == "UNIT_DISPLAYPOWER"
+                    or event == "UNIT_POWER_BAR_SHOW"
+                    or event == "UNIT_POWER_BAR_HIDE"
+                    or event == "MSUF_APPLY"
+                    or event == "MSUF_FORCE_UPDATE")) then
+            RefreshCachedPowerType(frame, unit)
+            powerType = frame._msufTextPowerType
+        end
     end
 
     local power
-    if powerType ~= nil then
-        power = UnitPower(unit, powerType)
-    else
-        power = UnitPower(unit)
+    if needPower ~= false then
+        if powerType ~= nil then
+            power = UnitPower(unit, powerType)
+        else
+            power = UnitPower(unit)
+        end
     end
 
     local maxPower = frame._msufTextPowerMax
-    if maxPower == nil
-        or event == "UNIT_MAXPOWER"
-        or event == "UNIT_DISPLAYPOWER"
-        or event == "UNIT_POWER_BAR_SHOW"
-        or event == "UNIT_POWER_BAR_HIDE"
-        or event == "MSUF_APPLY"
-        or event == "MSUF_FORCE_UPDATE" then
-        if powerType ~= nil then
-            maxPower = UnitPowerMax(unit, powerType)
-        else
-            maxPower = UnitPowerMax(unit)
+    if needMax ~= false then
+        if maxPower == nil
+            or frame._msufTextPowerMaxUnit ~= unit
+            or (not powerTick
+                and (event == "UNIT_MAXPOWER"
+                    or event == "UNIT_DISPLAYPOWER"
+                    or event == "UNIT_POWER_BAR_SHOW"
+                    or event == "UNIT_POWER_BAR_HIDE"
+                    or event == "MSUF_APPLY"
+                    or event == "MSUF_FORCE_UPDATE")) then
+            if powerType ~= nil then
+                maxPower = UnitPowerMax(unit, powerType)
+            else
+                maxPower = UnitPowerMax(unit)
+            end
+            if issecretvalue(maxPower) ~= true and maxPower == nil then maxPower = 1 end
+            frame._msufTextPowerMax = maxPower
+            frame._msufTextPowerMaxUnit = unit
         end
-        frame._msufTextPowerMax = maxPower
+    else
+        maxPower = nil
     end
 
+    if needPower ~= false and issecretvalue(power) ~= true and power == nil then power = 0 end
     return power, maxPower
+end
+
+local function ReadHealthValuesCached(frame, unit)
+    local bar = frame and (frame.hpBar or frame.Health)
+    if not bar then
+        return nil, nil
+    end
+    local hp = bar._msufHealthValueUnit == unit and bar._msufHealthValue or nil
+    local hpMax
+    if bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
+        hpMax = bar._msufHealthMax
+    end
+    return hp, hpMax
+end
+
+local function DispatchToken(frame)
+    return frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+end
+
+local function FreshUnitState(frame, unit)
+    local state = frame and frame._msufUnitState
+    if state
+        and state.ready == true
+        and state.unit == unit
+        and frame._msufDispatchActive == true
+        and state.dispatchToken == frame._msufDispatchToken then
+        return state
+    end
+    return nil
+end
+
+local function ReadConnectedCached(frame, unit)
+    local state = FreshUnitState(frame, unit)
+    if state and state.connectedKnown == true then
+        return state.connected == true, true
+    end
+    local token = DispatchToken(frame)
+    if token
+        and frame._msufGFConnectedToken == token
+        and frame._msufGFConnectedUnit == unit then
+        return frame._msufGFConnectedValue, frame._msufGFConnectedKnown
+    end
+    if not UnitIsConnected then
+        return true, true
+    end
+    local connected = UnitIsConnected(unit)
+    if issecretvalue(connected) == true or connected == nil then
+        if token then
+            frame._msufGFConnectedToken = token
+            frame._msufGFConnectedUnit = unit
+            frame._msufGFConnectedValue = true
+            frame._msufGFConnectedKnown = false
+        end
+        return true, false
+    end
+    connected = connected == true or connected == 1
+    if token then
+        frame._msufGFConnectedToken = token
+        frame._msufGFConnectedUnit = unit
+        frame._msufGFConnectedValue = connected
+        frame._msufGFConnectedKnown = true
+    end
+    return connected, true
+end
+
+local function ReadDeadCached(frame, unit)
+    local state = FreshUnitState(frame, unit)
+    if state and state.deadKnown == true then
+        return state.dead == true, true
+    end
+    local token = DispatchToken(frame)
+    if token
+        and frame._msufGFDeadToken == token
+        and frame._msufGFDeadUnit == unit then
+        return frame._msufGFDeadValue, frame._msufGFDeadKnown
+    end
+    if not UnitIsDeadOrGhost then
+        return false, true
+    end
+    local dead = UnitIsDeadOrGhost(unit)
+    if issecretvalue(dead) == true or dead == nil then
+        if token then
+            frame._msufGFDeadToken = token
+            frame._msufGFDeadUnit = unit
+            frame._msufGFDeadValue = false
+            frame._msufGFDeadKnown = false
+        end
+        return false, false
+    end
+    dead = dead == true or dead == 1
+    if token then
+        frame._msufGFDeadToken = token
+        frame._msufGFDeadUnit = unit
+        frame._msufGFDeadValue = dead
+        frame._msufGFDeadKnown = true
+    end
+    return dead, true
 end
 
 function Text.UpdateNameColor(frame, event, unit)
     if RegionShown(frame and frame.nameText) then
         SetNameTextColor(frame, NameTextColor(frame, unit or frame.unit))
-        Text.UpdateInline(frame, event, unit)
+        local rt = frame and frame._msufTextRuntime
+        if rt and rt.inlineToT then
+            Text.UpdateInline(frame, event, unit)
+        end
     end
 end
 
@@ -186,6 +313,7 @@ function Text.UpdateName(frame, event, unit)
     if not frameUnit or frameUnit == "" then
         frame._msufNameStatusUnit = nil
         frame._msufNameStatusHidden = nil
+        frame._msufNameTextUnit = nil
         SetTextCached(frame.nameText, "")
         frame.nameText._msufShown = nil
         SetShownCached(frame.nameText, false)
@@ -195,28 +323,42 @@ function Text.UpdateName(frame, event, unit)
     if rt and rt.showName == false then
         frame._msufNameStatusUnit = nil
         frame._msufNameStatusHidden = nil
+        frame._msufNameTextUnit = nil
         SetTextCached(frame.nameText, "")
         frame.nameText._msufShown = nil
         SetShownCached(frame.nameText, false)
         return
     end
     if rt and rt.hideNameOnDeadOffline == true then
-        local connected = UnitIsConnected and UnitIsConnected(unit)
-        local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)
+        local connected, connectedKnown = ReadConnectedCached(frame, unit)
         local hidden = false
-        if issecretvalue(connected) ~= true and connected == false then
+        if connectedKnown == true and connected == false then
             hidden = true
-        elseif issecretvalue(dead) ~= true and dead == true then
-            hidden = true
+        else
+            local dead, deadKnown = ReadDeadCached(frame, unit)
+            if deadKnown == true and dead == true then
+                hidden = true
+            end
         end
-        if event == "UNIT_HEALTH"
-            and frame._msufNameStatusUnit == unit
-            and frame._msufNameStatusHidden == hidden then
-            return
+        local statusUnchanged = frame._msufNameStatusUnit == unit
+            and frame._msufNameStatusHidden == hidden
+        if statusUnchanged then
+            if event == "UNIT_HEALTH" then
+                return
+            elseif event == "UNIT_CONNECTION" or event == "UNIT_FLAGS" then
+                if hidden then
+                    if frame.nameText._msufShown == false then
+                        return
+                    end
+                elseif frame.nameText._msufShown == true then
+                    return
+                end
+            end
         end
         frame._msufNameStatusUnit = unit
         frame._msufNameStatusHidden = hidden
         if hidden then
+            frame._msufNameTextUnit = nil
             SetTextCached(frame.nameText, "")
             frame.nameText._msufShown = nil
             SetShownCached(frame.nameText, false)
@@ -228,9 +370,19 @@ function Text.UpdateName(frame, event, unit)
     end
     frame.nameText._msufShown = nil
     SetShownCached(frame.nameText, true)
+    if frame._msufNameTextUnit == unit
+        and frame.nameText._msufShown == true
+        and (event == "UNIT_CONNECTION"
+            or event == "UNIT_FLAGS"
+            or event == "UNIT_FACTION"
+            or event == "UNIT_CLASSIFICATION_CHANGED") then
+        Text.UpdateNameColor(frame, event, unit)
+        return
+    end
     -- UnitName can be a secret string for target/boss units. Do not cache,
     -- compare, shorten, or branch on it in Lua.
     SetTextCached(frame.nameText, UnitName and UnitName(unit) or nil)
+    frame._msufNameTextUnit = unit
     Text.UpdateNameColor(frame, event, unit)
 end
 
@@ -241,8 +393,17 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
         return
     end
 
+    local healthTick = event == "UNIT_HEALTH"
+    local needsPercent = rt.healthNeedsPercent == true
+    local needsCurrent = rt.healthNeedsCurrent == true
+    local needsMax = rt.healthNeedsMax == true
+    local colorByHealth = rt.healthColorByHealth == true
+    local percentNeedsValues = needsPercent and not HealthPercentAvailable
+    local missingNeedsValues = rt.healthNeedsMissing == true
+    local needHPValue = needsCurrent or colorByHealth or percentNeedsValues or missingNeedsValues
+    local needMaxValue = needsMax or colorByHealth or percentNeedsValues or missingNeedsValues
     local throttle = rt.healthThrottle or 0
-    if throttle > 0 and event == "UNIT_HEALTH" and GetTime then
+    if throttle > 0 and healthTick and GetTime then
         local now = GetTime()
         local nextTime = rt.nextHealthTextTime
         if nextTime and now < nextTime then
@@ -259,55 +420,133 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     end
 
     if rt.healthPlain == true then
-        local hpSecret = issecretvalue(hp) == true
-        local hpMaxSecret = issecretvalue(hpMax) == true
-        if not hpSecret and hp == nil then
-            hp = UnitHealth(unit)
-            hpSecret = issecretvalue(hp) == true
+        if (needHPValue and hp == nil) or (needMaxValue and hpMax == nil) then
+            local cachedHP, cachedMax = ReadHealthValuesCached(frame, unit)
+            if needHPValue and hp == nil then
+                hp = cachedHP
+            end
+            if needMaxValue and hpMax == nil then
+                hpMax = cachedMax
+            end
         end
-        if not hpMaxSecret and hpMax == nil then
+        if needHPValue and hp == nil then
+            hp = UnitHealth(unit)
+        end
+        if needMaxValue and hpMax == nil then
             hpMax = UnitHealthMax(unit)
-            hpMaxSecret = issecretvalue(hpMax) == true
         end
 
         if rt.healthNeedsMissing == true then
-            local calc = frame and frame._msufHealthCalc
-            rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+            if healthTick and rt._dispatchHealthMissingReady == true then
+                rt.healthMissing = rt._dispatchHealthMissing
+                rt._dispatchHealthMissingReady = nil
+                rt._dispatchHealthMissing = nil
+            else
+                rt._dispatchHealthMissingReady = nil
+                rt._dispatchHealthMissing = nil
+                rt.healthMissing = MissingHealthFromValues(hp, hpMax)
+                if rt.healthMissing == nil then
+                    local calc = frame and frame._msufHealthCalc
+                    rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+                end
+            end
         else
+            rt._dispatchHealthMissingReady = nil
+            rt._dispatchHealthMissing = nil
             rt.healthMissing = nil
         end
 
-        if not (hpSecret or hpMaxSecret or issecretvalue(rt.healthMissing) == true) then
-            hp = hp or 0
-            hpMax = hpMax or 1
-            if event == "UNIT_HEALTH"
-                and rt._lastHealthTextHP == hp
-                and rt._lastHealthTextMax == hpMax
-                and rt._lastHealthTextMissing == rt.healthMissing then
-                return
-            end
-            rt._lastHealthTextHP = hp
-            rt._lastHealthTextMax = hpMax
-            rt._lastHealthTextMissing = rt.healthMissing
-            if UpdateHealthTextColor then
-                UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
-            end
-            UpdateTextSlotsPlain(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
+        if needHPValue and hp == nil then
+            hp = 0
+        end
+        if needMaxValue and hpMax == nil then
+            hpMax = 1
+        end
+
+        if nativeSecrets and (issecretvalue(hp) == true
+            or issecretvalue(hpMax) == true
+            or issecretvalue(rt.healthMissing) == true) then
+            rt._lastHealthTextHP = nil
+            rt._lastHealthTextMax = nil
+            rt._lastHealthTextMissing = nil
+            rt._dispatchHealthTextHP = nil
+            rt._dispatchHealthTextMax = nil
+            rt._dispatchHealthTextMissing = nil
+            UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
             return
         end
 
-        rt._lastHealthTextHP = nil
-        rt._lastHealthTextMax = nil
-        rt._lastHealthTextMissing = nil
+        local pctOverride, pctOverrideSet
+        if needsPercent then
+            if type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
+                pctOverride = floor((hp / hpMax) * 100 + 0.5)
+                pctOverrideSet = true
+            elseif HealthPercentAvailable then
+                pctOverride = HealthPercent(unit)
+                pctOverrideSet = true
+            end
+        end
+        local keyHP, keyMax = false, false
+        local canCompareText = true
+        local mode = rt.healthDispatchKeyMode or 0
+        if mode == 1 then
+            keyHP = hp
+        elseif mode == 2 then
+            keyMax = hpMax
+        elseif mode == 3 then
+            keyHP, keyMax = hp, hpMax
+        elseif mode == 4 or mode == 5 then
+            if pctOverrideSet and issecretvalue(pctOverride) ~= true then
+                keyHP = pctOverride or false
+            elseif type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
+                keyHP = floor((hp / hpMax) * 100 + 0.5)
+            else
+                canCompareText = false
+            end
+            keyMax = mode == 5 and hpMax or false
+        end
+        local valueRefreshEvent = healthTick or event == "UNIT_CONNECTION" or event == "UNIT_MAXHEALTH"
+        if valueRefreshEvent
+            and canCompareText
+            and rt._lastHealthTextHP == keyHP
+            and rt._lastHealthTextMax == keyMax
+            and rt._lastHealthTextMissing == rt.healthMissing then
+            return
+        end
+        if canCompareText then
+            rt._lastHealthTextHP = keyHP
+            rt._lastHealthTextMax = keyMax
+            rt._lastHealthTextMissing = rt.healthMissing
+        else
+            rt._lastHealthTextHP = nil
+            rt._lastHealthTextMax = nil
+            rt._lastHealthTextMissing = nil
+        end
+        if colorByHealth and UpdateHealthTextColor then
+            UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
+        end
+        UpdateTextSlotsPlain(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
+        return
     end
 
     local hpSecret = issecretvalue(hp) == true
     local hpMaxSecret = issecretvalue(hpMax) == true
-    if not hpSecret and hp == nil then
+    if (needHPValue and not hpSecret and hp == nil) or (needMaxValue and not hpMaxSecret and hpMax == nil) then
+        local cachedHP, cachedMax = ReadHealthValuesCached(frame, unit)
+        if needHPValue and not hpSecret and hp == nil then
+            hp = cachedHP
+            hpSecret = issecretvalue(hp) == true
+        end
+        if needMaxValue and not hpMaxSecret and hpMax == nil then
+            hpMax = cachedMax
+            hpMaxSecret = issecretvalue(hpMax) == true
+        end
+    end
+    if needHPValue and not hpSecret and hp == nil then
         hp = UnitHealth(unit)
         hpSecret = issecretvalue(hp) == true
     end
-    if not hpMaxSecret and hpMax == nil then
+    if needMaxValue and not hpMaxSecret and hpMax == nil then
         hpMax = UnitHealthMax(unit)
         hpMaxSecret = issecretvalue(hpMax) == true
     end
@@ -317,13 +556,16 @@ local function UpdateHealthRuntime(frame, event, unit, hp, hpMax)
     rt._lastHpRaw, rt._lastHpMaxRaw = hp, hpMax
 
     if rt.healthNeedsMissing == true then
-        local calc = frame and frame._msufHealthCalc
-        rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+        rt.healthMissing = MissingHealthFromValues(hp, hpMax)
+        if rt.healthMissing == nil then
+            local calc = frame and frame._msufHealthCalc
+            rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+        end
     else
         rt.healthMissing = nil
     end
 
-    if UpdateHealthTextColor then
+    if colorByHealth and UpdateHealthTextColor then
         UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
     end
     UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, unit, HealthPercent, rt.healthNeedsPercent, rt)
@@ -367,48 +609,61 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
         return
     end
+    local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
     -- A target/focus/ToT/pet/boss token gets reused for a different unit without a
     -- layout reapply, so the cached power type still belongs to the previous unit.
     -- Drop it on an identity swap (rare, so cheap) so both the per-type color and
     -- the throttled value path re-resolve for the new unit instead of sticking.
-    local identityChanged = event == "MSUF_UNIT_IDENTITY" or event == "MSUF_UNIT_IDENTITY_SOFT"
+    local identityChanged = not animate
+        and (event == "MSUF_UNIT_IDENTITY"
+            or event == "MSUF_UNIT_IDENTITY_SOFT"
+            or event == "MSUF_GF_UNIT_IDENTITY")
     if identityChanged then
         frame._msufTextPowerType = nil
         frame._msufTextPowerToken = nil
         frame._msufTextPowerTypeKnown = nil
+        frame._msufTextPowerTypeUnit = nil
         frame._msufTextPowerMax = nil
+        frame._msufTextPowerMaxUnit = nil
         if rt.powerColorByType == true then
             RefreshCachedPowerType(frame, unit)
         end
     end
-    local animate = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
     if rt.powerColorByType == true
         and animate
-        and frame._msufTextPowerTypeKnown ~= true
-        and (not frame.MSUFSpec or not frame.MSUFSpec.power or frame.MSUFSpec.power.mode == nil or frame.MSUFSpec.power.mode == "power") then
+        and rt.powerRefreshTypeOnTick == true
+        and (frame._msufTextPowerTypeKnown ~= true or frame._msufTextPowerTypeUnit ~= unit)
+    then
         RefreshCachedPowerType(frame, unit)
     end
-    if rt.powerColorByType == true
+    local powerTextColorEvent = not animate
         and (event == "UNIT_DISPLAYPOWER"
             or event == "MSUF_APPLY"
             or event == "MSUF_FORCE_UPDATE"
             or event == "MSUF_POWER_LAYOUT"
-            or event == "MSUF_POWER_TEXT_COLORS"
+            or event == "MSUF_POWER_TEXT_COLORS")
+    if rt.powerColorByType == true
+        and (powerTextColorEvent
             or frame._msufPowerTextColorInitialized ~= true
+            or frame._msufTextPowerTypeUnit ~= unit
             or frame._msufPowerTextColorType ~= frame._msufTextPowerType
             or frame._msufPowerTextColorToken ~= frame._msufTextPowerToken) then
-        local r, g, b = PowerColor(frame, unit)
+        if frame._msufTextPowerTypeKnown ~= true or frame._msufTextPowerTypeUnit ~= unit then
+            RefreshCachedPowerType(frame, unit)
+        end
+        local metaKnown = frame._msufTextPowerTypeKnown == true and frame._msufTextPowerTypeUnit == unit
+        local r, g, b = PowerColor(
+            frame, unit,
+            frame._msufTextPowerType, frame._msufTextPowerToken,
+            metaKnown
+        )
         local c = frame.MSUFSpec and frame.MSUFSpec.textColor
         SetPowerTextColor(frame, r, g, b, c and c.a or 1)
         frame._msufPowerTextColorInitialized = true
         frame._msufPowerTextColorType = frame._msufTextPowerType
         frame._msufPowerTextColorToken = frame._msufTextPowerToken
     elseif rt.powerColorByType == false
-        and (event == "UNIT_DISPLAYPOWER"
-            or event == "MSUF_APPLY"
-            or event == "MSUF_FORCE_UPDATE"
-            or event == "MSUF_POWER_LAYOUT"
-            or event == "MSUF_POWER_TEXT_COLORS"
+        and (powerTextColorEvent
             or frame._msufPowerTextColorInitialized ~= true
             or frame._msufPowerTextColorType ~= false) then
         -- Color-by-type is off: restore the configured base text color so a stale
@@ -421,9 +676,15 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
         frame._msufPowerTextColorToken = nil
     end
 
+    local needsPercent = rt.powerNeedsPercent == true
+    local needsCurrent = rt.powerNeedsCurrent == true
+    local needsMax = rt.powerNeedsMax == true
+    local percentNeedsValues = needsPercent and not PowerPercentAvailable
+    local needPowerValue = needsCurrent or percentNeedsValues
+    local needMaxValue = needsMax or percentNeedsValues
     local throttle = rt.powerThrottle or 0
     if throttle > 0
-        and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT")
+        and animate
         and GetTime then
         rt.pendingPower, rt.pendingPowerMax = power, powerMax
         rt.powerTextPending = true
@@ -444,48 +705,95 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     end
 
     if rt.powerPlain == true then
-        local powerSecret = issecretvalue(power) == true
-        local powerMaxSecret = issecretvalue(powerMax) == true
-        if not (powerSecret or powerMaxSecret) and (power == nil or powerMax == nil) then
-            local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event)
-            if power == nil then
+        if (needPowerValue and power == nil) or (needMaxValue and powerMax == nil) then
+            local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needMaxValue and powerMax == nil, animate)
+            if needPowerValue and power == nil then
                 power = currentPower
-                powerSecret = issecretvalue(power) == true
             end
-            if powerMax == nil then
+            if needMaxValue and powerMax == nil then
                 powerMax = currentMax
-                powerMaxSecret = issecretvalue(powerMax) == true
             end
         end
         rt.healthMissing = nil
 
-        if not (powerSecret or powerMaxSecret) then
-            power = power or 0
-            powerMax = powerMax or 1
-            if (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT")
-                and rt._lastPowerTextPower == power
-                and rt._lastPowerTextMax == powerMax then
-                return
-            end
-            rt._lastPowerTextPower = power
-            rt._lastPowerTextMax = powerMax
-            UpdateTextSlotsPlain(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
+        if needPowerValue and power == nil then
+            power = 0
+        end
+        if needMaxValue and powerMax == nil then
+            powerMax = 1
+        end
+
+        if nativeSecrets and (issecretvalue(power) == true or issecretvalue(powerMax) == true) then
+            rt._lastPowerTextPower = nil
+            rt._lastPowerTextMax = nil
+            rt._dispatchPowerTextPower = nil
+            rt._dispatchPowerTextMax = nil
+            UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt)
             return
         end
 
-        rt._lastPowerTextPower = nil
-        rt._lastPowerTextMax = nil
+        local pctOverride, pctOverrideSet
+        if needsPercent then
+            if type(power) == "number" and type(powerMax) == "number" and powerMax > 0 then
+                pctOverride = floor((power / powerMax) * 100 + 0.5)
+                pctOverrideSet = true
+            elseif PowerPercentAvailable then
+                pctOverride = PowerPercent(unit)
+                pctOverrideSet = true
+            end
+        end
+        local keyPower, keyMax = false, false
+        local canCompareText = true
+        local mode = rt.powerDispatchKeyMode or 0
+        if mode == 1 then
+            keyPower = power
+        elseif mode == 2 then
+            keyMax = powerMax
+        elseif mode == 3 then
+            keyPower, keyMax = power, powerMax
+        elseif mode == 4 or mode == 5 then
+            if pctOverrideSet and issecretvalue(pctOverride) ~= true then
+                keyPower = pctOverride or false
+            elseif type(power) == "number" and type(powerMax) == "number" and powerMax > 0 then
+                keyPower = floor((power / powerMax) * 100 + 0.5)
+            else
+                canCompareText = false
+            end
+            keyMax = mode == 5 and powerMax or false
+        end
+        local powerValueRefreshEvent = animate
+            or event == "UNIT_MAXPOWER"
+            or event == "UNIT_DISPLAYPOWER"
+            or event == "UNIT_POWER_BAR_SHOW"
+            or event == "UNIT_POWER_BAR_HIDE"
+        if powerValueRefreshEvent
+            and canCompareText
+            and mode ~= 0
+            and rt._lastPowerTextPower == keyPower
+            and rt._lastPowerTextMax == keyMax then
+            return
+        end
+        if canCompareText then
+            rt._lastPowerTextPower = keyPower
+            rt._lastPowerTextMax = keyMax
+        else
+            rt._lastPowerTextPower = nil
+            rt._lastPowerTextMax = nil
+        end
+        UpdateTextSlotsPlain(rt.powerSlots, rt.powerSlotCount, power, powerMax, unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
+        return
     end
 
     local powerSecret = issecretvalue(power) == true
     local powerMaxSecret = issecretvalue(powerMax) == true
-    if not powerSecret and not powerMaxSecret and (power == nil or powerMax == nil) then
-        local currentPower, currentMax = ReadPowerValues(unit)
-        if power == nil then
+    if not powerSecret and not powerMaxSecret
+        and ((needPowerValue and power == nil) or (needMaxValue and powerMax == nil)) then
+        local currentPower, currentMax = ReadPowerValuesPlain(frame, unit, event, needPowerValue and power == nil, needMaxValue and powerMax == nil, animate)
+        if needPowerValue and power == nil then
             power = currentPower
             powerSecret = issecretvalue(power) == true
         end
-        if powerMax == nil then
+        if needMaxValue and powerMax == nil then
             powerMax = currentMax
             powerMaxSecret = issecretvalue(powerMax) == true
         end
@@ -504,7 +812,8 @@ local function MarkPowerDirtyRuntime(frame, event, unit, power, powerMax)
     if not rt or not rt.powerSlotCount or rt.powerSlotCount <= 0 then
         return
     end
-    if (event ~= "UNIT_POWER_UPDATE" and event ~= "UNIT_POWER_FREQUENT")
+    local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+    if not powerTick
         or not GetTime
         or not QueuePowerTextFlush then
         return UpdatePowerRuntime(frame, event, unit, power, powerMax)
@@ -547,13 +856,25 @@ Text.UpdatePower = UpdatePowerRuntime
 Text.MarkPowerDirty = MarkPowerDirtyRuntime
 
 local NAME_EVENTS = { "UNIT_NAME_UPDATE" }
-local NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
-local NAME_STATUS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED", "UNIT_HEALTH" }
-local NAME_STATUS_COLD_EVENTS = NAME_COLOR_EVENTS
+local NAME_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
+local NAME_STATUS_COLOR_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
+local NAME_STATUS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FLAGS", "UNIT_CONNECTION" }
+local NAME_STATUS_PLAYER_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FLAGS" }
+local NAME_STATUS_COLD_EVENTS = NAME_STATUS_EVENTS
 local HEALTH_TEXT_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION" }
+local HEALTH_TEXT_PLAYER_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
+local HEALTH_TEXT_VALUE_EVENTS = { "UNIT_HEALTH", "UNIT_CONNECTION" }
+local HEALTH_TEXT_VALUE_PLAYER_EVENTS = { "UNIT_HEALTH" }
+local HEALTH_TEXT_MAX_EVENTS = { "UNIT_MAXHEALTH" }
 local INLINE_TARGET_EVENTS = { "UNIT_TARGET" }
 local INLINE_NAME_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE" }
-local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" }
+local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CLASSIFICATION_CHANGED" }
+
+local function NameNeedsNPCColorEvents(text)
+    return text
+        and type(text.nameColor) ~= "table"
+        and text.nameNpcColor == true
+end
 
 local function ModeEnabled(mode)
     return mode ~= nil and mode ~= "NONE"
@@ -566,12 +887,70 @@ local function PowerModeNeedsValueTicks(mode)
     return mode ~= "MAX"
 end
 
+local function PowerModeNeedsMaxEvents(mode)
+    return mode == "MAX"
+        or mode == "CURMAX"
+        or mode == "MAXCUR"
+        or mode == "PERCENT"
+        or mode == "CURPERCENT"
+        or mode == "PERCENTCUR"
+        or mode == "CURMAXPERCENT"
+        or mode == "PERCENTMAXCUR"
+        or mode == "MAXPERCENT"
+        or mode == "PERCENTMAX"
+        or mode == "PERCENTCURMAX"
+end
+
+local function HealthModeNeedsValueTicks(mode)
+    if not ModeEnabled(mode) then
+        return false
+    end
+    return mode ~= "MAX"
+end
+
+local function HealthModeNeedsMaxEvents(mode)
+    return mode == "MAX"
+        or mode == "DEFICIT"
+        or mode == "CURMAX"
+        or mode == "MAXCUR"
+        or mode == "PERCENT"
+        or mode == "CURPERCENT"
+        or mode == "PERCENTCUR"
+        or mode == "CURMAXPERCENT"
+        or mode == "PERCENTMAXCUR"
+        or mode == "MAXPERCENT"
+        or mode == "PERCENTMAX"
+        or mode == "PERCENTCURMAX"
+end
+
 local function HealthTextEnabled(spec)
     if not (spec and spec.showHealthText ~= false) then
         return false
     end
     local left, center, right = ResolveHealthTextModes(spec.text)
     return ModeEnabled(left) or ModeEnabled(center) or ModeEnabled(right)
+end
+
+local function HealthTextNeedsValueTicks(spec)
+    local text = spec and spec.text
+    if text and text.healthColorByHealth == true then
+        return true
+    end
+    local left, center, right = ResolveHealthTextModes(text)
+    return HealthModeNeedsValueTicks(left)
+        or HealthModeNeedsValueTicks(center)
+        or HealthModeNeedsValueTicks(right)
+end
+
+local function HealthTextNeedsMaxEvents(spec)
+    local text = spec and spec.text
+    if text and text.healthColorByHealth == true then
+        return true
+    end
+    local left, center, right = ResolveHealthTextModes(text)
+    return HealthModeNeedsMaxEvents(left)
+        or HealthModeNeedsMaxEvents(center)
+        or HealthModeNeedsMaxEvents(right)
 end
 
 local function PowerTextEnabled(spec)
@@ -587,6 +966,13 @@ local function PowerTextNeedsValueTicks(spec)
     return PowerModeNeedsValueTicks(text and text.powerLeft)
         or PowerModeNeedsValueTicks(text and text.powerCenter)
         or PowerModeNeedsValueTicks(text and text.powerRight)
+end
+
+local function PowerTextNeedsMaxEvents(spec)
+    local text = spec and spec.text
+    return PowerModeNeedsMaxEvents(text and text.powerLeft)
+        or PowerModeNeedsMaxEvents(text and text.powerCenter)
+        or PowerModeNeedsMaxEvents(text and text.powerRight)
 end
 
 local function InlineEnabled(frame, spec)
@@ -634,14 +1020,6 @@ TextStructure.Apply = Text.Apply
 TextStructure.IsEnabled = Text.IsEnabled
 UF.RegisterElement("Text", TextStructure)
 
-local function NameTextNeedsHealthStatusEvent(frame, spec)
-    if spec and spec.scope == "group" then
-        return false
-    end
-    local unit = frame and frame.unit
-    return unit ~= "player"
-end
-
 local NameText = {}
 
 function NameText.IsEnabled(frame, spec)
@@ -654,12 +1032,15 @@ function NameText.GetEvents(frame, spec)
     end
     local text = spec and spec.text
     if text and text.hideNameOnDeadOffline == true then
-        if not NameTextNeedsHealthStatusEvent(frame, spec) then
-            return NAME_STATUS_COLD_EVENTS or NAME_COLOR_EVENTS
+        if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+            return NAME_STATUS_PLAYER_EVENTS
         end
-        return NAME_STATUS_EVENTS
+        return NameNeedsNPCColorEvents(text) and NAME_STATUS_COLOR_EVENTS or NAME_STATUS_EVENTS
     end
-    return text and text.nameNpcColor == true and NAME_COLOR_EVENTS or NAME_EVENTS
+    if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+        return NAME_EVENTS
+    end
+    return NameNeedsNPCColorEvents(text) and NAME_COLOR_EVENTS or NAME_EVENTS
 end
 
 function NameText.Update(frame, event, unit)
@@ -681,6 +1062,18 @@ end
 function HealthText.GetEvents(frame, spec)
     if not HealthTextEnabled(spec) then
         return EMPTY_EVENTS
+    end
+    if not HealthTextNeedsValueTicks(spec) then
+        return HEALTH_TEXT_MAX_EVENTS
+    end
+    if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+        if not HealthTextNeedsMaxEvents(spec) then
+            return HEALTH_TEXT_VALUE_PLAYER_EVENTS
+        end
+        return HEALTH_TEXT_PLAYER_EVENTS
+    end
+    if not HealthTextNeedsMaxEvents(spec) then
+        return HEALTH_TEXT_VALUE_EVENTS
     end
     return HEALTH_TEXT_EVENTS
 end
@@ -722,18 +1115,23 @@ function PowerText.GetEvents(frame, spec)
     if not PowerTextNeedsValueTicks(spec) then
         return POWER_TEXT_MAX_EVENTS
     end
+    if not PowerTextNeedsMaxEvents(spec) then
+        return spec and spec.power and spec.power.frequent == true and POWER_TEXT_VALUE_META_EVENTS_FREQUENT or POWER_TEXT_VALUE_META_EVENTS
+    end
     return spec and spec.power and spec.power.frequent == true and POWER_EVENTS_FREQUENT or POWER_EVENTS
 end
 
 function PowerText.Update(frame, event, unit, power, powerMax)
     local rt = frame and frame._msufTextRuntime
-    if rt and rt.powerThrottle and rt.powerThrottle > 0
-        and (event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT") then
-        local fn = rt.powerDirty or rt.powerHot
-        if fn then
-            return fn(frame, event, unit or frame.unit, power, powerMax)
+    if rt and rt.powerThrottle and rt.powerThrottle > 0 then
+        local powerTick = event == "UNIT_POWER_UPDATE" or event == "UNIT_POWER_FREQUENT"
+        if powerTick then
+            local fn = rt.powerDirty or rt.powerHot
+            if fn then
+                return fn(frame, event, unit or frame.unit, power, powerMax)
+            end
+            return Text.MarkPowerDirty(frame, event, unit or frame.unit, power, powerMax)
         end
-        return Text.MarkPowerDirty(frame, event, unit or frame.unit, power, powerMax)
     end
     local fn = rt and rt.powerHot
     if fn then

@@ -98,8 +98,10 @@ Build side:
 - Keeps Perfy hook files and instrumentation out of the normal addon folder.
 - Instruments functions directly, including early returns, with guarded
   `_G.MSUF_PerfyEnter` / `_G.MSUF_PerfyLeave` calls.
-- Adds semantic labels such as `UF6:DispatchFrameEvent`, `UF6:UpdateRuntime`,
-  and `Element:<name>.Update` through the generated hook.
+- Adds semantic probe labels such as `UF6:DispatchFrameEvent`,
+  `UF6:UpdateRuntime`, and `Element:<name>.Update` through the generated hook.
+  These hook records are emitted as `Mark` annotations by default, not timed
+  stack spans.
 - Filters vendor `Libs` out of direct instrumentation.
 
 Analyze side:
@@ -107,6 +109,8 @@ Analyze side:
 - Parses `FunctionNames`, `EventNames`, and `Trace` from `!!!Perfy.lua`.
 - Handles Perfy's separate event-id and function-id namespaces.
 - Reconstructs balanced `Enter` / `Leave` spans.
+- Reports `Mark` probe counts and their extra payloads without pushing them onto
+  the call stack or adding self/inclusive time.
 - Resyncs at top-level event boundaries so an old broken trace cannot keep a
   stale function open across unrelated events.
 - Computes calls, self time, inclusive time, max inclusive time, and module totals.
@@ -125,6 +129,8 @@ Analyze side:
   parent/child attribution should be treated carefully.
 - Coroutine and non-MSUF records are noise for MSUF CPU unless they happen inside
   a first-party MSUF span.
+- `UF6:*`, `Element:*`, and `FrameScript:*` hook labels are fanout probes when
+  their action is `Mark`; use `UFStatic:*` labels for CPU-time decisions.
 - Secret helper cost should be reduced by lowering caller count. Do not remove
   secret checks from paths that can receive protected values.
 - The report is for prioritization. Fixes should still be verified in game with

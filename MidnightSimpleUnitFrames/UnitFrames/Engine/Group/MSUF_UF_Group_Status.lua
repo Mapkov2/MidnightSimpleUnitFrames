@@ -9,6 +9,9 @@ MSUF.GF = GF
 
 if not (UF and UF.RegisterElement) then return end
 
+local CreateFrame = _G.CreateFrame
+local next = next
+
 local STATUS_EVENT_KIND = {
     RAID_TARGET_UPDATE = 1,
     PARTY_LEADER_CHANGED = 2,
@@ -117,19 +120,92 @@ local function StatusTextEventRelevant(cfg, event)
     return true
 end
 
+local function DispatchToken(frame)
+    return frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+end
+
+local function ReadDeadCached(frame, unit)
+    local token = DispatchToken(frame)
+    if token
+        and frame._msufGFDeadToken == token
+        and frame._msufGFDeadUnit == unit then
+        return frame._msufGFDeadValue, frame._msufGFDeadKnown
+    end
+    if not UnitIsDeadOrGhost then
+        return false, true
+    end
+    local dead = UnitIsDeadOrGhost(unit)
+    if issecretvalue(dead) == true or dead == nil then
+        if token then
+            frame._msufGFDeadToken = token
+            frame._msufGFDeadUnit = unit
+            frame._msufGFDeadValue = false
+            frame._msufGFDeadKnown = false
+        end
+        return false, false
+    end
+    dead = dead == true or dead == 1
+    if token then
+        frame._msufGFDeadToken = token
+        frame._msufGFDeadUnit = unit
+        frame._msufGFDeadValue = dead
+        frame._msufGFDeadKnown = true
+    end
+    return dead, true
+end
+
+local function ReadConnectedCached(frame, unit)
+    local token = DispatchToken(frame)
+    if token
+        and frame._msufGFConnectedToken == token
+        and frame._msufGFConnectedUnit == unit then
+        return frame._msufGFConnectedValue, frame._msufGFConnectedKnown
+    end
+    if not UnitIsConnected then
+        return true, true
+    end
+    local connected = UnitIsConnected(unit)
+    if issecretvalue(connected) == true or connected == nil then
+        if token then
+            frame._msufGFConnectedToken = token
+            frame._msufGFConnectedUnit = unit
+            frame._msufGFConnectedValue = true
+            frame._msufGFConnectedKnown = false
+        end
+        return true, false
+    end
+    connected = connected == true or connected == 1
+    if token then
+        frame._msufGFConnectedToken = token
+        frame._msufGFConnectedUnit = unit
+        frame._msufGFConnectedValue = connected
+        frame._msufGFConnectedKnown = true
+    end
+    return connected, true
+end
+
 local function StatusTextFlagsKey(frame, cfg)
     local unit = frame and frame.unit
     if not unit then return nil end
+    local state = frame and frame._msufUnitState
+    local stateReady = state and state.ready == true and state.unit == unit
+    local stateFresh = stateReady
+        and frame._msufDispatchActive == true
+        and state.dispatchToken == frame._msufDispatchToken
     local key = 0
     if cfg.showGhost == true and UnitIsGhost then
         local ghost = UnitIsGhost(unit)
         if issecretvalue(ghost) == true then return nil end
         if ghost == true or ghost == 1 then key = key + 2 end
     end
-    if cfg.showDead == true and UnitIsDeadOrGhost then
-        local dead = UnitIsDeadOrGhost(unit)
-        if issecretvalue(dead) == true then return nil end
-        if dead == true or dead == 1 then key = key + 4 end
+    if cfg.showDead == true then
+        if stateFresh and state.deadKnown == true then
+            if state.dead == true then key = key + 4 end
+        else
+            local dead, known = ReadDeadCached(frame, unit)
+            if known ~= true then return nil end
+            if dead == true then key = key + 4 end
+        end
     end
     if cfg.showAFK == true and UnitIsAFK then
         local afk = UnitIsAFK(unit)
@@ -147,11 +223,18 @@ end
 local function StatusTextConnectionKey(frame, cfg)
     local unit = frame and frame.unit
     if not unit then return nil end
+    local state = frame and frame._msufUnitState
+    local stateReady = state and state.ready == true and state.unit == unit
+    local stateFresh = stateReady
+        and frame._msufDispatchActive == true
+        and state.dispatchToken == frame._msufDispatchToken
     local key = 0
-    if cfg.showDead == true and UnitIsConnected then
-        local connected = UnitIsConnected(unit)
-        if issecretvalue(connected) == true then return nil end
-        if connected == false or connected == 0 then key = key + 1 end
+    if cfg.showDead == true and stateFresh and state.connectedKnown == true then
+        if state.connected == false then key = key + 1 end
+    elseif cfg.showDead == true then
+        local connected, known = ReadConnectedCached(frame, unit)
+        if known ~= true then return nil end
+        if connected == false then key = key + 1 end
     end
     return key
 end
@@ -267,6 +350,164 @@ local function CompileStatusDispatch(status)
     return dispatch
 end
 
+local function RunStatusRuntimeFrame(frame, event)
+    local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
+    if not status then return end
+    local kind = STATUS_EVENT_KIND[event]
+    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
+    local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
+    local runner = kind and dispatch[kind] or dispatch.apply
+    if runner then
+        runner(frame, status, event)
+    end
+end
+
+local unitlessDriver
+local unitlessFramesByEvent = {}
+local unitlessIndexByEvent = {}
+local unitlessCountByEvent = {}
+local unitlessRegistered = {}
+
+local function EnsureUnitlessDriver()
+    if unitlessDriver or not CreateFrame then
+        return unitlessDriver
+    end
+    unitlessDriver = CreateFrame("Frame")
+    unitlessDriver:SetScript("OnEvent", function(_, event)
+        local list = unitlessFramesByEvent[event]
+        if not list then
+            return
+        end
+        local live = GF and GF.frames
+        for i = 1, #list do
+            local frame = list[i]
+            if frame and (not live or live[frame] == true) then
+                local active = frame._msufActiveElements
+                if active and active.GroupStatusRuntime == true then
+                    RunStatusRuntimeFrame(frame, event)
+                end
+            end
+        end
+    end)
+    return unitlessDriver
+end
+
+local function RefreshUnitlessDriverEvent(event)
+    local want = (unitlessCountByEvent[event] or 0) > 0
+    if not unitlessDriver and not want then
+        return
+    end
+    local driver = EnsureUnitlessDriver()
+    if not driver then
+        return
+    end
+    if unitlessRegistered[event] == want then
+        return
+    end
+    if want then
+        driver:RegisterEvent(event)
+    else
+        driver:UnregisterEvent(event)
+    end
+    unitlessRegistered[event] = want or nil
+end
+
+local function AddUnitlessFrame(event, frame)
+    if not (event and frame) then
+        return
+    end
+    local list = unitlessFramesByEvent[event]
+    if not list then
+        list = {}
+        unitlessFramesByEvent[event] = list
+    end
+    local index = unitlessIndexByEvent[event]
+    if not index then
+        index = {}
+        unitlessIndexByEvent[event] = index
+    elseif index[frame] then
+        return
+    end
+    local n = #list + 1
+    list[n] = frame
+    index[frame] = n
+    unitlessCountByEvent[event] = (unitlessCountByEvent[event] or 0) + 1
+    RefreshUnitlessDriverEvent(event)
+end
+
+local function RemoveUnitlessFrame(event, frame)
+    local index = event and unitlessIndexByEvent[event]
+    local i = index and frame and index[frame]
+    if not i then
+        return
+    end
+    local list = unitlessFramesByEvent[event]
+    local last = #list
+    local tail = list[last]
+    list[i] = tail
+    list[last] = nil
+    index[frame] = nil
+    if tail and tail ~= frame then
+        index[tail] = i
+    end
+    local count = (unitlessCountByEvent[event] or 1) - 1
+    if count <= 0 then
+        unitlessCountByEvent[event] = nil
+        unitlessFramesByEvent[event] = nil
+        unitlessIndexByEvent[event] = nil
+    else
+        unitlessCountByEvent[event] = count
+    end
+    RefreshUnitlessDriverEvent(event)
+end
+
+local function ClearUnitlessRegistration(frame)
+    local map = frame and frame._msufGFStatusUnitlessMap
+    if not map then
+        return
+    end
+    for event in pairs(map) do
+        RemoveUnitlessFrame(event, frame)
+    end
+    frame._msufGFStatusUnitlessMap = nil
+end
+
+local function SetUnitlessRegistration(frame, status)
+    if not frame then
+        return
+    end
+    local events = status and status.groupRuntimeUnitlessEvents
+    if not (events and #events > 0) then
+        ClearUnitlessRegistration(frame)
+        return
+    end
+    local map = frame._msufGFStatusUnitlessMap
+    if not map then
+        map = {}
+        frame._msufGFStatusUnitlessMap = map
+    else
+        for event in pairs(map) do
+            map[event] = false
+        end
+    end
+    for i = 1, #events do
+        local event = events[i]
+        if event and map[event] ~= true then
+            AddUnitlessFrame(event, frame)
+        end
+        map[event] = true
+    end
+    for event, active in pairs(map) do
+        if active ~= true then
+            RemoveUnitlessFrame(event, frame)
+            map[event] = nil
+        end
+    end
+    if next(map) == nil then
+        frame._msufGFStatusUnitlessMap = nil
+    end
+end
+
 local GroupStatusRuntime = {}
 
 function GroupStatusRuntime.IsEnabled(frame, spec)
@@ -280,28 +521,44 @@ function GroupStatusRuntime.GetEvents(frame, spec)
 end
 
 function GroupStatusRuntime.GetUnitlessEvents(frame, spec)
-    local status = spec and spec.status
-    return status and status.groupRuntimeUnitlessEvents or EMPTY_EVENTS
+    return EMPTY_EVENTS
 end
 
 function GroupStatusRuntime.Update(frame, event)
+    RunStatusRuntimeFrame(frame, event)
+end
+
+function GroupStatusRuntime.UpdateState(frame, event)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
-    if not status then return end
-    local kind = STATUS_EVENT_KIND[event]
-    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
-    local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
-    local runner = kind and dispatch[kind] or dispatch.apply
-    if runner then
-        runner(frame, status, event)
-    end
+    if not (status and status.runtimeStatusText == true) then return end
+    if not UpdateStatusText and not BindStatusRuntime() then return end
+    RunStatusText(frame, status, event)
 end
 
 function GroupStatusRuntime.Apply(frame)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
-    if not status then return end
-    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
+    if frame then
+        frame._msufUpdateGroupStatusState = nil
+    end
+    if not status then
+        ClearUnitlessRegistration(frame)
+        return
+    end
+    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then
+        ClearUnitlessRegistration(frame)
+        return
+    end
+    SetUnitlessRegistration(frame, status)
+    frame._msufUpdateGroupStatusState = GroupStatusRuntime.UpdateState
     local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
     dispatch.apply(frame, status, "MSUF_GF_STATUS_APPLY")
+end
+
+function GroupStatusRuntime.Disable(frame)
+    if frame then
+        ClearUnitlessRegistration(frame)
+        frame._msufUpdateGroupStatusState = nil
+    end
 end
 
 UF.RegisterElement("GroupStatusRuntime", GroupStatusRuntime)

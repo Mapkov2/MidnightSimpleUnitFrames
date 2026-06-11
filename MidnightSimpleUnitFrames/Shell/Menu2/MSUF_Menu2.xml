@@ -44,6 +44,7 @@
     <Script file="Assistant\MSUF_AssistantParser_Geometry.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Geometry_Text.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Geometry_Selectors.lua"/>
+    <Script file="Assistant\MSUF_AssistantParser_Followups_Copy.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Followups.lua"/>
     <Script file="Assistant\MSUF_AssistantParser_Compound.lua"/>
     <Script file="Assistant\MSUF_AssistantParser.lua"/>

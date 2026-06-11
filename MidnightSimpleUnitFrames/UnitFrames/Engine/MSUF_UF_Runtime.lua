@@ -15,7 +15,6 @@ local CreateFrame = CreateFrame
 local pairs = pairs
 local InCombatLockdown = InCombatLockdown
 local math_floor = math.floor
-local debugprofilestop = debugprofilestop
 
 local EMPTY_METADATA_SET = {}
 local ApplyElementToFrame = UF.ApplyElementToFrame
@@ -178,12 +177,6 @@ function dirtyQueueMethods:Flush()
     if maxPerFlush < 1 then
         maxPerFlush = 1
     end
-    local budgetMs = DirtyQueueValue(self.budgetMs, self, 0.35)
-    local endAt
-    if debugprofilestop and budgetMs and budgetMs > 0 then
-        endAt = debugprofilestop() + budgetMs
-    end
-
     local bitsMap = self.bits
     local queued = self.queued
     local queue = self.queue
@@ -210,10 +203,6 @@ function dirtyQueueMethods:Flush()
 
         processed = processed + 1
         if processed >= maxPerFlush then
-            self:Schedule()
-            return anyFlushed
-        end
-        if endAt and processed % 4 == 0 and debugprofilestop() > endAt then
             self:Schedule()
             return anyFlushed
         end
@@ -253,7 +242,6 @@ function UF.CreateDirtyQueue(name, opts)
     queue.runtimeEnabled = opts.runtimeEnabled
     queue.onAnyFlushed = opts.onAnyFlushed
     queue.maxPerFlush = opts.maxPerFlush or queue.maxPerFlush or 8
-    queue.budgetMs = opts.budgetMs or queue.budgetMs or 0.35
     queue.defaultBits = opts.defaultBits or queue.defaultBits or true
     return queue
 end
@@ -487,9 +475,9 @@ local function DriverOnEvent(self, event, unit)
         UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
     elseif event == "UNIT_TARGET" then
         if unit == "target" then
-            UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY")
+            UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
         elseif unit == "focus" then
-            UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY")
+            UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
         end
     elseif event == "UNIT_PET" then
         if unit == "player" then

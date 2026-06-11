@@ -26,19 +26,29 @@ local C_Timer = _G.C_Timer
 local UpdateHealthTextColor = Text.UpdateHealthTextColor
 local SCALE_100 = Text.SCALE_100
 local REVERSE_HEALTH_MODE = Text.REVERSE_HEALTH_MODE
+local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
+local wipe = _G.wipe or function(t)
+    for k in pairs(t) do
+        t[k] = nil
+    end
+    return t
+end
 local ApplyText = Apply.Text or function(fs, text)
     if not fs then return end
     if issecretvalue(text) == true then
         fs._aText = nil
+        fs._aTextPlain = nil
         fs:SetText(text)
         return
     end
     text = text or ""
-    if fs._aText ~= text then
-        fs:SetText(text)
-        fs._aText = text
+    if fs._aTextPlain == true and fs._aText == text then
+        return
     end
+    fs:SetText(text)
+    fs._aText = text
+    fs._aTextPlain = true
 end
 local ValueOrDefault = Text.ValueOrDefault or function(value, fallback)
     if value == nil then return fallback end
@@ -151,6 +161,27 @@ local function PowerPercent(unit)
     return UnitPowerPercent(unit, powerType, false, true)
 end
 
+local function PercentFromPlainValues(cur, maxValue)
+    if nativeSecrets and (issecretvalue(cur) == true or issecretvalue(maxValue) == true) then
+        return nil
+    end
+    if type(cur) ~= "number" or type(maxValue) ~= "number" or maxValue <= 0 then
+        return nil
+    end
+    return floor((cur / maxValue) * 100 + 0.5)
+end
+
+local function MissingHealthFromValues(cur, maxValue)
+    if nativeSecrets and (issecretvalue(cur) == true or issecretvalue(maxValue) == true) then
+        return nil
+    end
+    if type(cur) ~= "number" or type(maxValue) ~= "number" then
+        return nil
+    end
+    local missing = maxValue - cur
+    return missing > 0 and missing or 0
+end
+
 local function ModeNeedsPercent(mode)
     return mode == "PERCENT"
         or mode == "CURPERCENT"
@@ -235,11 +266,19 @@ local function SetTextPlainCached(fs, text)
     if not fs then
         return
     end
-    text = text or ""
-    if fs._aText ~= text then
+    if issecretvalue(text) == true then
+        fs._aText = nil
+        fs._aTextPlain = nil
         fs:SetText(text)
-        fs._aText = text
+        return
     end
+    text = text or ""
+    if fs._aTextPlain == true and fs._aText == text then
+        return
+    end
+    fs:SetText(text)
+    fs._aText = text
+    fs._aTextPlain = true
 end
 
 local function AddSuffix(text, suffix)
@@ -263,6 +302,7 @@ local function SlotFormatted(slot, pattern, ...)
         return
     end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(pattern, ...)
 end
 
@@ -621,6 +661,7 @@ local function SecretWriteCurrent(slot, cur)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, cur)
 end
 
@@ -630,6 +671,7 @@ local function SecretWriteMax(slot, cur, maxValue)
     local fn = slot.secretValueFn
     if fn then maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, maxValue)
 end
 
@@ -639,6 +681,7 @@ local function SecretWriteCurMax(slot, cur, maxValue)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur); maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, cur, slot.delimiter, maxValue)
 end
 
@@ -648,6 +691,7 @@ local function SecretWriteMaxCur(slot, cur, maxValue)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur); maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, maxValue, slot.delimiter, cur)
 end
 
@@ -655,6 +699,7 @@ local function SecretWritePercent(slot, cur, maxValue, pct)
     local fs = slot.fs
     if not fs then return end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, pct)
 end
 
@@ -664,6 +709,7 @@ local function SecretWriteCurPercent(slot, cur, maxValue, pct)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, cur, slot.delimiter, pct)
 end
 
@@ -673,6 +719,7 @@ local function SecretWritePercentCur(slot, cur, maxValue, pct)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, cur)
 end
 
@@ -682,6 +729,7 @@ local function SecretWriteCurMaxPercent(slot, cur, maxValue, pct)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur); maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, cur, slot.delimiter, maxValue, slot.delimiter, pct)
 end
 
@@ -691,6 +739,7 @@ local function SecretWritePercentMaxCur(slot, cur, maxValue, pct)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur); maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, maxValue, slot.delimiter, cur)
 end
 
@@ -700,6 +749,7 @@ local function SecretWriteMaxPercent(slot, cur, maxValue, pct)
     local fn = slot.secretValueFn
     if fn then maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, maxValue, slot.delimiter, pct)
 end
 
@@ -709,6 +759,7 @@ local function SecretWritePercentMax(slot, cur, maxValue, pct)
     local fn = slot.secretValueFn
     if fn then maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, maxValue)
 end
 
@@ -718,6 +769,7 @@ local function SecretWritePercentCurMax(slot, cur, maxValue, pct)
     local fn = slot.secretValueFn
     if fn then cur = fn(cur); maxValue = fn(maxValue) end
     fs._aText = nil
+    fs._aTextPlain = nil
     fs:SetFormattedText(slot.secretPattern, pct, slot.delimiter, cur, slot.delimiter, maxValue)
 end
 
@@ -910,34 +962,63 @@ local function CompileTextRuntime(frame, spec, text)
     local nextIndex = 1
     local needsPercent = false
     local needsMissing = false
+    local needsCurrent = false
+    local needsMax = false
     local slotNeeds
     local slotMissing
+    local slotCurrent
+    local slotMax
     if showHealth and frame.hpTextLeft and frame.hpTextLeft:IsShown() then
-        nextIndex, slotNeeds, slotMissing = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextLeft, healthLeft, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextLeft, healthLeft, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
         needsMissing = needsMissing or slotMissing
+        needsCurrent = needsCurrent or slotCurrent
+        needsMax = needsMax or slotMax
     end
     if showHealth and frame.hpTextCenter and frame.hpTextCenter:IsShown() then
-        nextIndex, slotNeeds, slotMissing = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextCenter, healthCenter, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextCenter, healthCenter, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
         needsMissing = needsMissing or slotMissing
+        needsCurrent = needsCurrent or slotCurrent
+        needsMax = needsMax or slotMax
     end
     if showHealth and frame.hpTextRight and frame.hpTextRight:IsShown() then
-        nextIndex, slotNeeds, slotMissing = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextRight, healthRight, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
+        nextIndex, slotNeeds, slotMissing, slotCurrent, slotMax = AddTextSlot(rt.healthSlots, nextIndex, frame.hpTextRight, healthRight, text.healthDelimiter, text.shortNumbers, text.hidePercentSymbol)
         needsPercent = needsPercent or slotNeeds
         needsMissing = needsMissing or slotMissing
+        needsCurrent = needsCurrent or slotCurrent
+        needsMax = needsMax or slotMax
     end
     rt.healthSlotCount = nextIndex - 1
     rt.healthNeedsPercent = needsPercent
     rt.healthNeedsMissing = needsMissing
+    rt.healthNeedsCurrent = needsCurrent
+    rt.healthNeedsMax = needsMax
     rt.healthColorByHealth = text.healthColorByHealth == true
+    if (needsPercent == true or rt.healthColorByHealth == true) and needsCurrent ~= true then
+        rt.healthDispatchKeyMode = needsMax == true and 5 or 4
+    elseif needsCurrent == true and needsMax == true then
+        rt.healthDispatchKeyMode = 3
+    elseif needsMax == true then
+        rt.healthDispatchKeyMode = 2
+    elseif needsCurrent == true then
+        rt.healthDispatchKeyMode = 1
+    else
+        rt.healthDispatchKeyMode = 0
+    end
     -- Compile-time alpha for the gradient text color (skips BaseTextColor on the
     -- hot path) and reset of the percent-bucket recolor memo (settings changed).
     rt.healthTextAlpha = (spec and spec.textColor and spec.textColor.a) or 1
     rt._textGradientPct = nil
-    rt.healthPlain = frame.unit == "player"
+    rt.healthPlain = nativeSecrets ~= true and frame.unit == "player"
     rt._lastHealthTextHP = nil
     rt._lastHealthTextMax = nil
+    rt._lastHealthTextMissing = nil
+    rt._dispatchHealthTextHP = nil
+    rt._dispatchHealthTextMax = nil
+    rt._dispatchHealthTextMissing = nil
+    rt._dispatchHealthMissing = nil
+    rt._dispatchHealthMissingReady = nil
     TrimTextSlots(rt.healthSlots, nextIndex)
 
     local showPower = spec and spec.showPowerText ~= false
@@ -968,18 +1049,41 @@ local function CompileTextRuntime(frame, spec, text)
     rt.powerNeedsPercent = needsPercent
     rt.powerNeedsCurrent = needsCurrent
     rt.powerNeedsMax = needsMax
+    if needsPercent == true and needsCurrent ~= true then
+        rt.powerDispatchKeyMode = needsMax == true and 5 or 4
+    elseif needsCurrent == true and needsMax == true then
+        rt.powerDispatchKeyMode = 3
+    elseif needsMax == true then
+        rt.powerDispatchKeyMode = 2
+    elseif needsCurrent == true then
+        rt.powerDispatchKeyMode = 1
+    else
+        rt.powerDispatchKeyMode = 0
+    end
     if text.directLayout == true and text.powerColorByType ~= true then
         rt.powerColorByType = "STATIC"
     else
         rt.powerColorByType = text.powerColorByType == true
     end
-    rt.powerPlain = frame.unit == "player"
+    local powerSpec = spec and spec.power
+    rt.powerRefreshTypeOnTick = rt.powerColorByType == true
+        and (not powerSpec or powerSpec.mode == nil or powerSpec.mode == "power")
+    frame._msufTextPowerNeedsType = rt.powerSlotCount > 0
+        and (rt.powerColorByType == true or needsMax == true or needsPercent == true)
+        and true
+        or nil
+    rt.powerPlain = nativeSecrets ~= true and frame.unit == "player"
+    rt.plainTextTrusted = nativeSecrets ~= true and frame.unit == "player"
     rt._lastPowerTextPower = nil
     rt._lastPowerTextMax = nil
+    rt._dispatchPowerTextPower = nil
+    rt._dispatchPowerTextMax = nil
     frame._msufTextPowerType = nil
     frame._msufTextPowerToken = nil
     frame._msufTextPowerTypeKnown = nil
+    frame._msufTextPowerTypeUnit = nil
     frame._msufTextPowerMax = nil
+    frame._msufTextPowerMaxUnit = nil
     rt.powerThrottle = tonumber(text.powerThrottle) or 0.1
     if rt.powerSlotCount <= 0 then
         rt.powerThrottle = 0
@@ -1054,19 +1158,26 @@ end
 
 local UpdateTextSlotsSecret
 
-local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, needsPercent, rt)
+local function UpdateTextSlotsPlain(slots, count, cur, max, unit, percentFn, needsPercent, rt, pctOverride, pctOverrideSet)
     if not slots or not count or count <= 0 then
         return
     end
-    if issecretvalue(cur) == true
+    if nativeSecrets and (issecretvalue(cur) == true
         or issecretvalue(max) == true
-        or (rt and issecretvalue(rt.healthMissing) == true) then
+        or (rt and issecretvalue(rt.healthMissing) == true)) then
         return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
     end
     local pct
     local pctKnown = false
     if needsPercent == true and percentFn then
-        pct = percentFn(unit)
+        if pctOverrideSet == true then
+            pct = pctOverride
+        else
+            pct = PercentFromPlainValues(cur, max)
+        end
+        if pct == nil and pctOverrideSet ~= true then
+            pct = percentFn(unit)
+        end
         if issecretvalue(pct) == true then
             return UpdateTextSlotsSecret(slots, count, cur, max, unit, percentFn, needsPercent, rt)
         end
@@ -1112,22 +1223,45 @@ local FlushPendingPowerText
 local function ResolvePendingHealth(frame, rt, hp, hpMax)
     local unit = frame and frame.unit
     if unit then
-        if issecretvalue(hp) ~= true and hp == nil and UnitHealth then
+        local percentNeedsValues = rt.healthNeedsPercent == true and UnitHealthPercent == nil
+        local missingNeedsValues = rt.healthNeedsMissing == true
+        local needsCurrent = rt.healthNeedsCurrent == true or rt.healthColorByHealth == true or percentNeedsValues or missingNeedsValues
+        local needsMax = rt.healthNeedsMax == true or rt.healthColorByHealth == true or percentNeedsValues or missingNeedsValues
+        local needHP = needsCurrent and issecretvalue(hp) ~= true and hp == nil
+        local needMax = needsMax and issecretvalue(hpMax) ~= true and hpMax == nil
+        if needHP or needMax then
+            local bar = frame.hpBar or frame.Health
+            if needHP and bar and bar._msufHealthValueUnit == unit then
+                hp = bar._msufHealthValue
+                needHP = issecretvalue(hp) ~= true and hp == nil
+            end
+            if needMax and bar and bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
+                hpMax = bar._msufHealthMax
+                needMax = issecretvalue(hpMax) ~= true and hpMax == nil
+            end
+        end
+        if needHP and UnitHealth then
             hp = UnitHealth(unit)
         end
-        if issecretvalue(hpMax) ~= true and hpMax == nil then
-            local bar = frame.hpBar or frame.Health
-            if bar and bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
-                hpMax = bar._msufHealthMax
-            elseif UnitHealthMax then
-                hpMax = UnitHealthMax(unit)
-            end
+        if needMax and UnitHealthMax then
+            hpMax = UnitHealthMax(unit)
         end
     end
     if rt.healthNeedsMissing == true then
-        local calc = frame and frame._msufHealthCalc
-        rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+        if rt._dispatchHealthMissingReady == true then
+            rt.healthMissing = rt._dispatchHealthMissing
+            rt._dispatchHealthMissingReady = nil
+            rt._dispatchHealthMissing = nil
+        else
+            rt.healthMissing = MissingHealthFromValues(hp, hpMax)
+            if rt.healthMissing == nil then
+                local calc = frame and frame._msufHealthCalc
+                rt.healthMissing = calc and calc.GetMissingHealth and calc:GetMissingHealth() or nil
+            end
+        end
     else
+        rt._dispatchHealthMissingReady = nil
+        rt._dispatchHealthMissing = nil
         rt.healthMissing = nil
     end
     return hp, hpMax
@@ -1135,11 +1269,19 @@ end
 
 local function ResolvePendingPower(frame, rt, power, powerMax)
     local unit = frame and frame.unit
-    local needPower = issecretvalue(power) ~= true and power == nil
-    local needPowerMax = issecretvalue(powerMax) ~= true and powerMax == nil
+    local percentNeedsValues = rt.powerNeedsPercent == true and UnitPowerPercent == nil
+    local needsPower = rt.powerNeedsCurrent == true or percentNeedsValues
+    local needsMax = rt.powerNeedsMax == true or percentNeedsValues
+    local needPower = needsPower and issecretvalue(power) ~= true and power == nil
+    local needPowerMax = needsMax and issecretvalue(powerMax) ~= true and powerMax == nil
     if unit and (needPower or needPowerMax) then
-        local powerType = frame._msufTextPowerType
-        if frame._msufTextPowerTypeKnown ~= true and UnitPowerType then
+        local powerType
+        if frame._msufTextPowerNeedsType == true then
+            powerType = frame._msufTextPowerType
+        end
+        if frame._msufTextPowerNeedsType == true
+            and (frame._msufTextPowerTypeKnown ~= true or frame._msufTextPowerTypeUnit ~= unit)
+            and UnitPowerType then
             local rawType, rawToken = UnitPowerType(unit)
             if issecretvalue(rawType) == true then rawType = nil end
             if issecretvalue(rawToken) == true then rawToken = nil end
@@ -1147,6 +1289,7 @@ local function ResolvePendingPower(frame, rt, power, powerMax)
             frame._msufTextPowerType = rawType
             frame._msufTextPowerToken = rawToken
             frame._msufTextPowerTypeKnown = true
+            frame._msufTextPowerTypeUnit = unit
         end
 
         if needPower and UnitPower then
@@ -1157,15 +1300,74 @@ local function ResolvePendingPower(frame, rt, power, powerMax)
             end
         end
         if needPowerMax and UnitPowerMax then
-            if powerType ~= nil then
+            if frame._msufTextPowerMaxUnit == unit and frame._msufTextPowerMax ~= nil then
+                powerMax = frame._msufTextPowerMax
+            elseif powerType ~= nil then
                 powerMax = UnitPowerMax(unit, powerType)
             else
                 powerMax = UnitPowerMax(unit)
             end
+            if issecretvalue(powerMax) ~= true and powerMax == nil then powerMax = 1 end
+            frame._msufTextPowerMax = powerMax
+            frame._msufTextPowerMaxUnit = unit
         end
     end
     rt.healthMissing = nil
     return power, powerMax
+end
+
+local function PlainHealthTextKey(rt, hp, hpMax, pctOverride, pctOverrideSet)
+    if nativeSecrets and (issecretvalue(hp) == true
+        or issecretvalue(hpMax) == true
+        or (pctOverrideSet == true and issecretvalue(pctOverride) == true)) then
+        return false
+    end
+    local mode = rt.healthDispatchKeyMode or 0
+    local keyHP, keyMax = false, false
+    if mode == 1 then
+        keyHP = hp
+    elseif mode == 2 then
+        keyMax = hpMax
+    elseif mode == 3 then
+        keyHP, keyMax = hp, hpMax
+    elseif mode == 4 or mode == 5 then
+        if pctOverrideSet == true and issecretvalue(pctOverride) ~= true then
+            keyHP = pctOverride or false
+        elseif type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
+            keyHP = floor((hp / hpMax) * 100 + 0.5)
+        else
+            return false
+        end
+        keyMax = mode == 5 and hpMax or false
+    end
+    return true, keyHP, keyMax
+end
+
+local function PlainPowerTextKey(rt, power, powerMax, pctOverride, pctOverrideSet)
+    if nativeSecrets and (issecretvalue(power) == true
+        or issecretvalue(powerMax) == true
+        or (pctOverrideSet == true and issecretvalue(pctOverride) == true)) then
+        return false
+    end
+    local mode = rt.powerDispatchKeyMode or 0
+    local keyPower, keyMax = false, false
+    if mode == 1 then
+        keyPower = power
+    elseif mode == 2 then
+        keyMax = powerMax
+    elseif mode == 3 then
+        keyPower, keyMax = power, powerMax
+    elseif mode == 4 or mode == 5 then
+        if pctOverrideSet == true and issecretvalue(pctOverride) ~= true then
+            keyPower = pctOverride or false
+        elseif type(power) == "number" and type(powerMax) == "number" and powerMax > 0 then
+            keyPower = floor((power / powerMax) * 100 + 0.5)
+        else
+            return false
+        end
+        keyMax = mode == 5 and powerMax or false
+    end
+    return true, keyPower, keyMax
 end
 
 local function FlushPendingHealthText(frame)
@@ -1186,12 +1388,41 @@ local function FlushPendingHealthText(frame)
     local throttle = rt.healthThrottle or 0
     rt.nextHealthTextTime = throttle > 0 and (now + throttle) or nil
     hp, hpMax = ResolvePendingHealth(frame, rt, hp, hpMax)
-    if UpdateHealthTextColor then
-        UpdateHealthTextColor(frame, rt, frame.unit, hp, hpMax)
-    end
     if rt.healthPlain == true then
-        UpdateTextSlotsPlain(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, HealthPercent, rt.healthNeedsPercent, rt)
+        local pctOverride, pctOverrideSet
+        if rt.healthNeedsPercent == true then
+            pctOverride = PercentFromPlainValues(hp, hpMax)
+            if pctOverride ~= nil then
+                pctOverrideSet = true
+            elseif UnitHealthPercent then
+                pctOverride = HealthPercent(frame.unit)
+                pctOverrideSet = true
+            end
+        end
+        local comparable, keyHP, keyMax = PlainHealthTextKey(rt, hp, hpMax, pctOverride, pctOverrideSet)
+        if comparable == true
+            and rt._lastHealthTextHP == keyHP
+            and rt._lastHealthTextMax == keyMax
+            and rt._lastHealthTextMissing == rt.healthMissing then
+            return
+        end
+        if comparable == true then
+            rt._lastHealthTextHP = keyHP
+            rt._lastHealthTextMax = keyMax
+            rt._lastHealthTextMissing = rt.healthMissing
+        else
+            rt._lastHealthTextHP = nil
+            rt._lastHealthTextMax = nil
+            rt._lastHealthTextMissing = nil
+        end
+        if rt.healthColorByHealth == true and UpdateHealthTextColor then
+            UpdateHealthTextColor(frame, rt, frame.unit, hp, hpMax)
+        end
+        UpdateTextSlotsPlain(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, HealthPercent, rt.healthNeedsPercent, rt, pctOverride, pctOverrideSet)
     else
+        if rt.healthColorByHealth == true and UpdateHealthTextColor then
+            UpdateHealthTextColor(frame, rt, frame.unit, hp, hpMax)
+        end
         UpdateTextSlotsSecret(rt.healthSlots, rt.healthSlotCount, hp, hpMax, frame.unit, HealthPercent, rt.healthNeedsPercent, rt)
     end
 end
@@ -1200,46 +1431,152 @@ local textThrottleFrame
 local textThrottleTimerActive
 local textThrottleTimerAt
 local healthTextQueue = {}
+local healthTextQueueList = {}
+local healthTextQueueHead = 1
+local healthTextQueueTail = 0
 local powerTextQueue = {}
+local powerTextQueueList = {}
+local powerTextQueueHead = 1
+local powerTextQueueTail = 0
 local TEXT_FLUSH_PER_TICK = 10
 local TEXT_MIN_DELAY = 0.01
+
+local function CompactTextQueue(list, head, tail)
+    if head <= 1 then
+        return head, tail
+    end
+    if head > tail then
+        wipe(list)
+        return 1, 0
+    end
+    local out = 1
+    for i = head, tail do
+        list[out] = list[i]
+        out = out + 1
+    end
+    for i = out, tail do
+        list[i] = nil
+    end
+    return 1, out - 1
+end
+
+local function RemoveQueuedTextFrame(queue, list, head, tail, frame)
+    if queue[frame] == nil then
+        return head, tail
+    end
+    queue[frame] = nil
+    for i = head, tail do
+        if list[i] == frame then
+            for j = i, tail - 1 do
+                list[j] = list[j + 1]
+            end
+            list[tail] = nil
+            tail = tail - 1
+            break
+        end
+    end
+    if head > tail then
+        wipe(list)
+        return 1, 0
+    end
+    return head, tail
+end
+
+local function QueueTextFrame(queue, list, head, tail, frame, when)
+    if head > 32 then
+        head, tail = CompactTextQueue(list, head, tail)
+    end
+    head, tail = RemoveQueuedTextFrame(queue, list, head, tail, frame)
+
+    local pos = tail + 1
+    while pos > head do
+        local prevFrame = list[pos - 1]
+        local prevWhen = prevFrame and queue[prevFrame]
+        if not prevWhen or prevWhen <= when then
+            break
+        end
+        list[pos] = prevFrame
+        pos = pos - 1
+    end
+    list[pos] = frame
+    queue[frame] = when
+    return head, tail + 1
+end
+
+local function QueueHasPending(head, tail)
+    return head <= tail
+end
+
+local function EarliestAt(a, b)
+    if not b then return a end
+    if not a or b < a then return b end
+    return a
+end
+
+local function FlushQueuedText(queue, list, head, tail, now, flushFn, budget)
+    local flushed = 0
+    local active = false
+    local nextAt
+    local i = head
+    local last = tail
+
+    while i <= last do
+        if flushed >= budget then
+            active = true
+            nextAt = now + TEXT_MIN_DELAY
+            break
+        end
+
+        local frame = list[i]
+        local when = frame and queue[frame]
+        if not when then
+            list[i] = nil
+            i = i + 1
+        elseif now >= when then
+            queue[frame] = nil
+            list[i] = nil
+            i = i + 1
+            flushFn(frame)
+            flushed = flushed + 1
+        else
+            active = true
+            nextAt = when
+            break
+        end
+    end
+
+    head = i
+    if head > tail then
+        wipe(list)
+        head = 1
+        tail = 0
+    elseif head > 32 then
+        head, tail = CompactTextQueue(list, head, tail)
+    end
+    return head, tail, active, nextAt, flushed
+end
 
 local function FlushTextQueues(now)
     local active = false
     local nextAt
-    local flushed = 0
+    local budget = TEXT_FLUSH_PER_TICK
+    local flushed
 
-    for frame, when in pairs(healthTextQueue) do
-        if now >= when then
-            healthTextQueue[frame] = nil
-            FlushPendingHealthText(frame)
-            flushed = flushed + 1
-            if flushed >= TEXT_FLUSH_PER_TICK then
-                active = true
-                nextAt = now + TEXT_MIN_DELAY
-                break
-            end
-        else
-            active = true
-            if not nextAt or when < nextAt then nextAt = when end
-        end
-    end
+    healthTextQueueHead, healthTextQueueTail, active, nextAt, flushed = FlushQueuedText(
+        healthTextQueue, healthTextQueueList, healthTextQueueHead, healthTextQueueTail, now, FlushPendingHealthText, budget
+    )
+    budget = budget - flushed
 
-    flushed = 0
-    for frame, when in pairs(powerTextQueue) do
-        if now >= when then
-            powerTextQueue[frame] = nil
-            FlushPendingPowerText(frame)
-            flushed = flushed + 1
-            if flushed >= TEXT_FLUSH_PER_TICK then
-                active = true
-                nextAt = now + TEXT_MIN_DELAY
-                break
-            end
-        else
-            active = true
-            if not nextAt or when < nextAt then nextAt = when end
-        end
+    if budget > 0 then
+        local powerActive, powerNext
+        powerTextQueueHead, powerTextQueueTail, powerActive, powerNext, flushed = FlushQueuedText(
+            powerTextQueue, powerTextQueueList, powerTextQueueHead, powerTextQueueTail, now, FlushPendingPowerText, budget
+        )
+        active = active or powerActive
+        nextAt = EarliestAt(nextAt, powerNext)
+    elseif QueueHasPending(powerTextQueueHead, powerTextQueueTail) then
+        active = true
+        nextAt = EarliestAt(nextAt, now + TEXT_MIN_DELAY)
     end
 
     return active, nextAt
@@ -1277,12 +1614,14 @@ end
 -- (early-out below) or the queues are already drained and RunTextThrottle is a
 -- cheap no-op over two empty tables.
 local function TextThrottleTimerCallback()
-    local now = GetTime and GetTime() or 0
-    local due = textThrottleTimerAt
-    if due and now + 0.001 < due then
-        return
-    end
-    RunTextThrottle(now)
+    -- MUST ALWAYS run RunTextThrottle -- never gate on textThrottleTimerAt.
+    -- C_Timer can deliver a fire marginally BEFORE the GetTime()-derived
+    -- deadline (frame-boundary accumulation); RunTextThrottle reschedules
+    -- not-yet-due entries itself. A time-based skip here once stalled HP
+    -- text permanently: the skipped fire was the only armed timer while
+    -- textThrottleTimerActive stayed true, so the Schedule guard suppressed
+    -- every future arm. Stale fires are cheap no-ops over empty queues.
+    RunTextThrottle()
 end
 
 ScheduleTextThrottleTimer = function(delay, when)
@@ -1315,7 +1654,9 @@ local function QueueHealthTextFlush(frame, rt, remaining)
     rt.healthTimerActive = true
     local delay = remaining > 0 and remaining or TEXT_MIN_DELAY
     local when = (GetTime and GetTime() or 0) + delay
-    healthTextQueue[frame] = when
+    healthTextQueueHead, healthTextQueueTail = QueueTextFrame(
+        healthTextQueue, healthTextQueueList, healthTextQueueHead, healthTextQueueTail, frame, when
+    )
     ScheduleTextThrottleTimer(delay, when)
 end
 
@@ -1338,7 +1679,30 @@ FlushPendingPowerText = function(frame)
     rt.nextPowerTextTime = throttle > 0 and (now + throttle) or nil
     power, powerMax = ResolvePendingPower(frame, rt, power, powerMax)
     if rt.powerPlain == true then
-        UpdateTextSlotsPlain(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PowerPercent, rt.powerNeedsPercent, rt)
+        local pctOverride, pctOverrideSet
+        if rt.powerNeedsPercent == true then
+            pctOverride = PercentFromPlainValues(power, powerMax)
+            if pctOverride ~= nil then
+                pctOverrideSet = true
+            elseif UnitPowerPercent then
+                pctOverride = PowerPercent(frame.unit)
+                pctOverrideSet = true
+            end
+        end
+        local comparable, keyPower, keyMax = PlainPowerTextKey(rt, power, powerMax, pctOverride, pctOverrideSet)
+        if comparable == true
+            and rt._lastPowerTextPower == keyPower
+            and rt._lastPowerTextMax == keyMax then
+            return
+        end
+        if comparable == true then
+            rt._lastPowerTextPower = keyPower
+            rt._lastPowerTextMax = keyMax
+        else
+            rt._lastPowerTextPower = nil
+            rt._lastPowerTextMax = nil
+        end
+        UpdateTextSlotsPlain(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PowerPercent, rt.powerNeedsPercent, rt, pctOverride, pctOverrideSet)
     else
         UpdateTextSlotsSecret(rt.powerSlots, rt.powerSlotCount, power, powerMax, frame.unit, PowerPercent, rt.powerNeedsPercent, rt)
     end
@@ -1351,7 +1715,9 @@ local function QueuePowerTextFlush(frame, rt, remaining)
     rt.powerTimerActive = true
     local delay = remaining > 0 and remaining or TEXT_MIN_DELAY
     local when = (GetTime and GetTime() or 0) + delay
-    powerTextQueue[frame] = when
+    powerTextQueueHead, powerTextQueueTail = QueueTextFrame(
+        powerTextQueue, powerTextQueueList, powerTextQueueHead, powerTextQueueTail, frame, when
+    )
     ScheduleTextThrottleTimer(delay, when)
 end
 Text.HealthPercent = HealthPercent

@@ -10,6 +10,7 @@ MSUF.GF = GF
 if not (UF and UF.AttachFrame and UF.ApplySpec) then return end
 
 local C_Timer = C_Timer
+local GetTime = GetTime
 local InCombatLockdown = InCombatLockdown
 local table_remove = table.remove
 local Secrets = MSUF.Secrets or {}
@@ -17,10 +18,20 @@ local UnitMissing = Secrets.UnitMissing or function(_) return false end
 
 GF.frames = GF.frames or setmetatable({}, { __mode = "k" })
 GF.frameList = GF.frameList or {}
+GF.unitFrames = GF.unitFrames or {}
 GF._scanScheduled = GF._scanScheduled or {}
 GF._scanScheduledKind = GF._scanScheduledKind or {}
+GF._scanScheduledKey = GF._scanScheduledKey or {}
+GF._scanScheduledDue = GF._scanScheduledDue or {}
+GF._scanScheduledList = GF._scanScheduledList or {}
 local scanScheduled = GF._scanScheduled
 local scanScheduledKind = GF._scanScheduledKind
+local scanScheduledKey = GF._scanScheduledKey
+local scanScheduledDue = GF._scanScheduledDue
+local scanScheduledList = GF._scanScheduledList
+local scanScheduledHead = 1
+local scanScheduledTail = 0
+local scanTimerAt
 local scanSeen = setmetatable({}, { __mode = "k" })
 local scanNonce = setmetatable({}, { __mode = "k" })
 local scanUnit = setmetatable({}, { __mode = "k" })
@@ -36,7 +47,7 @@ local appliedPowerEnabled = setmetatable({}, { __mode = "k" })
 local appliedPowerHeight = setmetatable({}, { __mode = "k" })
 local appliedRoleValue = setmetatable({}, { __mode = "k" })
 local UNIT_ATTR = "unit"
-local UNIT_CHANGED_REASON = "MSUF_UNIT_IDENTITY"
+local UNIT_CHANGED_REASON = "MSUF_GF_UNIT_IDENTITY"
 
 local APPLY_MASK = {
     Health = true, Power = true, Text = true, NameText = true,
@@ -148,11 +159,13 @@ local function ApplyClickCast(frame, spec)
     return GF.RegisterClickCastFrame(frame, true)
 end
 
+local function RefreshClickCastFrame(frame)
+    ApplyClickCast(frame, frame and frame.MSUFSpec)
+end
+
 function GF.RefreshClickCastFrames()
     if not GF.ForEachFrame then return false end
-    GF.ForEachFrame(function(frame)
-        ApplyClickCast(frame, frame and frame.MSUFSpec)
-    end, true)
+    GF.ForEachFrame(RefreshClickCastFrame, true)
     return true
 end
 
@@ -201,38 +214,73 @@ local function ShowHoverHighlight(frame)
     SetHoverShown(frame, true)
 end
 
+local tooltipPendingFrame
+local tooltipPendingToken
+local tooltipPendingAt
+local tooltipTimerActive
+
+local function GroupTooltipTimerCallback()
+    tooltipTimerActive = nil
+    local frame = tooltipPendingFrame
+    local token = tooltipPendingToken
+    if not frame then return end
+    local now = GetTime and GetTime() or 0
+    if tooltipPendingAt and now < tooltipPendingAt then
+        tooltipTimerActive = true
+        C_Timer.After(tooltipPendingAt - now, GroupTooltipTimerCallback)
+        return
+    end
+    tooltipPendingFrame = nil
+    tooltipPendingToken = nil
+    tooltipPendingAt = nil
+    if frame._msufGFTooltipToken ~= token then return end
+    if frame.IsMouseOver and not frame:IsMouseOver() then return end
+    ShowTooltip(frame)
+end
+
+local function GroupButtonOnEnter(self)
+    ShowHoverHighlight(self)
+    if _G.MSUF_RoundedUF_OnGroupMouseover then
+        _G.MSUF_RoundedUF_OnGroupMouseover(self, true)
+    end
+    if not TooltipAllowed() then return end
+    self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
+    local token = self._msufGFTooltipToken
+    if C_Timer and C_Timer.After then
+        tooltipPendingFrame = self
+        tooltipPendingToken = token
+        tooltipPendingAt = (GetTime and GetTime() or 0) + 0.12
+        if tooltipTimerActive ~= true then
+            tooltipTimerActive = true
+            C_Timer.After(0.12, GroupTooltipTimerCallback)
+        end
+    else
+        ShowTooltip(self)
+    end
+end
+
+local function GroupButtonOnLeave(self)
+    if _G.MSUF_RoundedUF_OnGroupMouseover then
+        _G.MSUF_RoundedUF_OnGroupMouseover(self, false)
+    end
+    SetHoverShown(self, false)
+    self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
+    if tooltipPendingFrame == self then
+        tooltipPendingFrame = nil
+        tooltipPendingToken = nil
+        tooltipPendingAt = nil
+    end
+    local tooltips = MSUF and MSUF.Tooltips
+    if tooltips and type(tooltips.HideUnit) == "function" then tooltips.HideUnit(self)
+    elseif UnitFrame_OnLeave then UnitFrame_OnLeave(self)
+    elseif GameTooltip then GameTooltip:Hide() end
+end
+
 local function HookButton(frame)
     if frame._msufGFHooked then return end
     frame._msufGFHooked = true
-    frame:HookScript("OnEnter", function(self)
-        ShowHoverHighlight(self)
-        if _G.MSUF_RoundedUF_OnGroupMouseover then
-            _G.MSUF_RoundedUF_OnGroupMouseover(self, true)
-        end
-        if not TooltipAllowed() then return end
-        self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
-        local token = self._msufGFTooltipToken
-        if C_Timer and C_Timer.After then
-            C_Timer.After(0.12, function()
-                if self._msufGFTooltipToken ~= token then return end
-                if self.IsMouseOver and not self:IsMouseOver() then return end
-                ShowTooltip(self)
-            end)
-        else
-            ShowTooltip(self)
-        end
-    end)
-    frame:HookScript("OnLeave", function(self)
-        if _G.MSUF_RoundedUF_OnGroupMouseover then
-            _G.MSUF_RoundedUF_OnGroupMouseover(self, false)
-        end
-        SetHoverShown(self, false)
-        self._msufGFTooltipToken = (self._msufGFTooltipToken or 0) + 1
-        local tooltips = MSUF and MSUF.Tooltips
-        if tooltips and type(tooltips.HideUnit) == "function" then tooltips.HideUnit(self)
-        elseif UnitFrame_OnLeave then UnitFrame_OnLeave(self)
-        elseif GameTooltip then GameTooltip:Hide() end
-    end)
+    frame:HookScript("OnEnter", GroupButtonOnEnter)
+    frame:HookScript("OnLeave", GroupButtonOnLeave)
 end
 
 local function NormalizeAttrUnit(value)
@@ -316,11 +364,35 @@ local function HeaderLayoutNonce(frame)
     return 0
 end
 
-local function TrackFrame(frame)
+local function IndexFrameUnit(frame, unit)
+    if not frame then return end
+    local old = frame._msufGFIndexedUnit
+    local byUnit = GF.unitFrames
+    if old and old ~= unit and byUnit[old] == frame then
+        byUnit[old] = nil
+    end
+    if type(unit) == "string" and unit ~= "" then
+        byUnit[unit] = frame
+        frame._msufGFIndexedUnit = unit
+    else
+        frame._msufGFIndexedUnit = nil
+    end
+end
+
+local function TrackFrame(frame, unit)
     if GF.frames[frame] ~= true then
         GF.frames[frame] = true
         GF.frameList[#GF.frameList + 1] = frame
     end
+    IndexFrameUnit(frame, unit or frame.unit)
+end
+
+function GF.FrameForUnit(unit)
+    local frame = unit and GF.unitFrames and GF.unitFrames[unit]
+    if frame and GF.frames[frame] == true and frame.unit == unit then
+        return frame
+    end
+    return nil
 end
 
 local function MarkApplied(frame, kind, unit, spec)
@@ -382,7 +454,7 @@ ApplyUnitChangeFast = function(frame, kind, unit)
     scanNonce[frame] = layoutNonce
     scanUnit[frame] = unit
     scanKind[frame] = kind
-    TrackFrame(frame)
+    TrackFrame(frame, unit)
     return true
 end
 
@@ -395,6 +467,11 @@ function GF.UntrackFrame(frame)
         UF.DetachFrame(frame)
     end
     GF.frames[frame] = nil
+    local indexedUnit = frame._msufGFIndexedUnit
+    if indexedUnit and GF.unitFrames and GF.unitFrames[indexedUnit] == frame then
+        GF.unitFrames[indexedUnit] = nil
+    end
+    frame._msufGFIndexedUnit = nil
     scanNonce[frame] = nil
     scanUnit[frame] = nil
     scanKind[frame] = nil
@@ -448,7 +525,7 @@ function GF.ApplyButton(frame, kind, reason)
         scanNonce[frame] = layoutNonce
         scanUnit[frame] = unit
         scanKind[frame] = kind
-        TrackFrame(frame)
+        TrackFrame(frame, unit)
         return true
     end
 
@@ -478,7 +555,7 @@ function GF.ApplyButton(frame, kind, reason)
     scanUnit[frame] = unit
     scanKind[frame] = kind
 
-    TrackFrame(frame)
+    TrackFrame(frame, unit)
     return true
 end
 
@@ -580,18 +657,91 @@ function GF.ScanHeader(key, kind)
     return false
 end
 
+local RunScheduledHeaderScans
+
+local function ArmScanTimer(when)
+    if not (C_Timer and C_Timer.After) then return end
+    if scanTimerAt and scanTimerAt <= when then return end
+    scanTimerAt = when
+    local delay = when - (GetTime and GetTime() or 0)
+    C_Timer.After(delay > 0 and delay or 0, RunScheduledHeaderScans)
+end
+
+RunScheduledHeaderScans = function()
+    scanTimerAt = nil
+    local now = GetTime and GetTime() or 0
+    local nextAt
+    local out = scanScheduledHead
+    local last = scanScheduledTail
+
+    for i = scanScheduledHead, last do
+        local scheduleKey = scanScheduledList[i]
+        local due = scheduleKey and scanScheduledDue[scheduleKey]
+        if not due then
+            scanScheduledList[i] = nil
+        elseif now >= due then
+            scanScheduled[scheduleKey] = nil
+            scanScheduledDue[scheduleKey] = nil
+            local key = scanScheduledKey[scheduleKey]
+            local kind = scanScheduledKind[scheduleKey]
+            scanScheduledKey[scheduleKey] = nil
+            scanScheduledKind[scheduleKey] = nil
+            scanScheduledList[i] = nil
+            GF.ScanHeader(key, kind)
+        else
+            if out ~= i then
+                scanScheduledList[out] = scheduleKey
+                scanScheduledList[i] = nil
+            end
+            out = out + 1
+            if not nextAt or due < nextAt then
+                nextAt = due
+            end
+        end
+    end
+
+    local appendedTail = scanScheduledTail
+    if appendedTail > last then
+        for i = last + 1, appendedTail do
+            local scheduleKey = scanScheduledList[i]
+            local due = scheduleKey and scanScheduledDue[scheduleKey]
+            if due then
+                if out ~= i then
+                    scanScheduledList[out] = scheduleKey
+                    scanScheduledList[i] = nil
+                end
+                out = out + 1
+                if not nextAt or due < nextAt then
+                    nextAt = due
+                end
+            else
+                scanScheduledList[i] = nil
+            end
+        end
+    end
+
+    scanScheduledHead = 1
+    scanScheduledTail = out - 1
+    if scanScheduledTail <= 0 then
+        scanScheduledTail = 0
+    end
+    if nextAt then
+        ArmScanTimer(nextAt)
+    end
+end
+
 local function ScheduleScanAfter(key, kind, delay)
     if not (C_Timer and C_Timer.After) then return end
     local scheduleKey = tostring(key) .. ":" .. tostring(delay)
     scanScheduledKind[scheduleKey] = kind
+    scanScheduledKey[scheduleKey] = key
     if scanScheduled[scheduleKey] then return end
     scanScheduled[scheduleKey] = true
-    C_Timer.After(delay, function()
-        scanScheduled[scheduleKey] = nil
-        local scanKind = scanScheduledKind[scheduleKey]
-        scanScheduledKind[scheduleKey] = nil
-        GF.ScanHeader(key, scanKind)
-    end)
+    local due = (GetTime and GetTime() or 0) + delay
+    scanScheduledDue[scheduleKey] = due
+    scanScheduledTail = scanScheduledTail + 1
+    scanScheduledList[scanScheduledTail] = scheduleKey
+    ArmScanTimer(due)
 end
 
 function GF.ScheduleScan(key, kind)
@@ -601,12 +751,16 @@ function GF.ScheduleScan(key, kind)
     end
 end
 
-function GF.ForEachFrame(fn, includeHidden)
+function GF.ForEachFrame(fn, includeHidden, a, b, c)
     if type(fn) ~= "function" then return end
+    local any
     for i = 1, #GF.frameList do
         local frame = GF.frameList[i]
         if frame and GF.frames[frame] == true and (includeHidden == true or not frame.IsShown or frame:IsShown()) then
-            fn(frame, frame.unit, frame._msufGFKind)
+            if fn(frame, frame.unit, frame._msufGFKind, a, b, c) == true then
+                any = true
+            end
         end
     end
+    return any
 end

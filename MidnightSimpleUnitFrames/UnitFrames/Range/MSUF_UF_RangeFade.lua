@@ -20,8 +20,10 @@ local UnitClass = _G.UnitClass
 local InCombatLockdown = _G.InCombatLockdown
 local CheckInteractDistance = _G.CheckInteractDistance
 local GetUnitSpeed = _G.GetUnitSpeed
+local GetTime = _G.GetTime
 local unpack = unpack or table.unpack
 local wipe = _G.wipe or table.wipe
+local tonumber = tonumber
 
 local C_Spell = _G.C_Spell
 local C_SpellBook = _G.C_SpellBook
@@ -33,10 +35,16 @@ local IsPlayerSpell = _G.IsPlayerSpell
 local Enum = _G.Enum
 local SPELL_BANK_PLAYER = Enum and Enum.SpellBookSpellBank and Enum.SpellBookSpellBank.Player
 
-local Secrets = MSUF.Secrets or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
-local UnitExistsPlain = Secrets.UnitExistsPlain or function(unit)
-    return not UnitExists or UnitExists(unit) == true or UnitExists(unit) == 1
+local function UnitExistsPlain(unit)
+    if not UnitExists then
+        return true
+    end
+    local exists = UnitExists(unit)
+    if issecretvalue(exists) == true then
+        return true
+    end
+    return exists == true or exists == 1
 end
 
 local SUPPORTED_UNITS = {
@@ -130,6 +138,7 @@ local enemySpell, friendlySpell, resSpell, targetFriendlySpell
 local activeCount = 0
 local pollCount = 0
 local pollQueued = false
+local pollNextAt
 local pollToken = 0
 local pollSetDirty = true
 local targetChecked = 0
@@ -265,18 +274,15 @@ local function FrameVisible(frame)
 end
 
 local function FrameRangeActive(frame)
-    local spec = frame and frame.MSUFSpec
-    local range = spec and spec.range
-    return range and range.active == true
-        and SUPPORTED_UNITS[frame.unit] == true
+    return frame
+        and frame._msufRangeActiveCfg == true
+        and frame._msufRangeUnitSupported == true
         and _G.MSUF_UnitEditModeActive ~= true
 end
 
 local function ApplyMul(frame, inRange, force)
     if not frame then return false end
-    local spec = frame.MSUFSpec
-    local range = spec and spec.range
-    local mul = inRange == false and range and range.alpha or 1
+    local mul = inRange == false and frame._msufRangeOutAlpha or 1
     if force ~= true and frame._msufRangeInRange == inRange and frame._msufRangeMulApplied == mul then
         return true
     end
@@ -356,7 +362,7 @@ local function CheckEnemy(unit)
 end
 
 local function DirectRange(unit)
-    if not UnitExistsPlain(unit) then return nil end
+    if not (unit and unit ~= "") then return nil end
     if unit == "player" then
         return true
     end
@@ -376,28 +382,28 @@ local function DirectRange(unit)
     return nil
 end
 
-local function TargetRange()
-    if not UnitExistsPlain("target") then return nil end
+local function TargetRange(existsKnown)
+    if existsKnown ~= true and not UnitExistsPlain("target") then return nil end
     local direct = DirectRange("target")
     if direct ~= nil then return direct end
     if targetChecked > 0 then return targetInRange > 0 end
     return nil
 end
 
-local function UnitRange(unit)
+local function UnitRange(unit, existsKnown)
     if unit == "target" then
-        return TargetRange()
+        return TargetRange(existsKnown)
     end
     return DirectRange(unit)
 end
 
-local function EvaluateUnit(unit, force)
+local function EvaluateUnit(unit, force, existsKnown)
     local frame = FrameForUnit(unit)
     if not FrameRangeActive(frame) then
         ClearUnit(unit, force)
         return false
     end
-    ApplyMul(frame, UnitRange(unit), force)
+    ApplyMul(frame, UnitRange(unit, existsKnown), force)
     return true
 end
 
@@ -559,7 +565,7 @@ local function ApplyTargetRegisteredRange(force)
         ApplyMul(frame, targetInRange > 0, force)
         return true
     end
-    EvaluateUnit("target", force)
+    EvaluateUnit("target", force, true)
     return true
 end
 
@@ -650,15 +656,26 @@ local function PollInterval()
     return (InCombatLockdown and InCombatLockdown()) and 0.75 or 0.85
 end
 
+local function PollTimerCallback()
+    if not pollQueued then return end
+    local now = GetTime and GetTime() or 0
+    if pollNextAt and now < pollNextAt then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(pollNextAt - now, PollTimerCallback)
+        end
+        return
+    end
+    pollQueued = false
+    pollNextAt = nil
+    PollNow()
+end
+
 local function SchedulePoll(delay)
     if pollQueued or pollCount <= 0 or not (C_Timer and C_Timer.After) then return end
     pollQueued = true
-    local token = pollToken
-    C_Timer.After(delay or PollInterval(), function()
-        if token ~= pollToken then return end
-        pollQueued = false
-        PollNow()
-    end)
+    delay = delay or PollInterval()
+    pollNextAt = (GetTime and GetTime() or 0) + delay
+    C_Timer.After(delay, PollTimerCallback)
 end
 
 local function RebuildPollSet()
@@ -676,9 +693,21 @@ local function RebuildPollSet()
     if pollCount <= 0 then
         pollToken = pollToken + 1
         pollQueued = false
+        pollNextAt = nil
         return
     end
     SchedulePoll()
+end
+
+local function RangeFrameOnShow(self)
+    MarkPollSetDirty()
+    EvaluateIfActive(self._msufRangeUnit or self.unit, true)
+    RebuildPollSet()
+end
+
+local function RangeFrameOnHide()
+    MarkPollSetDirty()
+    RebuildPollSet()
 end
 
 local function HookFrameVisibility(frame)
@@ -686,15 +715,8 @@ local function HookFrameVisibility(frame)
         return
     end
     frame._msufRangeVisibilityHooked = true
-    frame:HookScript("OnShow", function(self)
-        MarkPollSetDirty()
-        EvaluateIfActive(self._msufRangeUnit or self.unit, true)
-        RebuildPollSet()
-    end)
-    frame:HookScript("OnHide", function()
-        MarkPollSetDirty()
-        RebuildPollSet()
-    end)
+    frame:HookScript("OnShow", RangeFrameOnShow)
+    frame:HookScript("OnHide", RangeFrameOnHide)
 end
 
 PollNow = function()
@@ -911,6 +933,7 @@ local function SyncRuntime()
     pollCount = 0
     pollToken = pollToken + 1
     pollQueued = false
+    pollNextAt = nil
     UnregisterDriver()
 end
 
@@ -925,7 +948,13 @@ function Range.RegisterFrame(frame, spec)
     end
 
     frame._msufRangeUnit = unit
-    if not (spec and spec.range and spec.range.active == true and SUPPORTED_UNITS[unit] == true) then
+    local range = spec and spec.range
+    local supported = SUPPORTED_UNITS[unit] == true
+    local active = range and range.active == true and supported
+    frame._msufRangeUnitSupported = supported or nil
+    frame._msufRangeActiveCfg = active == true or nil
+    frame._msufRangeOutAlpha = active and (tonumber(range.alpha) or 1) or nil
+    if not active then
         if activeUnits[unit] then
             activeUnits[unit] = nil
             activeCount = activeCount - 1
@@ -958,6 +987,9 @@ function Range.UnregisterFrame(frame)
     end
     if frame then
         frame._msufRangeUnit = nil
+        frame._msufRangeUnitSupported = nil
+        frame._msufRangeActiveCfg = nil
+        frame._msufRangeOutAlpha = nil
         ApplyMul(frame, nil, true)
     end
     SyncRuntime()

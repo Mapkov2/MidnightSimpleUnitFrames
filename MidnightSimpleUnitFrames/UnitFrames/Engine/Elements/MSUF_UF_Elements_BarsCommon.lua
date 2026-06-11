@@ -42,6 +42,9 @@ local CreateColor = _G.CreateColor
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 local IsNil = Secrets.IsNil or function(value) return value == nil end
+-- Hot paths call the C predicate directly (no cross-module Lua wrapper);
+-- the IsSecret/IsNil locals stay to feed the UFBarTextCommon exports.
+local issecretvalue = _G.issecretvalue or function(_) return false end
 local SafeNumber = Secrets.SafeNumber or tonumber
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
@@ -58,8 +61,8 @@ local REVERSE_HEALTH_MODE = {
     PERCENTCURMAX = "CURMAXPERCENT",
 }
 local EMPTY_EVENTS = {}
-local POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE", "UNIT_CONNECTION" }
-local POWER_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE", "UNIT_CONNECTION" }
+local POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
+local POWER_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local TEXT_EVENT_SETS = {
     [0] = EMPTY_EVENTS,
     [1] = { "UNIT_NAME_UPDATE" },
@@ -117,33 +120,100 @@ end
 
 local function SetBarMinMax(bar, maxValue, directValue)
     if directValue then
+        local maxSecret = issecretvalue(maxValue) == true
+        if not maxSecret and bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue == maxValue then
+            return false
+        end
         bar:SetMinMaxValues(0, maxValue)
+        if maxSecret then
+            bar._msufDirectMaxValue = nil
+            bar._msufDirectMaxValuePlain = nil
+        else
+            bar._msufDirectMaxValue = maxValue
+            bar._msufDirectMaxValuePlain = true
+        end
         bar._msufMaxValue = nil
+        bar._msufMaxValuePlain = nil
         return true
     end
+    bar._msufDirectMaxValue = nil
+    bar._msufDirectMaxValuePlain = nil
     maxValue = SafeNumber(maxValue) or 0
-    if bar._msufMaxValue ~= maxValue then
+    if bar._msufMaxValuePlain ~= true or bar._msufMaxValue ~= maxValue then
         bar:SetMinMaxValues(0, maxValue)
         bar._msufMaxValue = maxValue
+        bar._msufMaxValuePlain = true
         return true
     end
     return false
 end
 
+local function SetBarMinMaxPlain(bar, maxValue)
+    local maxSecret = issecretvalue(maxValue) == true
+    if not maxSecret and bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue == maxValue then
+        return false
+    end
+    bar:SetMinMaxValues(0, maxValue)
+    if maxSecret then
+        bar._msufDirectMaxValue = nil
+        bar._msufDirectMaxValuePlain = nil
+    else
+        bar._msufDirectMaxValue = maxValue
+        bar._msufDirectMaxValuePlain = true
+    end
+    bar._msufMaxValue = nil
+    bar._msufMaxValuePlain = nil
+    return true
+end
+
+local function SetBarMinMaxKnown(bar, maxValue, maxSecret)
+    if maxSecret == nil then
+        maxSecret = issecretvalue(maxValue) == true
+    end
+    if not maxSecret and bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue == maxValue then
+        return false
+    end
+    bar:SetMinMaxValues(0, maxValue)
+    if maxSecret then
+        bar._msufDirectMaxValue = nil
+        bar._msufDirectMaxValuePlain = nil
+    else
+        bar._msufDirectMaxValue = maxValue
+        bar._msufDirectMaxValuePlain = true
+    end
+    bar._msufMaxValue = nil
+    bar._msufMaxValuePlain = nil
+    return true
+end
+
 local function SetBarValue(bar, value, directValue, animate)
     local interp = animate and bar._msufSmoothInterp or nil
     if directValue then
+        local valueSecret = issecretvalue(value) == true
+        if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
+            return false
+        end
         if interp then
             bar:SetValue(value, interp)
             bar._msufInterpolating = true
         else
             bar:SetValue(value)
         end
+        if valueSecret then
+            bar._msufDirectValue = nil
+            bar._msufDirectValuePlain = nil
+        else
+            bar._msufDirectValue = value
+            bar._msufDirectValuePlain = true
+        end
         bar._msufValue = nil
+        bar._msufValuePlain = nil
         return true
     end
+    bar._msufDirectValue = nil
+    bar._msufDirectValuePlain = nil
     value = SafeNumber(value) or 0
-    if bar._msufValue ~= value then
+    if bar._msufValuePlain ~= true or bar._msufValue ~= value then
         if interp then
             bar:SetValue(value, interp)
             bar._msufInterpolating = true
@@ -151,9 +221,60 @@ local function SetBarValue(bar, value, directValue, animate)
             bar:SetValue(value)
         end
         bar._msufValue = value
+        bar._msufValuePlain = true
         return true
     end
     return false
+end
+
+local function SetBarValueKnown(bar, value, valueSecret, animate)
+    if valueSecret == nil then
+        valueSecret = issecretvalue(value) == true
+    end
+    local interp = animate and bar._msufSmoothInterp or nil
+    if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
+        return false
+    end
+    if interp then
+        bar:SetValue(value, interp)
+        bar._msufInterpolating = true
+    else
+        bar:SetValue(value)
+    end
+    if valueSecret then
+        bar._msufDirectValue = nil
+        bar._msufDirectValuePlain = nil
+    else
+        bar._msufDirectValue = value
+        bar._msufDirectValuePlain = true
+    end
+    bar._msufValue = nil
+    bar._msufValuePlain = nil
+    return true
+end
+
+local function SetBarValuePlain(bar, value, animate)
+    local valueSecret = issecretvalue(value) == true
+    if not valueSecret and bar._msufDirectValuePlain == true and bar._msufDirectValue == value then
+        return false
+    end
+    local interp = animate and bar._msufSmoothInterp or nil
+    if interp then
+        bar:SetValue(value, interp)
+        bar._msufInterpolating = true
+    else
+        bar:SetValue(value)
+    end
+    if valueSecret then
+        bar._msufDirectValue = nil
+        bar._msufDirectValuePlain = nil
+    else
+        bar._msufDirectValue = value
+        bar._msufDirectValuePlain = true
+    end
+    bar._msufValue = nil
+    bar._msufValuePlain = nil
+    return true
 end
 
 local function SnapBarInterpolation(bar)
@@ -470,10 +591,16 @@ local function ReadUnitBool(api, unit, defaultValue)
         return defaultValue, false
     end
     local value = api(unit)
-    if IsSecret(value) or value == nil then
+    if issecretvalue(value) == true or value == nil then
         return defaultValue, false
     end
     return value == true or value == 1, true
+end
+
+local function HealthModeNeedsIdentity(spec)
+    local health = spec and spec.health
+    local mode = health and health.mode
+    return mode ~= "dark" and mode ~= "unified" and mode ~= "gradient"
 end
 
 local function RefreshUnitState(frame, unit, spec, event)
@@ -481,13 +608,27 @@ local function RefreshUnitState(frame, unit, spec, event)
         return nil
     end
     unit = unit or frame.unit
+    local needsIdentity = HealthModeNeedsIdentity(spec)
     local state = frame._msufUnitState
     if not state then
         state = {}
         frame._msufUnitState = state
     elseif state.unit == unit and state.ready == true then
         local dispatchToken = frame._msufDispatchActive == true and frame._msufDispatchToken or nil
-        if dispatchToken and state.dispatchToken == dispatchToken then
+        local needsIdentityRefresh = needsIdentity == true and state.identityReady ~= true
+        if dispatchToken and state.dispatchToken == dispatchToken and not needsIdentityRefresh then
+            return state
+        end
+        if not needsIdentityRefresh and event == "UNIT_CONNECTION" then
+            state.dispatchToken = dispatchToken
+            state.connected, state.connectedKnown = ReadUnitBool(UnitIsConnected, unit, true)
+            return state
+        elseif not needsIdentityRefresh and event == "UNIT_FLAGS" then
+            state.dispatchToken = dispatchToken
+            state.dead, state.deadKnown = ReadUnitBool(UnitIsDeadOrGhost, unit, false)
+            return state
+        elseif not needsIdentityRefresh and (event == "UNIT_MAXHEALTH" or event == "UNIT_MAX_HEALTH_MODIFIERS_CHANGED") then
+            state.dispatchToken = dispatchToken
             return state
         end
         if event ~= "UNIT_HEALTH"
@@ -495,6 +636,9 @@ local function RefreshUnitState(frame, unit, spec, event)
             and event ~= "UNIT_POWER_UPDATE" then
             -- Full recompute below: lower-frequency events may change identity,
             -- connection or NPC-kind state.
+        elseif needsIdentityRefresh then
+            -- Full recompute below: the frame moved from a fixed/gradient
+            -- health color into a mode that now needs player/NPC identity.
         else
             -- High-frequency value ticks cannot change unit identity, existence,
             -- death, connection or NPC-kind; those arrive on their own events and
@@ -511,12 +655,18 @@ local function RefreshUnitState(frame, unit, spec, event)
     state.exists, state.existsKnown = ReadUnitBool(UnitExists, unit, true)
     state.dead, state.deadKnown = ReadUnitBool(UnitIsDeadOrGhost, unit, false)
     state.connected, state.connectedKnown = ReadUnitBool(UnitIsConnected, unit, true)
-    state.isPlayer, state.isPlayerKnown = ReadUnitBool(UnitIsPlayer, unit, false)
+    state.isPlayer = false
+    state.isPlayerKnown = false
     state.npcKind = nil
     state.npcKindKnown = false
-    if state.isPlayerKnown and not state.isPlayer then
-        state.npcKind = UnitNPCKind(frame, unit, spec)
-        state.npcKindKnown = state.npcKind ~= nil
+    state.identityReady = nil
+    if needsIdentity then
+        state.isPlayer, state.isPlayerKnown = ReadUnitBool(UnitIsPlayer, unit, false)
+        if state.isPlayerKnown and not state.isPlayer then
+            state.npcKind = UnitNPCKind(frame, unit, spec)
+            state.npcKindKnown = state.npcKind ~= nil
+        end
+        state.identityReady = true
     end
     return state
 end
@@ -576,10 +726,10 @@ local function GradientColor(unit, calc)
     return 0.2, 0.8, 0.2, false
 end
 
-local function HealthColor(frame, unit, hp, maxHP, calc)
+local function HealthColor(frame, unit, hp, maxHP, calc, event)
     local spec = frame and frame.MSUFSpec
     local health = spec and spec.health or {}
-    local state = RefreshUnitState(frame, unit, spec, "UNIT_HEALTH")
+    local state = RefreshUnitState(frame, unit, spec, event or "UNIT_HEALTH")
     if state and state.existsKnown and state.exists == false then
         return 0.28, 0.28, 0.28
     end
@@ -613,13 +763,19 @@ local function HealthColor(frame, unit, hp, maxHP, calc)
     return health.r or 0.1, health.g or 0.6, health.b or 0.9
 end
 
-local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc)
+local function ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, calc, event)
     local spec = frame and frame.MSUFSpec
     local health = spec and spec.health or {}
-    local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc)
+    local r, g, b, raw = HealthColor(frame, unit, hp, maxHP, calc, event)
     if health.mode == "gradient" and raw == true then
         bar:SetStatusBarColor(r, g, b, 1)
         bar._msufStatusR, bar._msufStatusG, bar._msufStatusB, bar._msufStatusA = nil, nil, nil, nil
+        -- Stash the evaluated gradient for same-frame consumers (HP text
+        -- color): r/g/b may be secret -- store/forward only, NEVER compare.
+        -- The timestamp is our own plain GetTime. Saves the text path one
+        -- EvaluateCurrentHealthPercent C call + Color allocation per flush.
+        frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB = r, g, b
+        frame._msufGradStashAt = GetTime and GetTime() or 0
         return true
     end
     ApplyStatusColor(bar, r, g, b)
@@ -659,7 +815,7 @@ local function ApplyBackgrounds(frame, health, power)
     end
 end
 
-local function PowerColor(frame, unit)
+local function PowerColor(frame, unit, powerType, token, metaKnown)
     local spec = frame and frame.MSUFSpec
     local powerSpec = spec and spec.power or {}
     if powerSpec.mode == "dark" or powerSpec.mode == "unified" or powerSpec.mode == "static" then
@@ -668,9 +824,15 @@ local function PowerColor(frame, unit)
         return ClassColor(unit)
     end
 
-    local powerType, token = UnitPowerType(unit)
-    local tokenKey = not IsSecret(token) and token or nil
-    local powerTypeKey = not IsSecret(powerType) and powerType or nil
+    local tokenKey, powerTypeKey
+    if metaKnown == true then
+        tokenKey = token
+        powerTypeKey = powerType
+    elseif UnitPowerType then
+        powerType, token = UnitPowerType(unit)
+        tokenKey = issecretvalue(token) ~= true and token or nil
+        powerTypeKey = issecretvalue(powerType) ~= true and powerType or nil
+    end
     local resolved = _G.MSUF_GetResolvedPowerColor
     if type(resolved) == "function" then
         local r, g, b = resolved(powerTypeKey, tokenKey)
@@ -747,7 +909,11 @@ MSUF.UFBarTextCommon = {
     SetStatusTexture = SetStatusTexture,
     ApplyStatusColor = ApplyStatusColor,
     SetBarMinMax = SetBarMinMax,
+    SetBarMinMaxKnown = SetBarMinMaxKnown,
+    SetBarMinMaxPlain = SetBarMinMaxPlain,
     SetBarValue = SetBarValue,
+    SetBarValueKnown = SetBarValueKnown,
+    SetBarValuePlain = SetBarValuePlain,
     SnapBarInterpolation = SnapBarInterpolation,
     SetBarSmoothing = SetBarSmoothing,
     ApplyTextureColor = ApplyTextureColor,

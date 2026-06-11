@@ -7,6 +7,8 @@ local UF = MSUF.UF
 
 if not (UF and UF.RegisterElement) then return end
 
+local CreateFrame = _G.CreateFrame
+
 local function SetShown(region, show)
     if not region then return end
     show = show == true
@@ -18,30 +20,33 @@ local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitHealthPercent = UnitHealthPercent
 local UnitGUID = UnitGUID
+local UnitIsUnit = _G.UnitIsUnit
 local UnitIsConnected = _G.UnitIsConnected
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local tonumber = tonumber
 local type = type
 local max = math.max
 local floor = math.floor
+local GetTime = _G.GetTime
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local function IsUnitToken(unit)
     return type(unit) == "string" and unit ~= ""
 end
 
--- Event subscription lists. DeadBg adds UNIT_FLAGS so the rare dead<->ghost<->res
--- transition (which always raises UNIT_FLAGS) is what probes UnitIsDeadOrGhost --
--- the per-UNIT_HEALTH tick stays a single hp==0 comparison with no API call.
+-- Event subscription lists. DeadBg is driven by UNIT_FLAGS (dead/ghost/res)
+-- and UNIT_CONNECTION (offline) only; HealthFade is the only visual feature
+-- that needs UNIT_HEALTH. This keeps DeadBg-only raid frames out of the
+-- high-frequency health hotpath entirely.
 local EMPTY_EVENTS = {}
 local VISUAL_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }
 local VISUAL_HEALTH_FLAGS_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_FLAGS" }
 local VISUAL_OFFLINE_EVENTS = { "UNIT_CONNECTION" }
+local VISUAL_FLAGS_EVENTS = { "UNIT_FLAGS" }
+local VISUAL_FLAGS_OFFLINE_EVENTS = { "UNIT_CONNECTION", "UNIT_FLAGS" }
 local VISUAL_HEALTH_OFFLINE_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_CONNECTION", "UNIT_FLAGS" }
-local VISUAL_TARGET_EVENT = { "PLAYER_TARGET_CHANGED" }
-local VISUAL_FOCUS_EVENT = { "PLAYER_FOCUS_CHANGED" }
-local VISUAL_TARGET_FOCUS_EVENTS = { "PLAYER_TARGET_CHANGED", "PLAYER_FOCUS_CHANGED" }
 local EDGE_KEYS = { "top", "bottom", "left", "right" }
+local HEALTH_FADE_SECRET_THROTTLE = 0.1
 
 local function Clamp01(value, fallback)
     value = tonumber(value)
@@ -142,12 +147,22 @@ local function HideEdges(edges)
     end
 end
 
-local function SameUnitByGUID(unit, otherUnit)
-    if not (unit and otherUnit and UnitGUID) then
+local function SameUnit(unit, otherUnit)
+    if not (unit and otherUnit) then
         return false
     end
     if unit == otherUnit then
         return true
+    end
+    if UnitIsUnit then
+        local same = UnitIsUnit(unit, otherUnit)
+        if issecretvalue(same) == true then
+            return false
+        end
+        return same == true or same == 1
+    end
+    if not UnitGUID then
+        return false
     end
     local guid = UnitGUID(unit)
     local otherGuid = UnitGUID(otherUnit)
@@ -184,7 +199,11 @@ local function PrepareTarget(frame, cfg)
 end
 
 local function UpdateTarget(frame, cfg)
-    local show = cfg.targetIndicator == true and frame.unit and SameUnitByGUID(frame.unit, "target") or false
+    if not cfg then
+        SetEdgesShown(frame and frame.MSUFGFTargetEdges, false)
+        return
+    end
+    local show = cfg.targetIndicator == true and frame.unit and SameUnit(frame.unit, "target") or false
     SetEdgesShown(frame.MSUFGFTargetEdges, show)
 end
 
@@ -210,8 +229,135 @@ local function PrepareFocus(frame, cfg)
 end
 
 local function UpdateFocus(frame, cfg)
-    local show = cfg.focusIndicator == true and frame.unit and SameUnitByGUID(frame.unit, "focus") or false
+    if not cfg then
+        SetEdgesShown(frame and frame.MSUFGFFocusEdges, false)
+        return
+    end
+    local show = cfg.focusIndicator == true and frame.unit and SameUnit(frame.unit, "focus") or false
     SetEdgesShown(frame.MSUFGFFocusEdges, show)
+end
+
+local indicatorDriver
+local targetIndicatorCount = 0
+local focusIndicatorCount = 0
+local targetDriverRegistered
+local focusDriverRegistered
+local targetIndicatorFrames = {}
+local targetIndicatorIndex = {}
+local focusIndicatorFrames = {}
+local focusIndicatorIndex = {}
+
+local function RunIndicatorEvent(event)
+    local list, update
+    if event == "PLAYER_TARGET_CHANGED" then
+        list, update = targetIndicatorFrames, UpdateTarget
+    else
+        list, update = focusIndicatorFrames, UpdateFocus
+    end
+    local live = GF and GF.frames
+    for i = 1, #list do
+        local frame = list[i]
+        if frame and (not live or live[frame] == true) then
+            local cfg = frame.MSUFSpec and frame.MSUFSpec.group
+            update(frame, cfg)
+        end
+    end
+end
+
+local function IndicatorDriverOnEvent(_, event)
+    RunIndicatorEvent(event)
+end
+
+local function EnsureIndicatorDriver()
+    if indicatorDriver or not CreateFrame then
+        return indicatorDriver
+    end
+    indicatorDriver = CreateFrame("Frame")
+    indicatorDriver:SetScript("OnEvent", IndicatorDriverOnEvent)
+    return indicatorDriver
+end
+
+local function RefreshIndicatorDriver()
+    if not indicatorDriver and targetIndicatorCount <= 0 and focusIndicatorCount <= 0 then
+        return
+    end
+    local driver = EnsureIndicatorDriver()
+    if not driver then
+        return
+    end
+    local wantTarget = targetIndicatorCount > 0
+    if wantTarget ~= targetDriverRegistered then
+        if wantTarget then
+            driver:RegisterEvent("PLAYER_TARGET_CHANGED")
+        else
+            driver:UnregisterEvent("PLAYER_TARGET_CHANGED")
+        end
+        targetDriverRegistered = wantTarget
+    end
+    local wantFocus = focusIndicatorCount > 0
+    if wantFocus ~= focusDriverRegistered then
+        if wantFocus then
+            driver:RegisterEvent("PLAYER_FOCUS_CHANGED")
+        else
+            driver:UnregisterEvent("PLAYER_FOCUS_CHANGED")
+        end
+        focusDriverRegistered = wantFocus
+    end
+end
+
+local function AddIndicatorFrame(list, index, frame)
+    if not frame or index[frame] then
+        return
+    end
+    local n = #list + 1
+    list[n] = frame
+    index[frame] = n
+end
+
+local function RemoveIndicatorFrame(list, index, frame)
+    local i = frame and index[frame]
+    if not i then
+        return
+    end
+    local last = #list
+    local tail = list[last]
+    list[i] = tail
+    list[last] = nil
+    index[frame] = nil
+    if tail and tail ~= frame then
+        index[tail] = i
+    end
+end
+
+local function SetIndicatorRegistration(frame, target, focus)
+    if not frame then
+        return
+    end
+    target = target == true
+    focus = focus == true
+    local hadTarget = frame._msufGFTargetIndicatorRegistered == true
+    if hadTarget ~= target then
+        targetIndicatorCount = targetIndicatorCount + (target and 1 or -1)
+        if targetIndicatorCount < 0 then targetIndicatorCount = 0 end
+        frame._msufGFTargetIndicatorRegistered = target or nil
+        if target then
+            AddIndicatorFrame(targetIndicatorFrames, targetIndicatorIndex, frame)
+        else
+            RemoveIndicatorFrame(targetIndicatorFrames, targetIndicatorIndex, frame)
+        end
+    end
+    local hadFocus = frame._msufGFFocusIndicatorRegistered == true
+    if hadFocus ~= focus then
+        focusIndicatorCount = focusIndicatorCount + (focus and 1 or -1)
+        if focusIndicatorCount < 0 then focusIndicatorCount = 0 end
+        frame._msufGFFocusIndicatorRegistered = focus or nil
+        if focus then
+            AddIndicatorFrame(focusIndicatorFrames, focusIndicatorIndex, frame)
+        else
+            RemoveIndicatorFrame(focusIndicatorFrames, focusIndicatorIndex, frame)
+        end
+    end
+    RefreshIndicatorDriver()
 end
 
 local function PercentFromValues(hp, maxHP)
@@ -221,11 +367,27 @@ local function PercentFromValues(hp, maxHP)
     if issecretvalue(maxHP) == true or maxHP == nil then
         return nil
     end
-    hp, maxHP = tonumber(hp), tonumber(maxHP)
+    if type(hp) ~= "number" then
+        hp = tonumber(hp)
+    end
+    if type(maxHP) ~= "number" then
+        maxHP = tonumber(maxHP)
+    end
     if hp and maxHP and maxHP > 0 then
         return (hp / maxHP) * 100
     end
     return nil
+end
+
+local function CachedHealthValues(frame)
+    local unit = frame and frame.unit
+    local bar = frame and (frame.hpBar or frame.Health)
+    if not (unit and bar) then
+        return nil, nil
+    end
+    local hp = bar._msufHealthValueUnit == unit and bar._msufHealthValue or nil
+    local maxHP = bar._msufHealthMaxUnit == unit and bar._msufHealthMax or nil
+    return hp, maxHP
 end
 
 -- Health-percent fade (dim the bar near full HP) and group range fade, applied as a
@@ -233,11 +395,49 @@ end
 -- by the unified Alpha element (which sets the bar's fill texture), and the background
 -- opacity (hpBgAlpha) is baked into the background colour -- both compose on top of the
 -- multiplier set here.
-local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP)
+local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
     if not frame.hpBar then return end
+    local rangeAlpha = frame._msufGFRangeHealthAlpha or 1
+    local keyHP, keyMax = seedHP, seedMaxHP
+    local seedHPSecret = issecretvalue(seedHP) == true
+    local seedMaxSecret = issecretvalue(seedMaxHP) == true
+    local keyHPSecret = seedHPSecret
+    local keyMaxSecret = seedMaxSecret
+    local keyCacheable = keyHP ~= nil
+        and keyMax ~= nil
+        and not keyHPSecret
+        and not keyMaxSecret
+    if not keyCacheable then
+        keyHP, keyMax = CachedHealthValues(frame)
+        keyHPSecret = issecretvalue(keyHP) == true
+        keyMaxSecret = issecretvalue(keyMax) == true
+        keyCacheable = keyHP ~= nil
+            and keyMax ~= nil
+            and not keyHPSecret
+            and not keyMaxSecret
+    end
+    if not keyCacheable and event == "UNIT_HEALTH" and GetTime then
+        local now = GetTime()
+        local nextAt = frame._msufGFHealthFadeSecretNextAt
+        if frame._msufGFHealthFadeSecretRangeAlpha == rangeAlpha
+            and frame._msufGFVisualHealthAlpha ~= nil
+            and nextAt
+            and now < nextAt then
+            return
+        end
+        frame._msufGFHealthFadeSecretNextAt = now + HEALTH_FADE_SECRET_THROTTLE
+        frame._msufGFHealthFadeSecretRangeAlpha = rangeAlpha
+    end
+    if keyCacheable
+        and frame._msufGFHealthFadeSeedHP == keyHP
+        and frame._msufGFHealthFadeSeedMax == keyMax
+        and frame._msufGFHealthFadeRangeAlpha == rangeAlpha then
+        return
+    end
+
     local alpha = 1
     if cfg.healthFadeEnabled == true and frame.unit then
-        local pct = PercentFromValues(seedHP, seedMaxHP)
+        local pct = PercentFromValues(keyHP, keyMax)
         if pct == nil and UnitHealthPercent then
             local raw = UnitHealthPercent(frame.unit)
             if issecretvalue(raw) ~= true then
@@ -245,17 +445,31 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP)
             end
         end
         if pct == nil
-            and issecretvalue(seedHP) ~= true and seedHP == nil
-            and issecretvalue(seedMaxHP) ~= true and seedMaxHP == nil
+            and not seedHPSecret and seedHP == nil
+            and not seedMaxSecret and seedMaxHP == nil
             and UnitHealth and UnitHealthMax then
             local hp, maxHP = UnitHealth(frame.unit), UnitHealthMax(frame.unit)
             pct = PercentFromValues(hp, maxHP)
         end
-        if pct and pct >= (cfg.healthFadeThreshold or 95) then
-            alpha = alpha * (cfg.healthFadeAlpha or 0.45)
+        if pct and pct >= (cfg.runtimeHealthFadeThreshold or cfg.healthFadeThreshold or 95) then
+            alpha = alpha * (cfg.runtimeHealthFadeAlpha or cfg.healthFadeAlpha or 0.45)
         end
     end
-    alpha = alpha * (tonumber(frame._msufGFRangeHealthAlpha) or 1)
+    alpha = alpha * rangeAlpha
+    if keyCacheable then
+        frame._msufGFHealthFadeSeedHP = keyHP
+        frame._msufGFHealthFadeSeedMax = keyMax
+        frame._msufGFHealthFadeRangeAlpha = rangeAlpha
+        frame._msufGFHealthFadeSecretNextAt = nil
+        frame._msufGFHealthFadeSecretRangeAlpha = nil
+    else
+        frame._msufGFHealthFadeSeedHP = nil
+        frame._msufGFHealthFadeSeedMax = nil
+        frame._msufGFHealthFadeRangeAlpha = nil
+    end
+    if frame._msufGFVisualHealthAlpha == alpha then
+        return
+    end
     SetAlphaCached(frame.hpBar, alpha, "_msufGFVisualHealthAlpha")
     frame._msufGFVisualHealthAlpha = alpha
 end
@@ -305,42 +519,125 @@ local function RestoreHealthBackground(frame)
     if fn then fn(frame, true, false) end
 end
 
--- Returns true when the unit should wear the "gone" tint. The hot UNIT_HEALTH
--- path never calls a unit API: a live unit reads hp > 0 and a dead one reads
--- hp == 0. Dead/ghost/resurrect always raises UNIT_FLAGS and offline raises
--- UNIT_CONNECTION -- those (seedHP nil) are where the rare API probes happen
--- (UnitIsDeadOrGhost / UnitIsConnected). A ghost has hp > 0, so the HP tick
--- alone cannot tell it from alive; the cached tint state carries it across
--- ticks until UNIT_FLAGS flips it back. Everything else is decided from the hp
--- value the dispatch already handed us.
+local function DispatchToken(frame)
+    return frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+end
+
+local function ReadConnectedCached(frame, unit)
+    local token = DispatchToken(frame)
+    if token
+        and frame._msufGFConnectedToken == token
+        and frame._msufGFConnectedUnit == unit then
+        return frame._msufGFConnectedValue, frame._msufGFConnectedKnown
+    end
+    if not UnitIsConnected then
+        return true, true
+    end
+    local connected = UnitIsConnected(unit)
+    if issecretvalue(connected) == true or connected == nil then
+        if token then
+            frame._msufGFConnectedToken = token
+            frame._msufGFConnectedUnit = unit
+            frame._msufGFConnectedValue = true
+            frame._msufGFConnectedKnown = false
+        end
+        return true, false
+    end
+    connected = connected == true or connected == 1
+    if token then
+        frame._msufGFConnectedToken = token
+        frame._msufGFConnectedUnit = unit
+        frame._msufGFConnectedValue = connected
+        frame._msufGFConnectedKnown = true
+    end
+    return connected, true
+end
+
+local function ReadDeadCached(frame, unit)
+    local token = DispatchToken(frame)
+    if token
+        and frame._msufGFDeadToken == token
+        and frame._msufGFDeadUnit == unit then
+        return frame._msufGFDeadValue, frame._msufGFDeadKnown
+    end
+    if not UnitIsDeadOrGhost then
+        return false, true
+    end
+    local dead = UnitIsDeadOrGhost(unit)
+    if issecretvalue(dead) == true or dead == nil then
+        if token then
+            frame._msufGFDeadToken = token
+            frame._msufGFDeadUnit = unit
+            frame._msufGFDeadValue = false
+            frame._msufGFDeadKnown = false
+        end
+        return false, false
+    end
+    dead = dead == true or dead == 1
+    if token then
+        frame._msufGFDeadToken = token
+        frame._msufGFDeadUnit = unit
+        frame._msufGFDeadValue = dead
+        frame._msufGFDeadKnown = true
+    end
+    return dead, true
+end
+
+-- Returns true when the unit should wear the "gone" tint. Dead/ghost/resurrect
+-- is resolved on UNIT_FLAGS and offline is resolved on UNIT_CONNECTION, keeping
+-- DeadBg out of UNIT_HEALTH. If an explicit health-seeded update reaches this
+-- helper, the seed still lets us answer without a unit API call.
 local function ResolveGone(frame, cfg, unit, seedHP, event)
     local healthEvent = event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH"
-    if cfg.deadBgOffline == true and not healthEvent and UnitIsConnected then
-        local connected = UnitIsConnected(unit)
-        if issecretvalue(connected) ~= true and (connected == false or connected == 0) then
-            return true
+    local state = frame and frame._msufUnitState
+    local stateReady = state and state.ready == true and state.unit == unit
+    local stateFresh = stateReady
+        and frame._msufDispatchActive == true
+        and state.dispatchToken == frame._msufDispatchToken
+    local checkOffline = cfg.deadBgOffline == true
+        and not healthEvent
+        and (event ~= "UNIT_FLAGS" or frame._msufGFDeadBgState == true)
+    if checkOffline and UnitIsConnected then
+        if stateFresh and state.connectedKnown == true then
+            if state.connected == false then
+                return true
+            end
+        else
+            local connected, known = ReadConnectedCached(frame, unit)
+            if known == true and connected == false then
+                return true
+            end
         end
+    end
+    local deadKnown = stateFresh and state.deadKnown == true
+    local dead = deadKnown and state.dead == true or false
+    if dead then
+        return true
+    end
+    local function UnitDeadOrGhost()
+        if deadKnown then
+            return false
+        end
+        local dg, known = ReadDeadCached(frame, unit)
+        return known == true and dg == true
     end
     if issecretvalue(seedHP) ~= true and type(seedHP) == "number" then
         if seedHP == 0 then
             return true
         end
         -- hp > 0 on a health tick: alive, unless already wearing the ghost tint
-        -- (UNIT_FLAGS set it). Stay tinted without an API call; UNIT_FLAGS is
-        -- what clears it on resurrect.
-        if frame._msufGFDeadBgState == true and UnitIsDeadOrGhost then
-            local dg = UnitIsDeadOrGhost(unit)
-            if issecretvalue(dg) ~= true and (dg == true or dg == 1) then
-                return true
-            end
+        -- (UNIT_FLAGS set it). Stay tinted without an API call on health/max
+        -- ticks; UNIT_FLAGS is what clears it on resurrect.
+        if healthEvent and frame._msufGFDeadBgState == true then
+            return true
+        end
+        if frame._msufGFDeadBgState == true and UnitDeadOrGhost() then
+            return true
         end
         return false
     end
-    if UnitIsDeadOrGhost then
-        local dg = UnitIsDeadOrGhost(unit)
-        if issecretvalue(dg) ~= true and (dg == true or dg == 1) then
-            return true
-        end
+    if UnitDeadOrGhost() then
+        return true
     end
     return false
 end
@@ -387,10 +684,12 @@ local function UpdateDeadBg(frame, cfg, seedHP, event)
     end
 end
 
+local HealthFadeActive
+
 local function SpecNeedsGroupVisuals(spec)
     local cfg = spec and spec.group
     if not cfg then return false end
-    return cfg.healthFadeEnabled == true
+    return HealthFadeActive(cfg) == true
         or cfg.targetIndicator == true
         or cfg.focusIndicator == true
         or cfg.deadBgEnabled == true
@@ -398,9 +697,23 @@ end
 
 local UpdateBordersFromVisualState
 
+HealthFadeActive = function(cfg)
+    if not (cfg and cfg.healthFadeEnabled == true) then
+        return false
+    end
+    local alpha = tonumber(cfg.runtimeHealthFadeAlpha or cfg.healthFadeAlpha)
+    if alpha == nil then
+        alpha = 0.45
+    end
+    return alpha < 1
+end
+
 local function RuntimeOnRangeAlpha(frame, cfg)
-    UpdateHealthFade(frame, cfg)
-    UpdateBordersFromVisualState(frame)
+    UpdateHealthFade(frame, cfg, nil, nil, "MSUF_GF_RANGE_ALPHA")
+    local active = frame and frame._msufActiveElements
+    if active and active.Borders == true then
+        UpdateBordersFromVisualState(frame)
+    end
 end
 
 local function PrepareVisuals(frame, cfg)
@@ -412,7 +725,9 @@ end
 local function CompileVisualRuntime(spec)
     local cfg = spec and spec.group
     if cfg then
-        cfg.runtimeOnHealth = cfg.healthFadeEnabled == true and UpdateHealthFade or nil
+        cfg.runtimeHealthFadeThreshold = tonumber(cfg.healthFadeThreshold) or 95
+        cfg.runtimeHealthFadeAlpha = tonumber(cfg.healthFadeAlpha) or 0.45
+        cfg.runtimeOnHealth = HealthFadeActive(cfg) and UpdateHealthFade or nil
         cfg.runtimeOnTarget = cfg.targetIndicator == true and UpdateTarget or nil
         cfg.runtimeOnFocus = cfg.focusIndicator == true and UpdateFocus or nil
         cfg.runtimeOnDeadBg = cfg.deadBgEnabled == true and UpdateDeadBg or nil
@@ -429,26 +744,19 @@ end
 function GroupVisuals.GetEvents(frame, spec)
     local cfg = spec and spec.group
     if not cfg then return EMPTY_EVENTS end
-    local health = cfg.healthFadeEnabled == true or cfg.deadBgEnabled == true
+    local health = HealthFadeActive(cfg)
     local offline = cfg.deadBgEnabled == true and cfg.deadBgOffline == true
-    -- DeadBg needs UNIT_FLAGS to catch the dead<->ghost<->resurrect transition
-    -- (a ghost has hp > 0, so UNIT_HEALTH alone cannot tell it apart from alive).
     local flags = cfg.deadBgEnabled == true
     if health and offline then return VISUAL_HEALTH_OFFLINE_EVENTS end
     if health and flags then return VISUAL_HEALTH_FLAGS_EVENTS end
     if health then return VISUAL_HEALTH_EVENTS end
+    if flags and offline then return VISUAL_FLAGS_OFFLINE_EVENTS end
+    if flags then return VISUAL_FLAGS_EVENTS end
     if offline then return VISUAL_OFFLINE_EVENTS end
     return EMPTY_EVENTS
 end
 
 function GroupVisuals.GetUnitlessEvents(frame, spec)
-    local cfg = spec and spec.group
-    if not cfg then return EMPTY_EVENTS end
-    local target = cfg.targetIndicator == true
-    local focus = cfg.focusIndicator == true
-    if target and focus then return VISUAL_TARGET_FOCUS_EVENTS end
-    if target then return VISUAL_TARGET_EVENT end
-    if focus then return VISUAL_FOCUS_EVENT end
     return EMPTY_EVENTS
 end
 
@@ -480,11 +788,7 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     elseif event == "UNIT_HEALTH" or event == "UNIT_MAXHEALTH" then
         local fn = cfg.runtimeOnHealth
         if fn then
-            fn(frame, cfg, updateInfo, seedMaxHP)
-        end
-        fn = cfg.runtimeOnDeadBg
-        if fn then
-            fn(frame, cfg, updateInfo, event)
+            fn(frame, cfg, updateInfo, seedMaxHP, event)
         end
         return
     elseif event == "UNIT_CONNECTION" or event == "UNIT_FLAGS" then
@@ -508,7 +812,7 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     fn = cfg.runtimeOnFocus
     if fn then fn(frame, cfg, event) end
     fn = cfg.runtimeOnHealth
-    if fn then fn(frame, cfg) end
+    if fn then fn(frame, cfg, updateInfo, seedMaxHP, event) end
     fn = cfg.runtimeOnDeadBg
     if fn then fn(frame, cfg, nil, event) end
 
@@ -517,13 +821,37 @@ local function UpdateVisuals(frame, event, updateInfo, seedMaxHP)
     end
 end
 
+function GroupVisuals.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
+    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
+    local fn = cfg and cfg.runtimeOnHealth
+    if fn then
+        fn(frame, cfg, seedHP, seedMaxHP, event)
+    end
+end
+
+function GroupVisuals.UpdateGoneState(frame, event)
+    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
+    local fn = cfg and cfg.runtimeOnDeadBg
+    if fn then
+        fn(frame, cfg, nil, event)
+    end
+end
+
 function GroupVisuals.Apply(frame)
     -- Drop the cached dead/offline state: Health.Apply just restored the
     -- configured background, so the next resolve must re-tint from scratch (this
     -- also self-corrects a recycled frame that now holds a different unit).
-    if frame then frame._msufGFDeadBgState = nil end
+    if frame then
+        frame._msufGFDeadBgState = nil
+        frame._msufGFHealthFadeSeedHP = nil
+        frame._msufGFHealthFadeSeedMax = nil
+        frame._msufGFHealthFadeRangeAlpha = nil
+        frame._msufUpdateGroupVisualsHealthValue = GroupVisuals.UpdateHealthValue
+        frame._msufUpdateGroupVisualsGoneState = GroupVisuals.UpdateGoneState
+    end
     CompileVisualRuntime(frame and frame.MSUFSpec)
     local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
+    SetIndicatorRegistration(frame, cfg and cfg.targetIndicator == true, cfg and cfg.focusIndicator == true)
     PrepareVisuals(frame, cfg)
     UpdateVisuals(frame, "MSUF_GF_VISUALS_APPLY")
 end
@@ -531,12 +859,18 @@ function GroupVisuals.Update(frame, event, unit, updateInfo, seedMaxHP) UpdateVi
 
 function GroupVisuals.Disable(frame)
     if not frame then return end
+    SetIndicatorRegistration(frame, false, false)
     HideEdges(frame.MSUFGFTargetEdges)
     HideEdges(frame.MSUFGFFocusEdges)
     if frame._msufGFDeadBgState == true then
         RestoreHealthBackground(frame)
     end
     frame._msufGFDeadBgState = nil
+    frame._msufGFHealthFadeSeedHP = nil
+    frame._msufGFHealthFadeSeedMax = nil
+    frame._msufGFHealthFadeRangeAlpha = nil
+    frame._msufUpdateGroupVisualsHealthValue = nil
+    frame._msufUpdateGroupVisualsGoneState = nil
 end
 
 UF.RegisterElement("GroupVisuals", GroupVisuals)

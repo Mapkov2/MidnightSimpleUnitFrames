@@ -9,15 +9,18 @@ MSUF.GF = GF
 
 if not (UF and UF.RegisterElement) then return end
 
+local CreateFrame = _G.CreateFrame
 local tonumber = tonumber
 local type = type
 local pairs = pairs
 local UnitExists = UnitExists
 local UnitIsConnected = UnitIsConnected
 local UnitGUID = UnitGUID
+local UnitIsUnit = _G.UnitIsUnit
 local UnitInRange = UnitInRange
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
+local GetTime = GetTime
 
 local Secrets = MSUF.Secrets or {}
 local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -45,6 +48,7 @@ local RANGE_SETTLE_EVENT = {
     PLAYER_REGEN_ENABLED = true,
 }
 local EMPTY_EVENTS = {}
+local RANGE_SETTLE_CHUNK_SIZE = 12
 
 local GroupRangeFade = {}
 
@@ -54,9 +58,6 @@ function GroupRangeFade.IsEnabled(frame, spec)
 end
 
 function GroupRangeFade.GetUnitlessEvents(frame, spec)
-    if GroupRangeFade.IsEnabled(frame, spec) then
-        return RANGE_SETTLE_EVENTS
-    end
     return EMPTY_EVENTS
 end
 
@@ -79,13 +80,28 @@ local function ClearRange(frame)
     frame._msufGFRangeKnown = nil
     frame._msufGFInRangeRaw = nil
     frame._msufGFRangeCacheable = nil
+    frame._msufGFRangePlayerUnit = nil
+    frame._msufGFRangeIsPlayerUnit = nil
+    frame._msufGFOfflineUnit = nil
+    frame._msufGFOfflineGone = nil
 end
+
+local RemoveOfflineDelayFrame
 
 local function ClearOfflineDelay(frame)
     if not frame then return end
-    frame._msufGFOfflineDelayToken = (frame._msufGFOfflineDelayToken or 0) + 1
+    if frame._msufGFOfflineDelayPending ~= true
+        and frame._msufGFOfflineDelayReady ~= true
+        and frame._msufGFOfflineDelayUnit == nil then
+        return
+    end
+    if RemoveOfflineDelayFrame then
+        RemoveOfflineDelayFrame(frame)
+    end
     frame._msufGFOfflineDelayUnit = nil
+    frame._msufGFOfflineDelayPending = nil
     frame._msufGFOfflineDelayReady = nil
+    frame._msufGFOfflineDelayReadyAt = nil
 end
 
 local function StoreRange(frame, inRange)
@@ -117,6 +133,7 @@ local function StoreRange(frame, inRange)
     return true
 end
 
+local playerGUID
 local function UnitIsPlayer(unit)
     if not (unit and unit ~= "") then
         return false
@@ -124,15 +141,68 @@ local function UnitIsPlayer(unit)
     if unit == "player" then
         return true
     end
+    if UnitIsUnit then
+        local same = UnitIsUnit(unit, "player")
+        if issecretvalue(same) == true then
+            return false
+        end
+        return same == true or same == 1
+    end
     if UnitGUID then
         local guid = UnitGUID(unit)
-        local playerGuid = UnitGUID("player")
+        local playerGuid = playerGUID
+        if not playerGuid then
+            playerGuid = UnitGUID("player")
+            if issecretvalue(playerGuid) ~= true then
+                playerGUID = playerGuid
+            end
+        end
         if issecretvalue(guid) == true or issecretvalue(playerGuid) == true then
             return false
         end
         return guid ~= nil and guid == playerGuid
     end
     return false
+end
+
+local function FrameIsPlayerUnit(frame)
+    local unit = frame and frame.unit
+    if not unit then
+        return false
+    end
+    if frame._msufGFRangePlayerUnit == unit and frame._msufGFRangeIsPlayerUnit ~= nil then
+        return frame._msufGFRangeIsPlayerUnit == true
+    end
+    local isPlayer = UnitIsPlayer(unit) == true
+    frame._msufGFRangePlayerUnit = unit
+    frame._msufGFRangeIsPlayerUnit = isPlayer
+    return isPlayer
+end
+
+local function CompileRangeRuntime(frame, spec)
+    if not frame then return end
+    local cfg = spec and spec.group
+    local enabled = cfg and (cfg.rangeFadeEnabled == true or cfg.hideOfflineEnabled == true)
+    frame._msufGFRangeRuntimeEnabled = enabled == true or nil
+    frame._msufGFRangeFadeEnabled = cfg and cfg.rangeFadeEnabled == true or nil
+    frame._msufGFRangeLayerHealth = cfg and cfg.rangeFadeLayerMode == "health" or nil
+    frame._msufGFRangeFadeAlphaValue = cfg and (tonumber(cfg.rangeFadeAlpha) or 0.4) or 0.4
+    frame._msufGFHideOfflineEnabled = cfg and cfg.hideOfflineEnabled == true or nil
+    frame._msufGFHideOfflineInCombat = cfg and cfg.hideOfflineInCombat == true or nil
+    frame._msufGFOfflineAlphaValue = cfg and (tonumber(cfg.offlineAlpha) or 0.5) or 0.5
+    frame._msufGFOfflineDelayValue = cfg and (tonumber(cfg.hideOfflineDelay) or 0) or 0
+end
+
+local function ClearRangeRuntime(frame)
+    if not frame then return end
+    frame._msufGFRangeRuntimeEnabled = nil
+    frame._msufGFRangeFadeEnabled = nil
+    frame._msufGFRangeLayerHealth = nil
+    frame._msufGFRangeFadeAlphaValue = nil
+    frame._msufGFHideOfflineEnabled = nil
+    frame._msufGFHideOfflineInCombat = nil
+    frame._msufGFOfflineAlphaValue = nil
+    frame._msufGFOfflineDelayValue = nil
 end
 
 function GroupRangeFade.GetEvents(frame, spec)
@@ -151,27 +221,13 @@ end
 
 local ApplyAlpha
 local rangeSettleQueued
+local rangeSettleCursor
 local rangeSettleAfterCombat
-
-local function PlainUnitExists(unit)
-    if not (unit and unit ~= "") then
-        return false
-    end
-    if not UnitExists then
-        return true
-    end
-    local exists = UnitExists(unit)
-    if issecretvalue(exists) == true then
-        return true
-    end
-    return exists == true or exists == 1
-end
+local rangeSettleFrames = {}
+local rangeSettleIndex = {}
 
 local function PollCurrentRange(unit)
-    if UnitIsPlayer(unit) then
-        return true, true
-    end
-    if not (UnitInRange and PlainUnitExists(unit)) then
+    if not (UnitInRange and unit and unit ~= "") then
         return nil, false
     end
     local inRange, checked = UnitInRange(unit)
@@ -185,12 +241,17 @@ local function PollCurrentRange(unit)
 end
 
 local function RefreshSettledRange(frame)
-    if not (frame and frame.MSUFSpec and GroupRangeFade.IsEnabled(frame, frame.MSUFSpec)) then
+    if not (frame and frame._msufGFRangeRuntimeEnabled == true) then
         return
     end
-    local value, checked = PollCurrentRange(frame.unit)
-    if not checked then
-        value = nil
+    local value, checked
+    if FrameIsPlayerUnit(frame) then
+        value, checked = true, true
+    else
+        value, checked = PollCurrentRange(frame.unit)
+        if not checked then
+            value = nil
+        end
     end
     if StoreRange(frame, value) then
         ApplyAlpha(frame)
@@ -198,30 +259,39 @@ local function RefreshSettledRange(frame)
 end
 
 local function FlushRangeSettle()
-    rangeSettleQueued = nil
     if InCombatLockdown and InCombatLockdown() then
+        rangeSettleQueued = nil
+        rangeSettleCursor = nil
         rangeSettleAfterCombat = true
         return
     end
     rangeSettleAfterCombat = nil
 
-    local list = GF and GF.frameList
-    if type(list) == "table" then
-        for i = 1, #list do
+    local list = rangeSettleFrames
+    local last = #list
+    if last > 0 then
+        local i = rangeSettleCursor or 1
+        local processed = 0
+        local live = GF and GF.frames
+        while i <= last and processed < RANGE_SETTLE_CHUNK_SIZE do
             local frame = list[i]
-            if frame and (not GF.frames or GF.frames[frame] == true) then
+            if frame and (not live or live[frame] == true) then
                 RefreshSettledRange(frame)
+                processed = processed + 1
             end
+            i = i + 1
         end
+        if i <= last and C_Timer and C_Timer.After then
+            rangeSettleCursor = i
+            C_Timer.After(0, FlushRangeSettle)
+            return
+        end
+        rangeSettleQueued = nil
+        rangeSettleCursor = nil
         return
     end
-
-    local frames = GF and GF.frames
-    if type(frames) == "table" then
-        for frame in pairs(frames) do
-            RefreshSettledRange(frame)
-        end
-    end
+    rangeSettleQueued = nil
+    rangeSettleCursor = nil
 end
 
 local function QueueRangeSettle(delay)
@@ -233,11 +303,101 @@ local function QueueRangeSettle(delay)
         return
     end
     rangeSettleQueued = true
+    rangeSettleCursor = 1
     if C_Timer and C_Timer.After then
         C_Timer.After(delay or 0, FlushRangeSettle)
     else
         FlushRangeSettle()
     end
+end
+
+local settleDriver
+local settleDriverRegistered
+local settleRegistrationCount = 0
+
+local function SettleDriverOnEvent(_, event)
+    if event ~= "PLAYER_REGEN_ENABLED" or rangeSettleAfterCombat == true then
+        QueueRangeSettle(event == "PLAYER_ENTERING_WORLD" and 0.2 or 0)
+    end
+end
+
+local function EnsureSettleDriver()
+    if settleDriver or not CreateFrame then
+        return settleDriver
+    end
+    settleDriver = CreateFrame("Frame")
+    settleDriver:SetScript("OnEvent", SettleDriverOnEvent)
+    return settleDriver
+end
+
+local function RefreshSettleDriver()
+    if not settleDriver and settleRegistrationCount <= 0 then
+        return
+    end
+    local driver = EnsureSettleDriver()
+    if not driver then
+        return
+    end
+    local want = settleRegistrationCount > 0
+    if want == settleDriverRegistered then
+        return
+    end
+    if want then
+        for i = 1, #RANGE_SETTLE_EVENTS do
+            driver:RegisterEvent(RANGE_SETTLE_EVENTS[i])
+        end
+    else
+        for i = 1, #RANGE_SETTLE_EVENTS do
+            driver:UnregisterEvent(RANGE_SETTLE_EVENTS[i])
+        end
+    end
+    settleDriverRegistered = want
+end
+
+local function AddSettleFrame(frame)
+    if not frame or rangeSettleIndex[frame] then
+        return
+    end
+    local n = #rangeSettleFrames + 1
+    rangeSettleFrames[n] = frame
+    rangeSettleIndex[frame] = n
+end
+
+local function RemoveSettleFrame(frame)
+    local i = frame and rangeSettleIndex[frame]
+    if not i then
+        return
+    end
+    local last = #rangeSettleFrames
+    local tail = rangeSettleFrames[last]
+    rangeSettleFrames[i] = tail
+    rangeSettleFrames[last] = nil
+    rangeSettleIndex[frame] = nil
+    if tail and tail ~= frame then
+        rangeSettleIndex[tail] = i
+    end
+end
+
+local function SetSettleRegistration(frame, active)
+    if not frame then
+        return
+    end
+    active = active == true
+    local wasActive = frame._msufGFRangeSettleRegistered == true
+    if wasActive == active then
+        return
+    end
+    settleRegistrationCount = settleRegistrationCount + (active and 1 or -1)
+    if settleRegistrationCount < 0 then
+        settleRegistrationCount = 0
+    end
+    frame._msufGFRangeSettleRegistered = active or nil
+    if active then
+        AddSettleFrame(frame)
+    else
+        RemoveSettleFrame(frame)
+    end
+    RefreshSettleDriver()
 end
 
 local function SetAlphaCached(region, alpha, key)
@@ -250,6 +410,9 @@ end
 local function ClearAlphaCaches(frame)
     if not frame then return end
     frame._msufGFRangeFrameAlpha = nil
+    frame._msufGFRangeFrameBool = nil
+    frame._msufGFRangeFrameBoolIn = nil
+    frame._msufGFRangeFrameBoolOut = nil
     frame._msufGFRangeHealthAlpha = nil
     frame._msufGFRangeHealthBool = nil
     frame._msufGFRangeHealthBoolIn = nil
@@ -303,18 +466,46 @@ local function SetTextureAlphaFromBoolean(tex, value, inAlpha, outAlpha)
 end
 
 local function RefreshHealthVisual(frame)
-    local element = UF.elements and UF.elements.GroupVisuals
-    if frame and frame._msufActiveElements and frame._msufActiveElements.GroupVisuals == true and element and element.Update then
-        element.Update(frame, "MSUF_GF_RANGE_ALPHA", frame.unit)
-        return true
+    local active = frame and frame._msufActiveElements
+    if active and active.GroupVisuals == true then
+        local cfg = frame.MSUFSpec and frame.MSUFSpec.group
+        local fn = cfg and cfg.runtimeOnRangeAlpha
+        if fn then
+            fn(frame, cfg)
+            return true
+        end
+        local element = UF.elements and UF.elements.GroupVisuals
+        if element and element.Update then
+            element.Update(frame, "MSUF_GF_RANGE_ALPHA", frame.unit)
+            return true
+        end
+    end
+    if frame and frame._msufGFRangeHealthAlpha ~= nil then
+        frame._msufGFVisualHealthAlpha = nil
     end
     return false
+end
+
+local function ApplyDirectHealthRangeAlpha(frame, alpha)
+    if not frame then
+        return
+    end
+    frame._msufGFVisualHealthAlpha = alpha
+    SetStatusAlpha(frame.hpBar or frame.Health, alpha, "_msufGFRangeHealth")
+    SetTextureAlpha(frame.bg, alpha, "_msufGFRangeHealthBg")
+    SetTextureAlpha(frame.hpBarBG, alpha, "_msufGFRangeHealthBg")
+end
+
+local function ApplyPredictionRangeAlpha(frame, alpha)
+    SetStatusAlpha(frame.incomingHealBar, alpha, "_msufGFRangePredict")
+    SetStatusAlpha(frame.absorbBar, alpha, "_msufGFRangePredict")
+    SetStatusAlpha(frame.healAbsorbBar, alpha, "_msufGFRangePredict")
 end
 
 local function ApplyHealthRangeAlpha(frame, alpha)
     alpha = tonumber(alpha) or 1
     if frame._msufGFRangeHealthAlpha == alpha and frame._msufGFRangeHealthBool == nil then
-        return
+        return true
     end
     frame._msufGFRangeHealthAlpha = alpha
     frame._msufGFRangeHealthBool = nil
@@ -322,13 +513,10 @@ local function ApplyHealthRangeAlpha(frame, alpha)
     frame._msufGFRangeHealthBoolOut = nil
     local refreshed = RefreshHealthVisual(frame)
     if not refreshed then
-        SetStatusAlpha(frame.hpBar or frame.Health, alpha, "_msufGFRangeHealth")
-        SetTextureAlpha(frame.bg, alpha, "_msufGFRangeHealthBg")
-        SetTextureAlpha(frame.hpBarBG, alpha, "_msufGFRangeHealthBg")
+        ApplyDirectHealthRangeAlpha(frame, alpha)
     end
-    SetStatusAlpha(frame.incomingHealBar, alpha, "_msufGFRangePredict")
-    SetStatusAlpha(frame.absorbBar, alpha, "_msufGFRangePredict")
-    SetStatusAlpha(frame.healAbsorbBar, alpha, "_msufGFRangePredict")
+    ApplyPredictionRangeAlpha(frame, alpha)
+    return true
 end
 
 local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha, valueSecret)
@@ -374,8 +562,135 @@ local function CoreAlpha(frame)
     return 1
 end
 
-local function OfflineHideReady(frame, cfg)
-    local delay = tonumber(cfg and cfg.hideOfflineDelay) or 0
+local function ClearFrameRangeBool(frame)
+    if not frame then return end
+    frame._msufGFRangeFrameBool = nil
+    frame._msufGFRangeFrameBoolIn = nil
+    frame._msufGFRangeFrameBoolOut = nil
+end
+
+local function ApplyFrameAlphaFromBoolean(frame, value, inAlpha, outAlpha, valueSecret)
+    if not (frame and frame.SetAlphaFromBoolean) then
+        return false
+    end
+    if valueSecret == nil then
+        valueSecret = issecretvalue(value) == true
+    end
+    if not valueSecret
+        and frame._msufGFRangeFrameBool == value
+        and frame._msufGFRangeFrameBoolIn == inAlpha
+        and frame._msufGFRangeFrameBoolOut == outAlpha then
+        return true
+    end
+    frame:SetAlphaFromBoolean(value, inAlpha, outAlpha)
+    frame._msufGFRangeFrameAlpha = nil
+    if valueSecret then
+        ClearFrameRangeBool(frame)
+    else
+        frame._msufGFRangeFrameBool = value
+        frame._msufGFRangeFrameBoolIn = inAlpha
+        frame._msufGFRangeFrameBoolOut = outAlpha
+    end
+    return true
+end
+
+local offlineDelayFrames = {}
+local offlineDelayIndex = {}
+local offlineDelayTimerActive
+local offlineDelayTimerAt
+local ScheduleOfflineDelayTimer
+
+RemoveOfflineDelayFrame = function(frame)
+    local i = frame and offlineDelayIndex[frame]
+    if not i then
+        return
+    end
+    local last = #offlineDelayFrames
+    local tail = offlineDelayFrames[last]
+    offlineDelayFrames[i] = tail
+    offlineDelayFrames[last] = nil
+    offlineDelayIndex[frame] = nil
+    if tail and tail ~= frame then
+        offlineDelayIndex[tail] = i
+    end
+    frame._msufGFOfflineDelayReadyAt = nil
+end
+
+local function QueueOfflineDelayFrame(frame, delay)
+    if not (frame and C_Timer and C_Timer.After) then
+        return
+    end
+    local now = GetTime and GetTime() or 0
+    local when = now + (delay or 0)
+    frame._msufGFOfflineDelayReadyAt = when
+    if not offlineDelayIndex[frame] then
+        local n = #offlineDelayFrames + 1
+        offlineDelayFrames[n] = frame
+        offlineDelayIndex[frame] = n
+    end
+    ScheduleOfflineDelayTimer(when)
+end
+
+local function FlushOfflineDelayFrames()
+    local now = GetTime and GetTime() or 0
+    local nextAt
+    local live = GF and GF.frames
+    local i = #offlineDelayFrames
+    while i >= 1 do
+        local frame = offlineDelayFrames[i]
+        local when = frame and frame._msufGFOfflineDelayReadyAt
+        if not frame
+            or (live and live[frame] ~= true)
+            or frame._msufGFOfflineDelayPending ~= true
+            or not when then
+            RemoveOfflineDelayFrame(frame)
+        elseif now >= when then
+            local unit = frame._msufGFOfflineDelayUnit
+            RemoveOfflineDelayFrame(frame)
+            frame._msufGFOfflineDelayPending = nil
+            if frame.unit == unit then
+                frame._msufGFOfflineDelayReady = true
+                if ApplyAlpha then
+                    ApplyAlpha(frame, "MSUF_GF_OFFLINE_DELAY")
+                end
+            else
+                frame._msufGFOfflineDelayReady = nil
+            end
+        elseif not nextAt or when < nextAt then
+            nextAt = when
+        end
+        i = i - 1
+    end
+    if nextAt then
+        ScheduleOfflineDelayTimer(nextAt)
+    end
+end
+
+local function OfflineDelayTimerCallback()
+    offlineDelayTimerActive = nil
+    offlineDelayTimerAt = nil
+    FlushOfflineDelayFrames()
+end
+
+ScheduleOfflineDelayTimer = function(when)
+    if not (C_Timer and C_Timer.After) then
+        return
+    end
+    if offlineDelayTimerActive and offlineDelayTimerAt and offlineDelayTimerAt <= when then
+        return
+    end
+    local now = GetTime and GetTime() or 0
+    local delay = when - now
+    if delay < 0 then
+        delay = 0
+    end
+    offlineDelayTimerActive = true
+    offlineDelayTimerAt = when
+    C_Timer.After(delay, OfflineDelayTimerCallback)
+end
+
+local function OfflineHideReady(frame)
+    local delay = frame and frame._msufGFOfflineDelayValue or 0
     if delay <= 0 or not (C_Timer and C_Timer.After) then
         return true
     end
@@ -387,69 +702,131 @@ local function OfflineHideReady(frame, cfg)
         return false
     end
 
-    local token = (frame._msufGFOfflineDelayToken or 0) + 1
-    frame._msufGFOfflineDelayToken = token
     frame._msufGFOfflineDelayUnit = unit
     frame._msufGFOfflineDelayPending = true
     frame._msufGFOfflineDelayReady = nil
-
-    C_Timer.After(delay, function()
-        if not frame or frame._msufGFOfflineDelayToken ~= token or frame.unit ~= unit then
-            return
-        end
-        frame._msufGFOfflineDelayPending = nil
-        frame._msufGFOfflineDelayReady = true
-        if ApplyAlpha then
-            ApplyAlpha(frame)
-        end
-    end)
+    QueueOfflineDelayFrame(frame, delay)
     return false
 end
 
-local function BaseAlpha(frame)
-    local spec = frame and frame.MSUFSpec
-    local cfg = spec and spec.group
-    if not cfg then return 1, false end
+local function DispatchToken(frame)
+    return frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
+end
+
+local function FreshUnitState(frame, unit)
+    local state = frame and frame._msufUnitState
+    if state
+        and state.ready == true
+        and state.unit == unit
+        and frame._msufDispatchActive == true
+        and state.dispatchToken == frame._msufDispatchToken then
+        return state
+    end
+    return nil
+end
+
+local function ReadConnectedCached(frame, unit)
+    local state = FreshUnitState(frame, unit)
+    if state and state.connectedKnown == true then
+        return state.connected == true, true
+    end
+    local token = DispatchToken(frame)
+    if token
+        and frame._msufGFConnectedToken == token
+        and frame._msufGFConnectedUnit == unit then
+        return frame._msufGFConnectedValue, frame._msufGFConnectedKnown
+    end
+    if not UnitIsConnected then
+        return true, true
+    end
+    local connected = UnitIsConnected(unit)
+    if issecretvalue(connected) == true or connected == nil then
+        if token then
+            frame._msufGFConnectedToken = token
+            frame._msufGFConnectedUnit = unit
+            frame._msufGFConnectedValue = true
+            frame._msufGFConnectedKnown = false
+        end
+        return true, false
+    end
+    connected = connected == true or connected == 1
+    if token then
+        frame._msufGFConnectedToken = token
+        frame._msufGFConnectedUnit = unit
+        frame._msufGFConnectedValue = connected
+        frame._msufGFConnectedKnown = true
+    end
+    return connected, true
+end
+
+local function OfflineGone(frame, unit, force)
+    if not unit then
+        return false
+    end
+    if not force and frame._msufGFOfflineUnit == unit and frame._msufGFOfflineGone ~= nil then
+        return frame._msufGFOfflineGone == true
+    end
+    frame._msufGFOfflineUnit = unit
+
+    local offline = false
+    local connected, known = ReadConnectedCached(frame, unit)
+    if known == true and connected == false then
+        offline = true
+    else
+        local exists = true
+        local state = FreshUnitState(frame, unit)
+        if state and state.existsKnown == true then
+            exists = state.exists == true
+        elseif UnitExists then
+            local existsRaw = UnitExists(unit)
+            exists = issecretvalue(existsRaw) == true or existsRaw == true or existsRaw == 1
+        end
+        offline = exists ~= true
+    end
+    frame._msufGFOfflineGone = offline == true
+    return offline == true
+end
+
+local function BaseAlpha(frame, event)
+    if not frame then return 1, false end
     local unit = frame.unit
     if frame._msufGFRangeUnit ~= unit then
         ClearRange(frame)
     end
     local base = CoreAlpha(frame)
-    local exists = unit ~= nil
-    if UnitExists then
-        local existsRaw = UnitExists(unit)
-        exists = issecretvalue(existsRaw) == true or existsRaw == true or existsRaw == 1
+    if frame._msufGFHideOfflineEnabled ~= true then
+        ClearOfflineDelay(frame)
+        return base, false
     end
-    local connected = UnitIsConnected and exists and UnitIsConnected(unit)
-    if issecretvalue(connected) ~= true and (connected == false or connected == 0) then
-        if cfg.hideOfflineEnabled == true and (not (InCombatLockdown and InCombatLockdown()) or cfg.hideOfflineInCombat == true) then
-            if OfflineHideReady(frame, cfg) then
+    if OfflineGone(frame, unit, event == "UNIT_CONNECTION" or event == "MSUF_APPLY") then
+        if not (InCombatLockdown and InCombatLockdown()) or frame._msufGFHideOfflineInCombat == true then
+            if OfflineHideReady(frame) then
                 return 0, true
             end
         end
-        return base * (cfg.offlineAlpha or 0.5), true
+        return base * (frame._msufGFOfflineAlphaValue or 0.5), true
     end
     ClearOfflineDelay(frame)
     return base, false
 end
 
-function ApplyAlpha(frame)
-    local spec = frame and frame.MSUFSpec
-    local cfg = spec and spec.group
-    local baseAlpha, baseLocked = BaseAlpha(frame)
+function ApplyAlpha(frame, event)
+    local baseAlpha, baseLocked = BaseAlpha(frame, event)
     if baseLocked == true then
         ApplyHealthRangeAlpha(frame, 1)
+        ClearFrameRangeBool(frame)
         SetAlphaCached(frame, baseAlpha, "_msufGFRangeFrameAlpha")
         return
     end
 
-    if cfg and cfg.rangeFadeEnabled == true and frame._msufGFRangeKnown == true then
+    if frame and frame._msufGFRangeFadeEnabled == true and frame._msufGFRangeKnown == true then
         local inRange = frame._msufGFInRangeRaw
         local inRangeSecret = issecretvalue(inRange) == true
         local inRangeKnown = inRangeSecret or inRange ~= nil
-        if cfg.rangeFadeLayerMode == "health" then
+        local rangeAlpha = frame._msufGFRangeFadeAlphaValue or 0.4
+        if frame._msufGFRangeLayerHealth == true then
+            ClearFrameRangeBool(frame)
             SetAlphaCached(frame, baseAlpha, "_msufGFRangeFrameAlpha")
-            local rangeAlpha = cfg.rangeFadeAlpha or 0.4
             if inRangeKnown and ApplyHealthRangeAlphaFromBoolean(frame, inRange, 1, rangeAlpha, inRangeSecret) then
                 return
             end
@@ -462,47 +839,62 @@ function ApplyAlpha(frame)
             return
         end
         ApplyHealthRangeAlpha(frame, 1)
-        if frame.SetAlphaFromBoolean and inRangeKnown then
-            frame:SetAlphaFromBoolean(inRange, baseAlpha, baseAlpha * (cfg.rangeFadeAlpha or 0.4))
-            frame._msufGFRangeFrameAlpha = nil
+        if inRangeKnown and ApplyFrameAlphaFromBoolean(frame, inRange, baseAlpha, baseAlpha * rangeAlpha, inRangeSecret) then
             return
         end
 
         local safe = SafeBool(inRange)
         if safe ~= nil then
-            SetAlphaCached(frame, baseAlpha * (safe and 1 or (cfg.rangeFadeAlpha or 0.4)), "_msufGFRangeFrameAlpha")
+            ClearFrameRangeBool(frame)
+            SetAlphaCached(frame, baseAlpha * (safe and 1 or rangeAlpha), "_msufGFRangeFrameAlpha")
             return
         end
     end
 
     ApplyHealthRangeAlpha(frame, 1)
+    ClearFrameRangeBool(frame)
     SetAlphaCached(frame, baseAlpha, "_msufGFRangeFrameAlpha")
 end
 
 function GroupRangeFade.Apply(frame)
     ClearAlphaCaches(frame)
-    local isPlayer = UnitIsPlayer and UnitIsPlayer(frame and frame.unit)
-    if issecretvalue(isPlayer) ~= true and isPlayer then
+    CompileRangeRuntime(frame, frame and frame.MSUFSpec)
+    if frame then
+        frame._msufUpdateGroupRangeConnection = GroupRangeFade.UpdateConnectionState
+    end
+    SetSettleRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true)
+    if FrameIsPlayerUnit(frame) then
         StoreRange(frame, true)
     else
         -- No initial range poll here. Group range fade is driven only by
         -- UNIT_IN_RANGE_UPDATE plus the related phase/party option events.
         StoreRange(frame, nil)
     end
-    ApplyAlpha(frame)
+    ApplyAlpha(frame, "MSUF_APPLY")
+end
+
+function GroupRangeFade.UpdateConnectionState(frame, event)
+    ApplyAlpha(frame, event)
 end
 
 function GroupRangeFade.Update(frame, event, unit, inRange)
     local changed = false
     if event == "UNIT_IN_RANGE_UPDATE" then
         if not unit or unit == "" or unit == frame.unit then
-            changed = StoreRange(frame, UnitIsPlayer(frame and frame.unit) and true or inRange)
+            changed = StoreRange(frame, FrameIsPlayerUnit(frame) and true or inRange)
         end
     elseif event == "UNIT_PHASE" or event == "UNIT_CTR_OPTIONS" or event == "UNIT_OTHER_PARTY_CHANGED" then
         if not unit or unit == "" or unit == frame.unit then
-            changed = StoreRange(frame, UnitIsPlayer(frame and frame.unit) and true or nil)
+            changed = StoreRange(frame, FrameIsPlayerUnit(frame) and true or nil)
         end
     elseif event == "UNIT_CONNECTION" then
+        changed = true
+    elseif event == "MSUF_GF_UNIT_IDENTITY" then
+        if FrameIsPlayerUnit(frame) then
+            StoreRange(frame, true)
+        else
+            ClearRange(frame)
+        end
         changed = true
     elseif RANGE_SETTLE_EVENT[event] then
         if event ~= "PLAYER_REGEN_ENABLED" or rangeSettleAfterCombat == true then
@@ -511,13 +903,19 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
         return
     end
     if changed then
-        ApplyAlpha(frame)
+        ApplyAlpha(frame, event)
     end
 end
 
 function GroupRangeFade.Disable(frame)
     ClearRange(frame)
+    ClearOfflineDelay(frame)
     ClearAlphaCaches(frame)
+    SetSettleRegistration(frame, false)
+    if frame then
+        frame._msufUpdateGroupRangeConnection = nil
+    end
+    ClearRangeRuntime(frame)
     ApplyHealthRangeAlpha(frame, 1)
     SetAlphaCached(frame, CoreAlpha(frame), "_msufGFRangeFrameAlpha")
 end

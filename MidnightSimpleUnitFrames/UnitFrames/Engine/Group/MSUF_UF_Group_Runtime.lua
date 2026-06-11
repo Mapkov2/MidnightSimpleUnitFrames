@@ -16,13 +16,21 @@ local IsInRaid = IsInRaid
 local GetNumGroupMembers = GetNumGroupMembers
 local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetRaidRosterInfo = GetRaidRosterInfo
+local GetInstanceInfo = GetInstanceInfo
 local UnitGUID = UnitGUID
+local UnitIsUnit = _G.UnitIsUnit
 local UnitName = UnitName
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local floor = math.floor
 local table_concat = table.concat
 local type = type
 local tostring = tostring
+local wipe = wipe or function(t)
+    for k in pairs(t) do
+        t[k] = nil
+    end
+    return t
+end
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 
@@ -34,6 +42,8 @@ local nameEventsRegistered = false
 local rosterEventsRegistered = false
 local lastRosterMode
 local lastRosterSignature
+local lastDifficultyToken
+local rosterSignatureParts = {}
 
 local function InCombat()
     return InCombatLockdown and InCombatLockdown()
@@ -116,6 +126,12 @@ local function ApplyFrameDirty(frame, kind, mask, reason)
     return UF.ApplySpec(frame, spec, DirtyRuntimeReason(mask, reason), applyMask)
 end
 
+local function RefreshVisualsFrame(frame, _, frameKind, refreshKind, mask)
+    if not refreshKind or refreshKind == frameKind then
+        ApplyFrameDirty(frame, frameKind, mask, "MSUF_GF_REFRESH_VISUALS")
+    end
+end
+
 local function AddPendingRefresh(kind, mask)
     if GF._pendingGroupRefresh == true then
         if GF._pendingGroupRefreshKind ~= kind then
@@ -161,6 +177,13 @@ local function GroupUnitMatches(frame, unit)
     if frameUnit == unit then
         return true
     end
+    if UnitIsUnit then
+        local same = UnitIsUnit(frameUnit, unit)
+        if IsSecret(same) then
+            return false
+        end
+        return same == true or same == 1
+    end
     if not (UnitGUID and frameUnit) then
         return false
     end
@@ -172,23 +195,36 @@ local function GroupUnitMatches(frame, unit)
     return frameGuid ~= nil and frameGuid == unitGuid
 end
 
+local function RefreshGroupNameFrame(frame, _, _, runtime, matchUnit)
+    local active = frame and frame._msufActiveElements
+    if active and active.NameText == true and GroupUnitMatches(frame, matchUnit) then
+        runtime.UpdateName(frame, "MSUF_GF_NAME_UPDATE", frame.unit)
+        return true
+    end
+end
+
 function GF.RefreshGroupNames(unit)
     if InCombat() then
         return false
     end
     local runtime = MSUF.UFTextRuntime
-    if not (runtime and runtime.UpdateName and GF.ForEachFrame) then
+    if not (runtime and runtime.UpdateName) then
         return false
     end
-    local updated = false
-    GF.ForEachFrame(function(frame)
+    if unit and unit ~= "" and GF.FrameForUnit then
+        local frame = GF.FrameForUnit(unit)
         local active = frame and frame._msufActiveElements
-        if active and active.NameText == true and GroupUnitMatches(frame, unit) then
+        if active and active.NameText == true then
             runtime.UpdateName(frame, "MSUF_GF_NAME_UPDATE", frame.unit)
-            updated = true
+            return true
         end
-    end, true)
-    return updated
+        if not GF.ForEachFrame then
+            return false
+        end
+    elseif not GF.ForEachFrame then
+        return false
+    end
+    return GF.ForEachFrame(RefreshGroupNameFrame, true, runtime, unit) == true
 end
 
 local function RegisterNameEvents()
@@ -277,33 +313,62 @@ end
 
 local function CurrentRosterSignature()
     local mode = RosterMode()
-    local parts = { mode }
+    local parts = rosterSignatureParts
+    wipe(parts)
+    parts[1] = mode
+    local n = 1
+    local raidConf = GF.GetConf and GF.GetConf(LiveRaidKind()) or {}
+    local wantRaid = (IsInRaid and IsInRaid()) and raidConf.enabled == true
+    n = n + 1
+    parts[n] = ShouldShowParty() and "party:on" or "party:off"
+    n = n + 1
+    parts[n] = wantRaid and "raid:on" or "raid:off"
     if mode == "raid" then
         local count = GetNumGroupMembers and (GetNumGroupMembers() or 0) or 0
-        parts[#parts + 1] = tostring(count)
+        n = n + 1
+        parts[n] = tostring(count)
         for i = 1, count do
             local unit = "raid" .. i
             local subgroup = GetRaidRosterInfo and select(3, GetRaidRosterInfo(i)) or ""
-            parts[#parts + 1] = UnitIdentity(unit)
-            parts[#parts + 1] = UnitRoleToken(unit)
-            parts[#parts + 1] = tostring(subgroup or "")
+            n = n + 1
+            parts[n] = UnitIdentity(unit)
+            n = n + 1
+            parts[n] = UnitRoleToken(unit)
+            n = n + 1
+            parts[n] = tostring(subgroup or "")
         end
     elseif mode == "party" then
         local count = GetNumSubgroupMembers and (GetNumSubgroupMembers() or 0) or 0
-        parts[#parts + 1] = tostring(count)
-        parts[#parts + 1] = UnitIdentity("player")
-        parts[#parts + 1] = UnitRoleToken("player")
+        n = n + 1
+        parts[n] = tostring(count)
+        n = n + 1
+        parts[n] = UnitIdentity("player")
+        n = n + 1
+        parts[n] = UnitRoleToken("player")
         for i = 1, count do
             local unit = "party" .. i
-            parts[#parts + 1] = UnitIdentity(unit)
-            parts[#parts + 1] = UnitRoleToken(unit)
+            n = n + 1
+            parts[n] = UnitIdentity(unit)
+            n = n + 1
+            parts[n] = UnitRoleToken(unit)
         end
     end
-    return table_concat(parts, "\031")
+    return table_concat(parts, "\031", 1, n)
 end
 
 local function RefreshRosterSignature()
     lastRosterSignature = CurrentRosterSignature()
+end
+
+-- Plain token for the current instance difficulty context. World-boss sharding
+-- re-fires PLAYER_DIFFICULTY_CHANGED with an unchanged difficulty; only a real
+-- transition may force the A/B header-pool recreation.
+local function CurrentDifficultyToken()
+    if not GetInstanceInfo then
+        return nil
+    end
+    local _, instanceType, difficultyID, _, _, _, _, instanceMapID = GetInstanceInfo()
+    return tostring(instanceType) .. ":" .. tostring(difficultyID) .. ":" .. tostring(instanceMapID)
 end
 
 local function RosterSignatureChanged()
@@ -400,23 +465,48 @@ local function ScheduleDBReadyRetry(builder)
     C_Timer.After(0.1, Run)
 end
 
+local function RunScheduledRosterRebuild()
+    rosterRebuildQueued = false
+    -- Sharding gate: world-boss phasing fires GROUP_ROSTER_UPDATE without
+    -- any real roster change. The signature covers exactly the inputs
+    -- RebuildAll consumes (mode, count, identity, role, subgroup); when it
+    -- is unchanged and no header recreation is forced, the rebuild output
+    -- is guaranteed identical -- skip the full DropSpecs+SetupHeader pass.
+    -- Names can change without a signature change, so refresh them cheaply.
+    -- _forceScanHeaders is intentionally left untouched: the next real
+    -- rebuild consumes it; clearing here could swallow a force set by
+    -- another path.
+    if GF._forceRecreateHeaders ~= true and not RosterSignatureChanged() then
+        if GF.RefreshGroupNames then GF.RefreshGroupNames() end
+        if GF.RefreshClickCastFrames then GF.RefreshClickCastFrames() end
+        return
+    end
+    DropSpecs()
+    GF.RebuildAll(true)
+end
+
 local function ScheduleRosterRebuild()
     if rosterRebuildQueued then
         return
     end
     rosterRebuildQueued = true
-    local function Run()
-        rosterRebuildQueued = false
-        DropSpecs()
-        GF.RebuildAll(true)
-    end
     if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("MSUF_GF_ROSTER_REBUILD", Run)
+        _G.MSUF_ScheduleOnce("MSUF_GF_ROSTER_REBUILD", RunScheduledRosterRebuild)
     elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Run)
+        C_Timer.After(0, RunScheduledRosterRebuild)
     else
-        Run()
+        RunScheduledRosterRebuild()
     end
+end
+
+local function RunScheduledZoneRefresh()
+    zoneRefreshQueued = false
+    if InCombat() then
+        GF.DeferGroupRuntime("zone")
+        return
+    end
+    DropSpecs()
+    GF.RefreshAll(true)
 end
 
 local function ScheduleZoneRefresh()
@@ -424,21 +514,12 @@ local function ScheduleZoneRefresh()
         return
     end
     zoneRefreshQueued = true
-    local function Run()
-        zoneRefreshQueued = false
-        if InCombat() then
-            GF.DeferGroupRuntime("zone")
-            return
-        end
-        DropSpecs()
-        GF.RefreshAll(true)
-    end
     if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("MSUF_GF_ZONE_REFRESH", Run)
+        _G.MSUF_ScheduleOnce("MSUF_GF_ZONE_REFRESH", RunScheduledZoneRefresh)
     elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, Run)
+        C_Timer.After(0, RunScheduledZoneRefresh)
     else
-        Run()
+        RunScheduledZoneRefresh()
     end
 end
 
@@ -570,11 +651,7 @@ function GF.RefreshVisuals(kind, mask, preInvalidated)
         InvalidateSpecs(kind)
     end
     if GF.ForEachFrame then
-        GF.ForEachFrame(function(frame, unit, frameKind)
-            if not kind or kind == frameKind then
-                ApplyFrameDirty(frame, frameKind, mask, "MSUF_GF_REFRESH_VISUALS")
-            end
-        end, true)
+        GF.ForEachFrame(RefreshVisualsFrame, true, kind, mask)
     end
     return true
 end
@@ -748,6 +825,7 @@ local function OnEvent(self, event, ...)
             RegisterRosterEvents()
         end
         MarkRosterMode()
+        lastDifficultyToken = CurrentDifficultyToken()
         if event == "PLAYER_ENTERING_WORLD" then
             GF._forceRecreateHeaders = true
         end
@@ -767,7 +845,18 @@ local function OnEvent(self, event, ...)
         if event == "GROUP_ROSTER_UPDATE" and mode == "raid" then
             ScheduleRosterSettle()
         end
-    elseif event == "PLAYER_DIFFICULTY_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
+    elseif event == "PLAYER_DIFFICULTY_CHANGED" then
+        -- Sharding gate: only a REAL difficulty/instance transition forces the
+        -- expensive A/B header-pool recreation (the zone-change size fix);
+        -- same-token re-fires from world-boss phasing are dropped entirely.
+        local token = CurrentDifficultyToken()
+        if token ~= lastDifficultyToken then
+            lastDifficultyToken = token
+            GF._forceRecreateHeaders = true
+            ScheduleZoneRefresh()
+        end
+    elseif event == "ZONE_CHANGED_NEW_AREA" then
+        lastDifficultyToken = CurrentDifficultyToken()
         GF._forceRecreateHeaders = true
         ScheduleZoneRefresh()
     elseif event == "BARBER_SHOP_OPEN" then

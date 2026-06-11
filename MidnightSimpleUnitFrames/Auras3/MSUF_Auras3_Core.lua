@@ -1,9 +1,8 @@
 --- Auras3/MSUF_Auras3_Core.lua
---- Frontend-only Auras3 namespace and profile DB adapter.
+--- Auras3 namespace and profile DB adapter.
 ---
---- 6.0 keeps aura configuration, menu, edit-mode handles, and previews, but
---- intentionally does not install a live aura backend while Blizzard's
---- Midnight aura API refactor is still moving.
+--- 6.0 keeps aura configuration, menu, edit-mode handles, previews, and the
+--- UnitFrame backend split so gameplay aura deltas never enter menu/edit code.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -18,14 +17,14 @@ end
 _G.MSUF_Auras3 = A3
 
 A3.version = 3
-A3.frontendOnly = true
-A3.backendEnabled = false
-A3.unitFrameAuras = false
+A3.frontendOnly = false
+A3.backendEnabled = true
+A3.unitFrameAuras = true
 A3.masqueEnabled = false
 A3._runtimeConfigGen = A3._runtimeConfigGen or 1
 A3._unitFrameOwners = A3._unitFrameOwners or {}
 
-MSUF.AuraBackendEnabled = false
+MSUF.AuraBackendEnabled = true
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
 _G.MSUF_AuraCore = MSUF.AuraCore
 MSUF.AuraCore.Auras3 = A3
@@ -74,7 +73,7 @@ function A3.EnsureDB()
 end
 
 function A3.BackendEnabled()
-    return false
+    return A3.backendEnabled == true
 end
 
 function A3.DisablesMasque()

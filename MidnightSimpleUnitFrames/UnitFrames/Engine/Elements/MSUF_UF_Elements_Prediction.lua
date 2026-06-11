@@ -5,6 +5,8 @@ _G.MSUF_NS = MSUF
 
 local UF = MSUF.UF
 local CreateFrame = CreateFrame
+local UnitExists = UnitExists
+local UnitIsConnected = UnitIsConnected
 local UnitHealth = UnitHealth
 local UnitHealthMax = UnitHealthMax
 local UnitGetIncomingHeals = _G.UnitGetIncomingHeals
@@ -16,7 +18,27 @@ local tonumber = tonumber
 local type = type
 local Enum = _G.Enum
 local Secrets = MSUF.Secrets or {}
-local UnitMissing = Secrets.UnitMissing or function(_) return false end
+-- Inlined Secrets.UnitMissing (semantics verified 1:1): removes one
+-- cross-module Lua frame per Prediction.Update. A secret existence reads as
+-- "not missing" -- secrets are never compared.
+local UnitMissing
+do
+    local issv = _G.issecretvalue or function(_) return false end
+    UnitMissing = function(frame, unit)
+        local state = frame and frame._msufUnitState
+        if state and state.ready == true and state.unit == unit and state.existsKnown == true then
+            return state.exists == false
+        end
+        if not UnitExists then
+            return false
+        end
+        local exists = UnitExists(unit)
+        if issv(exists) == true then
+            return false
+        end
+        return exists == false or exists == 0
+    end
+end
 -- Raw secret test captured locally so the per-event hot path (ShowValue, the
 -- Calc* readers) can inline `issecretvalue(x) == true` instead of paying a Lua
 -- call frame for IsSecret()/IsNil() on every check -- the inlining pattern that
@@ -60,6 +82,24 @@ local PREDICTION_HEALTH_EVENTS = {
     [5] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
     [6] = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
     [7] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH", "UNIT_CONNECTION" },
+}
+local PREDICTION_EVENTS_PLAYER = {
+    [1] = { "UNIT_HEAL_PREDICTION", "UNIT_MAXHEALTH" },
+    [2] = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [3] = { "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [4] = { "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [5] = { "UNIT_HEAL_PREDICTION", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [6] = { "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [7] = { "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+}
+local PREDICTION_HEALTH_EVENTS_PLAYER = {
+    [1] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_MAXHEALTH" },
+    [2] = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [3] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [4] = { "UNIT_HEALTH", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [5] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [6] = { "UNIT_HEALTH", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
+    [7] = { "UNIT_HEALTH", "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED", "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "UNIT_MAXHEALTH" },
 }
 
 local PLAN_REFRESH_HEAL = 1
@@ -145,11 +185,19 @@ local function HideBar(bar)
     if not bar then
         return
     end
-    bar:SetMinMaxValues(0, 1)
-    bar._msufMax = 1
-    bar._msufMaxReady = nil
-    bar:SetValue(0)
-    bar._msufValue = 0
+    if bar._msufMaxReady ~= true or bar._msufMaxPlain ~= true or bar._msufMax ~= 1 then
+        bar:SetMinMaxValues(0, 1)
+        bar._msufMax = 1
+        bar._msufMaxPlain = true
+        bar._msufMaxReady = true
+        bar._msufValue = nil
+        bar._msufValuePlain = nil
+    end
+    if bar._msufValuePlain ~= true or bar._msufValue ~= 0 then
+        bar:SetValue(0)
+        bar._msufValue = 0
+        bar._msufValuePlain = true
+    end
     if bar._msufShown ~= false then
         bar:SetShown(false)
         bar._msufShown = false
@@ -164,6 +212,18 @@ local function CachedHealthMax(frame, unit)
         return hpBar._msufHealthMax
     end
     return nil
+end
+
+local function CachedHealthValue(frame, unit)
+    local hpBar = frame and (frame.hpBar or frame.Health)
+    if hpBar and hpBar._msufHealthValueUnit == unit then
+        return hpBar._msufHealthValue
+    end
+    return nil
+end
+
+local function CachedHealthValues(frame, unit)
+    return CachedHealthValue(frame, unit), CachedHealthMax(frame, unit)
 end
 
 local function ReadHealthMax(frame, unit)
@@ -201,25 +261,37 @@ local function ShowValue(bar, maxValue, value, forceMax)
     local needMax = forceMax == true or not maxReady
     local maxSecret = issecretvalue(maxValue) == true
     if maxSecret or maxValue ~= nil then -- not IsNil(maxValue)
-        local maxCacheable = not maxSecret
-        local cachedMax = bar._msufMax
-        if needMax or (maxCacheable and (issecretvalue(cachedMax) == true or cachedMax ~= maxValue)) then
+        if maxSecret or needMax or bar._msufMaxPlain ~= true or bar._msufMax ~= maxValue then
             bar:SetMinMaxValues(0, maxValue)
-            bar._msufMax = maxCacheable and maxValue or nil
+            if maxSecret then
+                bar._msufMax = nil
+                bar._msufMaxPlain = nil
+            else
+                bar._msufMax = maxValue
+                bar._msufMaxPlain = true
+            end
             bar._msufMaxReady = true
             bar._msufValue = nil
+            bar._msufValuePlain = nil
         end
     elseif needMax then
         bar:SetMinMaxValues(0, 1)
         bar._msufMax = 1
+        bar._msufMaxPlain = true
         bar._msufMaxReady = true
         bar._msufValue = nil
+        bar._msufValuePlain = nil
     end
 
-    local cachedValue = bar._msufValue
-    if valueSecret or issecretvalue(cachedValue) == true or cachedValue ~= value then
+    if valueSecret or bar._msufValuePlain ~= true or bar._msufValue ~= value then
         bar:SetValue(value)
-        bar._msufValue = valueSecret and nil or value
+        if valueSecret then
+            bar._msufValue = nil
+            bar._msufValuePlain = nil
+        else
+            bar._msufValue = value
+            bar._msufValuePlain = true
+        end
     end
 
     if bar._msufShown ~= true then
@@ -410,6 +482,11 @@ local function EnsureBar(frame, key, levelOffset)
     bar = CreateFrame("StatusBar", nil, frame)
     bar:SetMinMaxValues(0, 1)
     bar:SetValue(0)
+    bar._msufMax = 1
+    bar._msufMaxPlain = true
+    bar._msufMaxReady = true
+    bar._msufValue = 0
+    bar._msufValuePlain = true
     bar:SetStatusBarTexture(WHITE)
     bar:SetAllPoints(hpBar or frame)
     if bar.SetFrameLevel and hpBar and hpBar.GetFrameLevel then
@@ -598,12 +675,28 @@ local function PredictionPlan(refreshHeal, refreshAbsorb, refreshHealAbsorb, sho
     }
 end
 
+local predictionPlanCache = {}
+
+local function PredictionPlanCacheKey(heal, absorb, healAbsorb, clampHeal, clampAbsorb, followAbsorb)
+    return (heal and 1 or 0)
+        + (absorb and 2 or 0)
+        + (healAbsorb and 4 or 0)
+        + (clampHeal and 8 or 0)
+        + (clampAbsorb and 16 or 0)
+        + (followAbsorb and 32 or 0)
+end
+
 local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
     local heal = cfg and cfg.heal == true
     local absorb = cfg and cfg.absorb == true
     local healAbsorb = cfg and cfg.healAbsorb == true
     local clampHeal = heal and healMode == 3
     local clampAbsorb = absorb and absorbMode == 3
+    local key = PredictionPlanCacheKey(heal, absorb, healAbsorb, clampHeal, clampAbsorb, followAbsorb)
+    local cached = predictionPlanCache[key]
+    if cached then
+        return cached[1], cached[2]
+    end
     local plans = {}
 
     if heal then
@@ -625,6 +718,7 @@ local function CompilePredictionPlans(cfg, healMode, absorbMode, followAbsorb)
     local fullNeedHP = healAbsorb or clampHeal or clampAbsorb
     local fullNeedMaxHP = heal or absorb or healAbsorb or fullNeedHP
     local fullPlan = PredictionPlan(heal, absorb, healAbsorb, heal, absorb, healAbsorb, true, fullNeedHP, fullNeedMaxHP)
+    predictionPlanCache[key] = { plans, fullPlan }
     return plans, fullPlan
 end
 
@@ -640,9 +734,21 @@ local function ClearPredictionCache(frame)
     frame._msufPredictionIncoming = nil
     frame._msufPredictionAbsorb = nil
     frame._msufPredictionHealAbsorb = nil
-    if frame.incomingHealBar then frame.incomingHealBar._msufMaxReady = nil end
-    if frame.absorbBar then frame.absorbBar._msufMaxReady = nil end
-    if frame.healAbsorbBar then frame.healAbsorbBar._msufMaxReady = nil end
+    if frame.incomingHealBar then
+        frame.incomingHealBar._msufMaxReady = nil
+        frame.incomingHealBar._msufMaxPlain = nil
+        frame.incomingHealBar._msufValuePlain = nil
+    end
+    if frame.absorbBar then
+        frame.absorbBar._msufMaxReady = nil
+        frame.absorbBar._msufMaxPlain = nil
+        frame.absorbBar._msufValuePlain = nil
+    end
+    if frame.healAbsorbBar then
+        frame.healAbsorbBar._msufMaxReady = nil
+        frame.healAbsorbBar._msufMaxPlain = nil
+        frame.healAbsorbBar._msufValuePlain = nil
+    end
 end
 
 local function CompilePredictionRuntime(frame, cfg, spec)
@@ -683,17 +789,23 @@ function Prediction.IsEnabled(frame, spec)
     return PredictionMask(cfg) ~= 0
 end
 
-local function PredictionEventsForConfig(cfg, healthAware)
+local function PredictionEventsForConfig(cfg, healthAware, unit)
     local mask = PredictionMask(cfg)
     if mask == 0 then
         return EMPTY_EVENTS
     end
-    local eventTable = healthAware ~= false and NeedsHealthEvent(cfg) and PREDICTION_HEALTH_EVENTS or PREDICTION_EVENTS
+    local player = unit == "player"
+    local eventTable
+    if healthAware ~= false and NeedsHealthEvent(cfg) then
+        eventTable = player and PREDICTION_HEALTH_EVENTS_PLAYER or PREDICTION_HEALTH_EVENTS
+    else
+        eventTable = player and PREDICTION_EVENTS_PLAYER or PREDICTION_EVENTS
+    end
     return eventTable[mask] or EMPTY_EVENTS
 end
 
 function Prediction.GetEvents(frame, spec)
-    return PredictionEventsForConfig(spec and spec.prediction, true)
+    return PredictionEventsForConfig(spec and spec.prediction, true, (frame and frame.unit) or (spec and spec.key))
 end
 
 function Prediction.GetUnitlessEvents(frame, spec)
@@ -730,7 +842,11 @@ function Prediction.Apply(frame, spec)
     Prediction.Create(frame, spec)
     frame._msufPredictionDisabled = nil
     ClearPredictionCache(frame)
+    frame._msufPredictionConnectionUnit = nil
+    frame._msufPredictionConnectionOnline = nil
     CompilePredictionRuntime(frame, cfg, spec)
+    frame._msufUpdatePredictionHealthValue = Prediction.UpdateHealthValue
+    frame._msufUpdatePredictionConnectionState = Prediction.UpdateConnectionState
     if frame._msufPredictionMask ~= 0 and cfg.test ~= true then
         local calc = EnsureCalc(frame)
         if calc then
@@ -779,6 +895,10 @@ function Prediction.Disable(frame)
     frame._msufPredictionMask = 0
     frame._msufPredictionEventPlans = nil
     frame._msufPredictionFullPlan = nil
+    frame._msufPredictionConnectionUnit = nil
+    frame._msufPredictionConnectionOnline = nil
+    frame._msufUpdatePredictionHealthValue = nil
+    frame._msufUpdatePredictionConnectionState = nil
     frame._msufPredictionDisabled = true
 end
 
@@ -805,6 +925,12 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
     local hp, maxHP
     if issecretvalue(seedHP) == true or seedHP ~= nil then hp = seedHP end
     if issecretvalue(seedMaxHP) == true or seedMaxHP ~= nil then maxHP = seedMaxHP end
+    if (issecretvalue(hp) ~= true and hp == nil)
+        or (issecretvalue(maxHP) ~= true and maxHP == nil) then
+        local cachedHP, cachedMax = CachedHealthValues(frame, unit)
+        if issecretvalue(hp) ~= true and hp == nil then hp = cachedHP end
+        if issecretvalue(maxHP) ~= true and maxHP == nil then maxHP = cachedMax end
+    end
 
     local calc
     if refreshAbsorb then
@@ -823,6 +949,110 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
         maxHP = ReadHealthMax(frame, unit)
     end
     ShowValue(bar, maxHP, frame._msufPredictionAbsorb, forceMax)
+end
+
+function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
+    if unit and frame and unit ~= frame.unit then
+        return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
+    end
+    unit = unit or frame.unit
+    local cfg = frame.MSUFSpec and frame.MSUFSpec.prediction
+    if not (cfg and cfg.enabled == true)
+        or cfg.test == true
+        or frame._msufPredictionRuntimeCfg ~= cfg
+        or frame._msufPredictionNeedsHealth ~= true
+        or frame._msufPredictionMask == 0 then
+        return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
+    end
+    if frame._msufPredictionCacheReady ~= true
+        or frame._msufPredictionCacheUnit ~= unit
+        or frame._msufPredictionCacheCfg ~= cfg then
+        return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
+    end
+
+    local maxHP = seedMaxHP
+    if issecretvalue(maxHP) ~= true and maxHP == nil then
+        maxHP = ReadHealthMax(frame, unit)
+    end
+
+    local healBar = frame.incomingHealBar
+    if healBar then
+        ShowValue(healBar, maxHP, frame._msufPredictionIncoming)
+    end
+
+    if frame._msufPredictionFollowAbsorb == true and frame.absorbBar then
+        local follow = cfg.heal == true and healBar and healBar._msufShown == true and healBar or nil
+        local absorbMode = frame._msufPredictionAbsorbMode or NormalizeAnchorMode(cfg.absorbAnchorMode, 2)
+        LayoutBarIfNeeded(frame, frame.absorbBar, 2, absorbMode, frame._msufPredictionAbsorbReverse, follow)
+        ShowValue(frame.absorbBar, maxHP, frame._msufPredictionAbsorb)
+    end
+end
+
+function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+    if unit and frame and unit ~= frame.unit then
+        return Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+    end
+    unit = unit or frame.unit
+    local cfg = frame.MSUFSpec and frame.MSUFSpec.prediction
+    if not (cfg and cfg.enabled == true)
+        or cfg.test == true
+        or frame._msufPredictionRuntimeCfg ~= cfg
+        or frame._msufPredictionMask == 0 then
+        return Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+    end
+
+    local state = frame._msufUnitState
+    local connectedKnown = state
+        and state.ready == true
+        and state.unit == unit
+        and frame._msufDispatchActive == true
+        and state.dispatchToken == frame._msufDispatchToken
+        and state.connectedKnown == true
+    local connected = connectedKnown and state.connected or nil
+    if not connectedKnown and UnitIsConnected then
+        connected = UnitIsConnected(unit)
+        if issecretvalue(connected) == true or connected == nil then
+            connected = nil
+        else
+            connected = connected == true or connected == 1
+        end
+    end
+
+    if connected == false then
+        if frame._msufPredictionConnectionUnit == unit
+            and frame._msufPredictionConnectionOnline == false
+            and (not frame.incomingHealBar or frame.incomingHealBar._msufShown == false)
+            and (not frame.absorbBar or frame.absorbBar._msufShown == false)
+            and (not frame.healAbsorbBar or frame.healAbsorbBar._msufShown == false) then
+            return
+        end
+        frame._msufPredictionConnectionUnit = unit
+        frame._msufPredictionConnectionOnline = false
+        HideBar(frame.incomingHealBar)
+        HideBar(frame.absorbBar)
+        HideBar(frame.healAbsorbBar)
+        ClearPredictionCache(frame)
+        return
+    end
+
+    if connected == true
+        and frame._msufPredictionConnectionUnit == unit
+        and frame._msufPredictionConnectionOnline == true
+        and frame._msufPredictionCacheReady == true
+        and frame._msufPredictionCacheUnit == unit
+        and frame._msufPredictionCacheCfg == cfg then
+        return
+    end
+
+    local result = Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
+    if connected == true then
+        frame._msufPredictionConnectionUnit = unit
+        frame._msufPredictionConnectionOnline = true
+    else
+        frame._msufPredictionConnectionUnit = nil
+        frame._msufPredictionConnectionOnline = nil
+    end
+    return result
 end
 
 function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
@@ -856,7 +1086,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         end
     end
 
-    if UnitMissing(unit) then
+    if UnitMissing(frame, unit) then
         Prediction.Disable(frame)
         return
     end
@@ -928,6 +1158,13 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         and (issecretvalue(seedMaxHP) == true or seedMaxHP ~= nil)
     if canUseSeed then
         hp, maxHP = seedHP, seedMaxHP
+    end
+    if (needHP or needMaxHP)
+        and ((issecretvalue(hp) ~= true and hp == nil)
+            or (issecretvalue(maxHP) ~= true and maxHP == nil)) then
+        local cachedHP, cachedMax = CachedHealthValues(frame, unit)
+        if issecretvalue(hp) ~= true and hp == nil then hp = cachedHP end
+        if issecretvalue(maxHP) ~= true and maxHP == nil then maxHP = cachedMax end
     end
     if (needHP or needMaxHP) and issecretvalue(hp) ~= true and hp == nil and UnitHealth then hp = UnitHealth(unit) end
     if needMaxHP and issecretvalue(maxHP) ~= true and maxHP == nil then maxHP = ReadHealthMax(frame, unit) end

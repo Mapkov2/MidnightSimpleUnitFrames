@@ -154,6 +154,18 @@ local function RangeFadesWholeFrame(frame)
     return not (range and range.layerMode == "health")
 end
 
+local function ApplyRangeOnly(frame, mul, force)
+    if RangeFadesWholeFrame(frame) then
+        SetFrameAlpha(frame, mul)
+        ApplyCastbarRangeAlpha(frame, mul, force)
+        return true
+    end
+    SetFrameAlpha(frame, 1)
+    ApplyCastbarRangeAlpha(frame, 1, force)
+    ApplyHealthFillAlpha(frame, mul, force)
+    return true
+end
+
 -- Resolve the configured HP-fill alpha (independent of range), clamped, with the
 -- edit-mode floor so bars never fully vanish while the user is positioning frames.
 local function ConfiguredHPAlpha(cfg)
@@ -174,6 +186,7 @@ local function ResetFrameLayers(frame, force)
     SetTextLayerAlpha(frame, 1, force)
     SetPortraitLayerAlpha(frame, 1, force)
     frame._msufAlphaActive = nil
+    frame._msufAlphaEffective = nil
 end
 
 -- The single apply path. `force` re-writes even when the cached values match.
@@ -207,6 +220,7 @@ local function ApplyAlpha(frame, cfg, force)
     -- meant to touch the bar only.
     local frameAlpha = wholeFrame and mul or 1
     local hpAlpha = hp * (wholeFrame and 1 or mul)
+    frame._msufAlphaEffective = frameAlpha
 
     if not force
         and frame._msufAlphaLastFrame == frameAlpha
@@ -256,6 +270,7 @@ function Alpha.Disable(frame)
     frame._msufAlphaLastFrame = nil
     frame._msufAlphaLastHP = nil
     frame._msufAlphaLastFG = nil
+    frame._msufAlphaEffective = nil
     -- Range fade may still want the frame dimmed even though configured alpha is 1.
     if RangeMul(frame) ~= 1 then
         ApplyAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, true)
@@ -277,11 +292,12 @@ UF.ApplyRangeModifier = function(frame, mul, force)
     end
     frame._msufRangeMul = mul
     local cfg = frame.MSUFSpec and frame.MSUFSpec.alpha
-    if cfg or mul ~= 1 then
+    if (cfg and cfg.active == true) or frame._msufAlphaActive == true then
         ApplyAlpha(frame, cfg, force == true)
+    elseif mul ~= 1 then
+        ApplyRangeOnly(frame, mul, force == true)
     else
-        SetFrameAlpha(frame, mul)
-        ApplyCastbarRangeAlpha(frame, mul, force == true)
+        ApplyRangeOnly(frame, 1, force == true)
     end
     return true
 end

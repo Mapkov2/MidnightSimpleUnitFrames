@@ -174,6 +174,7 @@ local UNIT_EVENT_HAS_UNIT = {
     UNIT_PHASE = true,
     UNIT_CTR_OPTIONS = true,
     UNIT_OTHER_PARTY_CHANGED = true,
+    UNIT_AURA = true,
 }
 
 -- Forward declarations: the unit-filter / event-driver helpers below need to
@@ -813,7 +814,27 @@ local function RebuildFrameEventList(frame, event)
     end
 end
 
-local function RegisterElementEvent(frame, elementName, event, unitless)
+local function AddChangedEvent(changedEvents, event)
+    if not (changedEvents and event) then
+        return
+    end
+    for i = 1, #changedEvents do
+        if changedEvents[i] == event then
+            return
+        end
+    end
+    changedEvents[#changedEvents + 1] = event
+end
+
+local function RebuildFrameEventListOrDefer(frame, event, changedEvents)
+    if changedEvents then
+        AddChangedEvent(changedEvents, event)
+    else
+        RebuildFrameEventList(frame, event)
+    end
+end
+
+local function RegisterElementEvent(frame, elementName, event, unitless, changedEvents)
     if not (frame and event and elementName) then
         return
     end
@@ -823,12 +844,6 @@ local function RegisterElementEvent(frame, elementName, event, unitless)
         owners = {}
         frame._msufEventOwners = owners
     end
-    local unitlessOwners = frame._msufEventUnitless
-    if not unitlessOwners then
-        unitlessOwners = {}
-        frame._msufEventUnitless = unitlessOwners
-    end
-
     local byElement = owners[event]
     local createdOwners = false
     if not byElement then
@@ -846,6 +861,11 @@ local function RegisterElementEvent(frame, elementName, event, unitless)
             end
             return
         end
+        local unitlessOwners = frame._msufEventUnitless
+        if not unitlessOwners then
+            unitlessOwners = {}
+            frame._msufEventUnitless = unitlessOwners
+        end
         unitlessOwners[event] = true
     end
     local previous = byElement[elementName]
@@ -854,42 +874,73 @@ local function RegisterElementEvent(frame, elementName, event, unitless)
     else
         byElement[elementName] = previous == "unitless" and "both" or true
     end
-    RebuildFrameEventList(frame, event)
+    RebuildFrameEventListOrDefer(frame, event, changedEvents)
 end
 
-local function UnregisterElementEvents(frame, elementName)
+local function UnregisterElementEvent(frame, owners, elementName, event, changedEvents)
+    local byElement = owners and owners[event]
+    if not (byElement and byElement[elementName] ~= nil) then
+        return
+    end
+    byElement[elementName] = nil
+    if next(byElement) == nil then
+        owners[event] = nil
+        if frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
+            frame._msufEventUnitless[event] = nil
+            if next(frame._msufEventUnitless) == nil then
+                frame._msufEventUnitless = nil
+            end
+            UnregisterDriverFrameUnitlessEvent(frame, event)
+        end
+        RebuildFrameEventListOrDefer(frame, event, changedEvents)
+        UnregisterDriverFrameEvent(frame, event)
+    elseif frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
+        local hasUnitless = false
+        for _, mode in pairs(byElement) do
+            if mode == "unitless" or mode == "both" then
+                hasUnitless = true
+                break
+            end
+        end
+        if not hasUnitless then
+            frame._msufEventUnitless[event] = nil
+            if next(frame._msufEventUnitless) == nil then
+                frame._msufEventUnitless = nil
+            end
+            UnregisterDriverFrameUnitlessEvent(frame, event)
+        end
+        RebuildFrameEventListOrDefer(frame, event, changedEvents)
+    else
+        RebuildFrameEventListOrDefer(frame, event, changedEvents)
+    end
+end
+
+local function UnregisterElementEvents(frame, elementName, changedEvents)
     local owners = frame and frame._msufEventOwners
     if not owners then
         return
     end
 
+    local refs = frame._msufElementEventRefs and frame._msufElementEventRefs[elementName]
+    if refs then
+        local events = refs.events
+        if type(events) == "table" then
+            for i = 1, #events do
+                UnregisterElementEvent(frame, owners, elementName, events[i], changedEvents)
+            end
+        end
+        events = refs.unitlessEvents
+        if type(events) == "table" then
+            for i = 1, #events do
+                UnregisterElementEvent(frame, owners, elementName, events[i], changedEvents)
+            end
+        end
+        return
+    end
+
     for event, byElement in pairs(owners) do
         if byElement[elementName] ~= nil then
-            byElement[elementName] = nil
-            if next(byElement) == nil then
-                owners[event] = nil
-                if frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
-                    frame._msufEventUnitless[event] = nil
-                    UnregisterDriverFrameUnitlessEvent(frame, event)
-                end
-                RebuildFrameEventList(frame, event)
-                UnregisterDriverFrameEvent(frame, event)
-            elseif frame._msufEventUnitless and frame._msufEventUnitless[event] == true then
-                local hasUnitless = false
-                for _, mode in pairs(byElement) do
-                    if mode == "unitless" or mode == "both" then
-                        hasUnitless = true
-                        break
-                    end
-                end
-                if not hasUnitless then
-                    frame._msufEventUnitless[event] = nil
-                    UnregisterDriverFrameUnitlessEvent(frame, event)
-                end
-                RebuildFrameEventList(frame, event)
-            else
-                RebuildFrameEventList(frame, event)
-            end
+            UnregisterElementEvent(frame, owners, elementName, event, changedEvents)
         end
     end
 end
@@ -913,19 +964,31 @@ local function SyncElementEvents(frame, name, element, spec)
         end
     end
 
-    UnregisterElementEvents(frame, name)
+    local changedEvents = frame._msufChangedEventsScratch
+    if not changedEvents then
+        changedEvents = {}
+        frame._msufChangedEventsScratch = changedEvents
+    else
+        ClearArray(changedEvents)
+    end
+    UnregisterElementEvents(frame, name, changedEvents)
 
     if type(events) == "table" then
         for i = 1, #events do
-            RegisterElementEvent(frame, name, events[i], false)
+            RegisterElementEvent(frame, name, events[i], false, changedEvents)
         end
     end
 
     if type(unitlessEvents) == "table" then
         for i = 1, #unitlessEvents do
-            RegisterElementEvent(frame, name, unitlessEvents[i], true)
+            RegisterElementEvent(frame, name, unitlessEvents[i], true, changedEvents)
         end
     end
+
+    for i = 1, #changedEvents do
+        RebuildFrameEventList(frame, changedEvents[i])
+    end
+    ClearArray(changedEvents)
 
     if not eventRefs then
         eventRefs = {}
@@ -1056,16 +1119,20 @@ function UF.AttachFrame(frame, opts)
     return frame
 end
 
-function UF.ForEachFrame(fn)
+function UF.ForEachFrame(fn, a, b, c)
     if type(fn) ~= "function" then
         return
     end
+    local any
     for i = 1, #UF.unitOrder do
         local frame = UF.frames[UF.unitOrder[i]]
         if frame then
-            fn(frame, frame.unit)
+            if fn(frame, frame.unit, a, b, c) == true then
+                any = true
+            end
         end
     end
+    return any
 end
 
 function UF.ForEachAttachedFrame(fn, scope)
@@ -1128,6 +1195,7 @@ function UF.DetachFrame(frame)
     frame._msufElementEventRefs = nil
     frame._msufEventElementLists = nil
     frame._msufHotEventState = nil
+    frame._msufChangedEventsScratch = nil
     frame._msufDriverEventUnits = nil
     frame._msufDerivedEventUnits = nil
     frame._msufCoreScope = nil
@@ -1154,6 +1222,10 @@ function UF.Apply(unit)
     return factory.Apply(unit)
 end
 
+local function ForceUpdateFrame(frame)
+    UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
+end
+
 function UF.ForceUpdate(unit)
     if InCombatLockdown and InCombatLockdown() then
         UF.MarkDirty(unit)
@@ -1176,9 +1248,7 @@ function UF.ForceUpdate(unit)
         end
         return true
     end
-    UF.ForEachFrame(function(frame)
-        UF.FrameForceUpdate(frame, "MSUF_FORCE_UPDATE")
-    end)
+    UF.ForEachFrame(ForceUpdateFrame)
     return true
 end
 

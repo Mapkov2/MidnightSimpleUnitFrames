@@ -133,7 +133,10 @@ local Perfy_GetTime = _G.Perfy_GetTime
 ```
 
 It wraps semantic dispatch points that are hard to understand from raw function
-entries alone:
+entries alone, but the default generated hook emits them as `Mark` annotations.
+`Mark` records count fanout and extra payloads only; they must not be treated as
+timed stack frames. CPU time should come from the direct `UFStatic:*`
+instrumentation unless a hook label is explicitly opted into timed mode.
 
 ```text
 EventBus:Dispatch
@@ -154,6 +157,10 @@ end
 
 _G.MSUF_PerfyLeave = function(label, extra)
     Perfy_Trace(Perfy_GetTime(), "Leave", label, extra)
+end
+
+_G.MSUF_PerfyMark = function(label, extra)
+    Perfy_Trace(Perfy_GetTime(), "Mark", label, extra)
 end
 ```
 
