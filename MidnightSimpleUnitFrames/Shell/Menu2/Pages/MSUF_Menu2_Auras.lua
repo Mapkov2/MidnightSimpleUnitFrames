@@ -919,14 +919,9 @@ local function BuildGroupStyle(ctx, b, scope)
     local behavior = Card(section, "Behavior", "Shared group-frame aura behavior for " .. ScopeLabel(scope) .. ".", rightX, -42, rightW, 306)
     BindGroupRootSwitch(ctx, behavior, "Show Tooltip", 16, -64, rightW - 32, scope, "showTooltip", true, "visual")
     BindGroupRootSwitch(ctx, behavior, "Sort by Duration", 16, -96, rightW - 32, scope, "sortByDuration", false, "visual")
-    BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 16, -128, rightW - 32, scope, "preferPlayer", true, "visual")
+    BindGroupRootSwitch(ctx, behavior, "Prefer Player Auras", 16, -128, rightW - 32, scope, "preferPlayer", false, "visual")
     BindGroupRootSwitch(ctx, behavior, "Dynamic Icon Scale", 16, -160, rightW - 32, scope, "dynamicScale", false, "geometry")
     BindGroupConfSwitch(ctx, behavior, "Cooldown darkens on loss", 16, -202, rightW - 32, scope, "cooldownSwipeDarkenOnLoss", false, "visual")
-    BindGroupConfSwitch(ctx, behavior, "Masque skin", 16, -234, rightW - 32, scope, "masqueEnabled", false, "visual", function()
-        local gf = GF()
-        if gf and gf.Masque and type(gf.Masque.ReskinAllIcons) == "function" then gf.Masque.ReskinAllIcons() end
-    end)
-
     BuildMiniAuraPreview(ctx, section, scope, rightX, -404, rightW, 92)
 end
 
@@ -959,14 +954,14 @@ local function BuildSharedColors(ctx, b)
         local sr, sg, sb = Model.ReadGeneralColor("aurasCooldownTextSafeColor", 1, 1, 1)
         local wr, wg, wb = Model.ReadGeneralColor("aurasCooldownTextWarningColor", 1, 0.85, 0.20)
         local ur, ug, ub = Model.ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
-        local buckets = Model.ReadGeneralBool("aurasCooldownTextUseBuckets", true)
+        local buckets = Model.ReadGeneralBool("aurasCooldownTextUseBuckets", false)
         samples[1]:SetTextColor(sr, sg, sb, 1)
         samples[2]:SetTextColor(buckets and wr or sr, buckets and wg or sg, buckets and wb or sb, 1)
         samples[3]:SetTextColor(buckets and ur or sr, buckets and ug or sg, buckets and ub or sb, 1)
     end
 
     BindSwitch(ctx, cooldown, "Color by time", 16, -166, colW - 32,
-        function() return Model.ReadGeneralBool("aurasCooldownTextUseBuckets", true) end,
+        function() return Model.ReadGeneralBool("aurasCooldownTextUseBuckets", false) end,
         function(v)
             Model.WriteGeneralBool("aurasCooldownTextUseBuckets", v)
             RefreshColorSamples()

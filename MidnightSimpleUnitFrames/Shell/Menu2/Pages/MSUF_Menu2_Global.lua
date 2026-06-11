@@ -519,6 +519,9 @@ local function PriorityOrder()
     local defaults = PriorityDefaults()
     local allowed = PriorityAllowed(defaults)
     local raw = BarScopeGet("hlPrioOrder", nil)
+    if type(raw) ~= "table" then
+        raw = BarScopeGet("highlightPrioOrder", nil)
+    end
     if type(raw) ~= "table" and CurrentBarsScope() == "shared" then
         raw = G().highlightPrioOrder
     end
