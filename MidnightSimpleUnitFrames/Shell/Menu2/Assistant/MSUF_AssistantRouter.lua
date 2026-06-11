@@ -97,6 +97,7 @@ local AURA_BUFF_CONTEXT_TERMS = {
     "hidden", "hide", "show", "open", "help", "why", "where", "settings",
     "turn", "turn on", "turn off", "on", "off", "enable", "disable", "enabled", "disabled",
     "set", "change", "make", "size", "count", "max", "icon", "icons", "per row", "growth",
+    "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen",
     "own", "mine", "only mine", "only player", "raid filter", "player filter",
     "stack", "cooldown", "pandemic",
 }
@@ -230,6 +231,21 @@ local function LooksLikeKnowledgeQuestionPrefix(text)
     then
         return true
     end
+    if (norm:match("^how%s+do%s+i%s+") or norm:match("^how%s+can%s+i%s+"))
+        and ContainsAny(norm, {
+            "change", "set", "make", "hide", "show", "turn on", "turn off", "enable", "disable",
+            "lock", "unlock", "resize", "increase", "decrease", "scale", "scaling",
+        })
+        and ContainsAny(norm, {
+            "text", "name", "hp", "health", "power", "mana", "castbar", "cast bar",
+            "class resource", "class power", "combat timer", "totem", "raid frame", "party frame",
+            "group frame", "ready check", "role icon", "range fade", "menu scale", "menu bigger",
+            "menu smaller", "options scale", "ui scale", "raid", "party", "mythic raid",
+            "players", "player count", "raid size",
+        })
+    then
+        return true
+    end
     if norm:match("^help%s+with%s+")
         and ContainsAny(norm, { "cooldown manager", "cooldownmanager", "essential cooldown", "essential cooldowns", "cdm" })
     then
@@ -237,8 +253,10 @@ local function LooksLikeKnowledgeQuestionPrefix(text)
     end
     if ContainsAny(norm, {
         "what did you change", "what changed", "what was changed", "what did you do",
-        "what did you set", "last change", "previous change", "what is it now",
+        "what did you just change", "what exactly did you change", "what did you set",
+        "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
+        "show me last change", "show me the last change",
     }) then
         return false
     end
@@ -280,8 +298,10 @@ local function LooksLikeKnowledgeFirstRequest(text)
     if ContainsAny(norm, { "open", "go to", "show settings", "show me settings", "oeffne" }) then return false end
     if ContainsAny(norm, {
         "what did you change", "what changed", "what was changed", "what did you do",
-        "what did you set", "last change", "previous change", "what is it now",
+        "what did you just change", "what exactly did you change", "what did you set",
+        "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
+        "show me last change", "show me the last change",
     }) then return false end
     return ContainsAny(norm, {
         "search", "find", "where", "where is", "where are", "faq", "explain",
@@ -527,6 +547,8 @@ end
 
 local function UnsupportedAuraReply(text)
     local norm = Normalize(text)
+    local parser = A.Parser or {}
+    if type(parser.CopyCommandExcludesAuras) == "function" and parser.CopyCommandExcludesAuras(norm) then return nil end
     if ContainsAny(norm, { "debuff stripe", "debuff stripes" }) then return nil end
     if ContainsAny(norm, { "dispel overlay", "unitframe dispel overlay", "unit frame dispel overlay" }) then return nil end
     if not ContainsAny(norm, AURA_OUT_OF_SCOPE_TERMS)
@@ -627,6 +649,13 @@ local function ShouldSkipContext(text)
     if norm == "" then return true end
     if ContainsAny(norm, FLOW_TERMS) then return true end
     if ContainsAny(norm, NAV_HELP_TERMS) then return true end
+    if ContainsAny(norm, {
+        "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you just change", "what exactly did you change", "what did you set",
+        "last change", "last assistant change", "previous change", "what is it now",
+        "what is it set to", "current value", "value now", "show last change",
+        "show me last change", "show me the last change",
+    }) then return true end
     if ContainsAny(norm, EXPLICIT_DOMAIN_TERMS) then return true end
     if ContainsAny(norm, {
         "it", "that", "this", "same", "do it", "do that", "again", "more", "less",
@@ -944,7 +973,7 @@ function A.RouteInput(text, coreHandler)
         if exactKeyResult and not IsUnknownResult(exactKeyResult) then return exactKeyResult end
     end
 
-    do
+    if not LooksLikeKnowledgeQuestionPrefix(text) then
         local parser = A.Parser or {}
         local broadAnchor = parser.ParseBroadHumanAnchorTargetAnswer and parser.ParseBroadHumanAnchorTargetAnswer(Normalize(text), text)
         if broadAnchor then return broadAnchor end
@@ -952,6 +981,21 @@ function A.RouteInput(text, coreHandler)
 
     local auraUnsupported = UnsupportedAuraReply(text)
     if auraUnsupported then return auraUnsupported end
+
+    if hasCore and not LooksLikeKnowledgeQuestionPrefix(text)
+        and not (Normalize(text):find("%d+%.%d+") or ContainsAny(text, {
+            "release", "version", "preview", "alpha", "beta", "patch", "build", "changelog", "change log",
+        }))
+        and ContainsAny(text, {
+        "what did you change", "what changed", "what was changed", "what did you do",
+        "what did you just change", "what exactly did you change", "what did you set",
+        "last change", "last assistant change", "previous change", "what is it now",
+        "what is it set to", "current value", "value now", "show last change",
+        "show me last change", "show me the last change",
+    }) then
+        local followupResult = Core(text)
+        if followupResult and not IsUnknownResult(followupResult) then return followupResult end
+    end
 
     if LooksLikeScopedHelpKnowledgeRequest(text) and A.Knowledge and type(A.Knowledge.Answer) == "function" then
         local answer = A.Knowledge.Answer(text, { currentPage = M and M.activeKey })

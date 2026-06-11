@@ -120,14 +120,65 @@ local function CopyScopeDefaults()
     return scopes
 end
 
-local function CopyScopeMatches(text, specs)
+local COPY_SCOPE_NEGATIVE_PREFIXES = {
+    "without ",
+    "with no ",
+    "except ",
+    "except for ",
+    "excluding ",
+    "exclude ",
+    "but not ",
+    "not ",
+    "no ",
+    "minus ",
+    "skip ",
+    "leave out ",
+    "ohne ",
+    "ohne die ",
+    "ohne den ",
+    "ausser ",
+    "ausser die ",
+    "ausser den ",
+    "nicht ",
+}
+
+local function ScopeAliasHasNegativePrefix(text, alias)
+    if not alias or alias == "" then return false end
+    for i = 1, #COPY_SCOPE_NEGATIVE_PREFIXES do
+        if HasPhrase(text, COPY_SCOPE_NEGATIVE_PREFIXES[i] .. alias) then return true end
+    end
+    return false
+end
+
+local function CopyScopeNegativeKeySet(text, specs)
+    local keys = {}
+    for i = 1, #(specs or {}) do
+        local spec = specs[i]
+        if spec and spec.key then
+            for j = 1, #(spec.aliases or {}) do
+                if ScopeAliasHasNegativePrefix(text, spec.aliases[j]) then
+                    keys[spec.key] = true
+                    break
+                end
+            end
+        end
+    end
+    return keys
+end
+
+local function CopyScopeMatches(text, specs, negativeKeys)
     local matches = {}
     local seen = {}
     for i = 1, #(specs or {}) do
         local spec = specs[i]
-        if spec.key and not seen[spec.key] and ContainsAny(text, spec.aliases) then
-            matches[#matches + 1] = spec.key
-            seen[spec.key] = true
+        if spec.key and not seen[spec.key] and not (negativeKeys and negativeKeys[spec.key]) then
+            for j = 1, #(spec.aliases or {}) do
+                if HasPhrase(text, spec.aliases[j]) then
+                    matches[#matches + 1] = spec.key
+                    seen[spec.key] = true
+                    break
+                end
+            end
         end
     end
     return matches
@@ -140,34 +191,49 @@ local function ApplyCopyScopeMatches(scopes, matches)
     return true
 end
 
-local function WantsFullUnitCopy(text)
+local function WantsFullUnitCopy(text, matches)
     if ContainsAny(text, { "all settings", "all categories", "everything", "complete settings", "entire unit", "whole unit", "copy to function", "copy-to function", "copyto function", "copy to workflow" }) then
         return true
     end
     if ContainsAny(text, { "profile", "profil", "unit profile", "unitframe profile", "unit frame profile", "frame profile" }) then
-        return #CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS) == 0
+        if not matches then
+            matches = CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS, CopyScopeNegativeKeySet(text, UNIT_COPY_SCOPE_SPECS))
+        end
+        return #matches == 0
     end
     return false
 end
 
-local function WantsFullGroupCopy(text)
+local function WantsFullGroupCopy(text, matches)
     if ContainsAny(text, { "all settings", "all categories", "everything", "complete settings", "entire group", "whole group", "copy to function", "copy-to function", "copyto function", "copy to workflow" }) then
         return true
     end
     if ContainsAny(text, { "profile", "profil", "group profile", "groupframe profile", "group frame profile", "frame profile" }) then
-        return #CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS) == 0
+        if not matches then
+            matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS, CopyScopeNegativeKeySet(text, GROUP_COPY_SCOPE_SPECS))
+        end
+        return #matches == 0
     end
     return false
 end
 
+local function ApplyCopyScopeExclusions(scopes, negativeKeys)
+    for key in pairs(negativeKeys or {}) do
+        if scopes[key] ~= nil then scopes[key] = false end
+    end
+end
+
 local function CopyScopesForText(text)
     local scopes = CopyScopeDefaults()
-    if WantsFullUnitCopy(text) then
+    local negativeKeys = CopyScopeNegativeKeySet(text, UNIT_COPY_SCOPE_SPECS)
+    local matches = CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS, negativeKeys)
+    if WantsFullUnitCopy(text, matches) then
         for key in pairs(scopes) do scopes[key] = true end
     else
-        local matched = ApplyCopyScopeMatches(scopes, CopyScopeMatches(text, UNIT_COPY_SCOPE_SPECS))
+        local matched = ApplyCopyScopeMatches(scopes, matches)
         if matched and ContainsAny(text, { "size", "width", "height" }) then scopes.basics = true end
     end
+    ApplyCopyScopeExclusions(scopes, negativeKeys)
     return scopes
 end
 
@@ -196,11 +262,14 @@ end
 
 local function GroupCopyScopesForText(text)
     local scopes = GroupCopyScopeDefaults()
-    if WantsFullGroupCopy(text) then
+    local negativeKeys = CopyScopeNegativeKeySet(text, GROUP_COPY_SCOPE_SPECS)
+    local matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS, negativeKeys)
+    if WantsFullGroupCopy(text, matches) then
         for key in pairs(scopes) do scopes[key] = true end
     else
-        ApplyCopyScopeMatches(scopes, CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS))
+        ApplyCopyScopeMatches(scopes, matches)
     end
+    ApplyCopyScopeExclusions(scopes, negativeKeys)
     scopes.auras = false
     return scopes
 end
@@ -230,6 +299,24 @@ local function CleanProfileName(name)
     name = Trim(name)
     if name == "" then return nil end
     return name
+end
+
+local function CleanImportNewProfileName(name)
+    name = CleanProfileName(name)
+    if not name then return nil end
+    name = name:gsub("%s+safely$", "")
+    name = name:gsub("%s+after%s+backup$", "")
+    name = name:gsub("^after%s+backup%s+", "")
+    name = name:gsub("^backup%s+first%s+", "")
+    name = Trim(name)
+    local normalized = Normalize(name)
+    if normalized == "" or normalized == "safe" or normalized == "safely"
+        or normalized == "after backup" or normalized == "backup first"
+        or normalized == "backup" or normalized == "first"
+    then
+        return nil
+    end
+    return CleanProfileName(name)
 end
 
 local function RawAfterPrefix(raw, prefixes)
@@ -310,10 +397,37 @@ local function RawCopyProfileSourceDestination(raw)
         "backup profile ",
         "backup current profile ",
         "backup active profile ",
+        "backup my profile ",
+        "backup my current profile ",
+        "backup my active profile ",
         "make a copy of profile ",
+        "make a copy of this profile ",
+        "make a copy of current profile ",
+        "make a copy of active profile ",
+        "make a copy of my profile ",
+        "make a copy of my current profile ",
+        "make a copy of my active profile ",
         "make copy of profile ",
+        "make copy of this profile ",
+        "make copy of current profile ",
+        "make copy of active profile ",
+        "make copy of my profile ",
+        "make copy of my current profile ",
+        "make copy of my active profile ",
         "create a copy of profile ",
+        "create a copy of this profile ",
+        "create a copy of current profile ",
+        "create a copy of active profile ",
+        "create a copy of my profile ",
+        "create a copy of my current profile ",
+        "create a copy of my active profile ",
         "create copy of profile ",
+        "create copy of this profile ",
+        "create copy of current profile ",
+        "create copy of active profile ",
+        "create copy of my profile ",
+        "create copy of my current profile ",
+        "create copy of my active profile ",
     }
     for i = 1, #prefixes do
         local prefix = prefixes[i]
@@ -400,10 +514,39 @@ local function RawCurrentProfileCopyName(raw)
         "make a backup of current profile named ",
         "save backup of current profile as ",
         "save a backup of current profile as ",
+        "save current profile as ",
+        "save active profile as ",
+        "save my profile as ",
+        "save my current profile as ",
+        "save my active profile as ",
         "backup current profile to ",
         "backup current profile as ",
         "backup active profile to ",
         "backup active profile as ",
+        "backup my profile to ",
+        "backup my profile as ",
+        "backup my current profile to ",
+        "backup my current profile as ",
+        "backup my active profile to ",
+        "backup my active profile as ",
+        "make a copy of this profile called ",
+        "make a copy of this profile named ",
+        "make a copy of this profile as ",
+        "make a copy of current profile called ",
+        "make a copy of current profile named ",
+        "make a copy of current profile as ",
+        "make a copy of active profile called ",
+        "make a copy of active profile named ",
+        "make a copy of active profile as ",
+        "make a copy of my profile called ",
+        "make a copy of my profile named ",
+        "make a copy of my profile as ",
+        "make a copy of my current profile called ",
+        "make a copy of my current profile named ",
+        "make a copy of my current profile as ",
+        "make a copy of my active profile called ",
+        "make a copy of my active profile named ",
+        "make a copy of my active profile as ",
     }
     for i = 1, #prefixes do
         local prefix = prefixes[i]
@@ -535,6 +678,11 @@ local function ProfileExportKindForText(text)
 end
 
 local function HasProfileExportIntent(text)
+    if ContainsAny(text, { "restore", "recover", "rollback", "use backup", "use last backup", "load backup", "load last backup", "switch to backup", "switch to last backup" })
+        and ContainsAny(text, { "backup", "backup profile", "profile backup", "last backup" })
+    then
+        return false
+    end
     if ContainsAny(text, {
         "profile string", "export string", "profile export string", "copy profile string",
     }) and ContainsAny(text, {
@@ -547,7 +695,8 @@ local function HasProfileExportIntent(text)
     if ContainsAny(text, {
         "where", "where is", "where are", "find", "search", "show me",
         "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
-        "how", "how do", "how to", "why", "faq",
+        "how", "how do", "how to", "why", "faq", "broken", "not working", "doesnt work",
+        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
     }) then
         return false
     end
@@ -556,6 +705,14 @@ local function HasProfileExportIntent(text)
         "share my profile", "share msuf profile", "share my msuf profile",
         "copy string", "copy profile string", "profile string", "export string", "profile export string",
         "save backup", "save a backup", "save profile backup",
+        "backup msuf settings", "backup my msuf settings", "backup settings", "backup my settings",
+        "backup current settings", "backup my current settings", "make backup before import",
+        "make a backup before import", "backup before import",
+        "make backup before importing", "make a backup before importing", "backup before importing",
+        "backup before profile import", "backup before importing profile",
+        "backup raid profile", "backup party profile", "backup group profile",
+        "backup group frame profile", "backup group frames profile",
+        "backup raid settings", "backup party settings", "backup group frame settings", "backup group frames settings",
     }) then
         return true
     end
@@ -571,8 +728,49 @@ local function HasProfileReadOnlyQueryIntent(text)
     return ContainsAny(text, {
         "where", "where is", "where are", "find", "search", "show me",
         "help", "hilfe", "explain", "erklaere", "what is", "what are", "what can",
-        "how", "how do", "how to", "why", "faq",
+        "how", "how do", "how to", "why", "faq", "broken", "not working", "doesnt work",
+        "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
     })
+end
+
+local function IsBackupBeforeProfileImportIntent(text)
+    return ContainsAny(text, {
+        "make backup before import", "make a backup before import", "backup before import",
+        "make backup before importing", "make a backup before importing", "backup before importing",
+        "backup before profile import", "backup before importing profile",
+        "backup first then import", "backup first and import", "backup then import",
+        "make backup then import", "make a backup then import",
+        "make backup first then import", "make a backup first then import",
+    })
+end
+
+local function IsSafeProfileImportIntent(text)
+    return ContainsAny(text, {
+        "import safely", "import safe", "safe import", "safe profile import",
+        "import profile safely", "import profile safe", "profile import safely",
+        "import after backup", "import after backing up", "paste safely", "paste this safely",
+        "paste profile safely", "paste profile after backup",
+    }) or IsBackupBeforeProfileImportIntent(text)
+end
+
+local function BuildProfileBackupRestoreClarification(text)
+    if not ContainsAny(text, {
+        "restore backup", "restore my backup", "restore my backup profile",
+        "restore backup profile", "restore profile backup",
+        "restore last backup", "restore last backup profile",
+        "recover backup", "recover my backup", "recover my backup profile",
+        "use backup profile", "use my backup profile", "use last backup profile",
+        "load backup profile", "load my backup profile", "load last backup profile",
+        "switch to backup profile", "switch to last backup profile",
+    }) then
+        return nil
+    end
+    return {
+        kind = "answer",
+        status = "info",
+        text = "I cannot safely know which backup profile you mean. MSUF backups are either copied profile names or export strings. Use the exact profile name, for example 'switch profile Raid Backup', or paste an MSUF profile string to import.",
+        summary = "Clarifies ambiguous profile backup restore wording instead of guessing a profile name.",
+    }
 end
 
 local function RawAfterLastConnector(raw, connectors)
@@ -625,20 +823,31 @@ local function ImportNewProfileName(raw, startIndex, endIndex, text)
     if startIndex then
         local before = StripProfileImportString(Trim(raw:sub(1, startIndex - 1)))
         local beforeName = RawAfterLastConnector(before, { " as ", " to new profile ", " new profile ", " named ", " called " })
-        beforeName = CleanProfileName(beforeName)
+        beforeName = CleanImportNewProfileName(beforeName)
         if beforeName then return beforeName end
     end
     local after = Trim(tostring(raw or ""):sub((endIndex or 0) + 1))
     local lower = after:lower()
-    if lower:sub(1, 15) == "as new profile " then return CleanProfileName(StripProfileImportString(after:sub(16))) end
-    if lower:sub(1, 11) == "as profile " then return CleanProfileName(StripProfileImportString(after:sub(12))) end
-    if lower:sub(1, 3) == "as " then return CleanProfileName(StripProfileImportString(after:sub(4))) end
-    if lower:sub(1, 15) == "to new profile " then return CleanProfileName(StripProfileImportString(after:sub(16))) end
-    if lower:sub(1, 12) == "new profile " then return CleanProfileName(StripProfileImportString(after:sub(13))) end
+    if lower:sub(1, 15) == "as new profile " then return CleanImportNewProfileName(StripProfileImportString(after:sub(16))) end
+    if lower:sub(1, 11) == "as profile " then return CleanImportNewProfileName(StripProfileImportString(after:sub(12))) end
+    if lower:sub(1, 3) == "as " then return CleanImportNewProfileName(StripProfileImportString(after:sub(4))) end
+    if lower:sub(1, 15) == "to new profile " then return CleanImportNewProfileName(StripProfileImportString(after:sub(16))) end
+    if lower:sub(1, 12) == "new profile " then return CleanImportNewProfileName(StripProfileImportString(after:sub(13))) end
+    if startIndex then return nil end
     local name = StripProfileImportString(text:match("as%s+(.+)$")
         or text:match("to%s+new%s+profile%s+(.+)$")
         or text:match("new%s+profile%s+(.+)$"))
-    return CleanProfileName(name)
+    return CleanImportNewProfileName(name)
+end
+
+local function BuildMissingImportNewProfileNameAnswer(text)
+    if not ContainsAny(text, { "new profile", "new-profile", "as new profile", "to new profile" }) then return nil end
+    return {
+        kind = "answer",
+        status = "info",
+        text = "I need a new profile name to import into a new profile. Example: import this as new profile Raid Import MSUF5:...",
+        summary = "Clarifies safe new-profile import wording without treating safety words as a profile name.",
+    }
 end
 
 local function UUFBestEffortConfirmText()
@@ -944,7 +1153,8 @@ local function ParseProfile(text, raw)
     local uufStart, uufEndIndex, uufCompact = rawText:find("(!UUF_%S+)")
     local hasProfileWord = ContainsAny(text, { "profile", "profiles", "profil" })
     local hasExportIntent = HasProfileExportIntent(text)
-    local hasProfile = hasProfileWord or hasExportIntent
+    local safeImportIntent = IsSafeProfileImportIntent(text)
+    local hasProfile = hasProfileWord or hasExportIntent or safeImportIntent
     local rawLower = tostring(raw or ""):lower()
     local implicitSwitchName
     if not hasProfile and ContainsAny(text, { "switch to", "wechsel zu" }) then
@@ -960,9 +1170,15 @@ local function ParseProfile(text, raw)
             end
         end
     end
+    local backupRestoreClarification = BuildProfileBackupRestoreClarification(text)
+    if backupRestoreClarification then return backupRestoreClarification end
     if compact and (hasProfileWord or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^msuf%d+:")) then
         local legacy = ContainsAny(text, { "legacy import", "import legacy", "old profile import", "legacy profile" })
         local newName = ImportNewProfileName(rawText, compactStart, endIndex, text)
+        if not newName then
+            local missingName = BuildMissingImportNewProfileNameAnswer(text)
+            if missingName then return missingName end
+        end
         local action = Registry and Registry:GetAction(legacy and "import_legacy_profile_string" or (newName and "import_profile_string_new" or "import_profile_string"))
         return action and {
             kind = "action",
@@ -975,6 +1191,10 @@ local function ParseProfile(text, raw)
     end
     if uufCompact and (hasProfileWord or ContainsAny(text, { "import", "importiere", "paste" }) or rawLower:find("^%s*!uuf_")) then
         local newName = ImportNewProfileName(rawText, uufStart, uufEndIndex, text)
+        if not newName then
+            local missingName = BuildMissingImportNewProfileNameAnswer(text)
+            if missingName then return missingName end
+        end
         local action = Registry and Registry:GetAction(newName and "import_profile_string_new" or "import_profile_string")
         return action and {
             kind = "action",
@@ -1021,6 +1241,17 @@ local function ParseProfile(text, raw)
         } or nil
     end
 
+    if IsBackupBeforeProfileImportIntent(text) then
+        local action = Registry and Registry:GetAction("export_profile")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { kind = "all" },
+            label = "Export current profile",
+            summary = "Creates a copyable profile export string before opening/importing another profile.",
+        } or nil
+    end
+
     if ContainsAny(text, { "import", "importieren", "paste" }) and not HasProfileReadOnlyQueryIntent(text) then
         local action = Registry and Registry:GetAction("open_profile_import")
         return action and {
@@ -1056,7 +1287,7 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if implicitSwitchName or ContainsAny(text, { "switch", "wechsel", "change profile", "use profile", "use the", "activate", "load", "select profile" }) then
+    if implicitSwitchName or ContainsAny(text, { "switch", "wechsel", "change profile", "use", "use profile", "use the", "use my", "activate", "load", "select profile" }) then
         local name = implicitSwitchName or RawAfterPrefix(rawText, {
                 "switch to profile ",
                 "switch profile to ",
@@ -1064,6 +1295,8 @@ local function ParseProfile(text, raw)
                 "switch to ",
                 "use profile ",
                 "use the ",
+                "use my ",
+                "use ",
                 "activate profile ",
                 "activate ",
                 "load profile ",
@@ -1075,6 +1308,7 @@ local function ParseProfile(text, raw)
             or text:match("switch%s+profile%s+(.+)$")
             or text:match("use%s+profile%s+(.+)$")
             or text:match("use%s+the%s+(.+)%s+profile$")
+            or text:match("use%s+my%s+(.+)%s+profile$")
             or text:match("use%s+(.+)%s+profile$")
             or text:match("activate%s+profile%s+(.+)$")
             or text:match("activate%s+(.+)%s+profile$")
@@ -1166,7 +1400,11 @@ local function ParseProfile(text, raw)
         end
     end
 
-    if ContainsAny(text, { "copy", "duplicate", "clone", "dupe", "backup", "duplizieren" }) then
+    if ContainsAny(text, {
+        "copy", "duplicate", "clone", "dupe", "backup", "duplizieren",
+        "save current profile", "save active profile", "save my profile",
+        "save my current profile", "save my active profile",
+    }) then
         local source, dest = RawCopyProfileSourceDestination(rawText)
         if not source then source, dest = text:match("copy%s+profile%s+(.+)%s+to%s+(.+)$") end
         if not source then source, dest = text:match("copy%s+profile%s+(.+)%s+as%s+(.+)$") end
@@ -1289,6 +1527,24 @@ local function ParseProfile(text, raw)
         } or nil
     end
     return nil
+end
+
+function P.ParseProfileRepairShortcut(text)
+    if not ContainsAny(text, {
+        "profile mapping", "profile mappings", "spec profile mapping", "spec profile mappings",
+        "broken profile mapping", "broken profile mappings", "broken spec mapping", "broken spec mappings",
+    }) then
+        return nil
+    end
+    if not ContainsAny(text, { "clear", "fix", "repair", "remove", "clean" }) then return nil end
+    local action = Registry and Registry:GetAction("clear_broken_spec_profile_mappings")
+    return action and {
+        kind = "action",
+        action = action,
+        args = {},
+        label = "Clear broken spec profile mappings",
+        summary = "Removes specialization profile assignments that point to missing profiles.",
+    } or nil
 end
 
 P.COPY_SCOPE_DEFAULTS = COPY_SCOPE_DEFAULTS

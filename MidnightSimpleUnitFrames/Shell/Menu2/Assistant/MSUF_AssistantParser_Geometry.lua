@@ -760,6 +760,21 @@ function OM.ExplicitMultiIntent(text)
     return #DetectUnits(text) + #DetectGroups(text) > 1
 end
 
+function OM.CurrentPageUnitRows(rows, text)
+    if #(rows or {}) <= 1 or #DetectUnits(text) > 0 or HasAllUnitDetailScopeIntent(text) then return rows end
+    local pageUnit = CurrentPageUnit()
+    if not pageUnit then return rows end
+    local filtered = {}
+    for i = 1, #rows do
+        local setting = rows[i] and rows[i].setting
+        if tostring(setting and setting.frameType or "") ~= "unitframe" then return rows end
+        if tostring(setting and setting.unit or OM.UnitFromSetting(setting) or "") == pageUnit then
+            filtered[#filtered + 1] = rows[i]
+        end
+    end
+    return #filtered > 0 and filtered or rows
+end
+
 local function ParseGenericOffsetMove(text)
     if not OM.HasIntent(text) then return nil end
 
@@ -783,6 +798,7 @@ local function ParseGenericOffsetMove(text)
     local score = 0
     if axis then
         rows, score = OM.BestRows(text, axis)
+        rows = OM.CurrentPageUnitRows(rows, text)
     end
     if score <= 0 or #rows == 0 then return nil end
 
@@ -901,7 +917,22 @@ function P.ParseDetachedPowerBarMoveShortcut(text)
 
     local direction = DetectDirection(text, {})
     local axis = OM.AxisForDirection(direction) or A._DetailOffsetAxis(text)
-    if not direction and not axis then return nil end
+    if not direction and not axis then
+        if ContainsAny(text, {
+            "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
+            "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
+            "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
+            "under", "below", "above", "over",
+        }) and (P.CooldownManagerAnchorValueForText(text) ~= nil or ContainsAny(text, { "cooldown manager", "cooldownmanager", "cdm" })) then
+            return {
+                kind = "answer",
+                status = "info",
+                text = "Detached Power Bars do not have their own external anchor-frame setting. I can move a detached Power Bar with X/Y offsets, for example: move target detached powerbar left 10; move target detached powerbar up 4. To anchor the whole Target frame to cooldownmanager, say 'anchor target to cooldownmanager'.",
+                summary = "Explains detached Power Bar external anchor limits without changing the unit frame anchor.",
+            }
+        end
+        return nil
+    end
 
     local units = DetectUnits(text)
     if #units == 0 then
@@ -1087,12 +1118,14 @@ function P.ParseGroupFrameSpacingShortcut(text)
         "closer together", "closer to each other", "nearer together", "bring together",
         "less space", "less spacing", "reduce spacing", "decrease spacing", "tighten spacing",
         "smaller spacing", "smaller gap", "less gap", "compact spacing",
+        "tighter", "tighter spacing", "more compact", "closer vertically", "closer horizontally",
     }) then
         mode = "closer"
     elseif ContainsAny(text, {
         "farther apart", "further apart", "spread apart", "spread out", "space out",
         "more space", "more spacing", "more distance", "increase spacing", "add spacing",
         "add space between", "bigger spacing", "larger spacing", "bigger gap", "larger gap",
+        "looser", "looser spacing", "farther vertically", "farther horizontally",
     }) or (ContainsAny(text, { "spread", "space" }) and ContainsAny(text, { "apart", "out" })) then
         mode = "apart"
     else
@@ -1181,8 +1214,22 @@ end
 function P.ParseBroadHumanAnchorTargetAnswer(text, raw)
     local externalFrameName = HumanAnchorFrameNameForText(text, raw)
     if externalFrameName == nil then return nil end
+    if ContainsAny(text, { "open", "where", "where is", "where are", "how", "help", "settings", "setting", "page" })
+        and ContainsAny(text, { "anchor", "anchors", "custom anchor", "anchor settings", "anchor page" })
+    then
+        local target = externalFrameName == "EssentialCooldownViewer" and "cooldownmanager" or tostring(externalFrameName)
+        return {
+            kind = "answer",
+            status = "info",
+            text = table.concat({
+                tostring(target) .. " is an external custom anchor target, not a separate MSUF settings page.",
+                "Use a concrete MSUF frame command, for example: anchor target to " .. tostring(target) .. "; anchor player and target to " .. tostring(target) .. "; open target custom anchor picker.",
+            }, "\n"),
+            summary = "Explains external custom anchor wording without pretending there is a separate page.",
+        }
+    end
     local attachIntent = ContainsAny(text, {
-        "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
+        "close to", "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
         "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
         "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
     }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
@@ -1200,6 +1247,7 @@ function P.ParseHumanAnchorTarget(text, raw)
     if ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name", "anchor point", "anchor position" }) then return nil end
     if ContainsAny(text, {
         "portrait", "castbar", "cast bar", "name text", "hp text", "health text", "power text",
+        "powerbar", "power bar", "mana bar", "manabar", "power balken", "mana balken",
         "text", "icon", "indicator", "raid marker", "status", "level", "level indicator",
         "raid group name", "group number", "leader", "assist", "elite", "rare",
         "combat indicator", "rested", "resting", "incoming rez", "incoming resurrection",
@@ -1211,19 +1259,21 @@ function P.ParseHumanAnchorTarget(text, raw)
     end
     local externalFrameName = HumanAnchorFrameNameForText(text, raw)
     local attachIntent = ContainsAny(text, {
-        "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
+        "close to", "closer to", "nearer to", "toward", "towards", "move to", "move closer", "move nearer",
         "near", "near to", "next to", "put near", "put next to", "place near", "place next to",
         "follow", "dock to", "attach to", "anchor to", "snap to", "bring closer",
     }) or (HasPhrase(text, "anchor") and HasPhrase(text, "to"))
         or (HasPhrase(text, "attach") and HasPhrase(text, "to"))
         or (HasPhrase(text, "dock") and HasPhrase(text, "to"))
         or (HasPhrase(text, "snap") and HasPhrase(text, "to"))
+        or (externalFrameName ~= nil and HasPhrase(text, "use") and HasPhrase(text, "anchor"))
         or (externalFrameName ~= nil
             and ContainsAny(text, { "put", "place", "move", "anchor", "attach" })
             and ContainsAny(text, { "under", "below", "above", "over" }))
     local detachIntent = ContainsAny(text, {
         "away from", "farther from", "further from", "move away", "move away from",
-        "detach from", "undock from", "disconnect from",
+        "detach from", "undock from", "disconnect from", "detach", "undock", "free anchor",
+        "free from anchor", "clear anchor",
     })
     if not attachIntent and not detachIntent then return nil end
 
@@ -1330,10 +1380,61 @@ function P.ParseHumanAnchorTarget(text, raw)
     }
 end
 
+function P.GroupScaleWordPlayerCountForText(text)
+    local norm = Normalize(text):gsub("%-", " ")
+    local counts = {
+        { "forty", 40 }, { "thirty", 30 }, { "twenty nine", 29 }, { "twenty eight", 28 },
+        { "twenty seven", 27 }, { "twenty six", 26 }, { "twenty five", 25 },
+        { "twenty four", 24 }, { "twenty three", 23 }, { "twenty two", 22 },
+        { "twenty one", 21 }, { "twenty", 20 }, { "nineteen", 19 }, { "eighteen", 18 },
+        { "seventeen", 17 }, { "sixteen", 16 }, { "fifteen", 15 }, { "fourteen", 14 },
+        { "thirteen", 13 }, { "twelve", 12 }, { "eleven", 11 }, { "ten", 10 },
+        { "nine", 9 }, { "eight", 8 }, { "seven", 7 }, { "six", 6 }, { "five", 5 },
+        { "four", 4 }, { "three", 3 }, { "two", 2 }, { "one", 1 },
+    }
+    local units = {
+        "players", "player", "raiders", "raider", "people", "person",
+        "raid members", "raid member", "members", "member",
+        "player group", "player raid", "man raid", "m raid", "man",
+    }
+    local haystack = " " .. norm .. " "
+    for i = 1, #counts do
+        local phrase, value = counts[i][1], counts[i][2]
+        for j = 1, #units do
+            if haystack:find(" " .. phrase .. " " .. units[j] .. " ", 1, true) then return value end
+        end
+    end
+    return nil
+end
+
+function P.GroupScaleWordValueForText(text)
+    local norm = Normalize(text):gsub("%-", " ")
+    local values = {
+        { "one hundred", 100 }, { "hundred", 100 }, { "ninety five", 95 }, { "ninety", 90 },
+        { "eighty five", 85 }, { "eighty", 80 }, { "seventy five", 75 }, { "seventy", 70 },
+        { "sixty five", 65 }, { "sixty", 60 }, { "fifty five", 55 }, { "fifty", 50 },
+    }
+    local haystack = " " .. norm .. " "
+    for i = 1, #values do
+        local phrase, value = values[i][1], values[i][2]
+        if haystack:find(" to " .. phrase .. " ", 1, true)
+            or haystack:find(" at " .. phrase .. " percent ", 1, true)
+            or haystack:find(" " .. phrase .. " percent ", 1, true)
+            or haystack:find(" " .. phrase .. " scale ", 1, true)
+            or haystack:find(" " .. phrase .. " scaling ", 1, true)
+        then
+            return value
+        end
+    end
+    return nil
+end
+
 function P.GroupScaleBreakpointAttrForText(text)
     if ContainsAny(text, {
         "over 25", "above 25", "more than 25", "over twenty five", "above twenty five",
         "25 plus", "25+", "25 or more", "26 plus", "26+", "26 or more", "large raid", "full raid",
+        "raid is full", "full group", "full party", "full size raid", "max raid", "maximum raid",
+        "when full", "at full", "is full", "full roster",
     }) then
         return "scaleOver25", 26
     end
@@ -1350,6 +1451,10 @@ function P.GroupScaleBreakpointAttrForText(text)
         or norm:match("when%s+there%s+is%s+(%d+)%s+person")
         or norm:match("when%s+there%s+is%s+(%d+)%s+raid%s+member")
         or norm:match("when%s+there%s+is%s+(%d+)%s+member")
+        or norm:match("when%s+we%s+are%s+(%d+)")
+        or norm:match("when%s+we%s+have%s+(%d+)")
+        or norm:match("when%s+our%s+group%s+is%s+(%d+)")
+        or norm:match("when%s+our%s+raid%s+is%s+(%d+)")
         or norm:match("when%s+(%d+)%s+players")
         or norm:match("when%s+(%d+)%s+player")
         or norm:match("when%s+(%d+)%s+raiders")
@@ -1370,8 +1475,15 @@ function P.GroupScaleBreakpointAttrForText(text)
         or norm:match("with%s+(%d+)%s+raid%s+member")
         or norm:match("with%s+(%d+)%s+members")
         or norm:match("with%s+(%d+)%s+member")
+        or norm:match("with%s+us%s+at%s+(%d+)")
+        or norm:match("with%s+the%s+group%s+at%s+(%d+)")
+        or norm:match("with%s+the%s+raid%s+at%s+(%d+)")
         or norm:match("with%s+a%s+(%d+)%s+player%s+group")
         or norm:match("with%s+(%d+)%s+player%s+group")
+        or norm:match("if%s+we%s+are%s+(%d+)")
+        or norm:match("if%s+we%s+have%s+(%d+)")
+        or norm:match("if%s+our%s+group%s+is%s+(%d+)")
+        or norm:match("if%s+our%s+raid%s+is%s+(%d+)")
         or norm:match("for%s+(%d+)%s+players")
         or norm:match("for%s+(%d+)%s+player")
         or norm:match("for%s+(%d+)%s+raiders")
@@ -1434,7 +1546,13 @@ function P.GroupScaleBreakpointAttrForText(text)
         or norm:match("scaling%s+at%s+(%d+)")
     number = tonumber(number)
     if number == nil then
-        if ContainsAny(text, { "1-10", "1 to 10", "one to ten", "small group" }) then return "scaleAt10", 10 end
+        number = P.GroupScaleWordPlayerCountForText(text)
+    end
+    if number == nil then
+        if ContainsAny(text, {
+            "1-10", "1 to 10", "one to ten", "small group", "small raid", "small party",
+            "dungeon group", "dungeon party", "five man", "five-man", "5 man", "5-man", "5m",
+        }) then return "scaleAt10", 10 end
         if ContainsAny(text, { "11-20", "11 to 20", "eleven to twenty" }) then return "scaleAt20", 20 end
         if ContainsAny(text, { "21-25", "21 to 25", "twenty one to twenty five" }) then return "scaleAt25", 25 end
         return nil
@@ -1455,6 +1573,14 @@ function P.GroupScaleValueForText(text, playerCount)
         or norm:match("(%d+%.?%d*)%s*%%?%s+scale")
         or norm:match("(%d+%.?%d*)%s*%%?%s+scaling")
     value = tonumber(value)
+    if value ~= nil then return value end
+    if ContainsAny(text, {
+        "normal size", "normal scale", "normal scaling", "default scale", "default scaling",
+        "full size", "regular size", "regular scale", "back to 100", "back to normal",
+    }) then
+        return 100
+    end
+    value = P.GroupScaleWordValueForText(text)
     if value ~= nil then return value end
     if P.GroupScaleRelativeDeltaForText and P.GroupScaleRelativeDeltaForText(text) ~= nil then return nil end
     local fallback
@@ -1525,6 +1651,13 @@ function P.ParseGroupScaleBreakpointShortcut(text)
         "scale", "scaling", "frame scale", "raid scale", "party scale", "mythic raid scale",
         "players", "raider", "raiders", "people", "persons", "members",
         "raid member", "raid members", "player count", "raid size",
+        "when we are", "when we have", "when our group is", "when our raid is",
+        "if we are", "if we have", "if our group is", "if our raid is",
+        "with us at", "with the group at", "with the raid at",
+        "full raid", "large raid", "big raid", "max raid", "maximum raid",
+        "raid is full", "full group", "full size raid", "when full", "at full", "full roster",
+        "small raid", "small group", "small party", "dungeon group", "dungeon party",
+        "five man", "5 man", "5m",
     }) then
         return nil
     end
@@ -1559,6 +1692,130 @@ function P.ParseGroupScaleBreakpointShortcut(text)
         bulkSafe = #changes > 1,
         compoundComplete = true,
         summary = "Maps player-count wording to the Group Layout scaling breakpoint sliders.",
+    }
+end
+
+function P.GroupGrowthDirectionForText(text)
+    if ContainsAny(text, { "right then down", "right and down", "right first", "grow right", "to the right", "horizontal", "horizontally", "rechts" }) then
+        return "RIGHT"
+    end
+    if ContainsAny(text, { "left then down", "left and down", "left first", "grow left", "to the left", "links" }) then
+        return "LEFT"
+    end
+    if ContainsAny(text, { "down then right", "down and right", "down first", "grow down", "downwards", "vertical", "vertically", "runter", "unten" }) then
+        return "DOWN"
+    end
+    if ContainsAny(text, { "up then right", "up and right", "up first", "grow up", "upwards", "hoch", "oben" }) then
+        return "UP"
+    end
+    return nil
+end
+
+function P.ParseGroupGrowthDirectionShortcut(text)
+    if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
+    if not ContainsAny(text, { "grow", "growth", "growth direction", "fill direction", "layout direction" }) then return nil end
+    local groups = DetectGroups(text)
+    if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
+    if #groups == 0 then return nil end
+    local value = P.GroupGrowthDirectionForText(text)
+    if not value then return nil end
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. ".growth")
+        if setting then changes[#changes + 1] = { setting = setting, value = value } end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Set group frame growth direction",
+        bulkSafe = #changes > 1,
+        summary = "Maps natural group-frame growth wording to the registered Growth Direction control.",
+    }
+end
+
+function P.GroupPowerBarSizeDelta(text, direction)
+    local amount = FirstNumber(text)
+    if not amount then
+        if ContainsAny(text, { "a lot", "much", "massive", "huge", "large amount", "stark" }) then
+            amount = 3
+        else
+            amount = 1
+        end
+    end
+    amount = tonumber(amount) or 0
+    if direction == "decrease" then amount = -amount end
+    return amount
+end
+
+function P.ParseGroupPowerBarSizeShortcut(text)
+    if not ContainsAny(text, { "power bar", "mana bar", "power balken", "mana balken" }) then return nil end
+    if ContainsAny(text, {
+        "power text", "mana text", "power value", "mana value", "power number", "mana number",
+        "power label", "mana label", "border", "outline", "aura", "auras", "buff", "debuff",
+        "class power", "class resource", "castbar", "cast bar",
+    }) then
+        return nil
+    end
+    local groups = DetectGroups(text)
+    if #groups == 0 then groups = GroupScopesOrCurrentPage(text) end
+    if #groups == 0 then return nil end
+
+    local direction
+    local widthIntent
+    if ContainsAny(text, { "wider", "wide", "increase width", "more width", "breiter" }) then
+        widthIntent = true
+        direction = "increase"
+    elseif ContainsAny(text, { "narrower", "decrease width", "less width", "schmaler" }) then
+        widthIntent = true
+        direction = "decrease"
+    elseif ContainsAny(text, {
+        "taller", "higher", "thicker", "increase height", "more height", "bigger", "larger",
+        "increase size", "make bigger", "make larger", "hoeher", "dicker",
+    }) then
+        direction = "increase"
+    elseif ContainsAny(text, {
+        "shorter", "lower", "thinner", "decrease height", "less height", "smaller", "shrink",
+        "reduce size", "make smaller", "niedriger", "duenner",
+    }) then
+        direction = "decrease"
+    end
+
+    if widthIntent then
+        local label = groups[1] == "mythicraid" and "Mythic Raid" or ((P.FrameResizeGroupLabel and P.FrameResizeGroupLabel(groups[1])) or tostring(groups[1] or "Group"))
+        return {
+            kind = "answer",
+            status = "info",
+            text = tostring(label) .. " Power Bar width follows the group frame width. To make the Power Bar wider, resize the " .. tostring(label):lower() .. " frame width. To change only the Power Bar thickness, say 'set " .. tostring(label):lower() .. " power bar height to 5'.",
+            summary = "Explains why group Power Bars do not have a separate width control.",
+        }
+    end
+
+    local value
+    if ContainsAny(text, { "height", "hoehe" }) then
+        value = P.PowerBarSizeExactValue and P.PowerBarSizeExactValue(text, "height") or nil
+    end
+    if not direction and value == nil then return nil end
+
+    local changes = {}
+    for i = 1, #groups do
+        local setting = Registry and Registry:GetSetting("gf_" .. tostring(groups[i]) .. ".powerHeight")
+        if setting then
+            changes[#changes + 1] = {
+                setting = setting,
+                value = value,
+                relativeDelta = value == nil and P.GroupPowerBarSizeDelta(text, direction) or nil,
+                direction = direction,
+            }
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Resize group Power Bar",
+        bulkSafe = #changes > 1,
+        summary = "Maps natural group Power Bar size wording to the registered Group Power Bar Height control.",
     }
 end
 
@@ -1836,6 +2093,192 @@ function P.ParseFrameResizeShortcut(text)
     }
 end
 
+P.POWER_BAR_SIZE_TERMS = {
+    "power bar", "mana bar", "power balken", "mana balken",
+}
+
+P.POWER_BAR_SIZE_TEXT_BLOCKERS = {
+    "power text", "mana text", "energy text", "resource text", "power value", "mana value",
+    "power number", "mana number", "power label", "mana label",
+}
+
+P.POWER_BAR_SIZE_DETAIL_BLOCKERS = {
+    "border", "outline", "power border", "mana border", "aura", "auras", "buff", "debuff",
+    "castbar", "cast bar", "class power", "class resource", "class resources",
+}
+
+P.POWER_BAR_WIDTH_INCREASE_TERMS = {
+    "wider", "wide", "make wider", "increase width", "raise width", "larger width",
+    "more width", "breiter",
+}
+
+P.POWER_BAR_WIDTH_DECREASE_TERMS = {
+    "narrower", "make narrower", "decrease width", "reduce width", "smaller width",
+    "less width", "schmaler",
+}
+
+P.POWER_BAR_HEIGHT_INCREASE_TERMS = {
+    "taller", "higher", "thicker", "fatter", "make taller", "make thicker", "increase height",
+    "raise height", "larger height", "more height", "hoeher", "dicker",
+}
+
+P.POWER_BAR_HEIGHT_DECREASE_TERMS = {
+    "shorter", "lower", "thinner", "make shorter", "make thinner", "decrease height",
+    "reduce height", "smaller height", "less height", "niedriger", "duenner",
+}
+
+P.POWER_BAR_SIZE_INCREASE_TERMS = {
+    "bigger", "larger", "increase size", "make bigger", "make larger", "grow",
+}
+
+P.POWER_BAR_SIZE_DECREASE_TERMS = {
+    "smaller", "decrease size", "reduce size", "make smaller", "shrink",
+}
+
+function P.PowerBarSizeDirection(text)
+    if ContainsAny(text, P.POWER_BAR_WIDTH_INCREASE_TERMS) then return "increase", "width" end
+    if ContainsAny(text, P.POWER_BAR_WIDTH_DECREASE_TERMS) then return "decrease", "width" end
+    if ContainsAny(text, P.POWER_BAR_HEIGHT_INCREASE_TERMS) then return "increase", "height" end
+    if ContainsAny(text, P.POWER_BAR_HEIGHT_DECREASE_TERMS) then return "decrease", "height" end
+    if ContainsAny(text, P.POWER_BAR_SIZE_INCREASE_TERMS) then return "increase", "auto" end
+    if ContainsAny(text, P.POWER_BAR_SIZE_DECREASE_TERMS) then return "decrease", "auto" end
+    return nil, nil
+end
+
+function P.PowerBarSizeExactValue(text, dimension)
+    local number = FirstNumber(text)
+    if number == nil then return nil end
+    if HasPhrase(text, "by") then return nil end
+    if HasPhrase(text, "to") or tostring(text or ""):find("=", 1, true) then return number end
+    if dimension == "height" and ContainsAny(text, { "height", "power height", "mana height", "hoehe" }) then return number end
+    if dimension == "width" and ContainsAny(text, { "width", "power width", "mana width", "breite" }) then return number end
+    return nil
+end
+
+function P.PowerBarSizeDelta(text, dimension, direction, detached)
+    if dimension == "height" and not detached then
+        local amount = FirstNumber(text)
+        if not amount then
+            local subtle = ContainsAny(text, { "a bit", "bit", "little", "slightly", "small amount" })
+            local large = ContainsAny(text, { "a lot", "lot", "much", "massive", "huge", "big amount" })
+            amount = large and 5 or (subtle and 1 or 1)
+        end
+        amount = tonumber(amount) or 0
+        if direction == "decrease" then amount = -amount end
+        return amount
+    end
+    return P.FrameResizeDelta and P.FrameResizeDelta(text, dimension, direction) or (direction == "decrease" and -1 or 1)
+end
+
+function P.PowerBarSizeUnits(text)
+    local units = DetectUnits(text)
+    if #units > 0 then return units end
+    if ContainsAny(text, { "all", "all unitframes", "all unit frames", "every", "each", "alle" }) then
+        local allUnits = {}
+        for i = 1, #ALL_UNITFRAMES do allUnits[#allUnits + 1] = ALL_UNITFRAMES[i] end
+        return allUnits
+    end
+    local pageUnit = CurrentPageUnit()
+    if pageUnit then return { pageUnit } end
+    return {}
+end
+
+function P.ParsePowerBarSizeShortcut(text)
+    if not ContainsAny(text, P.POWER_BAR_SIZE_TERMS) then return nil end
+    if #DetectGroups(text) > 0 then return nil end
+    if ContainsAny(text, P.POWER_BAR_SIZE_TEXT_BLOCKERS) then return nil end
+    if ContainsAny(text, P.POWER_BAR_SIZE_DETAIL_BLOCKERS) then return nil end
+
+    local direction, dimension = P.PowerBarSizeDirection(text)
+    if not direction then
+        if ContainsAny(text, { "height", "power height", "mana height", "hoehe" }) then
+            dimension = "height"
+        elseif ContainsAny(text, { "width", "power width", "mana width", "breite" }) then
+            dimension = "width"
+        else
+            return nil
+        end
+        if ContainsAny(text, { "increase", "raise", "more", "grow", "hoeher", "groesser" }) then
+            direction = "increase"
+        elseif ContainsAny(text, { "decrease", "reduce", "lower", "less", "shrink", "niedriger", "kleiner" }) then
+            direction = "decrease"
+        end
+    end
+    if not direction and P.PowerBarSizeExactValue(text, dimension) == nil then return nil end
+
+    local explicitUnits = DetectUnits(text)
+    local allUnitPowerBars = ContainsAny(text, { "all", "all unitframes", "all unit frames", "every", "each", "alle" })
+    if #explicitUnits == 0 and not allUnitPowerBars and not CurrentPageUnit() then return nil end
+
+    local units = P.PowerBarSizeUnits(text)
+    if #units == 0 then
+        return {
+            kind = "unknown",
+            status = "failed",
+            text = "Which unit Power Bar should I resize? Try 'make player power bar taller' or 'set target power bar height to 8'.",
+            summary = "Asks for the missing unit before changing a Power Bar size control.",
+        }
+    end
+
+    local explicitDetached = ContainsAny(text, { "detached", "undocked", "separate", "separated", "abgekoppelt" })
+    local changes = {}
+    local skippedAttachedWidth = {}
+
+    for i = 1, #units do
+        local unit = tostring(units[i])
+        local detached = explicitDetached or (P.UnitPowerBarIsDetached and P.UnitPowerBarIsDetached(unit))
+        local effectiveDimension = dimension == "auto" and (detached and "both" or "height") or dimension
+        if effectiveDimension == "width" and not detached then
+            skippedAttachedWidth[#skippedAttachedWidth + 1] = unit
+        else
+            if detached and (effectiveDimension == "width" or effectiveDimension == "both") then
+                local setting = Registry and Registry:GetSetting(unit .. ".detachedPowerBarWidth")
+                if setting then
+                    local value = P.PowerBarSizeExactValue(text, "width")
+                    changes[#changes + 1] = {
+                        setting = setting,
+                        value = value,
+                        relativeDelta = value == nil and P.PowerBarSizeDelta(text, "width", direction, detached) or nil,
+                        direction = direction,
+                    }
+                end
+            end
+            if effectiveDimension == "height" or effectiveDimension == "both" then
+                local attr = detached and "detachedPowerBarHeight" or "powerBarHeight"
+                local setting = Registry and Registry:GetSetting(unit .. "." .. attr)
+                if setting then
+                    local value = P.PowerBarSizeExactValue(text, "height")
+                    changes[#changes + 1] = {
+                        setting = setting,
+                        value = value,
+                        relativeDelta = value == nil and P.PowerBarSizeDelta(text, "height", direction, detached) or nil,
+                        direction = direction,
+                    }
+                end
+            end
+        end
+    end
+
+    if #changes == 0 and #skippedAttachedWidth > 0 then
+        local labels = A.UnitLabels or {}
+        local unitLabel = labels[skippedAttachedWidth[1]] or skippedAttachedWidth[1] or "that unit"
+        return {
+            kind = "answer",
+            status = "info",
+            text = tostring(unitLabel) .. " Power Bar width follows the unitframe while it is attached. To make the bar wider, resize the " .. tostring(unitLabel):lower() .. " frame width, or detach the Power Bar and then resize the detached Power Bar width.",
+            summary = "Explains why attached unit Power Bars do not have a separate width control.",
+        }
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Resize Power Bar",
+        bulkSafe = #changes > 1,
+        summary = "Maps natural Power Bar size wording to the registered Power Bar height or detached Power Bar size controls.",
+    }
+end
+
 P.TEXT_VISIBILITY_VALUE_TERMS = {
     "current", "actual", "max", "maximum", "percent", "percentage", "pct", "%",
     "current max", "current maximum", "current percent", "current percentage",
@@ -1861,6 +2304,7 @@ P.TEXT_VISIBILITY_VERBS = {
 }
 
 function P.ParseTextVisibilityShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if ContainsAny(text, { "castbar", "cast bar", "aura", "auras", "buff", "debuff", "class power", "class resource", "class resources" }) then return nil end
     if ContainsAny(text, { "power bar", "powerbar", "mana bar", "mana balken", "power balken" }) then return nil end
     if ContainsAny(text, {
@@ -2551,6 +2995,7 @@ function A._ParseGroupOpacityShortcut(text)
 end
 
 function A._ParseGroupRangeFadeShortcut(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     if ContainsAny(text, { "aura", "auras", "buff", "debuff", "castbar", "cast bar" }) then return nil end
     if ContainsAny(text, { "affects", "layer", "mode", "health only", "current health only" }) then return nil end
     if ContainsAny(text, { "keep", "visible", "text visible", "names visible" }) then return nil end

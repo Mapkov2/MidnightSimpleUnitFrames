@@ -245,6 +245,11 @@ local function AddIndexItem(index, item)
     item.haystack = Normalize(table.concat(textParts, " "))
     item.keyNorm = Normalize(item.key)
     item.labelNorm = Normalize(item.label)
+    item.aliasNorms = {}
+    for i = 1, #item.aliases do
+        local aliasNorm = Normalize(item.aliases[i])
+        if aliasNorm ~= "" then item.aliasNorms[#item.aliasNorms + 1] = aliasNorm end
+    end
     item.tokens = SplitTokens(item.haystack)
     index.items[#index.items + 1] = item
 end
@@ -470,8 +475,23 @@ local function TokenScore(item, queryTokens, queryNorm, intent, pageKey, exactQu
     local exactNorm = exactQueryNorm or queryNorm
     if keyNorm ~= "" and keyNorm == exactNorm then score = score + 1800; matched = true end
     if labelNorm == queryNorm then score = score + 600; matched = true end
+    if exactNorm ~= queryNorm and labelNorm == exactNorm then score = score + 600; matched = true end
     if labelNorm:find(queryNorm, 1, true) then score = score + 280; matched = true end
+    if exactNorm ~= queryNorm and labelNorm:find(exactNorm, 1, true) then score = score + 280; matched = true end
+    for i = 1, #(item.aliasNorms or {}) do
+        local aliasNorm = item.aliasNorms[i]
+        if aliasNorm == queryNorm or aliasNorm == exactNorm then
+            score = score + 760
+            matched = true
+            break
+        elseif aliasNorm:find(queryNorm, 1, true) or (exactNorm ~= queryNorm and aliasNorm:find(exactNorm, 1, true)) then
+            score = score + 320
+            matched = true
+            break
+        end
+    end
     if item.haystack:find(queryNorm, 1, true) then score = score + 180; matched = true end
+    if exactNorm ~= queryNorm and item.haystack:find(exactNorm, 1, true) then score = score + 180; matched = true end
     for i = 1, #queryTokens do
         local token = queryTokens[i]
         if item.haystack:find(token, 1, true) then
@@ -625,7 +645,7 @@ local PAGE_HELP = {
     auras3_buffs = { title = "Aura Buffs help", lines = { "Buff style controls are intentionally disabled in the Assistant until the Aura backend is cleared." }, actions = {} },
     auras3_debuffs = { title = "Aura Debuffs help", lines = { "Debuff style controls are intentionally disabled in the Assistant until the Aura backend is cleared." }, actions = {} },
     auras3_filters = { title = "Aura Filters help", lines = { "Aura filter controls are intentionally disabled in the Assistant until the Aura backend is cleared." }, actions = {} },
-    gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, scaling breakpoints, party/raid/mythic raid controls, and visibility settings.", "Examples: 'set raid scale for 20 players to 80', 'move raid frame closer to player', or 'set party growth direction to down'." }, actions = { "Open Group Layout" } },
+    gf_layout = { title = "Group Layout help", lines = { "You can change group frame layout, spacing, growth, anchoring, reverse health fill, scaling breakpoints, party/raid/mythic raid controls, and visibility settings.", "Examples: 'set raid scale for 20 players to 80', 'make raid frames fill backwards', 'move raid frame closer to player', or 'set party growth direction to down'." }, actions = { "Open Group Layout" } },
     gf_bars = { title = "Group Health & Text help", lines = { "You can change group health/text controls, text slots/selectors, bar sizes, colors, and layout-related settings where registered." }, actions = { "Open Group Health & Text" } },
     gf_indicators = { title = "Group Indicators help", lines = { "You can change group status indicators, role/ready/summon icons, corner indicators, and related editor selectors where registered." }, actions = { "Open Group Indicators" } },
     classpower = { title = "Class Resources help", lines = { "You can change class resource mode, size, position, colors, and gameplay-specific class resource controls where registered." }, actions = { "Open Class Resources" } },
@@ -891,7 +911,9 @@ local GROUP_HEALTH_TEXT_HELP_TERMS = {
 local GROUP_INDICATOR_HELP_TERMS = {
     "indicator", "indicators", "status icon", "status icons", "spell indicator", "spell indicators",
     "corner indicator", "corner indicators", "ready check", "role icon", "leader icon", "assist icon",
-    "raid marker", "resurrection", "resurrect", "incoming res", "summon", "threat", "aggro", "dispel",
+    "leader", "assist", "raid marker", "target marker", "resurrection", "resurrection icon", "resurrect",
+    "resurrect icon", "incoming res", "incoming resurrection", "rez icon", "summon", "summon icon",
+    "phase icon", "phasing icon", "pvp icon", "pvp flag", "war mode", "threat", "aggro", "dispel",
 }
 
 local UNIT_FRAME_SCOPE_TERMS = {
@@ -936,7 +958,7 @@ local function DirectHelpAnswer(query, opts)
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Group Indicators help\nGroup frame indicators live on Group Frames > Indicators. You can change ready-check, role, leader/assist, raid-marker, incoming-res, summon, threat/aggro, dispel, spell, and corner indicators where registered.\nExamples: show raid ready check icon; move raid role icon left; set party ready check size to 18; open group indicators.\nActions: Open Group Indicators",
+            text = "Group Indicators help\nGroup frame indicators live on Group Frames > Indicators. You can change ready-check, role, leader/assist, raid-marker, summon, resurrection, phase, PvP/War Mode, threat/aggro, dispel, spell, and corner indicators where registered.\nExamples: show raid ready check icon; hide raid summon icon; move raid phase icon right; set party ready check size to 18; open group indicators.\nActions: Open Group Indicators",
             status = "applied",
             summary = "Assistant group indicators help",
         }
@@ -993,11 +1015,11 @@ local function DirectHelpAnswer(query, opts)
         }
     end
     if ContainsAny(norm, CLASS_RESOURCE_HELP_TERMS)
-        and ContainsAny(norm, { "width", "height", "size", "wider", "taller", "gap", "spacing", "color", "colors", "anchor", "position", "placement", "style", "mode" })
+        and ContainsAny(norm, { "width", "height", "size", "wider", "taller", "gap", "spacing", "color", "colors", "anchor", "position", "placement", "style", "mode", "fill", "reverse", "direction", "backwards" })
         and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Class Resources help\nClass Resources controls cover visibility, size, width/height, gap, placement, anchor, style, and token colors such as Combo Points where registered.\nExamples: make class resources wider; set combo point color to red; move class resources above player; open class resources.\nActions: Open Class Resources | Open Colors",
+            text = "Class Resources help\nClass Resources controls cover visibility, size, width/height, gap, placement, anchor, style, fill direction, and token colors such as Combo Points where registered.\nExamples: make class resources wider; make class resource fill backwards; make class resource fill normal direction; set combo point color to red; move class resources above player.\nActions: Open Class Resources | Open Colors",
             status = "applied",
             summary = "Assistant class resources help",
         }
@@ -1096,11 +1118,22 @@ local function DirectHelpAnswer(query, opts)
             summary = "Assistant focus kick help",
         }
     end
-    if ContainsAny(norm, { "castbar fill", "cast bar fill", "fill direction", "castbar direction", "cast bar direction", "left to right fill", "right to left fill", "opposite fill" })
-        and ContainsAny(norm, { "castbar", "cast bar", "fill", "direction", "left to right", "right to left", "opposite", "where", "explain", "what", "help" })
+    if ContainsAny(norm, GROUP_FRAME_SCOPE_TERMS)
+        and ContainsAny(norm, { "reverse fill", "reverse health fill", "fill backwards", "backwards fill", "right to left fill", "fill direction", "normal direction" })
+        and ContainsAny(norm, KNOWLEDGE_INTENT_TERMS)
     then
         return {
-            text = "Castbar fill direction help\nCastbar Fill Direction controls the shared direction for cast progress. Target can also use the opposite fill direction through its Target Opposite Direction option.\nExamples: make castbar fill left to right; make castbar fill right to left; make target castbar fill opposite.\nActions: Open Castbars",
+            text = "Group reverse fill help\nGroup Frame Reverse Health Fill lives on Group Layout for Party, Raid, and Mythic Raid. It flips health fill direction; normal direction turns Reverse Health Fill off.\nExamples: make raid frames fill backwards; make party frames fill normal direction; turn off raid reverse fill.\nActions: Open Group Layout",
+            status = "applied",
+            summary = "Assistant group reverse fill help",
+        }
+    end
+    if ContainsAny(norm, { "castbar fill", "cast bar fill", "fill direction", "castbar direction", "cast bar direction", "left to right fill", "right to left fill", "opposite fill", "reverse fill", "backwards fill", "normal direction" })
+        and ContainsAny(norm, { "castbar", "cast bar" })
+        and ContainsAny(norm, { "fill", "direction", "left to right", "right to left", "opposite", "reverse", "backwards", "normal", "where", "explain", "what", "help" })
+    then
+        return {
+            text = "Castbar fill direction help\nCastbar Fill Direction controls the shared direction for cast progress. Target can also use the opposite fill direction through its Target Opposite Direction option.\nExamples: make castbar fill left to right; make castbar fill backwards; make target castbar fill opposite; make target castbar use normal direction.\nActions: Open Castbars",
             status = "applied",
             summary = "Assistant castbar fill help",
         }

@@ -225,18 +225,83 @@ local function ShouldUseLastUnitContext(text)
     })
 end
 
+function A._FollowupValueLabelForAnswer(setting, value, explicitLabel)
+    if explicitLabel ~= nil then return tostring(explicitLabel) end
+    if value == nil then return "not set" end
+    if setting and setting.type == "boolean" then return value and "enabled" or "disabled" end
+    if setting and setting.type == "color" and type(value) == "table" then
+        local r = math.floor(((tonumber(value.r or value[1]) or 0) * 255) + 0.5)
+        local g = math.floor(((tonumber(value.g or value[2]) or 0) * 255) + 0.5)
+        local b = math.floor(((tonumber(value.b or value[3]) or 0) * 255) + 0.5)
+        if r < 0 then r = 0 elseif r > 255 then r = 255 end
+        if g < 0 then g = 0 elseif g > 255 then g = 255 end
+        if b < 0 then b = 0 elseif b > 255 then b = 255 end
+        return string.format("#%02X%02X%02X", r, g, b)
+    end
+    return tostring(value)
+end
+
+function A._FollowupChangeLineForAnswer(index, setting, previous)
+    if not setting then return nil end
+    local label = tostring(setting.label or setting.key or "MSUF setting")
+    local oldLabel = A._FollowupValueLabelForAnswer(setting, previous and previous.oldValue)
+    local newValue = previous and previous.value
+    if newValue == nil and type(setting.get) == "function" then newValue = setting.get() end
+    local newLabel = A._FollowupValueLabelForAnswer(setting, newValue, previous and previous.valueLabel)
+    local prefix = index and (tostring(index) .. ". ") or ""
+    return prefix .. label .. " from " .. oldLabel .. " to " .. newLabel .. "."
+end
+
 function A._ParseFollowupAnswer(text, ctx)
     if not ContainsAny(text, {
         "what did you change", "what changed", "what was changed", "what did you do",
-        "what did you set", "last change", "previous change", "what is it now",
+        "what did you just change", "what exactly did you change", "what did you set",
+        "last change", "last assistant change", "previous change", "what is it now",
         "what is it set to", "current value", "value now", "show last change",
+        "show me last change", "show me the last change",
+        "what did you copy", "what did you just copy", "what was copied", "last copy",
+        "show last copy", "show me last copy",
     }) then return nil end
     if not ctx then return nil end
 
     if type(ctx.lastChangeBundle) == "table" and #ctx.lastChangeBundle > 0 then
+        local bundle = ctx.lastChangeBundle
+        local lines = {}
+        if #bundle == 1 then
+            local previous = bundle[1]
+            local setting = previous and previous.key and Registry and Registry:GetSetting(previous.key) or nil
+            local line = A._FollowupChangeLineForAnswer(nil, setting, previous)
+            if line then
+                lines[#lines + 1] = "Last Assistant change: " .. line
+                lines[#lines + 1] = "You can type 'undo' to revert it."
+                return {
+                    kind = "answer",
+                    status = "info",
+                    text = table.concat(lines, "\n"),
+                    summary = "Reports the last Assistant setting change from context.",
+                }
+            end
+        elseif #bundle > 1 then
+            lines[#lines + 1] = "Last Assistant change touched " .. tostring(#bundle) .. " MSUF settings:"
+            local visible = math.min(#bundle, 5)
+            for i = 1, visible do
+                local previous = bundle[i]
+                local setting = previous and previous.key and Registry and Registry:GetSetting(previous.key) or nil
+                local line = A._FollowupChangeLineForAnswer(i, setting, previous)
+                if line then lines[#lines + 1] = line end
+            end
+            if #bundle > visible then lines[#lines + 1] = "And " .. tostring(#bundle - visible) .. " more." end
+            lines[#lines + 1] = "You can type 'undo' to revert it."
+            return {
+                kind = "answer",
+                status = "info",
+                text = table.concat(lines, "\n"),
+                summary = "Reports the last Assistant setting change from context.",
+            }
+        end
         local key = ctx.lastSetting
         if type(key) ~= "string" or key == "" then
-            local first = ctx.lastChangeBundle[1]
+            local first = bundle[1]
             key = first and first.key
         end
         local setting = key and Registry and Registry:GetSetting(key) or nil
@@ -360,7 +425,21 @@ function A._BuildColorTokenFollowup(text, ctx)
 end
 
 local function BuildFollowup(text, ctx)
-    if not (ctx and type(ctx.lastChangeBundle) == "table") then return nil end
+    if not ctx then return nil end
+    local copyActionFollowup = P.BuildCopyActionFollowup and P.BuildCopyActionFollowup(text, ctx)
+    if copyActionFollowup then return copyActionFollowup end
+    if ContainsAny(text, {
+        "what did you copy", "what was copied", "what did you just copy",
+        "last copy", "previous copy", "copy history", "show copy",
+    }) and ctx.lastAction ~= "copy_unit" and ctx.lastAction ~= "copy_group" then
+        return {
+            kind = "answer",
+            status = "info",
+            text = "No previous Assistant copy action is available yet.",
+            summary = "Reports missing copy action context.",
+        }
+    end
+    if type(ctx.lastChangeBundle) ~= "table" then return nil end
     local positiveTerms = {
         "bigger", "larger", "higher", "thicker", "wider", "taller", "increase", "raise", "up", "grow", "stronger",
         "brighter", "lighter", "more opaque", "more visible",
@@ -398,6 +477,9 @@ local function BuildFollowup(text, ctx)
     local replayTerms = {
         "too", "also", "as well", "same", "same for", "same on", "same to",
         "do the same", "do that", "do it", "apply that", "apply it", "copy that", "copy it",
+        "repeat that", "repeat it", "repeat that for", "repeat it for",
+        "apply that to", "apply it to", "do that for", "do it for",
+        "make same change", "make the same change", "make that same change",
         "auch", "auch fuer", "auch fur", "genauso", "genauso fuer", "genauso fur",
         "das auch", "mach das", "mach das gleiche", "das gleiche fuer", "das gleiche fur",
     }

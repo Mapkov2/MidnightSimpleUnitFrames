@@ -89,6 +89,14 @@ local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
 local ParseAuraBlacklist = P.ParseAuraBlacklist
 
 local COPY_VERBS = { "copy", "use", "kopiere", "kopieren", "uebernehme", "uebernehmen" }
+local COPY_LIKE_TERMS = {
+    "copy", "use", "kopiere", "kopieren", "uebernehme", "uebernehmen",
+    "look like", "looks like", "same as", "the same as", "match", "mirror", "clone",
+}
+
+local function HasCopyIntent(text)
+    return ContainsAny(text, COPY_LIKE_TERMS)
+end
 
 local function CopyCommandText(text)
     local normalized = Normalize(text)
@@ -139,6 +147,33 @@ local function CopyTextParts(text)
     return nil, nil
 end
 
+local function LookLikeCopyTextParts(text)
+    text = Normalize(text)
+    local dst, src = text:match("^make%s+(.+)%s+look%s+like%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^make%s+(.+)%s+look%s+the%s+same%s+as%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^make%s+(.+)%s+the%s+same%s+as%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^make%s+(.+)%s+match%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^make%s+(.+)%s+mirror%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^match%s+(.+)%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^mirror%s+(.+)%s+to%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^(.+)%s+look%s+like%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^(.+)%s+look%s+the%s+same%s+as%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^(.+)%s+match%s+(.+)$")
+    if src and dst then return src, dst end
+    dst, src = text:match("^(.+)%s+mirror%s+(.+)$")
+    if src and dst then return src, dst end
+    return nil, nil
+end
+
 local function RemoveUnit(out, unit)
     if not unit then return out end
     local filtered = {}
@@ -167,9 +202,12 @@ local function CopyGroupTargetsForText(text, source)
 end
 
 local function ParseGroupCopy(text)
-    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen" }) then return nil end
+    if not HasCopyIntent(text) then return nil end
     local source, targets
     local srcText, dstText = CopyTextParts(text)
+    if not (srcText and dstText) then
+        srcText, dstText = LookLikeCopyTextParts(text)
+    end
     if srcText and dstText then
         local srcGroups = DetectGroups(srcText)
         source = srcGroups[1]
@@ -217,8 +255,11 @@ local function ParseGroupCopy(text)
 end
 
 local function ParseUnsupportedMixedCopy(text)
-    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen" }) then return nil end
+    if not HasCopyIntent(text) then return nil end
     local srcText, dstText = CopyTextParts(text)
+    if not (srcText and dstText) then
+        srcText, dstText = LookLikeCopyTextParts(text)
+    end
     if not (srcText and dstText) then return nil end
 
     local srcUnits = DetectUnits(srcText)
@@ -245,9 +286,12 @@ local function ParseUnsupportedMixedCopy(text)
 end
 
 local function ParseCopy(text)
-    if not ContainsAny(text, { "copy", "use", "kopieren", "kopiere", "uebernehme", "uebernehmen" }) then return nil end
+    if not HasCopyIntent(text) then return nil end
     local source, targets
     local srcText, dstText = CopyTextParts(text)
+    if not (srcText and dstText) then
+        srcText, dstText = LookLikeCopyTextParts(text)
+    end
     if srcText and dstText then
         local srcUnits = DetectUnits(srcText)
         source = srcUnits[1]
@@ -652,6 +696,7 @@ local function RaidMarkerSymbolAnswer()
 end
 
 local function ParseGroupStatusIconDetail(text)
+    if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text) then return nil end
     local hasGroupStatus = ContainsAny(text, GROUP_STATUS_ICON_TERMS)
     if not hasGroupStatus and not ContainsAny(text, GROUP_STATUS_MIDNIGHT_STYLE_TERMS) then return nil end
 
@@ -1150,6 +1195,14 @@ local function ParseCustomAnchorWorkflow(text)
                 summary = "Starts the shared custom anchor picker overlay for a group frame.",
             } or nil
         end
+        if ContainsAny(text, { "where", "where is", "where are", "how", "help", "settings", "setting" }) then
+            return {
+                kind = "answer",
+                status = "info",
+                text = "The custom anchor picker needs a concrete MSUF frame or the current Unit/Group page. Try: open player custom anchor picker, open target custom anchor picker, open raid custom anchor picker, or set target custom anchor to cooldownmanager.",
+                summary = "Explains how to start the custom anchor picker without guessing a frame.",
+            }
+        end
         return nil
     end
     local action = Registry and Registry:GetAction("start_unit_custom_anchor_picker")
@@ -1182,6 +1235,10 @@ end
 local function RawCustomAnchorFrameName(raw)
     raw = tostring(raw or "")
     local lower = raw:lower()
+    local asStart = lower:find("%s+as%s+", 5)
+    if lower:find("^use%s+") and asStart and lower:sub(asStart):find("custom%s+anchor") then
+        return CleanCustomAnchorFrameName(raw:sub(5, asStart - 1))
+    end
     local connectors = { " to ", " as ", " named ", " called ", " frame ", " name " }
     local bestEnd
     for i = 1, #connectors do
@@ -1200,7 +1257,7 @@ end
 local function ParseCustomAnchorSet(text, raw)
     if not ContainsAny(text, { "custom anchor", "custom anchor frame", "anchor frame name" }) then return nil end
     if not ContainsAny(text, { "set", "change", "use", "assign", "write", "apply" }) then return nil end
-    local frameName = RawCustomAnchorFrameName(raw)
+    local frameName = (P.CooldownManagerAnchorValueForText and P.CooldownManagerAnchorValueForText(text)) or RawCustomAnchorFrameName(raw)
     if frameName == nil then return nil end
 
     local groups = DetectGroups(text)
@@ -1384,7 +1441,12 @@ end
 
 local function DashboardPanelForText(text)
     if ContainsAny(text, { "recovery tools", "display recovery", "recover menu", "reset tools", "dashboard recovery", "recovery panel", "recovery section", "display panel" }) then return "recovery", "recovery tools" end
-    if ContainsAny(text, { "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "scaling panel", "scale panel", "scale section", "scaling section", "ui scaling panel", "ui scaling section" }) then return "scaling", "scaling tools" end
+    if ContainsAny(text, {
+        "scaling tools", "dashboard scaling", "scale tools", "ui scale tools", "scaling panel", "scale panel",
+        "scale section", "scaling section", "ui scaling panel", "ui scaling section", "menu scale", "menu scaling",
+        "menu bigger", "menu smaller", "make menu bigger", "make menu smaller", "options scale", "options scaling",
+        "ui scale", "ui scaling", "msuf frame scale", "msuf frames scale",
+    }) then return "scaling", "scaling tools" end
     if ContainsAny(text, { "changelog", "change log", "release notes", "latest changes", "build notes", "changelog panel" }) then return "changelog", "changelog" end
     return nil, nil
 end
@@ -1392,6 +1454,7 @@ end
 local function ParseDashboardPanelAction(text)
     local panel, label = DashboardPanelForText(text)
     local explicit = ContainsAny(text, { "open", "show", "close", "hide", "collapse", "expand", "toggle" })
+        or (panel ~= nil and P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(text))
     if not explicit then return nil end
     if not panel and ContainsAny(text, { "dashboard panel", "dashboard panels" }) then
         local open
@@ -1529,6 +1592,7 @@ function A._ParseMenuHistoryAction(text)
     if not ContainsAny(text, {
         "menu history", "menu change", "menu changes", "menu session", "session changes",
         "msuf2 menu changes", "ui change", "ui changes", "navrail history",
+        "assistant change", "assistant changes", "assistant session", "assistant edits",
     }) then return nil end
     local actionKey
     local label

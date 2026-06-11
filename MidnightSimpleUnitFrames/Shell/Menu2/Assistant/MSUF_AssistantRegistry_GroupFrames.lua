@@ -553,6 +553,12 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "reverse fill", "fuellung umkehren")
     AddAliasesForUnit(aliases, scope, "reverse health fill", "leben umkehren")
+    AddAliasesForUnit(aliases, scope, "fill backwards")
+    AddAliasesForUnit(aliases, scope, "backwards fill")
+    AddAliasesForUnit(aliases, scope, "right to left fill")
+    AddAliasesForUnit(aliases, scope, "fill right to left")
+    AddAliasesForUnit(aliases, scope, "normal fill")
+    AddAliasesForUnit(aliases, scope, "left to right fill")
     RegisterGroupBoolean(scope, "reverseFill", "reverseFill", "Reverse Health Fill", false, "visual", aliases)
 
     aliases = {}
