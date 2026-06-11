@@ -596,17 +596,18 @@ local function GFAuraLaneShown(scope, lane)
     lane = lane == "debuff" and "debuff" or "buff"
     local root = GFAurasRoot(scope)
     local nativeKey = lane == "buff" and "buffs" or "debuffs"
-    if type(root.blizzardTypes) == "table" and root.blizzardTypes[nativeKey] == true then return true end
     local group = GFAuraGroup(scope, lane)
-    return root.enabled ~= false and group.enabled ~= false
+    local blizzardOwns = (root.renderer or "BLIZZARD") ~= "CUSTOM"
+        and (type(root.blizzardTypes) ~= "table" or root.blizzardTypes[nativeKey] ~= false)
+    return root.enabled ~= false and group.enabled ~= false and blizzardOwns ~= true
 end
 
 local function SetGFAuraLaneShown(scope, lane, shown)
     lane = lane == "debuff" and "debuff" or "buff"
     shown = shown and true or false
     local root = GFAurasRoot(scope)
-    root.enabled = shown and true or root.enabled
-    root.blizzardTypes[lane == "buff" and "buffs" or "debuffs"] = shown
+    root.enabled = true
+    root.blizzardTypes[lane == "buff" and "buffs" or "debuffs"] = false
     GFAuraGroup(scope, lane).enabled = shown
 end
 
