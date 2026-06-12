@@ -67,29 +67,32 @@ local function RegionShown(region)
 end
 
 local function RefreshCachedPowerType(frame, unit)
+    local cacheUnit = unit
     if not UnitPowerType then
         frame._msufTextPowerType = nil
         frame._msufTextPowerToken = nil
         frame._msufTextPowerTypeKnown = true
-        frame._msufTextPowerTypeUnit = unit
+        frame._msufTextPowerTypeUnit = cacheUnit
         return false
     end
     local powerType, powerToken = UnitPowerType(unit)
     if issecretvalue(powerType) == true then powerType = nil end
     if issecretvalue(powerToken) == true then powerToken = nil end
+    local oldUnit = frame._msufTextPowerTypeUnit
+    local sameUnit = cacheUnit ~= nil and oldUnit == cacheUnit
     if powerType == nil
         and powerToken == nil
         and frame._msufTextPowerTypeKnown == true
-        and frame._msufTextPowerTypeUnit == unit then
+        and sameUnit then
         return false
     end
     local changed = powerType ~= frame._msufTextPowerType
         or powerToken ~= frame._msufTextPowerToken
-        or frame._msufTextPowerTypeUnit ~= unit
+        or not sameUnit
     frame._msufTextPowerType = powerType
     frame._msufTextPowerToken = powerToken
     frame._msufTextPowerTypeKnown = true
-    frame._msufTextPowerTypeUnit = unit
+    frame._msufTextPowerTypeUnit = cacheUnit
     return changed
 end
 
@@ -97,8 +100,10 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
     local powerType
     if frame._msufTextPowerNeedsType == true then
         powerType = frame._msufTextPowerType
+        local typeUnit = frame._msufTextPowerTypeUnit
+        local typeUnitMatches = typeUnit == unit
         if frame._msufTextPowerTypeKnown ~= true
-            or frame._msufTextPowerTypeUnit ~= unit
+            or not typeUnitMatches
             or (not powerTick
                 and (event == "UNIT_DISPLAYPOWER"
                     or event == "UNIT_POWER_BAR_SHOW"
@@ -121,8 +126,12 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
 
     local maxPower = frame._msufTextPowerMax
     if needMax ~= false then
+        local cacheUnit = unit
+        local maxUnit = frame._msufTextPowerMaxUnit
+        local maxUnitMatches = cacheUnit ~= nil
+            and maxUnit == cacheUnit
         if maxPower == nil
-            or frame._msufTextPowerMaxUnit ~= unit
+            or not maxUnitMatches
             or (not powerTick
                 and (event == "UNIT_MAXPOWER"
                     or event == "UNIT_DISPLAYPOWER"
@@ -137,7 +146,7 @@ local function ReadPowerValuesPlain(frame, unit, event, needPower, needMax, powe
             end
             if issecretvalue(maxPower) ~= true and maxPower == nil then maxPower = 1 end
             frame._msufTextPowerMax = maxPower
-            frame._msufTextPowerMaxUnit = unit
+            frame._msufTextPowerMaxUnit = cacheUnit
         end
     else
         maxPower = nil
@@ -152,9 +161,14 @@ local function ReadHealthValuesCached(frame, unit)
     if not bar then
         return nil, nil
     end
-    local hp = bar._msufHealthValueUnit == unit and bar._msufHealthValue or nil
+    local cacheUnit = unit
+    local hpUnit = bar._msufHealthValueUnit
+    local maxUnit = bar._msufHealthMaxUnit
+    local hp = cacheUnit ~= nil and hpUnit == cacheUnit and bar._msufHealthValue or nil
     local hpMax
-    if bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
+    if bar._msufHealthMaxReady == true
+        and cacheUnit ~= nil
+        and maxUnit == cacheUnit then
         hpMax = bar._msufHealthMax
     end
     return hp, hpMax
@@ -616,7 +630,9 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     -- the throttled value path re-resolve for the new unit instead of sticking.
     local identityChanged = not animate
         and (event == "MSUF_UNIT_IDENTITY"
+            or event == "MSUF_UNIT_IDENTITY_FAST"
             or event == "MSUF_UNIT_IDENTITY_SOFT"
+            or event == "MSUF_UNIT_IDENTITY_SOFT_FAST"
             or event == "MSUF_GF_UNIT_IDENTITY")
     if identityChanged then
         frame._msufTextPowerType = nil
@@ -632,10 +648,15 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     if rt.powerColorByType == true
         and animate
         and rt.powerRefreshTypeOnTick == true
-        and (frame._msufTextPowerTypeKnown ~= true or frame._msufTextPowerTypeUnit ~= unit)
     then
-        RefreshCachedPowerType(frame, unit)
+        local typeUnit = frame._msufTextPowerTypeUnit
+        local typeUnitMatches = typeUnit == unit
+        if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
+            RefreshCachedPowerType(frame, unit)
+        end
     end
+    local typeUnit = frame._msufTextPowerTypeUnit
+    local typeUnitMatches = typeUnit == unit
     local powerTextColorEvent = not animate
         and (event == "UNIT_DISPLAYPOWER"
             or event == "MSUF_APPLY"
@@ -645,20 +666,21 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
     if rt.powerColorByType == true
         and (powerTextColorEvent
             or frame._msufPowerTextColorInitialized ~= true
-            or frame._msufTextPowerTypeUnit ~= unit
+            or not typeUnitMatches
             or frame._msufPowerTextColorType ~= frame._msufTextPowerType
             or frame._msufPowerTextColorToken ~= frame._msufTextPowerToken) then
-        if frame._msufTextPowerTypeKnown ~= true or frame._msufTextPowerTypeUnit ~= unit then
+        if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
             RefreshCachedPowerType(frame, unit)
+            typeUnit = frame._msufTextPowerTypeUnit
+            typeUnitMatches = typeUnit == unit
         end
-        local metaKnown = frame._msufTextPowerTypeKnown == true and frame._msufTextPowerTypeUnit == unit
+        local metaKnown = frame._msufTextPowerTypeKnown == true and typeUnitMatches
         local r, g, b = PowerColor(
             frame, unit,
             frame._msufTextPowerType, frame._msufTextPowerToken,
             metaKnown
         )
-        local c = frame.MSUFSpec and frame.MSUFSpec.textColor
-        SetPowerTextColor(frame, r, g, b, c and c.a or 1)
+        SetPowerTextColor(frame, r, g, b, rt.textColorA or 1)
         frame._msufPowerTextColorInitialized = true
         frame._msufPowerTextColorType = frame._msufTextPowerType
         frame._msufPowerTextColorToken = frame._msufTextPowerToken
@@ -669,8 +691,7 @@ local function UpdatePowerRuntime(frame, event, unit, power, powerMax)
         -- Color-by-type is off: restore the configured base text color so a stale
         -- per-type color doesn't survive the setting being toggled off. (false is
         -- the sentinel for "base color applied"; real power types are number/nil.)
-        local c = frame.MSUFSpec and frame.MSUFSpec.textColor
-        SetPowerTextColor(frame, c and c.r or 1, c and c.g or 1, c and c.b or 1, c and c.a or 1)
+        SetPowerTextColor(frame, rt.textColorR or 1, rt.textColorG or 1, rt.textColorB or 1, rt.textColorA or 1)
         frame._msufPowerTextColorInitialized = true
         frame._msufPowerTextColorType = false
         frame._msufPowerTextColorToken = nil

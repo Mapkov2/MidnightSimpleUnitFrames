@@ -826,20 +826,35 @@ local function BuildGFBars(ctx)
 
     BuildDeadBgSection(ctx, b)
 
-    local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 312, false)
+    local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 360, false)
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
-    local stripeCard = W.ControlCard(stripe, "Debuff Stripe", "Shows a thin colored stripe for debuffs matched by the debuff filter.", 20, -38, stripeCardW, 244)
+    local stripeCard = W.ControlCard(stripe, "Debuff Stripe", "Shows a thin colored stripe for debuffs matched by the debuff filter.", 20, -38, stripeCardW, 292)
     local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripeCard, "Debuff Stripe", stripeCardW - 62, -24, 0, "HIDDEN"), "debuffStripeEnabled", false, "visual")
     local stripeEdge = BindScopeDropdown(ctx, W.Dropdown(stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260), "debuffStripeEdge", "BOTTOM", "visual")
     local stripeHeight = BindScopeSlider(ctx, W.Slider(stripeCard, "Stripe height", 1, 8, 1, 300), "debuffStripeHeight", 3, "visual")
     local stripeAlpha = BindScopeSlider(ctx, W.Slider(stripeCard, "Stripe opacity", 0.10, 1, 0.05, 300), "debuffStripeAlpha", 0.60, "visual")
+    local stripeColor = W.Color(stripeCard, "Stripe color")
+    M.BindColor(ctx, stripeColor,
+        function()
+            return Num(CurrentScope(), "debuffStripeColorR", 0.80),
+                Num(CurrentScope(), "debuffStripeColorG", 0.20),
+                Num(CurrentScope(), "debuffStripeColorB", 0.20)
+        end,
+        function(r, g, bcol)
+            local conf = Conf(CurrentScope())
+            conf.debuffStripeColorR = r
+            conf.debuffStripeColorG = g
+            conf.debuffStripeColorB = bcol
+            QueueGF(CurrentScope(), "visual")
+        end)
     W.MoveWidget(stripeEdge, stripeCard, 16, -74, min(260, stripeCardW - 32), "LEFT")
     W.MoveWidget(stripeHeight, stripeCard, 16, -126, min(360, stripeCardW - 72), "CENTER")
     W.MoveWidget(stripeAlpha, stripeCard, 16, -174, min(360, stripeCardW - 72), "CENTER")
+    W.MoveWidget(stripeColor, stripeCard, 16, -236, min(360, stripeCardW - 32), "LEFT")
     local function RefreshStripeState()
         local enabled = Bool(CurrentScope(), "debuffStripeEnabled", false)
-        SetOptionsEnabled({ stripeEdge, stripeHeight, stripeAlpha }, enabled)
+        SetOptionsEnabled({ stripeEdge, stripeHeight, stripeAlpha, stripeColor }, enabled)
         SetOptionEnabled(stripeToggle, true)
         SetSectionBadges(stripe, {
             OnOffBadge(enabled, "Active", "Off"),

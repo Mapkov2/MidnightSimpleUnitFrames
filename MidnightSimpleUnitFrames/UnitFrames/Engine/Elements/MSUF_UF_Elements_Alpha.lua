@@ -55,6 +55,14 @@ local function CastbarRangeAlpha(frame, mul)
     if not frame then
         return 1
     end
+    local rangeActive = frame._msufAlphaRangeActive
+    local rangeHealthLayer = frame._msufAlphaRangeHealthLayer
+    if rangeActive ~= nil or rangeHealthLayer ~= nil then
+        if rangeActive ~= true or rangeHealthLayer == true then
+            return 1
+        end
+        return Clamp01(mul, 1)
+    end
     local spec = frame.MSUFSpec
     local range = spec and spec.range
     if not (range and range.active == true) or range.layerMode == "health" then
@@ -149,9 +157,21 @@ end
 
 -- "health" range fade dims only the HP fill; anything else dims the whole frame.
 local function RangeFadesWholeFrame(frame)
+    local rangeHealthLayer = frame and frame._msufAlphaRangeHealthLayer
+    if rangeHealthLayer ~= nil then
+        return rangeHealthLayer ~= true
+    end
     local spec = frame and frame.MSUFSpec
     local range = spec and spec.range
     return not (range and range.layerMode == "health")
+end
+
+local function CompileAlphaRuntime(frame, spec)
+    if not frame then return end
+    local range = spec and spec.range
+    frame._msufAlphaRuntimeCfg = spec and spec.alpha or nil
+    frame._msufAlphaRangeActive = range and range.active == true
+    frame._msufAlphaRangeHealthLayer = range and range.layerMode == "health"
 end
 
 local function ApplyRangeOnly(frame, mul, force)
@@ -254,13 +274,18 @@ function Alpha.GetUnitlessEvents(frame, spec)
 end
 
 function Alpha.Apply(frame, spec)
-    ApplyAlpha(frame, spec and spec.alpha, true)
+    CompileAlphaRuntime(frame, spec)
+    ApplyAlpha(frame, frame and frame._msufAlphaRuntimeCfg, true)
 end
 
 function Alpha.Update(frame, event)
     local force = event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE"
         or event == "MSUF_VISUALS" or event == "MSUF_ALPHA" or event == "MSUF_RANGE_FORCE"
-    ApplyAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, force)
+    local cfg = frame and frame._msufAlphaRuntimeCfg
+    if cfg == nil and frame and frame.MSUFSpec then
+        cfg = frame.MSUFSpec.alpha
+    end
+    ApplyAlpha(frame, cfg, force)
 end
 
 function Alpha.Disable(frame)
@@ -271,6 +296,9 @@ function Alpha.Disable(frame)
     frame._msufAlphaLastHP = nil
     frame._msufAlphaLastFG = nil
     frame._msufAlphaEffective = nil
+    frame._msufAlphaRuntimeCfg = nil
+    frame._msufAlphaRangeActive = nil
+    frame._msufAlphaRangeHealthLayer = nil
     -- Range fade may still want the frame dimmed even though configured alpha is 1.
     if RangeMul(frame) ~= 1 then
         ApplyAlpha(frame, frame.MSUFSpec and frame.MSUFSpec.alpha, true)
@@ -291,7 +319,7 @@ UF.ApplyRangeModifier = function(frame, mul, force)
         return true
     end
     frame._msufRangeMul = mul
-    local cfg = frame.MSUFSpec and frame.MSUFSpec.alpha
+    local cfg = frame._msufAlphaRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.alpha)
     if (cfg and cfg.active == true) or frame._msufAlphaActive == true then
         ApplyAlpha(frame, cfg, force == true)
     elseif mul ~= 1 then
@@ -333,12 +361,30 @@ UF.RegisterElement("Alpha", Alpha)
 -- exists, so both "all" and the legacy "combat" request resolve to the same refresh.
 do
     local pending
+    local driver
 
     local function Flush()
         pending = nil
+        if driver then
+            driver:SetScript("OnUpdate", nil)
+        end
         if _G.MSUF_RefreshAllUnitAlphas then
             return _G.MSUF_RefreshAllUnitAlphas()
         end
+    end
+
+    local function FlushOnUpdate()
+        return Flush()
+    end
+
+    local function QueueOnUpdate()
+        local create = _G.CreateFrame
+        if not create then
+            return false
+        end
+        driver = driver or create("Frame")
+        driver:SetScript("OnUpdate", FlushOnUpdate)
+        return true
     end
 
     function Alpha.RequestRefresh()
@@ -348,8 +394,8 @@ do
         pending = true
         if _G.MSUF_ScheduleOnce then
             _G.MSUF_ScheduleOnce("UF_ALPHA_FLUSH", Flush)
-        elseif _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(0, Flush)
+        elseif QueueOnUpdate() then
+            return true
         else
             Flush()
         end

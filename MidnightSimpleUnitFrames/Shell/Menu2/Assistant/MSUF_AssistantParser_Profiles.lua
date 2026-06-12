@@ -1071,6 +1071,17 @@ local function ParseGroupCopyScopeState(text)
 
     local matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS)
     if #matches == 0 then return nil end
+    for i = 1, #matches do
+        if matches[i] == "auras" then
+            if P.ParseUnsupportedAuraCommand then return P.ParseUnsupportedAuraCommand(text) end
+            return {
+                kind = "unsupported",
+                status = "info",
+                summary = "Group Aura copy is not registered yet.",
+                text = "I could not safely change the Group Copy Aura category. Group Aura copy is still blocked until its backend is registered.",
+            }
+        end
+    end
     if ContainsAny(text, { "only", "only these", "just" }) then
         return BuildMenuSelectorState({
             selector = "group_copy_scope",

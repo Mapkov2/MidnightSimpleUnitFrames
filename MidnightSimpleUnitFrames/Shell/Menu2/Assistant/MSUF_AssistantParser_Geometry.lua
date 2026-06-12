@@ -440,19 +440,47 @@ function OM.HasIntent(text)
 end
 
 function OM.Clean(text)
-    text = Normalize(text)
+    local raw = tostring(text or "")
+    OM.cleanCache = OM.cleanCache or {}
+    OM.cleanCacheOrder = OM.cleanCacheOrder or {}
+    local cached = OM.cleanCache[raw]
+    if cached then return cached end
+    text = Normalize(raw)
     text = text:gsub("[^%w%s]", " ")
-    return Trim(text:gsub("%s+", " "))
+    text = Trim(text:gsub("%s+", " "))
+    if raw ~= "" and #raw <= 320 then
+        if not OM.cleanCache[raw] then OM.cleanCacheOrder[#OM.cleanCacheOrder + 1] = raw end
+        OM.cleanCache[raw] = text
+        while #OM.cleanCacheOrder > 1024 do
+            local oldKey = table.remove(OM.cleanCacheOrder, 1)
+            OM.cleanCache[oldKey] = nil
+        end
+    end
+    return text
 end
 
 function OM.AxislessPhrase(text)
-    text = " " .. OM.Clean(text) .. " "
+    local raw = tostring(text or "")
+    OM.axislessCache = OM.axislessCache or {}
+    OM.axislessCacheOrder = OM.axislessCacheOrder or {}
+    local cached = OM.axislessCache[raw]
+    if cached then return cached end
+    text = " " .. OM.Clean(raw) .. " "
     text = text:gsub(" x ", " ")
     text = text:gsub(" y ", " ")
     text = text:gsub(" offset ", " ")
     text = text:gsub(" position ", " ")
     text = text:gsub(" pos ", " ")
-    return Trim(text:gsub("%s+", " "))
+    text = Trim(text:gsub("%s+", " "))
+    if raw ~= "" and #raw <= 320 then
+        if not OM.axislessCache[raw] then OM.axislessCacheOrder[#OM.axislessCacheOrder + 1] = raw end
+        OM.axislessCache[raw] = text
+        while #OM.axislessCacheOrder > 1024 do
+            local oldKey = table.remove(OM.axislessCacheOrder, 1)
+            OM.axislessCache[oldKey] = nil
+        end
+    end
+    return text
 end
 
 function OM.RootDetailBlocked(setting, text)
@@ -552,14 +580,23 @@ function OM.RegisteredSettings()
     local count = #(settings or {})
     if OM.cache and OM.cacheCount == count then return OM.cache end
     local out = {}
+    local byAxisUnit = {}
     for i = 1, count do
         local setting = settings[i]
         local axis = OM.Axis(setting)
         if axis and OM.IsNonAuraSetting(setting) then
-            out[#out + 1] = { setting = setting, axis = axis }
+            local row = { setting = setting, axis = axis }
+            out[#out + 1] = row
+            local unit = tostring(OM.UnitFromSetting(setting) or "")
+            if unit ~= "" then
+                local key = axis .. ":" .. unit
+                byAxisUnit[key] = byAxisUnit[key] or {}
+                byAxisUnit[key][#byAxisUnit[key] + 1] = row
+            end
         end
     end
     OM.cache = out
+    OM.cacheByAxisUnit = byAxisUnit
     OM.cacheCount = count
     return out
 end
@@ -740,6 +777,16 @@ end
 
 function OM.BestRows(text, axis)
     local rows = OM.RegisteredSettings()
+    local scopedRows = {}
+    local function addScoped(scope)
+        local list = OM.cacheByAxisUnit and OM.cacheByAxisUnit[axis .. ":" .. tostring(scope or "")]
+        for i = 1, #(list or {}) do scopedRows[#scopedRows + 1] = list[i] end
+    end
+    local units = DetectUnits(text)
+    for i = 1, #units do addScoped(units[i]) end
+    local groups = DetectGroups(text)
+    for i = 1, #groups do addScoped(groups[i]) end
+    if #scopedRows > 0 then rows = scopedRows end
     local best = 0
     local matches = {}
     for i = 1, #rows do

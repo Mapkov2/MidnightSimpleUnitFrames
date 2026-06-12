@@ -57,7 +57,7 @@ local function BuildBars(ctx)
         if not GF then return end
         if GF.InvalidateConfCache then GF.InvalidateConfCache() end
         if GF.RefreshVisuals then
-            GF.RefreshVisuals()
+            GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
         elseif _G.MSUF_GF_RefreshOverlays then
             _G.MSUF_GF_RefreshOverlays()
         end
@@ -79,7 +79,7 @@ local function BuildBars(ctx)
                 end
             end
         elseif GF.RefreshVisuals then
-            GF.RefreshVisuals()
+            GF.RefreshVisuals(nil, GF.DIRTY_BORDER or GF.DIRTY_VISUAL)
         end
     end
 
@@ -121,7 +121,7 @@ local function BuildBars(ctx)
         Call("MSUF_RefreshDispelOutlineStates", true)
         RefreshUnitBorders({ "player", "target", "focus", "targettarget" })
         Call("MSUF_RefreshUnitDispelOverlays")
-        RefreshGroupFrameVisuals()
+        RefreshGroupFrameBorders()
         if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
             _G.MSUF_SetDispelBorderTestMode(true, BorderTestScope())
         end

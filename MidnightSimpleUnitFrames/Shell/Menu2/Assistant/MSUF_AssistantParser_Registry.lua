@@ -649,6 +649,11 @@ local SUGGESTION_IGNORE_TOKENS = {
 local REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT = 260
 
 local function MeaningTokens(text)
+    text = tostring(text or "")
+    P._meaningTokenCache = P._meaningTokenCache or {}
+    P._meaningTokenCacheOrder = P._meaningTokenCacheOrder or {}
+    local cached = P._meaningTokenCache[text]
+    if cached then return cached.set, cached.list end
     local set = {}
     local list = {}
     local function add(word)
@@ -662,6 +667,16 @@ local function MeaningTokens(text)
         local folded = P.PluralFoldWord and P.PluralFoldWord(word) or word
         if folded ~= word then
             add(folded)
+        end
+    end
+    if text ~= "" and #text <= 320 then
+        if not P._meaningTokenCache[text] then
+            P._meaningTokenCacheOrder[#P._meaningTokenCacheOrder + 1] = text
+        end
+        P._meaningTokenCache[text] = { set = set, list = list }
+        while #P._meaningTokenCacheOrder > 2048 do
+            local oldKey = table.remove(P._meaningTokenCacheOrder, 1)
+            P._meaningTokenCache[oldKey] = nil
         end
     end
     return set, list
@@ -3308,6 +3323,7 @@ local function ParseRegistryAlias(text, raw)
     local lightSettings = P.RegistryCandidateSettings(text, allSettings, false)
     local result = P.ParseRegistryAliasCandidates(text, raw, lightSettings)
     if result then return result end
+    if (tonumber(P._compoundDepth) or 0) > 0 then return nil end
 
     local fullSettings = P.RegistryCandidateSettings(text, allSettings, true)
     if fullSettings ~= lightSettings then

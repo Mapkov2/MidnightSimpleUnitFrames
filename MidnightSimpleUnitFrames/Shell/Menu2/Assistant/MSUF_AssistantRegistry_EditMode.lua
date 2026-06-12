@@ -284,8 +284,16 @@ function EditMode.SetAuraPreview(value)
     value = ToggleValue(current, value)
     local changed = current ~= value
     if changed then shared.showInEditMode = value end
-    if changed and type(_G.MSUF_Auras3_RefreshEditPreview) == "function" then _G.MSUF_Auras3_RefreshEditPreview() end
-    if changed and type(_G.MSUF_Auras3_RefreshAll) == "function" then _G.MSUF_Auras3_RefreshAll() end
+    if changed then
+        local refreshAll = type(_G.MSUF_Auras3_RefreshAll) == "function" and _G.MSUF_Auras3_RefreshAll or nil
+        local refreshPreview = type(_G.MSUF_Auras3_RefreshEditPreview) == "function" and _G.MSUF_Auras3_RefreshEditPreview or nil
+        if IsEditModeActive() and refreshAll then
+            refreshAll()
+        else
+            if refreshPreview then refreshPreview() end
+            if refreshAll then refreshAll() end
+        end
+    end
     RefreshHUDControls()
     return true, StateMessage("Edit Mode Auras Preview", value, changed)
 end

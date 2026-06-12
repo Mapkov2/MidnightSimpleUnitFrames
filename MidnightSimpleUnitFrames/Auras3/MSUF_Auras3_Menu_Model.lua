@@ -1722,7 +1722,6 @@ function Model.Apply(unit, reason)
     local function Refresh(runtimeUnit)
         if type(_G.MSUF_Auras3_UpdateUnitAnchor) == "function" then _G.MSUF_Auras3_UpdateUnitAnchor(runtimeUnit) end
         if type(_G.MSUF_Auras3_RefreshUnit) == "function" then _G.MSUF_Auras3_RefreshUnit(runtimeUnit) end
-        if type(_G.MSUF_Auras3_RefreshEditPreview) == "function" then _G.MSUF_Auras3_RefreshEditPreview(runtimeUnit) end
     end
     if unit and NormalizeScope(unit) ~= "shared" then
         EachRuntimeUnit(unit, Refresh)

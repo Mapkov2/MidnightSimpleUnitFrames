@@ -326,7 +326,9 @@ end
 
 local function KnowledgeNoMatch(text)
     if A.Knowledge and type(A.Knowledge.NoMatch) == "function" then
-        return A.Knowledge.NoMatch(text)
+        local result = A.Knowledge.NoMatch(text)
+        if A.RecordNoMatch then A.RecordNoMatch(text, result, "knowledge") end
+        return result
     end
     return nil
 end
@@ -535,8 +537,8 @@ local function HumanConversationReply(text)
     if ContainsAny(norm, { "who are you", "what are you", "wer bist du", "was bist du" }) then
         return {
             text = german
-                and "Ich bin der lokale MSUF Assistant. Ich kann echte registrierte MSUF-Funktionen aendern, Seiten erklaeren und bei unklaren Befehlen nachfragen. Aura-Regler sind uebersprungen, bis ihr Backend fertig ist."
-                or "I am the local MSUF Assistant. I can change real registered MSUF controls, explain pages, and ask when a command is ambiguous. Aura controls are skipped until their backend is ready.",
+                and "Ich bin der lokale MSUF Assistant. Ich kann echte registrierte MSUF-Funktionen aendern, Seiten erklaeren und bei unklaren Befehlen nachfragen. Registrierte Aura-Regler funktionieren, nicht angebundene Aura-Backend-Bereiche bleiben blockiert."
+                or "I am the local MSUF Assistant. I can change real registered MSUF controls, explain pages, and ask when a command is ambiguous. Registered Aura controls work; Aura backend areas that are not registered yet stay blocked.",
             status = "info",
             summary = "Assistant conversation",
         }
@@ -563,21 +565,23 @@ local function UnsupportedAuraReply(text)
     return {
         kind = "unsupported",
         status = "info",
-        summary = "Aura Assistant commands are intentionally disabled.",
+        summary = "Aura command is not registered yet.",
         text = german
-            and "Auren sind im Assistant aktuell bewusst deaktiviert. Ich aendere keine Aura- oder Group-Aura-Einstellungen, bis das Backend dafuer freigegeben ist. Non-Aura-Bereiche wie Unit Frames, Castbars, Gruppenframes, Profile und Gameplay funktionieren weiter."
-            or "Aura commands are intentionally disabled in the Assistant right now. I will not change Aura or Group Aura settings until that backend is cleared. Non-aura areas such as Unit Frames, Castbars, Group Frames, Profiles, and Gameplay still work.",
+            and "Ich konnte diesen Aura-Befehl noch nicht sicher matchen. Registrierte Aura-Regler wie Icon-Groesse, Anzahl, Wachstum, Cooldown-/Stack-Text, Filter, Blacklist und Quick-Presets funktionieren. Aura-Copy und nicht angebundene Backend-Bereiche bleiben blockiert."
+            or "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, and quick presets can be changed. Aura copy and backend areas that are not registered yet are still blocked.",
     }
 end
 
 local function FriendlyNoMatch(text)
     local noMatch = KnowledgeNoMatch(text)
     if noMatch then return noMatch end
-    return {
-        text = "I could not safely match that MSUF command yet. I will not guess at settings. Try the frame or page plus the exact control, for example 'set player width to 300' or 'turn off raid range fade'. Aura controls are skipped until their backend is ready. If that wording should work, send the exact text in Discord: " .. DISCORD_INVITE,
+    local result = {
+        text = "I could not safely match that MSUF command yet. I will not guess at settings. Try the frame or page plus the exact control, for example 'set player width to 300', 'turn off raid range fade', or 'set target buff icon size to 30'. If that wording should work, send the exact text in Discord: " .. DISCORD_INVITE,
         status = "info",
         summary = "Assistant no match",
     }
+    if A.RecordNoMatch then A.RecordNoMatch(text, result, "router") end
+    return result
 end
 
 local function IsNoClueResult(result)
@@ -979,9 +983,6 @@ function A.RouteInput(text, coreHandler)
         if broadAnchor then return broadAnchor end
     end
 
-    local auraUnsupported = UnsupportedAuraReply(text)
-    if auraUnsupported then return auraUnsupported end
-
     if hasCore and not LooksLikeKnowledgeQuestionPrefix(text)
         and not (Normalize(text):find("%d+%.%d+") or ContainsAny(text, {
             "release", "version", "preview", "alpha", "beta", "patch", "build", "changelog", "change log",
@@ -1067,6 +1068,8 @@ function A.RouteInput(text, coreHandler)
     if LooksLikeMutation(text) or StartsWithMutationCommand(text) then
         local fallbackResult = TryMutationFallbacks(text, Core)
         if fallbackResult and not IsUnknownResult(fallbackResult) then return fallbackResult end
+        local auraUnsupported = UnsupportedAuraReply(text)
+        if auraUnsupported then return auraUnsupported end
         if IsNoClueResult(coreResult) then return FriendlyNoMatch(text) end
         return coreResult or { text = "I could not apply that command. Try being more specific or ask for help.", status = "failed" }
     end
@@ -1079,6 +1082,9 @@ function A.RouteInput(text, coreHandler)
             if noMatch then return noMatch end
         end
     end
+
+    local auraUnsupported = UnsupportedAuraReply(text)
+    if auraUnsupported then return auraUnsupported end
 
     if IsNoClueResult(coreResult) then return FriendlyNoMatch(text) end
     return coreResult or FriendlyNoMatch(text)

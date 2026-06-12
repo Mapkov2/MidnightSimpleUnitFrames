@@ -1008,7 +1008,12 @@ local function CompileTextRuntime(frame, spec, text)
     end
     -- Compile-time alpha for the gradient text color (skips BaseTextColor on the
     -- hot path) and reset of the percent-bucket recolor memo (settings changed).
-    rt.healthTextAlpha = (spec and spec.textColor and spec.textColor.a) or 1
+    local baseTextColor = spec and spec.textColor
+    rt.textColorR = baseTextColor and baseTextColor.r or 1
+    rt.textColorG = baseTextColor and baseTextColor.g or 1
+    rt.textColorB = baseTextColor and baseTextColor.b or 1
+    rt.textColorA = baseTextColor and baseTextColor.a or 1
+    rt.healthTextAlpha = rt.textColorA
     rt._textGradientPct = nil
     rt.healthPlain = nativeSecrets ~= true and frame.unit == "player"
     rt._lastHealthTextHP = nil
@@ -1231,13 +1236,17 @@ local function ResolvePendingHealth(frame, rt, hp, hpMax)
         local needMax = needsMax and issecretvalue(hpMax) ~= true and hpMax == nil
         if needHP or needMax then
             local bar = frame.hpBar or frame.Health
-            if needHP and bar and bar._msufHealthValueUnit == unit then
-                hp = bar._msufHealthValue
-                needHP = issecretvalue(hp) ~= true and hp == nil
-            end
-            if needMax and bar and bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit then
-                hpMax = bar._msufHealthMax
-                needMax = issecretvalue(hpMax) ~= true and hpMax == nil
+            if bar then
+                local hpUnit = bar._msufHealthValueUnit
+                local maxUnit = bar._msufHealthMaxUnit
+                if needHP and hpUnit == unit then
+                    hp = bar._msufHealthValue
+                    needHP = issecretvalue(hp) ~= true and hp == nil
+                end
+                if needMax and bar._msufHealthMaxReady == true and maxUnit == unit then
+                    hpMax = bar._msufHealthMax
+                    needMax = issecretvalue(hpMax) ~= true and hpMax == nil
+                end
             end
         end
         if needHP and UnitHealth then
@@ -1279,17 +1288,19 @@ local function ResolvePendingPower(frame, rt, power, powerMax)
         if frame._msufTextPowerNeedsType == true then
             powerType = frame._msufTextPowerType
         end
-        if frame._msufTextPowerNeedsType == true
-            and (frame._msufTextPowerTypeKnown ~= true or frame._msufTextPowerTypeUnit ~= unit)
-            and UnitPowerType then
-            local rawType, rawToken = UnitPowerType(unit)
-            if issecretvalue(rawType) == true then rawType = nil end
-            if issecretvalue(rawToken) == true then rawToken = nil end
-            powerType = rawType
-            frame._msufTextPowerType = rawType
-            frame._msufTextPowerToken = rawToken
-            frame._msufTextPowerTypeKnown = true
-            frame._msufTextPowerTypeUnit = unit
+        if frame._msufTextPowerNeedsType == true and UnitPowerType then
+            local typeUnit = frame._msufTextPowerTypeUnit
+            local typeUnitMatches = typeUnit == unit
+            if frame._msufTextPowerTypeKnown ~= true or not typeUnitMatches then
+                local rawType, rawToken = UnitPowerType(unit)
+                if issecretvalue(rawType) == true then rawType = nil end
+                if issecretvalue(rawToken) == true then rawToken = nil end
+                powerType = rawType
+                frame._msufTextPowerType = rawType
+                frame._msufTextPowerToken = rawToken
+                frame._msufTextPowerTypeKnown = true
+                frame._msufTextPowerTypeUnit = unit
+            end
         end
 
         if needPower and UnitPower then
@@ -1300,7 +1311,9 @@ local function ResolvePendingPower(frame, rt, power, powerMax)
             end
         end
         if needPowerMax and UnitPowerMax then
-            if frame._msufTextPowerMaxUnit == unit and frame._msufTextPowerMax ~= nil then
+            local maxUnit = frame._msufTextPowerMaxUnit
+            local maxUnitMatches = maxUnit == unit
+            if maxUnitMatches and frame._msufTextPowerMax ~= nil then
                 powerMax = frame._msufTextPowerMax
             elseif powerType ~= nil then
                 powerMax = UnitPowerMax(unit, powerType)

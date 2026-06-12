@@ -380,7 +380,13 @@ local function WriteHandleOffsets(handle, x, y, reason)
     local fields = handle._fields or {}
     if type(fields.writeOffsets) == "function" then
         if not fields.writeOffsets(handle, x, y, reason) then return false end
-        Preview.Refresh(box, reason or "UNIT_PREVIEW_MOVE")
+        local fastDrag = reason == "UNIT_PREVIEW_DRAG"
+            and fields.visualOnly == true
+            and type(fields.dragOffsets) == "function"
+            and fields.dragOffsets(handle, x, y) == true
+        if not fastDrag then
+            Preview.Refresh(box, reason or "UNIT_PREVIEW_MOVE")
+        end
         RefreshHandleSelectionVisuals(box)
         if not handle._msuf2PreviewHistoryTx then
             CheckpointMenuHistory(handle, reason == "UNIT_PREVIEW_NUDGE" and "Nudge" or "Move")
@@ -815,6 +821,9 @@ local function MakeHandle(preview, key, fields, label, color)
         end
         local hadFrozenScale = preview._dragFrozenScale ~= nil
         preview._dragFrozenScale = nil
+        if type(fields.clearDragOffsets) == "function" then
+            fields.clearDragOffsets(self)
+        end
         self._dragging = nil
         self._lastDragX = nil
         self._lastDragY = nil

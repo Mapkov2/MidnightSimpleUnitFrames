@@ -18,7 +18,6 @@ local GetNumSubgroupMembers = GetNumSubgroupMembers
 local GetRaidRosterInfo = GetRaidRosterInfo
 local GetInstanceInfo = GetInstanceInfo
 local UnitGUID = UnitGUID
-local UnitIsUnit = _G.UnitIsUnit
 local UnitName = UnitName
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local floor = math.floor
@@ -31,13 +30,10 @@ local wipe = wipe or function(t)
     end
     return t
 end
-local Secrets = MSUF.Secrets or {}
-local IsSecret = Secrets.IsSecret or function(_) return false end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local function IsUnitToken(unit)
-    if issecretvalue(unit) == true then return false end
-    return type(unit) == "string" and unit ~= ""
+    return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
 local eventFrame
@@ -57,6 +53,10 @@ end
 
 local band = bit and bit.band or bit32 and bit32.band
 local bor = bit and bit.bor or bit32 and bit32.bor
+local DIRTY_FLAGS = {
+    GF.DIRTY_GEOMETRY, GF.DIRTY_VISUAL, GF.DIRTY_FONT, GF.DIRTY_COLOR,
+    GF.DIRTY_BORDER, GF.DIRTY_LAYOUT, GF.DIRTY_AURAS,
+}
 local function Has(mask, flag)
     if not mask then return false end
     if band then return band(mask, flag) ~= 0 end
@@ -67,12 +67,8 @@ local function OrMask(a, b)
     if a == nil or b == nil then return nil end
     if bor then return bor(a, b) end
     local out = a
-    local flags = {
-        GF.DIRTY_GEOMETRY, GF.DIRTY_VISUAL, GF.DIRTY_FONT, GF.DIRTY_COLOR,
-        GF.DIRTY_BORDER, GF.DIRTY_LAYOUT, GF.DIRTY_AURAS,
-    }
-    for i = 1, #flags do
-        local flag = flags[i]
+    for i = 1, #DIRTY_FLAGS do
+        local flag = DIRTY_FLAGS[i]
         if flag and Has(b, flag) and not Has(out, flag) then
             out = out + flag
         end
@@ -104,6 +100,14 @@ local function DirtyRuntimeReason(mask, reason)
         return "MSUF_GF_DIRTY_AURAS"
     end
     return reason or "MSUF_GF_DIRTY"
+end
+
+local function BumpAuras3ConfigForGroup(mask)
+    if mask ~= nil and mask ~= GF.DIRTY_ALL and not Has(mask, GF.DIRTY_AURAS) then return end
+    local A3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
+    if A3 and type(A3.BumpRuntimeConfig) == "function" then
+        A3.BumpRuntimeConfig()
+    end
 end
 
 local function InvalidateSpecs(kind)
@@ -175,7 +179,7 @@ function GF.DeferGroupRuntime(reason, kind, mask)
     end
 end
 
-local function GroupUnitMatches(frame, unit)
+local function GroupUnitMatches(frame, unit, unitGuid)
     local frameUnit = frame and frame.unit
     if unit == nil then
         return true
@@ -187,27 +191,20 @@ local function GroupUnitMatches(frame, unit)
     if frameUnit == unit then
         return true
     end
-    if UnitIsUnit then
-        local same = UnitIsUnit(frameUnit, unit)
-        if IsSecret(same) then
-            return false
-        end
-        return same == true or same == 1
-    end
     if not (UnitGUID and frameUnit) then
         return false
     end
     local frameGuid = UnitGUID(frameUnit)
-    local unitGuid = UnitGUID(unit)
-    if IsSecret(frameGuid) or IsSecret(unitGuid) then
+    unitGuid = unitGuid or UnitGUID(unit)
+    if issecretvalue(frameGuid) == true or issecretvalue(unitGuid) == true then
         return false
     end
     return frameGuid ~= nil and frameGuid == unitGuid
 end
 
-local function RefreshGroupNameFrame(frame, _, _, runtime, matchUnit)
+local function RefreshGroupNameFrame(frame, _, _, runtime, matchUnit, matchGuid)
     local active = frame and frame._msufActiveElements
-    if active and active.NameText == true and GroupUnitMatches(frame, matchUnit) then
+    if active and active.NameText == true and GroupUnitMatches(frame, matchUnit, matchGuid) then
         runtime.UpdateName(frame, "MSUF_GF_NAME_UPDATE", frame.unit)
         return true
     end
@@ -221,7 +218,7 @@ function GF.RefreshGroupNames(unit)
     if not (runtime and runtime.UpdateName) then
         return false
     end
-    if unit and unit ~= "" and GF.FrameForUnit then
+    if IsUnitToken(unit) and GF.FrameForUnit then
         local frame = GF.FrameForUnit(unit)
         local active = frame and frame._msufActiveElements
         if active and active.NameText == true then
@@ -234,7 +231,14 @@ function GF.RefreshGroupNames(unit)
     elseif not GF.ForEachFrame then
         return false
     end
-    return GF.ForEachFrame(RefreshGroupNameFrame, true, runtime, unit) == true
+    local matchGuid
+    if UnitGUID and IsUnitToken(unit) then
+        local guid = UnitGUID(unit)
+        if issecretvalue(guid) ~= true then
+            matchGuid = guid
+        end
+    end
+    return GF.ForEachFrame(RefreshGroupNameFrame, true, runtime, unit, matchGuid) == true
 end
 
 local function RegisterNameEvents()
@@ -304,21 +308,27 @@ local function MarkRosterMode()
 end
 
 local function UnitIdentity(unit)
-    if UnitGUID and unit then
-        local guid = UnitGUID(unit)
-        if guid and not IsSecret(guid) then return guid end
+    if not IsUnitToken(unit) then
+        return ""
     end
-    if UnitName and unit then
+    if UnitGUID then
+        local guid = UnitGUID(unit)
+        if issecretvalue(guid) ~= true and guid then return guid end
+    end
+    if UnitName then
         local name, realm = UnitName(unit)
-        if name and name ~= "" then
-            return realm and realm ~= "" and (name .. "-" .. realm) or name
+        if issecretvalue(name) ~= true and name and name ~= "" then
+            if issecretvalue(realm) ~= true and realm and realm ~= "" then
+                return name .. "-" .. realm
+            end
+            return name
         end
     end
-    return unit or ""
+    return unit
 end
 
 local function UnitRoleToken(unit)
-    return (UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit)) or ""
+    return (UnitGroupRolesAssigned and IsUnitToken(unit) and UnitGroupRolesAssigned(unit)) or ""
 end
 
 local function CurrentRosterSignature()
@@ -475,6 +485,62 @@ local function ScheduleDBReadyRetry(builder)
     C_Timer.After(0.1, Run)
 end
 
+local groupRuntimeDeferFrame
+local groupRuntimeDeferActive
+local groupRuntimeDeferQueue = {}
+local groupRuntimeDeferKeys = {}
+local groupRuntimeDeferCount = 0
+
+local function GroupRuntimeDeferOnUpdate(self)
+    if self then
+        self:SetScript("OnUpdate", nil)
+    end
+    groupRuntimeDeferActive = nil
+    local count = groupRuntimeDeferCount
+    groupRuntimeDeferCount = 0
+    for i = 1, count do
+        local key = groupRuntimeDeferKeys[i]
+        groupRuntimeDeferKeys[i] = nil
+        local fn = groupRuntimeDeferQueue[key]
+        groupRuntimeDeferQueue[key] = nil
+        if type(fn) == "function" then
+            fn()
+        end
+    end
+    if groupRuntimeDeferCount > 0 and groupRuntimeDeferFrame then
+        groupRuntimeDeferActive = true
+        groupRuntimeDeferFrame:SetScript("OnUpdate", GroupRuntimeDeferOnUpdate)
+    end
+end
+
+local function ScheduleGroupRuntimeNextFrame(key, fn)
+    if type(fn) ~= "function" then return false end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce(key, fn)
+        return true
+    end
+    if not C_Timer then
+        return false
+    end
+    if not groupRuntimeDeferFrame and CreateFrame then
+        groupRuntimeDeferFrame = CreateFrame("Frame")
+    end
+    if not groupRuntimeDeferFrame then
+        return false
+    end
+    key = key or fn
+    if groupRuntimeDeferQueue[key] == nil then
+        groupRuntimeDeferCount = groupRuntimeDeferCount + 1
+        groupRuntimeDeferKeys[groupRuntimeDeferCount] = key
+    end
+    groupRuntimeDeferQueue[key] = fn
+    if not groupRuntimeDeferActive then
+        groupRuntimeDeferActive = true
+        groupRuntimeDeferFrame:SetScript("OnUpdate", GroupRuntimeDeferOnUpdate)
+    end
+    return true
+end
+
 local function RunScheduledRosterRebuild()
     rosterRebuildQueued = false
     -- Sharding gate: world-boss phasing fires GROUP_ROSTER_UPDATE without
@@ -500,11 +566,7 @@ local function ScheduleRosterRebuild()
         return
     end
     rosterRebuildQueued = true
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("MSUF_GF_ROSTER_REBUILD", RunScheduledRosterRebuild)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, RunScheduledRosterRebuild)
-    else
+    if not ScheduleGroupRuntimeNextFrame("MSUF_GF_ROSTER_REBUILD", RunScheduledRosterRebuild) then
         RunScheduledRosterRebuild()
     end
 end
@@ -524,11 +586,7 @@ local function ScheduleZoneRefresh()
         return
     end
     zoneRefreshQueued = true
-    if _G.MSUF_ScheduleOnce then
-        _G.MSUF_ScheduleOnce("MSUF_GF_ZONE_REFRESH", RunScheduledZoneRefresh)
-    elseif C_Timer and C_Timer.After then
-        C_Timer.After(0, RunScheduledZoneRefresh)
-    else
+    if not ScheduleGroupRuntimeNextFrame("MSUF_GF_ZONE_REFRESH", RunScheduledZoneRefresh) then
         RunScheduledZoneRefresh()
     end
 end
@@ -604,7 +662,7 @@ function GF.UpdateGroupVisibility()
     return true
 end
 
-function GF.RebuildAll(preInvalidated)
+function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
     if InCombat() then
         GF.DeferGroupRuntime("rebuild")
         return false
@@ -618,6 +676,9 @@ function GF.RebuildAll(preInvalidated)
     end
     if preInvalidated ~= true then
         InvalidateSpecs()
+    end
+    if auras3ConfigBumped ~= true then
+        BumpAuras3ConfigForGroup(GF.DIRTY_ALL)
     end
     if GF.EnsureDB then GF.EnsureDB() end
 
@@ -652,13 +713,16 @@ function GF.RebuildAll(preInvalidated)
     return true
 end
 
-function GF.RefreshVisuals(kind, mask, preInvalidated)
+function GF.RefreshVisuals(kind, mask, preInvalidated, auras3ConfigBumped)
     if InCombat() then
         GF.DeferGroupRuntime("refresh", kind, mask)
         return false
     end
     if preInvalidated ~= true then
         InvalidateSpecs(kind)
+    end
+    if auras3ConfigBumped ~= true then
+        BumpAuras3ConfigForGroup(mask)
     end
     if GF.ForEachFrame then
         GF.ForEachFrame(RefreshVisualsFrame, true, kind, mask)
@@ -676,8 +740,9 @@ function GF.RefreshAll(preInvalidated)
     if preInvalidated ~= true then
         InvalidateSpecs()
     end
-    GF.RebuildAll(true)
-    GF.RefreshVisuals(nil, GF.DIRTY_ALL, true)
+    BumpAuras3ConfigForGroup(GF.DIRTY_ALL)
+    GF.RebuildAll(true, true)
+    GF.RefreshVisuals(nil, GF.DIRTY_ALL, true, true)
     return true
 end
 
@@ -923,8 +988,8 @@ _G.MSUF_GF_ForceCooldownTextRecolor = function()
     local A3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
     local CT = A3 and A3.CooldownText
     if CT and CT.ForceRecolor then CT.ForceRecolor("group") end
-    return GF.RefreshVisuals()
+    return GF.RefreshVisuals(nil, GF.DIRTY_AURAS)
 end
-_G.MSUF_GF_ForceAuraTextColorRefresh = function() return GF.RefreshVisuals() end
+_G.MSUF_GF_ForceAuraTextColorRefresh = function() return GF.RefreshVisuals(nil, GF.DIRTY_AURAS) end
 _G.MSUF_GF_EM2_SetActivePreviewKind = function(kind) return GF.EM2_SetActivePreviewKind(kind) end
 _G.MSUF_GF_EM2_NudgePreview = function(key, dx, dy) return GF.EM2_NudgePreview(key, dx, dy) end

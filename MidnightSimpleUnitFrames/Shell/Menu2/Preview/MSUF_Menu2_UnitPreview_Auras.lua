@@ -116,20 +116,65 @@ function Auras.WriteOffsets(handle, x, y, reason)
     if not (spec and model and unit and type(model.WriteNumber) == "function") then return false end
     model.WriteNumber(unit, spec.x, RoundOffset(x), -4096, 4096)
     model.WriteNumber(unit, spec.y, RoundOffset(y), -4096, 4096)
-    local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
-    if a3 and type(a3.BumpRuntimeConfig) == "function" then
-        pcall(a3.BumpRuntimeConfig)
-    end
     if reason ~= "UNIT_PREVIEW_DRAG" then
+        local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
+        if a3 and type(a3.BumpRuntimeConfig) == "function" then
+            pcall(a3.BumpRuntimeConfig)
+        end
         RefreshRuntime(unit)
         SyncPopup(unit)
     end
     return true
 end
 
+local function MoveFrameBy(frame, dx, dy)
+    if not (frame and dx and dy) then return false end
+    local point, rel, relPoint, ox, oy = frame:GetPoint(1)
+    point = point or "BOTTOMLEFT"
+    relPoint = relPoint or point
+    frame:ClearAllPoints()
+    frame:SetPoint(point, rel, relPoint, (tonumber(ox) or 0) + dx, (tonumber(oy) or 0) + dy)
+    return true
+end
+
+function Auras.DragOffsets(handle, x, y)
+    local fields = handle and handle._fields
+    local kind = fields and NormalizeKind(fields.auraPreviewKind)
+    local box = handle and handle._preview
+    if not (kind and box) then return false end
+
+    x = RoundOffset(x)
+    y = RoundOffset(y)
+    local prevX = handle._msufAuraDragX
+    local prevY = handle._msufAuraDragY
+    if prevX == nil then prevX = tonumber(handle._startX) or x end
+    if prevY == nil then prevY = tonumber(handle._startY) or y end
+    if prevX == x and prevY == y then return true end
+
+    local scale = tonumber(box._mockEffectiveScale) or tonumber(box._mockScale) or 1
+    if scale <= 0 then scale = 1 end
+    local dx = RoundOffset((x - prevX) * scale)
+    local dy = RoundOffset((y - prevY) * scale)
+    handle._msufAuraDragX = x
+    handle._msufAuraDragY = y
+    if dx == 0 and dy == 0 then return true end
+
+    local moved = MoveFrameBy(handle, dx, dy)
+    local visual = box.auraPreviewVisuals and box.auraPreviewVisuals[kind]
+    MoveFrameBy(visual, dx, dy)
+    return moved == true
+end
+
+function Auras.ClearDragOffsets(handle)
+    if not handle then return end
+    handle._msufAuraDragX = nil
+    handle._msufAuraDragY = nil
+end
+
 function Auras.CommitOffsets(handle)
     local unit = PreviewUnit(handle and handle._preview)
     if not unit then return false end
+    Auras.ClearDragOffsets(handle)
     RefreshRuntime(unit)
     SyncPopup(unit)
     return true
@@ -146,6 +191,8 @@ function Auras.CreateHandles(box, makeHandle)
             visualOnly = true,
             readOffsets = Auras.ReadOffsets,
             writeOffsets = Auras.WriteOffsets,
+            dragOffsets = Auras.DragOffsets,
+            clearDragOffsets = Auras.ClearDragOffsets,
             commitOffsets = Auras.CommitOffsets,
             section = "auras3",
         }, spec.label, spec.color)
@@ -159,6 +206,8 @@ function Auras.CreateHandles(box, makeHandle)
             visualOnly = true,
             readOffsets = Auras.ReadOffsets,
             writeOffsets = Auras.WriteOffsets,
+            dragOffsets = Auras.DragOffsets,
+            clearDragOffsets = Auras.ClearDragOffsets,
             commitOffsets = Auras.CommitOffsets,
             section = "auras3",
         }, spec.label, spec.color)

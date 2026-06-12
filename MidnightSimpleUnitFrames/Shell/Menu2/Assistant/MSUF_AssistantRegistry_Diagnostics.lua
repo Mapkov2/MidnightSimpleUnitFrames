@@ -110,6 +110,15 @@ function A.Workflow.StatusText()
     lines[#lines + 1] = "Edit mode: " .. edit
     lines[#lines + 1] = "Assistant registry: " .. tostring(#(Registry.settings or {})) .. " settings, " .. tostring(#(Registry.actions or {})) .. " actions"
     lines[#lines + 1] = "Queued Assistant changes: " .. tostring(type(A.queuedPlans) == "table" and #A.queuedPlans or 0)
+    local jobSummary = A.GetJobSummary and A.GetJobSummary() or nil
+    if type(jobSummary) == "table" then
+        local detail = ""
+        if type(jobSummary.labels) == "table" and #jobSummary.labels > 0 then detail = " (" .. table.concat(jobSummary.labels, ", ") .. ")" end
+        lines[#lines + 1] = "Assistant jobs: " .. tostring(tonumber(jobSummary.count) or 0) .. detail
+    end
+    if A.PerformanceWarmupStatusText then
+        lines[#lines + 1] = "Assistant warmup: " .. A.PerformanceWarmupStatusText()
+    end
     local perf = A.GetLastPerfSample and A.GetLastPerfSample() or nil
     if type(perf) == "table" then
         lines[#lines + 1] = "Last Assistant timing: " .. tostring(perf.label or "assistant") .. " " .. tostring(math.floor((tonumber(perf.ms) or 0) + 0.5)) .. " ms"
@@ -1291,6 +1300,38 @@ Registry:RegisterAction({
             })
         end
         return true, text
+    end,
+})
+
+Registry:RegisterAction({
+    key = "assistant_nomatch_telemetry",
+    label = "Show Assistant NoMatch Telemetry",
+    type = "diagnostic",
+    combatSafe = true,
+    run = function()
+        local text = A.NoMatchTelemetryText and A.NoMatchTelemetryText(12) or "Assistant NoMatch telemetry is not available."
+        if A and type(A.ShowLargeTextPanel) == "function" then
+            A.ShowLargeTextPanel({
+                kind = "text",
+                title = "Assistant NoMatch Telemetry",
+                help = "Read-only list of unmatched wording captured by the local Assistant.",
+                text = text,
+                status = "No settings changed.",
+            })
+        end
+        return true, text
+    end,
+})
+
+Registry:RegisterAction({
+    key = "assistant_nomatch_clear",
+    label = "Clear Assistant NoMatch Telemetry",
+    type = "diagnostic",
+    combatSafe = true,
+    confirmRequired = true,
+    run = function()
+        local total = A.ClearNoMatchTelemetry and A.ClearNoMatchTelemetry() or 0
+        return true, "Cleared Assistant NoMatch telemetry. Removed " .. tostring(total) .. " recorded misses."
     end,
 })
 

@@ -272,8 +272,8 @@ if not P.InitUnsupportedAuraCommand then
                 return {
                     kind = "unsupported",
                     status = "info",
-                    summary = "Aura Assistant commands are intentionally disabled.",
-                    text = "Aura commands are intentionally disabled in the Assistant right now. I will not change Aura or Group Aura settings until that backend is cleared. Non-aura areas such as Unit Frames, Castbars, Group Frames, Profiles, and Gameplay still work.",
+                    summary = "Aura command is not registered yet.",
+                    text = "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, and quick presets can be changed. Aura copy and backend areas that are not registered yet are still blocked.",
                 }
             end
         end
@@ -300,6 +300,7 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or ParseAuraQuickPreset(normalized)
         or ParseAuraGroupCategoryBlacklist(normalized)
         or ParseAuraBlacklist(normalized, raw)
+        or (P.ParseAuraGeometryShortcut and P.ParseAuraGeometryShortcut(normalized))
         or ParseClassPowerAction(normalized)
         or A._ParseClassPowerPlacementShortcut(normalized)
         or A._ParseClassPowerWidthModeShortcut(normalized)
@@ -425,6 +426,29 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseRegistryAlias(normalized, raw)
 end
 
+function A.ParseSimpleChange(text)
+    local raw = Trim(text)
+    local normalized = Normalize(raw)
+    local ctx = A.GetContext and A.GetContext() or {}
+    if normalized == "" then return nil end
+    local parsed = (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
+        or (A._ParseTextLayerShortcut and A._ParseTextLayerShortcut(normalized))
+        or (A._ParseTextSlotDropdownShortcut and A._ParseTextSlotDropdownShortcut(normalized))
+        or (A._ParseTextDetailExactOffset and A._ParseTextDetailExactOffset(normalized))
+        or (A._ParseGroupOpacityShortcut and A._ParseGroupOpacityShortcut(normalized))
+        or (ParseUnitOpacityShortcut and ParseUnitOpacityShortcut(normalized))
+        or ParseScopedFontTextColorShortcut(normalized, raw)
+        or ParseFontColorAction(normalized, raw)
+        or ParseColorAction(normalized)
+        or ParseSetting(normalized, ctx)
+        or ParseRegistryAlias(normalized, raw)
+    if parsed then
+        parsed.raw = raw
+        parsed.normalized = normalized
+    end
+    return parsed
+end
+
 function A.Parse(text)
     local raw = Trim(text)
     local normalized = Normalize(raw)
@@ -442,10 +466,6 @@ function A.Parse(text)
         broadHumanAnchor.raw = raw
         broadHumanAnchor.normalized = normalized
         return broadHumanAnchor
-    end
-    if P.ParseUnsupportedAuraCommand then
-        local auraUnsupported = P.ParseUnsupportedAuraCommand(normalized)
-        if auraUnsupported then return auraUnsupported end
     end
     local historyAction = A._ParseMenuHistoryAction(normalized)
     if historyAction then
@@ -501,6 +521,14 @@ function A.Parse(text)
         parsed.raw = raw
         parsed.normalized = normalized
         return parsed
+    end
+    if P.ParseUnsupportedAuraCommand then
+        local auraUnsupported = P.ParseUnsupportedAuraCommand(normalized)
+        if auraUnsupported then
+            auraUnsupported.raw = raw
+            auraUnsupported.normalized = normalized
+            return auraUnsupported
+        end
     end
     return {
         kind = "unknown",

@@ -192,6 +192,21 @@ local MASK_UNIT_IDENTITY = {
     borders = true,
     auras = true,
 }
+local MASK_UNIT_IDENTITY_FAST = {
+    load = true,
+    health = true,
+    power = true,
+    name = true,
+}
+local MASK_UNIT_IDENTITY_VISUAL = {
+    inline = true,
+    portrait = true,
+    status = true,
+    prediction = true,
+    alpha = true,
+    borders = true,
+}
+local MASK_UNIT_IDENTITY_AURAS = { auras = true }
 local MASK_UNIT_IDENTITY_SOFT = {
     load = true,
     health = true,
@@ -203,6 +218,19 @@ local MASK_UNIT_IDENTITY_SOFT = {
     prediction = true,
     auras = true,
 }
+local MASK_UNIT_IDENTITY_SOFT_FAST = {
+    load = true,
+    health = true,
+    power = true,
+    name = true,
+}
+local MASK_UNIT_IDENTITY_SOFT_VISUAL = {
+    inline = true,
+    portrait = true,
+    status = true,
+    prediction = true,
+}
+local MASK_UNIT_IDENTITY_SOFT_AURAS = { auras = true }
 local MASK_GROUP_UNIT_IDENTITY = {
     load = true,
     health = true,
@@ -220,7 +248,13 @@ local runtimeReasonMasks = {}
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_FONT_RUNTIME, { "FONT_RUNTIME", "MSUF2_HP_TEXT_COLOR" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_CASTBAR_SYNC, { "CASTBAR_SYNC" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY, { "MSUF_UNIT_IDENTITY" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_FAST, { "MSUF_UNIT_IDENTITY_FAST" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_VISUAL, { "MSUF_UNIT_IDENTITY_VISUAL" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_AURAS, { "MSUF_UNIT_IDENTITY_AURAS" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT, { "MSUF_UNIT_IDENTITY_SOFT" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT_FAST, { "MSUF_UNIT_IDENTITY_SOFT_FAST" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT_VISUAL, { "MSUF_UNIT_IDENTITY_SOFT_VISUAL" })
+AddRuntimeReasonMasks(runtimeReasonMasks, MASK_UNIT_IDENTITY_SOFT_AURAS, { "MSUF_UNIT_IDENTITY_SOFT_AURAS" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_GROUP_UNIT_IDENTITY, { "MSUF_GF_UNIT_IDENTITY" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_ALPHA, { "MSUF_ALPHA" })
 AddRuntimeReasonMasks(runtimeReasonMasks, MASK_BORDERS, { "MSUF_BORDER_LAYOUT", "MSUF2_BORDER" })

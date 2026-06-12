@@ -35,13 +35,17 @@ local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
     UNIT_PORTRAIT_UPDATE = true,
     UNIT_MODEL_CHANGED = true,
     UNIT_CONNECTION = true,
+    MSUF_UNIT_IDENTITY_VISUAL = true,
     MSUF_UNIT_IDENTITY_SOFT = true,
+    MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
 }
 local PORTRAIT_GUID_BUST_EVENTS = {
     UNIT_PORTRAIT_UPDATE = true,
     UNIT_MODEL_CHANGED = true,
     UNIT_CONNECTION = true,
+    MSUF_UNIT_IDENTITY_VISUAL = true,
     MSUF_UNIT_IDENTITY_SOFT = true,
+    MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
 }
 local SetShown = V.SetShown
 local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -132,7 +136,7 @@ local function FlushQueuedPortraits()
         portraitQueue[i] = nil
         if frame and frame._msufPortraitQueued == true then
             frame._msufPortraitQueued = nil
-            local p = frame.MSUFSpec and frame.MSUFSpec.portrait
+            local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
             local texture = frame.portrait
             if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
                 frame._msufPortraitNeedsVisibleRefresh = nil
@@ -242,7 +246,7 @@ local function LayoutPortrait(frame, p)
         return
     end
 
-    local size = tonumber(p and p.size) or tonumber(frame.MSUFSpec and frame.MSUFSpec.height) or 30
+    local size = tonumber(p and p.size) or tonumber(frame._msufPortraitFrameHeight) or tonumber(frame.MSUFSpec and frame.MSUFSpec.height) or 30
     if size < 1 then
         size = 1
     end
@@ -487,6 +491,10 @@ end
 function Portrait.Apply(frame, spec)
     local p = spec and spec.portrait
     local holder = EnsurePortrait(frame)
+    if frame then
+        frame._msufPortraitRuntimeCfg = p
+        frame._msufPortraitFrameHeight = spec and spec.height or nil
+    end
     if not (p and p.enabled == true) then
         Portrait.Disable(frame)
         return
@@ -505,6 +513,8 @@ function Portrait.Disable(frame)
     frame._msufPortraitNeedsVisibleRefresh = nil
     frame._msufPortraitForceRefresh = nil
     frame._msufUpdatePortraitConnection = nil
+    frame._msufPortraitRuntimeCfg = nil
+    frame._msufPortraitFrameHeight = nil
     if frame.portrait then
         ClearPortraitGUID(frame.portrait)
     end
@@ -522,7 +532,7 @@ function Portrait.Disable(frame)
 end
 
 function Portrait.UpdateConnectionState(frame, event, unit)
-    local p = frame.MSUFSpec and frame.MSUFSpec.portrait
+    local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
     local texture = frame.portrait
     if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
         return
@@ -540,19 +550,22 @@ function Portrait.UpdateConnectionState(frame, event, unit)
 end
 
 function Portrait.Update(frame, event, unit)
-    local p = frame.MSUFSpec and frame.MSUFSpec.portrait
+    local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
     local texture = frame.portrait
     if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
         return
     end
     unit = unit or frame.unit
+    local identityVisual = event == "MSUF_UNIT_IDENTITY_VISUAL"
+        or event == "MSUF_UNIT_IDENTITY_SOFT"
+        or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"
     if PORTRAIT_GUID_BUST_EVENTS[event] == true then
         frame._msufPortraitForceRefresh = true
         ClearPortraitGUID(texture)
     end
     if not PortraitFrameVisible(frame) then
         frame._msufPortraitNeedsVisibleRefresh = true
-        if p.render ~= "CLASS" and event == "MSUF_UNIT_IDENTITY_SOFT" then
+        if p.render ~= "CLASS" and identityVisual then
             ClearPortraitTexture(texture)
         end
         return
@@ -567,7 +580,7 @@ function Portrait.Update(frame, event, unit)
         ApplyClassPortrait(texture, unit, p, class, frame)
     else
         if QUEUED_2D_PORTRAIT_EVENTS[event] == true then
-            if event == "MSUF_UNIT_IDENTITY_SOFT" then
+            if identityVisual then
                 ClearPortraitTexture(texture)
             end
             QueuePortraitUpdate(frame)

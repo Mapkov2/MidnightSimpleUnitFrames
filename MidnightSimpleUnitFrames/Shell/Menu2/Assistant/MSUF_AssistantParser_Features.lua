@@ -1505,12 +1505,14 @@ end
 local function ParseEditModeHUDControl(text)
     local hasEditContext = HasEditModeContext(text)
     local previewWord = ContainsAny(text, { "preview", "previews", "preview mode", "preview modes", "vorschau" })
-    local hasAuraPreview = ContainsAny(text, {
+    local hasExplicitAuraPreview = ContainsAny(text, {
         "preview auras", "preview aura", "preview aura icons", "preview auras icons",
         "aura preview", "aura previews", "aura icon preview", "aura icon previews", "aura icons",
         "aura preview icons", "aura mover", "aura movers", "aura mover boxes",
         "auren vorschau", "vorschau auren", "auren symbole", "auren icons",
-    }) or (hasEditContext and ContainsAny(text, { "auras", "aura", "auren" }) and (previewWord or DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
+    }) and (hasEditContext or previewWord or ContainsAny(text, { "mover", "movers", "vorschau", "toggle", "umschalten" }))
+    local hasAuraPreview = hasExplicitAuraPreview
+        or (hasEditContext and ContainsAny(text, { "auras", "aura", "auren" }) and (previewWord or DetectBoolean(text) ~= nil or ContainsAny(text, { "toggle", "umschalten" })))
     local hasGroupPreview = ContainsAny(text, {
         "gf preview", "gf previews", "group frame preview", "group frame previews",
         "group frames preview", "group frames previews", "group preview", "group previews",
@@ -1618,6 +1620,38 @@ local function ParseEditModeHUDControl(text)
 end
 
 local function ParseSupportWorkflow(text)
+    if ContainsAny(text, {
+        "clear no match telemetry", "clear nomatch telemetry", "clear assistant no match telemetry",
+        "reset no match telemetry", "reset nomatch telemetry", "reset assistant misses",
+        "clear unmatched commands", "clear missed commands",
+    }) then
+        local action = Registry and Registry:GetAction("assistant_nomatch_clear")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            confirmRequired = true,
+            label = "Clear Assistant NoMatch telemetry",
+            summary = "Clears stored unmatched Assistant wording telemetry.",
+        } or nil
+    end
+
+    if ContainsAny(text, {
+        "no match telemetry", "nomatch telemetry", "assistant no match telemetry",
+        "assistant misses", "assistant missed commands", "missed commands",
+        "unmatched commands", "unmatched wording", "show no match", "show nomatch",
+        "assistant learning report", "learning report", "no match report",
+    }) then
+        local action = Registry and Registry:GetAction("assistant_nomatch_telemetry")
+        return action and {
+            kind = "action",
+            action = action,
+            args = {},
+            label = "Show Assistant NoMatch telemetry",
+            summary = "Shows stored unmatched Assistant wording telemetry.",
+        } or nil
+    end
+
     if ContainsAny(text, {
         "msuf status", "assistant status", "status report", "diagnostic report",
         "diagnostics", "debug summary", "debug report", "debug info",

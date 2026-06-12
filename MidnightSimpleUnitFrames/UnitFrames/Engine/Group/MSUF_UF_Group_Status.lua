@@ -49,6 +49,10 @@ local UnitIsAFK = _G.UnitIsAFK
 local UnitIsDND = _G.UnitIsDND
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
+local function IsUnitToken(unit)
+    return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
+end
+
 local function BindStatusRuntime()
     statusRuntime = MSUF.UFStatusRuntime or statusRuntime
     if not statusRuntime then return false end
@@ -125,6 +129,9 @@ local function DispatchToken(frame)
 end
 
 local function ReadDeadCached(frame, unit)
+    if not IsUnitToken(unit) then
+        return false, false
+    end
     local token = DispatchToken(frame)
     if token
         and frame._msufGFDeadToken == token
@@ -155,6 +162,9 @@ local function ReadDeadCached(frame, unit)
 end
 
 local function ReadConnectedCached(frame, unit)
+    if not IsUnitToken(unit) then
+        return true, false
+    end
     local token = DispatchToken(frame)
     if token
         and frame._msufGFConnectedToken == token
@@ -186,9 +196,10 @@ end
 
 local function StatusTextFlagsKey(frame, cfg)
     local unit = frame and frame.unit
-    if not unit then return nil end
+    if not IsUnitToken(unit) then return nil end
     local state = frame and frame._msufUnitState
-    local stateReady = state and state.ready == true and state.unit == unit
+    local stateReady = state and state.ready == true
+        and state.unit == unit
     local stateFresh = stateReady
         and frame._msufDispatchActive == true
         and state.dispatchToken == frame._msufDispatchToken
@@ -222,9 +233,10 @@ end
 
 local function StatusTextConnectionKey(frame, cfg)
     local unit = frame and frame.unit
-    if not unit then return nil end
+    if not IsUnitToken(unit) then return nil end
     local state = frame and frame._msufUnitState
-    local stateReady = state and state.ready == true and state.unit == unit
+    local stateReady = state and state.ready == true
+        and state.unit == unit
     local stateFresh = stateReady
         and frame._msufDispatchActive == true
         and state.dispatchToken == frame._msufDispatchToken
@@ -351,11 +363,15 @@ local function CompileStatusDispatch(status)
 end
 
 local function RunStatusRuntimeFrame(frame, event)
-    local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
-    if not status then return end
+    local status = frame and frame._msufGFStatusRuntimeStatus
+    local dispatch = frame and frame._msufGFStatusRuntimeDispatch
+    if not (status and dispatch) then
+        status = frame and frame.MSUFSpec and frame.MSUFSpec.status
+        if not status then return end
+        if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
+        dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
+    end
     local kind = STATUS_EVENT_KIND[event]
-    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
-    local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
     local runner = kind and dispatch[kind] or dispatch.apply
     if runner then
         runner(frame, status, event)
@@ -529,7 +545,7 @@ function GroupStatusRuntime.Update(frame, event)
 end
 
 function GroupStatusRuntime.UpdateState(frame, event)
-    local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
+    local status = frame and frame._msufGFStatusRuntimeStatus or (frame and frame.MSUFSpec and frame.MSUFSpec.status)
     if not (status and status.runtimeStatusText == true) then return end
     if not UpdateStatusText and not BindStatusRuntime() then return end
     RunStatusText(frame, status, event)
@@ -539,6 +555,8 @@ function GroupStatusRuntime.Apply(frame)
     local status = frame and frame.MSUFSpec and frame.MSUFSpec.status
     if frame then
         frame._msufUpdateGroupStatusState = nil
+        frame._msufGFStatusRuntimeStatus = nil
+        frame._msufGFStatusRuntimeDispatch = nil
     end
     if not status then
         ClearUnitlessRegistration(frame)
@@ -549,8 +567,12 @@ function GroupStatusRuntime.Apply(frame)
         return
     end
     SetUnitlessRegistration(frame, status)
-    frame._msufUpdateGroupStatusState = GroupStatusRuntime.UpdateState
     local dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
+    if frame then
+        frame._msufGFStatusRuntimeStatus = status
+        frame._msufGFStatusRuntimeDispatch = dispatch
+        frame._msufUpdateGroupStatusState = RunStatusRuntimeFrame
+    end
     dispatch.apply(frame, status, "MSUF_GF_STATUS_APPLY")
 end
 
@@ -558,6 +580,8 @@ function GroupStatusRuntime.Disable(frame)
     if frame then
         ClearUnitlessRegistration(frame)
         frame._msufUpdateGroupStatusState = nil
+        frame._msufGFStatusRuntimeStatus = nil
+        frame._msufGFStatusRuntimeDispatch = nil
     end
 end
 

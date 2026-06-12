@@ -201,6 +201,13 @@ local function CopyGroupTargetsForText(text, source)
     return RemoveUnit(DetectGroups(text), source)
 end
 
+local function HasEnabledCopyScope(scopes)
+    for _, value in pairs(scopes or {}) do
+        if value == true then return true end
+    end
+    return false
+end
+
 local function ParseGroupCopy(text)
     if not HasCopyIntent(text) then return nil end
     local source, targets
@@ -244,10 +251,20 @@ local function ParseGroupCopy(text)
     local action = Registry and Registry:GetAction("copy_group")
     if not action then return nil end
     local confirm = (WantsFullGroupCopy and WantsFullGroupCopy(text)) or ContainsAny(text, { "all", "alle" }) or #targets > 1
+    local scopes = GroupCopyScopesForText(text)
+    if not HasEnabledCopyScope(scopes) then
+        if P.ParseUnsupportedAuraCommand then return P.ParseUnsupportedAuraCommand(text) end
+        return {
+            kind = "unsupported",
+            status = "info",
+            summary = "Group Aura copy is not registered yet.",
+            text = "I could not safely copy only Group Auras. Group Aura copy is still blocked until its backend is registered.",
+        }
+    end
     return {
         kind = "action",
         action = action,
-        args = { source = source, targets = targets, scopes = GroupCopyScopesForText(text) },
+        args = { source = source, targets = targets, scopes = scopes },
         confirmRequired = confirm,
         label = "Copy " .. tostring((A.UnitLabels or {})[source] or source) .. " group settings",
         summary = "Copies via the existing group-frame copy helper.",
@@ -686,6 +703,10 @@ local RAID_MARKER_SYMBOL_WORDS = {
     "raid star", "raid circle", "raid diamond", "raid triangle", "raid moon", "raid square", "raid cross", "raid skull",
 }
 
+local function HasStatusOffsetIntent(text)
+    return ContainsAny(text, { "x offset", "offset x", "horizontal offset", "y offset", "offset y", "vertical offset" })
+end
+
 local function RaidMarkerSymbolAnswer()
     return {
         kind = "answer",
@@ -735,7 +756,7 @@ local function ParseGroupStatusIconDetail(text)
 
     local iconSpec = GroupStatusIconSpecForText(text)
     if not iconSpec then return nil end
-    if iconSpec.key == "raidMarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) then
+    if iconSpec.key == "raidMarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) and not HasStatusOffsetIntent(text) then
         return RaidMarkerSymbolAnswer()
     end
     local anchorIntent = StatusAnchorIntent(text)
@@ -841,7 +862,7 @@ end
 local UNIT_STATUS_RESET_TERMS = {
     "status indicator", "status indicators", "status icon", "status icons", "status symbol", "status symbols", "indicator position", "level indicator", "level text",
     "leader icon", "leader indicator", "leader symbol", "assist icon", "assist indicator", "assist symbol",
-    "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "raid indicator", "raid symbol", "raid group", "raid group name",
+    "raid marker", "raid marker icon", "raid marker indicator", "raid marker symbol", "raid icon", "raid indicator", "raid symbol", "raid group", "raid group name",
     "elite icon", "elite indicator", "elite symbol", "rare icon", "rare indicator", "rare symbol",
     "dead text", "status text", "combat indicator", "combat icon", "combat symbol", "combat state symbol",
     "rested indicator", "resting indicator", "rested icon", "resting icon", "rested symbol", "resting symbol",
@@ -1046,7 +1067,7 @@ local function ParseUnitStatusIndicatorDetail(text)
     local unit = units[1]
     local spec = ResolveUnitStatusSpecOrSelected(unit, text)
     if not spec then return nil end
-    if spec.value == "raidmarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) then
+    if spec.value == "raidmarker" and ContainsAny(text, RAID_MARKER_SYMBOL_WORDS) and not HasStatusOffsetIntent(text) then
         return RaidMarkerSymbolAnswer()
     end
 
@@ -1093,6 +1114,28 @@ local function ParseUnitStatusIndicatorDetail(text)
                 changes = { { setting = setting, value = value, relativeDelta = relativeDelta } },
                 label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " Layer",
                 summary = "Changes the registered layer slider for one unit-frame status indicator.",
+            }
+        end
+    end
+
+    local offsetKey
+    local offsetLabel
+    if ContainsAny(text, { "x offset", "offset x", "horizontal offset" }) then
+        offsetKey = spec.x
+        offsetLabel = "X Offset"
+    elseif ContainsAny(text, { "y offset", "offset y", "vertical offset" }) then
+        offsetKey = spec.y
+        offsetLabel = "Y Offset"
+    end
+    if type(offsetKey) == "string" and offsetKey ~= "" then
+        local value = FirstNumber(text)
+        local setting = value ~= nil and Registry and Registry:GetSetting(unit .. "." .. offsetKey) or nil
+        if setting then
+            return {
+                kind = "changes",
+                changes = { { setting = setting, value = value } },
+                label = tostring((A.UnitLabels or {})[unit] or unit) .. " " .. tostring(spec.label or "Status Indicator") .. " " .. offsetLabel,
+                summary = "Changes the registered X/Y offset slider for one unit-frame status indicator.",
             }
         end
     end

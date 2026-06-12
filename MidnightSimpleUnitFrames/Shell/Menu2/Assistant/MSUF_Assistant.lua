@@ -90,6 +90,198 @@ function A.GetPerfTrace(limit)
     return out
 end
 
+function A.GetJobSummary()
+    local jobs = A._assistantJobs
+    local out = { count = 0, labels = {} }
+    if type(jobs) ~= "table" then return out end
+    out.count = #jobs
+    local limit = math.min(#jobs, 4)
+    for i = 1, limit do
+        local job = jobs[i]
+        out.labels[#out.labels + 1] = tostring(job and job.label or "assistant.job") .. "#" .. tostring(job and job.index or "?")
+    end
+    return out
+end
+
+function A.PerformanceWarmupStatusText()
+    if A._performanceWarmupCompleted == true then
+        return "completed (" .. tostring(A._performanceWarmupReason or "assistant") .. ")"
+    end
+    if A._performanceWarmupStarted == true then
+        local jobs = A._assistantJobs
+        if type(jobs) == "table" then
+            for i = 1, #jobs do
+                if jobs[i] and jobs[i].label == "assistant.warmup" then
+                    return "running (" .. tostring(A._performanceWarmupReason or "assistant") .. ")"
+                end
+            end
+        end
+        return "started (" .. tostring(A._performanceWarmupReason or "assistant") .. ")"
+    end
+    if A._performanceWarmupSuppressed then
+        return "disabled (" .. tostring(A._performanceWarmupSuppressed) .. ")"
+    end
+    return "not started"
+end
+
+local NO_MATCH_RECENT_LIMIT = 80
+local NO_MATCH_COUNT_LIMIT = 200
+
+local function NoMatchStore(create)
+    local global = _G.MSUF_GlobalDB
+    if type(global) ~= "table" then
+        if not create then return nil end
+        global = {}
+        _G.MSUF_GlobalDB = global
+    end
+    if type(global.global) ~= "table" then
+        if not create then return nil end
+        global.global = {}
+    end
+    local store = global.global.assistantNoMatch
+    if type(store) ~= "table" then
+        if not create then return nil end
+        store = {}
+        global.global.assistantNoMatch = store
+    end
+    store.recent = type(store.recent) == "table" and store.recent or {}
+    store.counts = type(store.counts) == "table" and store.counts or {}
+    return store
+end
+
+local function NormalizeNoMatchText(text)
+    text = Trim(text):lower():gsub("%s+", " ")
+    if #text > 160 then text = text:sub(1, 160) end
+    return text
+end
+
+function A.RecordNoMatch(text, result, source)
+    local key = NormalizeNoMatchText(text)
+    if key == "" then return nil end
+    local store = NoMatchStore(true)
+    if not store then return nil end
+    local now = type(_G.GetServerTime) == "function" and _G.GetServerTime() or (_G.time and _G.time()) or nil
+    local entry = store.counts[key]
+    if type(entry) ~= "table" then
+        entry = { text = key, count = 0 }
+        store.counts[key] = entry
+    end
+    entry.count = (tonumber(entry.count) or 0) + 1
+    entry.lastSeen = now
+    entry.source = tostring(source or "assistant")
+    entry.status = type(result) == "table" and tostring(result.status or result.kind or "") or ""
+    store.total = (tonumber(store.total) or 0) + 1
+    store.recent[#store.recent + 1] = {
+        text = key,
+        source = entry.source,
+        status = entry.status,
+        seen = now,
+    }
+    while #store.recent > NO_MATCH_RECENT_LIMIT do table.remove(store.recent, 1) end
+    local countKeys = 0
+    local lowestKey, lowestCount
+    for seenKey, seenEntry in pairs(store.counts) do
+        countKeys = countKeys + 1
+        local seenCount = tonumber(seenEntry and seenEntry.count) or 0
+        if not lowestCount or seenCount < lowestCount then
+            lowestKey, lowestCount = seenKey, seenCount
+        end
+    end
+    if countKeys > NO_MATCH_COUNT_LIMIT and lowestKey and lowestKey ~= key then store.counts[lowestKey] = nil end
+    A._lastNoMatch = entry
+    return entry
+end
+
+function A.GetNoMatchTelemetry(limit)
+    local store = NoMatchStore(false)
+    if not store then return { total = 0, recent = {}, top = {} } end
+    local top = {}
+    for _, entry in pairs(store.counts or {}) do
+        if type(entry) == "table" then top[#top + 1] = entry end
+    end
+    table.sort(top, function(a, b)
+        local ac, bc = tonumber(a.count) or 0, tonumber(b.count) or 0
+        if ac == bc then return tostring(a.text or "") < tostring(b.text or "") end
+        return ac > bc
+    end)
+    local maxTop = tonumber(limit) or 20
+    if maxTop < 1 then maxTop = 20 end
+    while #top > maxTop do table.remove(top) end
+    local recent = {}
+    local source = store.recent or {}
+    local first = math.max(1, #source - maxTop + 1)
+    for i = first, #source do recent[#recent + 1] = source[i] end
+    return {
+        total = tonumber(store.total) or 0,
+        recent = recent,
+        top = top,
+    }
+end
+
+function A.ClearNoMatchTelemetry()
+    local store = NoMatchStore(false)
+    if not store then return 0 end
+    local total = tonumber(store.total) or 0
+    store.total = 0
+    store.recent = {}
+    store.counts = {}
+    A._lastNoMatch = nil
+    return total
+end
+
+local function NoMatchLine(index, entry)
+    if type(entry) ~= "table" then return nil end
+    local text = tostring(entry.text or "")
+    if text == "" then return nil end
+    local count = tonumber(entry.count) or 0
+    local source = tostring(entry.source or "")
+    local status = tostring(entry.status or "")
+    local suffix = ""
+    if count > 0 then suffix = suffix .. " x" .. tostring(count) end
+    if source ~= "" then suffix = suffix .. " source=" .. source end
+    if status ~= "" then suffix = suffix .. " status=" .. status end
+    return tostring(index) .. ". " .. text .. suffix
+end
+
+function A.NoMatchTelemetryText(limit)
+    local data = A.GetNoMatchTelemetry(limit or 10)
+    local lines = {}
+    lines[#lines + 1] = "Assistant NoMatch telemetry:"
+    lines[#lines + 1] = "- Total recorded: " .. tostring(tonumber(data.total) or 0)
+    lines[#lines + 1] = "- Stored top phrases: " .. tostring(#(data.top or {}))
+    lines[#lines + 1] = "- Stored recent phrases: " .. tostring(#(data.recent or {}))
+    if (tonumber(data.total) or 0) <= 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "No Assistant NoMatch telemetry recorded yet."
+        return table.concat(lines, "\n")
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Top phrases:"
+    for i = 1, #(data.top or {}) do
+        local line = NoMatchLine(i, data.top[i])
+        if line then lines[#lines + 1] = line end
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Recent phrases:"
+    for i = 1, #(data.recent or {}) do
+        local entry = data.recent[i]
+        if type(entry) == "table" and tostring(entry.text or "") ~= "" then
+            local source = tostring(entry.source or "")
+            local status = tostring(entry.status or "")
+            local suffix = ""
+            if source ~= "" then suffix = suffix .. " source=" .. source end
+            if status ~= "" then suffix = suffix .. " status=" .. status end
+            lines[#lines + 1] = tostring(i) .. ". " .. tostring(entry.text) .. suffix
+        end
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Use repeated phrases as candidates for registry aliases, parser fallbacks, or help-copy examples."
+    return table.concat(lines, "\n")
+end
+
 local function ScheduleJobPump()
     if A._assistantJobPumpScheduled then return end
     A._assistantJobPumpScheduled = true
@@ -112,6 +304,11 @@ function A._RunJobPump()
     local stepsRun = 0
     while #jobs > 0 and stepsRun < maxSteps do
         local job = jobs[1]
+        local jobMaxSteps = tonumber(job and job.maxStepsPerFrame) or maxSteps
+        if jobMaxSteps <= 0 then jobMaxSteps = maxSteps end
+        if stepsRun >= jobMaxSteps then break end
+        local jobBudget = tonumber(job and job.budgetMs) or budget
+        if jobBudget <= 0 then jobBudget = budget end
         local step = job and job.steps and job.steps[job.index]
         if type(step) ~= "function" then
             table.remove(jobs, 1)
@@ -145,9 +342,9 @@ function A._RunJobPump()
             end
         end
 
-        if sliceStart and budget > 0 then
+        if sliceStart and jobBudget > 0 then
             local now = PerfNowMs()
-            if now and (now - sliceStart) >= budget then break end
+            if now and (now - sliceStart) >= jobBudget then break end
         end
     end
 
@@ -193,11 +390,12 @@ function A.CoroutineStep(fn)
     end
 end
 
-function A.StartJob(label, steps, callback)
+function A.StartJob(label, steps, callback, opts)
     if type(steps) ~= "table" or #steps == 0 then
         if type(callback) == "function" then pcall(callback, nil) end
         return nil
     end
+    opts = type(opts) == "table" and opts or {}
     A._assistantJobs = A._assistantJobs or {}
     A._assistantJobSerial = (tonumber(A._assistantJobSerial) or 0) + 1
     local job = {
@@ -206,6 +404,8 @@ function A.StartJob(label, steps, callback)
         steps = steps,
         index = 1,
         callback = callback,
+        budgetMs = tonumber(opts.budgetMs),
+        maxStepsPerFrame = tonumber(opts.maxStepsPerFrame),
     }
     A._assistantJobs[#A._assistantJobs + 1] = job
     ScheduleJobPump()
@@ -1096,7 +1296,9 @@ function A.HandleCommandInput(text)
         return { text = ChoiceText(A.pendingChoices), status = "ambiguous", summary = parsed.summary }
     end
     if parsed.kind == "unknown" then
-        return { text = parsed.text or "I do not know that setting yet.", status = parsed.status or "failed", kind = "unknown" }
+        local result = { text = parsed.text or "I do not know that setting yet.", status = parsed.status or "failed", kind = "unknown" }
+        if A.RecordNoMatch and type(A.RouteInput) ~= "function" then A.RecordNoMatch(text, result, "parser") end
+        return result
     end
     if parsed.kind == "unsupported" then
         return { text = parsed.text or "That Assistant command is not supported yet.", status = parsed.status or "info", kind = "unsupported", summary = parsed.summary }
@@ -1506,15 +1708,19 @@ function A.SubmitDeferred(text, callback)
 end
 
 function A.WarmupPerformanceIndexes(reason)
+    reason = tostring(reason or "assistant")
     if A.allowPerformanceWarmup ~= true and _G.MSUF_ASSISTANT_ALLOW_WARMUP ~= true then
-        A._performanceWarmupSuppressed = tostring(reason or "assistant")
+        A._performanceWarmupSuppressed = reason
         return false, "disabled"
     end
     if A._performanceWarmupStarted then return false end
-    if InCombat() then return false end
-    if A.IsBusy and A.IsBusy() then return false end
-    if type(A._assistantJobs) == "table" and #A._assistantJobs > 0 then return false end
+    if InCombat() then A._performanceWarmupSuppressed = "combat:" .. reason; return false, "combat" end
+    if A.IsBusy and A.IsBusy() then A._performanceWarmupSuppressed = "busy:" .. reason; return false, "busy" end
+    if type(A._assistantJobs) == "table" and #A._assistantJobs > 0 then A._performanceWarmupSuppressed = "jobs:" .. reason; return false, "jobs" end
     A._performanceWarmupStarted = true
+    A._performanceWarmupCompleted = nil
+    A._performanceWarmupSuppressed = nil
+    A._performanceWarmupReason = reason
 
     local steps = {
         A.CoroutineStep(function()
@@ -1539,8 +1745,15 @@ function A.WarmupPerformanceIndexes(reason)
             end
         end),
     }
-    A.StartJob("assistant.warmup", steps)
-    return true, tostring(reason or "assistant")
+    local warmupBudget = tonumber(A.warmupJobBudgetMs) or 2
+    if warmupBudget <= 0 or warmupBudget > 2 then warmupBudget = 2 end
+    A.StartJob("assistant.warmup", steps, function()
+        A._performanceWarmupCompleted = true
+    end, {
+        budgetMs = warmupBudget,
+        maxStepsPerFrame = 1,
+    })
+    return true, reason
 end
 
 function A.RegisteredSettingSummary()

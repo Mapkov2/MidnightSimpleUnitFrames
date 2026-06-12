@@ -15,6 +15,11 @@ local InCombatLockdown = InCombatLockdown
 local table_remove = table.remove
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
+local issecretvalue = _G.issecretvalue or function(_) return false end
+
+local function IsUnitToken(unit)
+    return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
+end
 
 GF.frames = GF.frames or setmetatable({}, { __mode = "k" })
 GF.frameList = GF.frameList or {}
@@ -367,11 +372,12 @@ end
 local function IndexFrameUnit(frame, unit)
     if not frame then return end
     local old = frame._msufGFIndexedUnit
+    local unitOk = IsUnitToken(unit)
     local byUnit = GF.unitFrames
-    if old and old ~= unit and byUnit[old] == frame then
+    if IsUnitToken(old) and (not unitOk or old ~= unit) and byUnit[old] == frame then
         byUnit[old] = nil
     end
-    if type(unit) == "string" and unit ~= "" then
+    if unitOk then
         byUnit[unit] = frame
         frame._msufGFIndexedUnit = unit
     else
@@ -388,8 +394,13 @@ local function TrackFrame(frame, unit)
 end
 
 function GF.FrameForUnit(unit)
+    if not IsUnitToken(unit) then
+        return nil
+    end
     local frame = unit and GF.unitFrames and GF.unitFrames[unit]
-    if frame and GF.frames[frame] == true and frame.unit == unit then
+    local frameUnit = frame and frame.unit
+    if frame and GF.frames[frame] == true
+        and frameUnit == unit then
         return frame
     end
     return nil

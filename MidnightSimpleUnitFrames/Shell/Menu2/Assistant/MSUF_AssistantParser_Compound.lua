@@ -176,6 +176,13 @@ end
 local function SimpleParse(text)
     text = Trim(text)
     if text == "" then return nil end
+    if type(A.ParseSimpleChange) == "function" then
+        P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
+        local parsed = A.ParseSimpleChange(text)
+        P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
+        if parsed then return parsed end
+        return nil
+    end
     P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
     local ok, parsed = pcall(A.Parse, text)
     P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
@@ -2326,19 +2333,23 @@ local function ValueChainCommand(segment, prefix, verb)
     return SegmentCommand(segment, prefix, verb)
 end
 
+local ScopedColorSegmentPlan
+
 local function ValueTokenChain(text)
     local segments = ValueTokenSegments(text)
     if not segments then return nil end
-    local firstPlan = SimpleParse(segments[1])
+    local firstPlan = (ScopedColorSegmentPlan and ScopedColorSegmentPlan(segments[1])) or SimpleParse(segments[1])
     if not (firstPlan and firstPlan.kind == "changes" and type(firstPlan.changes) == "table" and #firstPlan.changes > 0) then return nil end
     local prefix, verb = Prefix(firstPlan)
-    local commands = { segments[1] }
+    local plans = { firstPlan }
     for i = 2, #segments do
         local command = ValueChainCommand(segments[i], prefix, verb)
         if not command then return nil end
-        commands[#commands + 1] = command
+        local plan = (ScopedColorSegmentPlan and ScopedColorSegmentPlan(command)) or SimpleParse(command)
+        if not (plan and plan.kind == "changes" and type(plan.changes) == "table" and #plan.changes > 0) then return nil end
+        plans[#plans + 1] = plan
     end
-    return ParseCommands(commands)
+    return MergePlans(plans)
 end
 
 local function FastBarScope(scope)
@@ -2346,6 +2357,62 @@ local function FastBarScope(scope)
     if scope == "mythic raid" or scope == "mythicraid" or scope == "raid" then return "gf_raid" end
     if scope == "party" then return "gf_party" end
     return scope
+end
+
+ScopedColorSegmentPlan = function(segment)
+    local words = Words(segment)
+    if #words < 4 then return nil end
+    local colorWord = words[#words]
+    if not COLOR_VALUE_WORDS[colorWord] then return nil end
+    local r, g, b, label
+    if type(ExtractColor) == "function" then
+        r, g, b, label = ExtractColor(colorWord, colorWord)
+    end
+    if not r then return nil end
+
+    local prefix = StripCommandLead(WordsText(words, 1, #words - 1))
+    local detail = RemoveScopeTerms(prefix)
+    local changes = {}
+    if detail == "border color"
+        or detail == "outline color"
+        or detail == "bar border color"
+        or detail == "bar outline color"
+        or detail == "frame border color"
+        or detail == "frame outline color" then
+        local scopes = ScopeLabels(prefix)
+        if #scopes == 0 then return nil end
+        for scopeIndex = 1, #scopes do
+            local setting = Registry and Registry.GetSetting and Registry:GetSetting("barScope." .. FastBarScope(scopes[scopeIndex]) .. ".barOutlineColor")
+            if not setting then return nil end
+            changes[#changes + 1] = {
+                setting = setting,
+                value = { r = r, g = g, b = b, label = label },
+                valueLabel = label,
+            }
+        end
+    elseif detail == "bar background color"
+        or detail == "bar background tint"
+        or detail == "class bar background color"
+        or detail == "class bar background tint" then
+        if #ScopeLabels(prefix) > 0 then return nil end
+        local setting = Registry and Registry.GetSetting and Registry:GetSetting("general.classBarBgColor")
+        if not setting then return nil end
+        changes[#changes + 1] = {
+            setting = setting,
+            value = { r = r, g = g, b = b, label = label },
+            valueLabel = label,
+        }
+    else
+        return nil
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        label = "Combined Assistant setting change",
+        summary = "Combined natural-language setting changes.",
+        bulkSafe = true,
+    }
 end
 
 local function FastScopedBorderColorChain(text)

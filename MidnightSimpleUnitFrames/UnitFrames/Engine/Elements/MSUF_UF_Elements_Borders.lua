@@ -158,10 +158,12 @@ local function RefreshBorderTestFrames()
     end
     local gf = MSUF and MSUF.GF
     if gf then
-        if gf.RefreshVisuals then
-            gf.RefreshVisuals()
+        if gf.RefreshBorder then
+            gf.RefreshBorder()
+        elseif gf.RefreshVisuals then
+            gf.RefreshVisuals(nil, gf.DIRTY_BORDER or gf.DIRTY_VISUAL)
         elseif gf.MarkAllDirty then
-            gf.MarkAllDirty((gf.DIRTY_VISUAL or 2) + (gf.DIRTY_LAYOUT or 32))
+            gf.MarkAllDirty(gf.DIRTY_BORDER or gf.DIRTY_VISUAL or 2)
         end
     end
 end
@@ -267,9 +269,7 @@ local function SetBorder(frame, show, r, g, b, a)
     local showChanged = frame._msufBorderShown ~= show
     local colorChanged = secretColor == true
     if not colorChanged then
-        if frame._msufBorderSecretColor == true
-            or IsSecretValue(frame._msufBorderR) or IsSecretValue(frame._msufBorderG)
-            or IsSecretValue(frame._msufBorderB) or IsSecretValue(frame._msufBorderA) then
+        if frame._msufBorderSecretColor == true then
             colorChanged = true
         else
             colorChanged = frame._msufBorderR ~= r
@@ -451,21 +451,44 @@ local function LayoutUnitDispelOverlay(frame, tex, cfg)
     tex._msufOverlaySize = size
 end
 
+local function SetUnitDispelOverlayColor(tex, r, g, b, a)
+    if not tex then return end
+    r, g, b, a = r or 0.25, g or 0.75, b or 1, a or 0.35
+    if IsSecretValue(r) or IsSecretValue(g) or IsSecretValue(b) or IsSecretValue(a) then
+        tex._msufDispelOverlaySecretColor = true
+        tex._msufDispelOverlayR, tex._msufDispelOverlayG = nil, nil
+        tex._msufDispelOverlayB, tex._msufDispelOverlayA = nil, nil
+        tex:SetColorTexture(r, g, b, a)
+        return
+    end
+    if tex._msufDispelOverlaySecretColor ~= true
+        and tex._msufDispelOverlayR == r
+        and tex._msufDispelOverlayG == g
+        and tex._msufDispelOverlayB == b
+        and tex._msufDispelOverlayA == a then
+        return
+    end
+    tex._msufDispelOverlaySecretColor = nil
+    tex._msufDispelOverlayR, tex._msufDispelOverlayG = r, g
+    tex._msufDispelOverlayB, tex._msufDispelOverlayA = b, a
+    tex:SetColorTexture(r, g, b, a)
+end
+
 local function UpdateUnitDispelOverlay(frame, cfg)
     local tex = frame and frame.MSUFUnitDispelOverlay
     if not (cfg and cfg.enabled == true and frame and frame._msufA3DispelOverlayActive == true) then
-        if tex then tex:Hide() end
+        if tex then SetShown(tex, false) end
         return
     end
     tex = tex or EnsureUnitDispelOverlay(frame)
     if not tex then return end
     LayoutUnitDispelOverlay(frame, tex, cfg)
-    tex:SetColorTexture(
+    SetUnitDispelOverlayColor(tex,
         frame._msufA3DispelOverlayR or frame._msufA3DispelR or 0.25,
         frame._msufA3DispelOverlayG or frame._msufA3DispelG or 0.75,
         frame._msufA3DispelOverlayB or frame._msufA3DispelB or 1,
         tonumber(cfg.alpha) or 0.35)
-    tex:Show()
+    SetShown(tex, true)
 end
 
 local function NormalBorderColor(cfg)
@@ -526,6 +549,12 @@ end
 function Borders.Apply(frame, spec)
     local cfg = spec and spec.border
     local overlayCfg = spec and spec.dispelOverlay
+    if frame then
+        frame._msufBorderRuntimeCfg = cfg
+        frame._msufBorderRuntimeOverlayCfg = overlayCfg
+        frame._msufBorderRuntimeNormal = BorderNormalEnabled(cfg) or nil
+        frame._msufBorderRuntimeHighlight = BorderHighlightEnabled(frame, cfg) or nil
+    end
     UpdateUnitDispelOverlay(frame, overlayCfg)
     if not cfg or not (BorderNormalEnabled(cfg) or BorderHighlightEnabled(frame, cfg)) then
         LayoutBorder(frame, 1)
@@ -548,14 +577,29 @@ function Borders.Disable(frame)
     if frame and frame.MSUFUnitDispelOverlay then
         frame.MSUFUnitDispelOverlay:Hide()
     end
+    if frame then
+        frame._msufBorderRuntimeCfg = nil
+        frame._msufBorderRuntimeOverlayCfg = nil
+        frame._msufBorderRuntimeNormal = nil
+        frame._msufBorderRuntimeHighlight = nil
+    end
     SetBorder(frame, false)
 end
 
 function Borders.Update(frame)
-    local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.border
-    UpdateUnitDispelOverlay(frame, frame and frame.MSUFSpec and frame.MSUFSpec.dispelOverlay)
-    local normalEnabled = BorderNormalEnabled(cfg)
-    if not cfg or not (normalEnabled or BorderHighlightEnabled(frame, cfg)) then
+    local cfg = frame and frame._msufBorderRuntimeCfg
+    local overlayCfg = frame and frame._msufBorderRuntimeOverlayCfg
+    if cfg == nil and frame and frame.MSUFSpec then
+        cfg = frame.MSUFSpec.border
+        overlayCfg = frame.MSUFSpec.dispelOverlay
+    end
+    UpdateUnitDispelOverlay(frame, overlayCfg)
+    local normalEnabled = frame and frame._msufBorderRuntimeNormal == true
+    local highlightEnabled = frame and frame._msufBorderRuntimeHighlight == true
+    if _G.MSUF_BorderTestModesActive == true then
+        highlightEnabled = BorderHighlightEnabled(frame, cfg)
+    end
+    if not cfg or not (normalEnabled or highlightEnabled) then
         SetBorder(frame, false)
         return
     end

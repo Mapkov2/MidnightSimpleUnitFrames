@@ -396,12 +396,81 @@ local function PromoteRuntimeLayout(unit, kind)
     end
 end
 
-local function ForEachAffectedUnit(unit, shared, fn)
-    if BOSS_UNITS[unit] and shared and shared.bossEditTogether ~= false then
-        for i = 1, 5 do fn("boss" .. i) end
-    elseif unit then
-        fn(unit)
+local function ApplyDragUnit(auras, unit, moverKind, x, y)
+    WriteOffset(auras, unit, moverKind, x, y)
+    local other = EM.groups and EM.groups[unit] and EM.groups[unit][moverKind]
+    local frame = other and GetFrame(unit)
+    if other and frame then
+        local cfg = ReadGroupConfig(unit, moverKind)
+        local baseX, baseY = AnchorBase(cfg.anchor, frame)
+        ApplyGroupScaleForFrame(other, frame)
+        other:ClearAllPoints()
+        other:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", baseX + x, baseY + y)
     end
+end
+
+local function RefreshAffectedRuntimeUnits(unit, shared)
+    if BOSS_UNITS[unit] and shared and shared.bossEditTogether ~= false then
+        for i = 1, 5 do A3.RefreshUnit("boss" .. i) end
+    elseif unit then
+        A3.RefreshUnit(unit)
+    end
+end
+
+local function ApplyDragDelta(self, dx, dy)
+    if IsConfigBlocked() then return end
+    local auras = self._dragAuras
+    local shared = self._dragShared
+    if not (auras and shared) then
+        auras, shared = EnsureDB()
+        self._dragAuras = auras
+        self._dragShared = shared
+    end
+    if not auras or not shared then return end
+    local startX = self._dragStartOffsetX or 0
+    local startY = self._dragStartOffsetY or 0
+    local x = Round(startX + dx)
+    local y = Round(startY + dy)
+    if self._lastDragX == x and self._lastDragY == y then return end
+    self._lastDragX = x
+    self._lastDragY = y
+    local baseUnit = self._msufA3Unit
+    local moverKind = self._msufA3MoverKind
+
+    if BOSS_UNITS[baseUnit] and shared.bossEditTogether ~= false then
+        for i = 1, 5 do
+            ApplyDragUnit(auras, "boss" .. i, moverKind, x, y)
+        end
+    elseif baseUnit then
+        ApplyDragUnit(auras, baseUnit, moverKind, x, y)
+    end
+
+    local sync = _G.MSUF_SyncAuras3PositionPopup
+    if type(sync) == "function" then sync(baseUnit) end
+end
+
+local function AuraGroupDragOnUpdate(me)
+    if not me._dragging then me:SetScript("OnUpdate", nil); return end
+    local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
+    local mx, my = GetCursorPosition()
+    mx, my = mx / uiScale, my / uiScale
+    local dx = mx - (me._dragStartCursorX or mx)
+    local dy = my - (me._dragStartCursorY or my)
+    if not me._dragMoved then
+        if (dx * dx + dy * dy) < 9 then return end
+        me._dragMoved = true
+    end
+
+    local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
+    if Snap and Snap.IsEnabled and Snap.IsEnabled() and Snap.Apply then
+        if Snap.HideGuides then Snap.HideGuides() end
+        local sx, sy = Snap.Apply((me._snapStartCX or 0) + dx, (me._snapStartCY or 0) + dy, me._snapHW or 0, me._snapHH or 0, me._msufA3SnapName)
+        dx = sx - (me._snapStartCX or 0)
+        dy = sy - (me._snapStartCY or 0)
+    end
+    local frameScale = tonumber(me._dragFrameScale) or tonumber(me._msufA3FrameScale) or 1
+    if frameScale <= 0 then frameScale = 1 end
+    ApplyDragDelta(me, dx / frameScale, dy / frameScale)
 end
 
 local function ApplyGlobalFont(fs, size)
@@ -461,24 +530,24 @@ local function PostCreateRuntimeButton(element, button)
     ApplyRuntimeButtonStyle(button, element and element.unit)
 end
 
+local function StyleRuntimeLane(lane, unit)
+    if not lane then return end
+    lane.PostCreateButton = PostCreateRuntimeButton
+    local n = lane.createdButtons or #lane or 0
+    for i = 1, n do
+        ApplyRuntimeButtonStyle(lane[i], unit)
+    end
+end
+
 local function StyleRuntimeButtons(unit)
     local frame = GetFrame(unit)
     local element = frame and frame.Auras
     if not element then return end
 
-    local function styleLane(lane)
-        if not lane then return end
-        lane.PostCreateButton = PostCreateRuntimeButton
-        local n = lane.createdButtons or #lane or 0
-        for i = 1, n do
-            ApplyRuntimeButtonStyle(lane[i], unit)
-        end
-    end
-
-    styleLane(element.Buffs)
-    styleLane(element.Debuffs)
+    StyleRuntimeLane(element.Buffs, unit)
+    StyleRuntimeLane(element.Debuffs, unit)
     if not element.Buffs and not element.Debuffs then
-        styleLane(element)
+        StyleRuntimeLane(element, unit)
     end
 end
 
@@ -594,29 +663,8 @@ local function CreateGroup(unit, kind)
 
     group._msufA3Unit = unit
     group._msufA3MoverKind = kind
+    group._msufA3SnapName = name
     group:Hide()
-
-    local function ApplyDragDelta(self, dx, dy)
-        if IsConfigBlocked() then return end
-        local auras, shared = EnsureDB()
-        if not auras or not shared then return end
-        local startX = self._dragStartOffsetX or 0
-        local startY = self._dragStartOffsetY or 0
-        local x = Round(startX + dx)
-        local y = Round(startY + dy)
-        local baseUnit = self._msufA3Unit
-        local moverKind = self._msufA3MoverKind
-
-        ForEachAffectedUnit(baseUnit, shared, function(u)
-            WriteOffset(auras, u, moverKind, x, y)
-            PromoteRuntimeLayout(u, moverKind)
-            EM.RefreshUnit(u)
-        end)
-        RequestUnitFrameMenuPreview("AURAS3_EDITMODE_DRAG")
-
-        local sync = _G.MSUF_SyncAuras3PositionPopup
-        if type(sync) == "function" then sync(baseUnit) end
-    end
 
     group:SetScript("OnMouseDown", function(self, button)
         _G.MSUF_EM2_ActiveAuraGroup = self._msufA3MoverKind
@@ -646,6 +694,8 @@ local function CreateGroup(unit, kind)
         self._dragStartCursorY = cy / scale
         self._dragMoved = false
         self._dragging = true
+        self._lastDragX = nil
+        self._lastDragY = nil
 
         local l, r, t, b = self:GetLeft() or 0, self:GetRight() or 0, self:GetTop() or 0, self:GetBottom() or 0
         self._snapStartCX = (l + r) * 0.5
@@ -653,43 +703,26 @@ local function CreateGroup(unit, kind)
         self._snapHW = (r - l) * 0.5
         self._snapHH = (t - b) * 0.5
 
-        self:SetScript("OnUpdate", function(me)
-            if not me._dragging then me:SetScript("OnUpdate", nil); return end
-            local uiScale = UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale() or 1
-            local mx, my = GetCursorPosition()
-            mx, my = mx / uiScale, my / uiScale
-            local dx = mx - (me._dragStartCursorX or mx)
-            local dy = my - (me._dragStartCursorY or my)
-            if not me._dragMoved then
-                if (dx * dx + dy * dy) < 9 then return end
-                me._dragMoved = true
-            end
-
-            local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
-            if Snap and Snap.IsEnabled and Snap.IsEnabled() and Snap.Apply then
-                if Snap.HideGuides then Snap.HideGuides() end
-                local sx, sy = Snap.Apply((me._snapStartCX or 0) + dx, (me._snapStartCY or 0) + dy, me._snapHW or 0, me._snapHH or 0, name)
-                dx = sx - (me._snapStartCX or 0)
-                dy = sy - (me._snapStartCY or 0)
-            end
-            local frameScale = tonumber(me._dragFrameScale) or tonumber(me._msufA3FrameScale) or 1
-            if frameScale <= 0 then frameScale = 1 end
-            ApplyDragDelta(me, dx / frameScale, dy / frameScale)
-        end)
+        self:SetScript("OnUpdate", AuraGroupDragOnUpdate)
     end)
 
     group:SetScript("OnMouseUp", function(self)
         local moved = self._dragMoved == true
         self._dragging = false
         self:SetScript("OnUpdate", nil)
+        self._dragAuras = nil
+        self._dragShared = nil
         local Snap = _G.MSUF_EM2 and _G.MSUF_EM2.Snap
         if Snap and Snap.HideGuides then Snap.HideGuides() end
 
         if moved then
             local _, shared = EnsureDB()
-            ForEachAffectedUnit(self._msufA3Unit, shared, function(u)
-                A3.RefreshUnit(u)
-            end)
+            RefreshAffectedRuntimeUnits(self._msufA3Unit, shared)
+            RequestUnitFrameMenuPreview("AURAS3_EDITMODE_DRAG_END")
+            local sync = _G.MSUF_SyncAuras3PositionPopup
+            if type(sync) == "function" then sync(self._msufA3Unit) end
+            self._lastDragX = nil
+            self._lastDragY = nil
             self._dragMoved = false
             return
         end
@@ -697,6 +730,8 @@ local function CreateGroup(unit, kind)
         if IsEditModeActive() and not IsConfigBlocked() and type(_G.MSUF_OpenAuras3PositionPopup) == "function" then
             _G.MSUF_OpenAuras3PositionPopup(self._msufA3Unit, self)
         end
+        self._lastDragX = nil
+        self._lastDragY = nil
     end)
 
     byUnit[kind] = group
@@ -824,7 +859,9 @@ if type(CoreEnableFrame) == "function" then
         local ret = CoreEnableFrame(frame, ...)
         if frame and frame.unit then
             StyleRuntimeButtons(frame.unit)
-            EM.RefreshUnit(frame.unit)
+            if UnitPreviewActive(frame.unit) then
+                EM.RefreshUnit(frame.unit)
+            end
         end
         return ret
     end
@@ -852,7 +889,9 @@ function A3.RefreshUnit(unit)
     if frame and frame.Auras then frame.Auras.needFullUpdate = true end
     if A3.RequestUnit then A3.RequestUnit(unit, 0) end
     StyleRuntimeButtons(unit)
-    EM.RefreshUnit(unit)
+    if UnitPreviewActive(unit) then
+        EM.RefreshUnit(unit)
+    end
 end
 
 function A3.UpdateUnitAnchor(unit)
