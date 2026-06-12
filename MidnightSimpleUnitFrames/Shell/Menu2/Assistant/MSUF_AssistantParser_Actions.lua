@@ -253,12 +253,11 @@ local function ParseGroupCopy(text)
     local confirm = (WantsFullGroupCopy and WantsFullGroupCopy(text)) or ContainsAny(text, { "all", "alle" }) or #targets > 1
     local scopes = GroupCopyScopesForText(text)
     if not HasEnabledCopyScope(scopes) then
-        if P.ParseUnsupportedAuraCommand then return P.ParseUnsupportedAuraCommand(text) end
         return {
-            kind = "unsupported",
+            kind = "answer",
             status = "info",
-            summary = "Group Aura copy is not registered yet.",
-            text = "I could not safely copy only Group Auras. Group Aura copy is still blocked until its backend is registered.",
+            summary = "No group-frame copy categories selected.",
+            text = "No group-frame copy categories were selected. Say exactly what to copy, for example 'copy raid auras to party' or 'copy raid layout without auras to party'.",
         }
     end
     return {
@@ -1664,6 +1663,59 @@ function A._ParseMenuHistoryAction(text)
         label = label,
         summary = summary,
     } or nil
+end
+
+local function RegistryActionAliasScore(action, text)
+    if type(action) ~= "table" then return 0 end
+    if type(action.parseAliasArgs) ~= "function" and action.aliasNoArgs ~= true then return 0 end
+    local aliases = action.aliases
+    if type(aliases) ~= "table" or #aliases == 0 then return 0 end
+    local relationText = AliasRelationText(text)
+    local best = 0
+    for i = 1, #aliases do
+        local alias = aliases[i]
+        if TextMatchesAlias and TextMatchesAlias(text, relationText, alias) then
+            local score = #Compact(alias)
+            if score > best then best = score end
+        elseif HasPhrase(text, alias) then
+            local score = #Compact(alias)
+            if score > best then best = score end
+        end
+    end
+    return best
+end
+
+function P.ParseRegistryActionAliasShortcut(text, raw)
+    local actions = Registry and Registry:AllActions() or {}
+    local bestAction, bestArgs, bestMeta, bestScore
+    for i = 1, #actions do
+        local action = actions[i]
+        local score = RegistryActionAliasScore(action, text)
+        if score > 0 and (not bestScore or score > bestScore) then
+            local args, meta
+            if type(action.parseAliasArgs) == "function" then
+                local ok, parsedArgs, parsedMeta = pcall(action.parseAliasArgs, text, raw, action)
+                if ok and parsedArgs ~= false then
+                    args = type(parsedArgs) == "table" and parsedArgs or {}
+                    meta = type(parsedMeta) == "table" and parsedMeta or nil
+                end
+            elseif action.aliasNoArgs == true then
+                args = {}
+            end
+            if args then
+                bestAction, bestArgs, bestMeta, bestScore = action, args, meta, score
+            end
+        end
+    end
+    if not bestAction then return nil end
+    return {
+        kind = "action",
+        action = bestAction,
+        args = bestArgs or {},
+        confirmRequired = bestAction.confirmRequired == true or (bestMeta and bestMeta.confirmRequired == true),
+        label = (bestMeta and bestMeta.label) or bestAction.label or bestAction.key,
+        summary = (bestMeta and bestMeta.summary) or "Runs a registered action matched by action aliases.",
+    }
 end
 
 function P.ParseExactActionKeyShortcut(text, raw)

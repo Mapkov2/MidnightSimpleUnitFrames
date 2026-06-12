@@ -1431,6 +1431,10 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "debuff stripe opacity")
     AddAliasesForUnit(aliases, scope, "debuff stripe alpha")
     RegisterGroupNumber(scope, "debuffStripeAlpha", "debuffStripeAlpha", "Debuff Stripe Opacity", 0.60, 0.10, 1, 0.05, "visual", aliases, { percent = true })
+    aliases = {}
+    AddAliasesForUnit(aliases, scope, "debuff stripe color")
+    AddAliasesForUnit(aliases, scope, "stripe color")
+    RegisterGroupColor(scope, "debuffStripeColor", "debuffStripeColor", "Debuff Stripe Color", 0.80, 0.20, 0.20, aliases)
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "range fade affects")
@@ -1507,6 +1511,12 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     })
 
     aliases = {}
+    AddAliasesForUnit(aliases, scope, "target highlight")
+    AddAliasesForUnit(aliases, scope, "target border")
+    AddAliasesForUnit(aliases, scope, "selected target border")
+    RegisterGroupBoolean(scope, "targetHighlight", "targetIndicator", "Target Highlight", true, "visual", aliases)
+
+    aliases = {}
     AddAliasesForUnit(aliases, scope, "focus highlight")
     AddAliasesForUnit(aliases, scope, "focus border")
     AddAliasesForUnit(aliases, scope, "focus glow")
@@ -1579,7 +1589,7 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
         aliases = {}
         AddGroupStatusIconAliases(aliases, scope, spec)
         AddGroupStatusIconAliases(aliases, scope, spec, "enabled")
-        RegisterGroupBoolean(scope, "statusIcon" .. spec.value .. "Enabled", spec.enabled, spec.label, true, "visual", aliases, { description = spec.description })
+        RegisterGroupBoolean(scope, "statusIcon" .. spec.value .. "Enabled", spec.enabled, spec.label, false, "visual", aliases, { description = spec.description })
 
         aliases = {}
         AddGroupStatusIconAliases(aliases, scope, spec, "size")
@@ -2050,7 +2060,7 @@ for _, scope in ipairs(SCOPES) do
     RegisterGroupNested(scope, "ciEnabled", "cornerIndicators", "Corner Indicators", "boolean", aliases, {
         get = function()
             local value = GroupDB(scope).ciEnabled
-            if value == nil then return true end
+            if value == nil then return false end
             return value and true or false
         end,
         set = function(value) GroupDB(scope).ciEnabled = value and true or false end,
@@ -2332,7 +2342,7 @@ Registry:RegisterAction({
     run = function(args)
         local scope = Scope(args and args.scope)
         local conf = GroupDB(scope)
-        conf.ciEnabled, conf.ciSize, conf.ciAlpha = true, 8, 1
+        conf.ciEnabled, conf.ciSize, conf.ciAlpha = false, 8, 1
         for i = 1, #CI_SLOTS do
             local slot = CI_SLOTS[i]
             conf["ciSlot" .. slot.key] = slot.default or "none"

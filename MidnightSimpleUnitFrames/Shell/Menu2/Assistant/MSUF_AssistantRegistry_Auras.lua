@@ -25,6 +25,8 @@ local AddAliasesForUnit = C.AddAliasesForUnit
 local AuraModel = C.AuraModel
 local ApplyAura = C.ApplyAura
 local ApplyAuraText = C.ApplyAuraText
+local EnsureAuraFallbackDB = C.EnsureAuraFallbackDB
+local AuraRuntimeUnit = C.AuraRuntimeUnit
 local AuraSharedBool = C.AuraSharedBool
 local SetAuraSharedBool = C.SetAuraSharedBool
 local AuraUnitEnabled = C.AuraUnitEnabled
@@ -73,9 +75,152 @@ local AURA_SCOPE_ALIASES = {
     shared = { "shared", "global", "all auras", "all aura", "auras", "aura" },
 }
 
+local AURA_EDIT_SCOPES = { "shared", "player", "target", "focus", "boss", "party", "raid" }
+local AURA_EDIT_SCOPE_VALUES = { "shared", "player", "target", "focus", "boss", "party", "raid" }
+local AURA_EDIT_SCOPE_ALIASES = {
+    shared = "shared",
+    global = "shared",
+    all = "shared",
+    player = "player",
+    spieler = "player",
+    target = "target",
+    ziel = "target",
+    focus = "focus",
+    fokus = "focus",
+    boss = "boss",
+    boss1 = "boss",
+    boss2 = "boss",
+    boss3 = "boss",
+    boss4 = "boss",
+    boss5 = "boss",
+    party = "party",
+    group = "party",
+    gruppe = "party",
+    raid = "raid",
+    mythicraid = "raid",
+    ["mythic raid"] = "raid",
+    schlachtzug = "raid",
+}
+
 local function AuraScopeLabel(scope)
     if scope == "shared" then return "Shared" end
     return UNIT_LABELS[scope] or tostring(scope or "")
+end
+
+local function AuraRootDB()
+    local Model = AuraModel()
+    if Model and type(Model.EnsureDB) == "function" then
+        local auras = Model.EnsureDB()
+        if type(auras) == "table" then return auras end
+    end
+    local auras = EnsureAuraFallbackDB and EnsureAuraFallbackDB() or nil
+    if type(auras) == "table" then return auras end
+    _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+    _G.MSUF_DB.auras3 = type(_G.MSUF_DB.auras3) == "table" and _G.MSUF_DB.auras3 or {}
+    return _G.MSUF_DB.auras3
+end
+
+local function AuraPerUnit(scope, create)
+    local auras = AuraRootDB()
+    if type(auras) ~= "table" then return nil end
+    auras.perUnit = type(auras.perUnit) == "table" and auras.perUnit or {}
+    local unit = AuraRuntimeUnit and AuraRuntimeUnit(scope) or tostring(scope or "player")
+    local pu = auras.perUnit[unit]
+    if create and type(pu) ~= "table" then
+        pu = {}
+        auras.perUnit[unit] = pu
+    end
+    return pu, unit, auras
+end
+
+local function AuraRootBool(key, defaultValue)
+    local auras = AuraRootDB()
+    if type(auras) ~= "table" then return defaultValue and true or false end
+    if auras[key] == nil then return defaultValue and true or false end
+    return auras[key] == true
+end
+
+local function SetAuraRootBool(key, value)
+    local auras = AuraRootDB()
+    if type(auras) == "table" then auras[key] = value and true or false end
+end
+
+local function AuraOverrideBool(scope, key)
+    local pu = AuraPerUnit(scope, false)
+    return type(pu) == "table" and pu[key] == true
+end
+
+local function SeedAuraTable(dst, src, keys)
+    if type(dst) ~= "table" then return end
+    src = type(src) == "table" and src or {}
+    for i = 1, #keys do
+        local key = keys[i]
+        if dst[key] == nil then dst[key] = src[key] end
+    end
+end
+
+local function SetAuraOverrideBool(scope, key, value)
+    if scope == "shared" then return end
+    local pu, _, auras = AuraPerUnit(scope, true)
+    if type(pu) ~= "table" then return end
+    if not value then
+        pu[key] = false
+        return
+    end
+    pu[key] = true
+    local shared = type(auras) == "table" and type(auras.shared) == "table" and auras.shared or {}
+    if key == "overrideFilters" then
+        if type(pu.filters) ~= "table" then
+            pu.filters = {}
+            if type(shared.filters) == "table" then
+                for k, v in pairs(shared.filters) do
+                    if type(v) == "table" then
+                        pu.filters[k] = {}
+                        for kk, vv in pairs(v) do pu.filters[k][kk] = vv end
+                    else
+                        pu.filters[k] = v
+                    end
+                end
+            end
+        end
+        pu.filters.buffs = type(pu.filters.buffs) == "table" and pu.filters.buffs or {}
+        pu.filters.debuffs = type(pu.filters.debuffs) == "table" and pu.filters.debuffs or {}
+    elseif key == "overrideSharedLayout" then
+        pu.layoutShared = type(pu.layoutShared) == "table" and pu.layoutShared or {}
+        SeedAuraTable(pu.layoutShared, shared, {
+            "maxBuffs", "maxDebuffs", "maxIcons", "perRow", "layoutMode", "growth",
+            "buffGrowth", "debuffGrowth", "rowWrap", "buffRowWrap", "debuffRowWrap",
+            "buffDebuffAnchor", "splitSpacing", "stackCountAnchor", "sortOrder",
+        })
+    elseif key == "overrideLayout" then
+        pu.layout = type(pu.layout) == "table" and pu.layout or {}
+        SeedAuraTable(pu.layout, shared, { "iconSize", "spacing", "cooldownTextSize", "stackTextSize", "reminderGrowth" })
+    elseif key == "overrideIgnore" then
+        pu.ignoreCats = type(pu.ignoreCats) == "table" and pu.ignoreCats or {}
+        if type(shared.ignoreCats) == "table" then
+            for k, v in pairs(shared.ignoreCats) do pu.ignoreCats[k] = v end
+        end
+    end
+end
+
+local function ResetAuraScope(scope)
+    if scope == "shared" then return false end
+    local _, unit, auras = AuraPerUnit(scope, false)
+    if type(auras) ~= "table" or type(auras.perUnit) ~= "table" then return false end
+    auras.perUnit[unit] = nil
+    return true
+end
+
+local function ResetAllAuraOverrides()
+    local auras = AuraRootDB()
+    if type(auras) ~= "table" then return false end
+    auras.perUnit = {}
+    return true
+end
+
+local function AuraScopeFromArg(value)
+    value = tostring(value or "shared"):lower():gsub("%s+", "")
+    return AURA_EDIT_SCOPE_ALIASES[value] or value
 end
 
 local function AddAliasesForAuraScope(out, scope, noun, nounDE)
@@ -164,7 +309,71 @@ local function RegisterAuraUnitLaneEnum(unit, lane, attr, label, values, valueAl
     })
 end
 
-local function RegisterAuraScopeBoolean(scope, attr, label, defaultValue, aliases, read, write, applyText)
+local function RegisterAuraScopeLaneBoolean(scope, lane, attr, label, defaultValue, aliases, read, write, applyText)
+    Registry:RegisterSetting({
+        key = "auras3." .. scope .. "." .. lane .. "." .. attr,
+        label = AuraScopeLabel(scope) .. " " .. (lane == "buff" and "Buff " or "Debuff ") .. label,
+        category = AuraScopeLabel(scope) .. " / Aura Style",
+        unit = scope,
+        frameType = "aura",
+        attribute = "aura" .. (lane == "buff" and "Buff" or "Debuff") .. attr,
+        type = "boolean",
+        aliases = aliases,
+        get = read,
+        set = write,
+        apply = function()
+            if applyText then ApplyAuraText("MSUF_ASSISTANT_AURA_TEXT") else ApplyAura(scope, "MSUF_ASSISTANT_AURAS") end
+        end,
+        combatSafe = false,
+    })
+end
+
+local function RegisterAuraScopeLaneNumber(scope, lane, attr, label, defaultValue, minValue, maxValue, aliases, read, write, applyText)
+    Registry:RegisterSetting({
+        key = "auras3." .. scope .. "." .. lane .. "." .. attr,
+        label = AuraScopeLabel(scope) .. " " .. (lane == "buff" and "Buff " or "Debuff ") .. label,
+        category = AuraScopeLabel(scope) .. " / Aura Style",
+        unit = scope,
+        frameType = "aura",
+        attribute = "aura" .. (lane == "buff" and "Buff" or "Debuff") .. attr,
+        type = "number",
+        aliases = aliases,
+        min = minValue,
+        max = maxValue,
+        step = 1,
+        get = read,
+        set = write,
+        apply = function()
+            if applyText then ApplyAuraText("MSUF_ASSISTANT_AURA_TEXT") else ApplyAura(scope, "MSUF_ASSISTANT_AURAS") end
+        end,
+        combatSafe = false,
+    })
+end
+
+local function RegisterAuraScopeLaneEnum(scope, lane, attr, label, values, valueAliases, aliases, read, write, applyText)
+    local allowed = {}
+    for i = 1, #values do allowed[values[i]] = true end
+    Registry:RegisterSetting({
+        key = "auras3." .. scope .. "." .. lane .. "." .. attr,
+        label = AuraScopeLabel(scope) .. " " .. (lane == "buff" and "Buff " or "Debuff ") .. label,
+        category = AuraScopeLabel(scope) .. " / Aura Style",
+        unit = scope,
+        frameType = "aura",
+        attribute = "aura" .. (lane == "buff" and "Buff" or "Debuff") .. attr,
+        type = "enum",
+        aliases = aliases,
+        values = values,
+        valueAliases = valueAliases,
+        get = read,
+        set = function(value) write(allowed[value] and value or values[1]) end,
+        apply = function()
+            if applyText then ApplyAuraText("MSUF_ASSISTANT_AURA_TEXT") else ApplyAura(scope, "MSUF_ASSISTANT_AURAS") end
+        end,
+        combatSafe = false,
+    })
+end
+
+local function RegisterAuraScopeBoolean(scope, attr, label, defaultValue, aliases, read, write, applyText, exactAliases)
     Registry:RegisterSetting({
         key = "auras3." .. scope .. "." .. attr,
         label = AuraScopeLabel(scope) .. " " .. label,
@@ -174,6 +383,7 @@ local function RegisterAuraScopeBoolean(scope, attr, label, defaultValue, aliase
         attribute = "aura" .. attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = exactAliases,
         get = read or function() return AuraSharedBool(attr, defaultValue) end,
         set = write or function(value) SetAuraSharedBool(attr, value) end,
         apply = function()
@@ -228,6 +438,829 @@ local function RegisterAuraScopeEnum(scope, attr, label, values, valueAliases, a
     })
 end
 
+local function AuraSharedString(key, defaultValue, allowed)
+    local Model = AuraModel()
+    local shared
+    if Model and type(Model.EnsureDB) == "function" then
+        local _, modelShared = Model.EnsureDB()
+        shared = modelShared
+    else
+        _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+        _G.MSUF_DB.auras3 = type(_G.MSUF_DB.auras3) == "table" and _G.MSUF_DB.auras3 or {}
+        _G.MSUF_DB.auras3.shared = type(_G.MSUF_DB.auras3.shared) == "table" and _G.MSUF_DB.auras3.shared or {}
+        shared = _G.MSUF_DB.auras3.shared
+    end
+    local value = type(shared) == "table" and shared[key] or nil
+    if allowed and allowed[value] then return value end
+    return defaultValue
+end
+
+local function SetAuraSharedString(key, value, defaultValue, allowed)
+    local Model = AuraModel()
+    local shared
+    if Model and type(Model.EnsureDB) == "function" then
+        local _, modelShared = Model.EnsureDB()
+        shared = modelShared
+    else
+        _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+        _G.MSUF_DB.auras3 = type(_G.MSUF_DB.auras3) == "table" and _G.MSUF_DB.auras3 or {}
+        _G.MSUF_DB.auras3.shared = type(_G.MSUF_DB.auras3.shared) == "table" and _G.MSUF_DB.auras3.shared or {}
+        shared = _G.MSUF_DB.auras3.shared
+    end
+    if type(shared) == "table" then shared[key] = allowed and allowed[value] and value or defaultValue end
+end
+
+local function AuraSharedTable(key)
+    local Model = AuraModel()
+    local shared
+    if Model and type(Model.EnsureDB) == "function" then
+        local _, modelShared = Model.EnsureDB()
+        shared = modelShared
+    else
+        _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+        _G.MSUF_DB.auras3 = type(_G.MSUF_DB.auras3) == "table" and _G.MSUF_DB.auras3 or {}
+        _G.MSUF_DB.auras3.shared = type(_G.MSUF_DB.auras3.shared) == "table" and _G.MSUF_DB.auras3.shared or {}
+        shared = _G.MSUF_DB.auras3.shared
+    end
+    if type(shared) ~= "table" then return {} end
+    shared[key] = type(shared[key]) == "table" and shared[key] or {}
+    return shared[key]
+end
+
+local function ApplyAuraReminders(reason)
+    local api = MSUF and MSUF.MSUF_Auras3
+    local reminder = api and api.Reminder
+    if reminder and type(reminder.MarkDirty) == "function" then pcall(reminder.MarkDirty) end
+    ApplyAura("shared", reason or "MSUF_ASSISTANT_AURA_REMINDERS")
+end
+
+local AURA_GROWTH_VALUES = { "RIGHT", "LEFT", "UP", "DOWN" }
+local AURA_GROWTH_ALIASES = {
+    right = "RIGHT",
+    rechts = "RIGHT",
+    left = "LEFT",
+    links = "LEFT",
+    up = "UP",
+    hoch = "UP",
+    down = "DOWN",
+    runter = "DOWN",
+}
+local AURA_ROW_WRAP_VALUES = { "DOWN", "UP" }
+local AURA_ROW_WRAP_ALIASES = {
+    down = "DOWN",
+    runter = "DOWN",
+    below = "DOWN",
+    up = "UP",
+    hoch = "UP",
+    above = "UP",
+}
+local AURA_ANCHOR_VALUES = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER" }
+local AURA_ANCHOR_ALIASES = {
+    center = "CENTER",
+    middle = "CENTER",
+    top = "TOPLEFT",
+    lefttop = "TOPLEFT",
+    topleft = "TOPLEFT",
+    ["top left"] = "TOPLEFT",
+    righttop = "TOPRIGHT",
+    topright = "TOPRIGHT",
+    ["top right"] = "TOPRIGHT",
+    bottom = "BOTTOMLEFT",
+    leftbottom = "BOTTOMLEFT",
+    bottomleft = "BOTTOMLEFT",
+    ["bottom left"] = "BOTTOMLEFT",
+    rightbottom = "BOTTOMRIGHT",
+    bottomright = "BOTTOMRIGHT",
+    ["bottom right"] = "BOTTOMRIGHT",
+}
+local AURA_LANE_GROWTH_VALUES = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP", "UP", "DOWN" }
+local AURA_LANE_GROWTH_ALIASES = {
+    right = "RIGHTDOWN",
+    rightdown = "RIGHTDOWN",
+    ["right down"] = "RIGHTDOWN",
+    down = "RIGHTDOWN",
+    left = "LEFTDOWN",
+    leftdown = "LEFTDOWN",
+    ["left down"] = "LEFTDOWN",
+    up = "UP",
+    rightup = "RIGHTUP",
+    ["right up"] = "RIGHTUP",
+    leftup = "LEFTUP",
+    ["left up"] = "LEFTUP",
+}
+local AURA_STACK_ANCHOR_VALUES = { "TOPRIGHT", "TOPLEFT", "BOTTOMRIGHT", "BOTTOMLEFT" }
+local AURA_STACK_ANCHOR_ALIASES = {
+    top = "TOPRIGHT",
+    right = "TOPRIGHT",
+    topright = "TOPRIGHT",
+    ["top right"] = "TOPRIGHT",
+    left = "TOPLEFT",
+    topleft = "TOPLEFT",
+    ["top left"] = "TOPLEFT",
+    bottom = "BOTTOMRIGHT",
+    bottomright = "BOTTOMRIGHT",
+    ["bottom right"] = "BOTTOMRIGHT",
+    bottomleft = "BOTTOMLEFT",
+    ["bottom left"] = "BOTTOMLEFT",
+}
+
+local function AuraReadValue(scope, key, defaultValue)
+    local Model = AuraModel()
+    if Model and type(Model.ReadValue) == "function" then return Model.ReadValue(scope, key, defaultValue) end
+    local _, shared = EnsureAuraFallbackDB()
+    local value = shared and shared[key]
+    if value == nil then return defaultValue end
+    return value
+end
+
+local function AuraWriteValue(scope, key, value)
+    local Model = AuraModel()
+    if Model and type(Model.WriteValue) == "function" then
+        Model.WriteValue(scope, key, value)
+        return
+    end
+    local _, shared = EnsureAuraFallbackDB()
+    if type(shared) == "table" then shared[key] = value end
+end
+
+local function AuraLaneKey(lane, buffKey, debuffKey)
+    return lane == "buff" and buffKey or debuffKey
+end
+
+local function AuraReadLaneAnchor(scope, lane)
+    local Model = AuraModel()
+    if Model and type(Model.ReadLaneAnchor) == "function" then return Model.ReadLaneAnchor(scope, lane) end
+    local defaultValue = lane == "buff" and "BOTTOMRIGHT" or "TOPLEFT"
+    local value = tostring(AuraReadValue(scope, AuraLaneKey(lane, "buffAnchor", "debuffAnchor"), defaultValue) or defaultValue)
+    for i = 1, #AURA_ANCHOR_VALUES do if AURA_ANCHOR_VALUES[i] == value then return value end end
+    return defaultValue
+end
+
+local function AuraWriteLaneAnchor(scope, lane, value)
+    local allowed = {}
+    for i = 1, #AURA_ANCHOR_VALUES do allowed[AURA_ANCHOR_VALUES[i]] = true end
+    local defaultValue = lane == "buff" and "BOTTOMRIGHT" or "TOPLEFT"
+    value = allowed[value] and value or defaultValue
+    local Model = AuraModel()
+    if Model and type(Model.WriteLaneAnchor) == "function" then
+        Model.WriteLaneAnchor(scope, lane, value)
+        return
+    end
+    AuraWriteValue(scope, AuraLaneKey(lane, "buffAnchor", "debuffAnchor"), value)
+end
+
+local function AuraReadLaneLayer(scope, lane)
+    local Model = AuraModel()
+    if Model and type(Model.ReadLaneLayer) == "function" then return Model.ReadLaneLayer(scope, lane) end
+    return AuraReadNumber(scope, AuraLaneKey(lane, "buffLayer", "debuffLayer"), lane == "buff" and 5 or 6, 1, 15)
+end
+
+local function AuraWriteLaneLayer(scope, lane, value)
+    local Model = AuraModel()
+    if Model and type(Model.WriteLaneLayer) == "function" then
+        Model.WriteLaneLayer(scope, lane, value)
+        return
+    end
+    AuraWriteNumber(scope, AuraLaneKey(lane, "buffLayer", "debuffLayer"), value, 1, 15)
+end
+
+local function AuraReadLaneGrowthPair(scope, lane)
+    local Model = AuraModel()
+    if Model and type(Model.ReadLaneGrowthPair) == "function" then return Model.ReadLaneGrowthPair(scope, lane) end
+    local x = tostring(AuraReadValue(scope, AuraLaneKey(lane, "buffGrowthX", "debuffGrowthX"), "RIGHT") or "RIGHT")
+    local y = tostring(AuraReadValue(scope, AuraLaneKey(lane, "buffGrowthY", "debuffGrowthY"), "DOWN") or "DOWN")
+    if x == "UP" or x == "DOWN" then return x end
+    local pair = x .. y
+    if pair == "LEFTDOWN" or pair == "RIGHTUP" or pair == "LEFTUP" then return pair end
+    return "RIGHTDOWN"
+end
+
+local function AuraWriteLaneGrowthPair(scope, lane, value)
+    local Model = AuraModel()
+    if Model and type(Model.WriteLaneGrowthPair) == "function" then
+        Model.WriteLaneGrowthPair(scope, lane, value)
+        return
+    end
+    local x, y = "RIGHT", "DOWN"
+    if value == "LEFTDOWN" then x = "LEFT"
+    elseif value == "RIGHTUP" then y = "UP"
+    elseif value == "LEFTUP" then x, y = "LEFT", "UP"
+    elseif value == "UP" then x = "UP"
+    elseif value == "DOWN" then x = "DOWN" end
+    AuraWriteValue(scope, AuraLaneKey(lane, "buffGrowthX", "debuffGrowthX"), x)
+    AuraWriteValue(scope, AuraLaneKey(lane, "buffGrowthY", "debuffGrowthY"), y)
+end
+
+local function AuraReadLaneStyleBool(scope, lane, key, defaultValue)
+    local Model = AuraModel()
+    if Model and type(Model.ReadLaneStyleBool) == "function" then return Model.ReadLaneStyleBool(scope, lane, key, defaultValue) end
+    return AuraSharedBool(key, defaultValue)
+end
+
+local function AuraWriteLaneStyleBool(scope, lane, key, value)
+    local Model = AuraModel()
+    if Model and type(Model.WriteLaneStyleBool) == "function" then
+        Model.WriteLaneStyleBool(scope, lane, key, value)
+        return
+    end
+    SetAuraSharedBool(key, value)
+end
+
+local function AuraReadLaneStyleNumber(scope, lane, key, defaultValue, minValue, maxValue)
+    local Model = AuraModel()
+    if Model and type(Model.ReadLaneStyleNumber) == "function" then return Model.ReadLaneStyleNumber(scope, lane, key, defaultValue, minValue, maxValue) end
+    return AuraReadNumber(scope, key, defaultValue, minValue, maxValue)
+end
+
+local function AuraWriteLaneStyleNumber(scope, lane, key, value, minValue, maxValue)
+    local Model = AuraModel()
+    if Model and type(Model.WriteLaneStyleNumber) == "function" then
+        Model.WriteLaneStyleNumber(scope, lane, key, value, minValue, maxValue)
+        return
+    end
+    AuraWriteNumber(scope, key, value, minValue, maxValue)
+end
+
+local function AuraReadLaneStackAnchor(scope, lane)
+    local Model = AuraModel()
+    if Model and type(Model.ReadLaneStackAnchor) == "function" then return Model.ReadLaneStackAnchor(scope, lane) end
+    return AuraReadStackAnchor(scope)
+end
+
+local function AuraWriteLaneStackAnchor(scope, lane, value)
+    local Model = AuraModel()
+    if Model and type(Model.WriteLaneStackAnchor) == "function" then
+        Model.WriteLaneStackAnchor(scope, lane, value)
+        return
+    end
+    AuraWriteStackAnchor(scope, value)
+end
+
+local function RegisterAuraSharedEnum(attr, label, values, valueAliases, defaultValue, aliases, applyReason, exactAliases)
+    local allowed = {}
+    for i = 1, #values do allowed[values[i]] = true end
+    Registry:RegisterSetting({
+        key = "auras3.shared." .. attr,
+        label = "Shared " .. label,
+        category = "Shared / Auras",
+        unit = "shared",
+        frameType = "aura",
+        attribute = "aura" .. attr:gsub("^%l", string.upper),
+        type = "enum",
+        aliases = aliases,
+        exactAliases = exactAliases,
+        values = values,
+        valueAliases = valueAliases,
+        get = function() return AuraSharedString(attr, defaultValue, allowed) end,
+        set = function(value) SetAuraSharedString(attr, value, defaultValue, allowed) end,
+        apply = function() ApplyAura("shared", applyReason or "MSUF_ASSISTANT_AURA_LAYOUT") end,
+        combatSafe = false,
+    })
+end
+
+local function RegisterAuraSharedNumber(attr, label, defaultValue, minValue, maxValue, step, aliases, applyReason, exactAliases)
+    Registry:RegisterSetting({
+        key = "auras3.shared." .. attr,
+        label = "Shared " .. label,
+        category = "Shared / Auras",
+        unit = "shared",
+        frameType = "aura",
+        attribute = "aura" .. attr:gsub("^%l", string.upper),
+        type = "number",
+        aliases = aliases,
+        exactAliases = exactAliases,
+        min = minValue,
+        max = maxValue,
+        step = step or 1,
+        get = function() return AuraReadNumber("shared", attr, defaultValue, minValue, maxValue) end,
+        set = function(value) AuraWriteNumber("shared", attr, value, minValue, maxValue) end,
+        apply = function() ApplyAura("shared", applyReason or "MSUF_ASSISTANT_AURAS") end,
+        combatSafe = false,
+    })
+end
+
+Registry:RegisterSetting({
+    key = "auras3.enabled",
+    label = "Unit Auras",
+    category = "Shared / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraSystemEnabled",
+    type = "boolean",
+    aliases = { "unit auras", "aura system", "auras system", "all unit auras", "unitframe auras" },
+    exactAliases = { "unit auras", "aura system", "auras system", "all unit auras", "unitframe auras" },
+    get = function() return AuraRootBool("enabled", true) end,
+    set = function(value) SetAuraRootBool("enabled", value) end,
+    apply = function() ApplyAura("shared", "MSUF_ASSISTANT_AURA_SYSTEM") end,
+    combatSafe = false,
+})
+
+Registry:RegisterSetting({
+    key = "auras3.shared.filters.enabled",
+    label = "Shared Aura Filters",
+    category = "Shared / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraFiltersEnabled",
+    type = "boolean",
+    aliases = { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" },
+    exactAliases = { "aura filters", "auras filters", "aura filtering", "filter auras", "filter buffs", "filter debuffs" },
+    get = function()
+        local filters = AuraSharedTable("filters")
+        if filters.enabled == nil then return true end
+        return filters.enabled == true
+    end,
+    set = function(value)
+        AuraSharedTable("filters").enabled = value and true or false
+    end,
+    apply = function() ApplyAura("shared", "MSUF_ASSISTANT_AURA_FILTERS_ENABLED") end,
+    combatSafe = false,
+})
+
+Registry:RegisterSetting({
+    key = "auras3.shared.showInEditMode",
+    label = "Shared Aura Edit Preview",
+    category = "Shared / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraEditPreview",
+    type = "boolean",
+    aliases = { "aura edit preview", "edit mode auras", "preview auras in edit mode", "show auras in edit mode", "edit preview auras" },
+    exactAliases = { "aura edit preview", "edit mode auras", "preview auras in edit mode", "show auras in edit mode", "edit preview auras" },
+    get = function() return AuraSharedBool("showInEditMode", true) end,
+    set = function(value) SetAuraSharedBool("showInEditMode", value) end,
+    apply = function() ApplyAura("shared", "MSUF_ASSISTANT_AURA_EDIT_PREVIEW") end,
+    combatSafe = false,
+})
+
+Registry:RegisterSetting({
+    key = "menu.auraScope",
+    label = "Aura Editing Scope",
+    category = "Menu / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraEditingScope",
+    type = "enum",
+    aliases = { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" },
+    exactAliases = { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope" },
+    values = AURA_EDIT_SCOPE_VALUES,
+    valueAliases = AURA_EDIT_SCOPE_ALIASES,
+    get = function() return AuraScopeFromArg(M.auraScope or "shared") end,
+    set = function(value)
+        value = AuraScopeFromArg(value)
+        if value ~= "shared" and value ~= "player" and value ~= "target" and value ~= "focus" and value ~= "boss" and value ~= "party" and value ~= "raid" then value = "shared" end
+        if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("auraScope", value) else M.auraScope = value end
+        if value == "party" or value == "raid" then
+            if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("auraStyleGFScope", value) else M.auraStyleGFScope = value end
+        end
+    end,
+    apply = function()
+        if type(M.SelectPage) == "function" then M.SelectPage("auras3") elseif type(M.Open) == "function" then M.Open("auras3") end
+        if type(M.Refresh) == "function" then M.Refresh() end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3") end
+    end,
+    combatSafe = true,
+})
+
+Registry:RegisterSetting({
+    key = "menu.auraStyleGFLane",
+    label = "Aura Style Lane",
+    category = "Menu / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraStyleLane",
+    type = "enum",
+    aliases = { "aura style lane", "aura style tab", "aura style filter type", "aura buffs tab", "aura debuffs tab", "buff aura style", "debuff aura style" },
+    exactAliases = { "aura style lane", "aura style tab", "aura buffs tab", "aura debuffs tab" },
+    values = { "buff", "debuff" },
+    valueAliases = {
+        buff = "buff",
+        buffs = "buff",
+        bufftab = "buff",
+        ["buff tab"] = "buff",
+        debuff = "debuff",
+        debuffs = "debuff",
+        debufftab = "debuff",
+        ["debuff tab"] = "debuff",
+    },
+    get = function()
+        local lane = M.auraStyleGFLane
+        return lane == "buff" and "buff" or "debuff"
+    end,
+    set = function(value)
+        value = value == "buff" and "buff" or "debuff"
+        if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("auraStyleGFLane", value) else M.auraStyleGFLane = value end
+    end,
+    apply = function()
+        if type(M.SelectPage) == "function" then M.SelectPage("auras3_styling") elseif type(M.Open) == "function" then M.Open("auras3_styling") end
+        if type(M.Refresh) == "function" then M.Refresh() end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3_styling") end
+    end,
+    combatSafe = true,
+})
+
+Registry:RegisterSetting({
+    key = "menu.auraFilterLane",
+    label = "Aura Filter Lane",
+    category = "Menu / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraFilterLane",
+    type = "enum",
+    aliases = { "aura filter lane", "aura filter tab", "aura filter type", "aura buff filters tab", "aura debuff filters tab", "buff aura filters", "debuff aura filters" },
+    exactAliases = { "aura filter lane", "aura filter tab", "aura buff filters tab", "aura debuff filters tab" },
+    values = { "buff", "debuff" },
+    valueAliases = {
+        buff = "buff",
+        buffs = "buff",
+        bufftab = "buff",
+        ["buff tab"] = "buff",
+        debuff = "debuff",
+        debuffs = "debuff",
+        debufftab = "debuff",
+        ["debuff tab"] = "debuff",
+    },
+    get = function()
+        local lane = M.auraFilterLane
+        return lane == "debuff" and "debuff" or "buff"
+    end,
+    set = function(value)
+        value = value == "debuff" and "debuff" or "buff"
+        if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("auraFilterLane", value) else M.auraFilterLane = value end
+    end,
+    apply = function()
+        if type(M.SelectPage) == "function" then M.SelectPage("auras3_filters") elseif type(M.Open) == "function" then M.Open("auras3_filters") end
+        if type(M.Refresh) == "function" then M.Refresh() end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3_filters") end
+    end,
+    combatSafe = true,
+})
+
+Registry:RegisterSetting({
+    key = "menu.auraBlacklistPreset",
+    label = "Aura Blacklist Preset",
+    category = "Menu / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraBlacklistPreset",
+    type = "enum",
+    aliases = { "aura blacklist preset", "blacklist preset", "aura preset group", "aura blacklist group preset" },
+    values = {
+        "RAID_BUFFS", "PRESERVATION_EVOKER", "AUGMENTATION_EVOKER", "RESTO_DRUID", "DISC_PRIEST",
+        "HOLY_PRIEST", "MISTWEAVER_MONK", "RESTO_SHAMAN", "HOLY_PALADIN", "BLESSING_BRONZE",
+        "SELF_BUFFS", "ROGUE_POISONS", "SHAMAN_IMBUE", "RESOURCE_AURAS", "COOLDOWNS",
+    },
+    valueAliases = {
+        raidbuffs = "RAID_BUFFS",
+        ["raid buffs"] = "RAID_BUFFS",
+        preservationevoker = "PRESERVATION_EVOKER",
+        ["preservation evoker"] = "PRESERVATION_EVOKER",
+        augmentationevoker = "AUGMENTATION_EVOKER",
+        ["augmentation evoker"] = "AUGMENTATION_EVOKER",
+        restodruid = "RESTO_DRUID",
+        ["resto druid"] = "RESTO_DRUID",
+        disciplinepriest = "DISC_PRIEST",
+        ["discipline priest"] = "DISC_PRIEST",
+        discpriest = "DISC_PRIEST",
+        ["disc priest"] = "DISC_PRIEST",
+        holypriest = "HOLY_PRIEST",
+        ["holy priest"] = "HOLY_PRIEST",
+        mistweavermonk = "MISTWEAVER_MONK",
+        ["mistweaver monk"] = "MISTWEAVER_MONK",
+        restoshaman = "RESTO_SHAMAN",
+        ["resto shaman"] = "RESTO_SHAMAN",
+        holypaladin = "HOLY_PALADIN",
+        ["holy paladin"] = "HOLY_PALADIN",
+        blessingbronze = "BLESSING_BRONZE",
+        ["blessing bronze"] = "BLESSING_BRONZE",
+        selfbuffs = "SELF_BUFFS",
+        ["self buffs"] = "SELF_BUFFS",
+        roguepoisons = "ROGUE_POISONS",
+        ["rogue poisons"] = "ROGUE_POISONS",
+        shamanimbue = "SHAMAN_IMBUE",
+        ["shaman imbue"] = "SHAMAN_IMBUE",
+        resourceauras = "RESOURCE_AURAS",
+        ["resource auras"] = "RESOURCE_AURAS",
+        cooldowns = "COOLDOWNS",
+    },
+    get = function() return tostring(M.auraBlacklistPreset or "RAID_BUFFS") end,
+    set = function(value)
+        M.auraBlacklistPreset = tostring(value or "RAID_BUFFS")
+        M.auraBlacklistSpell = nil
+    end,
+    apply = function()
+        if type(M.SelectPage) == "function" then M.SelectPage("auras3_filters") elseif type(M.Open) == "function" then M.Open("auras3_filters") end
+        if type(M.Refresh) == "function" then M.Refresh() end
+    end,
+    combatSafe = true,
+})
+
+Registry:RegisterSetting({
+    key = "menu.auraBlacklistSpell",
+    label = "Aura Blacklist Spell",
+    category = "Menu / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraBlacklistSpell",
+    type = "string",
+    aliases = { "aura blacklist spell", "blacklist spell", "selected aura blacklist spell", "aura spell preset" },
+    valuePrefixes = { "aura blacklist spell", "blacklist spell", "selected aura blacklist spell", "aura spell preset" },
+    get = function() return tostring(M.auraBlacklistSpell or "") end,
+    set = function(value) M.auraBlacklistSpell = tostring(value or "") end,
+    apply = function()
+        if type(M.SelectPage) == "function" then M.SelectPage("auras3_filters") elseif type(M.Open) == "function" then M.Open("auras3_filters") end
+        if type(M.Refresh) == "function" then M.Refresh() end
+    end,
+    combatSafe = true,
+})
+
+Registry:RegisterSetting({
+    key = "menu.aurasUXMode",
+    label = "Aura Settings View",
+    category = "Menu / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraSettingsView",
+    type = "enum",
+    aliases = {
+        "aura settings view", "aura view", "aura settings mode", "show aura settings",
+        "basic aura settings", "advanced aura settings", "all aura settings",
+    },
+    exactAliases = {
+        "aura settings view", "aura view", "aura settings mode", "show aura settings",
+        "basic aura settings", "advanced aura settings", "all aura settings",
+        "basic aura options", "advanced aura options", "all aura options",
+    },
+    values = { "basic", "advanced" },
+    valueAliases = {
+        basic = "basic",
+        simple = "basic",
+        normal = "basic",
+        advanced = "advanced",
+        all = "advanced",
+        allsettings = "advanced",
+        ["all settings"] = "advanced",
+    },
+    get = function() return M.aurasUXMode == "advanced" and "advanced" or "basic" end,
+    set = function(value)
+        value = value == "advanced" and "advanced" or "basic"
+        if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("aurasUXMode", value) else M.aurasUXMode = value end
+    end,
+    apply = function()
+        if type(M.SelectPage) == "function" then M.SelectPage("auras3") elseif type(M.Open) == "function" then M.Open("auras3") end
+        if type(M.Refresh) == "function" then M.Refresh() end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3") end
+    end,
+    combatSafe = true,
+})
+
+for _, scope in ipairs({ "player", "target", "focus", "boss" }) do
+    for _, spec in ipairs({
+        { key = "overrideFilters", label = "Custom Aura Filters", aliases = { "custom aura filters", "custom filters", "aura filter override", "aura filters override" } },
+        { key = "overrideSharedLayout", label = "Custom Aura Caps", aliases = { "custom aura caps", "custom caps", "aura caps override", "aura limits override" } },
+        { key = "overrideLayout", label = "Custom Aura Layout", aliases = { "custom aura layout", "custom layout", "aura layout override", "aura visual override" } },
+        { key = "overrideIgnore", label = "Custom Aura Ignore List", aliases = { "custom aura ignore", "custom ignore", "aura ignore override", "aura ignore list override" } },
+    }) do
+        local settingScope, settingKey, exactAliases = scope, spec.key, {}
+        local aliases = {}
+        for i = 1, #spec.aliases do
+            exactAliases[#exactAliases + 1] = settingScope .. " " .. spec.aliases[i]
+            exactAliases[#exactAliases + 1] = settingScope .. " aura " .. spec.aliases[i]:gsub("^aura%s+", "")
+            exactAliases[#exactAliases + 1] = settingScope .. " auras " .. spec.aliases[i]:gsub("^aura%s+", "")
+            AddAliasesForAuraScope(aliases, settingScope, spec.aliases[i])
+        end
+        Registry:RegisterSetting({
+            key = "auras3." .. settingScope .. "." .. settingKey,
+            label = AuraScopeLabel(settingScope) .. " " .. spec.label,
+            category = AuraScopeLabel(settingScope) .. " / Auras",
+            unit = settingScope,
+            frameType = "aura",
+            attribute = "aura" .. settingKey:gsub("^%l", string.upper),
+            type = "boolean",
+            aliases = aliases,
+            exactAliases = exactAliases,
+            get = function() return AuraOverrideBool(settingScope, settingKey) end,
+            set = function(value) SetAuraOverrideBool(settingScope, settingKey, value) end,
+            apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_OVERRIDE") end,
+            combatSafe = false,
+        })
+    end
+end
+
+for _, spec in ipairs({
+    { attr = "showBuffs", label = "Show Buffs", defaultValue = true, aliases = { "show aura buffs", "show buffs", "aura buffs", "buff auras", "buffs" } },
+    { attr = "showDebuffs", label = "Show Debuffs", defaultValue = true, aliases = { "show aura debuffs", "show debuffs", "aura debuffs", "debuff auras", "debuffs" } },
+    { attr = "highlightOwnBuffs", label = "Highlight Own Buffs", defaultValue = false, aliases = { "highlight own buffs", "highlight my buffs", "own buff highlight", "my buff highlight" } },
+    { attr = "highlightOwnDebuffs", label = "Highlight Own Debuffs", defaultValue = false, aliases = { "highlight own debuffs", "highlight my debuffs", "own debuff highlight", "my debuff highlight" } },
+    { attr = "showTooltip", label = "Aura Tooltips", defaultValue = true, aliases = { "aura tooltips", "show aura tooltips", "aura tooltip", "show aura tooltip" } },
+    { attr = "clickThroughAuras", label = "Click-through Auras", defaultValue = false, aliases = { "click through auras", "click-through auras", "aura click through", "aura click-through" } },
+    { attr = "cooldownSwipeDarkenOnLoss", label = "Cooldown Swipe Darkens On Loss", defaultValue = false, aliases = { "swipe darkens on loss", "cooldown swipe darkens", "darken aura swipe on loss", "darken cooldown swipe" } },
+    { attr = "useDebuffTypeBorders", label = "Dispel-type Borders", defaultValue = false, aliases = { "dispel type borders", "debuff type borders", "aura dispel borders", "aura debuff type borders" } },
+}) do
+    local aliases = {}
+    for i = 1, #(spec.aliases or {}) do
+        aliases[#aliases + 1] = spec.aliases[i]
+        AddAliasesForAuraScope(aliases, "shared", spec.aliases[i])
+    end
+    RegisterAuraScopeBoolean("shared", spec.attr, spec.label, spec.defaultValue, aliases, nil, nil, nil, spec.aliases)
+end
+
+local reminderMasterAliases = {}
+local reminderMasterExactAliases = { "buff reminders", "aura reminders", "show buff reminders", "enable buff reminders" }
+for _, alias in ipairs(reminderMasterExactAliases) do
+    reminderMasterAliases[#reminderMasterAliases + 1] = alias
+    AddAliasesForAuraScope(reminderMasterAliases, "shared", alias)
+end
+Registry:RegisterSetting({
+    key = "auras3.shared.showReminders",
+    label = "Shared Buff Reminders",
+    category = "Shared / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraShowReminders",
+    type = "boolean",
+    aliases = reminderMasterAliases,
+    exactAliases = reminderMasterExactAliases,
+    get = function() return AuraSharedBool("showReminders", true) end,
+    set = function(value) SetAuraSharedBool("showReminders", value) end,
+    apply = function() ApplyAuraReminders("MSUF_ASSISTANT_AURA_REMINDERS") end,
+    combatSafe = false,
+})
+
+local reminderThresholdAliases = {}
+local reminderThresholdExactAliases = { "buff reminder expiry warning", "buff reminder threshold", "reminder expiry warning", "reminder threshold" }
+for _, alias in ipairs(reminderThresholdExactAliases) do
+    reminderThresholdAliases[#reminderThresholdAliases + 1] = alias
+    AddAliasesForAuraScope(reminderThresholdAliases, "shared", alias)
+end
+Registry:RegisterSetting({
+    key = "auras3.shared.reminderThreshold",
+    label = "Shared Buff Reminder Expiry Warning",
+    category = "Shared / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraReminderThreshold",
+    type = "number",
+    aliases = reminderThresholdAliases,
+    exactAliases = reminderThresholdExactAliases,
+    min = 0,
+    max = 600,
+    step = 5,
+    get = function() return AuraReadNumber("shared", "reminderThreshold", 0, 0, 600) end,
+    set = function(value) AuraWriteNumber("shared", "reminderThreshold", value, 0, 600) end,
+    apply = function() ApplyAuraReminders("MSUF_ASSISTANT_AURA_REMINDER_THRESHOLD") end,
+    combatSafe = false,
+})
+
+local reminderGrowthAliases = {}
+local reminderGrowthExactAliases = { "buff reminder grow direction", "buff reminder growth", "reminder grow direction", "reminder growth" }
+for _, alias in ipairs(reminderGrowthExactAliases) do
+    reminderGrowthAliases[#reminderGrowthAliases + 1] = alias
+    AddAliasesForAuraScope(reminderGrowthAliases, "shared", alias)
+end
+Registry:RegisterSetting({
+    key = "auras3.shared.reminderGrowth",
+    label = "Shared Buff Reminder Grow Direction",
+    category = "Shared / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraReminderGrowth",
+    type = "enum",
+    aliases = reminderGrowthAliases,
+    exactAliases = reminderGrowthExactAliases,
+    values = { "RIGHT", "LEFT", "UP", "DOWN" },
+    valueAliases = {
+        right = "RIGHT",
+        rechts = "RIGHT",
+        left = "LEFT",
+        links = "LEFT",
+        up = "UP",
+        hoch = "UP",
+        down = "DOWN",
+        runter = "DOWN",
+    },
+    get = function()
+        return AuraSharedString("reminderGrowth", "RIGHT", { RIGHT = true, LEFT = true, UP = true, DOWN = true })
+    end,
+    set = function(value)
+        SetAuraSharedString("reminderGrowth", value, "RIGHT", { RIGHT = true, LEFT = true, UP = true, DOWN = true })
+    end,
+    apply = function() ApplyAuraReminders("MSUF_ASSISTANT_AURA_REMINDER_GROWTH") end,
+    combatSafe = false,
+})
+
+local function AuraSharedAliases(...)
+    local aliases = {}
+    for i = 1, select("#", ...) do
+        local alias = select(i, ...)
+        aliases[#aliases + 1] = alias
+        AddAliasesForAuraScope(aliases, "shared", alias)
+    end
+    return aliases
+end
+
+RegisterAuraSharedEnum("buffGrowth", "Buff Growth", AURA_GROWTH_VALUES, AURA_GROWTH_ALIASES, "RIGHT",
+    AuraSharedAliases("buff growth", "buff grow direction", "buff direction", "buff aura growth"),
+    "MSUF_ASSISTANT_AURA_CAPS",
+    { "buff growth", "buff grow direction", "buff direction", "buff aura growth" })
+RegisterAuraSharedEnum("debuffGrowth", "Debuff Growth", AURA_GROWTH_VALUES, AURA_GROWTH_ALIASES, "RIGHT",
+    AuraSharedAliases("debuff growth", "debuff grow direction", "debuff direction", "debuff aura growth"),
+    "MSUF_ASSISTANT_AURA_CAPS",
+    { "debuff growth", "debuff grow direction", "debuff direction", "debuff aura growth" })
+RegisterAuraSharedEnum("buffRowWrap", "Buff Wrap Rows", AURA_ROW_WRAP_VALUES, AURA_ROW_WRAP_ALIASES, "DOWN",
+    AuraSharedAliases("buff wrap rows", "buff row wrap", "buff second row", "buff row direction"),
+    "MSUF_ASSISTANT_AURA_CAPS",
+    { "buff wrap rows", "buff row wrap", "buff second row", "buff row direction" })
+RegisterAuraSharedEnum("debuffRowWrap", "Debuff Wrap Rows", AURA_ROW_WRAP_VALUES, AURA_ROW_WRAP_ALIASES, "DOWN",
+    AuraSharedAliases("debuff wrap rows", "debuff row wrap", "debuff second row", "debuff row direction"),
+    "MSUF_ASSISTANT_AURA_CAPS",
+    { "debuff wrap rows", "debuff row wrap", "debuff second row", "debuff row direction" })
+
+local sortOrderExactAliases = { "sort order", "aura sort order", "aura sorting", "sort auras" }
+local sortOrderAliases = AuraSharedAliases("sort order", "aura sort order", "aura sorting", "sort auras")
+Registry:RegisterSetting({
+    key = "auras3.shared.sortOrder",
+    label = "Shared Aura Sort Order",
+    category = "Shared / Auras",
+    unit = "shared",
+    frameType = "aura",
+    attribute = "auraSortOrder",
+    type = "enum",
+    aliases = sortOrderAliases,
+    exactAliases = sortOrderExactAliases,
+    values = { 0, 1, 2, 3, 4, 5, 6 },
+    valueAliases = {
+        unsorted = 0,
+        native = 0,
+        default_player_can_apply_id = 1,
+        player_can_apply = 1,
+        big_defensive = 2,
+        defensive = 2,
+        expiration_soonest = 3,
+        soonest = 3,
+        expiration = 3,
+        expiration_only = 4,
+        name = 5,
+        alphabetical = 5,
+        name_alphabetical = 5,
+        name_only = 6,
+    },
+    get = function() return AuraReadNumber("shared", "sortOrder", 0, 0, 6) end,
+    set = function(value) AuraWriteNumber("shared", "sortOrder", value, 0, 6) end,
+    apply = function() ApplyAura("shared", "MSUF_ASSISTANT_AURA_SORT") end,
+    combatSafe = false,
+})
+
+RegisterAuraScopeBoolean("shared", "showSated", "Show Sated/Exhaustion", true,
+    AuraSharedAliases("show sated", "show exhaustion", "sated exhaustion", "sated buffs", "exhaustion buffs"),
+    nil, nil, nil,
+    { "show sated", "show exhaustion", "sated exhaustion", "sated buffs", "exhaustion buffs" })
+RegisterAuraSharedNumber("satedShowAtSeconds", "Sated Threshold", 0, 0, 600, 5,
+    AuraSharedAliases("sated threshold", "sated seconds", "exhaustion threshold", "sated show at seconds"),
+    "MSUF_ASSISTANT_AURA_FILTERS",
+    { "sated threshold", "sated seconds", "exhaustion threshold", "sated show at seconds" })
+
+for _, spec in ipairs({
+    { key = "FORTITUDE", label = "Power Word: Fortitude", aliases = { "fortitude reminder", "power word fortitude reminder", "priest stamina reminder" } },
+    { key = "ARCANE_INTELLECT", label = "Arcane Intellect", aliases = { "arcane intellect reminder", "intellect reminder", "mage intellect reminder" } },
+    { key = "MARK_OF_WILD", label = "Mark of the Wild", aliases = { "mark of the wild reminder", "motw reminder", "druid buff reminder" } },
+    { key = "BATTLE_SHOUT", label = "Battle Shout", aliases = { "battle shout reminder", "warrior buff reminder" } },
+    { key = "SKYFURY", label = "Skyfury", aliases = { "skyfury reminder", "shaman skyfury reminder" } },
+    { key = "SOURCE_OF_MAGIC", label = "Source of Magic", aliases = { "source of magic reminder", "evoker source of magic reminder" } },
+    { key = "BLESSING_BRONZE", label = "Blessing of the Bronze", aliases = { "blessing of the bronze reminder", "bronze reminder", "evoker bronze reminder" } },
+    { key = "ROGUE_LETHAL", label = "Lethal Poison", aliases = { "lethal poison reminder", "rogue lethal poison reminder" } },
+    { key = "ROGUE_NONLETHAL", label = "Non-Lethal Poison", aliases = { "non lethal poison reminder", "non-lethal poison reminder", "rogue non lethal reminder" } },
+}) do
+    local reminderKey, reminderLabel = spec.key, spec.label
+    local aliases = {}
+    for i = 1, #spec.aliases do
+        aliases[#aliases + 1] = spec.aliases[i]
+        AddAliasesForAuraScope(aliases, "shared", spec.aliases[i])
+    end
+    Registry:RegisterSetting({
+        key = "auras3.shared.reminders." .. reminderKey,
+        label = "Shared " .. reminderLabel .. " Reminder",
+        category = "Shared / Auras",
+        unit = "shared",
+        frameType = "aura",
+        attribute = "auraReminder" .. reminderKey,
+        type = "boolean",
+        aliases = aliases,
+        exactAliases = spec.aliases,
+        get = function()
+            local reminders = AuraSharedTable("reminders")
+            local value = reminders[reminderKey]
+            if value == nil then return true end
+            return value == true
+        end,
+        set = function(value)
+            AuraSharedTable("reminders")[reminderKey] = value == true
+        end,
+        apply = function() ApplyAuraReminders("MSUF_ASSISTANT_AURA_REMINDER_TOGGLE") end,
+        combatSafe = false,
+    })
+end
+
 for _, unit in ipairs(AURA_UNITS) do
     for _, laneInfo in ipairs(AURA_LANES) do
         local lane = laneInfo.key
@@ -275,18 +1308,30 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "growth")
         AddAuraLaneAliases(aliases, unit, lane, "growth direction")
-        RegisterAuraUnitLaneEnum(unit, lane, "growth", laneInfo.label .. " Growth", { "RIGHT", "LEFT", "UP", "DOWN" }, {
-            right = "RIGHT",
-            rechts = "RIGHT",
-            left = "LEFT",
-            links = "LEFT",
-            up = "UP",
-            hoch = "UP",
-            down = "DOWN",
-            runter = "DOWN",
-        }, aliases,
-            function() return AuraReadLaneGrowth(unit, lane) end,
-            function(value) AuraWriteLaneGrowth(unit, lane, value) end)
+        RegisterAuraUnitLaneEnum(unit, lane, "growth", laneInfo.label .. " Growth", AURA_LANE_GROWTH_VALUES, AURA_LANE_GROWTH_ALIASES, aliases,
+            function() return AuraReadLaneGrowthPair(unit, lane) end,
+            function(value) AuraWriteLaneGrowthPair(unit, lane, value) end)
+
+        aliases = {}
+        AddAuraLaneAliases(aliases, unit, lane, "anchor")
+        AddAuraLaneAliases(aliases, unit, lane, "anchor point")
+        RegisterAuraUnitLaneEnum(unit, lane, "anchor", laneInfo.label .. " Anchor", AURA_ANCHOR_VALUES, AURA_ANCHOR_ALIASES, aliases,
+            function() return AuraReadLaneAnchor(unit, lane) end,
+            function(value) AuraWriteLaneAnchor(unit, lane, value) end)
+
+        aliases = {}
+        AddAuraLaneAliases(aliases, unit, lane, "spacing")
+        AddAuraLaneAliases(aliases, unit, lane, "gap")
+        RegisterAuraUnitLaneNumber(unit, lane, "spacing", laneInfo.label .. " Spacing", 2, 0, 12, 1, aliases,
+            function() return AuraReadNumber(unit, "spacing", 2, 0, 64) end,
+            function(value) AuraWriteNumber(unit, "spacing", value, 0, 64) end)
+
+        aliases = {}
+        AddAuraLaneAliases(aliases, unit, lane, "layer")
+        AddAuraLaneAliases(aliases, unit, lane, "z order")
+        RegisterAuraUnitLaneNumber(unit, lane, "layer", laneInfo.label .. " Layer", lane == "buff" and 5 or 6, 1, 15, 1, aliases,
+            function() return AuraReadLaneLayer(unit, lane) end,
+            function(value) AuraWriteLaneLayer(unit, lane, value) end)
     end
 end
 
@@ -349,6 +1394,51 @@ for _, scope in ipairs(AURA_SCOPES) do
         function(value) AuraWriteNumber(scope, "cooldownTextSize", value, 6, 40) end,
         true)
 
+    for _, laneInfo in ipairs(AURA_LANES) do
+        local lane = laneInfo.key
+        local settingScope, settingLane = scope, lane
+        local styleBools = {
+            { key = "showStackCount", label = "Show Stack Count", defaultValue = true, words = { "show stack count", "stack count", "stacks" } },
+            { key = "showCooldownText", label = "Show Cooldown Text", defaultValue = true, words = { "show cooldown text", "cooldown text", "timer text" } },
+            { key = "showCooldownSwipe", label = "Show Cooldown Swipe", defaultValue = true, words = { "show cooldown swipe", "cooldown swipe", "timer swipe" } },
+        }
+        for i = 1, #styleBools do
+            local spec = styleBools[i]
+            aliases = {}
+            for j = 1, #spec.words do AddAuraLaneAliases(aliases, settingScope, settingLane, spec.words[j]) end
+            RegisterAuraScopeLaneBoolean(settingScope, settingLane, spec.key, spec.label, spec.defaultValue, aliases,
+                function() return AuraReadLaneStyleBool(settingScope, settingLane, spec.key, spec.defaultValue) end,
+                function(value) AuraWriteLaneStyleBool(settingScope, settingLane, spec.key, value) end,
+                true)
+        end
+
+        aliases = {}
+        AddAuraLaneAliases(aliases, settingScope, settingLane, "stack anchor")
+        AddAuraLaneAliases(aliases, settingScope, settingLane, "stack count anchor")
+        RegisterAuraScopeLaneEnum(settingScope, settingLane, "stackAnchor", "Stack Count Anchor", AURA_STACK_ANCHOR_VALUES, AURA_STACK_ANCHOR_ALIASES, aliases,
+            function() return AuraReadLaneStackAnchor(settingScope, settingLane) end,
+            function(value) AuraWriteLaneStackAnchor(settingScope, settingLane, value) end,
+            true)
+
+        local styleNumbers = {
+            { key = "stackTextSize", label = "Stack Text Size", defaultValue = 14, minValue = 6, maxValue = 40, words = { "stack size", "stack text size", "stack count text size" } },
+            { key = "stackTextOffsetX", label = "Stack Text X Offset", defaultValue = -1, minValue = -2000, maxValue = 2000, words = { "stack x", "stack x offset", "stack text x", "stack text x offset" } },
+            { key = "stackTextOffsetY", label = "Stack Text Y Offset", defaultValue = 1, minValue = -2000, maxValue = 2000, words = { "stack y", "stack y offset", "stack text y", "stack text y offset" } },
+            { key = "cooldownTextSize", label = "Cooldown Text Size", defaultValue = 14, minValue = 6, maxValue = 40, words = { "cooldown size", "cooldown text size", "timer text size" } },
+            { key = "cooldownTextOffsetX", label = "Cooldown Text X Offset", defaultValue = 0, minValue = -2000, maxValue = 2000, words = { "cooldown x", "cooldown x offset", "cooldown text x", "timer text x offset" } },
+            { key = "cooldownTextOffsetY", label = "Cooldown Text Y Offset", defaultValue = 0, minValue = -2000, maxValue = 2000, words = { "cooldown y", "cooldown y offset", "cooldown text y", "timer text y offset" } },
+        }
+        for i = 1, #styleNumbers do
+            local spec = styleNumbers[i]
+            aliases = {}
+            for j = 1, #spec.words do AddAuraLaneAliases(aliases, settingScope, settingLane, spec.words[j]) end
+            RegisterAuraScopeLaneNumber(settingScope, settingLane, spec.key, spec.label, spec.defaultValue, spec.minValue, spec.maxValue, aliases,
+                function() return AuraReadLaneStyleNumber(settingScope, settingLane, spec.key, spec.defaultValue, spec.minValue, spec.maxValue) end,
+                function(value) AuraWriteLaneStyleNumber(settingScope, settingLane, spec.key, value, spec.minValue, spec.maxValue) end,
+                true)
+        end
+    end
+
     if scope ~= "shared" then
         aliases = {}
         AddAliasesForAuraScope(aliases, scope, "use shared style")
@@ -406,11 +1496,71 @@ for _, scope in ipairs(AURA_SCOPES) do
             combatSafe = false,
         })
     end
+
+    local exclusiveValues = {
+        buff = { "none", "important" },
+        debuff = { "none", "important", "raid", "all" },
+    }
+    local exclusiveAliases = {
+        none = "none",
+        off = "none",
+        disabled = "none",
+        important = "important",
+        importantonly = "important",
+        ["important only"] = "important",
+        raid = "raid",
+        boss = "raid",
+        encounter = "raid",
+        all = "all",
+        everything = "all",
+    }
+    for _, laneInfo in ipairs(AURA_LANES) do
+        local lane = laneInfo.key
+        local settingScope, settingLane = scope, lane
+        aliases = {}
+        AddAuraLaneAliases(aliases, settingScope, settingLane, "exclusive filter")
+        AddAuraLaneAliases(aliases, settingScope, settingLane, "exclusive")
+        Registry:RegisterSetting({
+            key = "auras3." .. settingScope .. "." .. settingLane .. ".filter.exclusive",
+            label = AuraScopeLabel(settingScope) .. " " .. laneInfo.label .. " Exclusive Filter",
+            category = AuraScopeLabel(settingScope) .. " / Aura Filters",
+            unit = settingScope,
+            frameType = "aura",
+            attribute = "aura" .. settingLane .. "FilterExclusive",
+            type = "enum",
+            aliases = aliases,
+            values = exclusiveValues[settingLane],
+            valueAliases = exclusiveAliases,
+            get = function() return tostring(AuraReadFilter(settingScope, settingLane, "exclusive", "none") or "none") end,
+            set = function(value) AuraWriteFilter(settingScope, settingLane, "exclusive", value or "none") end,
+            apply = function() ApplyAura(settingScope, "MSUF_ASSISTANT_AURA_FILTER_EXCLUSIVE") end,
+            combatSafe = false,
+        })
+    end
 end
 
 local GF_AURA_GROUPS = { "party", "raid", "mythicraid" }
 local GF_AURA_ANCHORS = { "CENTER", "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }
 local GF_AURA_GROWTH = { "RIGHTDOWN", "LEFTDOWN", "RIGHTUP", "LEFTUP" }
+local GF_AURA_FILTER_VALUES = {
+    buff = { "ALL", "PLAYER", "RAID", "IMPORTANT" },
+    debuff = { "ALL", "PLAYER", "RAID", "DISPELLABLE", "IMPORTANT" },
+}
+local GF_AURA_FILTER_ALIASES = {
+    all = "ALL",
+    everything = "ALL",
+    player = "PLAYER",
+    mine = "PLAYER",
+    ["my auras"] = "PLAYER",
+    raid = "RAID",
+    boss = "RAID",
+    encounter = "RAID",
+    important = "IMPORTANT",
+    importantonly = "IMPORTANT",
+    ["important only"] = "IMPORTANT",
+    dispellable = "DISPELLABLE",
+    purgeable = "DISPELLABLE",
+}
 
 local function AddGFAuraAliases(out, scope, lane, noun)
     local laneWord = lane == "buff" and "buff" or "debuff"
@@ -431,6 +1581,7 @@ local function RegisterGFAuraBoolean(scope, lane, attr, key, label, defaultValue
         attribute = "gfAura" .. lane .. attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = aliases,
         get = function()
             if key == "enabled" then return GFAuraLaneShown(scope, lane) end
             local value = GFReadAuraValue(scope, lane, key, defaultValue)
@@ -454,6 +1605,7 @@ local function RegisterGFAuraNumber(scope, lane, attr, key, label, defaultValue,
         attribute = "gfAura" .. lane .. attr,
         type = "number",
         aliases = aliases,
+        exactAliases = aliases,
         min = minValue,
         max = maxValue,
         step = 1,
@@ -476,6 +1628,7 @@ local function RegisterGFAuraEnum(scope, lane, attr, key, label, values, valueAl
         attribute = "gfAura" .. lane .. attr,
         type = "enum",
         aliases = aliases,
+        exactAliases = aliases,
         values = values,
         valueAliases = valueAliases,
         get = function()
@@ -498,6 +1651,7 @@ local function RegisterGFAuraRootBoolean(scope, attr, key, label, defaultValue, 
         attribute = "gfAura" .. attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = aliases,
         get = function()
             local value = GFAurasRoot(scope)[key]
             if value == nil then return defaultValue and true or false end
@@ -710,6 +1864,30 @@ local function GFAuraCategorySummary(scope, lane)
     if #out == 0 then return "No blacklisted aura categories." end
     return table.concat(out, "\n")
 end
+
+local function ClearGFAuraCategoryBlacklist(scope, lane)
+    scope = GFAuraCategoryScope(scope)
+    lane = GFAuraCategoryLane(lane)
+    local values = GFAuraCategoryValues()
+    local count = 0
+    for i = 1, #values do
+        local item = values[i]
+        local catKey = item and (item.key or item.value)
+        if catKey then
+            local state = ReadGFAuraCategorySetting(scope, lane, catKey)
+            local wasBlocked = state == true
+            if type(state) == "table" then
+                if state.party == true or state.raid == true or state.mythicraid == true then wasBlocked = true end
+            end
+            if wasBlocked then
+                WriteGFAuraCategoryState(scope, lane, catKey, false)
+                count = count + 1
+            end
+        end
+    end
+    if count > 0 then ApplyGFAuraCategory(scope) end
+    return count
+end
 A.GroupAuraCategoryScope = GFAuraCategoryScope
 A.GroupAuraCategoryScopeLabel = GFAuraCategoryScopeLabel
 A.GroupAuraCategoryLane = GFAuraCategoryLane
@@ -717,6 +1895,7 @@ A.GroupAuraCategoryLanePlural = GFAuraCategoryLanePlural
 A.WriteGroupAuraCategoryState = WriteGFAuraCategoryState
 A.ApplyGroupAuraCategory = ApplyGFAuraCategory
 A.GroupAuraCategorySummary = GFAuraCategorySummary
+A.ClearGroupAuraCategoryBlacklist = ClearGFAuraCategoryBlacklist
 
 for _, scope in ipairs(GF_AURA_GROUPS) do
     for _, laneInfo in ipairs(AURA_LANES) do
@@ -795,6 +1974,29 @@ for _, scope in ipairs(GF_AURA_GROUPS) do
             up = "RIGHTUP",
             leftup = "LEFTUP",
         }, growthDefault, aliases, "geometry")
+
+        aliases = {}
+        AddGFAuraAliases(aliases, scope, lane, "filter")
+        AddGFAuraAliases(aliases, scope, lane, "filter type")
+        AddGFAuraAliases(aliases, scope, lane, "inclusive filter")
+        RegisterGFAuraEnum(scope, lane, "FilterToken", "filterToken", laneInfo.label .. " Filter", GF_AURA_FILTER_VALUES[lane], GF_AURA_FILTER_ALIASES, lane == "buff" and "RAID" or "ALL", aliases, "visual")
+
+        aliases = {}
+        AddGFAuraAliases(aliases, scope, lane, "cooldown anchor")
+        AddGFAuraAliases(aliases, scope, lane, "timer anchor")
+        RegisterGFAuraEnum(scope, lane, "CooldownAnchor", "cooldownAnchor", laneInfo.label .. " Cooldown Anchor", GF_AURA_ANCHORS, {
+            center = "CENTER",
+            middle = "CENTER",
+            topleft = "TOPLEFT",
+            top_left = "TOPLEFT",
+            top = "TOPLEFT",
+            topright = "TOPRIGHT",
+            top_right = "TOPRIGHT",
+            bottomleft = "BOTTOMLEFT",
+            bottom_left = "BOTTOMLEFT",
+            bottomright = "BOTTOMRIGHT",
+            bottom_right = "BOTTOMRIGHT",
+        }, "CENTER", aliases, "geometry")
 
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "cooldown text")
@@ -877,6 +2079,344 @@ do
     end
 end
 
+local function AuraActionNormalized(text)
+    local P = A.Parser or {}
+    if type(P.Normalize) == "function" then return P.Normalize(text) end
+    return tostring(text or ""):lower():gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function AuraActionEditScope(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local scope = type(P.AuraEditScopeForText) == "function" and P.AuraEditScopeForText(normalized) or nil
+    if not scope and type(P.AuraBlacklistScope) == "function" then scope = P.AuraBlacklistScope(normalized) end
+    scope = AuraScopeFromArg(scope or M.auraScope or "shared")
+    if scope ~= "shared" and scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "party" and scope ~= "raid" then
+        scope = "shared"
+    end
+    return scope
+end
+
+local function ParseAuraEditScopeAliasArgs(text)
+    local normalized = AuraActionNormalized(text)
+    if normalized:find("reset", 1, true) or normalized:find("clear", 1, true)
+        or normalized:find("remove", 1, true) or normalized:find("zuruecksetzen", 1, true) then
+        return false
+    end
+    return { scope = AuraActionEditScope(text) }, {
+        summary = "Selects the Aura page editing scope through registered action metadata.",
+    }
+end
+
+local function ParseAuraScopeResetAliasArgs(text)
+    local scope = AuraActionEditScope(text)
+    if scope == "shared" then return false end
+    return { scope = scope }, {
+        summary = "Resets one Aura editing scope back to Shared through registered action metadata.",
+    }
+end
+
+local function ParseAuraQuickPresetAliasArgs(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local preset = type(P.AuraQuickPresetForText) == "function" and P.AuraQuickPresetForText(normalized) or nil
+    if not preset then return false end
+    local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+    return { scope = scope or "shared", preset = preset }, {
+        summary = "Applies the shared Auras quick setup helper through registered action metadata.",
+    }
+end
+
+local function ParseAuraBlacklistScopeAliasArgs(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+    return { scope = scope or "shared" }, {
+        summary = "Reads or clears Aura blacklist state through registered action metadata.",
+    }
+end
+
+local function AuraActionContainsAny(text, phrases)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    if type(P.ContainsAny) == "function" then return P.ContainsAny(normalized, phrases) end
+    for i = 1, #(phrases or {}) do
+        if normalized:find(tostring(phrases[i] or ""), 1, true) then return true end
+    end
+    return false
+end
+
+local function ParseAuraBlacklistSummaryAliasArgs(text)
+    if not AuraActionContainsAny(text, { "show", "list", "summary", "current", "what is", "whats" }) then
+        return false
+    end
+    local args = ParseAuraBlacklistScopeAliasArgs(text)
+    if not args then return false end
+    return args, {
+        summary = "Shows Aura blacklist state through registered action metadata.",
+    }
+end
+
+local function ParseAuraBlacklistClearAliasArgs(text)
+    if not AuraActionContainsAny(text, {
+        "clear", "empty", "reset", "allow all", "remove all", "delete all", "unblacklist all",
+        "all spells", "all auras", "every spell", "every aura",
+    }) then
+        return false
+    end
+    local args = ParseAuraBlacklistScopeAliasArgs(text)
+    if not args then return false end
+    return args, {
+        summary = "Clears Aura blacklist state through registered action metadata.",
+    }
+end
+
+local function ParseAuraBlacklistSpellAliasArgs(text, raw)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    if normalized:find("all spells", 1, true) or normalized:find("all auras", 1, true)
+        or normalized:find("every spell", 1, true) or normalized:find("every aura", 1, true)
+        or normalized:find("clear all", 1, true) or normalized:find("allow all", 1, true)
+        or normalized:find("remove all", 1, true) or normalized:find("delete all", 1, true) then
+        return false
+    end
+    if not (normalized:find("aura", 1, true) or normalized:find("buff", 1, true)
+        or normalized:find("debuff", 1, true) or normalized:find("spell", 1, true)) then
+        return false
+    end
+    local value = type(P.AuraBlacklistSpellValue) == "function" and P.AuraBlacklistSpellValue(raw or text) or nil
+    if type(value) ~= "string" or value == "" then return false end
+    local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+    return { scope = scope or "shared", value = value }, {
+        summary = "Edits a single Aura blacklist spell through registered action metadata.",
+    }
+end
+
+local function ParseAuraBlacklistAddSpellAliasArgs(text, raw)
+    local normalized = AuraActionNormalized(text)
+    if normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
+        or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
+        or normalized:find("unblock", 1, true) or normalized:find("entfernen", 1, true)
+        or normalized:find("loeschen", 1, true) then
+        return false
+    end
+    local P = A.Parser or {}
+    if type(P.AuraBlacklistPresetForText) == "function" and P.AuraBlacklistPresetForText(normalized) then
+        return false
+    end
+    return ParseAuraBlacklistSpellAliasArgs(text, raw)
+end
+
+local function ParseAuraBlacklistRemoveSpellAliasArgs(text, raw)
+    local normalized = AuraActionNormalized(text)
+    if not (normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
+        or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
+        or normalized:find("unblock", 1, true) or normalized:find("entfernen", 1, true)
+        or normalized:find("loeschen", 1, true)) then
+        return false
+    end
+    return ParseAuraBlacklistSpellAliasArgs(text, raw)
+end
+
+local function ParseAuraBlacklistPresetAliasArgs(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local containsAny = type(P.ContainsAny) == "function" and P.ContainsAny or nil
+    if normalized:find("quick preset", 1, true) or normalized:find("quick setup", 1, true) then return false end
+    if normalized:find("category", 1, true) or normalized:find("categories", 1, true) then return false end
+    if containsAny and containsAny(normalized, { "show", "list", "summary", "current", "what is", "whats" }) then
+        return false
+    end
+    if normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
+        or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
+        or normalized:find("unblock", 1, true) or normalized:find("entfernen", 1, true)
+        or normalized:find("loeschen", 1, true) then
+        return false
+    end
+    if not (normalized:find("blacklist", 1, true) or normalized:find("blocked", 1, true)
+        or normalized:find("block", 1, true) or normalized:find("ignore", 1, true)) then
+        return false
+    end
+    local preset = type(P.AuraBlacklistPresetForText) == "function" and P.AuraBlacklistPresetForText(normalized) or nil
+    if not preset then return false end
+    local scope = type(P.AuraBlacklistScope) == "function" and P.AuraBlacklistScope(normalized) or AuraActionEditScope(normalized)
+    return { scope = scope or "shared", preset = preset }, {
+        summary = "Adds a curated Aura blacklist preset through registered action metadata.",
+    }
+end
+
+local function GroupAuraCategoryHasUnitAuraScope(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local phrases = {
+        "player aura", "player auras", "target aura", "target auras",
+        "focus aura", "focus auras", "boss aura", "boss auras",
+    }
+    if type(P.ContainsAny) == "function" then return P.ContainsAny(normalized, phrases) end
+    for i = 1, #phrases do
+        if normalized:find(phrases[i], 1, true) then return true end
+    end
+    return false
+end
+
+local function GroupAuraCategoryAliasBlocked(text)
+    local normalized = AuraActionNormalized(text)
+    return normalized:find("copy category", 1, true)
+        or normalized:find("copy categories", 1, true)
+        or normalized:find("group copy", 1, true)
+        or normalized:find("unit copy", 1, true)
+end
+
+local function GroupAuraCategoryScopeLane(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local scope = type(P.AuraGroupBlacklistScope) == "function" and P.AuraGroupBlacklistScope(normalized) or nil
+    local lane = type(P.AuraGroupBlacklistLane) == "function" and P.AuraGroupBlacklistLane(normalized) or nil
+    scope = A.GroupAuraCategoryScope and A.GroupAuraCategoryScope(scope) or (scope or "raid")
+    lane = A.GroupAuraCategoryLane and A.GroupAuraCategoryLane(lane) or (lane or "buff")
+    return scope, lane
+end
+
+local function GroupAuraCategoryForAlias(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local category = type(P.AuraGroupBlacklistCategoryForText) == "function" and P.AuraGroupBlacklistCategoryForText(normalized) or nil
+    if not category and A.ResolveAuraGroupCategory then category = A.ResolveAuraGroupCategory(normalized) end
+    return category
+end
+
+local function ParseGroupAuraCategorySetAliasArgs(text)
+    local normalized = AuraActionNormalized(text)
+    if GroupAuraCategoryAliasBlocked(normalized) then return false end
+    if GroupAuraCategoryHasUnitAuraScope(normalized) then return false end
+    if AuraActionContainsAny(normalized, { "show", "list", "summary", "current", "what is", "whats" }) then return false end
+    if normalized:find("clear all", 1, true) or normalized:find("allow all", 1, true)
+        or normalized:find("remove all", 1, true) or normalized:find("reset", 1, true)
+        or normalized:find("every category", 1, true) or normalized:find("all categories", 1, true) then
+        return false
+    end
+    local category = GroupAuraCategoryForAlias(normalized)
+    if not category then return false end
+    local value
+    if normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
+        or normalized:find("remove", 1, true) or normalized:find("clear", 1, true)
+        or normalized:find("include", 1, true) then
+        value = false
+    elseif normalized:find("blacklist", 1, true) or normalized:find("hide", 1, true)
+        or normalized:find("block", 1, true) or normalized:find("exclude", 1, true)
+        or normalized:find("disable", 1, true) then
+        value = true
+    end
+    if value == nil then return false end
+    local scope, lane = GroupAuraCategoryScopeLane(normalized)
+    return { scope = scope, lane = lane, category = category, value = value }, {
+        summary = "Edits the group-frame public aura category blacklist through registered action metadata.",
+    }
+end
+
+local function ParseGroupAuraCategorySummaryAliasArgs(text)
+    local normalized = AuraActionNormalized(text)
+    if GroupAuraCategoryAliasBlocked(normalized) then return false end
+    if not (normalized:find("summary", 1, true) or normalized:find("list", 1, true)
+        or normalized:find("current", 1, true) or normalized:find("what is", 1, true)
+        or (normalized:find("show", 1, true) and normalized:find("blacklist", 1, true))) then
+        return false
+    end
+    local scope, lane = GroupAuraCategoryScopeLane(normalized)
+    return { scope = scope, lane = lane }, {
+        summary = "Shows the group-frame public aura category blacklist through registered action metadata.",
+    }
+end
+
+local function ParseGroupAuraCategoryClearAliasArgs(text)
+    local normalized = AuraActionNormalized(text)
+    if GroupAuraCategoryAliasBlocked(normalized) then return false end
+    if not (normalized:find("clear all", 1, true) or normalized:find("allow all", 1, true)
+        or normalized:find("unblacklist all", 1, true) or normalized:find("remove all", 1, true)
+        or normalized:find("reset", 1, true)
+        or ((normalized:find("clear", 1, true) or normalized:find("allow", 1, true)
+            or normalized:find("remove", 1, true) or normalized:find("empty", 1, true))
+            and (normalized:find("all categories", 1, true) or normalized:find("every category", 1, true)
+                or normalized:find("categories", 1, true)))) then
+        return false
+    end
+    local scope, lane = GroupAuraCategoryScopeLane(normalized)
+    return { scope = scope, lane = lane }, {
+        summary = "Allows all public aura categories through registered action metadata.",
+    }
+end
+
+Registry:RegisterAction({
+    key = "set_aura_edit_scope",
+    label = "Set Aura Editing Scope",
+    type = "navigation",
+    combatSafe = true,
+    aliases = {
+        "aura editing scope", "aura scope", "edit auras", "edit player auras", "edit target auras",
+        "edit focus auras", "edit boss auras", "edit party auras", "edit raid auras",
+        "select aura scope", "switch aura scope",
+    },
+    parseAliasArgs = ParseAuraEditScopeAliasArgs,
+    run = function(args)
+        local scope = AuraScopeFromArg(args and args.scope)
+        if scope ~= "shared" and scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "party" and scope ~= "raid" then scope = "shared" end
+        if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("auraScope", scope) else M.auraScope = scope end
+        if scope == "party" or scope == "raid" then
+            if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("auraStyleGFScope", scope) else M.auraStyleGFScope = scope end
+        end
+        if type(M.SelectPage) == "function" then M.SelectPage("auras3") elseif type(M.Open) == "function" then M.Open("auras3") end
+        if type(M.Refresh) == "function" then M.Refresh() end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3") end
+        return true, "Done. Editing " .. AuraScopeLabel(scope) .. " auras."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "reset_aura_scope_overrides",
+    label = "Reset Aura Scope Overrides",
+    type = "reset",
+    combatSafe = false,
+    confirmRequired = true,
+    captureSnapshot = true,
+    aliases = {
+        "reset aura scope", "reset aura overrides", "reset custom aura settings",
+        "reset aura custom settings", "reset player aura overrides", "reset target aura overrides",
+        "reset focus aura overrides", "reset boss aura overrides",
+        "reset player aura scope", "reset target aura scope", "reset focus aura scope", "reset boss aura scope",
+    },
+    parseAliasArgs = ParseAuraScopeResetAliasArgs,
+    run = function(args)
+        local scope = AuraScopeFromArg(args and args.scope)
+        if scope == "shared" then return false, "Shared auras are the base settings; choose Player, Target, Focus, or Boss to reset overrides." end
+        ResetAuraScope(scope)
+        ApplyAura(scope, "MSUF_ASSISTANT_AURA_SCOPE_RESET")
+        if type(M.Refresh) == "function" then M.Refresh() end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3") end
+        return true, "Done. Reset " .. AuraScopeLabel(scope) .. " aura overrides."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "reset_all_aura_overrides",
+    label = "Reset All Aura Overrides",
+    type = "reset",
+    combatSafe = false,
+    confirmRequired = true,
+    captureSnapshot = true,
+    aliases = {
+        "reset all aura overrides", "reset every aura override", "clear all aura overrides",
+        "remove all aura overrides", "reset all auras",
+    },
+    aliasNoArgs = true,
+    run = function()
+        ResetAllAuraOverrides()
+        ApplyAura("shared", "MSUF_ASSISTANT_AURA_ALL_OVERRIDES_RESET")
+        if type(M.Refresh) == "function" then M.Refresh() end
+        if type(M.InvalidatePage) == "function" then M.InvalidatePage("auras3") end
+        return true, "Done. Reset all aura overrides."
+    end,
+})
+
 Registry:RegisterAction({
     key = "apply_aura_quick_preset",
     label = "Apply Aura Quick Preset",
@@ -884,6 +2424,15 @@ Registry:RegisterAction({
     combatSafe = false,
     confirmRequired = true,
     captureSnapshot = true,
+    aliases = {
+        "apply aura preset", "apply aura quick preset", "use aura preset", "use aura quick preset",
+        "aura quick setup", "auras quick setup", "aura preset setup", "aura setup preset",
+        "apply clean aura preset", "apply focused aura preset", "apply performance aura preset",
+        "use clean aura preset", "use focused aura preset", "use performance aura preset",
+        "use clean preset", "use focused preset", "use performance preset",
+        "clean aura quick setup", "focused aura quick setup", "performance aura quick setup",
+    },
+    parseAliasArgs = ParseAuraQuickPresetAliasArgs,
     run = function(args)
         local preset = args and args.preset
         local scope = args and args.scope or "shared"
@@ -901,6 +2450,15 @@ Registry:RegisterAction({
     type = "auras",
     combatSafe = false,
     captureSnapshot = true,
+    aliases = {
+        "blacklist", "allow", "hide", "block", "exclude", "include",
+        "category blacklist", "public category blacklist", "blacklist category",
+        "blacklisted category", "blacklist public category", "allow category",
+        "unblacklist category", "remove category blacklist",
+        "raid buff category blacklist", "raid debuff category blacklist",
+        "party buff category blacklist", "party debuff category blacklist",
+    },
+    parseAliasArgs = ParseGroupAuraCategorySetAliasArgs,
     run = function(args)
         local scope = A.GroupAuraCategoryScope(args and args.scope)
         local lane = A.GroupAuraCategoryLane(args and args.lane)
@@ -920,10 +2478,50 @@ Registry:RegisterAction({
     label = "Show Group Aura Category Blacklist",
     type = "auras",
     combatSafe = true,
+    aliases = {
+        "show category blacklist", "show public category blacklist",
+        "category blacklist summary", "public category blacklist summary",
+        "list category blacklist", "current category blacklist",
+        "show raid buff category blacklist", "show party debuff category blacklist",
+        "list raid buff category blacklist", "list raid debuff category blacklist",
+        "list party buff category blacklist", "list party debuff category blacklist",
+        "current raid buff category blacklist", "current raid debuff category blacklist",
+        "current party buff category blacklist", "current party debuff category blacklist",
+    },
+    parseAliasArgs = ParseGroupAuraCategorySummaryAliasArgs,
     run = function(args)
         local scope = A.GroupAuraCategoryScope(args and args.scope)
         local lane = A.GroupAuraCategoryLane(args and args.lane)
         return true, A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " category blacklist:\n" .. A.GroupAuraCategorySummary(scope, lane)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "aura_group_category_blacklist_clear",
+    label = "Clear Group Aura Category Blacklist",
+    type = "auras",
+    combatSafe = false,
+    captureSnapshot = true,
+    aliases = {
+        "clear category blacklist", "clear all category blacklist",
+        "allow all categories", "allow all public categories",
+        "allow all aura categories", "allow all public aura categories",
+        "remove all category blacklist", "reset category blacklist",
+        "clear all raid buff category blacklist", "clear all party debuff category blacklist",
+        "reset raid buff category blacklist", "reset raid debuff category blacklist",
+        "reset party buff category blacklist", "reset party debuff category blacklist",
+        "allow all raid buff categories", "allow all party debuff categories",
+    },
+    parseAliasArgs = ParseGroupAuraCategoryClearAliasArgs,
+    run = function(args)
+        local scope = A.GroupAuraCategoryScope(args and args.scope)
+        local lane = A.GroupAuraCategoryLane(args and args.lane)
+        local count = A.ClearGroupAuraCategoryBlacklist and A.ClearGroupAuraCategoryBlacklist(scope, lane) or 0
+        local target = A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane)
+        if count and count > 0 then
+            return true, "Done. Allowed all public aura categories for " .. target .. ". Cleared " .. tostring(count) .. " category blacklist " .. (count == 1 and "entry." or "entries.")
+        end
+        return true, "Already set. No public aura categories are blacklisted for " .. target .. "."
     end,
 })
 
@@ -933,6 +2531,11 @@ Registry:RegisterAction({
     type = "auras",
     combatSafe = false,
     captureSnapshot = true,
+    aliases = {
+        "blacklist", "blacklist spell", "blacklist aura", "blacklist aura spell",
+        "block aura", "block aura spell", "ignore aura", "ignore aura spell",
+    },
+    parseAliasArgs = ParseAuraBlacklistAddSpellAliasArgs,
     run = function(args)
         local Model = AuraModel()
         if not (Model and type(Model.AddBlacklistSpell) == "function") then return false, "Aura blacklist editing is not available right now." end
@@ -951,6 +2554,14 @@ Registry:RegisterAction({
     type = "auras",
     combatSafe = false,
     captureSnapshot = true,
+    aliases = {
+        "remove", "allow",
+        "remove aura blacklist spell", "remove spell from aura blacklist",
+        "allow aura spell", "allow spell", "allow aura",
+        "unblacklist", "unblacklist spell", "unblacklist aura",
+        "unblock aura", "unblock spell",
+    },
+    parseAliasArgs = ParseAuraBlacklistRemoveSpellAliasArgs,
     run = function(args)
         local Model = AuraModel()
         if not (Model and type(Model.RemoveBlacklistSpell) == "function") then return false, "Aura blacklist editing is not available right now." end
@@ -964,12 +2575,64 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "aura_blacklist_clear_spells",
+    label = "Clear Aura Blacklist",
+    type = "auras",
+    combatSafe = false,
+    captureSnapshot = true,
+    aliases = {
+        "clear aura blacklist", "clear all aura blacklist", "allow all aura blacklist",
+        "allow all aura blacklist spells", "remove all aura blacklist spells",
+        "empty aura blacklist", "reset aura blacklist", "delete all aura blacklist spells",
+        "clear player aura blacklist", "clear target aura blacklist", "clear focus aura blacklist", "clear boss aura blacklist",
+        "empty player aura blacklist", "empty target aura blacklist", "empty focus aura blacklist", "empty boss aura blacklist",
+        "reset player aura blacklist", "reset target aura blacklist", "reset focus aura blacklist", "reset boss aura blacklist",
+        "allow all player aura blacklist spells", "allow all target aura blacklist spells",
+        "allow all focus aura blacklist spells", "allow all boss aura blacklist spells",
+        "delete all player aura blacklist spells", "delete all target aura blacklist spells",
+        "delete all focus aura blacklist spells", "delete all boss aura blacklist spells",
+    },
+    parseAliasArgs = ParseAuraBlacklistClearAliasArgs,
+    run = function(args)
+        local Model = AuraModel()
+        if not (Model and type(Model.ClearBlacklistSpells) == "function") then return false, "Aura blacklist editing is not available right now." end
+        local scope = args and args.scope or "shared"
+        local count = Model.ClearBlacklistSpells(scope)
+        ApplyAura(scope, "MSUF_ASSISTANT_AURA_BLACKLIST_CLEAR")
+        if count and count > 0 then
+            return true, "Done. Allowed all spells for the " .. AuraScopeLabel(scope) .. " aura blacklist. Cleared " .. tostring(count) .. " blacklisted " .. (count == 1 and "spell." or "spells.")
+        end
+        return true, "Already set. No spells are blacklisted for the " .. AuraScopeLabel(scope) .. " aura blacklist."
+    end,
+})
+
+Registry:RegisterAction({
     key = "aura_blacklist_add_preset",
     label = "Add Aura Blacklist Preset",
     type = "auras",
     combatSafe = false,
     confirmRequired = true,
     captureSnapshot = true,
+    aliases = {
+        "aura blacklist", "aura blacklist preset", "blacklist preset", "blacklist aura preset",
+        "add aura blacklist preset", "add blacklist preset",
+        "blacklist raid buffs", "ignore raid buffs", "block raid buffs",
+        "blacklist cooldowns", "ignore cooldowns", "block cooldowns",
+        "blacklist self buffs", "ignore self buffs", "block self buffs",
+        "blacklist preservation evoker", "ignore preservation evoker",
+        "blacklist augmentation evoker", "ignore augmentation evoker",
+        "blacklist resto druid", "blacklist restoration druid", "ignore resto druid",
+        "blacklist disc priest", "blacklist discipline priest", "ignore disc priest",
+        "blacklist holy priest", "ignore holy priest",
+        "blacklist mistweaver monk", "ignore mistweaver monk",
+        "blacklist resto shaman", "blacklist restoration shaman", "ignore resto shaman",
+        "blacklist holy paladin", "blacklist holy pala", "ignore holy paladin",
+        "blacklist blessing of the bronze", "ignore blessing of the bronze",
+        "blacklist rogue poisons", "ignore rogue poisons",
+        "blacklist shaman imbues", "ignore shaman imbues",
+        "blacklist resource auras", "ignore resource auras",
+    },
+    parseAliasArgs = ParseAuraBlacklistPresetAliasArgs,
     run = function(args)
         local Model = AuraModel()
         if not (Model and type(Model.AddBlacklistPresetGroup) == "function") then return false, "Aura blacklist presets are not available right now." end
@@ -987,6 +2650,21 @@ Registry:RegisterAction({
     label = "Show Aura Blacklist",
     type = "auras",
     combatSafe = true,
+    aliases = {
+        "show aura blacklist", "list aura blacklist", "aura blacklist summary",
+        "current aura blacklist", "what is aura blacklist",
+        "show player aura blacklist", "show target aura blacklist", "show focus aura blacklist", "show boss aura blacklist",
+        "show current player aura blacklist", "show current target aura blacklist",
+        "show current focus aura blacklist", "show current boss aura blacklist",
+        "list player aura blacklist", "list target aura blacklist", "list focus aura blacklist", "list boss aura blacklist",
+        "current player aura blacklist", "current target aura blacklist",
+        "current focus aura blacklist", "current boss aura blacklist",
+        "what is player aura blacklist", "what is target aura blacklist",
+        "what is focus aura blacklist", "what is boss aura blacklist",
+        "player aura blacklist summary", "target aura blacklist summary",
+        "focus aura blacklist summary", "boss aura blacklist summary",
+    },
+    parseAliasArgs = ParseAuraBlacklistSummaryAliasArgs,
     run = function(args)
         local Model = AuraModel()
         if not (Model and type(Model.BlacklistSummary) == "function") then return false, "Aura blacklist reading is not available right now." end

@@ -57,14 +57,21 @@ local function BuildGFIndicators(ctx)
     local leftW = floor((innerW - cardGap) * 0.48)
     local rightX = leftX + leftW + cardGap
     local rightW = innerW - leftW - cardGap
-
     local function IsMouseoverHighlightEnabled()
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
+        if gen and gen.highlightEnabled == nil and gen.enableHighlightOnHover ~= nil then
+            return gen.enableHighlightOnHover == true
+        end
         return not (gen and gen.highlightEnabled == false)
     end
+    local function SetManyEnabled(enabled, ...)
+        for i = 1, select("#", ...) do SetOptionEnabled(select(i, ...), enabled) end
+    end
 
-    local highlightCard = W.ControlCard(indicators, "Aggro / Dispel / Target Highlight", nil, leftX, -38, innerW, 92)
-    local hlHint = W.Text(highlightCard, "Controlled from: |cff38c7f0Global Style > Bars|r > |cff38c7f0Outline & Highlight Border|r\nEnable/disable, colors, size, offset, priority - all in one place.", 16, -42, innerW - 32, T.colors.muted)
+    local highlightCard = W.ControlCard(indicators, "Target Highlight", nil, leftX, -38, innerW, 92)
+    local targetToggle = BindScopeToggle(ctx, W.SwitchAt(highlightCard, "Target Highlight", innerW - 62, -24, 0, "HIDDEN"), "targetIndicator", true, "visual")
+    targetToggle._msuf2GroupFrameGateAlwaysEnabled = true
+    local hlHint = W.Text(highlightCard, "Shows a border around the current target in group frames. Aggro and dispel borders are controlled from |cff38c7f0Global Style > Bars|r > |cff38c7f0Highlight Borders|r.", 16, -42, innerW - 32, T.colors.muted)
     if hlHint.SetWordWrap then hlHint:SetWordWrap(true) end
 
     local groupNumberCard = W.ControlCard(indicators, "Group Number", "Small group index label on each frame.", leftX, -148, leftW, 246)
@@ -153,6 +160,9 @@ local function BuildGFIndicators(ctx)
         SetOptionsEnabled(groupNumberControls, groupNumberEnabled)
         SetOptionEnabled(groupNumberToggle, true)
 
+        local targetEnabled = Bool(CurrentScope(), "targetIndicator", true)
+        SetOptionEnabled(targetToggle, true)
+
         local hoverEnabled = IsMouseoverHighlightEnabled()
         SetOptionEnabled(hoverSize, hoverEnabled)
         local hoverColor = hoverEnabled and T.colors.muted or T.colors.dim
@@ -168,8 +178,9 @@ local function BuildGFIndicators(ctx)
         SetOptionsEnabled(groupBorderControls, groupBorderEnabled)
         SetOptionEnabled(groupBorderToggle, true)
         SetSectionBadges(indicators, {
+            OnOffBadge(targetEnabled and hoverEnabled, "Target on", "Target off"),
             { text = hoverEnabled and "Hover on" or "Hover off", kind = hoverEnabled and "info" or "muted" },
-            OnOffBadge(focusEnabled, "Focus on", "Focus off"),
+            OnOffBadge(focusEnabled and hoverEnabled, "Focus on", "Focus off"),
             { text = groupNumberEnabled and "Group #" or (groupBorderEnabled and "Group border" or "Clean"), kind = (groupNumberEnabled or groupBorderEnabled) and "accent" or "muted" },
         })
         if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(indicators, nil) end
@@ -298,7 +309,7 @@ local function BuildGFIndicators(ctx)
     M.BindToggle(ctx, statusEnabled,
         function()
             local spec = CurrentGFStatusSpec()
-            return Bool(CurrentScope(), spec.enabled, true)
+            return Bool(CurrentScope(), spec.enabled, false)
         end,
         function(value)
             local spec = CurrentGFStatusSpec()
@@ -341,38 +352,37 @@ local function BuildGFIndicators(ctx)
     local previewAllW = min(112, max(76, previewInnerW - previewCurrentW - previewButtonGap))
     previewCurrentW = max(96, previewInnerW - previewAllW - previewButtonGap)
 
-    local previewCurrent = W.Button(previewCard, "Preview current", previewCurrentW)
-    previewCurrent:SetScript("OnClick", function()
+    local function SetStatusPreviewMode(mode)
         local gf = GF()
         if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("gfStatusPreviewMode", "current")
+            M.PersistMenuStateValue("gfStatusPreviewMode", mode)
         else
-            M.gfStatusPreviewMode = "current"
+            M.gfStatusPreviewMode = mode
         end
         if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
-        if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("current") end
-        if gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(CurrentGFStatusSpec().value) end
+        if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode(mode) end
+        if mode == "current" and gf and gf._PreviewSelectStatusIcon then gf._PreviewSelectStatusIcon(CurrentGFStatusSpec().value) end
         if RefreshGFPreview then RefreshGFPreview() end
+    end
+
+    local function PreviewActionButton(parent, label, width, onClick)
+        local btn = W.Button(parent, label, width)
+        btn:SetScript("OnClick", onClick)
+        btn:ClearAllPoints()
+        btn:SetSize(width, 24)
+        return btn
+    end
+
+    local previewCurrent = PreviewActionButton(previewCard, "Preview current", previewCurrentW, function()
+        SetStatusPreviewMode("current")
     end)
     previewCurrent:ClearAllPoints()
     previewCurrent:SetPoint("TOPLEFT", previewCard, "TOPLEFT", 16, -54)
-    previewCurrent:SetSize(previewCurrentW, 24)
 
-    local previewAll = W.Button(previewCard, "Show all", previewAllW)
-    previewAll:SetScript("OnClick", function()
-        local gf = GF()
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("gfStatusPreviewMode", "all")
-        else
-            M.gfStatusPreviewMode = "all"
-        end
-        if gf and gf.SetPreviewFocus then gf.SetPreviewFocus("sicons") end
-        if gf and gf.SetStatusPreviewMode then gf.SetStatusPreviewMode("all") end
-        if RefreshGFPreview then RefreshGFPreview() end
+    local previewAll = PreviewActionButton(previewCard, "Show all", previewAllW, function()
+        SetStatusPreviewMode("all")
     end)
-    previewAll:ClearAllPoints()
     previewAll:SetPoint("LEFT", previewCurrent, "RIGHT", previewButtonGap, 0)
-    previewAll:SetSize(previewAllW, 24)
 
     local statusReset = W.Button(previewCard, "Reset selected", min(160, previewInnerW))
     statusReset:SetScript("OnClick", function()
@@ -413,21 +423,15 @@ local function BuildGFIndicators(ctx)
     advanced.reset:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", siconRightX - siconLeftX, -150)
     advanced.reset:SetSize(160, 24)
 
-    advanced.previewCurrent = W.Button(advanced.card, "Preview current", 142)
-    advanced.previewCurrent:SetScript("OnClick", function()
+    advanced.previewCurrent = PreviewActionButton(advanced.card, "Preview current", 142, function()
         if previewCurrent and previewCurrent.Click then previewCurrent:Click() end
     end)
-    advanced.previewCurrent:ClearAllPoints()
     advanced.previewCurrent:SetPoint("TOPLEFT", advanced.card, "TOPLEFT", 16, -234)
-    advanced.previewCurrent:SetSize(142, 24)
 
-    advanced.previewAll = W.Button(advanced.card, "Show all", 112)
-    advanced.previewAll:SetScript("OnClick", function()
+    advanced.previewAll = PreviewActionButton(advanced.card, "Show all", 112, function()
         if previewAll and previewAll.Click then previewAll:Click() end
     end)
-    advanced.previewAll:ClearAllPoints()
     advanced.previewAll:SetPoint("LEFT", advanced.previewCurrent, "RIGHT", 10, 0)
-    advanced.previewAll:SetSize(112, 24)
 
     local statusPlacementControls = { statusSize, statusAnchor, statusX, statusY, statusLayer, advanced.x, advanced.y, advanced.layer }
     local statusActionControls = { advanced.reset, advanced.previewCurrent, statusReset, previewCurrent }
@@ -441,13 +445,10 @@ local function BuildGFIndicators(ctx)
 
     local function RefreshStatusIconState()
         local spec = CurrentGFStatusSpec()
-        local enabled = Bool(CurrentScope(), spec.enabled, true)
+        local enabled = Bool(CurrentScope(), spec.enabled, false)
         SetOptionsEnabled(statusPlacementControls, enabled)
         SetOptionsEnabled(statusActionControls, spec ~= nil)
-        SetOptionEnabled(advanced.previewAll, true)
-        SetOptionEnabled(previewAll, true)
-        SetOptionEnabled(midnightStyle, true)
-        SetOptionEnabled(statusEnabled, true)
+        SetManyEnabled(true, advanced.previewAll, previewAll, midnightStyle, statusEnabled)
         local hasIconPack = spec and spec.iconStyle
         if W.SetControlShown then
             W.SetControlShown(iconPack, hasIconPack and true or false)
@@ -1064,26 +1065,15 @@ local function BuildGFIndicators(ctx)
         local cdRelevant = placedEnabled and placed.type == "icon"
         local barRelevant = placedEnabled and placed.type == "bar"
         SetOptionEnabled(siEnable, true)
-        SetOptionEnabled(siLayer, indicatorsOn)
-        SetOptionEnabled(specDrop, indicatorsOn)
+        SetManyEnabled(indicatorsOn, siLayer, specDrop)
         SetOptionEnabled(multiSpecDrop, indicatorsOn and multi)
         SetOptionEnabled(multiSpecEnabled, indicatorsOn and multi and CurrentSpellMultiSpec(CurrentScope()) ~= "")
-        SetOptionEnabled(spellEnabled, hasSpell)
-        SetOptionEnabled(onlyMine, hasSpell)
-        SetOptionEnabled(placedType, hasSpell)
-        SetOptionEnabled(frameType, hasSpell)
-        SetOptionEnabled(placedAnchor, placedEnabled)
-        SetOptionEnabled(placedSize, placedEnabled)
-        SetOptionEnabled(placedX, placedEnabled)
-        SetOptionEnabled(placedY, placedEnabled)
+        SetManyEnabled(hasSpell, spellEnabled, onlyMine, placedType, frameType)
+        SetManyEnabled(placedEnabled, placedAnchor, placedSize, placedX, placedY, placedGrowth, placedMissing)
         SetOptionEnabled(placedBarWidth, barRelevant)
-        SetOptionEnabled(placedGrowth, placedEnabled)
-        SetOptionEnabled(placedMissing, placedEnabled)
-        SetOptionEnabled(placedCooldownSwipe, cdRelevant)
-        SetOptionEnabled(placedCooldown, cdRelevant)
+        SetManyEnabled(cdRelevant, placedCooldownSwipe, placedCooldown)
         SetOptionEnabled(placedCooldownSize, cdRelevant and placed and placed.showCooldown ~= false)
-        SetOptionEnabled(frameColor, hasFrame)
-        SetOptionEnabled(framePriority, hasFrame)
+        SetManyEnabled(hasFrame, frameColor, framePriority)
         SetOptionEnabled(frameAlpha, hasFrame and (frameKind == "healthtint" or frameKind == "pulse"))
         SetOptionEnabled(frameThickness, hasFrame and (frameKind == "border" or frameKind == "glow"))
         SetSectionBadges(spells, {
@@ -1112,7 +1102,7 @@ local function BuildGFIndicators(ctx)
     end
 
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
-    local ciEnable = BindScopeToggle(ctx, W.SwitchAt(corners, "Corner Indicators", leftX, -72, leftW), "ciEnabled", true, "visual")
+    local ciEnable = BindScopeToggle(ctx, W.SwitchAt(corners, "Corner Indicators", leftX, -72, leftW), "ciEnabled", false, "visual")
     ciEnable._msuf2GroupFrameGateAlwaysEnabled = true
     local ciSize = BindScopeSlider(ctx, W.Slider(corners, "Icon Size", 4, 24, 1, leftW), "ciSize", 8, "visual")
     local ciAlpha = W.Slider(corners, "Alpha", 10, 100, 5, leftW)
@@ -1250,7 +1240,7 @@ local function BuildGFIndicators(ctx)
         local slot = CurrentCISlot()
         local category = Val(CurrentScope(), "ciSlot" .. slot, CI_SLOT_DEFAULTS[slot] or "none")
         local showCustom = category == "custom"
-        local enabled = Bool(CurrentScope(), "ciEnabled", true)
+        local enabled = Bool(CurrentScope(), "ciEnabled", false)
         SetOptionEnabled(ciEnable, true)
         SetOptionsEnabled({ ciSize, ciAlpha }, enabled)
         SetOptionsEnabled(slotControls, enabled)

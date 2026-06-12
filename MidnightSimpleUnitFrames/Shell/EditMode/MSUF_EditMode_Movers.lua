@@ -453,17 +453,7 @@ local function RegisterAll()
     --- These will register when their respective modules load.
 end
 
---- Deferred init: register once frames are ready
-local initFrame = CreateFrame("Frame")
-initFrame:RegisterEvent("PLAYER_LOGIN")
-initFrame:SetScript("OnEvent", function(self, event)
-    self:UnregisterEvent("PLAYER_LOGIN")
-
-    --- Delay one frame to ensure all unit frames are created
-    C_Timer.After(0, function()
-        RegisterAll()
-    end)
-end)
+RegisterAll()
 
 --- MSUF_EM2_Compat.lua
 
@@ -559,54 +549,37 @@ _G.MSUF_ResetCurrentEditUnit = function()
     end
 end
 
---- --- MSUF_UpdateEditModeInfo (called by Castbars/main) ---
-_G.MSUF_UpdateEditModeInfo = function()
-    --- No-op: EM2 HUD handles display. Old GridFrame.infoText is gone.
-end
-
---- --- MSUF_UpdateCastbarEditInfo ---
-_G.MSUF_UpdateCastbarEditInfo = function() end
-
---- --- MSUF_UpdateGridOverlay ---
-_G.MSUF_UpdateGridOverlay = function()
+local function LegacyNoop() end
+local function UpdateGridOverlay()
     if EM2.State and EM2.State.IsActive() then
         if EM2.Grid then EM2.Grid.Show() end
     else
         if EM2.Grid then EM2.Grid.Hide() end
     end
 end
-
---- --- MSUF_UpdateEditModeVisuals ---
-_G.MSUF_UpdateEditModeVisuals = function()
-    _G.MSUF_UpdateGridOverlay()
+local function OpenMoverPopup(prefix, fallback, unit, parent)
+    if EM2.Popups then
+        EM2.Popups.Open(prefix and (prefix .. tostring(unit or "")) or unit, parent)
+    elseif fallback and fallback.Open then
+        fallback.Open(unit, parent)
+    end
 end
 
---- --- MSUF_CreateGridFrame ---
+_G.MSUF_UpdateEditModeInfo = LegacyNoop
+_G.MSUF_UpdateCastbarEditInfo = LegacyNoop
+_G.MSUF_UpdateGridOverlay = UpdateGridOverlay
+_G.MSUF_UpdateEditModeVisuals = UpdateGridOverlay
 _G.MSUF_CreateGridFrame = function()
     if EM2.Grid then EM2.Grid.Show() end
 end
-
---- --- MSUF_OpenPositionPopup (called from MidnightSimpleUnitFrames.lua OnMouseUp) ---
 _G.MSUF_OpenPositionPopup = function(unit, parent)
-    if EM2.Popups then EM2.Popups.Open(unit, parent) end
+    OpenMoverPopup(nil, nil, unit, parent)
 end
-
---- --- MSUF_OpenCastbarPositionPopup ---
 _G.MSUF_OpenCastbarPositionPopup = function(unit, parent)
-    if EM2.Popups then
-        EM2.Popups.Open("castbar_" .. tostring(unit or ""), parent)
-    elseif EM2.CastPopup then
-        EM2.CastPopup.Open(unit, parent)
-    end
+    OpenMoverPopup("castbar_", EM2.CastPopup, unit, parent)
 end
-
---- --- MSUF_OpenAuras3PositionPopup ---
 _G.MSUF_OpenAuras3PositionPopup = function(unit, parent)
-    if EM2.Popups then
-        EM2.Popups.Open("aura_" .. tostring(unit or ""), parent)
-    elseif EM2.AuraPopup then
-        EM2.AuraPopup.Open(unit, parent)
-    end
+    OpenMoverPopup("aura_", EM2.AuraPopup, unit, parent)
 end
 
 --- --- MSUF_SyncUnitPositionPopup ---
@@ -779,13 +752,12 @@ _G.MSUF_SyncAllUnitPreviews = function()
     SchedulePreviewMoverSync(0.08)
 end
 
---- --- Auto-reforce hooks ---
---- ANY visual update function can overwrite preview text/bars/colors.
---- Hook every entry point to schedule ReforcePreviewFrames after settle.
---- All hooks gate on MSUF_PreviewTestMode ? zero combat overhead.
+--- --- Auto-reforce wrappers ---
+--- Visual update functions can overwrite preview text/bars/colors while Edit
+--- Mode preview is active. Wrap MSUF-owned entry points only for the active
+--- preview window, then restore originals when preview mode stops.
 do
-    local _hooksInstalled = false
-    local PIPELINE_REFORCE_HOOKS = {
+    local PIPELINE_REFORCE_NAMES = {
         --- Font/color/bar/castbar visual entry points that can overwrite preview state.
         "MSUF_UpdateAllFonts",
         "MSUF_UpdateAllFonts_Immediate",
@@ -803,6 +775,9 @@ do
         "MSUF_RefreshDispelOutlineStates",
         "MSUF_ApplyAllAlpha",
     }
+    local wrapped = {}
+    local wrappers = {}
+    local unpack = table.unpack or unpack
 
     local function ScheduleReforce(delay)
         if not _G.MSUF_PreviewTestMode then return end
@@ -816,27 +791,54 @@ do
         end)
     end
 
-    local function SafeHook(name, delay)
-        if type(_G[name]) == "function" then
-            hooksecurefunc(name, function() ScheduleReforce(delay) end)
+    local function UninstallPipelineWrappers()
+        for name, original in pairs(wrapped) do
+            if _G[name] == wrappers[name] then
+                _G[name] = original
+            end
+            wrapped[name] = nil
+            wrappers[name] = nil
         end
     end
 
-    local function InstallPipelineHooks()
-        if _hooksInstalled then return end
-        _hooksInstalled = true
-
-        for _, name in ipairs(PIPELINE_REFORCE_HOOKS) do
-            SafeHook(name, 0.05)
+    local function InstallPipelineWrappers()
+        if not _G.MSUF_PreviewTestMode then return end
+        for _, name in ipairs(PIPELINE_REFORCE_NAMES) do
+            if not wrapped[name] and type(_G[name]) == "function" then
+                local original = _G[name]
+                local function wrapper(...)
+                    if not _G.MSUF_PreviewTestMode then
+                        UninstallPipelineWrappers()
+                        return original(...)
+                    end
+                    local results = { original(...) }
+                    ScheduleReforce(0.05)
+                    return unpack(results)
+                end
+                wrapped[name] = original
+                wrappers[name] = wrapper
+                _G[name] = wrapper
+            end
         end
     end
 
     local _origSync = _G.MSUF_SyncAllUnitPreviews
-    local function SyncAllUnitPreviewsWithPipelineHooks(...)
-        InstallPipelineHooks()
-        return _origSync(...)
+    local function SyncAllUnitPreviewsWithPipelineWrappers(...)
+        if _G.MSUF_PreviewTestMode then
+            InstallPipelineWrappers()
+        else
+            UninstallPipelineWrappers()
+        end
+        local results = { _origSync(...) }
+        if _G.MSUF_PreviewTestMode then
+            ScheduleReforce(0.05)
+            ScheduleReforce(0.20)
+        else
+            UninstallPipelineWrappers()
+        end
+        return unpack(results)
     end
-    _G.MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineHooks
+    _G.MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineWrappers
 end
 
 --- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar preview sync) ---

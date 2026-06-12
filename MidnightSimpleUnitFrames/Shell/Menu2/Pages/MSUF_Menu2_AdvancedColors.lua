@@ -14,14 +14,14 @@ local max = math.max
 local min = math.min
 
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
-local VTR = M.ValueTextRows
 local KLR = M.KeyLabelRows
+local WL = M.WordList
 
 local function ColorRows(...)
     local out = {}
     local n = select("#", ...)
     if n == 1 and type((...)) == "string" then
-        for line in tostring((...) or ""):gmatch("[^\r\n]+") do
+        for line in tostring((...) or ""):gmatch("[^;\r\n]+") do
             local key, label, r, g, b = line:match("^([^|]+)|([^|]+)|([^|]+)|([^|]+)|([^|]+)$")
             if key then out[#out + 1] = { key = key, label = label, dr = tonumber(r), dg = tonumber(g), db = tonumber(b) } end
         end
@@ -35,6 +35,24 @@ local function ColorRows(...)
             dg = select(i + 3, ...),
             db = select(i + 4, ...),
         }
+    end
+    return out
+end
+
+local function KeyLabelMap(rows)
+    local out = {}
+    for item in tostring(rows or ""):gmatch("[^|\r\n]+") do
+        local key, label = item:match("^(.-)=(.*)$")
+        if key then out[key] = label ~= "" and label or key end
+    end
+    return out
+end
+
+local function ValueTextPairs(rows)
+    local out = {}
+    for item in tostring(rows or ""):gmatch("[^|\r\n]+") do
+        local value, text = item:match("^(.-)=(.*)$")
+        if value then out[#out + 1] = { value = value, text = text ~= "" and text or value } end
     end
     return out
 end
@@ -102,26 +120,9 @@ local function ApplyPortraitColors(reason)
     CallGlobal("MSUF_UFPreview_RequestRefresh", reason or "PORTRAIT_COLORS")
 end
 
-local COLOR_CLASS_TOKENS = {
-    "WARRIOR", "PALADIN", "HUNTER", "ROGUE", "PRIEST", "DEATHKNIGHT", "SHAMAN",
-    "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",
-}
+local COLOR_CLASS_TOKENS = WL [[WARRIOR PALADIN HUNTER ROGUE PRIEST DEATHKNIGHT SHAMAN MAGE WARLOCK MONK DRUID DEMONHUNTER EVOKER]]
 
-local COLOR_CLASS_LABELS = {
-    WARRIOR = "Warrior",
-    PALADIN = "Paladin",
-    HUNTER = "Hunter",
-    ROGUE = "Rogue",
-    PRIEST = "Priest",
-    DEATHKNIGHT = "Death Knight",
-    SHAMAN = "Shaman",
-    MAGE = "Mage",
-    WARLOCK = "Warlock",
-    MONK = "Monk",
-    DRUID = "Druid",
-    DEMONHUNTER = "Demon Hunter",
-    EVOKER = "Evoker",
-}
+local COLOR_CLASS_LABELS = KeyLabelMap [[WARRIOR=Warrior|PALADIN=Paladin|HUNTER=Hunter|ROGUE=Rogue|PRIEST=Priest|DEATHKNIGHT=Death Knight|SHAMAN=Shaman|MAGE=Mage|WARLOCK=Warlock|MONK=Monk|DRUID=Druid|DEMONHUNTER=Demon Hunter|EVOKER=Evoker]]
 
 local COLOR_NPC_ROWS = ColorRows [[
 friendly|Friendly NPC Color|0|1|0
@@ -146,69 +147,17 @@ Poison|Poison|0.00|0.60|0.00
 Bleed|Bleed|0.80|0.10|0.10
 ]]
 
-local COLOR_POWER_TOKENS = VTR [[
-MANA=Mana
-RAGE=Rage
-ENERGY=Energy
-FOCUS=Focus
-RUNIC_POWER=Runic Power
-INSANITY=Insanity
-FURY=Fury
-PAIN=Pain
-ESSENCE=Essence
-LUNAR_POWER=Astral Power
-MAELSTROM=Maelstrom
-]]
+local COLOR_POWER_TOKENS = ValueTextPairs [[MANA=Mana|RAGE=Rage|ENERGY=Energy|FOCUS=Focus|RUNIC_POWER=Runic Power|INSANITY=Insanity|FURY=Fury|PAIN=Pain|ESSENCE=Essence|LUNAR_POWER=Astral Power|MAELSTROM=Maelstrom]]
 
-local COLOR_CP_TOKENS = VTR [[
-COMBO_POINTS=Combo Points
-HOLY_POWER=Holy Power
-SOUL_SHARDS=Soul Shards
-CHI=Chi
-ARCANE_CHARGES=Arcane Charges
-RUNES=Runes
-ESSENCE=Essence
-CHARGED=Empowered / Charged
-SOUL_FRAGMENTS=Soul Fragments
-SOUL_FRAGMENTS_META=Soul Fragments (Void Meta)
-MAELSTROM=Maelstrom Weapon
-MAELSTROM_ABOVE_5=Maelstrom Weapon 5+
-ASTRAL_POWER=Astral Power
-AP_PREDICTION=Astral Prediction
-ECLIPSE_SOLAR=Eclipse Solar
-ECLIPSE_LUNAR=Eclipse Lunar
-ECLIPSE_CA=Celestial Alignment
-STAGGER_GREEN=Stagger Light
-STAGGER_YELLOW=Stagger Moderate
-STAGGER_RED=Stagger Heavy
-SOUL_FRAGMENTS_VENG=Soul Fragments (Vengeance)
-INSANITY=Insanity
-MAELSTROM_POWER=Maelstrom Power
-WHIRLWIND=Whirlwind
-TIP_OF_THE_SPEAR=Tip of the Spear
-ICICLES=Icicles
-EBON_MIGHT=Ebon Might
-RESOURCE_TEXT=Resource Text
-]]
+local COLOR_CP_TOKENS = ValueTextPairs [[COMBO_POINTS=Combo Points|HOLY_POWER=Holy Power|SOUL_SHARDS=Soul Shards|CHI=Chi|ARCANE_CHARGES=Arcane Charges|RUNES=Runes|ESSENCE=Essence|CHARGED=Empowered / Charged|SOUL_FRAGMENTS=Soul Fragments|SOUL_FRAGMENTS_META=Soul Fragments (Void Meta)|MAELSTROM=Maelstrom Weapon|MAELSTROM_ABOVE_5=Maelstrom Weapon 5+|ASTRAL_POWER=Astral Power|AP_PREDICTION=Astral Prediction|ECLIPSE_SOLAR=Eclipse Solar|ECLIPSE_LUNAR=Eclipse Lunar|ECLIPSE_CA=Celestial Alignment|STAGGER_GREEN=Stagger Light|STAGGER_YELLOW=Stagger Moderate|STAGGER_RED=Stagger Heavy|SOUL_FRAGMENTS_VENG=Soul Fragments (Vengeance)|INSANITY=Insanity|MAELSTROM_POWER=Maelstrom Power|WHIRLWIND=Whirlwind|TIP_OF_THE_SPEAR=Tip of the Spear|ICICLES=Icicles|EBON_MIGHT=Ebon Might|RESOURCE_TEXT=Resource Text]]
 
-local COLOR_CP_SLOT_TOKENS = {
-    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
-    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
-}
+local COLOR_CP_SLOT_TOKENS = WL [[COMBO_POINTS_1 COMBO_POINTS_2 COMBO_POINTS_3 COMBO_POINTS_4 COMBO_POINTS_5 COMBO_POINTS_6 COMBO_POINTS_7]]
+local COLOR_CP_SLOT_DEFAULTS = {}
+for _, row in ipairs(ColorRows [[COMBO_POINTS_1|1|0.00|0.95|1.00;COMBO_POINTS_2|2|0.00|0.95|1.00;COMBO_POINTS_3|3|1.00|1.00|0.00;COMBO_POINTS_4|4|1.00|1.00|0.00;COMBO_POINTS_5|5|1.00|1.00|0.00;COMBO_POINTS_6|6|1.00|0.05|0.05;COMBO_POINTS_7|7|1.00|0.05|0.05]]) do
+    COLOR_CP_SLOT_DEFAULTS[row.key] = { row.dr, row.dg, row.db }
+end
 
-local COLOR_CP_SLOT_DEFAULTS = {
-    COMBO_POINTS_1 = { 0.00, 0.95, 1.00 },
-    COMBO_POINTS_2 = { 0.00, 0.95, 1.00 },
-    COMBO_POINTS_3 = { 1.00, 1.00, 0.00 },
-    COMBO_POINTS_4 = { 1.00, 1.00, 0.00 },
-    COMBO_POINTS_5 = { 1.00, 1.00, 0.00 },
-    COMBO_POINTS_6 = { 1.00, 0.05, 0.05 },
-    COMBO_POINTS_7 = { 1.00, 0.05, 0.05 },
-}
-
-local COLOR_CP_SLOT_MODES = VTR [[default=Resource color
-ramp=Combo ramp
-custom=Custom slots]]
+local COLOR_CP_SLOT_MODES = ValueTextPairs "default=Resource color|ramp=Combo ramp|custom=Custom slots"
 
 local COLOR_DATA = {
     CLASS_LABELS = COLOR_CLASS_LABELS,
@@ -225,10 +174,29 @@ local function ColorAPI()
     return (MSUF and MSUF._colorsAPI) or {}
 end
 
-local function ApiRGB(name, dr, dg, db)
+local function ApiCall(name, ...)
     local fn = ColorAPI()[name]
     if type(fn) == "function" then
-        local ok, r, g, b = pcall(fn)
+        local ok = pcall(fn, ...)
+        if ok then return true end
+    end
+    return false
+end
+
+local function ApiValue(name, fallback, ...)
+    local fn = ColorAPI()[name]
+    if type(fn) == "function" then
+        local ok, value = pcall(fn, ...)
+        if ok and value ~= nil then return value end
+    end
+    if type(fallback) == "function" then return fallback() end
+    return fallback
+end
+
+local function ApiRGB(name, dr, dg, db, ...)
+    local fn = ColorAPI()[name]
+    if type(fn) == "function" then
+        local ok, r, g, b = pcall(fn, ...)
         if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
             return r, g, b
         end
@@ -237,12 +205,7 @@ local function ApiRGB(name, dr, dg, db)
 end
 
 local function ApiSetRGB(name, r, g, b)
-    local fn = ColorAPI()[name]
-    if type(fn) == "function" then
-        pcall(fn, r, g, b)
-    else
-        ApplyColors()
-    end
+    if not ApiCall(name, r, g, b) then ApplyColors() end
 end
 
 local function GeneralRGB(prefix, dr, dg, db)
@@ -391,6 +354,17 @@ local function GetClassTokens()
     return COLOR_CLASS_TOKENS
 end
 
+local function ClassDefaultRGB(token)
+    local rc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
+    if rc then return rc.r, rc.g, rc.b end
+    return 1, 1, 1
+end
+
+local function ClassColorRGB(token)
+    local r, g, b = ClassDefaultRGB(token)
+    return ApiRGB("GetClassColor", r, g, b, token)
+end
+
 local function GetNPCTypeUnits()
     local units = ColorAPI().NPC_TYPE_UNITS
     if type(units) == "table" and #units > 0 then return units end
@@ -435,28 +409,20 @@ local function ResetPowerOverride(token)
     ApplyColors()
 end
 
+local CLASS_POWER_STATIC_DEFAULTS = {}
+for _, row in ipairs(ColorRows [[CHARGED|Charged|0.60|0.20|0.80;SOUL_FRAGMENTS|Soul Fragments|0.00|0.80|0.00;SOUL_FRAGMENTS_META|Soul Fragments Meta|0.60|0.20|0.93;MAELSTROM_ABOVE_5|Maelstrom Above 5|1.00|0.50|0.00;ECLIPSE_SOLAR|Eclipse Solar|0.82|0.56|0.25;ECLIPSE_LUNAR|Eclipse Lunar|0.41|0.49|0.82;ECLIPSE_CA|Eclipse CA|0.30|1.00|0.43;STAGGER_GREEN|Stagger Green|0.52|1.00|0.52;STAGGER_YELLOW|Stagger Yellow|1.00|0.98|0.72;STAGGER_RED|Stagger Red|1.00|0.42|0.42;SOUL_FRAGMENTS_VENG|Soul Fragments Veng|0.34|0.06|0.46;WHIRLWIND|Whirlwind|0.20|0.80|0.20;TIP_OF_THE_SPEAR|Tip of the Spear|0.60|0.80|0.20;ICICLES|Icicles|0.50|0.80|1.00;EBON_MIGHT|Ebon Might|0.40|0.80|0.60]]) do
+    CLASS_POWER_STATIC_DEFAULTS[row.key] = { row.dr, row.dg, row.db }
+end
+local CLASS_POWER_POWER_DEFAULTS = KeyLabelMap [[MAELSTROM=MAELSTROM|MAELSTROM_POWER=MAELSTROM|ASTRAL_POWER=LUNAR_POWER|AP_PREDICTION=LUNAR_POWER|INSANITY=INSANITY]]
+
 local function ClassPowerDefaultRGB(token)
     local slot = COLOR_CP_SLOT_DEFAULTS[token]
     if slot then return slot[1], slot[2], slot[3] end
-    if token == "CHARGED" then return 0.60, 0.20, 0.80 end
+    local static = CLASS_POWER_STATIC_DEFAULTS[token]
+    if static then return static[1], static[2], static[3] end
     if token == "RESOURCE_TEXT" then return ApiRGB("GetGlobalFontColor", 1, 1, 1) end
-    if token == "SOUL_FRAGMENTS" then return 0.00, 0.80, 0.00 end
-    if token == "SOUL_FRAGMENTS_META" then return 0.60, 0.20, 0.93 end
-    if token == "MAELSTROM" or token == "MAELSTROM_POWER" then return PowerDefaultRGB("MAELSTROM") end
-    if token == "MAELSTROM_ABOVE_5" then return 1.00, 0.50, 0.00 end
-    if token == "ASTRAL_POWER" or token == "AP_PREDICTION" then return PowerDefaultRGB("LUNAR_POWER") end
-    if token == "ECLIPSE_SOLAR" then return 0.82, 0.56, 0.25 end
-    if token == "ECLIPSE_LUNAR" then return 0.41, 0.49, 0.82 end
-    if token == "ECLIPSE_CA" then return 0.30, 1.00, 0.43 end
-    if token == "STAGGER_GREEN" then return 0.52, 1.00, 0.52 end
-    if token == "STAGGER_YELLOW" then return 1.00, 0.98, 0.72 end
-    if token == "STAGGER_RED" then return 1.00, 0.42, 0.42 end
-    if token == "SOUL_FRAGMENTS_VENG" then return 0.34, 0.06, 0.46 end
-    if token == "INSANITY" then return PowerDefaultRGB("INSANITY") end
-    if token == "WHIRLWIND" then return 0.20, 0.80, 0.20 end
-    if token == "TIP_OF_THE_SPEAR" then return 0.60, 0.80, 0.20 end
-    if token == "ICICLES" then return 0.50, 0.80, 1.00 end
-    if token == "EBON_MIGHT" then return 0.40, 0.80, 0.60 end
+    local powerToken = CLASS_POWER_POWER_DEFAULTS[token]
+    if powerToken then return PowerDefaultRGB(powerToken) end
     return PowerDefaultRGB(token)
 end
 
@@ -649,8 +615,10 @@ local function BuildColors(ctx)
     local font = b:CollapsibleSection("colors_font", "Global Font Color", 100, false)
     CH.ApiColorAt(ctx, font, "Global font color", 12, -10, "GetGlobalFontColor", "SetGlobalFontColor", 1, 1, 1)
     CH.ButtonAt(font, "Use font palette", 12, -50, 150, function()
-        local fn = ColorAPI().ResetGlobalFontToPalette
-        if type(fn) == "function" then pcall(fn) else G().useCustomFontColor = false; G().fontColorCustomR, G().fontColorCustomG, G().fontColorCustomB = nil, nil, nil end
+        if not ApiCall("ResetGlobalFontToPalette") then
+            G().useCustomFontColor = false
+            G().fontColorCustomR, G().fontColorCustomG, G().fontColorCustomB = nil, nil, nil
+        end
         ApplyColors()
     end)
 
@@ -668,24 +636,13 @@ local function BuildColors(ctx)
         local col = (i - 1) % 4
         local row = floor((i - 1) / 4)
         ColorValueAt(ctx, classColors, COLOR_DATA.CLASS_LABELS[token] or token, 12 + col * classColW, -34 - row * 36,
-            function()
-                local api = ColorAPI()
-                if type(api.GetClassColor) == "function" then
-                    local ok, r, g, c = pcall(api.GetClassColor, token)
-                    if ok then return r, g, c end
-                end
-                local rc = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[token]
-                if rc then return rc.r, rc.g, rc.b end
-                return 1, 1, 1
-            end,
+            function() return ClassColorRGB(token) end,
             function(r, g, c)
-                local api = ColorAPI()
-                if type(api.SetClassColor) == "function" then pcall(api.SetClassColor, token, r, g, c) else ApplyColors() end
+                if not ApiCall("SetClassColor", token, r, g, c) then ApplyColors() end
             end, classLabelW, 44)
     end
     CH.ButtonAt(classColors, "Reset all class colors", 12, classResetY, 190, function()
-        local fn = ColorAPI().ResetAllClassColors
-        if type(fn) == "function" then pcall(fn) else DB().classColors = nil end
+        if not ApiCall("ResetAllClassColors") then DB().classColors = nil end
         ApplyColors()
     end)
 
@@ -694,36 +651,21 @@ local function BuildColors(ctx)
     ColorValueAt(ctx, background, "Bar background tint", 12, -46,
         function() return ApiRGB("GetClassBarBgColor", 0, 0, 0) end,
         function(r, g, c)
-            local api = ColorAPI()
-            if type(api.SetClassBarBgColor) == "function" then pcall(api.SetClassBarBgColor, r, g, c) else SetGeneralRGB("classBarBg", r, g, c) end
+            if not ApiCall("SetClassBarBgColor", r, g, c) then SetGeneralRGB("classBarBg", r, g, c) end
         end)
     ValueToggleAt(ctx, background, "Background follows HP color", 12, -86,
-        function()
-            local fn = ColorAPI().GetBarBgMatchHP
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
-            return G().barBgMatchHPColor == true
-        end,
+        function() return ApiValue("GetBarBgMatchHP", function() return G().barBgMatchHPColor == true end) end,
         function(v)
-            local fn = ColorAPI().SetBarBgMatchHP
-            if type(fn) == "function" then
-                pcall(fn, v)
-            else
+            if not ApiCall("SetBarBgMatchHP", v) then
                 G().barBgMatchHPColor = v and true or false
                 if v then G().barBgClassColor = false end
             end
             ApplyColors()
         end)
     ValueToggleAt(ctx, background, "Health background follows class color", 12, -114,
-        function()
-            local fn = ColorAPI().GetBarBgClassColor
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
-            return G().barBgClassColor == true
-        end,
+        function() return ApiValue("GetBarBgClassColor", function() return G().barBgClassColor == true end) end,
         function(v)
-            local fn = ColorAPI().SetBarBgClassColor
-            if type(fn) == "function" then
-                pcall(fn, v)
-            else
+            if not ApiCall("SetBarBgClassColor", v) then
                 G().barBgClassColor = v and true or false
                 if v then G().barBgMatchHPColor = false end
             end
@@ -733,18 +675,14 @@ local function BuildColors(ctx)
         function() return G().darkBgCustomColor == true end,
         function(v) G().darkBgCustomColor = v and true or false; ApplyColors() end)
     CH.ButtonAt(background, "Reset to black", 12, -184, 140, function()
-        local fn = ColorAPI().ResetClassBarBgColor
-        if type(fn) == "function" then pcall(fn) else G().classBarBgR, G().classBarBgG, G().classBarBgB = nil, nil, nil end
+        if not ApiCall("ResetClassBarBgColor") then
+            G().classBarBgR, G().classBarBgG, G().classBarBgB = nil, nil, nil
+        end
         ApplyColors()
     end)
 
     local appearance = b:CollapsibleSection("colors_appearance", "Unitframe Global Coloring", 290, true)
-    ValueDropdownAt(ctx, appearance, "Bar mode", 12, -10, VTR [[
-dark=Dark Mode (dark black bars)
-class=Class Color Mode (color HP bars)
-unified=Unified Color Mode (one color for all frames)
-gradient=Color Gradient
-]], 320,
+    ValueDropdownAt(ctx, appearance, "Bar mode", 12, -10, ValueTextPairs "dark=Dark Mode (dark black bars)|class=Class Color Mode (color HP bars)|unified=Unified Color Mode (one color for all frames)|gradient=Color Gradient", 320,
         function()
             local g = G()
             local mode = g.barMode
@@ -780,23 +718,14 @@ gradient=Color Gradient
     for i = 1, #COLOR_DATA.NPC_ROWS do
         local row = COLOR_DATA.NPC_ROWS[i]
         ColorValueAt(ctx, unit, row.label, 12, -10 - (i - 1) * 36,
-            function()
-                local api = ColorAPI()
-                if type(api.GetNPCColor) == "function" then
-                    local ok, r, g, c = pcall(api.GetNPCColor, row.key)
-                    if ok then return r, g, c end
-                end
-                return row.dr, row.dg, row.db
-            end,
+            function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
             function(r, g, c)
-                local api = ColorAPI()
-                if type(api.SetNPCColor) == "function" then pcall(api.SetNPCColor, row.key, r, g, c) else ApplyColors() end
+                if not ApiCall("SetNPCColor", row.key, r, g, c) then ApplyColors() end
             end)
     end
     CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0)
     CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190, function()
-        local fn = ColorAPI().ResetAllNPCColors
-        if type(fn) == "function" then pcall(fn) else DB().npcColors = nil end
+        if not ApiCall("ResetAllNPCColors") then DB().npcColors = nil end
         ApplyColors()
     end)
 
@@ -808,36 +737,23 @@ gradient=Color Gradient
         for i = 1, #npcControls do SetControlEnabled(npcControls[i], enabled) end
     end
     npcControls[#npcControls + 1] = ValueToggleAt(ctx, npcType, "Color HP bar (Class Color mode only)", 32, -38,
-        function()
-            local fn = ColorAPI().GetNPCTypeColorBar
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
-            return G().npcTypeColorBar ~= false
-        end,
+        function() return ApiValue("GetNPCTypeColorBar", function() return G().npcTypeColorBar ~= false end) end,
         function(v)
-            local fn = ColorAPI().SetNPCTypeColorBar
-            if type(fn) == "function" then pcall(fn, v) else G().npcTypeColorBar = v and true or false end
+            if not ApiCall("SetNPCTypeColorBar", v) then G().npcTypeColorBar = v and true or false end
             ApplyColors()
         end)
     npcControls[#npcControls + 1] = ValueToggleAt(ctx, npcType, "Color name text", 32, -62,
-        function()
-            local fn = ColorAPI().GetNPCTypeColorText
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
-            return G().npcTypeColorText ~= false
-        end,
+        function() return ApiValue("GetNPCTypeColorText", function() return G().npcTypeColorText ~= false end) end,
         function(v)
-            local fn = ColorAPI().SetNPCTypeColorText
-            if type(fn) == "function" then pcall(fn, v) else G().npcTypeColorText = v and true or false end
+            if not ApiCall("SetNPCTypeColorText", v) then G().npcTypeColorText = v and true or false end
             ApplyColors()
         end)
     npcMaster = ValueSwitchAt(ctx, npcType, "NPC Type Colors", 12, -10, 260,
         function()
-            local fn = ColorAPI().GetNPCColorMode
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v == "type" end end
-            return G().npcColorMode == "type"
+            return ApiValue("GetNPCColorMode", function() return G().npcColorMode end) == "type"
         end,
         function(v)
-            local fn = ColorAPI().SetNPCColorMode
-            if type(fn) == "function" then pcall(fn, v and "type" or "reaction") else G().npcColorMode = v and "type" or "reaction" end
+            if not ApiCall("SetNPCColorMode", v and "type" or "reaction") then G().npcColorMode = v and "type" or "reaction" end
             ApplyColors()
             RefreshNPCTypeControls(v and true or false)
         end)
@@ -848,14 +764,9 @@ gradient=Color Gradient
         local col = (i - 1) % 2
         local row = floor((i - 1) / 2)
         npcControls[#npcControls + 1] = ValueToggleAt(ctx, npcType, info.label or info.key, 32 + col * 180, -114 - row * 24,
-            function()
-                local fn = ColorAPI().GetNPCTypePerUnit
-                if type(fn) == "function" then local ok, v = pcall(fn, info.key); if ok then return v end end
-                return G()[info.key] ~= false
-            end,
+            function() return ApiValue("GetNPCTypePerUnit", function() return G()[info.key] ~= false end, info.key) end,
             function(v)
-                local fn = ColorAPI().SetNPCTypePerUnit
-                if type(fn) == "function" then pcall(fn, info.key, v) else G()[info.key] = v and true or false end
+                if not ApiCall("SetNPCTypePerUnit", info.key, v) then G()[info.key] = v and true or false end
                 ApplyColors()
             end)
     end
@@ -864,23 +775,14 @@ gradient=Color Gradient
         local col = (i - 1) % 2
         local line = floor((i - 1) / 2)
         local sw = ColorValueAt(ctx, npcType, row.label, 12 + col * 330, -174 - line * 38,
-            function()
-                local api = ColorAPI()
-                if type(api.GetNPCColor) == "function" then
-                    local ok, r, g, c = pcall(api.GetNPCColor, row.key)
-                    if ok then return r, g, c end
-                end
-                return row.dr, row.dg, row.db
-            end,
+            function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
             function(r, g, c)
-                local api = ColorAPI()
-                if type(api.SetNPCColor) == "function" then pcall(api.SetNPCColor, row.key, r, g, c) else ApplyColors() end
+                if not ApiCall("SetNPCColor", row.key, r, g, c) then ApplyColors() end
             end)
         npcControls[#npcControls + 1] = sw
     end
     CH.ButtonAt(npcType, "Reset NPC Type Colors", 12, -292, 190, function()
-        local fn = ColorAPI().ResetNPCTypeColors
-        if type(fn) == "function" then pcall(fn) else DB().npcColors = nil end
+        if not ApiCall("ResetNPCTypeColors") then DB().npcColors = nil end
         ApplyColors()
     end)
     M.AddRefresher(ctx, RefreshNPCTypeControls)
@@ -907,14 +809,9 @@ gradient=Color Gradient
             ApplyGlobalOutlineColor()
         end)
     local powerBgMatch = ValueToggleAt(ctx, barColors, "Power background matches HP", barRightX, -148,
-        function()
-            local fn = ColorAPI().GetPowerBarBackgroundMatchHP
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
-            return G().powerBarBgMatchBarColor == true
-        end,
+        function() return ApiValue("GetPowerBarBackgroundMatchHP", function() return G().powerBarBgMatchBarColor == true end) end,
         function(v)
-            local fn = ColorAPI().SetPowerBarBackgroundMatchHP
-            if type(fn) == "function" then pcall(fn, v) else G().powerBarBgMatchBarColor = v and true or false end
+            if not ApiCall("SetPowerBarBackgroundMatchHP", v) then G().powerBarBgMatchBarColor = v and true or false end
             ApplyColors()
             SetControlEnabled(powerBg, not (v and true or false))
         end)
@@ -936,8 +833,7 @@ gradient=Color Gradient
 
     local dispel = b:CollapsibleSection("colors_dispel", "Dispel", 310, false)
     LabelAt(dispel, "Dispel color shared by Highlight Border and Unit/Group Frame Dispel Overlay.", 12, -8, 620, "GameFontHighlightSmall", T.colors.muted)
-    ValueDropdownAt(ctx, dispel, "Color mode", 12, -42, VTR [[SINGLE=Single color
-TYPE=Per debuff type]], 220,
+    ValueDropdownAt(ctx, dispel, "Color mode", 12, -42, ValueTextPairs "SINGLE=Single color|TYPE=Per debuff type", 220,
         function() return G().hlDispelColorMode or "SINGLE" end,
         function(v)
             G().hlDispelColorMode = v or "SINGLE"
@@ -983,15 +879,13 @@ TYPE=Per debuff type]], 220,
     ColorValueAt(ctx, castbar, "Castbar border color", 360, -46,
         function() return ApiRGB("GetCastbarBorderColor", 0, 0, 0) end,
         function(r, g, c)
-            local fn = ColorAPI().SetCastbarBorderColor
-            if type(fn) == "function" then pcall(fn, r, g, c, 1) else SetGeneralRGB("castbarBorder", r, g, c) end
+            if not ApiCall("SetCastbarBorderColor", r, g, c, 1) then SetGeneralRGB("castbarBorder", r, g, c) end
             ApplyCastbarColors()
         end)
     ColorValueAt(ctx, castbar, "Castbar background color", 360, -82,
         function() return ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10) end,
         function(r, g, c)
-            local fn = ColorAPI().SetCastbarBackgroundColor
-            if type(fn) == "function" then pcall(fn, r, g, c, 0.85) else SetGeneralRGB("castbarBg", r, g, c) end
+            if not ApiCall("SetCastbarBackgroundColor", r, g, c, 0.85) then SetGeneralRGB("castbarBg", r, g, c) end
             ApplyCastbarColors()
         end)
     LabelAt(castbar, "Player castbar override", 12, -134, 260, "GameFontNormal", T.colors.text)
@@ -1009,16 +903,10 @@ TYPE=Per debuff type]], 220,
         function(r, g, c) ApiSetRGB("SetPlayerCastbarOverrideColor", r, g, c); ApplyCastbarColors() end,
         overrideColorLabelW)
     local overrideEnable
-    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -154, VTR [[CLASS=Class color
-CUSTOM=Custom color]], overrideModeW,
-        function()
-            local fn = ColorAPI().GetPlayerCastbarOverrideMode
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
-            return G().playerCastbarOverrideMode or "CLASS"
-        end,
+    local overrideMode = ValueDropdownAt(ctx, castbar, "Mode", overrideModeX, -154, ValueTextPairs "CLASS=Class color|CUSTOM=Custom color", overrideModeW,
+        function() return ApiValue("GetPlayerCastbarOverrideMode", function() return G().playerCastbarOverrideMode or "CLASS" end) end,
         function(v)
-            local fn = ColorAPI().SetPlayerCastbarOverrideMode
-            if type(fn) == "function" then pcall(fn, v) else G().playerCastbarOverrideMode = v end
+            if not ApiCall("SetPlayerCastbarOverrideMode", v) then G().playerCastbarOverrideMode = v end
             ApplyCastbarColors()
             SetControlEnabled(overrideColor, (overrideEnable and overrideEnable:GetChecked() and true or false) and v == "CUSTOM")
         end)
@@ -1028,14 +916,9 @@ CUSTOM=Custom color]], overrideModeW,
         SetControlEnabled(overrideColor, enabled and ((overrideMode.GetValue and overrideMode:GetValue()) == "CUSTOM"))
     end
     overrideEnable = ValueSwitchAt(ctx, castbar, "Player override", 12, -154, 260,
-        function()
-            local fn = ColorAPI().GetPlayerCastbarOverrideEnabled
-            if type(fn) == "function" then local ok, v = pcall(fn); if ok then return v end end
-            return G().playerCastbarOverrideEnabled == true
-        end,
+        function() return ApiValue("GetPlayerCastbarOverrideEnabled", function() return G().playerCastbarOverrideEnabled == true end) end,
         function(v)
-            local fn = ColorAPI().SetPlayerCastbarOverrideEnabled
-            if type(fn) == "function" then pcall(fn, v) else G().playerCastbarOverrideEnabled = v and true or false end
+            if not ApiCall("SetPlayerCastbarOverrideEnabled", v) then G().playerCastbarOverrideEnabled = v and true or false end
             ApplyCastbarColors()
             RefreshCastbarOverrideControls(v and true or false)
         end)
@@ -1043,10 +926,9 @@ CUSTOM=Custom color]], overrideModeW,
     CH.TableColorAt(ctx, castbar, "Ready color (kick available)", 12, -274, G, "kickReadyColor", 0, 1, 0, ApplyCastbarColors)
     CH.TableColorAt(ctx, castbar, "Not ready color (kick on cooldown)", 12, -310, G, "kickNotReadyColor", 1, 0, 0, ApplyCastbarColors)
     CH.ButtonAt(castbar, "Reset castbar colors", 12, -470, 170, function()
-        local api = ColorAPI()
-        if type(api.ResetCastbarTextColorToGlobal) == "function" then pcall(api.ResetCastbarTextColorToGlobal) end
-        if type(api.ResetCastbarBorderColor) == "function" then pcall(api.ResetCastbarBorderColor) end
-        if type(api.ResetCastbarBackgroundColor) == "function" then pcall(api.ResetCastbarBackgroundColor) end
+        ApiCall("ResetCastbarTextColorToGlobal")
+        ApiCall("ResetCastbarBorderColor")
+        ApiCall("ResetCastbarBackgroundColor")
         local g = G()
         g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = nil, nil, nil
         g.castbarNonInterruptibleR, g.castbarNonInterruptibleG, g.castbarNonInterruptibleB = nil, nil, nil

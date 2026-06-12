@@ -736,19 +736,6 @@ local function OpenDropdown(owner, valuesTable)
     PlayMotion(dropdownFrame, "dropdownIn", { fromAlpha = 0 })
 end
 
-function W.OpenDropdownList(owner, values, onSelect, selectedValue)
-    if not owner then return end
-    if IsDropdownClosingFor(owner) then return end
-    if dropdownOwner == owner and dropdownFrame and dropdownFrame:IsShown() then
-        CloseDropdown()
-        return
-    end
-    CloseDropdown()
-    owner._msuf2DropdownListSelect = onSelect
-    owner._msuf2DropdownListValue = selectedValue
-    OpenDropdown(owner, values)
-end
-
 function W.Dropdown(section, label, values, width)
     local x, y = NextRow(section, 48)
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)

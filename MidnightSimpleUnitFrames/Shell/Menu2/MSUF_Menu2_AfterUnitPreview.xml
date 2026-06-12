@@ -1,0 +1,14 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Script file="Pages\MSUF_Menu2_UnitSectionShared.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitStatusSection.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitText.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitRangeFade.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitAlpha.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitFrameVisuals.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitSections.lua"/>
+    <Script file="Pages\MSUF_Menu2_Global.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalFonts.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalBars.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalCastbars.lua"/>
+    <Script file="Pages\MSUF_Menu2_GlobalMisc.lua"/>
+</Ui>

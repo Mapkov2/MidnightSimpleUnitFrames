@@ -148,3 +148,145 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     notice:Hide()
     return notice, text, button
 end
+
+function Shared.MakeTabFrame(parent, key, topOffset, width, store)
+    local frame = CreateFrame("Frame", nil, parent)
+    frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, topOffset or -118)
+    frame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", 0, 12)
+    frame._msuf2Width = width
+    if store and key then store[key] = frame end
+    return frame
+end
+
+function Shared.MakeDragSortRows(parent, defs, opts)
+    opts = opts or {}
+    defs = defs or {}
+    local rowW, rowH, rowGap = opts.width or 220, opts.rowHeight or 22, opts.gap or 4
+    local rowCount = opts.maxRows or #defs
+    local holder = CreateFrame("Frame", nil, parent)
+    holder:SetPoint("TOPLEFT", parent, "TOPLEFT", opts.x or 0, opts.y or 0)
+    holder:SetSize(rowW, rowCount * (rowH + rowGap))
+    holder.rows, holder._enabled, holder._activeCount = {}, true, rowCount
+
+    local function SlotY(slot) return -((slot - 1) * (rowH + rowGap)) end
+    function holder:SnapRows()
+        local active = self._activeCount or rowCount
+        for i = 1, #self.rows do
+            local row = self.rows[i]
+            row.frame:ClearAllPoints()
+            row.frame:SetPoint("TOPLEFT", self, "TOPLEFT", 0, SlotY(row.slotIndex))
+            if row.frame._numText then row.frame._numText:SetText(tostring(row.slotIndex)) end
+            if i <= active then row.frame:Show() else row.frame:Hide() end
+        end
+        self:SetHeight(active * (rowH + rowGap))
+    end
+    function holder:SetActiveCount(count)
+        self._activeCount = math.max(0, math.min(rowCount, tonumber(count) or rowCount))
+        self:SnapRows()
+    end
+    function holder:SetRowsEnabled(enabled)
+        self._enabled = enabled and true or false
+        for i = 1, #self.rows do
+            local row = self.rows[i]
+            local frame = row.frame
+            frame:SetAlpha(self._enabled and (opts.enabledAlpha or 1) or (opts.disabledAlpha or 0.42))
+            frame:EnableMouse(self._enabled)
+            if frame._label and frame._label.SetTextColor then
+                local c = self._enabled and (opts.enabledLabelColor or T.colors.text) or (opts.disabledLabelColor or T.colors.dim)
+                frame._label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
+            end
+        end
+    end
+
+    local function DragAllowed(row) return holder._enabled and (not opts.dragAllowed or opts.dragAllowed(row, holder) ~= false) end
+    local function OnEnter(self)
+        local row = self._msuf2DragRow
+        if not DragAllowed(row) then return end
+        if self.SetBackdropBorderColor then
+            local c = opts.hoverBorder or { 0.380, 0.550, 0.900, 0.95 }
+            self:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        if opts.tooltip and _G.GameTooltip then opts.tooltip(self, row, _G.GameTooltip) end
+    end
+    local function OnLeave(self)
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+        if self.SetBackdropBorderColor then
+            local c = opts.border or { 0.210, 0.230, 0.300, 0.78 }
+            self:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+        end
+    end
+    local function OnDragStart(self)
+        local row = self._msuf2DragRow
+        if not DragAllowed(row) then return end
+        if _G.GameTooltip then _G.GameTooltip:Hide() end
+        self._msuf2OldStrata = self.GetFrameStrata and self:GetFrameStrata() or nil
+        if self.SetFrameStrata then self:SetFrameStrata("TOOLTIP") end
+        self:StartMoving()
+    end
+    local function OnDragStop(self)
+        local row = self._msuf2DragRow
+        if not row then return end
+        if self.StopMovingOrSizing then self:StopMovingOrSizing() end
+        if self.SetFrameStrata and self._msuf2OldStrata then self:SetFrameStrata(self._msuf2OldStrata) end
+
+        local _, centerY = self:GetCenter()
+        local top = holder:GetTop()
+        local active, bestSlot, bestDist = holder._activeCount or rowCount, 1, math.huge
+        if centerY and top then
+            for slot = 1, active do
+                local dist = math.abs(centerY - (top + SlotY(slot) - (rowH * 0.5)))
+                if dist < bestDist then bestDist, bestSlot = dist, slot end
+            end
+        end
+
+        local changed = row.slotIndex ~= bestSlot
+        if changed then
+            for i = 1, #holder.rows do
+                if holder.rows[i] ~= row and holder.rows[i].slotIndex == bestSlot then
+                    holder.rows[i].slotIndex = row.slotIndex
+                    break
+                end
+            end
+            row.slotIndex = bestSlot
+        end
+        holder:SnapRows()
+        if (changed or opts.saveAlways) and opts.onReorder then opts.onReorder(holder.rows, holder) end
+    end
+
+    for i = 1, rowCount do
+        local def = defs[i] or {}
+        local frame = CreateFrame("Frame", nil, holder, T.Template and T.Template() or nil)
+        frame:SetSize(rowW, rowH)
+        frame:SetMovable(true)
+        frame:EnableMouse(true)
+        frame:RegisterForDrag("LeftButton")
+        if frame.SetBackdrop then
+            local bg, border = opts.bg or { 0.055, 0.060, 0.075, 0.88 }, opts.border or { 0.210, 0.230, 0.300, 0.78 }
+            frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
+            frame:SetBackdropColor(bg[1], bg[2], bg[3], bg[4] or 1)
+            frame:SetBackdropBorderColor(border[1], border[2], border[3], border[4] or 1)
+        end
+        local stripe = frame:CreateTexture(nil, "ARTWORK")
+        stripe:SetPoint("LEFT", frame, "LEFT", 2, 0)
+        stripe:SetSize(4, rowH - 2)
+        stripe:SetColorTexture(def.r or 0.30, def.g or 0.55, def.b or 0.85, 1)
+        frame._stripe = stripe
+        local label = T.Font(frame, "GameFontHighlightSmall", def.label or "", T.colors.text)
+        label:SetPoint("LEFT", stripe, "RIGHT", opts.labelOffsetX or 7, 0)
+        label:SetJustifyH("LEFT")
+        frame._label = label
+        local number = T.Font(frame, "GameFontNormalSmall", tostring(i), T.colors.dim)
+        number:SetPoint("RIGHT", frame, "RIGHT", -8, 0)
+        number:SetJustifyH("RIGHT")
+        frame._numText = number
+        frame:SetScript("OnEnter", OnEnter)
+        frame:SetScript("OnLeave", OnLeave)
+        frame:SetScript("OnDragStart", OnDragStart)
+        frame:SetScript("OnDragStop", OnDragStop)
+        local row = { frame = frame, key = def.key or "", slotIndex = i, def = def }
+        frame._msuf2DragRow, holder.rows[i] = row, row
+    end
+
+    holder:SnapRows()
+    return holder
+end

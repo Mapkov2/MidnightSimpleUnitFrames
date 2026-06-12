@@ -15,6 +15,7 @@ local min = math.min
 local sliderSerial = 0
 
 local Tr = M.TranslateText or function(text) return text end
+local EM2Util = (_G.MSUF_EM2 and _G.MSUF_EM2.Util) or {}
 
 local function SetSearchText(object, text)
     if object and text ~= nil then object._msuf2SearchText = text end
@@ -70,40 +71,9 @@ local GROUP_FOCUS_KIND = {
     mythicraid = "mythicraid",
 }
 
-local function NormalizeFocusKey(key)
-    if type(key) ~= "string" or key == "" then return nil end
-    key = key:lower()
-    if key == "tot" then return "targettarget" end
-    if key == "focus_target" then return "focustarget" end
-    if key == "uf_player" then return "player" end
-    if key == "uf_target" then return "target" end
-    if key == "uf_targettarget" then return "targettarget" end
-    if key == "uf_focustarget" then return "focustarget" end
-    if key == "uf_focus" then return "focus" end
-    if key == "uf_pet" then return "pet" end
-    if key == "uf_boss" then return "boss" end
-    if key:match("^boss%d+$") then return "boss" end
-    return key
-end
-
-local function NormalizeFocusComponent(component)
-    if type(component) ~= "string" or component == "" then return nil end
-    component = component:lower()
-    if component == "health" or component == "healthtext" or component == "hptext" then return "hp" end
-    if component == "powertext" then return "power" end
-    if component == "aura" or component == "buff" or component == "buffs" or component == "debuff" or component == "debuffs" then return "auras" end
-    if component == "cast" then return "castbar" end
-    return component
-end
-
-local function NormalizeFocusSlot(slot)
-    if type(slot) ~= "string" or slot == "" then return nil end
-    slot = slot:lower()
-    if slot == "l" then return "left" end
-    if slot == "c" then return "center" end
-    if slot == "r" then return "right" end
-    return slot
-end
+local NormalizeFocusKey = EM2Util.NormalizeFocusKey
+local NormalizeFocusComponent = EM2Util.NormalizeFocusComponent
+local NormalizeFocusSlot = EM2Util.NormalizeFocusSlot
 
 function W.SetPreviewFocus(key, component, slot, active)
     key = NormalizeFocusKey(ResolveFocusValue(key))
@@ -734,6 +704,7 @@ end
 local TOP_ACTION_BUTTON_STYLE = TopButtonStyle({ 0.018, 0.028, 0.058, 0.95 }, { 0.082, 0.125, 0.245, 0.66 }, { 0.82, 0.90, 1.00, 1 }, { 0.026, 0.040, 0.078, 0.97 }, { 0.125, 0.220, 0.430, 0.80 })
 local TOP_DANGER_BUTTON_STYLE = TopButtonStyle({ 0.070, 0.026, 0.034, 0.94 }, { 0.340, 0.090, 0.110, 0.82 }, { 1.00, 0.82, 0.82, 1 }, { 0.090, 0.035, 0.045, 0.96 }, { 0.420, 0.120, 0.140, 0.90 })
 local TOP_SUCCESS_BUTTON_STYLE = TopButtonStyle({ 0.018, 0.145, 0.090, 0.94 }, { 0.055, 0.440, 0.270, 0.82 }, { 0.780, 1.000, 0.875, 1 }, { 0.026, 0.185, 0.115, 0.96 }, { 0.075, 0.560, 0.345, 0.90 })
+local TOP_ROLE_STYLES = { primary = TOP_ACTION_BUTTON_STYLE, destructive = TOP_DANGER_BUTTON_STYLE, danger = TOP_DANGER_BUTTON_STYLE, reset = TOP_DANGER_BUTTON_STYLE, delete = TOP_DANGER_BUTTON_STYLE, success = TOP_SUCCESS_BUTTON_STYLE, confirm = TOP_SUCCESS_BUTTON_STYLE }
 
 local function ApplyTopActionButtonVisual(btn, hover)
     local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
@@ -748,6 +719,8 @@ local function ApplyTopActionButtonVisual(btn, hover)
     if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
     if btn._msuf2TopStripe then btn._msuf2TopStripe:SetShown(btn._msuf2TopActive and true or false) end
 end
+
+local TOP_BUTTON_HOOKS = { OnEnter = function(self) ApplyTopActionButtonVisual(self, true) end, OnLeave = function(self) ApplyTopActionButtonVisual(self) end, OnEnable = function(self) ApplyTopActionButtonVisual(self) end, OnDisable = function(self) ApplyTopActionButtonVisual(self) end }
 
 local function StyleTopButton(btn, style)
     local s = style or TOP_ACTION_BUTTON_STYLE
@@ -788,10 +761,7 @@ local function StyleTopButton(btn, style)
         end
         ApplyTopActionButtonVisual(self)
     end
-    btn:SetScript("OnEnter", function(self) ApplyTopActionButtonVisual(self, true) end)
-    btn:SetScript("OnLeave", function(self) ApplyTopActionButtonVisual(self) end)
-    btn:SetScript("OnEnable", function(self) ApplyTopActionButtonVisual(self) end)
-    btn:SetScript("OnDisable", function(self) ApplyTopActionButtonVisual(self) end)
+    for script, handler in pairs(TOP_BUTTON_HOOKS) do btn:SetScript(script, handler) end
     ApplyTopActionButtonVisual(btn)
     return btn
 end
@@ -814,16 +784,7 @@ W.StyleTopSuccessButton = StyleTopSuccessButton
 function W.RoleButton(parent, label, role, width, height)
     local btn = (T.RoleButton and T.RoleButton(parent, label, role, width, height)) or T.Button(parent, label, width, height)
     role = tostring(role or "normal")
-    if role == "primary" then
-        btn = StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE)
-    elseif role == "destructive" or role == "danger" or role == "reset" or role == "delete" then
-        btn = StyleTopButton(btn, TOP_DANGER_BUTTON_STYLE)
-    elseif role == "success" or role == "confirm" then
-        btn = StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE)
-    else
-        btn = StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE)
-    end
-    return btn
+    return StyleTopButton(btn, TOP_ROLE_STYLES[role] or TOP_ACTION_BUTTON_STYLE)
 end
 
 function W.TopButton(parent, label, width, height, style, active)
@@ -1086,6 +1047,12 @@ local function UseControlTexture(tex, texture)
     return tex
 end
 
+local function HideNativeCheckTexture(texture)
+    if not texture then return end
+    if texture.SetAlpha then texture:SetAlpha(0) end
+    if texture.Hide then texture:Hide() end
+end
+
 local function ApplyControlCardChrome(card)
     if not (card and card.CreateTexture) or card._msuf2ControlCardChrome then return end
     card._msuf2ControlCardChrome = true
@@ -1107,6 +1074,149 @@ local function ApplyControlCardChrome(card)
     card._msuf2CardDepthLine = depth
 end
 
+local function RefreshToggleControl(button, hover, down)
+    local refresh = button and button._msuf2RefreshToggleFeedback
+    if refresh then refresh(button, hover, down) end
+end
+
+local TOGGLE_CONTROL_HOOKS = {
+    OnShow = function(self)
+        if T.StyleCheckmark then T.StyleCheckmark(self) end
+        if self._msuf2SuppressNativeCheckChrome then self:_msuf2SuppressNativeCheckChrome() end
+        if self._msuf2UpdateToggleProxyBounds then self:_msuf2UpdateToggleProxyBounds() end
+        RefreshToggleControl(self)
+    end,
+    OnEnter = function(self) self._msuf2ToggleHovered = true; RefreshToggleControl(self, true, self._msuf2TogglePressed) end,
+    OnLeave = function(self) self._msuf2ToggleHovered = nil; self._msuf2TogglePressed = nil; RefreshToggleControl(self) end,
+    OnMouseDown = function(self) self._msuf2TogglePressed = true; RefreshToggleControl(self, self._msuf2ToggleHovered, true) end,
+    OnMouseUp = function(self) self._msuf2TogglePressed = nil; RefreshToggleControl(self, self._msuf2ToggleHovered) end,
+    OnClick = function(self) RefreshToggleControl(self, self._msuf2ToggleHovered) end,
+    OnEnable = function(self) RefreshToggleControl(self, self._msuf2ToggleHovered) end,
+    OnDisable = function(self) RefreshToggleControl(self) end,
+}
+
+local TOGGLE_LABEL_HOOKS = {
+    OnClick = function(self)
+        local btn = self and self._msuf2ToggleOwner
+        if not btn or (btn.IsEnabled and not btn:IsEnabled()) then return end
+        ClickCheckButton(btn, "LeftButton")
+        RefreshToggleControl(btn, true)
+    end,
+    OnEnter = function(self)
+        local btn = self and self._msuf2ToggleOwner
+        if not btn then return end
+        btn._msuf2ToggleHovered = true
+        RefreshToggleControl(btn, true)
+    end,
+    OnMouseDown = function(self)
+        local btn = self and self._msuf2ToggleOwner
+        if not btn or (btn.IsEnabled and not btn:IsEnabled()) then return end
+        btn._msuf2TogglePressed = true
+        RefreshToggleControl(btn, true, true)
+    end,
+    OnMouseUp = function(self)
+        local btn = self and self._msuf2ToggleOwner
+        if not btn then return end
+        btn._msuf2TogglePressed = nil
+        RefreshToggleControl(btn, btn._msuf2ToggleHovered)
+    end,
+    OnLeave = function(self)
+        local btn = self and self._msuf2ToggleOwner
+        if not btn then return end
+        btn._msuf2ToggleHovered = nil
+        btn._msuf2TogglePressed = nil
+        RefreshToggleControl(btn)
+    end,
+}
+
+local SWITCH_BG_ON = { 0.020, 0.090, 0.135, 0.96 }
+local SWITCH_BG_OFF = { 0.014, 0.022, 0.048, 0.96 }
+local SWITCH_EDGE_ON = { 0.160, 0.560, 0.760, 0.86 }
+local SWITCH_EDGE_OFF = { 0.095, 0.145, 0.255, 0.82 }
+local SWITCH_KNOB_ON = { 0.380, 0.760, 0.900, 1.00 }
+local SWITCH_KNOB_OFF = { 0.680, 0.760, 0.940, 1.00 }
+
+local function PlaySwitchFeedback(button)
+    if not (button and button._msuf2SwitchFlash) then return end
+    local checked = button.GetChecked and button:GetChecked()
+    local c = checked and T.colors.accent or (T.colors.borderSoft or T.colors.border)
+    local alpha = checked and 0.28 or 0.18
+    button._msuf2SwitchFlash:SetVertexColor(c[1], c[2], c[3], alpha)
+    button._msuf2SwitchFlash:SetAlpha(alpha)
+    PlayWidgetMotion(button._msuf2SwitchFlash, "controlFeedback", { fromAlpha = alpha, toAlpha = 0 })
+end
+
+local function RefreshSwitchVisual(button, hover)
+    if not button then return end
+    hover = hover or button._msuf2SwitchHovered
+    local pressed = button._msuf2SwitchPressed and true or false
+    local checked = button.GetChecked and button:GetChecked()
+    local enabled = not button.IsEnabled or button:IsEnabled()
+    local bg = checked and SWITCH_BG_ON or SWITCH_BG_OFF
+    local br = checked and SWITCH_EDGE_ON or SWITCH_EDGE_OFF
+    local kb = checked and SWITCH_KNOB_ON or SWITCH_KNOB_OFF
+    local mul = enabled and (pressed and 1.14 or hover and 1.08 or 1) or 1
+    local alpha = enabled and 1 or 0.45
+    if button._msuf2SwitchFill then button._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), bg[4] * alpha) end
+    if button._msuf2SwitchEdge then button._msuf2SwitchEdge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), br[4] * alpha) end
+    local knob = button._msuf2SwitchKnob
+    if knob then
+        local size = button._msuf2SwitchKnobSize or 18
+        local pad = button._msuf2SwitchKnobPad or 2
+        knob:ClearAllPoints()
+        UseControlTexture(knob, button._msuf2SwitchKnobTexture or "Interface\\Buttons\\WHITE8X8")
+        knob:SetSize(pressed and (size + 1) or size, pressed and (size + 1) or size)
+        knob:SetPoint(checked and "RIGHT" or "LEFT", button, checked and "RIGHT" or "LEFT", checked and -pad or pad, 0)
+        knob:SetVertexColor(kb[1], kb[2], kb[3], kb[4] * alpha)
+        if knob.SetAlpha then knob:SetAlpha(alpha) end
+    end
+    if button._msuf2Label and button._msuf2Label.SetTextColor then
+        local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
+        button._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
+    end
+end
+
+local function SetSwitchChecked(button, value)
+    local checked = value and true or false
+    local before = button.GetChecked and button:GetChecked()
+    if button._msuf2RawSetChecked then button._msuf2RawSetChecked(button, checked) end
+    if before ~= checked then PlaySwitchFeedback(button) end
+    RefreshSwitchVisual(button)
+end
+
+local SWITCH_CONTROL_HOOKS = {
+    OnEnter = function(self) self._msuf2SwitchHovered = true; RefreshSwitchVisual(self, true) end,
+    OnLeave = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
+    OnMouseDown = function(self) self._msuf2SwitchPressed = true; RefreshSwitchVisual(self) end,
+    OnMouseUp = function(self) self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
+    OnClick = RefreshSwitchVisual,
+    OnEnable = RefreshSwitchVisual,
+    OnDisable = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
+}
+
+local SWITCH_LABEL_HOOKS = {
+    OnClick = function(self)
+        local btn = self and self._msuf2SwitchOwner
+        if not btn or (btn.IsEnabled and not btn:IsEnabled()) then return end
+        ClickCheckButton(btn, "LeftButton")
+    end,
+    OnEnter = function(self)
+        local btn = self and self._msuf2SwitchOwner
+        if not btn then return end
+        btn._msuf2SwitchHovered = true
+        RefreshSwitchVisual(btn, true)
+        if btn.LockHighlight then btn:LockHighlight() end
+    end,
+    OnLeave = function(self)
+        local btn = self and self._msuf2SwitchOwner
+        if not btn then return end
+        btn._msuf2SwitchHovered = nil
+        btn._msuf2SwitchPressed = nil
+        RefreshSwitchVisual(btn)
+        if btn.UnlockHighlight then btn:UnlockHighlight() end
+    end,
+}
+
 local function CreateToggle(section, label, x, y, labelWidth)
     local btn = CreateFrame("CheckButton", nil, section, "UICheckButtonTemplate")
     btn._msuf2ControlKind = "toggle"
@@ -1124,18 +1234,6 @@ local function CreateToggle(section, label, x, y, labelWidth)
     if labelWidth then btn._msuf2Label:SetWidth(labelWidth) end
     btn.text = btn._msuf2Label
     if T.StyleCheckmark then T.StyleCheckmark(btn) end
-    btn:HookScript("OnShow", function(self)
-        if T.StyleCheckmark then T.StyleCheckmark(self) end
-        if self._msuf2SuppressNativeCheckChrome then self:_msuf2SuppressNativeCheckChrome() end
-        if self._msuf2UpdateToggleProxyBounds then self:_msuf2UpdateToggleProxyBounds() end
-        if self._msuf2RefreshToggleFeedback then self:_msuf2RefreshToggleFeedback() end
-    end)
-
-    local function HideNativeCheckTexture(texture)
-        if not texture then return end
-        if texture.SetAlpha then texture:SetAlpha(0) end
-        if texture.Hide then texture:Hide() end
-    end
 
     function btn:_msuf2SuppressNativeCheckChrome()
         if self.SetNormalTexture then pcall(self.SetNormalTexture, self, nil) end
@@ -1245,58 +1343,14 @@ local function CreateToggle(section, label, x, y, labelWidth)
         SyncCheckedTexture(self, value, not (self.IsEnabled and not self:IsEnabled()))
         RefreshToggleFeedback(self, self._msuf2ToggleHovered, self._msuf2TogglePressed)
     end
-    btn:HookScript("OnEnter", function(self)
-        self._msuf2ToggleHovered = true
-        RefreshToggleFeedback(self, true, self._msuf2TogglePressed)
-    end)
-    btn:HookScript("OnLeave", function(self)
-        self._msuf2ToggleHovered = nil
-        self._msuf2TogglePressed = nil
-        RefreshToggleFeedback(self)
-    end)
-    btn:HookScript("OnMouseDown", function(self)
-        self._msuf2TogglePressed = true
-        RefreshToggleFeedback(self, self._msuf2ToggleHovered, true)
-    end)
-    btn:HookScript("OnMouseUp", function(self)
-        self._msuf2TogglePressed = nil
-        RefreshToggleFeedback(self, self._msuf2ToggleHovered)
-    end)
-    btn:HookScript("OnClick", function(self)
-        RefreshToggleFeedback(self, self._msuf2ToggleHovered)
-    end)
-    btn:HookScript("OnEnable", function(self) RefreshToggleFeedback(self, self._msuf2ToggleHovered) end)
-    btn:HookScript("OnDisable", function(self)
-        RefreshToggleFeedback(self)
-    end)
+    for script, handler in pairs(TOGGLE_CONTROL_HOOKS) do btn:HookScript(script, handler) end
 
     local labelHit = CreateFrame("Button", nil, section)
     labelHit:EnableMouse(true)
     if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
     labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
-    labelHit:SetScript("OnClick", function()
-        if btn.IsEnabled and not btn:IsEnabled() then return end
-        ClickCheckButton(btn, "LeftButton")
-        RefreshToggleFeedback(btn, true)
-    end)
-    labelHit:SetScript("OnEnter", function()
-        btn._msuf2ToggleHovered = true
-        RefreshToggleFeedback(btn, true)
-    end)
-    labelHit:SetScript("OnMouseDown", function()
-        if btn.IsEnabled and not btn:IsEnabled() then return end
-        btn._msuf2TogglePressed = true
-        RefreshToggleFeedback(btn, true, true)
-    end)
-    labelHit:SetScript("OnMouseUp", function()
-        btn._msuf2TogglePressed = nil
-        RefreshToggleFeedback(btn, btn._msuf2ToggleHovered)
-    end)
-    labelHit:SetScript("OnLeave", function()
-        btn._msuf2ToggleHovered = nil
-        btn._msuf2TogglePressed = nil
-        RefreshToggleFeedback(btn)
-    end)
+    labelHit._msuf2ToggleOwner = btn
+    for script, handler in pairs(TOGGLE_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
     btn._msuf2LabelHit = labelHit
     btn._msuf2UseProxyMouse = true
     if btn.EnableMouse then btn:EnableMouse(false) end
@@ -1424,6 +1478,9 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     UseControlTexture(knob, switchKnobTexture)
     knob:SetSize(knobSize, knobSize)
     btn._msuf2SwitchKnob = knob
+    btn._msuf2SwitchKnobSize = knobSize
+    btn._msuf2SwitchKnobPad = knobPad
+    btn._msuf2SwitchKnobTexture = switchKnobTexture
 
     local side = labelSide or "RIGHT"
     local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
@@ -1442,94 +1499,18 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     btn._msuf2Label = labelFS
     btn.text = labelFS
 
-    local function PlaySwitchFeedback(self)
-        if not self._msuf2SwitchFlash then return end
-        local checked = self.GetChecked and self:GetChecked()
-        local c = checked and T.colors.accent or (T.colors.borderSoft or T.colors.border)
-        self._msuf2SwitchFlash:SetVertexColor(c[1], c[2], c[3], checked and 0.28 or 0.18)
-        self._msuf2SwitchFlash:SetAlpha(checked and 0.28 or 0.18)
-        PlayWidgetMotion(self._msuf2SwitchFlash, "controlFeedback", { fromAlpha = checked and 0.28 or 0.18, toAlpha = 0 })
-    end
-
-    local function Refresh(self, hover)
-        hover = hover or self._msuf2SwitchHovered
-        local pressed = self._msuf2SwitchPressed and true or false
-        local checked = self.GetChecked and self:GetChecked()
-        local enabled = not self.IsEnabled or self:IsEnabled()
-        local bg = checked and { 0.020, 0.090, 0.135, 0.96 } or { 0.014, 0.022, 0.048, 0.96 }
-        local br = checked and { 0.160, 0.560, 0.760, 0.86 } or { 0.095, 0.145, 0.255, 0.82 }
-        local kb = checked and { 0.380, 0.760, 0.900, 1.00 } or { 0.680, 0.760, 0.940, 1.00 }
-        local mul = enabled and (pressed and 1.14 or hover and 1.08 or 1) or 1
-        local alpha = enabled and 1 or 0.45
-        if self._msuf2SwitchFill then self._msuf2SwitchFill:SetVertexColor(min(bg[1] * mul, 1), min(bg[2] * mul, 1), min(bg[3] * mul, 1), (bg[4] or 1) * alpha) end
-        if self._msuf2SwitchEdge then self._msuf2SwitchEdge:SetVertexColor(min(br[1] * mul, 1), min(br[2] * mul, 1), min(br[3] * mul, 1), (br[4] or 1) * alpha) end
-        if knob then
-            knob:ClearAllPoints()
-            UseControlTexture(knob, switchKnobTexture)
-            knob:SetSize(pressed and (knobSize + 1) or knobSize, pressed and (knobSize + 1) or knobSize)
-            knob:SetPoint(checked and "RIGHT" or "LEFT", self, checked and "RIGHT" or "LEFT", checked and -knobPad or knobPad, 0)
-            knob:SetVertexColor(kb[1], kb[2], kb[3], (kb[4] or 1) * alpha)
-            if knob.SetAlpha then knob:SetAlpha(alpha) end
-        end
-        if self._msuf2Label and self._msuf2Label.SetTextColor then
-            local tx = enabled and (hover and T.colors.title or T.colors.text) or T.colors.dim
-            self._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
-        end
-    end
-    btn._msuf2RefreshSwitchVisual = Refresh
-
-    local rawSetChecked = btn.SetChecked
-    btn.SetChecked = function(self, value)
-        local before = self.GetChecked and self:GetChecked()
-        rawSetChecked(self, value and true or false)
-        if before ~= (value and true or false) then PlaySwitchFeedback(self) end
-        Refresh(self)
-    end
-    btn:HookScript("OnEnter", function(self)
-        self._msuf2SwitchHovered = true
-        Refresh(self, true)
-    end)
-    btn:HookScript("OnLeave", function(self)
-        self._msuf2SwitchHovered = nil
-        self._msuf2SwitchPressed = nil
-        Refresh(self)
-    end)
-    btn:HookScript("OnMouseDown", function(self)
-        self._msuf2SwitchPressed = true
-        Refresh(self)
-    end)
-    btn:HookScript("OnMouseUp", function(self)
-        self._msuf2SwitchPressed = nil
-        Refresh(self)
-    end)
-    btn:HookScript("OnClick", function(self) Refresh(self) end)
-    btn:HookScript("OnEnable", function(self) Refresh(self) end)
-    btn:HookScript("OnDisable", function(self)
-        self._msuf2SwitchHovered = nil
-        self._msuf2SwitchPressed = nil
-        Refresh(self)
-    end)
+    btn._msuf2RefreshSwitchVisual = RefreshSwitchVisual
+    btn._msuf2RawSetChecked = btn.SetChecked
+    btn.SetChecked = SetSwitchChecked
+    for script, handler in pairs(SWITCH_CONTROL_HOOKS) do btn:HookScript(script, handler) end
 
     if side ~= "HIDDEN" then
         local labelHit = CreateFrame("Button", nil, section)
         labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
         labelHit:SetPoint("TOPLEFT", labelFS, "TOPLEFT", -2, 2)
         labelHit:SetPoint("BOTTOMRIGHT", labelFS, "BOTTOMRIGHT", 2, -2)
-        labelHit:SetScript("OnClick", function()
-            if btn.IsEnabled and not btn:IsEnabled() then return end
-            ClickCheckButton(btn, "LeftButton")
-        end)
-        labelHit:SetScript("OnEnter", function()
-            btn._msuf2SwitchHovered = true
-            Refresh(btn, true)
-            if btn.LockHighlight then btn:LockHighlight() end
-        end)
-        labelHit:SetScript("OnLeave", function()
-            btn._msuf2SwitchHovered = nil
-            btn._msuf2SwitchPressed = nil
-            Refresh(btn)
-            if btn.UnlockHighlight then btn:UnlockHighlight() end
-        end)
+        labelHit._msuf2SwitchOwner = btn
+        for script, handler in pairs(SWITCH_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
         btn._msuf2LabelHit = labelHit
     end
 
@@ -1545,7 +1526,7 @@ local function ScopeButtonWidth(item)
     if value == "shared" then return 72 end
     if value == "targettarget" then return 58 end
     if value == "focustarget" then return 92 end
-    if text == "Boss 1" or text == "Boss 2" or text == "Boss 3" or text == "Boss 4" or text == "Boss 5" then return 74 end
+    if text:match("^Boss [1-5]$") then return 74 end
     return math.max(54, math.min(96, 28 + (#text * 7)))
 end
 
@@ -1816,12 +1797,6 @@ function W.SetControlsEnabled(controls, enabled)
     end
 end
 
-function W.SetControlsGateEnabled(controls, gateKey, enabled)
-    for i = 1, #(controls or {}) do
-        W.SetControlGateEnabled(controls[i], gateKey, enabled)
-    end
-end
-
 local function ClampPlacedControlWidth(widget, parent, x)
     if not (widget and parent and parent._msuf2Width) then return end
     local kind = widget._msuf2ControlKind
@@ -1922,28 +1897,23 @@ end
 local function InstallPinnedPreviewUpdater(scroll)
     if not scroll or scroll._msuf2PinnedPreviewUpdater then return end
     scroll._msuf2PinnedPreviewUpdater = true
-    scroll:HookScript("OnUpdate", function(self, elapsed)
+    local function RefreshIfPinned(self)
         local list = M._pinnedPreviews
         if type(list) ~= "table" or #list == 0 then
-            self._msuf2PinnedPreviewElapsed = 0
+            self._msuf2PinnedPreviewLastOffset = nil
+            self._msuf2PinnedPreviewLastHeight = nil
             return
         end
-        self._msuf2PinnedPreviewElapsed = (self._msuf2PinnedPreviewElapsed or 0) + (elapsed or 0)
-        if self._msuf2PinnedPreviewElapsed < 0.04 then return end
-        self._msuf2PinnedPreviewElapsed = 0
         local offset = (self.GetVerticalScroll and self:GetVerticalScroll()) or 0
         local h = (self.GetHeight and self:GetHeight()) or 0
         if offset == self._msuf2PinnedPreviewLastOffset and h == self._msuf2PinnedPreviewLastHeight then return end
         self._msuf2PinnedPreviewLastOffset = offset
         self._msuf2PinnedPreviewLastHeight = h
         if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(self) end
-    end)
-    scroll:HookScript("OnShow", function(self)
-        if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(self) end
-    end)
-    scroll:HookScript("OnSizeChanged", function(self)
-        if M.RefreshPinnedPreviews then M.RefreshPinnedPreviews(self) end
-    end)
+    end
+    scroll:HookScript("OnVerticalScroll", RefreshIfPinned)
+    scroll:HookScript("OnShow", RefreshIfPinned)
+    scroll:HookScript("OnSizeChanged", RefreshIfPinned)
 end
 
 function M.RefreshPinnedPreviews(scroll)
@@ -2497,29 +2467,18 @@ function W.Segment(section, label, values, width)
     return holder
 end
 
-function W.StatCard(parent, label, value, x, y, width)
-    local card = T.Panel(parent, nil, T.colors.panel2, T.colors.borderSoft)
-    SetSearchTitle(card, label)
-    RegisterSearchObject(card, label, "text", { values = { value } })
-    card:SetPoint("TOPLEFT", x or 0, y or 0)
-    card:SetSize(width or 170, 56)
-    local l = T.Font(card, "GameFontDisableSmall", Tr(label or ""), T.colors.muted)
-    SetSearchText(l, label)
-    l:SetPoint("TOPLEFT", 12, -10)
-    local v = T.Font(card, "GameFontNormal", Tr(value or ""), T.colors.text)
-    SetSearchText(v, value)
-    v:SetPoint("TOPLEFT", 12, -30)
-    card.valueText = v
-    return card
+local function TextInputEscape(self) self:ClearFocus() end
+
+local function TextInputEnter(self)
+    if self._msuf2OnCommit then self._msuf2OnCommit(self:GetText() or "") end
+    self:ClearFocus()
 end
 
-function W.Divider(parent, x, y, width)
-    local line = parent:CreateTexture(nil, "ARTWORK")
-    line:SetPoint("TOPLEFT", x or 0, y or 0)
-    line:SetSize(width or 400, 1)
-    line:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.70)
-    return line
+local function TextInputBlur(self)
+    if self._msuf2CommitOnBlur and self._msuf2OnCommit then self._msuf2OnCommit(self:GetText() or "") end
 end
+
+local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn end
 
 function W.TextInput(section, label, width)
     local x, y = NextRow(section, 50)
@@ -2538,20 +2497,61 @@ function W.TextInput(section, label, width)
     edit:SetJustifyH("LEFT")
     edit:SetMaxLetters(200000)
     T.SkinEditBox(edit)
-    edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    function edit:SetOnValueCommitted(fn)
-        self._msuf2OnCommit = fn
-    end
-    edit:SetScript("OnEnterPressed", function(self)
-        if self._msuf2OnCommit then self._msuf2OnCommit(self:GetText() or "") end
-        self:ClearFocus()
-    end)
-    edit:SetScript("OnEditFocusLost", function(self)
-        if self._msuf2CommitOnBlur and self._msuf2OnCommit then
-            self._msuf2OnCommit(self:GetText() or "")
-        end
-    end)
+    edit.SetOnValueCommitted = TextInputSetOnValueCommitted
+    edit:SetScript("OnEscapePressed", TextInputEscape)
+    edit:SetScript("OnEnterPressed", TextInputEnter)
+    edit:SetScript("OnEditFocusLost", TextInputBlur)
     return edit
+end
+
+local function ColorSetRGB(self, r, g, b)
+    self._msuf2R = tonumber(r) or 1
+    self._msuf2G = tonumber(g) or 1
+    self._msuf2B = tonumber(b) or 1
+    self._msuf2Swatch:SetVertexColor(self._msuf2R, self._msuf2G, self._msuf2B, 1)
+end
+
+local function ColorGetRGB(self) return self._msuf2R or 1, self._msuf2G or 1, self._msuf2B or 1 end
+local function ColorSetOnColorChanged(self, fn) self._msuf2OnColorChanged = fn end
+
+local function ColorApply(btn, r, g, b)
+    btn:SetRGB(r, g, b)
+    if btn._msuf2OnColorChanged then btn._msuf2OnColorChanged(r, g, b) end
+end
+
+local function ColorPickerCommit()
+    local picker, btn = ColorPickerFrame, ColorPickerFrame and ColorPickerFrame._msuf2ColorOwner
+    if not (picker and btn) then return end
+    local r, g, b = picker:GetColorRGB()
+    ColorApply(btn, r, g, b)
+end
+
+local function ColorPickerCancel(prev)
+    local btn = ColorPickerFrame and ColorPickerFrame._msuf2ColorOwner
+    if not btn then return end
+    local r, g, b = btn._msuf2PrevR or 1, btn._msuf2PrevG or 1, btn._msuf2PrevB or 1
+    if type(prev) == "table" then r, g, b = prev.r or r, prev.g or g, prev.b or b end
+    ColorApply(btn, r, g, b)
+end
+
+local function ColorButtonOnClick(self)
+    if not ColorPickerFrame then return end
+    local r, g, b = self:GetRGB()
+    local picker = ColorPickerFrame
+    picker._msuf2ColorOwner = self
+    self._msuf2PrevR, self._msuf2PrevG, self._msuf2PrevB = r, g, b
+    if picker.SetupColorPickerAndShow then
+        picker:SetupColorPickerAndShow({
+            r = r, g = g, b = b, opacity = 1, hasOpacity = false,
+            swatchFunc = ColorPickerCommit,
+            cancelFunc = ColorPickerCancel,
+            previousValues = { r = r, g = g, b = b, opacity = 1 },
+        })
+    else
+        picker.func, picker.cancelFunc = ColorPickerCommit, ColorPickerCancel
+        picker:SetColorRGB(r, g, b)
+        picker:Show()
+    end
 end
 
 function W.Color(section, label)
@@ -2569,50 +2569,10 @@ function W.Color(section, label)
     btn:SetSize(44, 18)
     btn._msuf2Swatch, btn._msuf2Edge = T.CreateSuperellipseLayers(btn, "_msuf2Color", 1, "ARTWORK", "ARTWORK")
     btn._msuf2Edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.75)
-
-    function btn:SetRGB(r, g, b)
-        self._msuf2R = tonumber(r) or 1
-        self._msuf2G = tonumber(g) or 1
-        self._msuf2B = tonumber(b) or 1
-        self._msuf2Swatch:SetVertexColor(self._msuf2R, self._msuf2G, self._msuf2B, 1)
-    end
-    function btn:GetRGB()
-        return self._msuf2R or 1, self._msuf2G or 1, self._msuf2B or 1
-    end
-    function btn:SetOnColorChanged(fn)
-        self._msuf2OnColorChanged = fn
-    end
+    btn.SetRGB = ColorSetRGB
+    btn.GetRGB = ColorGetRGB
+    btn.SetOnColorChanged = ColorSetOnColorChanged
     btn:SetRGB(1, 1, 1)
-    btn:SetScript("OnClick", function(self)
-        if not ColorPickerFrame then return end
-        local r, g, b = self:GetRGB()
-        local function Commit()
-            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-            self:SetRGB(nr, ng, nb)
-            if self._msuf2OnColorChanged then self._msuf2OnColorChanged(nr, ng, nb) end
-        end
-        if ColorPickerFrame.SetupColorPickerAndShow then
-            ColorPickerFrame:SetupColorPickerAndShow({
-                r = r, g = g, b = b, opacity = 1, hasOpacity = false,
-                swatchFunc = Commit,
-                cancelFunc = function(prev)
-                    if type(prev) == "table" then
-                        local pr, pg, pb = prev.r or r, prev.g or g, prev.b or b
-                        self:SetRGB(pr, pg, pb)
-                        if self._msuf2OnColorChanged then self._msuf2OnColorChanged(pr, pg, pb) end
-                    end
-                end,
-                previousValues = { r = r, g = g, b = b, opacity = 1 },
-            })
-        else
-            ColorPickerFrame.func = Commit
-            ColorPickerFrame.cancelFunc = function()
-                self:SetRGB(r, g, b)
-                if self._msuf2OnColorChanged then self._msuf2OnColorChanged(r, g, b) end
-            end
-            ColorPickerFrame:SetColorRGB(r, g, b)
-            ColorPickerFrame:Show()
-        end
-    end)
+    btn:SetScript("OnClick", ColorButtonOnClick)
     return btn
 end

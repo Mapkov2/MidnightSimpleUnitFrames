@@ -71,362 +71,333 @@ local Text = MSUF.UFText or {}
 MSUF.UFText = Text
 local Secrets = MSUF.Secrets or {}
 local IsSecret = C.IsSecret or Secrets.IsSecret or function(_) return false end
--- Hot paths call the C predicate directly (no cross-module Lua wrapper);
--- IsSecret stays for cold paths / API parity.
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local STANDARD_FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
--- Returns true if the FontString's actually-applied font matches what we asked
--- for. On a failed SetFont the engine keeps the previous font, so GetFont() will
--- not match -> we treat that as "not applied" and retry on the next layout pass.
 local function FontApplied(fs, requested)
-    if type(fs.GetFont) ~= "function" then return true end
-    local actual = fs:GetFont()
-    if not actual then return false end
-    return tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
+  if type(fs.GetFont) ~= "function" then return true end
+  local actual = fs:GetFont()
+  if not actual then return false end
+  return tostring(actual):gsub("/", "\\"):lower() == tostring(requested or ""):gsub("/", "\\"):lower()
 end
 
 local function ApplyFontChecked(fs, requested, size, flags)
-    if not (fs and type(fs.SetFont) == "function") then return false end
-    local safeSet = _G.MSUF_SetFontSafe
-    if type(safeSet) == "function" then
-        return safeSet(fs, requested, size, flags) == true and FontApplied(fs, requested)
-    end
-    local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
-    return ok and applied ~= false and FontApplied(fs, requested)
+  if not (fs and type(fs.SetFont) == "function") then return false end
+  local safeSet = _G.MSUF_SetFontSafe
+  if type(safeSet) == "function" then
+    return safeSet(fs, requested, size, flags) == true and FontApplied(fs, requested)
+  end
+  local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
+  return ok and applied ~= false and FontApplied(fs, requested)
 end
 
 local function SetFont(fs, spec, size)
-    if not fs then
-        return
+  if not fs then
+    return
+  end
+  local font = (spec and spec.font) or STANDARD_FONT
+  local fontSize = tonumber(size) or 12
+  local flags = spec and spec.fontFlags or "OUTLINE"
+  if fs._msufFont ~= font or fs._msufFontSize ~= fontSize or fs._msufFontFlags ~= flags then
+    if ApplyFontChecked(fs, font, fontSize, flags) then
+      fs._msufFont = font
+      fs._msufFontSize = fontSize
+      fs._msufFontFlags = flags
+    else
+      ApplyFontChecked(fs, STANDARD_FONT, fontSize, flags)
+      fs._msufFont = nil
+      fs._msufFontSize = nil
+      fs._msufFontFlags = nil
     end
-    local font = (spec and spec.font) or STANDARD_FONT
-    local fontSize = tonumber(size) or 12
-    local flags = spec and spec.fontFlags or "OUTLINE"
-    if fs._msufFont ~= font or fs._msufFontSize ~= fontSize or fs._msufFontFlags ~= flags then
-        if ApplyFontChecked(fs, font, fontSize, flags) then
-            fs._msufFont = font
-            fs._msufFontSize = fontSize
-            fs._msufFontFlags = flags
-        else
-            -- Cold-start race: the requested font isn't loadable yet. Apply a
-            -- guaranteed-present fallback so the text is visible and measurable,
-            -- but DO NOT cache the requested font -- leave the memo cleared so the
-            -- next layout pass retries it once the real font has loaded. (Without
-            -- this the memo records the intended font and the fallback face/metrics
-            -- stick until a /reload.)
-            ApplyFontChecked(fs, STANDARD_FONT, fontSize, flags)
-            fs._msufFont = nil
-            fs._msufFontSize = nil
-            fs._msufFontFlags = nil
-        end
+  end
+  local color = spec and spec.textColor
+  local r, g, b, a = color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 1
+  if fs._msufTextR ~= r or fs._msufTextG ~= g or fs._msufTextB ~= b or fs._msufTextA ~= a then
+    fs:SetTextColor(r, g, b, a)
+    fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = r, g, b, a
+  end
+  if fs.SetShadowOffset then
+    local shadowOn = spec and spec.fontShadow == true
+    local sx = shadowOn and (tonumber(spec and spec.fontShadowX) or 1) or 0
+    local sy = shadowOn and (tonumber(spec and spec.fontShadowY) or -1) or 0
+    local sa = shadowOn and (tonumber(spec and spec.fontShadowAlpha) or 1) or 0
+    if fs._msufShadowX ~= sx or fs._msufShadowY ~= sy or fs._msufShadowA ~= sa then
+      if shadowOn and fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, sa) end
+      fs:SetShadowOffset(sx, sy)
+      fs._msufShadowX, fs._msufShadowY, fs._msufShadowA = sx, sy, sa
     end
-    local color = spec and spec.textColor
-    local r, g, b, a = color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 1
-    if fs._msufTextR ~= r or fs._msufTextG ~= g or fs._msufTextB ~= b or fs._msufTextA ~= a then
-        fs:SetTextColor(r, g, b, a)
-        fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = r, g, b, a
-    end
-    if fs.SetShadowOffset then
-        local shadowOn = spec and spec.fontShadow == true
-        local sx = shadowOn and (tonumber(spec and spec.fontShadowX) or 1) or 0
-        local sy = shadowOn and (tonumber(spec and spec.fontShadowY) or -1) or 0
-        local sa = shadowOn and (tonumber(spec and spec.fontShadowAlpha) or 1) or 0
-        if fs._msufShadowX ~= sx or fs._msufShadowY ~= sy or fs._msufShadowA ~= sa then
-            if shadowOn and fs.SetShadowColor then fs:SetShadowColor(0, 0, 0, sa) end
-            fs:SetShadowOffset(sx, sy)
-            fs._msufShadowX, fs._msufShadowY, fs._msufShadowA = sx, sy, sa
-        end
-    end
+  end
 end
 
 local function SetPowerTextColor(frame, r, g, b, a)
-    a = a or 1
-    if frame._msufPowerTextR == r
-        and frame._msufPowerTextG == g
-        and frame._msufPowerTextB == b
-        and frame._msufPowerTextA == a then
-        return
-    end
-    -- Keep the per-fontstring color cache (fs._msufText*) in sync with the actual
-    -- color we apply here. SetFont() short-circuits on that same cache, so if we
-    -- skip it the stale type color survives when power-color-by-type is toggled off.
-    local left, center, right = frame.powerTextLeft, frame.powerTextCenter, frame.powerTextRight
-    if left then
-        left:SetTextColor(r, g, b, a)
-        left._msufTextR, left._msufTextG, left._msufTextB, left._msufTextA = r, g, b, a
-    end
-    if center then
-        center:SetTextColor(r, g, b, a)
-        center._msufTextR, center._msufTextG, center._msufTextB, center._msufTextA = r, g, b, a
-    end
-    if right then
-        right:SetTextColor(r, g, b, a)
-        right._msufTextR, right._msufTextG, right._msufTextB, right._msufTextA = r, g, b, a
-    end
-    frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = r, g, b, a
+  a = a or 1
+  if frame._msufPowerTextR == r
+    and frame._msufPowerTextG == g
+    and frame._msufPowerTextB == b
+    and frame._msufPowerTextA == a then
+    return
+  end
+  local left, center, right = frame.powerTextLeft, frame.powerTextCenter, frame.powerTextRight
+  if left then
+    left:SetTextColor(r, g, b, a)
+    left._msufTextR, left._msufTextG, left._msufTextB, left._msufTextA = r, g, b, a
+  end
+  if center then
+    center:SetTextColor(r, g, b, a)
+    center._msufTextR, center._msufTextG, center._msufTextB, center._msufTextA = r, g, b, a
+  end
+  if right then
+    right:SetTextColor(r, g, b, a)
+    right._msufTextR, right._msufTextG, right._msufTextB, right._msufTextA = r, g, b, a
+  end
+  frame._msufPowerTextR, frame._msufPowerTextG, frame._msufPowerTextB, frame._msufPowerTextA = r, g, b, a
 end
 
 local function SetHealthTextSlotColor(fs, r, g, b, a)
-    if not fs then
-        return
-    end
-    fs:SetTextColor(r, g, b, a)
-    fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = r, g, b, a
+  if not fs then
+    return
+  end
+  fs:SetTextColor(r, g, b, a)
+  fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = r, g, b, a
 end
 
 local function SetHealthTextSlotColorSecret(fs, r, g, b, a)
-    if not fs then
-        return
-    end
-    fs:SetTextColor(r, g, b, a)
-    fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = nil, nil, nil, nil
+  if not fs then
+    return
+  end
+  fs:SetTextColor(r, g, b, a)
+  fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = nil, nil, nil, nil
 end
 
 local function SetHealthTextSlotsColor(slots, count, setter, r, g, b, a)
-    if not (slots and count and count > 0) then
-        return false
-    end
-    for i = 1, count do
-        local slot = slots[i]
-        setter(slot and slot.fs, r, g, b, a)
-    end
-    return true
+  if not (slots and count and count > 0) then
+    return false
+  end
+  for i = 1, count do
+    local slot = slots[i]
+    setter(slot and slot.fs, r, g, b, a)
+  end
+  return true
 end
 
 local function SetHealthTextColor(frame, rt, r, g, b, a)
-    a = a or 1
-    if nativeSecrets then
-        if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
-            SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
-            SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
-            SetHealthTextSlotColorSecret(frame.hpTextRight, r, g, b, a)
-        end
-        frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
-        return
+  a = a or 1
+  if nativeSecrets then
+    if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
+      SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
+      SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
+      SetHealthTextSlotColorSecret(frame.hpTextRight, r, g, b, a)
     end
-    if issecretvalue(r) == true or issecretvalue(g) == true
-        or issecretvalue(b) == true or issecretvalue(a) == true then
-        if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
-            SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
-            SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
-            SetHealthTextSlotColorSecret(frame.hpTextRight, r, g, b, a)
-        end
-        frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
-        return
+    frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
+    return
+  end
+  if issecretvalue(r) == true or issecretvalue(g) == true
+    or issecretvalue(b) == true or issecretvalue(a) == true then
+    if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
+      SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
+      SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
+      SetHealthTextSlotColorSecret(frame.hpTextRight, r, g, b, a)
     end
-    if frame._msufHealthTextR == r
-        and frame._msufHealthTextG == g
-        and frame._msufHealthTextB == b
-        and frame._msufHealthTextA == a then
-        return
-    end
-    if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColor, r, g, b, a) then
-        SetHealthTextSlotColor(frame.hpTextLeft, r, g, b, a)
-        SetHealthTextSlotColor(frame.hpTextCenter, r, g, b, a)
-        SetHealthTextSlotColor(frame.hpTextRight, r, g, b, a)
-    end
-    frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = r, g, b, a
+    frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = nil, nil, nil, nil
+    return
+  end
+  if frame._msufHealthTextR == r
+    and frame._msufHealthTextG == g
+    and frame._msufHealthTextB == b
+    and frame._msufHealthTextA == a then
+    return
+  end
+  if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColor, r, g, b, a) then
+    SetHealthTextSlotColor(frame.hpTextLeft, r, g, b, a)
+    SetHealthTextSlotColor(frame.hpTextCenter, r, g, b, a)
+    SetHealthTextSlotColor(frame.hpTextRight, r, g, b, a)
+  end
+  frame._msufHealthTextR, frame._msufHealthTextG, frame._msufHealthTextB, frame._msufHealthTextA = r, g, b, a
 end
 
 local function BaseTextColor(frame)
-    local spec = frame and frame.MSUFSpec
-    local color = spec and spec.textColor
-    return color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 1
+  local spec = frame and frame.MSUFSpec
+  local color = spec and spec.textColor
+  return color and color.r or 1, color and color.g or 1, color and color.b or 1, color and color.a or 1
 end
 
 local function HealthGradientFromValues(hp, hpMax)
-    if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(hpMax) == true) then
-        return nil
-    end
-    hp = tonumber(hp)
-    hpMax = tonumber(hpMax)
-    if not hp or not hpMax or hpMax <= 0 then
-        return nil
-    end
-    local pct = hp / hpMax
-    if pct < 0 then
-        pct = 0
-    elseif pct > 1 then
-        pct = 1
-    end
-    if pct <= 0.5 then
-        return 1, pct * 2, 0, 1
-    end
-    return (1 - pct) * 2, 1, 0, 1
+  if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(hpMax) == true) then
+    return nil
+  end
+  hp = tonumber(hp)
+  hpMax = tonumber(hpMax)
+  if not hp or not hpMax or hpMax <= 0 then
+    return nil
+  end
+  local pct = hp / hpMax
+  if pct < 0 then
+    pct = 0
+  elseif pct > 1 then
+    pct = 1
+  end
+  if pct <= 0.5 then
+    return 1, pct * 2, 0, 1
+  end
+  return (1 - pct) * 2, 1, 0, 1
 end
 
 local function HealthTextColor(frame, unit, hp, hpMax, rt)
-    local calc = frame and frame._msufHealthCalc
-    -- Alpha is compile-time stable (spec.textColor.a); CompileTextRuntime caches
-    -- it on rt so the hot path skips the per-tick BaseTextColor table walk.
-    local a = rt and rt.healthTextAlpha
-    -- Reuse the bar's just-evaluated gradient (stash written by
-    -- ApplyHealthStatusColor) when the bar runs the same gradient mode and
-    -- the stash is fresh. The stashed r/g/b may be secret: forwarded only,
-    -- never compared. Dispatch order recolors the bar before the text flush,
-    -- so the stash is normally from this very tick; the freshness window
-    -- (0.2s) caps staleness at the same level as the bar's own throttle.
-    if frame and frame._msufHealthColorByHealth == true then
-        local at = frame._msufGradStashAt
-        if at and ((GetTime and GetTime() or 0) - at) < 0.2 then
-            if a == nil then
-                local _
-                _, _, _, a = BaseTextColor(frame)
-            end
-            return frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB, a
-        end
+  local calc = frame and frame._msufHealthCalc
+  local a = rt and rt.healthTextAlpha
+  if frame and frame._msufHealthColorByHealth == true then
+    local at = frame._msufGradStashAt
+    if at and ((GetTime and GetTime() or 0) - at) < 0.2 then
+      if a == nil then
+        local _
+        _, _, _, a = BaseTextColor(frame)
+      end
+      return frame._msufGradStashR, frame._msufGradStashG, frame._msufGradStashB, a
     end
-    local r, g, b, raw = GradientColor(unit, calc)
-    if raw == true then
-        if a == nil then
-            local _
-            _, _, _, a = BaseTextColor(frame)
-        end
-        return r, g, b, a
+  end
+  local r, g, b, raw = GradientColor(unit, calc)
+  if raw == true then
+    if a == nil then
+      local _
+      _, _, _, a = BaseTextColor(frame)
     end
-    if nativeSecrets ~= true then
-        local gr, gg, gb = HealthGradientFromValues(hp, hpMax)
-        if gr then
-            r, g, b = gr, gg, gb
-        else
-            r = nil
-        end
+    return r, g, b, a
+  end
+  if nativeSecrets ~= true then
+    local gr, gg, gb = HealthGradientFromValues(hp, hpMax)
+    if gr then
+      r, g, b = gr, gg, gb
     else
-        r = nil
+      r = nil
     end
-    if r then
-        if a == nil then
-            local _
-            _, _, _, a = BaseTextColor(frame)
-        end
-        return r, g, b, a
+  else
+    r = nil
+  end
+  if r then
+    if a == nil then
+      local _
+      _, _, _, a = BaseTextColor(frame)
     end
-    return BaseTextColor(frame)
+    return r, g, b, a
+  end
+  return BaseTextColor(frame)
 end
 
 local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
-    if not (rt and rt.healthColorByHealth == true and frame) then
-        return
+  if not (rt and rt.healthColorByHealth == true and frame) then
+    return
+  end
+  if nativeSecrets ~= true
+    and type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
+    local bucket = floor((hp / hpMax) * 100 + 0.5)
+    if rt._textGradientPct == bucket then
+      return
     end
-    -- The gradient text color is a pure function of the integer health percent
-    -- bucket (no dead/exists branch in HealthTextColor), so the recolor can be
-    -- skipped when the bucket is unchanged -- same memo the health bar uses
-    -- (_msufGradientPct in Health.Update). The memo is only trusted on the plain
-    -- path: secret values cannot be bucketed, so the secret path clears it and
-    -- always recolors (the flush throttle already caps that rate). Reset points:
-    -- CompileTextRuntime (settings/spec change) and every secret/unknown tick.
-    if nativeSecrets ~= true
-        and type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
-        local bucket = floor((hp / hpMax) * 100 + 0.5)
-        if rt._textGradientPct == bucket then
-            return
-        end
-        SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax, rt))
-        rt._textGradientPct = bucket
-        return
-    end
-    rt._textGradientPct = nil
     SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax, rt))
+    rt._textGradientPct = bucket
+    return
+  end
+  rt._textGradientPct = nil
+  SetHealthTextColor(frame, rt, HealthTextColor(frame, unit or frame.unit, hp, hpMax, rt))
 end
 
 local function SetNameTextColor(frame, r, g, b, a)
-    a = a or 1
-    if frame._msufNameTextR == r
-        and frame._msufNameTextG == g
-        and frame._msufNameTextB == b
-        and frame._msufNameTextA == a then
-        return
-    end
-    if frame.nameText then
-        frame.nameText:SetTextColor(r, g, b, a)
-    end
-    if frame._msufNameDotsFS then
-        frame._msufNameDotsFS:SetTextColor(r, g, b, a)
-    end
-    frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = r, g, b, a
+  a = a or 1
+  if frame._msufNameTextR == r
+    and frame._msufNameTextG == g
+    and frame._msufNameTextB == b
+    and frame._msufNameTextA == a then
+    return
+  end
+  if frame.nameText then
+    frame.nameText:SetTextColor(r, g, b, a)
+  end
+  if frame._msufNameDotsFS then
+    frame._msufNameDotsFS:SetTextColor(r, g, b, a)
+  end
+  frame._msufNameTextR, frame._msufNameTextG, frame._msufNameTextB, frame._msufNameTextA = r, g, b, a
 end
 
 local function NameTextColorFor(frame, unit, classNames, npcNames, keyOverride)
-    local spec = frame and frame.MSUFSpec
-    local fallback = spec and spec.textColor
-    local fr, fg, fb, fa = fallback and fallback.r or 1, fallback and fallback.g or 1, fallback and fallback.b or 1, fallback and fallback.a or 1
-    if not classNames and not npcNames then
-        return fr, fg, fb, fa
-    end
-    local isPlayer = UnitIsPlayer(unit)
-    if isPlayer then
-        if classNames then
-            local r, g, b = ClassColor(unit)
-            return r, g, b, fa
-        end
-    elseif npcNames then
-        local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, keyOverride))
-        return r, g, b, fa
-    end
+  local spec = frame and frame.MSUFSpec
+  local fallback = spec and spec.textColor
+  local fr, fg, fb, fa = fallback and fallback.r or 1, fallback and fallback.g or 1, fallback and fallback.b or 1, fallback and fallback.a or 1
+  if not classNames and not npcNames then
     return fr, fg, fb, fa
+  end
+  local isPlayer = UnitIsPlayer(unit)
+  if isPlayer then
+    if classNames then
+      local r, g, b = ClassColor(unit)
+      return r, g, b, fa
+    end
+  elseif npcNames then
+    local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, keyOverride))
+    return r, g, b, fa
+  end
+  return fr, fg, fb, fa
 end
 
 local function NameTextColor(frame, unit)
-    local spec = frame and frame.MSUFSpec
-    local text = spec and spec.text or {}
-    local override = text.nameColor
-    if type(override) == "table" then
-        return override.r or 1, override.g or 1, override.b or 1, override.a or 1
-    end
-    return NameTextColorFor(frame, unit, text.nameClassColor == true, text.nameNpcColor == true)
+  local spec = frame and frame.MSUFSpec
+  local text = spec and spec.text or {}
+  local override = text.nameColor
+  if type(override) == "table" then
+    return override.r or 1, override.g or 1, override.b or 1, override.a or 1
+  end
+  return NameTextColorFor(frame, unit, text.nameClassColor == true, text.nameNpcColor == true)
 end
 
 local function SetInlineTextColor(frame, r, g, b, a)
-    a = a or 1
-    if frame._msufInlineTextR == r
-        and frame._msufInlineTextG == g
-        and frame._msufInlineTextB == b
-        and frame._msufInlineTextA == a then
-        return
-    end
-    if frame.totInlineText then
-        frame.totInlineText:SetTextColor(r, g, b, a)
-    end
-    if frame._msufInlineDotsFS then
-        frame._msufInlineDotsFS:SetTextColor(r, g, b, a)
-    end
-    frame._msufInlineTextR, frame._msufInlineTextG, frame._msufInlineTextB, frame._msufInlineTextA = r, g, b, a
+  a = a or 1
+  if frame._msufInlineTextR == r
+    and frame._msufInlineTextG == g
+    and frame._msufInlineTextB == b
+    and frame._msufInlineTextA == a then
+    return
+  end
+  if frame.totInlineText then
+    frame.totInlineText:SetTextColor(r, g, b, a)
+  end
+  if frame._msufInlineDotsFS then
+    frame._msufInlineDotsFS:SetTextColor(r, g, b, a)
+  end
+  frame._msufInlineTextR, frame._msufInlineTextG, frame._msufInlineTextB, frame._msufInlineTextA = r, g, b, a
 end
 
 local function InlineTextColor(frame, unit, inline)
-    local spec = frame and frame.MSUFSpec
-    local fallback = spec and spec.textColor
-    local fr, fg, fb, fa = fallback and fallback.r or 1, fallback and fallback.g or 1, fallback and fallback.b or 1, fallback and fallback.a or 1
-    local mode = inline and inline.colorMode or "AUTO"
-    if mode == "DEFAULT" then
-        return fr, fg, fb, fa
-    elseif mode == "TARGET_NAME" then
-        return NameTextColorFor(frame, frame.unit, inline.targetNameClassColor == true, inline.targetNameNpcColor == true)
-    elseif mode == "TOT_NAME" then
-        return NameTextColorFor(frame, unit, inline.totNameClassColor == true, inline.totNameNpcColor == true, "targettarget")
-    end
+  local spec = frame and frame.MSUFSpec
+  local fallback = spec and spec.textColor
+  local fr, fg, fb, fa = fallback and fallback.r or 1, fallback and fallback.g or 1, fallback and fallback.b or 1, fallback and fallback.a or 1
+  local mode = inline and inline.colorMode or "AUTO"
+  if mode == "DEFAULT" then
+    return fr, fg, fb, fa
+  elseif mode == "TARGET_NAME" then
+    return NameTextColorFor(frame, frame.unit, inline.targetNameClassColor == true, inline.targetNameNpcColor == true)
+  elseif mode == "TOT_NAME" then
+    return NameTextColorFor(frame, unit, inline.totNameClassColor == true, inline.totNameNpcColor == true, "targettarget")
+  end
 
-    local isPlayer = UnitIsPlayer(unit)
-    if mode == "NPC" then
-        if not isPlayer then
-            local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, "targettarget"))
-            return r, g, b, fa
-        end
-        return fr, fg, fb, fa
-    end
-    if isPlayer then
-        if inline and inline.targetNameClassColor == true then
-            local r, g, b = ClassColor(unit)
-            return r, g, b, fa
-        end
-    elseif inline and inline.targetNameNpcColor == true then
-        local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, "targettarget"))
-        return r, g, b, fa
+  local isPlayer = UnitIsPlayer(unit)
+  if mode == "NPC" then
+    if not isPlayer then
+      local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, "targettarget"))
+      return r, g, b, fa
     end
     return fr, fg, fb, fa
+  end
+  if isPlayer then
+    if inline and inline.targetNameClassColor == true then
+      local r, g, b = ClassColor(unit)
+      return r, g, b, fa
+    end
+  elseif inline and inline.targetNameNpcColor == true then
+    local r, g, b = NPCColor(UnitNPCKind(frame, unit, spec, true, "targettarget"))
+    return r, g, b, fa
+  end
+  return fr, fg, fb, fa
 end
 Text.C = C
 Text.UF = UF
@@ -434,8 +405,8 @@ Text.Secrets = Secrets
 Text.IsSecret = Secrets.IsSecret or function(_) return false end
 Text.IsNil = Secrets.IsNil or function(value) return value == nil end
 Text.ValueOrDefault = Secrets.ValueOrDefault or function(value, fallback)
-    if value == nil then return fallback end
-    return value
+  if value == nil then return fallback end
+  return value
 end
 Text.CreateFrame = CreateFrame
 Text.UnitClass = UnitClass

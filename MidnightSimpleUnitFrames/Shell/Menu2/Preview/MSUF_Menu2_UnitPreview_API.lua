@@ -8,6 +8,7 @@ local Preview = MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
 if not Preview then return end
 
 local InstallPreviewHooks
+local UninstallPreviewHooks
 
 local function PreviewInCombat()
     local fn = Preview._PreviewInCombat
@@ -28,12 +29,16 @@ local function BoxOwnerInactive(box)
 end
 
 local function RequestRefreshForBox(box, reason)
-    if not box or not box:IsShown() then return end
+    if not box or not box:IsShown() then
+        if UninstallPreviewHooks then UninstallPreviewHooks() end
+        return
+    end
     if box.IsVisible and not box:IsVisible() then return end
     if BoxOwnerInactive(box) then
         box._refreshReason = nil
         box._refreshQueued = nil
         if box.Hide then box:Hide() end
+        if UninstallPreviewHooks then UninstallPreviewHooks() end
         return
     end
     local hostShown = box._msuf2UnitPageHostShown
@@ -92,71 +97,69 @@ _G.MSUF_UFPreview_SelectStatusIcon = function(id)
     Preview.SelectStatusIcon(id)
 end
 
-local PREVIEW_HOOK_NAMES = {
-    "MSUF_ForceTextLayoutForUnitKey",
-    "MSUF_UpdateAllFonts",
-    "MSUF_UpdateAllFonts_Immediate",
-    "MSUF_UpdateAllBarTextures",
-    "MSUF_UpdateAllBarTextures_Immediate",
-    "MSUF_UpdateCastbarVisuals",
-    "MSUF_ApplyCastbarUnitAndSync",
-    "MSUF_SyncCastbarPositionPopup",
-    "MSUF_SyncUnitPositionPopup",
-    "MSUF_ApplyUnitFrameKey_Immediate",
-    "MSUF_UFCore_RefreshSettingsCache",
-    "MSUF_RefreshAllIdentityColors",
-    "MSUF_RefreshAllPowerTextColors",
-    "MSUF_RefreshAllFrames",
-    "MSUF_RefreshAllUnitAlphas",
-    "MSUF_RequestAlphaRefresh",
-    "MSUF_ClassPower_Refresh",
-    "MSUF_ApplyPowerBarEmbedLayout",
-    "MSUF_ApplyPowerBarEmbedLayout_All",
-    "MSUF_ApplyPowerBarEmbedLayout_ForUnitKey",
-    "MSUF_RefreshRaidMarkerFrames",
-    "MSUF_RefreshLeaderIconFrames",
-    "MSUF_RefreshLevelIndicatorFrames",
-    "MSUF_RefreshEliteIconFrames",
-    "MSUF_RequestStatusTextRefresh",
-    "MSUF_RequestStatusCombatIndicatorRefresh",
-    "MSUF_RequestStatusRestingIndicatorRefresh",
-    "MSUF_RequestStatusIncomingResIndicatorRefresh",
-    "MSUF_SyncAuras3PositionPopup",
-    "MSUF_Auras3_RefreshUnit",
-    "MSUF_Auras3_RefreshAll",
-    "MSUF_Auras3_UpdateUnitAnchor",
-    "MSUF_Auras3_RefreshEditPreview",
-}
+local function WordList(text)
+    local out = {}
+    for word in tostring(text or ""):gmatch("%S+") do out[#out + 1] = word end
+    return out
+end
+local PREVIEW_HOOK_NAMES = WordList [[
+MSUF_ForceTextLayoutForUnitKey MSUF_UpdateAllFonts MSUF_UpdateAllFonts_Immediate MSUF_UpdateAllBarTextures MSUF_UpdateAllBarTextures_Immediate
+MSUF_UpdateCastbarVisuals MSUF_ApplyCastbarUnitAndSync MSUF_SyncCastbarPositionPopup MSUF_SyncUnitPositionPopup MSUF_ApplyUnitFrameKey_Immediate
+MSUF_UFCore_RefreshSettingsCache MSUF_RefreshAllIdentityColors MSUF_RefreshAllPowerTextColors MSUF_RefreshAllFrames MSUF_RefreshAllUnitAlphas MSUF_RequestAlphaRefresh
+MSUF_ClassPower_Refresh MSUF_ApplyPowerBarEmbedLayout MSUF_ApplyPowerBarEmbedLayout_All MSUF_ApplyPowerBarEmbedLayout_ForUnitKey MSUF_RefreshRaidMarkerFrames
+MSUF_RefreshLeaderIconFrames MSUF_RefreshLevelIndicatorFrames MSUF_RefreshEliteIconFrames MSUF_RequestStatusTextRefresh MSUF_RequestStatusCombatIndicatorRefresh
+MSUF_RequestStatusRestingIndicatorRefresh MSUF_RequestStatusIncomingResIndicatorRefresh MSUF_SyncAuras3PositionPopup MSUF_Auras3_RefreshUnit MSUF_Auras3_RefreshAll
+MSUF_Auras3_UpdateUnitAnchor MSUF_Auras3_RefreshEditPreview
+]]
 
-local hookedNames = {}
-local previewHooksInstalled
+local wrappedNames = {}
+local wrappers = {}
 local lastPreviewHookScanAt = -100
+local unpack = table.unpack or unpack
+
+UninstallPreviewHooks = function()
+    for name, original in pairs(wrappedNames) do
+        if _G[name] == wrappers[name] then
+            _G[name] = original
+        end
+        wrappedNames[name] = nil
+        wrappers[name] = nil
+    end
+end
+Preview.UninstallRefreshHooks = UninstallPreviewHooks
+
 InstallPreviewHooks = function()
-    if previewHooksInstalled then return end
+    if not (Preview.active and Preview.active.IsShown and Preview.active:IsShown()) then
+        UninstallPreviewHooks()
+        return
+    end
     local now = (_G.GetTime and _G.GetTime()) or 0
     if now - lastPreviewHookScanAt < 1.0 then return end
     lastPreviewHookScanAt = now
 
-    local allAvailable = true
     for i = 1, #PREVIEW_HOOK_NAMES do
         local name = PREVIEW_HOOK_NAMES[i]
         local fn = _G[name]
-        if type(fn) == "function" and type(hooksecurefunc) == "function" then
-            if not hookedNames[name] then
-                hookedNames[name] = true
-                hooksecurefunc(name, function()
-                    if not PreviewInCombat() then Preview.RequestRefresh(name) end
-                end)
+        if type(fn) == "function" and not wrappedNames[name] then
+            local original = fn
+            local function wrapper(...)
+                if not (Preview.active and Preview.active.IsShown and Preview.active:IsShown()) then
+                    UninstallPreviewHooks()
+                    return original(...)
+                end
+                local results = { original(...) }
+                if not PreviewInCombat() then Preview.RequestRefresh(name) end
+                return unpack(results)
             end
-        elseif not hookedNames[name] then
-            allAvailable = false
+            wrappedNames[name] = original
+            wrappers[name] = wrapper
+            _G[name] = wrapper
         end
     end
-    if allAvailable then previewHooksInstalled = true end
 end
 
---- Hooking the full runtime refresh surface is only useful while a preview exists.
---- Installing it on load adds cold-start work during /reload and early menu open.
+--- Wrapping the full runtime refresh surface is only useful while a preview exists.
+--- Wrappers are removed as soon as the active preview is hidden or inactive.
 
 function MSUF.MSUF_Menu2_CreateUnitPreviewBox(parent, panel, width, height)
     local build = Preview._BuildPreview

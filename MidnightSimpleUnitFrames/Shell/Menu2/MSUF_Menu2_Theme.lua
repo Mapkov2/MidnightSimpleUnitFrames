@@ -975,6 +975,17 @@ local function UpdateSliderThumb(slider)
     if thumb.Show then thumb:Show() end
 end
 
+local SLIDER_STYLE_HOOKS = {
+    OnEnter = function(self) self._msuf2SliderHovered = true; T.StyleSlider(self) end,
+    OnLeave = function(self) self._msuf2SliderHovered = nil; T.StyleSlider(self) end,
+    OnMouseDown = function(self) self._msuf2SliderActive = true; T.StyleSlider(self) end,
+    OnMouseUp = function(self) self._msuf2SliderActive = nil; T.StyleSlider(self) end,
+    OnDisable = function(self) self._msuf2SliderActive = nil; self._msuf2SliderHovered = nil; T.StyleSlider(self) end,
+    OnEnable = function(self) T.StyleSlider(self) end,
+    OnValueChanged = function(self) if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end end,
+    OnSizeChanged = function(self) if self._msuf2UpdateFill then self:_msuf2UpdateFill() end; if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end end,
+}
+
 function T.StyleSlider(slider)
     if not slider then return end
     slider.__msufPeelSliderSkinned = true
@@ -1082,52 +1093,9 @@ function T.StyleSlider(slider)
 
     if slider.HookScript and not slider._msuf2SliderStyleHooks then
         slider._msuf2SliderStyleHooks = true
-        slider:HookScript("OnEnter", function(self)
-            self._msuf2SliderHovered = true
-            T.StyleSlider(self)
-        end)
-        slider:HookScript("OnLeave", function(self)
-            self._msuf2SliderHovered = nil
-            T.StyleSlider(self)
-        end)
-        slider:HookScript("OnMouseDown", function(self)
-            self._msuf2SliderActive = true
-            T.StyleSlider(self)
-        end)
-        slider:HookScript("OnMouseUp", function(self)
-            self._msuf2SliderActive = nil
-            T.StyleSlider(self)
-        end)
-        slider:HookScript("OnDisable", function(self)
-            self._msuf2SliderActive = nil
-            self._msuf2SliderHovered = nil
-            T.StyleSlider(self)
-        end)
-        slider:HookScript("OnEnable", function(self)
-            T.StyleSlider(self)
-        end)
-        slider:HookScript("OnValueChanged", function(self)
-            if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end
-        end)
-        slider:HookScript("OnSizeChanged", function(self)
-            if self._msuf2UpdateFill then self:_msuf2UpdateFill() end
-            if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end
-        end)
+        for script, handler in pairs(SLIDER_STYLE_HOOKS) do slider:HookScript(script, handler) end
     end
 
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            if not slider then return end
-            slider.__msufPeelSliderSkinned = true
-            HideNativeSliderParts(slider)
-            if slider._msufTrack and slider._msufTrack.Show then slider._msufTrack:Show() end
-            if slider._msufTrackTop and slider._msufTrackTop.Show then slider._msufTrackTop:Show() end
-            if slider._msufTrackBottom and slider._msufTrackBottom.Show then slider._msufTrackBottom:Show() end
-            if slider._msufFill and slider._msufFill.Show then slider._msufFill:Show() end
-            if slider._msufFillGlow and slider._msufFillGlow.Show then slider._msufFillGlow:Show() end
-            if slider._msuf2UpdateThumb then slider:_msuf2UpdateThumb() end
-        end)
-    end
 end
 
 function T.StyleCheckmark(checkButton)
@@ -1195,15 +1163,6 @@ function T.StyleCheckmark(checkButton)
 
     ApplyCheckTexture()
     HideQuietCheckboxNative()
-    if C_Timer and C_Timer.After then
-        C_Timer.After(0, function()
-            local UI2 = MSUF and MSUF.UI
-            local laterText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI2 and UI2.StyleToggleText)
-            if type(laterText) == "function" then pcall(laterText, checkButton) end
-            ApplyCheckTexture()
-            HideQuietCheckboxNative()
-        end)
-    end
 end
 
 function T.Panel(parent, name, bg, border)
@@ -1214,6 +1173,13 @@ function T.Panel(parent, name, bg, border)
     end
     return f
 end
+
+local EDIT_BOX_EDGE_SPECS = {
+    { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 },
+    { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 },
+    { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 },
+    { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 },
+}
 
 function T.SkinEditBox(editBox)
     if not editBox or editBox._msuf2EditSkinned then return editBox end
@@ -1246,23 +1212,16 @@ function T.SkinEditBox(editBox)
         bg:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
         editBox._msuf2EditBg = bg
 
-        local top = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
-        top:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
-        top:SetPoint("TOPRIGHT", editBox, "TOPRIGHT", 0, 0)
-        top:SetHeight(1)
-        local bottom = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
-        bottom:SetPoint("BOTTOMLEFT", editBox, "BOTTOMLEFT", 0, 0)
-        bottom:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
-        bottom:SetHeight(1)
-        local left = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
-        left:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
-        left:SetPoint("BOTTOMLEFT", editBox, "BOTTOMLEFT", 0, 0)
-        left:SetWidth(1)
-        local right = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
-        right:SetPoint("TOPRIGHT", editBox, "TOPRIGHT", 0, 0)
-        right:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
-        right:SetWidth(1)
-        editBox._msuf2EditEdges = { top, bottom, left, right }
+        local edges = {}
+        for i = 1, #EDIT_BOX_EDGE_SPECS do
+            local spec = EDIT_BOX_EDGE_SPECS[i]
+            local edge = editBox:CreateTexture(nil, "OVERLAY", nil, 1)
+            edge:SetPoint(spec[1], editBox, spec[1], 0, 0)
+            edge:SetPoint(spec[2], editBox, spec[2], 0, 0)
+            edge[spec[3]](edge, spec[4])
+            edges[i] = edge
+        end
+        editBox._msuf2EditEdges = edges
     end
     local function PaintEditBox(self, focused)
         local enabled = not (self.IsEnabled and not self:IsEnabled())
@@ -1321,12 +1280,12 @@ function T.SkinEditBox(editBox)
     return editBox
 end
 
+local function FontSetText(self, value) return self._msuf2RawSetText(self, Tr(value or "")) end
+
 function T.Font(parent, template, text, color)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
-    local rawSetText = fs.SetText
-    fs.SetText = function(self, value)
-        rawSetText(self, Tr(value or ""))
-    end
+    fs._msuf2RawSetText = fs.SetText
+    fs.SetText = FontSetText
     fs:SetText(text or "")
     return T.StyleFontString(fs, color or T.colors.text, 1)
 end
@@ -1338,33 +1297,6 @@ function T.CenterButtonLabel(btn)
         btn._msuf2Label:SetJustifyH("CENTER")
     end
     return btn
-end
-
-function T.StripButtonTextures(btn)
-    if not btn then return end
-    if btn.Left and btn.Left.Hide then btn.Left:Hide() end
-    if btn.Middle and btn.Middle.Hide then btn.Middle:Hide() end
-    if btn.Right and btn.Right.Hide then btn.Right:Hide() end
-    if btn.GetNormalTexture and btn.SetNormalTexture then
-        local tex = btn:GetNormalTexture()
-        if tex and tex.SetAlpha then tex:SetAlpha(0) end
-        pcall(btn.SetNormalTexture, btn, nil)
-    end
-    if btn.GetPushedTexture and btn.SetPushedTexture then
-        local tex = btn:GetPushedTexture()
-        if tex and tex.SetAlpha then tex:SetAlpha(0) end
-        pcall(btn.SetPushedTexture, btn, nil)
-    end
-    if btn.GetHighlightTexture and btn.SetHighlightTexture then
-        local tex = btn:GetHighlightTexture()
-        if tex and tex.SetAlpha then tex:SetAlpha(0) end
-        pcall(btn.SetHighlightTexture, btn, nil)
-    end
-    if btn.GetDisabledTexture and btn.SetDisabledTexture then
-        local tex = btn:GetDisabledTexture()
-        if tex and tex.SetAlpha then tex:SetAlpha(0) end
-        pcall(btn.SetDisabledTexture, btn, nil)
-    end
 end
 
 local function SetLabelColor(label, color, alpha)
@@ -1477,6 +1409,91 @@ local function ButtonVisual(btn, active, hover)
     end
 end
 
+local function ButtonSetText(self, value)
+    local raw = value or ""
+    local text = Tr(raw)
+    if self._msuf2RawText == raw and self._msuf2Label and self._msuf2Label:GetText() == text then return end
+    self._msuf2RawText = raw
+    self._msuf2SearchText = raw
+    if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
+    self._msuf2Label:SetText(text)
+    if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
+        M.RegisterSearchWidget(self, { label = value, kind = "button", anchor = self._msuf2Label })
+    end
+end
+
+local function ButtonGetText(self)
+    return self._msuf2Label:GetText()
+end
+
+local function ButtonSetActive(self, active)
+    active = active and true or false
+    if self._msuf2Active ~= active then self._msuf2Active = active end
+    ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
+end
+
+local function ButtonRefreshVisual(self)
+    ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
+end
+
+local function ButtonSetEnabled(self, enabled)
+    enabled = enabled and true or false
+    if self._msuf2Enabled ~= enabled then
+        self._msuf2Enabled = enabled
+        if enabled then
+            if self.Enable then self:Enable() end
+        else
+            if self.Disable then self:Disable() end
+        end
+    end
+    ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
+end
+
+local function ButtonSetScript(self, scriptType, handler)
+    local rawSetScript = self._msuf2RawSetScript
+    if scriptType == "OnClick" and type(handler) == "function" then
+        local wrapped = function(...)
+            if not self._msuf2AllowCombatClick then
+                local blocked = false
+                if M and type(M.BlockCombatAction) == "function" then
+                    blocked = M.BlockCombatAction() and true or false
+                elseif type(_G.MSUF_BlockConfigCombatLocked) == "function" then
+                    blocked = _G.MSUF_BlockConfigCombatLocked() and true or false
+                elseif (_G.InCombatLockdown and _G.InCombatLockdown())
+                    or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
+                then
+                    blocked = true
+                    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
+                        _G.MSUF_ShowConfigCombatLockMessage()
+                    end
+                end
+                if blocked then return end
+            end
+            return handler(...)
+        end
+        return rawSetScript(self, scriptType, wrapped)
+    end
+    return rawSetScript(self, scriptType, handler)
+end
+
+local BUTTON_STYLE_HOOKS = {
+    OnEnter = function(self) self._msuf2Hover = true; ButtonVisual(self, self._msuf2Active, true) end,
+    OnLeave = function(self) self._msuf2Hover = nil; ButtonVisual(self, self._msuf2Active, false) end,
+    OnEnable = ButtonRefreshVisual,
+    OnDisable = ButtonRefreshVisual,
+}
+
+local function ButtonHistoryCheckpoint(self)
+    if self._msuf2SkipHistoryCheckpoint then return end
+    local checkpoint = M and M.CheckpointHistory
+    if type(checkpoint) ~= "function" then return end
+    local label = self._msuf2HistoryLabel
+        or (self.GetText and self:GetText())
+        or "MSUF2 button"
+    if label == "" then label = "MSUF2 button" end
+    checkpoint(label, self._msuf2HistorySource or ("button:" .. tostring(self)))
+end
+
 function T.Button(parent, text, width, height)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(width or 120, height or 24)
@@ -1497,121 +1514,19 @@ function T.Button(parent, text, width, height)
         M.RegisterSearchWidget(btn, { label = text, kind = "button", anchor = label })
     end
 
-    local rawSetScript = btn.SetScript
-    btn.SetScript = function(self, scriptType, handler)
-        if scriptType == "OnClick" and type(handler) == "function" then
-            local wrapped = function(...)
-                if not self._msuf2AllowCombatClick then
-                    local blocked = false
-                    if M and type(M.BlockCombatAction) == "function" then
-                        blocked = M.BlockCombatAction() and true or false
-                    elseif type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-                        blocked = _G.MSUF_BlockConfigCombatLocked() and true or false
-                    elseif (_G.InCombatLockdown and _G.InCombatLockdown())
-                        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
-                    then
-                        blocked = true
-                        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-                            _G.MSUF_ShowConfigCombatLockMessage()
-                        end
-                    end
-                    if blocked then return end
-                end
-                return handler(...)
-            end
-            return rawSetScript(self, scriptType, wrapped)
-        end
-        return rawSetScript(self, scriptType, handler)
-    end
-
-    btn.SetText = function(self, value)
-        local raw = value or ""
-        local text = Tr(raw)
-        if self._msuf2RawText == raw and self._msuf2Label and self._msuf2Label:GetText() == text then
-            return
-        end
-        self._msuf2RawText = raw
-        self._msuf2SearchText = raw
-        if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
-        self._msuf2Label:SetText(text)
-        if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
-            M.RegisterSearchWidget(self, { label = value, kind = "button", anchor = self._msuf2Label })
-        end
-    end
-    btn.GetText = function(self)
-        return self._msuf2Label:GetText()
-    end
-    btn.SetActive = function(self, active)
-        active = active and true or false
-        if self._msuf2Active ~= active then
-            self._msuf2Active = active
-        end
-        ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
-    end
-    btn.RefreshVisual = function(self)
-        ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
-    end
-    btn.SetEnabled = function(self, enabled)
-        enabled = enabled and true or false
-        if self._msuf2Enabled ~= enabled then
-            self._msuf2Enabled = enabled
-            if enabled then
-                if self.Enable then self:Enable() end
-            else
-                if self.Disable then self:Disable() end
-            end
-        end
-        ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
-    end
-
-    btn:SetScript("OnEnter", function(self)
-        self._msuf2Hover = true
-        ButtonVisual(self, self._msuf2Active, true)
-    end)
-    btn:SetScript("OnLeave", function(self)
-        self._msuf2Hover = nil
-        ButtonVisual(self, self._msuf2Active, false)
-    end)
-    btn:SetScript("OnEnable", function(self)
-        ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
-    end)
-    btn:SetScript("OnDisable", function(self)
-        ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
-    end)
-    btn:HookScript("OnClick", function(self)
-        if self._msuf2SkipHistoryCheckpoint then return end
-        local checkpoint = M and M.CheckpointHistory
-        if type(checkpoint) ~= "function" then return end
-        local label = self._msuf2HistoryLabel
-            or (self.GetText and self:GetText())
-            or "MSUF2 button"
-        if label == "" then label = "MSUF2 button" end
-        checkpoint(label, self._msuf2HistorySource or ("button:" .. tostring(self)))
-    end)
+    btn._msuf2RawSetScript = btn.SetScript
+    btn.SetScript = ButtonSetScript
+    btn.SetText, btn.GetText = ButtonSetText, ButtonGetText
+    btn.SetActive, btn.RefreshVisual, btn.SetEnabled = ButtonSetActive, ButtonRefreshVisual, ButtonSetEnabled
+    for script, handler in pairs(BUTTON_STYLE_HOOKS) do btn:SetScript(script, handler) end
+    btn:HookScript("OnClick", ButtonHistoryCheckpoint)
     ButtonVisual(btn, false, false)
     return btn
 end
 
-function T.SkinDangerButton(btn)
-    if not btn then return btn end
-    btn._msuf2Danger = true
-    btn:SetActive(false)
-    return btn
-end
-
-function T.SkinPrimaryButton(btn)
-    if not btn then return btn end
-    btn._msuf2Primary = true
-    btn:SetActive(false)
-    return btn
-end
-
-function T.SkinSuccessButton(btn)
-    if not btn then return btn end
-    btn._msuf2Success = true
-    btn:SetActive(false)
-    return btn
-end
+function T.SkinDangerButton(btn) return T.ApplyButtonRole(btn, "danger") end
+function T.SkinPrimaryButton(btn) return T.ApplyButtonRole(btn, "primary") end
+function T.SkinSuccessButton(btn) return T.ApplyButtonRole(btn, "success") end
 
 local BUTTON_ROLE_VARIANTS = {
     primary = "primary",
@@ -1626,17 +1541,10 @@ local BUTTON_ROLE_VARIANTS = {
 function T.ApplyButtonRole(btn, role)
     if not btn then return btn end
     role = tostring(role or "normal")
-    btn._msuf2Primary = nil
-    btn._msuf2Danger = nil
-    btn._msuf2Success = nil
     local variant = BUTTON_ROLE_VARIANTS[role]
-    if variant == "primary" then
-        btn._msuf2Primary = true
-    elseif variant == "danger" then
-        btn._msuf2Danger = true
-    elseif variant == "success" then
-        btn._msuf2Success = true
-    end
+    btn._msuf2Primary = (variant == "primary") or nil
+    btn._msuf2Danger = (variant == "danger") or nil
+    btn._msuf2Success = (variant == "success") or nil
     btn._msuf2Role = role
     if btn.RefreshVisual then btn:RefreshVisual() elseif btn.SetActive then btn:SetActive(btn._msuf2Active) end
     return btn
@@ -1678,6 +1586,15 @@ local function CloseButtonVisual(btn, hover, down)
     if label and label.SetTextColor then label:SetTextColor(lr, lg, lb, alpha) end
 end
 
+local CLOSE_BUTTON_HOOKS = {
+    OnEnter = function(self) self._msuf2CloseHover = true; CloseButtonVisual(self, true, self._msuf2CloseDown) end,
+    OnLeave = function(self) self._msuf2CloseHover = nil; self._msuf2CloseDown = nil; CloseButtonVisual(self, false, false) end,
+    OnMouseDown = function(self) self._msuf2CloseDown = true; CloseButtonVisual(self, self._msuf2CloseHover, true) end,
+    OnMouseUp = function(self) self._msuf2CloseDown = nil; CloseButtonVisual(self, self._msuf2CloseHover, false) end,
+    OnEnable = function(self) CloseButtonVisual(self, self._msuf2CloseHover, self._msuf2CloseDown) end,
+    OnDisable = function(self) CloseButtonVisual(self, false, false) end,
+}
+
 function T.CloseButton(parent)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(24, 24)
@@ -1686,14 +1603,12 @@ function T.CloseButton(parent)
     btn._msuf2CloseFill = fill
     btn._msuf2CloseEdge = edge
 
-    local lineA = btn:CreateTexture(nil, "ARTWORK")
-    lineA:SetTexture("Interface\\Buttons\\WHITE8X8")
-    lineA:SetSize(12, 2)
-    lineA:SetPoint("CENTER", btn, "CENTER", 0, 0)
-    local lineB = btn:CreateTexture(nil, "ARTWORK")
-    lineB:SetTexture("Interface\\Buttons\\WHITE8X8")
-    lineB:SetSize(12, 2)
-    lineB:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    local lineA, lineB = btn:CreateTexture(nil, "ARTWORK"), btn:CreateTexture(nil, "ARTWORK")
+    for _, line in ipairs({ lineA, lineB }) do
+        line:SetTexture("Interface\\Buttons\\WHITE8X8")
+        line:SetSize(12, 2)
+        line:SetPoint("CENTER", btn, "CENTER", 0, 0)
+    end
     if lineA.SetRotation and lineB.SetRotation then
         lineA:SetRotation(math.pi * 0.25)
         lineB:SetRotation(-math.pi * 0.25)
@@ -1707,29 +1622,7 @@ function T.CloseButton(parent)
     btn._msuf2CloseLineA = lineA
     btn._msuf2CloseLineB = lineB
 
-    btn:SetScript("OnEnter", function(self)
-        self._msuf2CloseHover = true
-        CloseButtonVisual(self, true, self._msuf2CloseDown)
-    end)
-    btn:SetScript("OnLeave", function(self)
-        self._msuf2CloseHover = nil
-        self._msuf2CloseDown = nil
-        CloseButtonVisual(self, false, false)
-    end)
-    btn:SetScript("OnMouseDown", function(self)
-        self._msuf2CloseDown = true
-        CloseButtonVisual(self, self._msuf2CloseHover, true)
-    end)
-    btn:SetScript("OnMouseUp", function(self)
-        self._msuf2CloseDown = nil
-        CloseButtonVisual(self, self._msuf2CloseHover, false)
-    end)
-    btn:SetScript("OnEnable", function(self)
-        CloseButtonVisual(self, self._msuf2CloseHover, self._msuf2CloseDown)
-    end)
-    btn:SetScript("OnDisable", function(self)
-        CloseButtonVisual(self, false, false)
-    end)
+    for script, handler in pairs(CLOSE_BUTTON_HOOKS) do btn:SetScript(script, handler) end
 
     CloseButtonVisual(btn, false, false)
     return btn

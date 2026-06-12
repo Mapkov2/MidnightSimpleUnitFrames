@@ -28,7 +28,7 @@ _G.MSUF_UFPreview = Preview
 local Model = Preview.Model or {}
 Preview.Model = Model
 local PreviewHelpers = M.PreviewHelpers or {}
-local KLR = M.KeyLabelRows
+local UnitPage = M.UnitPage or {}
 
 local UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet" }
 local UNIT_SET = { player = true, target = true, targettarget = true, focustarget = true, focus = true, boss = true, pet = true }
@@ -73,48 +73,21 @@ local function NormalizePreviewRaidGroupNameAnchor(anchor)
     return "NAMERIGHT"
 end
 
-local TEXT_ANCHORS = KLR [[LEFT=Left
-CENTER=Center
-RIGHT=Right]]
-local HP_MODES = KLR [[
-PERCENT=Percent
-CURRENT=Current
-MAX=Max
-DEFICIT=Deficit
-CURMAX=Current / Max
-CURPERCENT=Current / Percent
-CURMAXPERCENT=Current / Max / Percent
-MAXPERCENT=Max / Percent
-PERCENTCUR=Percent / Current
-PERCENTMAX=Percent / Max
-PERCENTCURMAX=Percent / Current / Max
-NONE=None
-]]
-local POWER_MODES = KLR [[
-CURRENT=Current
-MAX=Max
-CURMAX=Current / Max
-PERCENT=Percent
-CURPERCENT=Current / Percent
-CURMAXPERCENT=Current / Max / Percent
-NONE=None
-]]
-local SEP_ITEMS = KLR [[
-=space
--=-
-/=/
-\=\
-|=|
-<=<
->=>
-~=~
-:=:
-]]
-local PORTRAIT_MODE_ITEMS = KLR [[OFF=Off
-LEFT=Left
-RIGHT=Right]]
-local PORTRAIT_RENDER_ITEMS = KLR [[2D=2D portrait
-CLASS=Class portrait]]
+local function KeyLabelValues(values)
+    local out = {}
+    for i = 1, #(values or {}) do
+        local item = values[i]
+        local key = item and (item.key or item.value or item[1])
+        out[#out + 1] = { key = key, label = item and (item.label or item.text or item[2] or key) or "" }
+    end
+    return out
+end
+local TEXT_ANCHORS = KeyLabelValues(UnitPage.TEXT_ANCHORS)
+local HP_MODES = KeyLabelValues(UnitPage.HP_MODES)
+local POWER_MODES = KeyLabelValues(UnitPage.POWER_MODES)
+local SEP_ITEMS = KeyLabelValues(UnitPage.SEPARATORS)
+local PORTRAIT_MODE_ITEMS = { { key = "OFF", label = "Off" }, { key = "LEFT", label = "Left" }, { key = "RIGHT", label = "Right" } }
+local PORTRAIT_RENDER_ITEMS = KeyLabelValues(UnitPage.PORTRAIT_RENDER)
 local function PortraitClassItems()
     local PM = MSUF and MSUF.PortraitMedia
     local opts = (PM and PM.GetPackOptions and PM.GetPackOptions()) or {
@@ -127,19 +100,8 @@ local function PortraitClassItems()
     end
     return items
 end
-local PORTRAIT_SHAPE_ITEMS = KLR [[
-SQUARE=Square
-CIRCLE=Circle
-ROUNDED=Rounded
-DIAMOND=Diamond
-]]
-local PORTRAIT_BORDER_ITEMS = KLR [[
-NONE=No border
-SOLID=Solid
-CLASS_COLOR=Class color
-REACTION=Reaction color
-CUSTOM=Custom color
-]]
+local PORTRAIT_SHAPE_ITEMS = KeyLabelValues(UnitPage.PORTRAIT_SHAPES)
+local PORTRAIT_BORDER_ITEMS = KeyLabelValues(UnitPage.PORTRAIT_BORDERS)
 
 local PORTRAIT_STYLE_DEFAULTS = {
     portraitRender = "2D",

@@ -203,7 +203,9 @@ local function BuildBars(ctx)
             "turn on rounded frames", "turn off rounded frames", "abgerundete frames", "runde kanten",
             "runde ecken", "abrundung", "abrunden", "einschalten", "ausschalten",
         }
-        if type(extraKeywords) == "table" then
+        if type(extraKeywords) == "string" and extraKeywords:find("|", 1, true) then
+            for keyword in extraKeywords:gmatch("[^|]+") do keywords[#keywords + 1] = keyword end
+        elseif type(extraKeywords) == "table" then
             for i = 1, #extraKeywords do keywords[#keywords + 1] = extraKeywords[i] end
         elseif extraKeywords then
             keywords[#keywords + 1] = extraKeywords
@@ -627,38 +629,26 @@ local function BuildBars(ctx)
     local leftW = compactTextures and math.max(220, (ctx.width or 720) - 42) or math.min(300, math.max(220, rightX - 48))
     local gradientY = compactTextures and (topY - 126) or topY
 
-    local barTexture = W.Dropdown(textures, "Bar textures (SharedMedia)", function() return TextureValues(nil) end, 280)
-    if barTexture._msuf2Title then
-        barTexture._msuf2Title:ClearAllPoints()
-        barTexture._msuf2Title:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY)
+    local function BindTextureDropdown(label, values, getValue, setValue, y)
+        local control = W.Dropdown(textures, label, values, leftW)
+        M.BindDropdown(ctx, control, getValue, setValue)
+        W.MoveWidget(control, textures, leftX, y, leftW, "LEFT")
+        return control
     end
-    barTexture:ClearAllPoints()
-    barTexture:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY - 22)
-    barTexture:SetWidth(leftW)
-    M.BindDropdown(ctx, barTexture,
-        BarTextureForScope,
+    local barTexture = BindTextureDropdown("Bar textures (SharedMedia)", function() return TextureValues(nil) end, BarTextureForScope,
         function(v)
             if SetBarTextureForScope(v) then
                 ApplyBars("MSUF2_BAR_TEXTURE")
                 RefreshGroupFrameVisuals()
             end
-        end)
-    local bgTexture = W.Dropdown(textures, "Background texture", function() return TextureValues("Use foreground texture") end, 280)
-    if bgTexture._msuf2Title then
-        bgTexture._msuf2Title:ClearAllPoints()
-        bgTexture._msuf2Title:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY - 54)
-    end
-    bgTexture:ClearAllPoints()
-    bgTexture:SetPoint("TOPLEFT", textures, "TOPLEFT", leftX, topY - 76)
-    bgTexture:SetWidth(leftW)
-    M.BindDropdown(ctx, bgTexture,
-        BarBackgroundTextureForScope,
+        end, topY)
+    local bgTexture = BindTextureDropdown("Background texture", function() return TextureValues("Use foreground texture") end, BarBackgroundTextureForScope,
         function(v)
             if SetBarBackgroundTextureForScope(v) then
                 ApplyBars("MSUF2_BAR_BG_TEXTURE")
                 RefreshGroupFrameVisuals()
             end
-        end)
+        end, topY - 54)
 
     local gradLabel = T.Font(textures, "GameFontHighlightSmall", M.Tr("Gradient"), T.colors.muted)
     gradLabel:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY)
@@ -683,21 +673,13 @@ local function BuildBars(ctx)
             SyncGradientControls()
         end)
     local strength = W.Slider(textures, "Gradient strength", 0, 1, 0.05, 220)
-    if strength._msuf2Title then
-        strength._msuf2Title:ClearAllPoints()
-        strength._msuf2Title:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY - 90)
-        strength._msuf2Title:SetWidth(compactTextures and leftW or 220)
-    end
-    strength:ClearAllPoints()
-    strength:SetPoint("TOPLEFT", textures, "TOPLEFT", rightX, gradientY - 112)
-    strength:SetWidth(compactTextures and math.min(leftW, 300) or 220)
-    if strength._msuf2UpdateFill then strength:_msuf2UpdateFill() end
     M.BindSlider(ctx, strength,
         function() return tonumber(GradientScopeGet("gradientStrength", 0.45)) or 0.45 end,
         function(v)
             GradientScopeSet("gradientStrength", tonumber(v) or 0.45)
             ApplyGradientRuntime("MSUF2_GRADIENT_STRENGTH")
         end)
+    W.MoveWidget(strength, textures, rightX, gradientY - 90, compactTextures and math.min(leftW, 300) or 220, "LEFT")
 
     local padX = compactTextures and math.min(rightX + 210, (ctx.width or 720) - 104) or math.min(rightX + 238, (ctx.width or 720) - 104)
     local pad = T.Panel(textures, nil, { 0.020, 0.024, 0.046, 0.55 }, T.colors.borderSoft)
@@ -854,6 +836,7 @@ local function BuildBars(ctx)
     absorbTest:HookScript("OnHide", function() ClearAbsorbTextureTest() end)
 
     local healAbsorbOpacity = BindAbsorbSlider("Heal-absorb bar opacity", 0, 1, 0.05, "healAbsorbBarOpacity", 1, "MSUF2_HEAL_ABSORB_OPACITY", absorbRightX, -294, absorbRightW)
+    local absorbBarControls = { absorbAnchor, absorbTex, healAbsorbTex, absorbOpacity, healAbsorbOpacity }
 
     RefreshAbsorbControls = function()
         local mode = ReadAbsorbDisplayMode()
@@ -868,12 +851,8 @@ local function BuildBars(ctx)
             healPredOn = ReadGBool("showSelfHealPrediction", false)
         end
         SetControlEnabled(absorbMode, scopedActive)
-        SetControlEnabled(absorbAnchor, scopedActive and showBar)
-        SetControlEnabled(absorbTex, scopedActive and showBar)
-        SetControlEnabled(healAbsorbTex, scopedActive and showBar)
+        SetControlsEnabled(absorbBarControls, scopedActive and showBar)
         SetControlEnabled(absorbTest, true)
-        SetControlEnabled(absorbOpacity, scopedActive and showBar)
-        SetControlEnabled(healAbsorbOpacity, scopedActive and showBar)
         SetControlEnabled(healPredToggle, groupScope and scopedActive or sharedActive)
         SetControlEnabled(healPredAnchor, scopedActive and healPredOn)
     end
@@ -912,9 +891,9 @@ local function BuildBars(ctx)
     local roundLeftX = 30
     local roundRightX = 330
     local roundW = 250
-    RegisterRoundedSearch(rounded, "Rounded Texture", {
-        "rounded section", "rounded menu", "rounded options", "where rounded frames", "wo rounded frames",
-    }, "Open this section to enable or disable rounded frame textures and its per-surface toggles.", "section")
+    RegisterRoundedSearch(rounded, "Rounded Texture",
+        "rounded section|rounded menu|rounded options|where rounded frames|wo rounded frames",
+        "Open this section to enable or disable rounded frame textures and its per-surface toggles.", "section")
     local RefreshRoundedControls
     local function SyncRoundedControls()
         if RefreshRoundedControls then RefreshRoundedControls() end
@@ -933,31 +912,25 @@ local function BuildBars(ctx)
         RegisterRoundedSearch(control, label, searchKeywords, help)
         return control
     end
-    BindRoundedToggle("Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true, {
-        "master toggle", "all rounded frames", "rounded frames master", "rounded frames on", "rounded frames off",
-        "rounded frames einschalten", "rounded frames ausschalten", "alle abgerundeten frames",
-    }, "Master switch for the rounded frame texture style.", true)
-    local roundUnits = BindRoundedToggle("Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil, {
-        "rounded unit frames", "rounded unitframes", "unit frame corners", "unitframe corners",
-        "abgerundete unitframes", "unitframes abgerundet", "player target focus boss rounded",
-    }, "Enable or disable rounded textures on unit frames.")
-    local roundGroups = BindRoundedToggle("Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil, {
-        "rounded group frames", "rounded party frames", "rounded raid frames", "group frame corners",
-        "abgerundete gruppenframes", "party raid abgerundet",
-    }, "Enable or disable rounded textures on group frames.")
-    local roundPower = BindRoundedToggle("Power bars", roundRightX, -52, "roundedPowerBars", true, nil, {
-        "rounded power bars", "rounded powerbar", "power bar corners", "powerbar corners",
-        "powerbars abgerundet", "powerbar abrunden",
-    }, "Enable or disable rounded textures on power bars.")
-    local roundMouseover = BindRoundedToggle("Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil, {
-        "rounded mouseover", "rounded hover", "rounded hover border", "mouseover rounded",
-        "mouseover highlight rounded", "mouseover abgerundet", "hover abgerundet",
-    }, "Enable or disable rounded mouseover highlight edges.")
+    BindRoundedToggle("Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true,
+        "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames",
+        "Master switch for the rounded frame texture style.", true)
+    local roundUnits = BindRoundedToggle("Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil,
+        "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded",
+        "Enable or disable rounded textures on unit frames.")
+    local roundGroups = BindRoundedToggle("Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil,
+        "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet",
+        "Enable or disable rounded textures on group frames.")
+    local roundPower = BindRoundedToggle("Power bars", roundRightX, -52, "roundedPowerBars", true, nil,
+        "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden",
+        "Enable or disable rounded textures on power bars.")
+    local roundMouseover = BindRoundedToggle("Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil,
+        "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet",
+        "Enable or disable rounded mouseover highlight edges.")
     local roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -154, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
-    RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview", {
-        "rounded preview", "rounded example", "rounded image", "rounded frame preview",
-        "preview rounded frames", "rounded frames aussehen", "vorschau abgerundete frames",
-    }, "Shows a small preview of the rounded frame texture style.", "preview")
+    RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
+        "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
+        "Shows a small preview of the rounded frame texture style.", "preview")
     RefreshRoundedControls = function()
         local active = ReadB("roundedFramesEnabled", false) == true
         SetControlsEnabled({ roundUnits, roundGroups, roundPower, roundMouseover }, active)
@@ -999,16 +972,9 @@ local function BuildBars(ctx)
     M.BindSegment(ctx, highlightTabs, CurrentHighlightTab, SetHighlightTab)
 
     local function HighlightTabFrame(key)
-        local frame = CreateFrame("Frame", nil, highlights)
-        frame:SetPoint("TOPLEFT", highlights, "TOPLEFT", 0, -88)
-        frame:SetPoint("BOTTOMRIGHT", highlights, "BOTTOMRIGHT", 0, 12)
-        frame._msuf2Width = hlW
-        highlightTabFrames[key] = frame
-        return frame
+        return M.UnitSectionsShared.MakeTabFrame(highlights, key, -88, hlW, highlightTabFrames)
     end
-    local modesFrame = HighlightTabFrame("modes")
-    local previewFrame = HighlightTabFrame("preview")
-    local priorityFrame = HighlightTabFrame("priority")
+    local modesFrame, previewFrame, priorityFrame = HighlightTabFrame("modes"), HighlightTabFrame("preview"), HighlightTabFrame("priority")
     if highlightTabs.SetValue then highlightTabs:SetValue(CurrentHighlightTab()) end
     M.AddRefresher(ctx, RefreshHighlightTabs)
     RefreshHighlightTabs()
@@ -1142,6 +1108,11 @@ local function BuildBars(ctx)
     local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", PurgeBorderOn)
     local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true)
 
+    local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
+        local fn = _G[setterName]
+        if _G[flagName] and not enabled and type(fn) == "function" then fn(false) end
+    end
+
     M.AddRefresher(ctx, function()
         local scopedActive = HighlightControlsActive()
         local sharedActive = SharedBarsControlsActive()
@@ -1149,18 +1120,10 @@ local function BuildBars(ctx)
         local dispelOn = DispelBorderOn()
         local purgeOn = PurgeBorderOn()
         local bossTargetOn = BossTargetBorderOn()
-        if _G.MSUF_AggroBorderTestMode and not aggroOn and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
-            _G.MSUF_SetAggroBorderTestMode(false)
-        end
-        if _G.MSUF_DispelBorderTestMode and not dispelOn and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
-            _G.MSUF_SetDispelBorderTestMode(false)
-        end
-        if _G.MSUF_PurgeBorderTestMode and not purgeOn and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
-            _G.MSUF_SetPurgeBorderTestMode(false)
-        end
-        if _G.MSUF_BossTargetBorderTestMode and (not sharedActive or not bossTargetOn) and type(_G.MSUF_SetBossTargetBorderTestMode) == "function" then
-            _G.MSUF_SetBossTargetBorderTestMode(false)
-        end
+        ClearBorderTestIfDisabled("MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", aggroOn)
+        ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn)
+        ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn)
+        ClearBorderTestIfDisabled("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", sharedActive and bossTargetOn)
         SetControlEnabled(highlight, scopedActive)
         SetControlEnabled(aggro, scopedActive)
         SetControlEnabled(dispelBorder, scopedActive)
@@ -1240,6 +1203,7 @@ local function BuildBars(ctx)
     local ufOverlayStyle = BindUFOverlayDropdown("Overlay style", unitDispelOverlayStyles, "unitDispelOverlayStyle", "FULL", nil, "MSUF2_UF_DISPEL_OVERLAY_STYLE", -126)
     local ufOverlayCurrent = BindUFOverlayToggle("Show on current health only", "unitDispelOverlayOnHealth", true, "MSUF2_UF_DISPEL_OVERLAY_HEALTH", -174)
     local ufOverlayAlpha = BindUFOverlaySlider("Overlay opacity", "unitDispelOverlayAlpha", 0.35, "MSUF2_UF_DISPEL_OVERLAY_ALPHA", -218)
+    local ufOverlayControls = { ufOverlayTrigger, ufOverlayStyle, ufOverlayCurrent, ufOverlayAlpha }
 
     local ufOverlayGroupHintY = overlayWide and -286 or -386
     local ufOverlayGroupHint = W.Text(ufOverlayCard, "Group frame scopes use Group Frames > Health & Bars > Dispel Overlay.", 16, ufOverlayGroupHintY, ufOverlayCardW - 32, T.colors.muted)
@@ -1250,10 +1214,7 @@ local function BuildBars(ctx)
         local activeScope = (not groupScope) and ScopedBarsControlsActive()
         local overlayOn = activeScope and BarScopeGet("unitDispelOverlayEnabled", false) == true
         SetControlEnabled(ufOverlayToggle, activeScope)
-        SetControlEnabled(ufOverlayTrigger, overlayOn)
-        SetControlEnabled(ufOverlayStyle, overlayOn)
-        SetControlEnabled(ufOverlayCurrent, overlayOn)
-        SetControlEnabled(ufOverlayAlpha, overlayOn)
+        SetControlsEnabled(ufOverlayControls, overlayOn)
         ufOverlayGroupHint:SetShown(groupScope)
     end
     M.AddRefresher(ctx, RefreshUFOverlayControls)
@@ -1268,27 +1229,8 @@ local function BuildBars(ctx)
             ApplyHighlightPriorityRuntime()
         end)
 
-    local rowH, rowGap, rowMax = 22, 4, 4
-    local prioContainer = CreateFrame("Frame", nil, priorityCard)
-    prioContainer:SetPoint("TOPLEFT", prio, "BOTTOMLEFT", -2, -4)
-    prioContainer:SetSize(200, rowMax * (rowH + rowGap))
-
-    local prioRows, prioCount = {}, 0
-    local function PrioritySlotY(slot)
-        return -((slot - 1) * (rowH + rowGap))
-    end
-    local function SnapPriorityRows()
-        for i = 1, prioCount do
-            local row = prioRows[i]
-            row.frame:ClearAllPoints()
-            row.frame:SetPoint("TOPLEFT", prioContainer, "TOPLEFT", 0, PrioritySlotY(row.slotIndex))
-            row.frame:Show()
-        end
-        for i = prioCount + 1, rowMax do
-            if prioRows[i] then prioRows[i].frame:Hide() end
-        end
-        prioContainer:SetHeight(prioCount * (rowH + rowGap))
-    end
+    local rowMax = 4
+    local prioContainer, prioRows, prioCount
     local function SavePriorityRows()
         local function WritePriorityRows()
             local sorted = {}
@@ -1306,85 +1248,18 @@ local function BuildBars(ctx)
         end
     end
     local function SetPriorityRowsEnabled(enabled)
-        enabled = enabled and true or false
-        for i = 1, prioCount do
-            local frame = prioRows[i].frame
-            frame:SetAlpha(enabled and 1 or 0.4)
-            frame:EnableMouse(enabled)
-        end
+        prioContainer:SetRowsEnabled(enabled)
     end
 
-    for i = 1, rowMax do
-        local rowFrame = CreateFrame("Frame", nil, prioContainer, T.Template and T.Template() or nil)
-        rowFrame:SetSize(190, rowH)
-        rowFrame:SetMovable(true)
-        rowFrame:EnableMouse(true)
-        rowFrame:RegisterForDrag("LeftButton")
-        if rowFrame.SetBackdrop then
-            rowFrame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-            rowFrame:SetBackdropColor(0.12, 0.12, 0.12, 0.85)
-            rowFrame:SetBackdropBorderColor(0.30, 0.30, 0.30, 0.60)
-        end
-        local stripe = rowFrame:CreateTexture(nil, "ARTWORK")
-        stripe:SetSize(4, rowH - 2)
-        stripe:SetPoint("LEFT", rowFrame, "LEFT", 2, 0)
-        rowFrame._stripe = stripe
-        local label = T.Font(rowFrame, "GameFontHighlightSmall", "", T.colors.text)
-        label:SetPoint("LEFT", stripe, "RIGHT", 6, 0)
-        rowFrame._label = label
-        local num = T.Font(rowFrame, "GameFontNormalSmall", "", T.colors.dim)
-        num:SetPoint("RIGHT", rowFrame, "RIGHT", -8, 0)
-        rowFrame._numText = num
-        rowFrame:SetScript("OnDragStart", function(self)
-            if not (HighlightControlsActive() and HighlightPriorityEnabled()) then return end
-            if GameTooltip then GameTooltip:Hide() end
-            self._msuf2OldStrata = self:GetFrameStrata()
-            self:StartMoving()
-            self:SetFrameStrata("TOOLTIP")
-        end)
-        rowFrame:SetScript("OnDragStop", function(self)
-            self:StopMovingOrSizing()
-            self:SetFrameStrata(self._msuf2OldStrata or prioContainer:GetFrameStrata() or "MEDIUM")
-            local _, selfY = self:GetCenter()
-            local contTop = prioContainer:GetTop()
-            if not (selfY and contTop) then
-                SnapPriorityRows()
-                return
-            end
-            local bestSlot, bestDist = 1, math.huge
-            for slot = 1, prioCount do
-                local slotY = contTop + PrioritySlotY(slot) - (rowH / 2)
-                local dist = math.abs(selfY - slotY)
-                if dist < bestDist then
-                    bestDist = dist
-                    bestSlot = slot
-                end
-            end
-            local thisRow
-            for idx = 1, prioCount do
-                if prioRows[idx].frame == self then
-                    thisRow = prioRows[idx]
-                    break
-                end
-            end
-            if thisRow and thisRow.slotIndex ~= bestSlot then
-                for idx = 1, prioCount do
-                    if prioRows[idx].slotIndex == bestSlot then
-                        prioRows[idx].slotIndex = thisRow.slotIndex
-                        break
-                    end
-                end
-                thisRow.slotIndex = bestSlot
-            end
-            for idx = 1, prioCount do
-                prioRows[idx].frame._numText:SetText(tostring(prioRows[idx].slotIndex))
-            end
-            SnapPriorityRows()
-            SavePriorityRows()
-        end)
-        rowFrame:Hide()
-        prioRows[i] = { frame = rowFrame, key = "", slotIndex = i }
-    end
+    prioContainer = M.UnitSectionsShared.MakeDragSortRows(priorityCard, nil, {
+        x = -2, y = -82, width = 190, rowHeight = 22, gap = 4, maxRows = rowMax,
+        bg = { 0.12, 0.12, 0.12, 0.85 },
+        border = { 0.30, 0.30, 0.30, 0.60 },
+        disabledAlpha = 0.4,
+        dragAllowed = function() return HighlightControlsActive() and HighlightPriorityEnabled() end,
+        onReorder = SavePriorityRows,
+    })
+    prioRows = prioContainer.rows
 
     local function RefreshPriorityRows()
         local order = PriorityOrder()
@@ -1399,7 +1274,7 @@ local function BuildBars(ctx)
             row.frame._label:SetText(M.Tr(PRIORITY_LABELS[key] or key))
             row.frame._numText:SetText(tostring(i))
         end
-        SnapPriorityRows()
+        prioContainer:SetActiveCount(prioCount)
         SetPriorityRowsEnabled(HighlightControlsActive() and HighlightPriorityEnabled())
     end
     RefreshPriorityRows()

@@ -10,6 +10,7 @@ local T = M.Theme
 local GP = M.GroupPage or {}
 local A3 = MSUF.MSUF_Auras3 or _G.MSUF_Auras3
 local Model = A3 and A3.MenuModel
+local VTR = M.ValueTextRows
 
 if type(W) ~= "table" or type(T) ~= "table" or type(Model) ~= "table" then return end
 
@@ -22,44 +23,24 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
 
-local UNIT_ROWS = {
-    { unit = "player", label = "Player" },
-    { unit = "target", label = "Target" },
-    { unit = "focus", label = "Focus" },
-    { unit = "boss", label = "Boss" },
-}
-
-local GROUP_ROWS = {
-    { scope = "party", label = "Party" },
-    { scope = "raid", label = "Raid / Mythic" },
-}
-
-local AURA_SCOPE_VALUES = {
-    { value = "shared", text = "Shared" },
-    { value = "player", text = "Player" },
-    { value = "target", text = "Target" },
-    { value = "focus", text = "Focus" },
-    { value = "boss", text = "Boss" },
-    { value = "party", text = "Party" },
-    { value = "raid", text = "Raid / Mythic" },
-}
-
-local LANE_VALUES = {
-    { value = "buff", text = "Buffs" },
-    { value = "debuff", text = "Debuffs" },
-}
-
-local BUFF_EXCLUSIVE = {
-    { value = "none", text = "None" },
-    { value = "important", text = "Important" },
-}
-
-local DEBUFF_EXCLUSIVE = {
-    { value = "none", text = "None" },
-    { value = "important", text = "Important" },
-    { value = "raid", text = "Raid" },
-    { value = "all", text = "All" },
-}
+local AURA_SCOPE_VALUES = VTR [[shared=Shared
+player=Player
+target=Target
+focus=Focus
+boss=Boss
+party=Party
+raid=Raid / Mythic]]
+local AURA_SCOPE_LABELS = { shared = "Shared", player = "Player", target = "Target", focus = "Focus", boss = "Boss", party = "Party", raid = "Raid / Mythic" }
+local AURA_SCOPE_VALID = { shared = true, player = true, target = true, focus = true, boss = true, party = true, raid = true }
+local AURA_GROUP_SCOPES = { party = true, raid = true, mythicraid = true }
+local LANE_VALUES = VTR [[buff=Buffs
+debuff=Debuffs]]
+local BUFF_EXCLUSIVE = VTR [[none=None
+important=Important]]
+local DEBUFF_EXCLUSIVE = VTR [[none=None
+important=Important
+raid=Raid
+all=All]]
 
 local function Tr(text)
     if type(M.Tr) == "function" then return M.Tr(text) end
@@ -70,11 +51,6 @@ local function Round(value)
     value = tonumber(value) or 0
     if value < 0 then return -floor((-value) + 0.5) end
     return floor(value + 0.5)
-end
-
-local function BadgeNumber(value)
-    value = Round(value)
-    return tostring(value)
 end
 
 local function AddTooltip(widget, title, body)
@@ -140,20 +116,19 @@ local function ApplyUnit(ctx, unit, reason, refresh)
     if refresh and M.Refresh then M.Refresh(ctx) end
 end
 
-local function BindSwitch(ctx, parent, label, x, y, width, getValue, setValue)
-    local widget = W.SwitchAt(parent, label, x, y, width or 180)
+local function BindBoolWidget(ctx, widget, getValue, setValue)
     M.BindToggle(ctx, widget,
         function() return getValue() and true or false end,
         function(v) setValue(v and true or false) end)
     return widget
 end
 
+local function BindSwitch(ctx, parent, label, x, y, width, getValue, setValue)
+    return BindBoolWidget(ctx, W.SwitchAt(parent, label, x, y, width or 180), getValue, setValue)
+end
+
 local function BindToggle(ctx, parent, label, x, y, width, getValue, setValue)
-    local widget = W.ToggleAt(parent, label, x, y, width or 180)
-    M.BindToggle(ctx, widget,
-        function() return getValue() and true or false end,
-        function(v) setValue(v and true or false) end)
-    return widget
+    return BindBoolWidget(ctx, W.ToggleAt(parent, label, x, y, width or 180), getValue, setValue)
 end
 
 local function BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width, getValue, setValue)
@@ -194,10 +169,7 @@ local function CurrentScope()
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local scope = M.auraScope or "shared"
     if scope == "mythicraid" then scope = "raid" end
-    if scope ~= "shared" and scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" and scope ~= "party" and scope ~= "raid" then
-        scope = "shared"
-    end
-    return scope
+    return AURA_SCOPE_VALID[scope] and scope or "shared"
 end
 
 local function SetCurrentScope(scope)
@@ -214,17 +186,11 @@ end
 
 local function IsGroupScope(scope)
     scope = scope or CurrentScope()
-    return scope == "party" or scope == "raid" or scope == "mythicraid"
+    return AURA_GROUP_SCOPES[scope] == true
 end
 
 local function ScopeLabel(scope)
-    if scope == "shared" then return "Shared" end
-    if scope == "player" then return "Player" end
-    if scope == "target" then return "Target" end
-    if scope == "focus" then return "Focus" end
-    if scope == "boss" then return "Boss" end
-    if scope == "party" then return "Party" end
-    return "Raid / Mythic"
+    return AURA_SCOPE_LABELS[scope] or "Raid / Mythic"
 end
 
 local function BuildScopeTabs(ctx, section, x, y, width)
@@ -464,93 +430,30 @@ local function GFReadConf(scope)
     return GroupConf(kind)
 end
 
-local function GFNativeKeyForGroup(groupKey)
-    return groupKey == "buff" and "buffs" or "debuffs"
-end
-
-local function GFReadBlizzardType(scope, nativeKey, defaultValue)
-    local gf = GF()
-    if gf and type(gf.IsBlizzardAuraTypeEnabled) == "function" then
-        local kind = GroupScopeKinds(scope)
-        return gf.IsBlizzardAuraTypeEnabled(GroupConf(kind), nativeKey) == true
-    end
-    local root = GFReadRoot(scope)
-    if (root.renderer or "BLIZZARD") == "CUSTOM" then return false end
-    local types = root.blizzardTypes
-    if type(types) ~= "table" or types[nativeKey] == nil then return defaultValue and true or false end
-    return types[nativeKey] == true
-end
-
-local function GFWriteBlizzardType(scope, nativeKey, value)
+local function GFWriteScopeValue(scope, mode, getTarget, key, value)
     local changed
     local a, b = GroupScopeKinds(scope)
     local function write(kind)
-        local root = GFAurasRoot(kind)
-        root.blizzardTypes = root.blizzardTypes or {}
-        local nextValue = value and true or false
-        if root.blizzardTypes[nativeKey] == nextValue then return end
-        root.blizzardTypes[nativeKey] = nextValue
+        local target = getTarget(kind)
+        if target[key] == value then return end
+        target[key] = value
         changed = true
     end
     write(a)
     if b then write(b) end
-    if changed then QueueGroupScope(scope, "rebuild") end
+    if changed then QueueGroupScope(scope, mode or "visual") end
 end
 
 local function GFWriteGroupValue(scope, groupKey, key, value, mode)
-    local changed
-    local a, b = GroupScopeKinds(scope)
-    local function write(kind)
-        local group = GFAuraGroup(kind, groupKey)
-        if group[key] == value then return end
-        group[key] = value
-        changed = true
-    end
-    write(a)
-    if b then write(b) end
-    if changed then QueueGroupScope(scope, mode or "visual") end
+    GFWriteScopeValue(scope, mode, function(kind) return GFAuraGroup(kind, groupKey) end, key, value)
 end
 
 local function GFWriteRootValue(scope, key, value, mode)
-    local changed
-    local a, b = GroupScopeKinds(scope)
-    local function write(kind)
-        local root = GFAurasRoot(kind)
-        if root[key] == value then return end
-        root[key] = value
-        changed = true
-    end
-    write(a)
-    if b then write(b) end
-    if changed then QueueGroupScope(scope, mode or "visual") end
+    GFWriteScopeValue(scope, mode, GFAurasRoot, key, value)
 end
 
 local function GFWriteConfValue(scope, key, value, mode)
-    local changed
-    local a, b = GroupScopeKinds(scope)
-    local function write(kind)
-        local conf = GroupConf(kind)
-        if conf[key] == value then return end
-        conf[key] = value
-        changed = true
-    end
-    write(a)
-    if b then write(b) end
-    if changed then QueueGroupScope(scope, mode or "visual") end
-end
-
-local function GroupLaneShown(scope, groupKey)
-    if GFReadBlizzardType(scope, GFNativeKeyForGroup(groupKey), true) then return true end
-    local root = GFReadRoot(scope)
-    local group = GFReadGroup(scope, groupKey)
-    return root.enabled ~= false and group.enabled ~= false
-end
-
-local function SetGroupLaneShown(scope, groupKey, shown)
-    shown = shown and true or false
-    if shown then GFWriteRootValue(scope, "enabled", true, "visual") end
-    GFWriteGroupValue(scope, groupKey, "enabled", shown, "visual")
-    GFWriteBlizzardType(scope, GFNativeKeyForGroup(groupKey), shown)
+    GFWriteScopeValue(scope, mode, GroupConf, key, value)
 end
 
 local function AuraFilter()
@@ -814,25 +717,35 @@ local function BuildUnitStyle(ctx, b, scope)
         end
     end
 
+    local function AddStyleControl(control)
+        styleControls[#styleControls + 1] = control
+        return control
+    end
+
+    local function BindStyleSwitch(parent, label, x, y, width, key, defaultValue, reason)
+        return AddStyleControl(BindSwitch(ctx, parent, label, x, y, width,
+            function() return ReadScopeBool(key, defaultValue) end,
+            function(v)
+                WriteScopeBool(key, v)
+                ApplyUnit(ctx, unit, reason, true)
+            end))
+    end
+
+    local function BindStyleSlider(parent, label, x, y, minVal, maxVal, step, width, key, defaultValue, readMin, readMax, writeMin, writeMax, reason)
+        readMin, readMax = readMin or minVal, readMax or maxVal
+        writeMin, writeMax = writeMin or readMin, writeMax or readMax
+        return AddStyleControl(BindSlider(ctx, parent, label, x, y, minVal, maxVal, step, width,
+            function() return ReadScopeNumber(key, defaultValue, readMin, readMax) end,
+            function(v)
+                WriteScopeNumber(key, v, writeMin, writeMax)
+                ApplyUnit(ctx, unit, reason)
+            end))
+    end
+
     local text = Card(section, laneName .. " Text Features", "Stack-count and cooldown text for " .. ScopeLabel(scope) .. " " .. laneName .. ".", 24, topY, colW, 388)
-    styleControls[#styleControls + 1] = BindSwitch(ctx, text, "Show Stack Count", 16, -66, colW - 32,
-        function() return ReadScopeBool("showStackCount", true) end,
-        function(v)
-            WriteScopeBool("showStackCount", v)
-            ApplyUnit(ctx, unit, "AURAS3_SHOW_STACKS", true)
-        end)
-    styleControls[#styleControls + 1] = BindSwitch(ctx, text, "Show Cooldown Text", 16, -98, colW - 32,
-        function() return ReadScopeBool("showCooldownText", true) end,
-        function(v)
-            WriteScopeBool("showCooldownText", v)
-            ApplyUnit(ctx, unit, "AURAS3_SHOW_COOLDOWN_TEXT", true)
-        end)
-    styleControls[#styleControls + 1] = BindSwitch(ctx, text, "Show Cooldown Swipe", 16, -130, colW - 32,
-        function() return ReadScopeBool("showCooldownSwipe", true) end,
-        function(v)
-            WriteScopeBool("showCooldownSwipe", v)
-            ApplyUnit(ctx, unit, "AURAS3_SHOW_COOLDOWN_SWIPE", true)
-        end)
+    BindStyleSwitch(text, "Show Stack Count", 16, -66, colW - 32, "showStackCount", true, "AURAS3_SHOW_STACKS")
+    BindStyleSwitch(text, "Show Cooldown Text", 16, -98, colW - 32, "showCooldownText", true, "AURAS3_SHOW_COOLDOWN_TEXT")
+    BindStyleSwitch(text, "Show Cooldown Swipe", 16, -130, colW - 32, "showCooldownSwipe", true, "AURAS3_SHOW_COOLDOWN_SWIPE")
 
     W.LabelAt(text, "Stack Count", 16, -178, colW - 32, "GameFontNormalSmall", T.colors.accent)
     styleControls[#styleControls + 1] = BindDropdown(ctx, text, "Anchor", 16, -214, Model.StackAnchorValues(), colW - 32,
@@ -848,45 +761,15 @@ local function BuildUnitStyle(ctx, b, scope)
             end
             ApplyUnit(ctx, unit, "AURAS3_STACK_ANCHOR")
         end)
-    styleControls[#styleControls + 1] = BindSlider(ctx, text, "Text Size", 16, -272, 6, 40, 1, colW - 32,
-        function() return ReadScopeNumber("stackTextSize", 14, 6, 40) end,
-        function(v)
-            WriteScopeNumber("stackTextSize", v, 6, 40)
-            ApplyUnit(ctx, unit, "AURAS3_STACK_SIZE")
-        end)
+    BindStyleSlider(text, "Text Size", 16, -272, 6, 40, 1, colW - 32, "stackTextSize", 14, 6, 40, nil, nil, "AURAS3_STACK_SIZE")
     local smallW = max(120, floor((colW - 44) / 2))
-    styleControls[#styleControls + 1] = BindSlider(ctx, text, "X", 16, -332, -40, 40, 1, smallW,
-        function() return ReadScopeNumber("stackTextOffsetX", -1, -2000, 2000) end,
-        function(v)
-            WriteScopeNumber("stackTextOffsetX", v, -2000, 2000)
-            ApplyUnit(ctx, unit, "AURAS3_STACK_X")
-        end)
-    styleControls[#styleControls + 1] = BindSlider(ctx, text, "Y", 24 + smallW, -332, -40, 40, 1, smallW,
-        function() return ReadScopeNumber("stackTextOffsetY", 1, -2000, 2000) end,
-        function(v)
-            WriteScopeNumber("stackTextOffsetY", v, -2000, 2000)
-            ApplyUnit(ctx, unit, "AURAS3_STACK_Y")
-        end)
+    BindStyleSlider(text, "X", 16, -332, -40, 40, 1, smallW, "stackTextOffsetX", -1, -2000, 2000, nil, nil, "AURAS3_STACK_X")
+    BindStyleSlider(text, "Y", 24 + smallW, -332, -40, 40, 1, smallW, "stackTextOffsetY", 1, -2000, 2000, nil, nil, "AURAS3_STACK_Y")
 
     local cooldown = Card(section, laneName .. " Cooldown Text", "Timer font size and center offset for " .. ScopeLabel(scope) .. " " .. laneName .. ".", rightX, topY, rightW, 268)
-    styleControls[#styleControls + 1] = BindSlider(ctx, cooldown, "Text Size", 16, -62, 6, 40, 1, rightW - 32,
-        function() return ReadScopeNumber("cooldownTextSize", 14, 6, 40) end,
-        function(v)
-            WriteScopeNumber("cooldownTextSize", v, 6, 40)
-            ApplyUnit(ctx, unit, "AURAS3_COOLDOWN_SIZE")
-        end)
-    styleControls[#styleControls + 1] = BindSlider(ctx, cooldown, "X", 16, -122, -40, 40, 1, rightW - 32,
-        function() return ReadScopeNumber("cooldownTextOffsetX", 0, -2000, 2000) end,
-        function(v)
-            WriteScopeNumber("cooldownTextOffsetX", v, -2000, 2000)
-            ApplyUnit(ctx, unit, "AURAS3_COOLDOWN_X")
-        end)
-    styleControls[#styleControls + 1] = BindSlider(ctx, cooldown, "Y", 16, -182, -40, 40, 1, rightW - 32,
-        function() return ReadScopeNumber("cooldownTextOffsetY", 0, -2000, 2000) end,
-        function(v)
-            WriteScopeNumber("cooldownTextOffsetY", v, -2000, 2000)
-            ApplyUnit(ctx, unit, "AURAS3_COOLDOWN_Y")
-        end)
+    BindStyleSlider(cooldown, "Text Size", 16, -62, 6, 40, 1, rightW - 32, "cooldownTextSize", 14, 6, 40, nil, nil, "AURAS3_COOLDOWN_SIZE")
+    BindStyleSlider(cooldown, "X", 16, -122, -40, 40, 1, rightW - 32, "cooldownTextOffsetX", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_X")
+    BindStyleSlider(cooldown, "Y", 16, -182, -40, 40, 1, rightW - 32, "cooldownTextOffsetY", 0, -2000, 2000, nil, nil, "AURAS3_COOLDOWN_Y")
 
     BuildMiniAuraPreview(ctx, section, unit, rightX, topY - 292, rightW, 118, lane)
     local hint = W.Text(section, "", 24, topY - 424, w - 48, T.colors.muted)
@@ -967,40 +850,24 @@ local function BuildSharedColors(ctx, b)
             RefreshColorSamples()
             RequestAuraTextRefresh()
         end)
-    BindColor(ctx, cooldown, "Safe", 16, -210,
-        function() return Model.ReadGeneralColor("aurasCooldownTextSafeColor", 1, 1, 1) end,
-        function(r, g, bcol)
-            Model.WriteGeneralColor("aurasCooldownTextSafeColor", r, g, bcol)
-            RefreshColorSamples()
-            RequestAuraTextRefresh()
-        end)
-    BindColor(ctx, cooldown, "Warning", 16, -248,
-        function() return Model.ReadGeneralColor("aurasCooldownTextWarningColor", 1, 0.85, 0.20) end,
-        function(r, g, bcol)
-            Model.WriteGeneralColor("aurasCooldownTextWarningColor", r, g, bcol)
-            RefreshColorSamples()
-            RequestAuraTextRefresh()
-        end)
-    BindColor(ctx, cooldown, "Urgent", 16, -286,
-        function() return Model.ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10) end,
-        function(r, g, bcol)
-            Model.WriteGeneralColor("aurasCooldownTextUrgentColor", r, g, bcol)
-            RefreshColorSamples()
-            RequestAuraTextRefresh()
-        end)
-
-    BindColor(ctx, markers, "Stack Count", 16, -62,
-        function() return Model.ReadGeneralColor("aurasStackCountColor", 1, 1, 1) end,
-        function(r, g, bcol)
-            Model.WriteGeneralColor("aurasStackCountColor", r, g, bcol)
-            RequestAuraTextRefresh()
-        end)
-    BindColor(ctx, markers, "Own Buff", 16, -102,
-        function() return Model.ReadGeneralColor("aurasOwnBuffHighlightColor", 1, 0.85, 0.20) end,
-        function(r, g, bcol) Model.WriteGeneralColor("aurasOwnBuffHighlightColor", r, g, bcol) end)
-    BindColor(ctx, markers, "Own Debuff", 16, -142,
-        function() return Model.ReadGeneralColor("aurasOwnDebuffHighlightColor", 1, 0.30, 0.30) end,
-        function(r, g, bcol) Model.WriteGeneralColor("aurasOwnDebuffHighlightColor", r, g, bcol) end)
+    local function BindGeneralColor(parent, label, y, key, r, g, bcol, after)
+        BindColor(ctx, parent, label, 16, y,
+            function() return Model.ReadGeneralColor(key, r, g, bcol) end,
+            function(nr, ng, nb)
+                Model.WriteGeneralColor(key, nr, ng, nb)
+                if after then after() end
+            end)
+    end
+    local function RefreshTextColors()
+        RefreshColorSamples()
+        RequestAuraTextRefresh()
+    end
+    BindGeneralColor(cooldown, "Safe", -210, "aurasCooldownTextSafeColor", 1, 1, 1, RefreshTextColors)
+    BindGeneralColor(cooldown, "Warning", -248, "aurasCooldownTextWarningColor", 1, 0.85, 0.20, RefreshTextColors)
+    BindGeneralColor(cooldown, "Urgent", -286, "aurasCooldownTextUrgentColor", 1, 0.55, 0.10, RefreshTextColors)
+    BindGeneralColor(markers, "Stack Count", -62, "aurasStackCountColor", 1, 1, 1, RequestAuraTextRefresh)
+    BindGeneralColor(markers, "Own Buff", -102, "aurasOwnBuffHighlightColor", 1, 0.85, 0.20)
+    BindGeneralColor(markers, "Own Debuff", -142, "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30)
     BindSlider(ctx, markers, "Safe seconds", 16, -196, 0, 600, 1, colW - 32,
         function() return Model.ReadGeneralNumber("aurasCooldownTextSafeSeconds", 60, 0, 600) end,
         function(v) Model.WriteGeneralNumber("aurasCooldownTextSafeSeconds", v, 0, 600) end)
@@ -1028,79 +895,6 @@ end
 local function BuildAuraStyleLanePage(ctx, lane)
     SetCurrentLane("auraStyleGFLane", lane)
     BuildAuraStylePage(ctx)
-end
-
-local function BuildUnitFilterRules(ctx, b, scope)
-    local section = b:Section("Filter Rules", 520)
-    local w = section._msuf2Width or b.width or 720
-    local colW = max(310, floor((w - 48) / 2))
-    local rightX = 24 + colW + 16
-    local filterControls = {}
-    local useShared
-    if scope ~= "shared" then
-        useShared = BindSwitch(ctx, section, "Use Shared Rules", 24, -38, 190,
-            function() return Model.UseSharedRules(scope) end,
-            function(v)
-                Model.SetUseSharedRules(scope, v)
-                ApplyUnit(ctx, scope, "AURAS3_FILTER_INHERIT", true)
-            end)
-    end
-    local enableFilters = BindSwitch(ctx, section, "Enable Filters", scope == "shared" and 24 or 234, -38, 180,
-        function() return Model.ScopeFiltersEnabled(scope) end,
-        function(v)
-            Model.SetScopeFiltersEnabled(scope, v)
-            ApplyUnit(ctx, scope, "AURAS3_FILTER_ENABLE", true)
-        end)
-
-    local function FilterToggle(card, label, kind, key, x, y, tip)
-        local widget = BindSwitch(ctx, card, label, x, y, colW - 64,
-            function() return Model.ReadFilter(scope, kind, key, false) == true end,
-            function(v)
-                Model.WriteFilter(scope, kind, key, v)
-                ApplyUnit(ctx, scope, "AURAS3_FILTER_" .. kind .. "_" .. key, true)
-            end)
-        AddTooltip(widget, label, tip or "")
-        filterControls[#filterControls + 1] = widget
-        return widget
-    end
-
-    local buff = Card(section, "Buff Filters", "Inclusive rules plus one exclusive filter.", 24, -84, colW, 326)
-    local debuff = Card(section, "Debuff Filters", "Inclusive rules plus one exclusive filter.", rightX, -84, colW, 326)
-
-    W.LabelAt(buff, "Inclusive Filters", 16, -50, colW - 32, "GameFontNormalSmall", T.colors.accent)
-    FilterToggle(buff, "Player", "buff", "onlyMine", 16, -76, "Auras applied by the player.")
-    FilterToggle(buff, "Raid", "buff", "raid", 16, -108, "Raid-useful public Buffs.")
-    FilterToggle(buff, "Cancelable", "buff", "cancelable", 16, -140, "Buffs that can be cancelled.")
-    FilterToggle(buff, "Not Cancelable", "buff", "notCancelable", 16, -172, "Buffs that cannot be cancelled.")
-    FilterToggle(buff, "Stealable", "buff", "includeStealable", 16, -204, "Stealable Buff marker.")
-    filterControls[#filterControls + 1] = BindDropdown(ctx, buff, "Exclusive Filter", 16, -258, BUFF_EXCLUSIVE, min(250, colW - 32),
-        function() return Model.ReadFilter(scope, "buff", "exclusive", "none") end,
-        function(v)
-            Model.WriteFilter(scope, "buff", "exclusive", v or "none")
-            ApplyUnit(ctx, scope, "AURAS3_FILTER_BUFF_EXCLUSIVE", true)
-        end)
-
-    W.LabelAt(debuff, "Inclusive Filters", 16, -50, colW - 32, "GameFontNormalSmall", T.colors.accent)
-    FilterToggle(debuff, "Player", "debuff", "onlyMine", 16, -76, "Debuffs applied by the player.")
-    FilterToggle(debuff, "Raid", "debuff", "raid", 16, -108, "Raid and encounter Debuffs.")
-    FilterToggle(debuff, "Dispellable", "debuff", "includeDispellable", 16, -140, "Dispellable Debuffs.")
-    FilterToggle(debuff, "Not Dispellable", "debuff", "notDispellable", 16, -172, "Non-dispellable Debuffs.")
-    FilterToggle(debuff, "Boss", "debuff", "boss", 16, -204, "Boss Debuffs.")
-    filterControls[#filterControls + 1] = BindDropdown(ctx, debuff, "Exclusive Filter", 16, -258, DEBUFF_EXCLUSIVE, min(250, colW - 32),
-        function() return Model.ReadFilter(scope, "debuff", "exclusive", "none") end,
-        function(v)
-            Model.WriteFilter(scope, "debuff", "exclusive", v or "none")
-            ApplyUnit(ctx, scope, "AURAS3_FILTER_DEBUFF_EXCLUSIVE", true)
-        end)
-
-    W.Text(section, "On/off and placement are on each Unit Frame page. These filters apply to the selected unit-frame scope.", 24, -436, w - 48, T.colors.muted)
-    M.AddRefresher(ctx, function()
-        local customRules = scope == "shared" or not Model.UseSharedRules(scope)
-        local filtersOn = customRules and Model.ScopeFiltersEnabled(scope)
-        W.SetControlEnabled(enableFilters, customRules)
-        W.SetControlsEnabled(filterControls, filtersOn)
-        if useShared then W.SetControlEnabled(useShared, scope ~= "shared") end
-    end)
 end
 
 local function BuildUnitFilterRulesByLane(ctx, b, scope)
@@ -1470,6 +1264,10 @@ end
 local function BuildUnitAuraPlacementCard(ctx, parent, unit, kind, x, y, width)
     local title = kind == "buff" and "Buffs" or "Debuffs"
     local controls = {}
+    local function AddControl(control)
+        controls[#controls + 1] = control
+        return control
+    end
 
     local leftX = x + 16
     local rightX = max(x + 430, min(x + 520, x + floor(width * 0.50)))
@@ -1487,7 +1285,7 @@ local function BuildUnitAuraPlacementCard(ctx, parent, unit, kind, x, y, width)
         function(v) SetUnitLaneShown(ctx, unit, kind, v, "AURAS3_UNIT_PAGE_" .. (kind == "buff" and "BUFFS" or "DEBUFFS")) end)
     enable._msuf2GroupFrameGateAlwaysEnabled = true
 
-    controls[#controls + 1] = BindDropdown(ctx, parent, "Anchor", leftX, y - 80, anchorValues, leftW,
+    AddControl(BindDropdown(ctx, parent, "Anchor", leftX, y - 80, anchorValues, leftW,
         function()
             if type(Model.ReadLaneAnchor) == "function" then return Model.ReadLaneAnchor(unit, kind) end
             return kind == "buff" and "BOTTOMRIGHT" or "TOPLEFT"
@@ -1497,8 +1295,8 @@ local function BuildUnitAuraPlacementCard(ctx, parent, unit, kind, x, y, width)
                 Model.WriteLaneAnchor(unit, kind, v)
                 ApplyUnit(ctx, unit, "AURAS3_UNIT_ANCHOR")
             end
-        end)
-    controls[#controls + 1] = BindDropdown(ctx, parent, "Growth", leftX, y - 132, growthValues, leftW,
+        end))
+    AddControl(BindDropdown(ctx, parent, "Growth", leftX, y - 132, growthValues, leftW,
         function()
             if type(Model.ReadLaneGrowthPair) == "function" then return Model.ReadLaneGrowthPair(unit, kind) end
             return Model.ReadLaneGrowth(unit, kind)
@@ -1510,55 +1308,21 @@ local function BuildUnitAuraPlacementCard(ctx, parent, unit, kind, x, y, width)
                 Model.WriteLaneGrowth(unit, kind, v)
             end
             ApplyUnit(ctx, unit, "AURAS3_UNIT_GROWTH")
-        end)
-    controls[#controls + 1] = BindSlider(ctx, parent, "Offset X", leftX, y - 190, -300, 300, 1, leftW,
-        function() return Model.ReadNumber(unit, LaneXKey(kind), 0, -4096, 4096) end,
-        function(v)
-            Model.WriteNumber(unit, LaneXKey(kind), v, -4096, 4096)
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_X")
-        end)
-    controls[#controls + 1] = BindSlider(ctx, parent, "Offset Y", leftX, y - 250, -300, 300, 1, leftW,
-        function() return Model.ReadNumber(unit, LaneYKey(kind), LaneDefaultY(kind), -4096, 4096) end,
-        function(v)
-            Model.WriteNumber(unit, LaneYKey(kind), v, -4096, 4096)
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_Y")
-        end)
+        end))
 
-    controls[#controls + 1] = BindSlider(ctx, parent, "Max Icons", rightX, y - 80, 0, 80, 1, rightW,
-        function() return Model.ReadNumber(unit, LaneMaxKey(kind), LaneDefaultMax(kind), 0, 80) end,
-        function(v)
-            Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80)
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX")
-        end)
-    controls[#controls + 1] = BindSlider(ctx, parent, "Icon Size", rightX, y - 140, 10, 80, 1, rightW,
-        function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end,
-        function(v)
-            Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128)
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE")
-        end)
-    controls[#controls + 1] = BindSlider(ctx, parent, "Per Row", rightX, y - 200, 1, 40, 1, rightW,
-        function() return Model.ReadLanePerRow(unit, kind) end,
-        function(v)
-            Model.WriteLanePerRow(unit, kind, v)
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW")
-        end)
-    controls[#controls + 1] = BindSlider(ctx, parent, "Spacing", rightX, y - 260, 0, 12, 1, rightW,
-        function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end,
-        function(v)
-            Model.WriteNumber(unit, "spacing", v, 0, 64)
-            ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING")
-        end)
-    controls[#controls + 1] = BindSlider(ctx, parent, "Layer (Z-Order)", rightX, y - 320, 1, 15, 1, rightW,
-        function()
-            if type(Model.ReadLaneLayer) == "function" then return Model.ReadLaneLayer(unit, kind) end
-            return kind == "buff" and 5 or 6
-        end,
-        function(v)
-            if type(Model.WriteLaneLayer) == "function" then
-                Model.WriteLaneLayer(unit, kind, v)
-                ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER")
-            end
-        end)
+    local sliderSpecs = {
+        { "Offset X", leftX, y - 190, -300, 300, 1, leftW, function() return Model.ReadNumber(unit, LaneXKey(kind), 0, -4096, 4096) end, function(v) Model.WriteNumber(unit, LaneXKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_X") end },
+        { "Offset Y", leftX, y - 250, -300, 300, 1, leftW, function() return Model.ReadNumber(unit, LaneYKey(kind), LaneDefaultY(kind), -4096, 4096) end, function(v) Model.WriteNumber(unit, LaneYKey(kind), v, -4096, 4096); ApplyUnit(ctx, unit, "AURAS3_UNIT_Y") end },
+        { "Max Icons", rightX, y - 80, 0, 80, 1, rightW, function() return Model.ReadNumber(unit, LaneMaxKey(kind), LaneDefaultMax(kind), 0, 80) end, function(v) Model.WriteNumber(unit, LaneMaxKey(kind), v, 0, 80); ApplyUnit(ctx, unit, "AURAS3_UNIT_MAX") end },
+        { "Icon Size", rightX, y - 140, 10, 80, 1, rightW, function() return Model.ReadNumber(unit, LaneSizeKey(kind), 26, 1, 128) end, function(v) Model.WriteNumber(unit, LaneSizeKey(kind), v, 1, 128); ApplyUnit(ctx, unit, "AURAS3_UNIT_SIZE") end },
+        { "Per Row", rightX, y - 200, 1, 40, 1, rightW, function() return Model.ReadLanePerRow(unit, kind) end, function(v) Model.WriteLanePerRow(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_PER_ROW") end },
+        { "Spacing", rightX, y - 260, 0, 12, 1, rightW, function() return Model.ReadNumber(unit, "spacing", 2, 0, 64) end, function(v) Model.WriteNumber(unit, "spacing", v, 0, 64); ApplyUnit(ctx, unit, "AURAS3_UNIT_SPACING") end },
+        { "Layer (Z-Order)", rightX, y - 320, 1, 15, 1, rightW, function() return type(Model.ReadLaneLayer) == "function" and Model.ReadLaneLayer(unit, kind) or (kind == "buff" and 5 or 6) end, function(v) if type(Model.WriteLaneLayer) == "function" then Model.WriteLaneLayer(unit, kind, v); ApplyUnit(ctx, unit, "AURAS3_UNIT_LAYER") end end },
+    }
+    for i = 1, #sliderSpecs do
+        local spec = sliderSpecs[i]
+        AddControl(BindSlider(ctx, parent, spec[1], spec[2], spec[3], spec[4], spec[5], spec[6], spec[7], spec[8], spec[9]))
+    end
 
     local function RefreshLaneCard()
         local shown = UnitLaneShown(unit, kind)
@@ -1612,12 +1376,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
 
     local tabFrames = {}
     local function MakeTabFrame(key)
-        local frame = CreateFrame("Frame", nil, sec)
-        frame:SetPoint("TOPLEFT", sec, "TOPLEFT", 0, -170)
-        frame:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 12)
-        frame._msuf2Width = sectionW
-        tabFrames[key] = frame
-        return frame
+        return M.UnitSectionsShared.MakeTabFrame(sec, key, -170, sectionW, tabFrames)
     end
 
     BuildUnitAuraPlacementCard(ctx, MakeTabFrame("buff"), unit, "buff", 18, -6, laneCardW)
@@ -1645,9 +1404,7 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     RefreshTabs()
 end
 
-M.RegisterPage("auras3", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 69 })
 M.RegisterPage("auras3_buffs", { title = "MSUF Aura Buffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "buff") end, version = 9 })
 M.RegisterPage("auras3_debuffs", { title = "MSUF Aura Debuffs", build = function(ctx) BuildAuraStyleLanePage(ctx, "debuff") end, version = 9 })
-M.RegisterPage("auras3_rendering", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 69 })
 M.RegisterPage("auras3_styling", { title = "MSUF Aura Style", build = BuildAuraStylePage, version = 26 })
 M.RegisterPage("auras3_filters", { title = "MSUF Aura Filters", build = BuildAuraFiltersPage, version = 20 })

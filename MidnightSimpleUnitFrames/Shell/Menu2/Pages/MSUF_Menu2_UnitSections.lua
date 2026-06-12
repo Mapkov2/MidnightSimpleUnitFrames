@@ -44,6 +44,30 @@ local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
 local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
+local TOP_BUTTON_STYLE = {
+    bg = { 0.022, 0.032, 0.064, 0.94 },
+    border = { 0.090, 0.135, 0.250, 0.58 },
+    textColor = { 0.78, 0.87, 0.98, 1 },
+    hoverBg = { 0.032, 0.046, 0.086, 0.96 },
+    hoverBorder = { 0.120, 0.215, 0.405, 0.72 },
+    activeBg = { 0.026, 0.038, 0.074, 0.96 },
+    activeBorder = { 0.145, 0.270, 0.560, 0.82 },
+    activeTextColor = { 0.90, 0.95, 1.00, 1 },
+    stripe = false,
+}
+local TOP_ACTION_STYLE = {
+    bg = { 0.018, 0.028, 0.058, 0.95 },
+    border = { 0.082, 0.125, 0.245, 0.66 },
+    textColor = { 0.82, 0.90, 1.00, 1 },
+    hoverBg = { 0.026, 0.040, 0.078, 0.97 },
+    hoverBorder = { 0.125, 0.220, 0.430, 0.80 },
+    activeBg = { 0.018, 0.028, 0.058, 0.95 },
+    activeBorder = { 0.082, 0.125, 0.245, 0.66 },
+    activeTextColor = { 0.82, 0.90, 1.00, 1 },
+}
+local UF_COPY_TARGET_ORDER = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "all" }
+local UF_COPY_TARGET_WIDTHS = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
+local UF_COPY_TARGET_SHORT_LABELS = { targettarget = "ToT", focustarget = "FT", boss = "Boss", all = "All" }
 local TOT_INLINE_SEPARATOR_VALUES = {}
 local TOT_INLINE_SEPARATOR_OPTIONS = {}
 
@@ -329,29 +353,6 @@ local function BuildTopActions(ctx, builder, unit, label)
     line:SetHeight(1)
     line:SetColorTexture(0.22, 0.42, 0.70, 0.42)
 
-    local TOP_BUTTON_STYLE = {
-        bg = { 0.022, 0.032, 0.064, 0.94 },
-        border = { 0.090, 0.135, 0.250, 0.58 },
-        textColor = { 0.78, 0.87, 0.98, 1 },
-        hoverBg = { 0.032, 0.046, 0.086, 0.96 },
-        hoverBorder = { 0.120, 0.215, 0.405, 0.72 },
-        activeBg = { 0.026, 0.038, 0.074, 0.96 },
-        activeBorder = { 0.145, 0.270, 0.560, 0.82 },
-        activeTextColor = { 0.90, 0.95, 1.00, 1 },
-        stripe = false,
-    }
-
-    local TOP_ACTION_STYLE = {
-        bg = { 0.018, 0.028, 0.058, 0.95 },
-        border = { 0.082, 0.125, 0.245, 0.66 },
-        textColor = { 0.82, 0.90, 1.00, 1 },
-        hoverBg = { 0.026, 0.040, 0.078, 0.97 },
-        hoverBorder = { 0.125, 0.220, 0.430, 0.80 },
-        activeBg = { 0.018, 0.028, 0.058, 0.95 },
-        activeBorder = { 0.082, 0.125, 0.245, 0.66 },
-        activeTextColor = { 0.82, 0.90, 1.00, 1 },
-    }
-
     local function MakeTopButton(parent, text, width, active, opts)
         return W.TopButton(parent, text, width, 24, opts or TOP_BUTTON_STYLE, active)
     end
@@ -424,6 +425,25 @@ local function BuildTopActions(ctx, builder, unit, label)
     end
 
     local copyPopup
+    local function SyncCopyScopeChecks()
+        if not (copyPopup and copyPopup._checks) then return end
+        for i = 1, #UF_COPY_CATEGORIES do
+            local cat = UF_COPY_CATEGORIES[i]
+            if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(copyScopes[cat.key] == true) end
+        end
+    end
+
+    local function SetCopyScopesSelected(selected, feedback)
+        for i = 1, #UF_COPY_CATEGORIES do
+            local cat = UF_COPY_CATEGORIES[i]
+            copyScopes[cat.key] = selected and true or false
+            if copyPopup and copyPopup._checks and copyPopup._checks[i] then
+                copyPopup._checks[i]:SetChecked(selected and true or false)
+            end
+        end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(feedback), "info", 1.15) end
+    end
+
     local function RefreshCopyPopupTargets()
         if not copyPopup then return end
         local dest = NormalizeCopyDest(unit)
@@ -512,15 +532,13 @@ local function BuildTopActions(ctx, builder, unit, label)
             destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
 
             copyPopup._targetBtns = {}
-            local order = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet", "all" }
-            local widths = { player = 48, target = 50, targettarget = 38, focustarget = 34, focus = 48, boss = 46, pet = 38, all = 38 }
-            copyPopup._targetOrder = order
-            copyPopup._targetWidths = widths
-            local shortLabel = { targettarget = "ToT", focustarget = "FT", boss = M.Tr("Boss"), all = M.Tr("All") }
+            copyPopup._targetOrder = UF_COPY_TARGET_ORDER
+            copyPopup._targetWidths = UF_COPY_TARGET_WIDTHS
             local x = 16
-            for i = 1, #order do
-                local key = order[i]
-                local target = MakePopupButton(copyPopup, shortLabel[key] or UnitTopLabel(key), widths[key], { 0.020, 0.048, 0.105, 0.96 }, { 0.070, 0.160, 0.330, 0.72 }, { 0.76, 0.86, 0.98, 1 }, { 0.050, 0.110, 0.240, 0.98 }, { 0.135, 0.300, 0.600, 0.86 })
+            for i = 1, #UF_COPY_TARGET_ORDER do
+                local key = UF_COPY_TARGET_ORDER[i]
+                local short = UF_COPY_TARGET_SHORT_LABELS[key]
+                local target = MakePopupButton(copyPopup, short and M.Tr(short) or UnitTopLabel(key), UF_COPY_TARGET_WIDTHS[key], { 0.020, 0.048, 0.105, 0.96 }, { 0.070, 0.160, 0.330, 0.72 }, { 0.76, 0.86, 0.98, 1 }, { 0.050, 0.110, 0.240, 0.98 }, { 0.135, 0.300, 0.600, 0.86 })
                 target:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", x, -58)
                 target._msuf2UnitCopyValue = key
                 target:SetScript("OnClick", function()
@@ -528,7 +546,7 @@ local function BuildTopActions(ctx, builder, unit, label)
                     RefreshCopyPopupTargets()
                 end)
                 copyPopup._targetBtns[key] = target
-                x = x + widths[key] + 6
+                x = x + UF_COPY_TARGET_WIDTHS[key] + 6
             end
 
             local catLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Copy categories"), T.colors.dim)
@@ -549,25 +567,13 @@ local function BuildTopActions(ctx, builder, unit, label)
             local allBtn = MakePopupButton(copyPopup, M.Tr("All"), 48, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
             allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
-                for i, cat in ipairs(UF_COPY_CATEGORIES) do
-                    copyScopes[cat.key] = true
-                    if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(true) end
-                end
-                if M.ShowStatusFeedback then
-                    M.ShowStatusFeedback(M.Tr("All copy categories selected"), "info", 1.15)
-                end
+                SetCopyScopesSelected(true, "All copy categories selected")
             end)
 
             local noneBtn = MakePopupButton(copyPopup, M.Tr("None"), 58, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
             noneBtn:SetScript("OnClick", function()
-                for i, cat in ipairs(UF_COPY_CATEGORIES) do
-                    copyScopes[cat.key] = false
-                    if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(false) end
-                end
-                if M.ShowStatusFeedback then
-                    M.ShowStatusFeedback(M.Tr("Copy categories cleared"), "info", 1.15)
-                end
+                SetCopyScopesSelected(false, "Copy categories cleared")
             end)
 
             local runBtn = MakePopupButton(copyPopup, M.Tr("Copy Selected"), 128, { 0.050, 0.125, 0.270, 0.98 }, { 0.170, 0.350, 0.610, 0.86 }, { 0.88, 0.96, 1, 1 }, { 0.060, 0.150, 0.320, 0.98 }, { 0.210, 0.420, 0.720, 0.90 })
@@ -589,11 +595,7 @@ local function BuildTopActions(ctx, builder, unit, label)
             end)
         end
 
-        for i, cat in ipairs(UF_COPY_CATEGORIES) do
-            if copyPopup._checks and copyPopup._checks[i] then
-                copyPopup._checks[i]:SetChecked(copyScopes[cat.key] == true)
-            end
-        end
+        SyncCopyScopeChecks()
         RefreshCopyPopupTargets()
         M.ApplyPopupFramePriority(copyPopup)
         copyPopup:ClearAllPoints()

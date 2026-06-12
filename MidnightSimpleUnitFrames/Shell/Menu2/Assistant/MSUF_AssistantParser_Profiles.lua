@@ -251,12 +251,10 @@ local function GroupCopyScopeDefaults()
             local cat = cats[i]
             if type(cat) == "table" and type(cat.key) == "string" then scopes[cat.key] = true end
         end
-        scopes.auras = false
         if next(scopes) then return scopes end
     end
 
     for key, value in pairs(GROUP_COPY_SCOPE_DEFAULTS) do scopes[key] = value end
-    scopes.auras = false
     return scopes
 end
 
@@ -270,7 +268,6 @@ local function GroupCopyScopesForText(text)
         ApplyCopyScopeMatches(scopes, matches)
     end
     ApplyCopyScopeExclusions(scopes, negativeKeys)
-    scopes.auras = false
     return scopes
 end
 
@@ -1071,17 +1068,6 @@ local function ParseGroupCopyScopeState(text)
 
     local matches = CopyScopeMatches(text, GROUP_COPY_SCOPE_SPECS)
     if #matches == 0 then return nil end
-    for i = 1, #matches do
-        if matches[i] == "auras" then
-            if P.ParseUnsupportedAuraCommand then return P.ParseUnsupportedAuraCommand(text) end
-            return {
-                kind = "unsupported",
-                status = "info",
-                summary = "Group Aura copy is not registered yet.",
-                text = "I could not safely change the Group Copy Aura category. Group Aura copy is still blocked until its backend is registered.",
-            }
-        end
-    end
     if ContainsAny(text, { "only", "only these", "just" }) then
         return BuildMenuSelectorState({
             selector = "group_copy_scope",

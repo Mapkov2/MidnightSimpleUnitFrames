@@ -1,0 +1,13 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Script file="MSUF_Menu2_UnitPreview_Model.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Specs.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Core.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Castbar.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Status.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Auras.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Runtime.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_ZoomPan.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_Render.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_View.lua"/>
+    <Script file="MSUF_Menu2_UnitPreview_API.lua"/>
+</Ui>

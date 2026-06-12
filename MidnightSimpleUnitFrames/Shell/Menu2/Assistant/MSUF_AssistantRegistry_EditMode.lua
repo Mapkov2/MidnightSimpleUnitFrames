@@ -99,12 +99,22 @@ local function SyncEditModeMovers(includePreviewForce)
     end
 end
 
+local function InCombat()
+    return ((_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
+end
+
 local function ScheduleEditModeSync(includePreviewForce)
+    if InCombat() then return false end
     if C_Timer and type(C_Timer.After) == "function" then
-        C_Timer.After(0.1, function() SyncEditModeMovers(includePreviewForce) end)
+        C_Timer.After(0.1, function()
+            if InCombat() then return end
+            SyncEditModeMovers(includePreviewForce)
+        end)
     else
         SyncEditModeMovers(includePreviewForce)
     end
+    return true
 end
 
 local function ToggleValue(current, requested)

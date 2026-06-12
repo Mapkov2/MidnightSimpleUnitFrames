@@ -178,84 +178,9 @@ local function MSUF_PrintInputDebug()
         print("... " .. tostring(found - 20) .. " more keyboard-enabled frames hidden.")
     end
 end
---- Optional chat trigger: "!msuf help" (only from yourself)
---- Midnight/Beta secret-safe: chat event args can become "secret" in combat.
---- Never boolean-test/compare them directly and never call string methods via ':'.
-local NotSecretValue = _G.NotSecretValue
-local function MSUF__Chat_IsSafeString(v)
-    --- Secret-safe: never call string methods on secret strings (Midnight 12.0).
-    if type(v) ~= "string" then
-        return false
-    end
-
-    local isv = _G.issecretvalue
-        or (C_Secrets and type(C_Secrets.IsSecret) == "function" and C_Secrets.IsSecret)
-        or nil
-
-    if isv and isv(v) then
-        return false
-    end
-
-    local NotSecretValue = _G.NotSecretValue
-    if NotSecretValue then
-        return NotSecretValue(v)
-    end
-
-    --- If we cannot detect secret values, be conservative in combat.
-    if InCombatLockdown and InCombatLockdown() then
-        return false
-    end
-
-    return true
-end
-local function MSUF__Chat_IsFromSelf(author, ...)
-    --- Prefer GUID-based self-check to avoid comparing author strings.
-    local senderGUID = select(10, ...)
-    local myGUID = UnitGUID and UnitGUID("player")
-    if MSUF__Chat_IsSafeString(senderGUID) and MSUF__Chat_IsSafeString(myGUID) then
-        return senderGUID == myGUID
-    end
-    --- Fallback: compare short author name (strip realm) only if strings are safe.
-    local myName = UnitName and UnitName("player")
-    if not MSUF__Chat_IsSafeString(myName) or not MSUF__Chat_IsSafeString(author) then
-         return false
-    end
-    local shortAuthor = author
-    local dash = string.find(author, "-", 1, true)
-    if dash and dash > 1 then
-        shortAuthor = string.sub(author, 1, dash - 1)
-    end
-    return (shortAuthor == myName)
-end
-local function MSUF__Chat_GetLowerTrimmed(text)
-    if not MSUF__Chat_IsSafeString(text) then  return nil end
-    local lower = string.lower(text)
-    lower = string.gsub(lower, "^%s+", "")
-     return lower
-end
-local function MSUF_ChatCommand_OnChatMsg(_, text, author, ...)
-    local msgLower = MSUF__Chat_GetLowerTrimmed(text)
-    if not msgLower then  return end
-    --- Fast reject: only care about "!msuf help" (allow extra whitespace)
-    if string.sub(msgLower, 1, 5) ~= "!msuf" then  return end
-    local rest = string.sub(msgLower, 6)
-    rest = string.gsub(rest, "^%s+", "")
-    rest = string.gsub(rest, "%s+$", "")
-    if rest ~= "help" then  return end
-    if not MSUF__Chat_IsFromSelf(author, ...) then  return end
-    MSUF_PrintHelp()
- end
-if type(MSUF_EventBus_Register) == "function" then
-    local evs = {
-        "CHAT_MSG_SAY","CHAT_MSG_YELL","CHAT_MSG_PARTY","CHAT_MSG_PARTY_LEADER",
-        "CHAT_MSG_RAID","CHAT_MSG_RAID_LEADER","CHAT_MSG_RAID_WARNING",
-        "CHAT_MSG_INSTANCE_CHAT","CHAT_MSG_INSTANCE_CHAT_LEADER",
-        "CHAT_MSG_GUILD","CHAT_MSG_OFFICER","CHAT_MSG_WHISPER",
-    }
-    for _, e in ipairs(evs) do
-        MSUF_EventBus_Register(e, "MSUF_CHATCMD", MSUF_ChatCommand_OnChatMsg)
-    end
-end
+--- The old "!msuf help" chat trigger is gone: it kept 12 CHAT_MSG_* events
+--- registered for the whole session (every trade/guild/say line paid string
+--- work) to duplicate what /msuf help already does.
 SLASH_MIDNIGHTSUF1 = "/msufold"
 SlashCmdList["MIDNIGHTSUF"] = function(msg)
     msg = msg and msg:lower() or ""

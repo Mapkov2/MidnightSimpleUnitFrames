@@ -14,15 +14,12 @@ local UnitAffectingCombat = UnitAffectingCombat
 local UnitHasIncomingResurrection = UnitHasIncomingResurrection
 local UnitLevel = UnitLevel
 local UnitClassification = UnitClassification or GetUnitClassification
-local UnitIsConnected = UnitIsConnected
 local UnitIsPlayer = UnitIsPlayer
 local UnitIsPVP = UnitIsPVP
 local UnitIsPVPFreeForAll = UnitIsPVPFreeForAll
 local UnitFactionGroup = UnitFactionGroup
 local UnitIsMercenary = UnitIsMercenary
 local UnitIsGhost = UnitIsGhost
-local UnitIsDead = UnitIsDead
-local UnitIsDeadOrGhost = UnitIsDeadOrGhost
 local UnitIsAFK = UnitIsAFK
 local UnitIsDND = UnitIsDND
 local UnitPhaseReason = UnitPhaseReason
@@ -44,173 +41,67 @@ local find = string.find
 local setmetatable = setmetatable
 local Secrets = MSUF.Secrets or {}
 
--- `GetRaidTargetIndex` (and a few sibling unit APIs) can return secret number
--- values for hidden/protected units. Storing such a value on a region and
--- later comparing it with `==`/`~=` taints the comparison and bubbles up
--- "attempt to compare ... a secret value". Gate every store with issecretvalue
--- and comparison; treat secret as unknown and always re-apply.
--- Hot paths call the C predicate directly (no cross-module Lua wrapper).
 local issecretvalue = _G.issecretvalue or function(_) return false end
--- Local copies of the Secrets predicates used in the per-event status
--- lanes (semantics verified 1:1 against MSUF_UF_Secrets.lua): secret
--- values are never compared; BoolTrue/BoolFalse read secrets as false,
--- UnitExistsSafe reads a secret existence as true (unknown == keep
--- showing). Local definitions remove one cross-module call frame per
--- check; all call sites stay untouched.
 local function BoolTrue(value)
-    if issecretvalue(value) == true then
-        return false
-    end
-    return value == true or value == 1
-end
-local function BoolFalse(value)
-    if issecretvalue(value) == true then
-        return false
-    end
-    return value == false or value == 0
+  if issecretvalue(value) == true then
+    return false
+  end
+  return value == true or value == 1
 end
 local function SafeNumber(value)
-    if issecretvalue(value) == true then
-        return nil
-    end
-    return tonumber(value)
-end
-local function UnitExistsSafe(unit)
-    local UnitExists = _G.UnitExists
-    if not UnitExists then
-        return true
-    end
-    local exists = UnitExists(unit)
-    if issecretvalue(exists) == true then
-        return true
-    end
-    return exists == true or exists == 1
-end
-local function DispatchToken(frame)
-    return frame and frame._msufDispatchActive == true and frame._msufDispatchToken or nil
-end
-local function FreshUnitState(frame, unit)
-    local state = frame and frame._msufUnitState
-    if state
-        and state.ready == true
-        and state.unit == unit
-        and frame._msufDispatchActive == true
-        and state.dispatchToken == frame._msufDispatchToken then
-        return state
-    end
+  if issecretvalue(value) == true then
     return nil
+  end
+  return tonumber(value)
 end
+local UnitExistsSafe = UF.UnitExistsSafe
+local FreshUnitState = UF.FreshUnitState
+local ReadConnectedCached = UF.ReadConnectedCached
+local ReadDeadCached = UF.ReadDeadCached
 local function UnitExistsRuntime(unit, state)
-    if state and state.existsKnown == true then
-        return state.exists == true
-    end
-    return UnitExistsSafe(unit)
-end
-local function ReadConnectedCached(frame, unit, state)
-    if state and state.connectedKnown == true then
-        return state.connected == true, true
-    end
-    local token = DispatchToken(frame)
-    if token
-        and frame._msufGFConnectedToken == token
-        and frame._msufGFConnectedUnit == unit then
-        return frame._msufGFConnectedValue, frame._msufGFConnectedKnown
-    end
-    if not UnitIsConnected then
-        return true, true
-    end
-    local connected = UnitIsConnected(unit)
-    if issecretvalue(connected) == true or connected == nil then
-        if token then
-            frame._msufGFConnectedToken = token
-            frame._msufGFConnectedUnit = unit
-            frame._msufGFConnectedValue = true
-            frame._msufGFConnectedKnown = false
-        end
-        return true, false
-    end
-    connected = connected == true or connected == 1
-    if token then
-        frame._msufGFConnectedToken = token
-        frame._msufGFConnectedUnit = unit
-        frame._msufGFConnectedValue = connected
-        frame._msufGFConnectedKnown = true
-    end
-    return connected, true
-end
-local function ReadDeadCached(frame, unit, state)
-    if state and state.deadKnown == true then
-        return state.dead == true, true
-    end
-    local token = DispatchToken(frame)
-    if token
-        and frame._msufGFDeadToken == token
-        and frame._msufGFDeadUnit == unit then
-        return frame._msufGFDeadValue, frame._msufGFDeadKnown
-    end
-    if not (UnitIsDeadOrGhost or UnitIsDead) then
-        return false, true
-    end
-    local dead = UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit) or nil
-    if (issecretvalue(dead) == true or dead == nil) and UnitIsDead then
-        dead = UnitIsDead(unit)
-    end
-    if issecretvalue(dead) == true or dead == nil then
-        if token then
-            frame._msufGFDeadToken = token
-            frame._msufGFDeadUnit = unit
-            frame._msufGFDeadValue = false
-            frame._msufGFDeadKnown = false
-        end
-        return false, false
-    end
-    dead = dead == true or dead == 1
-    if token then
-        frame._msufGFDeadToken = token
-        frame._msufGFDeadUnit = unit
-        frame._msufGFDeadValue = dead
-        frame._msufGFDeadKnown = true
-    end
-    return dead, true
+  if state and state.existsKnown == true then
+    return state.exists == true
+  end
+  return UnitExistsSafe(unit)
 end
 local Apply = MSUF.Apply or {}
 local ApplyShown = Apply.Shown or function(region, show)
-    if not region then return end
-    show = show and true or false
-    if region._aShown ~= show then
-        region:SetShown(show)
-        region._aShown = show
-    end
+  if not region then return end
+  show = show and true or false
+  if region._aShown ~= show then
+    region:SetShown(show)
+    region._aShown = show
+  end
 end
 local ApplyTexture = Apply.Texture or function(region, texture)
-    if not region then return end
-    if issecretvalue(texture) == true then
-        region._aTex = nil
-        region._aColorTexture = nil
-        region:SetTexture(texture)
-        return
-    end
-    if region._aTex ~= texture then
-        region:SetTexture(texture)
-        region._aTex = texture
-        region._aColorTexture = nil
-    end
+  if not region then return end
+  if issecretvalue(texture) == true then
+    region._aTex = nil
+    region._aColorTexture = nil
+    region:SetTexture(texture)
+    return
+  end
+  if region._aTex ~= texture then
+    region:SetTexture(texture)
+    region._aTex = texture
+    region._aColorTexture = nil
+  end
 end
 local ApplyText = Apply.Text or function(region, text)
-    if not region then return end
-    if issecretvalue(text) == true then
-        region._aText = nil
-        region._aTextPlain = nil
-        region:SetText(text)
-        return
-    end
-    text = text or ""
-    if region._aTextPlain == true and region._aText == text then
-        return
-    end
+  if not region then return end
+  if issecretvalue(text) == true then
+    region._aText = nil
+    region._aTextPlain = nil
     region:SetText(text)
-    region._aText = text
-    region._aTextPlain = true
+    return
+  end
+  text = text or ""
+  if region._aTextPlain == true and region._aText == text then
+    return
+  end
+  region:SetText(text)
+  region._aText = text
+  region._aTextPlain = true
 end
 
 local EMPTY_EVENTS = {}
@@ -219,36 +110,41 @@ local ADDON_PATH = "Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFra
 local RAID_MARKER_TEXTURE = "Interface\\TargetingFrame\\UI-RaidTargetingIcons"
 local LEADER_TEXTURE = "Interface\\GroupFrame\\UI-Group-LeaderIcon"
 local ASSIST_TEXTURE = "Interface\\GroupFrame\\UI-Group-AssistantIcon"
-local READY_TEXTURE_READY = "Interface\\RaidFrame\\ReadyCheck-Ready"
-local READY_TEXTURE_NOT_READY = "Interface\\RaidFrame\\ReadyCheck-NotReady"
-local READY_TEXTURE_WAITING = "Interface\\RaidFrame\\ReadyCheck-Waiting"
+local READY_TEXTURES = {
+  ready = "Interface\\RaidFrame\\ReadyCheck-Ready",
+  notready = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+  waiting = "Interface\\RaidFrame\\ReadyCheck-Waiting",
+}
 local READY_REZ_TEXTURE = "Interface\\RaidFrame\\Raid-Icon-Rez"
 local PHASE_TEXTURE = "Interface\\TargetingFrame\\UI-PhasingIcon"
 local STATE_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
 local PVP_FFA_ATLAS = "UI-HUD-UnitFrame-Player-PVP-FFAIcon"
 local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
 local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
-local PVP_ALLIANCE_TEXTURE = "Interface\\TargetingFrame\\UI-PVP-Alliance"
-local PVP_HORDE_TEXTURE = "Interface\\TargetingFrame\\UI-PVP-Horde"
+local PVP_ATLAS_BY_FACTION = { Horde = PVP_HORDE_ATLAS, Alliance = PVP_ALLIANCE_ATLAS }
+local PVP_TEXTURE_BY_ATLAS = {
+  [PVP_HORDE_ATLAS] = "Interface\\TargetingFrame\\UI-PVP-Horde",
+  [PVP_ALLIANCE_ATLAS] = "Interface\\TargetingFrame\\UI-PVP-Alliance",
+}
 local SYMBOL_BASE = ADDON_PATH .. "\\Media\\Symbols\\"
 local SUMMON_TEXTURES = {
-    [1] = "Interface\\RaidFrame\\Raid-Icon-SummonPending",
-    [2] = "Interface\\RaidFrame\\Raid-Icon-SummonAccepted",
-    [3] = "Interface\\RaidFrame\\Raid-Icon-SummonDeclined",
+  [1] = "Interface\\RaidFrame\\Raid-Icon-SummonPending",
+  [2] = "Interface\\RaidFrame\\Raid-Icon-SummonAccepted",
+  [3] = "Interface\\RaidFrame\\Raid-Icon-SummonDeclined",
 }
 local STATUS_REFRESH = {
-    "StatusIndicators",
-    "RaidMarkerIndicator",
-    "LeaderIndicator",
-    "LevelIndicator",
-    "RaidGroupIndicator",
-    "EliteIndicator",
-    "StatusTextIndicator",
-    "CombatIndicator",
-    "RestingIndicator",
-    "IncomingResIndicator",
-    "PVPIndicator",
-    "GroupStatusRuntime",
+  "StatusIndicators",
+  "RaidMarkerIndicator",
+  "LeaderIndicator",
+  "LevelIndicator",
+  "RaidGroupIndicator",
+  "EliteIndicator",
+  "StatusTextIndicator",
+  "CombatIndicator",
+  "RestingIndicator",
+  "IncomingResIndicator",
+  "PVPIndicator",
+  "GroupStatusRuntime",
 }
 local SYMBOL_PATH_CACHE = {}
 local READY_CHECK_TIMERS = setmetatable({}, { __mode = "k" })
@@ -260,1391 +156,1261 @@ local READY_CHECK_TIMER_AT
 local Status = {}
 
 local function ClampLayer(layer, fallback)
-    layer = floor((tonumber(layer) or fallback or 7) + 0.5)
-    if layer < 0 then
-        return 0
-    elseif layer > 30 then
-        return 30
-    end
-    return layer
+  layer = floor((tonumber(layer) or fallback or 7) + 0.5)
+  if layer < 0 then
+    return 0
+  elseif layer > 30 then
+    return 30
+  end
+  return layer
 end
 
 local function GetLayerBaseLevel(frame)
-    local base = frame and (frame.Health or frame.hpBar or frame)
-    return base and base.GetFrameLevel and (base:GetFrameLevel() or 0) or 0
+  local base = frame and (frame.Health or frame.hpBar or frame)
+  return base and base.GetFrameLevel and (base:GetFrameLevel() or 0) or 0
 end
 
 local function EnsureLayerFrame(frame, layer)
-    if not frame then
-        return nil
+  if not frame then
+    return nil
+  end
+  layer = ClampLayer(layer, 7)
+  local layers = frame.MSUFStatusLayers
+  if not layers then
+    layers = {}
+    frame.MSUFStatusLayers = layers
+  end
+  local holder = layers[layer]
+  if not holder then
+    holder = CreateFrame("Frame", nil, frame)
+    holder:SetAllPoints(frame)
+    holder:EnableMouse(false)
+    if holder.SetClipsChildren then
+      holder:SetClipsChildren(false)
     end
-    layer = ClampLayer(layer, 7)
-    local layers = frame.MSUFStatusLayers
-    if not layers then
-        layers = {}
-        frame.MSUFStatusLayers = layers
+    layers[layer] = holder
+  end
+  if holder.SetFrameLevel then
+    local level = GetLayerBaseLevel(frame) + layer
+    if holder._msufStatusFrameLevel ~= level then
+      holder:SetFrameLevel(level)
+      holder._msufStatusFrameLevel = level
     end
-    local holder = layers[layer]
-    if not holder then
-        holder = CreateFrame("Frame", nil, frame)
-        holder:SetAllPoints(frame)
-        holder:EnableMouse(false)
-        if holder.SetClipsChildren then
-            holder:SetClipsChildren(false)
-        end
-        layers[layer] = holder
-    end
-    if holder.SetFrameLevel then
-        local level = GetLayerBaseLevel(frame) + layer
-        if holder._msufStatusFrameLevel ~= level then
-            holder:SetFrameLevel(level)
-            holder._msufStatusFrameLevel = level
-        end
-    end
-    return holder, layer
+  end
+  return holder, layer
 end
 
 local function SetShown(region, show)
-    show = show and true or false
-    if region and region._msufStatusShown ~= show then
-        ApplyShown(region, show)
-        region._msufStatusShown = show
-    end
+  show = show and true or false
+  if region and region._msufStatusShown ~= show then
+    ApplyShown(region, show)
+    region._msufStatusShown = show
+  end
 end
 
 local function SetTexture(region, texture)
-    if region and region._msufStatusTexture ~= texture then
-        ApplyTexture(region, texture)
-        region._msufStatusTexture = texture
-        region._msufStatusAtlas = nil
-    end
+  if region and region._msufStatusTexture ~= texture then
+    ApplyTexture(region, texture)
+    region._msufStatusTexture = texture
+    region._msufStatusAtlas = nil
+  end
 end
 
 local function SetAtlas(region, atlas)
-    if region and region.SetAtlas and region._msufStatusAtlas ~= atlas then
-        region:SetAtlas(atlas)
-        region._msufStatusAtlas = atlas
-        region._msufStatusTexture = nil
-        region._aTex = nil
-        region._aColorTexture = nil
-        region._msufStatusL, region._msufStatusR, region._msufStatusT, region._msufStatusB = nil, nil, nil, nil
-    end
+  if region and region.SetAtlas and region._msufStatusAtlas ~= atlas then
+    region:SetAtlas(atlas)
+    region._msufStatusAtlas = atlas
+    region._msufStatusTexture = nil
+    region._aTex = nil
+    region._aColorTexture = nil
+    region._msufStatusL, region._msufStatusR, region._msufStatusT, region._msufStatusB = nil, nil, nil, nil
+  end
 end
 
 local function SetTexCoord(region, l, r, t, b)
-    if region and region.SetTexCoord
-        and (region._msufStatusL ~= l or region._msufStatusR ~= r or region._msufStatusT ~= t or region._msufStatusB ~= b) then
-        region:SetTexCoord(l, r, t, b)
-        region._msufStatusL, region._msufStatusR, region._msufStatusT, region._msufStatusB = l, r, t, b
-    end
+  if region and region.SetTexCoord
+    and (region._msufStatusL ~= l or region._msufStatusR ~= r or region._msufStatusT ~= t or region._msufStatusB ~= b) then
+    region:SetTexCoord(l, r, t, b)
+    region._msufStatusL, region._msufStatusR, region._msufStatusT, region._msufStatusB = l, r, t, b
+  end
 end
 
 local function SetText(region, text, raw)
-    if not region then
-        return
-    end
-    if issecretvalue(text) == true then
-        region._msufStatusText = nil
-        ApplyText(region, text)
-        return
-    end
-    if raw == true then
-        region._aText = nil
-        region._aTextPlain = nil
-        region:SetText(text)
-        region._msufStatusText = nil
-    elseif region._msufStatusText ~= text then
-        ApplyText(region, text)
-        region._msufStatusText = text
-    end
+  if not region then
+    return
+  end
+  if issecretvalue(text) == true then
+    region._msufStatusText = nil
+    ApplyText(region, text)
+    return
+  end
+  if raw == true then
+    region._aText = nil
+    region._aTextPlain = nil
+    region:SetText(text)
+    region._msufStatusText = nil
+  elseif region._msufStatusText ~= text then
+    ApplyText(region, text)
+    region._msufStatusText = text
+  end
 end
 
 local function ApplyStatusFont(region, font, size, flags)
-    if not (region and region.SetFont and font) then
-        return false
-    end
-    local safeSet = _G.MSUF_SetFontSafe
-    if type(safeSet) == "function" then
-        return safeSet(region, font, size, flags) == true
-    end
-    local ok, applied = pcall(region.SetFont, region, font, size, flags)
-    return ok and applied ~= false
+  if not (region and region.SetFont and font) then
+    return false
+  end
+  local safeSet = _G.MSUF_SetFontSafe
+  if type(safeSet) == "function" then
+    return safeSet(region, font, size, flags) == true
+  end
+  local ok, applied = pcall(region.SetFont, region, font, size, flags)
+  return ok and applied ~= false
 end
 
 local function SetFont(region, spec, size)
-    if not region or not region.SetFont then
-        return
+  if not region or not region.SetFont then
+    return
+  end
+  local font = spec and spec.font
+  local flags = spec and spec.fontFlags or "OUTLINE"
+  size = tonumber(size) or 14
+  if font and (region._msufStatusFont ~= font or region._msufStatusFontSize ~= size or region._msufStatusFontFlags ~= flags) then
+    if ApplyStatusFont(region, font, size, flags) then
+      region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
     end
-    local font = spec and spec.font
-    local flags = spec and spec.fontFlags or "OUTLINE"
-    size = tonumber(size) or 14
-    if font and (region._msufStatusFont ~= font or region._msufStatusFontSize ~= size or region._msufStatusFontFlags ~= flags) then
-        if ApplyStatusFont(region, font, size, flags) then
-            region._msufStatusFont, region._msufStatusFontSize, region._msufStatusFontFlags = font, size, flags
-        end
+  end
+  if region.SetShadowOffset then
+    local shadowOn = spec and spec.fontShadow == true
+    local sx = shadowOn and (tonumber(spec and spec.fontShadowX) or 1) or 0
+    local sy = shadowOn and (tonumber(spec and spec.fontShadowY) or -1) or 0
+    local sa = shadowOn and (tonumber(spec and spec.fontShadowAlpha) or 1) or 0
+    if region._msufStatusShadowX ~= sx or region._msufStatusShadowY ~= sy or region._msufStatusShadowA ~= sa then
+      if shadowOn and region.SetShadowColor then region:SetShadowColor(0, 0, 0, sa) end
+      region:SetShadowOffset(sx, sy)
+      region._msufStatusShadowX, region._msufStatusShadowY, region._msufStatusShadowA = sx, sy, sa
     end
-    if region.SetShadowOffset then
-        local shadowOn = spec and spec.fontShadow == true
-        local sx = shadowOn and (tonumber(spec and spec.fontShadowX) or 1) or 0
-        local sy = shadowOn and (tonumber(spec and spec.fontShadowY) or -1) or 0
-        local sa = shadowOn and (tonumber(spec and spec.fontShadowAlpha) or 1) or 0
-        if region._msufStatusShadowX ~= sx or region._msufStatusShadowY ~= sy or region._msufStatusShadowA ~= sa then
-            if shadowOn and region.SetShadowColor then region:SetShadowColor(0, 0, 0, sa) end
-            region:SetShadowOffset(sx, sy)
-            region._msufStatusShadowX, region._msufStatusShadowY, region._msufStatusShadowA = sx, sy, sa
-        end
-    end
+  end
 end
 
 local function ApplyTextColor(region, spec)
-    local c = spec and spec.textColor
-    local r, g, b, a = c and c.r or 1, c and c.g or 1, c and c.b or 1, c and c.a or 1
-    if region and region.SetTextColor
-        and (region._msufStatusR ~= r or region._msufStatusG ~= g or region._msufStatusB ~= b or region._msufStatusA ~= a) then
-        region:SetTextColor(r, g, b, a)
-        region._msufStatusR, region._msufStatusG, region._msufStatusB, region._msufStatusA = r, g, b, a
-    end
+  local c = spec and spec.textColor
+  local r, g, b, a = c and c.r or 1, c and c.g or 1, c and c.b or 1, c and c.a or 1
+  if region and region.SetTextColor
+    and (region._msufStatusR ~= r or region._msufStatusG ~= g or region._msufStatusB ~= b or region._msufStatusA ~= a) then
+    region:SetTextColor(r, g, b, a)
+    region._msufStatusR, region._msufStatusG, region._msufStatusB, region._msufStatusA = r, g, b, a
+  end
 end
 
 local function ApplyLayer(region, layer)
-    if not (region and region.SetDrawLayer) then
-        return
-    end
-    local sub = ClampLayer(layer, 7) - 1
-    if sub > 7 then sub = 7 end
-    if region._msufStatusLayer ~= sub then
-        region:SetDrawLayer("OVERLAY", sub)
-        region._msufStatusLayer = sub
-    end
+  if not (region and region.SetDrawLayer) then
+    return
+  end
+  local sub = ClampLayer(layer, 7) - 1
+  if sub > 7 then sub = 7 end
+  if region._msufStatusLayer ~= sub then
+    region:SetDrawLayer("OVERLAY", sub)
+    region._msufStatusLayer = sub
+  end
 end
 
 local function AnchorRegion(region, frame, cfg)
-    if not (region and frame and cfg) then
-        return
+  if not (region and frame and cfg) then
+    return
+  end
+  local anchor = cfg.anchor or "TOPLEFT"
+  local x = tonumber(cfg.x) or 0
+  local y = tonumber(cfg.y) or 0
+  local target, point, relPoint = frame, anchor, anchor
+  if anchor == "NAMERIGHT" then
+    if frame.nameText then
+      target, point, relPoint = frame.nameText, "LEFT", "RIGHT"
+    else
+      point, relPoint = "RIGHT", "RIGHT"
     end
-    local anchor = cfg.anchor or "TOPLEFT"
-    local x = tonumber(cfg.x) or 0
-    local y = tonumber(cfg.y) or 0
-    local target, point, relPoint = frame, anchor, anchor
-    if anchor == "NAMERIGHT" then
-        if frame.nameText then
-            target, point, relPoint = frame.nameText, "LEFT", "RIGHT"
-        else
-            point, relPoint = "RIGHT", "RIGHT"
-        end
-    elseif anchor == "NAMELEFT" then
-        if frame.nameText then
-            target, point, relPoint = frame.nameText, "RIGHT", "LEFT"
-        else
-            point, relPoint = "LEFT", "LEFT"
-        end
+  elseif anchor == "NAMELEFT" then
+    if frame.nameText then
+      target, point, relPoint = frame.nameText, "RIGHT", "LEFT"
+    else
+      point, relPoint = "LEFT", "LEFT"
     end
-    if region._msufStatusAnchor ~= anchor or region._msufStatusTarget ~= target
-        or region._msufStatusX ~= x or region._msufStatusY ~= y then
-        region:ClearAllPoints()
-        region:SetPoint(point, target, relPoint, x, y)
-        region._msufStatusAnchor, region._msufStatusTarget = anchor, target
-        region._msufStatusX, region._msufStatusY = x, y
-    end
+  end
+  if region._msufStatusAnchor ~= anchor or region._msufStatusTarget ~= target
+    or region._msufStatusX ~= x or region._msufStatusY ~= y then
+    region:ClearAllPoints()
+    region:SetPoint(point, target, relPoint, x, y)
+    region._msufStatusAnchor, region._msufStatusTarget = anchor, target
+    region._msufStatusX, region._msufStatusY = x, y
+  end
 end
 
 local function LayoutRegion(region, frame, spec, cfg, isText)
-    if not (region and cfg) then
-        return
+  if not (region and cfg) then
+    return
+  end
+  if not isText then
+    local size = tonumber(cfg.size) or 16
+    if region._msufStatusSize ~= size then
+      region:SetSize(size, size)
+      region._msufStatusSize = size
     end
-    if not isText then
-        local size = tonumber(cfg.size) or 16
-        if region._msufStatusSize ~= size then
-            region:SetSize(size, size)
-            region._msufStatusSize = size
-        end
-    else
-        SetFont(region, spec, cfg.size)
-        ApplyTextColor(region, spec)
-        if region.SetJustifyH then
-            local anchor = cfg.anchor
-            local justify = (anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" or anchor == "NAMELEFT") and "RIGHT" or ((anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM") and "CENTER" or "LEFT")
-            if region._msufStatusJustify ~= justify then
-                region:SetJustifyH(justify)
-                region._msufStatusJustify = justify
-            end
-        end
-        if region.SetJustifyV and region._msufStatusJustifyV ~= "MIDDLE" then
-            region:SetJustifyV("MIDDLE")
-            region._msufStatusJustifyV = "MIDDLE"
-        end
+  else
+    SetFont(region, spec, cfg.size)
+    ApplyTextColor(region, spec)
+    if region.SetJustifyH then
+      local anchor = cfg.anchor
+      local justify = (anchor == "RIGHT" or anchor == "TOPRIGHT" or anchor == "BOTTOMRIGHT" or anchor == "NAMELEFT") and "RIGHT" or ((anchor == "CENTER" or anchor == "TOP" or anchor == "BOTTOM") and "CENTER" or "LEFT")
+      if region._msufStatusJustify ~= justify then
+        region:SetJustifyH(justify)
+        region._msufStatusJustify = justify
+      end
     end
-    ApplyLayer(region, cfg.layer)
-    local alpha = spec and spec.status and spec.status.alpha or 1
-    if region.SetAlpha and region._msufStatusAlpha ~= alpha then
-        region:SetAlpha(alpha)
-        region._msufStatusAlpha = alpha
+    if region.SetJustifyV and region._msufStatusJustifyV ~= "MIDDLE" then
+      region:SetJustifyV("MIDDLE")
+      region._msufStatusJustifyV = "MIDDLE"
     end
-    AnchorRegion(region, frame, cfg)
+  end
+  ApplyLayer(region, cfg.layer)
+  local alpha = spec and spec.status and spec.status.alpha or 1
+  if region.SetAlpha and region._msufStatusAlpha ~= alpha then
+    region:SetAlpha(alpha)
+    region._msufStatusAlpha = alpha
+  end
+  AnchorRegion(region, frame, cfg)
 end
 
 local function AdoptRegion(frame, region, layer)
-    local holder = EnsureLayerFrame(frame, layer)
-    if region and holder and region.GetParent and region:GetParent() ~= holder then
-        if region.SetParent then
-            region:SetParent(holder)
-            region:ClearAllPoints()
-            region._msufStatusAnchor, region._msufStatusTarget = nil, nil
-            region._msufStatusX, region._msufStatusY = nil, nil
-        else
-            return nil
-        end
+  local holder = EnsureLayerFrame(frame, layer)
+  if region and holder and region.GetParent and region:GetParent() ~= holder then
+    if region.SetParent then
+      region:SetParent(holder)
+      region:ClearAllPoints()
+      region._msufStatusAnchor, region._msufStatusTarget = nil, nil
+      region._msufStatusX, region._msufStatusY = nil, nil
+    else
+      return nil
     end
-    return holder
+  end
+  return holder
 end
 
 local function EnsureTexture(frame, field, layer)
-    local tex = frame[field]
-    local holder = AdoptRegion(frame, tex, layer)
-    if tex then
-        return tex
-    end
-    tex = (holder or frame):CreateTexture(nil, "OVERLAY")
-    tex:SetTexture(WHITE)
-    tex:Hide()
-    frame[field] = tex
+  local tex = frame[field]
+  local holder = AdoptRegion(frame, tex, layer)
+  if tex then
     return tex
+  end
+  tex = (holder or frame):CreateTexture(nil, "OVERLAY")
+  tex:SetTexture(WHITE)
+  tex:Hide()
+  frame[field] = tex
+  return tex
 end
 
 local function EnsureText(frame, field, layer)
-    local fs = frame[field]
-    local holder = AdoptRegion(frame, fs, layer)
-    if fs then
-        return fs
-    end
-    fs = (holder or frame):CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    fs:Hide()
-    frame[field] = fs
+  local fs = frame[field]
+  local holder = AdoptRegion(frame, fs, layer)
+  if fs then
     return fs
+  end
+  fs = (holder or frame):CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  fs:Hide()
+  frame[field] = fs
+  return fs
 end
 
 local function SymbolPath(symbol, useMidnight)
-    if type(symbol) ~= "string" or symbol == "" or symbol == "DEFAULT" then
-        return nil
-    end
-    local cacheKey = symbol .. (useMidnight and "\001M" or "\001C")
-    local cached = SYMBOL_PATH_CACHE[cacheKey]
-    if cached then
-        return cached
-    end
-    local folder = "Combat"
-    local suffix = useMidnight and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
-    if find(symbol, "^rested_") then
-        folder = "Rested"
-        suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
-    elseif find(symbol, "^resurrection_") then
-        folder = "Ress"
-        suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
-    end
-    local path = SYMBOL_BASE .. folder .. "\\" .. symbol .. suffix
-    SYMBOL_PATH_CACHE[cacheKey] = path
-    return path
+  if type(symbol) ~= "string" or symbol == "" or symbol == "DEFAULT" then
+    return nil
+  end
+  local cacheKey = symbol .. (useMidnight and "\001M" or "\001C")
+  local cached = SYMBOL_PATH_CACHE[cacheKey]
+  if cached then
+    return cached
+  end
+  local folder = "Combat"
+  local suffix = useMidnight and "_midnight_128_clean.tga" or "_classic_128_clean.tga"
+  if find(symbol, "^rested_") then
+    folder = "Rested"
+    suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
+  elseif find(symbol, "^resurrection_") then
+    folder = "Ress"
+    suffix = useMidnight and "_midnight_64.tga" or "_classic_64.tga"
+  end
+  local path = SYMBOL_BASE .. folder .. "\\" .. symbol .. suffix
+  SYMBOL_PATH_CACHE[cacheKey] = path
+  return path
 end
 
 local function ApplyStateIconTexture(tex, kind, cfg, status)
-    local path = SymbolPath(cfg and cfg.symbol, status and status.useMidnight == true)
-    if path then
-        SetTexture(tex, path)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        return
+  local path = SymbolPath(cfg and cfg.symbol, status and status.useMidnight == true)
+  if path then
+    SetTexture(tex, path)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    return
+  end
+  if kind == "combat" then
+    if tex.SetAtlas then
+      SetAtlas(tex, "UI-HUD-UnitFrame-Player-PortraitCombatIcon")
+    else
+      SetTexture(tex, STATE_TEXTURE)
+      SetTexCoord(tex, 0.5, 1, 0, 0.5)
     end
-    if kind == "combat" then
-        if tex.SetAtlas then
-            SetAtlas(tex, "UI-HUD-UnitFrame-Player-PortraitCombatIcon")
-        else
-            SetTexture(tex, STATE_TEXTURE)
-            SetTexCoord(tex, 0.5, 1, 0, 0.5)
-        end
-    elseif kind == "resting" then
-        if tex.SetAtlas then
-            SetAtlas(tex, "UI-HUD-UnitFrame-Player-PortraitRestingIcon")
-        else
-            SetTexture(tex, STATE_TEXTURE)
-            SetTexCoord(tex, 0, 0.5, 0, 0.5)
-        end
-    elseif kind == "incomingRes" then
-        SetTexture(tex, READY_REZ_TEXTURE)
-        SetTexCoord(tex, 0, 1, 0, 1)
+  elseif kind == "resting" then
+    if tex.SetAtlas then
+      SetAtlas(tex, "UI-HUD-UnitFrame-Player-PortraitRestingIcon")
+    else
+      SetTexture(tex, STATE_TEXTURE)
+      SetTexCoord(tex, 0, 0.5, 0, 0.5)
     end
+  elseif kind == "incomingRes" then
+    SetTexture(tex, READY_REZ_TEXTURE)
+    SetTexCoord(tex, 0, 1, 0, 1)
+  end
 end
 
 local function UnitFramePVPContextualDisabled()
-    local gameRules = _G.C_GameRules
-    local enum = _G.Enum
-    local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
-    if gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil then
-        local ok, disabled = pcall(gameRules.IsGameRuleActive, rule)
-        return ok and disabled == true
-    end
-    return false
+  local gameRules = _G.C_GameRules
+  local enum = _G.Enum
+  local rule = enum and enum.GameRule and enum.GameRule.UnitFramePvPContextualDisabled
+  if gameRules and type(gameRules.IsGameRuleActive) == "function" and rule ~= nil then
+    local ok, disabled = pcall(gameRules.IsGameRuleActive, rule)
+    return ok and disabled == true
+  end
+  return false
 end
 
 local function PVPAtlasForFaction(factionGroup)
-    if factionGroup == "Horde" then
-        return PVP_HORDE_ATLAS
-    elseif factionGroup == "Alliance" then
-        return PVP_ALLIANCE_ATLAS
-    end
-    return nil
+  return PVP_ATLAS_BY_FACTION[factionGroup]
 end
 
 local function PVPFallbackTextureForAtlas(atlas)
-    if atlas == PVP_HORDE_ATLAS then
-        return PVP_HORDE_TEXTURE
-    elseif atlas == PVP_ALLIANCE_ATLAS then
-        return PVP_ALLIANCE_TEXTURE
-    end
-    return nil
+  return PVP_TEXTURE_BY_ATLAS[atlas]
 end
 
 local function ResolvePVPAtlas(unit)
-    if not (unit and UnitExistsSafe(unit)) then
-        return nil
+  if not (unit and UnitExistsSafe(unit)) then
+    return nil
+  end
+  if UnitFramePVPContextualDisabled() then
+    return nil
+  end
+  if UnitIsPVPFreeForAll and BoolTrue(UnitIsPVPFreeForAll(unit)) then
+    return PVP_FFA_ATLAS
+  end
+  if not (UnitIsPVP and UnitFactionGroup and BoolTrue(UnitIsPVP(unit))) then
+    return nil
+  end
+  local factionGroup = UnitFactionGroup(unit)
+  if issecretvalue(factionGroup) == true or not factionGroup or factionGroup == "Neutral" then
+    return nil
+  end
+  if unit == "player" and UnitIsMercenary and BoolTrue(UnitIsMercenary(unit)) then
+    if factionGroup == "Horde" then
+      factionGroup = "Alliance"
+    elseif factionGroup == "Alliance" then
+      factionGroup = "Horde"
     end
-    if UnitFramePVPContextualDisabled() then
-        return nil
-    end
-    if UnitIsPVPFreeForAll and BoolTrue(UnitIsPVPFreeForAll(unit)) then
-        return PVP_FFA_ATLAS
-    end
-    if not (UnitIsPVP and UnitFactionGroup and BoolTrue(UnitIsPVP(unit))) then
-        return nil
-    end
-    local factionGroup = UnitFactionGroup(unit)
-    if issecretvalue(factionGroup) == true or not factionGroup or factionGroup == "Neutral" then
-        return nil
-    end
-    if unit == "player" and UnitIsMercenary and BoolTrue(UnitIsMercenary(unit)) then
-        if factionGroup == "Horde" then
-            factionGroup = "Alliance"
-        elseif factionGroup == "Alliance" then
-            factionGroup = "Horde"
-        end
-    end
-    return PVPAtlasForFaction(factionGroup)
+  end
+  return PVPAtlasForFaction(factionGroup)
 end
 
 local function ResolvePVPTestAtlas(unit)
-    local factionGroup
-    if UnitFactionGroup then
-        factionGroup = UnitFactionGroup("player")
-    end
-    if issecretvalue(factionGroup) == true then
-        factionGroup = nil
-    end
-    return PVPAtlasForFaction(factionGroup) or PVP_ALLIANCE_ATLAS
+  local factionGroup
+  if UnitFactionGroup then
+    factionGroup = UnitFactionGroup("player")
+  end
+  if issecretvalue(factionGroup) == true then
+    factionGroup = nil
+  end
+  return PVPAtlasForFaction(factionGroup) or PVP_ALLIANCE_ATLAS
 end
 
 local function ApplyPVPTexture(tex, atlas)
-    if not (tex and atlas) then
-        return false
-    end
-    if tex.SetAtlas then
-        SetAtlas(tex, atlas)
-        return true
-    end
-    local fallback = PVPFallbackTextureForAtlas(atlas)
-    if fallback then
-        SetTexture(tex, fallback)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        return true
-    end
+  if not (tex and atlas) then
     return false
+  end
+  if tex.SetAtlas then
+    SetAtlas(tex, atlas)
+    return true
+  end
+  local fallback = PVPFallbackTextureForAtlas(atlas)
+  if fallback then
+    SetTexture(tex, fallback)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    return true
+  end
+  return false
 end
 
 local function ApplyLeaderTexture(tex, cfg, status, assist)
-    local gf = MSUF and MSUF.GF
-    local kind = status and status.kind
-    if gf and kind then
-        local resolver = assist and gf.GetAssistTexture or gf.GetLeaderTexture
-        if type(resolver) == "function" then
-            local path, l, r, t, b = resolver(kind, cfg and cfg.style)
-            if type(path) == "string" and path ~= "" then
-                SetTexture(tex, path)
-                SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
-                return
-            end
-        end
+  local gf = MSUF and MSUF.GF
+  local kind = status and status.kind
+  if gf and kind then
+    local resolver = assist and gf.GetAssistTexture or gf.GetLeaderTexture
+    if type(resolver) == "function" then
+      local path, l, r, t, b = resolver(kind, cfg and cfg.style)
+      if type(path) == "string" and path ~= "" then
+        SetTexture(tex, path)
+        SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+        return
+      end
     end
-    local style = cfg and cfg.style
-    if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
-        local resolver = assist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
-        if type(resolver) == "function" then
-            local path, l, r, t, b = resolver(style, status and status.useMidnight == true)
-            if type(path) == "string" and path ~= "" then
-                SetTexture(tex, path)
-                SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
-                return
-            end
-        end
+  end
+  local style = cfg and cfg.style
+  if type(style) == "string" and style ~= "" and style ~= "DEFAULT" and style ~= "BLIZZARD" then
+    local resolver = assist and _G.MSUF_GetAssistStatusIconTexture or _G.MSUF_GetLeaderStatusIconTexture
+    if type(resolver) == "function" then
+      local path, l, r, t, b = resolver(style, status and status.useMidnight == true)
+      if type(path) == "string" and path ~= "" then
+        SetTexture(tex, path)
+        SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+        return
+      end
     end
-    SetTexture(tex, assist and ASSIST_TEXTURE or LEADER_TEXTURE)
-    SetTexCoord(tex, 0, 1, 0, 1)
+  end
+  SetTexture(tex, assist and ASSIST_TEXTURE or LEADER_TEXTURE)
+  SetTexCoord(tex, 0, 1, 0, 1)
 end
 
 local function ApplyRoleTexture(tex, cfg, status, role)
-    local gf = MSUF and MSUF.GF
-    local kind = status and status.kind
-    if gf and kind and type(gf.GetRoleTexture) == "function" then
-        local path, l, r, t, b = gf.GetRoleTexture(kind, role, cfg and cfg.style)
-        if type(path) == "string" and path ~= "" then
-            SetTexture(tex, path)
-            SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
-            return true
-        end
+  local gf = MSUF and MSUF.GF
+  local kind = status and status.kind
+  if gf and kind and type(gf.GetRoleTexture) == "function" then
+    local path, l, r, t, b = gf.GetRoleTexture(kind, role, cfg and cfg.style)
+    if type(path) == "string" and path ~= "" then
+      SetTexture(tex, path)
+      SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+      return true
     end
-    local resolver = _G.MSUF_GetRoleStatusIconTexture
-    if type(resolver) == "function" then
-        local path, l, r, t, b = resolver(cfg and cfg.style, role, status and status.useMidnight == true)
-        if type(path) == "string" and path ~= "" then
-            SetTexture(tex, path)
-            SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
-            return true
-        end
+  end
+  local resolver = _G.MSUF_GetRoleStatusIconTexture
+  if type(resolver) == "function" then
+    local path, l, r, t, b = resolver(cfg and cfg.style, role, status and status.useMidnight == true)
+    if type(path) == "string" and path ~= "" then
+      SetTexture(tex, path)
+      SetTexCoord(tex, l or 0, r or 1, t or 0, b or 1)
+      return true
     end
-    return false
+  end
+  return false
 end
 
 local function HideField(frame, field)
-    SetShown(frame and frame[field], false)
+  SetShown(frame and frame[field], false)
+end
+
+local CONFIGURED_REGION_DEFS = {
+  -- key, field, groupField, hide, aliases, texture, text, state, clearSummon, resetTexCoord
+  { "raidMarker", "raidTargetIcon", "raidIcon", { "raidIcon", "raidTargetIcon" }, { "raidTargetIcon", "raidMarkerIndicator" }, RAID_MARKER_TEXTURE },
+  { "role", "roleIcon" },
+  { "leader", "LeaderIndicator", "leaderIcon", { "leaderIcon", "LeaderIndicator" }, { "LeaderIndicator", "leaderIcon" } },
+  { "assist", "assistIcon" },
+  { "level", "levelText", nil, nil, nil, nil, true },
+  { "raidGroup", "raidGroupNameText", nil, nil, nil, nil, true },
+  { "elite", "eliteIcon" },
+  { "statusText", "statusIndicatorText", nil, nil, nil, nil, true },
+  { "combat", "combatStateIndicatorIcon", nil, nil, nil, nil, nil, "combat" },
+  { "resting", "restingIndicatorIcon", nil, nil, nil, nil, nil, "resting" },
+  { "incomingRes", "incomingResIndicatorIcon", "resurrectIcon", { "resurrectIcon", "incomingResIndicatorIcon" }, { "incomingResIndicatorIcon", "IncomingResIndicator" }, nil, nil, "incomingRes" },
+  { "pvp", "pvpIndicatorIcon", "pvpIcon", { "pvpIcon", "pvpIndicatorIcon" }, { "pvpIndicatorIcon", "pvpIcon" } },
+  { "readyCheck", "readyCheckIcon" },
+  { "summon", "summonIcon", nil, nil, nil, nil, nil, nil, true },
+  { "phase", "phaseIcon", nil, nil, nil, PHASE_TEXTURE, nil, nil, nil, true },
+}
+
+local function HideConfiguredRegion(frame, def)
+  local hide = def[4]
+  if hide then
+    for i = 1, #hide do
+      HideField(frame, hide[i])
+    end
+  else
+    HideField(frame, def[2])
+  end
+  if def[9] and frame then
+    frame._msufGFSummonActive = false
+  end
+end
+
+local function ApplyConfiguredRegion(frame, spec, status, def)
+  local key, field, groupField, aliases, texture, text, state, resetTexCoord =
+    def[1], def[2], def[3], def[5], def[6], def[7], def[8], def[10]
+  local cfg = status[key]
+  if not (cfg and cfg.enabled) then
+    HideConfiguredRegion(frame, def)
+    return
+  end
+  field = status.group and groupField or field
+  local region = text and EnsureText(frame, field, cfg.layer) or EnsureTexture(frame, field, cfg.layer)
+  if aliases then
+    for i = 1, #aliases do
+      frame[aliases[i]] = region
+    end
+  end
+  if texture then
+    SetTexture(region, texture)
+  end
+  if resetTexCoord then
+    SetTexCoord(region, 0, 1, 0, 1)
+  end
+  if state then
+    ApplyStateIconTexture(region, state, cfg, status)
+  end
+  LayoutRegion(region, frame, spec, cfg, text)
 end
 
 local function ApplyConfiguredRegions(frame, spec)
-    local status = spec and spec.status
-    if not status then
-        return
-    end
-    local cfg = status.raidMarker
-    if cfg and cfg.enabled then
-        local tex = EnsureTexture(frame, status.group and "raidIcon" or "raidTargetIcon", cfg.layer)
-        frame.raidTargetIcon = tex
-        frame.raidMarkerIndicator = tex
-        SetTexture(tex, RAID_MARKER_TEXTURE)
-        LayoutRegion(tex, frame, spec, cfg)
-    else
-        HideField(frame, "raidIcon")
-        HideField(frame, "raidTargetIcon")
-    end
-
-    cfg = status.role
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureTexture(frame, "roleIcon", cfg.layer), frame, spec, cfg)
-    else
-        HideField(frame, "roleIcon")
-    end
-
-    cfg = status.leader
-    if cfg and cfg.enabled then
-        local tex = EnsureTexture(frame, status.group and "leaderIcon" or "LeaderIndicator", cfg.layer)
-        frame.LeaderIndicator = tex
-        frame.leaderIcon = tex
-        LayoutRegion(tex, frame, spec, cfg)
-    else
-        HideField(frame, "leaderIcon")
-        HideField(frame, "LeaderIndicator")
-    end
-
-    cfg = status.assist
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureTexture(frame, "assistIcon", cfg.layer), frame, spec, cfg)
-    else
-        HideField(frame, "assistIcon")
-    end
-
-    cfg = status.level
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureText(frame, "levelText", cfg.layer), frame, spec, cfg, true)
-    else
-        HideField(frame, "levelText")
-    end
-
-    cfg = status.raidGroup
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureText(frame, "raidGroupNameText", cfg.layer), frame, spec, cfg, true)
-    else
-        HideField(frame, "raidGroupNameText")
-    end
-
-    cfg = status.elite
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureTexture(frame, "eliteIcon", cfg.layer), frame, spec, cfg)
-    else
-        HideField(frame, "eliteIcon")
-    end
-
-    cfg = status.statusText
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureText(frame, "statusIndicatorText", cfg.layer), frame, spec, cfg, true)
-    else
-        HideField(frame, "statusIndicatorText")
-    end
-
-    cfg = status.combat
-    if cfg and cfg.enabled then
-        local tex = EnsureTexture(frame, "combatStateIndicatorIcon", cfg.layer)
-        ApplyStateIconTexture(tex, "combat", cfg, status)
-        LayoutRegion(tex, frame, spec, cfg)
-    else
-        HideField(frame, "combatStateIndicatorIcon")
-    end
-
-    cfg = status.resting
-    if cfg and cfg.enabled then
-        local tex = EnsureTexture(frame, "restingIndicatorIcon", cfg.layer)
-        ApplyStateIconTexture(tex, "resting", cfg, status)
-        LayoutRegion(tex, frame, spec, cfg)
-    else
-        HideField(frame, "restingIndicatorIcon")
-    end
-
-    cfg = status.incomingRes
-    if cfg and cfg.enabled then
-        local tex = EnsureTexture(frame, status.group and "resurrectIcon" or "incomingResIndicatorIcon", cfg.layer)
-        frame.incomingResIndicatorIcon = tex
-        frame.IncomingResIndicator = tex
-        ApplyStateIconTexture(tex, "incomingRes", cfg, status)
-        LayoutRegion(tex, frame, spec, cfg)
-    else
-        HideField(frame, "resurrectIcon")
-        HideField(frame, "incomingResIndicatorIcon")
-    end
-
-    cfg = status.pvp
-    if cfg and cfg.enabled then
-        local tex = EnsureTexture(frame, status.group and "pvpIcon" or "pvpIndicatorIcon", cfg.layer)
-        frame.pvpIndicatorIcon = tex
-        frame.pvpIcon = tex
-        LayoutRegion(tex, frame, spec, cfg)
-    else
-        HideField(frame, "pvpIcon")
-        HideField(frame, "pvpIndicatorIcon")
-    end
-
-    cfg = status.readyCheck
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureTexture(frame, "readyCheckIcon", cfg.layer), frame, spec, cfg)
-    else
-        HideField(frame, "readyCheckIcon")
-    end
-
-    cfg = status.summon
-    if cfg and cfg.enabled then
-        LayoutRegion(EnsureTexture(frame, "summonIcon", cfg.layer), frame, spec, cfg)
-    else
-        HideField(frame, "summonIcon")
-        frame._msufGFSummonActive = false
-    end
-
-    cfg = status.phase
-    if cfg and cfg.enabled then
-        local tex = EnsureTexture(frame, "phaseIcon", cfg.layer)
-        SetTexture(tex, PHASE_TEXTURE)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        LayoutRegion(tex, frame, spec, cfg)
-    else
-        HideField(frame, "phaseIcon")
-    end
+  local status = spec and spec.status
+  if not status then
+    return
+  end
+  for i = 1, #CONFIGURED_REGION_DEFS do
+    ApplyConfiguredRegion(frame, spec, status, CONFIGURED_REGION_DEFS[i])
+  end
 end
 
 local function UpdateRaidMarker(frame, status)
-    local cfg = status and status.raidMarker
-    local tex = frame.raidTargetIcon
-    local unit = frame.unit
-    local exists = UnitExistsSafe(unit)
-    if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and exists) then
-        if tex then
-            tex._msufRaidMarkerIndex = nil
-            SetShown(tex, false)
-        end
-        return
+  local cfg = status and status.raidMarker
+  local tex = frame.raidTargetIcon
+  local unit = frame.unit
+  local exists = UnitExistsSafe(unit)
+  if not (cfg and cfg.enabled and tex and GetRaidTargetIndex and SetRaidTargetIconTexture and exists) then
+    if tex then
+      tex._msufRaidMarkerIndex = nil
+      SetShown(tex, false)
     end
-    local index = GetRaidTargetIndex(unit)
-    if issecretvalue(index) == true then
-        tex._msufRaidMarkerIndex = nil
-        SetRaidTargetIconTexture(tex, index)
-        SetShown(tex, true)
-        return
-    end
-    if not index then
-        tex._msufRaidMarkerIndex = nil
-        SetShown(tex, false)
-        return
-    end
-    -- We never store a secret value in `_msufRaidMarkerIndex`, so the cached
-    -- field is always nil or a clean number. The `~= index` comparison can
-    -- only taint when `index` itself is secret, so guard with IsSecret. The
-    -- common cache-hit path on group frames short-circuits via `status.group`
-    -- and never reaches IsSecret; non-group frames pay one C call per Update.
-    if (status and status.group) or issecretvalue(index) == true then
-        tex._msufRaidMarkerIndex = nil
-        SetRaidTargetIconTexture(tex, index)
-    elseif tex._msufRaidMarkerIndex ~= index then
-        SetRaidTargetIconTexture(tex, index)
-        tex._msufRaidMarkerIndex = index
-    end
+    return
+  end
+  local index = GetRaidTargetIndex(unit)
+  if issecretvalue(index) == true then
+    tex._msufRaidMarkerIndex = nil
+    SetRaidTargetIconTexture(tex, index)
     SetShown(tex, true)
+    return
+  end
+  if not index then
+    tex._msufRaidMarkerIndex = nil
+    SetShown(tex, false)
+    return
+  end
+  if (status and status.group) or issecretvalue(index) == true then
+    tex._msufRaidMarkerIndex = nil
+    SetRaidTargetIconTexture(tex, index)
+  elseif tex._msufRaidMarkerIndex ~= index then
+    SetRaidTargetIconTexture(tex, index)
+    tex._msufRaidMarkerIndex = index
+  end
+  SetShown(tex, true)
 end
 
 local function UpdateLeader(frame, status)
-    local cfg = status and status.leader
-    local tex = frame.LeaderIndicator
-    local unit = frame.unit
-    local exists = UnitExistsSafe(unit)
-    if not (cfg and cfg.enabled and tex and exists) then
-        SetShown(tex, false)
-        return
-    end
-    local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
-    local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
-    local leader = BoolTrue(isLeader)
-    local assist = (not leader) and BoolTrue(isAssist)
-    if leader or assist then
-        ApplyLeaderTexture(tex, cfg, status, assist)
-        SetShown(tex, true)
-    else
-        SetShown(tex, false)
-    end
+  local cfg = status and status.leader
+  local tex = frame.LeaderIndicator
+  local unit = frame.unit
+  local exists = UnitExistsSafe(unit)
+  if not (cfg and cfg.enabled and tex and exists) then
+    SetShown(tex, false)
+    return
+  end
+  local isLeader = UnitIsGroupLeader and UnitIsGroupLeader(unit)
+  local isAssist = UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
+  local leader = BoolTrue(isLeader)
+  local assist = (not leader) and BoolTrue(isAssist)
+  if leader or assist then
+    ApplyLeaderTexture(tex, cfg, status, assist)
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
 end
 
 local function UpdateLeaderPair(frame, status)
-    local unit = frame and frame.unit
-    local leaderCfg = status and status.leader
-    local assistCfg = status and status.assist
-    local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
-    local assistTex = frame and frame.assistIcon
-    local exists = UnitExistsSafe(unit)
-    local leaderRaw = exists and UnitIsGroupLeader and UnitIsGroupLeader(unit)
-    local leader = BoolTrue(leaderRaw)
-    local assistRaw = exists and (not leader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
-    local assist = BoolTrue(assistRaw)
+  local unit = frame and frame.unit
+  local leaderCfg = status and status.leader
+  local assistCfg = status and status.assist
+  local leaderTex = frame and (frame.leaderIcon or frame.LeaderIndicator)
+  local assistTex = frame and frame.assistIcon
+  local exists = UnitExistsSafe(unit)
+  local leaderRaw = exists and UnitIsGroupLeader and UnitIsGroupLeader(unit)
+  local leader = BoolTrue(leaderRaw)
+  local assistRaw = exists and (not leader) and UnitIsGroupAssistant and UnitIsGroupAssistant(unit)
+  local assist = BoolTrue(assistRaw)
 
-    local showLeader = leaderCfg and leaderCfg.enabled and leaderTex and leader
-    local showAssist = assistCfg and assistCfg.enabled and assistTex and assist
-    local state = (showLeader and 1 or 0) + (showAssist and 2 or 0)
-    local serial = frame and frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial or 0
-    if frame
-        and frame._msufLeaderPairState == state
-        and frame._msufLeaderPairSerial == serial
-        and (not leaderTex or leaderTex._msufStatusShown == (showLeader and true or false))
-        and (not assistTex or assistTex._msufStatusShown == (showAssist and true or false)) then
-        return
-    end
-    if frame then
-        frame._msufLeaderPairState = state
-        frame._msufLeaderPairSerial = serial
-    end
+  local showLeader = leaderCfg and leaderCfg.enabled and leaderTex and leader
+  local showAssist = assistCfg and assistCfg.enabled and assistTex and assist
+  local state = (showLeader and 1 or 0) + (showAssist and 2 or 0)
+  local serial = frame and (frame._msufStatusIndicatorSerial
+    or (frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial)
+    or 0)
+  if frame
+    and frame._msufLeaderPairState == state
+    and frame._msufLeaderPairSerial == serial
+    and (not leaderTex or leaderTex._msufStatusShown == (showLeader and true or false))
+    and (not assistTex or assistTex._msufStatusShown == (showAssist and true or false)) then
+    return
+  end
+  if frame then
+    frame._msufLeaderPairState = state
+    frame._msufLeaderPairSerial = serial
+  end
 
-    if showLeader then
-        ApplyLeaderTexture(leaderTex, leaderCfg, status, false)
-        SetShown(leaderTex, true)
-    else
-        SetShown(leaderTex, false)
-    end
+  if showLeader then
+    ApplyLeaderTexture(leaderTex, leaderCfg, status, false)
+    SetShown(leaderTex, true)
+  else
+    SetShown(leaderTex, false)
+  end
 
-    if showAssist then
-        ApplyLeaderTexture(assistTex, assistCfg, status, true)
-        SetShown(assistTex, true)
-    else
-        SetShown(assistTex, false)
-    end
+  if showAssist then
+    ApplyLeaderTexture(assistTex, assistCfg, status, true)
+    SetShown(assistTex, true)
+  else
+    SetShown(assistTex, false)
+  end
 end
 
 local function CancelReadyCheckTimer(frame)
-    if frame then
-        READY_CHECK_TIMERS[frame] = nil
-    end
+  if frame then
+    READY_CHECK_TIMERS[frame] = nil
+  end
 end
 
 local ReadyCheckTimerCallback
 
 local function ArmReadyCheckTimer(when)
-    if not (C_Timer and C_Timer.After) then return end
-    if READY_CHECK_TIMER_AT and READY_CHECK_TIMER_AT <= when then return end
-    READY_CHECK_TIMER_AT = when
-    local now = GetTime and GetTime() or 0
-    local delay = when - now
-    C_Timer.After(delay > 0 and delay or 0, ReadyCheckTimerCallback)
+  if not (C_Timer and C_Timer.After) then return end
+  if READY_CHECK_TIMER_AT and READY_CHECK_TIMER_AT <= when then return end
+  READY_CHECK_TIMER_AT = when
+  local now = GetTime and GetTime() or 0
+  local delay = when - now
+  C_Timer.After(delay > 0 and delay or 0, ReadyCheckTimerCallback)
 end
 
 ReadyCheckTimerCallback = function()
-    READY_CHECK_TIMER_AT = nil
-    local now = GetTime and GetTime() or 0
-    local nextAt
-    local out = READY_CHECK_HEAD
-    local last = READY_CHECK_TAIL
+  READY_CHECK_TIMER_AT = nil
+  local now = GetTime and GetTime() or 0
+  local nextAt
+  local out = READY_CHECK_HEAD
+  local last = READY_CHECK_TAIL
 
-    for i = READY_CHECK_HEAD, last do
-        local frame = READY_CHECK_LIST[i]
-        local due = frame and READY_CHECK_TIMERS[frame]
-        if not due then
-            READY_CHECK_LIST[i] = nil
-        elseif now >= due then
-            READY_CHECK_TIMERS[frame] = nil
-            READY_CHECK_LIST[i] = nil
-            SetShown(frame.readyCheckIcon, false)
-        else
-            if out ~= i then
-                READY_CHECK_LIST[out] = frame
-                READY_CHECK_LIST[i] = nil
-            end
-            out = out + 1
-            if not nextAt or due < nextAt then
-                nextAt = due
-            end
+  for i = READY_CHECK_HEAD, last do
+    local frame = READY_CHECK_LIST[i]
+    local due = frame and READY_CHECK_TIMERS[frame]
+    if not due then
+      READY_CHECK_LIST[i] = nil
+    elseif now >= due then
+      READY_CHECK_TIMERS[frame] = nil
+      READY_CHECK_LIST[i] = nil
+      SetShown(frame.readyCheckIcon, false)
+    else
+      if out ~= i then
+        READY_CHECK_LIST[out] = frame
+        READY_CHECK_LIST[i] = nil
+      end
+      out = out + 1
+      if not nextAt or due < nextAt then
+        nextAt = due
+      end
+    end
+  end
+
+  local appendedTail = READY_CHECK_TAIL
+  if appendedTail > last then
+    for i = last + 1, appendedTail do
+      local frame = READY_CHECK_LIST[i]
+      local due = frame and READY_CHECK_TIMERS[frame]
+      if due then
+        if out ~= i then
+          READY_CHECK_LIST[out] = frame
+          READY_CHECK_LIST[i] = nil
         end
-    end
-
-    local appendedTail = READY_CHECK_TAIL
-    if appendedTail > last then
-        for i = last + 1, appendedTail do
-            local frame = READY_CHECK_LIST[i]
-            local due = frame and READY_CHECK_TIMERS[frame]
-            if due then
-                if out ~= i then
-                    READY_CHECK_LIST[out] = frame
-                    READY_CHECK_LIST[i] = nil
-                end
-                out = out + 1
-                if not nextAt or due < nextAt then
-                    nextAt = due
-                end
-            else
-                READY_CHECK_LIST[i] = nil
-            end
+        out = out + 1
+        if not nextAt or due < nextAt then
+          nextAt = due
         end
+      else
+        READY_CHECK_LIST[i] = nil
+      end
     end
+  end
 
-    READY_CHECK_HEAD = 1
-    READY_CHECK_TAIL = out - 1
-    if READY_CHECK_TAIL <= 0 then
-        READY_CHECK_TAIL = 0
-    end
-    if nextAt then
-        ArmReadyCheckTimer(nextAt)
-    end
+  READY_CHECK_HEAD = 1
+  READY_CHECK_TAIL = out - 1
+  if READY_CHECK_TAIL <= 0 then
+    READY_CHECK_TAIL = 0
+  end
+  if nextAt then
+    ArmReadyCheckTimer(nextAt)
+  end
 end
 
 local function QueueReadyCheckHide(frame)
-    if not (frame and C_Timer and C_Timer.After) then return end
-    local now = GetTime and GetTime() or 0
-    local due = now + 6
-    local known = READY_CHECK_TIMERS[frame] ~= nil
-    READY_CHECK_TIMERS[frame] = due
-    if not known then
-        READY_CHECK_TAIL = READY_CHECK_TAIL + 1
-        READY_CHECK_LIST[READY_CHECK_TAIL] = frame
-    end
-    ArmReadyCheckTimer(due)
+  if not (frame and C_Timer and C_Timer.After) then return end
+  local now = GetTime and GetTime() or 0
+  local due = now + 6
+  local known = READY_CHECK_TIMERS[frame] ~= nil
+  READY_CHECK_TIMERS[frame] = due
+  if not known then
+    READY_CHECK_TAIL = READY_CHECK_TAIL + 1
+    READY_CHECK_LIST[READY_CHECK_TAIL] = frame
+  end
+  ArmReadyCheckTimer(due)
 end
 
 local function UpdatePowerRoleVisibility(frame, status)
-    local spec = frame and frame.MSUFSpec
-    if not (frame and (frame._msufGFKind or (spec and spec.scope == "group"))) then
-        if frame then
-            frame._msufGFPowRoleHidden = nil
-        end
-        return false
+  local spec = frame and frame.MSUFSpec
+  if not (frame and (frame._msufGFKind or (spec and spec.scope == "group"))) then
+    if frame then
+      frame._msufGFPowRoleHidden = nil
     end
-    local bar = frame and (frame.power or frame.Power or frame.powerBar or frame.targetPowerBar)
-    if not bar then
-        return false
+    return false
+  end
+  local bar = frame and (frame.power or frame.Power or frame.powerBar or frame.targetPowerBar)
+  if not bar then
+    return false
+  end
+  local unit = frame.unit
+  local c = frame._c
+  local gf = MSUF and MSUF.GF
+  local role = status and status.roleValue
+  if not role then
+    if gf and type(gf.GetUnitGroupRole) == "function" then
+      role = gf.GetUnitGroupRole(unit)
+    else
+      role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or "DAMAGER"
     end
-    local unit = frame.unit
-    local c = frame._c
-    local gf = MSUF and MSUF.GF
-    local role = status and status.roleValue
-    if not role then
-        if gf and type(gf.GetUnitGroupRole) == "function" then
-            role = gf.GetUnitGroupRole(unit)
-        else
-            role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or "DAMAGER"
-        end
-    end
-    if issecretvalue(role) == true then
-        role = nil
-    end
-    if gf and type(gf.NormalizeGroupRole) == "function" then
-        role = gf.NormalizeGroupRole(role)
-    elseif role ~= "TANK" and role ~= "HEALER" and role ~= "DAMAGER" then
-        role = "DAMAGER"
-    end
+  end
+  if issecretvalue(role) == true then
+    role = nil
+  end
+  if gf and type(gf.NormalizeGroupRole) == "function" then
+    role = gf.NormalizeGroupRole(role)
+  elseif role ~= "TANK" and role ~= "HEALER" and role ~= "DAMAGER" then
+    role = "DAMAGER"
+  end
 
-    local hidden = false
-    if gf and type(gf.GetEffectivePowerHeight) == "function" then
-        hidden = gf.GetEffectivePowerHeight(frame._msufGFKind or status and status.kind or "party", unit, role) <= 0
-    elseif c then
-        hidden = (role == "TANK" and not c.powTank)
-            or (role == "HEALER" and not c.powHealer)
-            or (role == "DAMAGER" and not c.powDPS) or false
-    end
+  local hidden = false
+  if gf and type(gf.GetEffectivePowerHeight) == "function" then
+    hidden = gf.GetEffectivePowerHeight(frame._msufGFKind or status and status.kind or "party", unit, role) <= 0
+  elseif c then
+    hidden = (role == "TANK" and not c.powTank)
+      or (role == "HEALER" and not c.powHealer)
+      or (role == "DAMAGER" and not c.powDPS) or false
+  end
 
-    local prev = frame._msufGFPowRoleHidden
-    frame._msufGFPowRoleHidden = hidden or nil
-    if prev ~= nil and prev ~= hidden then
-        if frame._msufGFRegEv and gf and type(gf.RegisterUnitEvents) == "function" and unit then
-            gf.RegisterUnitEvents(frame, unit)
-        end
-        if not (InCombatLockdown and InCombatLockdown()) and gf and type(gf.MarkDirty) == "function" then
-            gf.MarkDirty(frame, (gf.DIRTY_GEOMETRY or 0x01) + (gf.DIRTY_LAYOUT or 0x20))
-        end
+  local prev = frame._msufGFPowRoleHidden
+  frame._msufGFPowRoleHidden = hidden or nil
+  if prev ~= nil and prev ~= hidden then
+    if frame._msufGFRegEv and gf and type(gf.RegisterUnitEvents) == "function" and unit then
+      gf.RegisterUnitEvents(frame, unit)
     end
-    return hidden
+    if not (InCombatLockdown and InCombatLockdown()) and gf and type(gf.MarkDirty) == "function" then
+      gf.MarkDirty(frame, (gf.DIRTY_GEOMETRY or 0x01) + (gf.DIRTY_LAYOUT or 0x20))
+    end
+  end
+  return hidden
 end
 
 local function UpdateRole(frame, status)
-    local cfg = status and status.role
-    local tex = frame and frame.roleIcon
-    local unit = frame and frame.unit
-    local exists = UnitExistsSafe(unit)
-    local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
-    if issecretvalue(role) == true then role = nil end
-    if role == "NONE" then role = nil end
-    if status then status.roleValue = role end
-    UpdatePowerRoleVisibility(frame, status)
+  local cfg = status and status.role
+  local tex = frame and frame.roleIcon
+  local unit = frame and frame.unit
+  local exists = UnitExistsSafe(unit)
+  local role = UnitGroupRolesAssigned and unit and UnitGroupRolesAssigned(unit) or nil
+  if issecretvalue(role) == true then role = nil end
+  if role == "NONE" then role = nil end
+  if status then status.roleValue = role end
+  UpdatePowerRoleVisibility(frame, status)
 
-    if not (cfg and cfg.enabled and tex and exists and role) then
-        SetShown(tex, false)
-        return
-    end
-    if (role == "TANK" and cfg.showTank == false)
-        or (role == "HEALER" and cfg.showHealer == false)
-        or (role == "DAMAGER" and cfg.showDPS == false) then
-        SetShown(tex, false)
-        return
-    end
-    if ApplyRoleTexture(tex, cfg, status, role) then
-        SetShown(tex, true)
-    else
-        SetShown(tex, false)
-    end
+  if not (cfg and cfg.enabled and tex and exists and role) then
+    SetShown(tex, false)
+    return
+  end
+  if (role == "TANK" and cfg.showTank == false)
+    or (role == "HEALER" and cfg.showHealer == false)
+    or (role == "DAMAGER" and cfg.showDPS == false) then
+    SetShown(tex, false)
+    return
+  end
+  if ApplyRoleTexture(tex, cfg, status, role) then
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
 end
 
 local function UpdateReadyCheck(frame, status, event)
-    local cfg = status and status.readyCheck
-    local tex = frame and frame.readyCheckIcon
-    local unit = frame and frame.unit
-    if not (cfg and cfg.enabled and tex and unit) then
-        SetShown(tex, false)
-        CancelReadyCheckTimer(frame)
-        return
-    end
+  local cfg = status and status.readyCheck
+  local tex = frame and frame.readyCheckIcon
+  local unit = frame and frame.unit
+  if not (cfg and cfg.enabled and tex and unit) then
+    SetShown(tex, false)
+    CancelReadyCheckTimer(frame)
+    return
+  end
 
-    local ready = GetReadyCheckStatus and GetReadyCheckStatus(unit)
-    if ready == "ready" then
-        CancelReadyCheckTimer(frame)
-        SetTexture(tex, READY_TEXTURE_READY)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        SetShown(tex, true)
-    elseif ready == "notready" then
-        CancelReadyCheckTimer(frame)
-        SetTexture(tex, READY_TEXTURE_NOT_READY)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        SetShown(tex, true)
-    elseif ready == "waiting" then
-        CancelReadyCheckTimer(frame)
-        SetTexture(tex, READY_TEXTURE_WAITING)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        SetShown(tex, true)
-    elseif event == "READY_CHECK_FINISHED" and tex.IsShown and tex:IsShown() and C_Timer and C_Timer.After then
-        QueueReadyCheckHide(frame)
-    else
-        SetShown(tex, false)
-    end
+  local ready = GetReadyCheckStatus and GetReadyCheckStatus(unit)
+  local texture = READY_TEXTURES[ready]
+  if texture then
+    CancelReadyCheckTimer(frame)
+    SetTexture(tex, texture)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    SetShown(tex, true)
+  elseif event == "READY_CHECK_FINISHED" and tex.IsShown and tex:IsShown() and C_Timer and C_Timer.After then
+    QueueReadyCheckHide(frame)
+  else
+    SetShown(tex, false)
+  end
 end
 
 local function UpdateSummon(frame, status)
-    local cfg = status and status.summon
-    local tex = frame and frame.summonIcon
-    local unit = frame and frame.unit
-    if not (cfg and cfg.enabled and tex and unit) then
-        SetShown(tex, false)
-        if frame then frame._msufGFSummonActive = false end
-        return
-    end
-    local summonStatus
-    if C_IncomingSummon and C_IncomingSummon.IncomingSummonStatus then
-        summonStatus = C_IncomingSummon.IncomingSummonStatus(unit)
-    end
-    if issecretvalue(summonStatus) == true then
-        summonStatus = nil
-    end
-    local texture = summonStatus and SUMMON_TEXTURES[summonStatus]
-    if texture then
-        SetTexture(tex, texture)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        SetShown(tex, true)
-        frame._msufGFSummonActive = true
-    else
-        SetShown(tex, false)
-        frame._msufGFSummonActive = false
-    end
+  local cfg = status and status.summon
+  local tex = frame and frame.summonIcon
+  local unit = frame and frame.unit
+  if not (cfg and cfg.enabled and tex and unit) then
+    SetShown(tex, false)
+    if frame then frame._msufGFSummonActive = false end
+    return
+  end
+  local summonStatus
+  if C_IncomingSummon and C_IncomingSummon.IncomingSummonStatus then
+    summonStatus = C_IncomingSummon.IncomingSummonStatus(unit)
+  end
+  if issecretvalue(summonStatus) == true then
+    summonStatus = nil
+  end
+  local texture = summonStatus and SUMMON_TEXTURES[summonStatus]
+  if texture then
+    SetTexture(tex, texture)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    SetShown(tex, true)
+    frame._msufGFSummonActive = true
+  else
+    SetShown(tex, false)
+    frame._msufGFSummonActive = false
+  end
 end
 
 local function UpdatePhase(frame, status)
-    local cfg = status and status.phase
-    local tex = frame and frame.phaseIcon
-    local unit = frame and frame.unit
-    if not (cfg and cfg.enabled and tex and unit) then
-        SetShown(tex, false)
-        return
-    end
-    local reason
-    local isPlayer = UnitIsPlayer and UnitIsPlayer(unit)
-    if BoolTrue(isPlayer) and UnitPhaseReason then
-        reason = UnitPhaseReason(unit)
-    end
-    if issecretvalue(reason) ~= true and reason then
-        SetTexture(tex, PHASE_TEXTURE)
-        SetTexCoord(tex, 0, 1, 0, 1)
-        SetShown(tex, true)
-    else
-        SetShown(tex, false)
-    end
+  local cfg = status and status.phase
+  local tex = frame and frame.phaseIcon
+  local unit = frame and frame.unit
+  if not (cfg and cfg.enabled and tex and unit) then
+    SetShown(tex, false)
+    return
+  end
+  local reason
+  local isPlayer = UnitIsPlayer and UnitIsPlayer(unit)
+  if BoolTrue(isPlayer) and UnitPhaseReason then
+    reason = UnitPhaseReason(unit)
+  end
+  if issecretvalue(reason) ~= true and reason then
+    SetTexture(tex, PHASE_TEXTURE)
+    SetTexCoord(tex, 0, 1, 0, 1)
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
 end
 
 local function UpdateLevel(frame, status)
-    local cfg = status and status.level
-    local fs = frame.levelText
-    local unit = frame.unit
-    local exists = UnitExistsSafe(unit)
-    if not (cfg and cfg.enabled and fs and UnitLevel and exists) then
-        SetShown(fs, false)
-        return
-    end
-    local level = UnitLevel(unit)
-    level = SafeNumber(level)
-    if not level then
-        SetShown(fs, false)
-    elseif level == -1 then
-        SetText(fs, "??")
-        SetShown(fs, true)
-    else
-        SetText(fs, tostring(level))
-        SetShown(fs, true)
-    end
+  local cfg = status and status.level
+  local fs = frame.levelText
+  local unit = frame.unit
+  local exists = UnitExistsSafe(unit)
+  if not (cfg and cfg.enabled and fs and UnitLevel and exists) then
+    SetShown(fs, false)
+    return
+  end
+  local level = UnitLevel(unit)
+  level = SafeNumber(level)
+  if not level then
+    SetShown(fs, false)
+  elseif level == -1 then
+    SetText(fs, "??")
+    SetShown(fs, true)
+  else
+    SetText(fs, tostring(level))
+    SetShown(fs, true)
+  end
 end
 
 local function RaidGroupText(style, subgroup)
-    if style == "BRACKET" then
-        return "[" .. subgroup .. "]"
-    elseif style == "NONE" then
-        return tostring(subgroup)
-    end
-    return "(" .. subgroup .. ")"
+  if style == "BRACKET" then
+    return "[" .. subgroup .. "]"
+  elseif style == "NONE" then
+    return tostring(subgroup)
+  end
+  return "(" .. subgroup .. ")"
 end
 
 local function UpdateRaidGroup(frame, status)
-    local cfg = status and status.raidGroup
-    local fs = frame.raidGroupNameText
-    local unit = frame.unit
-    local exists = UnitExistsSafe(unit)
-    if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and exists) then
-        SetShown(fs, false)
-        return
+  local cfg = status and status.raidGroup
+  local fs = frame.raidGroupNameText
+  local unit = frame.unit
+  local exists = UnitExistsSafe(unit)
+  if not (cfg and cfg.enabled and fs and UnitInRaid and GetRaidRosterInfo and exists) then
+    SetShown(fs, false)
+    return
+  end
+  local index = UnitInRaid(unit)
+  index = SafeNumber(index)
+  local subgroup
+  if index then
+    local _, _, sg = GetRaidRosterInfo(index)
+    if type(sg) == "number" and sg > 0 then
+      subgroup = sg
     end
-    local index = UnitInRaid(unit)
-    index = SafeNumber(index)
-    local subgroup
-    if index then
-        local _, _, sg = GetRaidRosterInfo(index)
-        if type(sg) == "number" and sg > 0 then
-            subgroup = sg
-        end
-    end
-    -- Change-detection guard mirroring UpdateLeaderPair: a unit's subgroup almost
-    -- never changes mid-fight, yet GROUP_ROSTER_UPDATE bursts re-run this for every
-    -- raid frame. Bail before RaidGroupText() (a string allocation) and the setters
-    -- when the resolved subgroup is unchanged. The compile serial invalidates the
-    -- cache on config/style change; the _msufStatusShown check keeps the cache
-    -- honest if the region's shown state was altered elsewhere.
-    local serial = frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial or 0
-    if frame._msufRaidGroupSubgroup == subgroup
-        and frame._msufRaidGroupSerial == serial
-        and fs._msufStatusShown == (subgroup ~= nil) then
-        return
-    end
-    frame._msufRaidGroupSubgroup = subgroup
-    frame._msufRaidGroupSerial = serial
-    if subgroup then
-        SetText(fs, RaidGroupText(cfg.style, subgroup))
-        SetShown(fs, true)
-    else
-        SetShown(fs, false)
-    end
+  end
+  local serial = frame._msufStatusIndicatorSerial
+    or (frame.MSUFSpec and frame.MSUFSpec._msufGFCompileSerial)
+    or 0
+  if frame._msufRaidGroupSubgroup == subgroup
+    and frame._msufRaidGroupSerial == serial
+    and fs._msufStatusShown == (subgroup ~= nil) then
+    return
+  end
+  frame._msufRaidGroupSubgroup = subgroup
+  frame._msufRaidGroupSerial = serial
+  if subgroup then
+    SetText(fs, RaidGroupText(cfg.style, subgroup))
+    SetShown(fs, true)
+  else
+    SetShown(fs, false)
+  end
 end
 
 local function EliteAtlas(state)
-    if state == "BOSS" then
-        return "nameplates-icon-elite-gold"
-    end
-    return "nameplates-icon-elite-silver"
+  if state == "BOSS" then
+    return "nameplates-icon-elite-gold"
+  end
+  return "nameplates-icon-elite-silver"
 end
 
 local function EliteState(unit)
-    local exists = UnitExistsSafe(unit)
-    if not (UnitClassification and exists) then
-        return nil
-    end
-    local class = UnitClassification(unit)
-    if issecretvalue(class) == true then
-        return nil
-    end
-    if class == "worldboss" then
-        return "BOSS"
-    elseif class == "rareelite" then
-        return "RAREELITE"
-    elseif class == "rare" then
-        return "RARE"
-    elseif class == "elite" then
-        return "ELITE"
-    end
-    if UnitLevel then
-        local level = UnitLevel(unit)
-        if SafeNumber(level) == -1 then
-            return "BOSS"
-        end
-    end
+  local exists = UnitExistsSafe(unit)
+  if not (UnitClassification and exists) then
     return nil
+  end
+  local class = UnitClassification(unit)
+  if issecretvalue(class) == true then
+    return nil
+  end
+  if class == "worldboss" then
+    return "BOSS"
+  elseif class == "rareelite" then
+    return "RAREELITE"
+  elseif class == "rare" then
+    return "RARE"
+  elseif class == "elite" then
+    return "ELITE"
+  end
+  if UnitLevel then
+    local level = UnitLevel(unit)
+    if SafeNumber(level) == -1 then
+      return "BOSS"
+    end
+  end
+  return nil
 end
 
 local function UpdateElite(frame, status)
-    local cfg = status and status.elite
-    local tex = frame.eliteIcon
-    if not (cfg and cfg.enabled and tex) then
-        SetShown(tex, false)
-        return
-    end
-    local state = status.testMode and "BOSS" or EliteState(frame.unit)
-    if state then
-        if tex.SetAtlas then
-            SetAtlas(tex, EliteAtlas(state))
-        else
-            SetTexture(tex, "Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
-            SetTexCoord(tex, 0, 1, 0, 1)
-        end
-        SetShown(tex, true)
+  local cfg = status and status.elite
+  local tex = frame.eliteIcon
+  if not (cfg and cfg.enabled and tex) then
+    SetShown(tex, false)
+    return
+  end
+  local state = status.testMode and "BOSS" or EliteState(frame.unit)
+  if state then
+    if tex.SetAtlas then
+      SetAtlas(tex, EliteAtlas(state))
     else
-        SetShown(tex, false)
+      SetTexture(tex, "Interface\\TargetingFrame\\UI-TargetingFrame-Skull")
+      SetTexCoord(tex, 0, 1, 0, 1)
     end
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
 end
 
 local function StatusText(frame, cfg, unitState)
-    local unit = frame.unit
-    if cfg and cfg.showDead then
-        local connected, connectedKnown = ReadConnectedCached(frame, unit, unitState)
-        if connectedKnown == true and connected == false then
-            return "OFFLINE", "dead"
-        end
+  local unit = frame.unit
+  if cfg and cfg.showDead then
+    local connected, connectedKnown = ReadConnectedCached(frame, unit, unitState)
+    if connectedKnown == true and connected == false then
+      return "OFFLINE", "dead"
     end
-    if cfg and cfg.showGhost and UnitIsGhost then
-        local ghost = UnitIsGhost(unit)
-        if BoolTrue(ghost) then
-            return "GHOST", "ghost"
-        end
+  end
+  if cfg and cfg.showGhost and UnitIsGhost then
+    local ghost = UnitIsGhost(unit)
+    if BoolTrue(ghost) then
+      return "GHOST", "ghost"
     end
-    if cfg and cfg.showDead then
-        local dead, deadKnown = ReadDeadCached(frame, unit, unitState)
-        if deadKnown == true and dead == true then
-            return "DEAD", "dead"
-        end
+  end
+  if cfg and cfg.showDead then
+    local dead, deadKnown = ReadDeadCached(frame, unit, unitState)
+    if deadKnown == true and dead == true then
+      return "DEAD", "dead"
     end
-    if cfg and cfg.showAFK and UnitIsAFK then
-        local afk = UnitIsAFK(unit)
-        if BoolTrue(afk) then
-            return "AFK", "afk"
-        end
+  end
+  if cfg and cfg.showAFK and UnitIsAFK then
+    local afk = UnitIsAFK(unit)
+    if BoolTrue(afk) then
+      return "AFK", "afk"
     end
-    if cfg and cfg.showDND and UnitIsDND then
-        local dnd = UnitIsDND(unit)
-        if BoolTrue(dnd) then
-            return "DND", "afk"
-        end
+  end
+  if cfg and cfg.showDND and UnitIsDND then
+    local dnd = UnitIsDND(unit)
+    if BoolTrue(dnd) then
+      return "DND", "afk"
     end
-    return nil
+  end
+  return nil
 end
 
 local function StatusTextConnectionKey(frame, cfg, unitState)
-    if not (cfg and cfg.showDead == true) then
-        return 0
-    end
-    local unit = frame and frame.unit
-    if not unit then
-        return nil
-    end
-    local connected, known = ReadConnectedCached(frame, unit, unitState)
-    if known ~= true then
-        return nil
-    end
-    return connected == false and 1 or 0
+  if not (cfg and cfg.showDead == true) then
+    return 0
+  end
+  local unit = frame and frame.unit
+  if not unit then
+    return nil
+  end
+  local connected, known = ReadConnectedCached(frame, unit, unitState)
+  if known ~= true then
+    return nil
+  end
+  return connected == false and 1 or 0
 end
 
 local function StatusTextFlagsKey(frame, cfg, unitState)
-    local unit = frame and frame.unit
-    if not unit then
-        return nil
-    end
-    local key = 0
-    if cfg.showGhost == true and UnitIsGhost then
-        local ghost = UnitIsGhost(unit)
-        if issecretvalue(ghost) == true then return nil end
-        if ghost == true or ghost == 1 then key = key + 2 end
-    end
-    if cfg.showDead == true then
-        local dead, known = ReadDeadCached(frame, unit, unitState)
-        if known ~= true then return nil end
-        if dead == true then key = key + 4 end
-    end
-    if cfg.showAFK == true and UnitIsAFK then
-        local afk = UnitIsAFK(unit)
-        if issecretvalue(afk) == true then return nil end
-        if afk == true or afk == 1 then key = key + 8 end
-    end
-    if cfg.showDND == true and UnitIsDND then
-        local dnd = UnitIsDND(unit)
-        if issecretvalue(dnd) == true then return nil end
-        if dnd == true or dnd == 1 then key = key + 16 end
-    end
-    return key
+  local unit = frame and frame.unit
+  if not unit then
+    return nil
+  end
+  local key = 0
+  if cfg.showGhost == true and UnitIsGhost then
+    local ghost = UnitIsGhost(unit)
+    if issecretvalue(ghost) == true then return nil end
+    if ghost == true or ghost == 1 then key = key + 2 end
+  end
+  if cfg.showDead == true then
+    local dead, known = ReadDeadCached(frame, unit, unitState)
+    if known ~= true then return nil end
+    if dead == true then key = key + 4 end
+  end
+  if cfg.showAFK == true and UnitIsAFK then
+    local afk = UnitIsAFK(unit)
+    if issecretvalue(afk) == true then return nil end
+    if afk == true or afk == 1 then key = key + 8 end
+  end
+  if cfg.showDND == true and UnitIsDND then
+    local dnd = UnitIsDND(unit)
+    if issecretvalue(dnd) == true then return nil end
+    if dnd == true or dnd == 1 then key = key + 16 end
+  end
+  return key
 end
 
 local function StatusTextChanged(frame, status, event, unitState)
-    local cfg = status and status.statusText
-    if not (cfg and cfg.enabled == true) then return true end
-    if status.testMode == true then return true end
-    local storeKey, key
-    if event == "UNIT_CONNECTION" then
-        storeKey = "_msufStatusTextConnectionKey"
-        key = StatusTextConnectionKey(frame, cfg, unitState)
-    elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
-        storeKey = "_msufStatusTextFlagsKey"
-        key = StatusTextFlagsKey(frame, cfg, unitState)
-    elseif event == "UNIT_HEALTH" then
-        return false
-    else
-        return true
-    end
-    if key == nil then return true end
-    if frame[storeKey] == key then return false end
-    frame[storeKey] = key
+  local cfg = status and status.statusText
+  if not (cfg and cfg.enabled == true) then return true end
+  if status.testMode == true then return true end
+  local storeKey, key
+  if event == "UNIT_CONNECTION" then
+    storeKey = "_msufStatusTextConnectionKey"
+    key = StatusTextConnectionKey(frame, cfg, unitState)
+  elseif event == "UNIT_FLAGS" or event == "PLAYER_FLAGS_CHANGED" then
+    storeKey = "_msufStatusTextFlagsKey"
+    key = StatusTextFlagsKey(frame, cfg, unitState)
+  elseif event == "UNIT_HEALTH" then
+    return false
+  else
     return true
+  end
+  if key == nil then return true end
+  if frame[storeKey] == key then return false end
+  frame[storeKey] = key
+  return true
+end
+
+local function ClearStatusText(frame, fs)
+  if frame._msufStatusTextValue == nil
+    and frame._msufStatusTextLayout == nil
+    and fs and fs._msufStatusShown == false then
+    return
+  end
+  frame._msufStatusTextValue = nil
+  frame._msufStatusTextLayout = nil
+  if fs then
+    SetText(fs, "")
+    SetShown(fs, false)
+  end
 end
 
 local function UpdateStatusText(frame, status, event)
-    local cfg = status and status.statusText
-    local fs = frame.statusIndicatorText
-    local unit = frame.unit
-    if not (cfg and cfg.enabled and fs) then
-        if frame._msufStatusTextValue == nil
-            and frame._msufStatusTextLayout == nil
-            and fs and fs._msufStatusShown == false then
-            return
-        end
-        frame._msufStatusTextValue = nil
-        frame._msufStatusTextLayout = nil
-        if fs then
-            SetText(fs, "")
-            SetShown(fs, false)
-        end
-        return
+  local cfg = status and status.statusText
+  local fs = frame.statusIndicatorText
+  local unit = frame.unit
+  if not (cfg and cfg.enabled and fs) then
+    ClearStatusText(frame, fs)
+    return
+  end
+  local unitState = FreshUnitState(frame, unit)
+  if status.testMode ~= true
+    and event == "UNIT_HEALTH"
+    and frame._msufStatusTextValue == nil
+    and fs._msufStatusShown == false
+    and (cfg.showDead == true or cfg.showGhost == true) then
+    local deadOrGhost = ReadDeadCached(frame, unit, unitState)
+    if deadOrGhost ~= true then
+      return
     end
-    local unitState = FreshUnitState(frame, unit)
-    if status.testMode ~= true
-        and event == "UNIT_HEALTH"
-        and frame._msufStatusTextValue == nil
-        and fs._msufStatusShown == false
-        and (cfg.showDead == true or cfg.showGhost == true) then
-        local deadOrGhost = ReadDeadCached(frame, unit, unitState)
-        if deadOrGhost ~= true then
-            return
-        end
-    elseif status.testMode ~= true
-        and event == "UNIT_HEALTH"
-        and frame._msufStatusTextValue == nil
-        and cfg.showDead ~= true
-        and cfg.showGhost ~= true then
-        return
+  elseif status.testMode ~= true
+    and event == "UNIT_HEALTH"
+    and frame._msufStatusTextValue == nil
+    and cfg.showDead ~= true
+    and cfg.showGhost ~= true then
+    return
+  end
+  if not UnitExistsRuntime(unit, unitState) then
+    ClearStatusText(frame, fs)
+    return
+  end
+  if not StatusTextChanged(frame, status, event, unitState) then
+    return
+  end
+  local text, state = status.testMode and "DEAD" or nil, status.testMode and "dead" or nil
+  if not text then
+    text, state = StatusText(frame, cfg, unitState)
+  end
+  if text then
+    local layout = cfg
+    if state == "ghost" and cfg.ghost then
+      layout = cfg.ghost
+    elseif state == "afk" and cfg.afk then
+      layout = cfg.afk
+    elseif cfg.dead then
+      layout = cfg.dead
     end
-    if not UnitExistsRuntime(unit, unitState) then
-        if frame._msufStatusTextValue == nil
-            and frame._msufStatusTextLayout == nil
-            and fs._msufStatusShown == false then
-            return
-        end
-        frame._msufStatusTextValue = nil
-        frame._msufStatusTextLayout = nil
-        SetText(fs, "")
-        SetShown(fs, false)
-        return
+    if layout and layout.enabled == false then
+      ClearStatusText(frame, fs)
+      return
     end
-    if not StatusTextChanged(frame, status, event, unitState) then
-        return
+    if frame._msufStatusTextValue == text
+      and frame._msufStatusTextLayout == layout
+      and fs._msufStatusShown == true then
+      return
     end
-    local text, state = status.testMode and "DEAD" or nil, status.testMode and "dead" or nil
-    if not text then
-        text, state = StatusText(frame, cfg, unitState)
-    end
-    if text then
-        local layout = cfg
-        if state == "ghost" and cfg.ghost then
-            layout = cfg.ghost
-        elseif state == "afk" and cfg.afk then
-            layout = cfg.afk
-        elseif cfg.dead then
-            layout = cfg.dead
-        end
-        if layout and layout.enabled == false then
-            if frame._msufStatusTextValue == nil
-                and frame._msufStatusTextLayout == nil
-                and fs._msufStatusShown == false then
-                return
-            end
-            frame._msufStatusTextValue = nil
-            frame._msufStatusTextLayout = nil
-            SetText(fs, "")
-            SetShown(fs, false)
-            return
-        end
-        if frame._msufStatusTextValue == text
-            and frame._msufStatusTextLayout == layout
-            and fs._msufStatusShown == true then
-            return
-        end
-        frame._msufStatusTextValue = text
-        frame._msufStatusTextLayout = layout
-        LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
-        SetText(fs, text)
-        SetShown(fs, true)
-    else
-        if frame._msufStatusTextValue == nil
-            and frame._msufStatusTextLayout == nil
-            and fs._msufStatusShown == false then
-            return
-        end
-        frame._msufStatusTextValue = nil
-        frame._msufStatusTextLayout = nil
-        SetText(fs, "")
-        SetShown(fs, false)
-    end
+    frame._msufStatusTextValue = text
+    frame._msufStatusTextLayout = layout
+    LayoutRegion(fs, frame, frame.MSUFSpec, layout, true)
+    SetText(fs, text)
+    SetShown(fs, true)
+  else
+    ClearStatusText(frame, fs)
+  end
 end
 
 local function UpdateCombat(frame, status)
-    local cfg = status and status.combat
-    local tex = frame.combatStateIndicatorIcon
-    local unit = frame.unit
-    local exists = UnitExistsSafe(unit)
-    if not (cfg and cfg.enabled and tex and exists) then
-        SetShown(tex, false)
-        return
-    end
-    local active = status.testMode
-    if not active and UnitAffectingCombat then
-        local activeRaw = UnitAffectingCombat(unit)
-        active = BoolTrue(activeRaw)
-    end
-    SetShown(tex, active == true)
+  local cfg = status and status.combat
+  local tex = frame.combatStateIndicatorIcon
+  local unit = frame.unit
+  local exists = UnitExistsSafe(unit)
+  if not (cfg and cfg.enabled and tex and exists) then
+    SetShown(tex, false)
+    return
+  end
+  local active = status.testMode
+  if not active and UnitAffectingCombat then
+    local activeRaw = UnitAffectingCombat(unit)
+    active = BoolTrue(activeRaw)
+  end
+  SetShown(tex, active == true)
 end
 
 local function UpdateResting(frame, status)
-    local cfg = status and status.resting
-    local tex = frame.restingIndicatorIcon
-    if not (cfg and cfg.enabled and tex) then
-        SetShown(tex, false)
-        return
-    end
-    local active = status.testMode
-    if not active and frame.unit == "player" and IsResting then
-        local activeRaw = IsResting()
-        active = BoolTrue(activeRaw)
-    end
-    SetShown(tex, active == true)
+  local cfg = status and status.resting
+  local tex = frame.restingIndicatorIcon
+  if not (cfg and cfg.enabled and tex) then
+    SetShown(tex, false)
+    return
+  end
+  local active = status.testMode
+  if not active and frame.unit == "player" and IsResting then
+    local activeRaw = IsResting()
+    active = BoolTrue(activeRaw)
+  end
+  SetShown(tex, active == true)
 end
 
 local function UpdateIncomingRes(frame, status)
-    local cfg = status and status.incomingRes
-    local tex = frame.incomingResIndicatorIcon
-    local unit = frame.unit
-    local exists = UnitExistsSafe(unit)
-    if not (cfg and cfg.enabled and tex and exists) then
-        SetShown(tex, false)
-        return
-    end
-    if frame._msufGFSummonActive then
-        SetShown(tex, false)
-        return
-    end
-    local active = status.testMode
-    if not active and UnitHasIncomingResurrection then
-        local activeRaw = UnitHasIncomingResurrection(unit)
-        active = BoolTrue(activeRaw)
-    end
-    SetShown(tex, active == true)
+  local cfg = status and status.incomingRes
+  local tex = frame.incomingResIndicatorIcon
+  local unit = frame.unit
+  local exists = UnitExistsSafe(unit)
+  if not (cfg and cfg.enabled and tex and exists) then
+    SetShown(tex, false)
+    return
+  end
+  if frame._msufGFSummonActive then
+    SetShown(tex, false)
+    return
+  end
+  local active = status.testMode
+  if not active and UnitHasIncomingResurrection then
+    local activeRaw = UnitHasIncomingResurrection(unit)
+    active = BoolTrue(activeRaw)
+  end
+  SetShown(tex, active == true)
 end
 
 local function UpdatePVP(frame, status)
-    local cfg = status and status.pvp
-    local tex = frame and frame.pvpIndicatorIcon
-    local unit = frame and frame.unit
-    if not (cfg and cfg.enabled and tex and unit) then
-        SetShown(tex, false)
-        return
-    end
-    local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(unit)
-    if ApplyPVPTexture(tex, atlas) then
-        SetShown(tex, true)
-    else
-        SetShown(tex, false)
-    end
+  local cfg = status and status.pvp
+  local tex = frame and frame.pvpIndicatorIcon
+  local unit = frame and frame.unit
+  if not (cfg and cfg.enabled and tex and unit) then
+    SetShown(tex, false)
+    return
+  end
+  local atlas = status.testMode and ResolvePVPTestAtlas(unit) or ResolvePVPAtlas(unit)
+  if ApplyPVPTexture(tex, atlas) then
+    SetShown(tex, true)
+  else
+    SetShown(tex, false)
+  end
 end
 
 function Status.IsEnabled(frame, spec)
-    return spec and spec.status and spec.status.enabled == true
+  return spec and spec.status and spec.status.enabled == true
 end
 
 function Status.GetEvents()
-    return EMPTY_EVENTS
+  return EMPTY_EVENTS
 end
 
 function Status.GetUnitlessEvents()
-    return EMPTY_EVENTS
+  return EMPTY_EVENTS
 end
 
 function Status.Apply(frame, spec)
-    if frame then
-        frame._msufStatusTextValue = nil
-        frame._msufStatusTextLayout = nil
-    end
-    ApplyConfiguredRegions(frame, spec)
+  if frame then
+    frame._msufStatusTextValue = nil
+    frame._msufStatusTextLayout = nil
+  end
+  ApplyConfiguredRegions(frame, spec)
 end
 
 function Status.Disable(frame)
-    HideField(frame, "raidTargetIcon")
-    HideField(frame, "raidIcon")
-    HideField(frame, "roleIcon")
-    HideField(frame, "LeaderIndicator")
-    HideField(frame, "leaderIcon")
-    HideField(frame, "assistIcon")
-    HideField(frame, "levelText")
-    HideField(frame, "raidGroupNameText")
-    HideField(frame, "eliteIcon")
-    HideField(frame, "statusIndicatorText")
-    HideField(frame, "combatStateIndicatorIcon")
-    HideField(frame, "restingIndicatorIcon")
-    HideField(frame, "incomingResIndicatorIcon")
-    HideField(frame, "pvpIcon")
-    HideField(frame, "pvpIndicatorIcon")
-    HideField(frame, "resurrectIcon")
-    HideField(frame, "readyCheckIcon")
-    HideField(frame, "summonIcon")
-    HideField(frame, "phaseIcon")
-    frame._msufGFSummonActive = false
-    frame._msufStatusTextValue = nil
-    frame._msufStatusTextLayout = nil
-    CancelReadyCheckTimer(frame)
+  for i = 1, #CONFIGURED_REGION_DEFS do
+    HideConfiguredRegion(frame, CONFIGURED_REGION_DEFS[i])
+  end
+  frame._msufStatusTextValue = nil
+  frame._msufStatusTextLayout = nil
+  CancelReadyCheckTimer(frame)
 end
 
 local RAID_MARKER_EVENTS = { "RAID_TARGET_UPDATE" }
@@ -1664,85 +1430,85 @@ local INCOMING_RES_EVENTS = { "INCOMING_RESURRECT_CHANGED" }
 local PVP_EVENTS = { "UNIT_FACTION" }
 
 local function StatusEnabled(spec, key)
-    local status = spec and spec.status
-    local cfg = status and status[key]
-    return status and status.enabled == true and cfg and cfg.enabled == true
+  local status = spec and spec.status
+  local cfg = status and status[key]
+  return status and status.enabled == true and cfg and cfg.enabled == true
 end
 
 local function StatusTextEvents(spec, frame)
-    if not StatusEnabled(spec, "statusText") then
-        return EMPTY_EVENTS
-    end
-    local cfg = spec.status.statusText
-    local player = frame and frame.unit == "player"
-    local needsConnection = cfg.showDead == true and player ~= true
-    local needsFlags = cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
-    if needsConnection then
-        return needsFlags and STATUS_TEXT_EVENTS or STATUS_TEXT_CONNECTION_EVENTS
-    end
-    return needsFlags and STATUS_TEXT_FLAGS_EVENTS or EMPTY_EVENTS
+  if not StatusEnabled(spec, "statusText") then
+    return EMPTY_EVENTS
+  end
+  local cfg = spec.status.statusText
+  local player = frame and frame.unit == "player"
+  local needsConnection = cfg.showDead == true and player ~= true
+  local needsFlags = cfg.showDead == true or cfg.showGhost == true or cfg.showAFK == true or cfg.showDND == true
+  if needsConnection then
+    return needsFlags and STATUS_TEXT_EVENTS or STATUS_TEXT_CONNECTION_EVENTS
+  end
+  return needsFlags and STATUS_TEXT_FLAGS_EVENTS or EMPTY_EVENTS
 end
 
 local function StatusTextUnitlessEvents(spec, frame)
-    if not StatusEnabled(spec, "statusText") then
-        return EMPTY_EVENTS
-    end
-    if not (frame and frame.unit == "player") then
-        return EMPTY_EVENTS
-    end
-    local cfg = spec.status.statusText
-    return (cfg.showAFK == true or cfg.showDND == true) and STATUS_TEXT_UNITLESS_EVENTS or EMPTY_EVENTS
+  if not StatusEnabled(spec, "statusText") then
+    return EMPTY_EVENTS
+  end
+  if not (frame and frame.unit == "player") then
+    return EMPTY_EVENTS
+  end
+  local cfg = spec.status.statusText
+  return (cfg.showAFK == true or cfg.showDND == true) and STATUS_TEXT_UNITLESS_EVENTS or EMPTY_EVENTS
 end
 
 local function PVPEvents(spec)
-    return StatusEnabled(spec, "pvp") and PVP_EVENTS or EMPTY_EVENTS
+  return StatusEnabled(spec, "pvp") and PVP_EVENTS or EMPTY_EVENTS
 end
 
 local function CombatEvents(spec, frame)
-    if frame and frame.unit == "player" then
-        return EMPTY_EVENTS
-    end
-    return StatusEnabled(spec, "combat") and COMBAT_EVENTS or EMPTY_EVENTS
+  if frame and frame.unit == "player" then
+    return EMPTY_EVENTS
+  end
+  return StatusEnabled(spec, "combat") and COMBAT_EVENTS or EMPTY_EVENTS
 end
 
 local Runtime = {
-    EMPTY_EVENTS = EMPTY_EVENTS,
-    RAID_MARKER_EVENTS = RAID_MARKER_EVENTS,
-    LEADER_EVENTS = LEADER_EVENTS,
-    LEVEL_EVENTS = LEVEL_EVENTS,
-    LEVEL_UNITLESS_EVENTS = LEVEL_UNITLESS_EVENTS,
-    RAID_GROUP_EVENTS = RAID_GROUP_EVENTS,
-    ELITE_EVENTS = ELITE_EVENTS,
-    STATUS_TEXT_EVENTS = STATUS_TEXT_EVENTS,
-    STATUS_TEXT_UNITLESS_EVENTS = STATUS_TEXT_UNITLESS_EVENTS,
-    StatusTextEvents = StatusTextEvents,
-    StatusTextUnitlessEvents = StatusTextUnitlessEvents,
-    CombatEvents = CombatEvents,
-    COMBAT_EVENTS = COMBAT_EVENTS,
-    COMBAT_PLAYER_EVENTS = COMBAT_PLAYER_EVENTS,
-    RESTING_PLAYER_EVENTS = RESTING_PLAYER_EVENTS,
-    INCOMING_RES_EVENTS = INCOMING_RES_EVENTS,
-    PVP_EVENTS = PVP_EVENTS,
-    StatusEnabled = StatusEnabled,
-    HideField = HideField,
-    ApplyConfiguredRegions = ApplyConfiguredRegions,
-    CancelReadyCheckTimer = CancelReadyCheckTimer,
-    UpdateRaidMarker = UpdateRaidMarker,
-    UpdateLeader = UpdateLeader,
-    UpdateLeaderPair = UpdateLeaderPair,
-    UpdatePowerRoleVisibility = UpdatePowerRoleVisibility,
-    UpdateRole = UpdateRole,
-    UpdateReadyCheck = UpdateReadyCheck,
-    UpdateSummon = UpdateSummon,
-    UpdatePhase = UpdatePhase,
-    UpdateLevel = UpdateLevel,
-    UpdateRaidGroup = UpdateRaidGroup,
-    UpdateElite = UpdateElite,
-    UpdateStatusText = UpdateStatusText,
-    UpdateCombat = UpdateCombat,
-    UpdateResting = UpdateResting,
-    UpdateIncomingRes = UpdateIncomingRes,
-    UpdatePVP = UpdatePVP,
+  EMPTY_EVENTS = EMPTY_EVENTS,
+  RAID_MARKER_EVENTS = RAID_MARKER_EVENTS,
+  LEADER_EVENTS = LEADER_EVENTS,
+  LEVEL_EVENTS = LEVEL_EVENTS,
+  LEVEL_UNITLESS_EVENTS = LEVEL_UNITLESS_EVENTS,
+  RAID_GROUP_EVENTS = RAID_GROUP_EVENTS,
+  ELITE_EVENTS = ELITE_EVENTS,
+  STATUS_TEXT_EVENTS = STATUS_TEXT_EVENTS,
+  STATUS_TEXT_UNITLESS_EVENTS = STATUS_TEXT_UNITLESS_EVENTS,
+  StatusTextEvents = StatusTextEvents,
+  StatusTextUnitlessEvents = StatusTextUnitlessEvents,
+  CombatEvents = CombatEvents,
+  COMBAT_EVENTS = COMBAT_EVENTS,
+  COMBAT_PLAYER_EVENTS = COMBAT_PLAYER_EVENTS,
+  RESTING_PLAYER_EVENTS = RESTING_PLAYER_EVENTS,
+  INCOMING_RES_EVENTS = INCOMING_RES_EVENTS,
+  PVP_EVENTS = PVP_EVENTS,
+  StatusEnabled = StatusEnabled,
+  HideField = HideField,
+  ApplyConfiguredRegions = ApplyConfiguredRegions,
+  CancelReadyCheckTimer = CancelReadyCheckTimer,
+  UpdateRaidMarker = UpdateRaidMarker,
+  UpdateLeader = UpdateLeader,
+  UpdateLeaderPair = UpdateLeaderPair,
+  UpdatePowerRoleVisibility = UpdatePowerRoleVisibility,
+  UpdateRole = UpdateRole,
+  UpdateReadyCheck = UpdateReadyCheck,
+  UpdateSummon = UpdateSummon,
+  UpdatePhase = UpdatePhase,
+  UpdateLevel = UpdateLevel,
+  UpdateRaidGroup = UpdateRaidGroup,
+  UpdateElite = UpdateElite,
+  UpdateStatusText = UpdateStatusText,
+  UpdateCombat = UpdateCombat,
+  UpdateResting = UpdateResting,
+  UpdateIncomingRes = UpdateIncomingRes,
+  UpdatePVP = UpdatePVP,
 }
 MSUF.UFStatusRuntime = Runtime
 
@@ -1757,93 +1523,111 @@ StatusStructure.IsEnabled = Status.IsEnabled
 UF.RegisterElement("StatusIndicators", StatusStructure)
 
 local function RegisterStatusIndicator(def)
-    local element = {}
+  local element = {}
+  local name, key, events, unitlessEvents = def[1], def[2], def[3], def[4]
+  local update, hide = def[5], def[6]
+  local noGroup, playerOnly, getEvents = def[7], def[8], def[9]
+  local getUnitlessEvents, playerUnitlessEvents, updateWithEvent = def[10], def[11], def[12]
 
-    function element.IsEnabled(frame, spec)
-        if def.playerOnly == true and not (frame and frame.unit == "player") then
-            return false
-        end
-        if def.noGroup == true and spec and spec.status and spec.status.group == true then
-            return false
-        end
-        return StatusEnabled(spec, def.key)
+  function element.IsEnabled(frame, spec)
+    if playerOnly == true and not (frame and frame.unit == "player") then
+      return false
     end
-
-    if def.getEvents then
-        function element.GetEvents(frame, spec)
-            return def.getEvents(spec, frame)
-        end
-    elseif def.events then
-        function element.GetEvents()
-            return def.events
-        end
+    if noGroup == true and spec and spec.status and spec.status.group == true then
+      return false
     end
+    return StatusEnabled(spec, key)
+  end
 
-    if def.getUnitlessEvents then
-        function element.GetUnitlessEvents(frame, spec)
-            return def.getUnitlessEvents(spec, frame)
-        end
-    elseif def.playerUnitlessEvents then
-        function element.GetUnitlessEvents(frame)
-            return frame and frame.unit == "player" and def.playerUnitlessEvents or EMPTY_EVENTS
-        end
-    elseif def.unitlessEvents then
-        function element.GetUnitlessEvents()
-            return def.unitlessEvents
-        end
+  if getEvents then
+    function element.GetEvents(frame, spec)
+      return getEvents(spec, frame)
     end
-
-    if def.updateWithEvent == true then
-        function element.Update(frame, event)
-            def.update(frame, frame.MSUFSpec and frame.MSUFSpec.status, event)
-        end
-    else
-        function element.Update(frame)
-            def.update(frame, frame.MSUFSpec and frame.MSUFSpec.status)
-        end
+  elseif events then
+    function element.GetEvents()
+      return events
     end
+  end
 
-    function element.Disable(frame)
-        HideField(frame, def.hide)
+  if getUnitlessEvents then
+    function element.GetUnitlessEvents(frame, spec)
+      return getUnitlessEvents(spec, frame)
     end
+  elseif playerUnitlessEvents then
+    function element.GetUnitlessEvents(frame)
+      return frame and frame.unit == "player" and playerUnitlessEvents or EMPTY_EVENTS
+    end
+  elseif unitlessEvents then
+    function element.GetUnitlessEvents()
+      return unitlessEvents
+    end
+  end
 
-    UF.RegisterElement(def.name, element)
+  if updateWithEvent == true then
+    function element.Update(frame, event)
+      update(frame, frame._msufStatusIndicatorStatus or (frame.MSUFSpec and frame.MSUFSpec.status), event)
+    end
+  else
+    function element.Update(frame)
+      update(frame, frame._msufStatusIndicatorStatus or (frame.MSUFSpec and frame.MSUFSpec.status))
+    end
+  end
+
+  function element.Apply(frame, spec)
+    if frame then
+      frame._msufStatusIndicatorStatus = spec and spec.status or nil
+      frame._msufStatusIndicatorSerial = spec and spec._msufGFCompileSerial or 0
+    end
+  end
+
+  function element.Disable(frame)
+    HideField(frame, hide)
+  end
+
+  UF.RegisterElement(name, element)
 end
 
 local STATUS_INDICATOR_DEFS = {
-    { name = "RaidMarkerIndicator", key = "raidMarker", noGroup = true, unitlessEvents = RAID_MARKER_EVENTS, update = UpdateRaidMarker, hide = "raidTargetIcon" },
-    { name = "LeaderIndicator", key = "leader", noGroup = true, unitlessEvents = LEADER_EVENTS, update = UpdateLeader, hide = "LeaderIndicator" },
-    { name = "LevelIndicator", key = "level", events = LEVEL_EVENTS, unitlessEvents = LEVEL_UNITLESS_EVENTS, update = UpdateLevel, hide = "levelText" },
-    { name = "RaidGroupIndicator", key = "raidGroup", noGroup = true, unitlessEvents = RAID_GROUP_EVENTS, update = UpdateRaidGroup, hide = "raidGroupNameText" },
-    { name = "EliteIndicator", key = "elite", events = ELITE_EVENTS, update = UpdateElite, hide = "eliteIcon" },
-    { name = "StatusTextIndicator", key = "statusText", noGroup = true, getEvents = StatusTextEvents, getUnitlessEvents = StatusTextUnitlessEvents, update = UpdateStatusText, updateWithEvent = true, hide = "statusIndicatorText" },
-    { name = "CombatIndicator", key = "combat", getEvents = CombatEvents, playerUnitlessEvents = COMBAT_PLAYER_EVENTS, update = UpdateCombat, hide = "combatStateIndicatorIcon" },
-    { name = "RestingIndicator", key = "resting", playerOnly = true, unitlessEvents = RESTING_PLAYER_EVENTS, update = UpdateResting, hide = "restingIndicatorIcon" },
-    { name = "IncomingResIndicator", key = "incomingRes", noGroup = true, events = INCOMING_RES_EVENTS, update = UpdateIncomingRes, hide = "incomingResIndicatorIcon" },
-    { name = "PVPIndicator", key = "pvp", noGroup = true, getEvents = PVPEvents, update = UpdatePVP, hide = "pvpIndicatorIcon" },
+  { "RaidMarkerIndicator", "raidMarker", nil, RAID_MARKER_EVENTS, UpdateRaidMarker, "raidTargetIcon", true },
+  { "LeaderIndicator", "leader", nil, LEADER_EVENTS, UpdateLeader, "LeaderIndicator", true },
+  { "LevelIndicator", "level", LEVEL_EVENTS, LEVEL_UNITLESS_EVENTS, UpdateLevel, "levelText" },
+  { "RaidGroupIndicator", "raidGroup", nil, RAID_GROUP_EVENTS, UpdateRaidGroup, "raidGroupNameText", true },
+  { "EliteIndicator", "elite", ELITE_EVENTS, nil, UpdateElite, "eliteIcon" },
+  { "StatusTextIndicator", "statusText", nil, nil, UpdateStatusText, "statusIndicatorText", true, nil, StatusTextEvents, StatusTextUnitlessEvents, nil, true },
+  { "CombatIndicator", "combat", nil, nil, UpdateCombat, "combatStateIndicatorIcon", nil, nil, CombatEvents, nil, COMBAT_PLAYER_EVENTS },
+  { "RestingIndicator", "resting", nil, RESTING_PLAYER_EVENTS, UpdateResting, "restingIndicatorIcon", nil, true },
+  { "IncomingResIndicator", "incomingRes", INCOMING_RES_EVENTS, nil, UpdateIncomingRes, "incomingResIndicatorIcon", true },
+  { "PVPIndicator", "pvp", nil, nil, UpdatePVP, "pvpIndicatorIcon", true, nil, PVPEvents },
 }
 
 for i = 1, #STATUS_INDICATOR_DEFS do
-    RegisterStatusIndicator(STATUS_INDICATOR_DEFS[i])
+  RegisterStatusIndicator(STATUS_INDICATOR_DEFS[i])
 end
 
 local function RefreshStatus(unit, reason)
-    if UF.RefreshElements then
-        return UF.RefreshElements(unit, STATUS_REFRESH, reason or "MSUF_STATUS")
-    end
-    return false
+  if UF.RefreshElements then
+    return UF.RefreshElements(unit, STATUS_REFRESH, reason or "MSUF_STATUS")
+  end
+  return false
 end
 
 UF.RefreshStatusIndicators = RefreshStatus
-_G.MSUF_RefreshStatusIndicators = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RequestStatusIconsRefreshForCurrent = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RequestStatusTextRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RequestStatusCombatIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RequestStatusRestingIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RequestStatusIncomingResIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RequestStatusPvpIndicatorRefresh = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RefreshLeaderIconFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RefreshRaidMarkerFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RefreshLevelIndicatorFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RefreshRaidGroupNameFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end
-_G.MSUF_RefreshEliteIconFrames = function() return RefreshStatus(nil, "MSUF_STATUS") end
+local STATUS_REFRESH_ALIASES = {
+  "MSUF_RefreshStatusIndicators",
+  "MSUF_RequestStatusIconsRefreshForCurrent",
+  "MSUF_RequestStatusTextRefresh",
+  "MSUF_RequestStatusCombatIndicatorRefresh",
+  "MSUF_RequestStatusRestingIndicatorRefresh",
+  "MSUF_RequestStatusIncomingResIndicatorRefresh",
+  "MSUF_RequestStatusPvpIndicatorRefresh",
+  "MSUF_RefreshLeaderIconFrames",
+  "MSUF_RefreshRaidMarkerFrames",
+  "MSUF_RefreshLevelIndicatorFrames",
+  "MSUF_RefreshRaidGroupNameFrames",
+  "MSUF_RefreshEliteIconFrames",
+}
+for i = 1, #STATUS_REFRESH_ALIASES do
+  _G[STATUS_REFRESH_ALIASES[i]] = function()
+    return RefreshStatus(nil, "MSUF_STATUS")
+  end
+end

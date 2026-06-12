@@ -273,7 +273,7 @@ if not P.InitUnsupportedAuraCommand then
                     kind = "unsupported",
                     status = "info",
                     summary = "Aura command is not registered yet.",
-                    text = "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, and quick presets can be changed. Aura copy and backend areas that are not registered yet are still blocked.",
+                    text = "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, quick presets, and Group Aura copy can be changed. Aura backend areas that are not registered yet stay blocked.",
                 }
             end
         end
@@ -297,6 +297,11 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or ParseProfile(normalized, raw)
         or (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
+        or (P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw))
+        or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
+        or (P.ParseAuraEditScope and P.ParseAuraEditScope(normalized))
+        or (P.ParseAuraReset and P.ParseAuraReset(normalized))
+        or (P.ParseAuraSettingsView and P.ParseAuraSettingsView(normalized))
         or ParseAuraQuickPreset(normalized)
         or ParseAuraGroupCategoryBlacklist(normalized)
         or ParseAuraBlacklist(normalized, raw)
@@ -432,6 +437,7 @@ function A.ParseSimpleChange(text)
     local ctx = A.GetContext and A.GetContext() or {}
     if normalized == "" then return nil end
     local parsed = (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
+        or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
         or (A._ParseTextLayerShortcut and A._ParseTextLayerShortcut(normalized))
         or (A._ParseTextSlotDropdownShortcut and A._ParseTextSlotDropdownShortcut(normalized))
         or (A._ParseTextDetailExactOffset and A._ParseTextDetailExactOffset(normalized))
@@ -456,6 +462,7 @@ function A.Parse(text)
     if normalized == "" then return { kind = "empty" } end
     local exactKeyParsed = (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
+        or (P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw))
     if exactKeyParsed then
         exactKeyParsed.raw = raw
         exactKeyParsed.normalized = normalized

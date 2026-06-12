@@ -1,4 +1,4 @@
---- Menu2/Search/MSUF_Menu2_Search_Routing.lua
+--- Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua
 --- Search target routing, accordion state, and anchor scrolling.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
@@ -243,59 +243,56 @@ local function SearchNewRoute()
     return { state = {}, accordion = {}, tables = {}, nestedTables = {}, general = {} }
 end
 
+local function TableHasValues(t, depth)
+    if type(t) ~= "table" then return false end
+    for _, v in pairs(t) do
+        if not depth or depth <= 0 or type(v) ~= "table" then return true end
+        if TableHasValues(v, depth - 1) then return true end
+    end
+    return false
+end
+
 local function SearchRouteIsEmpty(route)
     if type(route) ~= "table" then return true end
-    for _ in pairs(route.state or {}) do return false end
-    for _ in pairs(route.accordion or {}) do return false end
-    for _ in pairs(route.general or {}) do return false end
-    for _, values in pairs(route.tables or {}) do
-        if type(values) == "table" then
-            for _ in pairs(values) do return false end
-        end
-    end
-    for _, firstLevel in pairs(route.nestedTables or {}) do
-        if type(firstLevel) == "table" then
-            for _, secondLevel in pairs(firstLevel) do
-                if type(secondLevel) == "table" then
-                    for _ in pairs(secondLevel) do return false end
-                end
-            end
-        end
-    end
-    return true
+    return not (TableHasValues(route.state) or TableHasValues(route.accordion)
+        or TableHasValues(route.general) or TableHasValues(route.tables, 1)
+        or TableHasValues(route.nestedTables, 2))
+end
+
+local function RouteBucket(route, name)
+    local bucket = route[name] or {}
+    route[name] = bucket
+    return bucket
 end
 
 local function SearchRouteOpenAccordion(route, pageKey, id)
     if not (route and pageKey and id) then return end
-    route.accordion = route.accordion or {}
-    route.accordion[tostring(pageKey) .. ":" .. tostring(id)] = true
+    RouteBucket(route, "accordion")[tostring(pageKey) .. ":" .. tostring(id)] = true
 end
 
 local function SearchRouteSetState(route, field, value)
     if not (route and field) then return end
-    route.state = route.state or {}
-    route.state[field] = value
+    RouteBucket(route, "state")[field] = value
 end
 
 local function SearchRouteSetTable(route, tableName, key, value)
     if not (route and tableName and key ~= nil) then return end
-    route.tables = route.tables or {}
-    route.tables[tableName] = route.tables[tableName] or {}
-    route.tables[tableName][key] = value
+    local tables = RouteBucket(route, "tables")
+    tables[tableName] = tables[tableName] or {}
+    tables[tableName][key] = value
 end
 
 local function SearchRouteSetNestedTable(route, tableName, key1, key2, value)
     if not (route and tableName and key1 ~= nil and key2 ~= nil) then return end
-    route.nestedTables = route.nestedTables or {}
-    route.nestedTables[tableName] = route.nestedTables[tableName] or {}
-    route.nestedTables[tableName][key1] = route.nestedTables[tableName][key1] or {}
-    route.nestedTables[tableName][key1][key2] = value
+    local nestedTables = RouteBucket(route, "nestedTables")
+    nestedTables[tableName] = nestedTables[tableName] or {}
+    nestedTables[tableName][key1] = nestedTables[tableName][key1] or {}
+    nestedTables[tableName][key1][key2] = value
 end
 
 local function SearchRouteSetGeneral(route, key, value)
     if not (route and key) then return end
-    route.general = route.general or {}
-    route.general[key] = value
+    RouteBucket(route, "general")[key] = value
 end
 
 local function SearchRouteApplySectionSpecs(route, pageKey, normalized, specs)
@@ -742,22 +739,27 @@ local function SearchRouteForTarget(pageKey, query, fallback)
     SearchRouteGlobalPage(route, pageKey, normalized)
     return SearchRouteIsEmpty(route) and nil or route
 end
+
+local function ApplyRouteValues(target, values, setter)
+    if type(target) ~= "table" or type(values) ~= "table" then return false end
+    local changed = false
+    for key, value in pairs(values) do
+        if target[key] ~= value then
+            if setter then setter(key, value) else target[key] = value end
+            changed = true
+        end
+    end
+    return changed
+end
+
 local function ApplySearchRoute(pageKey, route)
     if type(route) ~= "table" then return false end
     local changed = false
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local state = route.state
     if type(state) == "table" then
-        for field, value in pairs(state) do
-            if M[field] ~= value then
-                if type(M.PersistMenuStateValue) == "function" then
-                    M.PersistMenuStateValue(field, value)
-                else
-                    M[field] = value
-                end
-                changed = true
-            end
-        end
+        local persist = type(M.PersistMenuStateValue) == "function" and M.PersistMenuStateValue or nil
+        changed = ApplyRouteValues(M, state, persist and function(field, value) persist(field, value) end) or changed
     end
     local accordion = route.accordion
     if type(accordion) == "table" then
@@ -769,12 +771,10 @@ local function ApplySearchRoute(pageKey, route)
             M.accordionState = M.accordionState or {}
             target = M.accordionState
         end
-        for key, value in pairs(accordion) do
-            local open = value and true or false
-            if target[key] ~= open then
-                target[key] = open
-                changed = true
-            end
+        local normalizedAccordion = {}
+        for key, value in pairs(accordion) do normalizedAccordion[key] = value and true or false end
+        if ApplyRouteValues(target, normalizedAccordion) then
+            changed = true
         end
     end
     local tables = route.tables
@@ -786,12 +786,7 @@ local function ApplySearchRoute(pageKey, route)
                     target = {}
                     M[tableName] = target
                 end
-                for key, value in pairs(values) do
-                    if target[key] ~= value then
-                        target[key] = value
-                        changed = true
-                    end
-                end
+                if ApplyRouteValues(target, values) then changed = true end
             end
         end
     end
@@ -840,12 +835,7 @@ local function ApplySearchRoute(pageKey, route)
             _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
             db = _G.MSUF_DB.general
         end
-        for key, value in pairs(general) do
-            if db[key] ~= value then
-                db[key] = value
-                changed = true
-            end
-        end
+        if ApplyRouteValues(db, general) then changed = true end
     end
     if changed and pageKey and type(M.InvalidatePage) == "function" then
         M.InvalidatePage(pageKey)

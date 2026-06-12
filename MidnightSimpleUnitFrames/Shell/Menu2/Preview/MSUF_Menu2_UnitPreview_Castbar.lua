@@ -1,4 +1,4 @@
---- Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua
+--- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua
 --- Cold-path castbar preview helpers.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}

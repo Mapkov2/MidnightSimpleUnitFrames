@@ -55,45 +55,6 @@ function M.GetGeneralDB()
     return db.general, db
 end
 
-function M.ShowPreserveHPColorWarning()
-    local g = M.GetGeneralDB()
-    if g.hidePreserveHPColorWarning == true then return false end
-
-    local message = M.Tr("Preserve HP color keeps the HP fill color while layer fade is active and draws missing health separately with the same HP track color from Colors.\n\nThis can help when HP Bar fade makes the empty HP area disappear or look black. Some custom textures may still look flat, dark, or different while this option is enabled.")
-    if not (_G.StaticPopupDialogs and _G.StaticPopup_Show) then
-        if print then
-            print(M.Tr("|cffffd700MSUF:|r Preserve HP color uses the same HP track color from Colors, but some bar textures may look different."))
-        end
-        return false
-    end
-
-    if not _G.StaticPopupDialogs.MSUF2_PRESERVE_HP_COLOR_WARNING then
-        _G.StaticPopupDialogs.MSUF2_PRESERVE_HP_COLOR_WARNING = {
-            text = "%s",
-            button1 = _G.OKAY or "OK",
-            button2 = M.Tr("Don't show again"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = false,
-            preferredIndex = 3,
-            OnCancel = function()
-                local gen = M.GetGeneralDB()
-                gen.hidePreserveHPColorWarning = true
-            end,
-        }
-    end
-
-    _G.StaticPopup_Show("MSUF2_PRESERVE_HP_COLOR_WARNING", message)
-    return true
-end
-
-function M.WarnPreserveHPColorIfNeeded(enabled)
-    if enabled == true then
-        return M.ShowPreserveHPColorWarning()
-    end
-    return false
-end
-
 local function CallGlobal(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then
@@ -101,6 +62,19 @@ local function CallGlobal(name, ...)
     end
     return false
 end
+local function CallGlobalList(names)
+    for i = 1, #(names or {}) do CallGlobal(names[i]) end
+end
+local PROFILE_APPLY_GLOBALS = WL [[
+    MSUF_GF_InvalidateCooldownTextCurve MSUF_GF_ForceCooldownTextRecolor MSUF_RefreshAllIdentityColors
+    MSUF_RefreshAllPowerTextColors MSUF_RefreshAllFrames MSUF_UpdateAllBarTextures_Immediate
+    MSUF_UpdateAllBarTextures MSUF_UpdateCastbarVisuals_Immediate MSUF_ClassPower_Refresh MSUF_ClassPower_RefreshTextures
+]]
+local RESTORE_GLOBALS = WL [[
+    MSUF_UpdateAllFonts_Immediate MSUF_UpdateAllBarTextures_Immediate MSUF_UpdateAllBarTextures
+    MSUF_UpdateCastbarVisuals_Immediate MSUF_UpdateCastbarVisuals MSUF_RefreshAllIdentityColors
+    MSUF_RefreshAllPowerTextColors MSUF_RefreshAllUnitAlphas MSUF_RefreshAllFrames
+]]
 
 local function ApplyUnitFrame(unit)
     local UF = MSUF and MSUF.UF
@@ -381,16 +355,7 @@ local function ApplyHistorySnapshot(snapshot, reason)
     elseif type(_G.MSUF_Auras3_RefreshAll) == "function" then
         pcall(_G.MSUF_Auras3_RefreshAll)
     end
-    CallGlobal("MSUF_GF_InvalidateCooldownTextCurve")
-    CallGlobal("MSUF_GF_ForceCooldownTextRecolor")
-    CallGlobal("MSUF_RefreshAllIdentityColors")
-    CallGlobal("MSUF_RefreshAllPowerTextColors")
-    CallGlobal("MSUF_RefreshAllFrames")
-    CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
-    CallGlobal("MSUF_UpdateAllBarTextures")
-    CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
-    CallGlobal("MSUF_ClassPower_Refresh")
-    CallGlobal("MSUF_ClassPower_RefreshTextures")
+    CallGlobalList(PROFILE_APPLY_GLOBALS)
     CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, "MSUF2_PROFILE_APPLY")
     if MSUF and MSUF.GF then
         if type(MSUF.GF.RebuildAll) == "function" then pcall(MSUF.GF.RebuildAll) end
@@ -490,14 +455,6 @@ function M.CommitHistoryTransaction()
     local pushed = PushHistory(tx.label, tx.source, tx.before, SnapshotDB())
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
-end
-
-function M.CancelHistoryTransaction()
-    if not historyTransaction then return false end
-    historyTransaction = nil
-    historyDepth = math.max(0, historyDepth - 1)
-    NotifyHistoryChanged()
-    return true
 end
 
 function M.ResetHistorySession()
@@ -678,92 +635,33 @@ local UNIT_CASTBAR_GENERAL_KEYS = {
     boss = WL("enableBossCastbar bossCastbarBackend bossCastbarBackendBeforeHide showBossCastTime showBossCastIcon showBossCastName bossCastTimeFormat bossCastIconPosition bossCastIconSize bossCastIconOffsetX bossCastIconOffsetY bossCastIconSpacing bossCastIconBorderStyle bossCastSpellNamePosition bossCastSpellNameFontSize bossCastTextOffsetX bossCastTextOffsetY bossCastSpellNameAlign bossCastSpellNameMaxWidth bossCastSpellNameTruncate bossCastTimePosition bossCastTimeFontSize bossCastTimeOffsetX bossCastTimeOffsetY"),
 }
 
-local GROUP_RESET_INFO = {
-    label = "Group Frames",
-    kind = "group",
-    summary = "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions",
-}
+local function ResetInfo(label, kind, summary)
+    return { label = label, kind = kind, summary = summary }
+end
+
+local GROUP_RESET_INFO = ResetInfo("Group Frames", "group", "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions")
+local AURA_STYLE_SUMMARY = "scope-aware Buff and Debuff text, cooldown and stack styling"
 
 local PAGE_RESET_INFO = {
     gf_layout = GROUP_RESET_INFO,
     gf_bars = GROUP_RESET_INFO,
     gf_auras = GROUP_RESET_INFO,
     gf_indicators = GROUP_RESET_INFO,
-    opt_bars = {
-        label = "Bars",
-        kind = "bars",
-        summary = "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides",
-    },
-    opt_fonts = {
-        label = "Fonts",
-        kind = "fonts",
-        summary = "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides",
-    },
-    auras3 = {
-        label = "Aura Style",
-        kind = "auras",
-        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
-    },
-    auras3_buffs = {
-        label = "Aura Buffs",
-        kind = "auras",
-        summary = "Buff text, cooldown and stack styling",
-    },
-    auras3_debuffs = {
-        label = "Aura Debuffs",
-        kind = "auras",
-        summary = "Debuff text, cooldown and stack styling",
-    },
-    auras3_rendering = {
-        label = "Aura Style",
-        kind = "auras",
-        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
-    },
-    auras3_filters = {
-        label = "Aura Filters",
-        kind = "auras",
-        summary = "scope-aware Buff and Debuff filters and blacklists",
-    },
-    auras3_styling = {
-        label = "Aura Style",
-        kind = "auras",
-        summary = "scope-aware Buff and Debuff text, cooldown and stack styling",
-    },
-    opt_castbar = {
-        label = "Castbar",
-        kind = "castbar",
-        summary = "global castbar behavior, textures, boss castbar and interrupt indicator settings",
-    },
-    opt_colors = {
-        label = "Colors",
-        kind = "colors",
-        summary = "frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings",
-    },
-    opt_misc = {
-        label = "Miscellaneous",
-        kind = "misc",
-        summary = "language/menu behavior, update pacing, tooltips, Blizzard-frame handling, minimap icon, sounds and range-fade settings",
-    },
-    classpower = {
-        label = "Class Resources",
-        kind = "classpower",
-        summary = "class-resource layout, behavior, style, auto-hide, detached power bar and alternative mana settings",
-    },
-    gameplay = {
-        label = "Gameplay",
-        kind = "gameplay",
-        summary = "gameplay enhancement settings such as combat text, crosshair and click-cast behavior",
-    },
-    modules = {
-        label = "Modules",
-        kind = "modules",
-        summary = "optional style/module settings such as MSUF Style and dropdown style",
-    },
-    profiles = {
-        label = "Profiles",
-        kind = "profile",
-        summary = "the entire active profile",
-    },
+    opt_bars = ResetInfo("Bars", "bars", "shared bar textures, gradients, rounded frame corners, absorb display, outlines, highlight borders, power smoothing and all per-unit/group bar overrides"),
+    opt_fonts = ResetInfo("Fonts", "fonts", "shared font family, text style, name/power text coloring, name shortening and all per-unit/group font overrides"),
+    auras3 = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
+    auras3_buffs = ResetInfo("Aura Buffs", "auras", "Buff text, cooldown and stack styling"),
+    auras3_debuffs = ResetInfo("Aura Debuffs", "auras", "Debuff text, cooldown and stack styling"),
+    auras3_rendering = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
+    auras3_filters = ResetInfo("Aura Filters", "auras", "scope-aware Buff and Debuff filters and blacklists"),
+    auras3_styling = ResetInfo("Aura Style", "auras", AURA_STYLE_SUMMARY),
+    opt_castbar = ResetInfo("Castbar", "castbar", "global castbar behavior, textures, boss castbar and interrupt indicator settings"),
+    opt_colors = ResetInfo("Colors", "colors", "frame colors, class/NPC colors, power colors, castbar colors, aura colors and gameplay color settings"),
+    opt_misc = ResetInfo("Miscellaneous", "misc", "language/menu behavior, update pacing, tooltips, Blizzard-frame handling, minimap icon, sounds and range-fade settings"),
+    classpower = ResetInfo("Class Resources", "classpower", "class-resource layout, behavior, style, auto-hide, detached power bar and alternative mana settings"),
+    gameplay = ResetInfo("Gameplay", "gameplay", "gameplay enhancement settings such as combat text, crosshair and click-cast behavior"),
+    modules = ResetInfo("Modules", "modules", "optional style/module settings such as MSUF Style and dropdown style"),
+    profiles = ResetInfo("Profiles", "profile", "the entire active profile"),
 }
 
 for pageKey, info in pairs(UNIT_PAGE_RESETS) do
@@ -809,6 +707,7 @@ local FONT_SCOPE_KEYS = KSW [[
 ]]
 
 local FONT_ROOT_KEYS = KS("shortenNames", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots")
+local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget focus pet boss gf_party gf_raid gf_mythicraid]]
 
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
@@ -818,6 +717,7 @@ local MISC_GENERAL_KEYS = KSW [[
 ]]
 
 local MISC_UNIT_KEYS = {}
+local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
 
 local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickIconWidth focusKickIconHeight focusKickTextSize
@@ -825,7 +725,7 @@ local CASTBAR_GENERAL_KEYS = KSW [[
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY
 ]]
 
-local MODULES_GENERAL_KEYS = KS("styleEnabled", "dropdownStyleMode")
+local MODULES_GENERAL_KEYS = KS("styleEnabled")
 
 local COLOR_GENERAL_KEYS = KS(
     "highlightEnabled", "playerCastbarOverrideEnabled", "playerCastbarOverrideMode",
@@ -1027,7 +927,7 @@ end
 local function ResetBarsPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", IsBarsGeneralKey)
     ResetRootFiltered(db, defaults, "bars", function(key) return BARS_TABLE_KEYS[key] == true end)
-    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, IsBarsScopeKey)
     end
     EnsureTargetTargetAlias(db)
@@ -1036,7 +936,7 @@ end
 local function ResetFontsPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return FONT_GENERAL_KEYS[key] == true end)
     ResetKeySet(db, defaults, FONT_ROOT_KEYS)
-    for _, key in ipairs({ "player", "target", "targettarget", "focustarget", "focus", "pet", "boss", "gf_party", "gf_raid", "gf_mythicraid" }) do
+    for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, IsFontScopeKey)
     end
     EnsureTargetTargetAlias(db)
@@ -1064,7 +964,7 @@ end
 
 local function ResetMiscPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return MISC_GENERAL_KEYS[key] == true end)
-    for _, key in ipairs({ "target", "focus", "boss" }) do
+    for _, key in ipairs(MISC_UNIT_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, function(unitKey) return MISC_UNIT_KEYS[unitKey] == true end)
     end
 end
@@ -1080,6 +980,20 @@ end
 local function ResetModulesPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return MODULES_GENERAL_KEYS[key] == true end)
 end
+
+local PAGE_RESET_HANDLERS = {
+    unit = function(db, defaults, info) ResetUnitPage(db, defaults, info.unit) end,
+    group = ResetGroupFrames,
+    bars = ResetBarsPage,
+    fonts = ResetFontsPage,
+    auras = ResetAurasPage,
+    castbar = ResetCastbarPage,
+    colors = ResetColorsPage,
+    misc = ResetMiscPage,
+    classpower = ResetClassPowerPage,
+    gameplay = ResetGameplayPage,
+    modules = ResetModulesPage,
+}
 
 local function ApplyAfterPageReset(pageKey, info)
     local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
@@ -1123,15 +1037,7 @@ local function ApplyAfterPageReset(pageKey, info)
         CallGlobal("MSUF_ApplyModules")
     end
 
-    CallGlobal("MSUF_UpdateAllFonts_Immediate")
-    CallGlobal("MSUF_UpdateAllBarTextures_Immediate")
-    CallGlobal("MSUF_UpdateAllBarTextures")
-    CallGlobal("MSUF_UpdateCastbarVisuals_Immediate")
-    CallGlobal("MSUF_UpdateCastbarVisuals")
-    CallGlobal("MSUF_RefreshAllIdentityColors")
-    CallGlobal("MSUF_RefreshAllPowerTextColors")
-    CallGlobal("MSUF_RefreshAllUnitAlphas")
-    CallGlobal("MSUF_RefreshAllFrames")
+    CallGlobalList(RESTORE_GLOBALS)
     CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, "MSUF2_RESTORE")
 
     if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
@@ -1176,31 +1082,9 @@ local function ResetPageImpl(pageKey)
     end
 
     local db = M.EnsureDB()
-    if info.kind == "unit" then
-        ResetUnitPage(db, defaults, info.unit)
-    elseif info.kind == "group" then
-        ResetGroupFrames(db, defaults)
-    elseif info.kind == "bars" then
-        ResetBarsPage(db, defaults)
-    elseif info.kind == "fonts" then
-        ResetFontsPage(db, defaults)
-    elseif info.kind == "auras" then
-        ResetAurasPage(db, defaults)
-    elseif info.kind == "castbar" then
-        ResetCastbarPage(db, defaults)
-    elseif info.kind == "colors" then
-        ResetColorsPage(db, defaults)
-    elseif info.kind == "misc" then
-        ResetMiscPage(db, defaults)
-    elseif info.kind == "classpower" then
-        ResetClassPowerPage(db, defaults)
-    elseif info.kind == "gameplay" then
-        ResetGameplayPage(db, defaults)
-    elseif info.kind == "modules" then
-        ResetModulesPage(db, defaults)
-    else
-        return false
-    end
+    local handler = PAGE_RESET_HANDLERS[info.kind]
+    if not handler then return false end
+    handler(db, defaults, info)
 
     EnsureTargetTargetAlias(db)
     ApplyAfterPageReset(pageKey, info)

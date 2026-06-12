@@ -82,6 +82,50 @@ function Util.RefreshUFPreview(reason)
     if type(fn) == "function" then fn(reason or "EM2") end
 end
 
+function Util.SyncMovers()
+    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+end
+
+function Util.NotifyPositionChanged(key, immediate)
+    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, immediate) end
+end
+
+function Util.SyncMoversAndNotify(key, immediate)
+    Util.SyncMovers()
+    Util.NotifyPositionChanged(key, immediate)
+end
+
+function Util.SetMenuFocusRequest(opts)
+    if type(opts) ~= "table" then return nil end
+    _G.MSUF_EM2_MenuFocusRequest = {
+        key = opts.key,
+        component = opts.component,
+        slot = opts.slot,
+        pageKey = opts.pageKey,
+        sectionId = opts.sectionId,
+        source = opts.source,
+        explicit = true,
+        changedAt = GetTime and GetTime() or 0,
+    }
+    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
+    if M then M.editModeSelection = _G.MSUF_EM2_MenuFocusRequest end
+    return _G.MSUF_EM2_MenuFocusRequest
+end
+
+function Util.WirePopupFocus(btn, getKey, component, source, slot)
+    if not (btn and btn.HookScript) then return btn end
+    btn:HookScript("OnEnter", function()
+        local key = type(getKey) == "function" and getKey() or getKey
+        if key and EM2.Focus and EM2.Focus.SetHover then
+            EM2.Focus.SetHover(key, component, slot, { source = source })
+        end
+    end)
+    btn:HookScript("OnLeave", function()
+        if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover(source) end
+    end)
+    return btn
+end
+
 function Util.Round(n)
     return n + (2^52 + 2^51) - (2^52 + 2^51)
 end
@@ -97,6 +141,42 @@ function Util.UnitSectionForComponent(component)
     if component == "alpha" or component == "transparency" then return "transparency" end
     if component == "status" or component == "status_icons" then return "status_icons" end
     return "frame_basics"
+end
+
+function Util.NormalizeFocusKey(key)
+    if type(key) ~= "string" or key == "" then return nil end
+    key = key:lower()
+    if key:sub(1, 5) == "aura_" then return Util.NormalizeFocusKey(key:sub(6)) end
+    if key == "tot" then return "targettarget" end
+    if key == "focus_target" or key == "focustargettarget" then return "focustarget" end
+    if key == "uf_player" then return "player" end
+    if key == "uf_target" then return "target" end
+    if key == "uf_targettarget" then return "targettarget" end
+    if key == "uf_focustarget" then return "focustarget" end
+    if key == "uf_focus" then return "focus" end
+    if key == "uf_pet" then return "pet" end
+    if key == "uf_boss" then return "boss" end
+    if key:match("^boss%d+$") then return "boss" end
+    return key
+end
+
+function Util.NormalizeFocusComponent(component)
+    if type(component) ~= "string" or component == "" then return nil end
+    component = component:lower()
+    if component == "health" or component == "healthtext" or component == "hptext" then return "hp" end
+    if component == "powertext" then return "power" end
+    if component == "aura" or component == "buff" or component == "buffs" or component == "debuff" or component == "debuffs" then return "auras" end
+    if component == "cast" then return "castbar" end
+    return component
+end
+
+function Util.NormalizeFocusSlot(slot)
+    if type(slot) ~= "string" or slot == "" then return nil end
+    slot = slot:lower()
+    if slot == "l" then return "left" end
+    if slot == "c" then return "center" end
+    if slot == "r" then return "right" end
+    return slot
 end
 
 function Util.SyncUnitTextMenuState(M, key, component, slot)
@@ -197,6 +277,7 @@ EM2.State = State
 local active      = false
 local unitKey     = nil
 local combatFrame = nil
+local combatEventsRegistered = false
 local pendingCombatExitApply = false
 
 local IsConfigCombatLocked = Util.IsConfigCombatLocked
@@ -361,6 +442,7 @@ local function RestoreAfterCombatExit()
     if _G.MSUF_Auras3_RefreshAll then
         _G.MSUF_Auras3_RefreshAll()
     end
+    if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
 local function RestoreDB()
@@ -395,6 +477,7 @@ function State.Enter(key)
     active  = true
     unitKey = key or "player"
     SyncLegacy()
+    if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 
     SnapshotDB()
 
@@ -440,7 +523,7 @@ function State.Enter(key)
         elseif _G.MSUF_SyncAllUnitPreviews then
             _G.MSUF_SyncAllUnitPreviews()
         end
-        if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+        Util.SyncMovers()
     end
 
     --- Preview: defer the (heavy) preview sync to the next frame so the click
@@ -540,6 +623,7 @@ function State.Exit(source)
 
     --- Notify listeners
     NotifyListeners()
+    if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
 --- CANCEL ALL - restore DB to pre-edit-mode state, then exit
@@ -596,15 +680,15 @@ function State.CancelAll()
     if _G.MSUF_Auras3_RefreshAll then _G.MSUF_Auras3_RefreshAll() end
 
     NotifyListeners()
+    if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
 end
 
---- Combat guard: auto-exit on PLAYER_REGEN_DISABLED
---- Installed at LOAD time (not lazy) so it's always active.
+--- Combat guard: auto-exit on PLAYER_REGEN_DISABLED.
+--- Events are registered only while Edit Mode is active or while a combat-exit
+--- restore is pending, so normal combat has no Edit Mode shell event overhead.
 function State.EnsureCombatListener()
     if combatFrame then return end
     combatFrame = CreateFrame("Frame")
-    combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
-    combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     combatFrame:SetScript("OnEvent", function(_, event)
         if event == "PLAYER_REGEN_DISABLED" and active then
             State.Exit("combat")
@@ -612,10 +696,24 @@ function State.EnsureCombatListener()
         elseif event == "PLAYER_REGEN_ENABLED" and pendingCombatExitApply then
             RestoreAfterCombatExit()
         end
+        if State.UpdateCombatListenerRegistration then State.UpdateCombatListenerRegistration() end
     end)
 end
---- Install immediately at file load
-State.EnsureCombatListener()
+
+function State.UpdateCombatListenerRegistration()
+    if active or pendingCombatExitApply then
+        State.EnsureCombatListener()
+        if combatFrame and not combatEventsRegistered then
+            combatEventsRegistered = true
+            combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+            combatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        end
+    elseif combatFrame and combatEventsRegistered then
+        combatEventsRegistered = false
+        combatFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
+        combatFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    end
+end
 
 --- Stub: called when unit selection changes while already active
 function EM2.OnUnitChanged(key)
@@ -726,7 +824,7 @@ local function RestoreState(snap)
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    Util.SyncMovers()
 
     _G.MSUF__UndoRestoring = false
 end
@@ -785,9 +883,6 @@ _G.MSUF_EM_UndoRedo = function() Undo.DoRedo() end
 
 --- MSUF_EM2_Init.lua
 --- Loads last. Compat.lua already provides all legacy globals.
---- This file ensures combat listener and exposes version tag.
-if EM2.State and EM2.State.EnsureCombatListener then
-    EM2.State.EnsureCombatListener()
-end
+--- This file exposes version tag; combat listener is demand-registered by state.
 
 EM2.VERSION = "2.0.0"

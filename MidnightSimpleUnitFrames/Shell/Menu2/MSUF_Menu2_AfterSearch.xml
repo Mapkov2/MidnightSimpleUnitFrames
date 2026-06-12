@@ -1,0 +1,6 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Script file="Assistant\MSUF_AssistantKnowledge.lua"/>
+    <Script file="Assistant\MSUF_AssistantRouter.lua"/>
+    <Script file="Pages\MSUF_Menu2_Unit.lua"/>
+    <Script file="Pages\MSUF_Menu2_UnitLazy.lua"/>
+</Ui>

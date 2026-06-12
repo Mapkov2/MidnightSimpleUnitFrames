@@ -90,12 +90,16 @@ local LANE_GROWTH_VALUES = {
     { value = "LEFTDOWN", text = "Left then Down" },
     { value = "RIGHTUP", text = "Right then Up" },
     { value = "LEFTUP", text = "Left then Up" },
+    { value = "UP", text = "Up" },
+    { value = "DOWN", text = "Down" },
 }
 local LANE_GROWTH_PARTS = {
     RIGHTDOWN = { "RIGHT", "DOWN" },
     LEFTDOWN = { "LEFT", "DOWN" },
     RIGHTUP = { "RIGHT", "UP" },
     LEFTUP = { "LEFT", "UP" },
+    UP = { "UP", "DOWN" },
+    DOWN = { "DOWN", "DOWN" },
 }
 
 local LAYOUT_KEYS = {
@@ -999,6 +1003,7 @@ end
 function Model.ReadLaneGrowthPair(unit, kind)
     kind = NormalizeKind(kind)
     local growth = Model.ReadLaneGrowth(unit, kind)
+    if growth == "UP" or growth == "DOWN" then return growth end
     local rowWrap = Model.ReadLaneRowWrap(unit, kind)
     local pair = tostring(growth or "RIGHT") .. tostring(rowWrap or "DOWN")
     return LANE_GROWTH_PARTS[pair] and pair or "RIGHTDOWN"
@@ -1382,6 +1387,24 @@ function Model.BlacklistEntries(scope)
     end
     table_sort(out, function(a, b) return tostring(a.text) < tostring(b.text) end)
     return out
+end
+
+local function CountBlacklistSpells(spells)
+    if type(spells) ~= "table" then return 0 end
+    local count = 0
+    for _, enabled in pairs(spells) do
+        if enabled == true then count = count + 1 end
+    end
+    return count
+end
+
+function Model.ClearBlacklistSpells(scope)
+    local effective = EnsureBlacklist(scope, false)
+    local count = CountBlacklistSpells(type(effective) == "table" and effective.spells or nil)
+    local list = EnsureBlacklist(scope, true)
+    if type(list) ~= "table" then return 0 end
+    list.spells = {}
+    return count
 end
 
 function Model.BlacklistPreparedCount(scope)

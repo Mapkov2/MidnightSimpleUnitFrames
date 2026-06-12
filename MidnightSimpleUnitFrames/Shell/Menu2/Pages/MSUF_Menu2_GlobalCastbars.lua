@@ -201,49 +201,37 @@ local function BuildCastbars(ctx)
             return not (key and g and g[key] == false)
         end
 
-        local unitButtons = {}
-        local unitBox = T.Panel(section, nil, { 0.020, 0.026, 0.052, 0.94 }, T.colors.borderSoft)
-        unitBox:SetSize(232, 34)
-        unitBox:SetPoint("TOPLEFT", section, "TOPLEFT", 82, -12)
-        for i, spec in ipairs({
+        local function PreviewButtonGroup(parent, point, relPoint, x, y, specs, buttonW, gap, extraW, onClick)
+            local buttons = {}
+            local box = T.Panel(parent, nil, { 0.020, 0.026, 0.052, 0.94 }, T.colors.borderSoft)
+            box:SetSize((#specs * buttonW) + ((#specs - 1) * gap) + (extraW or 12), 34)
+            box:SetPoint(point, parent, relPoint, x, y)
+            for i = 1, #specs do
+                local spec = specs[i]
+                local btn = T.CenterButtonLabel(T.Button(box, spec.text, buttonW, 24))
+                local value = spec.key
+                btn._msuf2AllowCombatClick = true
+                btn._msuf2SkipHistoryCheckpoint = true
+                btn:SetPoint("LEFT", box, "LEFT", 6 + ((i - 1) * (buttonW + gap)), 0)
+                btn:SetScript("OnClick", function() onClick(value) end)
+                buttons[value] = btn
+            end
+            return buttons, box
+        end
+
+        local unitButtons = PreviewButtonGroup(section, "TOPLEFT", "TOPLEFT", 82, -12, {
             { key = "player", text = "Player" },
             { key = "target", text = "Target" },
             { key = "focus", text = "Focus" },
             { key = "boss", text = "Boss" },
-        }) do
-            local layoutUnit = spec.key
-            local btn = T.CenterButtonLabel(T.Button(unitBox, spec.text, 52, 24))
-            btn._msuf2AllowCombatClick = true
-            btn._msuf2SkipHistoryCheckpoint = true
-            btn:SetPoint("LEFT", unitBox, "LEFT", 6 + ((i - 1) * 56), 0)
-            btn:SetScript("OnClick", function()
-                M.SetCastbarPreviewUnit(layoutUnit)
-            end)
-            unitButtons[layoutUnit] = btn
-        end
+        }, 52, 4, 12, M.SetCastbarPreviewUnit)
 
-        local typeButtons = {}
         local buttonW, buttonGap, interruptW = 82, 6, 90
-        local buttonsW = (buttonW * 3) + (buttonGap * 2) + 12
-        local typeBox = T.Panel(section, nil, { 0.020, 0.026, 0.052, 0.94 }, T.colors.borderSoft)
-        typeBox:SetSize(buttonsW, 34)
-        typeBox:SetPoint("TOPRIGHT", section, "TOPRIGHT", -(14 + interruptW + 10), -12)
-
-        for i, spec in ipairs({
+        local typeButtons = PreviewButtonGroup(section, "TOPRIGHT", "TOPRIGHT", -(14 + interruptW + 10), -12, {
             { key = "normal", text = "Normal" },
             { key = "channel", text = "Channel" },
             { key = "empowered", text = "Empowered" },
-        }) do
-            local castType = spec.key
-            local btn = T.CenterButtonLabel(T.Button(typeBox, spec.text, buttonW, 24))
-            btn._msuf2AllowCombatClick = true
-            btn._msuf2SkipHistoryCheckpoint = true
-            btn:SetPoint("LEFT", typeBox, "LEFT", 6 + ((i - 1) * (buttonW + buttonGap)), 0)
-            btn:SetScript("OnClick", function()
-                M.SetCastbarPreviewType(castType)
-            end)
-            typeButtons[castType] = btn
-        end
+        }, buttonW, buttonGap, 12, M.SetCastbarPreviewType)
 
         local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(section, "Interrupt", interruptW, 24)))
         interrupt._msuf2AllowCombatClick = true
