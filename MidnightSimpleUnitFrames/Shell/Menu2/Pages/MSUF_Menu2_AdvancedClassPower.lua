@@ -17,6 +17,7 @@ local RefreshClassPowerInlinePreview
 
 local CallGlobal, Bars, BoolValue, NumValue, SetValue, DeepCopyTable, BindTableToggle, BindTableSlider, BindTableDropdown, SwitchAt, SetControlEnabled = M.Pick(AP, [[CallGlobal Bars BoolValue NumValue SetValue DeepCopyTable BindTableToggle BindTableSlider BindTableDropdown SwitchAt SetControlEnabled]])
 local MoveWidget = W.MoveWidget or AP.MoveWidget
+local CPPreview = M.ClassPowerPreview or {}
 local function ApplyClassPower()
     CallGlobal("MSUF_ClassPower_Refresh")
     CallGlobal("MSUF_ClassPower_RefreshTextures")
@@ -27,6 +28,34 @@ end
 
 local TextureValues = M.StatusBarTextureItems
 local VT = M.ValueTextList
+local CP_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
+local CP_SHAPE_TEXTURES = {
+    CIRCLE = {
+        fill = CP_SHAPE_MEDIA .. "pip_circle_fill.tga",
+        bg = CP_SHAPE_MEDIA .. "pip_circle_bg.tga",
+        edge = CP_SHAPE_MEDIA .. "pip_circle_edge.tga",
+    },
+    DIAMOND = {
+        fill = CP_SHAPE_MEDIA .. "pip_diamond_fill.tga",
+        bg = CP_SHAPE_MEDIA .. "pip_diamond_bg.tga",
+        edge = CP_SHAPE_MEDIA .. "pip_diamond_edge.tga",
+    },
+    HEX = {
+        fill = CP_SHAPE_MEDIA .. "pip_hex_fill.tga",
+        bg = CP_SHAPE_MEDIA .. "pip_hex_bg.tga",
+        edge = CP_SHAPE_MEDIA .. "pip_hex_edge.tga",
+    },
+}
+
+local function NormalizeClassPowerShape(value)
+    value = tostring(value or "BAR"):upper()
+    if value == "CIRCLE" or value == "DIAMOND" or value == "HEX" then return value end
+    return "BAR"
+end
+
+local function ClassPowerShapeTextures(value)
+    return CP_SHAPE_TEXTURES[NormalizeClassPowerShape(value)]
+end
 
 local CLASS_POWER_PREVIEW_SPECS = {
     { key = "deathknight_runes", label = "Death Knight - Runes", token = "RUNES", mode = "rune", segments = 6, value = 3, previewText = "3", runeDuration = 10 },
@@ -92,196 +121,6 @@ end
 M.ClassPowerPreviewSpecValues = CLASS_POWER_PREVIEW_VALUES
 M.ClassPowerPreviewSpecs = CLASS_POWER_PREVIEW_BY_KEY
 
-local CLASS_POWER_PREVIEW_FALLBACK_COLORS = {
-    ARCANE_CHARGES = { 0.45, 0.55, 1.00 },
-    CHI = { 0.70, 1.00, 0.86 },
-    COMBO_POINTS = { 1.00, 0.82, 0.10 },
-    CHARGED = { 0.60, 0.20, 0.80 },
-    EBON_MIGHT = { 0.40, 0.80, 0.60 },
-    ESSENCE = { 0.32, 0.74, 1.00 },
-    HOLY_POWER = { 0.95, 0.86, 0.20 },
-    INSANITY = { 0.55, 0.32, 0.95 },
-    MAELSTROM = { 0.00, 0.55, 1.00 },
-    MAELSTROM_ABOVE_5 = { 1.00, 0.50, 0.00 },
-    RUNES = { 0.55, 0.85, 1.00 },
-    SOUL_FRAGMENTS = { 0.00, 0.80, 0.00 },
-    SOUL_FRAGMENTS_META = { 0.60, 0.20, 0.93 },
-    SOUL_FRAGMENTS_VENG = { 0.34, 0.06, 0.46 },
-    SOUL_SHARDS = { 0.58, 0.28, 0.92 },
-    STAGGER_GREEN = { 0.52, 1.00, 0.52 },
-    STAGGER_YELLOW = { 1.00, 0.98, 0.72 },
-    STAGGER_RED = { 1.00, 0.42, 0.42 },
-    TIP_OF_THE_SPEAR = { 0.60, 0.80, 0.20 },
-    WHIRLWIND = { 0.20, 0.80, 0.20 },
-}
-
-local COMBO_POINT_SLOT_TOKENS = {
-    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
-    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
-}
-local COMBO_POINT_RAMP_R = { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
-local COMBO_POINT_RAMP_G = { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
-local COMBO_POINT_RAMP_B = { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
-
-local function ClassPowerPreviewColorOverride(tableName, token)
-    local db = _G.MSUF_DB
-    local general = db and db.general
-    local overrides = general and general[tableName]
-    local c = overrides and token and overrides[token]
-    if type(c) ~= "table" then return nil end
-    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
-    return nil
-end
-
-local function ResolveClassPowerPreviewColor(token, fallbackR, fallbackG, fallbackB)
-    local r, g, b = ClassPowerPreviewColorOverride("classPowerColorOverrides", token)
-    if r then return r, g, b end
-    if type(_G.MSUF_GetPowerBarColor) == "function" and token then
-        r, g, b = _G.MSUF_GetPowerBarColor(0, token)
-        if type(r) == "number" then return r, g, b end
-    end
-    local pbc = _G.PowerBarColor
-    local c = pbc and token and pbc[token]
-    if c then
-        r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
-        if type(r) == "number" then return r, g, b end
-    end
-    c = token and CLASS_POWER_PREVIEW_FALLBACK_COLORS[token]
-    if c then return c[1], c[2], c[3] end
-    return fallbackR or 1, fallbackG or 1, fallbackB or 1
-end
-
-local function ResolveClassPowerPreviewTextColor()
-    return ResolveClassPowerPreviewColor("RESOURCE_TEXT", 1, 1, 1)
-end
-
-local function ResolveComboPointPreviewColor(bars, slot, baseR, baseG, baseB)
-    local mode = bars and bars.classPowerComboPointColorMode
-    if mode ~= "ramp" and mode ~= "custom" then return baseR, baseG, baseB end
-    slot = tonumber(slot) or 1
-    if slot < 1 then slot = 1 elseif slot > 7 then slot = 7 end
-    if mode == "custom" then
-        local r, g, b = ClassPowerPreviewColorOverride("classPowerColorOverrides", COMBO_POINT_SLOT_TOKENS[slot])
-        if r then return r, g, b end
-    end
-    return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
-end
-
-local function IsChargedComboPreviewSlot(spec, bars, slot)
-    return spec and spec.token == "COMBO_POINTS"
-        and bars and bars.showChargedComboPoints ~= false
-        and spec.chargedSlots and spec.chargedSlots[slot] == true
-end
-
-local function IsClassPowerSingleBarPreviewMode(mode)
-    return mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single"
-end
-
-local function IsEssencePreview(spec)
-    return spec and spec.token == "ESSENCE"
-end
-
-local function ClassPowerPreviewTokenForValue(spec, value)
-    if spec and spec.mode == "stagger" then
-        value = tonumber(value)
-        if value == nil then value = tonumber(spec.value) or 0 end
-        if value >= 0.60 then return "STAGGER_RED" end
-        if value > 0.30 then return "STAGGER_YELLOW" end
-        return "STAGGER_GREEN"
-    end
-    return spec and spec.token
-end
-
-local function PreviewFillForSegment(spec, index, valueOverride)
-    if not spec then return index <= 3 and 1 or 0 end
-    local mode = spec.mode or "segmented"
-    local value = tonumber(valueOverride)
-    if value == nil then value = tonumber(spec.value) or 0 end
-    if IsClassPowerSingleBarPreviewMode(mode) then
-        if index ~= 1 then return 0 end
-        if value < 0 then value = 0 elseif value > 1 then value = 1 end
-        return value
-    end
-    local full = floor(value)
-    if mode == "fractional" or IsEssencePreview(spec) then
-        local partial = value - full
-        if index <= full then return 1 end
-        if index == full + 1 and partial > 0.001 then return partial end
-        return 0
-    end
-    return index <= full and 1 or 0
-end
-
-local function AnimatedClassPowerPreviewValue(spec, elapsed)
-    if not spec then return nil end
-    local mode = spec.mode or "segmented"
-    local maxValue = tonumber(spec.segments) or 1
-    if IsClassPowerSingleBarPreviewMode(mode) then
-        maxValue = 1
-    elseif maxValue < 1 then
-        maxValue = 1
-    end
-    elapsed = tonumber(elapsed) or 0
-    if mode == "timer_bar" then
-        return 1 - ((elapsed % 4.8) / 4.8)
-    end
-    local phase = (elapsed % 2.4) / 2.4
-    local wave = phase < 0.5 and (phase * 2) or ((1 - phase) * 2)
-    if mode == "continuous" or mode == "stagger" or mode == "aura_single" then
-        return 0.08 + (wave * 0.88)
-    end
-    if IsEssencePreview(spec) then
-        local cycle = (elapsed / 1.15) % (maxValue + 1)
-        if cycle >= maxValue then return maxValue end
-        local full = floor(cycle)
-        return full + (cycle - full)
-    end
-    if mode == "fractional" then
-        return wave * maxValue
-    end
-    local steps = maxValue * 2
-    local step = floor((elapsed / 0.42) % steps)
-    if step <= maxValue then return step end
-    return steps - step
-end
-
-local function PreviewTextForValue(spec, value)
-    if not spec then return "" end
-    if value == nil then return spec.previewText or "" end
-    local mode = spec.mode or "segmented"
-    if mode == "continuous" then
-        return tostring(floor((value * 100) + 0.5)) .. " / 100"
-    end
-    if mode == "timer_bar" then
-        return string.format("%.1fs", floor((value * 20 * 10) + 0.5) / 10)
-    end
-    if mode == "stagger" then
-        return tostring(floor((value * 34) + 0.5)) .. "K"
-    end
-    if mode == "aura_single" then
-        return tostring(floor((value * 5) + 0.5))
-    end
-    if mode == "fractional" then
-        return string.format("%.1f", value)
-    end
-    local rounded = IsEssencePreview(spec) and floor(value) or floor(value + 0.5)
-    if spec.token == "SOUL_FRAGMENTS_VENG" then
-        return tostring(rounded) .. " / " .. tostring(tonumber(spec.segments) or 6)
-    end
-    return tostring(rounded)
-end
-
-local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
-local RUNE_PREVIEW_OFFSET = { nil, 0.0, nil, 3.1, nil, 6.2 }
-local RUNE_PREVIEW_READY_HOLD = 1.2
-
-local function FormatClassPowerPreviewSeconds(remaining)
-    remaining = tonumber(remaining) or 0
-    if remaining <= 0.05 then return "" end
-    return string.format("%.1f", floor((remaining * 10) + 0.5) / 10)
-end
-
 local function ApplyClassPowerPreviewFont(region, size)
     if not (region and region.SetFont) then return end
     size = floor(tonumber(size) or 12)
@@ -297,84 +136,6 @@ local function ApplyClassPowerPreviewFont(region, size)
     end
     if region.SetShadowColor then region:SetShadowColor(0, 0, 0, 1) end
     if region.SetShadowOffset then region:SetShadowOffset(1, -1) end
-end
-
-local function FillRunePreviewState(out, runeID, totalDuration, elapsed, animated)
-    out.id = runeID
-    out.total = totalDuration
-    local baseRemaining = RUNE_PREVIEW_REMAINING[runeID]
-    if not baseRemaining then
-        out.ready = true
-        out.elapsed = totalDuration
-        out.remaining = 0
-        return out
-    end
-    out.ready = false
-    if animated then
-        local offset = RUNE_PREVIEW_OFFSET[runeID] or 0
-        local cycle = totalDuration + RUNE_PREVIEW_READY_HOLD
-        local progress = ((tonumber(elapsed) or 0) + offset) % cycle
-        if progress >= totalDuration then
-            out.ready = true
-            out.elapsed = totalDuration
-            out.remaining = 0
-        else
-            out.elapsed = progress
-            out.remaining = totalDuration - progress
-        end
-    else
-        out.remaining = baseRemaining
-        out.elapsed = totalDuration - baseRemaining
-    end
-    if out.remaining < 0.05 then
-        out.ready = true
-        out.elapsed = totalDuration
-        out.remaining = 0
-    end
-    return out
-end
-
-local function BuildRunePreviewOrder(scratch, bars, spec, elapsed, animated)
-    local states = scratch.runeStates
-    if not states then
-        states = {}
-        scratch.runeStates = states
-    end
-    local totalDuration = tonumber(spec and spec.runeDuration) or 10
-    if totalDuration < 1 then totalDuration = 10 end
-    for i = 1, 6 do
-        states[i] = FillRunePreviewState(states[i] or {}, i, totalDuration, elapsed, animated)
-    end
-    for i = 7, #states do states[i] = nil end
-    local sortOrder = bars and bars.runeSortOrder
-    if sortOrder == "asc" then
-        table.sort(states, function(a, b)
-            if a.ready ~= b.ready then return a.ready == true end
-            return (a.id or 0) < (b.id or 0)
-        end)
-    elseif sortOrder == "desc" then
-        table.sort(states, function(a, b)
-            if a.ready ~= b.ready then return a.ready ~= true end
-            return (a.id or 0) < (b.id or 0)
-        end)
-    else
-        table.sort(states, function(a, b) return (a.id or 0) < (b.id or 0) end)
-    end
-    return states
-end
-
-local function ResolveClassPowerPreviewTexture(key, fallback)
-    if key and key ~= "" then
-        local resolve = _G.MSUF_ResolveStatusbarTextureKey
-        local path = type(resolve) == "function" and resolve(key) or nil
-        if path and path ~= "" then return path end
-    end
-    if fallback and fallback ~= "" then return fallback end
-    if type(_G.MSUF_GetBarTexture) == "function" then
-        local path = _G.MSUF_GetBarTexture()
-        if path and path ~= "" then return path end
-    end
-    return WHITE8
 end
 
 RefreshClassPowerInlinePreview = function()
@@ -419,6 +180,7 @@ local QUICK_FALLBACK_Y_FRAC = 0.60
 
 local QUICK_BARS_KEYS = {
     "showClassPower",
+    "classPowerShape",
     "classPowerShowText",
     "classPowerAnchorToCooldown",
     "classPowerWidthMode",
@@ -436,6 +198,7 @@ local QUICK_BARS_KEYS = {
 
 local QUICK_PLAYER_KEYS = {
     "powerBarDetached",
+    "detachedPowerBarShape",
     "detachedPowerBarSyncClassPower",
     "detachedPowerBarAnchorToClassPower",
     "detachedPowerBarTextOnBar",
@@ -826,6 +589,11 @@ local function BuildInlineClassPowerPreview(ctx, b)
         bg:SetTexture(WHITE8)
         bg:SetVertexColor(0, 0, 0, 0.3)
         seg._bg = bg
+        local edge = seg:CreateTexture(nil, "OVERLAY", nil, 5)
+        edge:SetAllPoints(seg)
+        edge:SetVertexColor(0, 0, 0, 1)
+        edge:Hide()
+        seg._edge = edge
         local runeText = T.Font(seg, "GameFontHighlightSmall", "", T.colors.text)
         runeText:SetPoint("CENTER", seg, "CENTER", 0, 0)
         runeText:SetJustifyH("CENTER")
@@ -916,12 +684,12 @@ local function BuildInlineClassPowerPreview(ctx, b)
         bar:Show()
         if animate.SetEnabled then animate:SetEnabled(true) else animate:Enable() end
         scratch.isRune = spec.mode == "rune"
-        scratch.value = (self._msuf2Animating and not scratch.isRune) and AnimatedClassPowerPreviewValue(spec, self._msuf2AnimElapsed) or nil
-        scratch.token = ClassPowerPreviewTokenForValue(spec, scratch.value)
+        scratch.value = (self._msuf2Animating and not scratch.isRune) and CPPreview.AnimatedValue(spec, self._msuf2AnimElapsed) or nil
+        scratch.token = CPPreview.TokenForValue(spec, scratch.value)
         if bars and bars.classPowerColorByType == false then
             scratch.r, scratch.g, scratch.b = 1, 1, 1
         else
-            scratch.r, scratch.g, scratch.b = ResolveClassPowerPreviewColor(scratch.token, 1, 1, 1)
+            scratch.r, scratch.g, scratch.b = CPPreview.ResolveColor(scratch.token, 1, 1, 1)
         end
         scratch.filledAlpha = tonumber(bars.classPowerFilledAlpha) or 1
         if scratch.filledAlpha < 0 then scratch.filledAlpha = 0 elseif scratch.filledAlpha > 1 then scratch.filledAlpha = 1 end
@@ -929,16 +697,24 @@ local function BuildInlineClassPowerPreview(ctx, b)
         if scratch.emptyAlpha < 0 then scratch.emptyAlpha = 0 elseif scratch.emptyAlpha > 1 then scratch.emptyAlpha = 1 end
         scratch.bgAlpha = tonumber(bars.classPowerBgAlpha) or 0.3
         if scratch.bgAlpha < 0 then scratch.bgAlpha = 0 elseif scratch.bgAlpha > 1 then scratch.bgAlpha = 1 end
-        scratch.bgr, scratch.bgg, scratch.bgb = ClassPowerPreviewColorOverride("classPowerBgColorOverrides", scratch.token)
+        scratch.bgr, scratch.bgg, scratch.bgb = CPPreview.ColorOverride("classPowerBgColorOverrides", scratch.token)
 
-        scratch.fgTexture = ResolveClassPowerPreviewTexture(bars.classPowerTexture)
-        scratch.bgTexture = ResolveClassPowerPreviewTexture(bars.classPowerBgTexture, scratch.fgTexture)
+        scratch.fgTexture = CPPreview.ResolveTexture(bars.classPowerTexture)
+        scratch.bgTexture = CPPreview.ResolveTexture(bars.classPowerBgTexture, scratch.fgTexture)
+        scratch.shape = NormalizeClassPowerShape(bars.classPowerShape)
+        scratch.shapeInfo = ClassPowerShapeTextures(scratch.shape)
         scratch.outline = floor(tonumber(bars.classPowerOutline) or 1)
         if scratch.outline < 0 then scratch.outline = 0 elseif scratch.outline > 4 then scratch.outline = 4 end
         if bar.SetBackdrop then
-            bar:SetBackdrop({ bgFile = scratch.bgTexture, edgeFile = WHITE8, edgeSize = max(1, scratch.outline) })
-            bar:SetBackdropColor(scratch.bgr or 0, scratch.bgg or 0, scratch.bgb or 0, scratch.bgAlpha)
-            bar:SetBackdropBorderColor(0, 0, 0, scratch.outline > 0 and 1 or 0)
+            if scratch.shapeInfo then
+                bar:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
+                bar:SetBackdropColor(0, 0, 0, 0)
+                bar:SetBackdropBorderColor(0, 0, 0, 0)
+            else
+                bar:SetBackdrop({ bgFile = scratch.bgTexture, edgeFile = WHITE8, edgeSize = max(1, scratch.outline) })
+                bar:SetBackdropColor(scratch.bgr or 0, scratch.bgg or 0, scratch.bgb or 0, scratch.bgAlpha)
+                bar:SetBackdropBorderColor(0, 0, 0, scratch.outline > 0 and 1 or 0)
+            end
         end
 
         scratch.rawW = tonumber(bars.classPowerWidth) or 275
@@ -954,7 +730,7 @@ local function BuildInlineClassPowerPreview(ctx, b)
         if scratch.tickW < 0 then scratch.tickW = 0 elseif scratch.tickW > 4 then scratch.tickW = 4 end
         scratch.gap = floor(tonumber(bars.classPowerGap) or 0)
         if scratch.gap < 0 then scratch.gap = 0 elseif scratch.gap > 8 then scratch.gap = 8 end
-        scratch.sepW = scratch.tickW + scratch.gap
+        scratch.sepW = scratch.shapeInfo and scratch.gap or (scratch.tickW + scratch.gap)
         if scratch.segCount > 1 then
             scratch.maxSepW = floor((scratch.w - scratch.segCount) / (scratch.segCount - 1))
             if scratch.maxSepW < 0 then scratch.maxSepW = 0 end
@@ -962,29 +738,48 @@ local function BuildInlineClassPowerPreview(ctx, b)
         end
         scratch.totalBarSpace = scratch.w - ((scratch.segCount - 1) * scratch.sepW)
         if scratch.totalBarSpace < scratch.segCount then scratch.totalBarSpace = scratch.segCount end
+        if scratch.shapeInfo then
+            scratch.slot = scratch.h
+            scratch.maxSlot = floor((scratch.w - ((scratch.segCount - 1) * scratch.sepW)) / scratch.segCount)
+            if scratch.maxSlot < 1 then scratch.maxSlot = 1 end
+            if scratch.slot > scratch.maxSlot then scratch.slot = scratch.maxSlot end
+            scratch.totalBarSpace = scratch.slot * scratch.segCount
+            scratch.rowW = scratch.totalBarSpace + ((scratch.segCount - 1) * scratch.sepW)
+            scratch.startX = floor((scratch.w - scratch.rowW) * 0.5 + 0.5)
+            if scratch.startX < 0 then scratch.startX = 0 end
+        else
+            scratch.slot = nil
+            scratch.startX = 0
+        end
         scratch.xPos, scratch.prevBoundary = 0, 0
         scratch.reverse = bars.classPowerFillReverse == true
-        scratch.runeOrder = scratch.isRune and BuildRunePreviewOrder(scratch, bars, spec, self._msuf2AnimElapsed or 0, self._msuf2Animating) or nil
+        scratch.runeOrder = scratch.isRune and CPPreview.BuildRuneOrder(scratch, bars, spec, self._msuf2AnimElapsed or 0, self._msuf2Animating) or nil
         scratch.runeShowTime = bars.runeShowTime ~= false
         if bars.runeShowTime == nil and bars.runeShowTimeText ~= nil then scratch.runeShowTime = bars.runeShowTimeText == true end
         scratch.textSize = floor(tonumber(bars.classPowerFontSize) or 16)
         if scratch.textSize < 6 then scratch.textSize = 6 end
         scratch.runeTextSize = scratch.textSize - 2
         if scratch.runeTextSize < 6 then scratch.runeTextSize = 6 end
-        scratch.tr, scratch.tg, scratch.tb = ResolveClassPowerPreviewTextColor()
+        scratch.tr, scratch.tg, scratch.tb = CPPreview.ResolveTextColor()
 
         for i = 1, #bar.segments do
             local seg = bar.segments[i]
             if i <= scratch.segCount then
-                scratch.boundary = floor((scratch.totalBarSpace * i) / scratch.segCount)
-                scratch.segW = scratch.boundary - scratch.prevBoundary
-                if scratch.segW < 1 then scratch.segW = 1 end
+                if scratch.shapeInfo then
+                    scratch.boundary = i * scratch.slot
+                    scratch.segW = scratch.slot
+                else
+                    scratch.boundary = floor((scratch.totalBarSpace * i) / scratch.segCount)
+                    scratch.segW = scratch.boundary - scratch.prevBoundary
+                    if scratch.segW < 1 then scratch.segW = 1 end
+                end
                 scratch.rune = scratch.runeOrder and scratch.runeOrder[i] or nil
-                scratch.fill = scratch.rune and ((scratch.rune.elapsed or 0) / (scratch.rune.total or 1)) or PreviewFillForSegment(spec, i, scratch.value)
+                scratch.fill = scratch.rune and ((scratch.rune.elapsed or 0) / (scratch.rune.total or 1)) or CPPreview.FillForSegment(spec, i, scratch.value)
                 if scratch.fill < 0 then scratch.fill = 0 elseif scratch.fill > 1 then scratch.fill = 1 end
                 scratch.drawW = scratch.fill > 0 and max(1, floor(scratch.segW * scratch.fill + 0.5)) or 0
-                scratch.x = scratch.reverse and (scratch.w - scratch.xPos - scratch.segW) or scratch.xPos
-                if seg.SetStatusBarTexture then seg:SetStatusBarTexture(scratch.fgTexture) end
+                scratch.xBase = scratch.startX + scratch.xPos
+                scratch.x = scratch.reverse and (scratch.w - scratch.xBase - scratch.segW) or scratch.xBase
+                if seg.SetStatusBarTexture then seg:SetStatusBarTexture((scratch.shapeInfo and scratch.shapeInfo.fill) or scratch.fgTexture) end
                 if scratch.rune then
                     if seg.SetMinMaxValues then seg:SetMinMaxValues(0, scratch.rune.total or 1) end
                 elseif seg.SetMinMaxValues then
@@ -992,7 +787,7 @@ local function BuildInlineClassPowerPreview(ctx, b)
                 end
                 if seg.SetReverseFill then seg:SetReverseFill(false) end
                 if seg._bg then
-                    seg._bg:SetTexture(scratch.bgTexture)
+                    seg._bg:SetTexture((scratch.shapeInfo and scratch.shapeInfo.bg) or scratch.bgTexture)
                     if scratch.rune then
                         seg._bg:SetVertexColor(0, 0, 0, scratch.bgAlpha)
                     else
@@ -1003,25 +798,42 @@ local function BuildInlineClassPowerPreview(ctx, b)
                 seg:SetPoint("TOPLEFT", bar, "TOPLEFT", scratch.x, 0)
                 seg:SetPoint("BOTTOMLEFT", bar, "BOTTOMLEFT", scratch.x, 0)
                 seg:SetWidth(scratch.segW)
+                if seg._edge then
+                    seg._edge:Hide()
+                end
                 scratch.sr, scratch.sg, scratch.sb = scratch.r, scratch.g, scratch.b
-                if IsChargedComboPreviewSlot(spec, bars, i) then
-                    scratch.sr, scratch.sg, scratch.sb = ResolveClassPowerPreviewColor("CHARGED", 0.60, 0.20, 0.80)
+                if CPPreview.IsCharged(spec, bars, i) then
+                    scratch.sr, scratch.sg, scratch.sb = CPPreview.ResolveColor("CHARGED", 0.60, 0.20, 0.80)
                 elseif scratch.token == "COMBO_POINTS" then
-                    scratch.sr, scratch.sg, scratch.sb = ResolveComboPointPreviewColor(bars, i, scratch.r, scratch.g, scratch.b)
+                    scratch.sr, scratch.sg, scratch.sb = CPPreview.ResolveComboColor(bars, i, scratch.r, scratch.g, scratch.b)
                 end
                 if spec.threshold and scratch.fill > 0 and i > spec.threshold then
-                    scratch.sr, scratch.sg, scratch.sb = ResolveClassPowerPreviewColor(spec.thresholdToken, scratch.sr, scratch.sg, scratch.sb)
+                    scratch.sr, scratch.sg, scratch.sb = CPPreview.ResolveColor(spec.thresholdToken, scratch.sr, scratch.sg, scratch.sb)
                 end
                 scratch.alpha = scratch.rune and scratch.filledAlpha or (scratch.fill > 0 and scratch.filledAlpha or scratch.emptyAlpha)
-                if IsChargedComboPreviewSlot(spec, bars, i) and scratch.fill <= 0 then
+                if CPPreview.IsCharged(spec, bars, i) and scratch.fill <= 0 then
                     scratch.alpha = max(scratch.alpha, 0.55)
                 end
                 if seg.SetAlpha then seg:SetAlpha(scratch.alpha) end
                 if seg.SetStatusBarColor then seg:SetStatusBarColor(scratch.sr, scratch.sg, scratch.sb, 1) end
                 if seg.SetValue then seg:SetValue(scratch.rune and (scratch.rune.elapsed or 0) or scratch.fill) end
+                if seg.GetStatusBarTexture then
+                    local tex = seg:GetStatusBarTexture()
+                    if tex then
+                        if scratch.shapeInfo and scratch.fill > 0 and scratch.fill < 1 then
+                            if scratch.reverse then
+                                tex:SetTexCoord(1 - scratch.fill, 1, 0, 1)
+                            else
+                                tex:SetTexCoord(0, scratch.fill, 0, 1)
+                            end
+                        else
+                            tex:SetTexCoord(0, 1, 0, 1)
+                        end
+                    end
+                end
                 if seg._runeText then
                     if scratch.rune and scratch.runeShowTime and not scratch.rune.ready then
-                        scratch.runeText = FormatClassPowerPreviewSeconds(scratch.rune.remaining)
+                        scratch.runeText = CPPreview.FormatSeconds(scratch.rune.remaining)
                         if scratch.runeText ~= "" then
                             ApplyClassPowerPreviewFont(seg._runeText, scratch.runeTextSize)
                             seg._runeText:SetText(scratch.runeText)
@@ -1041,6 +853,7 @@ local function BuildInlineClassPowerPreview(ctx, b)
                 scratch.prevBoundary = scratch.boundary
             else
                 if seg._runeText then seg._runeText:Hide() end
+                if seg._edge then seg._edge:Hide() end
                 if seg.SetAlpha then seg:SetAlpha(1) end
                 seg:Hide()
             end
@@ -1049,7 +862,7 @@ local function BuildInlineClassPowerPreview(ctx, b)
         if bars.classPowerShowText == true then
             bar.text:SetTextColor(scratch.tr, scratch.tg, scratch.tb, 1)
             ApplyClassPowerPreviewFont(bar.text, scratch.textSize)
-            bar.text:SetText(PreviewTextForValue(spec, scratch.value))
+            bar.text:SetText(CPPreview.TextForValue(spec, scratch.value))
             bar.text:ClearAllPoints()
             bar.text:SetPoint("CENTER", bar, "CENTER", tonumber(bars.classPowerTextOffsetX) or 0, tonumber(bars.classPowerTextOffsetY) or 0)
             bar.text:Show()
@@ -1135,44 +948,48 @@ local function BuildClassPower(ctx)
 
     local layoutWidth = ctx.width or 900
     local compactLayout = layoutWidth < 620
-    local display = b:CollapsibleSection("classpower_display", "Layout", compactLayout and 560 or 304, true)
+    local display = b:CollapsibleSection("classpower_display", "Layout", compactLayout and 620 or 360, true)
     local cpControls = {}
     local textControls = {}
     local dpbControls = {}
+    local dpbPlayerControls = {}
     local altManaControls = {}
     local RefreshClassPowerControls
+    local function AddControls(list, ...)
+        for i = 1, select("#", ...) do
+            list[#list + 1] = select(i, ...)
+        end
+    end
+    local function PlaceColumn(parent, x, y, step, width, titleJustify, ...)
+        for i = 1, select("#", ...) do
+            MoveWidget(select(i, ...), parent, x, y - ((i - 1) * step), width, titleJustify)
+        end
+    end
 
     local cpEnable = SwitchAt(ctx, display, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, function()
         ApplyClassPower()
         if RefreshClassPowerControls then RefreshClassPowerControls() end
     end)
+    local cpShape = BindTableDropdown(ctx, display, "Shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260, Bars, "classPowerShape", "BAR", ApplyClassPower)
     local cpHeight = BindTableSlider(ctx, display, "Height", 1, 40, 1, 300, Bars, "classPowerHeight", 4, ApplyClassPower)
     local cpWidthMode = BindTableDropdown(ctx, display, "Width mode", VT("player", "Player frame", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, Bars, "classPowerWidthMode", "player", ApplyClassPower)
     local cpWidth = BindTableSlider(ctx, display, "Width", 30, 800, 1, 300, Bars, "classPowerWidth", 0, ApplyClassPower)
     local cpX = BindTableSlider(ctx, display, "Offset X", -800, 800, 1, 300, Bars, "classPowerOffsetX", 0, ApplyClassPower)
     local cpY = BindTableSlider(ctx, display, "Offset Y", -800, 800, 1, 300, Bars, "classPowerOffsetY", 0, ApplyClassPower)
     local cpLevel = BindTableSlider(ctx, display, "Frame level", 0, 30, 1, 300, Bars, "classPowerFrameLevelOffset", 5, ApplyClassPower)
-    cpControls[#cpControls + 1] = cpHeight
-    cpControls[#cpControls + 1] = cpWidthMode
-    cpControls[#cpControls + 1] = cpX
-    cpControls[#cpControls + 1] = cpY
-    cpControls[#cpControls + 1] = cpLevel
+    AddControls(cpControls, cpShape, cpHeight, cpWidthMode, cpX, cpY, cpLevel)
     local layoutLeftX = 32
     local layoutRightX = compactLayout and layoutLeftX or min(max(430, floor(layoutWidth * 0.52)), max(360, layoutWidth - 360))
     local layoutLeftW = compactLayout and max(250, layoutWidth - layoutLeftX - 32) or max(250, layoutRightX - layoutLeftX - 42)
     local layoutRightW = compactLayout and layoutLeftW or max(250, layoutWidth - layoutRightX - 32)
     local layoutControlW = compactLayout and max(250, min(320, layoutWidth - layoutLeftX - 42)) or 300
-    local positionCardY = compactLayout and -294 or -38
-    local positionTopY = compactLayout and -348 or -92
-    W.ControlCard(display, "Bar", nil, layoutLeftX - 14, -38, layoutLeftW + 28, compactLayout and 238 or 252)
+    local positionCardY = compactLayout and -350 or -38
+    local positionTopY = compactLayout and -404 or -92
+    W.ControlCard(display, "Bar", nil, layoutLeftX - 14, -38, layoutLeftW + 28, compactLayout and 292 or 306)
     W.ControlCard(display, "Position", nil, layoutRightX - 14, positionCardY, layoutRightW + 28, 232)
     MoveWidget(cpEnable, display, layoutLeftX, -78)
-    MoveWidget(cpHeight, display, layoutLeftX, -116, layoutControlW)
-    MoveWidget(cpWidthMode, display, layoutLeftX, -170, layoutControlW)
-    MoveWidget(cpWidth, display, layoutLeftX, -224, layoutControlW)
-    MoveWidget(cpX, display, layoutRightX, positionTopY, layoutControlW)
-    MoveWidget(cpY, display, layoutRightX, positionTopY - 54, layoutControlW)
-    MoveWidget(cpLevel, display, layoutRightX, positionTopY - 108, layoutControlW)
+    PlaceColumn(display, layoutLeftX, -116, 54, layoutControlW, nil, cpShape, cpHeight, cpWidthMode, cpWidth)
+    PlaceColumn(display, layoutRightX, positionTopY, 54, layoutControlW, nil, cpX, cpY, cpLevel)
 
     local behavior = b:CollapsibleSection("classpower_behavior", "Behavior", 206, false)
     local cpAnchor = BindTableToggle(ctx, behavior, "Anchor to Essential Cooldown", Bars, "classPowerAnchorToCooldown", false, ApplyClassPower)
@@ -1184,24 +1001,15 @@ local function BuildClassPower(ctx)
     local cpEbon = BindTableToggle(ctx, behavior, "Show Ebon Might timer (Aug)", Bars, "showEbonMight", true, ApplyClassPower)
     local cpShadow = BindTableToggle(ctx, behavior, "Show Insanity bar (Shadow)", Bars, "showShadowMana", false, ApplyClassPower)
     local cpPrediction = BindTableToggle(ctx, behavior, "Show resource prediction", Bars, "classPowerShowPrediction", true, ApplyClassPower)
-    for _, control in ipairs({ cpAnchor, cpCharged, cpText, cpRune, cpReverse, cpEle, cpEbon, cpShadow, cpPrediction }) do
-        cpControls[#cpControls + 1] = control
-    end
+    AddControls(cpControls, cpAnchor, cpCharged, cpText, cpRune, cpReverse, cpEle, cpEbon, cpShadow, cpPrediction)
     local behaviorRightX = min(max(380, floor((ctx.width or 900) * 0.45)), max(320, (ctx.width or 900) - 420))
     local behaviorW = behavior._msuf2Width or ctx.width or 900
     local behaviorLeftW = max(280, behaviorRightX - 42)
     local behaviorRightW = max(280, behaviorW - behaviorRightX - 28)
     W.ControlCardBackdrop(behavior, 14, -38, behaviorLeftW, 154)
     W.ControlCardBackdrop(behavior, behaviorRightX - 14, -38, behaviorRightW + 14, 154)
-    MoveWidget(cpAnchor, behavior, 14, -38)
-    MoveWidget(cpCharged, behavior, 14, -70)
-    MoveWidget(cpText, behavior, 14, -102)
-    MoveWidget(cpRune, behavior, 14, -134)
-    MoveWidget(cpReverse, behavior, 14, -166)
-    MoveWidget(cpEle, behavior, behaviorRightX, -38)
-    MoveWidget(cpEbon, behavior, behaviorRightX, -70)
-    MoveWidget(cpShadow, behavior, behaviorRightX, -102)
-    MoveWidget(cpPrediction, behavior, behaviorRightX, -134)
+    PlaceColumn(behavior, 14, -38, 32, nil, nil, cpAnchor, cpCharged, cpText, cpRune, cpReverse)
+    PlaceColumn(behavior, behaviorRightX, -38, 32, nil, nil, cpEle, cpEbon, cpShadow, cpPrediction)
 
     local visual = b:CollapsibleSection("classpower_visuals", "Style", 430, false)
     local styleWidth = visual._msuf2Width or ctx.width or 900
@@ -1234,17 +1042,10 @@ local function BuildClassPower(ctx)
     M.BindSegment(ctx, styleTabs, CurrentStyleTab, SetStyleTab)
 
     local function StyleTabFrame(key)
-        local frame = CreateFrame("Frame", nil, visual)
-        frame:SetPoint("TOPLEFT", visual, "TOPLEFT", 0, -88)
-        frame:SetPoint("BOTTOMRIGHT", visual, "BOTTOMRIGHT", 0, 12)
-        frame._msuf2Width = styleWidth
-        styleTabFrames[key] = frame
-        return frame
+        return M.UnitSectionsShared.MakeTabFrame(visual, key, -88, styleWidth, styleTabFrames)
     end
-    local resourcesFrame = StyleTabFrame("resources")
-    local textFrame = StyleTabFrame("text")
-    local opacityFrame = StyleTabFrame("opacity")
-    local pipsFrame = StyleTabFrame("pips")
+    local resourcesFrame, textFrame = StyleTabFrame("resources"), StyleTabFrame("text")
+    local opacityFrame, pipsFrame = StyleTabFrame("opacity"), StyleTabFrame("pips")
     if styleTabs.SetValue then styleTabs:SetValue(CurrentStyleTab()) end
     M.AddRefresher(ctx, RefreshStyleTabs)
     RefreshStyleTabs()
@@ -1262,29 +1063,18 @@ local function BuildClassPower(ctx)
     local cpSeparator = BindTableSlider(ctx, pipsFrame, "Separator", 0, 4, 1, 300, Bars, "classPowerTickWidth", 1, ApplyClassPower)
     local cpOutline = BindTableSlider(ctx, pipsFrame, "Outline", 0, 4, 1, 300, Bars, "classPowerOutline", 1, ApplyClassPower)
     local cpGap = BindTableSlider(ctx, pipsFrame, "Pip gap", 0, 8, 1, 300, Bars, "classPowerGap", 0, ApplyClassPower)
-    for _, control in ipairs({ cpColor, cpComboColor, cpBg, cpSeparator, cpOutline, cpFilled, cpEmpty, cpGap, cpFgTex, cpBgTex }) do
-        cpControls[#cpControls + 1] = control
-    end
-    textControls[#textControls + 1] = cpFont
-    textControls[#textControls + 1] = cpTextX
-    textControls[#textControls + 1] = cpTextY
+    AddControls(cpControls, cpColor, cpComboColor, cpBg, cpSeparator, cpOutline, cpFilled, cpEmpty, cpGap, cpFgTex, cpBgTex)
+    AddControls(textControls, cpFont, cpTextX, cpTextY)
     W.ControlCard(resourcesFrame, "Resource & Textures", nil, styleLeftX - 14, -38, styleCardW + 28, 248)
     W.ControlCard(textFrame, "Text", nil, styleLeftX - 14, -38, styleCardW + 28, 210)
     W.ControlCard(opacityFrame, "Opacity", nil, styleLeftX - 14, -38, styleCardW + 28, 204)
     W.ControlCard(pipsFrame, "Pips & Border", nil, styleLeftX - 14, -38, styleCardW + 28, 230)
     MoveWidget(cpColor, resourcesFrame, styleLeftX, -72)
     MoveWidget(cpComboColor, resourcesFrame, styleLeftX, -104, styleControlW)
-    MoveWidget(cpFgTex, resourcesFrame, styleLeftX, -192, styleControlW)
-    MoveWidget(cpBgTex, resourcesFrame, styleLeftX, -246, styleControlW)
-    MoveWidget(cpFont, textFrame, styleLeftX, -84, styleControlW)
-    MoveWidget(cpTextX, textFrame, styleLeftX, -136, styleControlW)
-    MoveWidget(cpTextY, textFrame, styleLeftX, -188, styleControlW)
-    MoveWidget(cpBg, opacityFrame, styleLeftX, -84, styleControlW)
-    MoveWidget(cpFilled, opacityFrame, styleLeftX, -136, styleControlW)
-    MoveWidget(cpEmpty, opacityFrame, styleLeftX, -188, styleControlW)
-    MoveWidget(cpSeparator, pipsFrame, styleLeftX, -84, styleControlW)
-    MoveWidget(cpOutline, pipsFrame, styleLeftX, -136, styleControlW)
-    MoveWidget(cpGap, pipsFrame, styleLeftX, -188, styleControlW)
+    PlaceColumn(resourcesFrame, styleLeftX, -192, 54, styleControlW, nil, cpFgTex, cpBgTex)
+    PlaceColumn(textFrame, styleLeftX, -84, 52, styleControlW, nil, cpFont, cpTextX, cpTextY)
+    PlaceColumn(opacityFrame, styleLeftX, -84, 52, styleControlW, nil, cpBg, cpFilled, cpEmpty)
+    PlaceColumn(pipsFrame, styleLeftX, -84, 52, styleControlW, nil, cpSeparator, cpOutline, cpGap)
 
     local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 216, false)
     local visibilityW = min(560, (visibility._msuf2Width or ctx.width or 900) - 28)
@@ -1292,7 +1082,7 @@ local function BuildClassPower(ctx)
     local hideOOC = SwitchAt(ctx, visibility, "Hide out of combat", 32, -86, visibilityW - 48, Bars, "classPowerHideOOC", false, ApplyClassPower)
     local hideFull = SwitchAt(ctx, visibility, "Hide when full", 32, -118, visibilityW - 48, Bars, "classPowerHideWhenFull", false, ApplyClassPower)
     local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -150, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
-    for _, control in ipairs({ hideOOC, hideFull, hideEmpty }) do cpControls[#cpControls + 1] = control end
+    AddControls(cpControls, hideOOC, hideFull, hideEmpty)
 
     local dpb = b:CollapsibleSection("classpower_detached_power", "Detached Power Bar", 382, false)
     local dpbCardW = min(620, (dpb._msuf2Width or ctx.width or 900) - 28)
@@ -1305,14 +1095,29 @@ local function BuildClassPower(ctx)
             Bars().detachedPowerBarWidthMode = (v ~= "manual") and v or nil
             ApplyDetachedPowerBar()
         end)
+    local dpbShape = W.Dropdown(dpb, "Player power shape", VT("FOLLOW_CLASS", "Follow Class Resource", "BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal"), 300)
+    M.BindDropdown(ctx, dpbShape,
+        function()
+            local db = M.EnsureDB()
+            local player = db.player or {}
+            local v = tostring(player.detachedPowerBarShape or "FOLLOW_CLASS"):upper()
+            if v ~= "FOLLOW_CLASS" and v ~= "BAR" and v ~= "ROUND" and v ~= "CRYSTAL" then v = "FOLLOW_CLASS" end
+            return v
+        end,
+        function(v)
+            v = tostring(v or "FOLLOW_CLASS"):upper()
+            if v ~= "FOLLOW_CLASS" and v ~= "BAR" and v ~= "ROUND" and v ~= "CRYSTAL" then v = "FOLLOW_CLASS" end
+            local db = M.EnsureDB()
+            db.player = db.player or {}
+            db.player.detachedPowerBarShape = v
+            ApplyDetachedPowerBar()
+        end)
     local dpbFg = BindTableDropdown(ctx, dpb, "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, Bars, "detachedPowerBarTexture", "", ApplyDetachedPowerBar)
     local dpbBg = BindTableDropdown(ctx, dpb, "Background texture", function() return TextureValues("Use foreground texture") end, 300, Bars, "detachedPowerBarBgTexture", "", ApplyDetachedPowerBar)
     local dpbOutline = BindTableSlider(ctx, dpb, "Power bar outline", 0, 6, 1, 300, Bars, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline)
-    MoveWidget(dpbMode, dpb, 32, -100, dpbControlW, "LEFT")
-    MoveWidget(dpbFg, dpb, 32, -154, dpbControlW, "LEFT")
-    MoveWidget(dpbBg, dpb, 32, -208, dpbControlW, "LEFT")
-    MoveWidget(dpbOutline, dpb, 32, -262, dpbControlW, "LEFT")
-    for _, control in ipairs({ dpbMode, dpbFg, dpbBg, dpbOutline }) do dpbControls[#dpbControls + 1] = control end
+    PlaceColumn(dpb, 32, -100, 54, dpbControlW, "LEFT", dpbMode, dpbShape, dpbFg, dpbBg, dpbOutline)
+    AddControls(dpbControls, dpbMode, dpbFg, dpbBg, dpbOutline)
+    AddControls(dpbPlayerControls, dpbShape)
 
     local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana Bar", 306, false)
     local altManaCardW = min(620, (altMana._msuf2Width or ctx.width or 900) - 28)
@@ -1321,10 +1126,8 @@ local function BuildClassPower(ctx)
     local altManaToggle = SwitchAt(ctx, altMana, "Show mana bar (dual resource)", 32, -98, altManaControlW, Bars, "showAltMana", false, ApplyClassPower)
     local altManaHeight = BindTableSlider(ctx, altMana, "Height", 2, 30, 1, 300, Bars, "altManaHeight", 4, ApplyClassPower)
     local altManaY = BindTableSlider(ctx, altMana, "Y offset", -50, 50, 1, 300, Bars, "altManaOffsetY", -2, ApplyClassPower)
-    MoveWidget(altManaHeight, altMana, 32, -138, altManaControlW, "LEFT")
-    MoveWidget(altManaY, altMana, 32, -192, altManaControlW, "LEFT")
-    altManaControls[#altManaControls + 1] = altManaHeight
-    altManaControls[#altManaControls + 1] = altManaY
+    PlaceColumn(altMana, 32, -138, 54, altManaControlW, "LEFT", altManaHeight, altManaY)
+    AddControls(altManaControls, altManaHeight, altManaY)
 
     RefreshClassPowerControls = function()
         local bars = Bars()
@@ -1332,14 +1135,20 @@ local function BuildClassPower(ctx)
         local textOn = cpOn and BoolValue(bars, "classPowerShowText", false)
         local customWidth = cpOn and ((bars.classPowerWidthMode or "player") == "custom")
         local anyDetached = false
+        local playerDetached = false
         local db = M.EnsureDB()
         for _, key in ipairs({ "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }) do
             if db[key] and db[key].powerBarDetached then anyDetached = true; break end
         end
+        playerDetached = db.player and db.player.powerBarDetached == true
         for i = 1, #cpControls do SetControlEnabled(cpControls[i], cpOn) end
         SetControlEnabled(cpWidth, customWidth)
+        local classShapeIsBar = NormalizeClassPowerShape(bars.classPowerShape) == "BAR"
+        SetControlEnabled(cpSeparator, cpOn and classShapeIsBar)
+        SetControlEnabled(cpOutline, cpOn and classShapeIsBar)
         for i = 1, #textControls do SetControlEnabled(textControls[i], textOn) end
         for i = 1, #dpbControls do SetControlEnabled(dpbControls[i], anyDetached) end
+        for i = 1, #dpbPlayerControls do SetControlEnabled(dpbPlayerControls[i], playerDetached) end
         local altOn = BoolValue(bars, "showAltMana", false)
         for i = 1, #altManaControls do SetControlEnabled(altManaControls[i], altOn) end
         SetControlEnabled(altManaToggle, true)

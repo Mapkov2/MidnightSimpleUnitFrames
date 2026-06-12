@@ -1,4 +1,4 @@
---- Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua
+--- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_View.lua
 --- Cold-path unitframe preview view.
 ---
 --- Owns: preview frame construction, draggable handle interactions, and
@@ -203,6 +203,17 @@ local function RefreshHandleSelectionVisuals(box)
     UpdateHandleHint(box, selected)
 end
 
+local function ApplyCastbarRuntimeForKey(key)
+    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
+        _G.MSUF_ApplyCastbarUnitAndSync(key)
+    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
+        _G.MSUF_UpdateCastbarVisuals()
+    end
+    if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
+        _G.MSUF_SyncCastbarPositionPopup(key)
+    end
+end
+
 local function CommitHandleMove(handle, reason)
     if not handle then return end
     local box = handle._preview
@@ -217,14 +228,7 @@ local function CommitHandleMove(handle, reason)
             _G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey(key, true)
         end
     elseif fields.castbar then
-        if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-            _G.MSUF_ApplyCastbarUnitAndSync(key)
-        elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-            _G.MSUF_UpdateCastbarVisuals()
-        end
-        if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
-            _G.MSUF_SyncCastbarPositionPopup(key)
-        end
+        ApplyCastbarRuntimeForKey(key)
     elseif fields.statusRefresh then
         local fn = _G[fields.statusRefresh]
         if type(fn) == "function" then fn() end
@@ -275,14 +279,7 @@ local function WriteBarsHandleOffsets(handle, x, y, reason)
 end
 
 local function RefreshCastbarRuntime(box, key, reason)
-    if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
-        _G.MSUF_ApplyCastbarUnitAndSync(key)
-    elseif type(_G.MSUF_UpdateCastbarVisuals) == "function" then
-        _G.MSUF_UpdateCastbarVisuals()
-    end
-    if type(_G.MSUF_SyncCastbarPositionPopup) == "function" then
-        _G.MSUF_SyncCastbarPositionPopup(key)
-    end
+    ApplyCastbarRuntimeForKey(key)
     ApplyPanelUnit(box and box._msufPanel, key, reason or "UNIT_PREVIEW_CASTBAR_ELEMENT_MOVE")
 end
 
@@ -529,6 +526,30 @@ local function RegisterPreviewNudgeTarget(box)
     fn(box._msufPreviewNudgeTarget)
 end
 
+local TEXT_HANDLE_SELECTION = {
+    name = { "name" },
+    hp = { "hp" }, hpLeft = { "hp", "left" }, hpCenter = { "hp", "center" }, hpRight = { "hp", "right" },
+    power = { "power" }, powerLeft = { "power", "left" }, powerCenter = { "power", "center" }, powerRight = { "power", "right" },
+}
+
+local function PreviewTextKindSlotForKey(key)
+    local spec = TEXT_HANDLE_SELECTION[key]
+    if spec then return spec[1], spec[2] end
+end
+
+local function StorePreviewTextSelection(menu, unitKey, kind, slot)
+    if not (menu and (kind == "hp" or kind == "power")) then return end
+    unitKey = unitKey or "player"
+    UnitPreviewSetTextMoveTogether(unitKey, kind, slot == nil)
+    menu.unitTextTabSelection = menu.unitTextTabSelection or {}
+    menu.unitTextTabSelection[unitKey] = kind
+    if slot then
+        menu.unitTextSlotSelection = menu.unitTextSlotSelection or {}
+        menu.unitTextSlotSelection[unitKey] = menu.unitTextSlotSelection[unitKey] or {}
+        menu.unitTextSlotSelection[unitKey][kind] = slot
+    end
+end
+
 SelectPreviewHandle = function(handle, skipSectionOpen)
     local box = handle and handle._preview or Preview.active
     if not box then return end
@@ -552,49 +573,16 @@ SelectPreviewHandle = function(handle, skipSectionOpen)
                 p._msufUFStatusSet("selected", handle._key)
             end
         end
-        if menu and (handle._key == "hpLeft" or handle._key == "hpCenter" or handle._key == "hpRight") then
-            UnitPreviewSetTextMoveTogether(box.key, "hp", false)
-            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
-            menu.unitTextSlotSelection = menu.unitTextSlotSelection or {}
-            menu.unitTextTabSelection[box.key or "player"] = "hp"
-            menu.unitTextSlotSelection[box.key or "player"] = menu.unitTextSlotSelection[box.key or "player"] or {}
-            menu.unitTextSlotSelection[box.key or "player"].hp = (handle._key == "hpLeft" and "left") or (handle._key == "hpRight" and "right") or "center"
-        elseif menu and handle._key == "hp" then
-            UnitPreviewSetTextMoveTogether(box.key, "hp", true)
-            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
-            menu.unitTextTabSelection[box.key or "player"] = "hp"
-        elseif menu and (handle._key == "powerLeft" or handle._key == "powerCenter" or handle._key == "powerRight") then
-            UnitPreviewSetTextMoveTogether(box.key, "power", false)
-            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
-            menu.unitTextSlotSelection = menu.unitTextSlotSelection or {}
-            menu.unitTextTabSelection[box.key or "player"] = "power"
-            menu.unitTextSlotSelection[box.key or "player"] = menu.unitTextSlotSelection[box.key or "player"] or {}
-            menu.unitTextSlotSelection[box.key or "player"].power = (handle._key == "powerLeft" and "left") or (handle._key == "powerRight" and "right") or "center"
-        elseif menu and handle._key == "power" then
-            UnitPreviewSetTextMoveTogether(box.key, "power", true)
-            menu.unitTextTabSelection = menu.unitTextTabSelection or {}
-            menu.unitTextTabSelection[box.key or "player"] = "power"
-        elseif menu and (handle._key == "auraBuffs" or handle._key == "auraDebuffs") then
+        local textKind, textSlot = PreviewTextKindSlotForKey(handle._key)
+        StorePreviewTextSelection(menu, box.key, textKind, textSlot)
+        if menu and (handle._key == "auraBuffs" or handle._key == "auraDebuffs") then
             menu.unitAuraTabSelection = menu.unitAuraTabSelection or {}
             menu.unitAuraTabSelection[box.key or "player"] = handle._key == "auraDebuffs" and "debuff" or "buff"
         end
         do
             local focus = _G.MSUF_EM2_SetFocusSelection
             if type(focus) == "function" then
-                local kind, slot
-                if handle._key == "name" then
-                    kind = "name"
-                elseif handle._key == "hp" then
-                    kind = "hp"
-                elseif handle._key == "hpLeft" or handle._key == "hpCenter" or handle._key == "hpRight" then
-                    kind = "hp"
-                    slot = (handle._key == "hpLeft" and "left") or (handle._key == "hpRight" and "right") or "center"
-                elseif handle._key == "power" then
-                    kind = "power"
-                elseif handle._key == "powerLeft" or handle._key == "powerCenter" or handle._key == "powerRight" then
-                    kind = "power"
-                    slot = (handle._key == "powerLeft" and "left") or (handle._key == "powerRight" and "right") or "center"
-                end
+                local kind, slot = PreviewTextKindSlotForKey(handle._key)
                 if kind then focus(box.key or "player", kind, slot, { source = "unit-preview", clearHover = true }) end
             end
         end
@@ -710,6 +698,12 @@ local function PreviewArrowKeyDown(self, keyName)
 end
 
 local StartPreviewPan, StopPreviewPan
+local HANDLE_BORDER_SPECS = {
+    top = { "TOPLEFT", "TOPRIGHT", "SetHeight" },
+    bottom = { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight" },
+    left = { "TOPLEFT", "BOTTOMLEFT", "SetWidth" },
+    right = { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth" },
+}
 
 local function MakeHandle(preview, key, fields, label, color)
     local h = CreateFrame("Button", nil, preview.canvas)
@@ -734,23 +728,14 @@ local function MakeHandle(preview, key, fields, label, color)
     h._selBorder = CreateFrame("Frame", nil, h)
     h._selBorder:SetPoint("TOPLEFT", h, "TOPLEFT", -1, 1)
     h._selBorder:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 1, -1)
-    for _, side in ipairs({ "top", "bottom", "left", "right" }) do
+    for side, spec in pairs(HANDLE_BORDER_SPECS) do
         local line = h._selBorder:CreateTexture(nil, "OVERLAY")
         line:SetColorTexture(0.30, 0.58, 0.95, 0.70)
+        line:SetPoint(spec[1])
+        line:SetPoint(spec[2])
+        line[spec[3]](line, 1)
         h._selBorder[side] = line
     end
-    h._selBorder.top:SetPoint("TOPLEFT")
-    h._selBorder.top:SetPoint("TOPRIGHT")
-    h._selBorder.top:SetHeight(1)
-    h._selBorder.bottom:SetPoint("BOTTOMLEFT")
-    h._selBorder.bottom:SetPoint("BOTTOMRIGHT")
-    h._selBorder.bottom:SetHeight(1)
-    h._selBorder.left:SetPoint("TOPLEFT")
-    h._selBorder.left:SetPoint("BOTTOMLEFT")
-    h._selBorder.left:SetWidth(1)
-    h._selBorder.right:SetPoint("TOPRIGHT")
-    h._selBorder.right:SetPoint("BOTTOMRIGHT")
-    h._selBorder.right:SetWidth(1)
     h._selBorder:Hide()
     h:SetScript("OnEnter", function(self)
         self._hovering = true
@@ -1103,11 +1088,21 @@ local function BuildPreview(parent, panel, width, height)
     mock.classPower:SetBackdropColor(0, 0, 0, 0.55)
     mock.classPower:SetBackdropBorderColor(0, 0, 0, 1)
     mock.classPower.segments = {}
+    mock.classPower.segmentBgs = {}
+    mock.classPower.segmentEdges = {}
     mock.classPower.runeTexts = {}
     for i = 1, 10 do
+        local bg = mock.classPower:CreateTexture(nil, "BACKGROUND")
+        bg:SetTexture(TEX_W8)
+        bg:Hide()
+        mock.classPower.segmentBgs[i] = bg
         local seg = mock.classPower:CreateTexture(nil, "ARTWORK")
         seg:SetTexture(TEX_W8)
         mock.classPower.segments[i] = seg
+        local edge = mock.classPower:CreateTexture(nil, "OVERLAY")
+        edge:SetTexture(TEX_W8)
+        edge:Hide()
+        mock.classPower.segmentEdges[i] = edge
         local rfs = MakeFS(mock.classPower, "OVERLAY", 8)
         rfs:SetJustifyH("CENTER")
         if rfs.SetJustifyV then rfs:SetJustifyV("MIDDLE") end
@@ -1127,10 +1122,19 @@ local function BuildPreview(parent, panel, width, height)
     mock.detachedPower:SetBackdrop({ bgFile = TEX_W8, edgeFile = TEX_W8, edgeSize = 1 })
     mock.detachedPower:SetBackdropColor(0, 0, 0, 0.82)
     mock.detachedPower:SetBackdropBorderColor(0, 0, 0, 1)
+    mock.detachedPower.bg = mock.detachedPower:CreateTexture(nil, "BACKGROUND")
+    mock.detachedPower.bg:SetAllPoints(mock.detachedPower)
+    mock.detachedPower.bg:SetTexture(TEX_W8)
+    mock.detachedPower.bg:SetVertexColor(0, 0, 0, 0)
     mock.detachedPower.fill = mock.detachedPower:CreateTexture(nil, "ARTWORK")
     SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
     mock.detachedPower.fill:SetPoint("TOPLEFT", mock.detachedPower, "TOPLEFT", 1, -1)
     mock.detachedPower.fill:SetPoint("BOTTOMLEFT", mock.detachedPower, "BOTTOMLEFT", 1, 1)
+    mock.detachedPower.edge = mock.detachedPower:CreateTexture(nil, "OVERLAY")
+    mock.detachedPower.edge:SetAllPoints(mock.detachedPower)
+    mock.detachedPower.edge:SetTexture(TEX_W8)
+    mock.detachedPower.edge:SetVertexColor(0, 0, 0, 1)
+    mock.detachedPower.edge:Hide()
 
     mock.portrait = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
     mock.portrait:SetBackdrop({ bgFile = TEX_W8 })
@@ -1291,6 +1295,7 @@ local function BuildPreview(parent, panel, width, height)
         Preview.SetArrowBindings(self, false)
         RefreshHandleSelectionVisuals(self)
         if Preview.active == self then Preview.active = nil end
+        if type(Preview.UninstallRefreshHooks) == "function" then Preview.UninstallRefreshHooks() end
         self.dragFrame:SetScript("OnUpdate", nil)
         self.dragFrame._handle = nil
         if self._msufPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == self._msufPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then
@@ -1326,88 +1331,38 @@ local PreviewInCombat = PreviewCore.InCombat
 do
     local deps = Preview.RefreshDeps or {}
     Preview.RefreshDeps = deps
-    deps.PreviewInCombat = PreviewInCombat
-    deps.TR = TR
-    deps.PortraitStyleGet = PortraitStyleGet
-    deps.RuntimeSpecForPreviewKey = RuntimeSpecForPreviewKey
-    deps.RuntimeVisualScaleForPreviewKey = RuntimeVisualScaleForPreviewKey
-    deps.ClampPreviewZoom = ClampPreviewZoom
-    deps.UpdatePreviewZoomControls = UpdatePreviewZoomControls
-    deps.ZOOM_MIN = ZOOM_MIN
-    deps.max = max
-    deps.min = min
-    deps.abs = abs
-    deps.floor = floor
-    deps.format = format
-    deps.TEX_W8 = TEX_W8
-    deps.FONT = FONT
-    deps.CurrentPanelKey = CurrentPanelKey
-    deps.UnitDB = UnitDB
-    deps.UNIT_DATA = UNIT_DATA
-    deps.UNIT_LABELS = UNIT_LABELS
-    deps.ReadPowerBarEnabled = ReadPowerBarEnabled
-    deps.PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed
-    deps.PreviewRaidGroupNameText = PreviewRaidGroupNameText
+    deps.PreviewInCombat, deps.TR, deps.PortraitStyleGet = PreviewInCombat, TR, PortraitStyleGet
+    deps.RuntimeSpecForPreviewKey, deps.RuntimeVisualScaleForPreviewKey = RuntimeSpecForPreviewKey, RuntimeVisualScaleForPreviewKey
+    deps.ClampPreviewZoom, deps.UpdatePreviewZoomControls, deps.ZOOM_MIN = ClampPreviewZoom, UpdatePreviewZoomControls, ZOOM_MIN
+    deps.max, deps.min, deps.abs, deps.floor, deps.format = max, min, abs, floor, format
+    deps.TEX_W8, deps.FONT, deps.STATUS_PREVIEW = TEX_W8, FONT, STATUS_PREVIEW
+    deps.CurrentPanelKey, deps.UnitDB, deps.UNIT_DATA, deps.UNIT_LABELS = CurrentPanelKey, UnitDB, UNIT_DATA, UNIT_LABELS
+    deps.ReadPowerBarEnabled, deps.ReadPowerBarHeight = ReadPowerBarEnabled, ReadPowerBarHeight
+    deps.PreviewRaidGroupNameAllowed, deps.PreviewRaidGroupNameText = PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText
     deps.NormalizeRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor
-    deps.STATUS_PREVIEW = STATUS_PREVIEW
-    deps.CastbarEnabled = CastbarEnabled
-    deps.CastbarShowIcon = CastbarShowIcon
-    deps.CastbarShowText = CastbarShowText
-    deps.ReadCastbarSize = ReadCastbarSize
-    deps.ReadCastbarNum = ReadCastbarNum
-    deps.FormatCastbarPreviewTime = FormatCastbarPreviewTime
-    deps.CastbarOffsetFields = CastbarOffsetFields
-    deps.CastbarDetached = CastbarDetached
-    deps.CanDetachPowerBarKey = CanDetachPowerBarKey
-    deps.ClampPreviewLayer = ClampPreviewLayer
-    deps.SetTex = SetTex
-    deps.ReadPowerBarHeight = ReadPowerBarHeight
-    deps.PlaceHandle = PlaceHandle
-    deps.PlaceHandleAroundRegions = UnitPreviewText.PlaceHandleAroundRegions
-    deps.UnitPreviewText = UnitPreviewText
+    deps.CastbarEnabled, deps.CastbarShowIcon, deps.CastbarShowText = CastbarEnabled, CastbarShowIcon, CastbarShowText
+    deps.ReadCastbarSize, deps.ReadCastbarNum, deps.FormatCastbarPreviewTime = ReadCastbarSize, ReadCastbarNum, FormatCastbarPreviewTime
+    deps.CastbarOffsetFields, deps.CastbarDetached, deps.CanDetachPowerBarKey = CastbarOffsetFields, CastbarDetached, CanDetachPowerBarKey
+    deps.ClampPreviewLayer, deps.SetTex, deps.PlaceHandle = ClampPreviewLayer, SetTex, PlaceHandle
+    deps.PlaceHandleAroundRegions, deps.UnitPreviewText = UnitPreviewText.PlaceHandleAroundRegions, UnitPreviewText
     deps.UnitPreviewTextMovesTogether = UnitPreviewTextMovesTogether
-    deps.NormalizeHpMode = NormalizeHpMode
-    deps.NormalizePowerMode = NormalizePowerMode
-    deps.TextScopeGet = TextScopeGet
-    deps.TextScopeHasSlots = TextScopeHasSlots
-    deps.TextScopeSlotGet = TextScopeSlotGet
-    deps.FormatMode = FormatMode
-    deps.ShortenPreviewName = ShortenPreviewName
-    deps.ToTInlineSeparator = ToTInlineSeparator
-    deps.ResolveNameAnchor = ResolveNameAnchor
-    deps.ClassColor = ClassColor
-    deps.HealthColor = HealthColor
-    deps.HealthBackgroundColor = HealthBackgroundColor
-    deps.PowerBackgroundColor = PowerBackgroundColor
-    deps.PowerColor = PowerColor
-    deps.FontColor = FontColor
-    deps.PreviewResolveHealPredAnchorMode = PreviewResolveHealPredAnchorMode
-    deps.PreviewResolveAbsorbAnchorMode = PreviewResolveAbsorbAnchorMode
-    deps.PreviewHealPredictionEnabled = PreviewHealPredictionEnabled
-    deps.PreviewAbsorbBarEnabled = PreviewAbsorbBarEnabled
-    deps.UnitPreviewPortraitTexture = UnitPreviewPortraitTexture
-    deps.ClassPortraitVisual = ClassPortraitVisual
-    deps.PreviewNameColor = PreviewNameColor
-    deps.PreviewToTInlineColor = PreviewToTInlineColor
+    deps.NormalizeHpMode, deps.NormalizePowerMode = NormalizeHpMode, NormalizePowerMode
+    deps.TextScopeGet, deps.TextScopeHasSlots, deps.TextScopeSlotGet = TextScopeGet, TextScopeHasSlots, TextScopeSlotGet
+    deps.FormatMode, deps.ShortenPreviewName, deps.ToTInlineSeparator = FormatMode, ShortenPreviewName, ToTInlineSeparator
+    deps.ResolveNameAnchor, deps.ClassColor, deps.HealthColor = ResolveNameAnchor, ClassColor, HealthColor
+    deps.HealthBackgroundColor, deps.PowerBackgroundColor, deps.PowerColor, deps.FontColor = HealthBackgroundColor, PowerBackgroundColor, PowerColor, FontColor
+    deps.PreviewResolveHealPredAnchorMode, deps.PreviewResolveAbsorbAnchorMode = PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode
+    deps.PreviewHealPredictionEnabled, deps.PreviewAbsorbBarEnabled = PreviewHealPredictionEnabled, PreviewAbsorbBarEnabled
+    deps.UnitPreviewPortraitTexture, deps.ClassPortraitVisual = UnitPreviewPortraitTexture, ClassPortraitVisual
+    deps.PreviewNameColor, deps.PreviewToTInlineColor = PreviewNameColor, PreviewToTInlineColor
     deps.LayoutUnitPreviewOverlay = LayoutUnitPreviewOverlay
-    deps.PositionFromAnchor = PositionFromAnchor
-    deps.PositionRuntimeLayoutIconPreview = PositionRuntimeLayoutIconPreview
-    deps.PositionStatusCornerPreview = PositionStatusCornerPreview
-    deps.PositionSameAnchorPreview = PositionSameAnchorPreview
-    deps.PositionLevelPreview = PositionLevelPreview
-    deps.ResolveStatusPreviewAnchor = ResolveStatusPreviewAnchor
-    deps.SetPreviewIconTexture = SetPreviewIconTexture
-    deps.NormalizeStatusPreviewId = NormalizeStatusPreviewId
-    deps.ApplyPreviewTextFocus = ApplyPreviewTextFocus
-    deps.ApplyPreviewRounded = ApplyPreviewRounded
-    deps.ApplyPreviewFrameBorder = ApplyPreviewFrameBorder
-    deps.PreviewRoundedOutlineThickness = PreviewRoundedOutlineThickness
-    deps.ApplyPreviewBoundsGuide = ApplyPreviewBoundsGuide
-    deps.SetShownSafe = SetShownSafe
-    deps.ApplyPreviewLayerVisibility = ApplyPreviewLayerVisibility
-    deps.ApplyPreviewTransparency = Preview.ApplyPreviewTransparency
-    deps.RefreshHandleSelectionVisuals = RefreshHandleSelectionVisuals
-    deps.Auras = PreviewAuras
+    deps.PositionFromAnchor, deps.PositionRuntimeLayoutIconPreview = PositionFromAnchor, PositionRuntimeLayoutIconPreview
+    deps.PositionStatusCornerPreview, deps.PositionSameAnchorPreview, deps.PositionLevelPreview = PositionStatusCornerPreview, PositionSameAnchorPreview, PositionLevelPreview
+    deps.ResolveStatusPreviewAnchor, deps.SetPreviewIconTexture, deps.NormalizeStatusPreviewId = ResolveStatusPreviewAnchor, SetPreviewIconTexture, NormalizeStatusPreviewId
+    deps.ApplyPreviewTextFocus, deps.ApplyPreviewRounded, deps.ApplyPreviewFrameBorder = ApplyPreviewTextFocus, ApplyPreviewRounded, ApplyPreviewFrameBorder
+    deps.PreviewRoundedOutlineThickness, deps.ApplyPreviewBoundsGuide = PreviewRoundedOutlineThickness, ApplyPreviewBoundsGuide
+    deps.SetShownSafe, deps.ApplyPreviewLayerVisibility = SetShownSafe, ApplyPreviewLayerVisibility
+    deps.ApplyPreviewTransparency, deps.RefreshHandleSelectionVisuals, deps.Auras = Preview.ApplyPreviewTransparency, RefreshHandleSelectionVisuals, PreviewAuras
 end
 if MSUF.UFPreviewRender and MSUF.UFPreviewRender.Install then
     MSUF.UFPreviewRender.Install(Preview, Preview.RefreshDeps)
