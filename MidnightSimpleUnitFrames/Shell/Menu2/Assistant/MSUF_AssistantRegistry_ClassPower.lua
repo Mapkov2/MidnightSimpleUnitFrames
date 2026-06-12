@@ -60,6 +60,29 @@ local CLASS_POWER_WIDTH_MODE_ALIASES = {
     manual = "custom",
 }
 
+local CLASS_POWER_SHAPE_ALIASES = {
+    bar = "BAR",
+    bars = "BAR",
+    rectangle = "BAR",
+    rectangular = "BAR",
+    default = "BAR",
+    circle = "CIRCLE",
+    circles = "CIRCLE",
+    round = "CIRCLE",
+    dot = "CIRCLE",
+    dots = "CIRCLE",
+    orb = "CIRCLE",
+    orbs = "CIRCLE",
+    diamond = "DIAMOND",
+    diamonds = "DIAMOND",
+    gem = "DIAMOND",
+    gems = "DIAMOND",
+    crystal = "DIAMOND",
+    hex = "HEX",
+    hexagon = "HEX",
+    hexagons = "HEX",
+}
+
 local COMBO_POINT_COLOR_MODE_ALIASES = {
     default = "default",
     resource = "default",
@@ -236,6 +259,16 @@ RegisterBarsBoolean("showClassPower", "enabled", "Class Resource", true, {
 })
 RegisterBarsNumber("classPowerHeight", "height", "Class Resource Height", 4, 1, 40, ClassPowerAliases("height", "class resource bar height"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_HEIGHT",
+})
+RegisterBarsEnum("classPowerShape", "shape", "Class Resource Shape", "BAR", {
+    "BAR", "CIRCLE", "DIAMOND", "HEX",
+}, ClassPowerAliases(
+    "shape", "class resource shape", "class resources shape", "class power shape",
+    "combo point shape", "combo points shape", "holy power shape", "soul shard shape", "chi shape",
+    "arcane charge shape", "rune shape", "essence shape"
+), {
+    reason = "MSUF_ASSISTANT_CLASSPOWER_SHAPE",
+    valueAliases = CLASS_POWER_SHAPE_ALIASES,
 })
 RegisterBarsEnum("classPowerWidthMode", "widthMode", "Class Resource Width Mode", "player", {
     "player", "cooldown", "utility", "tracked_buffs", "custom",

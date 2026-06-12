@@ -101,6 +101,32 @@ local TEXT_ANCHOR_VALUES = { "LEFT", "CENTER", "RIGHT" }
 local HP_MODE_VALUES = { "PERCENT", "CURRENT", "MAX", "DEFICIT", "CURMAX", "CURPERCENT", "CURMAXPERCENT", "MAXPERCENT", "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX", "NONE" }
 local POWER_MODE_VALUES = { "CURRENT", "MAX", "CURMAX", "PERCENT", "CURPERCENT", "CURMAXPERCENT", "NONE" }
 local SEPARATOR_VALUES = { "", "-", "/", "\\", "|", "<", ">", "~", ":" }
+local DETACHED_POWER_SHAPE_VALUES = { "FOLLOW_CLASS", "BAR", "ROUND", "CRYSTAL" }
+local DETACHED_POWER_SHAPE_ALIASES = {
+    follow = "FOLLOW_CLASS",
+    followclass = "FOLLOW_CLASS",
+    followclassresource = "FOLLOW_CLASS",
+    class = "FOLLOW_CLASS",
+    classresource = "FOLLOW_CLASS",
+    auto = "FOLLOW_CLASS",
+    automatic = "FOLLOW_CLASS",
+    bar = "BAR",
+    bars = "BAR",
+    rectangle = "BAR",
+    rectangular = "BAR",
+    round = "ROUND",
+    rounded = "ROUND",
+    circle = "ROUND",
+    circular = "ROUND",
+    orb = "ROUND",
+    crystal = "CRYSTAL",
+    crystals = "CRYSTAL",
+    diamond = "CRYSTAL",
+    diamonds = "CRYSTAL",
+    gem = "CRYSTAL",
+    hex = "CRYSTAL",
+    hexagon = "CRYSTAL",
+}
 local PORTRAIT_MODE_VALUES = { "OFF", "LEFT", "RIGHT" }
 local PORTRAIT_RENDER_VALUES = { "2D", "CLASS" }
 local PORTRAIT_SHAPE_VALUES = { "SQUARE", "CIRCLE", "ROUNDED", "DIAMOND" }
@@ -327,6 +353,73 @@ local function AddVerbUnitNounAliases(out, unit, verbs, noun)
     end
 end
 
+local function AddUniqueAlias(out, seen, value)
+    value = tostring(value or "")
+    if value == "" or seen[value] then return end
+    seen[value] = true
+    out[#out + 1] = value
+end
+
+local function DetachedPowerMoveAliases(unit, axis)
+    local out, seen = {}, {}
+    local unitAliases = (A.UnitAliases and A.UnitAliases[unit]) or { unit }
+    local nouns = { "powerbar", "power bar", "detached powerbar", "detached power bar" }
+    local directions = axis == "y"
+        and { "up", "down", "hoch", "runter", "oben", "unten" }
+        or { "left", "right", "links", "rechts" }
+    local axisTerms = axis == "y"
+        and { "y offset", "y position", "vertical offset", "vertical position" }
+        or { "x offset", "x position", "horizontal offset", "horizontal position" }
+
+    for i = 1, #unitAliases do
+        local unitText = tostring(unitAliases[i])
+        for n = 1, #nouns do
+            local noun = nouns[n]
+            for d = 1, #directions do
+                local dir = directions[d]
+                AddUniqueAlias(out, seen, unitText .. " " .. noun .. " " .. dir)
+                AddUniqueAlias(out, seen, "move " .. unitText .. " " .. noun .. " " .. dir)
+                AddUniqueAlias(out, seen, "nudge " .. unitText .. " " .. noun .. " " .. dir)
+                AddUniqueAlias(out, seen, "shift " .. unitText .. " " .. noun .. " " .. dir)
+                if axis == "x" then
+                    AddUniqueAlias(out, seen, unitText .. " " .. noun .. " to the " .. dir)
+                    AddUniqueAlias(out, seen, "move " .. unitText .. " " .. noun .. " to the " .. dir)
+                else
+                    AddUniqueAlias(out, seen, unitText .. " " .. noun .. " " .. (dir == "up" and "higher" or (dir == "down" and "lower" or dir)))
+                end
+            end
+            for t = 1, #axisTerms do
+                local term = axisTerms[t]
+                AddUniqueAlias(out, seen, unitText .. " " .. noun .. " " .. term)
+                AddUniqueAlias(out, seen, "set " .. unitText .. " " .. noun .. " " .. term)
+                AddUniqueAlias(out, seen, "move " .. unitText .. " " .. noun .. " " .. term)
+            end
+        end
+    end
+    return out
+end
+
+local function TextHasAny(text, terms)
+    text = tostring(text or ""):lower()
+    for i = 1, #(terms or {}) do
+        if text:find(tostring(terms[i] or ""):lower(), 1, true) then return true end
+    end
+    return false
+end
+
+local function DetachedPowerMoveGuard(unit)
+    return function(_, text)
+        if TextHasAny(text, { "detached", "undocked", "separate", "separated", "abgekoppelt" }) then return nil end
+        if UnitDB(unit).powerBarDetached == true then return nil end
+        local unitLabel = (A.UnitLabels and A.UnitLabels[unit]) or unit or "That unit"
+        return {
+            kind = "unknown",
+            status = "failed",
+            text = tostring(unitLabel) .. " Power Bar is attached to the unit frame, so the bar itself has no separate position. Detach it first, or say 'move " .. tostring(unitLabel):lower() .. " power text left' to move only the text.",
+        }
+    end
+end
+
 local function ExpandStatusAliases(aliases)
     local out = {}
     local seen = {}
@@ -393,6 +486,7 @@ local function RegisterUnitBooleanSetting(unit, attr, dbKey, label, defaultValue
         attribute = attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         get = function()
             if opts.get then return opts.get(unit) end
             local value = UnitDB(unit)[dbKey]
@@ -430,10 +524,15 @@ local function RegisterUnitNumberSetting(unit, attr, dbKey, label, defaultValue,
         attribute = attr,
         type = "number",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         min = minValue,
         max = maxValue,
         step = opts.step or 1,
         percent = opts.percent == true,
+        moveAxis = opts.moveAxis,
+        moveStep = opts.moveStep,
+        moveAmount = opts.moveAmount,
+        intentGuard = opts.intentGuard,
         get = function()
             if opts.get then return opts.get(unit) end
             local value = tonumber(UnitDB(unit)[dbKey])
@@ -467,6 +566,7 @@ local function RegisterUnitEnum(unit, attr, dbKey, label, defaultValue, values, 
         attribute = attr,
         type = "enum",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         values = values,
         valueAliases = opts.valueAliases,
         get = function()
@@ -676,6 +776,7 @@ local function InitDetachedPowerBar(unit)
     conf.detachedPowerBarHeight = tonumber(conf.detachedPowerBarHeight) or 6
     conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
     if unit == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
+    if unit == "player" and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "FOLLOW_CLASS" end
 end
 
 local function RegisterUnitTextNumber(unit, attr, dbKey, label, defaultValue, aliases, opts)
@@ -1050,9 +1151,36 @@ for i = 1, #UNIT_KEYS do
                 get = function(unitKey) return UnitDB(unitKey).detachedPowerBarSyncClassPower ~= false end,
             })
             RegisterUnitBooleanSetting(unit, "detachedPowerBarAnchorToClassPower", "detachedPowerBarAnchorToClassPower", "Detached Power Bar Anchors To Class Resource", false, MakeAliases(unit, "anchor detached power to class resource", "detached power anchor class resource"), { category = "Power Bar", power = true })
+            RegisterUnitEnum(unit, "detachedPowerBarShape", "detachedPowerBarShape", "Detached Power Bar Shape", "FOLLOW_CLASS", DETACHED_POWER_SHAPE_VALUES, MakeAliases(unit,
+                "player power shape", "detached power shape", "detached power bar shape", "player detached power shape",
+                "follow class resource shape", "power bar shape"
+            ), {
+                category = "Power Bar",
+                power = true,
+                valueAliases = DETACHED_POWER_SHAPE_ALIASES,
+                get = function(unitKey)
+                    local value = tostring(UnitDB(unitKey).detachedPowerBarShape or "FOLLOW_CLASS"):upper()
+                    if value == "FOLLOW_CLASS" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" then return value end
+                    return "FOLLOW_CLASS"
+                end,
+            })
         end
-        RegisterUnitNumberSetting(unit, "detachedPowerBarOffsetX", "detachedPowerBarOffsetX", "Detached Power Bar X Offset", 0, -1000, 1000, MakeAliases(unit, "detached power x", "detached power bar x offset"), { category = "Power Bar", power = true })
-        RegisterUnitNumberSetting(unit, "detachedPowerBarOffsetY", "detachedPowerBarOffsetY", "Detached Power Bar Y Offset", -4, -1000, 1000, MakeAliases(unit, "detached power y", "detached power bar y offset"), { category = "Power Bar", power = true })
+        RegisterUnitNumberSetting(unit, "detachedPowerBarOffsetX", "detachedPowerBarOffsetX", "Detached Power Bar X Offset", 0, -1000, 1000, MakeAliases(unit, "detached power x", "detached power bar x offset"), {
+            category = "Power Bar",
+            power = true,
+            exactAliases = DetachedPowerMoveAliases(unit, "x"),
+            moveAxis = "x",
+            moveStep = 10,
+            intentGuard = DetachedPowerMoveGuard(unit),
+        })
+        RegisterUnitNumberSetting(unit, "detachedPowerBarOffsetY", "detachedPowerBarOffsetY", "Detached Power Bar Y Offset", -4, -1000, 1000, MakeAliases(unit, "detached power y", "detached power bar y offset"), {
+            category = "Power Bar",
+            power = true,
+            exactAliases = DetachedPowerMoveAliases(unit, "y"),
+            moveAxis = "y",
+            moveStep = 10,
+            intentGuard = DetachedPowerMoveGuard(unit),
+        })
         RegisterUnitNumberSetting(unit, "detachedPowerBarWidth", "detachedPowerBarWidth", "Detached Power Bar Width", unit == "focus" and 180 or 275, 20, 800, MakeAliases(unit, "detached power width", "detached power bar width"), {
             category = "Power Bar",
             power = true,

@@ -76,10 +76,41 @@ local function BuildPortrait(ctx, builder, unit)
     leftW = max(310, min(430, leftW))
     local rightX = leftX + leftW + cardGap
     local rightW = max(310, min(430, sectionW - rightX - 16))
-    local function PlaceSlider(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or rightW, "CENTER")
-    end
     local RefreshPortraitControls
+    local function RefreshPortraitSoon()
+        if RefreshPortraitControls then RefreshPortraitControls() end
+    end
+    local function BindPortraitDropdown(parent, label, values, x, y, width, key, defaultValue, reason, normalize, after)
+        local control = W.Dropdown(parent, label, values, 220)
+        W.MoveWidget(control, parent, x, y, width)
+        M.BindDropdown(ctx, control,
+            function()
+                local value = GetConf(unit)[key]
+                value = value == nil and defaultValue or value
+                return normalize and normalize(value) or value
+            end,
+            function(v)
+                v = normalize and normalize(v or defaultValue) or (v or defaultValue)
+                SetPortraitValue(unit, key, v, reason)
+                if after then after() end
+            end)
+        return control
+    end
+    local function BindPortraitSlider(parent, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason)
+        local control = W.Slider(parent, label, minValue, maxValue, step, 280)
+        W.MoveWidget(control, parent, x, y, width, "CENTER")
+        M.BindSlider(ctx, control,
+            function() return ReadNumber(unit, key, defaultValue) end,
+            function(v) SetNumber(unit, key, v, reason, { preview = true }) end)
+        return control
+    end
+    local function BindPortraitToggle(parent, label, x, y, width, key, defaultValue, reason)
+        local control = W.ToggleAt(parent, label, x, y, width)
+        M.BindToggle(ctx, control,
+            function() return ReadBool(unit, key, defaultValue) end,
+            function(v) SetPortraitValue(unit, key, v and true or false, reason) end)
+        return control
+    end
 
     M._msuf2LastPortraitSide = M._msuf2LastPortraitSide or {}
     local mainCard = W.ControlCard(sec, "Portrait", "Main portrait visibility and render mode.", leftX, -38, leftW, 168)
@@ -111,73 +142,20 @@ local function BuildPortrait(ctx, builder, unit)
         function(v)
             M._msuf2LastPortraitSide[unit] = v == "RIGHT" and "RIGHT" or "LEFT"
             SetPortraitValue(unit, "portraitMode", v or "LEFT", "MSUF2_PORTRAIT_MODE")
-            if RefreshPortraitControls then RefreshPortraitControls() end
+            RefreshPortraitSoon()
         end)
 
-    local render = W.Dropdown(mainCard, "Render", PORTRAIT_RENDER, 220)
-    W.MoveWidget(render, mainCard, 16, -116, min(220, leftW - 32))
-    M.BindDropdown(ctx, render,
-        function() return GetConf(unit).portraitRender or "2D" end,
-        function(v)
-            SetPortraitValue(unit, "portraitRender", v or "2D", "MSUF2_PORTRAIT_RENDER")
-            if RefreshPortraitControls then RefreshPortraitControls() end
-        end)
-
-    local shape = W.Dropdown(borderCard, "Shape", PORTRAIT_SHAPES, 220)
-    W.MoveWidget(shape, borderCard, 16, -58, min(220, leftW - 32))
-    M.BindDropdown(ctx, shape,
-        function() return GetConf(unit).portraitShape or "SQUARE" end,
-        function(v) SetPortraitValue(unit, "portraitShape", v or "SQUARE", "MSUF2_PORTRAIT_SHAPE") end)
-
-    local size = W.Slider(geometryCard, "Size override", 0, 128, 1, 280)
-    W.MoveWidget(size, geometryCard, 16, -62, rightW - 58, "CENTER")
-    M.BindSlider(ctx, size,
-        function() return ReadNumber(unit, "portraitSizeOverride", 0) end,
-        function(v) SetNumber(unit, "portraitSizeOverride", v, "MSUF2_PORTRAIT_SIZE", { preview = true }) end)
-
-    local x = W.Slider(geometryCard, "Portrait X", -120, 120, 1, 280)
-    W.MoveWidget(x, geometryCard, 16, -116, rightW - 58, "CENTER")
-    M.BindSlider(ctx, x,
-        function() return ReadNumber(unit, "portraitOffsetX", 0) end,
-        function(v) SetNumber(unit, "portraitOffsetX", v, "MSUF2_PORTRAIT_X", { preview = true }) end)
-
-    local y = W.Slider(geometryCard, "Portrait Y", -120, 120, 1, 280)
-    W.MoveWidget(y, geometryCard, 16, -170, rightW - 58, "CENTER")
-    M.BindSlider(ctx, y,
-        function() return ReadNumber(unit, "portraitOffsetY", 0) end,
-        function(v) SetNumber(unit, "portraitOffsetY", v, "MSUF2_PORTRAIT_Y", { preview = true }) end)
-
-    local classStyle = W.Dropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 220)
+    local render = BindPortraitDropdown(mainCard, "Render", PORTRAIT_RENDER, 16, -116, min(220, leftW - 32), "portraitRender", "2D", "MSUF2_PORTRAIT_RENDER", nil, RefreshPortraitSoon)
+    local shape = BindPortraitDropdown(borderCard, "Shape", PORTRAIT_SHAPES, 16, -58, min(220, leftW - 32), "portraitShape", "SQUARE", "MSUF2_PORTRAIT_SHAPE")
+    local size = BindPortraitSlider(geometryCard, "Size override", 16, -62, rightW - 58, 0, 128, 1, "portraitSizeOverride", 0, "MSUF2_PORTRAIT_SIZE")
+    local x = BindPortraitSlider(geometryCard, "Portrait X", 16, -116, rightW - 58, -120, 120, 1, "portraitOffsetX", 0, "MSUF2_PORTRAIT_X")
+    local y = BindPortraitSlider(geometryCard, "Portrait Y", 16, -170, rightW - 58, -120, 120, 1, "portraitOffsetY", 0, "MSUF2_PORTRAIT_Y")
+    local classStyle = BindPortraitDropdown(styleCard, "Class portrait style", PortraitClassStyleValues, 16, -58, min(220, rightW - 32), "portraitClassStyle", "BLIZZARD", "MSUF2_PORTRAIT_CLASS_STYLE", NormalizePortraitClassStyle)
     classStyle._msuf2SearchText = "Class portrait style Blizzard Rondo Colored Rondo WoW"
-    W.MoveWidget(classStyle, styleCard, 16, -58, min(220, rightW - 32))
-    M.BindDropdown(ctx, classStyle,
-        function() return NormalizePortraitClassStyle(GetConf(unit).portraitClassStyle or "BLIZZARD") end,
-        function(v) SetPortraitValue(unit, "portraitClassStyle", NormalizePortraitClassStyle(v), "MSUF2_PORTRAIT_CLASS_STYLE") end)
-
-    local border = W.Dropdown(borderCard, "Border", PORTRAIT_BORDERS, 220)
-    W.MoveWidget(border, borderCard, 16, -112, min(220, leftW - 32))
-    M.BindDropdown(ctx, border,
-        function() return GetConf(unit).portraitBorderStyle or "NONE" end,
-        function(v)
-            SetPortraitValue(unit, "portraitBorderStyle", v or "NONE", "MSUF2_PORTRAIT_BORDER")
-            if RefreshPortraitControls then RefreshPortraitControls() end
-        end)
-
-    local borderSize = W.Slider(borderCard, "Border thickness", 1, 12, 1, 280)
-    W.MoveWidget(borderSize, borderCard, 16, -170, leftW - 58, "CENTER")
-    M.BindSlider(ctx, borderSize,
-        function() return ReadNumber(unit, "portraitBorderThickness", 2) end,
-        function(v) SetNumber(unit, "portraitBorderThickness", v, "MSUF2_PORTRAIT_BORDER_SIZE", { preview = true }) end)
-
-    local fillBorder = W.ToggleAt(borderCard, "Fill border into frame gap", 16, -238, leftW - 32)
-    M.BindToggle(ctx, fillBorder,
-        function() return ReadBool(unit, "portraitFillBorder", false) end,
-        function(v) SetPortraitValue(unit, "portraitFillBorder", v and true or false, "MSUF2_PORTRAIT_FILL_BORDER") end)
-
-    local portraitBg = W.ToggleAt(styleCard, "Portrait background", 16, -112, rightW - 32)
-    M.BindToggle(ctx, portraitBg,
-        function() return ReadBool(unit, "portraitBgEnabled", false) end,
-        function(v) SetPortraitValue(unit, "portraitBgEnabled", v and true or false, "MSUF2_PORTRAIT_BG") end)
+    local border = BindPortraitDropdown(borderCard, "Border", PORTRAIT_BORDERS, 16, -112, min(220, leftW - 32), "portraitBorderStyle", "NONE", "MSUF2_PORTRAIT_BORDER", nil, RefreshPortraitSoon)
+    local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -170, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
+    local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -238, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
+    local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
 
     RefreshPortraitControls = function()
         local conf = GetConf(unit)
@@ -226,9 +204,6 @@ local function BuildPower(ctx, builder, unit)
     local detachedRightX = 16 + detachedLeftW + detachedGap
     local detachedRightW = max(180, min(320, fullW - detachedRightX - 16))
     local detachedSliderW = max(170, min(300, min(detachedLeftW, detachedRightW) - 42))
-    local function PlaceSlider(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or rightW, "CENTER")
-    end
     local function PowerCard(title, subtitle, x, y, width, height)
         return W.ControlCard(sec, title, subtitle, x, y, width, height)
     end
@@ -243,6 +218,21 @@ local function BuildPower(ctx, builder, unit)
     local function AddDetachedControl(control)
         detachedControls[#detachedControls + 1] = control
         return AddPowerControl(control)
+    end
+    local function ResolveDefault(value)
+        if type(value) == "function" then return value() end
+        return value
+    end
+    local function BindPowerSlider(parent, addFn, label, x, y, width, minValue, maxValue, step, key, defaultValue, reason, readFn)
+        local control = addFn(W.Slider(parent, label, minValue, maxValue, step, 300))
+        W.MoveWidget(control, parent, x, y, width, "CENTER")
+        M.BindSlider(ctx, control,
+            function()
+                if readFn then return readFn() end
+                return ReadNumber(unit, key, ResolveDefault(defaultValue))
+            end,
+            function(v) SetNumber(unit, key, v, reason, { power = true, preview = true }) end)
+        return control
     end
 
     local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 104)
@@ -278,23 +268,17 @@ local function BuildPower(ctx, builder, unit)
             if RefreshPowerEnabled then RefreshPowerEnabled() end
         end)
 
-    local height = AddPowerControl(W.Slider(mainCard, "Power bar height", 1, 20, 1, 300))
-    W.MoveWidget(height, mainCard, 16, -76, cardW - 72, "CENTER")
-    M.BindSlider(ctx, height,
+    local height = BindPowerSlider(mainCard, AddPowerControl, "Power bar height", 16, -76, cardW - 72, 1, 20, 1, "powerBarHeight", 3, "MSUF2_POWER_HEIGHT",
         function()
             local conf = GetConf(unit)
             return tonumber(conf.powerBarHeight) or tonumber(GetBars().powerBarHeight) or 3
-        end,
-        function(v) SetNumber(unit, "powerBarHeight", v, "MSUF2_POWER_HEIGHT", { power = true, preview = true }) end)
+        end)
 
-    local borderSize = AddPowerControl(W.Slider(borderCard, "Border thickness", 0, 6, 1, 300))
-    W.MoveWidget(borderSize, borderCard, 16, -108, rightW - 72, "CENTER")
-    M.BindSlider(ctx, borderSize,
+    local borderSize = BindPowerSlider(borderCard, AddPowerControl, "Border thickness", 16, -108, rightW - 72, 0, 6, 1, "powerBarBorderThickness", 1, "MSUF2_POWER_BORDER_SIZE",
         function()
             local conf = GetConf(unit)
             return tonumber(conf.powerBarBorderThickness) or tonumber(GetBars().powerBarBorderThickness or GetBars().powerBarBorderSize) or 1
-        end,
-        function(v) SetNumber(unit, "powerBarBorderThickness", v, "MSUF2_POWER_BORDER_SIZE", { power = true, preview = true }) end)
+        end)
 
     local embed = AddPowerControl(W.ToggleAt(mainCard, "Embed into health", 16, -138, cardW - 32))
     M.BindToggle(ctx, embed,
@@ -323,6 +307,7 @@ local function BuildPower(ctx, builder, unit)
                 conf.detachedPowerBarHeight = tonumber(conf.detachedPowerBarHeight) or 6
                 conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
                 if isPlayer and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
+                if isPlayer and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "FOLLOW_CLASS" end
             end
             M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", { power = true, preview = true })
             if RefreshPowerEnabled then RefreshPowerEnabled() end
@@ -348,35 +333,11 @@ local function BuildPower(ctx, builder, unit)
             function(v) SetBool(unit, "detachedPowerBarAnchorToClassPower", v, "MSUF2_POWER_DETACHED_ANCHOR", { power = true, preview = true }) end)
     end
 
-    local dx = AddDetachedControl(W.Slider(detachedCard, "Detached X", -1000, 1000, 1, 300))
-    W.MoveWidget(dx, detachedCard, 16, sliderTop, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dx,
-        function() return ReadNumber(unit, "detachedPowerBarOffsetX", 0) end,
-        function(v) SetNumber(unit, "detachedPowerBarOffsetX", v, "MSUF2_POWER_DETACHED_X", { power = true, preview = true }) end)
-
-    local dy = AddDetachedControl(W.Slider(detachedCard, "Detached Y", -1000, 1000, 1, 300))
-    W.MoveWidget(dy, detachedCard, detachedRightX, sliderTop, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dy,
-        function() return ReadNumber(unit, "detachedPowerBarOffsetY", -4) end,
-        function(v) SetNumber(unit, "detachedPowerBarOffsetY", v, "MSUF2_POWER_DETACHED_Y", { power = true, preview = true }) end)
-
-    local dw = AddDetachedControl(W.Slider(detachedCard, "Detached width", 20, 800, 1, 300))
-    W.MoveWidget(dw, detachedCard, 16, sliderTop - 66, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dw,
-        function() return ReadNumber(unit, "detachedPowerBarWidth", ReadNumber(unit, "width", 250)) end,
-        function(v) SetNumber(unit, "detachedPowerBarWidth", v, "MSUF2_POWER_DETACHED_W", { power = true, preview = true }) end)
-
-    local dh = AddDetachedControl(W.Slider(detachedCard, "Detached height", 2, 80, 1, 300))
-    W.MoveWidget(dh, detachedCard, detachedRightX, sliderTop - 66, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, dh,
-        function() return ReadNumber(unit, "detachedPowerBarHeight", 6) end,
-        function(v) SetNumber(unit, "detachedPowerBarHeight", v, "MSUF2_POWER_DETACHED_H", { power = true, preview = true }) end)
-
-    local layer = AddDetachedControl(W.Slider(detachedCard, "Detached layer", 0, 20, 1, 300))
-    W.MoveWidget(layer, detachedCard, 16, sliderTop - 132, detachedSliderW, "CENTER")
-    M.BindSlider(ctx, layer,
-        function() return ReadNumber(unit, "detachedPowerBarFrameLevelOffset", 6) end,
-        function(v) SetNumber(unit, "detachedPowerBarFrameLevelOffset", v, "MSUF2_POWER_DETACHED_LAYER", { power = true, preview = true }) end)
+    BindPowerSlider(detachedCard, AddDetachedControl, "Detached X", 16, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetX", 0, "MSUF2_POWER_DETACHED_X")
+    BindPowerSlider(detachedCard, AddDetachedControl, "Detached Y", detachedRightX, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetY", -4, "MSUF2_POWER_DETACHED_Y")
+    BindPowerSlider(detachedCard, AddDetachedControl, "Detached width", 16, sliderTop - 66, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W")
+    BindPowerSlider(detachedCard, AddDetachedControl, "Detached height", detachedRightX, sliderTop - 66, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H")
+    BindPowerSlider(detachedCard, AddDetachedControl, "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 20, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER")
 
     RefreshPowerEnabled = function()
         local powerOn = ReadBool(unit, "showPowerBar", true)
@@ -598,12 +559,7 @@ local function BuildCastbar(ctx, builder, unit)
 
     local tabFrames = {}
     local function MakeTabFrame(key)
-        local frame = CreateFrame("Frame", nil, sec)
-        frame:SetPoint("TOPLEFT", sec, "TOPLEFT", 0, -118)
-        frame:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 12)
-        frame._msuf2Width = sectionW
-        tabFrames[key] = frame
-        return frame
+        return UnitSectionShared.MakeTabFrame(sec, key, -118, sectionW, tabFrames)
     end
 
     local generalTab = MakeTabFrame("general")

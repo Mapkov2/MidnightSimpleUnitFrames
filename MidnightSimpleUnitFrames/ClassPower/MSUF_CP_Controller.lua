@@ -336,6 +336,7 @@ local function EnsureDefaults()
     --- ClassPower defaults
     if b.showClassPower       == nil then b.showClassPower       = true  end
     if b.classPowerHeight     == nil then b.classPowerHeight     = 4     end
+    if b.classPowerShape      == nil then b.classPowerShape      = "BAR" end
     if b.classPowerColorByType == nil then b.classPowerColorByType = true end
     if b.classPowerBgAlpha    == nil then b.classPowerBgAlpha    = 0.3   end
     if b.classPowerTickWidth  == nil then b.classPowerTickWidth  = 1     end
@@ -1578,7 +1579,10 @@ local function FullRefresh()
         CP.container:Show()
         CP.visible = true
         --- Belt-and-suspenders: ensure outline survives parent Hide/Show cycle
-        if CP._outline then CP._outline:Show() end
+        if CP._outline then
+            local outlineShape = tostring((_cpDB.bars and _cpDB.bars.classPowerShape) or "BAR"):upper()
+            if outlineShape == "BAR" then CP._outline:Show() else CP._outline:Hide() end
+        end
 
     else
         --- Clean up rune/timer/essence OnUpdate scripts when hiding

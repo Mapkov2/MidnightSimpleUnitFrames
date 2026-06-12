@@ -1858,6 +1858,9 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.classPowerComboPointColorMode == nil then
         MSUF_DB.bars.classPowerComboPointColorMode = "default"
     end
+    if MSUF_DB.bars.classPowerShape == nil then
+        MSUF_DB.bars.classPowerShape = "BAR"
+    end
     if MSUF_DB.bars.realtimePowerText == nil then
         MSUF_DB.bars.realtimePowerText = true
     end
@@ -2415,6 +2418,9 @@ local function fill(key, defaults)
             end
             if u.powerSmoothFill == nil then
                 u.powerSmoothFill = (unitKey == "player") and (bars.smoothPowerBar ~= false) or false
+            end
+            if unitKey == "player" and u.detachedPowerBarShape == nil then
+                u.detachedPowerBarShape = "FOLLOW_CLASS"
             end
             if u.powerBarDetached == true and u.detachedPowerBarWidth == nil then
                 local syncedClassWidth = unitKey == "player"

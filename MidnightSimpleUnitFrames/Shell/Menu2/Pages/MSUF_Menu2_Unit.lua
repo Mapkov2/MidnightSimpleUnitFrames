@@ -30,6 +30,8 @@ local CASTBAR_FIELDS = {
     focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat" },
     boss = { enable = "enableBossCastbar", backend = "bossCastbarBackend", providerMemory = "bossCastbarBackendBeforeHide", time = "showBossCastTime", icon = "showBossCastIcon", text = "showBossCastName", timeFormat = "bossCastTimeFormat" },
 }
+local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
+local CASTBAR_COPY_SUFFIXES = WL [[IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY]]
 
 local LOAD_CONDITIONS = KLR [[
 loadCondHideMounted=Mounted
@@ -230,7 +232,7 @@ local function DeepCopy(src)
     return M.DeepCopy(src)
 end
 
-local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower]]
+local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower]]
 local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitShape portraitSizeOverride portraitOffsetX portraitOffsetY portraitBorderStyle portraitBorderThickness portraitBgEnabled portraitFillBorder]]
 local COPY_TEXT_FIELDS = WL [[showName showHP showPower nameTextAnchor nameOffsetX nameOffsetY nameFontSize showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator nameTextLayer hpTextLayer powerTextLayer]]
 local COPY_INDICATOR_FIELDS = WL [[showLeaderIcon leaderIconStyle leaderIconOffsetX leaderIconOffsetY leaderIconAnchor leaderIconSize leaderIconLayer showRaidMarker raidMarkerOffsetX raidMarkerOffsetY raidMarkerAnchor raidMarkerSize raidMarkerLayer showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle showLevelIndicator levelIndicatorOffsetX levelIndicatorOffsetY levelIndicatorAnchor levelIndicatorSize levelIndicatorLayer showEliteIcon eliteIconSize eliteIconAnchor eliteIconOffsetX eliteIconOffsetY eliteIconLayer]]
@@ -270,6 +272,8 @@ focus=Focus
 pet=Pet
 boss=Boss Frames
 ]]
+local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", pet = "Pet", boss = "Boss Frames" }
+local UNIT_PILL_WIDTHS = { targettarget = 116, focustarget = 104, boss = 92, target = 62, focus = 58, pet = 46 }
 
 local function DefaultCopyTarget(unit)
     for i = 1, #UNIT_COPY_TARGETS do
@@ -280,26 +284,12 @@ local function DefaultCopyTarget(unit)
 end
 
 local function UnitTopLabel(unit)
-    local label = ({
-        player = "Player",
-        target = "Target",
-        targettarget = "Target of Target",
-        focustarget = "Focus Target",
-        focus = "Focus",
-        boss = "Boss Frames",
-        pet = "Pet",
-    })[unit] or tostring(unit or "")
+    local label = UNIT_LABELS[unit] or tostring(unit or "")
     return (M.Tr and M.Tr(label)) or label
 end
 
 local function UnitTopPillWidth(unit)
-    if unit == "targettarget" then return 116 end
-    if unit == "focustarget" then return 104 end
-    if unit == "boss" then return 92 end
-    if unit == "target" then return 62 end
-    if unit == "focus" then return 58 end
-    if unit == "pet" then return 46 end
-    return 56
+    return UNIT_PILL_WIDTHS[unit] or 56
 end
 
 local UNIT_KEY_SET = KSW("player target targettarget focustarget focus pet boss")
@@ -348,64 +338,56 @@ local PB_SHOW_DEFAULTS = {
     boss = true,
 }
 
-local function ReadPowerBarEnabled(conf, unitKey)
-    if conf and conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
-    local fn = _G.MSUF_ReadUnitPowerBarEnabled
-    if type(fn) == "function" then return fn(unitKey) end
-    local b, bk = _G.MSUF_DB and _G.MSUF_DB.bars, PB_SHOW_KEY_MAP[unitKey]
-    if b and bk and b[bk] ~= nil then return b[bk] ~= false end
-    return PB_SHOW_DEFAULTS[unitKey] ~= false
+local function ConfBool(value) if value ~= nil then return true, value ~= false end end
+local function ConfTrue(value) if value ~= nil then return true, value == true end end
+local function ConfNumber(value) if type(value) == "number" then return true, value end end
+local function BarsDB()
+    return _G.MSUF_DB and _G.MSUF_DB.bars
 end
 
-local function ReadPowerBarHeight(conf, unitKey)
-    if conf and type(conf.powerBarHeight) == "number" then return conf.powerBarHeight end
-    local fn = _G.MSUF_ReadUnitPowerBarHeight
-    if type(fn) == "function" then return fn(unitKey) end
-    local b = _G.MSUF_DB and _G.MSUF_DB.bars
-    return tonumber(b and b.powerBarHeight) or 3
-end
-
-local function ReadPowerBarEmbed(conf, unitKey)
-    if conf and conf.embedPowerBarIntoHealth ~= nil then return conf.embedPowerBarIntoHealth == true end
-    local fn = _G.MSUF_ReadUnitPowerBarEmbed
-    if type(fn) == "function" then return fn(unitKey) end
-    local b = _G.MSUF_DB and _G.MSUF_DB.bars
-    return b and b.embedPowerBarIntoHealth == true
-end
-
-local function ReadPowerBarBorderEnabled(conf, unitKey)
-    if conf and conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
-    local fn = _G.MSUF_ReadUnitPowerBarBorderEnabled
-    if type(fn) == "function" then return fn(unitKey) end
-    local b = _G.MSUF_DB and _G.MSUF_DB.bars
-    return b and b.powerBarBorderEnabled == true
-end
-
-local function ReadPowerBarBorderThickness(conf, unitKey)
-    if conf and type(conf.powerBarBorderThickness) == "number" then return conf.powerBarBorderThickness end
-    local fn = _G.MSUF_ReadUnitPowerBarBorderThickness
-    if type(fn) == "function" then return fn(unitKey) end
-    local b = _G.MSUF_DB and _G.MSUF_DB.bars
-    return tonumber(b and (b.powerBarBorderThickness or b.powerBarBorderSize)) or 1
-end
-
-local function ReadPowerSmoothFill(conf, unitKey)
-    if conf and conf.powerSmoothFill ~= nil then return conf.powerSmoothFill == true end
-    if unitKey == "player" then
-        local b = _G.MSUF_DB and _G.MSUF_DB.bars
+local POWER_COPY_OVERRIDES = {
+    { key = "showPowerBar", fn = "MSUF_ReadUnitPowerBarEnabled", read = ConfBool, fallback = function(unitKey)
+        local b, bk = BarsDB(), PB_SHOW_KEY_MAP[unitKey]
+        if b and bk and b[bk] ~= nil then return b[bk] ~= false end
+        return PB_SHOW_DEFAULTS[unitKey] ~= false
+    end },
+    { key = "powerBarHeight", fn = "MSUF_ReadUnitPowerBarHeight", read = ConfNumber, fallback = function()
+        local b = BarsDB()
+        return tonumber(b and b.powerBarHeight) or 3
+    end },
+    { key = "embedPowerBarIntoHealth", fn = "MSUF_ReadUnitPowerBarEmbed", read = ConfTrue, fallback = function()
+        local b = BarsDB()
+        return b and b.embedPowerBarIntoHealth == true
+    end },
+    { key = "powerBarBorderEnabled", fn = "MSUF_ReadUnitPowerBarBorderEnabled", read = ConfTrue, fallback = function()
+        local b = BarsDB()
+        return b and b.powerBarBorderEnabled == true
+    end },
+    { key = "powerBarBorderThickness", fn = "MSUF_ReadUnitPowerBarBorderThickness", read = ConfNumber, fallback = function()
+        local b = BarsDB()
+        return tonumber(b and (b.powerBarBorderThickness or b.powerBarBorderSize)) or 1
+    end },
+    { key = "powerSmoothFill", read = ConfTrue, fallback = function(unitKey)
+        if unitKey ~= "player" then return false end
+        local b = BarsDB()
         return not (b and b.smoothPowerBar == false)
-    end
-    return false
+    end },
+}
+
+local function ReadPowerCopyValue(conf, unitKey, spec)
+    local ok, value = spec.read(conf and conf[spec.key])
+    if ok then return value end
+    local fn = spec.fn and _G[spec.fn]
+    if type(fn) == "function" then return fn(unitKey) end
+    return spec.fallback(unitKey)
 end
 
 local function CopyPowerBarFields(dst, src, srcKey)
     CopyFields(dst, src, COPY_POWER_BAR_FIELDS)
-    dst.showPowerBar = ReadPowerBarEnabled(src, srcKey)
-    dst.powerBarHeight = ReadPowerBarHeight(src, srcKey)
-    dst.embedPowerBarIntoHealth = ReadPowerBarEmbed(src, srcKey)
-    dst.powerBarBorderEnabled = ReadPowerBarBorderEnabled(src, srcKey)
-    dst.powerBarBorderThickness = ReadPowerBarBorderThickness(src, srcKey)
-    dst.powerSmoothFill = ReadPowerSmoothFill(src, srcKey)
+    for i = 1, #POWER_COPY_OVERRIDES do
+        local spec = POWER_COPY_OVERRIDES[i]
+        dst[spec.key] = ReadPowerCopyValue(src, srcKey, spec)
+    end
 end
 
 local function CopyCastbar(g, src, dst)
@@ -426,22 +408,11 @@ local function CopyCastbar(g, src, dst)
     g[d.text] = g[s.text]
     g[d.timeFormat] = g[s.timeFormat]
 
-    local prefixByUnit = {
-        player = "castbarPlayer",
-        target = "castbarTarget",
-        focus = "castbarFocus",
-        boss = "bossCast",
-    }
-    local srcPrefix = prefixByUnit[src]
-    local dstPrefix = prefixByUnit[dst]
+    local srcPrefix = CASTBAR_PREFIX[src]
+    local dstPrefix = CASTBAR_PREFIX[dst]
     if not srcPrefix or not dstPrefix then return end
-    local suffixes = {
-        "IconPosition", "IconSize", "IconOffsetX", "IconOffsetY", "IconSpacing", "IconBorderStyle",
-        "SpellNamePosition", "SpellNameFontSize", "TextOffsetX", "TextOffsetY", "SpellNameAlign", "SpellNameMaxWidth", "SpellNameTruncate",
-        "TimePosition", "TimeFontSize", "TimeOffsetX", "TimeOffsetY",
-    }
-    for i = 1, #suffixes do
-        g[dstPrefix .. suffixes[i]] = g[srcPrefix .. suffixes[i]]
+    for i = 1, #CASTBAR_COPY_SUFFIXES do
+        g[dstPrefix .. CASTBAR_COPY_SUFFIXES[i]] = g[srcPrefix .. CASTBAR_COPY_SUFFIXES[i]]
     end
 end
 
@@ -832,7 +803,7 @@ end
 
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
-for key, value in pairs({
+M.Assign(UnitPage, {
     UNIT_PAGES = UNIT_PAGES,
     POWER_UNITS = POWER_UNITS,
     CASTBAR_FIELDS = CASTBAR_FIELDS,
@@ -881,13 +852,11 @@ for key, value in pairs({
     ReadStatusString = ReadStatusString,
     RefreshStatusRuntime = RefreshStatusRuntime,
     SetControlEnabled = SetControlEnabled,
-}) do
-    UnitPage[key] = value
-end
-UnitPage.SeedText = SeedText
-UnitPage.ReadText = ReadText
-UnitPage.SetText = SetText
-UnitPage.NormalizePortrait = NormalizePortrait
-UnitPage.SetPortraitValue = SetPortraitValue
-UnitPage.NormalizeBossLayoutMode = NormalizeBossLayoutMode
-UnitPage.UpdateLoadActive = UpdateLoadActive
+    SeedText = SeedText,
+    ReadText = ReadText,
+    SetText = SetText,
+    NormalizePortrait = NormalizePortrait,
+    SetPortraitValue = SetPortraitValue,
+    NormalizeBossLayoutMode = NormalizeBossLayoutMode,
+    UpdateLoadActive = UpdateLoadActive,
+})

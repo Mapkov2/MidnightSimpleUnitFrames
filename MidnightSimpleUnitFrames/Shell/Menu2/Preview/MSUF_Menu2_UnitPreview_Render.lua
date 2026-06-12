@@ -11,54 +11,6 @@ MSUF.UFPreviewRender = Render
 local Pick = (MSUF.MSUF2 or _G.MSUF2 or {}).Pick
 local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}
 
-local CLASS_POWER_PREVIEW_FALLBACK_COLORS = {
-    ARCANE_CHARGES = { 0.45, 0.55, 1.00 },
-    CHARGED = { 0.60, 0.20, 0.80 },
-    CHI = { 0.70, 1.00, 0.86 },
-    COMBO_POINTS = { 1.00, 0.82, 0.10 },
-    EBON_MIGHT = { 0.40, 0.80, 0.60 },
-    ESSENCE = { 0.32, 0.74, 1.00 },
-    HOLY_POWER = { 0.95, 0.86, 0.20 },
-    INSANITY = { 0.55, 0.32, 0.95 },
-    MAELSTROM = { 0.00, 0.55, 1.00 },
-    MAELSTROM_ABOVE_5 = { 1.00, 0.50, 0.00 },
-    RUNES = { 0.55, 0.85, 1.00 },
-    SOUL_FRAGMENTS = { 0.00, 0.80, 0.00 },
-    SOUL_FRAGMENTS_META = { 0.60, 0.20, 0.93 },
-    SOUL_FRAGMENTS_VENG = { 0.34, 0.06, 0.46 },
-    SOUL_SHARDS = { 0.58, 0.28, 0.92 },
-    STAGGER_GREEN = { 0.52, 1.00, 0.52 },
-    STAGGER_YELLOW = { 1.00, 0.98, 0.72 },
-    STAGGER_RED = { 1.00, 0.42, 0.42 },
-    TIP_OF_THE_SPEAR = { 0.60, 0.80, 0.20 },
-    WHIRLWIND = { 0.20, 0.80, 0.20 },
-}
-
-local COMBO_POINT_SLOT_TOKENS = {
-    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
-    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
-}
-local COMBO_POINT_RAMP_R = { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
-local COMBO_POINT_RAMP_G = { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
-local COMBO_POINT_RAMP_B = { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
-
-local function ClassPowerPreviewColorOverride(tableName, token)
-    local db = _G.MSUF_DB
-    local general = db and db.general
-    local overrides = general and general[tableName]
-    local c = overrides and token and overrides[token]
-    if type(c) ~= "table" then return nil end
-    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
-    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
-    return nil
-end
-
-local function IsChargedComboPreviewSlot(spec, bars, slot)
-    return spec and spec.token == "COMBO_POINTS"
-        and bars and bars.showChargedComboPoints ~= false
-        and spec.chargedSlots and spec.chargedSlots[slot] == true
-end
-
 local function CastbarPreviewDetailPrefix(unitKey)
     if unitKey == "player" then return "castbarPlayer" end
     if unitKey == "target" then return "castbarTarget" end
@@ -92,6 +44,54 @@ local function NormalizeCastbarPreviewJustify(value, fallback)
     value = tostring(value or fallback or "LEFT"):upper()
     if value == "CENTER" or value == "RIGHT" then return value end
     return "LEFT"
+end
+
+local PREVIEW_CLASS_POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
+local PREVIEW_CLASS_POWER_SHAPES = {
+    CIRCLE = {
+        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_fill.tga",
+        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_bg.tga",
+        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_edge.tga",
+    },
+    DIAMOND = {
+        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_diamond_fill.tga",
+        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_diamond_bg.tga",
+        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_diamond_edge.tga",
+    },
+    HEX = {
+        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_hex_fill.tga",
+        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_hex_bg.tga",
+        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_hex_edge.tga",
+    },
+}
+local PREVIEW_POWER_SHAPES = {
+    ROUND = {
+        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_round_fill.tga",
+        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_round_bg.tga",
+        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_round_edge.tga",
+    },
+    CRYSTAL = {
+        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_crystal_fill.tga",
+        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_crystal_bg.tga",
+        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_crystal_edge.tga",
+    },
+}
+
+local function NormalizePreviewClassPowerShape(value)
+    value = tostring(value or "BAR"):upper()
+    if value == "CIRCLE" or value == "DIAMOND" or value == "HEX" then return value end
+    return "BAR"
+end
+
+local function ResolvePreviewPowerShape(value, classPowerShape)
+    value = tostring(value or "BAR"):upper()
+    if value == "ROUND" or value == "CRYSTAL" or value == "BAR" then return value end
+    if value == "FOLLOW_CLASS" then
+        classPowerShape = NormalizePreviewClassPowerShape(classPowerShape)
+        if classPowerShape == "CIRCLE" then return "ROUND" end
+        if classPowerShape == "DIAMOND" or classPowerShape == "HEX" then return "CRYSTAL" end
+    end
+    return "BAR"
 end
 
 local function NormalizeCastbarPreviewTruncate(value)
@@ -316,129 +316,28 @@ function Render.Install(Preview, deps)
     }
     local ApplyPreviewTextFocus = deps.ApplyPreviewTextFocus or function() end
 
-    local function ResolveClassPowerPreviewColor(token, fallbackR, fallbackG, fallbackB)
-        local r, g, b = ClassPowerPreviewColorOverride("classPowerColorOverrides", token)
-        if r then return r, g, b end
-        if type(_G.MSUF_GetPowerBarColor) == "function" and token then
-            r, g, b = _G.MSUF_GetPowerBarColor(0, token)
-            if type(r) == "number" then return r, g, b end
-        end
-        local pbc = _G.PowerBarColor
-        local c = pbc and token and pbc[token]
-        if c then
-            r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
-            if type(r) == "number" then return r, g, b end
-        end
-        c = token and CLASS_POWER_PREVIEW_FALLBACK_COLORS[token]
-        if c then return c[1], c[2], c[3] end
-        if token then
-            r, g, b = PowerColor(token)
-            if type(r) == "number" then return r, g, b end
-        end
-        return fallbackR or 1, fallbackG or 1, fallbackB or 1
-    end
-
-    local function ResolveClassPowerPreviewBaseColor(spec, bars, fallbackR, fallbackG, fallbackB)
-        if bars and bars.classPowerColorByType == false then return 1, 1, 1 end
-        return ResolveClassPowerPreviewColor(spec and spec.token, fallbackR, fallbackG, fallbackB)
-    end
-
-    local function ResolveClassPowerPreviewTextColor(fallbackR, fallbackG, fallbackB)
-        return ResolveClassPowerPreviewColor("RESOURCE_TEXT", fallbackR, fallbackG, fallbackB)
-    end
-
-    local function ResolveComboPointPreviewColor(bars, slot, baseR, baseG, baseB)
-        local mode = bars and bars.classPowerComboPointColorMode
-        if mode ~= "ramp" and mode ~= "custom" then return baseR, baseG, baseB end
-        slot = tonumber(slot) or 1
-        if slot < 1 then slot = 1 elseif slot > 7 then slot = 7 end
-        if mode == "custom" then
-            local r, g, b = ClassPowerPreviewColorOverride("classPowerColorOverrides", COMBO_POINT_SLOT_TOKENS[slot])
-            if r then return r, g, b end
-        end
-        return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
-    end
-
-    local function PreviewFillForSegment(spec, index)
-        if not spec then
-            return index <= 3 and 1 or 0
-        end
-        local mode = spec.mode or "segmented"
-        local value = tonumber(spec.value) or 0
-        if mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single" then
-            if index ~= 1 then return 0 end
-            if value < 0 then value = 0 elseif value > 1 then value = 1 end
-            return value
-        end
-        local full = math.floor(value)
-        if mode == "fractional" then
-            local partial = value - full
-            if index <= full then return 1 end
-            if index == full + 1 and partial > 0.001 then return partial end
-            return 0
-        end
-        return index <= full and 1 or 0
-    end
-
-    local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
-    local function FormatClassPowerPreviewSeconds(remaining)
-        remaining = tonumber(remaining) or 0
-        if remaining <= 0.05 then return "" end
-        return string.format("%.1f", math.floor((remaining * 10) + 0.5) / 10)
-    end
-
-    local function FillRunePreviewState(out, runeID, totalDuration)
-        out.id = runeID
-        out.total = totalDuration
-        local remaining = RUNE_PREVIEW_REMAINING[runeID]
-        if not remaining then
-            out.ready = true
-            out.elapsed = totalDuration
-            out.remaining = 0
-        else
-            out.ready = false
-            out.remaining = remaining
-            out.elapsed = totalDuration - remaining
-        end
-        return out
-    end
-
-    local function BuildRunePreviewOrder(cp, bars, spec)
-        local states = cp.runeStates
-        if not states then
-            states = {}
-            cp.runeStates = states
-        end
-        local totalDuration = tonumber(spec and spec.runeDuration) or 10
-        if totalDuration < 1 then totalDuration = 10 end
-        for i = 1, 6 do states[i] = FillRunePreviewState(states[i] or {}, i, totalDuration) end
-        for i = 7, #states do states[i] = nil end
-        local sortOrder = bars and bars.runeSortOrder
-        if sortOrder == "asc" then
-            table.sort(states, function(a, b)
-                if a.ready ~= b.ready then return a.ready == true end
-                return (a.id or 0) < (b.id or 0)
-            end)
-        elseif sortOrder == "desc" then
-            table.sort(states, function(a, b)
-                if a.ready ~= b.ready then return a.ready ~= true end
-                return (a.id or 0) < (b.id or 0)
-            end)
-        else
-            table.sort(states, function(a, b) return (a.id or 0) < (b.id or 0) end)
-        end
-        return states
-    end
+    local SharedCPPreview = MenuState.ClassPowerPreview or {}
+    local function FallbackBase(_, _, r, g, b) return r or 1, g or 1, b or 1 end
+    local function FallbackColor(_, r, g, b) return r or 1, g or 1, b or 1 end
+    local function FallbackText(r, g, b) return r or 1, g or 1, b or 1 end
+    local function FallbackFill(spec, index) return spec and index <= math.floor(tonumber(spec.value) or 0) and 1 or 0 end
+    local function FallbackCombo(_, _, r, g, b) return r, g, b end
     local CPPreview = {
-        BuildRuneOrder = BuildRunePreviewOrder,
-        ColorOverride = ClassPowerPreviewColorOverride,
-        FillForSegment = PreviewFillForSegment,
-        FormatSeconds = FormatClassPowerPreviewSeconds,
-        IsCharged = IsChargedComboPreviewSlot,
-        ResolveBaseColor = ResolveClassPowerPreviewBaseColor,
-        ResolveColor = ResolveClassPowerPreviewColor,
-        ResolveComboColor = ResolveComboPointPreviewColor,
-        ResolveTextColor = ResolveClassPowerPreviewTextColor,
+        BuildRuneOrder = SharedCPPreview.BuildRuneOrder or function() return nil end,
+        ColorOverride = SharedCPPreview.ColorOverride or function() return nil end,
+        FillForSegment = SharedCPPreview.FillForSegment or FallbackFill,
+        FormatSeconds = SharedCPPreview.FormatSeconds or function() return "" end,
+        IsCharged = SharedCPPreview.IsCharged or function() return false end,
+        ResolveComboColor = SharedCPPreview.ResolveComboColor or FallbackCombo,
+        ResolveBaseColor = function(spec, bars, fallbackR, fallbackG, fallbackB)
+            return (SharedCPPreview.ResolveBaseColor or FallbackBase)(spec, bars, fallbackR, fallbackG, fallbackB, PowerColor)
+        end,
+        ResolveColor = function(token, fallbackR, fallbackG, fallbackB)
+            return (SharedCPPreview.ResolveColor or FallbackColor)(token, fallbackR, fallbackG, fallbackB, PowerColor)
+        end,
+        ResolveTextColor = function(fallbackR, fallbackG, fallbackB)
+            return (SharedCPPreview.ResolveTextColor or FallbackText)(fallbackR, fallbackG, fallbackB, PowerColor)
+        end,
     }
     local fallbackFont = deps.FONT or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 
@@ -651,6 +550,9 @@ function Preview.Refresh(box, reason)
     box._runtimeDetachedPowerY = tonumber(runtimePower and runtimePower.detachedY) or tonumber(conf.detachedPowerBarOffsetY) or -4
     box._runtimeDetachedPowerAnchorClass = key == "player" and ((runtimePower and runtimePower.detachedAnchorClass == true) or (runtimePower == nil and conf.detachedPowerBarAnchorToClassPower == true))
     box._runtimeDetachedPowerTextOnBar = (runtimePower and runtimePower.textOnDetached == true) or (runtimePower == nil and conf.detachedPowerBarTextOnBar == true)
+    box._runtimeDetachedPowerShape = key == "player"
+        and ResolvePreviewPowerShape((runtimePower and runtimePower.shape) or conf.detachedPowerBarShape or "FOLLOW_CLASS", bars.classPowerShape)
+        or "BAR"
     local detachedH = detachedPower and (tonumber(runtimePower and runtimePower.detachedHeight) or tonumber(conf.detachedPowerBarHeight) or 6) or 0
     if detachedH < 2 then detachedH = 2 elseif detachedH > 80 then detachedH = 80 end
     local wideW = w
@@ -887,15 +789,19 @@ function Preview.Refresh(box, reason)
         if cp.emptyAlpha < 0 then cp.emptyAlpha = 0 elseif cp.emptyAlpha > 1 then cp.emptyAlpha = 1 end
         cp.bgAlpha = tonumber(bars.classPowerBgAlpha) or 0.30
         if cp.bgAlpha < 0 then cp.bgAlpha = 0 elseif cp.bgAlpha > 1 then cp.bgAlpha = 1 end
+        cp.shape = NormalizePreviewClassPowerShape(bars.classPowerShape)
+        cp.shapeInfo = PREVIEW_CLASS_POWER_SHAPES[cp.shape]
         if mock.classPower.SetBackdropColor then
             cp.bgr, cp.bgg, cp.bgb = CPPreview.ColorOverride("classPowerBgColorOverrides", cp.token)
-            mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0, cp.bgAlpha)
+            mock.classPower:SetBackdropColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0, cp.shapeInfo and 0 or cp.bgAlpha)
+            mock.classPower:SetBackdropBorderColor(0, 0, 0, cp.shapeInfo and 0 or 1)
         end
         cp.segCount = floor(tonumber(cp.preview and cp.preview.segments) or 5)
         if cp.segCount < 1 then cp.segCount = 1 end
         if mock.classPower.segments and cp.segCount > #mock.classPower.segments then cp.segCount = #mock.classPower.segments end
         local previewW = S(cpW)
-        local gap = max(0, S((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0)))
+        local rawGap = cp.shapeInfo and (tonumber(bars.classPowerGap) or 0) or ((tonumber(bars.classPowerTickWidth) or 1) + (tonumber(bars.classPowerGap) or 0))
+        local gap = max(0, S(rawGap))
         if cp.segCount > 1 then
             local maxGap = floor((previewW - cp.segCount) / (cp.segCount - 1))
             if maxGap < 0 then maxGap = 0 end
@@ -903,6 +809,18 @@ function Preview.Refresh(box, reason)
         end
         local segSpace = previewW - (cp.segCount - 1) * gap
         if segSpace < cp.segCount then segSpace = cp.segCount end
+        local slot = nil
+        local startX = 0
+        if cp.shapeInfo then
+            slot = max(1, S(cpH))
+            local maxSlot = floor((previewW - (cp.segCount - 1) * gap) / cp.segCount)
+            if maxSlot < 1 then maxSlot = 1 end
+            if slot > maxSlot then slot = maxSlot end
+            segSpace = slot * cp.segCount
+            local rowW = segSpace + (cp.segCount - 1) * gap
+            startX = floor((previewW - rowW) * 0.5 + 0.5)
+            if startX < 0 then startX = 0 end
+        end
         local xPos, prevBoundary = 0, 0
         cp.runeOrder = cp.isRune and CPPreview.BuildRuneOrder(cp, bars, cp.preview) or nil
         cp.runeShowTime = bars.runeShowTime ~= false
@@ -910,11 +828,19 @@ function Preview.Refresh(box, reason)
         cp.runeTextSize = max(6, S((tonumber(bars.classPowerFontSize) or 16) - 2))
         for i = 1, #mock.classPower.segments do
             local seg = mock.classPower.segments[i]
+            local segBg = mock.classPower.segmentBgs and mock.classPower.segmentBgs[i]
+            local segEdge = mock.classPower.segmentEdges and mock.classPower.segmentEdges[i]
             local runeText = mock.classPower.runeTexts and mock.classPower.runeTexts[i]
             if i <= cp.segCount then
-                local boundary = floor((segSpace * i) / cp.segCount)
-                local segW = boundary - prevBoundary
-                if segW < 1 then segW = 1 end
+                local boundary, segW
+                if cp.shapeInfo then
+                    boundary = i * slot
+                    segW = slot
+                else
+                    boundary = floor((segSpace * i) / cp.segCount)
+                    segW = boundary - prevBoundary
+                    if segW < 1 then segW = 1 end
+                end
                 seg:Show()
                 seg:ClearAllPoints()
                 cp.rune = cp.runeOrder and cp.runeOrder[i] or nil
@@ -926,13 +852,37 @@ function Preview.Refresh(box, reason)
                 elseif cp.rune and cp.fill > 0 and cp.fill < 1 then
                     cp.drawW = max(1, floor(segW * cp.fill + 0.5))
                 end
-                seg:SetWidth(cp.drawW)
+                local visualW = cp.shapeInfo and segW or cp.drawW
+                seg:SetWidth(visualW)
+                seg:SetHeight(max(2, S(cpH)))
+                local anchorX = startX + xPos
                 if bars.classPowerFillReverse == true then
-                    seg:SetPoint("TOPRIGHT", mock.classPower, "TOPRIGHT", -xPos, 0)
-                    seg:SetPoint("BOTTOMRIGHT", mock.classPower, "BOTTOMRIGHT", -xPos, 0)
+                    seg:SetPoint("TOPRIGHT", mock.classPower, "TOPRIGHT", -anchorX, 0)
+                    seg:SetPoint("BOTTOMRIGHT", mock.classPower, "BOTTOMRIGHT", -anchorX, 0)
                 else
-                    seg:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", xPos, 0)
-                    seg:SetPoint("BOTTOMLEFT", mock.classPower, "BOTTOMLEFT", xPos, 0)
+                    seg:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", anchorX, 0)
+                    seg:SetPoint("BOTTOMLEFT", mock.classPower, "BOTTOMLEFT", anchorX, 0)
+                end
+                if segBg then
+                    if cp.shapeInfo then
+                        segBg:SetTexture(cp.shapeInfo.bg)
+                        segBg:SetVertexColor(cp.bgr or 0, cp.bgg or 0, cp.bgb or 0, cp.bgAlpha)
+                        segBg:ClearAllPoints()
+                        if bars.classPowerFillReverse == true then
+                            segBg:SetPoint("TOPRIGHT", mock.classPower, "TOPRIGHT", -anchorX, 0)
+                            segBg:SetPoint("BOTTOMRIGHT", mock.classPower, "BOTTOMRIGHT", -anchorX, 0)
+                        else
+                            segBg:SetPoint("TOPLEFT", mock.classPower, "TOPLEFT", anchorX, 0)
+                            segBg:SetPoint("BOTTOMLEFT", mock.classPower, "BOTTOMLEFT", anchorX, 0)
+                        end
+                        segBg:SetSize(segW, max(2, S(cpH)))
+                        segBg:Show()
+                    else
+                        segBg:Hide()
+                    end
+                end
+                if segEdge then
+                    segEdge:Hide()
                 end
                 cp.sr, cp.sg, cp.sb = cp.r, cp.g, cp.b
                 cp.charged = CPPreview.IsCharged(cp.preview, bars, i)
@@ -946,7 +896,23 @@ function Preview.Refresh(box, reason)
                 end
                 cp.alpha = cp.fill > 0 and cp.filledAlpha or cp.emptyAlpha
                 if cp.charged and cp.fill <= 0 then cp.alpha = max(cp.alpha, 0.55) end
-                seg:SetColorTexture(cp.sr, cp.sg, cp.sb, cp.alpha)
+                if cp.shapeInfo then
+                    seg:SetTexture(cp.shapeInfo.fill)
+                    if cp.fill > 0 and cp.fill < 1 then
+                        seg:SetWidth(max(1, floor(segW * cp.fill + 0.5)))
+                        if bars.classPowerFillReverse == true then
+                            seg:SetTexCoord(1 - cp.fill, 1, 0, 1)
+                        else
+                            seg:SetTexCoord(0, cp.fill, 0, 1)
+                        end
+                    else
+                        seg:SetTexCoord(0, 1, 0, 1)
+                    end
+                    seg:SetVertexColor(cp.sr, cp.sg, cp.sb, cp.fill > 0 and cp.alpha or 0)
+                else
+                    seg:SetTexCoord(0, 1, 0, 1)
+                    seg:SetColorTexture(cp.sr, cp.sg, cp.sb, cp.alpha)
+                end
                 if runeText then
                     if cp.rune and cp.runeShowTime and not cp.rune.ready then
                         cp.runeText = CPPreview.FormatSeconds(cp.rune.remaining)
@@ -957,9 +923,9 @@ function Preview.Refresh(box, reason)
                             runeText:SetTextColor(cp.tr, cp.tg, cp.tb, 1)
                             runeText:ClearAllPoints()
                             if bars.classPowerFillReverse == true then
-                                runeText:SetPoint("CENTER", mock.classPower, "TOPRIGHT", -(xPos + floor(segW * 0.5 + 0.5)), -floor(max(2, S(cpH)) * 0.5 + 0.5))
+                                runeText:SetPoint("CENTER", mock.classPower, "TOPRIGHT", -(anchorX + floor(segW * 0.5 + 0.5)), -floor(max(2, S(cpH)) * 0.5 + 0.5))
                             else
-                                runeText:SetPoint("CENTER", mock.classPower, "TOPLEFT", xPos + floor(segW * 0.5 + 0.5), -floor(max(2, S(cpH)) * 0.5 + 0.5))
+                                runeText:SetPoint("CENTER", mock.classPower, "TOPLEFT", anchorX + floor(segW * 0.5 + 0.5), -floor(max(2, S(cpH)) * 0.5 + 0.5))
                             end
                             runeText:Show()
                         else
@@ -975,6 +941,8 @@ function Preview.Refresh(box, reason)
                 prevBoundary = boundary
             else
                 seg:Hide()
+                if segBg then segBg:Hide() end
+                if segEdge then segEdge:Hide() end
                 if runeText then runeText:Hide() end
             end
         end
@@ -1022,8 +990,50 @@ function Preview.Refresh(box, reason)
         else
             mock.detachedPower:SetPoint("TOP", mock, "BOTTOM", dx, dy)
         end
-        mock.detachedPower.fill:SetVertexColor(pr, pg, pb, 1)
-        mock.detachedPower.fill:SetWidth(max(1, S(dW) * powerFrac - 2))
+        local powerShapeInfo = PREVIEW_POWER_SHAPES[box._runtimeDetachedPowerShape or "BAR"]
+        if mock.detachedPower.SetBackdropColor then
+            mock.detachedPower:SetBackdropColor(0, 0, 0, powerShapeInfo and 0 or 0.82)
+            mock.detachedPower:SetBackdropBorderColor(0, 0, 0, powerShapeInfo and 0 or 1)
+        end
+        mock.detachedPower.fill:ClearAllPoints()
+        if powerShapeInfo then
+            if mock.detachedPower.bg then
+                mock.detachedPower.bg:SetTexture(powerShapeInfo.bg)
+                mock.detachedPower.bg:SetVertexColor(pr, pg, pb, 0.28)
+                mock.detachedPower.bg:ClearAllPoints()
+                mock.detachedPower.bg:SetAllPoints(mock.detachedPower)
+                mock.detachedPower.bg:Show()
+            end
+            mock.detachedPower.fill:SetTexture(powerShapeInfo.fill)
+            mock.detachedPower.fill:SetVertexColor(pr, pg, pb, powerFrac > 0 and 1 or 0)
+            if powerFrac > 0 and powerFrac < 1 then
+                mock.detachedPower.fill:SetTexCoord(0, powerFrac, 0, 1)
+                mock.detachedPower.fill:SetWidth(max(1, floor(S(dW) * powerFrac + 0.5)))
+            else
+                mock.detachedPower.fill:SetTexCoord(0, 1, 0, 1)
+                mock.detachedPower.fill:SetWidth(S(dW))
+            end
+            mock.detachedPower.fill:SetPoint("TOPLEFT", mock.detachedPower, "TOPLEFT", 0, 0)
+            mock.detachedPower.fill:SetPoint("BOTTOMLEFT", mock.detachedPower, "BOTTOMLEFT", 0, 0)
+            if mock.detachedPower.edge then
+                if (tonumber(bars.detachedPowerBarOutline) or 1) > 0 then
+                    mock.detachedPower.edge:SetTexture(powerShapeInfo.edge)
+                    mock.detachedPower.edge:SetVertexColor(0, 0, 0, 1)
+                    mock.detachedPower.edge:Show()
+                else
+                    mock.detachedPower.edge:Hide()
+                end
+            end
+        else
+            if mock.detachedPower.bg then mock.detachedPower.bg:Hide() end
+            if mock.detachedPower.edge then mock.detachedPower.edge:Hide() end
+            SetTex(mock.detachedPower.fill, type(_G.MSUF_GetBarTexture) == "function" and _G.MSUF_GetBarTexture() or TEX_W8)
+            mock.detachedPower.fill:SetTexCoord(0, 1, 0, 1)
+            mock.detachedPower.fill:SetVertexColor(pr, pg, pb, 1)
+            mock.detachedPower.fill:SetWidth(max(1, S(dW) * powerFrac - 2))
+            mock.detachedPower.fill:SetPoint("TOPLEFT", mock.detachedPower, "TOPLEFT", 1, -1)
+            mock.detachedPower.fill:SetPoint("BOTTOMLEFT", mock.detachedPower, "BOTTOMLEFT", 1, 1)
+        end
         box.handleDetachedPower:SetSize(max(36, S(dW)), max(18, S(detachedH) + 8))
         PlaceHandle(box.handleDetachedPower, mock.detachedPower)
     else
@@ -1216,36 +1226,34 @@ function Preview.Refresh(box, reason)
         if v == nil and generalAlias then v = g[generalAlias] end
         return tonumber(v) or fallback or 0
     end
-    local hpOX = NumField("hpOffsetX", "hpTextOffsetX", "hpOffsetX", "hpTextOffsetX", -4)
-    local hpOY = NumField("hpOffsetY", "hpTextOffsetY", "hpOffsetY", "hpTextOffsetY", -4) + box._fontPreviewBaselineOffset
-    local hpLeftX = hpOX + NumField("hpTextLeftOffsetX", "hpLeftOffsetX", "hpTextLeftOffsetX", "hpLeftOffsetX", 0)
-    local hpLeftY = hpOY + NumField("hpTextLeftOffsetY", "hpLeftOffsetY", "hpTextLeftOffsetY", "hpLeftOffsetY", 0)
-    local hpCenterX = hpOX + NumField("hpTextCenterOffsetX", "hpCenterOffsetX", "hpTextCenterOffsetX", "hpCenterOffsetX", 0)
-    local hpCenterY = hpOY + NumField("hpTextCenterOffsetY", "hpCenterOffsetY", "hpTextCenterOffsetY", "hpCenterOffsetY", 0)
-    local hpRightX = hpOX + NumField("hpTextRightOffsetX", "hpRightOffsetX", "hpTextRightOffsetX", "hpRightOffsetX", 0)
-    local hpRightY = hpOY + NumField("hpTextRightOffsetY", "hpRightOffsetY", "hpTextRightOffsetY", "hpRightOffsetY", 0)
-    PlacePreviewSlot(mock.hpTextLeft, mock.textFrame, "LEFT", "LEFT", S(4 + hpLeftX), S(hpLeftY), "LEFT")
-    PlacePreviewSlot(mock.hpTextCenter, mock.textFrame, "CENTER", "CENTER", S(hpCenterX), S(hpCenterY), "CENTER")
-    PlacePreviewSlot(mock.hpText, mock.textFrame, "RIGHT", "RIGHT", S(-4 + hpRightX), S(hpRightY), "RIGHT")
-    PlacePreviewSlot(mock.hpTextPct, mock.textFrame, "RIGHT", "RIGHT", S(-4 + hpRightX), S(hpRightY), "RIGHT")
-    local pOX = NumField("powerOffsetX", "powerTextOffsetX", "powerOffsetX", "powerTextOffsetX", -4)
-    local pOY = NumField("powerOffsetY", "powerTextOffsetY", "powerOffsetY", "powerTextOffsetY", 4) + box._fontPreviewBaselineOffset
-    local pLeftX = pOX + NumField("powerTextLeftOffsetX", "powerLeftOffsetX", "powerTextLeftOffsetX", "powerLeftOffsetX", 0)
-    local pLeftY = pOY + NumField("powerTextLeftOffsetY", "powerLeftOffsetY", "powerTextLeftOffsetY", "powerLeftOffsetY", 0)
-    local pCenterX = pOX + NumField("powerTextCenterOffsetX", "powerCenterOffsetX", "powerTextCenterOffsetX", "powerCenterOffsetX", 0)
-    local pCenterY = pOY + NumField("powerTextCenterOffsetY", "powerCenterOffsetY", "powerTextCenterOffsetY", "powerCenterOffsetY", 0)
-    local pRightX = pOX + NumField("powerTextRightOffsetX", "powerRightOffsetX", "powerTextRightOffsetX", "powerRightOffsetX", 0)
-    local pRightY = pOY + NumField("powerTextRightOffsetY", "powerRightOffsetY", "powerTextRightOffsetY", "powerRightOffsetY", 0)
+    local function TextOffsets(prefix, fallbackY)
+        local baseX = NumField(prefix .. "OffsetX", prefix .. "TextOffsetX", prefix .. "OffsetX", prefix .. "TextOffsetX", -4)
+        local baseY = NumField(prefix .. "OffsetY", prefix .. "TextOffsetY", prefix .. "OffsetY", prefix .. "TextOffsetY", fallbackY) + box._fontPreviewBaselineOffset
+        local function Slot(side, axis)
+            return NumField(prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, prefix .. "Text" .. side .. "Offset" .. axis, prefix .. side .. "Offset" .. axis, 0)
+        end
+        return {
+            leftX = baseX + Slot("Left", "X"),
+            leftY = baseY + Slot("Left", "Y"),
+            centerX = baseX + Slot("Center", "X"),
+            centerY = baseY + Slot("Center", "Y"),
+            rightX = baseX + Slot("Right", "X"),
+            rightY = baseY + Slot("Right", "Y"),
+        }
+    end
+    local function PlaceTextSet(left, center, right, pct, parent, lPoint, lRel, cPoint, cRel, rPoint, rRel, offsets, yAdd)
+        yAdd = yAdd or 0
+        PlacePreviewSlot(left, parent, lPoint, lRel, S(4 + offsets.leftX), S(yAdd + offsets.leftY), "LEFT")
+        PlacePreviewSlot(center, parent, cPoint, cRel, S(offsets.centerX), S(yAdd + offsets.centerY), "CENTER")
+        PlacePreviewSlot(right, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
+        PlacePreviewSlot(pct, parent, rPoint, rRel, S(-4 + offsets.rightX), S(yAdd + offsets.rightY), "RIGHT")
+    end
+    PlaceTextSet(mock.hpTextLeft, mock.hpTextCenter, mock.hpText, mock.hpTextPct, mock.textFrame, "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", TextOffsets("hp", -4))
+    local powerOffsets = TextOffsets("power", 4)
     if detachedPower and box._runtimeDetachedPowerTextOnBar and mock.detachedPower:IsShown() then
-        PlacePreviewSlot(mock.powerTextLeft, mock.detachedPower, "LEFT", "LEFT", S(4 + pLeftX), S(pLeftY), "LEFT")
-        PlacePreviewSlot(mock.powerTextCenter, mock.detachedPower, "CENTER", "CENTER", S(pCenterX), S(pCenterY), "CENTER")
-        PlacePreviewSlot(mock.powerText, mock.detachedPower, "RIGHT", "RIGHT", S(-4 + pRightX), S(pRightY), "RIGHT")
-        PlacePreviewSlot(mock.powerTextPct, mock.detachedPower, "RIGHT", "RIGHT", S(-4 + pRightX), S(pRightY), "RIGHT")
+        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.detachedPower, "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", powerOffsets)
     else
-        PlacePreviewSlot(mock.powerTextLeft, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", S(4 + pLeftX), S(1 + pLeftY), "LEFT")
-        PlacePreviewSlot(mock.powerTextCenter, mock.textFrame, "BOTTOM", "BOTTOM", S(pCenterX), S(1 + pCenterY), "CENTER")
-        PlacePreviewSlot(mock.powerText, mock.textFrame, "BOTTOMRIGHT", "BOTTOMRIGHT", S(-4 + pRightX), S(1 + pRightY), "RIGHT")
-        PlacePreviewSlot(mock.powerTextPct, mock.textFrame, "BOTTOMRIGHT", "BOTTOMRIGHT", S(-4 + pRightX), S(1 + pRightY), "RIGHT")
+        PlaceTextSet(mock.powerTextLeft, mock.powerTextCenter, mock.powerText, mock.powerTextPct, mock.textFrame, "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT", powerOffsets, 1)
     end
     if hasPortrait then
         mock.portrait:Show()

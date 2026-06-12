@@ -20,6 +20,92 @@ local function RequestUFReanchorAfterCombat()
     end
 end
 
+local CP_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
+local CP_SHAPE_TEXTURES = {
+    CIRCLE = {
+        fill = CP_SHAPE_MEDIA .. "pip_circle_fill.tga",
+        bg = CP_SHAPE_MEDIA .. "pip_circle_bg.tga",
+        edge = CP_SHAPE_MEDIA .. "pip_circle_edge.tga",
+    },
+    DIAMOND = {
+        fill = CP_SHAPE_MEDIA .. "pip_diamond_fill.tga",
+        bg = CP_SHAPE_MEDIA .. "pip_diamond_bg.tga",
+        edge = CP_SHAPE_MEDIA .. "pip_diamond_edge.tga",
+    },
+    HEX = {
+        fill = CP_SHAPE_MEDIA .. "pip_hex_fill.tga",
+        bg = CP_SHAPE_MEDIA .. "pip_hex_bg.tga",
+        edge = CP_SHAPE_MEDIA .. "pip_hex_edge.tga",
+    },
+}
+
+local function CP_NormalizeShape(value)
+    value = tostring(value or "BAR"):upper()
+    if value == "CIRCLE" or value == "DIAMOND" or value == "HEX" then return value end
+    return "BAR"
+end
+
+local function CP_ShapeTextures(shape)
+    return CP_SHAPE_TEXTURES[CP_NormalizeShape(shape)]
+end
+
+local function CP_UpdateShapeFillClip(bar, value)
+    local secret = _G.issecretvalue
+    if secret and secret(value) == true then return end
+    local tex = bar and (bar._shapeFillTex or (bar.GetStatusBarTexture and bar:GetStatusBarTexture()))
+    if not tex then return end
+    local minV, maxV = bar._msufCPMin or 0, bar._msufCPMax or 1
+    if secret and (secret(minV) == true or secret(maxV) == true) then
+        tex:SetTexCoord(0, 1, 0, 1)
+        tex._msufCPShapeL, tex._msufCPShapeR = nil, nil
+        return
+    end
+    value = tonumber(value) or minV or 0
+    minV = tonumber(minV) or 0
+    maxV = tonumber(maxV) or 1
+    local span = maxV - minV
+    local frac = span > 0 and ((value - minV) / span) or 0
+    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
+    local left, right
+    if frac <= 0 or frac >= 1 then
+        left, right = 0, 1
+    elseif bar._shapeFillReverse == true then
+        left, right = 1 - frac, 1
+    else
+        left, right = 0, frac
+    end
+    if tex._msufCPShapeL ~= left or tex._msufCPShapeR ~= right then
+        tex:SetTexCoord(left, right, 0, 1)
+        tex._msufCPShapeL, tex._msufCPShapeR = left, right
+    end
+end
+
+local function CP_EnableShapeFillClip(bar, reverse)
+    if not bar then return end
+    bar._shapeFillTex = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+    bar._shapeFillReverse = reverse == true
+    if bar.SetScript and bar._shapeFillClipEnabled ~= true then
+        bar:SetScript("OnValueChanged", CP_UpdateShapeFillClip)
+        bar._shapeFillClipEnabled = true
+    end
+    CP_UpdateShapeFillClip(bar, bar.GetValue and bar:GetValue() or 0)
+end
+
+local function CP_DisableShapeFillClip(bar)
+    if not bar then return end
+    if bar.SetScript and bar._shapeFillClipEnabled == true then
+        bar:SetScript("OnValueChanged", nil)
+    end
+    bar._shapeFillClipEnabled = nil
+    bar._shapeFillReverse = nil
+    local tex = bar._shapeFillTex or (bar.GetStatusBarTexture and bar:GetStatusBarTexture())
+    if tex then
+        tex:SetTexCoord(0, 1, 0, 1)
+        tex._msufCPShapeL, tex._msufCPShapeR = nil, nil
+    end
+    bar._shapeFillTex = nil
+end
+
 builders.BUILD = function(E)
     local CP = E.CP
     local _cpDB = E._cpDB
@@ -45,6 +131,7 @@ local function CP_EnsureBars(parent, count)
             local bar = CreateFrame("StatusBar", nil, CP.container)
             bar:SetStatusBarTexture(fgPath)
             bar:SetMinMaxValues(0, 1)
+            bar._msufCPMin, bar._msufCPMax = 0, 1
             bar:SetValue(0)
             bar:Hide()
 
@@ -154,6 +241,23 @@ builders.LAYOUT = function(E)
     local SetFilledAlpha = E.SetFilledAlpha
     local SetEmptyAlpha = E.SetEmptyAlpha
     local SetAutoHideActive = E.SetAutoHideActive
+
+    local function EnsureShapeEdge(bar)
+        if not bar then return nil end
+        if bar._shapeEdge then return bar._shapeEdge end
+        local edge = bar:CreateTexture(nil, "OVERLAY", nil, 5)
+        edge:SetAllPoints(bar)
+        edge:SetVertexColor(0, 0, 0, 1)
+        edge:Hide()
+        bar._shapeEdge = edge
+        return edge
+    end
+
+    local function ClearShapeEdge(bar)
+        if bar and bar._shapeEdge then
+            bar._shapeEdge:Hide()
+        end
+    end
 
     local function CP_Layout(playerFrame, maxPower, height, powerType)
         if not CP.container or maxPower <= 0 then return end
@@ -308,10 +412,16 @@ builders.LAYOUT = function(E)
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
 
+        local shape = CP_NormalizeShape(b.classPowerShape)
+        local shapeInfo = CP_ShapeTextures(shape)
+        local shapeMode = shapeInfo ~= nil
+
         local outlineThick = tonumber(b.classPowerOutline) or 1
         if outlineThick < 0 then outlineThick = 0 elseif outlineThick > 4 then outlineThick = 4 end
 
-        if outlineThick > 0 then
+        if shapeMode then
+            if CP._outline then CP._outline:Hide() end
+        elseif outlineThick > 0 then
             if not CP._outline then
                 local tpl = (BackdropTemplateMixin and "BackdropTemplate") or nil
                 local ol = CreateFrame("Frame", nil, CP.container, tpl)
@@ -368,7 +478,7 @@ builders.LAYOUT = function(E)
 
         local bgA = tonumber(b.classPowerBgAlpha) or 0.3
         local bgR, bgG, bgB = ResolveClassPowerBgColor(powerType or CP.powerType)
-        CP.bgTex:SetVertexColor(bgR, bgG, bgB, bgA)
+        CP.bgTex:SetVertexColor(bgR, bgG, bgB, shapeMode and 0 or bgA)
 
         local filledAlpha = tonumber(b.classPowerFilledAlpha) or 1.0
         local emptyAlpha  = tonumber(b.classPowerEmptyAlpha)  or 0.3
@@ -381,49 +491,107 @@ builders.LAYOUT = function(E)
                        or (b.classPowerHideWhenFull == true)
                        or (b.classPowerHideWhenEmpty == true))
 
-        local xPos = 0
-        local prevBoundary = 0
-        for i = 1, maxPower do
-            local bar = CP.bars[i]
-            if bar then
-                bar:ClearAllPoints()
-                local boundary = math_floor((totalBarSpace * i) / maxPower)
-                local thisW = boundary - prevBoundary
-                if thisW < 1 then thisW = 1 end
-                if fillReverse then
-                    bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -xPos, 0)
-                else
-                    bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
-                end
-                bar:SetSize(thisW, h)
-                bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
-                bar:Show()
-                if snapTickW > 0 and i < maxPower then
-                    local tick = CP.ticks[i]
-                    if tick then
-                        local tickX = xPos + thisW + math_floor(snapGap / 2)
-                        tick:ClearAllPoints()
-                        if fillReverse then
-                            tick:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -tickX, 0)
-                        else
-                            tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
-                        end
-                        tick:SetSize(snapTickW, h)
-                        tick:Show()
+        if shapeMode then
+            local shapeFill = shapeInfo.fill
+            local shapeBg = shapeInfo.bg
+            local shapeEdge = shapeInfo.edge
+            local slot = h
+            if slot < 1 then slot = 1 end
+            if type(snap) == "function" then slot = snap(CP.container, slot) or slot end
+            if slot < 1 then slot = 1 end
+            local totalGap = (maxPower - 1) * snapGap
+            local maxSlot = math_floor((frameW - totalGap) / maxPower)
+            if maxSlot < 1 then maxSlot = 1 end
+            if slot > maxSlot then slot = maxSlot end
+            local rowW = (slot * maxPower) + totalGap
+            if rowW > frameW then rowW = frameW end
+            local startX = math_floor((frameW - rowW) * 0.5 + 0.5)
+            if startX < 0 then startX = 0 end
+            local xPos = 0
+            for i = 1, maxPower do
+                local bar = CP.bars[i]
+                if bar then
+                    bar:ClearAllPoints()
+                    bar:SetStatusBarTexture(shapeFill)
+                    if bar.SetReverseFill then bar:SetReverseFill(fillReverse) end
+                    CP_EnableShapeFillClip(bar, fillReverse)
+                    if bar._bg then
+                        bar._bg:SetTexture(shapeBg)
+                        bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
                     end
+                    if fillReverse then
+                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(startX + xPos), 0)
+                    else
+                        bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", startX + xPos, 0)
+                    end
+                    bar:SetSize(slot, h)
+                    local edge = EnsureShapeEdge(bar)
+                    if edge then
+                        edge:SetTexture(shapeEdge)
+                        edge:SetVertexColor(0, 0, 0, 1)
+                        edge:Hide()
+                    end
+                    bar:Show()
+                    xPos = xPos + slot + snapGap
                 end
-                xPos = xPos + thisW + sepW
-                prevBoundary = boundary
+            end
+            for i = 1, #CP.ticks do
+                if CP.ticks[i] then CP.ticks[i]:Hide() end
+            end
+        else
+            local xPos = 0
+            local prevBoundary = 0
+            for i = 1, maxPower do
+                local bar = CP.bars[i]
+                if bar then
+                    bar:ClearAllPoints()
+                    if bar.SetReverseFill then bar:SetReverseFill(false) end
+                    CP_DisableShapeFillClip(bar)
+                    ClearShapeEdge(bar)
+                    local boundary = math_floor((totalBarSpace * i) / maxPower)
+                    local thisW = boundary - prevBoundary
+                    if thisW < 1 then thisW = 1 end
+                    if fillReverse then
+                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -xPos, 0)
+                    else
+                        bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", xPos, 0)
+                    end
+                    bar:SetSize(thisW, h)
+                    bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
+                    bar:Show()
+                    if snapTickW > 0 and i < maxPower then
+                        local tick = CP.ticks[i]
+                        if tick then
+                            local tickX = xPos + thisW + math_floor(snapGap / 2)
+                            tick:ClearAllPoints()
+                            if fillReverse then
+                                tick:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -tickX, 0)
+                            else
+                                tick:SetPoint("TOPLEFT", CP.container, "TOPLEFT", tickX, 0)
+                            end
+                            tick:SetSize(snapTickW, h)
+                            tick:Show()
+                        end
+                    end
+                    xPos = xPos + thisW + sepW
+                    prevBoundary = boundary
+                end
             end
         end
 
         for i = maxPower + 1, CP.maxBars do
-            if CP.bars[i] then CP.bars[i]:Hide() end
+            if CP.bars[i] then
+                CP_DisableShapeFillClip(CP.bars[i])
+                ClearShapeEdge(CP.bars[i])
+                CP.bars[i]:Hide()
+            end
         end
 
-        local hideFrom = (snapTickW > 0) and maxPower or 1
-        for i = hideFrom, #CP.ticks do
-            if CP.ticks[i] then CP.ticks[i]:Hide() end
+        if not shapeMode then
+            local hideFrom = (snapTickW > 0) and maxPower or 1
+            for i = hideFrom, #CP.ticks do
+                if CP.ticks[i] then CP.ticks[i]:Hide() end
+            end
         end
 
         CP.currentMax = maxPower
@@ -483,6 +651,12 @@ builders.PRESENTATION = function(E)
     local ResolveClassPowerColor = E.ResolveClassPowerColor
     local CP_ResolveTexture = E.CP_ResolveTexture
     local GetUpdateFn = E.GetUpdateFn
+
+    local function ClearShapeEdge(bar)
+        if bar and bar._shapeEdge then
+            bar._shapeEdge:Hide()
+        end
+    end
 
     local _cpFontRev = 0
 
@@ -614,15 +788,27 @@ builders.PRESENTATION = function(E)
         else
             bgPath = fgPath
         end
+        local shapeInfo = CP_ShapeTextures(b.classPowerShape)
+        local activeFgPath = (shapeInfo and shapeInfo.fill) or fgPath
+        local activeBgPath = (shapeInfo and shapeInfo.bg) or bgPath
 
         for i = 1, CP.maxBars do
             local bar = CP.bars[i]
             if bar then
-                bar:SetStatusBarTexture(fgPath)
-                if bar._bg then bar._bg:SetTexture(bgPath) end
+                bar:SetStatusBarTexture(activeFgPath)
+                if shapeInfo then
+                    local reverse = (_cpDB.bars and _cpDB.bars.classPowerFillReverse) == true
+                    if bar.SetReverseFill then bar:SetReverseFill(reverse) end
+                    CP_EnableShapeFillClip(bar, reverse)
+                else
+                    if bar.SetReverseFill then bar:SetReverseFill(false) end
+                    CP_DisableShapeFillClip(bar)
+                end
+                if bar._bg then bar._bg:SetTexture(activeBgPath) end
+                if not shapeInfo then ClearShapeEdge(bar) end
             end
         end
-        if CP.bgTex then CP.bgTex:SetTexture(bgPath) end
+        if CP.bgTex then CP.bgTex:SetTexture(activeBgPath) end
     end
 
     return {
