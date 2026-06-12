@@ -3488,6 +3488,7 @@ do
 
     f:SetScript("OnEvent", function(_, event, unit, updateInfo)
         if event == "UNIT_AURA" then
+            if issecretvalue and issecretvalue(unit) then return end
             if unit ~= "player" and unit ~= "target" and unit ~= "focus" and unit ~= "targettarget" then return end
             if not _dispelAuraWant or _dispelAuraQueued[unit] then return end
             local shouldQueue = false
@@ -3529,7 +3530,10 @@ do
             end
             if f.RegisterUnitEvent then
                 if not f:IsEventRegistered("UNIT_AURA") then
-                    f:RegisterUnitEvent("UNIT_AURA", "player", "target", "focus", "targettarget")
+                    local ok = pcall(f.RegisterUnitEvent, f, "UNIT_AURA", "player", "target", "focus", "targettarget")
+                    if not ok and f.RegisterEvent then
+                        f:RegisterEvent("UNIT_AURA")
+                    end
                 end
             elseif not f:IsEventRegistered("UNIT_AURA") then
                 f:RegisterEvent("UNIT_AURA")

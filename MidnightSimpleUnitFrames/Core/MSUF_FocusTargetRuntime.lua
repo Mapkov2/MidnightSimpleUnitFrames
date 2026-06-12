@@ -41,6 +41,10 @@ local function RequestUpdate(reason)
         f._msufPortraitDirty = true
         f._msufPortraitNextAt = 0
     end
+    local ensureTicker = _G.MSUF_EnsureDependentUnitFallbackTicker
+    if type(ensureTicker) == "function" then
+        ensureTicker()
+    end
 
     local req = _G.MSUF_RequestUnitUpdate
     if type(req) == "function" then
@@ -90,9 +94,7 @@ end
 local function Register()
     if registered then return end
     local f = EnsureFrame()
-    if f.RegisterUnitEvent then
-        f:RegisterUnitEvent("UNIT_TARGET", "focus")
-    else
+    if not (f.RegisterUnitEvent and pcall(f.RegisterUnitEvent, f, "UNIT_TARGET", "focus")) then
         f:RegisterEvent("UNIT_TARGET")
     end
     f:RegisterEvent("PLAYER_FOCUS_CHANGED")
