@@ -108,6 +108,114 @@ local AURA_QUICK_PRESETS = {
     { key = "performance", aliases = { "fast", "performance", "fast 4 8", "performance aura", "performance auras" } },
 }
 
+local AURA_GEOMETRY_UNITS = { "player", "target", "focus", "boss" }
+
+local function AuraGeometryLanes(text)
+    if ContainsAny(text, { "buff", "buffs" }) then return { "buff" } end
+    if ContainsAny(text, { "debuff", "debuffs" }) then return { "debuff" } end
+    if ContainsAny(text, { "aura", "auras", "aura icon", "aura icons" }) then return { "buff", "debuff" } end
+    return nil
+end
+
+local function AuraGeometryScopes(text)
+    local groups = DetectGroups(text)
+    if #groups > 0 then
+        local out = {}
+        for i = 1, #groups do
+            if groups[i] == "party" or groups[i] == "raid" or groups[i] == "mythicraid" then out[#out + 1] = { kind = "group", key = groups[i] } end
+        end
+        if #out > 0 then return out end
+    end
+
+    local units = DetectUnits(text)
+    local out = {}
+    for i = 1, #units do
+        for j = 1, #AURA_GEOMETRY_UNITS do
+            if units[i] == AURA_GEOMETRY_UNITS[j] then out[#out + 1] = { kind = "unit", key = units[i] } end
+        end
+    end
+    if #out > 0 then return out end
+    return nil
+end
+
+local function AuraGeometrySettingKey(scope, lane, attr)
+    if scope.kind == "group" then
+        local groupAttr = attr == "offsetX" and "x" or attr == "offsetY" and "y" or attr
+        return "gf_" .. tostring(scope.key) .. ".auras." .. tostring(lane) .. "." .. tostring(groupAttr)
+    end
+    return "auras3." .. tostring(scope.key) .. "." .. tostring(lane) .. "." .. tostring(attr)
+end
+
+local function AuraGeometryAxis(text, direction)
+    if ContainsAny(text, { "x offset", "offset x", "horizontal offset", "left", "right", "links", "rechts" }) then return "offsetX" end
+    if ContainsAny(text, { "y offset", "offset y", "vertical offset", "up", "down", "oben", "unten", "hoch", "runter" }) then return "offsetY" end
+    if direction == "left" or direction == "right" then return "offsetX" end
+    if direction == "up" or direction == "down" then return "offsetY" end
+    return nil
+end
+
+local function AuraGeometryDelta(text, setting, attr, direction)
+    local relative = P.RelativeNumberDeltaForText and P.RelativeNumberDeltaForText(setting, text)
+    if relative ~= nil then return nil, relative end
+    if attr == "size" then
+        local value = FirstNumber(text)
+        if value ~= nil then return value, nil end
+        if ContainsAny(text, { "bigger", "larger", "grow", "increase", "raise", "more", "groesser", "mehr" }) then return nil, 1 end
+        if ContainsAny(text, { "smaller", "shrink", "decrease", "lower", "less", "kleiner", "weniger" }) then return nil, -1 end
+        return nil, nil
+    end
+    if direction then
+        local amount = FirstNumber(text) or 10
+        if direction == "left" or direction == "down" then amount = -amount end
+        return nil, amount
+    end
+    return FirstNumber(text), nil
+end
+
+local function ParseAuraGeometryShortcut(text)
+    if not ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return nil end
+    if ContainsAny(text, { "copy", "preset", "blacklist", "filter", "category" }) then return nil end
+    local lanes = AuraGeometryLanes(text)
+    local scopes = AuraGeometryScopes(text)
+    if not lanes or not scopes then return nil end
+
+    local direction = DetectDirection(text, {})
+    local attr
+    if ContainsAny(text, { "icon size", "icons size", "size", "bigger", "larger", "smaller", "grow", "shrink", "groesse", "grosse" }) then
+        attr = "size"
+    elseif ContainsAny(text, { "move", "nudge", "shift", "offset", "left", "right", "up", "down", "verschiebe", "links", "rechts", "oben", "unten" }) then
+        attr = AuraGeometryAxis(text, direction)
+    end
+    if not attr then return nil end
+
+    local changes = {}
+    for i = 1, #scopes do
+        for j = 1, #lanes do
+            local key = AuraGeometrySettingKey(scopes[i], lanes[j], attr)
+            local setting = Registry and Registry:GetSetting(key)
+            if setting then
+                local value, relativeDelta = AuraGeometryDelta(text, setting, attr, direction)
+                if value ~= nil or relativeDelta ~= nil then
+                    changes[#changes + 1] = {
+                        setting = setting,
+                        value = value,
+                        relativeDelta = relativeDelta,
+                        direction = direction,
+                    }
+                end
+            end
+        end
+    end
+    if #changes == 0 then return nil end
+    return {
+        kind = "changes",
+        changes = changes,
+        bulkSafe = #changes > 1,
+        label = "Change Aura layout",
+        summary = "Maps natural Aura lane layout wording to registered Aura settings.",
+    }
+end
+
 local function AuraQuickPresetForText(text)
     for i = 1, #AURA_QUICK_PRESETS do
         local preset = AURA_QUICK_PRESETS[i]
@@ -270,6 +378,7 @@ P.AURA_BLACKLIST_PRESETS = AURA_BLACKLIST_PRESETS
 P.AuraBlacklistScope = AuraBlacklistScope
 P.AURA_QUICK_PRESETS = AURA_QUICK_PRESETS
 P.AuraQuickPresetForText = AuraQuickPresetForText
+P.ParseAuraGeometryShortcut = ParseAuraGeometryShortcut
 P.ParseAuraQuickPreset = ParseAuraQuickPreset
 P.AuraBlacklistPresetForText = AuraBlacklistPresetForText
 P.AuraGroupBlacklistScope = AuraGroupBlacklistScope

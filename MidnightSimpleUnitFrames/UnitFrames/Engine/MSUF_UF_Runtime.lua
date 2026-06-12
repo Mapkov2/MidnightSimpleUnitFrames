@@ -467,55 +467,293 @@ local function ForceUnits(reason, ...)
     end
 end
 
-local pendingTargetTargetUpdate = false
-local pendingFocusTargetUpdate = false
+local pendingTargetVisual = false
+local pendingTargetAuras = false
+local pendingFocusVisual = false
+local pendingFocusAuras = false
+local pendingTargetTargetFast = false
+local pendingTargetTargetVisual = false
+local pendingTargetTargetAuras = false
+local pendingFocusTargetFast = false
+local pendingFocusTargetVisual = false
+local pendingFocusTargetAuras = false
+local pendingIdentityFlush = false
+local RuntimeFlushOnUpdate
 
-local function RunPendingTargetTargetUpdate()
-    if not pendingTargetTargetUpdate then
-        return
+local function RunPendingIdentityFlush()
+    pendingIdentityFlush = false
+    local targetVisual = pendingTargetVisual
+    local targetAuras = pendingTargetAuras
+    local focusVisual = pendingFocusVisual
+    local focusAuras = pendingFocusAuras
+    local targetTargetFast = pendingTargetTargetFast
+    local targetTargetVisual = pendingTargetTargetVisual
+    local targetTargetAuras = pendingTargetTargetAuras
+    local focusTargetFast = pendingFocusTargetFast
+    local focusTargetVisual = pendingFocusTargetVisual
+    local focusTargetAuras = pendingFocusTargetAuras
+    pendingTargetVisual = false
+    pendingTargetAuras = false
+    pendingFocusVisual = false
+    pendingFocusAuras = false
+    pendingTargetTargetFast = false
+    pendingTargetTargetVisual = false
+    pendingTargetTargetAuras = false
+    pendingFocusTargetFast = false
+    pendingFocusTargetVisual = false
+    pendingFocusTargetAuras = false
+
+    if targetTargetFast and targetTargetVisual then
+        UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT_DEFERRED")
+        targetTargetVisual = false
+    elseif targetTargetFast then
+        UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT_FAST")
     end
-    pendingTargetTargetUpdate = false
-    UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
+    if focusTargetFast and focusTargetVisual then
+        UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT_DEFERRED")
+        focusTargetVisual = false
+    elseif focusTargetFast then
+        UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT_FAST")
+    end
+    if targetVisual and targetAuras then
+        UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY_DEFERRED")
+    elseif targetVisual then
+        UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY_VISUAL")
+    end
+    if focusVisual and focusAuras then
+        UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY_DEFERRED")
+    elseif focusVisual then
+        UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY_VISUAL")
+    end
+    if targetTargetVisual then
+        UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT_VISUAL")
+    end
+    if focusTargetVisual then
+        UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT_VISUAL")
+    end
 end
 
-local function RunPendingFocusTargetUpdate()
-    if not pendingFocusTargetUpdate then
-        return
+RuntimeFlushOnUpdate = function(self)
+    if self then
+        self:SetScript("OnUpdate", nil)
     end
-    pendingFocusTargetUpdate = false
-    UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+    if pendingIdentityFlush then
+        RunPendingIdentityFlush()
+    end
+    if pendingIdentityFlush then
+        local driver = UF.driver
+        if driver and driver.SetScript then
+            driver:SetScript("OnUpdate", RuntimeFlushOnUpdate)
+        end
+    end
+end
+
+local function QueueIdentityFlush()
+    if pendingIdentityFlush then return true end
+    local driver = UF.driver
+    if driver and driver.SetScript then
+        pendingIdentityFlush = true
+        driver:SetScript("OnUpdate", RuntimeFlushOnUpdate)
+        return true
+    end
+    return false
+end
+
+local function RuntimeFrame(unit)
+    local frames = UF.frames
+    local frame = frames and frames[unit]
+    if frame and frame._msufActiveElements then
+        return frame
+    end
+    return nil
+end
+
+local function RunRuntimeFrame(frame, reason)
+    local update = UF.FrameRuntimeUpdate
+    if update then
+        return update(frame, reason)
+    end
+    return frame and UF.UpdateRuntime(frame.unit, reason)
+end
+
+local function ScheduleTargetVisual(skipAuras, frame)
+    if skipAuras == true then pendingTargetAuras = false end
+    if pendingTargetVisual and pendingTargetAuras then return end
+    frame = frame or RuntimeFrame("target")
+    if not frame then return end
+    local wantAuras = skipAuras ~= true and frame._msufUpdateAuras ~= nil
+    local wantVisual = frame._msufRuntimeVisualCount ~= nil
+    if not wantAuras and not wantVisual then return end
+    if pendingTargetVisual and (wantAuras ~= true or pendingTargetAuras) then return end
+    if QueueIdentityFlush() then
+        pendingTargetVisual = true
+        if wantAuras then pendingTargetAuras = true end
+    else
+        UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY_VISUAL")
+        if wantAuras then
+            UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY_AURAS")
+        end
+    end
+end
+
+local function ScheduleFocusVisual(skipAuras, frame)
+    if skipAuras == true then pendingFocusAuras = false end
+    if pendingFocusVisual and pendingFocusAuras then return end
+    frame = frame or RuntimeFrame("focus")
+    if not frame then return end
+    local wantAuras = skipAuras ~= true and frame._msufUpdateAuras ~= nil
+    local wantVisual = frame._msufRuntimeVisualCount ~= nil
+    if not wantAuras and not wantVisual then return end
+    if pendingFocusVisual and (wantAuras ~= true or pendingFocusAuras) then return end
+    if QueueIdentityFlush() then
+        pendingFocusVisual = true
+        if wantAuras then pendingFocusAuras = true end
+    else
+        UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY_VISUAL")
+        if wantAuras then
+            UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY_AURAS")
+        end
+    end
+end
+
+local function ScheduleTargetIdentityDeferred(skipAuras, frame)
+    ScheduleTargetVisual(skipAuras, frame)
+end
+
+local function ScheduleFocusIdentityDeferred(skipAuras, frame)
+    ScheduleFocusVisual(skipAuras, frame)
 end
 
 local function ScheduleTargetTargetUpdate()
-    if pendingTargetTargetUpdate then
-        return
+    if pendingTargetTargetFast and pendingTargetTargetVisual and pendingTargetTargetAuras then return end
+    local frame = RuntimeFrame("targettarget")
+    if not frame then return end
+    local wantAuras = frame and frame._msufUpdateAuras ~= nil
+    local wantVisual = frame._msufRuntimeSoftVisualCount ~= nil or wantAuras
+    if pendingTargetTargetFast
+        and (wantVisual ~= true or pendingTargetTargetVisual)
+        and (wantAuras ~= true or pendingTargetTargetAuras) then return end
+    if QueueIdentityFlush() then
+        pendingTargetTargetFast = true
+        if wantVisual then pendingTargetTargetVisual = true end
+        if wantAuras then pendingTargetTargetAuras = true end
+    else
+        UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
     end
-    if C_Timer and C_Timer.After then
-        pendingTargetTargetUpdate = true
-        C_Timer.After(0, RunPendingTargetTargetUpdate)
-        return
-    end
-    UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
 end
 
 local function ScheduleFocusTargetUpdate()
-    if pendingFocusTargetUpdate then
+    if pendingFocusTargetFast and pendingFocusTargetVisual and pendingFocusTargetAuras then return end
+    local frame = RuntimeFrame("focustarget")
+    if not frame then return end
+    local wantAuras = frame and frame._msufUpdateAuras ~= nil
+    local wantVisual = frame._msufRuntimeSoftVisualCount ~= nil or wantAuras
+    if pendingFocusTargetFast
+        and (wantVisual ~= true or pendingFocusTargetVisual)
+        and (wantAuras ~= true or pendingFocusTargetAuras) then return end
+    if QueueIdentityFlush() then
+        pendingFocusTargetFast = true
+        if wantVisual then pendingFocusTargetVisual = true end
+        if wantAuras then pendingFocusTargetAuras = true end
+    else
+        UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+    end
+end
+
+local function RunImmediateIdentityAuras(frame, reason)
+    if not (frame and frame._msufUpdateAuras) then return false end
+    local wasDeferred = frame._msufA3DeferAuraVisualNotify
+    frame._msufA3DeferAuraVisualNotify = true
+    RunRuntimeFrame(frame, reason)
+    frame._msufA3DeferAuraVisualNotify = wasDeferred
+    return true
+end
+
+-- Fast-swap coalescing for the synchronous identity aura rebuild -- the
+-- single biggest block in the PLAYER_TARGET_CHANGED tick. The first swap
+-- after idle still rebuilds inline (auras land in the same tick), but
+-- further target/focus swaps inside AURA_IDENTITY_WINDOW only mark the unit
+-- dirty and let one trailing rebuild cover the whole burst. While a trailing
+-- rebuild is pending, _msufA3IdentityRebuildPending tells A3.HandleUnitAura
+-- to drop interim UNIT_AURA deltas: they describe a unit the lane no longer
+-- tracks and are superseded by the trailing full rebuild. The flag and the
+-- dirty bit are always set/cleared together (an inline run clears both; the
+-- trailing flush clears both), so a stale flag can never wedge deltas.
+local AURA_IDENTITY_WINDOW = 0.05
+local timePrecise = GetTimePreciseSec or GetTime
+local auraCoalesce = {
+    target = { ranAt = -math.huge, dirty = false, trailing = false },
+    focus = { ranAt = -math.huge, dirty = false, trailing = false },
+}
+
+local function RunTrailingIdentityAuras(unit)
+    local frames = UF.frames
+    local frame = frames and frames[unit]
+    if not frame then return end
+    frame._msufA3IdentityRebuildPending = nil
+    if frame._msufActiveElements and frame._msufUpdateAuras then
+        -- No visual pass follows this rebuild, so the aura-visual notify
+        -- runs un-deferred and recolors borders/dispel state directly.
+        RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_AURAS")
+    end
+end
+
+for unit, slot in pairs(auraCoalesce) do
+    slot.flush = function()
+        slot.trailing = false
+        if not slot.dirty then return end
+        slot.dirty = false
+        slot.ranAt = timePrecise()
+        RunTrailingIdentityAuras(unit)
+    end
+end
+
+local function RunIdentityAurasCoalesced(frame, unit)
+    if not (frame and frame._msufUpdateAuras) then return end
+    local slot = auraCoalesce[unit]
+    local now = timePrecise()
+    if not slot or now - slot.ranAt >= AURA_IDENTITY_WINDOW then
+        if slot then
+            slot.ranAt = now
+            slot.dirty = false
+        end
+        frame._msufA3IdentityRebuildPending = nil
+        RunImmediateIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
         return
     end
-    if C_Timer and C_Timer.After then
-        pendingFocusTargetUpdate = true
-        C_Timer.After(0, RunPendingFocusTargetUpdate)
-        return
+    if not slot.trailing then
+        if not (C_Timer and C_Timer.After) then
+            slot.ranAt = now
+            slot.dirty = false
+            frame._msufA3IdentityRebuildPending = nil
+            RunImmediateIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
+            return
+        end
+        slot.trailing = true
+        C_Timer.After(AURA_IDENTITY_WINDOW, slot.flush)
     end
-    UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+    slot.dirty = true
+    frame._msufA3IdentityRebuildPending = true
 end
 
 local function DriverOnEvent(self, event, unit)
     if event == "PLAYER_TARGET_CHANGED" then
-        UF.UpdateRuntime("target", "MSUF_UNIT_IDENTITY")
+        local frame = RuntimeFrame("target")
+        if frame then
+            RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_FAST")
+            RunIdentityAurasCoalesced(frame, "target")
+        end
+        -- Auras are owned by the inline/trailing rebuild above; the deferred
+        -- flush only runs the visual pass.
+        ScheduleTargetIdentityDeferred(true, frame)
         ScheduleTargetTargetUpdate()
     elseif event == "PLAYER_FOCUS_CHANGED" then
-        UF.UpdateRuntime("focus", "MSUF_UNIT_IDENTITY")
+        local frame = RuntimeFrame("focus")
+        if frame then
+            RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_FAST")
+            RunIdentityAurasCoalesced(frame, "focus")
+        end
+        ScheduleFocusIdentityDeferred(true, frame)
         ScheduleFocusTargetUpdate()
     elseif event == "UNIT_TARGET" then
         if unit == "target" then
@@ -525,7 +763,10 @@ local function DriverOnEvent(self, event, unit)
         end
     elseif event == "UNIT_PET" then
         if unit == "player" then
-            UF.UpdateRuntime("pet", "MSUF_UNIT_IDENTITY")
+            local frame = RuntimeFrame("pet")
+            if frame then
+                RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY")
+            end
         end
     elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
         ForceUnits("MSUF_UNIT_IDENTITY", "boss1", "boss2", "boss3", "boss4", "boss5")

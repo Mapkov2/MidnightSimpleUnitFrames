@@ -25,8 +25,16 @@ local UnitMissing
 do
     local issv = _G.issecretvalue or function(_) return false end
     UnitMissing = function(frame, unit)
+        if issv(unit) == true then
+            return false
+        end
         local state = frame and frame._msufUnitState
-        if state and state.ready == true and state.unit == unit and state.existsKnown == true then
+        if state
+            and state.ready == true
+            and issv(unit) ~= true
+            and issv(state.unit) ~= true
+            and state.unit == unit
+            and state.existsKnown == true then
             return state.exists == false
         end
         if not UnitExists then
@@ -206,9 +214,10 @@ end
 
 local function CachedHealthMax(frame, unit)
     local hpBar = frame and (frame.hpBar or frame.Health)
+    local cachedUnit = hpBar and hpBar._msufHealthMaxUnit
     if hpBar
         and hpBar._msufHealthMaxReady == true
-        and hpBar._msufHealthMaxUnit == unit then
+        and cachedUnit == unit then
         return hpBar._msufHealthMax
     end
     return nil
@@ -216,7 +225,8 @@ end
 
 local function CachedHealthValue(frame, unit)
     local hpBar = frame and (frame.hpBar or frame.Health)
-    if hpBar and hpBar._msufHealthValueUnit == unit then
+    local cachedUnit = hpBar and hpBar._msufHealthValueUnit
+    if hpBar and cachedUnit == unit then
         return hpBar._msufHealthValue
     end
     return nil
@@ -794,7 +804,7 @@ local function PredictionEventsForConfig(cfg, healthAware, unit)
     if mask == 0 then
         return EMPTY_EVENTS
     end
-    local player = unit == "player"
+    local player = issecretvalue(unit) ~= true and unit == "player"
     local eventTable
     if healthAware ~= false and NeedsHealthEvent(cfg) then
         eventTable = player and PREDICTION_HEALTH_EVENTS_PLAYER or PREDICTION_HEALTH_EVENTS
@@ -897,6 +907,15 @@ function Prediction.Disable(frame)
     frame._msufPredictionFullPlan = nil
     frame._msufPredictionConnectionUnit = nil
     frame._msufPredictionConnectionOnline = nil
+    frame._msufPredictionRuntimeCfg = nil
+    frame._msufPredictionHpReverse = nil
+    frame._msufPredictionHealMode = nil
+    frame._msufPredictionAbsorbMode = nil
+    frame._msufPredictionHealReverse = nil
+    frame._msufPredictionAbsorbReverse = nil
+    frame._msufPredictionFollowAbsorb = nil
+    frame._msufPredictionClampHealToMissing = nil
+    frame._msufPredictionClampAbsorbToMissing = nil
     frame._msufUpdatePredictionHealthValue = nil
     frame._msufUpdatePredictionConnectionState = nil
     frame._msufPredictionDisabled = true
@@ -906,8 +925,10 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
     local bar = frame.absorbBar
     if not bar then return end
 
+    local cacheUnit = frame._msufPredictionCacheUnit
     local cacheReady = frame._msufPredictionCacheReady == true
-        and frame._msufPredictionCacheUnit == unit
+        and issecretvalue(unit) ~= true
+        and cacheUnit == unit
         and frame._msufPredictionCacheCfg == cfg
     local refreshAbsorb = not cacheReady
     local forceMax = not cacheReady
@@ -941,7 +962,7 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
         end
         frame._msufPredictionAbsorb = ReadDamageAbsorbs(calc, unit, hp, maxHP, absorbMode)
         frame._msufPredictionCacheReady = true
-        frame._msufPredictionCacheUnit = unit
+        frame._msufPredictionCacheUnit = issecretvalue(unit) ~= true and unit or nil
         frame._msufPredictionCacheCfg = cfg
     end
 
@@ -952,20 +973,24 @@ local function UpdateAbsorbOnly(frame, event, unit, cfg, seedHP, seedMaxHP, abso
 end
 
 function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
-    if unit and frame and unit ~= frame.unit then
+    if unit and issecretvalue(unit) == true then
+        unit = frame and frame.unit or nil
+        seedHP, seedMaxHP = nil, nil
+    elseif unit and frame and unit ~= frame.unit then
         return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
     end
     unit = unit or frame.unit
-    local cfg = frame.MSUFSpec and frame.MSUFSpec.prediction
+    local cfg = frame._msufPredictionRuntimeCfg
     if not (cfg and cfg.enabled == true)
         or cfg.test == true
-        or frame._msufPredictionRuntimeCfg ~= cfg
         or frame._msufPredictionNeedsHealth ~= true
         or frame._msufPredictionMask == 0 then
         return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
     end
+    local cacheUnit = frame._msufPredictionCacheUnit
     if frame._msufPredictionCacheReady ~= true
-        or frame._msufPredictionCacheUnit ~= unit
+        or issecretvalue(unit) == true
+        or cacheUnit ~= unit
         or frame._msufPredictionCacheCfg ~= cfg then
         return Prediction.Update(frame, event, unit, seedHP, seedMaxHP)
     end
@@ -989,14 +1014,16 @@ function Prediction.UpdateHealthValue(frame, event, unit, seedHP, seedMaxHP)
 end
 
 function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP, seedCalc)
-    if unit and frame and unit ~= frame.unit then
+    if unit and issecretvalue(unit) == true then
+        unit = frame and frame.unit or nil
+        seedHP, seedMaxHP, seedCalc = nil, nil, nil
+    elseif unit and frame and unit ~= frame.unit then
         return Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
     unit = unit or frame.unit
-    local cfg = frame.MSUFSpec and frame.MSUFSpec.prediction
+    local cfg = frame._msufPredictionRuntimeCfg
     if not (cfg and cfg.enabled == true)
         or cfg.test == true
-        or frame._msufPredictionRuntimeCfg ~= cfg
         or frame._msufPredictionMask == 0 then
         return Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
@@ -1004,6 +1031,7 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
     local state = frame._msufUnitState
     local connectedKnown = state
         and state.ready == true
+        and issecretvalue(unit) ~= true
         and state.unit == unit
         and frame._msufDispatchActive == true
         and state.dispatchToken == frame._msufDispatchToken
@@ -1018,15 +1046,17 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
         end
     end
 
+    local connectionUnit = frame._msufPredictionConnectionUnit
     if connected == false then
-        if frame._msufPredictionConnectionUnit == unit
+        if issecretvalue(unit) ~= true
+            and connectionUnit == unit
             and frame._msufPredictionConnectionOnline == false
             and (not frame.incomingHealBar or frame.incomingHealBar._msufShown == false)
             and (not frame.absorbBar or frame.absorbBar._msufShown == false)
             and (not frame.healAbsorbBar or frame.healAbsorbBar._msufShown == false) then
             return
         end
-        frame._msufPredictionConnectionUnit = unit
+        frame._msufPredictionConnectionUnit = issecretvalue(unit) ~= true and unit or nil
         frame._msufPredictionConnectionOnline = false
         HideBar(frame.incomingHealBar)
         HideBar(frame.absorbBar)
@@ -1035,18 +1065,21 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
         return
     end
 
+    connectionUnit = frame._msufPredictionConnectionUnit
+    local cacheUnit = frame._msufPredictionCacheUnit
     if connected == true
-        and frame._msufPredictionConnectionUnit == unit
+        and issecretvalue(unit) ~= true
+        and connectionUnit == unit
         and frame._msufPredictionConnectionOnline == true
         and frame._msufPredictionCacheReady == true
-        and frame._msufPredictionCacheUnit == unit
+        and cacheUnit == unit
         and frame._msufPredictionCacheCfg == cfg then
         return
     end
 
     local result = Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     if connected == true then
-        frame._msufPredictionConnectionUnit = unit
+        frame._msufPredictionConnectionUnit = issecretvalue(unit) ~= true and unit or nil
         frame._msufPredictionConnectionOnline = true
     else
         frame._msufPredictionConnectionUnit = nil
@@ -1056,19 +1089,27 @@ function Prediction.UpdateConnectionState(frame, event, unit, seedHP, seedMaxHP,
 end
 
 function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
-    if unit and frame and unit ~= frame.unit then
+    if unit and issecretvalue(unit) == true then
+        unit = frame and frame.unit or nil
+        seedHP, seedMaxHP, seedCalc = nil, nil, nil
+    elseif unit and frame and unit ~= frame.unit then
         unit = frame.unit
         seedHP, seedMaxHP, seedCalc = nil, nil, nil
     else
         unit = unit or frame.unit
     end
-    local cfg = frame.MSUFSpec and frame.MSUFSpec.prediction
+    local cfg = frame._msufPredictionRuntimeCfg
+    local spec
+    if not cfg then
+        spec = frame.MSUFSpec
+        cfg = spec and spec.prediction
+    end
     if not (cfg and cfg.enabled == true) then
         Prediction.Disable(frame)
         return
     end
     if frame._msufPredictionRuntimeCfg ~= cfg then
-        CompilePredictionRuntime(frame, cfg, frame.MSUFSpec)
+        CompilePredictionRuntime(frame, cfg, spec or frame.MSUFSpec)
     end
     if cfg.test ~= true and frame._msufPredictionMask == 0 then
         Prediction.Disable(frame)
@@ -1123,8 +1164,10 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
         return
     end
 
+    local cacheUnit = frame._msufPredictionCacheUnit
     local cacheReady = frame._msufPredictionCacheReady == true
-        and frame._msufPredictionCacheUnit == unit
+        and issecretvalue(unit) ~= true
+        and cacheUnit == unit
         and frame._msufPredictionCacheCfg == cfg
     local plans = frame._msufPredictionEventPlans
     local plan = event and plans and plans[event] or nil
@@ -1185,7 +1228,7 @@ function Prediction.Update(frame, event, unit, seedHP, seedMaxHP, seedCalc)
     end
     if refreshHeal or refreshAbsorb or refreshHealAbsorb then
         frame._msufPredictionCacheReady = true
-        frame._msufPredictionCacheUnit = unit
+        frame._msufPredictionCacheUnit = issecretvalue(unit) ~= true and unit or nil
         frame._msufPredictionCacheCfg = cfg
     end
 

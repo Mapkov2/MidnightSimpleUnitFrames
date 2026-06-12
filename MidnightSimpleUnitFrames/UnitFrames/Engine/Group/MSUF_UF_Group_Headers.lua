@@ -17,11 +17,9 @@ local table_concat = table.concat
 local table_sort = table.sort
 local UnitName = UnitName
 local UnitGUID = UnitGUID
-local UnitIsUnit = _G.UnitIsUnit
 local UnitClass = UnitClass
 local Secrets = MSUF.Secrets or {}
 local UnitMissing = Secrets.UnitMissing or function(_) return false end
-local IsSecret = Secrets.IsSecret or function(_) return false end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned
 local GetNumGroupMembers = GetNumGroupMembers
@@ -42,8 +40,7 @@ GF._lastKnownLayoutCounts = GF._lastKnownLayoutCounts or {}
 local NIL_ATTR = {}
 
 local function IsUnitToken(unit)
-    if issecretvalue(unit) == true then return false end
-    return type(unit) == "string" and unit ~= ""
+    return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
 local VALID_POINTS = {
@@ -473,17 +470,10 @@ local function IsPlayerUnit(unit)
     if unit == "player" then
         return true
     end
-    if UnitIsUnit then
-        local same = UnitIsUnit(unit, "player")
-        if IsSecret(same) then
-            return false
-        end
-        return same == true or same == 1
-    end
     if UnitGUID then
         local guid = UnitGUID(unit)
         local playerGuid = UnitGUID("player")
-        if IsSecret(guid) or IsSecret(playerGuid) then
+        if issecretvalue(guid) == true or issecretvalue(playerGuid) == true then
             return false
         end
         return guid ~= nil and guid == playerGuid

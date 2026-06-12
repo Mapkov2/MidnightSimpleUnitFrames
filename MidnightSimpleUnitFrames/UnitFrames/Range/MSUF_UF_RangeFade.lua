@@ -56,6 +56,18 @@ local RANGE_UNITS = {
     "target", "targettarget", "focus", "focustarget", "pet",
     "boss1", "boss2", "boss3", "boss4", "boss5",
 }
+local RANGE_UNIT_BITS = {
+    target = 1, targettarget = 2, focus = 4, focustarget = 8, pet = 16,
+    boss1 = 32, boss2 = 64, boss3 = 128, boss4 = 256, boss5 = 512,
+}
+local TARGET_EVENT_TARGET_BIT = 1
+local TARGET_EVENT_FOCUS_BIT = 2
+local DRIVER_EVENT_ACTIVE_BIT = 1
+local DRIVER_EVENT_TARGET_BIT = 2
+local DRIVER_EVENT_FOCUS_BIT = 4
+local DRIVER_EVENT_PET_BIT = 8
+local DRIVER_EVENT_BOSS_BIT = 16
+local DRIVER_EVENT_TARGET_SPELL_BIT = 32
 
 local UNIT_EVENTS = {
     "UNIT_IN_RANGE_UPDATE", "UNIT_PHASE", "UNIT_CTR_OPTIONS", "UNIT_OTHER_PARTY_CHANGED",
@@ -139,7 +151,6 @@ local activeCount = 0
 local pollCount = 0
 local pollQueued = false
 local pollNextAt
-local pollToken = 0
 local pollSetDirty = true
 local targetChecked = 0
 local targetInRange = 0
@@ -196,6 +207,13 @@ local function SpellRange(spellID, unit)
         if overrideResult ~= nil then return overrideResult end
     end
     return PlainBool(IsSpellInRange(spellID, unit))
+end
+
+local function AddTargetWantedSpell(spellID)
+    if not spellID then return end
+    targetWanted[spellID] = true
+    local overrideID = SpellOverrideID(spellID)
+    if overrideID then targetWanted[overrideID] = true end
 end
 
 local function SpellBookKnown(fn, spellID, includeOverrides)
@@ -458,6 +476,9 @@ local function EvaluateBossUnits(force)
 end
 
 local function TargetClearStates()
+    if targetChecked <= 0 and targetInRange <= 0 then
+        return
+    end
     WipeTable(targetStates)
     targetChecked = 0
     targetInRange = 0
@@ -514,21 +535,15 @@ SyncTargetSpells = function()
     end
 
     WipeTable(targetWanted)
-    local function AddWanted(spellID)
-        if not spellID then return end
-        targetWanted[spellID] = true
-        local overrideID = SpellOverrideID(spellID)
-        if overrideID then targetWanted[overrideID] = true end
-    end
     if next(targetFriendlySpells) then
         for spellID in pairs(targetFriendlySpells) do
-            AddWanted(spellID)
+            AddTargetWantedSpell(spellID)
         end
     else
-        AddWanted(targetFriendlySpell)
+        AddTargetWantedSpell(targetFriendlySpell)
     end
-    AddWanted(enemySpell)
-    AddWanted(resSpell)
+    AddTargetWantedSpell(enemySpell)
+    AddTargetWantedSpell(resSpell)
 
     for spellID in pairs(targetRegistered) do
         if not targetWanted[spellID] then
@@ -548,6 +563,22 @@ end
 TargetRefresh = function(force)
     SyncTargetSpells()
     TargetClearStates()
+    local frame = FrameForUnit("target")
+    if not FrameRangeActive(frame) then
+        ClearUnit("target", force)
+        return false
+    end
+    if not UnitExistsPlain("target") then
+        ApplyMul(frame, nil, force)
+        return false
+    end
+
+    local direct = DirectRange("target")
+    if direct ~= nil then
+        ApplyMul(frame, direct, force)
+        return true
+    end
+
     if IsSpellInRange then
         for spellID in pairs(targetRegistered) do
             local result = SpellRange(spellID, "target")
@@ -556,7 +587,12 @@ TargetRefresh = function(force)
             end
         end
     end
-    EvaluateUnit("target", force)
+    if targetChecked > 0 then
+        ApplyMul(frame, targetInRange > 0, force)
+        return true
+    end
+    ApplyMul(frame, nil, force)
+    return true
 end
 
 local function ApplyTargetRegisteredRange(force)
@@ -651,6 +687,7 @@ end
 -- every unit) or any polled unit is in motion. Player speed is tested first as
 -- the dominant driver, so the common stationary case short-circuits cheaply.
 local function RangeCanChange()
+    if InCombatLockdown and InCombatLockdown() then return true end
     if not GetUnitSpeed then return true end
     if UnitMoving("player") then return true end
     for i = 1, pollCount do
@@ -700,7 +737,6 @@ local function RebuildPollSet()
         pollUnits[i] = nil
     end
     if pollCount <= 0 then
-        pollToken = pollToken + 1
         pollQueued = false
         pollNextAt = nil
         return
@@ -710,58 +746,127 @@ end
 
 local pendingTargetTargetRange = false
 local pendingFocusTargetRange = false
+local pendingTargetRange = false
+local pendingFocusRange = false
+local pendingRangeFlush = false
+local driver
+local RangeFlushOnUpdate
 
-local function RunPendingTargetTargetRange()
-    if not pendingTargetTargetRange then
-        return
-    end
+local function RunPendingRangeFlush()
+    pendingRangeFlush = false
+    local runTarget = pendingTargetRange
+    local runFocus = pendingFocusRange
+    local runTargetTarget = pendingTargetTargetRange
+    local runFocusTarget = pendingFocusTargetRange
+    pendingTargetRange = false
+    pendingFocusRange = false
     pendingTargetTargetRange = false
-    EvaluateIfActive("targettarget", false)
+    pendingFocusTargetRange = false
+    if runTarget then EvaluateTargetUnits(false) end
+    if runFocus then EvaluateFocusUnits(false) end
+    if runTargetTarget then EvaluateIfActive("targettarget", false) end
+    if runFocusTarget then EvaluateIfActive("focustarget", false) end
     RebuildPollSet()
 end
 
-local function RunPendingFocusTargetRange()
-    if not pendingFocusTargetRange then
-        return
+RangeFlushOnUpdate = function(self)
+    if self then
+        self:SetScript("OnUpdate", nil)
     end
-    pendingFocusTargetRange = false
-    EvaluateIfActive("focustarget", false)
-    RebuildPollSet()
+    RunPendingRangeFlush()
+end
+
+local function QueueRangeFlush()
+    if pendingRangeFlush then return true end
+    if driver and driver.SetScript then
+        pendingRangeFlush = true
+        driver:SetScript("OnUpdate", RangeFlushOnUpdate)
+        return true
+    end
+    return false
+end
+
+local function RangeUnitScheduled(unit)
+    if not activeUnits[unit] then
+        return false
+    end
+    local frame = FrameForUnit(unit)
+    return FrameRangeActive(frame) and FrameVisible(frame)
+end
+
+local function ScheduleTargetRange()
+    if not RangeUnitScheduled("target") then
+        return false
+    end
+    if pendingTargetRange then
+        return true
+    end
+    if QueueRangeFlush() then
+        pendingTargetRange = true
+        return true
+    end
+    EvaluateTargetUnits(false)
+    return false
+end
+
+local function ScheduleFocusRange()
+    if not RangeUnitScheduled("focus") then
+        return false
+    end
+    if pendingFocusRange then
+        return true
+    end
+    if QueueRangeFlush() then
+        pendingFocusRange = true
+        return true
+    end
+    EvaluateFocusUnits(false)
+    return false
 end
 
 local function ScheduleTargetTargetRange()
-    if not activeUnits.targettarget or pendingTargetTargetRange then
-        return
+    if not RangeUnitScheduled("targettarget") then
+        return false
     end
-    if C_Timer and C_Timer.After then
+    if pendingTargetTargetRange then
+        return true
+    end
+    if QueueRangeFlush() then
         pendingTargetTargetRange = true
-        C_Timer.After(0, RunPendingTargetTargetRange)
-        return
+        return true
     end
     EvaluateIfActive("targettarget", false)
+    return false
 end
 
 local function ScheduleFocusTargetRange()
-    if not activeUnits.focustarget or pendingFocusTargetRange then
-        return
+    if not RangeUnitScheduled("focustarget") then
+        return false
     end
-    if C_Timer and C_Timer.After then
+    if pendingFocusTargetRange then
+        return true
+    end
+    if QueueRangeFlush() then
         pendingFocusTargetRange = true
-        C_Timer.After(0, RunPendingFocusTargetRange)
-        return
+        return true
     end
     EvaluateIfActive("focustarget", false)
+    return false
 end
 
 local function RangeFrameOnShow(self)
     MarkPollSetDirty()
     EvaluateIfActive(self._msufRangeUnit or self.unit, true)
-    RebuildPollSet()
+    if not QueueRangeFlush() then
+        RebuildPollSet()
+    end
 end
 
 local function RangeFrameOnHide()
     MarkPollSetDirty()
-    RebuildPollSet()
+    if not QueueRangeFlush() then
+        RebuildPollSet()
+    end
 end
 
 local function HookFrameVisibility(frame)
@@ -792,9 +897,10 @@ PollNow = function()
     end
 end
 
-local driver
 local driverRegistered = false
-local driverSignature
+local driverUnitMask
+local driverTargetMask
+local driverEventMask
 
 local function DriverOnEvent(_, event, unit, a, b, c)
     if event == "SPELL_RANGE_CHECK_UPDATE" then
@@ -809,24 +915,33 @@ local function DriverOnEvent(_, event, unit, a, b, c)
         EvaluateAll(true)
         RebuildPollSet()
         return
-    else
-        MarkPollSetDirty()
+    end
+
+    if unit and issecretvalue(unit) == true then
+        unit = nil
     end
 
     if event == "PLAYER_TARGET_CHANGED" then
-        EvaluateTargetUnits(false)
+        ScheduleTargetRange()
         ScheduleTargetTargetRange()
+        return
     elseif event == "PLAYER_FOCUS_CHANGED" then
-        EvaluateFocusUnits(false)
+        ScheduleFocusRange()
         ScheduleFocusTargetRange()
-    elseif event == "UNIT_PET" then
-        if unit == "player" then EvaluateIfActive("pet", false) end
+        return
     elseif event == "UNIT_TARGET" then
         if unit == "target" then
             ScheduleTargetTargetRange()
         elseif unit == "focus" then
             ScheduleFocusTargetRange()
         end
+        return
+    end
+
+    MarkPollSetDirty()
+
+    if event == "UNIT_PET" then
+        if unit == "player" then EvaluateIfActive("pet", false) end
     elseif event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
         EvaluateBossUnits(false)
     elseif event == "PLAYER_ENTERING_WORLD"
@@ -845,6 +960,9 @@ local function DriverOnEvent(_, event, unit, a, b, c)
             EvaluateUnit(unit, true)
         end
     end
+    if pendingRangeFlush then
+        return
+    end
     RebuildPollSet()
 end
 
@@ -856,31 +974,23 @@ local function EnsureDriver()
     return driver
 end
 
-local function AppendUnit(list, count, unit)
-    for i = 1, count do
-        if list[i] == unit then
-            return count
-        end
-    end
-    count = count + 1
-    list[count] = unit
-    return count
-end
-
 local function BuildDriverUnitLists()
     local unitCount, targetCount = 0, 0
-    local signature, targetSignature = "", ""
+    local unitMask, targetMask = 0, 0
     for i = 1, #RANGE_UNITS do
         local unit = RANGE_UNITS[i]
         if activeUnits[unit] then
-            unitCount = AppendUnit(unitEventUnits, unitCount, unit)
-            signature = signature .. "," .. unit
+            unitCount = unitCount + 1
+            unitEventUnits[unitCount] = unit
+            unitMask = unitMask + RANGE_UNIT_BITS[unit]
             if unit == "targettarget" then
-                targetCount = AppendUnit(targetEventUnits, targetCount, "target")
-                targetSignature = targetSignature .. ",target"
+                targetCount = targetCount + 1
+                targetEventUnits[targetCount] = "target"
+                targetMask = targetMask + TARGET_EVENT_TARGET_BIT
             elseif unit == "focustarget" then
-                targetCount = AppendUnit(targetEventUnits, targetCount, "focus")
-                targetSignature = targetSignature .. ",focus"
+                targetCount = targetCount + 1
+                targetEventUnits[targetCount] = "focus"
+                targetMask = targetMask + TARGET_EVENT_FOCUS_BIT
             end
         end
     end
@@ -890,47 +1000,38 @@ local function BuildDriverUnitLists()
     for i = targetCount + 1, #targetEventUnits do
         targetEventUnits[i] = nil
     end
-    return unitCount, targetCount, signature .. "|" .. targetSignature
-end
-
-local function BossRangeActive()
-    for i = 1, #BOSS_UNITS do
-        if activeUnits[BOSS_UNITS[i]] then
-            return true
-        end
-    end
-    return false
-end
-
-local function EventSignatureIf(enabled, event, signature)
-    if not enabled then return signature end
-    return signature .. "|" .. event
+    return unitCount, targetCount, unitMask, targetMask
 end
 
 local function RegisterDriver()
     local f = EnsureDriver()
     if not f then return end
-    local unitCount, targetCount, signature = BuildDriverUnitLists()
+    local unitCount, targetCount, unitMask, targetMask = BuildDriverUnitLists()
 
     local targetActive = activeUnits.target == true
     local targetDependent = targetActive or activeUnits.targettarget == true
     local focusDependent = activeUnits.focus == true or activeUnits.focustarget == true
     local petActive = activeUnits.pet == true
-    local bossActive = BossRangeActive()
+    local bossActive = activeUnits.boss1 == true
+        or activeUnits.boss2 == true
+        or activeUnits.boss3 == true
+        or activeUnits.boss4 == true
+        or activeUnits.boss5 == true
 
-    signature = EventSignatureIf(activeCount > 0, "PLAYER_ENTERING_WORLD", signature)
-    signature = EventSignatureIf(activeCount > 0, "PLAYER_REGEN_DISABLED", signature)
-    signature = EventSignatureIf(activeCount > 0, "PLAYER_REGEN_ENABLED", signature)
-    signature = EventSignatureIf(targetDependent, "PLAYER_TARGET_CHANGED", signature)
-    signature = EventSignatureIf(focusDependent, "PLAYER_FOCUS_CHANGED", signature)
-    signature = EventSignatureIf(petActive, "UNIT_PET", signature)
-    signature = EventSignatureIf(bossActive, "INSTANCE_ENCOUNTER_ENGAGE_UNIT", signature)
-    for i = 1, #SPELL_UPDATE_EVENTS do
-        signature = EventSignatureIf(activeCount > 0, SPELL_UPDATE_EVENTS[i], signature)
+    local eventMask = 0
+    if activeCount > 0 then eventMask = eventMask + DRIVER_EVENT_ACTIVE_BIT end
+    if targetDependent then eventMask = eventMask + DRIVER_EVENT_TARGET_BIT end
+    if focusDependent then eventMask = eventMask + DRIVER_EVENT_FOCUS_BIT end
+    if petActive then eventMask = eventMask + DRIVER_EVENT_PET_BIT end
+    if bossActive then eventMask = eventMask + DRIVER_EVENT_BOSS_BIT end
+    if targetActive and EnableSpellRangeCheck then eventMask = eventMask + DRIVER_EVENT_TARGET_SPELL_BIT end
+
+    if driverRegistered
+        and driverUnitMask == unitMask
+        and driverTargetMask == targetMask
+        and driverEventMask == eventMask then
+        return
     end
-    signature = EventSignatureIf(targetActive and EnableSpellRangeCheck, "SPELL_RANGE_CHECK_UPDATE", signature)
-
-    if driverRegistered and driverSignature == signature then return end
     f:UnregisterAllEvents()
     if activeCount > 0 then
         f:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -965,31 +1066,45 @@ local function RegisterDriver()
         end
     end
     driverRegistered = true
-    driverSignature = signature
+    driverUnitMask = unitMask
+    driverTargetMask = targetMask
+    driverEventMask = eventMask
 end
 
 local function UnregisterDriver()
     if not driverRegistered or not driver then return end
     driver:UnregisterAllEvents()
     driverRegistered = false
-    driverSignature = nil
+    driverUnitMask = nil
+    driverTargetMask = nil
+    driverEventMask = nil
 end
 
 local function SyncRuntime()
     if activeCount > 0 then
         RegisterDriver()
         SyncTargetSpells()
-        MarkPollSetDirty()
-        RebuildPollSet()
+        if pollSetDirty == true then
+            RebuildPollSet()
+        else
+            SchedulePoll()
+        end
         return
     end
     TargetUnregisterSpells()
     WipeTable(activeUnits)
     activeCount = 0
     pollCount = 0
-    pollToken = pollToken + 1
     pollQueued = false
     pollNextAt = nil
+    pendingRangeFlush = false
+    pendingTargetRange = false
+    pendingFocusRange = false
+    pendingTargetTargetRange = false
+    pendingFocusTargetRange = false
+    if driver and driver.SetScript then
+        driver:SetScript("OnUpdate", nil)
+    end
     UnregisterDriver()
 end
 

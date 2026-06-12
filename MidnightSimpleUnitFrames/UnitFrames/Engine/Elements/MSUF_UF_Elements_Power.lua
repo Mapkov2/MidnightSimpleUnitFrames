@@ -36,6 +36,29 @@ local PowerColor = C.PowerColor
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local Power = {}
 
+local function StorePowerMax(frame, bar, unit, maxPower, maxSecret)
+    if maxSecret == nil then maxSecret = issecretvalue(maxPower) == true end
+    if maxSecret then
+        bar._msufPowerMax = nil
+        bar._msufPowerMaxSecret = nil
+        bar._msufPowerMaxUnit = nil
+        bar._msufPowerMaxReady = nil
+        if frame then
+            frame._msufTextPowerMax = nil
+            frame._msufTextPowerMaxUnit = nil
+        end
+        return
+    end
+    bar._msufPowerMax = maxPower
+    bar._msufPowerMaxSecret = nil
+    bar._msufPowerMaxUnit = unit
+    bar._msufPowerMaxReady = true
+    if frame then
+        frame._msufTextPowerMax = maxPower
+        frame._msufTextPowerMaxUnit = unit
+    end
+end
+
 if not SetBarMinMaxKnown then
     SetBarMinMaxKnown = function(bar, maxValue)
         return SetBarMinMax(bar, maxValue, true)
@@ -59,7 +82,10 @@ local function ReadPowerType(unit)
 end
 
 local function ReadPowerMeta(frame, bar, unit, force)
-    if not force and bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
+    local cacheUnit = unit
+    local maxUnit = bar._msufPowerMaxUnit
+    local sameMaxUnit = cacheUnit ~= nil and maxUnit == cacheUnit
+    if not force and bar._msufPowerMaxReady == true and sameMaxUnit then
         return bar._msufPowerType, bar._msufPowerMax, bar._msufPowerToken, false, bar._msufPowerMaxSecret == true
     end
 
@@ -82,24 +108,22 @@ local function ReadPowerMeta(frame, bar, unit, force)
     local powerMetaChanged = powerType ~= bar._msufPowerType or powerToken ~= bar._msufPowerToken
     bar._msufPowerType = powerType
     bar._msufPowerToken = powerToken
-    bar._msufPowerMax = maxPower
-    bar._msufPowerMaxSecret = maxSecret or nil
-    bar._msufPowerMaxUnit = unit
-    bar._msufPowerMaxReady = true
     if needsType then
         frame._msufTextPowerType = powerType
         frame._msufTextPowerToken = powerToken
         frame._msufTextPowerTypeKnown = true
-        frame._msufTextPowerTypeUnit = unit
+        frame._msufTextPowerTypeUnit = cacheUnit
     end
-    frame._msufTextPowerMax = maxPower
-    frame._msufTextPowerMaxUnit = unit
+    StorePowerMax(frame, bar, cacheUnit, maxPower, maxSecret)
     return powerType, maxPower, powerToken, powerMetaChanged, maxSecret
 end
 
 local function ReadPowerValues(frame, bar, unit, event, animate)
     local powerType, maxPower, powerToken, powerMetaChanged, maxSecret
-    if animate and bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
+    local cacheUnit = unit
+    local maxUnit = bar._msufPowerMaxUnit
+    local sameMaxUnit = cacheUnit ~= nil and maxUnit == cacheUnit
+    if animate and bar._msufPowerMaxReady == true and sameMaxUnit then
         powerType = bar._msufPowerType
         maxPower = bar._msufPowerMax
         powerToken = bar._msufPowerToken
@@ -107,7 +131,7 @@ local function ReadPowerValues(frame, bar, unit, event, animate)
         maxSecret = bar._msufPowerMaxSecret == true
     else
         local forceMeta = bar._msufPowerMaxReady ~= true
-            or bar._msufPowerMaxUnit ~= unit
+            or not sameMaxUnit
         if not forceMeta and not animate then
             forceMeta = event == "UNIT_MAXPOWER"
                 or event == "UNIT_DISPLAYPOWER"
@@ -390,7 +414,7 @@ end
 
 function Power.UpdateValuePlain(frame, event, unit)
     unit = unit or frame.unit
-    if unit ~= "player" then
+    if issecretvalue(unit) == true or unit ~= "player" then
         return Power.UpdateValue(frame, event, unit)
     end
     local bar = frame.targetPowerBar
@@ -399,7 +423,10 @@ function Power.UpdateValuePlain(frame, event, unit)
     end
 
     local powerType, maxPower, powerToken, powerMetaChanged, maxSecret
-    if bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
+    local cacheUnit = unit
+    local maxUnit = bar._msufPowerMaxUnit
+    local sameMaxUnit = cacheUnit ~= nil and maxUnit == cacheUnit
+    if bar._msufPowerMaxReady == true and sameMaxUnit then
         powerType = bar._msufPowerType
         maxPower = bar._msufPowerMax
         powerToken = bar._msufPowerToken
@@ -437,7 +464,10 @@ function Power.UpdateValue(frame, event, unit)
     end
 
     local powerType, maxPower, powerToken, powerMetaChanged, maxSecret
-    if bar._msufPowerMaxReady == true and bar._msufPowerMaxUnit == unit then
+    local cacheUnit = unit
+    local maxUnit = bar._msufPowerMaxUnit
+    local sameMaxUnit = cacheUnit ~= nil and maxUnit == cacheUnit
+    if bar._msufPowerMaxReady == true and sameMaxUnit then
         powerType = bar._msufPowerType
         maxPower = bar._msufPowerMax
         powerToken = bar._msufPowerToken

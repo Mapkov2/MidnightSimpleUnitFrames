@@ -59,13 +59,14 @@ local function OwnerModeAllowsUnit(mode, frame, unit)
     if mode == nil then
         return nil, false
     end
-    if unit and unit ~= frame.unit then
+    local frameUnit = frame.unit
+    if unit and unit ~= frameUnit then
         if OwnerModeIsUnitless(mode) then
             return unit, true
         end
         return nil, false
     end
-    return unit or frame.unit, true
+    return unit or frameUnit, true
 end
 
 local function FrameForceUpdate(frame, reason)
@@ -91,10 +92,11 @@ local function RunElementUpdate(frame, owners, name, event, unit, ...)
     if owners then
         local mode = owners[name]
         if mode == nil then return nil end
-        if unit and unit ~= frame.unit then
+        local frameUnit = frame.unit
+        if unit and unit ~= frameUnit then
             if mode ~= "unitless" and mode ~= "both" then return nil end
         else
-            unit = unit or frame.unit
+            unit = unit or frameUnit
         end
     else
         unit = unit or frame.unit
@@ -110,7 +112,8 @@ local function RunTextName(frame, owners, event, unit)
     if owners then
         local mode = owners["NameText"]
         if mode == nil then return end
-        if unit and unit ~= frame.unit and mode ~= "unitless" and mode ~= "both" then
+        local frameUnit = frame.unit
+        if unit and unit ~= frameUnit and mode ~= "unitless" and mode ~= "both" then
             return
         end
     end
@@ -146,7 +149,9 @@ local function RunPowerHot(frame, owners, event, unit)
     if not updateFn then return end
     local power, maxPower = updateFn(frame, event, unit)
     local textFn = frame._msufUpdatePowerText
-    RunCompiledPowerText(frame, textFn, event, unit, power, maxPower)
+    if textFn then
+        RunCompiledPowerText(frame, textFn, event, unit, power, maxPower)
+    end
 end
 
 local HOT_EVENT_KIND = Metadata.hotEventKind or {}
@@ -1571,6 +1576,11 @@ function DispatchFrameEvent(frame, event, unit, ...)
     -- while owners exist for the event -- so the owner-map guards are redundant
     -- here and live in the non-hot fallback below. This keeps the dominant
     -- UNIT_HEALTH / UNIT_POWER traffic to a single per-event state lookup.
+    local frameUnit = frame.unit
+    if unit and issecretvalue(unit) == true then
+        unit = nil
+    end
+
     local hotStates = frame._msufHotEventState
     local hotState = hotStates and hotStates[event]
     if not hotState then
@@ -1587,9 +1597,9 @@ function DispatchFrameEvent(frame, event, unit, ...)
         local runner = hotState.runner
         if runner then
             local unitScoped = hotState.unitScoped == true
-            if unitScoped and hotState.frameUnitFiltered ~= true and unit and unit ~= frame.unit then
+            if unitScoped and hotState.frameUnitFiltered ~= true and unit and unit ~= frameUnit then
                 return
-            elseif not unitScoped and unit and unit ~= frame.unit then
+            elseif not unitScoped and unit and unit ~= frameUnit then
                 local unitless = frame._msufEventUnitless
                 if not (unitless and unitless[event]) then
                     return
@@ -1601,9 +1611,9 @@ function DispatchFrameEvent(frame, event, unit, ...)
                 frame._msufDispatchActive = true
             end
             local sameUnit = true
-            local eventUnit = unit or frame.unit
+            local eventUnit = unit or frameUnit
             if not unitScoped then
-                sameUnit = (not unit) or unit == frame.unit
+                sameUnit = (not unit) or unit == frameUnit
                 eventUnit = sameUnit and eventUnit or unit
             end
             if runner(frame, hotState, event, eventUnit, sameUnit, ...) then
@@ -1620,7 +1630,7 @@ function DispatchFrameEvent(frame, event, unit, ...)
 
     -- Cross-unit (ToT-style) gating for non-hot fallback: when the event's unit
     -- isn't this frame's unit, dispatch only if the frame has a unitless owner.
-    if unit and unit ~= frame.unit then
+    if unit and unit ~= frameUnit then
         local unitless = frame._msufEventUnitless
         if not (unitless and unitless[event]) then
             return
@@ -1654,8 +1664,24 @@ local RUNTIME_UPDATE_OWNERS = Metadata.runtimeUpdateOwners or EMPTY_METADATA_SET
 local RUNTIME_REASON_MASKS = Metadata.runtimeReasonMasks or EMPTY_METADATA_SET
 local RUNTIME_IDENTITY_MISSING_EXIT = {
     MSUF_UNIT_IDENTITY = true,
+    MSUF_UNIT_IDENTITY_DEFERRED = true,
+    MSUF_UNIT_IDENTITY_FAST = true,
+    MSUF_UNIT_IDENTITY_VISUAL = true,
+    MSUF_UNIT_IDENTITY_AURAS = true,
     MSUF_UNIT_IDENTITY_SOFT = true,
+    MSUF_UNIT_IDENTITY_SOFT_DEFERRED = true,
+    MSUF_UNIT_IDENTITY_SOFT_FAST = true,
+    MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
+    MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
     MSUF_GF_UNIT_IDENTITY = true,
+}
+local RUNTIME_MISSING_AURA_CLEAR = {
+    MSUF_UNIT_IDENTITY = true,
+    MSUF_UNIT_IDENTITY_DEFERRED = true,
+    MSUF_UNIT_IDENTITY_AURAS = true,
+    MSUF_UNIT_IDENTITY_SOFT = true,
+    MSUF_UNIT_IDENTITY_SOFT_DEFERRED = true,
+    MSUF_UNIT_IDENTITY_SOFT_AURAS = true,
 }
 local BOSS_IDENTITY_UNITS = {
     boss1 = true,
@@ -1664,6 +1690,71 @@ local BOSS_IDENTITY_UNITS = {
     boss4 = true,
     boss5 = true,
 }
+
+local RUNTIME_VISUAL_UPDATE_KEYS = {
+    "_msufUpdateInlineToT",
+    "_msufUpdatePortrait",
+    "_msufUpdateRaidMarkerIndicator",
+    "_msufUpdateLeaderIndicator",
+    "_msufUpdateLevelIndicator",
+    "_msufUpdateRaidGroupIndicator",
+    "_msufUpdateEliteIndicator",
+    "_msufUpdateStatusTextIndicator",
+    "_msufUpdateCombatIndicator",
+    "_msufUpdateRestingIndicator",
+    "_msufUpdateIncomingResIndicator",
+    "_msufUpdatePVPIndicator",
+    "_msufUpdateGroupStatusRuntime",
+    "_msufUpdatePrediction",
+    "_msufUpdateAlpha",
+    "_msufUpdateBorders",
+}
+
+local RUNTIME_SOFT_VISUAL_UPDATE_KEYS = {
+    "_msufUpdateInlineToT",
+    "_msufUpdatePortrait",
+    "_msufUpdateRaidMarkerIndicator",
+    "_msufUpdateLeaderIndicator",
+    "_msufUpdateLevelIndicator",
+    "_msufUpdateRaidGroupIndicator",
+    "_msufUpdateEliteIndicator",
+    "_msufUpdateStatusTextIndicator",
+    "_msufUpdateCombatIndicator",
+    "_msufUpdateRestingIndicator",
+    "_msufUpdateIncomingResIndicator",
+    "_msufUpdatePVPIndicator",
+    "_msufUpdateGroupStatusRuntime",
+    "_msufUpdatePrediction",
+}
+
+local function RebuildRuntimeList(frame, keys, listKey, countKey)
+    local list = frame[listKey]
+    if not list then
+        list = {}
+        frame[listKey] = list
+    end
+    local n = 0
+    for i = 1, #keys do
+        local fn = frame[keys[i]]
+        if fn then
+            n = n + 1
+            list[n] = fn
+        end
+    end
+    for i = n + 1, frame[countKey] or 0 do
+        list[i] = nil
+    end
+    frame[countKey] = n > 0 and n or nil
+    if n <= 0 then
+        frame[listKey] = nil
+    end
+end
+
+function UF.RebuildRuntimeStatusState(frame)
+    if not frame then return end
+    RebuildRuntimeList(frame, RUNTIME_VISUAL_UPDATE_KEYS, "_msufRuntimeVisualFns", "_msufRuntimeVisualCount")
+    RebuildRuntimeList(frame, RUNTIME_SOFT_VISUAL_UPDATE_KEYS, "_msufRuntimeSoftVisualFns", "_msufRuntimeSoftVisualCount")
+end
 
 local function RuntimeCanSkipMissingUnit(frame, reason)
     if not (frame and RUNTIME_IDENTITY_MISSING_EXIT[reason]) then
@@ -1679,74 +1770,194 @@ local function RuntimeCanSkipMissingUnit(frame, reason)
     return UnitMissing(frame.unit)
 end
 
+local function RuntimeRunIdentityFast(frame, reason)
+    local unit = frame.unit
+    local updateFn = frame._msufUpdateLoadConditions
+    if updateFn then updateFn(frame, reason, unit) end
+    RunHealthHot(frame, nil, reason, unit)
+    RunPowerHot(frame, nil, reason, unit)
+    RunTextName(frame, nil, reason, unit)
+end
+
+local function RuntimeRunIdentityVisual(frame, reason)
+    local count = frame._msufRuntimeVisualCount
+    if not count then return end
+    local list = frame._msufRuntimeVisualFns
+    local unit = frame.unit
+    for i = 1, count do
+        list[i](frame, reason, unit, nil, nil, nil)
+    end
+end
+
+local function RuntimeRunIdentitySoftVisual(frame, reason)
+    local count = frame._msufRuntimeSoftVisualCount
+    if not count then return end
+    local list = frame._msufRuntimeSoftVisualFns
+    local unit = frame.unit
+    for i = 1, count do
+        list[i](frame, reason, unit, nil, nil, nil)
+    end
+end
+
+local function RuntimeRunIdentityAuras(frame, reason)
+    local updateFn = frame._msufUpdateAuras
+    if updateFn then return updateFn(frame, reason, frame.unit) end
+end
+
+local function RuntimeRunIdentityFull(frame, reason)
+    RuntimeRunIdentityFast(frame, reason)
+    if frame._msufUpdateAuras then
+        frame._msufA3DeferAuraVisualNotify = true
+        RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
+        frame._msufA3DeferAuraVisualNotify = nil
+    end
+    RuntimeRunIdentityVisual(frame, "MSUF_UNIT_IDENTITY_VISUAL")
+end
+
+local function RuntimeRunIdentityDeferred(frame)
+    if frame._msufUpdateAuras then
+        frame._msufA3DeferAuraVisualNotify = true
+        RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
+        frame._msufA3DeferAuraVisualNotify = nil
+    end
+    RuntimeRunIdentityVisual(frame, "MSUF_UNIT_IDENTITY_VISUAL")
+end
+
+local function RuntimeRunIdentitySoftDeferred(frame)
+    RuntimeRunIdentityFast(frame, "MSUF_UNIT_IDENTITY_SOFT_FAST")
+    if frame._msufUpdateAuras then
+        frame._msufA3DeferAuraVisualNotify = true
+        RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_SOFT_AURAS")
+        frame._msufA3DeferAuraVisualNotify = nil
+    end
+    RuntimeRunIdentitySoftVisual(frame, "MSUF_UNIT_IDENTITY_SOFT_VISUAL")
+end
+
+local function RuntimeRunIdentitySoftFull(frame, reason)
+    RuntimeRunIdentityFast(frame, reason)
+    if frame._msufUpdateAuras then
+        frame._msufA3DeferAuraVisualNotify = true
+        RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_SOFT_AURAS")
+        frame._msufA3DeferAuraVisualNotify = nil
+    end
+    RuntimeRunIdentitySoftVisual(frame, "MSUF_UNIT_IDENTITY_SOFT_VISUAL")
+end
+
+local function RuntimeRunGroupIdentity(frame, reason)
+    local unit = frame.unit
+    local updateFn = frame._msufUpdateLoadConditions
+    if updateFn then updateFn(frame, reason, unit) end
+    local hp, maxHP, calc = RunHealthHot(frame, nil, reason, unit)
+    RunPowerHot(frame, nil, reason, unit)
+    RunTextName(frame, nil, reason, unit)
+    updateFn = frame._msufUpdateGroupStatusRuntime
+    if updateFn then updateFn(frame, reason, unit) end
+    updateFn = frame._msufUpdatePrediction
+    if updateFn then updateFn(frame, reason, unit, hp, maxHP, calc) end
+    updateFn = frame._msufUpdateAuras
+    if updateFn then
+        frame._msufA3DeferAuraVisualNotify = true
+        updateFn(frame, reason, unit)
+        frame._msufA3DeferAuraVisualNotify = nil
+    end
+    updateFn = frame._msufUpdateGroupVisuals
+    if updateFn then updateFn(frame, reason, unit, hp, maxHP) end
+    updateFn = frame._msufUpdateGroupRangeFade
+    if updateFn then updateFn(frame, reason, unit) end
+    updateFn = frame._msufUpdateBorders
+    if updateFn then updateFn(frame, reason, unit) end
+end
+
+local RUNTIME_REASON_RUNNERS = {
+    MSUF_UNIT_IDENTITY = RuntimeRunIdentityFull,
+    MSUF_UNIT_IDENTITY_DEFERRED = RuntimeRunIdentityDeferred,
+    MSUF_UNIT_IDENTITY_SOFT = RuntimeRunIdentitySoftFull,
+    MSUF_UNIT_IDENTITY_SOFT_DEFERRED = RuntimeRunIdentitySoftDeferred,
+    MSUF_UNIT_IDENTITY_FAST = RuntimeRunIdentityFast,
+    MSUF_UNIT_IDENTITY_SOFT_FAST = RuntimeRunIdentityFast,
+    MSUF_UNIT_IDENTITY_VISUAL = RuntimeRunIdentityVisual,
+    MSUF_UNIT_IDENTITY_SOFT_VISUAL = RuntimeRunIdentitySoftVisual,
+    MSUF_UNIT_IDENTITY_AURAS = RuntimeRunIdentityAuras,
+    MSUF_UNIT_IDENTITY_SOFT_AURAS = RuntimeRunIdentityAuras,
+    MSUF_GF_UNIT_IDENTITY = RuntimeRunGroupIdentity,
+}
+
 FrameRuntimeUpdate = function(frame, reason)
     if not frame then
         return
     end
     reason = reason or "MSUF_FORCE_UPDATE"
+    local unit = frame.unit
     if RuntimeCanSkipMissingUnit(frame, reason) then
+        if RUNTIME_MISSING_AURA_CLEAR[reason] == true then
+            RuntimeRunIdentityAuras(frame, "MSUF_UNIT_IDENTITY_AURAS")
+        end
         return
+    end
+    local runner = RUNTIME_REASON_RUNNERS[reason]
+    if runner then
+        return runner(frame, reason)
     end
     local mask = RUNTIME_REASON_MASKS[reason]
     local hp, maxHP, calc
     if not mask or mask.load then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LoadConditions", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LoadConditions", reason, unit)
     end
     if not mask or mask.health then
-        hp, maxHP, calc = RunHealthHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
+        hp, maxHP, calc = RunHealthHot(frame, RUNTIME_UPDATE_OWNERS, reason, unit)
     end
     if not mask or mask.power then
-        RunPowerHot(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
+        RunPowerHot(frame, RUNTIME_UPDATE_OWNERS, reason, unit)
     end
     if not mask or mask.name then
-        RunTextName(frame, RUNTIME_UPDATE_OWNERS, reason, frame.unit)
+        RunTextName(frame, RUNTIME_UPDATE_OWNERS, reason, unit)
     end
     if not mask or mask.inline then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "InlineToT", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "InlineToT", reason, unit)
     end
     if not mask or mask.portrait then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Portrait", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Portrait", reason, unit)
     end
     if not mask or mask.status then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RaidMarkerIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LeaderIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LevelIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RaidGroupIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "EliteIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "StatusTextIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "CombatIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RestingIndicator", reason, frame.unit)
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "IncomingResIndicator", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RaidMarkerIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LeaderIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "LevelIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RaidGroupIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "EliteIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "StatusTextIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "CombatIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RestingIndicator", reason, unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "IncomingResIndicator", reason, unit)
         local status = frame.MSUFSpec and frame.MSUFSpec.status
         local pvp = status and status.pvp
         if pvp and pvp.enabled == true then
-            RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "PVPIndicator", reason, frame.unit)
+            RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "PVPIndicator", reason, unit)
         end
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, unit)
     end
     if mask and mask.groupStatus and not mask.status then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupStatusRuntime", reason, unit)
     end
     if not mask or mask.groupVisuals then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupVisuals", reason, frame.unit, hp, maxHP)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupVisuals", reason, unit, hp, maxHP)
     end
     if not mask or mask.prediction then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Prediction", reason, frame.unit, hp, maxHP, calc)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Prediction", reason, unit, hp, maxHP, calc)
     end
     if not mask or mask.alpha then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Alpha", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Alpha", reason, unit)
     end
     if not mask or mask.range then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RangeFade", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "RangeFade", reason, unit)
     end
     if not mask or mask.groupRange then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupRangeFade", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "GroupRangeFade", reason, unit)
     end
     if not mask or mask.borders then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Borders", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Borders", reason, unit)
     end
     if not mask or mask.auras then
-        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Auras", reason, frame.unit)
+        RunElementUpdate(frame, RUNTIME_UPDATE_OWNERS, "Auras", reason, unit)
     end
 end
 
@@ -1756,6 +1967,14 @@ end
 
 function UF.UpdateRuntime(unit, reason)
     if unit then
+        if issecretvalue(unit) == true then
+            return false
+        end
+        local frame = UF.frames[unit]
+        if frame then
+            FrameRuntimeUpdate(frame, reason)
+            return true
+        end
         local units = UF.UnitsForConfigKey(unit)
         if not units then
             return false

@@ -16,7 +16,6 @@ local pairs = pairs
 local UnitExists = UnitExists
 local UnitIsConnected = UnitIsConnected
 local UnitGUID = UnitGUID
-local UnitIsUnit = _G.UnitIsUnit
 local UnitInRange = UnitInRange
 local InCombatLockdown = InCombatLockdown
 local C_Timer = C_Timer
@@ -75,8 +74,7 @@ local function SafeBool(value)
 end
 
 local function IsUnitToken(unit)
-    if issecretvalue(unit) == true then return false end
-    return type(unit) == "string" and unit ~= ""
+    return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
 local function UnitEventMatchesFrame(frame, unit)
@@ -85,7 +83,9 @@ local function UnitEventMatchesFrame(frame, unit)
     if type(unit) ~= "string" then return false end
     if unit == "" then return true end
     local frameUnit = frame and frame.unit
-    return IsUnitToken(frameUnit) and frameUnit == unit
+    return type(frameUnit) == "string"
+        and frameUnit ~= ""
+        and frameUnit == unit
 end
 
 local function ClearRange(frame)
@@ -125,8 +125,8 @@ local function StoreRange(frame, inRange)
         local oldUnit = frame._msufGFRangeUnit
         local oldKnown = frame._msufGFRangeKnown
         local oldRaw = frame._msufGFInRangeRaw
-        local hadState = issecretvalue(oldUnit) == true or oldUnit ~= nil
-            or issecretvalue(oldKnown) == true or oldKnown ~= nil
+        local hadState = oldUnit ~= nil
+            or oldKnown ~= nil
             or issecretvalue(oldRaw) == true or oldRaw ~= nil
         frame._msufGFRangeUnit = nil
         frame._msufGFRangeKnown = nil
@@ -135,11 +135,17 @@ local function StoreRange(frame, inRange)
         return hadState
     end
     local oldUnit = frame._msufGFRangeUnit
-    local unitChanged = issecretvalue(oldUnit) == true or oldUnit ~= unit
+    local unitChanged = oldUnit ~= unit
     frame._msufGFRangeUnit = unit
 
     local inRangeSecret = issecretvalue(inRange) == true
-    if not inRangeSecret and inRange == nil then
+    if inRangeSecret then
+        frame._msufGFRangeKnown = nil
+        frame._msufGFInRangeRaw = nil
+        frame._msufGFRangeCacheable = nil
+        return true, inRange, true
+    end
+    if inRange == nil then
         if not unitChanged and frame._msufGFRangeKnown == nil and frame._msufGFInRangeRaw == nil then
             return false
         end
@@ -149,15 +155,14 @@ local function StoreRange(frame, inRange)
         return true
     end
 
-    local cacheable = not inRangeSecret
-    if cacheable and not unitChanged and frame._msufGFRangeCacheable == true
+    if not unitChanged and frame._msufGFRangeCacheable == true
         and frame._msufGFRangeKnown == true and frame._msufGFInRangeRaw == inRange then
         return false
     end
 
     frame._msufGFRangeKnown = true
     frame._msufGFInRangeRaw = inRange
-    frame._msufGFRangeCacheable = cacheable and true or nil
+    frame._msufGFRangeCacheable = true
     return true
 end
 
@@ -168,13 +173,6 @@ local function UnitIsPlayer(unit)
     end
     if unit == "player" then
         return true
-    end
-    if UnitIsUnit then
-        local same = UnitIsUnit(unit, "player")
-        if issecretvalue(same) == true then
-            return false
-        end
-        return same == true or same == 1
     end
     if UnitGUID then
         local guid = UnitGUID(unit)
@@ -198,7 +196,8 @@ local function FrameIsPlayerUnit(frame)
     if not IsUnitToken(unit) then
         return false
     end
-    if frame._msufGFRangePlayerUnit == unit and frame._msufGFRangeIsPlayerUnit ~= nil then
+    local cachedUnit = frame._msufGFRangePlayerUnit
+    if cachedUnit == unit and frame._msufGFRangeIsPlayerUnit ~= nil then
         return frame._msufGFRangeIsPlayerUnit == true
     end
     local isPlayer = UnitIsPlayer(unit) == true
@@ -253,6 +252,23 @@ local rangeSettleCursor
 local rangeSettleAfterCombat
 local rangeSettleFrames = {}
 local rangeSettleIndex = {}
+local settleDriver
+local FlushRangeSettle
+
+local function SettleFlushOnUpdate(self)
+    if self then
+        self:SetScript("OnUpdate", nil)
+    end
+    FlushRangeSettle()
+end
+
+local function QueueRangeSettleNextFrame()
+    if settleDriver and settleDriver.SetScript then
+        settleDriver:SetScript("OnUpdate", SettleFlushOnUpdate)
+        return true
+    end
+    return false
+end
 
 local function PollCurrentRange(unit)
     if not (UnitInRange and IsUnitToken(unit)) then
@@ -281,12 +297,13 @@ local function RefreshSettledRange(frame)
             value = nil
         end
     end
-    if StoreRange(frame, value) then
-        ApplyAlpha(frame)
+    local changed, rangeValue, rangeSecret = StoreRange(frame, value)
+    if changed then
+        ApplyAlpha(frame, nil, rangeValue, rangeSecret)
     end
 end
 
-local function FlushRangeSettle()
+FlushRangeSettle = function()
     if InCombatLockdown and InCombatLockdown() then
         rangeSettleQueued = nil
         rangeSettleCursor = nil
@@ -309,9 +326,10 @@ local function FlushRangeSettle()
             end
             i = i + 1
         end
-        if i <= last and C_Timer and C_Timer.After then
+        if i <= last then
             rangeSettleCursor = i
-            C_Timer.After(0, FlushRangeSettle)
+            if QueueRangeSettleNextFrame() then return end
+            FlushRangeSettle()
             return
         end
         rangeSettleQueued = nil
@@ -332,14 +350,21 @@ local function QueueRangeSettle(delay)
     end
     rangeSettleQueued = true
     rangeSettleCursor = 1
+    delay = delay or 0
+    if delay <= 0 and QueueRangeSettleNextFrame() then
+        return
+    end
+    if delay <= 0 then
+        FlushRangeSettle()
+        return
+    end
     if C_Timer and C_Timer.After then
-        C_Timer.After(delay or 0, FlushRangeSettle)
+        C_Timer.After(delay, FlushRangeSettle)
     else
         FlushRangeSettle()
     end
 end
 
-local settleDriver
 local settleDriverRegistered
 local settleRegistrationCount = 0
 
@@ -500,11 +525,6 @@ local function RefreshHealthVisual(frame)
         local fn = cfg and cfg.runtimeOnRangeAlpha
         if fn then
             fn(frame, cfg)
-            return true
-        end
-        local element = UF.elements and UF.elements.GroupVisuals
-        if element and element.Update then
-            element.Update(frame, "MSUF_GF_RANGE_ALPHA", frame.unit)
             return true
         end
     end
@@ -727,10 +747,12 @@ local function OfflineHideReady(frame)
         ClearOfflineDelay(frame)
         return true
     end
-    if frame._msufGFOfflineDelayUnit == unit and frame._msufGFOfflineDelayReady == true then
+    local delayUnit = frame._msufGFOfflineDelayUnit
+    local sameDelayUnit = delayUnit == unit
+    if sameDelayUnit and frame._msufGFOfflineDelayReady == true then
         return true
     end
-    if frame._msufGFOfflineDelayUnit == unit and frame._msufGFOfflineDelayPending == true then
+    if sameDelayUnit and frame._msufGFOfflineDelayPending == true then
         return false
     end
 
@@ -801,7 +823,9 @@ local function OfflineGone(frame, unit, force)
     if not IsUnitToken(unit) then
         return false
     end
-    if not force and frame._msufGFOfflineUnit == unit and frame._msufGFOfflineGone ~= nil then
+    if not force
+        and frame._msufGFOfflineUnit == unit
+        and frame._msufGFOfflineGone ~= nil then
         return frame._msufGFOfflineGone == true
     end
     frame._msufGFOfflineUnit = unit
@@ -834,7 +858,7 @@ local function BaseAlpha(frame, event)
         return CoreAlpha(frame), false
     end
     local rangeUnit = frame._msufGFRangeUnit
-    if issecretvalue(rangeUnit) == true or rangeUnit ~= unit then
+    if rangeUnit ~= unit then
         ClearRange(frame)
     end
     local base = CoreAlpha(frame)
@@ -854,7 +878,7 @@ local function BaseAlpha(frame, event)
     return base, false
 end
 
-function ApplyAlpha(frame, event)
+function ApplyAlpha(frame, event, rangeValue, rangeSecret)
     local baseAlpha, baseLocked = BaseAlpha(frame, event)
     if baseLocked == true then
         ApplyHealthRangeAlpha(frame, 1)
@@ -863,9 +887,10 @@ function ApplyAlpha(frame, event)
         return
     end
 
-    if frame and frame._msufGFRangeFadeEnabled == true and frame._msufGFRangeKnown == true then
-        local inRange = frame._msufGFInRangeRaw
-        local inRangeSecret = issecretvalue(inRange) == true
+    if frame and frame._msufGFRangeFadeEnabled == true
+        and (frame._msufGFRangeKnown == true or rangeSecret == true) then
+        local inRange = rangeSecret == true and rangeValue or frame._msufGFInRangeRaw
+        local inRangeSecret = rangeSecret == true
         local inRangeKnown = inRangeSecret or inRange ~= nil
         local rangeAlpha = frame._msufGFRangeFadeAlphaValue or 0.4
         if frame._msufGFRangeLayerHealth == true then
@@ -904,7 +929,7 @@ function GroupRangeFade.Apply(frame)
     ClearAlphaCaches(frame)
     CompileRangeRuntime(frame, frame and frame.MSUFSpec)
     if frame then
-        frame._msufUpdateGroupRangeConnection = GroupRangeFade.UpdateConnectionState
+        frame._msufUpdateGroupRangeConnection = ApplyAlpha
     end
     SetSettleRegistration(frame, frame and frame._msufGFRangeRuntimeEnabled == true)
     if FrameIsPlayerUnit(frame) then
@@ -923,13 +948,15 @@ end
 
 function GroupRangeFade.Update(frame, event, unit, inRange)
     local changed = false
+    local rangeValue
+    local rangeSecret
     if event == "UNIT_IN_RANGE_UPDATE" then
         if UnitEventMatchesFrame(frame, unit) then
-            changed = StoreRange(frame, FrameIsPlayerUnit(frame) and true or inRange)
+            changed, rangeValue, rangeSecret = StoreRange(frame, FrameIsPlayerUnit(frame) and true or inRange)
         end
     elseif event == "UNIT_PHASE" or event == "UNIT_CTR_OPTIONS" or event == "UNIT_OTHER_PARTY_CHANGED" then
         if UnitEventMatchesFrame(frame, unit) then
-            changed = StoreRange(frame, FrameIsPlayerUnit(frame) and true or nil)
+            changed, rangeValue, rangeSecret = StoreRange(frame, FrameIsPlayerUnit(frame) and true or nil)
         end
     elseif event == "UNIT_CONNECTION" then
         changed = true
@@ -947,7 +974,7 @@ function GroupRangeFade.Update(frame, event, unit, inRange)
         return
     end
     if changed then
-        ApplyAlpha(frame, event)
+        ApplyAlpha(frame, event, rangeValue, rangeSecret)
     end
 end
 

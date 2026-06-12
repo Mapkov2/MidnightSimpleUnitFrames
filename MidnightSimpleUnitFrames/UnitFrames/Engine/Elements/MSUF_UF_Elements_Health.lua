@@ -54,6 +54,34 @@ local HEALTH_EVENTS_NO_FACTION = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HE
 local HEALTH_EVENTS_PLAYER = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", "UNIT_FLAGS" }
 local GROUP_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH", "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" }
 
+local function StoreHealthValue(bar, unit, hp, hpSecret)
+    if not bar then return end
+    if hpSecret == nil then hpSecret = issecretvalue(hp) == true end
+    if hpSecret then
+        bar._msufHealthValue = nil
+        bar._msufHealthValueUnit = nil
+        return
+    end
+    bar._msufHealthValue = hp
+    bar._msufHealthValueUnit = unit
+end
+
+local function StoreHealthMax(bar, unit, maxHP, maxSecret)
+    if not bar then return end
+    if maxSecret == nil then maxSecret = issecretvalue(maxHP) == true end
+    if maxSecret then
+        bar._msufHealthMax = nil
+        bar._msufHealthMaxUnit = nil
+        bar._msufHealthMaxSecret = nil
+        bar._msufHealthMaxReady = nil
+        return
+    end
+    bar._msufHealthMax = maxHP
+    bar._msufHealthMaxUnit = unit
+    bar._msufHealthMaxSecret = nil
+    bar._msufHealthMaxReady = true
+end
+
 local function ConnectionStatusKey(frame, unit, event)
     if not RefreshUnitState then
         return nil
@@ -153,7 +181,7 @@ end
 
 function Health.UpdateValuePlain(frame, event, unit)
     unit = unit or frame.unit
-    if unit ~= "player" then
+    if issecretvalue(unit) == true or unit ~= "player" then
         return Health.UpdateValue(frame, event, unit)
     end
     local bar = frame.hpBar
@@ -161,20 +189,25 @@ function Health.UpdateValuePlain(frame, event, unit)
         return
     end
 
-    local hp = UnitHealth(unit) or 0
-    bar._msufHealthValue = hp
-    bar._msufHealthValueUnit = unit
+    local hp = UnitHealth(unit)
+    if issecretvalue(hp) == true then
+        return Health.UpdateValue(frame, event, unit)
+    end
+    if hp == nil then hp = 0 end
+    StoreHealthValue(bar, unit, hp, false)
 
-    local maxReady = bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit
+    local maxUnit = bar._msufHealthMaxUnit
+    local maxReady = bar._msufHealthMaxReady == true and maxUnit == unit
     local maxHP
     if maxReady then
         maxHP = bar._msufHealthMax
     else
-        maxHP = UnitHealthMax(unit) or 1
-        bar._msufHealthMax = maxHP
-        bar._msufHealthMaxUnit = unit
-        bar._msufHealthMaxSecret = nil
-        bar._msufHealthMaxReady = true
+        maxHP = UnitHealthMax(unit)
+        if issecretvalue(maxHP) == true then
+            return Health.UpdateValue(frame, event, unit)
+        end
+        if maxHP == nil then maxHP = 1 end
+        StoreHealthMax(bar, unit, maxHP, false)
     end
 
     if bar._msufMinMaxInit ~= true then
@@ -222,10 +255,13 @@ function Health.UpdateValue(frame, event, unit)
     local hp = UnitHealth(unit)
     local hpSecret = issecretvalue(hp) == true
     if not hpSecret and hp == nil then hp = 0 end
-    bar._msufHealthValue = hp
-    bar._msufHealthValueUnit = unit
+    local cacheUnit = unit
+    StoreHealthValue(bar, cacheUnit, hp, hpSecret)
 
-    local maxReady = bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit
+    local maxUnit = bar._msufHealthMaxUnit
+    local maxReady = bar._msufHealthMaxReady == true
+        and cacheUnit ~= nil
+        and maxUnit == cacheUnit
     local maxHP, maxSecret
     if maxReady then
         maxHP = bar._msufHealthMax
@@ -234,10 +270,7 @@ function Health.UpdateValue(frame, event, unit)
         maxHP = UnitHealthMax(unit)
         maxSecret = issecretvalue(maxHP) == true
         if not maxSecret and maxHP == nil then maxHP = 1 end
-        bar._msufHealthMax = maxHP
-        bar._msufHealthMaxUnit = unit
-        bar._msufHealthMaxSecret = maxSecret or nil
-        bar._msufHealthMaxReady = true
+        StoreHealthMax(bar, cacheUnit, maxHP, maxSecret)
     end
 
     if bar._msufMinMaxInit ~= true then
@@ -289,7 +322,7 @@ end
 
 function Health.UpdateMaxValuePlain(frame, event, unit)
     unit = unit or frame.unit
-    if unit ~= "player" then
+    if issecretvalue(unit) == true or unit ~= "player" then
         return Health.UpdateMaxValue(frame, event, unit)
     end
     local bar = frame.hpBar
@@ -297,14 +330,18 @@ function Health.UpdateMaxValuePlain(frame, event, unit)
         return
     end
 
-    local hp = UnitHealth(unit) or 0
-    local maxHP = UnitHealthMax(unit) or 1
-    bar._msufHealthValue = hp
-    bar._msufHealthValueUnit = unit
-    bar._msufHealthMax = maxHP
-    bar._msufHealthMaxUnit = unit
-    bar._msufHealthMaxSecret = nil
-    bar._msufHealthMaxReady = true
+    local hp = UnitHealth(unit)
+    if issecretvalue(hp) == true then
+        return Health.UpdateMaxValue(frame, event, unit)
+    end
+    if hp == nil then hp = 0 end
+    local maxHP = UnitHealthMax(unit)
+    if issecretvalue(maxHP) == true then
+        return Health.UpdateMaxValue(frame, event, unit)
+    end
+    if maxHP == nil then maxHP = 1 end
+    StoreHealthValue(bar, unit, hp, false)
+    StoreHealthMax(bar, unit, maxHP, false)
 
     SetBarMinMaxPlain(bar, maxHP)
     bar._msufMinMaxInit = true
@@ -336,12 +373,9 @@ function Health.UpdateMaxValue(frame, event, unit)
     local maxHP = UnitHealthMax(unit)
     local maxSecret = issecretvalue(maxHP) == true
     if not maxSecret and maxHP == nil then maxHP = 1 end
-    bar._msufHealthValue = hp
-    bar._msufHealthValueUnit = unit
-    bar._msufHealthMax = maxHP
-    bar._msufHealthMaxUnit = unit
-    bar._msufHealthMaxSecret = maxSecret or nil
-    bar._msufHealthMaxReady = true
+    local cacheUnit = unit
+    StoreHealthValue(bar, cacheUnit, hp, hpSecret)
+    StoreHealthMax(bar, cacheUnit, maxHP, maxSecret)
 
     SetBarMinMaxKnown(bar, maxHP, maxSecret)
     bar._msufMinMaxInit = true
@@ -367,17 +401,21 @@ function Health.UpdateConnectionState(frame, event, unit)
         return
     end
 
-    local hp = bar._msufHealthValueUnit == unit and bar._msufHealthValue or nil
+    local cacheUnit = unit
+    local valueUnit = bar._msufHealthValueUnit
+    local hp = cacheUnit ~= nil and valueUnit == cacheUnit and bar._msufHealthValue or nil
     local hpSecret = issecretvalue(hp) == true
     if not hpSecret and hp == nil then
         hp = UnitHealth(unit)
         hpSecret = issecretvalue(hp) == true
         if not hpSecret and hp == nil then hp = 0 end
-        bar._msufHealthValue = hp
-        bar._msufHealthValueUnit = unit
+        StoreHealthValue(bar, cacheUnit, hp, hpSecret)
     end
 
-    local maxReady = bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit
+    local maxUnit = bar._msufHealthMaxUnit
+    local maxReady = bar._msufHealthMaxReady == true
+        and cacheUnit ~= nil
+        and maxUnit == cacheUnit
     local maxHP, maxSecret
     if maxReady then
         maxHP = bar._msufHealthMax
@@ -386,10 +424,7 @@ function Health.UpdateConnectionState(frame, event, unit)
         maxHP = UnitHealthMax(unit)
         maxSecret = issecretvalue(maxHP) == true
         if not maxSecret and maxHP == nil then maxHP = 1 end
-        bar._msufHealthMax = maxHP
-        bar._msufHealthMaxUnit = unit
-        bar._msufHealthMaxSecret = maxSecret or nil
-        bar._msufHealthMaxReady = true
+        StoreHealthMax(bar, cacheUnit, maxHP, maxSecret)
     end
 
     local wroteBar
@@ -425,8 +460,11 @@ function Health.Update(frame, event, unit)
     local coldColor = frame._msufHealthColdColor == true
 
     if event == "UNIT_FLAGS" or event == "UNIT_FACTION" then
-        local hp = bar._msufHealthValueUnit == unit and bar._msufHealthValue or nil
-        local maxHP = bar._msufHealthMaxUnit == unit and bar._msufHealthMax or nil
+        local cacheUnit = unit
+        local hpUnit = bar._msufHealthValueUnit
+        local maxUnit = bar._msufHealthMaxUnit
+        local hp = cacheUnit ~= nil and hpUnit == cacheUnit and bar._msufHealthValue or nil
+        local maxHP = cacheUnit ~= nil and maxUnit == cacheUnit and bar._msufHealthMax or nil
         local rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event)
         if rawHealthColor ~= true then
             bar._msufGradientPct = nil
@@ -440,11 +478,14 @@ function Health.Update(frame, event, unit)
     local hp = UnitHealth(unit)
     local hpSecret = issecretvalue(hp) == true
     if not hpSecret and hp == nil then hp = 0 end
-    bar._msufHealthValue = hp
-    bar._msufHealthValueUnit = unit
+    local cacheUnit = unit
+    StoreHealthValue(bar, cacheUnit, hp, hpSecret)
 
     local animate = event == "UNIT_HEALTH"
-    local maxReady = bar._msufHealthMaxReady == true and bar._msufHealthMaxUnit == unit
+    local maxUnit = bar._msufHealthMaxUnit
+    local maxReady = bar._msufHealthMaxReady == true
+        and cacheUnit ~= nil
+        and maxUnit == cacheUnit
     local maxHP, maxSecret
     if animate and maxReady then
         maxHP = bar._msufHealthMax
@@ -453,10 +494,7 @@ function Health.Update(frame, event, unit)
         maxHP = UnitHealthMax(unit)
         maxSecret = issecretvalue(maxHP) == true
         if not maxSecret and maxHP == nil then maxHP = 1 end
-        bar._msufHealthMax = maxHP
-        bar._msufHealthMaxUnit = unit
-        bar._msufHealthMaxSecret = maxSecret or nil
-        bar._msufHealthMaxReady = true
+        StoreHealthMax(bar, cacheUnit, maxHP, maxSecret)
     end
 
     -- Max health only changes on UNIT_MAXHEALTH (and forced applies); skip the

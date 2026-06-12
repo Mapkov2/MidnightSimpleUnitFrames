@@ -64,10 +64,13 @@ local function FlushGF()
     local geometry = pendingGF.geometry
     local visual = pendingGF.visual
     local font = pendingGF.font
+    local kind = pendingGF.kind
     pendingGF.rebuild = nil
     pendingGF.geometry = nil
     pendingGF.visual = nil
     pendingGF.font = nil
+    pendingGF.kind = nil
+    if kind == false then kind = nil end
     if InCombatLockdown and InCombatLockdown() then
         if rebuild and type(gf.RebuildAll) == "function" then gf.RebuildAll() end
         if geometry then gf._pendingRefreshGeometry = true end
@@ -83,14 +86,21 @@ local function FlushGF()
     if geometry then
         if type(gf.RefreshGeometry) == "function" then gf.RefreshGeometry() end
     end
-    if font and type(gf.RefreshFonts) == "function" then gf.RefreshFonts() end
+    if font and type(gf.RefreshFonts) == "function" then gf.RefreshFonts(kind) end
     if visual then
-        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals() end
+        if type(gf.RefreshVisuals) == "function" then gf.RefreshVisuals(kind) end
     end
     RefreshGFPreview()
 end
 
 local function QueueGF(kind, mode)
+    if kind ~= nil then
+        if pendingGF.kind == nil then
+            pendingGF.kind = kind
+        elseif pendingGF.kind ~= kind then
+            pendingGF.kind = false
+        end
+    end
     if mode == "rebuild" then pendingGF.rebuild = true end
     if mode == "geometry" then pendingGF.geometry = true end
     if mode == "visual" then pendingGF.visual = true end

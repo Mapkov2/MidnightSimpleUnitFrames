@@ -31,10 +31,11 @@ local C_CurveUtil = _G.C_CurveUtil
 local AuraUtil = _G.AuraUtil
 local CreateColor = _G.CreateColor
 local Enum = _G.Enum
-local nativeSecrets = _G.issecretvalue ~= nil
+local InCombatLockdown = _G.InCombatLockdown
 local IsSecret = _G.issecretvalue or function() return false end
 
 local GetAuraSlots = C_UnitAuras and C_UnitAuras.GetAuraSlots
+local GetAuraDataByIndex = C_UnitAuras and C_UnitAuras.GetAuraDataByIndex
 local GetAuraDataBySlot = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot
 local GetAuraDataByAuraInstanceID = C_UnitAuras and C_UnitAuras.GetAuraDataByAuraInstanceID
 local IsAuraFilteredOutByInstanceID = C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID
@@ -63,6 +64,7 @@ local DISPEL_POINTS = {
     { 9, "Enrage", 0.95, 0.37, 0.96 },
     { 11, "Bleed", 0.80, 0.10, 0.10 },
 }
+local DISPEL_CURVE_CACHE = {}
 
 local SATED_SPELLS = {
     [57723] = true, -- Exhaustion
@@ -269,8 +271,12 @@ local function WipeTable(tbl)
 end
 
 local function FillAuraSlots(out, ...)
-    out = WipeTable(out)
+    out = out or {}
     local count = select("#", ...)
+    if count == 0 then
+        out[1] = nil
+        return out, 0
+    end
     for i = 1, count do
         out[i] = select(i, ...)
     end
@@ -336,6 +342,20 @@ local function NormalizeDispelTrigger(value, fallback)
     return fallback or "BY_ME"
 end
 
+local function DirectVisualFilterForTrigger(trigger)
+    if trigger == "PLAYER_CAST" then
+        return "HARMFUL|PLAYER"
+    elseif trigger == "BY_ME" then
+        return "HARMFUL|RAID_PLAYER_DISPELLABLE"
+    elseif trigger == "DISPEL_TYPE" then
+        return "HARMFUL|RAID"
+    end
+end
+
+local function TriggerCanUseDirectVisual(trigger)
+    return DirectVisualFilterForTrigger(trigger) ~= nil
+end
+
 local function DispelColorValue(spec, key, fallback)
     local value = spec and spec[key]
     value = tonumber(value)
@@ -348,8 +368,27 @@ local function AddDispelCurvePoint(curve, index, r, g, b, a)
     curve:AddPoint(index, CreateColor(Clamp01(r, 1), Clamp01(g, 1), Clamp01(b, 1), Clamp01(a, 1)))
 end
 
+local function DispelCurveSignature(spec)
+    local parts = {}
+    local n = 0
+    n = n + 1; parts[n] = tostring(DispelColorValue(spec, "typeNoneR", 0.80))
+    n = n + 1; parts[n] = tostring(DispelColorValue(spec, "typeNoneG", 0.00))
+    n = n + 1; parts[n] = tostring(DispelColorValue(spec, "typeNoneB", 0.00))
+    for i = 2, #DISPEL_POINTS do
+        local point = DISPEL_POINTS[i]
+        local key = "type" .. point[2]
+        n = n + 1; parts[n] = tostring(DispelColorValue(spec, key .. "R", point[3]))
+        n = n + 1; parts[n] = tostring(DispelColorValue(spec, key .. "G", point[4]))
+        n = n + 1; parts[n] = tostring(DispelColorValue(spec, key .. "B", point[5]))
+    end
+    return table.concat(parts, ":")
+end
+
 local function BuildDispelColorCurve(spec)
     if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
+    local signature = DispelCurveSignature(spec)
+    local cached = DISPEL_CURVE_CACHE[signature]
+    if cached then return cached end
     local curve = C_CurveUtil.CreateColorCurve()
     if not curve then return nil end
     if curve.SetType and Enum and Enum.LuaCurveType and Enum.LuaCurveType.Step then
@@ -365,20 +404,8 @@ local function BuildDispelColorCurve(spec)
             DispelColorValue(spec, key .. "B", point[5]),
             1)
     end
+    DISPEL_CURVE_CACHE[signature] = curve
     return curve
-end
-
-local function CompileDispelVisual(spec)
-    local visual = type(spec) == "table" and spec or nil
-    local mode = visual and visual.colorMode == "TYPE" and "TYPE" or "SINGLE"
-    return {
-        colorMode = mode,
-        r = DispelColorValue(visual, "r", 0.25),
-        g = DispelColorValue(visual, "g", 0.75),
-        b = DispelColorValue(visual, "b", 1.00),
-        a = DispelColorValue(visual, "a", 1.00),
-        dispelColorCurve = BuildDispelColorCurve(visual),
-    }
 end
 
 local function ColorObjectRGBA(color)
@@ -393,6 +420,39 @@ local function HasSecretColor(r, g, b, a)
     return IsSecret(r) or IsSecret(g) or IsSecret(b) or IsSecret(a)
 end
 
+local function CompileDispelVisual(spec)
+    local visual = type(spec) == "table" and spec or nil
+    local mode = visual and visual.colorMode == "TYPE" and "TYPE" or "SINGLE"
+    local curve = BuildDispelColorCurve(visual)
+    local noneR, noneG, noneB, noneA, noneReady, noneSecret
+    if curve and curve.Evaluate then
+        local color = curve:Evaluate(0)
+        noneR, noneG, noneB, noneA = ColorObjectRGBA(color)
+        if IsSecret(noneR) == true then
+            noneReady = true
+            noneSecret = true
+        elseif noneR ~= nil then
+            noneReady = true
+            if IsSecret(noneA) ~= true and noneA == nil then noneA = 1 end
+            noneSecret = HasSecretColor(noneR, noneG, noneB, noneA) == true
+        end
+    end
+    return {
+        colorMode = mode,
+        r = DispelColorValue(visual, "r", 0.25),
+        g = DispelColorValue(visual, "g", 0.75),
+        b = DispelColorValue(visual, "b", 1.00),
+        a = DispelColorValue(visual, "a", 1.00),
+        dispelColorCurve = curve,
+        dispelNoneReady = noneReady == true,
+        dispelNoneR = noneR,
+        dispelNoneG = noneG,
+        dispelNoneB = noneB,
+        dispelNoneA = noneA,
+        dispelNoneSecret = noneSecret == true,
+    }
+end
+
 local function Round(value)
     value = tonumber(value) or 0
     if value < 0 then return -math_floor((-value) + 0.5) end
@@ -400,12 +460,17 @@ local function Round(value)
 end
 
 local function NormalizeRuntimeUnit(unit)
+    if unit and IsSecret(unit) == true then return nil end
     unit = tostring(unit or "player")
     if unit == "boss" then return "boss1" end
     if BOSS_UNITS[unit] or unit == "player" or unit == "target" or unit == "focus" then
         return unit
     end
     return nil
+end
+
+local function IsUnitToken(unit)
+    return unit ~= nil and IsSecret(unit) ~= true and type(unit) == "string" and unit ~= ""
 end
 
 local function NormalizeConfigUnit(unit)
@@ -418,23 +483,6 @@ local function IsGroupFrame(frame)
     if frame._msufCoreScope == "group" or frame._msufIsGroupFrame == true then return true end
     local spec = frame.MSUFSpec
     return spec and spec.scope == "group" or false
-end
-
-local function EachRuntimeUnit(unit, fn)
-    unit = tostring(unit or "")
-    if unit == "" or unit == "*" then
-        fn("player")
-        fn("target")
-        fn("focus")
-        for i = 1, 5 do fn("boss" .. i) end
-        return
-    end
-    if unit == "boss" then
-        for i = 1, 5 do fn("boss" .. i) end
-        return
-    end
-    unit = NormalizeRuntimeUnit(unit)
-    if unit then fn(unit) end
 end
 
 local function EnsureRootDB()
@@ -555,6 +603,22 @@ local function CompileBlacklist(blacklist)
     return n > 0 and out or nil
 end
 
+local function CompileBlacklistHash(hash)
+    if type(hash) ~= "table" then return nil end
+    local out, n = nil, 0
+    for key, enabled in pairs(hash) do
+        if enabled == true then
+            local id = tonumber(key)
+            if id then
+                if not out then out = {} end
+                out[math_floor(id + 0.5)] = true
+                n = n + 1
+            end
+        end
+    end
+    return n > 0 and out or nil
+end
+
 local function FilterTable(filtersRoot, dbKey)
     local root = type(filtersRoot) == "table" and filtersRoot or nil
     if not root or root.enabled == false then return nil end
@@ -563,12 +627,12 @@ local function FilterTable(filtersRoot, dbKey)
 end
 
 local SortAuras, SortAurasID, SortComparator
+local frameSpecConfigCache = setmetatable and setmetatable({}, { __mode = "k" }) or {}
 
 local function CompileFrameAuraVisual(spec)
     if type(spec) ~= "table" then return nil end
     local group = spec.scope == "group" and spec.group or nil
     local border = spec.border
-    local dispel = CompileDispelVisual(spec.dispel)
     local unitOverlay = spec.dispelOverlay
 
     local borderEnabled = border and border.dispel == true
@@ -618,6 +682,10 @@ local function CompileFrameAuraVisual(spec)
     local overlayActualTrigger = overlayTrigger == "BORDER" and borderTrigger or overlayTrigger
     local needsScan = borderEnabled == true or overlayEnabled == true or stripeEnabled == true
     if not needsScan then return nil end
+    local directVisualEligible = stripeEnabled ~= true
+        and (borderEnabled ~= true or TriggerCanUseDirectVisual(borderTrigger))
+        and (overlayEnabled ~= true or TriggerCanUseDirectVisual(overlayActualTrigger))
+    local dispel = (borderEnabled == true or overlayEnabled == true) and CompileDispelVisual(spec.dispel) or nil
 
     return {
         enabled = true,
@@ -626,13 +694,14 @@ local function CompileFrameAuraVisual(spec)
         stripeEnabled = stripeEnabled == true,
         borderTrigger = borderTrigger,
         overlayTrigger = overlayActualTrigger,
+        directVisualEligible = directVisualEligible == true,
         needsPlayerFlag = borderTrigger == "PLAYER_CAST" or overlayActualTrigger == "PLAYER_CAST",
-        colorMode = dispel.colorMode,
-        r = dispel.r,
-        g = dispel.g,
-        b = dispel.b,
-        a = dispel.a,
-        dispelColorCurve = dispel.dispelColorCurve,
+        colorMode = dispel and dispel.colorMode or "SINGLE",
+        r = dispel and dispel.r or 0.25,
+        g = dispel and dispel.g or 0.75,
+        b = dispel and dispel.b or 1,
+        a = dispel and dispel.a or 1,
+        dispelColorCurve = dispel and dispel.dispelColorCurve or nil,
         overlayStyle = overlayStyle,
         overlayAlpha = overlayAlpha,
         overlayOnHealth = overlayOnHealth == true,
@@ -696,8 +765,18 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local visualNeedsPlayer = kind == "debuff" and visual and visual.needsPlayerFlag == true
     local hasInclusive = onlyMine or raid or includeStealable or boss or raidInCombat
     local black = CompileBlacklist(blacklist)
+    local hasFilterWork = black ~= nil or onlyImportant or hasInclusive or hidePermanent or satedFilter
     local renderEnabled = renderAllowed ~= false and show and maxCount > 0
-    local enabled = renderEnabled or (forceScan == true and kind == "debuff")
+    local visualDirect = kind == "debuff"
+        and visual
+        and visual.directVisualEligible == true
+        and hasFilterWork ~= true
+    local enabled = renderEnabled or (forceScan == true and kind == "debuff" and visualDirect ~= true)
+    local cappedFilterScan = black ~= nil
+        and onlyImportant ~= true
+        and hasInclusive ~= true
+        and hidePermanent ~= true
+        and satedFilter ~= true
     local step = size + spacing
     local cols = math_min(math_max(maxCount, 1), math_max(perRow, 1))
     local rows = math_ceil(math_max(maxCount, 1) / math_max(perRow, 1))
@@ -727,8 +806,13 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
     local baseFilter = onlyBoss and (spec.filter .. "|BOSS") or spec.filter
     local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and ReadBool(nil, shared, "useDebuffTypeBorders", false)
     local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
-    local needsPlayerFlag = onlyMine == true or ownHighlight == true or visualNeedsPlayer == true
+    local needsPlayerFlag = onlyMine == true or ownHighlight == true or (visualNeedsPlayer == true and visualDirect ~= true)
     local sortComparator = sortOrder == 0 and (needsPlayerFlag and SortAuras or SortAurasID) or SortComparator(Round(sortOrder))
+    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true
+    local visibleOnlyScan = renderEnabled == true
+        and naturalOrder == true
+        and raidInCombat ~= true
+        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
 
     return {
         kind = kind,
@@ -764,7 +848,9 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         initialAnchor = ButtonAnchor(xSign, ySign),
         sortOrder = Round(sortOrder),
         sortComparator = sortComparator,
-        naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true,
+        naturalOrder = naturalOrder,
+        visibleOnlyScan = visibleOnlyScan == true,
+        cappedFilterScan = cappedFilterScan == true,
         reorderOnUpdate = sortOrder ~= 0,
         ownHighlight = ownHighlight == true,
         ownR = ownR,
@@ -801,7 +887,8 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         stackG = stackG,
         stackB = stackB,
         blacklist = black,
-        hasFilterWork = black ~= nil or onlyImportant or hasInclusive or hidePermanent or satedFilter,
+        hasFilterWork = hasFilterWork,
+        visualDirect = visualDirect == true,
         exclusiveImportant = exclusive == "important",
         onlyImportant = onlyImportant == true,
         onlyMine = onlyMine == true,
@@ -819,6 +906,12 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         visual = kind == "debuff" and visual or nil,
         showDispelTypeBorder = showDispelTypeBorder == true,
         dispelColorCurve = dispelVisual and dispelVisual.dispelColorCurve or nil,
+        dispelNoneReady = dispelVisual and dispelVisual.dispelNoneReady == true or false,
+        dispelNoneR = dispelVisual and dispelVisual.dispelNoneR or nil,
+        dispelNoneG = dispelVisual and dispelVisual.dispelNoneG or nil,
+        dispelNoneB = dispelVisual and dispelVisual.dispelNoneB or nil,
+        dispelNoneA = dispelVisual and dispelVisual.dispelNoneA or nil,
+        dispelNoneSecret = dispelVisual and dispelVisual.dispelNoneSecret == true or false,
     }
 end
 
@@ -832,7 +925,6 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
     local maxCount = ClampNumber(source[spec.maxKey], spec.defaultMax, 0, 80)
     local renderEnabled = renderAllowed ~= false and source[spec.showKey] == true and maxCount > 0
-    local enabled = renderEnabled or (forceScan == true and kind == "debuff")
     local growthX, growthY, xSign, ySign = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
     local x = ClampNumber(source[spec.xKey], 0, -4096, 4096)
     local y = ClampNumber(source[spec.yKey], 0, -4096, 4096)
@@ -844,7 +936,14 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local layer = ClampNumber(source[spec.layerKey], spec.defaultLayer, 1, 15)
     local alpha = ClampNumber(source[spec.alphaKey], 1, 0, 1)
     local filter = source[spec.filterKey] or spec.filter
-    local black = type(source[spec.blacklistKey]) == "table" and source[spec.blacklistKey] or nil
+    local black = CompileBlacklistHash(source[spec.blacklistKey])
+    local hasFilterWork = black ~= nil
+    local visualDirect = kind == "debuff"
+        and visual
+        and visual.directVisualEligible == true
+        and hasFilterWork ~= true
+    local enabled = renderEnabled or (forceScan == true and kind == "debuff" and visualDirect ~= true)
+    local cappedFilterScan = black ~= nil
     local showCooldown = source[spec.showCooldownKey] ~= false
     local showCooldownSwipe = showCooldown and source[spec.showSwipeKey] ~= false
     local stackR, stackG, stackB = ReadGeneralColor("aurasStackCountColor", 1, 1, 1)
@@ -864,7 +963,13 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local sortOrder = source.sortByDuration == true and 2 or 0
     local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and source.debuffShowDispelBorder == true
     local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
-    local needsPlayerFlag = source.preferPlayer == true or (kind == "debuff" and visual and visual.needsPlayerFlag == true)
+    local needsPlayerFlag = source.preferPlayer == true
+        or (kind == "debuff" and visual and visual.needsPlayerFlag == true and visualDirect ~= true)
+
+    local naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true
+    local visibleOnlyScan = renderEnabled == true
+        and naturalOrder == true
+        and not (kind == "debuff" and visual and visual.enabled == true and visualDirect ~= true)
 
     return {
         kind = kind,
@@ -901,7 +1006,9 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         initialAnchor = ButtonAnchor(xSign, ySign),
         sortOrder = sortOrder,
         sortComparator = sortOrder == 0 and SortAurasID or SortComparator(sortOrder),
-        naturalOrder = sortOrder == 0 and needsPlayerFlag ~= true,
+        naturalOrder = naturalOrder,
+        visibleOnlyScan = visibleOnlyScan == true,
+        cappedFilterScan = cappedFilterScan == true,
         reorderOnUpdate = sortOrder ~= 0,
         clickThrough = source.clickThrough == true,
         showTooltip = source.showTooltip ~= false,
@@ -935,7 +1042,8 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         stackG = stackG,
         stackB = stackB,
         blacklist = black,
-        hasFilterWork = black ~= nil,
+        hasFilterWork = hasFilterWork,
+        visualDirect = visualDirect == true,
         exclusiveImportant = false,
         onlyImportant = false,
         onlyMine = false,
@@ -949,6 +1057,12 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         visual = kind == "debuff" and visual or nil,
         showDispelTypeBorder = showDispelTypeBorder == true,
         dispelColorCurve = dispelVisual and dispelVisual.dispelColorCurve or nil,
+        dispelNoneReady = dispelVisual and dispelVisual.dispelNoneReady == true or false,
+        dispelNoneR = dispelVisual and dispelVisual.dispelNoneR or nil,
+        dispelNoneG = dispelVisual and dispelVisual.dispelNoneG or nil,
+        dispelNoneB = dispelVisual and dispelVisual.dispelNoneB or nil,
+        dispelNoneA = dispelVisual and dispelVisual.dispelNoneA or nil,
+        dispelNoneSecret = dispelVisual and dispelVisual.dispelNoneSecret == true or false,
     }
 end
 
@@ -957,13 +1071,14 @@ local function ResolveGroupFrameConfig(frame, unit)
     unit = unit or frame.unit
     local spec = frame.MSUFSpec
     local source = spec and spec.group and spec.group.auras
-    local visual = CompileFrameAuraVisual(spec)
+    local gen = A3._runtimeConfigGen or 1
     local cached = frame._msufA3GroupConfig
     if cached and frame._msufA3GroupSource == source and frame._msufA3GroupUnit == unit
-        and frame._msufA3GroupSpec == spec then
+        and frame._msufA3GroupSpec == spec and frame._msufA3GroupGen == gen then
         return cached
     end
 
+    local visual = CompileFrameAuraVisual(spec)
     local cfg = { unit = unit, enabled = false, lanes = {}, group = true, source = source, visual = visual }
     if type(source) == "table" and type(unit) == "string" and unit ~= "" then
         local sourceEnabled = source.enabled == true
@@ -975,12 +1090,14 @@ local function ResolveGroupFrameConfig(frame, unit)
         cfg.clickThrough = source.clickThrough == true
         cfg.lanes.buff = buff
         cfg.lanes.debuff = debuff
-        cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
+        cfg.visualDirect = debuff and debuff.visualDirect == true or nil
+        cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true) or cfg.visualDirect == true
     end
 
     frame._msufA3GroupSource = source
     frame._msufA3GroupUnit = unit
     frame._msufA3GroupSpec = spec
+    frame._msufA3GroupGen = gen
     frame._msufA3GroupConfig = cfg
     return cfg
 end
@@ -1011,7 +1128,8 @@ local function BuildUnitFrameConfig(unit, frameSpec)
         cfg.clickThrough = ReadBool(nil, shared, "clickThroughAuras", false)
         cfg.lanes.buff = buff
         cfg.lanes.debuff = debuff
-        cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true)
+        cfg.visualDirect = debuff and debuff.visualDirect == true or nil
+        cfg.enabled = (buff and buff.enabled == true) or (debuff and debuff.enabled == true) or cfg.visualDirect == true
     end
 
     return cfg
@@ -1021,7 +1139,14 @@ function A3.ResolveUnitFrameConfig(unit, frameSpec)
     unit = NormalizeRuntimeUnit(unit)
     if not unit then return nil end
     if frameSpec ~= nil then
-        return BuildUnitFrameConfig(unit, frameSpec)
+        local gen = A3._runtimeConfigGen or 1
+        local cached = frameSpecConfigCache[frameSpec]
+        if cached and cached.gen == gen and cached.unit == unit then
+            return cached.config
+        end
+        local cfg = BuildUnitFrameConfig(unit, frameSpec)
+        frameSpecConfigCache[frameSpec] = { gen = gen, unit = unit, config = cfg }
+        return cfg
     end
     A3._runtimeConfigCache = A3._runtimeConfigCache or {}
     local gen = A3._runtimeConfigGen or 1
@@ -1210,7 +1335,12 @@ local function ApplyButtonLayout(lane, button, index)
         end
     end
     if cfg.showDispelTypeBorder ~= true and button._msufA3DispelOverlay then
+        button._msufA3DispelOverlay._msufA3Shown = nil
         button._msufA3DispelOverlay:Hide()
+    end
+    if cfg.ownHighlight ~= true and button._msufA3OwnHighlight then
+        button._msufA3OwnHighlight._msufA3Shown = nil
+        button._msufA3OwnHighlight:Hide()
     end
     PositionButton(lane, button, index)
 end
@@ -1227,6 +1357,9 @@ local function CreateAuraButton(lane, index)
     if cooldown.SetDrawEdge then cooldown:SetDrawEdge(false) end
     if cooldown.SetReverse then cooldown:SetReverse(true) end
     button.Cooldown = cooldown
+    if GetAuraDuration and cooldown.SetCooldownFromDurationObject then
+        button._msufA3SetCooldownFromDurationObject = cooldown.SetCooldownFromDurationObject
+    end
 
     local textLayer = CreateFrame("Frame", nil, button)
     textLayer:SetAllPoints(button)
@@ -1257,6 +1390,22 @@ local function EnsureButton(lane, index)
     return lane[index] or CreateAuraButton(lane, index)
 end
 
+-- Pre-create the visible button pool for single unit frames while out of
+-- combat, so the first swap onto an aura-heavy target never pays a burst of
+-- CreateFrame calls mid-fight. Group frames keep the lazy path: their pools
+-- are per-member and prewarming would multiply login cost across the raid.
+local function PrewarmLaneButtons(lane, frame)
+    local cfg = lane.config
+    if not cfg then return end
+    if frame and frame._msufA3GroupRuntime == true then return end
+    local want = cfg.max or 0
+    if want <= (lane.createdButtons or 0) then return end
+    if InCombatLockdown and InCombatLockdown() then return end
+    for i = (lane.createdButtons or 0) + 1, want do
+        EnsureButton(lane, i)
+    end
+end
+
 local function ApplyLaneLayout(lane)
     local cfg = lane.config
     if not (lane.frame and cfg) then return end
@@ -1274,7 +1423,36 @@ local function ApplyLaneLayout(lane)
 end
 
 local HideButton
+local HideTrailingButtons
 local ClearFrameAuraVisualState
+local BuildButtonUpdater
+local UpdateButton
+
+local function ResetLaneVisualCache(lane)
+    if not lane then return end
+    local cfg = lane.config
+    local visual = cfg and cfg.visual
+    lane._msufA3VisualCacheReady = cfg
+        and cfg.enabled == true
+        and cfg.visualDirect ~= true
+        and visual
+        and visual.enabled == true or nil
+    lane._msufA3VisualAnyDebuff = nil
+    lane._msufA3VisualBorderActive = nil
+    lane._msufA3VisualBorderR = nil
+    lane._msufA3VisualBorderG = nil
+    lane._msufA3VisualBorderB = nil
+    lane._msufA3VisualBorderA = nil
+    lane._msufA3VisualBorderSecret = nil
+    lane._msufA3VisualBorderToken = nil
+    lane._msufA3VisualOverlayActive = nil
+    lane._msufA3VisualOverlayR = nil
+    lane._msufA3VisualOverlayG = nil
+    lane._msufA3VisualOverlayB = nil
+    lane._msufA3VisualOverlayA = nil
+    lane._msufA3VisualOverlaySecret = nil
+    lane._msufA3VisualOverlayToken = nil
+end
 
 local function ClearLane(lane)
     lane.all = WipeTable(lane.all)
@@ -1285,6 +1463,8 @@ local function ClearLane(lane)
     lane.orderedCount = 0
     lane.orderDirty = nil
     lane.visible = 0
+    lane._msufA3CappedFullScan = nil
+    ResetLaneVisualCache(lane)
     for i = 1, lane.createdButtons or 0 do
         local button = lane[i]
         if button then
@@ -1294,14 +1474,18 @@ local function ClearLane(lane)
     end
 end
 
-local function ResetLaneData(lane)
+local function ResetLaneData(lane, skipOrderScratch)
     lane.all = WipeTable(lane.all)
     lane.active = WipeTable(lane.active)
-    lane.sorted = WipeTable(lane.sorted)
-    lane.ordered = WipeTable(lane.ordered)
+    if skipOrderScratch ~= true then
+        lane.sorted = WipeTable(lane.sorted)
+        lane.ordered = WipeTable(lane.ordered)
+    end
     lane.visibleByID = WipeTable(lane.visibleByID)
     lane.orderedCount = 0
     lane.orderDirty = nil
+    lane._msufA3CappedFullScan = nil
+    ResetLaneVisualCache(lane)
 end
 
 local function EnsureLane(root, state, kind)
@@ -1350,6 +1534,26 @@ local function EnsureState(frame)
     return state
 end
 
+local function ApplyConfigLane(root, state, cfg, kind)
+    local lane = EnsureLane(root, state, kind)
+    lane.unit = cfg.unit
+    lane.config = cfg.lanes and cfg.lanes[kind]
+    if lane.config and lane.config.enabled then
+        lane.updateButton = BuildButtonUpdater and BuildButtonUpdater(lane.config) or UpdateButton
+        if lane.config.renderEnabled == true then
+            lane.frame:Show()
+            ApplyLaneLayout(lane)
+            PrewarmLaneButtons(lane, state.frame)
+        else
+            lane.frame:Hide()
+        end
+    else
+        lane.updateButton = nil
+        lane.frame:Hide()
+        ClearLane(lane)
+    end
+end
+
 local function ApplyConfig(frame, cfg)
     local state = EnsureState(frame)
     local root = state.root
@@ -1361,29 +1565,19 @@ local function ApplyConfig(frame, cfg)
     state.frameSpec = frame.MSUFSpec
     state.needFullUpdate = true
 
-    for kind in pairs(LANE_SPECS) do
-        local lane = EnsureLane(root, state, kind)
-        lane.unit = cfg.unit
-        lane.config = cfg.lanes and cfg.lanes[kind]
-        if lane.config and lane.config.enabled then
-            if lane.config.renderEnabled == true then
-                lane.frame:Show()
-                ApplyLaneLayout(lane)
-            else
-                lane.frame:Hide()
-            end
-        else
-            lane.frame:Hide()
-            ClearLane(lane)
-        end
-    end
+    ApplyConfigLane(root, state, cfg, "buff")
+    ApplyConfigLane(root, state, cfg, "debuff")
     return state
 end
 
 local function HideState(frame)
     local state = frame and frame._msufA3State
     if not state then return end
-    for _, lane in pairs(state.lanes) do ClearLane(lane) end
+    local lanes = state.lanes
+    local lane = lanes and lanes.buff
+    if lane then ClearLane(lane) end
+    lane = lanes and lanes.debuff
+    if lane then ClearLane(lane) end
     if state.root then state.root:Hide() end
     ClearFrameAuraVisualState(frame)
 end
@@ -1401,11 +1595,17 @@ local function ProcessData(lane, unit, data)
     if auraInstanceID == nil then return nil end
     local cfg = lane.config
     if cfg.needsPlayerFlag == true then
-        data.isPlayerAura = not Filtered(unit, auraInstanceID, cfg.playerFilter)
-    else
-        data.isPlayerAura = false
+        -- AuraData already carries the player-source flag; the per-aura
+        -- IsAuraFilteredOutByInstanceID C call is only the fallback for
+        -- secret/absent fields. On uncapped full scans this removes one C
+        -- call per aura.
+        local fromPlayer = data.isFromPlayerOrPlayerPet
+        if fromPlayer == nil or IsSecret(fromPlayer) then
+            data.isPlayerAura = not Filtered(unit, auraInstanceID, cfg.playerFilter)
+        else
+            data.isPlayerAura = fromPlayer == true
+        end
     end
-    data.isHarmfulAura = cfg.harmful == true
     return data
 end
 
@@ -1414,6 +1614,9 @@ local function Blacklisted(cfg, data)
     if not blacklist then return false end
     local spellID = data and data.spellId
     if spellID == nil or IsSecret(spellID) then return false end
+    if type(spellID) == "number" then
+        return blacklist[spellID] == true
+    end
     spellID = tonumber(spellID)
     return spellID and blacklist[math_floor(spellID + 0.5)] == true or false
 end
@@ -1422,8 +1625,8 @@ local function MatchFilter(unit, auraInstanceID, filter)
     return not Filtered(unit, auraInstanceID, filter)
 end
 
-local function AuraDispelColor(cfg, unit, data)
-    if not (cfg and unit and data and data.auraInstanceID and GetAuraDispelTypeColor and cfg.dispelColorCurve) then
+local function AuraDispelColorByCurve(curve, unit, data)
+    if not (curve and unit and data and data.auraInstanceID and GetAuraDispelTypeColor) then
         return false
     end
     if data._msufA3DispelKnown == true then
@@ -1440,7 +1643,7 @@ local function AuraDispelColor(cfg, unit, data)
         end
         return false
     end
-    local color = GetAuraDispelTypeColor(unit, data.auraInstanceID, cfg.dispelColorCurve)
+    local color = GetAuraDispelTypeColor(unit, data.auraInstanceID, curve)
     local r, g, b, a = ColorObjectRGBA(color)
     data._msufA3DispelKnown = true
     if r then
@@ -1460,6 +1663,25 @@ local function AuraDispelColor(cfg, unit, data)
     data._msufA3DispelSecretColor = nil
     data._msufA3DispelColorObject = nil
     data._msufA3DispelR, data._msufA3DispelG, data._msufA3DispelB, data._msufA3DispelA = nil, nil, nil, nil
+    return false
+end
+
+local function AuraDispelColor(cfg, unit, data)
+    return AuraDispelColorByCurve(cfg and cfg.dispelColorCurve, unit, data)
+end
+
+local function AuraDispelNoneColor(cfg)
+    if cfg and cfg.dispelNoneReady == true then
+        if cfg.dispelNoneSecret == true then
+            return true, cfg.dispelNoneR, cfg.dispelNoneG, cfg.dispelNoneB, cfg.dispelNoneA, true
+        end
+        return true, cfg.dispelNoneR, cfg.dispelNoneG, cfg.dispelNoneB, cfg.dispelNoneA or 1, false
+    end
+    local curve = cfg and cfg.dispelColorCurve
+    if not (curve and curve.Evaluate) then return false end
+    local color = curve:Evaluate(0)
+    local r, g, b, a = ColorObjectRGBA(color)
+    if r then return true, r, g, b, a or 1, HasSecretColor(r, g, b, a) end
     return false
 end
 
@@ -1483,6 +1705,82 @@ local function DispelVisualColor(lane, visual, unit, data)
     return visual and visual.r or 0.25, visual and visual.g or 0.75, visual and visual.b or 1, visual and visual.a or 1, false
 end
 
+local function DirectDispelVisualColor(visual, unit, data)
+    if visual and visual.colorMode == "TYPE" then
+        local hasColor, r, g, b, a, secret = AuraDispelColorByCurve(visual.dispelColorCurve, unit, data)
+        if hasColor then return r, g, b, a, secret == true end
+    end
+    return visual and visual.r or 0.25, visual and visual.g or 0.75, visual and visual.b or 1, visual and visual.a or 1, false
+end
+
+local function ResolveDirectDispelTriggerVisual(unit, visual, trigger)
+    local filter = DirectVisualFilterForTrigger(trigger)
+    if not (filter and GetAuraDataByIndex and IsUnitToken(unit)) then
+        return false
+    end
+    local data = GetAuraDataByIndex(unit, 1, filter)
+    if not (data and data.auraInstanceID) then
+        return false
+    end
+    if trigger == "DISPEL_TYPE" and not AuraDispelColorByCurve(visual and visual.dispelColorCurve, unit, data) then
+        return false
+    end
+    local token = data.auraInstanceID
+    if IsSecret(token) then token = nil end
+    local r, g, b, a, secret = DirectDispelVisualColor(visual, unit, data)
+    return true, r, g, b, a, secret == true, token
+end
+
+local function ConsiderLaneAuraVisual(lane, unit, data)
+    if not (lane and lane._msufA3VisualCacheReady == true and data) then return end
+    local visual = lane.config and lane.config.visual
+    if not (visual and visual.enabled == true) then return end
+    if lane._msufA3VisualAnyDebuff == true
+        and (visual.borderEnabled ~= true or lane._msufA3VisualBorderActive == true)
+        and (visual.overlayEnabled ~= true or lane._msufA3VisualOverlayActive == true) then
+        return
+    end
+    lane._msufA3VisualAnyDebuff = true
+
+    local borderMatched = false
+    if visual.borderEnabled == true and lane._msufA3VisualBorderActive ~= true then
+        borderMatched = MatchDispelTrigger(lane, unit, data, visual.borderTrigger)
+        if borderMatched then
+            local token = data.auraInstanceID
+            if IsSecret(token) then token = nil end
+            local r, g, b, a, secret = DispelVisualColor(lane, visual, unit, data)
+            lane._msufA3VisualBorderActive = true
+            lane._msufA3VisualBorderR, lane._msufA3VisualBorderG = r, g
+            lane._msufA3VisualBorderB, lane._msufA3VisualBorderA = b, a
+            lane._msufA3VisualBorderSecret = secret == true
+            lane._msufA3VisualBorderToken = token
+        end
+    end
+
+    if visual.overlayEnabled == true and lane._msufA3VisualOverlayActive ~= true then
+        if visual.overlayTrigger == visual.borderTrigger then
+            if lane._msufA3VisualBorderActive == true then
+                lane._msufA3VisualOverlayActive = true
+                lane._msufA3VisualOverlayR = lane._msufA3VisualBorderR
+                lane._msufA3VisualOverlayG = lane._msufA3VisualBorderG
+                lane._msufA3VisualOverlayB = lane._msufA3VisualBorderB
+                lane._msufA3VisualOverlayA = lane._msufA3VisualBorderA
+                lane._msufA3VisualOverlaySecret = lane._msufA3VisualBorderSecret
+                lane._msufA3VisualOverlayToken = lane._msufA3VisualBorderToken
+            end
+        elseif MatchDispelTrigger(lane, unit, data, visual.overlayTrigger) then
+            local token = data.auraInstanceID
+            if IsSecret(token) then token = nil end
+            local r, g, b, a, secret = DispelVisualColor(lane, visual, unit, data)
+            lane._msufA3VisualOverlayActive = true
+            lane._msufA3VisualOverlayR, lane._msufA3VisualOverlayG = r, g
+            lane._msufA3VisualOverlayB, lane._msufA3VisualOverlayA = b, a
+            lane._msufA3VisualOverlaySecret = secret == true
+            lane._msufA3VisualOverlayToken = token
+        end
+    end
+end
+
 local function TimedAura(data)
     local duration = PlainNumber(data and data.duration)
     local expirationTime = PlainNumber(data and data.expirationTime)
@@ -1498,7 +1796,12 @@ local function RemainingTime(data)
 end
 
 local function SatedAura(data)
-    local spellID = PlainNumber(data and data.spellId)
+    local spellID = data and data.spellId
+    if spellID == nil or IsSecret(spellID) then return false end
+    if type(spellID) == "number" then
+        return SATED_SPELLS[spellID] == true
+    end
+    spellID = tonumber(spellID)
     return spellID and SATED_SPELLS[math_floor(spellID + 0.5)] == true or false
 end
 
@@ -1609,7 +1912,7 @@ SortComparator = function(mode)
 end
 
 local function DataMatchesLane(data, cfg)
-    if nativeSecrets ~= true and type(data) == "table" then
+    if type(data) == "table" then
         local harmful = data.isHarmful
         if harmful ~= nil and not IsSecret(harmful) then
             return (harmful == true) == (cfg.harmful == true)
@@ -1625,7 +1928,7 @@ end
 
 local function AddAuraToLane(lane, unit, data)
     data = ProcessData(lane, unit, data)
-    if not data then return false end
+    if not data then return false, nil end
     local auraInstanceID = data.auraInstanceID
     local isNew = lane.all[auraInstanceID] == nil
     lane.all[auraInstanceID] = data
@@ -1636,43 +1939,159 @@ local function AddAuraToLane(lane, unit, data)
     end
     if lane.config.hasFilterWork ~= true then
         lane.active[auraInstanceID] = true
-        return true
+        if lane._msufA3VisualCacheReady == true then
+            ConsiderLaneAuraVisual(lane, unit, data)
+        end
+        return true, data
     end
     if ShouldShowAura(lane, unit, data) then
         lane.active[auraInstanceID] = true
-        return true
+        if lane._msufA3VisualCacheReady == true then
+            ConsiderLaneAuraVisual(lane, unit, data)
+        end
+        return true, data
     end
     lane.active[auraInstanceID] = nil
     lane.orderDirty = true
-    return false
+    return false, data
 end
 
-local function FullScanLane(lane, unit)
+local function AddVisibleAuraToCappedLane(lane, unit, data)
+    data = ProcessData(lane, unit, data)
+    if not data then return false, nil end
+    if lane.config.hasFilterWork == true and ShouldShowAura(lane, unit, data) ~= true then
+        return false, data
+    end
+    local auraInstanceID = data.auraInstanceID
+    lane.all[auraInstanceID] = data
+    lane.active[auraInstanceID] = true
+    if lane._msufA3VisualCacheReady == true then
+        ConsiderLaneAuraVisual(lane, unit, data)
+    end
+    return true, data
+end
+
+local AURA_UTIL_SCAN = {}
+
+local function AuraUtilScanCallback(data)
+    local scan = AURA_UTIL_SCAN
+    local lane = scan.lane
+    local unit = scan.unit
+    local active, processed = scan.addAura(lane, unit, data)
+    if scan.inlineRender == true
+        and active == true
+        and processed
+        and scan.visible < scan.maxVisible then
+        local visible = scan.visible + 1
+        scan.visible = visible
+        local button = EnsureButton(lane, visible)
+        scan.updateButton(lane, button, unit, processed)
+        scan.visibleByID[processed.auraInstanceID] = visible
+        if scan.capped == true and visible >= scan.maxVisible then return true end
+    end
+end
+
+local function FullScanLane(lane, unit, renderInline)
     local cfg = lane.config
-    ResetLaneData(lane)
     if not (cfg and cfg.enabled) then return false end
 
+    local inlineRender = renderInline == true
+        and cfg.naturalOrder == true
+        and cfg.renderEnabled == true
+        and cfg.max > 0
+    local cappedScan = inlineRender
+        and cfg.visibleOnlyScan == true
+        and (cfg.hasFilterWork ~= true or cfg.cappedFilterScan == true)
+    local visibleByID = inlineRender and lane.visibleByID or nil
+    local updateButton = inlineRender and (lane.updateButton or UpdateButton) or nil
+    local visible = 0
+    local maxVisible = cfg.max or 0
+    local slotLimit = cappedScan and maxVisible or nil
+    local addAura = cappedScan and AddVisibleAuraToCappedLane or AddAuraToLane
+    ResetLaneData(lane, cappedScan)
+    lane._msufA3CappedFullScan = cappedScan or nil
+
     if GetAuraSlots and GetAuraDataBySlot then
-        local slots, count = FillAuraSlots(lane.slotScratch, GetAuraSlots(unit, cfg.filter))
-        lane.slotScratch = slots
-        for i = 2, count do
-            local data = GetAuraDataBySlot(unit, slots[i])
-            AddAuraToLane(lane, unit, data)
+        if not cappedScan then
+            local slots, count
+            slots, count = FillAuraSlots(lane.slotScratch, GetAuraSlots(unit, cfg.filter))
+            lane.slotScratch = slots
+            if inlineRender then
+                for i = 2, count do
+                    local active, processed = addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]))
+                    if active == true and processed and visible < maxVisible then
+                        visible = visible + 1
+                        local button = EnsureButton(lane, visible)
+                        updateButton(lane, button, unit, processed)
+                        visibleByID[processed.auraInstanceID] = visible
+                    end
+                end
+            else
+                for i = 2, count do
+                    addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]))
+                end
+            end
+        else
+            local continuation
+            while true do
+                local slots, count
+                if continuation ~= nil then
+                    slots, count = FillAuraSlots(lane.slotScratch, GetAuraSlots(unit, cfg.filter, slotLimit, continuation))
+                else
+                    slots, count = FillAuraSlots(lane.slotScratch, GetAuraSlots(unit, cfg.filter, slotLimit))
+                end
+                lane.slotScratch = slots
+                continuation = slots[1]
+                for i = 2, count do
+                    local active, processed = addAura(lane, unit, GetAuraDataBySlot(unit, slots[i]))
+                    if active == true and processed and visible < maxVisible then
+                        visible = visible + 1
+                        local button = EnsureButton(lane, visible)
+                        updateButton(lane, button, unit, processed)
+                        visibleByID[processed.auraInstanceID] = visible
+                        if visible >= maxVisible then break end
+                    end
+                end
+                if visible >= maxVisible or IsSecret(continuation) or continuation == nil then
+                    break
+                end
+            end
         end
-        return true
+        if inlineRender then HideTrailingButtons(lane, visibleByID, visible) end
+        return true, inlineRender
     end
 
-    if AuraUtil and type(AuraUtil.ForEachAura) == "function" then
-        AuraUtil.ForEachAura(unit, cfg.filter, nil, function(data)
-            AddAuraToLane(lane, unit, data)
-        end, true)
-        return true
+    local forEachAura = AuraUtil and AuraUtil.ForEachAura
+    if type(forEachAura) == "function" then
+        local auraUtilLimit = cappedScan and cfg.hasFilterWork ~= true and maxVisible or nil
+        local scan = AURA_UTIL_SCAN
+        scan.lane = lane
+        scan.unit = unit
+        scan.addAura = addAura
+        scan.inlineRender = inlineRender
+        scan.visibleByID = visibleByID
+        scan.updateButton = updateButton
+        scan.maxVisible = maxVisible
+        scan.visible = visible
+        scan.capped = cappedScan
+        forEachAura(unit, cfg.filter, auraUtilLimit, AuraUtilScanCallback, true)
+        visible = scan.visible or visible
+        scan.lane = nil
+        scan.unit = nil
+        scan.addAura = nil
+        scan.inlineRender = nil
+        scan.visibleByID = nil
+        scan.updateButton = nil
+        scan.maxVisible = nil
+        scan.visible = nil
+        scan.capped = nil
+        if inlineRender then HideTrailingButtons(lane, visibleByID, visible) end
+        return true, inlineRender
     end
 
-    return true
+    if inlineRender then HideTrailingButtons(lane, visibleByID, visible) end
+    return true, inlineRender
 end
-
-local UpdateButton
 
 local function ShowButton(button)
     if button._msufA3Shown ~= true then
@@ -1732,17 +2151,40 @@ local function UpdateDispelTypeOverlay(button, lane, unit, data)
     local cfg = lane and lane.config
     if not (cfg and cfg.showDispelTypeBorder == true) then
         local tex = button and button._msufA3DispelOverlay
-        if tex then tex:Hide() end
+        if tex and tex._msufA3Shown ~= nil then
+            tex._msufA3Shown = nil
+            tex:Hide()
+        end
         return
     end
-    local hasColor, r, g, b, a = AuraDispelColor(cfg, unit, data)
+    local hasColor, r, g, b, a, secret = AuraDispelColor(cfg, unit, data)
+    if not hasColor then
+        hasColor, r, g, b, a, secret = AuraDispelNoneColor(cfg)
+    end
     local tex = button._msufA3DispelOverlay
     if hasColor then
         tex = tex or EnsureDispelTypeOverlay(button)
-        tex:SetVertexColor(r or 1, g or 1, b or 1, a or 1)
-        tex:Show()
+        r, g, b, a = r or 1, g or 1, b or 1, a or 1
+        if secret == true or tex._msufA3ColorPlain ~= true
+            or tex._msufA3R ~= r or tex._msufA3G ~= g
+            or tex._msufA3B ~= b or tex._msufA3A ~= a then
+            tex:SetVertexColor(r, g, b, a)
+            if secret == true then
+                tex._msufA3ColorPlain = nil
+            else
+                tex._msufA3ColorPlain = true
+                tex._msufA3R, tex._msufA3G, tex._msufA3B, tex._msufA3A = r, g, b, a
+            end
+        end
+        if tex._msufA3Shown ~= true then
+            tex._msufA3Shown = true
+            tex:Show()
+        end
     elseif tex then
-        tex:Hide()
+        if tex._msufA3Shown ~= nil then
+            tex._msufA3Shown = nil
+            tex:Hide()
+        end
     end
 end
 
@@ -1751,10 +2193,23 @@ local function UpdateOwnHighlight(button, cfg, data)
     local tex = button._msufA3OwnHighlight
     if active then
         tex = EnsureOwnHighlight(button)
-        tex:SetVertexColor(cfg.ownR or 1, cfg.ownG or 1, cfg.ownB or 1, 0.24)
-        tex:Show()
+        local r, g, b, a = cfg.ownR or 1, cfg.ownG or 1, cfg.ownB or 1, 0.24
+        if tex._msufA3ColorPlain ~= true
+            or tex._msufA3R ~= r or tex._msufA3G ~= g
+            or tex._msufA3B ~= b or tex._msufA3A ~= a then
+            tex:SetVertexColor(r, g, b, a)
+            tex._msufA3ColorPlain = true
+            tex._msufA3R, tex._msufA3G, tex._msufA3B, tex._msufA3A = r, g, b, a
+        end
+        if tex._msufA3Shown ~= true then
+            tex._msufA3Shown = true
+            tex:Show()
+        end
     elseif tex then
-        tex:Hide()
+        if tex._msufA3Shown ~= nil then
+            tex._msufA3Shown = nil
+            tex:Hide()
+        end
     end
 end
 
@@ -1812,29 +2267,48 @@ ResetCooldownTextColor = function(cooldown)
         cooldown:SetTextColor(1, 1, 1, 1)
     end
     cooldown._msufA3ColorApplied = nil
+    cooldown._msufA3TextColorPlain = nil
+    cooldown._msufA3TextR, cooldown._msufA3TextG, cooldown._msufA3TextB = nil, nil, nil
 end
 
 local function ApplyCooldownTextColor(cooldown, cfg, data)
     if not (cooldown and cfg and cfg.showCooldownText ~= false and cfg.cooldownTextBuckets == true) then return end
     local r, g, b = CooldownTextRGB(cfg, data)
+    if cooldown._msufA3TextColorPlain == true
+        and cooldown._msufA3TextR == r
+        and cooldown._msufA3TextG == g
+        and cooldown._msufA3TextB == b then
+        return
+    end
     if cooldown.SetCooldownTextColor then
         cooldown:SetCooldownTextColor(r, g, b, 1)
         cooldown._msufA3ColorApplied = true
+        cooldown._msufA3TextColorPlain = true
+        cooldown._msufA3TextR, cooldown._msufA3TextG, cooldown._msufA3TextB = r, g, b
         return
     end
     if cooldown.SetTextColor then
         cooldown:SetTextColor(r, g, b, 1)
         cooldown._msufA3ColorApplied = true
+        cooldown._msufA3TextColorPlain = true
+        cooldown._msufA3TextR, cooldown._msufA3TextG, cooldown._msufA3TextB = r, g, b
         return
     end
     local region = CooldownTextRegion(cooldown)
-    if region then MarkCooldownTextColor(cooldown, region, r, g, b) end
+    if region then
+        MarkCooldownTextColor(cooldown, region, r, g, b)
+        cooldown._msufA3TextColorPlain = true
+        cooldown._msufA3TextR, cooldown._msufA3TextG, cooldown._msufA3TextB = r, g, b
+    end
 end
 
 local function UpdateLaneFromDelta(lane, unit, updateInfo)
     local cfg = lane.config
     if not (cfg and cfg.enabled) then return false end
     local needsRender = false
+    local visualEnabled = cfg.visual and cfg.visual.enabled == true and cfg.visualDirect ~= true
+    local visualDirty = false
+    local updateButton = lane.updateButton or UpdateButton
 
     local added = updateInfo and updateInfo.addedAuras
     if added then
@@ -1859,8 +2333,15 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                 if data then
                     lane.all[auraInstanceID] = data
                     local nowActive = cfg.hasFilterWork ~= true or ShouldShowAura(lane, unit, data)
+                    if visualEnabled and wasActive then
+                        lane._msufA3VisualCacheReady = nil
+                        visualDirty = true
+                    end
                     if nowActive then
                         lane.active[auraInstanceID] = true
+                        if visualEnabled and not wasActive then
+                            ConsiderLaneAuraVisual(lane, unit, data)
+                        end
                         if wasActive then
                             if cfg.reorderOnUpdate == true or oldPlayer ~= data.isPlayerAura then
                                 needsRender = true
@@ -1868,7 +2349,7 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                                 local index = lane.visibleByID and lane.visibleByID[auraInstanceID]
                                 local button = index and lane[index]
                                 if button then
-                                    UpdateButton(lane, button, unit, data)
+                                    updateButton(lane, button, unit, data)
                                 end
                             end
                         else
@@ -1883,6 +2364,10 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                     lane.all[auraInstanceID] = nil
                     lane.orderDirty = true
                     if wasActive then
+                        if visualEnabled then
+                            lane._msufA3VisualCacheReady = nil
+                            visualDirty = true
+                        end
                         lane.active[auraInstanceID] = nil
                         needsRender = true
                     end
@@ -1899,6 +2384,10 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
                 lane.all[auraInstanceID] = nil
                 lane.orderDirty = true
                 if lane.active[auraInstanceID] then
+                    if visualEnabled then
+                        lane._msufA3VisualCacheReady = nil
+                        visualDirty = true
+                    end
                     lane.active[auraInstanceID] = nil
                     needsRender = true
                 end
@@ -1906,20 +2395,90 @@ local function UpdateLaneFromDelta(lane, unit, updateInfo)
         end
     end
 
-    return needsRender
+    return needsRender, visualDirty
+end
+
+local function UpdateCappedLaneFromDelta(lane, unit, updateInfo)
+    local cfg = lane.config
+    if not (cfg and cfg.enabled) then return false, false end
+
+    local added = updateInfo and updateInfo.addedAuras
+    if added then
+        for i = 1, #added do
+            local data = added[i]
+            if data and data.auraInstanceID ~= nil and DataMatchesLane(data, cfg) then
+                if cfg.hasFilterWork ~= true or ShouldShowAura(lane, unit, data) == true then
+                    return true, true
+                end
+            end
+        end
+    end
+
+    local needsFullScan = false
+    local changed = false
+    local removed = updateInfo and updateInfo.removedAuraInstanceIDs
+    if removed then
+        for i = 1, #removed do
+            local auraInstanceID = removed[i]
+            if auraInstanceID ~= nil and lane.all[auraInstanceID] then
+                if lane.active[auraInstanceID] == true then
+                    needsFullScan = true
+                end
+                lane.all[auraInstanceID] = nil
+                lane.active[auraInstanceID] = nil
+                lane.orderDirty = true
+            end
+        end
+        if needsFullScan then return true, true end
+    end
+
+    local updated = updateInfo and updateInfo.updatedAuraInstanceIDs
+    if updated and GetAuraDataByAuraInstanceID then
+        local visibleByID = lane.visibleByID
+        local updateButton = lane.updateButton or UpdateButton
+        for i = 1, #updated do
+            local auraInstanceID = updated[i]
+            if auraInstanceID ~= nil and lane.all[auraInstanceID] then
+                local data = ProcessData(lane, unit, GetAuraDataByAuraInstanceID(unit, auraInstanceID))
+                local wasActive = lane.active[auraInstanceID] == true
+                if data then
+                    lane.all[auraInstanceID] = data
+                    local nowActive = cfg.hasFilterWork ~= true or ShouldShowAura(lane, unit, data)
+                    if nowActive then
+                        lane.active[auraInstanceID] = true
+                        local index = visibleByID and visibleByID[auraInstanceID]
+                        local button = index and lane[index]
+                        if wasActive and button then
+                            updateButton(lane, button, unit, data)
+                            changed = true
+                        else
+                            return true, true
+                        end
+                    else
+                        lane.active[auraInstanceID] = nil
+                        lane.orderDirty = true
+                        if wasActive then return true, true end
+                    end
+                else
+                    lane.all[auraInstanceID] = nil
+                    lane.active[auraInstanceID] = nil
+                    lane.orderDirty = true
+                    if wasActive then return true, true end
+                end
+            end
+        end
+    end
+
+    return changed, false
 end
 
 local function SetIcon(button, icon)
     local tex = button.Icon
     if not tex then return end
-    if nativeSecrets == true then
-        tex:SetTexture(icon)
-        return
-    end
     if IsSecret(icon) then
         tex:SetTexture(icon)
-        button._msufA3Icon = nil
         button._msufA3IconPlain = nil
+        button._msufA3Icon = nil
         return
     end
     if button._msufA3IconPlain == true and button._msufA3Icon == icon then
@@ -1933,10 +2492,6 @@ end
 local function SetCount(button, text)
     local count = button.Count
     if not count then return end
-    if nativeSecrets == true then
-        count:SetText(text or "")
-        return
-    end
     if IsSecret(text) then
         count:SetText(text)
         button._msufA3Count = nil
@@ -1952,45 +2507,72 @@ local function SetCount(button, text)
     button._msufA3CountPlain = true
 end
 
+local UpdateButtonStacks
+if GetAuraApplicationDisplayCount then
+    UpdateButtonStacks = function(button, unit, data)
+        local applications = data.applications
+        if not IsSecret(applications) and type(applications) == "number" then
+            SetCount(button, applications > 1 and applications or "")
+            return
+        end
+        SetCount(button, GetAuraApplicationDisplayCount(unit, data.auraInstanceID, 2, 999))
+    end
+else
+    UpdateButtonStacks = function(button, unit, data)
+        local applications = data.applications
+        if not IsSecret(applications) and type(applications) == "number" then
+            SetCount(button, applications > 1 and applications or "")
+        else
+            SetCount(button, "")
+        end
+    end
+end
+
 local function UpdateCooldown(button, cooldown, unit, data)
-    if nativeSecrets ~= true then
-        local duration = data.duration
-        local expirationTime = data.expirationTime
-        if not IsSecret(duration) and not IsSecret(expirationTime)
-            and type(duration) == "number" and type(expirationTime) == "number"
-            and duration > 0 and expirationTime > 0 then
-            local start = expirationTime - duration
-            if button._msufA3CooldownPlain ~= true
-                or button._msufA3CooldownStart ~= start
-                or button._msufA3CooldownDuration ~= duration then
-                cooldown:SetCooldown(start, duration)
-                button._msufA3CooldownStart = start
-                button._msufA3CooldownDuration = duration
-                button._msufA3CooldownPlain = true
+    local setFromDurationObject = button._msufA3SetCooldownFromDurationObject
+    if setFromDurationObject then
+        local durationObject = GetAuraDuration(unit, data.auraInstanceID)
+        if durationObject then
+            if button._msufA3CooldownPlain ~= nil then
+                button._msufA3CooldownStart = nil
+                button._msufA3CooldownDuration = nil
+                button._msufA3CooldownPlain = nil
             end
+            setFromDurationObject(cooldown, durationObject)
             ShowCooldown(button, cooldown)
             return
         end
     end
 
-    local durationObject = GetAuraDuration and GetAuraDuration(unit, data.auraInstanceID)
-    button._msufA3CooldownStart = nil
-    button._msufA3CooldownDuration = nil
-    button._msufA3CooldownPlain = nil
-    if durationObject then
-        if cooldown.SetCooldownFromDurationObject then
-            cooldown:SetCooldownFromDurationObject(durationObject)
+    local duration = data.duration
+    local expirationTime = data.expirationTime
+    if not IsSecret(duration) and not IsSecret(expirationTime)
+        and type(duration) == "number" and type(expirationTime) == "number"
+        and duration > 0 and expirationTime > 0 then
+        local start = expirationTime - duration
+        if button._msufA3CooldownPlain ~= true
+            or button._msufA3CooldownStart ~= start
+            or button._msufA3CooldownDuration ~= duration then
+            cooldown:SetCooldown(start, duration)
+            button._msufA3CooldownStart = start
+            button._msufA3CooldownDuration = duration
+            button._msufA3CooldownPlain = true
         end
         ShowCooldown(button, cooldown)
-    else
-        HideCooldown(button, cooldown)
+        return
     end
+
+    if button._msufA3CooldownPlain ~= nil then
+        button._msufA3CooldownStart = nil
+        button._msufA3CooldownDuration = nil
+        button._msufA3CooldownPlain = nil
+    end
+    HideCooldown(button, cooldown)
 end
 
 UpdateButton = function(lane, button, unit, data)
     local cfg = lane.config
     button.auraInstanceID = data.auraInstanceID
-    button.isHarmfulAura = cfg.harmful == true
     SetIcon(button, data.icon)
     local cooldown = button.Cooldown
     if cooldown and cfg.showCooldown == true then
@@ -2002,14 +2584,7 @@ UpdateButton = function(lane, button, unit, data)
         HideCooldown(button, cooldown)
     end
     if cfg.showStacks ~= false then
-        local applications = data.applications
-        if nativeSecrets ~= true and not IsSecret(applications) and type(applications) == "number" then
-            SetCount(button, applications > 1 and applications or "")
-        elseif GetAuraApplicationDisplayCount then
-            SetCount(button, GetAuraApplicationDisplayCount(unit, data.auraInstanceID, 2, 999))
-        else
-            SetCount(button, "")
-        end
+        UpdateButtonStacks(button, unit, data)
     end
     if cfg.ownHighlight == true or button._msufA3OwnHighlight then
         UpdateOwnHighlight(button, cfg, data)
@@ -2020,8 +2595,95 @@ UpdateButton = function(lane, button, unit, data)
     ShowButton(button)
 end
 
-local function HideTrailingButtons(lane, visibleByID, visible)
-    for i = visible + 1, lane.visible do
+local function UpdateButtonHeader(lane, button, data)
+    button.auraInstanceID = data.auraInstanceID
+    SetIcon(button, data.icon)
+end
+
+local function UpdateButtonCooldownOnly(lane, button, unit, data)
+    UpdateButtonHeader(lane, button, data)
+    UpdateCooldown(button, button.Cooldown, unit, data)
+    ShowButton(button)
+end
+
+local function UpdateButtonCooldownStacks(lane, button, unit, data)
+    UpdateButtonHeader(lane, button, data)
+    UpdateCooldown(button, button.Cooldown, unit, data)
+    UpdateButtonStacks(button, unit, data)
+    ShowButton(button)
+end
+
+local function UpdateButtonCooldownBuckets(lane, button, unit, data)
+    UpdateButtonHeader(lane, button, data)
+    local cooldown = button.Cooldown
+    UpdateCooldown(button, cooldown, unit, data)
+    ApplyCooldownTextColor(cooldown, lane.config, data)
+    ShowButton(button)
+end
+
+local function UpdateButtonCooldownBucketsStacks(lane, button, unit, data)
+    UpdateButtonHeader(lane, button, data)
+    local cooldown = button.Cooldown
+    UpdateCooldown(button, cooldown, unit, data)
+    ApplyCooldownTextColor(cooldown, lane.config, data)
+    UpdateButtonStacks(button, unit, data)
+    ShowButton(button)
+end
+
+local function UpdateButtonStacksOnly(lane, button, unit, data)
+    UpdateButtonHeader(lane, button, data)
+    UpdateButtonStacks(button, unit, data)
+    ShowButton(button)
+end
+
+local function UpdateButtonBasic(lane, button, unit, data)
+    UpdateButtonHeader(lane, button, data)
+    ShowButton(button)
+end
+
+BuildButtonUpdater = function(cfg)
+    if not cfg then return UpdateButton end
+
+    local core
+    if cfg.showCooldown == true then
+        if cfg.cooldownTextBuckets == true and cfg.showCooldownText ~= false then
+            core = cfg.showStacks ~= false and UpdateButtonCooldownBucketsStacks or UpdateButtonCooldownBuckets
+        else
+            core = cfg.showStacks ~= false and UpdateButtonCooldownStacks or UpdateButtonCooldownOnly
+        end
+    else
+        core = cfg.showStacks ~= false and UpdateButtonStacksOnly or UpdateButtonBasic
+    end
+
+    local own = cfg.ownHighlight == true
+    local dispel = cfg.showDispelTypeBorder == true
+    if own and dispel then
+        return function(lane, button, unit, data)
+            core(lane, button, unit, data)
+            UpdateOwnHighlight(button, lane.config, data)
+            UpdateDispelTypeOverlay(button, lane, unit, data)
+        end
+    elseif own then
+        return function(lane, button, unit, data)
+            core(lane, button, unit, data)
+            UpdateOwnHighlight(button, lane.config, data)
+        end
+    elseif dispel then
+        return function(lane, button, unit, data)
+            core(lane, button, unit, data)
+            UpdateDispelTypeOverlay(button, lane, unit, data)
+        end
+    end
+    return core
+end
+
+HideTrailingButtons = function(lane, visibleByID, visible)
+    local oldVisible = lane.visible or 0
+    if visible >= oldVisible then
+        lane.visible = visible
+        return
+    end
+    for i = visible + 1, oldVisible do
         local button = lane[i]
         if button then
             if button.auraInstanceID ~= nil then
@@ -2058,6 +2720,7 @@ local function RenderLaneNatural(lane, unit, cfg)
     local ordered = lane.ordered
     local all = lane.all
     local active = lane.active
+    local updateButton = lane.updateButton or UpdateButton
     local visible = 0
     local maxVisible = cfg.max
     for i = 1, lane.orderedCount or 0 do
@@ -2067,7 +2730,7 @@ local function RenderLaneNatural(lane, unit, cfg)
             if data then
                 visible = visible + 1
                 local button = EnsureButton(lane, visible)
-                UpdateButton(lane, button, unit, data)
+                updateButton(lane, button, unit, data)
                 visibleByID[auraInstanceID] = visible
                 if visible >= maxVisible then break end
             end
@@ -2116,10 +2779,11 @@ local function RenderLane(lane, unit)
 
     local visible = math_min(cfg.max, count)
     local visibleByID = WipeTable(lane.visibleByID)
+    local updateButton = lane.updateButton or UpdateButton
     for i = 1, visible do
         local button = EnsureButton(lane, i)
         local data = sorted[i]
-        UpdateButton(lane, button, unit, data)
+        updateButton(lane, button, unit, data)
         visibleByID[data.auraInstanceID] = i
     end
     HideTrailingButtons(lane, visibleByID, visible)
@@ -2147,8 +2811,26 @@ local function HasActiveDebuff(lane)
     return lane and lane.active and next(lane.active) ~= nil or false
 end
 
+local function StoreLaneAuraVisualCache(lane, anyDebuff, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken)
+    lane._msufA3VisualCacheReady = true
+    lane._msufA3VisualAnyDebuff = anyDebuff == true
+    lane._msufA3VisualBorderActive = borderActive == true
+    lane._msufA3VisualBorderR, lane._msufA3VisualBorderG = br, bg
+    lane._msufA3VisualBorderB, lane._msufA3VisualBorderA = bb, ba
+    lane._msufA3VisualBorderSecret = borderSecret == true
+    lane._msufA3VisualBorderToken = borderToken
+    lane._msufA3VisualOverlayActive = overlayActive == true
+    lane._msufA3VisualOverlayR, lane._msufA3VisualOverlayG = orr, og
+    lane._msufA3VisualOverlayB, lane._msufA3VisualOverlayA = ob, oa
+    lane._msufA3VisualOverlaySecret = overlaySecret == true
+    lane._msufA3VisualOverlayToken = overlayToken
+end
+
 local function NotifyFrameAuraVisuals(frame)
     if not frame then return end
+    if frame._msufA3DeferAuraVisualNotify == true then
+        return
+    end
     local active = frame._msufActiveElements
     local elements = UF and UF.elements
     local borders = active and active.Borders == true and elements and elements.Borders
@@ -2164,7 +2846,7 @@ local function NotifyFrameAuraVisuals(frame)
 end
 
 local function SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, stripeActive, visual)
-    if not frame then return end
+    if not frame then return false end
     br, bg, bb, ba = br or 0.25, bg or 0.75, bb or 1, ba or 1
     orr, og, ob, oa = orr or br, og or bg, ob or bb, oa or ba
     borderSecret = borderSecret == true
@@ -2203,7 +2885,7 @@ local function SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, bord
         or frame._msufA3DebuffStripeA ~= (visual and visual.stripeAlpha)
         or frame._msufA3DebuffStripeEdge ~= (visual and visual.stripeEdge)
         or frame._msufA3DebuffStripeHeight ~= (visual and visual.stripeHeight)
-    if not changed then return end
+    if not changed then return false end
     frame._msufA3DispelActive = borderActive == true
     frame._msufA3DispelColorSecret = borderSecret or nil
     frame._msufA3DispelToken = borderToken
@@ -2220,22 +2902,65 @@ local function SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, bord
     frame._msufA3DebuffStripeEdge = visual and visual.stripeEdge or nil
     frame._msufA3DebuffStripeHeight = visual and visual.stripeHeight or nil
     NotifyFrameAuraVisuals(frame)
+    return true
+end
+
+local function FrameHasAuraVisualState(frame)
+    return frame
+        and (frame._msufA3DispelActive == true
+            or frame._msufA3DispelOverlayActive == true
+            or frame._msufA3DebuffStripeActive == true
+            or frame._msufA3DispelColorSecret == true
+            or frame._msufA3DispelOverlayColorSecret == true
+            or frame._msufA3DispelToken ~= nil
+            or frame._msufA3DispelOverlayToken ~= nil)
 end
 
 ClearFrameAuraVisualState = function(frame)
-    SetFrameAuraVisualState(frame, false, nil, nil, nil, nil, false, nil, false, nil, nil, nil, nil, false, nil, false, nil)
+    if not frame then return false end
+    if not FrameHasAuraVisualState(frame) then
+        return false
+    end
+    return SetFrameAuraVisualState(frame, false, nil, nil, nil, nil, false, nil, false, nil, nil, nil, nil, false, nil, false, nil)
 end
 
 local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
     local visual = cfg and cfg.visual
     if not (visual and visual.enabled == true) then
-        ClearFrameAuraVisualState(frame)
-        return
+        return ClearFrameAuraVisualState(frame)
+    end
+    if cfg and cfg.visualDirect == true then
+        local borderActive, br, bg, bb, ba, borderSecret, borderToken = false
+        local overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = false
+        if visual.borderEnabled == true then
+            borderActive, br, bg, bb, ba, borderSecret, borderToken = ResolveDirectDispelTriggerVisual(unit, visual, visual.borderTrigger)
+        end
+        if visual.overlayEnabled == true then
+            if visual.overlayTrigger == visual.borderTrigger then
+                overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = borderActive, br, bg, bb, ba, borderSecret, borderToken
+            else
+                overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = ResolveDirectDispelTriggerVisual(unit, visual, visual.overlayTrigger)
+            end
+        end
+        return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, false, visual)
     end
     local lane = state and state.lanes and state.lanes.debuff
     if not (lane and lane.config and lane.config.enabled == true) then
-        ClearFrameAuraVisualState(frame)
-        return
+        return ClearFrameAuraVisualState(frame)
+    end
+    if lane._msufA3VisualCacheReady == true then
+        local anyDebuff = lane._msufA3VisualAnyDebuff == true
+        local stripeActive = anyDebuff and visual.stripeEnabled == true
+        return SetFrameAuraVisualState(frame,
+            anyDebuff and lane._msufA3VisualBorderActive == true,
+            lane._msufA3VisualBorderR, lane._msufA3VisualBorderG,
+            lane._msufA3VisualBorderB, lane._msufA3VisualBorderA,
+            lane._msufA3VisualBorderSecret == true, lane._msufA3VisualBorderToken,
+            anyDebuff and lane._msufA3VisualOverlayActive == true,
+            lane._msufA3VisualOverlayR, lane._msufA3VisualOverlayG,
+            lane._msufA3VisualOverlayB, lane._msufA3VisualOverlayA,
+            lane._msufA3VisualOverlaySecret == true, lane._msufA3VisualOverlayToken,
+            stripeActive, visual)
     end
     local anyDebuff = HasActiveDebuff(lane)
     local borderActive, br, bg, bb, ba, borderSecret, borderToken = false
@@ -2250,8 +2975,9 @@ local function UpdateFrameAuraVisualState(frame, state, cfg, unit)
             overlayActive, orr, og, ob, oa, overlaySecret, overlayToken = ResolveDispelTriggerVisual(lane, unit, visual, visual.overlayTrigger)
         end
     end
+    StoreLaneAuraVisualCache(lane, anyDebuff, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken)
     local stripeActive = anyDebuff and visual.stripeEnabled == true
-    SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, stripeActive, visual)
+    return SetFrameAuraVisualState(frame, borderActive, br, bg, bb, ba, borderSecret, borderToken, overlayActive, orr, og, ob, oa, overlaySecret, overlayToken, stripeActive, visual)
 end
 
 local function EmptyAuraPayload(updateInfo)
@@ -2259,6 +2985,61 @@ local function EmptyAuraPayload(updateInfo)
         and not updateInfo.addedAuras
         and not updateInfo.updatedAuraInstanceIDs
         and not updateInfo.removedAuraInstanceIDs
+end
+
+local function ConfigHasEnabledAuraLane(cfg)
+    local lanes = cfg and cfg.lanes
+    local lane = lanes and lanes.buff
+    if lane and lane.enabled == true then
+        return true
+    end
+    lane = lanes and lanes.debuff
+    return lane and lane.enabled == true or false
+end
+
+local function LaneAffectsFrameAuraVisual(lane)
+    local cfg = lane and lane.config
+    return cfg and cfg.visual and cfg.visual.enabled == true and cfg.visualDirect ~= true or false
+end
+
+local function UpdateAuraLaneRuntime(lane, unit, updateInfo, full)
+    if not (lane and lane.config and lane.config.enabled) then
+        return false, false
+    end
+    local laneAffectsVisual = LaneAffectsFrameAuraVisual(lane)
+    if full then
+        local changed, rendered = FullScanLane(lane, unit, true)
+        if changed then
+            if rendered ~= true then
+                RenderLane(lane, unit)
+            end
+            return true, laneAffectsVisual
+        end
+        return false, false
+    end
+    if lane._msufA3CappedFullScan == true then
+        local changed, needsFullScan = UpdateCappedLaneFromDelta(lane, unit, updateInfo)
+        if needsFullScan == true then
+            local scanned, rendered = FullScanLane(lane, unit, true)
+            if scanned then
+                if rendered ~= true then
+                    RenderLane(lane, unit)
+                end
+                return true, laneAffectsVisual
+            end
+            return false, false
+        end
+        return changed == true, changed == true and laneAffectsVisual or false
+    end
+    local needsRender, visualDirty = UpdateLaneFromDelta(lane, unit, updateInfo)
+    if needsRender then
+        RenderLane(lane, unit)
+        return true, laneAffectsVisual
+    end
+    if visualDirty then
+        return true, true
+    end
+    return false, false
 end
 
 local function CurrentFrameState(frame, unit)
@@ -2291,9 +3072,19 @@ end
 
 local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     if not frame then return false end
-    unit = unit or frame.unit
-    if unit ~= frame.unit then return false end
-    if EmptyAuraPayload(updateInfo) and forceFull ~= true then return false end
+    local frameUnit = frame.unit
+    if unit and IsSecret(unit) == true then
+        unit = frameUnit
+    elseif unit == nil then
+        unit = frameUnit
+    elseif unit ~= frameUnit then
+        return false
+    end
+    local preState = frame._msufA3State
+    if EmptyAuraPayload(updateInfo) and forceFull ~= true
+        and not (preState and preState.needFullUpdate == true) then
+        return false
+    end
 
     local state, cfg = CurrentFrameState(frame, unit)
     if not (cfg and cfg.enabled) then
@@ -2304,6 +3095,10 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     forceFull = forceFull == true or state.config ~= cfg
     local full = forceFull == true or state.needFullUpdate == true or not updateInfo or updateInfo.isFullUpdate == true
     state.needFullUpdate = false
+
+    if cfg.visualDirect == true and not ConfigHasEnabledAuraLane(cfg) then
+        return UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+    end
 
     if full and UnitExists then
         local exists = UnitExists(unit)
@@ -2319,38 +3114,37 @@ local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     end
 
     local changedCount = 0
+    local auraVisualDirty = false
 
     local lanes = state.lanes
     local lane = lanes and lanes.buff
-    if lane and lane.config and lane.config.enabled then
-        if full then
-            if FullScanLane(lane, unit) then
-                changedCount = changedCount + 1
-                RenderLane(lane, unit)
-            end
-        elseif UpdateLaneFromDelta(lane, unit, updateInfo) then
-            changedCount = changedCount + 1
-            RenderLane(lane, unit)
-        end
+    local changed, visualDirty = UpdateAuraLaneRuntime(lane, unit, updateInfo, full)
+    if changed then
+        changedCount = changedCount + 1
+        if visualDirty then auraVisualDirty = true end
     end
 
     lane = lanes and lanes.debuff
-    if lane and lane.config and lane.config.enabled then
-        if full then
-            if FullScanLane(lane, unit) then
-                changedCount = changedCount + 1
-                RenderLane(lane, unit)
-            end
-        elseif UpdateLaneFromDelta(lane, unit, updateInfo) then
-            changedCount = changedCount + 1
-            RenderLane(lane, unit)
-        end
+    changed, visualDirty = UpdateAuraLaneRuntime(lane, unit, updateInfo, full)
+    if changed then
+        changedCount = changedCount + 1
+        if visualDirty then auraVisualDirty = true end
     end
 
-    if changedCount > 0 then
-        UpdateFrameAuraVisualState(frame, state, cfg, unit)
+    local visualChanged = false
+    if cfg.visualDirect == true then
+        visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+    elseif auraVisualDirty == true then
+        if cfg.visual ~= nil or FrameHasAuraVisualState(frame) then
+            visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+        end
+    elseif full then
+        local hasFrameVisual = FrameHasAuraVisualState(frame)
+        if hasFrameVisual then
+            visualChanged = UpdateFrameAuraVisualState(frame, state, cfg, unit) == true
+        end
     end
-    return changedCount > 0
+    return changedCount > 0 or visualChanged == true
 end
 
 local function RenderCachedAuras(frame, combatOnly)
@@ -2379,10 +3173,15 @@ local function RenderCachedAuras(frame, combatOnly)
         RenderLane(lane, unit)
         changed = true
     end
-    if changed then
+    if changed and (cfg.visual ~= nil or FrameHasAuraVisualState(frame)) then
         UpdateFrameAuraVisualState(frame, state, cfg, unit)
     end
     return changed
+end
+
+local function ResetAurasForIdentity(frame)
+    if not frame then return false end
+    return UpdateAuras(frame, "ForceUpdate", frame.unit, nil, true)
 end
 
 local function NeedsCombatAuraEvents(cfg)
@@ -2416,6 +3215,7 @@ function A3.DisableFrame(frame)
     frame._msufA3GroupConfig = nil
     frame._msufA3GroupSource = nil
     frame._msufA3GroupUnit = nil
+    frame._msufA3GroupGen = nil
     frame._msufA3GroupRuntime = nil
     if unit then
         if A3._runtimeFrames and A3._runtimeFrames[unit] == frame then
@@ -2436,6 +3236,13 @@ A3.ForceUpdateFrame = A3.RenderFrame
 A3.RenderCachedFrame = RenderCachedAuras
 
 function A3.HandleUnitAura(frame, event, unit, updateInfo)
+    -- A coalesced target/focus swap owns the next full rebuild (see the
+    -- aura-identity coalescing in MSUF_UF_Runtime.lua). Interim deltas
+    -- describe a unit the lane no longer tracks and are superseded by that
+    -- rebuild, so they are dropped instead of being merged into stale state.
+    if frame and frame._msufA3IdentityRebuildPending == true then
+        return false
+    end
     return UpdateAuras(frame, event, unit, updateInfo, false)
 end
 
@@ -2449,23 +3256,40 @@ function A3.RuntimeOwnsUnit(unit)
     return unit and A3._runtimeFrames and A3._runtimeFrames[unit] ~= nil or false
 end
 
+local function ApplyRuntimeUnit(runtimeUnit)
+    local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
+        or (UF.frames and UF.frames[runtimeUnit])
+        or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[runtimeUnit])
+        or _G["MSUF_" .. runtimeUnit]
+    if not frame then return false end
+    if UF.ApplyElementToFrame then
+        UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
+    else
+        A3.EnableFrame(frame)
+    end
+    return true
+end
+
 local function RequestUnitNow(unit)
-    local didWork = false
-    EachRuntimeUnit(unit, function(runtimeUnit)
-        local frame = (A3._runtimeFrames and A3._runtimeFrames[runtimeUnit])
-            or (UF.frames and UF.frames[runtimeUnit])
-            or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames[runtimeUnit])
-            or _G["MSUF_" .. runtimeUnit]
-        if frame then
-            if UF.ApplyElementToFrame then
-                UF.ApplyElementToFrame(frame, "Auras", frame.MSUFSpec, nil)
-            else
-                A3.EnableFrame(frame)
-            end
-            didWork = true
+    unit = tostring(unit or "")
+    if unit == "" or unit == "*" then
+        local didWork = ApplyRuntimeUnit("player")
+        didWork = ApplyRuntimeUnit("target") or didWork
+        didWork = ApplyRuntimeUnit("focus") or didWork
+        for i = 1, 5 do
+            didWork = ApplyRuntimeUnit("boss" .. i) or didWork
         end
-    end)
-    return didWork
+        return didWork
+    end
+    if unit == "boss" then
+        local didWork = false
+        for i = 1, 5 do
+            didWork = ApplyRuntimeUnit("boss" .. i) or didWork
+        end
+        return didWork
+    end
+    unit = NormalizeRuntimeUnit(unit)
+    return unit and ApplyRuntimeUnit(unit) or false
 end
 
 function A3.RequestUnit(unit, delay)
@@ -2480,6 +3304,7 @@ end
 function A3.RefreshAll()
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
+    frameSpecConfigCache = setmetatable and setmetatable({}, { __mode = "k" }) or {}
     RequestUnitNow("*")
     return true
 end
@@ -2487,6 +3312,7 @@ end
 function A3.RefreshUnit(unit)
     A3.BumpRuntimeConfig()
     A3._runtimeConfigCache = nil
+    frameSpecConfigCache = setmetatable and setmetatable({}, { __mode = "k" }) or {}
     return A3.RequestUnit(unit, 0)
 end
 
@@ -2496,7 +3322,16 @@ function _G.MSUF_Auras3_ApplyFontsFromGlobal()
     for _, frame in pairs(frames) do
         local state = frame and frame._msufA3State
         if state then
-            for _, lane in pairs(state.lanes) do
+            local lanes = state.lanes
+            local lane = lanes and lanes.buff
+            if lane then
+                for i = 1, lane.createdButtons or 0 do
+                    local button = lane[i]
+                    if button then ApplyButtonLayout(lane, button, i) end
+                end
+            end
+            lane = lanes and lanes.debuff
+            if lane then
                 for i = 1, lane.createdButtons or 0 do
                     local button = lane[i]
                     if button then ApplyButtonLayout(lane, button, i) end
@@ -2518,7 +3353,8 @@ function AurasElement.IsEnabled(frame)
         local cfg = ResolveGroupFrameConfig(frame, frame.unit)
         return cfg and cfg.enabled == true or false
     end
-    return A3.UnitFrameAuraEnabled(frame.unit) == true
+    local cfg = A3.ResolveUnitFrameConfig(frame.unit, frame.MSUFSpec)
+    return cfg and cfg.enabled == true or false
 end
 
 function AurasElement.GetUnitlessEvents(frame)
@@ -2572,8 +3408,18 @@ function AurasElement.Disable(frame)
 end
 
 function AurasElement.Update(frame, event, unit, updateInfo)
+    if event == "UNIT_AURA" then
+        return A3.HandleUnitAura(frame, event, unit, updateInfo)
+    end
+    if event == "MSUF_UNIT_IDENTITY_AURAS"
+        or event == "MSUF_UNIT_IDENTITY_SOFT_AURAS" then
+        return ResetAurasForIdentity(frame)
+    end
     if event == "ForceUpdate"
-        or event == "MSUF_FORCE_UPDATE" then
+        or event == "MSUF_FORCE_UPDATE"
+        or event == "MSUF_UNIT_IDENTITY"
+        or event == "MSUF_UNIT_IDENTITY_SOFT"
+        or event == "MSUF_GF_UNIT_IDENTITY" then
         return A3.RenderFrame(frame)
     end
     if event == "PLAYER_REGEN_DISABLED"

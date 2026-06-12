@@ -49,7 +49,9 @@ local QUEUED_2D_PORTRAIT_EVENTS = {
     UNIT_PORTRAIT_UPDATE = true,
     UNIT_MODEL_CHANGED = true,
     UNIT_CONNECTION = true,
+    MSUF_UNIT_IDENTITY_VISUAL = true,
     MSUF_UNIT_IDENTITY_SOFT = true,
+    MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
 }
 
 local function SetShown(obj, show)

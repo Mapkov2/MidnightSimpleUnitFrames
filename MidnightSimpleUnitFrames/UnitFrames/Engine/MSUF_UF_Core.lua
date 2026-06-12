@@ -22,6 +22,7 @@ local table_sort = table.sort
 local unpack = unpack or table.unpack
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
+local issecretvalue = _G.issecretvalue or function(_) return false end
 
 UF.version = "6.0-clean-core"
 UF.frames = UF.frames or {}
@@ -66,6 +67,7 @@ UF.configKeyUnits = UF.configKeyUnits or {
     pet = { "pet" },
     boss = { "boss1", "boss2", "boss3", "boss4", "boss5" },
 }
+UF.singleUnitLists = UF.singleUnitLists or {}
 
 local BOSS_UNITS = {
     boss1 = true,
@@ -90,10 +92,19 @@ function UF.IsManagedUnit(unit)
 end
 
 function UF.UnitsForConfigKey(key)
-    if UF.unitLookup[key] then
-        return UF.configKeyUnits[key] or { key }
+    local units = UF.configKeyUnits[key]
+    if units then
+        return units
     end
-    return UF.configKeyUnits[key]
+    if UF.unitLookup[key] then
+        units = UF.singleUnitLists[key]
+        if not units then
+            units = { key }
+            UF.singleUnitLists[key] = units
+        end
+        return units
+    end
+    return nil
 end
 
 function UF.FrameName(unit)
@@ -290,10 +301,17 @@ local function FrameUnitMatches(frame, unit)
     if not (frame and unit) then
         return false
     end
-    if frame.unit == unit then
+    if unit and issecretvalue(unit) == true then
+        return false
+    end
+    local frameUnit = frame.unit
+    if frameUnit == unit then
         return true
     end
     local attrUnit = frame.GetAttribute and frame:GetAttribute("unit")
+    if issecretvalue(attrUnit) == true then
+        return false
+    end
     return attrUnit == unit
 end
 
@@ -321,7 +339,7 @@ local function EventDriverOnEvent(_, event, unit, ...)
         -- UNIT_* events are only useful when Blizzard provides the unit token.
         -- A nil-unit fallback would fan out to every registered unit/group frame
         -- and was the largest observed trace cost.
-        if not unit then
+        if not unit or issecretvalue(unit) == true then
             return
         end
 
@@ -1028,6 +1046,10 @@ local function FrameEnableElement(frame, name)
     end
     SyncElementEvents(frame, name, element, spec)
     frame._msufActiveElements[name] = true
+    local rebuildRuntimeStatus = UF.RebuildRuntimeStatusState
+    if rebuildRuntimeStatus then
+        rebuildRuntimeStatus(frame)
+    end
     return true
 end
 
@@ -1044,6 +1066,10 @@ local function FrameDisableElement(frame, name)
     frame[GetUpdateKey(name)] = nil
     if element and element.Disable then
         element.Disable(frame)
+    end
+    local rebuildRuntimeStatus = UF.RebuildRuntimeStatusState
+    if rebuildRuntimeStatus then
+        rebuildRuntimeStatus(frame)
     end
     return true
 end
@@ -1195,6 +1221,10 @@ function UF.DetachFrame(frame)
     frame._msufElementEventRefs = nil
     frame._msufEventElementLists = nil
     frame._msufHotEventState = nil
+    frame._msufRuntimeVisualFns = nil
+    frame._msufRuntimeVisualCount = nil
+    frame._msufRuntimeSoftVisualFns = nil
+    frame._msufRuntimeSoftVisualCount = nil
     frame._msufChangedEventsScratch = nil
     frame._msufDriverEventUnits = nil
     frame._msufDerivedEventUnits = nil
@@ -1211,6 +1241,7 @@ function UF.DetachFrame(frame)
 end
 
 function UF.GetFrame(unit)
+    if unit and issecretvalue(unit) == true then return nil end
     return UF.frames[unit]
 end
 
@@ -1236,6 +1267,9 @@ function UF.ForceUpdate(unit)
         return false
     end
     if unit then
+        if issecretvalue(unit) == true then
+            return false
+        end
         local units = UF.UnitsForConfigKey(unit)
         if not units then
             return false
