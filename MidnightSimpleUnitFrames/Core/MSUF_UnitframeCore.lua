@@ -1763,6 +1763,18 @@ local function UFCore_WantEvent(f, conf, desired, unsupported, ev)
     desired[ev] = true
 end
 
+function Core.RegisterUnitEventSafe(f, ev, unit)
+    if f.RegisterUnitEvent then
+        local ok = pcall(f.RegisterUnitEvent, f, ev, unit)
+        if ok then return true end
+    end
+    if f.RegisterEvent then
+        local ok = pcall(f.RegisterEvent, f, ev)
+        if ok then return true end
+    end
+    return false
+end
+
 -- ToTInline config, DB migration, separator resolution, and text rendering live
 -- in Core\MSUF_UFCore_ToTInline.lua. Keep local wrappers so existing UFCore
 -- dirty-mask and event code keeps its original call sites.
@@ -1899,7 +1911,7 @@ end
 end
 
 local function RefreshUnitEvents(f, force)
-    if not f or not f.unit or not f.RegisterUnitEvent then return end
+    if not f or not f.unit then return end
 
     local mask, conf = ComputeElementMask(f)
     local cache = UFCore_GetSettingsCache()
@@ -1985,8 +1997,13 @@ end
                         Core._unsupportedUFCoreUnitEvents = unsupported
                         unsupported[ev] = true
                     else
-                        f:RegisterUnitEvent(ev, f.unit)
-                        reg[ev] = true
+                        if Core.RegisterUnitEventSafe(f, ev, f.unit) then
+                            reg[ev] = true
+                        else
+                            unsupported = unsupported or {}
+                            Core._unsupportedUFCoreUnitEvents = unsupported
+                            unsupported[ev] = true
+                        end
                     end
                 end
             end
@@ -2755,8 +2772,65 @@ local _UF_DISPATCH = {
     end,
 }
 
+Core._dependentUnitPollSeconds = 0.2
+Core._dependentUnits = { "targettarget", "focustarget" }
+
+function Core.UnitExistsPlain(unit)
+    if not UnitExists then return true end
+    local exists = UnitExists(unit)
+    if _UFCORE_issecret and _UFCORE_issecret(exists) then return true end
+    return exists == true or exists == 1
+end
+
+function Core.DependentPollFrame(unit)
+    local f = FramesByUnit and FramesByUnit[unit]
+    if not f then return nil end
+    if f.IsShown and not f:IsShown() and not f.MSUF_AllowHiddenEvents then return nil end
+    if not Core.UnitExistsPlain(unit) then return nil end
+    return f
+end
+
+function Core.StopDependentUnitFallbackTicker()
+    local ticker = Core._dependentUnitTicker
+    if ticker and ticker.Cancel then
+        ticker:Cancel()
+    end
+    Core._dependentUnitTicker = nil
+end
+
+function Core.RunDependentUnitFallbackTicker()
+    local active = false
+    local units = Core._dependentUnits
+    for i = 1, #units do
+        local f = Core.DependentPollFrame(units[i])
+        if f then
+            active = true
+            if f.hpBar then _HealthValueFast(f) end
+            if f.targetPowerBar or f.powerBar then Core._PowerUpdate(f) end
+        end
+    end
+    if not active then
+        Core.StopDependentUnitFallbackTicker()
+    end
+end
+
+function Core.EnsureDependentUnitFallbackTicker()
+    if Core._dependentUnitTicker then return end
+    local timer = _G.C_Timer
+    local newTicker = timer and timer.NewTicker
+    if not newTicker then return end
+    Core._dependentUnitTicker = newTicker(Core._dependentUnitPollSeconds, Core.RunDependentUnitFallbackTicker)
+end
+
+_G.MSUF_EnsureDependentUnitFallbackTicker = Core.EnsureDependentUnitFallbackTicker
+_G.MSUF_StopDependentUnitFallbackTicker = Core.StopDependentUnitFallbackTicker
+
 local function FrameOnEvent(self, event, arg1, ...)
     if not self:IsVisible() and not self.MSUF_AllowHiddenEvents then return end
+    if arg1 ~= nil then
+        if _UFCORE_issecret and _UFCORE_issecret(arg1) then return end
+        if arg1 ~= self.unit then return end
+    end
     local fn = _UF_DISPATCH[event]
     if fn then return fn(self) end
     -- Fallback: any UNIT_* event not in dispatch table
@@ -3145,7 +3219,9 @@ Global:RegisterEvent("UPDATE_EXHAUSTION")
 Global:RegisterEvent("PLAYER_TARGET_CHANGED")
 Global:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE")
 Global:RegisterEvent("UNIT_THREAT_LIST_UPDATE")
-Global:RegisterUnitEvent("UNIT_TARGET", "target")
+if not (Global.RegisterUnitEvent and pcall(Global.RegisterUnitEvent, Global, "UNIT_TARGET", "target")) then
+    Global:RegisterEvent("UNIT_TARGET")
+end
 Global:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
 Global:RegisterEvent("GROUP_ROSTER_UPDATE")
 Global:RegisterEvent("PARTY_LEADER_CHANGED")
@@ -3293,6 +3369,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
 
             Core.MarkDirty(f, MASK_ALL, true, event)
         end
+        Core.EnsureDependentUnitFallbackTicker()
         return
     end
 
@@ -3391,11 +3468,14 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         fn = _G.MSUF_RangeFade_OnTargetChanged;     if fn then fn() end
         fn = _G.MSUF_Portrait_OnTargetChanged;       if fn then fn() end
         fn = _G.MSUF_ToT_OnTargetChanged;            if fn then fn() end
+        Core.EnsureDependentUnitFallbackTicker()
 
         return
     end
 
     if event == "UNIT_TARGET" then
+        if _UFCORE_issecret and _UFCORE_issecret(arg1) then return end
+        if arg1 ~= "target" then return end
         -- RegisterUnitEvent("UNIT_TARGET", "target") guarantees arg1 == "target".
         -- Early exit: skip all work if neither ToT inline nor ToT frame is active.
         local totInline = UFCore_IsToTInlineEnabled()
@@ -3411,6 +3491,7 @@ Global:SetScript("OnEvent", function(_, event, arg1)
         if totFrame then
             QueueUnit("targettarget", true, MASK_UNIT_SWAP_NO_PORTRAIT, event)
             DeferSwapWork("targettarget", event, true, false)
+            Core.EnsureDependentUnitFallbackTicker()
         end
         local recolor = _G.MSUF_SwapRecolor_OnUnitTargetChanged
         if recolor then recolor() end
@@ -3556,6 +3637,7 @@ do
                 Core.MarkDirty(ff, MASK_UNIT_SWAP_NO_PORTRAIT, false, "FOCUS_SWAP_DEFERRED")
             end
             DeferSwapWork("focus", "PLAYER_FOCUS_CHANGED", true, false)
+            Core.EnsureDependentUnitFallbackTicker()
         end)
     end
 end

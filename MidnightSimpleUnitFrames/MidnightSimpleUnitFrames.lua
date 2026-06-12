@@ -6408,21 +6408,32 @@ do
 end
         if not _G.MSUF_UFCore_HasToTInlineDriver then
         local f = F.CreateFrame("Frame")
+        local function MSUF_RegisterToTUnitEvent(frame, event, unit)
+            if frame.RegisterUnitEvent then
+                local ok = pcall(frame.RegisterUnitEvent, frame, event, unit)
+                if ok then return true end
+            end
+            if frame.RegisterEvent then
+                local ok = pcall(frame.RegisterEvent, frame, event)
+                return ok == true
+            end
+            return false
+        end
         -- PLAYER_TARGET_CHANGED removed: consolidated in UFCore handler
         if f.RegisterUnitEvent then
-            f:RegisterUnitEvent("UNIT_TARGET", "target")
-            f:RegisterUnitEvent("UNIT_HEALTH", "targettarget")
-            f:RegisterUnitEvent("UNIT_MAXHEALTH", "targettarget")
-            f:RegisterUnitEvent("UNIT_POWER_UPDATE", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_TARGET", "target")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_HEALTH", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_MAXHEALTH", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_POWER_UPDATE", "targettarget")
             -- Smooth power updates (energy/rage/etc.)
-            f:RegisterUnitEvent("UNIT_POWER_FREQUENT", "targettarget")
-            f:RegisterUnitEvent("UNIT_MAXPOWER", "targettarget")
-            f:RegisterUnitEvent("UNIT_DISPLAYPOWER", "targettarget")
-            f:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", "targettarget")
-            f:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "targettarget")
-            f:RegisterUnitEvent("UNIT_NAME_UPDATE", "targettarget")
-            f:RegisterUnitEvent("UNIT_LEVEL", "targettarget")
-            f:RegisterUnitEvent("UNIT_CONNECTION", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_POWER_FREQUENT", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_MAXPOWER", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_DISPLAYPOWER", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_ABSORB_AMOUNT_CHANGED", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_HEAL_ABSORB_AMOUNT_CHANGED", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_NAME_UPDATE", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_LEVEL", "targettarget")
+            MSUF_RegisterToTUnitEvent(f, "UNIT_CONNECTION", "targettarget")
         else
             f:RegisterEvent("UNIT_TARGET")
             f:RegisterEvent("UNIT_HEALTH")
@@ -6458,6 +6469,7 @@ end
             end
         end
         f:SetScript("OnEvent", function(self, event, unit)
+            if unit and _G.MSUF_IsSecretValue and _G.MSUF_IsSecretValue(unit) then return end
             if unit and unit ~= "target" and unit ~= "targettarget" then
                  return
             end
@@ -6478,6 +6490,10 @@ end
             _G.MSUF_ToTFallbackTicker = nil
      end
         _G.MSUF_EnsureToTFallbackTicker = function()
+            local ensure = _G.MSUF_EnsureDependentUnitFallbackTicker
+            if type(ensure) == "function" then
+                return ensure()
+            end
             MSUF_StopToTFallbackTicker()
      end
         MSUF_StopToTFallbackTicker()
