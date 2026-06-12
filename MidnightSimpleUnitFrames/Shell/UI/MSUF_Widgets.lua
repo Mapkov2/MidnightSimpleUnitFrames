@@ -4,41 +4,7 @@
 --- Phase 7: Legacy dropdown factory (MSUF_DD_*) and modern dropdown system
 --- removed - zero external callers after Widget SDK migration.
 --- ============================================================================
-local addonName, MSUF = ...
-
---- - Theme -
-local T = {
-    bgR = 0.04,  bgG = 0.06,  bgB = 0.13,  bgA = 0.95,
-    edgeR = 0.12, edgeG = 0.22, edgeB = 0.48, edgeA = 0.90,
-    textR = 0.86,  textG = 0.92,  textB = 1.00,  textA = 1.00,
-    accentR = 0.30, accentG = 0.60, accentB = 1.00,
-    mutedR = 0.55, mutedG = 0.60, mutedB = 0.70,
-    hoverBgR = 0.08, hoverBgG = 0.10, hoverBgB = 0.18,
-    selR = 0.20, selG = 0.40, selB = 0.80, selA = 0.30,
-}
-
---- - Helpers -
-local function UseModern()
-    local db = _G.MSUF_DB
-    if not db then return true end
-    local g = db.general
-    if not g then return true end
-    if g.useModernWidgets == nil then return true end
-    return g.useModernWidgets and true or false
-end
-
-local function GetLSM()
-    return _G.MSUF_GetLSM and _G.MSUF_GetLSM()
-        or _G.LibStub and _G.LibStub("LibSharedMedia-3.0", true)
-        or nil
-end
-
---- Export module onto MSUF for split-file usage
-MSUF.MSUF_Widgets = {
-    Theme     = T,
-    UseModern = UseModern,
-    GetLSM    = GetLSM,
-}
+local _, MSUF = ...
 
 --- Shared UI primitives used by Menu2 and Edit Mode.
 --- Keep this layer independent from Menu2 load order: Edit Mode loads first.
@@ -49,8 +15,6 @@ _G.MSUF_UI = UI
 local W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local max = math.max
-local min = math.min
-local floor = math.floor
 
 UI.colors = UI.colors or {
     bg = { 0.030, 0.040, 0.075, 0.965 },
@@ -109,59 +73,6 @@ function UI.Color(key, fallback)
     return c or UI.colors[key] or fallback
 end
 
-local function Clamp01(value)
-    value = tonumber(value) or 0
-    if value < 0 then return 0 end
-    if value > 1 then return 1 end
-    return value
-end
-
-local function ShadeColor(c, amount, alphaMul)
-    c = c or UI.colors.card
-    amount = tonumber(amount) or 0
-    local r, g, b = c[1] or 0, c[2] or 0, c[3] or 0
-    if amount >= 0 then
-        r = r + (1 - r) * amount
-        g = g + (1 - g) * amount
-        b = b + (1 - b) * amount
-    else
-        local f = 1 + amount
-        r, g, b = r * f, g * f, b * f
-    end
-    return { Clamp01(r), Clamp01(g), Clamp01(b), Clamp01((c[4] or 1) * (alphaMul or 1)) }
-end
-
-local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preserveTexture)
-    if not tex then return false end
-    fromColor = fromColor or UI.colors.card
-    toColor = toColor or fromColor
-    orientation = orientation or "VERTICAL"
-    if not preserveTexture and tex.SetTexture then
-        tex:SetTexture(W8)
-        if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
-    end
-    if tex.SetGradientAlpha then
-        local ok = pcall(tex.SetGradientAlpha, tex, orientation,
-            fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1,
-            toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1)
-        if ok then return true end
-    end
-    if tex.SetGradient and _G.CreateColor then
-        local ok = pcall(tex.SetGradient, tex, orientation,
-            _G.CreateColor(fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1),
-            _G.CreateColor(toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1))
-        if ok then return true end
-    end
-    if tex.SetColorTexture then
-        tex:SetColorTexture(
-            ((fromColor[1] or 0) + (toColor[1] or 0)) * 0.5,
-            ((fromColor[2] or 0) + (toColor[2] or 0)) * 0.5,
-            ((fromColor[3] or 0) + (toColor[3] or 0)) * 0.5,
-            ((fromColor[4] or 1) + (toColor[4] or 1)) * 0.5)
-    end
-    return false
-end
-
 function UI.ApplyGradient(frame, material, opts)
     local theme = UI.GetMenu2Theme()
     if theme and theme.ApplyGradient then return theme.ApplyGradient(frame, material or "card", opts) end
@@ -178,7 +89,7 @@ function UI.ApplyGradient(frame, material, opts)
     local inset = tonumber(opts.inset) or 2
     tex:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
     tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
-    ApplyTextureGradient(tex, "VERTICAL", ShadeColor(bg, 0.16, 0.42), ShadeColor(bg, -0.22, 0.58), false)
+    tex:SetColorTexture(bg[1], bg[2], bg[3], (bg[4] or 1) * 0.56)
     if tex.SetBlendMode then tex:SetBlendMode("BLEND") end
     if tex.Show then tex:Show() end
     return frame
@@ -203,47 +114,6 @@ function UI.ApplyMaterial(frame, material)
     SetBackdrop(frame, UI.Color(bgKey, UI.colors[bgKey]), UI.Color("borderSoft", UI.colors.borderSoft))
     UI.ApplyGradient(frame, material or "card")
     return frame
-end
-
-function UI.Panel(parent, name, width, height, material)
-    local frame = CreateFrame("Frame", name, parent, _G.BackdropTemplateMixin and "BackdropTemplate" or nil)
-    if width and height then frame:SetSize(width, height) end
-    UI.ApplyMaterial(frame, material or "card")
-    return frame
-end
-
-function UI.Popup(parent, name, width, height, title, subtitle)
-    local frame = UI.Panel(parent or UIParent, name, width or 380, height or 240, "popup")
-    frame.__msufSharedUIPopup = true
-    frame:EnableMouse(true)
-    frame:SetMovable(true)
-    frame:SetClampedToScreen(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", function(self)
-        if _G.InCombatLockdown and _G.InCombatLockdown() then return end
-        self:StartMoving()
-    end)
-    frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-
-    local titleFS = UI.Font(frame, "GameFontNormal", title or "", UI.Color("text", UI.colors.text))
-    titleFS:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -16)
-    frame._msufUITitle = titleFS
-    if subtitle and subtitle ~= "" then
-        local sub = UI.Font(frame, "GameFontDisableSmall", subtitle, UI.Color("muted", UI.colors.muted))
-        sub:SetPoint("TOPLEFT", titleFS, "BOTTOMLEFT", 0, -7)
-        frame._msufUISubtitle = sub
-    end
-    return frame
-end
-
-function UI.Inspector(parent, name, width, height, title, subtitle)
-    local frame = UI.Popup(parent, name, width or 380, height or 240, title or "Inspector", subtitle)
-    frame.__msufSharedUIInspector = true
-    return frame
-end
-
-function UI.Card(parent, width, height)
-    return UI.Panel(parent, nil, width, height, "card")
 end
 
 function UI.Font(parent, template, text, color)
@@ -279,7 +149,8 @@ local function FallbackButtonVisual(btn, active, hover)
     if btn._msufUIPrimary then bg, br = { 0.160, 0.560, 0.720, 0.970 }, UI.Color("accent", UI.colors.accent) end
     if btn._msufUISuccess then bg, br = { 0.040, 0.280, 0.130, 0.950 }, UI.Color("ok", UI.colors.ok) end
     local alpha = enabled and 1 or 0.45
-    ApplyTextureGradient(fill, "VERTICAL", ShadeColor(bg, 0.16, alpha), ShadeColor(bg, -0.20, alpha), false)
+    fill:SetTexture(W8)
+    fill:SetColorTexture(bg[1], bg[2], bg[3], (bg[4] or 1) * alpha)
     if edge.SetBackdropBorderColor then edge:SetBackdropBorderColor(br[1], br[2], br[3], (br[4] or 1) * alpha) end
     if label then
         local tc = enabled and UI.Color("text", UI.colors.text) or UI.Color("dim", UI.colors.dim)
@@ -344,53 +215,11 @@ function UI.Button(parent, text, width, height, opts)
     return btn
 end
 
-local ROLE_VARIANTS = {
-    primary = "primary",
-    destructive = "danger",
-    danger = "danger",
-    delete = "danger",
-    reset = "danger",
-    success = "success",
-    confirm = "success",
-    normal = nil,
-    cancel = nil,
-}
-
-function UI.ApplyButtonRole(btn, role)
-    if not btn then return btn end
-    local theme = UI.GetMenu2Theme()
-    role = tostring(role or "normal")
-    if theme and theme.ApplyButtonRole then return theme.ApplyButtonRole(btn, role) end
-    btn._msufUIDanger = ROLE_VARIANTS[role] == "danger"
-    btn._msufUIPrimary = ROLE_VARIANTS[role] == "primary"
-    btn._msufUISuccess = ROLE_VARIANTS[role] == "success"
-    if btn.SetActive then btn:SetActive(btn._msufUIActive) else FallbackButtonVisual(btn, btn._msufUIActive, btn._msufUIHover) end
-    return btn
-end
-
-function UI.RoleButton(parent, text, role, width, height, opts)
-    opts = opts or {}
-    opts.variant = opts.variant or ROLE_VARIANTS[tostring(role or "normal")]
-    local btn = UI.Button(parent, text, width, height, opts)
-    btn._msufUIRole = role or "normal"
-    return UI.ApplyButtonRole(btn, role)
-end
-
 function UI.SetButtonText(btn, text)
     if not btn then return end
     if btn.SetText then btn:SetText(text or ""); return end
     local label = btn._msuf2Label or btn._label
     if label and label.SetText then label:SetText(Tr(text or "")) end
-end
-
-function UI.Pill(parent, text, width, opts)
-    opts = opts or {}
-    opts.skipHistory = true
-    local pill = UI.Button(parent, text, width or 86, opts.height or 22, opts)
-    if opts.interactive == false then
-        pill:EnableMouse(false)
-    end
-    return pill
 end
 
 function UI.StepperButton(parent, text, width, height)
@@ -418,75 +247,6 @@ function UI.CloseButton(parent, onClick)
     end
     local btn = UI.Button(parent, "x", 24, 24, { skipHistory = true, align = "CENTER", variant = "danger", onClick = onClick })
     return btn
-end
-
-function UI.NumberStepper(parent, opts)
-    opts = opts or {}
-    local row = CreateFrame("Frame", nil, parent)
-    row:SetSize(opts.width or 130, opts.height or 24)
-    local label
-    if opts.label then
-        label = UI.Font(row, "GameFontHighlightSmall", opts.label, UI.Color("text", UI.colors.text))
-        label:SetPoint("LEFT", row, "LEFT", 0, 0)
-    end
-    local minus = UI.StepperButton(row, "-", 20, 22)
-    minus:SetPoint("LEFT", label or row, label and "RIGHT" or "LEFT", label and 6 or 0, 0)
-    local box = CreateFrame("EditBox", nil, row, _G.BackdropTemplateMixin and "BackdropTemplate" or nil)
-    box:SetSize(opts.boxWidth or 52, 22)
-    box:SetAutoFocus(false)
-    box:SetJustifyH("CENTER")
-    if box.SetFont then box:SetFont(FONT, 12, "") end
-    box:SetPoint("LEFT", minus, "RIGHT", 1, 0)
-    UI.EditBox(box)
-    local plus = UI.StepperButton(row, "+", 20, 22)
-    plus:SetPoint("LEFT", box, "RIGHT", 1, 0)
-    local function stepValue(delta)
-        local step = opts.getStep and opts.getStep() or opts.step or 1
-        local value = tonumber(box:GetText()) or 0
-        value = value + (delta * step)
-        if opts.min then value = max(opts.min, value) end
-        if opts.max then value = min(opts.max, value) end
-        box:SetText(tostring(floor(value + 0.5)))
-        if opts.onChanged then opts.onChanged(value, row) end
-    end
-    minus:SetScript("OnClick", function() stepValue(-1) end)
-    plus:SetScript("OnClick", function() stepValue(1) end)
-    box:SetScript("OnEnterPressed", function(self) self:ClearFocus(); if opts.onChanged then opts.onChanged(tonumber(self:GetText()) or 0, row) end end)
-    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-    row.label = label
-    row.minus = minus
-    row.box = box
-    row.plus = plus
-    return row
-end
-
-function UI.Slider(parent, opts)
-    opts = opts or {}
-    local slider = CreateFrame("Slider", opts.name, parent)
-    slider:SetSize(opts.width or 180, opts.height or 22)
-    slider:SetMinMaxValues(opts.min or 0, opts.max or 1)
-    slider:SetValueStep(opts.step or 1)
-    if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
-    local theme = UI.GetMenu2Theme()
-    if theme and theme.StyleSlider then theme.StyleSlider(slider) end
-    if opts.value ~= nil then slider:SetValue(opts.value) end
-    if opts.onChanged then slider:HookScript("OnValueChanged", opts.onChanged) end
-    return slider
-end
-
-function UI.SectionHeader(parent, title, width, opts)
-    opts = opts or {}
-    local header = CreateFrame("Button", nil, parent)
-    header:SetSize(width or 280, opts.height or 28)
-    local fill = header:CreateTexture(nil, "BACKGROUND")
-    fill:SetAllPoints()
-    local bg = UI.Color("card", UI.colors.card)
-    ApplyTextureGradient(fill, "VERTICAL", ShadeColor(bg, 0.14, opts.alpha or 0.34), ShadeColor(bg, -0.20, opts.alpha or 0.34), false)
-    header._msufUIFill = fill
-    local label = UI.Font(header, "GameFontNormal", title or "", UI.Color("text", UI.colors.text))
-    label:SetPoint("LEFT", header, "LEFT", opts.labelX or 14, 0)
-    header.label = label
-    return header
 end
 
 function UI.FadeIn(frame, duration, fromAlpha, toAlpha)

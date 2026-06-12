@@ -1,4 +1,4 @@
---- Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua
+--- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Specs.lua
 --- Cold-path data specs for the MSUF2 unit frame preview.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}

@@ -70,6 +70,10 @@ local function ToggleOptionsWindow()
         pcall(_G.MSUF_ShowStandaloneOptionsWindow, "home")
         return
     end
+    if type(_G.MSUF_OpenOptionsMenu) == "function" then
+        pcall(_G.MSUF_OpenOptionsMenu)
+        return
+    end
     if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then
         pcall(_G.SlashCmdList["MIDNIGHTSUF"], "")
     elseif type(print) == "function" then
@@ -77,9 +81,11 @@ local function ToggleOptionsWindow()
     end
 end
 
-local function BuildTooltip(tt)
+local function BuildTooltip(tt, owner, opts)
     if not tt then return end
     if not tt.AddLine then return end
+    opts = opts or {}
+    if owner and tt.SetOwner then tt:SetOwner(owner, opts.anchor or "ANCHOR_LEFT") end
 
     tt:AddLine("Midnight Simple Unit Frames", 1, 1, 1)
 
@@ -87,11 +93,11 @@ local function BuildTooltip(tt)
     local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
         and _G.C_AddOns.GetAddOnMetadata(addonName, "Version")
     if type(version) == "string" and version ~= "" then
-        local displayVersion = version:match("^%d") and ("v" .. version) or version
+        local displayVersion = opts.versionLabel and (Tr("Version:") .. " " .. version) or (version:match("^%d") and ("v" .. version) or version)
         tt:AddLine(displayVersion, 0.6, 0.6, 0.6)
     end
 
-    tt:AddLine(" ")
+    if opts.blankAfterVersion ~= false then tt:AddLine(" ") end
 
     --- Active profile
     local profile = _G.MSUF_ActiveProfile
@@ -106,10 +112,17 @@ local function BuildTooltip(tt)
     end
 
     tt:AddLine(" ")
-    tt:AddLine(Tr("|cffffffffLeft Click:|r Open MSUF"), 0.7, 0.7, 0.7)
-    tt:AddLine(Tr("|cffffffffRight Click:|r Toggle Edit Mode"), 0.7, 0.7, 0.7)
-    tt:AddLine(Tr("|cffffffffShift + Click:|r Open Profiles"), 0.7, 0.7, 0.7)
+    tt:AddLine(Tr(opts.leftText or "|cffffffffLeft Click:|r Open MSUF"), 0.7, 0.7, 0.7)
+    tt:AddLine(Tr(opts.rightText or "|cffffffffRight Click:|r Toggle Edit Mode"), 0.7, 0.7, 0.7)
+    if opts.shiftText ~= false then tt:AddLine(Tr(opts.shiftText or "|cffffffffShift + Click:|r Open Profiles"), 0.7, 0.7, 0.7) end
+    if opts.show and tt.Show then tt:Show() end
 end
+
+MSUF.MinimapButton = MSUF.MinimapButton or {}
+MSUF.MinimapButton.Tr = Tr
+MSUF.MinimapButton.ToggleEditMode = ToggleEditMode
+MSUF.MinimapButton.ToggleOptionsWindow = ToggleOptionsWindow
+MSUF.MinimapButton.BuildTooltip = BuildTooltip
 
 --- LDB/DBIcon path
 local LibStub = _G.LibStub
@@ -281,7 +294,9 @@ end
 --- Init on login (DB is expected to exist by then)
 local initFrame = CreateFrame("Frame")
 initFrame:RegisterEvent("PLAYER_LOGIN")
-initFrame:SetScript("OnEvent", function()
+initFrame:SetScript("OnEvent", function(self)
+    self:UnregisterEvent("PLAYER_LOGIN")
+    self:SetScript("OnEvent", nil)
     local g = EnsureGeneralDB()
     if g then
         EnsureInitialized()

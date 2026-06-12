@@ -769,6 +769,7 @@ local function RegisterUnitBoolean(unit, attr, dbKey, label, defaultValue, alias
         attribute = attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         get = function()
             local value = UnitDB(unit)[dbKey]
             if value == nil then return defaultValue and true or false end
@@ -797,9 +798,14 @@ local function RegisterUnitNumber(unit, attr, dbKey, label, defaultValue, minVal
         attribute = attr,
         type = "number",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         min = minValue,
         max = maxValue,
         step = opts.step or 1,
+        moveAxis = opts.moveAxis,
+        moveStep = opts.moveStep,
+        moveAmount = opts.moveAmount,
+        intentGuard = opts.intentGuard,
         get = function()
             local value = tonumber(UnitDB(unit)[dbKey])
             if value == nil then return defaultValue end
@@ -827,6 +833,7 @@ local function RegisterGeneralBoolean(dbKey, attr, label, defaultValue, aliases,
         attribute = attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         get = function()
             local value = GeneralDB()[dbKey]
             if value == nil then return defaultValue and true or false end
@@ -875,6 +882,7 @@ local function RegisterGeneralNumberSetting(dbKey, attr, label, defaultValue, mi
         attribute = attr,
         type = "number",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         min = minValue,
         max = maxValue,
         step = opts.step or 1,
@@ -915,6 +923,7 @@ local function RegisterGeneralEnum(dbKey, attr, label, defaultValue, values, ali
         attribute = attr,
         type = "enum",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         values = values,
         valueAliases = opts.valueAliases,
         get = function()

@@ -664,58 +664,21 @@ end
 
 local GlobalPage = M.GlobalPage or {}
 M.GlobalPage = GlobalPage
-GlobalPage.UNIT_SCOPE_KEYS = UNIT_SCOPE_KEYS
-GlobalPage.GRADIENT_DIR_KEYS = GRADIENT_DIR_KEYS
-GlobalPage.PRIORITY_LABELS = PRIORITY_LABELS
-GlobalPage.NormalizePriorityKey = NormalizePriorityKey
-GlobalPage.Call = Call
-GlobalPage.DB = DB
-GlobalPage.G = G
-GlobalPage.Bars = Bars
-GlobalPage.Unit = Unit
-GlobalPage.ReadG = ReadG
-GlobalPage.Targeted = Targeted
-GlobalPage.SetG = SetG
-GlobalPage.ReadGBool = ReadGBool
-GlobalPage.SetGBool = SetGBool
-GlobalPage.ReadB = ReadB
-GlobalPage.SetB = SetB
-GlobalPage.NormalizeScopeKey = NormalizeScopeKey
-GlobalPage.ScopeDBKeys = ScopeDBKeys
-GlobalPage.ScopeHasOverride = ScopeHasOverride
-GlobalPage.ScopeSetOverride = ScopeSetOverride
-GlobalPage.ScopeRead = ScopeRead
-GlobalPage.ScopeWrite = ScopeWrite
-GlobalPage.CurrentFontScope = CurrentFontScope
-GlobalPage.CurrentBarsScope = CurrentBarsScope
-GlobalPage.IsGFScope = IsGFScope
-GlobalPage.BarsFlagForKey = BarsFlagForKey
-GlobalPage.FontScopeGet = FontScopeGet
-GlobalPage.FontScopeSet = FontScopeSet
-GlobalPage.BarScopeGet = BarScopeGet
-GlobalPage.BarScopeSet = BarScopeSet
-GlobalPage.BarScopeGetBars = BarScopeGetBars
-GlobalPage.BarScopeSetBars = BarScopeSetBars
-GlobalPage.NormalizeFontKey = NormalizeFontKey
-GlobalPage.FontValues = FontValues
-GlobalPage.FontKeyGet = FontKeyGet
-GlobalPage.FontKeySet = FontKeySet
-GlobalPage.TextureValues = TextureValues
-GlobalPage.SCOPE_VALUES = GLOBAL_SCOPE_VALUES
-GlobalPage.CurrentPowerBarScopeUnit = CurrentPowerBarScopeUnit
-GlobalPage.BuildScopeOverrideSection = BuildScopeOverrideSection
-GlobalPage.SmoothPowerGet = SmoothPowerGet
-GlobalPage.SmoothPowerSet = SmoothPowerSet
-GlobalPage.NormalizeHpMode = NormalizeHpMode
-GlobalPage.NormalizePowerMode = NormalizePowerMode
-GlobalPage.PriorityOrder = PriorityOrder
-GlobalPage.PriorityColor = PriorityColor
-GlobalPage.SetPriorityOrder = SetPriorityOrder
-GlobalPage.RefreshBorderTestModes = RefreshBorderTestModes
-GlobalPage.SetAbsorbTextureTest = SetAbsorbTextureTest
-GlobalPage.ClearAbsorbTextureTest = ClearAbsorbTextureTest
-GlobalPage.SetControlEnabled = SetControlEnabled
-GlobalPage.SetControlsEnabled = SetControlsEnabled
-GlobalPage.ApplyFonts = ApplyFonts
-GlobalPage.ApplyBars = ApplyBars
-GlobalPage.ApplyCastbars = ApplyCastbars
+M.Assign(GlobalPage, {
+    UNIT_SCOPE_KEYS = UNIT_SCOPE_KEYS, GRADIENT_DIR_KEYS = GRADIENT_DIR_KEYS, PRIORITY_LABELS = PRIORITY_LABELS,
+    NormalizePriorityKey = NormalizePriorityKey, Call = Call, DB = DB, G = G, Bars = Bars, Unit = Unit,
+    ReadG = ReadG, Targeted = Targeted, SetG = SetG, ReadGBool = ReadGBool, SetGBool = SetGBool,
+    ReadB = ReadB, SetB = SetB, NormalizeScopeKey = NormalizeScopeKey, ScopeDBKeys = ScopeDBKeys,
+    ScopeHasOverride = ScopeHasOverride, ScopeSetOverride = ScopeSetOverride, ScopeRead = ScopeRead, ScopeWrite = ScopeWrite,
+    CurrentFontScope = CurrentFontScope, CurrentBarsScope = CurrentBarsScope, IsGFScope = IsGFScope, BarsFlagForKey = BarsFlagForKey,
+    FontScopeGet = FontScopeGet, FontScopeSet = FontScopeSet, BarScopeGet = BarScopeGet, BarScopeSet = BarScopeSet,
+    BarScopeGetBars = BarScopeGetBars, BarScopeSetBars = BarScopeSetBars, NormalizeFontKey = NormalizeFontKey,
+    FontValues = FontValues, FontKeyGet = FontKeyGet, FontKeySet = FontKeySet, TextureValues = TextureValues,
+    SCOPE_VALUES = GLOBAL_SCOPE_VALUES, CurrentPowerBarScopeUnit = CurrentPowerBarScopeUnit,
+    BuildScopeOverrideSection = BuildScopeOverrideSection, SmoothPowerGet = SmoothPowerGet, SmoothPowerSet = SmoothPowerSet,
+    NormalizeHpMode = NormalizeHpMode, NormalizePowerMode = NormalizePowerMode,
+    PriorityOrder = PriorityOrder, PriorityColor = PriorityColor, SetPriorityOrder = SetPriorityOrder,
+    RefreshBorderTestModes = RefreshBorderTestModes, SetAbsorbTextureTest = SetAbsorbTextureTest,
+    ClearAbsorbTextureTest = ClearAbsorbTextureTest, SetControlEnabled = SetControlEnabled, SetControlsEnabled = SetControlsEnabled,
+    ApplyFonts = ApplyFonts, ApplyBars = ApplyBars, ApplyCastbars = ApplyCastbars,
+})

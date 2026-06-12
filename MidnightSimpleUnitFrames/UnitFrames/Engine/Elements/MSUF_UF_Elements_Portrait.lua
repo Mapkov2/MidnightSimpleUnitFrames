@@ -22,30 +22,30 @@ local BOSS_PREVIEW_PORTRAIT = V.BOSS_PREVIEW_PORTRAIT or "Interface\\ICONS\\Achi
 local BOSS_PREVIEW_CLASS = V.BOSS_PREVIEW_CLASS or "DEATHKNIGHT"
 local ADDON_PATH = V.ADDON_PATH or ("Interface\\AddOns\\" .. (addonName or "MidnightSimpleUnitFrames"))
 local PORTRAIT_MASKS = V.PORTRAIT_MASKS or {
-    SQUARE = WHITE,
-    CIRCLE = ADDON_PATH .. "\\Media\\Masks\\circle_mask.tga",
-    ROUNDED = ADDON_PATH .. "\\Media\\Masks\\rounded_mask.tga",
-    DIAMOND = ADDON_PATH .. "\\Media\\Masks\\diamond_mask.tga",
+  SQUARE = WHITE,
+  CIRCLE = ADDON_PATH .. "\\Media\\Masks\\circle_mask.tga",
+  ROUNDED = ADDON_PATH .. "\\Media\\Masks\\rounded_mask.tga",
+  DIAMOND = ADDON_PATH .. "\\Media\\Masks\\diamond_mask.tga",
 }
 local DYNAMIC_PORTRAIT_BORDER = V.DYNAMIC_PORTRAIT_BORDER or {
-    CLASS_COLOR = true,
-    REACTION = true,
+  CLASS_COLOR = true,
+  REACTION = true,
 }
 local QUEUED_2D_PORTRAIT_EVENTS = V.QUEUED_2D_PORTRAIT_EVENTS or {
-    UNIT_PORTRAIT_UPDATE = true,
-    UNIT_MODEL_CHANGED = true,
-    UNIT_CONNECTION = true,
-    MSUF_UNIT_IDENTITY_VISUAL = true,
-    MSUF_UNIT_IDENTITY_SOFT = true,
-    MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
+  UNIT_PORTRAIT_UPDATE = true,
+  UNIT_MODEL_CHANGED = true,
+  UNIT_CONNECTION = true,
+  MSUF_UNIT_IDENTITY_VISUAL = true,
+  MSUF_UNIT_IDENTITY_SOFT = true,
+  MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
 }
 local PORTRAIT_GUID_BUST_EVENTS = {
-    UNIT_PORTRAIT_UPDATE = true,
-    UNIT_MODEL_CHANGED = true,
-    UNIT_CONNECTION = true,
-    MSUF_UNIT_IDENTITY_VISUAL = true,
-    MSUF_UNIT_IDENTITY_SOFT = true,
-    MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
+  UNIT_PORTRAIT_UPDATE = true,
+  UNIT_MODEL_CHANGED = true,
+  UNIT_CONNECTION = true,
+  MSUF_UNIT_IDENTITY_VISUAL = true,
+  MSUF_UNIT_IDENTITY_SOFT = true,
+  MSUF_UNIT_IDENTITY_SOFT_VISUAL = true,
 }
 local SetShown = V.SetShown
 local issecretvalue = _G.issecretvalue or function(_) return false end
@@ -61,542 +61,542 @@ local PortraitBorderNeedsUpdate
 local LayoutPortraitBorder
 
 local function SetTextureCached(texture, value)
-    if texture and texture._msufTexture ~= value then
-        texture:SetTexture(value)
-        texture._msufTexture = value
-        texture._msufAtlas = nil
-        texture._msufPortraitGUID = nil
-    end
+  if texture and texture._msufTexture ~= value then
+    texture:SetTexture(value)
+    texture._msufTexture = value
+    texture._msufAtlas = nil
+    texture._msufPortraitGUID = nil
+  end
 end
 
 local function SetTexCoordCached(texture, l, r, t, b)
-    if texture and (texture._msufL ~= l or texture._msufR ~= r or texture._msufT ~= t or texture._msufB ~= b) then
-        texture:SetTexCoord(l, r, t, b)
-        texture._msufL, texture._msufR, texture._msufT, texture._msufB = l, r, t, b
-    end
+  if texture and (texture._msufL ~= l or texture._msufR ~= r or texture._msufT ~= t or texture._msufB ~= b) then
+    texture:SetTexCoord(l, r, t, b)
+    texture._msufL, texture._msufR, texture._msufT, texture._msufB = l, r, t, b
+  end
 end
 
 local function SetAtlasCached(texture, atlas)
-    if texture and texture.SetAtlas and texture._msufAtlas ~= atlas then
-        texture:SetAtlas(atlas)
-        texture._msufAtlas = atlas
-        texture._msufTexture = nil
-        texture._msufPortraitGUID = nil
-        texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
-    end
+  if texture and texture.SetAtlas and texture._msufAtlas ~= atlas then
+    texture:SetAtlas(atlas)
+    texture._msufAtlas = atlas
+    texture._msufTexture = nil
+    texture._msufPortraitGUID = nil
+    texture._msufL, texture._msufR, texture._msufT, texture._msufB = nil, nil, nil, nil
+  end
 end
 
 local function ClearPortraitGUID(texture)
-    if texture then
-        texture._msufPortraitGUID = nil
-    end
+  if texture then
+    texture._msufPortraitGUID = nil
+  end
 end
 
 local function SetVertexColorCached(texture, r, g, b, a)
-    if texture and (texture._msufR ~= r or texture._msufG ~= g or texture._msufBv ~= b or texture._msufA ~= a) then
-        texture:SetVertexColor(r, g, b, a)
-        texture._msufR, texture._msufG, texture._msufBv, texture._msufA = r, g, b, a
-    end
+  if texture and (texture._msufR ~= r or texture._msufG ~= g or texture._msufBv ~= b or texture._msufA ~= a) then
+    texture:SetVertexColor(r, g, b, a)
+    texture._msufR, texture._msufG, texture._msufBv, texture._msufA = r, g, b, a
+  end
 end
 
 local function ClearPortraitTexture(texture)
-    if not texture then
-        return
-    end
-    texture:SetTexture(nil)
-    texture._msufTexture = nil
-    texture._msufAtlas = nil
-    texture._msufPortraitGUID = nil
+  if not texture then
+    return
+  end
+  texture:SetTexture(nil)
+  texture._msufTexture = nil
+  texture._msufAtlas = nil
+  texture._msufPortraitGUID = nil
 end
 
 local function PortraitFrameVisible(frame)
-    if not frame then
-        return false
-    end
-    if frame.IsShown and not frame:IsShown() then
-        return false
-    end
-    local holder = frame.MSUFPortraitHolder
-    if holder and holder.IsShown and not holder:IsShown() then
-        return false
-    end
-    return holder ~= nil
+  if not frame then
+    return false
+  end
+  if frame.IsShown and not frame:IsShown() then
+    return false
+  end
+  local holder = frame.MSUFPortraitHolder
+  if holder and holder.IsShown and not holder:IsShown() then
+    return false
+  end
+  return holder ~= nil
 end
 
 local function FlushQueuedPortraits()
-    portraitQueueScheduled = false
-    if portraitQueueDriver then
-        portraitQueueDriver:Hide()
-    end
+  portraitQueueScheduled = false
+  if portraitQueueDriver then
+    portraitQueueDriver:Hide()
+  end
 
-    local count = portraitQueueCount
-    portraitQueueCount = 0
-    for i = 1, count do
-        local frame = portraitQueue[i]
-        portraitQueue[i] = nil
-        if frame and frame._msufPortraitQueued == true then
-            frame._msufPortraitQueued = nil
-            local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
-            local texture = frame.portrait
-            if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
-                frame._msufPortraitNeedsVisibleRefresh = nil
-                if frame._msufPortraitForceRefresh == true then
-                    frame._msufPortraitForceRefresh = nil
-                    ClearPortraitGUID(texture)
-                end
-                ApplyUnitPortrait(texture, frame.unit, frame)
-                if PortraitBorderNeedsUpdate("MSUF_PORTRAIT_FLUSH", p) then
-                    LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
-                end
-            elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
-                frame._msufPortraitNeedsVisibleRefresh = true
-            end
+  local count = portraitQueueCount
+  portraitQueueCount = 0
+  for i = 1, count do
+    local frame = portraitQueue[i]
+    portraitQueue[i] = nil
+    if frame and frame._msufPortraitQueued == true then
+      frame._msufPortraitQueued = nil
+      local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
+      local texture = frame.portrait
+      if p and p.enabled == true and p.render ~= "CLASS" and texture and PortraitFrameVisible(frame) then
+        frame._msufPortraitNeedsVisibleRefresh = nil
+        if frame._msufPortraitForceRefresh == true then
+          frame._msufPortraitForceRefresh = nil
+          ClearPortraitGUID(texture)
         end
+        ApplyUnitPortrait(texture, frame.unit, frame)
+        if PortraitBorderNeedsUpdate("MSUF_PORTRAIT_FLUSH", p) then
+          LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
+        end
+      elseif p and p.enabled == true and texture and not PortraitFrameVisible(frame) then
+        frame._msufPortraitNeedsVisibleRefresh = true
+      end
     end
+  end
 end
 
 local function QueuePortraitUpdate(frame)
-    if not frame then
-        return
-    end
-    if frame._msufPortraitQueued ~= true then
-        portraitQueueCount = portraitQueueCount + 1
-        portraitQueue[portraitQueueCount] = frame
-        frame._msufPortraitQueued = true
-    end
-    if portraitQueueScheduled then
-        return
-    end
-    portraitQueueScheduled = true
-    if not portraitQueueDriver then
-        portraitQueueDriver = CreateFrame("Frame")
-        portraitQueueDriver:Hide()
-        portraitQueueDriver:SetScript("OnUpdate", FlushQueuedPortraits)
-    end
-    portraitQueueDriver:Show()
+  if not frame then
+    return
+  end
+  if frame._msufPortraitQueued ~= true then
+    portraitQueueCount = portraitQueueCount + 1
+    portraitQueue[portraitQueueCount] = frame
+    frame._msufPortraitQueued = true
+  end
+  if portraitQueueScheduled then
+    return
+  end
+  portraitQueueScheduled = true
+  if not portraitQueueDriver then
+    portraitQueueDriver = CreateFrame("Frame")
+    portraitQueueDriver:Hide()
+    portraitQueueDriver:SetScript("OnUpdate", FlushQueuedPortraits)
+  end
+  portraitQueueDriver:Show()
 end
 
 local function EnsurePortrait(frame)
-    local holder = frame.MSUFPortraitHolder
-    if holder then
-        return holder, frame.portrait
-    end
+  local holder = frame.MSUFPortraitHolder
+  if holder then
+    return holder, frame.portrait
+  end
 
-    holder = CreateFrame("Frame", nil, frame)
-    holder:EnableMouse(false)
-    frame.MSUFPortraitHolder = holder
-    if frame.HookScript and not frame._msufPortraitOnShowHooked then
-        frame._msufPortraitOnShowHooked = true
-        frame:HookScript("OnShow", function(self)
-            if self._msufPortraitNeedsVisibleRefresh == true and Portrait.Update then
-                self._msufPortraitNeedsVisibleRefresh = nil
-                Portrait.Update(self, "MSUF_PORTRAIT_ONSHOW", self.unit)
-            end
-        end)
-    end
+  holder = CreateFrame("Frame", nil, frame)
+  holder:EnableMouse(false)
+  frame.MSUFPortraitHolder = holder
+  if frame.HookScript and not frame._msufPortraitOnShowHooked then
+    frame._msufPortraitOnShowHooked = true
+    frame:HookScript("OnShow", function(self)
+      if self._msufPortraitNeedsVisibleRefresh == true and Portrait.Update then
+        self._msufPortraitNeedsVisibleRefresh = nil
+        Portrait.Update(self, "MSUF_PORTRAIT_ONSHOW", self.unit)
+      end
+    end)
+  end
 
-    local bg = holder:CreateTexture(nil, "BACKGROUND")
-    bg:SetTexture(WHITE)
-    bg:SetAllPoints(holder)
-    bg:Hide()
-    holder.bg = bg
-    frame.MSUFPortraitBG = bg
+  local bg = holder:CreateTexture(nil, "BACKGROUND")
+  bg:SetTexture(WHITE)
+  bg:SetAllPoints(holder)
+  bg:Hide()
+  holder.bg = bg
+  frame.MSUFPortraitBG = bg
 
-    local tex = holder:CreateTexture(nil, "ARTWORK")
-    tex:SetAllPoints(holder)
-    frame.portrait = tex
-    frame.Portrait = tex
+  local tex = holder:CreateTexture(nil, "ARTWORK")
+  tex:SetAllPoints(holder)
+  frame.portrait = tex
+  frame.Portrait = tex
 
-    if holder.CreateMaskTexture and tex.AddMaskTexture then
-        local mask = holder:CreateMaskTexture()
-        mask:SetAllPoints(holder)
-        tex:AddMaskTexture(mask)
-        bg:AddMaskTexture(mask)
-        holder.mask = mask
-    end
+  if holder.CreateMaskTexture and tex.AddMaskTexture then
+    local mask = holder:CreateMaskTexture()
+    mask:SetAllPoints(holder)
+    tex:AddMaskTexture(mask)
+    bg:AddMaskTexture(mask)
+    holder.mask = mask
+  end
 
-    local border = CreateFrame("Frame", nil, holder)
-    border:EnableMouse(false)
-    border:SetAllPoints(holder)
-    holder.border = border
-    frame.MSUFPortraitBorder = border
+  local border = CreateFrame("Frame", nil, holder)
+  border:EnableMouse(false)
+  border:SetAllPoints(holder)
+  holder.border = border
+  frame.MSUFPortraitBorder = border
 
-    local edges = {}
-    for i = 1, 4 do
-        local edge = border:CreateTexture(nil, "OVERLAY")
-        edge:SetTexture(WHITE)
-        edge:Hide()
-        edges[i] = edge
-    end
-    holder.edges = edges
-    return holder, tex
+  local edges = {}
+  for i = 1, 4 do
+    local edge = border:CreateTexture(nil, "OVERLAY")
+    edge:SetTexture(WHITE)
+    edge:Hide()
+    edges[i] = edge
+  end
+  holder.edges = edges
+  return holder, tex
 end
 
 local function ApplyPortraitMask(holder, p)
-    local mask = holder and holder.mask
-    if not mask then
-        return
-    end
-    SetTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
+  local mask = holder and holder.mask
+  if not mask then
+    return
+  end
+  SetTextureCached(mask, PORTRAIT_MASKS[p and p.shape or "SQUARE"] or WHITE)
 end
 
 local function LayoutPortrait(frame, p)
-    local holder = frame.MSUFPortraitHolder
-    if not holder then
-        return
-    end
+  local holder = frame.MSUFPortraitHolder
+  if not holder then
+    return
+  end
 
-    local size = tonumber(p and p.size) or tonumber(frame._msufPortraitFrameHeight) or tonumber(frame.MSUFSpec and frame.MSUFSpec.height) or 30
-    if size < 1 then
-        size = 1
-    end
-    local side = p and p.side == "RIGHT" and "RIGHT" or "LEFT"
-    local x = tonumber(p and p.x) or 0
-    local y = tonumber(p and p.y) or 0
-    local anchor = frame.Health or frame.hpBar or frame
-    if frame._msufPowerBarReserved then
-        anchor = frame
-    end
+  local size = tonumber(p and p.size) or tonumber(frame._msufPortraitFrameHeight) or tonumber(frame.MSUFSpec and frame.MSUFSpec.height) or 30
+  if size < 1 then
+    size = 1
+  end
+  local side = p and p.side == "RIGHT" and "RIGHT" or "LEFT"
+  local x = tonumber(p and p.x) or 0
+  local y = tonumber(p and p.y) or 0
+  local anchor = frame.Health or frame.hpBar or frame
+  if frame._msufPowerBarReserved then
+    anchor = frame
+  end
 
-    local baseLevel = frame:GetFrameLevel() or 1
-    if frame.Health and frame.Health.GetFrameLevel then
-        baseLevel = frame.Health:GetFrameLevel() or baseLevel
-    end
-    if holder._msufLevel ~= baseLevel + 6 then
-        holder:SetFrameLevel(baseLevel + 6)
-        holder._msufLevel = baseLevel + 6
-    end
-    if holder.border and holder.border._msufLevel ~= baseLevel + 7 then
-        holder.border:SetFrameLevel(baseLevel + 7)
-        holder.border._msufLevel = baseLevel + 7
-    end
+  local baseLevel = frame:GetFrameLevel() or 1
+  if frame.Health and frame.Health.GetFrameLevel then
+    baseLevel = frame.Health:GetFrameLevel() or baseLevel
+  end
+  if holder._msufLevel ~= baseLevel + 6 then
+    holder:SetFrameLevel(baseLevel + 6)
+    holder._msufLevel = baseLevel + 6
+  end
+  if holder.border and holder.border._msufLevel ~= baseLevel + 7 then
+    holder.border:SetFrameLevel(baseLevel + 7)
+    holder.border._msufLevel = baseLevel + 7
+  end
 
-    if holder._msufSize ~= size then
-        holder:SetSize(size, size)
-        holder._msufSize = size
+  if holder._msufSize ~= size then
+    holder:SetSize(size, size)
+    holder._msufSize = size
+  end
+  if holder._msufSide ~= side or holder._msufX ~= x or holder._msufY ~= y or holder._msufAnchor ~= anchor then
+    holder:ClearAllPoints()
+    if side == "RIGHT" then
+      holder:SetPoint("LEFT", anchor, "RIGHT", x, y)
+    else
+      holder:SetPoint("RIGHT", anchor, "LEFT", x, y)
     end
-    if holder._msufSide ~= side or holder._msufX ~= x or holder._msufY ~= y or holder._msufAnchor ~= anchor then
-        holder:ClearAllPoints()
-        if side == "RIGHT" then
-            holder:SetPoint("LEFT", anchor, "RIGHT", x, y)
-        else
-            holder:SetPoint("RIGHT", anchor, "LEFT", x, y)
-        end
-        holder._msufSide, holder._msufX, holder._msufY, holder._msufAnchor = side, x, y, anchor
-    end
+    holder._msufSide, holder._msufX, holder._msufY, holder._msufAnchor = side, x, y, anchor
+  end
 end
 
 local function UnitClassToken(unit)
-    if UnitClass then
-        local _, token = UnitClass(unit)
-        if type(token) == "string" then
-            return token
-        end
+  if UnitClass then
+    local _, token = UnitClass(unit)
+    if type(token) == "string" then
+      return token
     end
-    return nil
+  end
+  return nil
 end
 
 local function BossPreviewActive(unit, frame)
-    return type(unit) == "string"
-        and unit:match("^boss[1-5]$")
-        and (
-            (frame and frame._msufBossPreviewForced == true)
-            or _G.MSUF2_BossUnitframePreviewActive == true
-            or _G.MSUF_BossTestMode == true
-            or _G.MSUF_PreviewTestMode == true
-        )
+  return type(unit) == "string"
+    and unit:match("^boss[1-5]$")
+    and (
+      (frame and frame._msufBossPreviewForced == true)
+      or _G.MSUF2_BossUnitframePreviewActive == true
+      or _G.MSUF_BossTestMode == true
+      or _G.MSUF_PreviewTestMode == true
+    )
 end
 
 local function BossPreviewClassToken(unit, frame)
-    if BossPreviewActive(unit, frame) then
-        return BOSS_PREVIEW_CLASS
-    end
-    return nil
+  if BossPreviewActive(unit, frame) then
+    return BOSS_PREVIEW_CLASS
+  end
+  return nil
 end
 
 local function ApplyClassPortrait(texture, unit, p, class, frame)
-    class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
-    local classStyle = p and p.classStyle or "BLIZZARD"
-    if class and classStyle == "BLIZZARD" and texture and texture.SetAtlas then
-        SetAtlasCached(texture, "classicon-" .. class)
-        return
-    end
+  class = class or BossPreviewClassToken(unit, frame) or UnitClassToken(unit)
+  local classStyle = p and p.classStyle or "BLIZZARD"
+  if class and classStyle == "BLIZZARD" and texture and texture.SetAtlas then
+    SetAtlasCached(texture, "classicon-" .. class)
+    return
+  end
 
-    local PM = MSUF and MSUF.PortraitMedia
-    local path, l, r, t, b
-    if PM and PM.ResolveClassPortrait then
-        local visual = PM.ResolveClassPortrait(class, classStyle)
-        if type(visual) == "table" then
-            path, l, r, t, b = visual.texture, visual.left, visual.right, visual.top, visual.bottom
-        end
+  local PM = MSUF and MSUF.PortraitMedia
+  local path, l, r, t, b
+  if PM and PM.ResolveClassPortrait then
+    local visual = PM.ResolveClassPortrait(class, classStyle)
+    if type(visual) == "table" then
+      path, l, r, t, b = visual.texture, visual.left, visual.right, visual.top, visual.bottom
     end
-    if not path then
-        path, l, r, t, b = QUESTION_MARK, 0, 1, 0, 1
-    end
-    SetTextureCached(texture, path)
-    SetTexCoordCached(texture, l or 0, r or 1, t or 0, b or 1)
+  end
+  if not path then
+    path, l, r, t, b = QUESTION_MARK, 0, 1, 0, 1
+  end
+  SetTextureCached(texture, path)
+  SetTexCoordCached(texture, l or 0, r or 1, t or 0, b or 1)
 end
 
 ApplyUnitPortrait = function(texture, unit, frame)
-    if BossPreviewActive(unit, frame) then
-        SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
-        SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
-        SetVertexColorCached(texture, 1, 1, 1, 1)
-        return
-    end
-    local guid
-    if UnitGUID and unit then
-        guid = UnitGUID(unit)
-        if issecretvalue(guid) == true then
-            guid = nil
-        end
-    end
-    if guid ~= nil and texture._msufPortraitGUID == guid then
-        return
-    end
+  if BossPreviewActive(unit, frame) then
+    SetTextureCached(texture, BOSS_PREVIEW_PORTRAIT)
     SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
-    texture._msufTexture = nil
-    texture._msufAtlas = nil
-    if SetPortraitTexture then
-        SetPortraitTexture(texture, unit, true)
-        texture._msufPortraitGUID = guid
-    else
-        SetTextureCached(texture, QUESTION_MARK)
+    SetVertexColorCached(texture, 1, 1, 1, 1)
+    return
+  end
+  local guid
+  if UnitGUID and unit then
+    guid = UnitGUID(unit)
+    if issecretvalue(guid) == true then
+      guid = nil
     end
+  end
+  if guid ~= nil and texture._msufPortraitGUID == guid then
+    return
+  end
+  SetTexCoordCached(texture, 0.08, 0.92, 0.08, 0.92)
+  texture._msufTexture = nil
+  texture._msufAtlas = nil
+  if SetPortraitTexture then
+    SetPortraitTexture(texture, unit, true)
+    texture._msufPortraitGUID = guid
+  else
+    SetTextureCached(texture, QUESTION_MARK)
+  end
 end
 
 ResolvePortraitBorderColor = function(frame, p, class)
-    local border = p and p.border
-    local style = border and border.style or "NONE"
-    if style == "NONE" then
-        return nil
+  local border = p and p.border
+  local style = border and border.style or "NONE"
+  if style == "NONE" then
+    return nil
+  end
+  if style == "CLASS_COLOR" then
+    class = class or BossPreviewClassToken(frame.unit, frame) or UnitClassToken(frame.unit)
+    local c = class and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[class]
+    if c then
+      return c.r or 1, c.g or 1, c.b or 1, 1
     end
-    if style == "CLASS_COLOR" then
-        class = class or BossPreviewClassToken(frame.unit, frame) or UnitClassToken(frame.unit)
-        local c = class and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[class]
-        if c then
-            return c.r or 1, c.g or 1, c.b or 1, 1
-        end
-        return 1, 1, 1, 1
-    elseif style == "REACTION" then
-        local reaction = UnitReaction and UnitReaction(frame.unit, "player")
-        reaction = tonumber(reaction)
-        if reaction then
-            if reaction <= 2 then return 1, 0, 0, 1 end
-            if reaction <= 4 then return 1, 0.6, 0, 1 end
-            return 0, 1, 0, 1
-        end
-        return 1, 1, 1, 1
+    return 1, 1, 1, 1
+  elseif style == "REACTION" then
+    local reaction = UnitReaction and UnitReaction(frame.unit, "player")
+    reaction = tonumber(reaction)
+    if reaction then
+      if reaction <= 2 then return 1, 0, 0, 1 end
+      if reaction <= 4 then return 1, 0.6, 0, 1 end
+      return 0, 1, 0, 1
     end
-    return border.r or 1, border.g or 1, border.b or 1, border.a or 1
+    return 1, 1, 1, 1
+  end
+  return border.r or 1, border.g or 1, border.b or 1, border.a or 1
 end
 
 PortraitBorderNeedsUpdate = function(event, p)
-    if event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" then
-        return true
-    end
-    local style = p and p.border and p.border.style
-    return DYNAMIC_PORTRAIT_BORDER[style] == true
+  if event == "MSUF_APPLY" or event == "MSUF_FORCE_UPDATE" then
+    return true
+  end
+  local style = p and p.border and p.border.style
+  return DYNAMIC_PORTRAIT_BORDER[style] == true
 end
 
 LayoutPortraitBorder = function(holder, p, r, g, b, a)
-    local border = holder and holder.border
-    local edges = holder and holder.edges
-    if not (border and edges) then
-        return
+  local border = holder and holder.border
+  local edges = holder and holder.edges
+  if not (border and edges) then
+    return
+  end
+  if not r then
+    if edges then
+      for i = 1, 4 do
+        SetShown(edges[i], false)
+      end
     end
-    if not r then
-        if edges then
-            for i = 1, 4 do
-                SetShown(edges[i], false)
-            end
-        end
-        return
-    end
+    return
+  end
 
-    local cfg = p and p.border
-    local thick = max(1, tonumber(cfg and cfg.thickness) or 2)
-    local fill = cfg and cfg.fill == true
-    local key = thick .. "|" .. (fill and "1" or "0")
-    local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
-    if holder._msufBorderKey ~= key then
-        top:ClearAllPoints()
-        bottom:ClearAllPoints()
-        left:ClearAllPoints()
-        right:ClearAllPoints()
-        if fill then
-            top:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
-            top:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, 0)
-            bottom:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
-            bottom:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
-            left:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
-            left:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
-            right:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, 0)
-            right:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
-        else
-            top:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
-            top:SetPoint("TOPRIGHT", holder, "TOPRIGHT", thick, thick)
-            bottom:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -thick, -thick)
-            bottom:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
-            left:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
-            left:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -thick, -thick)
-            right:SetPoint("TOPRIGHT", holder, "TOPRIGHT", thick, thick)
-            right:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
-        end
-        top:SetHeight(thick)
-        bottom:SetHeight(thick)
-        left:SetWidth(thick)
-        right:SetWidth(thick)
-        holder._msufBorderKey = key
+  local cfg = p and p.border
+  local thick = max(1, tonumber(cfg and cfg.thickness) or 2)
+  local fill = cfg and cfg.fill == true
+  local key = thick .. "|" .. (fill and "1" or "0")
+  local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
+  if holder._msufBorderKey ~= key then
+    top:ClearAllPoints()
+    bottom:ClearAllPoints()
+    left:ClearAllPoints()
+    right:ClearAllPoints()
+    if fill then
+      top:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+      top:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, 0)
+      bottom:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
+      bottom:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
+      left:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+      left:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
+      right:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, 0)
+      right:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", 0, 0)
+    else
+      top:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
+      top:SetPoint("TOPRIGHT", holder, "TOPRIGHT", thick, thick)
+      bottom:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -thick, -thick)
+      bottom:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
+      left:SetPoint("TOPLEFT", holder, "TOPLEFT", -thick, thick)
+      left:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", -thick, -thick)
+      right:SetPoint("TOPRIGHT", holder, "TOPRIGHT", thick, thick)
+      right:SetPoint("BOTTOMRIGHT", holder, "BOTTOMRIGHT", thick, -thick)
     end
-    for i = 1, 4 do
-        SetVertexColorCached(edges[i], r, g, b, a)
-        SetShown(edges[i], true)
-    end
+    top:SetHeight(thick)
+    bottom:SetHeight(thick)
+    left:SetWidth(thick)
+    right:SetWidth(thick)
+    holder._msufBorderKey = key
+  end
+  for i = 1, 4 do
+    SetVertexColorCached(edges[i], r, g, b, a)
+    SetShown(edges[i], true)
+  end
 end
 
 local function ApplyPortraitBackground(holder, p)
-    local bg = holder and holder.bg
-    local cfg = p and p.bg
-    if not bg then
-        return
-    end
-    if not (cfg and cfg.enabled == true) then
-        SetShown(bg, false)
-        return
-    end
-    SetVertexColorCached(bg, cfg.r or 0.05, cfg.g or 0.05, cfg.b or 0.05, cfg.a or 0.85)
-    SetShown(bg, true)
+  local bg = holder and holder.bg
+  local cfg = p and p.bg
+  if not bg then
+    return
+  end
+  if not (cfg and cfg.enabled == true) then
+    SetShown(bg, false)
+    return
+  end
+  SetVertexColorCached(bg, cfg.r or 0.05, cfg.g or 0.05, cfg.b or 0.05, cfg.a or 0.85)
+  SetShown(bg, true)
 end
 
 function Portrait.GetEvents(frame, spec)
-    local p = spec and spec.portrait
-    if p and p.enabled == true and p.render ~= "CLASS" then
-        if (frame and frame.unit == "player") or (spec and spec.key == "player") then
-            return PORTRAIT_2D_PLAYER_EVENTS
-        end
-        return PORTRAIT_2D_EVENTS
+  local p = spec and spec.portrait
+  if p and p.enabled == true and p.render ~= "CLASS" then
+    if (frame and frame.unit == "player") or (spec and spec.key == "player") then
+      return PORTRAIT_2D_PLAYER_EVENTS
     end
-    return EMPTY_EVENTS
+    return PORTRAIT_2D_EVENTS
+  end
+  return EMPTY_EVENTS
 end
 
 function Portrait.IsEnabled(frame, spec)
-    return spec and spec.portrait and spec.portrait.enabled == true
+  return spec and spec.portrait and spec.portrait.enabled == true
 end
 
 function Portrait.Create(frame)
-    EnsurePortrait(frame)
+  EnsurePortrait(frame)
 end
 
 function Portrait.Apply(frame, spec)
-    local p = spec and spec.portrait
-    local holder = EnsurePortrait(frame)
-    if frame then
-        frame._msufPortraitRuntimeCfg = p
-        frame._msufPortraitFrameHeight = spec and spec.height or nil
-    end
-    if not (p and p.enabled == true) then
-        Portrait.Disable(frame)
-        return
-    end
-    frame._msufUpdatePortraitConnection = Portrait.UpdateConnectionState
-    LayoutPortrait(frame, p)
-    ApplyPortraitMask(holder, p)
-    ApplyPortraitBackground(holder, p)
-    LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
-    SetShown(holder, true)
-    SetShown(frame.portrait, true)
+  local p = spec and spec.portrait
+  local holder = EnsurePortrait(frame)
+  if frame then
+    frame._msufPortraitRuntimeCfg = p
+    frame._msufPortraitFrameHeight = spec and spec.height or nil
+  end
+  if not (p and p.enabled == true) then
+    Portrait.Disable(frame)
+    return
+  end
+  frame._msufUpdatePortraitConnection = Portrait.UpdateConnectionState
+  LayoutPortrait(frame, p)
+  ApplyPortraitMask(holder, p)
+  ApplyPortraitBackground(holder, p)
+  LayoutPortraitBorder(holder, p, ResolvePortraitBorderColor(frame, p))
+  SetShown(holder, true)
+  SetShown(frame.portrait, true)
 end
 
 function Portrait.Disable(frame)
-    local holder = frame.MSUFPortraitHolder
-    frame._msufPortraitNeedsVisibleRefresh = nil
-    frame._msufPortraitForceRefresh = nil
-    frame._msufUpdatePortraitConnection = nil
-    frame._msufPortraitRuntimeCfg = nil
-    frame._msufPortraitFrameHeight = nil
-    if frame.portrait then
-        ClearPortraitGUID(frame.portrait)
+  local holder = frame.MSUFPortraitHolder
+  frame._msufPortraitNeedsVisibleRefresh = nil
+  frame._msufPortraitForceRefresh = nil
+  frame._msufUpdatePortraitConnection = nil
+  frame._msufPortraitRuntimeCfg = nil
+  frame._msufPortraitFrameHeight = nil
+  if frame.portrait then
+    ClearPortraitGUID(frame.portrait)
+  end
+  if holder then
+    SetShown(holder, false)
+    if holder.bg then SetShown(holder.bg, false) end
+    if holder.edges then
+      for i = 1, 4 do
+        SetShown(holder.edges[i], false)
+      end
     end
-    if holder then
-        SetShown(holder, false)
-        if holder.bg then SetShown(holder.bg, false) end
-        if holder.edges then
-            for i = 1, 4 do
-                SetShown(holder.edges[i], false)
-            end
-        end
-    elseif frame.portrait then
-        SetShown(frame.portrait, false)
-    end
+  elseif frame.portrait then
+    SetShown(frame.portrait, false)
+  end
 end
 
 function Portrait.UpdateConnectionState(frame, event, unit)
-    local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
-    local texture = frame.portrait
-    if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
-        return
-    end
-    frame._msufPortraitForceRefresh = true
-    ClearPortraitGUID(texture)
-    if not PortraitFrameVisible(frame) then
-        frame._msufPortraitNeedsVisibleRefresh = true
-        return
-    end
-    QueuePortraitUpdate(frame)
-    if PortraitBorderNeedsUpdate(event, p) then
-        LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
-    end
+  local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
+  local texture = frame.portrait
+  if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
+    return
+  end
+  frame._msufPortraitForceRefresh = true
+  ClearPortraitGUID(texture)
+  if not PortraitFrameVisible(frame) then
+    frame._msufPortraitNeedsVisibleRefresh = true
+    return
+  end
+  QueuePortraitUpdate(frame)
+  if PortraitBorderNeedsUpdate(event, p) then
+    LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p))
+  end
 end
 
 function Portrait.Update(frame, event, unit)
-    local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
-    local texture = frame.portrait
-    if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
-        return
+  local p = frame._msufPortraitRuntimeCfg or (frame.MSUFSpec and frame.MSUFSpec.portrait)
+  local texture = frame.portrait
+  if not (p and p.enabled == true and texture and frame.MSUFPortraitHolder) then
+    return
+  end
+  unit = unit or frame.unit
+  local identityVisual = event == "MSUF_UNIT_IDENTITY_VISUAL"
+    or event == "MSUF_UNIT_IDENTITY_SOFT"
+    or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"
+  if PORTRAIT_GUID_BUST_EVENTS[event] == true then
+    frame._msufPortraitForceRefresh = true
+    ClearPortraitGUID(texture)
+  end
+  if not PortraitFrameVisible(frame) then
+    frame._msufPortraitNeedsVisibleRefresh = true
+    if p.render ~= "CLASS" and identityVisual then
+      ClearPortraitTexture(texture)
     end
-    unit = unit or frame.unit
-    local identityVisual = event == "MSUF_UNIT_IDENTITY_VISUAL"
-        or event == "MSUF_UNIT_IDENTITY_SOFT"
-        or event == "MSUF_UNIT_IDENTITY_SOFT_VISUAL"
-    if PORTRAIT_GUID_BUST_EVENTS[event] == true then
-        frame._msufPortraitForceRefresh = true
-        ClearPortraitGUID(texture)
-    end
-    if not PortraitFrameVisible(frame) then
-        frame._msufPortraitNeedsVisibleRefresh = true
-        if p.render ~= "CLASS" and identityVisual then
-            ClearPortraitTexture(texture)
-        end
-        return
-    end
+    return
+  end
 
-    local class
-    if p.render == "CLASS" then
-        frame._msufPortraitNeedsVisibleRefresh = nil
-        frame._msufPortraitQueued = nil
-        frame._msufPortraitForceRefresh = nil
-        class = UnitClassToken(unit)
-        ApplyClassPortrait(texture, unit, p, class, frame)
+  local class
+  if p.render == "CLASS" then
+    frame._msufPortraitNeedsVisibleRefresh = nil
+    frame._msufPortraitQueued = nil
+    frame._msufPortraitForceRefresh = nil
+    class = UnitClassToken(unit)
+    ApplyClassPortrait(texture, unit, p, class, frame)
+  else
+    if QUEUED_2D_PORTRAIT_EVENTS[event] == true then
+      if identityVisual then
+        ClearPortraitTexture(texture)
+      end
+      QueuePortraitUpdate(frame)
     else
-        if QUEUED_2D_PORTRAIT_EVENTS[event] == true then
-            if identityVisual then
-                ClearPortraitTexture(texture)
-            end
-            QueuePortraitUpdate(frame)
-        else
-            frame._msufPortraitNeedsVisibleRefresh = nil
-            frame._msufPortraitQueued = nil
-            if frame._msufPortraitForceRefresh == true then
-                frame._msufPortraitForceRefresh = nil
-                ClearPortraitGUID(texture)
-            end
-            ApplyUnitPortrait(texture, unit, frame)
-        end
+      frame._msufPortraitNeedsVisibleRefresh = nil
+      frame._msufPortraitQueued = nil
+      if frame._msufPortraitForceRefresh == true then
+        frame._msufPortraitForceRefresh = nil
+        ClearPortraitGUID(texture)
+      end
+      ApplyUnitPortrait(texture, unit, frame)
     end
-    if PortraitBorderNeedsUpdate(event, p) then
-        LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p, class))
-    end
+  end
+  if PortraitBorderNeedsUpdate(event, p) then
+    LayoutPortraitBorder(frame.MSUFPortraitHolder, p, ResolvePortraitBorderColor(frame, p, class))
+  end
 end
 
 UF.RegisterElement("Portrait", Portrait)

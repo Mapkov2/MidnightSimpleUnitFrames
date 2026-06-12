@@ -1,4 +1,4 @@
---- Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua
+--- Shell/Menu2/Search/MSUF_Menu2_Search_IndexQuery.lua
 --- Cold-path search indexing, query scoring, target routing, and navigation.
 ---
 --- Owns: search registry, background index construction, query matching,
@@ -217,65 +217,18 @@ local function AddSearchCanonicalPairs(result, firstWords, secondWords)
     end
 end
 
-for _, row in ipairs({
-    "demonhunter|demon|hunter",
-    "deathknight|death|knight",
-    "windshear|wind|shear",
-    "castbar|cast|bar",
-    "healthbar|health|bar",
-    "powerbar|power|bar",
-    "showbuffs|show|buffs",
-    "maxbuffs|max|buffs",
-    "customcaps|custom|caps",
-    "smoothfill|smooth soft fluid|fill",
-    "smoothfill|weiche weichen sanfte fluessige|fuellung",
-    "smoothfill|relleno llenado|suave fluido",
-    "smoothfill|remplissage|doux fluide",
-    "smoothfill|riempimento|fluido morbido",
-    "smoothfill|preenchimento|suave fluido",
-    "classpower|class|resource resources power",
-    "clickcast|click|cast casting",
-    "clickthrough|click|through",
-    "editmode|edit|mode",
-    "loadconditions|load|condition conditions",
-    "readycheck|ready|check",
-    "raidmarker|raid|marker",
-    "groupnumber|group|number",
-    "nameshortening|name|shortening",
-    "globalcooldown|global|cooldown",
-    "fokuskick|focus|kick",
-    "interruptready|interrupt|ready",
-    "leveltext|level|text",
-    "levelindicator|level|indicator",
-    "statusindicators|status|indicator indicators",
-    "statusicons|status|icon icons",
-    "onoff|turn|off",
-    "minimapicon|minimap|icon button",
-    "kofi|ko|fi",
-    "menuscale|menu|scale",
-    "uiscale|ui|scale",
-    "targetsound|target|sound sounds",
-    "unitauras|unit|aura auras",
-    "globalstyle|global|style",
-    "spellid|spell|id",
-    "healthtext|health|text",
-    "powertext|power|text",
-    "nametext|name|text",
-    "classcolor|class|color",
-    "rangecheck|range|check checker checking",
-    "distancecheck|distance|check checker checking",
-    "outofrange|out|range",
-    "unitframe|unit|frame frames",
-    "playerframe|player|frame",
-    "targetframe|target|frame",
-    "focusframe|focus|frame",
-    "petframe|pet|frame",
-    "bossframes|boss|frame frames",
-    "partyframes|party|frame frames",
-    "raidframes|raid|frame frames",
-}) do
+for row in ([[
+demonhunter|demon|hunter;deathknight|death|knight;windshear|wind|shear;castbar|cast|bar;healthbar|health|bar;powerbar|power|bar;showbuffs|show|buffs;maxbuffs|max|buffs;customcaps|custom|caps
+smoothfill|smooth soft fluid|fill;smoothfill|weiche weichen sanfte fluessige|fuellung;smoothfill|relleno llenado|suave fluido;smoothfill|remplissage|doux fluide;smoothfill|riempimento|fluido morbido;smoothfill|preenchimento|suave fluido
+classpower|class|resource resources power;clickcast|click|cast casting;clickthrough|click|through;editmode|edit|mode;loadconditions|load|condition conditions;readycheck|ready|check;raidmarker|raid|marker;groupnumber|group|number
+nameshortening|name|shortening;globalcooldown|global|cooldown;fokuskick|focus|kick;interruptready|interrupt|ready;leveltext|level|text;levelindicator|level|indicator;statusindicators|status|indicator indicators;statusicons|status|icon icons
+onoff|turn|off;minimapicon|minimap|icon button;kofi|ko|fi;menuscale|menu|scale;uiscale|ui|scale;targetsound|target|sound sounds;unitauras|unit|aura auras;globalstyle|global|style;spellid|spell|id
+healthtext|health|text;powertext|power|text;nametext|name|text;classcolor|class|color;rangecheck|range|check checker checking;distancecheck|distance|check checker checking;outofrange|out|range;unitframe|unit|frame frames
+playerframe|player|frame;targetframe|target|frame;focusframe|focus|frame;petframe|pet|frame;bossframes|boss|frame frames;partyframes|party|frame frames;raidframes|raid|frame frames
+]]):gmatch("[^;]+") do
+    row = row:match("^%s*(.-)%s*$")
     local result, firstWords, secondWords = row:match("^([^|]*)|([^|]*)|(.+)$")
-    AddSearchCanonicalPairs(result, firstWords, secondWords)
+    if result then AddSearchCanonicalPairs(result, firstWords, secondWords) end
 end
 
 local function SearchCanonicalWords(raw)

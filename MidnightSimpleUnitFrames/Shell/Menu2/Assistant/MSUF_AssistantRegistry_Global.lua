@@ -1557,6 +1557,7 @@ local function ColorSetting(key, label, aliases, getRGB, setRGB, opts)
         attribute = opts.attribute or key,
         type = "color",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         get = function()
             local r, g, b, colorLabel = getRGB()
             return ColorValue(r, g, b, colorLabel)
@@ -2702,26 +2703,29 @@ Registry:RegisterAction({
 })
 
 ColorSetting("general.aurasOwnBuffHighlightColor", "Own Buff Highlight Color", {
-    "own buff highlight color", "my buff highlight color", "aura own buff color",
+    "own buff highlight color", "my buff highlight color", "aura own buff color", "own buff aura highlight color", "buff aura highlight color",
 }, function()
     return TableRGB(GeneralDB(), "aurasOwnBuffHighlightColor", 1, 0.85, 0.2)
 end, function(r, g, b)
     SetTableRGB(GeneralDB(), "aurasOwnBuffHighlightColor", r, g, b)
-end, { category = "Colors / Auras", attribute = "ownBuffHighlightColor", defaultR = 1, defaultG = 0.85, defaultB = 0.2, apply = ApplyAuraColors })
+end, { category = "Colors / Auras", attribute = "ownBuffHighlightColor", defaultR = 1, defaultG = 0.85, defaultB = 0.2, apply = ApplyAuraColors,
+    exactAliases = { "own buff highlight color", "my buff highlight color", "aura own buff color", "own buff aura highlight color", "buff aura highlight color" } })
 ColorSetting("general.aurasOwnDebuffHighlightColor", "Own Debuff Highlight Color", {
-    "own debuff highlight color", "my debuff highlight color", "aura own debuff color",
+    "own debuff highlight color", "my debuff highlight color", "aura own debuff color", "own debuff aura highlight color", "debuff aura highlight color",
 }, function()
-    return TableRGB(GeneralDB(), "aurasOwnDebuffHighlightColor", 1, 0.85, 0.2)
+    return TableRGB(GeneralDB(), "aurasOwnDebuffHighlightColor", 1, 0.30, 0.30)
 end, function(r, g, b)
     SetTableRGB(GeneralDB(), "aurasOwnDebuffHighlightColor", r, g, b)
-end, { category = "Colors / Auras", attribute = "ownDebuffHighlightColor", defaultR = 1, defaultG = 0.85, defaultB = 0.2, apply = ApplyAuraColors })
+end, { category = "Colors / Auras", attribute = "ownDebuffHighlightColor", defaultR = 1, defaultG = 0.30, defaultB = 0.30, apply = ApplyAuraColors,
+    exactAliases = { "own debuff highlight color", "my debuff highlight color", "aura own debuff color", "own debuff aura highlight color", "debuff aura highlight color" } })
 ColorSetting("general.aurasStackCountColor", "Aura Stack Count Text Color", {
-    "stack count text color", "aura stack color", "aura stack count color",
+    "stack count text color", "aura stack color", "aura stack count color", "aura stacks color", "aura stack text color", "aura count color",
 }, function()
     return TableRGB(GeneralDB(), "aurasStackCountColor", 1, 1, 1)
 end, function(r, g, b)
     SetTableRGB(GeneralDB(), "aurasStackCountColor", r, g, b)
-end, { category = "Colors / Auras", attribute = "auraStackColor", apply = ApplyAuraColors })
+end, { category = "Colors / Auras", attribute = "auraStackColor", apply = ApplyAuraColors,
+    exactAliases = { "stack count text color", "aura stack color", "aura stack count color", "aura stacks color", "aura stack text color", "aura count color" } })
 ColorSetting("auras3.shared.pandemicColor", "Pandemic Window Color", {
     "pandemic window color", "pandemic color", "aura pandemic color",
 }, function()
@@ -2731,19 +2735,34 @@ end, function(r, g, b)
     local sh = AuraSharedDB()
     sh.pandemicR, sh.pandemicG, sh.pandemicB = r, g, b
 end, { category = "Colors / Auras", attribute = "pandemicColor", defaultR = 0, defaultG = 0.4, defaultB = 1, apply = ApplyAuraColors })
-RegisterGeneralBoolean("aurasCooldownTextUseBuckets", "auraCooldownBuckets", "Color Aura Timers By Remaining Time", true, {
-    "color aura timers by remaining time", "aura timer bucket colors", "aura cooldown bucket colors",
-}, { category = "Colors / Auras", frameType = "colors", apply = ApplyAuraColors, reason = "MSUF_ASSISTANT_AURA_TIMER_BUCKETS" })
+RegisterGeneralBoolean("aurasCooldownTextUseBuckets", "auraCooldownBuckets", "Color Aura Timers By Remaining Time", false, {
+    "color aura timers by remaining time", "aura timer bucket colors", "aura timer color buckets", "aura cooldown bucket colors", "aura cooldown color buckets", "aura cooldown buckets", "aura timer buckets",
+}, { category = "Colors / Auras", frameType = "colors", apply = ApplyAuraColors, reason = "MSUF_ASSISTANT_AURA_TIMER_BUCKETS",
+    exactAliases = { "color aura timers by remaining time", "aura timer bucket colors", "aura timer color buckets", "aura cooldown bucket colors", "aura cooldown color buckets", "aura cooldown buckets", "aura timer buckets" } })
 for _, row in ipairs({
-    { key = "aurasCooldownTextSafeColor", label = "Aura Cooldown Safe Text Color", dr = 1, dg = 1, db = 1, aliases = { "aura cooldown safe color", "cooldown text safe color", "aura timer safe color" } },
-    { key = "aurasCooldownTextWarningColor", label = "Aura Cooldown Warning Text Color", dr = 1, dg = 0.85, db = 0.2, aliases = { "aura cooldown warning color", "cooldown text warning color", "aura timer warning color" } },
-    { key = "aurasCooldownTextUrgentColor", label = "Aura Cooldown Urgent Text Color", dr = 1, dg = 0.55, db = 0.1, aliases = { "aura cooldown urgent color", "cooldown text urgent color", "aura timer urgent color" } },
+    { key = "aurasCooldownTextSafeColor", label = "Aura Cooldown Safe Text Color", dr = 1, dg = 1, db = 1, aliases = { "aura cooldown safe color", "aura cooldown safe text color", "cooldown text safe color", "aura timer safe color", "aura safe timer color", "safe aura timer color" } },
+    { key = "aurasCooldownTextWarningColor", label = "Aura Cooldown Warning Text Color", dr = 1, dg = 0.85, db = 0.2, aliases = { "aura cooldown warning color", "aura cooldown warning text color", "cooldown text warning color", "aura timer warning color", "aura warning timer color", "warning aura timer color" } },
+    { key = "aurasCooldownTextUrgentColor", label = "Aura Cooldown Urgent Text Color", dr = 1, dg = 0.55, db = 0.1, aliases = { "aura cooldown urgent color", "aura cooldown urgent text color", "cooldown text urgent color", "aura timer urgent color", "aura urgent timer color", "urgent aura timer color" } },
 }) do
     ColorSetting("general." .. row.key, row.label, row.aliases, function()
         return TableRGB(GeneralDB(), row.key, row.dr, row.dg, row.db)
     end, function(r, g, b)
         SetTableRGB(GeneralDB(), row.key, r, g, b)
-    end, { category = "Colors / Auras", attribute = row.key, defaultR = row.dr, defaultG = row.dg, defaultB = row.db, apply = ApplyAuraColors })
+    end, { category = "Colors / Auras", attribute = row.key, defaultR = row.dr, defaultG = row.dg, defaultB = row.db, apply = ApplyAuraColors, exactAliases = row.aliases })
+end
+for _, row in ipairs({
+    { key = "aurasCooldownTextSafeSeconds", attr = "auraCooldownTextSafeSeconds", label = "Aura Cooldown Safe Seconds", defaultValue = 60, minValue = 0, maxValue = 600, aliases = { "aura cooldown safe seconds", "aura timer safe seconds", "aura safe seconds", "safe aura seconds", "safe aura timer threshold", "aura safe timer threshold" } },
+    { key = "aurasCooldownTextWarningSeconds", attr = "auraCooldownTextWarningSeconds", label = "Aura Cooldown Warning Seconds", defaultValue = 15, minValue = 0, maxValue = 30, aliases = { "aura cooldown warning seconds", "aura timer warning seconds", "aura warning seconds", "warning aura seconds", "warning aura timer threshold", "aura warning timer threshold" } },
+    { key = "aurasCooldownTextUrgentSeconds", attr = "auraCooldownTextUrgentSeconds", label = "Aura Cooldown Urgent Seconds", defaultValue = 5, minValue = 0, maxValue = 15, aliases = { "aura cooldown urgent seconds", "aura timer urgent seconds", "aura urgent seconds", "urgent aura seconds", "urgent aura timer threshold", "aura urgent timer threshold" } },
+}) do
+    RegisterGeneralNumberSetting(row.key, row.attr, row.label, row.defaultValue, row.minValue, row.maxValue, row.aliases, {
+        category = "Colors / Auras",
+        frameType = "colors",
+        apply = ApplyAuraColors,
+        reason = "MSUF_ASSISTANT_AURA_TIMER_THRESHOLDS",
+        description = "Aura cooldown text bucket threshold.",
+        exactAliases = row.aliases,
+    })
 end
 
 ColorSetting("general.portraitBorderColor", "Portrait Border Color", {
@@ -2916,7 +2935,7 @@ Registry:RegisterAction({
     run = function()
         local g = GeneralDB()
         g.aurasOwnBuffHighlightColor = { 1, 0.85, 0.2 }
-        g.aurasOwnDebuffHighlightColor = { 1, 0.85, 0.2 }
+        g.aurasOwnDebuffHighlightColor = { 1, 0.30, 0.30 }
         g.aurasStackCountColor = { 1, 1, 1 }
         g.aurasCooldownTextSafeColor = nil
         g.aurasCooldownTextWarningColor = { 1, 0.85, 0.2 }

@@ -8,6 +8,7 @@ _G.MSUF2 = M
 local W = M.Widgets or {}
 local T = M.Theme or {}
 local UP = M.UnitPage or {}
+local UnitSectionShared = M.UnitSectionsShared or {}
 
 local floor = math.floor
 local max = math.max
@@ -195,12 +196,7 @@ local function BuildText(ctx, builder, unit)
 
     local tabFrames = {}
     local function MakeTabFrame(key)
-        local frame = CreateFrame("Frame", nil, sec)
-        frame:SetPoint("TOPLEFT", sec, "TOPLEFT", 0, -118)
-        frame:SetPoint("BOTTOMRIGHT", sec, "BOTTOMRIGHT", 0, 12)
-        frame._msuf2Width = sectionW
-        tabFrames[key] = frame
-        return frame
+        return UnitSectionShared.MakeTabFrame(sec, key, -118, sectionW, tabFrames)
     end
 
     local function TextCard(parent, title, subtitle, x, y, width, height)

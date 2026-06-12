@@ -27,8 +27,13 @@ local GameplayDB = C.GameplayDB or function() return (_G.MSUF_DB and _G.MSUF_DB.
 local UnitDB = C.UnitDB
 local GroupDB = C.GroupDB
 local AuraSharedBool = C.AuraSharedBool
+local AuraModel = C.AuraModel
 local AuraUnitEnabled = C.AuraUnitEnabled
+local AuraLaneShown = C.AuraLaneShown
+local AuraFiltersEnabled = C.AuraFiltersEnabled
+local AuraReadFilter = C.AuraReadFilter
 local GFAuraLaneShown = C.GFAuraLaneShown
+local GFReadAuraValue = C.GFReadAuraValue
 local GlobalScopeLabel = C.GlobalScopeLabel
 local GlobalScopeHasOverride = C.GlobalScopeHasOverride
 local GlobalScopeRead = C.GlobalScopeRead
@@ -410,6 +415,209 @@ local function GroupFrameDiagnosticText(scope)
         return label .. " Group Frames are enabled and have no obvious hidden-size or opacity problem. Open Group Frames or Edit Mode to inspect position and current group context."
     end
     return AppendFixChoices(table.concat(issues, "\n"), choices)
+end
+
+local function AuraLaneLabel(lane)
+    return lane == "debuff" and "Debuffs" or "Buffs"
+end
+
+local function AuraDiagnosticLanes(kind)
+    if kind == "buff" or kind == "buffs" then return { "buff" } end
+    if kind == "debuff" or kind == "debuffs" then return { "debuff" } end
+    return { "buff", "debuff" }
+end
+
+local function SafeSettingValue(key)
+    if not (Registry and type(Registry.GetSetting) == "function") then return nil end
+    local setting = Registry:GetSetting(key)
+    if not (setting and type(setting.get) == "function") then return nil end
+    local ok, value = pcall(setting.get)
+    if ok then return value end
+    return nil
+end
+
+local UNIT_AURA_FILTER_WARNINGS = {
+    buff = {
+        { key = "onlyMine", label = "only your buffs" },
+        { key = "raid", label = "only raid buffs" },
+        { key = "cancelable", label = "only cancelable buffs" },
+        { key = "notCancelable", label = "only non-cancelable buffs" },
+    },
+    debuff = {
+        { key = "onlyMine", label = "only your debuffs" },
+        { key = "raid", label = "only raid debuffs" },
+        { key = "includeDispellable", label = "only dispellable debuffs" },
+        { key = "notDispellable", label = "only non-dispellable debuffs" },
+        { key = "boss", label = "only boss debuffs" },
+    },
+}
+
+local function AddUnitAuraFilterDiagnostics(scope, label, lane, issues, choices)
+    local filtersOn = true
+    if AuraFiltersEnabled then
+        local ok, value = pcall(AuraFiltersEnabled, scope)
+        if ok and value == false then filtersOn = false end
+    end
+    if filtersOn == false then return end
+
+    local laneLabel = AuraLaneLabel(lane)
+    local exclusive
+    if AuraReadFilter then
+        local ok, value = pcall(AuraReadFilter, scope, lane, "exclusive", "none")
+        if ok then exclusive = value end
+    end
+    if exclusive == nil then exclusive = SafeSettingValue("auras3." .. scope .. "." .. lane .. ".filter.exclusive") end
+    exclusive = tostring(exclusive or "none")
+    if exclusive ~= "none" and exclusive ~= "" then
+        issues[#issues + 1] = label .. " " .. laneLabel .. " exclusive filter is set to " .. exclusive .. ", which can hide normal auras."
+        AddFixChoice(choices, "auras3." .. scope .. "." .. lane .. ".filter.exclusive", "none", "Set " .. label .. " " .. laneLabel .. " exclusive filter to none")
+    end
+
+    local specs = UNIT_AURA_FILTER_WARNINGS[lane] or {}
+    for i = 1, #specs do
+        local spec = specs[i]
+        local key = "auras3." .. scope .. "." .. lane .. ".filter." .. spec.key
+        if SafeSettingValue(key) == true then
+            issues[#issues + 1] = label .. " " .. laneLabel .. " filter is limited to " .. spec.label .. "."
+            AddFixChoice(choices, key, false, "Turn off " .. label .. " " .. laneLabel .. " " .. spec.label .. " filter")
+        end
+    end
+end
+
+local function AddUnitAuraBlacklistDiagnostics(scope, label, issues, choices)
+    local ignoreKey = "auras3." .. scope .. ".overrideIgnore"
+    if SafeSettingValue(ignoreKey) == true then
+        issues[#issues + 1] = label .. " uses a custom Aura ignore list. A specific spell may be hidden there."
+        AddFixChoice(choices, ignoreKey, false, "Turn off " .. label .. " custom Aura ignore list")
+    end
+
+    local Model = AuraModel and AuraModel() or nil
+    if not (Model and type(Model.BlacklistSummary) == "function") then return end
+    local ok, summary = pcall(Model.BlacklistSummary, scope)
+    summary = ok and tostring(summary or "") or ""
+    if summary ~= "" and not summary:find("No blacklisted", 1, true) then
+        issues[#issues + 1] = label .. " Aura blacklist has entries. A specific missing aura may be blacklisted."
+        AddActionChoice(choices, "aura_blacklist_summary", { scope = scope }, "Show " .. label .. " aura blacklist", "Shows the current blacklist entries for this aura scope.", nil, true)
+        AddActionChoice(choices, "aura_blacklist_clear_spells", { scope = scope }, "Allow all " .. label .. " aura spells", "Clears every spell entry from this aura blacklist scope.", nil, true)
+    end
+end
+
+local function GroupAuraDefaultMax(lane)
+    return lane == "buff" and 6 or 6
+end
+
+local function AddGroupAuraFilterDiagnostics(scope, label, lane, issues, choices)
+    local laneLabel = AuraLaneLabel(lane)
+    local maxKey = "gf_" .. scope .. ".auras." .. lane .. ".max"
+    local maxValue = SafeSettingValue(maxKey)
+    if tonumber(maxValue) ~= nil and tonumber(maxValue) <= 0 then
+        issues[#issues + 1] = label .. " " .. laneLabel .. " max icon count is zero."
+        AddFixChoice(choices, maxKey, GroupAuraDefaultMax(lane), "Set " .. label .. " " .. laneLabel .. " max icons to " .. tostring(GroupAuraDefaultMax(lane)))
+    end
+
+    local sizeKey = "gf_" .. scope .. ".auras." .. lane .. ".size"
+    local sizeValue = SafeSettingValue(sizeKey)
+    if tonumber(sizeValue) ~= nil and tonumber(sizeValue) < 8 then
+        local defaultSize = lane == "buff" and 22 or 20
+        issues[#issues + 1] = label .. " " .. laneLabel .. " icon size is extremely small."
+        AddFixChoice(choices, sizeKey, defaultSize, "Set " .. label .. " " .. laneLabel .. " icon size to " .. tostring(defaultSize))
+    end
+
+    local tokenKey = "gf_" .. scope .. ".auras." .. lane .. ".filterToken"
+    local token = SafeSettingValue(tokenKey)
+    token = tostring(token or "")
+    if token ~= "" and token ~= "ALL" then
+        issues[#issues + 1] = label .. " " .. laneLabel .. " filter is set to " .. token .. ", so normal auras outside that filter may be hidden."
+        AddFixChoice(choices, tokenKey, "ALL", "Show all " .. label .. " " .. laneLabel)
+    elseif GFReadAuraValue then
+        local ok, raw = pcall(GFReadAuraValue, scope, lane, "filterToken", nil)
+        raw = ok and raw or nil
+        if raw ~= nil and tostring(raw) ~= "ALL" then
+            issues[#issues + 1] = label .. " " .. laneLabel .. " filter is set to " .. tostring(raw) .. ", so normal auras outside that filter may be hidden."
+            AddFixChoice(choices, tokenKey, "ALL", "Show all " .. label .. " " .. laneLabel)
+        end
+    end
+
+    if A and type(A.GroupAuraCategorySummary) == "function" then
+        local ok, summary = pcall(A.GroupAuraCategorySummary, scope, lane)
+        summary = ok and tostring(summary or "") or ""
+        if summary ~= "" and not summary:find("No blacklisted", 1, true) then
+            issues[#issues + 1] = label .. " " .. laneLabel .. " category blacklist has entries."
+            AddActionChoice(choices, "aura_group_category_blacklist_summary", { scope = scope, lane = lane }, "Show " .. label .. " " .. laneLabel .. " category blacklist", "Shows the public aura categories currently blocked for this group scope.", nil, true)
+            AddActionChoice(choices, "aura_group_category_blacklist_clear", { scope = scope, lane = lane }, "Allow all " .. label .. " " .. laneLabel .. " categories", "Clears the public aura category blacklist for this group scope and lane.", nil, true)
+        end
+    end
+end
+
+local function AuraDiagnosticText(args)
+    args = type(args) == "table" and args or {}
+    local scope = tostring(args.scope or "target")
+    local lanes = AuraDiagnosticLanes(args.lane)
+    local issues = {}
+    local choices = {}
+
+    if scope == "party" or scope == "raid" or scope == "mythicraid" then
+        local conf = GroupDB(scope)
+        local label = UNIT_LABELS[scope] or scope
+        if conf.enabled ~= true then
+            issues[#issues + 1] = label .. " Group Frames are disabled, so their auras cannot be visible."
+            AddFixChoice(choices, "gf_" .. scope .. ".enabled", true, "Show " .. label .. " group frames")
+        end
+        if scope == "party" and conf.showSolo ~= true then
+            issues[#issues + 1] = "Party frames hide while solo unless Show While Solo is enabled."
+            AddFixChoice(choices, "gf_party.showSolo", true, "Show Party frames while solo")
+        end
+        for i = 1, #lanes do
+            local lane = lanes[i]
+            if GFAuraLaneShown and not GFAuraLaneShown(scope, lane) then
+                issues[#issues + 1] = label .. " " .. AuraLaneLabel(lane) .. " are disabled or still owned by Blizzard aura rendering."
+                AddFixChoice(choices, "gf_" .. scope .. ".auras." .. lane .. ".enabled", true, "Show " .. label .. " " .. AuraLaneLabel(lane))
+            end
+            AddGroupAuraFilterDiagnostics(scope, label, lane, issues, choices)
+        end
+        if #issues == 0 then
+            return label .. " Group Auras diagnostic: requested aura lanes are enabled in MSUF, max icon counts are above zero, and no obvious category/filter blocker was found. If they are still missing, check active group context and whether the aura exists on party/raid members."
+        end
+        return AppendFixChoices(label .. " Group Auras diagnostic:\n" .. table.concat(issues, "\n"), choices)
+    end
+
+    if scope ~= "player" and scope ~= "target" and scope ~= "focus" and scope ~= "boss" then scope = "target" end
+    local label = UNIT_LABELS[scope] or scope
+    local root = Registry:GetSetting("auras3.enabled")
+    if root and type(root.get) == "function" and root.get() == false then
+        issues[#issues + 1] = "Unit Auras are disabled globally."
+        AddFixChoice(choices, "auras3.enabled", true, "Turn on Unit Auras")
+    end
+    if AuraUnitEnabled and not AuraUnitEnabled(scope) then
+        issues[#issues + 1] = label .. " Unit Auras are disabled."
+        for i = 1, #lanes do
+            AddFixChoice(choices, "auras3." .. scope .. "." .. lanes[i] .. ".visible", true, "Show " .. label .. " " .. AuraLaneLabel(lanes[i]))
+        end
+    end
+    for i = 1, #lanes do
+        local lane = lanes[i]
+        local sharedKey = lane == "buff" and "auras3.shared.showBuffs" or "auras3.shared.showDebuffs"
+        local shared = Registry:GetSetting(sharedKey)
+        if shared and type(shared.get) == "function" and shared.get() == false then
+            issues[#issues + 1] = "Shared Aura " .. AuraLaneLabel(lane) .. " are turned off."
+            AddFixChoice(choices, sharedKey, true, "Show shared Aura " .. AuraLaneLabel(lane))
+        end
+        if AuraLaneShown and not AuraLaneShown(scope, lane) then
+            issues[#issues + 1] = label .. " " .. AuraLaneLabel(lane) .. " are hidden or their max icon count is zero."
+            AddFixChoice(choices, "auras3." .. scope .. "." .. lane .. ".visible", true, "Show " .. label .. " " .. AuraLaneLabel(lane))
+        end
+        AddUnitAuraFilterDiagnostics(scope, label, lane, issues, choices)
+    end
+    local customFilters = Registry:GetSetting("auras3." .. scope .. ".overrideFilters")
+    if customFilters and type(customFilters.get) == "function" and customFilters.get() == true then
+        issues[#issues + 1] = label .. " uses custom Aura filters. If only some auras are missing, inspect that scope's filter settings or turn custom filters off."
+        AddFixChoice(choices, "auras3." .. scope .. ".overrideFilters", false, "Turn off " .. label .. " custom Aura filters")
+    end
+    AddUnitAuraBlacklistDiagnostics(scope, label, issues, choices)
+    if #issues == 0 then
+        return label .. " Auras diagnostic: requested aura lanes are enabled in MSUF and no obvious filter, custom ignore, or blacklist blocker was found. If a specific aura is still missing, check whether that aura is currently active and allowed by Blizzard/unit ownership rules."
+    end
+    return AppendFixChoices(label .. " Auras diagnostic:\n" .. table.concat(issues, "\n"), choices)
 end
 
 local function CountKeys(tbl)
@@ -1324,6 +1532,27 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "assistant_nomatch_worklist",
+    label = "Show Assistant NoMatch Worklist",
+    type = "diagnostic",
+    combatSafe = true,
+    run = function(args)
+        local owner = args and (args.owner or args.ownerFilter)
+        local text = A.NoMatchWorklistText and A.NoMatchWorklistText(20, owner) or "Assistant NoMatch worklist is not available."
+        if A and type(A.ShowLargeTextPanel) == "function" then
+            A.ShowLargeTextPanel({
+                kind = "text",
+                title = "Assistant NoMatch Worklist",
+                help = "Prioritized local Assistant misses for alias, registry-intent, action, Aura, media, or Knowledge follow-up work.",
+                text = text,
+                status = "No settings changed.",
+            })
+        end
+        return true, text
+    end,
+})
+
+Registry:RegisterAction({
     key = "assistant_nomatch_clear",
     label = "Clear Assistant NoMatch Telemetry",
     type = "diagnostic",
@@ -1464,6 +1693,16 @@ Registry:RegisterAction({
         local scope = args and args.scope or "party"
         if scope ~= "party" and scope ~= "raid" and scope ~= "mythicraid" then scope = "party" end
         return true, GroupFrameDiagnosticText(scope)
+    end,
+})
+
+Registry:RegisterAction({
+    key = "diagnose_aura_visibility",
+    label = "Diagnose Aura Visibility",
+    type = "diagnostic",
+    combatSafe = true,
+    run = function(args)
+        return true, AuraDiagnosticText(args)
     end,
 })
 

@@ -124,24 +124,14 @@ local function BuildSearchPage(ctx)
     local shortcutDispel = "dispel border overlay any debuff"
     local shortcutStripe = "where is debuff stripe"
     local shortcutHighlights = "highlight priority dispel aggro target"
-    local shortcuts = {
-        { "Move Frames", "where do I move my unitframe" },
-        { "Background", "change my backgrond" },
-        { "Raid Frames", "move raid frames" },
-        { "Text Size", "make text bigger" },
-        { "Profiles", "import profile wago" },
-        { "Castbar", "evoker castbar" },
-        { "Buffs", "show only my buffs" },
-        { "Blizzard", "hide blizzard frames" },
-        { "Range Check", "unit frame range check" },
-        { "Level Text", "where is level text anchor" },
-        { "Performance", "why is msuf lagging" },
-        { "Minimap", "where is the minimap icon setting" },
-        { "Rounded", "rounded frames ausschalten" },
-        { "Dispel", shortcutDispel },
-        { "Stripe", shortcutStripe },
-        { "Highlights", shortcutHighlights },
-    }
+    local shortcuts = {}
+    for row in ([[
+Move Frames=where do I move my unitframe;Background=change my backgrond;Raid Frames=move raid frames;Text Size=make text bigger;Profiles=import profile wago;Castbar=evoker castbar;Buffs=show only my buffs;Blizzard=hide blizzard frames
+Range Check=unit frame range check;Level Text=where is level text anchor;Performance=why is msuf lagging;Minimap=where is the minimap icon setting;Rounded=rounded frames ausschalten;Dispel=]] .. shortcutDispel .. [[;Stripe=]] .. shortcutStripe .. [[;Highlights=]] .. shortcutHighlights .. [[
+]]):gmatch("[^;]+") do
+        local label, query = row:match("^%s*(.-)=(.-)%s*$")
+        if label and query then shortcuts[#shortcuts + 1] = { label, query } end
+    end
     local buttonW = math.floor((width - 56) / 3)
     for i = 1, #shortcuts do
         local col = (i - 1) % 3

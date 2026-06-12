@@ -55,7 +55,6 @@ Locales\MSUF_RuntimeLocalization.lua
 # ---------------------------------------------------------------
 Kernel\MSUF_Util.lua
 State\MSUF_Changelog.lua
-Shell\UI\MSUF_Transitions.lua
 State\MSUF_Defaults.lua
 State\MSUF_Profiles.lua
 Shell\UI\MSUF_Style.lua
@@ -116,6 +115,7 @@ Auras3\MSUF_Auras3_Runtime.xml
 Runtime\MSUF_FontRuntime.lua
 Runtime\MSUF_TextureRuntime.lua
 Features\Diagnostics\MSUF_Feature_DebugPosition.lua
+Features\Diagnostics\MSUF_Feature_ClickProbe.lua
 
 # ---------------------------------------------------------------
 # CASTBARS / CLASS POWER
@@ -156,6 +156,12 @@ MSUF_GroupFrames.xml
 # ---------------------------------------------------------------
 # MENU2
 Shell\Menu2\MSUF_Menu2.xml
+Shell\Menu2\Search\MSUF_Menu2_Search.xml
+Shell\Menu2\MSUF_Menu2_AfterSearch.xml
+Shell\Menu2\Preview\MSUF_Menu2_UnitPreview.xml
+Shell\Menu2\MSUF_Menu2_AfterUnitPreview.xml
+Shell\Menu2\Preview\MSUF_Menu2_GroupPreview.xml
+Shell\Menu2\MSUF_Menu2_AfterGroupPreview.xml
 
 # ---------------------------------------------------------------
 # OPTIONAL VISUAL / CASTBAR FEATURES

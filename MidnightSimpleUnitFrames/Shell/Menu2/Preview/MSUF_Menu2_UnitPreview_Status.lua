@@ -1,4 +1,4 @@
---- Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua
+--- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua
 --- Cold-path status icon preview element helpers.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}

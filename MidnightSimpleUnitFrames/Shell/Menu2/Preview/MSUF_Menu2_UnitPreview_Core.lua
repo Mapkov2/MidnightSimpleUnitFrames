@@ -1,4 +1,4 @@
---- Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua
+--- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Core.lua
 --- Cold-path shared helpers for the MSUF2 unit frame preview.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}

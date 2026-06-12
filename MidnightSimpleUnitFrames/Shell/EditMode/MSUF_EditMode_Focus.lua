@@ -46,8 +46,6 @@ local state = {
     nextHUDRefresh = 0,
 }
 
-local veilParent
-local veilByKey = {}
 local hoverFrame
 
 local UNIT_PAGE_KEYS = {
@@ -66,41 +64,9 @@ local GROUP_KIND_BY_KEY = {
     gf_mythicraid = "mythicraid",
 }
 
-local function NormalizeKey(key)
-    if type(key) ~= "string" or key == "" then return nil end
-    key = key:lower()
-    if key:sub(1, 5) == "aura_" then return NormalizeKey(key:sub(6)) end
-    if key == "tot" then return "targettarget" end
-    if key == "focus_target" then return "focustarget" end
-    if key == "uf_player" then return "player" end
-    if key == "uf_target" then return "target" end
-    if key == "uf_targettarget" then return "targettarget" end
-    if key == "uf_focustarget" then return "focustarget" end
-    if key == "uf_focus" then return "focus" end
-    if key == "uf_pet" then return "pet" end
-    if key == "uf_boss" then return "boss" end
-    if key:match("^boss%d+$") then return "boss" end
-    return key
-end
-
-local function NormalizeComponent(component)
-    if type(component) ~= "string" or component == "" then return nil end
-    component = component:lower()
-    if component == "health" or component == "healthtext" or component == "hptext" then return "hp" end
-    if component == "powertext" then return "power" end
-    if component == "aura" or component == "buff" or component == "buffs" or component == "debuff" or component == "debuffs" then return "auras" end
-    if component == "cast" then return "castbar" end
-    return component
-end
-
-local function NormalizeSlot(slot)
-    if type(slot) ~= "string" or slot == "" then return nil end
-    slot = slot:lower()
-    if slot == "l" then return "left" end
-    if slot == "c" then return "center" end
-    if slot == "r" then return "right" end
-    return slot
-end
+local NormalizeKey = U.NormalizeFocusKey
+local NormalizeComponent = U.NormalizeFocusComponent
+local NormalizeSlot = U.NormalizeFocusSlot
 
 local function IsEditActive()
     return EM2.State and EM2.State.IsActive and EM2.State.IsActive()
@@ -112,17 +78,6 @@ local function IsPopupOpen()
     end
     local st = _G.MSUF_EditState
     return st and st.popupOpen == true or false
-end
-
-local function EnsureVeilParent()
-    if veilParent then return veilParent end
-    veilParent = CreateFrame("Frame", "MSUF_EM2_PopupFocusVeil", UIParent)
-    veilParent:SetAllPoints(UIParent)
-    veilParent:SetFrameStrata("DIALOG")
-    veilParent:SetFrameLevel(160)
-    veilParent:EnableMouse(false)
-    veilParent:Hide()
-    return veilParent
 end
 
 local function HideLegacyInspector()
@@ -279,21 +234,6 @@ local function OpenMenuPage(pageKey)
     return false
 end
 
-local function GetVeil(key)
-    local veil = veilByKey[key]
-    if veil then return veil end
-    veil = CreateFrame("Frame", nil, EnsureVeilParent())
-    veil:SetFrameLevel(509)
-    veil:EnableMouse(false)
-    veil:SetAlpha(1)
-    veil:Hide()
-    veil.fill = veil:CreateTexture(nil, "OVERLAY")
-    veil.fill:SetAllPoints()
-    veil.fill:SetColorTexture(0, 0, 0, 0.10)
-    veilByKey[key] = veil
-    return veil
-end
-
 local function PlaceAroundFrame(veil, frame)
     if not (veil and frame and frame.GetLeft) then return false end
     local l, r, t, b = frame:GetLeft(), frame:GetRight(), frame:GetTop(), frame:GetBottom()
@@ -318,11 +258,6 @@ local function PlaceAroundFrame(veil, frame)
 end
 
 local function HideVeils()
-    for _, veil in pairs(veilByKey) do
-        veil:Hide()
-        veil:ClearAllPoints()
-    end
-    if veilParent then veilParent:Hide() end
     HideLegacyInspector()
 end
 

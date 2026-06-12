@@ -80,14 +80,20 @@ local function GetAddonVersion()
     return nil
 end
 
+local previewBuild
 local function IsMSUF60PreviewBuild()
+    if previewBuild ~= nil then return previewBuild end
     local ver = GetAddonVersion()
-    if type(ver) ~= "string" or not ver:match("^6%.0") then return false end
+    if type(ver) ~= "string" or not ver:match("^6%.0") then
+        previewBuild = false
+        return previewBuild
+    end
     local lower = ver:lower()
-    return lower:find("alpha", 1, true)
+    previewBuild = (lower:find("alpha", 1, true)
         or lower:find("preview", 1, true)
         or lower:find("pre", 1, true)
-        or lower:find("beta", 1, true)
+        or lower:find("beta", 1, true)) and true or false
+    return previewBuild
 end
 
 local function AddPreviewWarningLine(line)
@@ -111,16 +117,18 @@ end
 M.ShowPreviewWarning = ShowPreviewWarning
 
 do
-    local loginWarningFrame = CreateFrame("Frame")
-    loginWarningFrame:RegisterEvent("PLAYER_LOGIN")
-    loginWarningFrame:SetScript("OnEvent", function(self)
-        self:UnregisterEvent("PLAYER_LOGIN")
-        if _G.C_Timer and type(_G.C_Timer.After) == "function" then
-            _G.C_Timer.After(2, function() ShowPreviewWarning("login") end)
-        else
-            ShowPreviewWarning("login")
-        end
-    end)
+    if IsMSUF60PreviewBuild() then
+        local loginWarningFrame = CreateFrame("Frame")
+        loginWarningFrame:RegisterEvent("PLAYER_LOGIN")
+        loginWarningFrame:SetScript("OnEvent", function(self)
+            self:UnregisterEvent("PLAYER_LOGIN")
+            if _G.C_Timer and type(_G.C_Timer.After) == "function" then
+                _G.C_Timer.After(2, function() ShowPreviewWarning("login") end)
+            else
+                ShowPreviewWarning("login")
+            end
+        end)
+    end
 end
 
 local ApplyMenuFramePriority = M.ApplyMenuFramePriority
@@ -344,6 +352,7 @@ local function RestoreMinimizedSlashMenu(frame)
     frame._msuf2Minimized = nil
     ApplyMenuFramePriority(frame)
     frame:Show()
+    if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
     if RefreshWindowControls then RefreshWindowControls(frame) end
     return true
 end
@@ -352,6 +361,7 @@ local function HideSlashMenuAndMinibar(frame)
     frame = frame or M.frame
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     if frame and frame.Hide then frame:Hide() end
+    if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
 end
 
 local function MinimizeSlashMenuWindow(frame)
@@ -364,6 +374,7 @@ local function MinimizeSlashMenuWindow(frame)
     ApplyMenuFramePriority(M.minimizedBar)
     M.minimizedBar:Show()
     frame:Hide()
+    if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
     return true
 end
 
@@ -704,13 +715,6 @@ local function BuildPageEntry(key, hidden)
 end
 M.BuildPageEntry = BuildPageEntry
 
-local function StopPagePrewarm() end
-
-local StartPagePrewarm = StopPagePrewarm
-
-M.StartPagePrewarm = StartPagePrewarm
-M.StopPagePrewarm = StopPagePrewarm
-
 local PAGE_HISTORY_LIMIT = 30
 local suppressPageHistory
 
@@ -799,7 +803,6 @@ function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
     key = ALIASES[key or ""] or key or "home"
-    if key == "search" then StopPagePrewarm() end
     local hasPendingFocus = false
     do
         local req = _G.MSUF_EM2_MenuFocusRequest
@@ -831,7 +834,6 @@ function M.SelectPage(key)
         SyncBossPagePreviewForKey(key)
         SyncGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
-        if key ~= "search" then StartPagePrewarm("select-cached") end
         return true
     end
 
@@ -870,7 +872,6 @@ function M.SelectPage(key)
     SyncBossPagePreviewForKey(key)
     SyncGroupPagePreviewForKey(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
-    if key ~= "search" then StartPagePrewarm("select") end
     return true
 end
 
@@ -905,6 +906,7 @@ local function CreateMinimizedBar(frame)
     close:SetScript("OnClick", function()
         bar:Hide()
         if frame then frame._msuf2Minimized = nil end
+        if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
     end)
     bar.closeButton = close
 
@@ -1327,23 +1329,16 @@ local function BuildWindow()
         end
         RefreshDashboardEditModeButton()
     end
+    local STATUS_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_DIFFICULTY_CHANGED" }
     local function RegisterStatusEvents()
         if status._msuf2EventsRegistered then return end
         status._msuf2EventsRegistered = true
-        status:RegisterEvent("PLAYER_REGEN_DISABLED")
-        status:RegisterEvent("PLAYER_REGEN_ENABLED")
-        status:RegisterEvent("GROUP_ROSTER_UPDATE")
-        status:RegisterEvent("PLAYER_ENTERING_WORLD")
-        status:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
+        for i = 1, #STATUS_EVENTS do status:RegisterEvent(STATUS_EVENTS[i]) end
     end
     local function UnregisterStatusEvents()
         if not status._msuf2EventsRegistered then return end
         status._msuf2EventsRegistered = nil
-        status:UnregisterEvent("PLAYER_REGEN_DISABLED")
-        status:UnregisterEvent("PLAYER_REGEN_ENABLED")
-        status:UnregisterEvent("GROUP_ROSTER_UPDATE")
-        status:UnregisterEvent("PLAYER_ENTERING_WORLD")
-        status:UnregisterEvent("PLAYER_DIFFICULTY_CHANGED")
+        for i = 1, #STATUS_EVENTS do status:UnregisterEvent(STATUS_EVENTS[i]) end
     end
     status:SetScript("OnEvent", function(_, event)
         if not (f and f:IsShown()) then
@@ -1378,11 +1373,11 @@ local function BuildWindow()
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
         SyncBossPagePreviewForKey(M.activeKey)
         SyncGroupPagePreviewForKey(M.activeKey)
+        if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
     end)
     f:SetScript("OnHide", function()
         if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
         if FinishResizeProxy then FinishResizeProxy(false) end
-        StopPagePrewarm()
         CancelSearchBackgroundIndex()
         UnregisterStatusEvents()
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
@@ -1394,6 +1389,7 @@ local function BuildWindow()
         if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("WINDOW_HIDE", nil) end
         SyncBossPagePreviewForKey(nil)
         SyncGroupPagePreviewForKey(nil)
+        if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
     end)
 
     local scroll = CreateFrame("ScrollFrame", nil, host)

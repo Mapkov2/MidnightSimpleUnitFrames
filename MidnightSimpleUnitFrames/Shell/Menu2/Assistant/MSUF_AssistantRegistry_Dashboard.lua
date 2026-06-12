@@ -463,9 +463,8 @@ local function EnsureGroupCopyScopes()
     local cats = GroupCopyCategories()
     for i = 1, #cats do
         local key = cats[i] and cats[i].key
-        if type(key) == "string" and M.gfCopyScopes[key] == nil then M.gfCopyScopes[key] = key ~= "auras" end
+        if type(key) == "string" and M.gfCopyScopes[key] == nil then M.gfCopyScopes[key] = true end
     end
-    M.gfCopyScopes.auras = false
     return M.gfCopyScopes, cats
 end
 
@@ -888,11 +887,10 @@ local function SetGroupCopyScopeSelector(args)
     end
     if command == "all" or command == "selectall" then
         for i = 1, #cats do
-            local key = cats[i].key
-            scopes[key] = key ~= "auras"
+            scopes[cats[i].key] = true
         end
         refresh()
-        return true, "Selected all non-aura group copy categories."
+        return true, "Selected all group copy categories."
     end
     if command == "none" or command == "clear" or command == "selectnone" then
         for i = 1, #cats do scopes[cats[i].key] = false end
@@ -906,25 +904,18 @@ local function SetGroupCopyScopeSelector(args)
         local labels = {}
         for i = 1, #wanted do
             local key, label = ResolveGroupCopyCategory(wanted[i])
-            if key and key ~= "auras" then
+            if key then
                 scopes[key] = true
                 labels[#labels + 1] = tostring(label or key)
             end
         end
-        scopes.auras = false
         if #labels == 0 then return false, "I do not know those group copy categories." end
         refresh()
         return true, "Selected only group copy categories: " .. table.concat(labels, ", ") .. "."
     end
     local key, label = ResolveGroupCopyCategory(args and args.category)
     if not key then return false, "I do not know which group copy category to set." end
-    if key == "auras" then
-        scopes.auras = false
-        refresh()
-        return false, "Group Auras copy is disabled in the Assistant until the Aura backend is cleared."
-    end
     scopes[key] = SelectorBool(args and args.value)
-    scopes.auras = false
     refresh()
     return true, "Set group copy category " .. tostring(label or key) .. " " .. (scopes[key] and "on" or "off") .. "."
 end

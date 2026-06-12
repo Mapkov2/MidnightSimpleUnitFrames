@@ -176,18 +176,27 @@ end
 local function SimpleParse(text)
     text = Trim(text)
     if text == "" then return nil end
+    local cache = P._compoundSimpleParseCache
+    local cacheKey
+    if type(cache) == "table" then
+        cacheKey = Normalize(text)
+        local cached = cache[cacheKey]
+        if cached ~= nil then return cached ~= false and cached or nil end
+    end
+    local parsed
     if type(A.ParseSimpleChange) == "function" then
         P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
-        local parsed = A.ParseSimpleChange(text)
+        parsed = A.ParseSimpleChange(text)
         P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
-        if parsed then return parsed end
-        return nil
+    else
+        P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
+        local ok
+        ok, parsed = pcall(A.Parse, text)
+        P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
+        if not ok then parsed = nil end
     end
-    P._compoundDepth = (tonumber(P._compoundDepth) or 0) + 1
-    local ok, parsed = pcall(A.Parse, text)
-    P._compoundDepth = math.max(0, (tonumber(P._compoundDepth) or 1) - 1)
-    if ok then return parsed end
-    return nil
+    if type(cache) == "table" and cacheKey then cache[cacheKey] = parsed or false end
+    return parsed
 end
 
 local function ScopePhrase(changes)
@@ -2516,6 +2525,12 @@ function P.ParseCompound(normalized, raw, normalParsed)
 
     local hasJoin = text:find(" and ", 1, true) or text:find(" und ", 1, true)
     if not LooksLikeCompoundCandidate(text, hasJoin) then return nil end
+    local previousSimpleParseCache = P._compoundSimpleParseCache
+    P._compoundSimpleParseCache = {}
+    local function finish(result)
+        P._compoundSimpleParseCache = previousSimpleParseCache
+        return result
+    end
     local normalCount = ChangeCount(normalParsed)
     local normalSignature
     local function accepted(candidate)
@@ -2532,14 +2547,15 @@ function P.ParseCompound(normalized, raw, normalParsed)
     if text:find(" but ", 1, true) then
         local keep = FastKeepBoolean(text) or KeepButBoolean(text)
         local ok, count = accepted(keep)
-        if ok and count >= 3 then return keep end
+        if ok and count >= 3 then return finish(keep) end
     end
 
     local fastBoolean = FastBooleanScopeList(text)
     local fastBooleanOk, fastBooleanCount = accepted(fastBoolean)
-    if fastBooleanOk and fastBooleanCount >= 2 then return fastBoolean end
+    if fastBooleanOk and fastBooleanCount >= 2 then return finish(fastBoolean) end
 
-    if CountNumbers(text) >= 2 then
+    local numberCount = CountNumbers(text)
+    if numberCount >= 2 then
         local numeric = FastNumericBooleanChain(text)
             or FastAttributeListTrailingNumbers(text)
             or RepeatedAttributeListTrailingNumbers(text)
@@ -2547,13 +2563,19 @@ function P.ParseCompound(normalized, raw, normalParsed)
             or AttributeListTrailingNumbers(text)
             or AttributeListValues(text)
         local ok, count = accepted(numeric)
-        if ok and count >= 2 then return numeric end
+        if ok and count >= 2 then return finish(numeric) end
+    elseif numberCount == 1 then
+        local numeric = AttributeNumberPairs(text)
+            or AttributeListTrailingNumbers(text)
+            or AttributeListValues(text)
+        local ok, count = accepted(numeric)
+        if ok and count >= 2 then return finish(numeric) end
     end
 
     if CountKnownWords(text, COLOR_VALUE_WORDS) >= 2 then
         local color = FastScopedBorderColorChain(text)
         local ok, count = accepted(color)
-        if ok and count >= 2 then return color end
+        if ok and count >= 2 then return finish(color) end
     end
 
     local noJoinCommands = (not hasJoin) and NoJoinScopeItemCommands(text) or nil
@@ -2609,5 +2631,5 @@ function P.ParseCompound(normalized, raw, normalParsed)
             if not best or ChangeCount(candidate) > ChangeCount(best) then best = candidate end
         end
     end
-    return best
+    return finish(best)
 end

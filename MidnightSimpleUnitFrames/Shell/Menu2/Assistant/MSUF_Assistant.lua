@@ -29,6 +29,62 @@ local JOB_BUDGET_MS = 4
 local JOB_MAX_STEPS = 8
 A.JOB_YIELD = A.JOB_YIELD or {}
 
+local function InCombat()
+    return ((_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
+end
+
+function A.IsCombatLocked()
+    return InCombat()
+end
+
+local afterCombatFrame
+local afterCombatPending
+local afterCombatOrder
+
+local function ScheduleAfterCombat(key, fn)
+    if not InCombat() then
+        if type(fn) == "function" then fn() end
+        return true
+    end
+    if type(_G.CreateFrame) ~= "function" then return false end
+    afterCombatPending = afterCombatPending or {}
+    afterCombatOrder = afterCombatOrder or {}
+    key = tostring(key or "MSUF_ASSISTANT_AFTER_COMBAT")
+    if afterCombatPending[key] == nil then
+        afterCombatOrder[#afterCombatOrder + 1] = key
+    end
+    afterCombatPending[key] = fn or true
+
+    if not afterCombatFrame then
+        afterCombatFrame = _G.CreateFrame("Frame")
+        if afterCombatFrame and type(afterCombatFrame.SetScript) == "function" then
+            afterCombatFrame:SetScript("OnEvent", function(self, event)
+                if event ~= "PLAYER_REGEN_ENABLED" or InCombat() then return end
+                if self and type(self.UnregisterEvent) == "function" then
+                    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+                end
+                local pending = afterCombatPending or {}
+                local order = afterCombatOrder or {}
+                afterCombatPending = {}
+                afterCombatOrder = {}
+                for i = 1, #order do
+                    local callback = pending[order[i]]
+                    if type(callback) == "function" then pcall(callback) end
+                end
+                if afterCombatPending and afterCombatOrder and #afterCombatOrder > 0
+                    and self and type(self.RegisterEvent) == "function" then
+                    self:RegisterEvent("PLAYER_REGEN_ENABLED")
+                end
+            end)
+        end
+    end
+    if afterCombatFrame and type(afterCombatFrame.RegisterEvent) == "function" then
+        afterCombatFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    return true
+end
+
 local function ScheduleNextFrame(key, fn)
     if type(fn) ~= "function" then return false end
     if type(_G.MSUF_ScheduleOnce) == "function" then
@@ -57,6 +113,7 @@ end
 
 function A.RecordPerfSample(label, startedMs, detail)
     if not startedMs then return nil end
+    if InCombat() then return nil end
     local now = PerfNowMs()
     if not now then return nil end
     local elapsed = now - startedMs
@@ -155,11 +212,247 @@ local function NormalizeNoMatchText(text)
     return text
 end
 
+local function NoMatchHasAny(text, words)
+    text = " " .. tostring(text or "") .. " "
+    for i = 1, #(words or {}) do
+        local word = tostring(words[i] or "")
+        if word ~= "" and text:find(word, 1, true) then return true end
+    end
+    return false
+end
+
+local function NoMatchTags(text)
+    local tags, seen = {}, {}
+    local function add(tag)
+        if tag ~= "" and not seen[tag] then
+            seen[tag] = true
+            tags[#tags + 1] = tag
+        end
+    end
+    if NoMatchHasAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then add("aura") end
+    if NoMatchHasAny(text, { "copy", "same", "import", "export", "profile", "preset" }) then add("action") end
+    if NoMatchHasAny(text, { "anchor", "attach", "cooldownmanager", "cooldown manager", "cdm", "essentialcooldown" }) then add("anchor") end
+    if NoMatchHasAny(text, { "player", "target", "focus", "pet", "boss", "party", "raid", "mythic" }) then add("scope") end
+    if NoMatchHasAny(text, { "move", "left", "right", "up", "down", "x ", "y ", "width", "height", "size", "scale", "bigger", "smaller", "wider", "narrower", "taller", "shorter" }) then add("geometry") end
+    if NoMatchHasAny(text, { "color", "colour", "red", "green", "blue", "class color", "texture", "font", "sound", "icon" }) then add("media") end
+    if NoMatchHasAny(text, { "text", "name", "health", "hp", "power", "mana", "energy", "border", "opacity", "alpha" }) then add("setting") end
+    if NoMatchHasAny(text, { "where", "help", "explain", "find", "search", "what is", "how" }) then add("knowledge") end
+    return tags
+end
+
+local function NoMatchOwnerForTags(tags)
+    local set = {}
+    for i = 1, #(tags or {}) do set[tags[i]] = true end
+    if set.aura and set.action then return "aura-action/backend" end
+    if set.aura then return "aura-registry/backend" end
+    if set.anchor then return "anchor-intent" end
+    if set.action then return "action-parser" end
+    if set.knowledge then return "knowledge/help" end
+    if set.scope and (set.geometry or set.setting or set.media) then return "registry-alias" end
+    if set.media then return "media-alias" end
+    return "parser-or-help"
+end
+
+local function NoMatchTagText(tags)
+    return #(tags or {}) > 0 and table.concat(tags, ",") or "uncategorized"
+end
+
+local function NoMatchAdvice(owner)
+    if owner == "aura-action/backend" then return "check Aura backend/action coverage before adding copy/filter shortcuts" end
+    if owner == "aura-registry/backend" then return "add Aura registry alias/control or keep unsupported guard explicit" end
+    if owner == "anchor-intent" then return "add generic anchor/CDM intent wording or third-party anchor alias" end
+    if owner == "action-parser" then return "map to a registered action or guided workflow before adding a fallback" end
+    if owner == "knowledge/help" then return "add Knowledge/help copy or search alias, not a setting parser" end
+    if owner == "registry-alias" then return "prefer registered setting aliases or generic registry intent before a special parser" end
+    if owner == "media-alias" then return "check SharedMedia resolver aliases and exact media names" end
+    return "reproduce, then decide registry alias vs knowledge answer vs parser fallback"
+end
+
+local function NoMatchCandidate(owner)
+    if owner == "aura-action/backend" then return "Aura backend/action workflow candidate" end
+    if owner == "aura-registry/backend" then return "Aura registry alias/control candidate" end
+    if owner == "anchor-intent" then return "Generic anchor intent or third-party alias candidate" end
+    if owner == "action-parser" then return "Registered action or workflow parser candidate" end
+    if owner == "knowledge/help" then return "Knowledge/help answer candidate" end
+    if owner == "registry-alias" then return "Registry exactAlias or generic intent metadata candidate" end
+    if owner == "media-alias" then return "SharedMedia alias/resolver candidate" end
+    return "Parser/help triage candidate"
+end
+
+local function NoMatchPriority(count, owner)
+    count = tonumber(count) or 0
+    if count >= 5 then return "high" end
+    if count >= 2 then return "medium" end
+    if owner == "aura-action/backend" or owner == "aura-registry/backend" or owner == "anchor-intent" then return "medium" end
+    return "low"
+end
+
+local NO_MATCH_PRIORITY_WEIGHT = { high = 3, medium = 2, low = 1 }
+
+local function NoMatchScopeTokens()
+    local unitAliases = A.UnitAliases or {}
+    if A._noMatchScopeAliasTable == unitAliases and type(A._noMatchScopeTokens) == "table" then
+        return A._noMatchScopeTokens
+    end
+    local scopeTokens = {}
+    for _, aliases in pairs(unitAliases) do
+        for i = 1, #(aliases or {}) do
+            for token in NormalizeNoMatchText(aliases[i]):gmatch("%S+") do scopeTokens[token] = true end
+        end
+    end
+    A._noMatchScopeAliasTable = unitAliases
+    A._noMatchScopeTokens = scopeTokens
+    return scopeTokens
+end
+
+local function NoMatchRegistryCandidateScore(setting, requestSet, requestList)
+    if type(setting) ~= "table" or type(requestSet) ~= "table" or type(requestList) ~= "table" then return 0 end
+    local parser = A.Parser
+    local tokenSet = {}
+    local function addTokens(value)
+        value = tostring(value or "")
+        if value == "" then return end
+        if parser and type(parser.MeaningTokens) == "function" then
+            local _, tokens = parser.MeaningTokens(value)
+            for i = 1, #(tokens or {}) do tokenSet[tokens[i]] = true end
+        else
+            for token in NormalizeNoMatchText(value):gmatch("%S+") do
+                if #token >= 2 and not token:match("^[-+]?%d") then tokenSet[token] = true end
+            end
+        end
+    end
+    addTokens(setting.key)
+    addTokens(setting.label)
+    addTokens(setting.attribute)
+    for i = 1, #(setting.aliases or {}) do addTokens(setting.aliases[i]) end
+    for i = 1, #(setting.exactAliases or {}) do addTokens(setting.exactAliases[i]) end
+
+    local common, meaningful = 0, 0
+    local scopeTokens = NoMatchScopeTokens()
+    for i = 1, #requestList do
+        local token = requestList[i]
+        if tokenSet[token] then
+            common = common + 1
+            if not scopeTokens[token] then meaningful = meaningful + 1 end
+        end
+    end
+    if common == 0 or (meaningful == 0 and common < 2) then return 0 end
+    return (common * 100) + (meaningful * 25)
+end
+
+local function NoMatchRegistryCandidateSummary(text, limit)
+    if InCombat() then return nil end
+    local registry = A.Registry or Registry
+    local parser = A.Parser
+    if not (registry and parser and type(registry.AllSettings) == "function") then return nil end
+    if not (type(parser.RegistryCandidateSettings) == "function" and type(parser.MeaningTokens) == "function") then return nil end
+    local requestSet, requestList = parser.MeaningTokens(text)
+    if not requestList or #requestList == 0 then return nil end
+
+    local settings = registry:AllSettings() or {}
+    local candidates = parser.RegistryCandidateSettings(text, settings, false) or {}
+    if #candidates == 0 then candidates = parser.RegistryCandidateSettings(text, settings, true) or {} end
+    local scored = {}
+    for i = 1, #(candidates or {}) do
+        if i % 64 == 0 and A and type(A.MaybeYield) == "function" then A.MaybeYield() end
+        local setting = candidates[i]
+        local score = NoMatchRegistryCandidateScore(setting, requestSet, requestList)
+        if score > 0 then
+            scored[#scored + 1] = { setting = setting, score = score }
+        end
+    end
+    if #scored == 0 then return nil end
+    table.sort(scored, function(a, b)
+        if a.score ~= b.score then return a.score > b.score end
+        return tostring(a.setting and a.setting.key or "") < tostring(b.setting and b.setting.key or "")
+    end)
+    local maxItems = tonumber(limit) or 3
+    if maxItems < 1 then maxItems = 3 end
+    local parts = {}
+    for i = 1, math.min(#scored, maxItems) do
+        local setting = scored[i].setting or {}
+        parts[#parts + 1] = tostring(setting.key or "?")
+            .. " [" .. tostring(setting.type or "?") .. ", score " .. tostring(scored[i].score) .. "]"
+    end
+    return #parts > 0 and table.concat(parts, "; ") or nil
+end
+
+local function NoMatchTopRegistryKey(registryCandidates)
+    registryCandidates = tostring(registryCandidates or "")
+    if registryCandidates == "" then return nil end
+    local key = registryCandidates:match("^([^%s;]+)")
+    return key and key ~= "" and key or nil
+end
+
+local function NoMatchLearningPlan(entry)
+    if type(entry) ~= "table" then return "" end
+    local owner = tostring(entry.owner or "parser-or-help")
+    local text = tostring(entry.text or "")
+    local topKey = NoMatchTopRegistryKey(entry.registryCandidates)
+    if owner == "registry-alias" then
+        if topKey then
+            return "review phrase '" .. text .. "' against " .. topKey .. "; prefer exactAliases/aliases or generic registry intent metadata"
+        end
+        return "review phrase '" .. text .. "' against registry terms; add alias metadata only after reproducing the intended control"
+    end
+    if owner == "aura-registry/backend" then
+        if topKey then
+            return "review Aura phrase '" .. text .. "' against " .. topKey .. "; prefer Aura registry aliases before a specialty parser"
+        end
+        return "review Aura phrase '" .. text .. "' against Aura registry/actions; add explicit unsupported guard when backend cannot do it"
+    end
+    if owner == "aura-action/backend" then
+        return "map phrase '" .. text .. "' to a registered Aura action or backend helper before adding parser-only wording"
+    end
+    if owner == "anchor-intent" then
+        return "add generic anchor intent metadata or a third-party frame alias if '" .. text .. "' targets a real frame"
+    end
+    if owner == "action-parser" then
+        return "map phrase '" .. text .. "' to an existing action/workflow or register a new action first"
+    end
+    if owner == "knowledge/help" then
+        return "add Knowledge/Search copy for '" .. text .. "' instead of a setting parser"
+    end
+    if owner == "media-alias" then
+        return "check SharedMedia exact names and aliases for '" .. text .. "' before adding parser fallback"
+    end
+    return "reproduce phrase '" .. text .. "' and classify as registry alias, action, Knowledge answer, or explicit unsupported response"
+end
+
+function A.AnalyzeNoMatchText(text)
+    local tags = NoMatchTags(NormalizeNoMatchText(text))
+    local owner = NoMatchOwnerForTags(tags)
+    return {
+        owner = owner,
+        tags = NoMatchTagText(tags),
+        advice = NoMatchAdvice(owner),
+        candidate = NoMatchCandidate(owner),
+    }
+end
+
+local function RefreshNoMatchEntry(entry)
+    if type(entry) ~= "table" then return nil end
+    local text = NormalizeNoMatchText(entry.text or "")
+    if text == "" then return nil end
+    local analysis = A.AnalyzeNoMatchText and A.AnalyzeNoMatchText(text) or {}
+    entry.text = text
+    entry.owner = tostring(entry.owner or analysis.owner or "parser-or-help")
+    entry.tags = tostring(entry.tags or analysis.tags or "uncategorized")
+    entry.advice = tostring(entry.advice or analysis.advice or NoMatchAdvice(entry.owner))
+    entry.candidate = tostring(entry.candidate or analysis.candidate or NoMatchCandidate(entry.owner))
+    entry.registryCandidates = entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3)
+    entry.learningPlan = NoMatchLearningPlan(entry)
+    entry.priority = NoMatchPriority(entry.count, entry.owner)
+    return entry
+end
+
 function A.RecordNoMatch(text, result, source)
+    if InCombat() then return nil end
     local key = NormalizeNoMatchText(text)
     if key == "" then return nil end
     local store = NoMatchStore(true)
     if not store then return nil end
+    local analysis = A.AnalyzeNoMatchText and A.AnalyzeNoMatchText(key) or nil
     local now = type(_G.GetServerTime) == "function" and _G.GetServerTime() or (_G.time and _G.time()) or nil
     local entry = store.counts[key]
     if type(entry) ~= "table" then
@@ -170,11 +463,24 @@ function A.RecordNoMatch(text, result, source)
     entry.lastSeen = now
     entry.source = tostring(source or "assistant")
     entry.status = type(result) == "table" and tostring(result.status or result.kind or "") or ""
+    entry.owner = analysis and analysis.owner or nil
+    entry.tags = analysis and analysis.tags or nil
+    entry.advice = analysis and analysis.advice or nil
+    entry.candidate = analysis and analysis.candidate or nil
+    entry.registryCandidates = nil
+    entry.learningPlan = nil
+    entry.priority = NoMatchPriority(entry.count, entry.owner)
     store.total = (tonumber(store.total) or 0) + 1
     store.recent[#store.recent + 1] = {
         text = key,
         source = entry.source,
         status = entry.status,
+        owner = entry.owner,
+        tags = entry.tags,
+        candidate = entry.candidate,
+        registryCandidates = entry.registryCandidates,
+        learningPlan = entry.learningPlan,
+        priority = entry.priority,
         seen = now,
     }
     while #store.recent > NO_MATCH_RECENT_LIMIT do table.remove(store.recent, 1) end
@@ -192,12 +498,49 @@ function A.RecordNoMatch(text, result, source)
     return entry
 end
 
+function A.GetNoMatchReview(limit, ownerFilter)
+    local store = NoMatchStore(false)
+    if not store then return { total = 0, items = {}, ownerCounts = {} } end
+    local ownerWanted = tostring(ownerFilter or ""):lower()
+    local items = {}
+    local ownerCounts = {}
+    for _, entry in pairs(store.counts or {}) do
+        entry = RefreshNoMatchEntry(entry)
+        if entry then
+            local owner = tostring(entry.owner or "parser-or-help")
+            ownerCounts[owner] = (ownerCounts[owner] or 0) + 1
+            if ownerWanted == "" or owner:lower() == ownerWanted then
+                items[#items + 1] = entry
+            end
+        end
+    end
+    table.sort(items, function(a, b)
+        local aw = NO_MATCH_PRIORITY_WEIGHT[tostring(a.priority or "low")] or 0
+        local bw = NO_MATCH_PRIORITY_WEIGHT[tostring(b.priority or "low")] or 0
+        if aw ~= bw then return aw > bw end
+        local ac, bc = tonumber(a.count) or 0, tonumber(b.count) or 0
+        if ac ~= bc then return ac > bc end
+        local ao, bo = tostring(a.owner or ""), tostring(b.owner or "")
+        if ao ~= bo then return ao < bo end
+        return tostring(a.text or "") < tostring(b.text or "")
+    end)
+    local maxItems = tonumber(limit) or 20
+    if maxItems < 1 then maxItems = 20 end
+    while #items > maxItems do table.remove(items) end
+    return {
+        total = tonumber(store.total) or 0,
+        items = items,
+        ownerCounts = ownerCounts,
+    }
+end
+
 function A.GetNoMatchTelemetry(limit)
     local store = NoMatchStore(false)
     if not store then return { total = 0, recent = {}, top = {} } end
     local top = {}
     for _, entry in pairs(store.counts or {}) do
-        if type(entry) == "table" then top[#top + 1] = entry end
+        entry = RefreshNoMatchEntry(entry)
+        if entry then top[#top + 1] = entry end
     end
     table.sort(top, function(a, b)
         local ac, bc = tonumber(a.count) or 0, tonumber(b.count) or 0
@@ -236,11 +579,129 @@ local function NoMatchLine(index, entry)
     local count = tonumber(entry.count) or 0
     local source = tostring(entry.source or "")
     local status = tostring(entry.status or "")
+    local owner = tostring(entry.owner or "")
     local suffix = ""
     if count > 0 then suffix = suffix .. " x" .. tostring(count) end
     if source ~= "" then suffix = suffix .. " source=" .. source end
     if status ~= "" then suffix = suffix .. " status=" .. status end
+    if owner ~= "" then suffix = suffix .. " owner=" .. owner end
     return tostring(index) .. ". " .. text .. suffix
+end
+
+local function NoMatchHintLine(index, entry)
+    if type(entry) ~= "table" then return nil end
+    local text = tostring(entry.text or "")
+    if text == "" then return nil end
+    local analysis = entry.owner and entry or (A.AnalyzeNoMatchText and A.AnalyzeNoMatchText(text)) or {}
+    local owner = tostring(analysis.owner or "parser-or-help")
+    local tags = tostring(analysis.tags or "uncategorized")
+    local advice = tostring(analysis.advice or NoMatchAdvice(owner))
+    local candidate = tostring(analysis.candidate or NoMatchCandidate(owner))
+    local registryCandidates = tostring(entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3) or "")
+    entry.registryCandidates = registryCandidates ~= "" and registryCandidates or entry.registryCandidates
+    entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
+    local plan = tostring(entry.learningPlan or "")
+    local suffix = registryCandidates ~= "" and (" | settings=" .. registryCandidates) or ""
+    local planSuffix = plan ~= "" and (" | plan=" .. plan) or ""
+    return tostring(index) .. ". " .. text .. " -> " .. owner .. " | tags=" .. tags .. " | candidate=" .. candidate .. suffix .. " | next=" .. advice .. planSuffix
+end
+
+local function NoMatchWorkItemLine(index, entry)
+    if type(entry) ~= "table" then return nil end
+    local text = tostring(entry.text or "")
+    if text == "" then return nil end
+    local owner = tostring(entry.owner or (A.AnalyzeNoMatchText and A.AnalyzeNoMatchText(text).owner) or "parser-or-help")
+    local count = tonumber(entry.count) or 0
+    local priority = tostring(entry.priority or NoMatchPriority(count, owner))
+    local candidate = tostring(entry.candidate or NoMatchCandidate(owner))
+    local advice = tostring(entry.advice or NoMatchAdvice(owner))
+    local registryCandidates = tostring(entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3) or "")
+    entry.registryCandidates = registryCandidates ~= "" and registryCandidates or entry.registryCandidates
+    entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
+    local plan = tostring(entry.learningPlan or "")
+    local suffix = registryCandidates ~= "" and (" | settings=" .. registryCandidates) or ""
+    local planSuffix = plan ~= "" and (" | plan=" .. plan) or ""
+    return tostring(index) .. ". [" .. priority .. "] " .. text .. " x" .. tostring(count) .. " -> " .. candidate .. " | owner=" .. owner .. suffix .. " | next=" .. advice .. planSuffix
+end
+
+local function NoMatchOwnerSummary(ownerCounts)
+    local owners = {}
+    for owner, count in pairs(ownerCounts or {}) do
+        owners[#owners + 1] = { owner = tostring(owner), count = tonumber(count) or 0 }
+    end
+    table.sort(owners, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.owner < b.owner
+    end)
+    local parts = {}
+    for i = 1, #owners do
+        parts[#parts + 1] = owners[i].owner .. "=" .. tostring(owners[i].count)
+    end
+    return #parts > 0 and table.concat(parts, ", ") or "none"
+end
+
+local function NoMatchTSVLine(entry)
+    local function clean(value)
+        value = tostring(value or "")
+        value = value:gsub("[\t\r\n]+", " ")
+        return value
+    end
+    return table.concat({
+        clean(entry.priority or "low"),
+        tostring(tonumber(entry.count) or 0),
+        clean(entry.owner or "parser-or-help"),
+        clean(entry.tags or "uncategorized"),
+        clean(entry.candidate or NoMatchCandidate(entry.owner)),
+        clean(entry.text or ""),
+        clean(entry.advice or NoMatchAdvice(entry.owner)),
+        clean(entry.registryCandidates or NoMatchRegistryCandidateSummary(entry.text or "", 3) or ""),
+        clean(entry.learningPlan or NoMatchLearningPlan(entry)),
+    }, "\t")
+end
+
+function A.NoMatchWorklistText(limit, ownerFilter)
+    local data = A.GetNoMatchReview and A.GetNoMatchReview(limit or 20, ownerFilter) or { total = 0, items = {}, ownerCounts = {} }
+    local lines = {}
+    lines[#lines + 1] = "Assistant NoMatch worklist:"
+    lines[#lines + 1] = "- Total recorded: " .. tostring(tonumber(data.total) or 0)
+    lines[#lines + 1] = "- Review items shown: " .. tostring(#(data.items or {}))
+    lines[#lines + 1] = "- Owners: " .. NoMatchOwnerSummary(data.ownerCounts)
+    if ownerFilter and tostring(ownerFilter) ~= "" then
+        lines[#lines + 1] = "- Filter: " .. tostring(ownerFilter)
+    end
+    if (tonumber(data.total) or 0) <= 0 or #(data.items or {}) == 0 then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "No Assistant NoMatch telemetry recorded yet."
+        return table.concat(lines, "\n")
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Priority queue:"
+    for i = 1, #(data.items or {}) do
+        local line = NoMatchWorkItemLine(i, data.items[i])
+        if line then lines[#lines + 1] = line end
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Alias/intent plan:"
+    for i = 1, #(data.items or {}) do
+        local entry = data.items[i]
+        if type(entry) == "table" then
+            entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
+            lines[#lines + 1] = tostring(i) .. ". " .. tostring(entry.learningPlan or "")
+        end
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "TSV for alias review:"
+    lines[#lines + 1] = "priority\tcount\towner\ttags\tcandidate\tphrase\tnext\tregistryCandidates\tlearningPlan"
+    for i = 1, #(data.items or {}) do
+        lines[#lines + 1] = NoMatchTSVLine(data.items[i])
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Use high/medium registry-alias items for exactAliases or generic registry intent metadata first; route knowledge/help items to Assistant Knowledge copy."
+    return table.concat(lines, "\n")
 end
 
 function A.NoMatchTelemetryText(limit)
@@ -264,6 +725,20 @@ function A.NoMatchTelemetryText(limit)
     end
 
     lines[#lines + 1] = ""
+    lines[#lines + 1] = "Learning hints:"
+    for i = 1, #(data.top or {}) do
+        local line = NoMatchHintLine(i, data.top[i])
+        if line then lines[#lines + 1] = line end
+    end
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Review candidates:"
+    for i = 1, #(data.top or {}) do
+        local line = NoMatchWorkItemLine(i, data.top[i])
+        if line then lines[#lines + 1] = line end
+    end
+
+    lines[#lines + 1] = ""
     lines[#lines + 1] = "Recent phrases:"
     for i = 1, #(data.recent or {}) do
         local entry = data.recent[i]
@@ -282,7 +757,57 @@ function A.NoMatchTelemetryText(limit)
     return table.concat(lines, "\n")
 end
 
-local function ScheduleJobPump()
+local ScheduleJobPump
+local combatResumeFrame
+
+local function EnsureCombatResumeFrame()
+    if combatResumeFrame then return combatResumeFrame end
+    if type(_G.CreateFrame) ~= "function" then return nil end
+    combatResumeFrame = _G.CreateFrame("Frame")
+    if combatResumeFrame and type(combatResumeFrame.SetScript) == "function" then
+        combatResumeFrame:SetScript("OnEvent", function(_, event)
+            if event == "PLAYER_REGEN_ENABLED" and A.ResumeCombatDeferredJobs then
+                A.ResumeCombatDeferredJobs("PLAYER_REGEN_ENABLED")
+            end
+        end)
+    end
+    return combatResumeFrame
+end
+
+local function DeferJobPumpForCombat(reason)
+    local jobs = A._assistantJobs
+    if type(jobs) ~= "table" or #jobs == 0 then return false end
+    A._assistantJobsCombatDeferred = true
+    A._assistantJobsCombatReason = tostring(reason or "combat")
+    local frame = EnsureCombatResumeFrame()
+    if frame and type(frame.RegisterEvent) == "function" then
+        frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    return true
+end
+
+function A.ResumeCombatDeferredJobs(reason)
+    if InCombat() then
+        return DeferJobPumpForCombat(reason or "combat")
+    end
+    if combatResumeFrame and type(combatResumeFrame.UnregisterEvent) == "function" then
+        combatResumeFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    end
+    A._assistantJobsCombatDeferred = nil
+    A._assistantJobsCombatReason = nil
+    local jobs = A._assistantJobs
+    if type(jobs) == "table" and #jobs > 0 and ScheduleJobPump then
+        ScheduleJobPump()
+        return true
+    end
+    return false
+end
+
+function ScheduleJobPump()
+    if InCombat() then
+        DeferJobPumpForCombat("schedule")
+        return
+    end
     if A._assistantJobPumpScheduled then return end
     A._assistantJobPumpScheduled = true
     ScheduleNextFrame("MSUF_ASSISTANT_JOB_PUMP", function()
@@ -294,6 +819,10 @@ end
 function A._RunJobPump()
     local jobs = A._assistantJobs
     if type(jobs) ~= "table" or #jobs == 0 then return end
+    if InCombat() then
+        DeferJobPumpForCombat("run")
+        return false
+    end
 
     local sliceStart = PerfNowMs()
     local budget = tonumber(A.jobBudgetMs) or JOB_BUDGET_MS
@@ -303,6 +832,10 @@ function A._RunJobPump()
 
     local stepsRun = 0
     while #jobs > 0 and stepsRun < maxSteps do
+        if InCombat() then
+            DeferJobPumpForCombat("run")
+            return false
+        end
         local job = jobs[1]
         local jobMaxSteps = tonumber(job and job.maxStepsPerFrame) or maxSteps
         if jobMaxSteps <= 0 then jobMaxSteps = maxSteps end
@@ -349,7 +882,13 @@ function A._RunJobPump()
     end
 
     A.RecordPerfSample("assistant.job.slice", sliceStart, tostring(stepsRun) .. " step(s)")
-    if #jobs > 0 then ScheduleJobPump() end
+    if #jobs > 0 then
+        if InCombat() then
+            DeferJobPumpForCombat("slice")
+        else
+            ScheduleJobPump()
+        end
+    end
 end
 
 function A.MaybeYield(force)
@@ -408,25 +947,40 @@ function A.StartJob(label, steps, callback, opts)
         maxStepsPerFrame = tonumber(opts.maxStepsPerFrame),
     }
     A._assistantJobs[#A._assistantJobs + 1] = job
-    ScheduleJobPump()
+    if opts.runInCombat == true or not InCombat() then
+        ScheduleJobPump()
+    else
+        DeferJobPumpForCombat("start:" .. job.label)
+    end
     return job
 end
 
 function A.RequestRefreshUI(reason)
     A._refreshReason = tostring(reason or A._refreshReason or "assistant")
+    if InCombat() then
+        A._refreshAfterCombat = true
+        return ScheduleAfterCombat("MSUF_ASSISTANT_REFRESH_UI", function()
+            A._refreshAfterCombat = nil
+            A.RequestRefreshUI(A._refreshReason or "assistant.after_combat")
+        end)
+    end
     if A._refreshPending then return true end
     A._refreshPending = true
     ScheduleNextFrame("MSUF_ASSISTANT_REFRESH_UI", function()
         A._refreshPending = nil
+        if InCombat() then
+            A._refreshAfterCombat = true
+            ScheduleAfterCombat("MSUF_ASSISTANT_REFRESH_UI", function()
+                A._refreshAfterCombat = nil
+                A.RequestRefreshUI(A._refreshReason or "assistant.after_combat")
+            end)
+            return
+        end
         local started = PerfNowMs()
         if type(A.RefreshUI) == "function" then A.RefreshUI() end
         A.RecordPerfSample("assistant.refresh_ui", started, A._refreshReason)
     end)
     return true
-end
-
-local function InCombat()
-    return _G.InCombatLockdown and _G.InCombatLockdown()
 end
 
 local function SettingValueLabel(setting, value)

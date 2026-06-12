@@ -1,0 +1,9 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <Script file="MSUF_Menu2_GroupPreview_Specs.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Rounded.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_TextFocus.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_ZoomPan.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Handles.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Render.lua"/>
+    <Script file="MSUF_Menu2_GroupPreview_Native.lua"/>
+</Ui>

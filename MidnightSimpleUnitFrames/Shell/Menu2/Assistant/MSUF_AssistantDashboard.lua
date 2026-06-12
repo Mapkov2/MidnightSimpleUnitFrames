@@ -101,6 +101,12 @@ end
 
 local BUSY_DOTS = { "", ".", "..", "..." }
 
+local function InCombat()
+    if A.IsCombatLocked and A.IsCombatLocked() then return true end
+    return ((_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
+end
+
 local function BusyText(ui)
     local text = (A.GetBusyText and A.GetBusyText()) or "I am working on that"
     local phase = tonumber(ui and ui._msufAssistantBusyPhase) or 1
@@ -110,12 +116,17 @@ end
 
 local function ScheduleBusyPulse(ui)
     if not (ui and A.IsBusy and A.IsBusy()) then return end
+    if InCombat() then return end
     if ui._msufAssistantBusyPulse then return end
     if not (_G.C_Timer and type(_G.C_Timer.After) == "function") then return end
 
     ui._msufAssistantBusyPulse = true
     local function Pulse()
         if not (A.IsBusy and A.IsBusy()) or A.dashboardUI ~= ui then
+            ui._msufAssistantBusyPulse = nil
+            return
+        end
+        if InCombat() then
             ui._msufAssistantBusyPulse = nil
             return
         end

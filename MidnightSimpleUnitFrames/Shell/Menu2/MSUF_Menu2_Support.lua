@@ -138,36 +138,11 @@ function M.ValueTextList(...)
     return out
 end
 
-function M.ValueTextFrom(items)
-    local out = {}
-    if type(items) ~= "table" then return out end
-    for i = 1, #items do
-        local item = items[i]
-        if type(item) == "table" then
-            out[#out + 1] = { value = item[1], text = item[2] or item[1] }
-        else
-            out[#out + 1] = { value = item, text = item }
-        end
-    end
-    return out
-end
-
 function M.ValueTextRows(rows)
     local out = {}
     for line in tostring(rows or ""):gmatch("[^\r\n]+") do
         local value, text = line:match("^(.-)=(.*)$")
         if value then out[#out + 1] = { value = value, text = text ~= "" and text or value } end
-    end
-    return out
-end
-
-function M.KeyLabelList(...)
-    local out = {}
-    local n = select("#", ...)
-    for i = 1, n, 2 do
-        local key = select(i, ...)
-        local label = select(i + 1, ...)
-        out[#out + 1] = { key = key, label = label ~= nil and label or key }
     end
     return out
 end
@@ -236,12 +211,6 @@ function M.Pick(source, names)
     return unpack(values, 1, count)
 end
 
-function M.TableDefaults(...)
-    local values, count = {}, select("#", ...)
-    for i = 1, count do values[i] = select(i, ...) or {} end
-    return unpack(values, 1, count)
-end
-
 function M.PickDefaults(source, names)
     local values, count = {}, 0
     for name in tostring(names or ""):gmatch("%S+") do
@@ -249,6 +218,12 @@ function M.PickDefaults(source, names)
         values[count] = (source and source[name]) or {}
     end
     return unpack(values, 1, count)
+end
+
+function M.Assign(target, values)
+    if type(target) ~= "table" or type(values) ~= "table" then return target end
+    for key, value in pairs(values) do target[key] = value end
+    return target
 end
 
 function M.NormalizeHpMode(mode)
@@ -435,21 +410,6 @@ end
 
 function M.AlphaLabel(label, value)
     return tostring(label or "") .. ": " .. M.PercentValue(value)
-end
-
-function M.LayoutSegmentButtons(segment, gap, fallbackWidth, height)
-    local buttons = segment and segment.buttons or {}
-    local count = #buttons
-    if count <= 0 then return end
-    gap = gap or 8
-    local width = segment.GetWidth and segment:GetWidth() or 0
-    local buttonW = width > 0 and floor((width - gap * (count - 1)) / count) or (fallbackWidth or 120)
-    for i = 1, count do
-        local btn = buttons[i]
-        btn:ClearAllPoints()
-        btn:SetPoint("LEFT", segment, "LEFT", (i - 1) * (buttonW + gap), 0)
-        btn:SetSize(buttonW, height or 22)
-    end
 end
 
 function M.BindSliderLiveLabel(ctx, widget, readValue, labelFn, percentInput)
@@ -711,23 +671,14 @@ local GROUP_KEYS_C = "ANCHORS AURA_ANCHORS SORT_MODES GF_BAR_MODES "
 local GROUP_KEYS_D = "GF_ANCHOR_TO GF_ANCHOR_POINTS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES"
 M.GROUP_SPEC_TABLE_KEYS = GROUP_KEYS_A .. "BLIZZARD_FALLBACK_VALUES " .. GROUP_KEYS_B .. "DELIMITER_VALUES " .. GROUP_KEYS_C .. GROUP_KEYS_D
 
-local tips = {
-    "Bigger steps: Hold SHIFT while adjusting sliders to change values faster.",
-    "Fine tuning: Hold CTRL while adjusting sliders for smaller steps.",
-    "Quick reset: If something feels off, try /msuf reset for frame positions.",
-    "Factory reset: Use Menu > Advanced > Factory Reset or /msuf fullreset confirm + /reload.",
-    "Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.",
-    "Profiles safety: Create a new profile before big experiments so you can switch back instantly.",
-    "Colors: The Colors tab lets you customize fonts, bars, castbars and highlights.",
-    "Gameplay: The Gameplay tab contains extra UI tools and warnings you can enable or disable.",
-    "Recommended: Sensei Resource Bar pairs well with MSUF for clean resource tracking.",
-    "UI scale tip: MSUF has its own UI scale, separate from Blizzard global UI scale.",
-    "Troubleshoot: If visuals do not update, a quick /reload fixes most UI state issues.",
-    "Readability: Slightly larger fonts often help more than bigger frames.",
-    "During development of MSUF Unhalted, R41z0r and other addon developers helped out.",
-    "Danders is a strong Party/Raidframe addon and works well with MSUF.",
-    "Community: If you like MSUF, share it with a friend.",
-}
+local tips = {}
+for tip in ([[
+Bigger steps: Hold SHIFT while adjusting sliders to change values faster.|Fine tuning: Hold CTRL while adjusting sliders for smaller steps.|Quick reset: If something feels off, try /msuf reset for frame positions.|Factory reset: Use Menu > Advanced > Factory Reset or /msuf fullreset confirm + /reload.|Edit Mode: Use Toggle Edit Mode to move frames quickly, then fine-tune with the position popup.
+Profiles safety: Create a new profile before big experiments so you can switch back instantly.|Colors: The Colors tab lets you customize fonts, bars, castbars and highlights.|Gameplay: The Gameplay tab contains extra UI tools and warnings you can enable or disable.|Recommended: Sensei Resource Bar pairs well with MSUF for clean resource tracking.|UI scale tip: MSUF has its own UI scale, separate from Blizzard global UI scale.
+Troubleshoot: If visuals do not update, a quick /reload fixes most UI state issues.|Readability: Slightly larger fonts often help more than bigger frames.|During development of MSUF Unhalted, R41z0r and other addon developers helped out.|Danders is a strong Party/Raidframe addon and works well with MSUF.|Community: If you like MSUF, share it with a friend.
+]]):gmatch("[^|]+") do
+    tips[#tips + 1] = (tip:gsub("^%s+", ""):gsub("%s+$", ""))
+end
 
 function _G.MSUF_GetNextTip()
     local g = EnsureGeneral()
@@ -911,6 +862,8 @@ local pendingGlobalScale
 local pendingDisableScaling
 local pendingReloadOnScalingOff
 local scaleApplyWatcher
+local scaleEvents
+local UpdateGlobalScaleEvents
 local lastGlobalUiParentScale
 local blizzardUiParentScale
 
@@ -1087,6 +1040,7 @@ local function SetGlobalUiScaleState(enabled, scale, preset)
         g.globalUiScalePreset = preset or "auto"
         g.globalUiScaleValue = nil
     end
+    if UpdateGlobalScaleEvents then UpdateGlobalScaleEvents() end
 end
 
 local function CaptureBlizzardUiScale()
@@ -1218,6 +1172,7 @@ local function SetGlobalUiScale(scale, silent)
 
     CaptureBlizzardUiScale()
     EnforceUIParentScale(scale)
+    if UpdateGlobalScaleEvents then UpdateGlobalScaleEvents() end
     ScheduleUnitframeReanchorAfterScale()
     if not silent then Print(string.format("Global UI scale set to %.4f", scale)) end
 end
@@ -1370,6 +1325,28 @@ local function ApplySavedScaleState(applyGlobalCVar)
     end
 end
 
+UpdateGlobalScaleEvents = function()
+    if not _G.CreateFrame then return end
+    local enabled = (tonumber(GetDesiredGlobalScaleFromDB()) or 0) > 0
+    if enabled then
+        if not scaleEvents then
+            scaleEvents = _G.CreateFrame("Frame")
+            scaleEvents:SetScript("OnEvent", function(_, event)
+                ApplySavedScaleState(event == "PLAYER_LOGIN")
+            end)
+        end
+        if not scaleEvents._msuf2Registered then
+            scaleEvents._msuf2Registered = true
+            scaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
+            scaleEvents:RegisterEvent("DISPLAY_SIZE_CHANGED")
+        end
+    elseif scaleEvents and scaleEvents._msuf2Registered then
+        scaleEvents._msuf2Registered = nil
+        scaleEvents:UnregisterEvent("PLAYER_ENTERING_WORLD")
+        scaleEvents:UnregisterEvent("DISPLAY_SIZE_CHANGED")
+    end
+end
+
 local startupScaleApplyQueued
 local startupScaleNeedsGlobalCVar
 local function QueueStartupScaleApply(applyGlobalCVar)
@@ -1391,20 +1368,20 @@ local function QueueStartupScaleApply(applyGlobalCVar)
     end
 end
 
-local scaleEvents = _G.CreateFrame and _G.CreateFrame("Frame")
-if scaleEvents then
-    scaleEvents:RegisterEvent("PLAYER_LOGIN")
-    scaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
-    scaleEvents:RegisterEvent("DISPLAY_SIZE_CHANGED")
-    scaleEvents:SetScript("OnEvent", function(_, event)
-        if event == "DISPLAY_SIZE_CHANGED" then
-            ApplySavedScaleState(false)
-        else
-            QueueStartupScaleApply(event == "PLAYER_LOGIN")
-        end
-    end)
-end
-
 if _G.C_Timer and _G.C_Timer.After then
     QueueStartupScaleApply(true)
+end
+
+local startupScaleEvents = _G.CreateFrame and _G.CreateFrame("Frame")
+if startupScaleEvents then
+    startupScaleEvents:RegisterEvent("PLAYER_LOGIN")
+    startupScaleEvents:RegisterEvent("PLAYER_ENTERING_WORLD")
+    startupScaleEvents:SetScript("OnEvent", function(self, event)
+        self:UnregisterAllEvents()
+        self:SetScript("OnEvent", nil)
+        QueueStartupScaleApply(event == "PLAYER_LOGIN")
+        UpdateGlobalScaleEvents()
+    end)
+else
+    UpdateGlobalScaleEvents()
 end

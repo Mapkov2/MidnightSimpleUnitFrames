@@ -1253,6 +1253,7 @@ local function ParseDiagnostic(text)
         "not showing", "not visible", "not appearing", "not displayed", "not there",
         "doesnt show", "does not show", "doesnt appear", "does not appear",
         "cant see", "can't see", "cannot see", "can not see", "missing", "hidden", "invisible",
+        "filtered out", "filtered", "blacklisted", "blocked",
         "disappeared", "disappear", "gone", "vanished", "broken", "not working", "doesnt work",
         "does not work", "won't work", "wont work", "fails", "failed", "failure", "error", "errors", "stuck",
         "nicht sichtbar", "zeigt nicht", "verschwunden", "kaputt", "haengt",
@@ -1309,6 +1310,22 @@ local function ParseDiagnostic(text)
             args = {},
             label = "Diagnose Class Resources",
             summary = "Inspects Class Resource visibility, sizing, opacity, width mode, and hide rules.",
+        } or nil
+    end
+    if ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then
+        local groups = DetectGroups(text)
+        local units = DetectUnits(text)
+        local scope = groups[1] or units[1] or "target"
+        if scope == "targettarget" or scope == "focustarget" or scope == "pet" then scope = "target" end
+        local lane
+        if ContainsAny(text, { "debuff", "debuffs" }) then lane = "debuff" elseif ContainsAny(text, { "buff", "buffs" }) then lane = "buff" end
+        local action = Registry and Registry:GetAction("diagnose_aura_visibility")
+        return action and {
+            kind = "action",
+            action = action,
+            args = { scope = scope, lane = lane },
+            label = "Diagnose Auras",
+            summary = "Inspects Aura visibility settings and suggests safe setting-backed fixes.",
         } or nil
     end
     if ContainsAny(text, { "castbar", "zauberleiste" }) then
@@ -1633,6 +1650,43 @@ local function ParseSupportWorkflow(text)
             confirmRequired = true,
             label = "Clear Assistant NoMatch telemetry",
             summary = "Clears stored unmatched Assistant wording telemetry.",
+        } or nil
+    end
+
+    local function NoMatchOwnerFilterForText(value)
+        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
+        if ContainsAny(value, { "aura action", "aura actions", "aura workflow", "aura workflows" }) then return "aura-action/backend" end
+        if ContainsAny(value, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return "aura-registry/backend" end
+        if ContainsAny(value, { "anchor", "anchors", "anchoring", "cooldownmanager", "cooldown manager", "cdm" }) then return "anchor-intent" end
+        if ContainsAny(value, { "registry", "registry alias", "aliases", "alias", "setting", "settings", "intent metadata" }) then return "registry-alias" end
+        if ContainsAny(value, { "media", "font", "texture", "sound", "sharedmedia" }) then return "media-alias" end
+        if ContainsAny(value, { "knowledge", "help", "search", "faq", "where", "explain" }) then return "knowledge/help" end
+        if ContainsAny(value, { "action", "actions", "workflow", "workflows", "copy", "profile", "preset" }) then return "action-parser" end
+        if ContainsAny(value, { "parser", "triage", "generic" }) then return "parser-or-help" end
+        return nil
+    end
+
+    if ContainsAny(text, {
+        "no match worklist", "nomatch worklist", "assistant no match worklist",
+        "assistant learning worklist", "learning worklist", "missed command worklist",
+        "unmatched command worklist", "unmatched wording worklist",
+        "alias review worklist", "alias worklist", "registry alias worklist",
+        "registry alias candidates", "registry review candidates",
+        "anchor review candidates", "anchor no match worklist", "anchor nomatch worklist",
+        "aura review candidates", "aura no match worklist", "aura nomatch worklist",
+        "knowledge review candidates", "knowledge no match worklist", "knowledge nomatch worklist",
+        "media review candidates", "media no match worklist", "media nomatch worklist",
+        "action review candidates", "action no match worklist", "action nomatch worklist",
+        "show learning candidates", "show review candidates", "show alias candidates",
+    }) then
+        local action = Registry and Registry:GetAction("assistant_nomatch_worklist")
+        local owner = NoMatchOwnerFilterForText(text)
+        return action and {
+            kind = "action",
+            action = action,
+            args = owner and { owner = owner } or {},
+            label = "Show Assistant NoMatch worklist",
+            summary = "Shows prioritized unmatched Assistant wording as review work items.",
         } or nil
     end
 

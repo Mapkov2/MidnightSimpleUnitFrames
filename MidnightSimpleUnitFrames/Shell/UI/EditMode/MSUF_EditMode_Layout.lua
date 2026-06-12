@@ -509,12 +509,6 @@ local function ShowHGuide(y)
     g:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, y)
 end
 
---- --- Edge computation ---
---- Returns { left, centerX, right, bottom, centerY, top } from screen coords
-local function GetEdges(l, b, w, h)
-    return l, l + w * 0.5, l + w, b, b + h * 0.5, b + h
-end
-
 local function GetFrameEdgesUI(frame)
     if not (frame and frame.GetLeft and frame.GetRight and frame.GetTop and frame.GetBottom) then
         return nil
@@ -753,11 +747,6 @@ function Anchors.Clear()
     for k in pairs(chains) do chains[k] = nil end
 end
 
---- MSUF_EM2_Nudge.lua
-
---- MSUF_EM2_Nudge.lua
---- Arrow key nudge system. Override bindings for UP/DOWN/LEFT/RIGHT.
---- Shift=5px, Ctrl=10px, Alt=grid step. Targets open popup or current unit.
 local Nudge = {}
 EM2.Nudge = Nudge
 
@@ -808,10 +797,6 @@ local function NudgeTarget(dx, dy)
     local s = GetStep()
     local ndx, ndy = dx * s, dy * s
 
-    --- Priority 0: selected custom preview frame.
-    --- Some previews are not normal EM2 movers but still write normal position
-    --- keys. They register here on click/drag so arrow keys move what the user
-    --- just selected.
     local previewTarget = GetPreviewNudgeTarget()
     if previewTarget then
         previewTarget:Nudge(ndx, ndy)
@@ -820,7 +805,6 @@ local function NudgeTarget(dx, dy)
         return
     end
 
-    --- Priority 1: open castbar popup
     if EM2.CastPopup and EM2.CastPopup.IsOpen() then
         db.general = db.general or {}
         local g = db.general
@@ -834,11 +818,6 @@ local function NudgeTarget(dx, dy)
                 end
                 g[xKey] = floor(((tonumber(g[xKey]) or 0) + ndx) + 0.5)
                 g[yKey] = floor(((tonumber(g[yKey]) or 0) + ndy) + 0.5)
-                --- Arrow-key movement must use the same unit-aware apply path as
-                --- popup fields: it reanchors target/focus/player bars, updates
-                --- boss previews, refreshes visuals, and syncs the position popup.
-                --- A plain visual refresh leaves the live target castbar at the
-                --- previous anchor until the user clicks it again.
                 if type(_G.MSUF_ApplyCastbarUnitAndSync) == "function" then
                     _G.MSUF_ApplyCastbarUnitAndSync(unit)
                 elseif _G.MSUF_UpdateCastbarVisuals then
@@ -853,7 +832,6 @@ local function NudgeTarget(dx, dy)
         return
     end
 
-    --- Priority 2: aura sub-group (individual buff/debuff/private)
     local auraGroup = _G.MSUF_EM2_ActiveAuraGroup
     local auraPopupOpen = EM2.AuraPopup and EM2.AuraPopup.IsOpen()
     local a2PopupOpen = false
@@ -913,12 +891,10 @@ local function NudgeTarget(dx, dy)
         return
     end
 
-    --- Priority 3: focused inspector selection (works without a legacy popup).
     if EM2.Focus and EM2.Focus.NudgeSelection and EM2.Focus.NudgeSelection(ndx, ndy) then
         return
     end
 
-    --- Priority 4: current unit frame
     local key = EM2.State.GetUnitKey() or "player"
     if (key == "gf_party" or key == "gf_raid" or key == "gf_mythicraid")
         and type(_G.MSUF_GF_EM2_NudgePreview) == "function"
@@ -944,6 +920,11 @@ local function NudgeTarget(dx, dy)
     RefreshUFPreview("EM2_UNIT_NUDGE", key)
 end
 
+local NUDGE_DIRS = { { "UP", 0, 1 }, { "DOWN", 0, -1 }, { "LEFT", -1, 0 }, { "RIGHT", 1, 0 } }
+local function NudgeButtonClick(self)
+    NudgeTarget(self._msufDx or 0, self._msufDy or 0)
+end
+
 function Nudge.Enable()
     if not owner then
         owner = CreateFrame("Frame", "MSUF_EM2_NudgeOwner", UIParent)
@@ -957,17 +938,14 @@ function Nudge.Enable()
             end
         end)
 
-        for _, dir in ipairs({"UP","DOWN","LEFT","RIGHT"}) do
-            local btnName = "MSUF_EM2_Nudge" .. dir
+        for i = 1, #NUDGE_DIRS do
+            local dir = NUDGE_DIRS[i]
+            local btnName = "MSUF_EM2_Nudge" .. dir[1]
             local btn = CreateFrame("Button", btnName, UIParent, "SecureActionButtonTemplate")
+            btn._msufDx, btn._msufDy = dir[2], dir[3]
             btn:SetSize(1, 1)
             btn:Hide()
-            btn:SetScript("OnClick", function()
-                if dir == "UP"    then NudgeTarget(0, 1)
-                elseif dir == "DOWN"  then NudgeTarget(0, -1)
-                elseif dir == "LEFT"  then NudgeTarget(-1, 0)
-                elseif dir == "RIGHT" then NudgeTarget(1, 0) end
-            end)
+            btn:SetScript("OnClick", NudgeButtonClick)
         end
     end
 
@@ -976,7 +954,8 @@ function Nudge.Enable()
         owner:RegisterEvent("PLAYER_REGEN_ENABLED")
         return
     end
-    for _, dir in ipairs({"UP","DOWN","LEFT","RIGHT"}) do
+    for i = 1, #NUDGE_DIRS do
+        local dir = NUDGE_DIRS[i][1]
         SetOverrideBindingClick(owner, false, dir, "MSUF_EM2_Nudge" .. dir)
     end
 end
@@ -991,17 +970,10 @@ function Nudge.Disable()
     ClearOverrideBindings(owner)
 end
 
---- Legacy global
 function _G.MSUF_EnableArrowKeyNudge(enable)
     if enable then Nudge.Enable() else Nudge.Disable() end
 end
 
---- MSUF_EM2_Ticker.lua
-
---- MSUF_EM2_Ticker.lua ? v5 CENTER-native
---- During drag: computes DB offset from cursor, then positions bar with the
---- EXACT same SetPoint("CENTER", anchor, "CENTER", ...) that PositionUnitFrame
---- uses. Zero TOPLEFT. Zero conversion error. One positioning code path.
 local Ticker = {}
 EM2.Ticker = Ticker
 
@@ -1232,27 +1204,22 @@ local function OnUpdate(self, elapsed)
         local mx, my = GetCursorPosition()
         mx = mx / sc; my = my / sc
 
-        --- Mover center = cursor + offset
         local rawCX = mx + d.offX
         local rawCY = my + d.offY
 
-        --- Snap
         local snapCX, snapCY = rawCX, rawCY
         if d.snapEnabled and EM2.Snap then
             snapCX, snapCY = EM2.Snap.Apply(rawCX, rawCY, d.halfW, d.halfH, d.key)
         end
 
-        --- Clamp
         snapCX = max(d.halfW, min(d.screenW - d.halfW, snapCX))
         snapCY = max(d.halfH, min(d.screenH - d.halfH, snapCY))
 
-        --- Position mover (TOPLEFT UIParent ? mover only)
         d.mover:ClearAllPoints()
         d.mover:SetPoint("TOPLEFT", UIParent, "TOPLEFT",
             snapCX - d.halfW,
             snapCY + d.halfH - d.screenH)
 
-        --- Coord display
         if d.mover._coordFS then
             d.mover._coordFS:SetText(format("%.0f, %.0f",
                 round(snapCX - d.screenW * 0.5),
@@ -1266,12 +1233,6 @@ local function OnUpdate(self, elapsed)
             return
         end
 
-        --- ---
-        --- Position bar with CENTER ? same code path as PositionUnitFrame.
-        --- Group Frames use a stricter UIParent-center path so mouse release
-        --- matches the exact preview landing spot with no final snap drift.
-        --- ---
-
         local bar = d.bar
         if bar and not IsConfigCombatLocked() then
             bar._msufDragActive = true
@@ -1284,14 +1245,6 @@ local function OnUpdate(self, elapsed)
                 end
             else
                 local anchor = d.anchor
-                --- Compute where bar center IS in screen pixels after hypothetical move
-                --- snapCX/snapCY are in UIParent coords.
-                --- Bar center in screen pixels = snapCX * uiScale
-                --- We need: offset = (barCenter * barScale - anchorCenter * anchorScale) / anchorScale
-                --- Since we WANT barCenter at snapCX (UIParent coords), and UIParent coords = screen / uiScale:
-                --- barCenter_local = snapCX * (uiScale / barScale)
-                --- But simpler: just write offset then SetPoint with CENTER.
-
                 local ax, ay = d.anchorCX, d.anchorCY
                 if not (ax and ay) then
                     ax, ay = anchor:GetCenter()
@@ -1305,17 +1258,13 @@ local function OnUpdate(self, elapsed)
                     local desiredBarCX = snapCX + (d.barCenterDX or 0)
                     local desiredBarCY = snapCY + (d.barCenterDY or 0)
 
-                    --- Desired bar center in absolute screen pixels
                     local barScreenCX = desiredBarCX * sc  --- sc = UIParent:GetEffectiveScale()
                     local barScreenCY = desiredBarCY * sc
-                    --- Anchor center in absolute screen pixels
                     local ancScreenCX = ax * as
                     local ancScreenCY = ay * as
-                    --- Offset in anchor's coord space
                     local offX = (barScreenCX - ancScreenCX) / as
                     local offY = (barScreenCY - ancScreenCY) / as
 
-                    --- Boss spacing adjustment (applied to whichever axis the layout uses)
                     if d.bossAdjX then offX = offX - d.bossAdjX end
                     if d.bossAdjY then offY = offY - d.bossAdjY end
 

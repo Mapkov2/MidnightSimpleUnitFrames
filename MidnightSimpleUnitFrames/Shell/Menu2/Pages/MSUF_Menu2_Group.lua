@@ -22,6 +22,9 @@ local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
 
 local pendingGF = {}
 local gfFlushQueued = false
+local SCOPE_LABELS = { party = "Party", raid = "Raid", mythicraid = "Mythic Raid" }
+local SCOPE_SHORT_LABELS = { mythicraid = "Mythic" }
+local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
 
 local function GF()
     return MSUF and MSUF.GF
@@ -144,14 +147,11 @@ local function CurrentScope()
 end
 
 local function ScopeLabel(kind)
-    if kind == "mythicraid" then return M.Tr("Mythic Raid") end
-    if kind == "raid" then return M.Tr("Raid") end
-    return M.Tr("Party")
+    return M.Tr(SCOPE_LABELS[kind] or "Party")
 end
 
 local function ScopeShortLabel(kind)
-    if kind == "mythicraid" then return M.Tr("Mythic") end
-    return ScopeLabel(kind)
+    return M.Tr(SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party")
 end
 
 local GF_COPY_EXCLUDE = {
@@ -171,7 +171,7 @@ local GF_COPY_CATEGORIES = {
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
     { key = "indicators", label = "Indicators & Status Icons", keys = WL [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle pvpIcon pvpIconSize pvpIconAnchor pvpIconX pvpIconY pvpIconLayer statusText statusTextSize statusTextAnchor statusOffsetX statusOffsetY statusTextLayer statusGhostText statusGhostTextSize statusGhostTextAnchor statusGhostOffsetX statusGhostOffsetY statusGhostTextLayer statusAFKText statusAFKTextSize statusAFKTextAnchor statusAFKOffsetX statusAFKOffsetY statusAFKTextLayer]], prefix = WL [[si_ statusIcon indicator]] },
     { key = "auras", label = "Auras", tables = WL [[auras]] },
-    { key = "highlight", label = "Highlight & Aggro", prefix = WL [[hl dispel]] },
+    { key = "highlight", label = "Highlight & Aggro", keys = WL [[targetIndicator targetR targetG targetB]], prefix = WL [[hl dispel]] },
     { key = "dstripe", label = "Debuff Stripe", prefix = WL [[debuffStripe]] },
     { key = "features", label = "Corner/Spell", keys = WL [[ciEnabled ciAlpha]], tables = WL [[spellIndicators]], prefix = WL [[ci]] },
 }
@@ -243,42 +243,11 @@ local function RefreshContext(ctx)
 end
 
 local function SetSectionHeaderStatus(sec, opts)
-    local entry = sec and sec._msuf2CollapsibleEntry
-    if not entry then return end
-
-    T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open)
-    if entry.headerBg and entry.headerBg.SetColorTexture then
-        entry.headerBg:SetColorTexture(0.060, 0.070, 0.130, 0.48)
+    if not Shared.SetSectionHeaderStatus then return end
+    if not (opts and opts.bg) then
+        opts = M.Assign({ bg = GROUP_SECTION_HEADER_BG }, opts)
     end
-    if entry.label and entry.label.SetTextColor and T.colors and T.colors.text then
-        local c = T.colors.text
-        entry.label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-    end
-
-    opts = opts or {}
-    if opts.bg and entry.headerBg and entry.headerBg.SetColorTexture then
-        local bg = opts.bg
-        entry.headerBg:SetColorTexture(bg[1] or 0.060, bg[2] or 0.070, bg[3] or 0.130, bg[4] or 0.48)
-    end
-    if opts.labelColor and entry.label and entry.label.SetTextColor then
-        local c = opts.labelColor
-        entry.label:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
-    end
-    if opts.arrowColor and entry.arrow and entry.arrow.SetVertexColor then
-        local c = opts.arrowColor
-        entry.arrow:SetVertexColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
-    end
-    if entry.hint and entry.hint.SetText then
-        if opts.hint ~= nil then
-            entry.hint:SetText(opts.hint)
-            if opts.hintColor and entry.hint.SetTextColor then
-                local c = opts.hintColor
-                entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
-            end
-        else
-            T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open)
-        end
-    end
+    Shared.SetSectionHeaderStatus(sec, opts)
 end
 
 local function SetSectionBadges(sec, specs)
@@ -585,15 +554,10 @@ end
 
 local GroupPage = M.GroupPage or {}
 M.GroupPage = GroupPage
-GroupPage.Conf = Conf
-GroupPage.Val = Val
-GroupPage.Set = Set
-GroupPage.Bool = Bool
-GroupPage.Num = Num
-GroupPage.CurrentScope = CurrentScope
-GroupPage.GF_COPY_CATEGORIES = GF_COPY_CATEGORIES
-GroupPage.NewGFCopyScopes = NewGFCopyScopes
-GroupPage.CopyGroupSettings = CopyGroupSettings
+M.Assign(GroupPage, {
+    Conf = Conf, Val = Val, Set = Set, Bool = Bool, Num = Num, CurrentScope = CurrentScope,
+    GF_COPY_CATEGORIES = GF_COPY_CATEGORIES, NewGFCopyScopes = NewGFCopyScopes, CopyGroupSettings = CopyGroupSettings,
+})
 local function BindScopeToggle(ctx, widget, key, default, mode)
     M.BindToggle(ctx, widget,
         function() return Bool(CurrentScope(), key, default) end,
@@ -864,32 +828,12 @@ local function BuildRoleOrderRows(ctx, section, opts)
         section._msuf2CursorY = listY - (#ROLE_SORT_DEFS * (rowH + rowGap)) - 10
     end
 
-    local holder = CreateFrame("Frame", nil, section)
-    holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, listY)
-    holder:SetSize(rowW, (#ROLE_SORT_DEFS * (rowH + rowGap)))
-
-    local rows = {}
-    local activeCount = #ROLE_SORT_DEFS
-
-    local function SlotY(slot)
-        return -((slot - 1) * (rowH + rowGap))
-    end
-
     local function NormalizeRoleToken(token)
         if token == "MELEE" or token == "RANGED" then return "DAMAGER" end
         return token
     end
 
-    local function SnapRows()
-        for i = 1, #rows do
-            local row = rows[i]
-            row.frame:ClearAllPoints()
-            row.frame:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, SlotY(row.slotIndex))
-            row.frame._numText:SetText(tostring(row.slotIndex))
-            row.frame:Show()
-        end
-    end
-
+    local holder, rows
     local function SaveOrder()
         local kind = CurrentScope()
         local function WriteOrder()
@@ -929,121 +873,20 @@ local function BuildRoleOrderRows(ctx, section, opts)
                 rows[i].slotIndex = slot
             end
         end
-        SnapRows()
+        holder:SnapRows()
     end
 
-    local function SetRowEnabled(row, enabled)
-        if not row then return end
-        local frame = row.frame
-        frame:SetAlpha(enabled and 1 or 0.42)
-        frame:EnableMouse(enabled and true or false)
-        if frame._label then
-            local c = enabled and T.colors.text or T.colors.dim
-            frame._label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
-        end
-    end
-
-    function holder:SetRowsEnabled(enabled)
-        self._enabled = enabled and true or false
-        for i = 1, #rows do
-            SetRowEnabled(rows[i], self._enabled)
-        end
-    end
-
-    for i = 1, #ROLE_SORT_DEFS do
-        local def = ROLE_SORT_DEFS[i]
-        local row = CreateFrame("Frame", nil, holder, T.Template and T.Template() or nil)
-        row:SetSize(rowW, rowH)
-        row:SetMovable(true)
-        row:EnableMouse(true)
-        row:RegisterForDrag("LeftButton")
-        if row.SetBackdrop then
-            row:SetBackdrop({
-                bgFile = "Interface\\Buttons\\WHITE8X8",
-                edgeFile = "Interface\\Buttons\\WHITE8X8",
-                edgeSize = 1,
-            })
-            row:SetBackdropColor(0.055, 0.060, 0.075, 0.88)
-            row:SetBackdropBorderColor(0.210, 0.230, 0.300, 0.78)
-        end
-
-        local stripe = row:CreateTexture(nil, "ARTWORK")
-        stripe:SetPoint("LEFT", row, "LEFT", 2, 0)
-        stripe:SetSize(4, rowH - 2)
-        stripe:SetColorTexture(def.r, def.g, def.b, 1)
-
-        local label = T.Font(row, "GameFontHighlightSmall", def.label, T.colors.text)
-        label:SetPoint("LEFT", stripe, "RIGHT", 7, 0)
-        label:SetJustifyH("LEFT")
-        row._label = label
-
-        local number = T.Font(row, "GameFontNormalSmall", tostring(i), T.colors.dim)
-        number:SetPoint("RIGHT", row, "RIGHT", -8, 0)
-        number:SetJustifyH("RIGHT")
-        row._numText = number
-
-        row:SetScript("OnEnter", function(self)
-            if not holder._enabled then return end
-            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.380, 0.550, 0.900, 0.95) end
-            if GameTooltip then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:AddLine(M.Tr(def.label or ""), 1, 1, 1)
-                GameTooltip:AddLine(M.Tr("Drag to change role priority."), 0.72, 0.76, 0.86)
-                GameTooltip:Show()
-            end
-        end)
-        row:SetScript("OnLeave", function(self)
-            if GameTooltip then GameTooltip:Hide() end
-            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(0.210, 0.230, 0.300, 0.78) end
-        end)
-        row:SetScript("OnDragStart", function(self)
-            if not holder._enabled then return end
-            if GameTooltip then GameTooltip:Hide() end
-            self._msuf2OldStrata = self.GetFrameStrata and self:GetFrameStrata() or nil
-            if self.SetFrameStrata then self:SetFrameStrata("TOOLTIP") end
-            self:StartMoving()
-        end)
-        row:SetScript("OnDragStop", function(self)
-            if not holder._enabled then return end
-            self:StopMovingOrSizing()
-            if self.SetFrameStrata and self._msuf2OldStrata then self:SetFrameStrata(self._msuf2OldStrata) end
-
-            local _, centerY = self:GetCenter()
-            local top = holder:GetTop()
-            local bestSlot, bestDist = 1, math.huge
-            if centerY and top then
-                for slotIndex = 1, activeCount do
-                    local slotCenter = top + SlotY(slotIndex) - (rowH * 0.5)
-                    local dist = math.abs(centerY - slotCenter)
-                    if dist < bestDist then
-                        bestDist = dist
-                        bestSlot = slotIndex
-                    end
-                end
-            end
-
-            local moving
-            for ri = 1, #rows do
-                if rows[ri].frame == self then
-                    moving = rows[ri]
-                    break
-                end
-            end
-            if moving and moving.slotIndex ~= bestSlot then
-                for ri = 1, #rows do
-                    if rows[ri] ~= moving and rows[ri].slotIndex == bestSlot then
-                        rows[ri].slotIndex = moving.slotIndex
-                        break
-                    end
-                end
-                moving.slotIndex = bestSlot
-                SaveOrder()
-            end
-            SnapRows()
-        end)
-
-        rows[i] = { frame = row, key = def.key, slotIndex = i }
-    end
+    holder = Shared.MakeDragSortRows(section, ROLE_SORT_DEFS, {
+        x = x, y = listY, width = rowW, rowHeight = rowH, gap = rowGap,
+        onReorder = SaveOrder,
+        tooltip = function(self, row, tip)
+            tip:SetOwner(self, "ANCHOR_RIGHT")
+            tip:AddLine(M.Tr((row and row.def and row.def.label) or ""), 1, 1, 1)
+            tip:AddLine(M.Tr("Drag to change role priority."), 0.72, 0.76, 0.86)
+            tip:Show()
+        end,
+    })
+    rows = holder.rows
 
     holder.Refresh = LoadOrder
     M.AddRefresher(ctx, LoadOrder)
@@ -1332,13 +1175,8 @@ local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
     return widget
 end
 
-local function SetOptionEnabled(control, enabled)
-    W.SetControlEnabled(control, enabled)
-end
-
-local function SetOptionsEnabled(controls, enabled)
-    W.SetControlsEnabled(controls, enabled)
-end
+local SetOptionEnabled = W.SetControlEnabled
+local SetOptionsEnabled = W.SetControlsEnabled
 
 local function ForEachGroupPageControl(parent, callback)
     if not (parent and parent.GetChildren and type(callback) == "function") then return end
@@ -1370,7 +1208,7 @@ ApplyScopeEnabledGate = function(ctx)
     end)
 end
 
-for key, value in pairs({
+M.Assign(GroupPage, {
     SCOPE_VALUES = SCOPE_VALUES,
     GROWTH_VALUES = GROWTH_VALUES,
     BLIZZARD_FALLBACK_VALUES = BLIZZARD_FALLBACK_VALUES,
@@ -1437,6 +1275,4 @@ for key, value in pairs({
     BadgeNumber = BadgeNumber,
     OptionText = OptionText,
     CreateSectionNotice = CreateSectionNotice,
-}) do
-    GroupPage[key] = value
-end
+})

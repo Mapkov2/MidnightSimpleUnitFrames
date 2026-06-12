@@ -629,7 +629,7 @@ local function BuildModules(ctx)
     if W.CreatePageResetButton then
         W.CreatePageResetButton(ctx, head, nil, { width = 88, y = -20 })
     end
-    local style = b:CollapsibleSection("modules_style", "Style", 176, true)
+    local style = b:CollapsibleSection("modules_style", "Style", 96, true)
     local enable = W.SwitchAt(style, "MSUF Style", 14, -38, 220)
     M.BindToggle(ctx, enable,
         function()
@@ -643,31 +643,6 @@ local function BuildModules(ctx)
             if type(_G.MSUF_SetStyleEnabled) == "function" then pcall(_G.MSUF_SetStyleEnabled, v and true or false) end
             G().styleEnabled = v and true or false
             CallGlobal("MSUF_ApplyModules")
-        end)
-    style._msuf2CursorY = -82
-    local dropdownMode = W.Dropdown(style, "Dropdown style", {
-        { text = "MSUF superellipse", value = "msuf" },
-        { text = "Blizzard legacy", value = "old" },
-    }, 230)
-    M.BindDropdown(ctx, dropdownMode,
-        function()
-            if type(_G.MSUF_GetDropdownStyleMode) == "function" then
-                local ok, value = pcall(_G.MSUF_GetDropdownStyleMode)
-                if ok then return value or "msuf" end
-            end
-            local mode = G().dropdownStyleMode
-            return (mode == "old" or mode == "blizzard" or mode == "legacy") and "old" or "msuf"
-        end,
-        function(v)
-            v = (v == "old") and "old" or "msuf"
-            if type(_G.MSUF_ApplyDropdownStyleModeImmediate) == "function" then
-                pcall(_G.MSUF_ApplyDropdownStyleModeImmediate, v)
-            elseif type(_G.MSUF_SetDropdownStyleMode) == "function" then
-                pcall(_G.MSUF_SetDropdownStyleMode, v)
-                G().dropdownStyleMode = v
-            else
-                G().dropdownStyleMode = v
-            end
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end

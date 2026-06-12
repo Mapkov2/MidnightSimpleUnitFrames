@@ -1,4 +1,4 @@
---- Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua
+--- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua
 --- Cold-path buff/debuff preview provider for the MSUF2 unit frame preview.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
@@ -214,27 +214,71 @@ function Auras.CreateHandles(box, makeHandle)
     end
 end
 
+local function ButtonAnchor(xSign, ySign)
+    if ySign > 0 then
+        return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT"
+    end
+    return xSign < 0 and "TOPRIGHT" or "TOPLEFT"
+end
+
 local function Growth(cfg, kind)
     local isBuff = kind == "buff"
     local growth = isBuff and (cfg.buffGrowthX or cfg.growth) or (cfg.debuffGrowthX or cfg.growth)
     local rowWrap = isBuff and (cfg.buffGrowthY or cfg.rowWrap) or (cfg.debuffGrowthY or cfg.rowWrap)
     local gx = growth == "LEFT" and -1 or 1
     local gy = rowWrap == "UP" and 1 or -1
+    local vertical = false
     if growth == "UP" then
+        vertical = true
         gx, gy = 1, 1
     elseif growth == "DOWN" then
+        vertical = true
         gx, gy = 1, -1
     end
-    return gx, gy
+    return gx, gy, vertical, ButtonAnchor(gx, gy)
+end
+
+local function AnchorOffset(anchor, w, h)
+    w = tonumber(w) or 0
+    h = tonumber(h) or 0
+    anchor = tostring(anchor or "TOPLEFT")
+    if anchor == "TOPRIGHT" then return w, h end
+    if anchor == "BOTTOMLEFT" then return 0, 0 end
+    if anchor == "BOTTOMRIGHT" then return w, 0 end
+    if anchor == "CENTER" then return w * 0.5, h * 0.5 end
+    return 0, h
 end
 
 local function AnchorBase(anchor, frameW, frameH)
-    anchor = tostring(anchor or "TOPLEFT")
-    if anchor == "TOPRIGHT" then return frameW, frameH end
-    if anchor == "BOTTOMLEFT" then return 0, 0 end
-    if anchor == "BOTTOMRIGHT" then return frameW, 0 end
-    if anchor == "CENTER" then return frameW * 0.5, frameH * 0.5 end
-    return 0, frameH
+    return AnchorOffset(anchor, frameW, frameH)
+end
+
+local function GridShape(count, perRow, vertical)
+    count = max(1, RoundOffset(count))
+    perRow = max(1, RoundOffset(perRow))
+    if vertical then
+        return max(1, ceil(count / perRow)), min(count, perRow)
+    end
+    return min(count, perRow), max(1, ceil(count / perRow))
+end
+
+local function IconGridCoord(index, perRow, vertical)
+    local per = max(1, RoundOffset(perRow))
+    local idx = index - 1
+    if vertical then
+        local row = idx % per
+        return (idx - row) / per, row
+    end
+    local col = idx % per
+    return col, (idx - col) / per
+end
+
+local function IconRect(anchor, laneW, laneH, size, x, y)
+    local laneAnchorX, laneAnchorY = AnchorOffset(anchor, laneW, laneH)
+    local iconAnchorX, iconAnchorY = AnchorOffset(anchor, size, size)
+    local left = laneAnchorX + x - iconAnchorX
+    local bottom = laneAnchorY + y - iconAnchorY
+    return left, bottom, left + size, bottom + size
 end
 
 local function LaneBounds(cfg, kind, frameW, frameH)
@@ -251,23 +295,29 @@ local function LaneBounds(cfg, kind, frameW, frameH)
     local spacing = max(0, cfg.spacing or 0)
     local perRow = max(1, (isBuff and cfg.buffPerRow or cfg.debuffPerRow) or cfg.perRow or 1)
     local shown = min(max(1, count), PREVIEW_ICONS)
-    local cols = min(shown, perRow)
-    local rows = max(1, floor((shown + perRow - 1) / perRow))
     local step = size + spacing
-    local growthX, growthY = Growth(cfg, kind)
+    local growthX, growthY, vertical, initialAnchor = Growth(cfg, kind)
     local baseX, baseY = AnchorBase(anchor, frameW, frameH)
-    local laneRows = max(1, floor((count + perRow - 1) / perRow))
-    local laneW = perRow * size + (perRow - 1) * spacing
-    local laneH = laneRows * size + (laneRows - 1) * spacing
-    local anchorBottom = baseY + y
-    local iconMinX = growthX < 0 and -((cols - 1) * step) or 0
-    local iconMaxX = growthX < 0 and size or ((cols - 1) * step + size)
-    local iconMinY = growthY < 0 and -((rows - 1) * step) or 0
-    local iconMaxY = growthY < 0 and size or ((rows - 1) * step + size)
-    local left = baseX + x + min(0, iconMinX)
-    local right = baseX + x + max(laneW, iconMaxX)
-    local bottom = anchorBottom + min(0, iconMinY)
-    local top = anchorBottom + max(laneH, iconMaxY)
+    local cols, rows = GridShape(count, perRow, vertical)
+    local laneW = max(1, cols * size + max(cols - 1, 0) * spacing)
+    local laneH = max(1, rows * size + max(rows - 1, 0) * spacing)
+    local anchorLocalX, anchorLocalY = AnchorOffset(anchor, laneW, laneH)
+    local laneLeft = baseX + x - anchorLocalX
+    local laneBottom = baseY + y - anchorLocalY
+    local iconMinX, iconMinY, iconMaxX, iconMaxY
+    for i = 1, shown do
+        local col, row = IconGridCoord(i, perRow, vertical)
+        local l, b, r, t = IconRect(initialAnchor, laneW, laneH, size, col * step * growthX, row * step * growthY)
+        iconMinX = iconMinX and min(iconMinX, l) or l
+        iconMinY = iconMinY and min(iconMinY, b) or b
+        iconMaxX = iconMaxX and max(iconMaxX, r) or r
+        iconMaxY = iconMaxY and max(iconMaxY, t) or t
+    end
+    iconMinX, iconMinY, iconMaxX, iconMaxY = iconMinX or 0, iconMinY or 0, iconMaxX or size, iconMaxY or size
+    local left = laneLeft + min(0, iconMinX)
+    local right = laneLeft + max(laneW, iconMaxX)
+    local bottom = laneBottom + min(0, iconMinY)
+    local top = laneBottom + max(laneH, iconMaxY)
     return {
         kind = kind,
         left = left,
@@ -286,17 +336,20 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         laneH = laneH,
         baseX = baseX,
         baseY = baseY,
+        laneLeft = laneLeft,
+        laneBottom = laneBottom,
         iconMinX = iconMinX,
         iconMaxX = iconMaxX,
         iconMinY = iconMinY,
         iconMaxY = iconMaxY,
-        anchorBottom = anchorBottom,
+        anchorBottom = laneBottom,
         growthX = growthX,
         growthY = growthY,
+        verticalGrowth = vertical == true,
         layer = isBuff and cfg.buffLayer or cfg.debuffLayer,
         point = "BOTTOMLEFT",
         relativePoint = "BOTTOMLEFT",
-        initialAnchor = "BOTTOMLEFT",
+        initialAnchor = initialAnchor,
     }
 end
 
@@ -492,10 +545,10 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local cooldownX = S(textCfg.cooldownX or 0)
     local cooldownY = S(textCfg.cooldownY or 0)
     local layer = tonumber(bounds.layer) or (kind == "buff" and 5 or 6)
-    local laneX = S((bounds.baseX or 0) + (bounds.x or 0))
-    local laneY = S((bounds.baseY or 0) + (bounds.y or 0))
-    local handleLeft = S((bounds.baseX or 0) + (bounds.x or 0) + (bounds.iconMinX or 0))
-    local handleBottom = S((bounds.baseY or 0) + (bounds.y or 0) + (bounds.iconMinY or 0))
+    local laneX = S(bounds.laneLeft or ((bounds.baseX or 0) + (bounds.x or 0)))
+    local laneY = S(bounds.laneBottom or ((bounds.baseY or 0) + (bounds.y or 0)))
+    local handleLeft = S((bounds.laneLeft or 0) + (bounds.iconMinX or 0))
+    local handleBottom = S((bounds.laneBottom or 0) + (bounds.iconMinY or 0))
     local handleW = max(1, S((bounds.iconMaxX or 0) - (bounds.iconMinX or 0)))
     local handleH = max(1, S((bounds.iconMaxY or 0) - (bounds.iconMinY or 0)))
 
@@ -514,11 +567,10 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     for i = 1, bounds.shown do
         local icon = EnsureIcon(visual, i)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 0) + 1) end
-        local col = (i - 1) % bounds.perRow
-        local row = floor((i - 1) / bounds.perRow)
+        local col, row = IconGridCoord(i, bounds.perRow, bounds.verticalGrowth == true)
         icon:SetSize(size, size)
         icon:ClearAllPoints()
-        icon:SetPoint("BOTTOMLEFT", visual, "BOTTOMLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
+        icon:SetPoint(bounds.initialAnchor or "TOPLEFT", visual, bounds.initialAnchor or "TOPLEFT", col * step * bounds.growthX, row * step * bounds.growthY)
         icon.tex:SetTexture(textures[((i - 1) % #textures) + 1])
         icon.edge:SetVertexColor(0, 0, 0, 0)
         ApplyAuraFont(icon.stack, stackSize)

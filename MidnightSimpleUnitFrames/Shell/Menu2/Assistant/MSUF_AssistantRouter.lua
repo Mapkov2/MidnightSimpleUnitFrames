@@ -568,7 +568,7 @@ local function UnsupportedAuraReply(text)
         summary = "Aura command is not registered yet.",
         text = german
             and "Ich konnte diesen Aura-Befehl noch nicht sicher matchen. Registrierte Aura-Regler wie Icon-Groesse, Anzahl, Wachstum, Cooldown-/Stack-Text, Filter, Blacklist und Quick-Presets funktionieren. Aura-Copy und nicht angebundene Backend-Bereiche bleiben blockiert."
-            or "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, and quick presets can be changed. Aura copy and backend areas that are not registered yet are still blocked.",
+            or "I could not safely match that Aura command yet. Registered Aura controls such as icon size, count, growth, cooldown and stack text, filters, blacklist, quick presets, and Group Aura copy can be changed. Aura backend areas that are not registered yet stay blocked.",
     }
 end
 

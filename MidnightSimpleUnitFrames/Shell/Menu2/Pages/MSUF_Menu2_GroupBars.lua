@@ -567,12 +567,7 @@ local function BuildGFBars(ctx)
 
     local tabFrames = {}
     local function MakeTabFrame(key)
-        local frame = CreateFrame("Frame", nil, text)
-        frame:SetPoint("TOPLEFT", text, "TOPLEFT", 0, -118)
-        frame:SetPoint("BOTTOMRIGHT", text, "BOTTOMRIGHT", 0, 12)
-        frame._msuf2Width = textW
-        tabFrames[key] = frame
-        return frame
+        return M.UnitSectionsShared.MakeTabFrame(text, key, -118, textW, tabFrames)
     end
 
     local function TextCard(parent, title, subtitle, x, y, width, height)

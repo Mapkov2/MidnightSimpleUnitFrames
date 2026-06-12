@@ -356,15 +356,104 @@ local function ReadGroupConfig(unit, kind)
     }
 end
 
+local AnchorOffset
+
 local function AnchorBase(anchor, frame)
     local w = frame and frame.GetWidth and frame:GetWidth() or 0
     local h = frame and frame.GetHeight and frame:GetHeight() or 0
+    return AnchorOffset(anchor, w, h)
+end
+
+AnchorOffset = function(anchor, w, h)
+    w = tonumber(w) or 0
+    h = tonumber(h) or 0
     anchor = tostring(anchor or "TOPLEFT")
     if anchor == "TOPRIGHT" then return w, h end
     if anchor == "BOTTOMLEFT" then return 0, 0 end
     if anchor == "BOTTOMRIGHT" then return w, 0 end
     if anchor == "CENTER" then return w * 0.5, h * 0.5 end
     return 0, h
+end
+
+local function ButtonAnchor(xSign, ySign)
+    if ySign > 0 then
+        return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT"
+    end
+    return xSign < 0 and "TOPRIGHT" or "TOPLEFT"
+end
+
+local function GrowthParts(growth, rowWrap)
+    if growth ~= "LEFT" and growth ~= "UP" and growth ~= "DOWN" then growth = "RIGHT" end
+    if rowWrap ~= "UP" then rowWrap = "DOWN" end
+    local xSign = growth == "LEFT" and -1 or 1
+    local ySign = rowWrap == "UP" and 1 or -1
+    local vertical = false
+    if growth == "UP" or growth == "DOWN" then
+        vertical = true
+        xSign = 1
+        ySign = growth == "UP" and 1 or -1
+    end
+    return xSign, ySign, vertical, ButtonAnchor(xSign, ySign)
+end
+
+local function GridDimensions(maxN, perRow, size, spacing, vertical)
+    local count = math_max(Round(maxN), 1)
+    local per = math_max(Round(perRow), 1)
+    local cols, rows
+    if vertical == true then
+        rows = math_min(count, per)
+        cols = math_ceil(count / per)
+    else
+        cols = math_min(count, per)
+        rows = math_ceil(count / per)
+    end
+    size = Clamp(size, 26, 1, 128)
+    spacing = Clamp(spacing, 2, 0, 64)
+    return math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
+        math_max(1, rows * size + math_max(rows - 1, 0) * spacing),
+        cols,
+        rows
+end
+
+local function IconGridCoord(index, perRow, vertical)
+    local per = math_max(Round(perRow), 1)
+    local idx = index - 1
+    if vertical == true then
+        local row = idx % per
+        return (idx - row) / per, row
+    end
+    local col = idx % per
+    return col, (idx - col) / per
+end
+
+local function PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
+    if not (group and frame) then return end
+    local baseX, baseY = AnchorBase(anchor, frame)
+    local localX, localY = AnchorOffset(anchor, laneW, laneH)
+    group:ClearAllPoints()
+    group:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", baseX + (tonumber(x) or 0) - localX, baseY + (tonumber(y) or 0) - localY)
+end
+
+local function FallbackMetrics(cfg)
+    local xSign, ySign, vertical, initialAnchor = GrowthParts(cfg and cfg.growth, cfg and cfg.rowWrap)
+    local laneW, laneH = GridDimensions(cfg and cfg.max, cfg and cfg.perRow, cfg and cfg.size, cfg and cfg.spacing, vertical)
+    return {
+        enabled = cfg and cfg.show == true,
+        num = cfg and cfg.max or 0,
+        size = cfg and cfg.size or 26,
+        spacing = cfg and cfg.spacing or 2,
+        step = ((cfg and cfg.size) or 26) + ((cfg and cfg.spacing) or 2),
+        perRow = cfg and cfg.perRow or 12,
+        width = laneW,
+        height = laneH,
+        growthX = xSign,
+        growthY = ySign,
+        verticalGrowth = vertical == true,
+        initialAnchor = initialAnchor,
+        x = cfg and cfg.x or 0,
+        y = cfg and cfg.y or 0,
+        anchor = cfg and cfg.anchor or "TOPLEFT",
+    }
 end
 
 local function WriteOffset(auras, unit, kind, x, y)
@@ -402,10 +491,12 @@ local function ApplyDragUnit(auras, unit, moverKind, x, y)
     local frame = other and GetFrame(unit)
     if other and frame then
         local cfg = ReadGroupConfig(unit, moverKind)
-        local baseX, baseY = AnchorBase(cfg.anchor, frame)
+        local metrics = type(A3.BuildAuraLaneMetrics) == "function" and A3.BuildAuraLaneMetrics(unit, moverKind) or nil
+        metrics = metrics or FallbackMetrics(cfg)
+        local laneW = metrics.width or cfg.size
+        local laneH = metrics.height or cfg.size
         ApplyGroupScaleForFrame(other, frame)
-        other:ClearAllPoints()
-        other:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", baseX + x, baseY + y)
+        PositionPreviewGroup(other, frame, metrics.anchor or cfg.anchor, x, y, laneW, laneH)
     end
 end
 
@@ -580,7 +671,7 @@ local function EnsureIcon(group, index)
     local icon = icons[index]
     if icon then return icon end
 
-    icon = CreateFrame("Frame", nil, group, "BackdropTemplate")
+    icon = CreateFrame("Frame", nil, group.Body or group, "BackdropTemplate")
     icon:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
     icon:SetBackdropColor(0, 0, 0, 0)
     icon:SetBackdropBorderColor(0, 0, 0, 0)
@@ -660,6 +751,11 @@ local function CreateGroup(unit, kind)
     StyleLabel(label)
     label:SetText(UnitLabel(unit) .. " " .. spec.label)
     group.Label = label
+
+    local body = CreateFrame("Frame", nil, group)
+    body:SetPoint("BOTTOMLEFT", group, "BOTTOMLEFT", 0, 0)
+    body:SetSize(1, 1)
+    group.Body = body
 
     group._msufA3Unit = unit
     group._msufA3MoverKind = kind
@@ -781,20 +877,23 @@ function EM.RefreshUnit(unit)
             local size = (metrics and metrics.size) or cfg.size
             local step = (metrics and metrics.step) or (cfg.size + cfg.spacing)
             local perRow = (metrics and metrics.perRow) or cfg.perRow
-            local fallbackRows = math_ceil(math_max(cfg.max, 1) / math_max(cfg.perRow, 1))
-            local laneW = (metrics and metrics.width) or math_max(1, cfg.perRow * cfg.size + (cfg.perRow - 1) * cfg.spacing)
-            local laneH = (metrics and metrics.height) or math_max(1, fallbackRows * cfg.size + (fallbackRows - 1) * cfg.spacing)
-            local growthX = (metrics and metrics.growthX) or ((cfg.growth == "LEFT") and -1 or 1)
-            local growthY = (metrics and metrics.growthY) or ((cfg.rowWrap == "UP") and 1 or -1)
+            local fallback
+            if not metrics then fallback = FallbackMetrics(cfg) end
+            local laneW = (metrics and metrics.width) or (fallback and fallback.width) or cfg.size
+            local laneH = (metrics and metrics.height) or (fallback and fallback.height) or cfg.size
+            local growthX = (metrics and metrics.growthX) or (fallback and fallback.growthX) or 1
+            local growthY = (metrics and metrics.growthY) or (fallback and fallback.growthY) or -1
+            local vertical = metrics and metrics.verticalGrowth == true or (fallback and fallback.verticalGrowth == true)
+            local initialAnchor = (metrics and metrics.initialAnchor) or (fallback and fallback.initialAnchor) or "TOPLEFT"
             local x = (metrics and metrics.x) or cfg.x
             local y = (metrics and metrics.y) or cfg.y
-            local baseX, baseY = AnchorBase(cfg.anchor, frame)
+            local anchor = (metrics and metrics.anchor) or cfg.anchor
 
             if group.SetClampedToScreen then group:SetClampedToScreen(false) end
             ApplyGroupScaleForFrame(group, frame)
-            group:ClearAllPoints()
-            group:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", baseX + x, baseY + y)
+            PositionPreviewGroup(group, frame, anchor, x, y, laneW, laneH)
             group:SetSize(laneW, laneH + HEADER_H)
+            if group.Body then group.Body:SetSize(laneW, laneH) end
             group:SetFrameLevel(160 + (tonumber(cfg.layer) or 5))
             if group.Label then
                 group.Label:SetText(UnitLabel(unit) .. " " .. spec.label)
@@ -805,9 +904,9 @@ function EM.RefreshUnit(unit)
                 local icon = EnsureIcon(group, i)
                 icon:SetSize(size, size)
                 icon:ClearAllPoints()
-                local col = (i - 1) % math_max(perRow, 1)
-                local row = math_floor((i - 1) / math_max(perRow, 1))
-                icon:SetPoint("BOTTOMLEFT", group, "BOTTOMLEFT", col * step * growthX, row * step * growthY)
+                local col, row = IconGridCoord(i, perRow, vertical)
+                local body = group.Body or group
+                icon:SetPoint(initialAnchor, body, initialAnchor, col * step * growthX, row * step * growthY)
                 if icon.Icon then icon.Icon:SetTexture(spec.texture) end
                 if icon.Count then icon.Count:SetText(i == 1 and "3" or "") end
                 if icon.CooldownText then icon.CooldownText:SetText(i == 1 and "1m" or "32") end

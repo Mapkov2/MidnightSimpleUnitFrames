@@ -326,6 +326,11 @@ end
 
 local function SettingMatchScore(setting, text)
     if type(setting) ~= "table" then return 0 end
+    text = tostring(text or "")
+    if type(P._settingMatchScoreCache) == "table" then
+        local cached = P.SettingMatchScoreCacheGet and P.SettingMatchScoreCacheGet(setting, text)
+        if cached ~= nil then return cached end
+    end
     if RootFrameEnabledBlockedByDetail(setting, text) then return 0 end
     if not SettingAllowedByExplicitScopes(setting, text) then return 0 end
     if setting.frameType == "castbar" and setting.attribute == "enabled" and ContainsAny(text, CASTBAR_ROOT_DETAIL_TERMS) then
@@ -364,6 +369,7 @@ local function SettingMatchScore(setting, text)
         local score = #Compact(setting.label)
         if score > best then best = score end
     end
+    if best > 0 and P.SettingMatchScoreCachePut then return P.SettingMatchScoreCachePut(setting, text, best) end
     return best
 end
 
@@ -647,6 +653,25 @@ local SUGGESTION_IGNORE_TOKENS = {
 }
 
 local REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT = 260
+P.REGISTRY_COLOR_VALUE_TOKENS = P.REGISTRY_COLOR_VALUE_TOKENS or {
+    white = true, black = true, red = true, green = true, blue = true, yellow = true,
+    cyan = true, magenta = true, orange = true, purple = true, pink = true,
+    turquoise = true, grey = true, gray = true, brown = true, gold = true,
+    violet = true, weiss = true, schwarz = true, rot = true, gruen = true,
+    blau = true, gelb = true, lila = true,
+}
+
+function P.IsRegistryCandidateValueToken(token)
+    token = tostring(token or "")
+    if token == "" then return false end
+    if P.REGISTRY_COLOR_VALUE_TOKENS and P.REGISTRY_COLOR_VALUE_TOKENS[token] then return true end
+    if token:match("^%x%x%x%x%x%x$") then return true end
+    if A and type(A.ColorFromName) == "function" then
+        local ok = A.ColorFromName(token)
+        if ok then return true end
+    end
+    return false
+end
 
 local function MeaningTokens(text)
     text = tostring(text or "")
@@ -806,6 +831,7 @@ P._BuildRegistryCandidateIndex = function(settings, includeAliases)
     P._registryCandidateIndexAll = all
     P._registryCandidateCache = {}
     P._registryCandidateCacheOrder = {}
+    if P.ClearSettingMatchScoreCache then P.ClearSettingMatchScoreCache() end
 end
 
 P._EnsureRegistryCandidateIndex = function(settings, includeAliases)
@@ -826,21 +852,32 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
     end
     local _, tokens = MeaningTokens(text)
     if #tokens == 0 then return {} end
-    local selectedTokens, selectedCount, hasRareToken = {}, 0, false
+    local candidateTokens = {}
+    local skippedValueToken = false
     for i = 1, #tokens do
-        local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[tokens[i]]
+        if P.IsRegistryCandidateValueToken(tokens[i]) then
+            skippedValueToken = true
+        else
+            candidateTokens[#candidateTokens + 1] = tokens[i]
+        end
+    end
+    if #candidateTokens == 0 then candidateTokens = tokens end
+    local selectedTokens, selectedCount, hasRareToken = {}, 0, false
+    for i = 1, #candidateTokens do
+        local token = candidateTokens[i]
+        local list = P._registryCandidateIndexByToken and P._registryCandidateIndexByToken[token]
         if type(list) == "table" and #list > 0 and #list <= REGISTRY_CANDIDATE_RARE_TOKEN_LIMIT then
             selectedCount = selectedCount + 1
-            selectedTokens[selectedCount] = tokens[i]
+            selectedTokens[selectedCount] = token
             hasRareToken = true
         end
     end
     if not hasRareToken then
-        selectedTokens = tokens
-        selectedCount = #tokens
+        selectedTokens = candidateTokens
+        selectedCount = #candidateTokens
     end
     local out, seen = {}, {}
-    if selectedCount >= 2 and not includeAliases then
+    if selectedCount >= 2 and (not includeAliases or skippedValueToken) then
         local counts = {}
         local ordered = {}
         for i = 1, selectedCount do
@@ -866,6 +903,7 @@ P.RegistryCandidateSettings = function(text, settings, includeAliases)
             end
         end
     end
+    if #out == 0 and skippedValueToken and not includeAliases then return {} end
     if #out == 0 then
         for i = 1, selectedCount do
             if A and type(A.MaybeYield) == "function" then A.MaybeYield() end
@@ -1208,7 +1246,39 @@ local RELATIVE_DECREASE_TERMS = {
     "verringere", "reduziere", "tiefer", "niedriger", "kleiner", "weniger", "schmaler", "duenner", "runter",
 }
 
+P.DIRECTIONAL_MOVE_TERMS = {
+    "move", "nudge", "shift", "position", "offset", "left", "right", "up", "down",
+    "links", "rechts", "hoch", "runter", "oben", "unten", "verschiebe", "verschieben", "versatz",
+}
+
+P.AxisForRegistryDirection = function(direction)
+    if direction == "left" or direction == "right" then return "x" end
+    if direction == "up" or direction == "down" then return "y" end
+    return nil
+end
+
+P.DirectionalNumberDeltaForSetting = function(setting, text, fallbackAmount)
+    if type(setting) ~= "table" or not setting.moveAxis then return nil end
+    if not ContainsAny(text, P.DIRECTIONAL_MOVE_TERMS) then return nil end
+    local direction = DetectDirection and DetectDirection(text, {}) or nil
+    local axis = P.AxisForRegistryDirection(direction)
+    if not axis or axis ~= tostring(setting.moveAxis) then return nil end
+    local amount = A._RelativeNumberAmountForText(text)
+    if amount == nil then
+        amount = fallbackAmount
+            or tonumber(setting.moveStep)
+            or tonumber(setting.moveAmount)
+            or tonumber(setting.step)
+            or 1
+    end
+    if setting.percent == true and amount > 1 then amount = amount / 100 end
+    if direction == "left" or direction == "down" then amount = -amount end
+    return amount
+end
+
 RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
+    local directional = P.DirectionalNumberDeltaForSetting(setting, text, fallbackAmount)
+    if directional ~= nil then return directional end
     local sign
     if ContainsAny(text, RELATIVE_INCREASE_TERMS) then sign = 1 end
     if ContainsAny(text, RELATIVE_DECREASE_TERMS) then sign = -1 end
@@ -3314,6 +3384,8 @@ end
 
 local function ParseRegistryAlias(text, raw)
     if P.LooksLikeExactKeyLookup and P.LooksLikeExactKeyLookup(raw or text) then return nil end
+    local exactAlias = P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(text, raw)
+    if exactAlias then return exactAlias end
     local repeated = ParseRepeatedRegistryShortcut(text, raw)
     if repeated then return repeated end
     local groupAvailability = ParseGroupAvailabilityIntent(text)

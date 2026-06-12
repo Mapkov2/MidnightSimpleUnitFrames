@@ -22,17 +22,44 @@ _G.MSUF_GetCurrentMirrorPage = function() return M.activeKey or "home" end
 _G.MSUF_GetMirrorPages = function() return M.pages end
 
 do
-    local f = CreateFrame("Frame")
-    f:RegisterEvent("PLAYER_REGEN_DISABLED")
-    f:SetScript("OnEvent", function()
+    local combatFrame
+    local combatRegistered = false
+
+    local function MenuVisible()
         local win = M.frame
         local bar = M.minimizedBar
-        local visible = (win and win.IsShown and win:IsShown())
+        return (win and win.IsShown and win:IsShown())
             or (bar and bar.IsShown and bar:IsShown())
-        if not visible then return end
-        if M.BlockCombatAction then M.BlockCombatAction() end
-        if M.HideSlashMenuAndMinibar then M.HideSlashMenuAndMinibar(win) end
-    end)
+    end
+
+    local function EnsureCombatFrame()
+        if combatFrame then return end
+        combatFrame = CreateFrame("Frame")
+        combatFrame:SetScript("OnEvent", function()
+            if not MenuVisible() then
+                M.UpdateMenuCombatListener()
+                return
+            end
+            local win = M.frame
+            if M.BlockCombatAction then M.BlockCombatAction() end
+            if M.HideSlashMenuAndMinibar then M.HideSlashMenuAndMinibar(win) end
+            M.UpdateMenuCombatListener()
+        end)
+    end
+
+    function M.UpdateMenuCombatListener()
+        if MenuVisible() then
+            EnsureCombatFrame()
+            if combatFrame and not combatRegistered then
+                combatRegistered = true
+                combatFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
+            end
+        elseif combatFrame and combatRegistered then
+            combatRegistered = false
+            combatFrame:UnregisterEvent("PLAYER_REGEN_DISABLED")
+        end
+    end
+
 end
 
 SLASH_MSUF2OPTIONS1 = "/msuf"

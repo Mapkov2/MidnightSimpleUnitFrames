@@ -540,11 +540,13 @@ local function GrowthParts(growth, rowWrap)
     if rowWrap ~= "UP" then rowWrap = "DOWN" end
     local xSign = growth == "LEFT" and -1 or 1
     local ySign = rowWrap == "UP" and 1 or -1
+    local vertical = false
     if growth == "UP" or growth == "DOWN" then
+        vertical = true
         xSign = 1
         ySign = growth == "UP" and 1 or -1
     end
-    return growth, rowWrap, xSign, ySign
+    return growth, rowWrap, xSign, ySign, vertical
 end
 
 local function GroupGrowthParts(growthX, growthY)
@@ -552,11 +554,13 @@ local function GroupGrowthParts(growthX, growthY)
     if growthY ~= "UP" then growthY = "DOWN" end
     local xSign = growthX == "LEFT" and -1 or 1
     local ySign = growthY == "UP" and 1 or -1
+    local vertical = false
     if growthX == "UP" or growthX == "DOWN" then
+        vertical = true
         xSign = 1
         ySign = growthX == "UP" and 1 or -1
     end
-    return growthX, growthY, xSign, ySign
+    return growthX, growthY, xSign, ySign, vertical
 end
 
 local function ButtonAnchor(xSign, ySign)
@@ -564,6 +568,19 @@ local function ButtonAnchor(xSign, ySign)
         return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT"
     end
     return xSign < 0 and "TOPRIGHT" or "TOPLEFT"
+end
+
+local function GridShape(maxCount, perRow, vertical)
+    local count = math_max(Round(maxCount), 1)
+    local per = math_max(Round(perRow), 1)
+    if vertical == true then
+        local rows = math_min(count, per)
+        local cols = math_ceil(count / per)
+        return cols, rows
+    end
+    local cols = math_min(count, per)
+    local rows = math_ceil(count / per)
+    return cols, rows
 end
 
 local function EffectiveTables(auras, runtimeUnit)
@@ -734,7 +751,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         or ReadRaw(sharedLayout, shared, legacyWrapKey)
         or ReadRaw(sharedLayout, shared, "rowWrap")
         or DEFAULT_SHARED.rowWrap
-    local growthX, growthY, xSign, ySign = GrowthParts(growth, rowWrap)
+    local growthX, growthY, xSign, ySign, verticalGrowth = GrowthParts(growth, rowWrap)
     local x = ReadNumber(layout, shared, spec.xKey, DEFAULT_SHARED[spec.xKey] or 0, -4096, 4096)
     local y = ReadNumber(layout, shared, spec.yKey, DEFAULT_SHARED[spec.yKey] or 0, -4096, 4096)
     local anchor = ReadAnchor(layout, shared, spec.anchorKey, spec.defaultAnchor)
@@ -778,8 +795,9 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         and hidePermanent ~= true
         and satedFilter ~= true
     local step = size + spacing
-    local cols = math_min(math_max(maxCount, 1), math_max(perRow, 1))
-    local rows = math_ceil(math_max(maxCount, 1) / math_max(perRow, 1))
+    local roundedMax = Round(maxCount)
+    local roundedPerRow = Round(perRow)
+    local cols, rows = GridShape(roundedMax, roundedPerRow, verticalGrowth)
     local sortOrder = ReadNumber(sharedLayout, shared, "sortOrder", DEFAULT_SHARED.sortOrder, 0, 6)
     local showCooldownSwipe = ReadBool(sharedLayout, shared, spec.showSwipeKey, ReadShared(shared, "showCooldownSwipe") ~= false)
     local showCooldownText = ReadBool(sharedLayout, shared, spec.showTextKey, ReadShared(shared, "showCooldownText") ~= false)
@@ -828,11 +846,11 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         stealableFilter = "HELPFUL|STEALABLE",
         dispellableFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE",
         bossFilter = spec.filter .. "|BOSS",
-        max = renderEnabled and Round(maxCount) or 0,
+        max = renderEnabled and roundedMax or 0,
         size = size,
         spacing = spacing,
         step = step,
-        perRow = Round(perRow),
+        perRow = roundedPerRow,
         cols = cols,
         rows = rows,
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
@@ -845,6 +863,7 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         growthY = growthY,
         xSign = xSign,
         ySign = ySign,
+        verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
         sortOrder = Round(sortOrder),
         sortComparator = sortComparator,
@@ -925,7 +944,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
     local perRow = ClampNumber(source[spec.perRowKey] or source.perRow, spec.defaultPerRow, 1, 40)
     local maxCount = ClampNumber(source[spec.maxKey], spec.defaultMax, 0, 80)
     local renderEnabled = renderAllowed ~= false and source[spec.showKey] == true and maxCount > 0
-    local growthX, growthY, xSign, ySign = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
+    local growthX, growthY, xSign, ySign, verticalGrowth = GroupGrowthParts(source[spec.growthXKey], source[spec.growthYKey])
     local x = ClampNumber(source[spec.xKey], 0, -4096, 4096)
     local y = ClampNumber(source[spec.yKey], 0, -4096, 4096)
     local anchor = source[spec.anchorKey] or spec.defaultAnchor
@@ -958,8 +977,9 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         cooldownUrgentR, cooldownUrgentG, cooldownUrgentB = ReadGeneralColor("aurasCooldownTextUrgentColor", 1, 0.55, 0.10)
     end
     local step = size + spacing
-    local cols = math_min(math_max(maxCount, 1), math_max(perRow, 1))
-    local rows = math_ceil(math_max(maxCount, 1) / math_max(perRow, 1))
+    local roundedMax = Round(maxCount)
+    local roundedPerRow = Round(perRow)
+    local cols, rows = GridShape(roundedMax, roundedPerRow, verticalGrowth)
     local sortOrder = source.sortByDuration == true and 2 or 0
     local showDispelTypeBorder = kind == "debuff" and renderEnabled == true and source.debuffShowDispelBorder == true
     local dispelVisual = (kind == "debuff" and (visual or (showDispelTypeBorder and CompileDispelVisual(nil)))) or nil
@@ -985,11 +1005,11 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         stealableFilter = "HELPFUL|STEALABLE",
         dispellableFilter = "HARMFUL|RAID_PLAYER_DISPELLABLE",
         bossFilter = "HARMFUL|BOSS",
-        max = renderEnabled and Round(maxCount) or 0,
+        max = renderEnabled and roundedMax or 0,
         size = size,
         spacing = spacing,
         step = step,
-        perRow = Round(perRow),
+        perRow = roundedPerRow,
         cols = cols,
         rows = rows,
         width = math_max(1, cols * size + math_max(cols - 1, 0) * spacing),
@@ -1003,6 +1023,7 @@ local function CompileGroupLane(unit, source, kind, forceScan, visual, renderAll
         growthY = growthY,
         xSign = xSign,
         ySign = ySign,
+        verticalGrowth = verticalGrowth == true,
         initialAnchor = ButtonAnchor(xSign, ySign),
         sortOrder = sortOrder,
         sortComparator = sortOrder == 0 and SortAurasID or SortComparator(sortOrder),
@@ -1170,10 +1191,18 @@ function A3.BuildAuraLaneMetrics(configOrUnit, kind)
         spacing = lane.spacing,
         step = lane.step,
         perRow = lane.perRow,
+        cols = lane.cols,
+        rows = lane.rows,
         width = lane.width,
         height = lane.height,
+        growth = lane.growthX,
+        rowWrap = lane.growthY,
         growthX = lane.xSign,
         growthY = lane.ySign,
+        xSign = lane.xSign,
+        ySign = lane.ySign,
+        verticalGrowth = lane.verticalGrowth == true,
+        initialAnchor = lane.initialAnchor,
         x = lane.x,
         y = lane.y,
         anchor = lane.anchor,
@@ -1245,8 +1274,15 @@ end
 local function PositionButton(lane, button, index)
     local cfg = lane.config
     local perRow = cfg.perRow > 0 and cfg.perRow or 1
-    local col = (index - 1) % perRow
-    local row = math_floor((index - 1) / perRow)
+    local idx = index - 1
+    local col, row
+    if cfg.verticalGrowth == true then
+        row = idx % perRow
+        col = (idx - row) / perRow
+    else
+        col = idx % perRow
+        row = (idx - col) / perRow
+    end
     local x = col * cfg.step * cfg.xSign
     local y = row * cfg.step * cfg.ySign
     button:ClearAllPoints()

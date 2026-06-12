@@ -126,6 +126,8 @@ local function CanDetachPower(key) return key=="player" or key=="target" or key=
 local pf
 local Sync
 local UnitSectionForComponent = U.UnitSectionForComponent
+local SyncMovers = U.SyncMovers or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
+local NotifyPositionChanged = U.NotifyPositionChanged or function(key, immediate) if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, immediate) end end
 
 local function Apply()
     if BlockConfigCombatLocked() then return end
@@ -163,9 +165,9 @@ local function Apply()
     end
     if type(_G.MSUF_ApplyPowerBarEmbedLayout)=="function" and pf.parent then _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent) end
     if pf._refreshVisibility then pf._refreshVisibility() end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_APPLY", key)
-    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
+    NotifyPositionChanged(key, true)
     if pf and pf:IsShown() then Sync() end
 end
 
@@ -239,27 +241,16 @@ local function ApplyMenu2UnitSelection(component, slot)
         EM2.Focus.SetSelection(key, component, slot, { source = "unit-popup", menu = false })
     end
 
-    _G.MSUF_EM2_MenuFocusRequest = {
+    if U.SetMenuFocusRequest then U.SetMenuFocusRequest({
         key = key,
         component = component,
         slot = slot,
         pageKey = pageKey,
         sectionId = sectionId,
         source = "unit-popup",
-        explicit = true,
-        changedAt = GetTime and GetTime() or 0,
-    }
+    }) end
 
     local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
-    if M then
-        M.editModeSelection = {
-            key = key,
-            component = component,
-            slot = slot,
-            pageKey = pageKey,
-            sectionId = sectionId,
-        }
-    end
     if M and (component == "name" or component == "hp" or component == "power") then
         U.SyncUnitTextMenuState(M, key, component, slot)
     end
@@ -305,7 +296,7 @@ local function ApplyDetachPower(checked)
         _G.MSUF_ApplyPowerBarEmbedLayout(pf.parent)
     end
     if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_DETACH") end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_DETACH", key)
     SetHUDStatus(checked and "Detached powerbar" or "Embedded powerbar", "ok")
     Sync()
@@ -323,9 +314,9 @@ local function ResetPosition()
     conf.offsetX, conf.offsetY = dx, dy
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(key) end
     if pf.parent and pf.parent.ForceUpdate then pf.parent:ForceUpdate("EM2_UNIT_POPUP_RESETPOS") end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_RESETPOS", key)
-    if EM2.Focus and EM2.Focus.NotifyPositionChanged then EM2.Focus.NotifyPositionChanged(key, true) end
+    NotifyPositionChanged(key, true)
     if pf and pf:IsShown() then Sync() end
 end
 
@@ -347,7 +338,7 @@ local function CopyBoundsTo(targetKey)
     if src.height ~= nil then dst.height = floor(max(8, min(200, tonumber(src.height) or 40)) + 0.5) end
     if type(_G.MSUF_ApplyUnitFrameKey_Immediate)=="function" then _G.MSUF_ApplyUnitFrameKey_Immediate(targetKey) end
     if not ApplyAllSettingsSafe() and type(_G.MSUF_UpdateAllFrames)=="function" then _G.MSUF_UpdateAllFrames() end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    SyncMovers()
     RefreshUFPreview("EM2_UNIT_POPUP_COPY_BOUNDS", targetKey)
     if EM2.Focus and EM2.Focus.Pulse then EM2.Focus.Pulse(targetKey, "frame", nil, { source = "unit-copy", duration = 0.32 }) end
     SetHUDStatus("Copied frame bounds", "ok")
@@ -381,17 +372,7 @@ local function Build()
     end
 
     local function WirePopupFocus(btn, component, slot)
-        if not (btn and btn.HookScript) then return btn end
-        btn:HookScript("OnEnter", function()
-            local key = pf and pf.unit and CK(pf.unit)
-            if key and EM2.Focus and EM2.Focus.SetHover then
-                EM2.Focus.SetHover(key, component, slot, { source = "unit-popup" })
-            end
-        end)
-        btn:HookScript("OnLeave", function()
-            if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("unit-popup") end
-        end)
-        return btn
+        return U.WirePopupFocus and U.WirePopupFocus(btn, function() return pf and pf.unit and CK(pf.unit) end, component, "unit-popup", slot) or btn
     end
 
     local function MakeToggleButtonIn(parent, text, x, y, w, onClick)

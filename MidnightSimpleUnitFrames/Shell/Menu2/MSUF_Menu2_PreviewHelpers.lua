@@ -8,6 +8,263 @@ _G.MSUF2 = M
 local H = M.PreviewHelpers or {}
 M.PreviewHelpers = H
 
+local CP = M.ClassPowerPreview or {}
+M.ClassPowerPreview = CP
+
+local floor = math.floor
+CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
+CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
+    ARCANE_CHARGES = { 0.45, 0.55, 1.00 },
+    CHARGED = { 0.60, 0.20, 0.80 },
+    CHI = { 0.70, 1.00, 0.86 },
+    COMBO_POINTS = { 1.00, 0.82, 0.10 },
+    EBON_MIGHT = { 0.40, 0.80, 0.60 },
+    ESSENCE = { 0.32, 0.74, 1.00 },
+    HOLY_POWER = { 0.95, 0.86, 0.20 },
+    INSANITY = { 0.55, 0.32, 0.95 },
+    MAELSTROM = { 0.00, 0.55, 1.00 },
+    MAELSTROM_ABOVE_5 = { 1.00, 0.50, 0.00 },
+    RUNES = { 0.55, 0.85, 1.00 },
+    SOUL_FRAGMENTS = { 0.00, 0.80, 0.00 },
+    SOUL_FRAGMENTS_META = { 0.60, 0.20, 0.93 },
+    SOUL_FRAGMENTS_VENG = { 0.34, 0.06, 0.46 },
+    SOUL_SHARDS = { 0.58, 0.28, 0.92 },
+    STAGGER_GREEN = { 0.52, 1.00, 0.52 },
+    STAGGER_YELLOW = { 1.00, 0.98, 0.72 },
+    STAGGER_RED = { 1.00, 0.42, 0.42 },
+    TIP_OF_THE_SPEAR = { 0.60, 0.80, 0.20 },
+    WHIRLWIND = { 0.20, 0.80, 0.20 },
+}
+CP.COMBO_POINT_SLOT_TOKENS = CP.COMBO_POINT_SLOT_TOKENS or {
+    "COMBO_POINTS_1", "COMBO_POINTS_2", "COMBO_POINTS_3", "COMBO_POINTS_4",
+    "COMBO_POINTS_5", "COMBO_POINTS_6", "COMBO_POINTS_7",
+}
+local COMBO_POINT_RAMP_R = CP.COMBO_POINT_RAMP_R or { 0.00, 0.00, 1.00, 1.00, 1.00, 1.00, 1.00 }
+local COMBO_POINT_RAMP_G = CP.COMBO_POINT_RAMP_G or { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
+local COMBO_POINT_RAMP_B = CP.COMBO_POINT_RAMP_B or { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
+CP.COMBO_POINT_RAMP_R, CP.COMBO_POINT_RAMP_G, CP.COMBO_POINT_RAMP_B = COMBO_POINT_RAMP_R, COMBO_POINT_RAMP_G, COMBO_POINT_RAMP_B
+
+function CP.ColorOverride(tableName, token)
+    local db = _G.MSUF_DB
+    local general = db and db.general
+    local overrides = general and general[tableName]
+    local c = overrides and token and overrides[token]
+    if type(c) ~= "table" then return nil end
+    local r, g, b = c[1] or c.r, c[2] or c.g, c[3] or c.b
+    if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
+    return nil
+end
+
+function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
+    local r, g, b = CP.ColorOverride("classPowerColorOverrides", token)
+    if r then return r, g, b end
+    if type(_G.MSUF_GetPowerBarColor) == "function" and token then
+        r, g, b = _G.MSUF_GetPowerBarColor(0, token)
+        if type(r) == "number" then return r, g, b end
+    end
+    local pbc = _G.PowerBarColor
+    local c = pbc and token and pbc[token]
+    if c then
+        r, g, b = c.r or c[1], c.g or c[2], c.b or c[3]
+        if type(r) == "number" then return r, g, b end
+    end
+    c = token and CP.FALLBACK_COLORS[token]
+    if c then return c[1], c[2], c[3] end
+    if type(powerColorFn) == "function" and token then
+        r, g, b = powerColorFn(token)
+        if type(r) == "number" then return r, g, b end
+    end
+    return fallbackR or 1, fallbackG or 1, fallbackB or 1
+end
+
+function CP.ResolveBaseColor(spec, bars, fallbackR, fallbackG, fallbackB, powerColorFn)
+    if bars and bars.classPowerColorByType == false then return 1, 1, 1 end
+    return CP.ResolveColor(spec and spec.token, fallbackR, fallbackG, fallbackB, powerColorFn)
+end
+
+function CP.ResolveTextColor(fallbackR, fallbackG, fallbackB, powerColorFn)
+    return CP.ResolveColor("RESOURCE_TEXT", fallbackR or 1, fallbackG or 1, fallbackB or 1, powerColorFn)
+end
+
+function CP.ResolveComboColor(bars, slot, baseR, baseG, baseB)
+    local mode = bars and bars.classPowerComboPointColorMode
+    if mode ~= "ramp" and mode ~= "custom" then return baseR, baseG, baseB end
+    slot = tonumber(slot) or 1
+    if slot < 1 then slot = 1 elseif slot > 7 then slot = 7 end
+    if mode == "custom" then
+        local r, g, b = CP.ColorOverride("classPowerColorOverrides", CP.COMBO_POINT_SLOT_TOKENS[slot])
+        if r then return r, g, b end
+    end
+    return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
+end
+
+function CP.IsCharged(spec, bars, slot)
+    return spec and spec.token == "COMBO_POINTS"
+        and bars and bars.showChargedComboPoints ~= false
+        and spec.chargedSlots and spec.chargedSlots[slot] == true
+end
+
+function CP.IsSingleBarMode(mode)
+    return mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single"
+end
+
+function CP.IsEssence(spec)
+    return spec and spec.token == "ESSENCE"
+end
+
+function CP.TokenForValue(spec, value)
+    if spec and spec.mode == "stagger" then
+        value = tonumber(value)
+        if value == nil then value = tonumber(spec.value) or 0 end
+        if value >= 0.60 then return "STAGGER_RED" end
+        if value > 0.30 then return "STAGGER_YELLOW" end
+        return "STAGGER_GREEN"
+    end
+    return spec and spec.token
+end
+
+function CP.FillForSegment(spec, index, valueOverride)
+    if not spec then return index <= 3 and 1 or 0 end
+    local mode = spec.mode or "segmented"
+    local value = tonumber(valueOverride)
+    if value == nil then value = tonumber(spec.value) or 0 end
+    if CP.IsSingleBarMode(mode) then
+        if index ~= 1 then return 0 end
+        if value < 0 then value = 0 elseif value > 1 then value = 1 end
+        return value
+    end
+    local full = floor(value)
+    if mode == "fractional" or CP.IsEssence(spec) then
+        local partial = value - full
+        if index <= full then return 1 end
+        if index == full + 1 and partial > 0.001 then return partial end
+        return 0
+    end
+    return index <= full and 1 or 0
+end
+
+function CP.AnimatedValue(spec, elapsed)
+    if not spec then return nil end
+    local mode = spec.mode or "segmented"
+    local maxValue = tonumber(spec.segments) or 1
+    if CP.IsSingleBarMode(mode) then maxValue = 1 elseif maxValue < 1 then maxValue = 1 end
+    elapsed = tonumber(elapsed) or 0
+    if mode == "timer_bar" then return 1 - ((elapsed % 4.8) / 4.8) end
+    local phase = (elapsed % 2.4) / 2.4
+    local wave = phase < 0.5 and (phase * 2) or ((1 - phase) * 2)
+    if mode == "continuous" or mode == "stagger" or mode == "aura_single" then return 0.08 + (wave * 0.88) end
+    if CP.IsEssence(spec) then
+        local cycle = (elapsed / 1.15) % (maxValue + 1)
+        if cycle >= maxValue then return maxValue end
+        local full = floor(cycle)
+        return full + (cycle - full)
+    end
+    if mode == "fractional" then return wave * maxValue end
+    local steps = maxValue * 2
+    local step = floor((elapsed / 0.42) % steps)
+    if step <= maxValue then return step end
+    return steps - step
+end
+
+function CP.TextForValue(spec, value)
+    if not spec then return "" end
+    if value == nil then return spec.previewText or "" end
+    local mode = spec.mode or "segmented"
+    if mode == "continuous" then return tostring(floor((value * 100) + 0.5)) .. " / 100" end
+    if mode == "timer_bar" then return string.format("%.1fs", floor((value * 20 * 10) + 0.5) / 10) end
+    if mode == "stagger" then return tostring(floor((value * 34) + 0.5)) .. "K" end
+    if mode == "aura_single" then return tostring(floor((value * 5) + 0.5)) end
+    if mode == "fractional" then return string.format("%.1f", value) end
+    local rounded = CP.IsEssence(spec) and floor(value) or floor(value + 0.5)
+    if spec.token == "SOUL_FRAGMENTS_VENG" then return tostring(rounded) .. " / " .. tostring(tonumber(spec.segments) or 6) end
+    return tostring(rounded)
+end
+
+local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
+local RUNE_PREVIEW_OFFSET = { nil, 0.0, nil, 3.1, nil, 6.2 }
+local RUNE_PREVIEW_READY_HOLD = 1.2
+
+function CP.FormatSeconds(remaining)
+    remaining = tonumber(remaining) or 0
+    if remaining <= 0.05 then return "" end
+    return string.format("%.1f", floor((remaining * 10) + 0.5) / 10)
+end
+
+function CP.FillRuneState(out, runeID, totalDuration, elapsed, animated)
+    out.id = runeID
+    out.total = totalDuration
+    local baseRemaining = RUNE_PREVIEW_REMAINING[runeID]
+    if not baseRemaining then
+        out.ready = true
+        out.elapsed = totalDuration
+        out.remaining = 0
+        return out
+    end
+    out.ready = false
+    if animated then
+        local cycle = totalDuration + RUNE_PREVIEW_READY_HOLD
+        local progress = ((tonumber(elapsed) or 0) + (RUNE_PREVIEW_OFFSET[runeID] or 0)) % cycle
+        if progress >= totalDuration then
+            out.ready = true
+            out.elapsed = totalDuration
+            out.remaining = 0
+        else
+            out.elapsed = progress
+            out.remaining = totalDuration - progress
+        end
+    else
+        out.remaining = baseRemaining
+        out.elapsed = totalDuration - baseRemaining
+    end
+    if out.remaining < 0.05 then
+        out.ready = true
+        out.elapsed = totalDuration
+        out.remaining = 0
+    end
+    return out
+end
+
+function CP.BuildRuneOrder(scratch, bars, spec, elapsed, animated)
+    local states = scratch.runeStates
+    if not states then
+        states = {}
+        scratch.runeStates = states
+    end
+    local totalDuration = tonumber(spec and spec.runeDuration) or 10
+    if totalDuration < 1 then totalDuration = 10 end
+    for i = 1, 6 do states[i] = CP.FillRuneState(states[i] or {}, i, totalDuration, elapsed, animated) end
+    for i = 7, #states do states[i] = nil end
+    local sortOrder = bars and bars.runeSortOrder
+    if sortOrder == "asc" then
+        table.sort(states, function(a, b)
+            if a.ready ~= b.ready then return a.ready == true end
+            return (a.id or 0) < (b.id or 0)
+        end)
+    elseif sortOrder == "desc" then
+        table.sort(states, function(a, b)
+            if a.ready ~= b.ready then return a.ready ~= true end
+            return (a.id or 0) < (b.id or 0)
+        end)
+    else
+        table.sort(states, function(a, b) return (a.id or 0) < (b.id or 0) end)
+    end
+    return states
+end
+
+function CP.ResolveTexture(key, fallback)
+    if key and key ~= "" then
+        local resolve = _G.MSUF_ResolveStatusbarTextureKey
+        local path = type(resolve) == "function" and resolve(key) or nil
+        if path and path ~= "" then return path end
+    end
+    if fallback and fallback ~= "" then return fallback end
+    if type(_G.MSUF_GetBarTexture) == "function" then
+        local path = _G.MSUF_GetBarTexture()
+        if path and path ~= "" then return path end
+    end
+    return CP.WHITE8
+end
+
 function H.InstallZoomPan(ZoomPan, opts)
     if type(ZoomPan) ~= "table" then return end
     opts = opts or {}
@@ -41,6 +298,9 @@ function H.InstallZoomPan(ZoomPan, opts)
     local function PanKey(name)
         return tostring(opts.panPrefix or "_msufPreview") .. name
     end
+    local PAN_PANNING, PAN_BOX = PanKey("Panning"), PanKey("PanBox")
+    local PAN_CURSOR_X, PAN_CURSOR_Y = PanKey("PanCursorX"), PanKey("PanCursorY")
+    local PAN_START_X, PAN_START_Y = PanKey("PanStartX"), PanKey("PanStartY")
 
     ZoomPan.MIN = minZoom
     ZoomPan.MAX = maxZoom
@@ -136,13 +396,10 @@ function H.InstallZoomPan(ZoomPan, opts)
 
     function ZoomPan.Stop(surface)
         if not surface then return end
-        local box = surface[PanKey("PanBox")]
-        surface[PanKey("Panning")] = nil
-        surface[PanKey("PanBox")] = nil
-        surface[PanKey("PanCursorX")] = nil
-        surface[PanKey("PanCursorY")] = nil
-        surface[PanKey("PanStartX")] = nil
-        surface[PanKey("PanStartY")] = nil
+        local box = surface[PAN_BOX]
+        surface[PAN_PANNING], surface[PAN_BOX] = nil, nil
+        surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = nil, nil
+        surface[PAN_START_X], surface[PAN_START_Y] = nil, nil
         surface:SetScript("OnUpdate", nil)
         local update = deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
@@ -159,21 +416,18 @@ function H.InstallZoomPan(ZoomPan, opts)
         local cx, cy = GetCursorPosition()
         local uiScale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
         if uiScale <= 0 then uiScale = 1 end
-        surface[PanKey("Panning")] = true
-        surface[PanKey("PanBox")] = box
-        surface[PanKey("PanCursorX")] = (cx or 0) / uiScale
-        surface[PanKey("PanCursorY")] = (cy or 0) / uiScale
-        surface[PanKey("PanStartX")] = tonumber(box._zoomPanX) or 0
-        surface[PanKey("PanStartY")] = tonumber(box._zoomPanY) or 0
+        surface[PAN_PANNING], surface[PAN_BOX] = true, box
+        surface[PAN_CURSOR_X], surface[PAN_CURSOR_Y] = (cx or 0) / uiScale, (cy or 0) / uiScale
+        surface[PAN_START_X], surface[PAN_START_Y] = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         local hint = box[opts.hintField or "hint"]
         if hint then hint:SetText(TR("moving preview canvas - release mouse to stop - Fit recenters")) end
         surface:SetScript("OnUpdate", function(self)
-            if not self[PanKey("Panning")] then return end
+            if not self[PAN_PANNING] then return end
             local mx, my = GetCursorPosition()
             local scale = (UIParent and UIParent.GetEffectiveScale and UIParent:GetEffectiveScale()) or 1
             if scale <= 0 then scale = 1 end
-            local nextX = Round((self[PanKey("PanStartX")] or 0) + ((mx or 0) / scale - (self[PanKey("PanCursorX")] or 0)))
-            local nextY = Round((self[PanKey("PanStartY")] or 0) + ((my or 0) / scale - (self[PanKey("PanCursorY")] or 0)))
+            local nextX = Round((self[PAN_START_X] or 0) + ((mx or 0) / scale - (self[PAN_CURSOR_X] or 0)))
+            local nextY = Round((self[PAN_START_Y] or 0) + ((my or 0) / scale - (self[PAN_CURSOR_Y] or 0)))
             if box._zoomPanX ~= nextX or box._zoomPanY ~= nextY then
                 box._zoomPanX, box._zoomPanY = nextX, nextY
                 ZoomPan.ApplyPan(box)
@@ -250,6 +504,16 @@ function H.BuildZoomBar(box, surface, opts)
     zoomBar:EnableMouseWheel(true)
     if zoomBar.SetPropagateMouseWheel then zoomBar:SetPropagateMouseWheel(false) end
     box[prefix .. "zoomBar"] = zoomBar
+    local function AddZoomButton(field, text, width, tooltip, onClick, relativeTo, offset)
+        local btn = createButton(zoomBar, text, width, tooltip, onClick)
+        if relativeTo then
+            btn:SetPoint("LEFT", relativeTo, "RIGHT", offset or 3, 0)
+        else
+            btn:SetPoint("LEFT", zoomBar, "LEFT", offset or 3, 0)
+        end
+        box[prefix .. field] = btn
+        return btn
+    end
     zoomBar:SetScript("OnEnter", function(self)
         if GameTooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -263,9 +527,7 @@ function H.BuildZoomBar(box, surface, opts)
         if GameTooltip then GameTooltip:Hide() end
     end)
 
-    local zoomOut = createButton(zoomBar, "-", 18, "Zoom out", function() stepZoom(box, -1) end)
-    zoomOut:SetPoint("LEFT", zoomBar, "LEFT", 3, 0)
-    box[prefix .. "zoomOutButton"] = zoomOut
+    local zoomOut = AddZoomButton("zoomOutButton", "-", 18, "Zoom out", function() stepZoom(box, -1) end)
 
     local T = opts.T
     local readout
@@ -280,17 +542,11 @@ function H.BuildZoomBar(box, surface, opts)
     readout:SetJustifyH("CENTER")
     box[prefix .. "zoomReadout"] = readout
 
-    local fitButton = createButton(zoomBar, "Fit", 28, "Fit preview", function() setZoom(box, nil, opts.fitReason) end)
-    fitButton:SetPoint("LEFT", readout, "RIGHT", 3, 0)
-    box[prefix .. "zoomFitButton"] = fitButton
+    local fitButton = AddZoomButton("zoomFitButton", "Fit", 28, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, readout)
 
-    local oneButton = createButton(zoomBar, "1:1", 30, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end)
-    oneButton:SetPoint("LEFT", fitButton, "RIGHT", 3, 0)
-    box[prefix .. "zoomOneButton"] = oneButton
+    local oneButton = AddZoomButton("zoomOneButton", "1:1", 30, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
 
-    local zoomIn = createButton(zoomBar, "+", 18, "Zoom in", function() stepZoom(box, 1) end)
-    zoomIn:SetPoint("LEFT", oneButton, "RIGHT", 3, 0)
-    box[prefix .. "zoomInButton"] = zoomIn
+    AddZoomButton("zoomInButton", "+", 18, "Zoom in", function() stepZoom(box, 1) end, oneButton)
 
     local function ZoomWheel(self, delta)
         local dir = (delta or 0) > 0 and 1 or -1
@@ -311,6 +567,12 @@ function H.BuildZoomBar(box, surface, opts)
 end
 
 local TEXT_FOCUS_SIDES = { "top", "bottom", "left", "right" }
+local EDGE_ANCHORS = {
+    top = { "TOPLEFT", "TOPRIGHT", "SetHeight" },
+    bottom = { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight" },
+    left = { "TOPLEFT", "BOTTOMLEFT", "SetWidth" },
+    right = { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth" },
+}
 
 function H.NormalizeTextFocusKind(kind)
     if kind == "name" or kind == "hp" or kind == "power" then return kind end
@@ -340,16 +602,11 @@ function H.EnsureTextFocusFrame(box, parent)
         f.lines = {}
         for i = 1, #TEXT_FOCUS_SIDES do
             local side = TEXT_FOCUS_SIDES[i]
-            f.lines[side] = f:CreateTexture(nil, "OVERLAY")
+            local line = f:CreateTexture(nil, "OVERLAY")
+            line:SetPoint(EDGE_ANCHORS[side][1])
+            line:SetPoint(EDGE_ANCHORS[side][2])
+            f.lines[side] = line
         end
-        f.lines.top:SetPoint("TOPLEFT")
-        f.lines.top:SetPoint("TOPRIGHT")
-        f.lines.bottom:SetPoint("BOTTOMLEFT")
-        f.lines.bottom:SetPoint("BOTTOMRIGHT")
-        f.lines.left:SetPoint("TOPLEFT")
-        f.lines.left:SetPoint("BOTTOMLEFT")
-        f.lines.right:SetPoint("TOPRIGHT")
-        f.lines.right:SetPoint("BOTTOMRIGHT")
         box._msufMenuTextFocusFrame = f
     elseif f.SetParent then
         f:SetParent(parent)
@@ -553,27 +810,15 @@ function H.LayoutEdgeLines(frame, edge, opts)
     end
     local r, g, b, a = 0, 0, 0, 1
     if type(opts.color) == "function" then r, g, b, a = opts.color(frame) end
-    local top, bottom, left, right = lines.top, lines.bottom, lines.left, lines.right
-    top:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
-    top:ClearAllPoints()
-    top:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-    top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-    top:SetHeight(edge)
-    bottom:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
-    bottom:ClearAllPoints()
-    bottom:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-    bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    bottom:SetHeight(edge)
-    left:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
-    left:ClearAllPoints()
-    left:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-    left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
-    left:SetWidth(edge)
-    right:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
-    right:ClearAllPoints()
-    right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-    right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
-    right:SetWidth(edge)
+    for i = 1, #keys do
+        local key, line = keys[i], lines[keys[i]]
+        local spec = EDGE_ANCHORS[key]
+        line:SetVertexColor(r or 0, g or 0, b or 0, a or 1)
+        line:ClearAllPoints()
+        line:SetPoint(spec[1], frame, spec[1], 0, 0)
+        line:SetPoint(spec[2], frame, spec[2], 0, 0)
+        line[spec[3]](line, edge)
+    end
     H.SetEdgeLinesShown(frame, true, opts)
     return true
 end

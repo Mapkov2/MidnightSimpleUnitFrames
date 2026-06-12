@@ -11,11 +11,11 @@ local Metadata = GF.Metadata or {}
 GF.Metadata = Metadata
 
 local function BuildNameSet(names)
-    local set = {}
-    for i = 1, #names do
-        set[names[i]] = true
-    end
-    return set
+  local set = {}
+  for i = 1, #names do
+    set[names[i]] = true
+  end
+  return set
 end
 
 GF.DIRTY_GEOMETRY = GF.DIRTY_GEOMETRY or 0x01
@@ -28,30 +28,30 @@ GF.DIRTY_AURAS = GF.DIRTY_AURAS or 0x40
 GF.DIRTY_ALL = GF.DIRTY_ALL or 0x7F
 
 Metadata.MASK_FONT = BuildNameSet({
-    "Text", "NameText", "HealthText", "PowerText", "StatusIndicators", "GroupStatusRuntime",
+  "Text", "NameText", "HealthText", "PowerText", "StatusIndicators", "GroupStatusRuntime",
 })
 Metadata.MASK_COLOR = BuildNameSet({
-    "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-    "StatusIndicators", "GroupVisuals", "GroupCornerIndicators",
-    "Borders",
+  "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
+  "StatusIndicators", "GroupVisuals", "GroupCornerIndicators",
+  "Borders",
 })
 Metadata.MASK_BORDER = BuildNameSet({ "Borders", "GroupVisuals" })
 Metadata.MASK_AURAS = BuildNameSet({ "Auras" })
 Metadata.MASK_VISUAL = BuildNameSet({
-    "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-    "StatusIndicators", "Prediction", "Alpha", "GroupStatusRuntime", "GroupRangeFade",
-    "GroupVisuals", "Borders", "Auras",
+  "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
+  "StatusIndicators", "Prediction", "Alpha", "GroupStatusRuntime", "GroupRangeFade",
+  "GroupVisuals", "Borders", "Auras",
 })
 Metadata.MASK_RUNTIME = BuildNameSet({
-    "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
-    "StatusIndicators", "Prediction", "Alpha", "Borders", "GroupStatusRuntime",
-    "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators",
+  "Health", "Power", "Text", "NameText", "HealthText", "PowerText",
+  "StatusIndicators", "Prediction", "Alpha", "Borders", "GroupStatusRuntime",
+  "GroupRangeFade", "GroupVisuals", "GroupCornerIndicators",
 })
 
 Metadata.dirtyApplyMasks = {
-    [GF.DIRTY_FONT] = Metadata.MASK_FONT,
-    [GF.DIRTY_COLOR] = Metadata.MASK_COLOR,
-    [GF.DIRTY_BORDER] = Metadata.MASK_BORDER,
-    [GF.DIRTY_AURAS] = Metadata.MASK_AURAS,
-    [GF.DIRTY_VISUAL] = Metadata.MASK_VISUAL,
+  [GF.DIRTY_FONT] = Metadata.MASK_FONT,
+  [GF.DIRTY_COLOR] = Metadata.MASK_COLOR,
+  [GF.DIRTY_BORDER] = Metadata.MASK_BORDER,
+  [GF.DIRTY_AURAS] = Metadata.MASK_AURAS,
+  [GF.DIRTY_VISUAL] = Metadata.MASK_VISUAL,
 }

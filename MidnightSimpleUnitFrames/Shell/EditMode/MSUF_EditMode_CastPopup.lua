@@ -26,6 +26,8 @@ local TEST_FUNCS = {
 
 local pf
 local Sync
+local Util = EM2.Util or {}
+local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
 
 local function ButtonOpts(sync)
     return {
@@ -165,7 +167,7 @@ local function ReapplyCastbar(unit)
         if type(_G.MSUF_UpdateCastbarVisuals) == "function" then _G.MSUF_UpdateCastbarVisuals() end
     end
     if type(_G.MSUF_PositionCastbarPreviewUnit) == "function" then _G.MSUF_PositionCastbarPreviewUnit(unit) end
-    if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
+    SyncMovers()
     RefreshUFPreview("EM2_CASTBAR_POPUP_APPLY")
 end
 
@@ -251,46 +253,31 @@ local function OpenUnitCastbar()
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(unit == "boss" and "boss" or unit, "castbar", nil, { source = "cast-popup", menu = false })
     end
-    _G.MSUF_EM2_MenuFocusRequest = {
+    if Util.SetMenuFocusRequest then Util.SetMenuFocusRequest({
         key = unit == "boss" and "boss" or unit,
         component = "castbar",
         pageKey = pageKey,
         sectionId = "castbar",
         source = "cast-popup",
-        explicit = true,
-        changedAt = GetTime and GetTime() or 0,
-    }
-    local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
-    if M then M.editModeSelection = _G.MSUF_EM2_MenuFocusRequest end
+    }) end
     Quick.OpenPage(pageKey, pf)
 end
 
 local function OpenGeneralCastbars()
     if not (pf and pf.unit) then return end
     CommitShortcutFields()
-    _G.MSUF_EM2_MenuFocusRequest = {
+    if Util.SetMenuFocusRequest then Util.SetMenuFocusRequest({
         key = "castbar",
         component = "general",
         pageKey = "opt_castbar",
         sectionId = "castbar_behavior",
         source = "cast-popup",
-        explicit = true,
-        changedAt = GetTime and GetTime() or 0,
-    }
+    }) end
     Quick.OpenPage("opt_castbar", pf)
 end
 
 local function WirePopupFocus(btn)
-    if not (btn and btn.HookScript) then return btn end
-    btn:HookScript("OnEnter", function()
-        if pf and pf.unit and EM2.Focus and EM2.Focus.SetHover then
-            EM2.Focus.SetHover(pf.unit == "boss" and "boss" or pf.unit, "castbar", nil, { source = "cast-popup" })
-        end
-    end)
-    btn:HookScript("OnLeave", function()
-        if EM2.Focus and EM2.Focus.ClearHover then EM2.Focus.ClearHover("cast-popup") end
-    end)
-    return btn
+    return Util.WirePopupFocus and Util.WirePopupFocus(btn, function() return pf and pf.unit and (pf.unit == "boss" and "boss" or pf.unit) end, "castbar", "cast-popup") or btn
 end
 
 function Sync()
