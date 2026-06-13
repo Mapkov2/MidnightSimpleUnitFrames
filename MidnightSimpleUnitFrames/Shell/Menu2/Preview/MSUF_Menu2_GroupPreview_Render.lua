@@ -18,7 +18,7 @@ M.GroupPreviewRender = Render
 function Render.Install(box, ctx, deps)
     if not box then return end
     deps = deps or {}
-    local floor, max, min = math.floor, math.max, math.min
+    local floor, max, min, ceil = math.floor, math.max, math.min, math.ceil
     local H = deps.H or {}
     local M = deps.M or _G.MSUF2 or {}
     local MSUF = deps.MSUF or MSUF or {}
@@ -541,6 +541,41 @@ function Render.Install(box, ctx, deps)
         end
 
         local auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale and gf.GetPreviewDynamicScale(conf, kind)) or 1
+        local function RuntimeAuraGrowth(growth)
+            if growth == "LEFTUP" then
+                return -1, 1, false, "BOTTOMRIGHT"
+            elseif growth == "LEFTDOWN" then
+                return -1, -1, false, "TOPRIGHT"
+            elseif growth == "RIGHTUP" then
+                return 1, 1, false, "BOTTOMLEFT"
+            elseif growth == "UP" or growth == "UPRIGHT" or growth == "UPLEFT" then
+                return 1, 1, true, "BOTTOMLEFT"
+            elseif growth == "DOWN" or growth == "DOWNRIGHT" or growth == "DOWNLEFT" then
+                return 1, -1, true, "TOPLEFT"
+            end
+            return 1, -1, false, "TOPLEFT"
+        end
+
+        local function RuntimeAuraAnchor(anchor, fallback)
+            if anchor == "TOPLEFT" or anchor == "TOPRIGHT"
+                or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
+                or anchor == "CENTER" then
+                return anchor
+            end
+            return fallback or "CENTER"
+        end
+
+        local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
+            count = max(GFPreviewRound(count), 1)
+            perRow = max(GFPreviewRound(perRow), 1)
+            if verticalGrowth == true then
+                local rows = min(count, perRow)
+                return ceil(count / perRow), rows
+            end
+            local cols = min(count, perRow)
+            return cols, ceil(count / perRow)
+        end
+
         local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
             cfg = cfg or {}
             defaults = defaults or {}
@@ -551,12 +586,11 @@ function Render.Install(box, ctx, deps)
             local laneScale = cfg._compiled and previewScale or (previewScale * auraDynamicScale)
             local size = max(minSize, GFPreviewScaleValue(rawSize, laneScale, minSize))
             local spacing = max(0, GFPreviewScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
-            local anchor = cfg.anchor or defaults.anchor or "CENTER"
+            local anchor = RuntimeAuraAnchor(cfg.anchor, defaults.anchor or "CENTER")
             if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
             if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
             local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
             local gv = GFPreviewAuraGrowth(growth)
-            local effectiveAnchor = gv.centered and "CENTER" or anchor
             local anchorTarget = mock
             local anchorFrac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
             local ids = GF_AURA_MOCK_ICON_IDS[groupKey] or GF_AURA_MOCK_ICON_IDS.debuff
@@ -565,10 +599,11 @@ function Render.Install(box, ctx, deps)
             AddIconPool(handle, maxIcons)
             handle._previewRects = handle._previewRects or {}
 
-            local minL, minB, maxR, maxT
-            for i = 1, maxIcons do
-                local left, bottom
-                if gv.centered then
+            local handleW, handleH, originX, originY
+            if gv.centered then
+                local minL, minB, maxR, maxT
+                for i = 1, maxIcons do
+                    local left, bottom
                     local totalPrimary = maxIcons * size + max(0, maxIcons - 1) * spacing
                     local halfOfs = totalPrimary * 0.5
                     local col = i - 1
@@ -579,32 +614,44 @@ function Render.Install(box, ctx, deps)
                         local cy = -(col * step - halfOfs) - size * 0.5
                         left, bottom = -size * 0.5, cy - size * 0.5
                     end
-                else
-                    local col = (i - 1) % perRow
-                    local row = floor((i - 1) / perRow)
-                    local ox = col * step * gv.px + row * step * gv.sx
-                    local oy = col * step * gv.py + row * step * gv.sy
-                    left = ox - anchorFrac[1] * size
-                    bottom = oy - anchorFrac[2] * size
+
+                    local right, top = left + size, bottom + size
+                    local rect = handle._previewRects[i] or {}
+                    rect[1], rect[2], rect.anchor = left, bottom, nil
+                    handle._previewRects[i] = rect
+                    minL = minL and min(minL, left) or left
+                    minB = minB and min(minB, bottom) or bottom
+                    maxR = maxR and max(maxR, right) or right
+                    maxT = maxT and max(maxT, top) or top
                 end
-
-                local right, top = left + size, bottom + size
-                local rect = handle._previewRects[i] or {}
-                rect[1], rect[2] = left, bottom
-                handle._previewRects[i] = rect
-                minL = minL and min(minL, left) or left
-                minB = minB and min(minB, bottom) or bottom
-                maxR = maxR and max(maxR, right) or right
-                maxT = maxT and max(maxT, top) or top
+                if not minL then
+                    minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5
+                end
+                handleW = max(1, GFPreviewRound(maxR - minL))
+                handleH = max(1, GFPreviewRound(maxT - minB))
+                originX, originY = -minL, -minB
+            else
+                local xSign, ySign, verticalGrowth, initialAnchor = RuntimeAuraGrowth(growth)
+                local cols, rows = RuntimeAuraGridShape(maxIcons, perRow, verticalGrowth)
+                handleW = max(1, GFPreviewRound(cols * size + max(cols - 1, 0) * spacing))
+                handleH = max(1, GFPreviewRound(rows * size + max(rows - 1, 0) * spacing))
+                originX = GFPreviewRound(anchorFrac[1] * handleW)
+                originY = GFPreviewRound(anchorFrac[2] * handleH)
+                for i = 1, maxIcons do
+                    local idx = i - 1
+                    local col, row
+                    if verticalGrowth == true then
+                        row = idx % perRow
+                        col = (idx - row) / perRow
+                    else
+                        col = idx % perRow
+                        row = (idx - col) / perRow
+                    end
+                    local rect = handle._previewRects[i] or {}
+                    rect[1], rect[2], rect.anchor = col * step * xSign, row * step * ySign, initialAnchor
+                    handle._previewRects[i] = rect
+                end
             end
-
-            if not minL then
-                minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5
-            end
-
-            local handleW = max(1, GFPreviewRound(maxR - minL))
-            local handleH = max(1, GFPreviewRound(maxT - minB))
-            local originX, originY = -minL, -minB
             handle:SetSize(handleW, handleH)
             handle._previewOriginX = originX
             handle._previewOriginY = originY
@@ -612,13 +659,23 @@ function Render.Install(box, ctx, deps)
             handle._previewScale = previewScale
             handle._previewWriteScale = cfg._compiled and (previewScale * max(0.0001, auraDynamicScale)) or previewScale
             handle:ClearAllPoints()
-            handle:SetPoint(
-                "BOTTOMLEFT",
-                anchorTarget,
-                effectiveAnchor,
-                GFPreviewConfigToOffset(cfg.x or 0, previewScale) - originX,
-                GFPreviewConfigToOffset(cfg.y or 0, previewScale) - originY
-            )
+            if gv.centered then
+                handle:SetPoint(
+                    "BOTTOMLEFT",
+                    anchorTarget,
+                    "CENTER",
+                    GFPreviewConfigToOffset(cfg.x or 0, previewScale) - originX,
+                    GFPreviewConfigToOffset(cfg.y or 0, previewScale) - originY
+                )
+            else
+                handle:SetPoint(
+                    anchor,
+                    anchorTarget,
+                    anchor,
+                    GFPreviewConfigToOffset(cfg.x or 0, previewScale),
+                    GFPreviewConfigToOffset(cfg.y or 0, previewScale)
+                )
+            end
 
             for i = 1, maxIcons do
                 local tex = handle._icons and handle._icons[i]
@@ -627,7 +684,11 @@ function Render.Install(box, ctx, deps)
                     tex:SetTexture(GFMockSpellTexture(ids[((i - 1) % #ids) + 1]))
                     tex:SetSize(size, size)
                     tex:ClearAllPoints()
-                    tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] - minL, rect[2] - minB)
+                    if rect.anchor then
+                        tex:SetPoint(rect.anchor, handle, rect.anchor, rect[1], rect[2])
+                    else
+                        tex:SetPoint("BOTTOMLEFT", handle, "BOTTOMLEFT", rect[1] + originX, rect[2] + originY)
+                    end
                     tex:Show()
                 end
             end
