@@ -1,6 +1,9 @@
 local _, MSUF = ...
 MSUF = MSUF or {}
 
+-- Gameplay configuration defaults.
+-- Initializes and clamps DB fields for optional gameplay features. Runtime modules consume
+-- these values later; this file should not create frames or register gameplay events.
 local type, rawget, tonumber = type, rawget, tonumber
 local LibStub = LibStub
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
@@ -44,6 +47,8 @@ end
 local gameplayDBCache
 
 local function EnsureGameplayDefaults()
+    -- Defaults are intentionally centralized so Menu2, assistant registry, and runtime all
+    -- agree on missing-field behavior after profile import or version migration.
     if not MSUF_DB then
         MSUF_DB = {}
     end

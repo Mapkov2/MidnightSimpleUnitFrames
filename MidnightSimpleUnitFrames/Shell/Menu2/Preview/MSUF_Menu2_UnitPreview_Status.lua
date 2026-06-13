@@ -1,5 +1,8 @@
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Status.lua
 --- Cold-path status icon preview element helpers.
+---
+--- Mirrors runtime status-icon anchoring for mock preview frames. It must stay deterministic
+--- and should not call live Unit* status APIs.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -18,6 +21,8 @@ local Status = MSUF.UFPreviewStatus or {}
 MSUF.UFPreviewStatus = Status
 
 local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)
+    -- Runtime supports name-relative anchors; preview duplicates that math so the editor shows
+    -- the same visual result without depending on a real unitframe.
     if not (region and frame) then return end
     x = tonumber(x) or 0
     y = tonumber(y) or 0

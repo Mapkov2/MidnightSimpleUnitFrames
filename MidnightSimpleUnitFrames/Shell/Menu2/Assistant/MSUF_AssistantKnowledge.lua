@@ -15,6 +15,9 @@ local Registry = A.Registry
 local K = A.Knowledge or {}
 A.Knowledge = K
 
+-- Lightweight knowledge search for Assistant help/support answers.
+-- It indexes registry metadata and curated snippets so the assistant can explain features
+-- without reading live frame state or mutating settings.
 local MAX_RESULTS = 6
 local INDEX_VERSION = 3
 local SEARCH_CACHE_LIMIT = 32

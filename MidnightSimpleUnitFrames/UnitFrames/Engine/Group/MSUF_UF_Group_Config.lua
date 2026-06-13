@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Config.lua
+--- Compiles group-frame SavedVariables into unit-frame specs.
+---
+--- The compiled spec is the contract consumed by UF.ApplySpec. Keep expensive
+--- DB/default/media decisions here so Adapter/Runtime/Visual elements can run
+--- from cached spec data during roster and unit events.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -42,6 +49,8 @@ local function Layer(value, fallback)
 end
 
 local _groupSizeCacheAt, _groupSizeCacheValue = 0, 0
+--- Group-size reads are used for dynamic aura scaling. Cache briefly so one
+--- refresh pass does not call into roster APIs for every compiled frame.
 local function CachedGroupSize()
   local now = GetTime and GetTime() or 0
   if now - _groupSizeCacheAt < 1 then return _groupSizeCacheValue end
@@ -129,6 +138,8 @@ local function NormalizeHealthMode(value)
   return value ~= "GLOBAL" and HEALTH_MODE_ALIASES[value] or nil
 end
 
+--- Resolve the effective health-color model once per compile. Runtime visual
+--- code receives concrete mode/color fields instead of profile fallback logic.
 local function ResolveHealthVisual(conf)
   conf = conf or {}
   local cache = SettingsCache()
@@ -526,17 +537,8 @@ local function SplitAuraGrowth(value, fallback)
   return "RIGHT", "DOWN"
 end
 
-local function BlizzardOwnsAuraGroup(root, nativeKey)
-  if not root or root.renderer == "CUSTOM" then
-    return false
-  end
-  local types = root.blizzardTypes
-  return type(types) ~= "table" or types[nativeKey] ~= false
-end
-
 local function IsBlizzardAuraTypeEnabled(confOrRoot, nativeKey)
-  local root = confOrRoot and confOrRoot.auras or confOrRoot
-  return BlizzardOwnsAuraGroup(root, nativeKey)
+  return false
 end
 
 function GF.GetBlizzardAuraTypeFlags(conf)
@@ -562,7 +564,7 @@ local function AuraFilterString(groupKey, group)
   local filter = GF.AuraFilter or _G.MSUF_GF_AuraFilter
   local token = group and group.filterToken
   if groupKey == "buff" then
-    return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL|RAID"
+    return filter and filter.ResolveBuffFilter and filter.ResolveBuffFilter(token) or "HELPFUL"
   elseif groupKey == "externals" then
     return filter and filter.EXTERNALS_TOKEN or "HELPFUL|BIG_DEFENSIVE"
   end
@@ -619,12 +621,12 @@ local function CompileCoreAuras(kind, conf)
   local externals = root and type(root.externals) == "table" and root.externals or {}
   local private = type(conf.privateAuras) == "table" and conf.privateAuras or {}
   local rootEnabled = root == nil or root.enabled ~= false
-  local showBuffs = rootEnabled and buff.enabled ~= false and not BlizzardOwnsAuraGroup(root, "buffs")
-  local showDebuffs = rootEnabled and debuff.enabled ~= false and not BlizzardOwnsAuraGroup(root, "debuffs")
-  local showExternals = rootEnabled and externals.enabled ~= false and not BlizzardOwnsAuraGroup(root, "externals")
+  local showBuffs = rootEnabled and buff.enabled ~= false
+  local showDebuffs = rootEnabled and debuff.enabled ~= false
+  local showExternals = rootEnabled and externals.enabled ~= false
   local privateEnabled = private.enabled
   if privateEnabled == nil then privateEnabled = conf.privateAurasEnabled ~= false end
-  local showPrivate = rootEnabled and privateEnabled ~= false and not BlizzardOwnsAuraGroup(root, "privateAuras")
+  local showPrivate = rootEnabled and privateEnabled ~= false
   local buffGrowthX, buffGrowthY = SplitAuraGrowth(buff.growth, "LEFTUP")
   local debuffGrowthX, debuffGrowthY = SplitAuraGrowth(debuff.growth, "RIGHTDOWN")
   local externalGrowthX, externalGrowthY = SplitAuraGrowth(externals.growth, "RIGHTDOWN")
@@ -639,13 +641,13 @@ local function CompileCoreAuras(kind, conf)
     enabled = showBuffs == true or showDebuffs == true or showExternals == true,
     group = true,
     kind = kind,
-    renderer = root and root.renderer or "BLIZZARD",
+    renderer = "CUSTOM",
     blizzard = {
-      buffs = BlizzardOwnsAuraGroup(root, "buffs"),
-      debuffs = BlizzardOwnsAuraGroup(root, "debuffs"),
-      dispels = BlizzardOwnsAuraGroup(root, "dispels"),
-      externals = BlizzardOwnsAuraGroup(root, "externals"),
-      privateAuras = BlizzardOwnsAuraGroup(root, "privateAuras"),
+      buffs = false,
+      debuffs = false,
+      dispels = false,
+      externals = false,
+      privateAuras = false,
       iconSize = Num(root and root.blizzardIconSize, 20),
       organizationType = root and root.blizzardOrganizationType or "default",
       strata = root and root.blizzardContainerStrata or "AUTO",
@@ -1031,6 +1033,8 @@ local function PatchFrameSpec(base, kind, frame, unit, conf)
   return spec
 end
 
+--- Main compile entry. It turns the current GF config plus frame/unit context
+--- into a generic unit-frame spec for the shared UF engine.
 function GF.CompileSpec(kind, frame, unit)
   kind = kind or "party"
   local base = compiledSpecCache[kind]

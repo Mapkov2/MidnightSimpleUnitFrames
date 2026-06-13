@@ -16,6 +16,9 @@ if not (Registry and type(Registry.RegisterAction) == "function") then return en
 A.Workflow = A.Workflow or {}
 A.Workflow.EditMode = A.Workflow.EditMode or {}
 
+-- Edit Mode assistant actions.
+-- This domain coordinates Menu2/HUD lifecycle helpers and reports combat-locked state. It
+-- does not bypass secure-frame restrictions; direct frame moves stay in edit-mode runtime.
 local EditMode = A.Workflow.EditMode
 local SOURCE_FILE = "Shell/Menu2/Assistant/MSUF_AssistantRegistry_EditMode.lua"
 local SOURCE_CONTROL = "M.SetMSUFEditModeActive / M.CancelMSUFEditMode / M.ToggleMSUFEditMode"

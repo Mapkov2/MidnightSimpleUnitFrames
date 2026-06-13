@@ -1,3 +1,11 @@
+--- Castbars/MSUF_Castbars_Bridge.lua
+--- Glue between castbar backend policy, Blizzard frame suppression, and the
+--- addon module lifecycle.
+---
+--- The actual castbar implementations live in Player/Driver/Boss files. This
+--- bridge decides whether MSUF, Blizzard, or no castbar owns each unit and
+--- exposes stable globals for older code paths.
+
 local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
 _G.MSUF_NS = ns
@@ -81,6 +89,8 @@ if type(_G.MSUF_IsCastTimeEnabled) ~= "function" then
     end
 end
 
+--- Blizzard only has a native player castbar path. When MSUF owns the player
+--- castbar, mark Blizzard's frames as suppressed and hook show attempts.
 local function SetBlizzardPlayerCastbarAllowed(allowed)
     local frames = {
         rawget(_G, "PlayerCastingBarFrame"),
@@ -198,6 +208,8 @@ _G.MSUF_Castbars_ForceHideAll = _G.MSUF_Castbars_ForceHideAll or function()
     end
 end
 
+--- One refresh entry for menus/profile changes. It syncs legacy backend flags,
+--- applies ownership changes, and hides stale frames if no castbar feature is on.
 _G.MSUF_Castbars_OnSettingsChanged = _G.MSUF_Castbars_OnSettingsChanged or function()
     local syncBackend = _G.MSUF_SyncCastbarBackendLegacyFlags
     if type(syncBackend) == "function" then
@@ -241,6 +253,8 @@ end
 
 _G.MSUF_Castbars_RunNextFrame = _G.MSUF_Castbars_RunNextFrame or RunNextFrame
 
+--- Module registration lets the kernel disable/shutdown castbars without
+--- knowing about individual player/target/focus/boss implementation files.
 local registerModule = _G.MSUF_RegisterModule
 if type(registerModule) == "function" then
     registerModule("Castbars", {

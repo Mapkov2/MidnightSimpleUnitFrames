@@ -587,3 +587,452 @@ SlashCmdList["MSUFCLICKPROBE"] = function(msg)
         Report()
     end
 end
+
+-- /msufidprobe: per-element identity cost. Wraps the compiled per-frame
+-- update functions on player/target/targettarget/focustarget so EVERY path
+-- (events, flush phases, dependent poll ticks) is timed at element level,
+-- then rebuilds the runtime visual lists so the wrappers are captured.
+local ID_PROBE_KEYS = {
+    "_msufUpdateLoadConditions", "_msufUpdateHealth", "_msufUpdateHealthText",
+    "_msufUpdatePower", "_msufUpdatePowerText", "_msufUpdateNameText",
+    "_msufUpdateInlineToT", "_msufUpdatePortrait", "_msufUpdatePrediction",
+    "_msufUpdateAlpha", "_msufUpdateBorders", "_msufUpdateAuras",
+    "_msufUpdateRaidMarkerIndicator", "_msufUpdateLeaderIndicator",
+    "_msufUpdateLevelIndicator", "_msufUpdateRaidGroupIndicator",
+    "_msufUpdateEliteIndicator", "_msufUpdateStatusTextIndicator",
+    "_msufUpdateCombatIndicator", "_msufUpdateRestingIndicator",
+    "_msufUpdateIncomingResIndicator", "_msufUpdatePVPIndicator",
+    "_msufUpdateGroupStatusRuntime", "_msufUpdateGroupVisuals",
+    "_msufUpdateRangeFade", "_msufUpdateGroupRangeFade",
+}
+local ID_PROBE_UNITS = { "player", "target", "targettarget", "focustarget" }
+local idWrapped = {}
+local idActive = false
+
+local function IdWrapFrame(frame, label)
+    if not frame then return end
+    for i = 1, #ID_PROBE_KEYS do
+        local key = ID_PROBE_KEYS[i]
+        local fn = frame[key]
+        if type(fn) == "function" then
+            local slot = idWrapped[frame]
+            if not slot then
+                slot = {}
+                idWrapped[frame] = slot
+            end
+            if not slot[key] then
+                slot[key] = fn
+                frame[key] = function(...)
+                    if not idActive then return fn(...) end
+                    local t0 = GetTimePreciseSec()
+                    local a, b, c = fn(...)
+                    local reason = select(2, ...)
+                    Record(label .. "." .. key:gsub("_msufUpdate", ""), reason, (GetTimePreciseSec() - t0) * 1000)
+                    return a, b, c
+                end
+            end
+        end
+    end
+end
+
+local function IdRestoreAll()
+    local UFNS = MSUF.UF
+    for frame, slot in pairs(idWrapped) do
+        for key, fn in pairs(slot) do
+            frame[key] = fn
+        end
+        idWrapped[frame] = nil
+        if UFNS and UFNS.RebuildRuntimeStatusState then
+            UFNS.RebuildRuntimeStatusState(frame)
+        end
+    end
+end
+
+local function IdReport()
+    idActive = false
+    local list = {}
+    for key, r in pairs(results) do
+        list[#list + 1] = { key = key, total = r.total, count = r.count, max = r.max }
+    end
+    table.sort(list, function(a, b) return a.total > b.total end)
+    print("|cff7fd5ffMSUF IdProbe|r per-element identity cost (total ms | count | worst | element):")
+    if #list == 0 then
+        print("  no element work ran -- the spike is outside the identity elements; tell Claude.")
+    end
+    for i = 1, math.min(#list, 20) do
+        local e = list[i]
+        print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
+    end
+    IdRestoreAll()
+    results = {}
+end
+
+SLASH_MSUFIDPROBE1 = "/msufidprobe"
+SlashCmdList["MSUFIDPROBE"] = function()
+    if idActive then
+        print("MSUF IdProbe: already armed.")
+        return
+    end
+    if InCombatLockdown and InCombatLockdown() then
+        print("MSUF IdProbe: leave combat first.")
+        return
+    end
+    local UFNS = MSUF.UF
+    local frames = UFNS and UFNS.frames
+    if not frames then
+        print("MSUF IdProbe: no UF frames.")
+        return
+    end
+    results = {}
+    for i = 1, #ID_PROBE_UNITS do
+        local unit = ID_PROBE_UNITS[i]
+        local frame = frames[unit]
+        if frame then
+            IdWrapFrame(frame, unit)
+            if UFNS.RebuildRuntimeStatusState then
+                UFNS.RebuildRuntimeStatusState(frame)
+            end
+        end
+    end
+    -- Also wrap every live GROUP frame so the group-aura identity path is timed
+    -- (group children are keyed by frame, not unit, in GF.frames).
+    local gf = MSUF.GF or _G.MSUF_GF
+    local gfFrames = gf and gf.frames
+    local gfCount = 0
+    if type(gfFrames) == "table" then
+        for frame in pairs(gfFrames) do
+            if type(frame) == "table" and frame._msufActiveElements then
+                gfCount = gfCount + 1
+                local unit = frame.unit or ("gf" .. gfCount)
+                IdWrapFrame(frame, "GF:" .. tostring(unit))
+                if UFNS.RebuildRuntimeStatusState then
+                    UFNS.RebuildRuntimeStatusState(frame)
+                end
+            end
+        end
+    end
+    idActive = true
+    print(string.format("|cff7fd5ffMSUF IdProbe|r armed 6s (%d group frames wrapped) -- click through group members NOW (different targets included).", gfCount))
+    if C_Timer and C_Timer.After then
+        C_Timer.After(6, IdReport)
+    else
+        IdReport()
+    end
+end
+
+-- /msufprofpeek: reads C_AddOnProfiler (the SAME source the in-game profiler
+-- shows) once per frame and reports MSUF's peak per-frame ms during a window.
+-- This captures EVERYTHING billed to MSUF -- secure snippets, attribute
+-- handlers, element work -- not just what function wrappers can see. Use it to
+-- reconcile "probe says X but profiler shows Y".
+local function ProfPeek()
+    local P = _G.C_AddOnProfiler
+    if not P or not P.GetAddOnMetric then
+        print("|cffff5555MSUF ProfPeek|r C_AddOnProfiler unavailable on this client.")
+        return
+    end
+    local name = "MidnightSimpleUnitFrames"
+    local Enum_metric = _G.Enum and _G.Enum.AddOnProfilerMetric
+    if not Enum_metric then
+        print("|cffff5555MSUF ProfPeek|r Enum.AddOnProfilerMetric missing.")
+        return
+    end
+    local peak = 0
+    local samples = 0
+    local lastTickPeak = 0
+    local driver = CreateFrame("Frame")
+    local elapsed = 0
+    print("|cff7fd5ffMSUF ProfPeek|r sampling 5s -- click frames NOW. Reports MSUF peak per-frame ms from C_AddOnProfiler.")
+    driver:SetScript("OnUpdate", function(self, dt)
+        elapsed = elapsed + dt
+        samples = samples + 1
+        -- per-frame "last tick" CPU time MSUF used, in ms
+        local v = P.GetAddOnMetric(name, Enum_metric.RecentAverageTime)
+        local lastTime = P.GetAddOnMetric(name, Enum_metric.LastTime)
+        if type(lastTime) == "number" and lastTime > lastTickPeak then
+            lastTickPeak = lastTime
+        end
+        if type(v) == "number" and v > peak then peak = v end
+        if elapsed >= 5 then
+            self:SetScript("OnUpdate", nil)
+            print(string.format("|cff7fd5ffMSUF ProfPeek|r over %d frames: peak RecentAvg=%.3fms  peak LastTime=%.3fms", samples, peak, lastTickPeak))
+            print("  (LastTime peak is the single worst frame MSUF was billed -- compare to the profiler's Peak column.)")
+        end
+    end)
+end
+
+SLASH_MSUFPROFPEEK1 = "/msufprofpeek"
+SlashCmdList["MSUFPROFPEEK"] = function()
+    ProfPeek()
+end
+
+-- /msufopprobe: times the heavy ops that fire NEAR a click but that the
+-- OnEvent/element probes bracket too tightly to see (deferred flushes land on a
+-- later frame; secure/apply paths aren't element fns). Wraps SetPortraitTexture
+-- (global C), UF.ApplySpec, GF.ApplyButton, and the A3 deferred aura flush.
+local opProbeActive = false
+local opSaved = {}
+local function OpWrapGlobal(name)
+    local fn = _G[name]
+    if type(fn) ~= "function" or opSaved["_G."..name] then return end
+    opSaved["_G."..name] = fn
+    _G[name] = function(...)
+        if not opProbeActive then return fn(...) end
+        local t0 = GetTimePreciseSec()
+        local a,b,c,d = fn(...)
+        Record("op:"..name, "", (GetTimePreciseSec()-t0)*1000)
+        return a,b,c,d
+    end
+end
+local function OpWrapTable(tbl, key, label)
+    if type(tbl) ~= "table" or type(tbl[key]) ~= "function" or opSaved[label] then return end
+    local fn = tbl[key]
+    opSaved[label] = { tbl = tbl, key = key, fn = fn }
+    tbl[key] = function(...)
+        if not opProbeActive then return fn(...) end
+        local t0 = GetTimePreciseSec()
+        local a,b,c,d = fn(...)
+        Record("op:"..label, "", (GetTimePreciseSec()-t0)*1000)
+        return a,b,c,d
+    end
+end
+local function OpRestore()
+    for label, s in pairs(opSaved) do
+        if type(s) == "table" and s.tbl then
+            s.tbl[s.key] = s.fn
+        else
+            local g = label:match("^_G%.(.+)$")
+            if g then _G[g] = s end
+        end
+        opSaved[label] = nil
+    end
+end
+
+SLASH_MSUFOPPROBE1 = "/msufopprobe"
+SlashCmdList["MSUFOPPROBE"] = function()
+    if opProbeActive then print("op probe already armed.") return end
+    if InCombatLockdown and InCombatLockdown() then print("leave combat first.") return end
+    results = {}
+    local UF = MSUF.UF
+    local A3 = MSUF.MSUF_Auras3
+    local GF = MSUF.GF or _G.MSUF_GF
+    OpWrapGlobal("SetPortraitTexture")
+    OpWrapGlobal("SetPortraitTextureFromCreatureDisplayID")
+    if UF then OpWrapTable(UF, "ApplySpec", "UF.ApplySpec") end
+    if UF then OpWrapTable(UF, "ApplyElementToFrame", "UF.ApplyElementToFrame") end
+    if GF then OpWrapTable(GF, "ApplyButton", "GF.ApplyButton") end
+    if A3 then OpWrapTable(A3, "RenderFrame", "A3.RenderFrame") end
+    if A3 then OpWrapTable(A3, "FlushIdentityAuraRebuilds", "A3.FlushIdentityAura") end
+    opProbeActive = true
+    print("|cff7fd5ffMSUF OpProbe|r armed 6s -- click 3 fresh units NOW.")
+    if C_Timer and C_Timer.After then
+        C_Timer.After(6, function()
+            opProbeActive = false
+            local list = {}
+            for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+            table.sort(list, function(a,b) return a.total>b.total end)
+            print("|cff7fd5ffMSUF OpProbe|r (total | count | worst):")
+            if #list == 0 then print("  no wrapped op ran -- cost is elsewhere; tell Claude.") end
+            for i=1,math.min(#list,15) do
+                local e=list[i]
+                print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
+            end
+            OpRestore()
+            results = {}
+        end)
+    else
+        opProbeActive = false
+        OpRestore()
+    end
+end
+
+-- /msuflaneflags: prints why the target's aura lanes scan capped or full.
+-- The full (uncapped) scan walks every aura on a raid-buffed unit (~0.3ms);
+-- the capped scan stops at cfg.max. This shows which config flag forces full.
+SLASH_MSUFLANEFLAGS1 = "/msuflaneflags"
+SlashCmdList["MSUFLANEFLAGS"] = function()
+    local frames = MSUF.UF and MSUF.UF.frames
+    local frame = frames and frames.target
+    if not frame then print("no target frame (target something).") return end
+    local state = frame._msufA3State
+    if not state then print("target has no aura state.") return end
+    local function dump(kind)
+        local lane = state.lanes and state.lanes[kind]
+        local cfg = lane and lane.config
+        if not cfg then print(kind..": no lane") return end
+        local capped = cfg.renderEnabled and cfg.naturalOrder and cfg.max > 0
+            and cfg.visibleOnlyScan and (cfg.hasFilterWork ~= true or cfg.cappedFilterScan)
+        print(string.format("|cff7fd5ff%s|r capped=%s | max=%s renderEnabled=%s naturalOrder=%s visibleOnlyScan=%s hasFilterWork=%s cappedFilterScan=%s sortOrder=%s needsPlayerFlag=%s",
+            kind, tostring(capped == true), tostring(cfg.max),
+            tostring(cfg.renderEnabled), tostring(cfg.naturalOrder),
+            tostring(cfg.visibleOnlyScan), tostring(cfg.hasFilterWork),
+            tostring(cfg.cappedFilterScan), tostring(cfg.sortOrder),
+            tostring(cfg.needsPlayerFlag)))
+    end
+    dump("buff")
+    dump("debuff")
+end
+
+-- /msufrt: times the RUNTIME (post-click, deferred) layer that profpeek sees
+-- but the OnEvent/element probes miss -- works with auras OFF. Wraps the
+-- runtime entry points: UF.UpdateRuntime, UF.FrameRuntimeUpdate, and (if
+-- present) the visual-phase runner. Reason string is recorded so we see which
+-- identity pass costs.
+local rtActive = false
+local rtSaved = {}
+local function RtWrap(tbl, key, label)
+    if type(tbl) ~= "table" or type(tbl[key]) ~= "function" or rtSaved[label] then return end
+    local fn = tbl[key]
+    rtSaved[label] = { tbl = tbl, key = key, fn = fn }
+    tbl[key] = function(a1, a2, a3, a4, a5, a6)
+        if not rtActive then return fn(a1, a2, a3, a4, a5, a6) end
+        local reason = (label == "UF.UpdateRuntime") and a2 or a2
+        local t0 = GetTimePreciseSec()
+        local r1, r2, r3 = fn(a1, a2, a3, a4, a5, a6)
+        Record(label, reason, (GetTimePreciseSec() - t0) * 1000)
+        return r1, r2, r3
+    end
+end
+local function RtRestore()
+    for label, s in pairs(rtSaved) do s.tbl[s.key] = s.fn; rtSaved[label] = nil end
+end
+
+SLASH_MSUFRT1 = "/msufrt"
+SlashCmdList["MSUFRT"] = function()
+    if rtActive then print("rt probe already armed.") return end
+    if InCombatLockdown and InCombatLockdown() then print("leave combat first.") return end
+    results = {}
+    local UF = MSUF.UF
+    if not UF then print("no UF.") return end
+    RtWrap(UF, "UpdateRuntime", "UF.UpdateRuntime")
+    RtWrap(UF, "FrameRuntimeUpdate", "UF.FrameRuntimeUpdate")
+    RtWrap(UF, "ApplySpec", "UF.ApplySpec")
+    RtWrap(UF, "ApplyElementToFrame", "UF.ApplyElementToFrame")
+    RtWrap(UF, "ForceUpdate", "UF.ForceUpdate")
+    rtActive = true
+    print("|cff7fd5ffMSUF RT|r armed 6s (auras can be OFF) -- click 3 fresh units NOW.")
+    if C_Timer and C_Timer.After then
+        C_Timer.After(6, function()
+            rtActive = false
+            local list = {}
+            for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+            table.sort(list, function(a,b) return a.total>b.total end)
+            print("|cff7fd5ffMSUF RT|r (total | count | worst):")
+            if #list == 0 then print("  no runtime call ran -- cost is in the secure/event layer; tell Claude.") end
+            for i=1,math.min(#list,15) do
+                local e=list[i]
+                print(string.format("  %.3fms | %dx | max %.3fms | %s [%s]", e.total, e.count, e.max, e.key, tostring(e.key)))
+            end
+            RtRestore(); results = {}
+        end)
+    else rtActive = false; RtRestore() end
+end
+
+-- /msufdispatch: wraps UF.DispatchFrameEvent -- the single chokepoint EVERY
+-- unit event funnels through (per-frame OnEvent script AND the central
+-- eventDriver both call it). Buckets by event name. This is the layer the
+-- OnEvent probe missed (it only wrapped UF.driver + per-unit frames, not the
+-- central event driver). Works auras off. Reports per-event total/max so the
+-- post-click UNIT_* burst names itself.
+local dispActive = false
+local dispSaved
+SLASH_MSUFDISPATCH1 = "/msufdispatch"
+SlashCmdList["MSUFDISPATCH"] = function()
+    if dispActive then print("dispatch probe already armed.") return end
+    if InCombatLockdown and InCombatLockdown() then print("leave combat first.") return end
+    local UF = MSUF.UF
+    if not (UF and type(UF.DispatchFrameEvent) == "function") then print("no DispatchFrameEvent.") return end
+    results = {}
+    dispSaved = UF.DispatchFrameEvent
+    local orig = dispSaved
+    UF.DispatchFrameEvent = function(frame, event, unit, ...)
+        if not dispActive then return orig(frame, event, unit, ...) end
+        local t0 = GetTimePreciseSec()
+        orig(frame, event, unit, ...)
+        local fu = frame and frame.unit or "?"
+        Record("disp:" .. tostring(fu), event, (GetTimePreciseSec() - t0) * 1000)
+    end
+    -- re-point any per-frame OnEvent scripts that captured the old function
+    if UF.frames then
+        for _, f in pairs(UF.frames) do
+            if f.GetScript and f:GetScript("OnEvent") == orig then
+                f:SetScript("OnEvent", UF.DispatchFrameEvent)
+            end
+        end
+    end
+    dispActive = true
+    print("|cff7fd5ffMSUF Dispatch|r armed 6s -- click 3 fresh units NOW (auras off ok).")
+    if C_Timer and C_Timer.After then
+        C_Timer.After(6, function()
+            dispActive = false
+            -- restore
+            local cur = UF.DispatchFrameEvent
+            UF.DispatchFrameEvent = dispSaved
+            if UF.frames then
+                for _, f in pairs(UF.frames) do
+                    if f.GetScript and f:GetScript("OnEvent") == cur then
+                        f:SetScript("OnEvent", dispSaved)
+                    end
+                end
+            end
+            local list = {}
+            for k,r in pairs(results) do list[#list+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+            table.sort(list, function(a,b) return a.total>b.total end)
+            print("|cff7fd5ffMSUF Dispatch|r per (frameUnit, event) (total | count | worst):")
+            if #list == 0 then print("  no dispatch ran -- cost is NOT event dispatch; tell Claude.") end
+            for i=1,math.min(#list,18) do
+                local e=list[i]
+                print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
+            end
+            results = {}
+        end)
+    else
+        dispActive = false
+        UF.DispatchFrameEvent = dispSaved
+    end
+end
+
+-- /msufvs: side-by-side per-frame profiler peak for MSUF vs UnhaltedUnitFrames
+-- (and oUF if separate), sampled from C_AddOnProfiler every frame. Click MSUF
+-- frames, then UUF frames, in the SAME window. If UUF spikes the same on its
+-- own frames, the cost is the shared secure pipeline. If UUF stays flat while
+-- MSUF spikes, MSUF has a real defect and this proves it.
+SLASH_MSUFVS1 = "/msufvs"
+SlashCmdList["MSUFVS"] = function()
+    local P = _G.C_AddOnProfiler
+    local Enum_metric = _G.Enum and _G.Enum.AddOnProfilerMetric
+    if not (P and P.GetAddOnMetric and Enum_metric) then
+        print("|cffff5555MSUF VS|r C_AddOnProfiler unavailable.")
+        return
+    end
+    -- discover loaded addon names to compare against
+    local names = { "MidnightSimpleUnitFrames" }
+    local candidates = { "UnhaltedUnitFrames", "oUF", "UnhaltedUnitFrames_Options" }
+    local C_AddOns = _G.C_AddOns
+    for _, n in ipairs(candidates) do
+        local loaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded(n)
+        if loaded == nil and _G.IsAddOnLoaded then loaded = _G.IsAddOnLoaded(n) end
+        if loaded then names[#names + 1] = n end
+    end
+    local peak = {}
+    for _, n in ipairs(names) do peak[n] = 0 end
+    local driver = CreateFrame("Frame")
+    local elapsed = 0
+    print("|cff7fd5ffMSUF VS|r 8s -- click MSUF frames for 4s, then UUF frames for 4s. Comparing: " .. table.concat(names, ", "))
+    driver:SetScript("OnUpdate", function(self, dt)
+        elapsed = elapsed + dt
+        for _, n in ipairs(names) do
+            local v = P.GetAddOnMetric(n, Enum_metric.LastTime)
+            if type(v) == "number" and v > peak[n] then peak[n] = v end
+        end
+        if elapsed >= 8 then
+            self:SetScript("OnUpdate", nil)
+            print("|cff7fd5ffMSUF VS|r peak per-frame ms (worst single frame each addon was billed):")
+            for _, n in ipairs(names) do
+                print(string.format("  %.3fms | %s", peak[n], n))
+            end
+            print("  If UUF/oUF peak ~= MSUF peak after clicking their frames, it's the shared secure pipeline.")
+            print("  If they stayed near 0 while MSUF spiked, MSUF has a real defect.")
+        end
+    end)
+end

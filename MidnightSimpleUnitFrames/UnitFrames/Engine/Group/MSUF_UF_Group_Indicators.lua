@@ -1,3 +1,9 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Indicators.lua
+--- Runtime element for group corner indicators.
+---
+--- Config_Indicators compiles slots and colors; this file creates indicator
+--- textures and updates threat-driven visibility during unit events.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -105,6 +111,8 @@ local function SetColorTextureCached(tex, r, g, b, a)
   ApplyColorTexture(tex, r, g, b, a)
 end
 
+--- Threat values can be secret/unknown. Treat those as "no visible aggro" rather
+--- than throwing or showing stale indicators.
 local function HasThreat(unit)
   if not UnitThreatSituation or not unit then return false end
   local status = UnitThreatSituation(unit)
@@ -188,6 +196,8 @@ local function SetThreatSlotsShown(frame, cfg, shown)
   end
 end
 
+--- Threat updates are event-deduped per frame/config so repeated threat events
+--- do not repaint unchanged slots.
 local function RuntimeThreat(frame, cfg, event)
   if not (frame and cfg and cfg.enabled == true and cfg.needsThreat == true) then return end
   local unit = frame.unit

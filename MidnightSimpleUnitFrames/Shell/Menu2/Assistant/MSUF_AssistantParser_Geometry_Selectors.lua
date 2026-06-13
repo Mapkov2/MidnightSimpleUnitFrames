@@ -24,6 +24,10 @@ local GroupStatusIconForText = P.GroupStatusIconForText
 local TextSelectorTab = P.TextSelectorTab
 local TextSelectorSlot = P.TextSelectorSlot
 local TextSelectorIntent = P.TextSelectorIntent
+
+-- Menu selector parser for UI-only changes.
+-- Selecting a visible tab/dropdown/slot should not mutate the underlying setting value; it
+-- only changes Menu2 editor state so the user lands on the relevant control.
 local MENU_SELECTOR_VERBS = {
     "select", "choose", "pick", "open", "show", "switch to", "go to", "edit",
 }

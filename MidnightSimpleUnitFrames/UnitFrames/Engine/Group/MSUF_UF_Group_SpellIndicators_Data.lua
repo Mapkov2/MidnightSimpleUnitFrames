@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_SpellIndicators_Data.lua
+--- Built-in spell indicator defaults and spell-id metadata.
+---
+--- This file should stay declarative. Runtime matching, profile merging, and
+--- icon lookup belong in SpellRegistry; DB first-load seeding lives in
+--- GroupFrames/MSUF_GroupFrames_DB_SpellIndicators.lua.
+
 local _, ns = ...
 ns = ns or (_G.MSUF_NS) or {}
 _G.MSUF_NS = ns

@@ -1,3 +1,12 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Adapter.lua
+--- Adapter between secure group-header children and the generic unit-frame
+--- engine.
+---
+--- Headers create protected child frames. This file discovers/tracks those
+--- children, applies compiled specs, indexes frames by unit, wires click-cast
+--- and tooltip behavior, and schedules bounded rescans when header children
+--- appear late.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -77,6 +86,8 @@ end
 
 GF.ClickCastEnabled = true
 
+--- Clique/ClickCastFrames integration is intentionally outside the generic UF
+--- engine because only secure group buttons need this registration behavior.
 local function RegisterDefaultClicks(frame)
   if frame and frame.RegisterForClicks then
     frame:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -423,6 +434,8 @@ local function IndexFrameUnit(frame, unit)
   end
 end
 
+--- Track by both frame and unit. Unit indexes are refreshed when secure child
+--- attributes change, so callers can find the current frame for a roster unit.
 local function TrackFrame(frame, unit)
   if GF.frames[frame] ~= true then
     GF.frames[frame] = true
@@ -546,6 +559,8 @@ function GF.UntrackFrame(frame)
   end
 end
 
+--- Apply or reapply the compiled unit-frame spec to one secure child. This is
+--- the adapter's main hot/warm path, so it skips identical unit/spec states.
 function GF.ApplyButton(frame, kind, reason)
   if not frame then return false end
   local unit = frame.GetAttribute and frame:GetAttribute("unit") or frame.unit
@@ -670,6 +685,8 @@ local function MeasureFirstCenterDelta(header, key, kind, firstChild)
   end
 end
 
+--- Scan one secure header's children. Header creation and roster changes can
+--- produce children over several frames, so ScheduleScan below retries briefly.
 function GF.ScanHeader(key, kind)
   local header = GF.headers and GF.headers[key]
   if not header then return end

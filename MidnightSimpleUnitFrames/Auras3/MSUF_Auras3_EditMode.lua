@@ -4,6 +4,10 @@
 --- This file intentionally does not hook UNIT_AURA and does not add per-aura
 --- render callbacks. It owns only edit-mode fake previews, drag movement, and
 --- config refresh bridges.
+---
+--- Edit-mode state is visual and coldpath. Dragging writes layout offsets to
+--- the Auras3 DB through the same shape that Menu_Model uses, then asks runtime
+--- frames to refresh. Do not add aura scanning or per-aura render decisions here.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -115,7 +119,6 @@ end
 
 local function UnitPreviewActive(unit)
     return IsEditModeActive()
-        or (BOSS_UNITS[unit] == true and rawget(_G, "MSUF2_BossUnitframePreviewActive") == true)
 end
 
 local function IsConfigBlocked()
@@ -465,6 +468,9 @@ local function WriteOffset(auras, unit, kind, x, y)
     layout[spec.yKey] = Round(y)
 end
 
+--- Older profiles may store only group-lane offsets/sizes. When a user drags a
+--- lane in edit mode, promote the effective runtime position back into the
+--- per-unit layout so future edits are stable and visible in the menu model.
 local function PromoteRuntimeLayout(unit, kind)
     kind = NormalizeKind(kind or rawget(_G, "MSUF_EM2_ActiveAuraGroup"))
     local spec = GROUPS[kind]
@@ -508,6 +514,9 @@ local function RefreshAffectedRuntimeUnits(unit, shared)
     end
 end
 
+--- Drag writes are throttled by value equality and blocked in combat. Boss aura
+--- lanes can be edited together, but the persisted value is still written to
+--- each boss unit so the runtime path stays simple.
 local function ApplyDragDelta(self, dx, dy)
     if IsConfigBlocked() then return end
     local auras = self._dragAuras
@@ -948,6 +957,8 @@ function A3.RefreshAll(...)
     end
     if IsEditModeActive() then
         EM.RefreshAll()
+    else
+        EM.HideAll()
     end
     return ret
 end
@@ -960,6 +971,8 @@ if type(CoreEnableFrame) == "function" then
             StyleRuntimeButtons(frame.unit)
             if UnitPreviewActive(frame.unit) then
                 EM.RefreshUnit(frame.unit)
+            else
+                EM.HideUnit(frame.unit)
             end
         end
         return ret
@@ -988,9 +1001,7 @@ function A3.RefreshUnit(unit)
     if frame and frame.Auras then frame.Auras.needFullUpdate = true end
     if A3.RequestUnit then A3.RequestUnit(unit, 0) end
     StyleRuntimeButtons(unit)
-    if UnitPreviewActive(unit) then
-        EM.RefreshUnit(unit)
-    end
+    EM.RefreshUnit(unit)
 end
 
 function A3.UpdateUnitAnchor(unit)

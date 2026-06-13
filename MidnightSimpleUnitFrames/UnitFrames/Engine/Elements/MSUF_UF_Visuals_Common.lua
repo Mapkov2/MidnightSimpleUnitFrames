@@ -5,6 +5,10 @@ _G.MSUF_NS = MSUF
 
 local UF = MSUF.UF
 local CreateFrame = CreateFrame
+
+-- Shared visual constants/helpers for unitframe elements.
+-- Exports common API aliases, event lists, masks, and secret-safe helpers consumed by portrait,
+-- border, alpha, and visual element files so they stay behaviorally aligned.
 local UnitExists = UnitExists
 local UnitThreatSituation = UnitThreatSituation
 local UnitGroupRolesAssigned = UnitGroupRolesAssigned

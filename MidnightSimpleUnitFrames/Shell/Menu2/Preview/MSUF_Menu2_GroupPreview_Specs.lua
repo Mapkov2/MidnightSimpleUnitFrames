@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Group preview spec data.
+-- Declarative mock layout maps, growth vectors, anchors, classes, and icon IDs for the Menu2
+-- preview renderer. Live group-frame specs remain in the GroupFrames runtime.
 local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 
 local function MapRows(rows)

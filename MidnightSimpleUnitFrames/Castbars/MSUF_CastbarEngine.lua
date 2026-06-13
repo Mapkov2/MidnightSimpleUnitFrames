@@ -1,3 +1,11 @@
+--- Castbars/MSUF_CastbarEngine.lua
+--- Normalizes Blizzard cast/channel/empower API output into one cast-state
+--- table used by the player, target, focus, boss, kick-ready, and preview code.
+---
+--- This is a data layer, not a visual layer. Keep frame mutation in Runtime,
+--- Driver, Frames, or Visuals; Engine should answer "what is the unit casting?"
+--- and cache only enough to avoid duplicate work within the same frame.
+
 local _, ns = ...
 ns = ns or {}
 
@@ -34,6 +42,8 @@ Engine.VERSION = 3
 Engine._subs = Engine._subs or {}
 Engine._state = Engine._state or {}
 
+--- Tiny pub/sub hook for code that wants cast-state notifications without
+--- taking ownership of the castbar frames themselves.
 local function SubscriptionList(key)
     if not key then
         return nil
@@ -96,6 +106,8 @@ local EnsureDBLazy = _G.MSUF_EnsureDBLazy or function()
     end
 end
 
+--- Fill direction is part of cast-state because channels/empower casts can run
+--- opposite to normal casts unless the profile requests unified direction.
 local function ReverseFillForCastType(castType, unit)
     EnsureDBLazy()
 
@@ -118,6 +130,9 @@ local function ReverseFillForCastType(castType, unit)
     return reverseFill
 end
 
+--- UNIT_SPELLCAST_INTERRUPTIBLE/NOT_INTERRUPTIBLE can arrive separately from
+--- cast start. Preserve the previous value until the interruptibility event
+--- confirms the new cast's state.
 local function PreserveInterruptState(_, previousState)
     if previousState and previousState.isNotInterruptible ~= nil then
         return previousState.isNotInterruptible == true
@@ -139,6 +154,9 @@ local function UnitIsEmpowering(unit)
     return type(stageCount) == "number" and stageCount > 0
 end
 
+--- Main API: return a reusable state table for the unit. The same-frame cache
+--- avoids repeated UnitCastingInfo/UnitChannelInfo reads when multiple castbar
+--- helpers ask for state during one event burst.
 function Engine:BuildState(unit, previousState)
     if not unit then
         return { active = false }

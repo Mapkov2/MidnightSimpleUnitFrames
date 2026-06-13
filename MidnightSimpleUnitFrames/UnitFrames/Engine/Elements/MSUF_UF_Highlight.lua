@@ -4,6 +4,9 @@ MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
 
 
+-- Unitframe highlight overlay runtime.
+-- Owns the optional mouseover/target-style highlight frame layered above unitframes. Global
+-- DB changes update cached config, while per-frame calls only show/hide/recolor the overlay.
 local CreateFrame = CreateFrame
 local tonumber = tonumber
 local type = type

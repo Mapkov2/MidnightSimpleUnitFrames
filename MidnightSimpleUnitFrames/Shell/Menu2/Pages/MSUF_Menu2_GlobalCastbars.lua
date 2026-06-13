@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 global Castbars page.
+-- Exposes shared castbar backend/visual/text/timing controls and drives a page-local preview.
+-- Actual cast/channel state handling is owned by the castbar runtime modules.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GlobalPage or {}
@@ -45,6 +48,8 @@ function M.SetCastbarPreviewUnit(unit)
 end
 
 function M.SetCastbarPreviewType(kind, progress)
+    -- Preview type changes are local UI state. They simulate normal/channel/empowered casts
+    -- without mutating live unit castbar runtime state.
     kind = NormalizeCastbarPreviewType(kind)
     M._msuf2CastbarPreviewType = kind
     local preview = M._msuf2CastbarPreview

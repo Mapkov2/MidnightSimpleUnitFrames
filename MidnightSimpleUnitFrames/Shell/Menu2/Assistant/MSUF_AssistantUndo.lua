@@ -10,6 +10,9 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+-- Assistant undo stack.
+-- Undo stores snapshots of plain DB state before a plan is applied and then triggers broad
+-- refreshers. It must not try to resurrect frame objects or transient runtime references.
 local UNDO_LIMIT = 20
 
 local function DeepCopy(value, seen)
@@ -61,6 +64,8 @@ local function ScheduleNextFrame(key, fn)
 end
 
 local function BroadApply(reason)
+    -- Undo may touch several domains at once. Use broad scheduled refreshers rather than
+    -- guessing which specific runtime owned each restored DB key.
     reason = reason or "MSUF_ASSISTANT_UNDO"
     if M and type(M.RequestGeneralApply) == "function" then
         M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true })

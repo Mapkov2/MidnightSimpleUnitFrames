@@ -5,6 +5,10 @@ _G.MSUF_NS = MSUF
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
+
+-- Unitframe border overlay element.
+-- Owns highlight, aggro, purge/dispel, and boss-target border layers for unitframes. Runtime
+-- updates are event-driven and secret-safe; page code only changes DB/style inputs.
 local CreateFrame = V.CreateFrame or CreateFrame
 local UnitExists = V.UnitExists or UnitExists
 local UnitThreatSituation = V.UnitThreatSituation or UnitThreatSituation

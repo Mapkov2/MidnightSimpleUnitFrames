@@ -25,6 +25,9 @@ local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
 _G.MSUF_UFPreview = Preview
 
+-- Unit preview model.
+-- Provides deterministic mock units, names, colors, and derived text for Menu2 previews. This
+-- file is display-only; live unit state and event dispatch remain in UnitFrames runtime.
 local Model = Preview.Model or {}
 Preview.Model = Model
 local PreviewHelpers = M.PreviewHelpers or {}
@@ -42,6 +45,9 @@ local UNIT_LABELS = {
     pet = "Pet",
 }
 local UNIT_DATA = {
+    -- Preview data is intentionally stylized and stable. Do not replace this with live Unit*
+    -- API calls; preview should render identically while the player is offline, in combat, or
+    -- inspecting another profile.
     player = { name = "MIDNIGHT", class = "ROGUE", hp = 0.72, power = 0.52, powerToken = "ENERGY", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Stealth" },
     target = { name = "Astral Warden", class = "MAGE", hp = 0.41, power = 0.68, powerToken = "MANA", level = "82", elite = true, reactionKind = "neutral", npcKind = "npcRegular", portraitTexture = "Interface\\ICONS\\Spell_Frost_FrostBolt02" },
     targettarget = { name = "Moonlit Tank", class = "WARRIOR", hp = 0.88, power = 0.36, powerToken = "RAGE", level = "80", elite = false, isPlayer = true, portraitTexture = "Interface\\ICONS\\Ability_Warrior_DefensiveStance" },

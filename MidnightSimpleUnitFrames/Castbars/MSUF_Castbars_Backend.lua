@@ -1,3 +1,11 @@
+--- Castbars/MSUF_Castbars_Backend.lua
+--- Backend policy for each castbar unit.
+---
+--- Public settings still include older `enable*Castbar` booleans, while newer
+--- code needs a three-state backend: MSUF, Blizzard, or Hide. This adapter keeps
+--- both representations synchronized so menus, imports, and old profile data
+--- continue to agree.
+
 local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
 _G.MSUF_NS = ns
@@ -23,6 +31,8 @@ local BLIZZARD_SUPPORTED_UNITS = {
     player = true,
 }
 
+--- Accept both unit tokens and frame-ish names because older menu/runtime code
+--- passes a mix of "target", "MSUF_TargetCastbar", and "boss1".
 local function NormalizeUnit(unit)
     if type(unit) ~= "string" then
         return nil
@@ -106,6 +116,8 @@ function Backend.LegacyEnableKey(unit)
     return LEGACY_ENABLE_KEYS[NormalizeUnit(unit)]
 end
 
+--- Read-through normalization: every get also repairs the profile's paired
+--- backend and legacy boolean fields.
 function Backend.Get(unit, general)
     unit = NormalizeUnit(unit)
 
@@ -132,6 +144,8 @@ function Backend.Get(unit, general)
     return backend
 end
 
+--- Set both the modern backend key and the legacy boolean in one place. Only
+--- player supports Blizzard's native castbar; other Blizzard requests become Hide.
 function Backend.Set(unit, value, general)
     unit = NormalizeUnit(unit)
 

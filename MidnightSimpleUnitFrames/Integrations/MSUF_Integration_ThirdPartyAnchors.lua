@@ -3,6 +3,9 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
 
+-- Third-party anchor integration.
+-- Registers MSUF unitframe anchors with external cooldown/utility addons after frames exist.
+-- Integration is deferred in combat and must not take ownership of external addon layouts.
 local C_AddOns = C_AddOns
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
@@ -40,6 +43,8 @@ local BCDM_ANCHORS = {
 local registered
 
 local function ApplyUnitFrameAnchors()
+    -- Anchor registration needs real spawned frames. If the UnitFrames factory is not ready,
+    -- callers can retry later without mutating third-party state.
     local UF = MSUF.UF
     local factory = UF and UF.Factory
     if not (UF and UF.spawned and factory and type(factory.Apply) == "function") then

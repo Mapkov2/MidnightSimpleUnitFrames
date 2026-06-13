@@ -45,6 +45,10 @@ do
 end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
+-- Heal/absorb prediction element.
+-- Owns incoming heal, absorb, and heal-absorb overlays for unitframes. The code supports
+-- both modern detailed prediction APIs and older fallbacks, and it must tolerate secret unit
+-- tokens without leaking or doing math on protected values.
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local UnitIncomingHealClampMode = Enum and Enum.UnitIncomingHealClampMode
 local UnitDamageAbsorbClampMode = Enum and Enum.UnitDamageAbsorbClampMode
@@ -69,6 +73,8 @@ local PREDICTION_EVENT_BITS = {
 }
 
 local function BuildPredictionEventTable(healthAware, includeConnection)
+  -- Specs opt into only the prediction pieces they display. Build the event lists from bit
+  -- masks once so runtime registration stays compact even with several overlay combinations.
   local out = {}
   for mask = 1, 7 do
     local events = {}

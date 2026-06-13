@@ -1,3 +1,7 @@
+-- Legacy compact castbar preview runtime.
+-- This file is intentionally compact legacy code that creates draggable player/target/focus
+-- preview bars for edit-mode/Menu2. Keep new behavior in the shared castbar preview helpers
+-- where possible, and preserve these globals for compatibility.
 local function _(e)local t=_G.MSUF_NS
 if type(e)~="string"then return e end
 if type(t)=="table"and type(t.Translate)=="function"then return t.Translate(e)end

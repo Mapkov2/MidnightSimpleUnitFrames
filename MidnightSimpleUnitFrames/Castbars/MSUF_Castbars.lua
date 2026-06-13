@@ -1,3 +1,12 @@
+--- Castbars/MSUF_Castbars.lua
+--- Legacy/minified player castbar creation, backend application, castbar manager,
+--- and timer text update loop.
+---
+--- This file still owns some historical globals used by the newer readable
+--- Castbar modules. Prefer adding shared behavior to Engine, Runtime, Frames,
+--- Style, or Visuals; when this file must change, keep edits tiny and validate
+--- with `luac -p` because formatting does not make control flow obvious.
+
 local d=_G.MSUF_PlayerCastbar_Cast
 local a=_G.MSUF_PlayerCastbar_OnEvent local f=_G.MSUF_PlayerCastbar_UpdateLatencyZone
 local F=_G.MSUF_LayoutEmpowerTicks local C=_G.MSUF_BlinkEmpowerTick

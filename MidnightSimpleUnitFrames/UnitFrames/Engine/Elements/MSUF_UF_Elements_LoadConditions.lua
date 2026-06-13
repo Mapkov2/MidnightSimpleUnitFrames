@@ -6,6 +6,9 @@ _G.MSUF_NS = MSUF
 local UF = MSUF.UF
 if not UF then return end
 
+-- Unitframe load-condition element.
+-- Owns secure state-driver visibility rules for mounted/combat/group/instance/resting style
+-- conditions. Protected state changes are deferred or expressed through secure snippets.
 local RegisterStateDriver = _G.RegisterStateDriver
 local UnregisterStateDriver = _G.UnregisterStateDriver
 local SecureCmdOptionParse = _G.SecureCmdOptionParse

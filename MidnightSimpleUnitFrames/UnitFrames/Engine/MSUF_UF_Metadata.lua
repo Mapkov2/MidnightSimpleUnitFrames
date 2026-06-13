@@ -9,6 +9,9 @@ local UF = MSUF.UF
 local Metadata = UF.Metadata or {}
 UF.Metadata = Metadata
 
+-- UnitFrames metadata catalogue.
+-- Centralizes element event groups, runtime dirty masks, and reason-to-mask mappings so
+-- factory/apply/dispatch code can share stable names without hard-coded duplicates.
 local pairs = pairs
 local type = type
 local string_gmatch = string.gmatch

@@ -1,6 +1,10 @@
---- Core/MSUF_FontRuntime.lua
+--- Runtime/MSUF_FontRuntime.lua
 --- Runtime font refresh and deferred castbar/font apply wrappers.
 --- Shared font application runtime helpers with stable exported globals.
+---
+--- FontRegistry resolves font keys and catalogues. This file applies the active
+--- font/color/shadow settings to existing frames and schedules layout refreshes
+--- when font metrics become available after login.
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -37,6 +41,8 @@ local function ForEachUnitFrame(fn)
     end
 end
 
+--- Font changes affect many elements. Defer the UF dirty commit so global font
+--- and per-frame text relayout happen once after a settings burst.
 local function ScheduleApplyCommit()
     local UF = MSUF and MSUF.UF
     local commit = UF and UF.ApplyDirty
@@ -106,7 +112,7 @@ local function _MSUF_MonochromeFromFlags(flags)
     return tostring(flags or ""):upper():find("MONOCHROME", 1, true) ~= nil
 end
 
--- Cold-start text fix, folded into the font subsystem (no standalone file).
+--- Cold-start text fix, folded into the font subsystem (no standalone file).
 -- On the first login after a client start the configured font may not be
 -- loadable when the per-frame init layout runs, so width-dependent text anchors
 -- (name maxChars clamp, inline ToT, centre/right text) get committed against the

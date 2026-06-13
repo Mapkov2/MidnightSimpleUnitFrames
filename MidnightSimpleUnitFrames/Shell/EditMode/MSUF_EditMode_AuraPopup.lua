@@ -1,4 +1,6 @@
---- MSUF_EditMode_AuraPopup.lua - Menu2-style quick aura bounds popup
+--- MSUF_EditMode_AuraPopup.lua - Menu2-style quick aura bounds popup.
+--- Adjusts aura group offsets/sizes from edit mode while delegating saved config and live
+--- refresh to Auras3/Menu2 helpers. It should not run aura scans itself.
 
 local addonName, MSUF = ...
 local EM2 = _G.MSUF_EM2

@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Group Auras page.
+-- Builds party/raid aura lane controls and group aura backend toggles. Auras3/group runtime
+-- own aura scanning, filtering, and icon updates after these settings change.
 local W = M.Widgets
 local GP = M.GroupPage or {}
 
@@ -29,11 +32,7 @@ local function LaneBackendEnabled(scope, groupKey)
     local root = AurasRoot and AurasRoot(scope)
     local group = AuraGroup(scope, groupKey)
     if not root then return group.enabled ~= false end
-    local nativeKey = NativeAuraKey(groupKey)
-    local blizzardTypes = root.blizzardTypes
-    local blizzardOwns = (root.renderer or "BLIZZARD") ~= "CUSTOM"
-        and (type(blizzardTypes) ~= "table" or blizzardTypes[nativeKey] ~= false)
-    return root.enabled ~= false and group.enabled ~= false and blizzardOwns ~= true
+    return root.enabled ~= false and group.enabled ~= false
 end
 
 local function BindAuraLaneEnabled(ctx, widget, groupKey)

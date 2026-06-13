@@ -1,5 +1,16 @@
 --- Auras3/MSUF_Auras3_UnitFrames.lua
 --- Delta-first UnitFrame aura backend.
+---
+--- Runtime ownership:
+--- * Menu_Model writes SavedVariables and invalidates runtime config.
+--- * EditMode builds fake preview groups and drag handles only.
+--- * This file owns live aura state, full scans, UNIT_AURA deltas, button pools,
+---   and frame-level aura visuals for unit and group frames.
+---
+--- Keep gameplay aura work here and keep menu/edit code out of UNIT_AURA paths.
+--- Aura scans are one of the most expensive frame events in MSUF, so new logic
+--- should either compile into lane config or run behind the existing delta/full
+--- scan split.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -204,7 +215,7 @@ local LANE_SPECS = {
 
 local GROUP_LANE_SPECS = {
     buff = {
-        filter = "HELPFUL|RAID",
+        filter = "HELPFUL",
         showKey = "showBuffs",
         maxKey = "maxBuffs",
         sizeKey = "buffIconSize",
@@ -646,6 +657,9 @@ end
 local SortAuras, SortAurasID, SortComparator
 local frameSpecConfigCache = setmetatable and setmetatable({}, { __mode = "k" }) or {}
 
+--- Config compilation turns DB/model choices into lane specs that the runtime
+--- can consume without walking SavedVariables during UNIT_AURA. This is where
+--- layout, filters, blacklist hashes, and dispel visual rules should be folded.
 local function CompileFrameAuraVisual(spec)
     if type(spec) ~= "table" then return nil end
     local group = spec.scope == "group" and spec.group or nil
@@ -789,11 +803,14 @@ local function CompileLane(runtimeUnit, shared, layout, sharedLayout, blacklist,
         and visual.directVisualEligible == true
         and hasFilterWork ~= true
     local enabled = renderEnabled or (forceScan == true and kind == "debuff" and visualDirect ~= true)
-    local cappedFilterScan = black ~= nil
-        and onlyImportant ~= true
-        and hasInclusive ~= true
-        and hidePermanent ~= true
-        and satedFilter ~= true
+    -- Capped scan validity: ShouldShowAura is a pure per-aura predicate for
+    -- blacklist / hidePermanent / sated / onlyImportant, so the scan can stop
+    -- at cfg.max and still be correct. Only hasInclusive (raid/boss/stealable/
+    -- onlyMine OR-inclusion) can match an aura beyond the cap, so it is the one
+    -- case that must keep the full walk. (Previously this required a pure
+    -- blacklist, which forced a full ~0.3ms scan on the common buff lane where
+    -- satedFilter defaults true -- the target-click spike.)
+    local cappedFilterScan = hasFilterWork == true and hasInclusive ~= true
     local step = size + spacing
     local roundedMax = Round(maxCount)
     local roundedPerRow = Round(perRow)
@@ -1091,7 +1108,7 @@ local function ResolveGroupFrameConfig(frame, unit)
     if not frame then return nil end
     unit = unit or frame.unit
     local spec = frame.MSUFSpec
-    local source = spec and spec.group and spec.group.auras
+    local source = spec and (spec.auras or (spec.group and spec.group.auras))
     local gen = A3._runtimeConfigGen or 1
     local cached = frame._msufA3GroupConfig
     if cached and frame._msufA3GroupSource == source and frame._msufA3GroupUnit == unit
@@ -1426,6 +1443,9 @@ local function EnsureButton(lane, index)
     return lane[index] or CreateAuraButton(lane, index)
 end
 
+--- Button pools and lane state are runtime-owned. Config may change the desired
+--- max/layout, but live buttons stay attached to their lane so delta updates can
+--- reuse them without creating frames during combat.
 -- Pre-create the visible button pool for single unit frames while out of
 -- combat, so the first swap onto an aura-heavy target never pays a burst of
 -- CreateFrame calls mid-fight. Group frames keep the lazy path: their pools
@@ -2009,6 +2029,10 @@ end
 
 local AURA_UTIL_SCAN = {}
 
+--- Full scans rebuild lane state from Blizzard aura data. Deltas are preferred
+--- for normal UNIT_AURA, but full scans remain the correctness fallback when
+--- Blizzard reports isFullUpdate, the capped visible-only scan loses context,
+--- config changes, or identity changes make old lane state untrustworthy.
 local function AuraUtilScanCallback(data)
     local scan = AURA_UTIL_SCAN
     local lane = scan.lane
@@ -3038,6 +3062,9 @@ local function LaneAffectsFrameAuraVisual(lane)
     return cfg and cfg.visual and cfg.visual.enabled == true and cfg.visualDirect ~= true or false
 end
 
+--- Runtime update path for one lane. It chooses full scan vs delta merge,
+--- renders only when the visible order changed, and reports whether frame-level
+--- aura visuals need to be recomputed.
 local function UpdateAuraLaneRuntime(lane, unit, updateInfo, full)
     if not (lane and lane.config and lane.config.enabled) then
         return false, false
@@ -3106,6 +3133,9 @@ local function CurrentFrameState(frame, unit)
     return state, cfg
 end
 
+--- AurasElement.Update lands here from Dispatch. Keep this function narrow:
+--- normalize the unit, get/apply compiled config, update both lanes, and notify
+--- frame-level aura visuals. Menu preview refreshes and DB writes belong outside.
 local function UpdateAuras(frame, event, unit, updateInfo, forceFull)
     if not frame then return false end
     local frameUnit = frame.unit
@@ -3220,6 +3250,51 @@ local function ResetAurasForIdentity(frame)
     return UpdateAuras(frame, "ForceUpdate", frame.unit, nil, true)
 end
 
+-- Deferred identity aura rebuild. A full rescan of a raid-buffed unit (40+
+-- buffs) costs ~1.6ms and was the dominant cost in the target-change tick
+-- (IdProbe: target.Auras 1.634ms vs everything else <0.3ms). oUF never runs a
+-- synchronous scan on a swap -- the C-fired UNIT_AURA full-update does it on
+-- its own frame. We mirror that: identity reasons enqueue the frame and one
+-- C_Timer.After(0) flush rebuilds it next tick. Bars/name/portrait still
+-- update instantly in the identity pass; only the (expensive) aura scan moves
+-- off the tick. Frame-keyed set => natural coalescing under swap spam; the
+-- unit is re-read at flush so the latest target always wins.
+-- (State and helpers hang off A3 rather than file-scope locals: this file is
+-- at Lua's 200-local-per-chunk ceiling.)
+A3._identityAuraPending = A3._identityAuraPending or {}
+
+function A3.FlushIdentityAuraRebuilds()
+    if not A3._identityAuraQueued then
+        A3._identityAuraFlushScheduled = false
+        return
+    end
+    A3._identityAuraQueued = false
+    A3._identityAuraFlushScheduled = false
+    local pending = A3._identityAuraPending
+    A3._identityAuraPending = {}
+    for frame in pairs(pending) do
+        frame._msufA3IdentityRebuildPending = nil
+        if frame._msufActiveElements and frame._msufActiveElements.Auras == true then
+            UpdateAuras(frame, "ForceUpdate", frame.unit, nil, true)
+        end
+    end
+end
+
+function A3.QueueIdentityAuraRebuild(frame)
+    if not frame then return false end
+    if not (C_Timer and C_Timer.After) then
+        return ResetAurasForIdentity(frame)
+    end
+    A3._identityAuraPending[frame] = true
+    A3._identityAuraQueued = true
+    frame._msufA3IdentityRebuildPending = true
+    if not A3._identityAuraFlushScheduled then
+        A3._identityAuraFlushScheduled = true
+        C_Timer.After(0, A3.FlushIdentityAuraRebuilds)
+    end
+    return true
+end
+
 local function NeedsCombatAuraEvents(cfg)
     if not (cfg and cfg.enabled and cfg.lanes) then return false end
     local lane = cfg.lanes.buff
@@ -3306,6 +3381,56 @@ local function ApplyRuntimeUnit(runtimeUnit)
     return true
 end
 
+function A3._GroupAPI()
+    local ns = MSUF or _G.MSUF_NS or _G.MSUF
+    return ns and ns.GF or nil
+end
+
+function A3._ApplyGroupAuraFrame(frame, unit, kind)
+    if not (frame and type(unit) == "string" and unit ~= "") then return false end
+    frame._msufIsGroupFrame = true
+    if kind then frame._msufGFKind = kind end
+    local spec = frame.MSUFSpec
+    local gf = A3._GroupAPI()
+    if gf and type(gf.CompileSpec) == "function" and kind then
+        spec = gf.CompileSpec(kind, frame, unit)
+    end
+    if UF.ApplyElementToFrame then
+        UF.ApplyElementToFrame(frame, "Auras", spec, nil)
+    else
+        A3.RenderFrame(frame)
+    end
+    return true
+end
+
+function A3._RequestGroupKindNow(kind)
+    local gf = A3._GroupAPI()
+    if not gf then return false end
+
+    local didWork = false
+    if type(gf.ForEachFrame) == "function" then
+        didWork = gf.ForEachFrame(function(frame, frameUnit, frameKind)
+            if kind == nil or frameKind == kind then
+                return A3._ApplyGroupAuraFrame(frame, frameUnit, frameKind)
+            end
+            return false
+        end, true) == true
+    end
+
+    if not didWork and type(gf.RefreshVisuals) == "function" then
+        gf.RefreshVisuals(kind, gf.DIRTY_AURAS)
+        return true
+    end
+    return didWork
+end
+
+function A3._RequestGroupUnitNow(unit)
+    local gf = A3._GroupAPI()
+    if not (gf and type(unit) == "string" and unit ~= "") then return false end
+    local frame = type(gf.FrameForUnit) == "function" and gf.FrameForUnit(unit) or nil
+    return frame and A3._ApplyGroupAuraFrame(frame, unit, frame._msufGFKind) or false
+end
+
 local function RequestUnitNow(unit)
     unit = tostring(unit or "")
     if unit == "" or unit == "*" then
@@ -3315,6 +3440,7 @@ local function RequestUnitNow(unit)
         for i = 1, 5 do
             didWork = ApplyRuntimeUnit("boss" .. i) or didWork
         end
+        didWork = A3._RequestGroupKindNow(nil) or didWork
         return didWork
     end
     if unit == "boss" then
@@ -3323,6 +3449,22 @@ local function RequestUnitNow(unit)
             didWork = ApplyRuntimeUnit("boss" .. i) or didWork
         end
         return didWork
+    end
+    if unit == "group" or unit == "groups" then
+        return A3._RequestGroupKindNow(nil)
+    end
+    if unit == "party" or unit == "gf_party" then
+        return A3._RequestGroupKindNow("party")
+    end
+    if unit == "raid" or unit == "gf_raid" then
+        local didWork = A3._RequestGroupKindNow("raid")
+        return A3._RequestGroupKindNow("mythicraid") or didWork
+    end
+    if unit == "mythicraid" or unit == "gf_mythicraid" then
+        return A3._RequestGroupKindNow("mythicraid")
+    end
+    if unit:match("^party%d+$") or unit:match("^raid%d+$") then
+        return A3._RequestGroupUnitNow(unit)
     end
     unit = NormalizeRuntimeUnit(unit)
     return unit and ApplyRuntimeUnit(unit) or false
@@ -3343,6 +3485,10 @@ function A3.RefreshAll()
     frameSpecConfigCache = setmetatable and setmetatable({}, { __mode = "k" }) or {}
     RequestUnitNow("*")
     return true
+end
+
+function A3.RequestApply()
+    return A3.RefreshAll()
 end
 
 function A3.RefreshUnit(unit)
@@ -3449,7 +3595,10 @@ function AurasElement.Update(frame, event, unit, updateInfo)
     end
     if event == "MSUF_UNIT_IDENTITY_AURAS"
         or event == "MSUF_UNIT_IDENTITY_SOFT_AURAS" then
-        return ResetAurasForIdentity(frame)
+        -- Defer the expensive full rescan off the identity tick (see
+        -- QueueIdentityAuraRebuild). Group identity keeps the synchronous path
+        -- below via A3.RenderFrame so roster builds settle in one pass.
+        return A3.QueueIdentityAuraRebuild(frame)
     end
     if event == "ForceUpdate"
         or event == "MSUF_FORCE_UPDATE"

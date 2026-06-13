@@ -1,5 +1,9 @@
 --- Shell/Menu2/Search/MSUF_Menu2_Search_Routing.lua
 --- Search target routing, accordion state, and anchor scrolling.
+---
+--- Search routing is UI navigation only: it may expand sections and scroll to anchors, but it
+--- should not change the setting value behind the matched control. Combat checks stay here so
+--- routing does not try to focus protected edit-mode surfaces at unsafe times.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
@@ -26,6 +30,8 @@ local DASHBOARD_ROUTE_CHANGELOG = C.DASHBOARD_ROUTE_CHANGELOG
 if not (NormalizeSearchText and BuildSearchQueryClauses and BuildSearchTokenList and SearchEditDistanceWithin and SearchCombatLocked and ContentWidth and ContentHeight) then return end
 
 local function ScoreAnchorTextClauses(normalized, queryNorm, clauses)
+    -- Anchor scoring favors exact page-control text first, then prefix/contains/fuzzy matches.
+    -- This keeps search useful for typos while still sending precise queries to the right row.
     if normalized == "" or type(clauses) ~= "table" or #clauses == 0 then return 0 end
     local score, matched = 0, 0
     if queryNorm ~= "" then

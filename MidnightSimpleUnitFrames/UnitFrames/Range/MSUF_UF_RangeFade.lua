@@ -9,6 +9,9 @@ if not (UF and UF.RegisterElement) then return end
 local Range = UF.Range or {}
 UF.Range = Range
 
+-- Unitframe range fade element.
+-- Owns range/offline alpha for target/focus/pet/boss-style frames. Range checks are expensive
+-- and client-version-dependent, so spell probes, event bitmasks, and settle timers are cached.
 local CreateFrame = _G.CreateFrame
 local C_Timer = _G.C_Timer
 local UnitCanAssist = _G.UnitCanAssist
@@ -42,6 +45,8 @@ local SUPPORTED_UNITS = {
   boss1 = true, boss2 = true, boss3 = true, boss4 = true, boss5 = true,
 }
 
+-- Bitmasks let one driver frame know which unit families need target/focus/pet/boss events
+-- without registering a separate expensive event set for every unitframe.
 local RANGE_UNITS = {
   "target", "targettarget", "focus", "focustarget", "pet",
   "boss1", "boss2", "boss3", "boss4", "boss5",

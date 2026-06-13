@@ -10,6 +10,16 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+--- Shell/Menu2/Assistant/MSUF_AssistantParser.lua
+---
+--- High-level parse pipeline for assistant commands. The many P.* helpers are
+--- loaded from registry/domain parser files; this module orders them from most
+--- specific workflow/geometry matches to broader registry fallback.
+---
+--- New parser work should usually live in the owning domain file and be called
+--- from one of the _ParsePipeline* functions below. Avoid applying settings here:
+--- return a plan/action and let MSUF_Assistant.lua execute it.
+
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
@@ -77,14 +87,11 @@ local AURA_BLACKLIST_PRESETS = P.AURA_BLACKLIST_PRESETS
 local AuraBlacklistScope = P.AuraBlacklistScope
 local AURA_QUICK_PRESETS = P.AURA_QUICK_PRESETS
 local AuraQuickPresetForText = P.AuraQuickPresetForText
-local ParseAuraQuickPreset = P.ParseAuraQuickPreset
 local AuraBlacklistPresetForText = P.AuraBlacklistPresetForText
 local AuraGroupBlacklistScope = P.AuraGroupBlacklistScope
 local AuraGroupBlacklistLane = P.AuraGroupBlacklistLane
 local AuraGroupBlacklistCategoryForText = P.AuraGroupBlacklistCategoryForText
-local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
-local ParseAuraBlacklist = P.ParseAuraBlacklist
 local CopyTextParts = P.CopyTextParts
 local RemoveUnit = P.RemoveUnit
 local CopyTargetsForText = P.CopyTargetsForText
@@ -281,6 +288,9 @@ if not P.InitUnsupportedAuraCommand then
 end
 P.InitUnsupportedAuraCommand()
 
+--- Pipeline order matters. Specific workflows and follow-up answers must win
+--- before broad registry matching, otherwise "yes", copy/profile flows, and
+--- exact assistant keys can be swallowed by generic setting aliases.
 function A._ParsePipelineWorkflow(normalized, raw, ctx)
     return ParseGuidedSetupFollowup(normalized, ctx)
         or A._ParseFollowupAnswer(normalized, ctx)
@@ -299,25 +309,11 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
         or (P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw))
         or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
-        or (P.ParseAuraEditScope and P.ParseAuraEditScope(normalized))
-        or (P.ParseAuraReset and P.ParseAuraReset(normalized))
-        or (P.ParseAuraSettingsView and P.ParseAuraSettingsView(normalized))
-        or ParseAuraQuickPreset(normalized)
-        or ParseAuraGroupCategoryBlacklist(normalized)
-        or ParseAuraBlacklist(normalized, raw)
-        or (P.ParseAuraGeometryShortcut and P.ParseAuraGeometryShortcut(normalized))
         or ParseClassPowerAction(normalized)
         or A._ParseClassPowerPlacementShortcut(normalized)
-        or A._ParseClassPowerWidthModeShortcut(normalized)
         or A._ParseClassPowerColorShortcut(normalized, raw)
         or A._ParseClassPowerDisplayStyleShortcut(normalized)
-        or A._ParseClassPowerFillDirectionShortcut(normalized)
-        or A._ParseClassPowerTextSizeShortcut(normalized)
-        or (A._ParseClassPowerSeparatorShortcut and A._ParseClassPowerSeparatorShortcut(normalized))
-        or A._ParseClassPowerSizeShortcut(normalized)
-        or A._ParseClassPowerGapShortcut(normalized)
         or A._ParseClassPowerBackgroundShortcut(normalized)
-        or A._ParseClassPowerVisibilityShortcut(normalized)
         or A._ParseClassPowerAnchorShortcut(normalized)
         or ParseClassPowerRootToggle(normalized)
         or A._ParseClassPowerMoveShortcut(normalized)
@@ -345,6 +341,9 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or (P.ParseDashboardScaleShortcut and P.ParseDashboardScaleShortcut(normalized))
 end
 
+--- Geometry commands often share words with visual feature commands ("move",
+--- "size", "left", "right"). Keep exact/positional parsers before fallback
+--- setting lookup so directional phrases stay actionable.
 function A._ParsePipelineGeometry(normalized, raw)
     return (P.ParseTextVisibilityShortcut and P.ParseTextVisibilityShortcut(normalized))
         or A._ParseNameTextAnchorShortcut(normalized)
@@ -390,6 +389,9 @@ function A._ParsePipelineGeometry(normalized, raw)
         or ParseUnitOpacityShortcut(normalized)
 end
 
+--- Feature pipeline handles domain toggles and richer actions that are not
+--- pure geometry. It runs after workflow/geometry in A.Parse, then falls back
+--- to generic setting parsing if no domain-specific action matched.
 function A._ParsePipelineFeature(normalized, raw, ctx)
     return ParseClassPowerAction(normalized)
         or ParseGameplayAction(normalized, raw)
@@ -427,8 +429,8 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseReset(normalized)
         or ParseOpen(normalized, raw)
         or ParseFontColorAction(normalized, raw)
-        or ParseSetting(normalized, ctx)
         or ParseRegistryAlias(normalized, raw)
+        or ParseSetting(normalized, ctx)
 end
 
 function A.ParseSimpleChange(text)
@@ -446,8 +448,8 @@ function A.ParseSimpleChange(text)
         or ParseScopedFontTextColorShortcut(normalized, raw)
         or ParseFontColorAction(normalized, raw)
         or ParseColorAction(normalized)
-        or ParseSetting(normalized, ctx)
         or ParseRegistryAlias(normalized, raw)
+        or ParseSetting(normalized, ctx)
     if parsed then
         parsed.raw = raw
         parsed.normalized = normalized

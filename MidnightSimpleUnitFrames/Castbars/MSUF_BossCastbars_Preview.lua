@@ -1,3 +1,10 @@
+--- Castbars/MSUF_BossCastbars_Preview.lua
+--- Edit/menu previews for boss castbars.
+---
+--- Preview frames are non-combat, non-event copies that mirror boss castbar
+--- geometry and styling. They should never subscribe to UNIT_SPELLCAST events;
+--- real boss castbars own live state.
+
 local _ = ...
 
 local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
@@ -55,6 +62,8 @@ local function HideAllBossCastbarPreviews()
     end
 end
 
+--- Create one preview per visible boss unit slot. The preview is intentionally
+--- inert: no cast progression, no event registration, just layout/style.
 local function CreateBossCastbarPreview(index)
     local name = index == 1 and "MSUF_BossCastbarPreview" or ("MSUF_BossCastbarPreview" .. index)
     local existing = _G[name]
@@ -167,6 +176,8 @@ local function ApplyBossCastbarPreviewLayout(preview, index)
     end
 end
 
+--- Positioning mirrors live boss castbar anchoring so edit mode and menu previews
+--- show the same detached vs unit-frame-relative behavior.
 local function PositionBossCastbarPreview(preview, index)
     if not preview then
         return

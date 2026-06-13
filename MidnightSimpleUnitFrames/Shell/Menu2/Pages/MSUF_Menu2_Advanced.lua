@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- AdvancedPage helper module.
+-- Provides shared DB helpers, binding adapters, and layout primitives for advanced option
+-- pages. Keep page-specific controls in their domain files and common glue here.
 local W = M.Widgets
 local T = M.Theme
 

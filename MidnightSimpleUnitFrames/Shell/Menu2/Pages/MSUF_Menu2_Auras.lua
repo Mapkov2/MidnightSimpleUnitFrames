@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Auras page.
+-- Builds controls for Auras3 unit/group scopes, lanes, filters, and visual options. The page
+-- talks to the Auras3 menu model; aura scanning and button pooling remain in Auras3 runtime.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
@@ -403,6 +406,7 @@ end
 local function GFAurasRoot(kind)
     local conf = GroupConf(kind)
     conf.auras = conf.auras or {}
+    if conf.auras.renderer ~= "CUSTOM" then conf.auras.renderer = "CUSTOM" end
     conf.auras.blizzardTypes = conf.auras.blizzardTypes or {}
     conf.auras.buff = conf.auras.buff or {}
     conf.auras.debuff = conf.auras.debuff or {}
@@ -1219,7 +1223,7 @@ local function BuildGroupFilters(ctx, b, scope)
     W.LabelAt(filter, "Filter Type", 16, -72, 90, "GameFontNormalSmall", T.colors.accent)
     BuildLaneTabs(ctx, filter, "auraFilterLane", 112, -68, min(300, w - 180))
     local dropdownW = min(360, max(240, floor((filterW - 48) * 0.55)))
-    BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", lane == "buff" and "RAID" or "ALL", "visual")
+    BindGroupDropdown(ctx, filter, laneText .. " Filter", 16, -142, GroupFilterValues(lane), dropdownW, scope, lane, "filterToken", "ALL", "visual")
     W.Text(filter, "Use category blacklist below to exclude public " .. laneText .. " groups.", 40 + dropdownW, -142, max(220, filterW - dropdownW - 64), T.colors.muted)
 
     local blacklist = Card(section, "Category Blacklist", "Checked categories are hidden for " .. ScopeLabel(scope) .. ".", 24, -304, w - 48, 324)

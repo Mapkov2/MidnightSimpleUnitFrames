@@ -6,6 +6,10 @@ _G.MSUF_NS = MSUF
 MSUF.UF = MSUF.UF or {}
 local UF = MSUF.UF
 
+-- Blizzard unitframe ownership bridge.
+-- Hides or restores Blizzard unit/cast frames according to MSUF settings while respecting
+-- combat lockdown. MSUF frame creation lives elsewhere; this file only manages Blizzard frame
+-- visibility/parenting hooks and compatibility globals.
 local type = type
 local next = next
 local CreateFrame = CreateFrame

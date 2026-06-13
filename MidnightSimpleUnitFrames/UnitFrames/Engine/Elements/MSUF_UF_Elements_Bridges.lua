@@ -6,6 +6,9 @@ _G.MSUF_NS = MSUF
 local UF = MSUF.UF
 local type = type
 
+-- UnitFrame element bridge helpers.
+-- Queues cross-module refreshes from unitframe events into castbar/classpower/aura runtimes
+-- without making those runtimes direct dependencies of every element file.
 local function CastbarUnit(unit)
   if type(unit) == "string" and unit:match("^boss%d+$") then
     return "boss"

@@ -13,6 +13,9 @@ M.Assistant = A
 local Registry = A.Registry or { settings = {}, settingsByKey = {}, actions = {}, actionsByKey = {}, todos = {} }
 A.Registry = Registry
 
+-- Shared helper layer for Assistant registry domains.
+-- Domain files below this one should reuse these DB readers, clamps, aliases, and apply
+-- callbacks so natural-language settings stay consistent with the real Menu2 controls.
 local floor = math.floor
 
 local UNIT_LABELS = {
@@ -265,6 +268,7 @@ end
 local function ApplyDetachedPowerBar(reason)
     CallGlobal("MSUF_DetachedPowerBar_RefreshTextures")
     CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
+    CallGlobal("MSUF_ClassPower_PlayerHP_Refresh")
     ApplyGeneral(reason or "MSUF_ASSISTANT_DETACHED_POWER_BAR", { preview = true, power = true, applyAll = false })
 end
 
@@ -579,6 +583,7 @@ end
 local function GFAurasRoot(scope)
     local conf = GroupDB(scope)
     conf.auras = type(conf.auras) == "table" and conf.auras or {}
+    if conf.auras.renderer ~= "CUSTOM" then conf.auras.renderer = "CUSTOM" end
     conf.auras.blizzardTypes = type(conf.auras.blizzardTypes) == "table" and conf.auras.blizzardTypes or {}
     conf.auras.buff = type(conf.auras.buff) == "table" and conf.auras.buff or {}
     conf.auras.debuff = type(conf.auras.debuff) == "table" and conf.auras.debuff or {}
@@ -595,11 +600,8 @@ end
 local function GFAuraLaneShown(scope, lane)
     lane = lane == "debuff" and "debuff" or "buff"
     local root = GFAurasRoot(scope)
-    local nativeKey = lane == "buff" and "buffs" or "debuffs"
     local group = GFAuraGroup(scope, lane)
-    local blizzardOwns = (root.renderer or "BLIZZARD") ~= "CUSTOM"
-        and (type(root.blizzardTypes) ~= "table" or root.blizzardTypes[nativeKey] ~= false)
-    return root.enabled ~= false and group.enabled ~= false and blizzardOwns ~= true
+    return root.enabled ~= false and group.enabled ~= false
 end
 
 local function SetGFAuraLaneShown(scope, lane, shown)
@@ -886,6 +888,7 @@ local function RegisterGeneralNumberSetting(dbKey, attr, label, defaultValue, mi
         min = minValue,
         max = maxValue,
         step = opts.step or 1,
+        relativeStep = opts.relativeStep,
         percent = opts.percent == true,
         get = function()
             local value = tonumber(GeneralDB()[dbKey])
@@ -1051,6 +1054,8 @@ local function RegisterBarsBoolean(dbKey, attr, label, defaultValue, aliases, op
         attribute = attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
+        valueAliases = opts.valueAliases,
         get = function()
             local value = BarsDB()[dbKey]
             if value == nil then return defaultValue and true or false end
@@ -1085,6 +1090,7 @@ local function RegisterBarsString(dbKey, attr, label, defaultValue, aliases, opt
         attribute = attr,
         type = "string",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         valuePrefixes = opts.valuePrefixes or aliases,
         mediaType = opts.mediaType,
         get = function()
@@ -1120,9 +1126,11 @@ local function RegisterBarsNumber(dbKey, attr, label, defaultValue, minValue, ma
         attribute = attr,
         type = "number",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         min = minValue,
         max = maxValue,
         step = opts.step or 1,
+        relativeStep = opts.relativeStep,
         percent = opts.percent == true,
         get = function()
             local value = tonumber(BarsDB()[dbKey])
@@ -1159,6 +1167,7 @@ local function RegisterBarsEnum(dbKey, attr, label, defaultValue, values, aliase
         attribute = attr,
         type = "enum",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         values = values,
         valueAliases = opts.valueAliases,
         get = function()

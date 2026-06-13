@@ -1,3 +1,9 @@
+--- Kernel/MSUF_Util.lua
+--- Shared pure helpers and compatibility globals used across MSUF.
+---
+--- Keep hotpath-safe helpers here when they are stateless and shared by several
+--- modules. Feature-specific behavior should stay with the owning module.
+
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 

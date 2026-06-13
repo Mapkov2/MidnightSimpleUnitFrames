@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Advanced Colors page.
+-- Binds global color palettes, class/power overrides, aura colors, and border colors. Color
+-- apply is coalesced because one edit may need to refresh several frame families.
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
@@ -58,6 +61,8 @@ local function ValueTextPairs(rows)
 end
 
 local colorApplyQueued = false
+-- Multiple color sliders can fire in one frame while dragging. Queue a single apply so live
+-- frames repaint once per frame instead of per slider event.
 local ColorValueAt
 local function FlushColorApply()
     colorApplyQueued = false

@@ -9,6 +9,9 @@ local T = M.Theme
 local W = M.Widgets or {}
 M.Widgets = W
 
+-- Menu2 dropdown implementation.
+-- Owns the shared popup frame, searchable row rendering, and search registration for dropdown
+-- controls. Page modules should create dropdowns here rather than duplicating popup logic.
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -42,6 +45,8 @@ end
 local dropdownFrame, dropdownScroll, dropdownChild, dropdownOwner, dropdownSlider
 local dropdownClosing, dropdownClosingOwner
 local dropdownRows = {}
+-- One popup instance is reused for all dropdowns. This keeps strata/focus behavior predictable
+-- and avoids leaking row frames as pages are rebuilt.
 local DROPDOWN_ROW_H = 24
 local DROPDOWN_ICON_SIZE = 18
 local DROPDOWN_ICON_LEFT = 10

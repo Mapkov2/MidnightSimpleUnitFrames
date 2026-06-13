@@ -1,5 +1,8 @@
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Auras.lua
 --- Cold-path buff/debuff preview provider for the MSUF2 unit frame preview.
+---
+--- Reads Auras3 menu-model settings and draws fake aura buttons for layout feedback only.
+--- Live aura filtering, scanning, cooldown text, and button pooling stay in Auras3 runtime.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -34,6 +37,8 @@ local AURA_TEXTURES = {
 }
 
 local function MenuModel()
+    -- Prefer the Auras3 module table when loaded, with a global fallback for older load orders
+    -- and test harnesses that inject only the menu model.
     local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
     return type(a3) == "table" and a3.MenuModel or _G.MSUF_Auras3_MenuModel
 end

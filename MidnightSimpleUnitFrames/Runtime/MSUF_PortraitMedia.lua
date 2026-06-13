@@ -1,3 +1,10 @@
+--- Runtime/MSUF_PortraitMedia.lua
+--- Declarative class portrait media catalogue.
+---
+--- Runtime portrait code asks this module for pack options and class-token
+--- visuals. Keep this file data-focused: it should not create frames or apply
+--- portrait layout.
+
 local addonName, MSUF = ...
 
 MSUF.PortraitMedia = MSUF.PortraitMedia or {}

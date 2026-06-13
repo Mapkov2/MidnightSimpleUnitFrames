@@ -1,4 +1,6 @@
 --- Menu2 public globals, slash routing, and combat-hide bridge.
+--- This file is the compatibility facade for older slash/global entry points. Keep it thin:
+--- open/toggle/select calls delegate to Menu2, and combat entry hides the menu safely.
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
@@ -25,6 +27,8 @@ do
     local combatFrame
     local combatRegistered = false
 
+    -- Options UI is not useful once protected combat starts and may try to focus protected
+    -- edit surfaces. Register the listener only while the window/minibar is visible.
     local function MenuVisible()
         local win = M.frame
         local bar = M.minimizedBar

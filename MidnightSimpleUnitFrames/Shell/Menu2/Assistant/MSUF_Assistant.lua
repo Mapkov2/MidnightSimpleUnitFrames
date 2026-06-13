@@ -10,6 +10,16 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+--- Shell/Menu2/Assistant/MSUF_Assistant.lua
+---
+--- Command execution layer for the Menu2 assistant. Parser/Router decide what
+--- the user meant; this file owns job scheduling, combat deferral, confirmations,
+--- choice handling, undo metadata, and the final apply fanout into Menu2/MSUF
+--- runtime systems.
+---
+--- Keep UI mutation and protected-frame work behind the job/combat helpers here.
+--- Parser modules should return plans, not directly change SavedVariables.
+
 local Registry = A.Registry
 
 local function Trim(text)
@@ -184,6 +194,9 @@ end
 local NO_MATCH_RECENT_LIMIT = 80
 local NO_MATCH_COUNT_LIMIT = 200
 
+--- No-match telemetry is product feedback stored in SavedVariables. It helps
+--- tune registry aliases and parser fallbacks without changing the command
+--- execution path for successful matches.
 local function NoMatchStore(create)
     local global = _G.MSUF_GlobalDB
     if type(global) ~= "table" then
@@ -221,6 +234,18 @@ local function NoMatchHasAny(text, words)
     return false
 end
 
+local function NoMatchHasToken(text, tokens)
+    local set = {}
+    for i = 1, #(tokens or {}) do
+        local token = NormalizeNoMatchText(tokens[i])
+        if token ~= "" then set[token] = true end
+    end
+    for token in NormalizeNoMatchText(text):gmatch("%S+") do
+        if set[token] then return true end
+    end
+    return false
+end
+
 local function NoMatchTags(text)
     local tags, seen = {}, {}
     local function add(tag)
@@ -233,7 +258,8 @@ local function NoMatchTags(text)
     if NoMatchHasAny(text, { "copy", "same", "import", "export", "profile", "preset" }) then add("action") end
     if NoMatchHasAny(text, { "anchor", "attach", "cooldownmanager", "cooldown manager", "cdm", "essentialcooldown" }) then add("anchor") end
     if NoMatchHasAny(text, { "player", "target", "focus", "pet", "boss", "party", "raid", "mythic" }) then add("scope") end
-    if NoMatchHasAny(text, { "move", "left", "right", "up", "down", "x ", "y ", "width", "height", "size", "scale", "bigger", "smaller", "wider", "narrower", "taller", "shorter" }) then add("geometry") end
+    if NoMatchHasAny(text, { "x offset", "y offset" })
+        or NoMatchHasToken(text, { "move", "left", "right", "up", "down", "width", "height", "size", "scale", "bigger", "smaller", "wider", "narrower", "taller", "shorter", "x", "y" }) then add("geometry") end
     if NoMatchHasAny(text, { "color", "colour", "red", "green", "blue", "class color", "texture", "font", "sound", "icon" }) then add("media") end
     if NoMatchHasAny(text, { "text", "name", "health", "hp", "power", "mana", "energy", "border", "opacity", "alpha" }) then add("setting") end
     if NoMatchHasAny(text, { "where", "help", "explain", "find", "search", "what is", "how" }) then add("knowledge") end
@@ -288,6 +314,30 @@ local function NoMatchPriority(count, owner)
 end
 
 local NO_MATCH_PRIORITY_WEIGHT = { high = 3, medium = 2, low = 1 }
+
+local function NoMatchEachTag(tagsText, callback)
+    tagsText = tostring(tagsText or "")
+    if tagsText == "" then tagsText = "uncategorized" end
+    local emitted = false
+    for tag in tagsText:gmatch("[^,]+") do
+        tag = NormalizeNoMatchText(tag)
+        if tag ~= "" then
+            emitted = true
+            callback(tag)
+        end
+    end
+    if not emitted then callback("uncategorized") end
+end
+
+local function NoMatchTagsMatch(tagsText, wanted)
+    wanted = NormalizeNoMatchText(wanted)
+    if wanted == "" then return true end
+    local match = false
+    NoMatchEachTag(tagsText, function(tag)
+        if tag == wanted then match = true end
+    end)
+    return match
+end
 
 local function NoMatchScopeTokens()
     local unitAliases = A.UnitAliases or {}
@@ -419,6 +469,35 @@ local function NoMatchLearningPlan(entry)
     return "reproduce phrase '" .. text .. "' and classify as registry alias, action, Knowledge answer, or explicit unsupported response"
 end
 
+local function NoMatchResolution(entry)
+    if InCombat() then return tostring(entry and entry.resolution or "unknown"), tostring(entry and entry.resolvedBy or "") end
+    if type(entry) ~= "table" or type(A.Parse) ~= "function" then return "unresolved", "" end
+    local text = NormalizeNoMatchText(entry.text or "")
+    if text == "" then return "unresolved", "" end
+    if A._noMatchResolutionInProgress then return tostring(entry.resolution or "unknown"), tostring(entry.resolvedBy or "") end
+
+    A._noMatchResolutionInProgress = true
+    local ok, parsed = pcall(A.Parse, text)
+    A._noMatchResolutionInProgress = nil
+    if not ok or type(parsed) ~= "table" then return "unresolved", "" end
+
+    local kind = tostring(parsed.kind or "")
+    local status = tostring(parsed.status or "")
+    if kind == "" or kind == "empty" or kind == "unknown" or kind == "unsupported" or status == "failed" then
+        return "unresolved", kind ~= "" and kind or status
+    end
+    if kind == "ambiguous" then return "needs-clarification", "ambiguous" end
+    if kind == "action" then
+        return "resolved", tostring(parsed.action and parsed.action.key or parsed.label or "action")
+    end
+    if kind == "changes" then
+        local change = parsed.changes and parsed.changes[1]
+        local setting = change and change.setting
+        return "resolved", tostring(setting and setting.key or parsed.label or "changes")
+    end
+    return "resolved", kind
+end
+
 function A.AnalyzeNoMatchText(text)
     local tags = NoMatchTags(NormalizeNoMatchText(text))
     local owner = NoMatchOwnerForTags(tags)
@@ -443,6 +522,7 @@ local function RefreshNoMatchEntry(entry)
     entry.registryCandidates = entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3)
     entry.learningPlan = NoMatchLearningPlan(entry)
     entry.priority = NoMatchPriority(entry.count, entry.owner)
+    entry.resolution, entry.resolvedBy = NoMatchResolution(entry)
     return entry
 end
 
@@ -467,9 +547,10 @@ function A.RecordNoMatch(text, result, source)
     entry.tags = analysis and analysis.tags or nil
     entry.advice = analysis and analysis.advice or nil
     entry.candidate = analysis and analysis.candidate or nil
-    entry.registryCandidates = nil
-    entry.learningPlan = nil
+    entry.registryCandidates = NoMatchRegistryCandidateSummary(key, 3)
+    entry.learningPlan = NoMatchLearningPlan(entry)
     entry.priority = NoMatchPriority(entry.count, entry.owner)
+    entry.resolution, entry.resolvedBy = NoMatchResolution(entry)
     store.total = (tonumber(store.total) or 0) + 1
     store.recent[#store.recent + 1] = {
         text = key,
@@ -480,7 +561,11 @@ function A.RecordNoMatch(text, result, source)
         candidate = entry.candidate,
         registryCandidates = entry.registryCandidates,
         learningPlan = entry.learningPlan,
+        advice = entry.advice,
         priority = entry.priority,
+        resolution = entry.resolution,
+        resolvedBy = entry.resolvedBy,
+        count = entry.count,
         seen = now,
     }
     while #store.recent > NO_MATCH_RECENT_LIMIT do table.remove(store.recent, 1) end
@@ -498,18 +583,34 @@ function A.RecordNoMatch(text, result, source)
     return entry
 end
 
-function A.GetNoMatchReview(limit, ownerFilter)
+function A.GetNoMatchReview(limit, ownerFilter, resolutionFilter, priorityFilter, tagFilter)
     local store = NoMatchStore(false)
-    if not store then return { total = 0, items = {}, ownerCounts = {} } end
+    if not store then return { total = 0, items = {}, ownerCounts = {}, resolutionCounts = {}, priorityCounts = {}, tagCounts = {} } end
     local ownerWanted = tostring(ownerFilter or ""):lower()
+    local resolutionWanted = tostring(resolutionFilter or ""):lower()
+    local priorityWanted = tostring(priorityFilter or ""):lower()
+    local tagWanted = NormalizeNoMatchText(tagFilter or "")
     local items = {}
     local ownerCounts = {}
+    local resolutionCounts = {}
+    local priorityCounts = {}
+    local tagCounts = {}
     for _, entry in pairs(store.counts or {}) do
         entry = RefreshNoMatchEntry(entry)
         if entry then
             local owner = tostring(entry.owner or "parser-or-help")
             ownerCounts[owner] = (ownerCounts[owner] or 0) + 1
-            if ownerWanted == "" or owner:lower() == ownerWanted then
+            local resolution = tostring(entry.resolution or "unknown")
+            resolutionCounts[resolution] = (resolutionCounts[resolution] or 0) + 1
+            local priority = tostring(entry.priority or NoMatchPriority(entry.count, owner) or "low")
+            priorityCounts[priority] = (priorityCounts[priority] or 0) + 1
+            NoMatchEachTag(entry.tags, function(tag)
+                tagCounts[tag] = (tagCounts[tag] or 0) + 1
+            end)
+            if (ownerWanted == "" or owner:lower() == ownerWanted)
+                and (resolutionWanted == "" or resolution:lower() == resolutionWanted)
+                and (priorityWanted == "" or priority:lower() == priorityWanted)
+                and NoMatchTagsMatch(entry.tags, tagWanted) then
                 items[#items + 1] = entry
             end
         end
@@ -531,7 +632,32 @@ function A.GetNoMatchReview(limit, ownerFilter)
         total = tonumber(store.total) or 0,
         items = items,
         ownerCounts = ownerCounts,
+        resolutionCounts = resolutionCounts,
+        priorityCounts = priorityCounts,
+        tagCounts = tagCounts,
     }
+end
+
+local function RefreshNoMatchRecentEntry(entry, counts)
+    if type(entry) ~= "table" then return nil end
+    local text = NormalizeNoMatchText(entry.text or "")
+    if text == "" then return nil end
+    entry.text = text
+    local aggregate = type(counts) == "table" and counts[text] or nil
+    if type(aggregate) == "table" then
+        entry.count = aggregate.count
+        entry.owner = aggregate.owner or entry.owner
+        entry.tags = aggregate.tags or entry.tags
+        entry.advice = aggregate.advice or entry.advice
+        entry.candidate = aggregate.candidate or entry.candidate
+        entry.registryCandidates = aggregate.registryCandidates or entry.registryCandidates
+        entry.learningPlan = aggregate.learningPlan or entry.learningPlan
+        entry.priority = aggregate.priority or entry.priority
+        entry.resolution = aggregate.resolution or entry.resolution
+        entry.resolvedBy = aggregate.resolvedBy or entry.resolvedBy
+    end
+    if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
+    return entry
 end
 
 function A.GetNoMatchTelemetry(limit)
@@ -553,7 +679,10 @@ function A.GetNoMatchTelemetry(limit)
     local recent = {}
     local source = store.recent or {}
     local first = math.max(1, #source - maxTop + 1)
-    for i = first, #source do recent[#recent + 1] = source[i] end
+    for i = first, #source do
+        local entry = RefreshNoMatchRecentEntry(source[i], store.counts)
+        if entry then recent[#recent + 1] = entry end
+    end
     return {
         total = tonumber(store.total) or 0,
         recent = recent,
@@ -585,6 +714,7 @@ local function NoMatchLine(index, entry)
     if source ~= "" then suffix = suffix .. " source=" .. source end
     if status ~= "" then suffix = suffix .. " status=" .. status end
     if owner ~= "" then suffix = suffix .. " owner=" .. owner end
+    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " resolution=" .. tostring(entry.resolution) end
     return tostring(index) .. ". " .. text .. suffix
 end
 
@@ -600,8 +730,11 @@ local function NoMatchHintLine(index, entry)
     local registryCandidates = tostring(entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3) or "")
     entry.registryCandidates = registryCandidates ~= "" and registryCandidates or entry.registryCandidates
     entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
+    if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
     local plan = tostring(entry.learningPlan or "")
     local suffix = registryCandidates ~= "" and (" | settings=" .. registryCandidates) or ""
+    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | resolution=" .. tostring(entry.resolution) end
+    if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | resolvedBy=" .. tostring(entry.resolvedBy) end
     local planSuffix = plan ~= "" and (" | plan=" .. plan) or ""
     return tostring(index) .. ". " .. text .. " -> " .. owner .. " | tags=" .. tags .. " | candidate=" .. candidate .. suffix .. " | next=" .. advice .. planSuffix
 end
@@ -618,8 +751,11 @@ local function NoMatchWorkItemLine(index, entry)
     local registryCandidates = tostring(entry.registryCandidates or NoMatchRegistryCandidateSummary(text, 3) or "")
     entry.registryCandidates = registryCandidates ~= "" and registryCandidates or entry.registryCandidates
     entry.learningPlan = entry.learningPlan or NoMatchLearningPlan(entry)
+    if not entry.resolution then entry.resolution, entry.resolvedBy = NoMatchResolution(entry) end
     local plan = tostring(entry.learningPlan or "")
     local suffix = registryCandidates ~= "" and (" | settings=" .. registryCandidates) or ""
+    if tostring(entry.resolution or "") ~= "" then suffix = suffix .. " | resolution=" .. tostring(entry.resolution) end
+    if tostring(entry.resolvedBy or "") ~= "" then suffix = suffix .. " | resolvedBy=" .. tostring(entry.resolvedBy) end
     local planSuffix = plan ~= "" and (" | plan=" .. plan) or ""
     return tostring(index) .. ". [" .. priority .. "] " .. text .. " x" .. tostring(count) .. " -> " .. candidate .. " | owner=" .. owner .. suffix .. " | next=" .. advice .. planSuffix
 end
@@ -640,6 +776,58 @@ local function NoMatchOwnerSummary(ownerCounts)
     return #parts > 0 and table.concat(parts, ", ") or "none"
 end
 
+local function NoMatchResolutionSummary(resolutionCounts)
+    local order = { "resolved", "needs-clarification", "unresolved", "unknown" }
+    local parts = {}
+    local seen = {}
+    for i = 1, #order do
+        local key = order[i]
+        seen[key] = true
+        if tonumber(resolutionCounts and resolutionCounts[key]) then
+            parts[#parts + 1] = key .. "=" .. tostring(tonumber(resolutionCounts[key]) or 0)
+        end
+    end
+    for key, count in pairs(resolutionCounts or {}) do
+        key = tostring(key)
+        if not seen[key] then parts[#parts + 1] = key .. "=" .. tostring(tonumber(count) or 0) end
+    end
+    return #parts > 0 and table.concat(parts, ", ") or "none"
+end
+
+local function NoMatchPrioritySummary(priorityCounts)
+    local order = { "high", "medium", "low" }
+    local parts = {}
+    local seen = {}
+    for i = 1, #order do
+        local key = order[i]
+        seen[key] = true
+        if tonumber(priorityCounts and priorityCounts[key]) then
+            parts[#parts + 1] = key .. "=" .. tostring(tonumber(priorityCounts[key]) or 0)
+        end
+    end
+    for key, count in pairs(priorityCounts or {}) do
+        key = tostring(key)
+        if not seen[key] then parts[#parts + 1] = key .. "=" .. tostring(tonumber(count) or 0) end
+    end
+    return #parts > 0 and table.concat(parts, ", ") or "none"
+end
+
+local function NoMatchTagSummary(tagCounts)
+    local tags = {}
+    for tag, count in pairs(tagCounts or {}) do
+        tags[#tags + 1] = { tag = tostring(tag), count = tonumber(count) or 0 }
+    end
+    table.sort(tags, function(a, b)
+        if a.count ~= b.count then return a.count > b.count end
+        return a.tag < b.tag
+    end)
+    local parts = {}
+    for i = 1, #tags do
+        parts[#parts + 1] = tags[i].tag .. "=" .. tostring(tags[i].count)
+    end
+    return #parts > 0 and table.concat(parts, ", ") or "none"
+end
+
 local function NoMatchTSVLine(entry)
     local function clean(value)
         value = tostring(value or "")
@@ -656,18 +844,32 @@ local function NoMatchTSVLine(entry)
         clean(entry.advice or NoMatchAdvice(entry.owner)),
         clean(entry.registryCandidates or NoMatchRegistryCandidateSummary(entry.text or "", 3) or ""),
         clean(entry.learningPlan or NoMatchLearningPlan(entry)),
+        clean(entry.resolution or ""),
+        clean(entry.resolvedBy or ""),
     }, "\t")
 end
 
-function A.NoMatchWorklistText(limit, ownerFilter)
-    local data = A.GetNoMatchReview and A.GetNoMatchReview(limit or 20, ownerFilter) or { total = 0, items = {}, ownerCounts = {} }
+function A.NoMatchWorklistText(limit, ownerFilter, resolutionFilter, priorityFilter, tagFilter)
+    local data = A.GetNoMatchReview and A.GetNoMatchReview(limit or 20, ownerFilter, resolutionFilter, priorityFilter, tagFilter) or { total = 0, items = {}, ownerCounts = {}, resolutionCounts = {}, priorityCounts = {}, tagCounts = {} }
     local lines = {}
     lines[#lines + 1] = "Assistant NoMatch worklist:"
     lines[#lines + 1] = "- Total recorded: " .. tostring(tonumber(data.total) or 0)
     lines[#lines + 1] = "- Review items shown: " .. tostring(#(data.items or {}))
     lines[#lines + 1] = "- Owners: " .. NoMatchOwnerSummary(data.ownerCounts)
+    lines[#lines + 1] = "- Resolution: " .. NoMatchResolutionSummary(data.resolutionCounts)
+    lines[#lines + 1] = "- Priorities: " .. NoMatchPrioritySummary(data.priorityCounts)
+    lines[#lines + 1] = "- Tags: " .. NoMatchTagSummary(data.tagCounts)
     if ownerFilter and tostring(ownerFilter) ~= "" then
         lines[#lines + 1] = "- Filter: " .. tostring(ownerFilter)
+    end
+    if resolutionFilter and tostring(resolutionFilter) ~= "" then
+        lines[#lines + 1] = "- Resolution filter: " .. tostring(resolutionFilter)
+    end
+    if priorityFilter and tostring(priorityFilter) ~= "" then
+        lines[#lines + 1] = "- Priority filter: " .. tostring(priorityFilter)
+    end
+    if tagFilter and tostring(tagFilter) ~= "" then
+        lines[#lines + 1] = "- Tag filter: " .. tostring(tagFilter)
     end
     if (tonumber(data.total) or 0) <= 0 or #(data.items or {}) == 0 then
         lines[#lines + 1] = ""
@@ -694,7 +896,7 @@ function A.NoMatchWorklistText(limit, ownerFilter)
 
     lines[#lines + 1] = ""
     lines[#lines + 1] = "TSV for alias review:"
-    lines[#lines + 1] = "priority\tcount\towner\ttags\tcandidate\tphrase\tnext\tregistryCandidates\tlearningPlan"
+    lines[#lines + 1] = "priority\tcount\towner\ttags\tcandidate\tphrase\tnext\tregistryCandidates\tlearningPlan\tresolution\tresolvedBy"
     for i = 1, #(data.items or {}) do
         lines[#lines + 1] = NoMatchTSVLine(data.items[i])
     end
@@ -745,9 +947,22 @@ function A.NoMatchTelemetryText(limit)
         if type(entry) == "table" and tostring(entry.text or "") ~= "" then
             local source = tostring(entry.source or "")
             local status = tostring(entry.status or "")
+            local owner = tostring(entry.owner or "")
+            local priority = tostring(entry.priority or "")
+            local registryCandidates = tostring(entry.registryCandidates or "")
+            local learningPlan = tostring(entry.learningPlan or "")
+            local resolution = tostring(entry.resolution or "")
+            local resolvedBy = tostring(entry.resolvedBy or "")
             local suffix = ""
+            if tonumber(entry.count) then suffix = suffix .. " count=" .. tostring(tonumber(entry.count) or 0) end
             if source ~= "" then suffix = suffix .. " source=" .. source end
             if status ~= "" then suffix = suffix .. " status=" .. status end
+            if owner ~= "" then suffix = suffix .. " owner=" .. owner end
+            if priority ~= "" then suffix = suffix .. " priority=" .. priority end
+            if registryCandidates ~= "" then suffix = suffix .. " settings=" .. registryCandidates end
+            if resolution ~= "" then suffix = suffix .. " resolution=" .. resolution end
+            if resolvedBy ~= "" then suffix = suffix .. " resolvedBy=" .. resolvedBy end
+            if learningPlan ~= "" then suffix = suffix .. " plan=" .. learningPlan end
             lines[#lines + 1] = tostring(i) .. ". " .. tostring(entry.text) .. suffix
         end
     end
@@ -760,6 +975,9 @@ end
 local ScheduleJobPump
 local combatResumeFrame
 
+--- Assistant jobs are sliced across frames and paused in combat. The assistant
+--- can build large indexes or apply multiple changes, but protected UI work must
+--- resume only after PLAYER_REGEN_ENABLED.
 local function EnsureCombatResumeFrame()
     if combatResumeFrame then return combatResumeFrame end
     if type(_G.CreateFrame) ~= "function" then return nil end
@@ -1172,6 +1390,8 @@ local function CurrentPendingChoices()
     return nil
 end
 
+--- Plans are declarative until this section. Confirmation and combat checks
+--- happen before ExecuteChanges/ExecuteAction mutates SavedVariables or live UI.
 local function AnyCombatUnsafe(plan)
     if type(plan) ~= "table" then return false end
     if plan.kind == "action" then
@@ -1899,6 +2119,9 @@ local BATCH_COMMAND_STARTERS = {
     "oeffne", "waehle", "nutze",
 }
 
+--- Batch parsing lets one input fan out into multiple normal assistant commands.
+--- It inherits obvious verbs across fragments but only executes after each part
+--- goes through the same parser/confirmation path as a single command.
 local function NormalizeForBatch(text)
     if A.Normalize then return A.Normalize(text) end
     text = tostring(text or ""):lower():gsub("[,;:!?%(%)]", " "):gsub("%s+", " ")

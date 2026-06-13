@@ -1,4 +1,6 @@
---- MSUF_EditMode_CastPopup.lua - Menu2-style quick castbar bounds popup
+--- MSUF_EditMode_CastPopup.lua - Menu2-style quick castbar bounds popup.
+--- This is an edit-mode convenience surface for changing castbar bounds. It writes through
+--- existing castbar DB/reanchor helpers and must respect combat-safe mover sync.
 
 local addonName, MSUF = ...
 local EM2 = _G.MSUF_EM2

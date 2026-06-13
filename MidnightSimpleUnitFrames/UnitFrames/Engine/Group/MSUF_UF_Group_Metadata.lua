@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Metadata.lua
+--- Dirty-mask metadata for group-frame refreshes.
+---
+--- Runtime uses these masks to decide whether an option change can refresh a
+--- subset of UF elements or must rebuild secure headers. Keep the masks aligned
+--- with element names registered by the group Config/Visuals/Status modules.
+
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}

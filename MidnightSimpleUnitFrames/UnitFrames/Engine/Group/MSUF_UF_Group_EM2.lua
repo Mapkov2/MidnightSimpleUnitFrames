@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_EM2.lua
+--- EditMode v2 integration for group frames.
+---
+--- This file owns mover containers, edit-mode preview visibility, drag-to-save
+--- position updates, quick popup controls, and hooks that keep EM2 in sync after
+--- runtime header changes. It should not implement live group-frame rendering.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
@@ -136,6 +143,8 @@ local function RuntimeAnchor(kind)
   return nil
 end
 
+--- When the active group kind is live, prefer the runtime secure header anchor
+--- instead of a fake preview anchor so dragging edits the actual saved position.
 local function EnsureRuntimeAnchor(kind)
   kind = NormalizeKind(kind)
   if not (kind and UsesRuntimeAnchor(kind)) then return nil end
@@ -414,6 +423,8 @@ local function PositionLogicalPreviewAnchor(kind, conf, totalW, totalH)
   return anchor
 end
 
+--- Synchronize one EM2 mover to either live runtime bounds or preview bounds.
+--- This keeps edit handles stable while the underlying group frame changes size.
 local function SyncContainer(kind)
   kind = NormalizeKind(kind)
   if not kind then return nil end
@@ -550,6 +561,8 @@ local function RefreshGFPositionUI(kind)
   if EM2.HUD and EM2.HUD.RefreshUnitSelector then EM2.HUD.RefreshUnitSelector() end
 end
 
+--- Drag writes are blocked by combat lock rules and saved at drag end so mouse
+--- movement does not spam profile writes.
 local function BeginGroupDrag(frame, kind, source)
   kind = NormalizeKind(kind)
   local key = kind and KIND_TO_KEY[kind]
@@ -638,6 +651,8 @@ local function WirePreviewMouse(kind)
   end
 end
 
+--- EM2 preview mode shows logical group previews without subscribing them to
+--- roster or secure header events.
 local function ShowPreviewOnly()
   local gf = GF()
   if not gf then return end
@@ -931,6 +946,8 @@ local function InstallHUDToggle()
   end
 end
 
+--- Runtime hooks refresh EM2 movers after GF rebuild/refresh paths mutate header
+--- anchors. Keep these hooks idempotent; EM2 can load before or after GF runtime.
 local function InstallRuntimeHooks()
   local gf = GF()
   if not gf or gf._msufEM2BridgeHooked then return end

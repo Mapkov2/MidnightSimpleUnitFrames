@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- GlobalPage helper module.
+-- Provides DB readers/writers, scope override helpers, and apply fanout used by the global
+-- fonts/bars/castbars/misc pages. Page files should reuse these helpers for consistent state.
 local W = M.Widgets
 local T = M.Theme
 local VTR = M.ValueTextRows

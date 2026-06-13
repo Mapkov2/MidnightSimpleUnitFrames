@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Unit text section.
+-- Builds name/HP/power text controls and edit-mode focus hooks. Text rendering, event
+-- registration, and cached font-string updates belong to UFText runtime modules.
 local W = M.Widgets or {}
 local T = M.Theme or {}
 local UP = M.UnitPage or {}
@@ -14,7 +17,7 @@ local floor = math.floor
 local max = math.max
 local VT = M.ValueTextList
 
-local TEXT_ANCHORS, HP_MODES, POWER_MODES, SEPARATORS, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadStatusBool, SetControlEnabled, ReadText, SetText = M.Pick(UP, [[TEXT_ANCHORS HP_MODES POWER_MODES SEPARATORS GetConf GetGeneral Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadStatusBool SetControlEnabled ReadText SetText]])
+local TEXT_ANCHORS, HP_MODES, POWER_MODES, SEPARATORS, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadStatusBool, SetControlEnabled, ReadText, SetText, IsPlayerPowerManagedByClassResources = M.Pick(UP, [[TEXT_ANCHORS HP_MODES POWER_MODES SEPARATORS GetConf GetGeneral Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadStatusBool SetControlEnabled ReadText SetText IsPlayerPowerManagedByClassResources]])
 TEXT_ANCHORS = TEXT_ANCHORS or {}
 HP_MODES = HP_MODES or {}
 POWER_MODES = POWER_MODES or {}
@@ -24,6 +27,8 @@ local function BuildText(ctx, builder, unit)
     local sec = builder:CollapsibleSection("text", "Text", 620, false)
     sec._msuf2CollapsibleBadgesOnlyWhenOpen = true
     do
+        -- Edit Mode can request that Menu2 opens directly on the text section/component the
+        -- user clicked. Consume that request visually without changing any text settings.
         local req = _G.MSUF_EM2_MenuFocusRequest
         if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit and (req.component == "name" or req.component == "hp" or req.component == "power") then
             _G.MSUF_EM2_MenuFocusSection = sec
@@ -312,6 +317,14 @@ local function BuildText(ctx, builder, unit)
                 { text = "X " .. BadgeNumber(ReadNumber(unit, "hpOffsetX", -4)) .. "  Y " .. BadgeNumber(ReadNumber(unit, "hpOffsetY", -4)), kind = hpOn and "accent" or "muted" },
             })
         elseif tab == "power" then
+            if IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) then
+                W.SetCollapsibleBadges(sec, {
+                    { text = "Managed", kind = "accent" },
+                    { text = "Class Resources", kind = "info" },
+                    { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
+                })
+                return
+            end
             W.SetCollapsibleBadges(sec, {
                 { text = powerOn and "Shown" or "Hidden", kind = powerOn and "ok" or "muted" },
                 { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
@@ -581,6 +594,16 @@ local function BuildText(ctx, builder, unit)
     })
     local showPowerText, pLeft, pCenter, pRight, pSep, pX, pY, pMoveTogether, pSlot, pSlotX, pSlotY, pSize =
         powerControls.show, powerControls.left, powerControls.center, powerControls.right, powerControls.separator, powerControls.x, powerControls.y, powerControls.moveTogether, powerControls.slot, powerControls.slotX, powerControls.slotY, powerControls.size
+    local powerManagedNotice, powerManagedNoticeButton
+    if UnitSectionShared.CreateSectionNotice then
+        local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -470, "Class Resources", 126)
+        powerManagedNotice, powerManagedNoticeButton = notice, button
+    end
+    if powerManagedNoticeButton then
+        powerManagedNoticeButton:SetScript("OnClick", function()
+            if type(M.SelectPage) == "function" then M.SelectPage("classpower") end
+        end)
+    end
 
     local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
 
@@ -645,6 +668,7 @@ local function BuildText(ctx, builder, unit)
         local nameOn = ReadBool(unit, "showName", true)
         local hpOn = ReadBool(unit, "showHP", true)
         local powerOn = ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
+        local powerManaged = IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
         if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         SetControlEnabled(showNameText, true)
@@ -655,6 +679,16 @@ local function BuildText(ctx, builder, unit)
         SetControlEnabled(showPowerText, true)
         EnableControls(powerOn, pLeft, pCenter, pRight, pSep, pSize, pX, pY, pMoveTogether, advPowerLayer)
         EnableControls(powerOn and not MoveTogether("power"), pSlot, pSlotX, pSlotY)
+        if powerManaged then
+            SetControlEnabled(showPowerText, false)
+            EnableControls(false, pLeft, pCenter, pRight, pSep, pSize, pX, pY, pMoveTogether, pSlot, pSlotX, pSlotY, advPowerLayer)
+            if powerManagedNotice then
+                powerManagedNotice:SetMessage("Player power text is managed in Class Resources because the detached power bar is connected there.", "warning")
+                powerManagedNotice:Show()
+            end
+        elseif powerManagedNotice then
+            powerManagedNotice:Hide()
+        end
         FocusActivePreviewText()
     end
     M.SetCollapsibleRefreshState(sec, RefreshTextControlState)

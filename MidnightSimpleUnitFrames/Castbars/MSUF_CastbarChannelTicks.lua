@@ -1,3 +1,6 @@
+-- Player channel tick marker support.
+-- Adds optional haste/channel tick markers to the player castbar using existing DB fields.
+-- This augments castbar visuals only; cast/channel state remains in the shared runtime.
 local DEFAULT_TICK_COUNT = 5
 local MAX_TICK_COUNT = 10
 

@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Advanced Profiles page.
+-- Builds profile copy/import/export/spec-switch controls and Wago/UUF import affordances.
+-- Actual profile mutation stays in State/MSUF_Profiles.lua and import helpers.
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}

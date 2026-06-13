@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Group indicators page.
+-- Builds party/raid status icon, placed indicator, frame effect, and spell-indicator controls.
+-- Runtime indicator dispatch and aura scanning remain in the GroupFrames engine.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
@@ -24,6 +27,8 @@ OptionText = OptionText or M.OptionText
 
 
 local function IconPackValues()
+    -- Icon pack options come from the group runtime when available, with a small fallback for
+    -- early load or test contexts where the runtime has not registered styles yet.
     local gf = GF()
     if gf and type(gf.GetIconStyleItems) == "function" then
         return gf.GetIconStyleItems(true)

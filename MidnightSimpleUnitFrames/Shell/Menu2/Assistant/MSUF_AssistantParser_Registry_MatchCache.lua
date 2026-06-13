@@ -13,6 +13,9 @@ M.Assistant = A
 local P = A.Parser or {}
 A.Parser = P
 
+-- Bounded score cache for registry matching.
+-- The assistant scores many settings against the same text; caching keeps typing responsive
+-- while avoiding persistent growth from long pasted messages.
 local CACHE_LIMIT = 4096
 
 local function CacheKey(setting, text)

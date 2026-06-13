@@ -17,6 +17,9 @@ if not (Registry and type(Registry.RegisterAction) == "function") then return en
 A.Workflow = A.Workflow or {}
 A.Workflow.Lifecycle = A.Workflow.Lifecycle or {}
 
+-- Multi-step workflow registry.
+-- These actions hold transient assistant state for guided setup/copy flows. They may call
+-- unit/group apply helpers, but should keep confirmation and cancellation explicit.
 local UnitDB = C.UnitDB or function() return {} end
 local GroupDB = C.GroupDB or function() return {} end
 local ApplyUnit = C.ApplyUnit or function() end

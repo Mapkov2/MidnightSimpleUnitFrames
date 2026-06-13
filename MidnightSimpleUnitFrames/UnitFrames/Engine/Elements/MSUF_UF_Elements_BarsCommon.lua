@@ -46,6 +46,9 @@ local IsNil = Secrets.IsNil or function(value) return value == nil end
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local SafeNumber = Secrets.SafeNumber or tonumber
 
+-- Shared bar/text primitives for unitframe elements.
+-- Health, power, text, color, and smoothing helpers live here so element files can share the
+-- same secret-value handling and cached mutation rules instead of diverging per unit type.
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local SCALE_100 = _G.CurveConstants and _G.CurveConstants.ScaleTo100
 local REVERSE_HEALTH_MODE = {
@@ -63,6 +66,8 @@ local EMPTY_EVENTS = {}
 local POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local POWER_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 local TEXT_EVENT_SETS = {
+  -- Event sets are deliberately prebuilt tables. The dispatcher stores references to these
+  -- tables and should not allocate new event arrays every time a text mode changes.
   [0] = EMPTY_EVENTS,
   [1] = { "UNIT_NAME_UPDATE" },
   [2] = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT_FLAGS", "UNIT_CONNECTION", "UNIT_CLASSIFICATION_CHANGED" },

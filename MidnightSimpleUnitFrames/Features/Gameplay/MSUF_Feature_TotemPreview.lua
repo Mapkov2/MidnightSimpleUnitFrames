@@ -2,6 +2,9 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local S = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
 
+-- Blizzard totem/statue preview controller.
+-- Lets edit mode display and move Blizzard's totem-style frame without taking ownership of
+-- the live Blizzard frame during combat. Saved offsets flow through gameplay config helpers.
 local CreateFrame = CreateFrame
 local UIParent = UIParent
 local UnitClass = UnitClass

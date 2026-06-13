@@ -6,6 +6,9 @@ _G.MSUF_NS = MSUF
 local C = MSUF.UFBarTextCommon
 if not C then return end
 
+-- UF text common export shim.
+-- Pulls the shared bar/text helper bundle into local symbols for legacy split modules. Keep
+-- behavioral changes in MSUF_UF_Elements_BarsCommon.lua so the text runtime stays consistent.
 local UF = C.UF
 local CreateFrame = C.CreateFrame
 local UnitClass = C.UnitClass

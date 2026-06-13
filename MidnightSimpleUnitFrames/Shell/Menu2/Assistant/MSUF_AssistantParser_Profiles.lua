@@ -13,6 +13,11 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+
+-- Profile parser shard.
+-- Profile names are user-authored text, so helpers here preserve raw fragments where needed
+-- and only normalize the command scaffolding around them. The parser stages profile actions;
+-- actual import/export/copy writes remain in the profile/runtime layer.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase

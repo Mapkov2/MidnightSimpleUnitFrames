@@ -15,6 +15,9 @@ if not (Registry and type(Registry.RegisterAction) == "function") then return en
 
 A.Workflow = A.Workflow or {}
 
+-- Dashboard assistant actions.
+-- Unlike pure setting domains, this file owns small dashboard workflow flags. Keep writes
+-- limited to dashboard state and route visible UI refresh through Menu2 helpers.
 local function ActiveProfileName()
     local name = tostring(_G.MSUF_ActiveProfile or "Default")
     if name == "" then return "Default" end
@@ -22,6 +25,8 @@ local function ActiveProfileName()
 end
 
 function A.Workflow.DashboardState()
+    -- Dashboard state lives in the global DB because it describes UI guidance/recovery
+    -- progress, not the active profile's unitframe layout.
     _G.MSUF_GlobalDB = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {}
     _G.MSUF_GlobalDB.global = type(_G.MSUF_GlobalDB.global) == "table" and _G.MSUF_GlobalDB.global or {}
     _G.MSUF_GlobalDB.global.dashboard = type(_G.MSUF_GlobalDB.global.dashboard) == "table" and _G.MSUF_GlobalDB.global.dashboard or {}

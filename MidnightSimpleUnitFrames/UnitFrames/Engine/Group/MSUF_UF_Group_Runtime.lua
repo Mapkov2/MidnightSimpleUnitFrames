@@ -1,3 +1,11 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Runtime.lua
+--- Runtime coordinator for party/raid/mythicraid frames.
+---
+--- This file owns roster/zone events, combat deferral, header visibility,
+--- rebuild-vs-refresh decisions, and public GF.Refresh* bridge functions. The
+--- actual secure header setup lives in Headers, per-child tracking in Adapter,
+--- and visual/status work in registered UF elements.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -168,6 +176,8 @@ local function AddPendingRefresh(kind, mask)
 end
 
 function GF.DeferGroupRuntime(reason, kind, mask)
+  -- Group headers are secure/protected. Any refresh that could move, create, or
+  -- rebind children while in combat is reduced to flags and replayed on regen.
   reason = reason or "refresh"
   GF._pendingGroupRuntime = reason
   if reason == "roster" or reason == "zone" then
@@ -602,6 +612,9 @@ local function PreviewSuppressesHeader(key)
   return false
 end
 
+--- Show/retire headers based on current group state and preview ownership.
+--- This is separate from RebuildAll so menu preview toggles can hide headers
+--- without forcing a full spec drop.
 function GF.UpdateGroupVisibility()
   if InCombat() then
     GF.DeferGroupRuntime("visibility")
@@ -648,6 +661,8 @@ function GF.UpdateGroupVisibility()
   return true
 end
 
+--- Full structural pass: rebuild secure headers, drop compiled specs when
+--- needed, bump Auras3 config, and refresh Blizzard ownership.
 function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
   if InCombat() then
     GF.DeferGroupRuntime("rebuild")
@@ -696,6 +711,8 @@ function GF.RebuildAll(preInvalidated, auras3ConfigBumped)
   return true
 end
 
+--- Warm visual refresh. Dirty masks let option changes touch only affected
+--- runtime elements instead of reapplying every group-frame element.
 function GF.RefreshVisuals(kind, mask, preInvalidated, auras3ConfigBumped)
   if InCombat() then
     GF.DeferGroupRuntime("refresh", kind, mask)
@@ -780,6 +797,8 @@ function GF.EM2_NudgePreview(key, dx, dy)
   return true
 end
 
+--- Collapse multiple deferred requests into one post-combat action set. Roster
+--- changes win over simple visual refreshes because unit identity can change.
 local function TakePendingGroupRuntime(rosterChanged)
   local pending = GF._pendingGroupRuntime
   local rebuild = GF._pendingGroupRebuild == true
@@ -840,6 +859,8 @@ local function FlushPendingGroupRuntime(rosterChanged)
   return true
 end
 
+--- Central event router for group runtime. Keep event-specific decisions here so
+--- Headers/Adapter/Visuals stay callable from explicit refresh paths too.
 local function OnEvent(self, event, ...)
   if event == "PLAYER_REGEN_ENABLED" then
     _G.MSUF_InCombat = false

@@ -1,6 +1,11 @@
---- Core/MSUF_BarBackgroundRuntime.lua
+--- Runtime/MSUF_BarBackgroundRuntime.lua
 --- Runtime bar background tint/texture handling.
 --- Shared bar-background runtime helpers with stable exported globals.
+---
+--- This file applies background color/texture policy to existing health, power,
+--- and detached bars. Texture/key resolution is shared with TextureRuntime and
+--- callers should use the exported helpers instead of repainting backgrounds
+--- directly.
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -12,6 +17,8 @@ local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.Unit
 local issecretvalue = _G.issecretvalue
 
 do
+    --- Legacy compatibility anchor for profiles that referenced an older
+    --- cooldown-viewer frame as an external anchor target.
     local LEGACY_CDM_ANCHOR = "EssentialCooldownViewer_MSA_Container"
 
     local function _CompatCharKey()

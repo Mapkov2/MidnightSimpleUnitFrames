@@ -1,3 +1,11 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Status.lua
+--- Group-frame status indicator runtime.
+---
+--- Status icons/text share the generic UF status runtime, but group frames need
+--- extra dispatch for raid markers, leader/assist, ready checks, summons,
+--- phase, incoming res, PVP, AFK/DND, and raid group labels. This file compiles
+--- those event needs and updates only the affected status regions.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -50,6 +58,8 @@ local IsUnitToken = UF.IsUnitToken
 local ReadConnectedCached = UF.ReadConnectedCached
 local ReadDeadCached = UF.ReadDeadCached
 
+--- Status runtime may load before or after this file depending on addon order.
+--- Bind lazily so Apply/Update can recover once the shared runtime exists.
 local function BindStatusRuntime()
   statusRuntime = MSUF.UFStatusRuntime or statusRuntime
   if not statusRuntime then return false end
@@ -178,6 +188,8 @@ local function StatusTextConnectionKey(frame, cfg)
   return key
 end
 
+--- Status text can be expensive because it combines connection, dead, ghost,
+--- AFK, and DND flags. Build compact keys and skip repainting unchanged text.
 local function StatusTextChanged(frame, status, event)
   local cfg = status and status.statusText
   if not (cfg and cfg.enabled == true) then return true end
@@ -243,6 +255,8 @@ local function RunStatusApply(frame, status, event)
   end
 end
 
+--- Convert a compiled status config into a small dispatch table so Update can
+--- run the exact functions relevant for the incoming event.
 local function CompileStatusDispatch(status)
   local dispatch = status and status.runtimeDispatch
   if dispatch then
@@ -415,6 +429,8 @@ local function ClearUnitlessRegistration(frame)
   frame._msufGFStatusUnitlessMap = nil
 end
 
+--- Some status changes are unitless Blizzard events. Register those through one
+--- shared driver instead of every frame having its own event frame.
 local function SetUnitlessRegistration(frame, status)
   if not frame then
     return

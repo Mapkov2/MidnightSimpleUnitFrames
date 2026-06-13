@@ -1,6 +1,9 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
+-- Rounded bar mask/edge runtime.
+-- Adds optional mask textures and edge overlays to MSUF bars while respecting combat lockdown:
+-- existing regions can be updated in combat, but new rounded regions are deferred.
 local MASK_ROOT = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local MASK_PATH = MASK_ROOT .. "rounded_bar_4x.tga"
 local MASK_PATH_1X = MASK_ROOT .. "rounded_bar_1x.tga"
@@ -51,6 +54,8 @@ local function DeferApply()
 end
 
 local function CanCreateRoundedRegion(existing)
+  -- Creating new regions during combat can taint protected layouts. Existing regions are safe
+  -- to recolor/reanchor; missing regions wait for the next non-combat apply.
   if existing then return true end
   if IsCombatLocked() then
     DeferApply()

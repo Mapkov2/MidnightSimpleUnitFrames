@@ -1,3 +1,11 @@
+--- Castbars/MSUF_CastbarRuntime.lua
+--- Applies normalized cast-state to visible castbar frames.
+---
+--- Runtime is the shared mutation layer: timer duration, reverse fill, icon/text,
+--- registration with the castbar manager, interrupt visuals, and stop cleanup all
+--- pass through here. Keep API reads in Engine/Driver and keep static frame
+--- construction in Frames.
+
 local _, ns = ...
 ns = ns or {}
 
@@ -36,6 +44,8 @@ local function Now()
     return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 end
 
+--- Dragonflight+ APIs may return value wrappers. Convert only to plain scalars
+--- here so the rest of Runtime can compare and cache safely.
 local function PlainNumber(value)
     if value == nil then
         return nil
@@ -104,6 +114,9 @@ local function ResolveReverseFill(frame, state, isChanneled)
     return false
 end
 
+--- Prefer Blizzard's StatusBar timer object when available. That lets the
+--- client drive smooth progress while MSUF only updates text/glow at its own
+--- managed cadence.
 function Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
     if not statusBar then
         return false
@@ -133,6 +146,9 @@ function Runtime:ClearTimer()
     return false
 end
 
+--- Snapshot duration into plain numbers for fallback text updates and manager
+--- buckets. The duration object remains authoritative when the client supports
+--- timer-driven StatusBars.
 function Runtime:SnapshotDuration(frame, durationObj)
     if not (frame and durationObj) then
         return nil, nil
@@ -165,6 +181,9 @@ function Runtime:SnapshotDuration(frame, durationObj)
     return remaining, total
 end
 
+--- Shared active-cast entry used by both readable and legacy driver paths.
+--- Options allow callers to skip work they already performed, but the default
+--- path fully updates visuals and registers the frame with the manager.
 function Runtime:ApplyActive(frame, state, options)
     if not (frame and state and state.active == true) then
         return false
@@ -260,6 +279,8 @@ function Runtime:ApplyActive(frame, state, options)
     return true
 end
 
+--- Interrupt feedback is a short-lived visual hold, not an active cast. It uses
+--- the same frame so range alpha, outlines, and kick-ready state remain aligned.
 function Runtime:ApplyInterrupt(frame, options)
     if not frame then
         return
@@ -314,6 +335,8 @@ function Runtime:ApplyInterrupt(frame, options)
     end
 end
 
+--- Stop cleanup must be centralized because casts can end through normal stop,
+--- fail, interrupt, hard hide, unit death, backend disable, or preview teardown.
 function Runtime:Stop(frame, reasonOrOptions)
     if not frame then
         return
@@ -423,6 +446,8 @@ function Runtime:BuildState(unit, previousState)
     return nil
 end
 
+--- Compatibility globals for older castbar files. New code should call Runtime
+--- methods through ns when possible, but these exports keep load order flexible.
 _G.MSUF_ApplyTimerAndFill = function(statusBar, durationObj, reverseFill, isChanneled)
     return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
 end

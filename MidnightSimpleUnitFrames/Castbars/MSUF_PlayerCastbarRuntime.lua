@@ -1,3 +1,11 @@
+--- Castbars/MSUF_PlayerCastbarRuntime.lua
+--- Legacy/minified player castbar runtime.
+---
+--- Player is special because it supports vehicle casts, latency display,
+--- empower stages, interrupt feedback, channel haste markers, and optional
+--- Blizzard backend ownership. Keep new shared behavior in Engine/Runtime/Style
+--- when possible; edits here should be narrowly scoped and syntax-checked.
+
 local s=_G.MSUF_EnsureDBLazy or function()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end
 end local l=_G.MSUF_CastbarRuntime_PlainNumber or function(e)if e==nil then return nil end local n=_G.ToPlain
 if type(n)=="function"then local e=n(e)local e=tonumber(tostring(e))if e~=nil then return e end

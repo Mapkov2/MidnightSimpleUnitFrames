@@ -1,6 +1,10 @@
 --- Runtime/MSUF_TextureRuntime.lua
 --- Runtime bar texture refresh and deferred texture apply wrappers.
 --- Shared texture runtime helpers with stable exported globals.
+---
+--- Texture selection/resolution happens elsewhere; this file applies the chosen
+--- textures to existing unit frames, prediction bars, detached power bars, and
+--- castbars, then schedules a UF apply commit when needed.
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -38,6 +42,8 @@ local function ForEachUnitFrame(fn)
     end
 end
 
+--- Profile/menu texture changes can arrive in bursts. Defer the final UF dirty
+--- apply so multiple setters collapse into one engine commit.
 local function ScheduleApplyCommit()
     local UF = MSUF and MSUF.UF
     local commit = UF and UF.ApplyDirty
@@ -94,6 +100,8 @@ local function _Iter_ApplyAllBarTex(f)
     _ApplyTexCached(f.targetPowerBar, pbTex)
 end
 
+--- Immediate refresh path used by the deferred wrapper and direct callers. Keep
+--- this frame-iteration-only; it should not normalize profile texture keys.
 local function UpdateAllBarTextures()
     local getBarTexture = _G.MSUF_GetBarTexture
     if type(getBarTexture) ~= "function" then return end

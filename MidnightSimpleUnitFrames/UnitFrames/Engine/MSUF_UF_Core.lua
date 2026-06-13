@@ -3,6 +3,13 @@ local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
 
+--- UnitFrames/Engine/MSUF_UF_Core.lua
+---
+--- Owns the frame registry, element registry, and event-routing contract for
+--- the unit-frame engine. Config compiles specs, Factory creates/positions
+--- frames, Dispatch runs event updates; Core is the glue that keeps those
+--- pieces attached without making every element know about every other element.
+
 MSUF.UF = MSUF.UF or {}
 MSUF.UF.Elements = MSUF.UF.Elements or {}
 
@@ -88,6 +95,9 @@ for unit, parent in pairs(DEPENDENT_UNIT_PARENTS) do
   UF.dependentUnitParents[unit] = UF.dependentUnitParents[unit] or parent
 end
 
+--- Dependent units look like normal unit tokens to elements, but their identity
+--- is owned by their parent target/focus relationship. Runtime has special
+--- polling/coalescing for them; keep the relationship centralized here.
 function UF.ParentUnitForDependentUnit(unit)
   return UF.dependentUnitParents[unit]
 end
@@ -513,6 +523,9 @@ local function GetUpdateKey(name)
   return UPDATE_KEYS[name]
 end
 
+--- Elements are small capability modules (Health, Power, Text, Status, etc.).
+--- Registering an element only declares it; frames decide at ApplySpec time
+--- whether it is enabled and which events it owns.
 function UF.ElementEnabled(element, frame, spec)
   return not element or type(element.IsEnabled) ~= "function" or element.IsEnabled(frame, spec) ~= false
 end
@@ -566,6 +579,13 @@ local UNIT_EVENT_HAS_UNIT = {
   UNIT_AURA = true,
 }
 
+--- Event routing model:
+--- * eventFrames tracks every frame interested in an event.
+--- * eventUnitFrames narrows normal UNIT_* events by concrete unit token.
+--- * eventUnitlessFrames handles events where Blizzard gives no useful unit.
+--- * eventDerivedFrames handles dependent relationships such as ToT/FoT.
+--- Dispatch consumes the owner map built here so hot events do not rediscover
+--- which element should run.
 local ReindexFrameUnitFilter
 local ClearFrameUnitFilter
 local ApplyFrameUnitFilter
@@ -1259,6 +1279,9 @@ local function RegisterElementEvent(frame, elementName, event, unitless, changed
   RebuildFrameEventListOrDefer(frame, event, changedEvents)
 end
 
+--- Removing an element must also tear down event ownership. The owner map can
+--- contain unit-only, unitless, or "both" modes, so unregistration keeps the
+--- central driver counts in sync instead of just unregistering the frame event.
 local function UnregisterElementEvent(frame, owners, elementName, event, changedEvents)
   local byElement = owners and owners[event]
   if not (byElement and byElement[elementName] ~= nil) then
@@ -1335,6 +1358,9 @@ local function ElementEvents(element, kind, frame, spec)
   return kind == "unitless" and element.unitlessEvents or element.events
 end
 
+--- Diff each element's declared event set against the frame. Keep new element
+--- event declarations as stable tables when possible; stable refs let this
+--- function skip rebuild work during repeated ApplySpec calls.
 local function SyncElementEvents(frame, name, element, spec)
   local events = ElementEvents(element, "unit", frame, spec)
   local unitlessEvents = ElementEvents(element, "unitless", frame, spec)
@@ -1444,6 +1470,9 @@ end
 UF.FrameIsElementEnabled = FrameIsElementEnabled
 
 
+--- AttachFrame installs the small Core API onto a concrete frame. Non-unit
+--- adapters can opt out of Core's OnEvent ownership but still reuse element
+--- enable/disable, spec storage, and runtime refresh plumbing.
 function UF.AttachFrameMethods(frame, opts)
   if not frame then
     return frame

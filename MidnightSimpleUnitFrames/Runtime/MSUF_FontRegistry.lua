@@ -1,3 +1,10 @@
+--- Runtime/MSUF_FontRegistry.lua
+--- Font catalogue, LibSharedMedia font registration bridge, and font/color
+--- resolver globals.
+---
+--- This file owns font key normalization and default/bundled font discovery.
+--- Runtime font application lives in MSUF_FontRuntime.lua.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
@@ -9,6 +16,8 @@ local string_lower = string.lower
 
 local LSM = (MSUF and MSUF.LSM) or G.MSUF_LSM or (LibStub and LibStub("LibSharedMedia-3.0", true))
 
+--- Called by the LSM bootstrap when LibSharedMedia becomes available after this
+--- file loaded. Keep the local LSM reference fresh for later lookups.
 G.MSUF_OnLSMReady = function(lsm)
     LSM = lsm
 end
@@ -143,6 +152,8 @@ local function MSUF_NormalizeFontKeyField(tbl)
     end
 end
 
+--- Profile migration: old per-scope font keys now collapse to the global font
+--- setting. This keeps imports/older profiles from carrying stale overrides.
 local function MSUF_NormalizeStoredFontKeys()
     local db = G.MSUF_DB
     if type(db) ~= "table" then return end

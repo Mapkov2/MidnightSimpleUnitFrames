@@ -5,6 +5,17 @@ _G.MSUF_NS = MSUF
 
 MSUF.UF = MSUF.UF or {}
 
+--- UnitFrames/Engine/MSUF_UF_Dispatch.lua
+---
+--- Hot event dispatcher for unit frames. Core decides which frames/elements own
+--- an event; this file decides the cheapest way to run that event. The many
+--- small runner functions are intentional: they avoid generic element loops for
+--- frequent health/power/connection updates and keep text work conditional.
+---
+--- Rule of thumb for maintainers: add config interpretation in Config, event
+--- ownership in Core/element declarations, and only add direct hot handling here
+--- when a measured event path is too expensive through the generic runner.
+
 local UF = MSUF.UF
 local Metadata = UF.Metadata or {}
 local Secrets = MSUF.Secrets or {}
@@ -183,6 +194,9 @@ local function IsGroupFrame(frame)
   return frame and (frame._msufIsGroupFrame == true or frame._msufCoreScope == "group" or (spec and spec.scope == "group"))
 end
 
+--- Text can be as expensive as the bar update it follows. These helpers cache
+--- the last relevant numeric key so plain text modes do not rewrite FontStrings
+--- when the displayed value would be identical.
 local function PowerTextNeedsTickUpdate(frame, power, powerMax)
   local rt = frame and frame._msufTextRuntime
   if not (rt and rt.powerPlain == true) then
@@ -1254,6 +1268,9 @@ do
   end
 end
 
+--- Hot state is built when element ownership changes, not when an event fires.
+--- That lets DispatchFrameEvent use one preselected runner and prebound update
+--- functions for common UNIT_* events.
 RebuildHotEventState = function(frame, event, owners)
   local kind = HOT_EVENT_KIND[event]
   local states = frame and frame._msufHotEventState
@@ -1362,6 +1379,9 @@ RebuildHotEventState = function(frame, event, owners)
   state.empty = state.hasWork ~= true
 end
 
+--- Single frame OnEvent entry point installed by Core. Prefer adding new event
+--- handling through hot-state metadata or element ownership rather than adding
+--- broad logic here; this function is on every unit-frame event path.
 function DispatchFrameEvent(frame, event, unit, ...)
 
   local frameUnit = frame.unit
@@ -1533,6 +1553,9 @@ local function RebuildRuntimeList(frame, keys, listKey, countKey)
   end
 end
 
+--- Precompute the update lists used by runtime identity refreshes. Identity
+--- refreshes are narrower than ForceUpdate and deliberately split fast
+--- bars/text from aura and visual passes.
 function UF.RebuildRuntimeStatusState(frame)
   if not frame then return end
   RebuildRuntimeList(frame, RUNTIME_VISUAL_UPDATE_KEYS, "_msufRuntimeVisualFns", "_msufRuntimeVisualCount")

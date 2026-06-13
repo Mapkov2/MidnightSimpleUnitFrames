@@ -1,3 +1,11 @@
+--- Castbars/MSUF_InterruptReady.lua
+--- Optional interrupt-readiness indicator for target, focus, and boss castbars.
+---
+--- This module answers two questions: "is my interrupt cooldown ready?" and
+--- "how should the indicator look for the current cast's interruptibility?" It
+--- must not decide castbar ownership or spellcast state; it decorates frames
+--- that the castbar drivers already own.
+
 local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
 
@@ -63,6 +71,9 @@ local function Now()
     return (GetTimePreciseSec and GetTimePreciseSec()) or GetTime()
 end
 
+--- Resolve the player's current interrupt spell once per class/spec change.
+--- Some classes swap interrupt IDs by specialization, so cache both class/spec
+--- metadata with the selected spell.
 local function ResolveInterruptSpellID()
     local classToken
     if UnitClass then
@@ -156,6 +167,8 @@ local function ColorFromDB(general, key, defaultR, defaultG, defaultB)
     return defaultR, defaultG, defaultB, 1
 end
 
+--- Color objects are cached because indicator refreshes can happen from both
+--- spellcast events and cooldown timers.
 local function ReadyColors(general)
     general = general or GeneralDB()
 
@@ -302,6 +315,9 @@ local function HasKnownValue(value)
     return value ~= nil
 end
 
+--- Raw interruptibility can be nil, false, true, or a wrapped/secret value
+--- depending on which castbar path produced the state. Preserve "known false"
+--- instead of collapsing it with "unknown".
 local function ResolveRawNotInterruptible(frame, castState)
     if castState then
         local rawValue = castState.apiNotInterruptibleRaw
@@ -361,6 +377,8 @@ local function HideIndicator(frame)
     RestoreOutline(frame)
 end
 
+--- Per-frame decorator entry. It never starts or stops casts; it only shows,
+--- hides, or recolors the indicator on frames that are already active.
 local function RefreshFrame(frame, castState, status, general)
     if not (frame and frame.statusBar) then
         return
@@ -432,6 +450,8 @@ local function RefreshAll()
     return status.remaining, status.resolved == true
 end
 
+--- When the interrupt is on cooldown, schedule one refresh near the expected
+--- ready time instead of polling every frame.
 local function ScheduleCooldownRefresh(remaining, remainingResolved)
     if cooldownTimer and cooldownTimer.Cancel then
         if remaining and remaining > 0.05 and cooldownTimerEndTime and TimerAPI and TimerAPI.NewTimer then

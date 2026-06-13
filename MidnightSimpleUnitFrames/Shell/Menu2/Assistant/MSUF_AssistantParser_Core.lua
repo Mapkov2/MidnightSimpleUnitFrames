@@ -10,6 +10,10 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+-- Low-level text helpers shared by all Assistant parser shards.
+-- This file owns normalization, tokenization, fuzzy matching, and broad scope detection.
+-- It deliberately has no profile writes and no UI side effects; callers should build
+-- declarative parse results and let the router execute them after confirmation.
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
@@ -22,6 +26,8 @@ end
 local normalizeCache = {}
 local normalizeCacheCount = 0
 
+-- Normalization runs on every assistant query and on many registry aliases. Keep the cache
+-- bounded and only cache short strings so pasted imports or bug reports cannot grow it forever.
 local function CacheNormalize(raw, value)
     if #raw <= 180 then
         if normalizeCacheCount > 4096 then
@@ -38,6 +44,8 @@ local function Normalize(text)
     local raw = tostring(text or "")
     local cached = normalizeCache[raw]
     if cached ~= nil then return cached end
+    -- The assistant accepts English/German phrasing plus common typos. These replacements
+    -- intentionally happen before phrase folding so the downstream parser can stay literal.
     text = raw:lower()
     text = text:gsub("\195\131\194\164", "ae")
     text = text:gsub("\195\131\194\182", "oe")
@@ -108,6 +116,8 @@ local EXACT_ONLY_FUZZY_WORDS = {
     ["id"] = true,
 }
 
+-- Short control words are too dangerous to fuzzy-match: "on", "off", "x", "y", and IDs
+-- frequently decide which setting is touched. Keep fuzzy matching for longer human words.
 local function IsWordToken(word)
     return type(word) == "string" and word:match("^[a-z]+$") ~= nil
 end
@@ -189,6 +199,8 @@ local fuzzyPhraseCache = {}
 local fuzzyPhraseCacheTokens = {}
 local fuzzyPhraseTokenCache = {}
 
+-- Phrase fuzzy matching is scoped to the current input text. Registry aliases are reused
+-- heavily, so the token cache saves work without keeping per-query state alive forever.
 local function FuzzyPhraseMatch(text, phrase)
     text = Normalize(text)
     phrase = Normalize(phrase)
@@ -261,6 +273,8 @@ local UNIT_ORDER = { "targettarget", "focustarget", "player", "target", "focus",
 local GROUP_ORDER = { "mythicraid", "party", "raid" }
 local ALL_UNITFRAMES = { "player", "target", "focus", "targettarget", "focustarget", "pet", "boss" }
 local ALL_GROUPS = { "party", "raid", "mythicraid" }
+-- These term buckets are shared across parser shards so "castbar", "class power", "group",
+-- and global bar commands do not each invent their own meaning for the same words.
 local CLASS_POWER_TERMS = {
     "class power", "class resource", "class resources", "class bar", "resource bar",
     "combo point", "combo points", "holy power", "soul shard", "soul shards",
@@ -358,6 +372,8 @@ local function DetectGroups(text)
         for i = 1, #ALL_GROUPS do AddUnique(groups, ALL_GROUPS[i]) end
         return groups
     end
+    -- Mythic raid contains the word "raid", so consume its aliases first before testing
+    -- the generic raid scope. Otherwise a single command can accidentally target both.
     local mythicAliases = { "mythic raid frames", "mythic raid frame", "mythicraidframes", "mythicraidframe", "mythic raid", "mythicraid" }
     local scopeText = text
     if ContainsAny(scopeText, mythicAliases) then
@@ -410,6 +426,8 @@ local ON_WORDS = {
 }
 
 local function DetectBoolean(text)
+    -- Off wins over on when both appear. Commands like "do not show" include "show", and
+    -- treating the negative intent as stronger avoids destructive surprise.
     if ContainsAny(text, OFF_WORDS) then return false end
     if ContainsAny(text, ON_WORDS) then return true end
     return nil
