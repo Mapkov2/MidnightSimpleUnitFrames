@@ -467,13 +467,18 @@ local function _PickColor(readyMixin, cdMixin, readyBool, userMixin, rawNI)
     return indicator:GetRGBA()
 end
 
+local function _HasSecretRGBA(r, g, b, a)
+    local secret = issecretvalue
+    return type(secret) == "function" and (secret(r) or secret(g) or secret(b) or secret(a))
+end
+
 -- Apply our color to the castbar's existing outline edges.
 local function _TintCastbarOutline(frame, r, g, b, a, force)
     local o = frame and frame._msufOutline
     if not o then return false end
     if not force then
-        local secret = issecretvalue
-        if not (secret and (secret(r) or secret(g) or secret(b) or secret(a)))
+        if not _HasSecretRGBA(r, g, b, a)
+           and not _HasSecretRGBA(frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA)
            and frame._kickReadyLastR == r and frame._kickReadyLastG == g
            and frame._kickReadyLastB == b and frame._kickReadyLastA == a then
             return true
@@ -485,7 +490,11 @@ local function _TintCastbarOutline(frame, r, g, b, a, force)
     if o.right  and o.right.SetVertexColor  then o.right:SetVertexColor(r, g, b, a)  end
     -- Mark so the hook on MSUF_ApplyCastbarOutline knows to re-tint.
     frame._kickReadyBorderTinted = true
-    frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA = r, g, b, a
+    if _HasSecretRGBA(r, g, b, a) then
+        frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA = nil, nil, nil, nil
+    else
+        frame._kickReadyLastR, frame._kickReadyLastG, frame._kickReadyLastB, frame._kickReadyLastA = r, g, b, a
+    end
     return true
 end
 
@@ -723,13 +732,11 @@ local function _PaintFrame(frame, readyBool, cfg, style, readyMixin, cdMixin, us
             -- (we compose visibility via alpha instead). Use the cheaper
             -- single-step pick.
             local r, g, b, a = _PickColor(readyMixin, cdMixin, readyBool)
-            local secret = issecretvalue
-            if (secret and (secret(r) or secret(g) or secret(b) or secret(a)))
-               or box._kickReadyFillR ~= r or box._kickReadyFillG ~= g
-               or box._kickReadyFillB ~= b or box._kickReadyFillA ~= a then
-                box.fill:SetVertexColor(r, g, b, a)
-                box._kickReadyFillR, box._kickReadyFillG, box._kickReadyFillB, box._kickReadyFillA = r, g, b, a
-            end
+            -- Do not cache/compare these RGBA values. EvaluateColorFromBoolean
+            -- can return secret numbers, and comparing a cached secret later
+            -- throws before SetVertexColor can repaint.
+            box.fill:SetVertexColor(r, g, b, a)
+            box._kickReadyFillR, box._kickReadyFillG, box._kickReadyFillB, box._kickReadyFillA = nil, nil, nil, nil
             if not box._kickReadyShown then
                 box:Show()
                 box._kickReadyShown = true

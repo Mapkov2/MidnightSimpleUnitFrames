@@ -1,5 +1,12 @@
 # Changelog
 
+## 5.59 - 2026-06-13
+
+### WoW 12.0.7 Fixes
+
+- Fixed compound unit event routing for Target of Target and Focus Target so `targettarget` and `focustarget` updates keep health, power, name, and dependent visuals current even when client-specific `RegisterUnitEvent` filtering falls back to broader unit events.
+- Fixed Interrupt Ready box and border repaint caching so secret RGBA values from cooldown color evaluation are never compared in Lua, preventing rare `_kickReadyFillR` taint errors during target, focus, or boss castbar updates.
+
 ## 5.58 - 2026-06-08
 
 ### Fixes
