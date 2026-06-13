@@ -2083,7 +2083,16 @@ function A.HandleCommandInput(text)
     return A.ExecutePlan(parsed)
 end
 
+local function CombatSubmitResult()
+    return {
+        text = "MSUF Assistant is paused during combat. Try again after combat.",
+        status = "combat",
+        summary = "Assistant input blocked during combat.",
+    }
+end
+
 function A.HandleInput(text)
+    if InCombat() then return CombatSubmitResult() end
     if type(A.RouteInput) == "function" then
         return A.RouteInput(text, A.HandleCommandInput)
     end
@@ -2369,6 +2378,7 @@ local function SubmitNow(text, opts)
     opts = opts or {}
     text = Trim(text)
     if text == "" then return nil end
+    if InCombat() then return CombatSubmitResult() end
     local startedMs = PerfNowMs()
     if opts.skipUserHistory ~= true then
         A.AddHistory("user", text, "submitted")
@@ -2469,6 +2479,7 @@ end
 function A.SubmitDeferred(text, callback)
     text = Trim(text)
     if text == "" then return nil end
+    if InCombat() then return CombatSubmitResult() end
     if A.IsBusy() then
         return { text = "I am still working on the previous request.", status = "busy" }
     end

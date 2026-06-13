@@ -1302,11 +1302,13 @@ local function SubmitAssistantSearchQuery(query)
     if type(M.SelectPage) == "function" and M.activeKey ~= "home" then
         M.SelectPage("home")
     end
+    local result
     if type(A.SubmitDeferred) == "function" then
-        A.SubmitDeferred(query)
+        result = A.SubmitDeferred(query)
     else
-        A.Submit(query)
+        result = A.Submit(query)
     end
+    if result and result.status == "combat" then return true end
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.search")
     elseif type(A.RefreshUI) == "function" then
