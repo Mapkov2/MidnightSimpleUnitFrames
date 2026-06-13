@@ -2624,6 +2624,48 @@ local COLOR_CP_TOKENS = {
     { key = "RESOURCE_TEXT", label = "Resource Text" },
 }
 A.ClassPowerColorTokens = COLOR_CP_TOKENS
+
+local function AddUniqueAlias(out, seen, value)
+    value = tostring(value or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    if value ~= "" and not seen[value] then
+        seen[value] = true
+        out[#out + 1] = value
+    end
+end
+
+local function ClassPowerColorExactAliases(label, background)
+    local lower = tostring(label or ""):lower()
+    local out, seen = {}, {}
+    if background then
+        AddUniqueAlias(out, seen, "set " .. lower .. " background color")
+        AddUniqueAlias(out, seen, "set " .. lower .. " background")
+        AddUniqueAlias(out, seen, "set " .. lower .. " resource background")
+        AddUniqueAlias(out, seen, "make " .. lower .. " background color")
+        AddUniqueAlias(out, seen, "make " .. lower .. " background")
+    else
+        AddUniqueAlias(out, seen, "set " .. lower .. " color")
+        AddUniqueAlias(out, seen, "set " .. lower .. " class resource color")
+        AddUniqueAlias(out, seen, "set " .. lower .. " resource color")
+        AddUniqueAlias(out, seen, "make " .. lower .. " color")
+        AddUniqueAlias(out, seen, "make " .. lower)
+    end
+    return out
+end
+
+local function ComboPointSlotColorExactAliases(slot)
+    local out, seen = {}, {}
+    local n = tostring(slot)
+    AddUniqueAlias(out, seen, "set combo point slot " .. n)
+    AddUniqueAlias(out, seen, "set combo point slot " .. n .. " color")
+    AddUniqueAlias(out, seen, "set combo point " .. n)
+    AddUniqueAlias(out, seen, "set combo point " .. n .. " color")
+    AddUniqueAlias(out, seen, "set cp " .. n)
+    AddUniqueAlias(out, seen, "make combo point slot " .. n)
+    AddUniqueAlias(out, seen, "make combo point " .. n)
+    AddUniqueAlias(out, seen, "make cp " .. n)
+    return out
+end
+
 for i = 1, #COLOR_CP_TOKENS do
     local token = COLOR_CP_TOKENS[i].key
     local label = COLOR_CP_TOKENS[i].label
@@ -2634,14 +2676,27 @@ for i = 1, #COLOR_CP_TOKENS do
         return ClassPowerRGB(token)
     end, function(r, g, b)
         SetClassPowerRGB(token, r, g, b)
-    end, { category = "Colors / Class Power", attribute = "classPowerColor", apply = ApplyClassPowerColors })
+    end, {
+        category = "Colors / Class Power",
+        attribute = "classPowerColor",
+        apply = ApplyClassPowerColors,
+        exactAliases = ClassPowerColorExactAliases(label, false),
+    })
     ColorSetting("general.classPowerBgColorOverrides." .. token, label .. " Background Color", {
         lower .. " background color", lower .. " class power background color", lower .. " resource background color",
     }, function()
         return ClassPowerBgRGB(token)
     end, function(r, g, b)
         SetClassPowerBgRGB(token, r, g, b)
-    end, { category = "Colors / Class Power", attribute = "classPowerBackgroundColor", defaultR = 0, defaultG = 0, defaultB = 0, apply = ApplyClassPowerColors })
+    end, {
+        category = "Colors / Class Power",
+        attribute = "classPowerBackgroundColor",
+        defaultR = 0,
+        defaultG = 0,
+        defaultB = 0,
+        apply = ApplyClassPowerColors,
+        exactAliases = ClassPowerColorExactAliases(label, true),
+    })
 end
 for i = 1, 7 do
     local token = "COMBO_POINTS_" .. tostring(i)
@@ -2654,7 +2709,12 @@ for i = 1, 7 do
     end, function(r, g, b)
         BarsDB().classPowerComboPointColorMode = "custom"
         SetClassPowerRGB(token, r, g, b)
-    end, { category = "Colors / Class Power", attribute = "comboPointSlotColor", apply = ApplyClassPowerColors })
+    end, {
+        category = "Colors / Class Power",
+        attribute = "comboPointSlotColor",
+        apply = ApplyClassPowerColors,
+        exactAliases = ComboPointSlotColorExactAliases(i),
+    })
 end
 
 local function KnownClassPowerColorToken(token)

@@ -890,6 +890,13 @@ local function RegisterGeneralNumberSetting(dbKey, attr, label, defaultValue, mi
         step = opts.step or 1,
         relativeStep = opts.relativeStep,
         percent = opts.percent == true,
+        booleanOnValue = opts.booleanOnValue,
+        booleanOffValue = opts.booleanOffValue,
+        booleanAliases = opts.booleanAliases,
+        moveAxis = opts.moveAxis,
+        moveStep = opts.moveStep,
+        moveAmount = opts.moveAmount,
+        intentGuard = opts.intentGuard,
         get = function()
             local value = tonumber(GeneralDB()[dbKey])
             if value == nil then return defaultValue end
@@ -1056,6 +1063,7 @@ local function RegisterBarsBoolean(dbKey, attr, label, defaultValue, aliases, op
         aliases = aliases,
         exactAliases = opts.exactAliases,
         valueAliases = opts.valueAliases,
+        companionChanges = opts.companionChanges,
         get = function()
             local value = BarsDB()[dbKey]
             if value == nil then return defaultValue and true or false end
@@ -1132,6 +1140,13 @@ local function RegisterBarsNumber(dbKey, attr, label, defaultValue, minValue, ma
         step = opts.step or 1,
         relativeStep = opts.relativeStep,
         percent = opts.percent == true,
+        booleanOnValue = opts.booleanOnValue,
+        booleanOffValue = opts.booleanOffValue,
+        booleanAliases = opts.booleanAliases,
+        moveAxis = opts.moveAxis,
+        moveStep = opts.moveStep,
+        moveAmount = opts.moveAmount,
+        intentGuard = opts.intentGuard,
         get = function()
             local value = tonumber(BarsDB()[dbKey])
             if value == nil then return defaultValue end
