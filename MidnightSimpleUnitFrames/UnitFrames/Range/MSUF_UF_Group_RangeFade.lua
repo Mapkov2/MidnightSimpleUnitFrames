@@ -94,6 +94,7 @@ local function ClearRange(frame)
   frame._msufGFRangeUnit = frame.unit
   frame._msufGFRangeKnown = nil
   frame._msufGFInRangeRaw = nil
+  frame._msufGFRangeSecret = nil
   frame._msufGFRangeCacheable = nil
   frame._msufGFRangePlayerUnit = nil
   frame._msufGFRangeIsPlayerUnit = nil
@@ -132,6 +133,7 @@ local function StoreRange(frame, inRange)
     frame._msufGFRangeUnit = nil
     frame._msufGFRangeKnown = nil
     frame._msufGFInRangeRaw = nil
+    frame._msufGFRangeSecret = nil
     frame._msufGFRangeCacheable = nil
     return hadState
   end
@@ -141,8 +143,9 @@ local function StoreRange(frame, inRange)
 
   local inRangeSecret = issecretvalue(inRange) == true
   if inRangeSecret then
-    frame._msufGFRangeKnown = nil
-    frame._msufGFInRangeRaw = nil
+    frame._msufGFRangeKnown = true
+    frame._msufGFInRangeRaw = inRange
+    frame._msufGFRangeSecret = true
     frame._msufGFRangeCacheable = nil
     return true, inRange, true
   end
@@ -152,6 +155,7 @@ local function StoreRange(frame, inRange)
     end
     frame._msufGFRangeKnown = nil
     frame._msufGFInRangeRaw = nil
+    frame._msufGFRangeSecret = nil
     frame._msufGFRangeCacheable = nil
     return true
   end
@@ -163,6 +167,7 @@ local function StoreRange(frame, inRange)
 
   frame._msufGFRangeKnown = true
   frame._msufGFInRangeRaw = inRange
+  frame._msufGFRangeSecret = nil
   frame._msufGFRangeCacheable = true
   return true
 end
@@ -469,6 +474,7 @@ local function ClearAlphaCaches(frame)
   frame._msufGFRangeFrameBoolOut = nil
   frame._msufGFRangeHealthAlpha = nil
   frame._msufGFRangeHealthBool = nil
+  frame._msufGFRangeHealthBoolSecret = nil
   frame._msufGFRangeHealthBoolIn = nil
   frame._msufGFRangeHealthBoolOut = nil
 end
@@ -563,6 +569,7 @@ local function ApplyHealthRangeAlpha(frame, alpha)
   end
   frame._msufGFRangeHealthAlpha = alpha
   frame._msufGFRangeHealthBool = nil
+  frame._msufGFRangeHealthBoolSecret = nil
   frame._msufGFRangeHealthBoolIn = nil
   frame._msufGFRangeHealthBoolOut = nil
   local refreshed = RefreshHealthVisual(frame)
@@ -579,24 +586,31 @@ local function ApplyHealthRangeAlphaFromBoolean(frame, value, inAlpha, outAlpha,
   end
   local cacheable = not valueSecret
   if cacheable
+    and frame._msufGFRangeHealthBoolSecret ~= true
+    and issecretvalue(frame._msufGFRangeHealthBool) ~= true
     and frame._msufGFRangeHealthBool == value
     and frame._msufGFRangeHealthBoolIn == inAlpha
     and frame._msufGFRangeHealthBoolOut == outAlpha then
     return true
   end
   frame._msufGFRangeHealthAlpha = nil
-  local applied = SetStatusAlphaFromBoolean(frame.hpBar or frame.Health, value, inAlpha, outAlpha)
+  frame._msufGFRangeHealthBool = value
+  frame._msufGFRangeHealthBoolSecret = valueSecret or nil
+  frame._msufGFRangeHealthBoolIn = inAlpha
+  frame._msufGFRangeHealthBoolOut = outAlpha
+  local refreshed = RefreshHealthVisual(frame)
+  local applied = refreshed == true
+  if not refreshed then
+    applied = SetStatusAlphaFromBoolean(frame.hpBar or frame.Health, value, inAlpha, outAlpha)
+  end
   applied = SetTextureAlphaFromBoolean(frame.bg, value, inAlpha, outAlpha) or applied
   applied = SetTextureAlphaFromBoolean(frame.hpBarBG, value, inAlpha, outAlpha) or applied
   applied = SetStatusAlphaFromBoolean(frame.incomingHealBar, value, inAlpha, outAlpha) or applied
   applied = SetStatusAlphaFromBoolean(frame.absorbBar, value, inAlpha, outAlpha) or applied
   applied = SetStatusAlphaFromBoolean(frame.healAbsorbBar, value, inAlpha, outAlpha) or applied
-  if applied and cacheable then
-    frame._msufGFRangeHealthBool = value
-    frame._msufGFRangeHealthBoolIn = inAlpha
-    frame._msufGFRangeHealthBoolOut = outAlpha
-  else
+  if not applied then
     frame._msufGFRangeHealthBool = nil
+    frame._msufGFRangeHealthBoolSecret = nil
     frame._msufGFRangeHealthBoolIn = nil
     frame._msufGFRangeHealthBoolOut = nil
   end
@@ -843,8 +857,14 @@ function ApplyAlpha(frame, event, rangeValue, rangeSecret)
 
   if frame and frame._msufGFRangeFadeEnabled == true
     and (frame._msufGFRangeKnown == true or rangeSecret == true) then
-    local inRange = rangeSecret == true and rangeValue or frame._msufGFInRangeRaw
     local inRangeSecret = rangeSecret == true
+    local inRange
+    if inRangeSecret then
+      inRange = rangeValue
+    else
+      inRange = frame._msufGFInRangeRaw
+      inRangeSecret = frame._msufGFRangeSecret == true or issecretvalue(inRange) == true
+    end
     local inRangeKnown = inRangeSecret or inRange ~= nil
     local rangeAlpha = frame._msufGFRangeFadeAlphaValue or 0.4
     if frame._msufGFRangeLayerHealth == true then

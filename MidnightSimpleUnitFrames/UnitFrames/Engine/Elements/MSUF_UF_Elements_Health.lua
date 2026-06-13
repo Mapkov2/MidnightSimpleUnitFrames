@@ -464,6 +464,28 @@ function Health.Update(frame, event, unit)
     local maxUnit = bar._msufHealthMaxUnit
     local hp = cacheUnit ~= nil and hpUnit == cacheUnit and bar._msufHealthValue or nil
     local maxHP = cacheUnit ~= nil and maxUnit == cacheUnit and bar._msufHealthMax or nil
+    -- UNIT_FLAGS fires very frequently in combat (dispatch probe: boss
+    -- UNIT_FLAGS ~20x in a 6s window) but the health *color* for a flag change
+    -- only depends on exists/dead/connected state. Gate ONLY UNIT_FLAGS on the
+    -- same status key UpdateConnectionState uses, so flag spam that doesn't
+    -- change that state skips ApplyHealthStatusColor. UNIT_FACTION is NOT gated:
+    -- it can change reaction/PvP color without changing the status key, so it
+    -- must always recolor.
+    if event == "UNIT_FLAGS" then
+      local colorKey = ConnectionStatusKey(frame, unit, event)
+      if colorKey ~= nil and frame._msufHealthConnectionColorKey == colorKey then
+        return hp, maxHP
+      end
+      local rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event)
+      frame._msufHealthConnectionColorKey = colorKey
+      if rawHealthColor ~= true then
+        bar._msufGradientPct = nil
+      end
+      if not rawHealthColor and (frame._msufHealthBgDynamic == true or frame._msufPowerBgDynamic == true) then
+        ApplyBackgrounds(frame, frame._msufHealthBgDynamic == true, frame._msufPowerBgDynamic == true)
+      end
+      return hp, maxHP
+    end
     local rawHealthColor = ApplyHealthStatusColor(bar, frame, unit, hp, maxHP, nil, event)
     if rawHealthColor ~= true then
       bar._msufGradientPct = nil
