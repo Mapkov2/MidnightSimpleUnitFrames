@@ -10,6 +10,7 @@ local Render = MSUF.UFPreviewRender or {}
 MSUF.UFPreviewRender = Render
 local Pick = (MSUF.MSUF2 or _G.MSUF2 or {}).Pick
 local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}
+local PreviewHelpers = MenuState.PreviewHelpers or {}
 
 local function CastbarPreviewDetailPrefix(unitKey)
     if unitKey == "player" then return "castbarPlayer" end
@@ -47,40 +48,24 @@ local function NormalizeCastbarPreviewJustify(value, fallback)
 end
 
 local PREVIEW_CLASS_POWER_SHAPE_MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\ClassPower\\"
+local function PreviewShape(fill, bg, edge, axis)
+    return {
+        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. fill,
+        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. bg,
+        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. edge,
+        axis = axis,
+    }
+end
+
 local PREVIEW_CLASS_POWER_SHAPES = {
-    CIRCLE = {
-        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_fill.tga",
-        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_bg.tga",
-        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_edge.tga",
-    },
-    DIAMOND = {
-        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_diamond_fill.tga",
-        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_diamond_bg.tga",
-        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_diamond_edge.tga",
-    },
-    HEX = {
-        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_hex_fill.tga",
-        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_hex_bg.tga",
-        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_hex_edge.tga",
-    },
+    CIRCLE = PreviewShape("pip_circle_fill.tga", "pip_circle_bg.tga", "pip_circle_edge.tga"),
+    DIAMOND = PreviewShape("pip_diamond_fill.tga", "pip_diamond_bg.tga", "pip_diamond_edge.tga"),
+    HEX = PreviewShape("pip_hex_fill.tga", "pip_hex_bg.tga", "pip_hex_edge.tga"),
 }
 local PREVIEW_POWER_SHAPES = {
-    ROUND = {
-        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_round_fill.tga",
-        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_round_bg.tga",
-        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_round_edge.tga",
-    },
-    CRYSTAL = {
-        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_crystal_fill.tga",
-        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_crystal_bg.tga",
-        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "power_crystal_edge.tga",
-    },
-    ORB = {
-        fill = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_fill.tga",
-        bg = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_bg.tga",
-        edge = PREVIEW_CLASS_POWER_SHAPE_MEDIA .. "pip_circle_edge.tga",
-        axis = "VERTICAL",
-    },
+    ROUND = PreviewShape("power_round_fill.tga", "power_round_bg.tga", "power_round_edge.tga"),
+    CRYSTAL = PreviewShape("power_crystal_fill.tga", "power_crystal_bg.tga", "power_crystal_edge.tga"),
+    ORB = PreviewShape("pip_circle_fill.tga", "pip_circle_bg.tga", "pip_circle_edge.tga", "VERTICAL"),
 }
 
 local function NormalizePreviewClassPowerShape(value)
@@ -455,55 +440,36 @@ function Render.Install(Preview, deps)
 
     local function LayoutPreviewPortraitBorder(portrait, thickness, fill, r, g, b, a)
         local border = portrait and portrait.border
-        local edges = border and border.edges
-        if not (border and edges) then return end
+        if not border then return end
         if not r then
-            for i = 1, 4 do
-                if edges[i] then edges[i]:Hide() end
-            end
+            if PreviewHelpers.SetEdgeLinesShown then PreviewHelpers.SetEdgeLinesShown(border, false, border._msufPreviewEdgeOpts) end
+            border:Hide()
             return
         end
         thickness = math.floor((tonumber(thickness) or 1) + 0.5)
         if thickness < 1 then thickness = 1 end
         if thickness > 30 then thickness = 30 end
         local key = thickness .. "|" .. (fill and "1" or "0")
-        local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
         if portrait._previewBorderKey ~= key then
-            top:ClearAllPoints()
-            bottom:ClearAllPoints()
-            left:ClearAllPoints()
-            right:ClearAllPoints()
+            border:ClearAllPoints()
             if fill then
-                top:SetPoint("TOPLEFT", portrait, "TOPLEFT", 0, 0)
-                top:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", 0, 0)
-                bottom:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", 0, 0)
-                bottom:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 0, 0)
-                left:SetPoint("TOPLEFT", portrait, "TOPLEFT", 0, 0)
-                left:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", 0, 0)
-                right:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", 0, 0)
-                right:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", 0, 0)
+                border:SetAllPoints(portrait)
             else
-                top:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thickness, thickness)
-                top:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thickness, thickness)
-                bottom:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thickness, -thickness)
-                bottom:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thickness, -thickness)
-                left:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thickness, thickness)
-                left:SetPoint("BOTTOMLEFT", portrait, "BOTTOMLEFT", -thickness, -thickness)
-                right:SetPoint("TOPRIGHT", portrait, "TOPRIGHT", thickness, thickness)
-                right:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thickness, -thickness)
+                border:SetPoint("TOPLEFT", portrait, "TOPLEFT", -thickness, thickness)
+                border:SetPoint("BOTTOMRIGHT", portrait, "BOTTOMRIGHT", thickness, -thickness)
             end
-            top:SetHeight(thickness)
-            bottom:SetHeight(thickness)
-            left:SetWidth(thickness)
-            right:SetWidth(thickness)
             portrait._previewBorderKey = key
         end
-        for i = 1, 4 do
-            if edges[i] then
-                edges[i]:SetVertexColor(r, g, b, a or 1)
-                edges[i]:Show()
-            end
-        end
+        border._msufPreviewEdgeR, border._msufPreviewEdgeG, border._msufPreviewEdgeB, border._msufPreviewEdgeA = r, g, b, a or 1
+        border._msufPreviewEdgeOpts = border._msufPreviewEdgeOpts or {
+            linesKey = "edges",
+            maxEdgeSize = 30,
+            color = function(frame)
+                return frame._msufPreviewEdgeR or 1, frame._msufPreviewEdgeG or 1, frame._msufPreviewEdgeB or 1, frame._msufPreviewEdgeA or 1
+            end,
+        }
+        if PreviewHelpers.LayoutEdgeLines then PreviewHelpers.LayoutEdgeLines(border, thickness, border._msufPreviewEdgeOpts) end
+        border:Show()
     end
 
     deps._RenderState = {
