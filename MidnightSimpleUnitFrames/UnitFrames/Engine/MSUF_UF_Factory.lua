@@ -236,8 +236,12 @@ local function ApplyFrame(frame, spec)
   end
   UF.ApplySpec(frame, spec, nil, true)
 
-  if frame._msufVisibilityManaged == true then
-  else
+  -- LoadConditions.Apply (run inside ApplySpec above) owns visibility: it
+  -- either installs a secure state driver (_msufVisibilityManaged) or, for the
+  -- existence-only case, registers the lightweight unit watch itself
+  -- (_msufUnitWatched). Only fall back to a manual watch/show when neither
+  -- path claimed the frame.
+  if frame._msufVisibilityManaged ~= true and frame._msufUnitWatched ~= true then
     if frame.Enable then
       frame:Enable()
     elseif RegisterUnitWatch then
