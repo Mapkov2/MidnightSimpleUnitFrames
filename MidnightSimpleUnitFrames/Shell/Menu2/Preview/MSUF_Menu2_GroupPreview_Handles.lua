@@ -116,6 +116,27 @@ function Handles.Install(box, deps)
         return true
     end
 
+    local function ResolveGroupAuraAnchor(rx, ry)
+        local best, bestD = "CENTER", 1e9
+        local candidates = {
+            { "CENTER", 0.5, 0.5 },
+            { "TOPLEFT", 0, 0 },
+            { "TOPRIGHT", 1, 0 },
+            { "BOTTOMLEFT", 0, 1 },
+            { "BOTTOMRIGHT", 1, 1 },
+        }
+        for i = 1, #candidates do
+            local c = candidates[i]
+            local dx = (rx or 0.5) - c[2]
+            local dy = (ry or 0.5) - c[3]
+            local d = dx * dx + dy * dy
+            if d < bestD then
+                best, bestD = c[1], d
+            end
+        end
+        return best
+    end
+
     local function SaveHandlePosition(handle, action)
         if not (handle and box._mock) or handle._locked then return end
         if handle._cfgText then return end
@@ -130,7 +151,7 @@ function Handles.Install(box, deps)
         if handle._cfgGroup and handle._previewOriginX and handle._previewOriginY then
             local px = hL + handle._previewOriginX
             local py = hB + handle._previewOriginY
-            anchor = GFPreviewResolveAnchor((px - mL) / mW, (mT - py) / mH)
+            anchor = ResolveGroupAuraAnchor((px - mL) / mW, (mT - py) / mH)
             offX, offY = GFPreviewPointOffset(px, py, anchorFrame, anchor)
         else
             local cx, cy = hL + hW * 0.5, hT - hH * 0.5
