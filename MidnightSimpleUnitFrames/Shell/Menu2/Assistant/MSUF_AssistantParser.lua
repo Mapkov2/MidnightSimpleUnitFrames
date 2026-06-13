@@ -146,7 +146,6 @@ local ScopedOnlyKind = P.ScopedOnlyKind
 local ScopedOnlyOverrideKey = P.ScopedOnlyOverrideKey
 local ParseScopedOnlyOverride = P.ParseScopedOnlyOverride
 local CLASS_POWER_DETAIL_TERMS = P.CLASS_POWER_DETAIL_TERMS
-local ParseClassPowerRootToggle = P.ParseClassPowerRootToggle
 local ParseFontColorAction = P.ParseFontColorAction
 local BuildColorResetAction = P.BuildColorResetAction
 local POWER_TOKEN_EXTRA_ALIASES = P.POWER_TOKEN_EXTRA_ALIASES
@@ -161,7 +160,6 @@ local ParseSupportWorkflow = P.ParseSupportWorkflow
 local GlobalScalePresetForText = P.GlobalScalePresetForText
 local ParsePresetWorkflow = P.ParsePresetWorkflow
 local ParseScopedOverrideReset = P.ParseScopedOverrideReset
-local ParseClassPowerAction = P.ParseClassPowerAction
 local GAMEPLAY_ROOT_TOGGLES = P.GAMEPLAY_ROOT_TOGGLES
 local ParseGameplayRootToggle = P.ParseGameplayRootToggle
 local ParseGameplayAction = P.ParseGameplayAction
@@ -309,14 +307,6 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
         or (P.ParseRegistryActionAliasShortcut and P.ParseRegistryActionAliasShortcut(normalized, raw))
         or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
-        or ParseClassPowerAction(normalized)
-        or A._ParseClassPowerPlacementShortcut(normalized)
-        or A._ParseClassPowerColorShortcut(normalized, raw)
-        or A._ParseClassPowerDisplayStyleShortcut(normalized)
-        or A._ParseClassPowerBackgroundShortcut(normalized)
-        or A._ParseClassPowerAnchorShortcut(normalized)
-        or ParseClassPowerRootToggle(normalized)
-        or A._ParseClassPowerMoveShortcut(normalized)
         or ParseGameplayRootToggle(normalized)
         or A._ParseGameplayBooleanShortcut(normalized)
         or A._ParseGameplayAnchorShortcut(normalized)
@@ -393,8 +383,7 @@ end
 --- pure geometry. It runs after workflow/geometry in A.Parse, then falls back
 --- to generic setting parsing if no domain-specific action matched.
 function A._ParsePipelineFeature(normalized, raw, ctx)
-    return ParseClassPowerAction(normalized)
-        or ParseGameplayAction(normalized, raw)
+    return ParseGameplayAction(normalized, raw)
         or ParseDarkModeBrightnessShortcut(normalized)
         or ParseGlobalBarsAction(normalized)
         or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))

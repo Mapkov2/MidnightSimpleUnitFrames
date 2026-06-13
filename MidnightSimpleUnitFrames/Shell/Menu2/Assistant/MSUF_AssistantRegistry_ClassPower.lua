@@ -359,6 +359,47 @@ local function ClassPowerPreviewValueAliases()
     return aliases
 end
 
+local function ClassPowerPreviewExactAliases()
+    local out = {
+        "class resource preview resource",
+        "class resource preview",
+        "class resources preview",
+        "class power preview resource",
+        "class power preview",
+        "preview class resource",
+        "preview class resources",
+        "preview class power",
+        "preview class bar",
+        "preview resource",
+        "resource preview",
+        "set class resource preview",
+        "set class resources preview",
+        "set preview resource",
+    }
+    local seen = {}
+    for i = 1, #out do seen[out[i]] = true end
+    local aliases = ClassPowerPreviewValueAliases()
+    for alias in pairs(aliases) do
+        alias = tostring(alias or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+        if alias ~= "" then
+            local variants = {
+                "preview " .. alias,
+                "preview " .. alias .. " class resource",
+                "preview " .. alias .. " class resources",
+                "show " .. alias .. " class resource preview",
+            }
+            for i = 1, #variants do
+                local value = variants[i]
+                if not seen[value] then
+                    seen[value] = true
+                    out[#out + 1] = value
+                end
+            end
+        end
+    end
+    return out
+end
+
 local function ClassPowerPreviewLabel(key)
     return CLASS_POWER_PREVIEW_LABELS[key] or tostring(key or "rogue_combo")
 end
@@ -369,6 +410,35 @@ local function NormalizeClassPowerPreviewKey(key)
         if CLASS_POWER_PREVIEW_VALUES[i] == key then return key end
     end
     return "rogue_combo"
+end
+
+local function ClassPowerPreviewActionTextHas(text, terms)
+    local compact = tostring(text or ""):lower():gsub("[^%w]+", "")
+    local hay = " " .. tostring(text or ""):lower():gsub("[^%w]+", " ") .. " "
+    for i = 1, #(terms or {}) do
+        local term = tostring(terms[i] or ""):lower()
+        local compactTerm = term:gsub("[^%w]+", "")
+        if compactTerm ~= "" and compact:find(compactTerm, 1, true) then return true end
+        local phrase = term:gsub("[^%w]+", " ")
+        phrase = phrase:gsub("^%s+", ""):gsub("%s+$", "")
+        if phrase ~= "" and hay:find(" " .. phrase .. " ", 1, true) then return true end
+    end
+    return false
+end
+
+local function ParseClassPowerPreviewAnimationAliasArgs(text)
+    local value
+    if ClassPowerPreviewActionTextHas(text, { "toggle", "switch", "umschalten" }) then
+        value = nil
+    elseif ClassPowerPreviewActionTextHas(text, { "stop", "pause", "off", "disable", "turn off" }) then
+        value = false
+    elseif ClassPowerPreviewActionTextHas(text, { "start", "play", "animate", "on", "enable", "turn on" }) then
+        value = true
+    end
+    return { value = value }, {
+        label = "Animate class resource preview",
+        summary = "Controls the Class Resources inline preview animation through registered action metadata.",
+    }
 end
 
 local function RefreshClassPowerPreview()
@@ -386,6 +456,48 @@ RegisterBarsBoolean("showClassPower", "enabled", "Class Resource", true, {
 }, {
     reason = "MSUF_ASSISTANT_CLASSPOWER_ENABLED",
     matchLabel = false,
+    exactAliases = {
+        "show class resource",
+        "show class resources",
+        "show class power",
+        "show class power bar",
+        "show class resource bar",
+        "show class resources bar",
+        "show combo points",
+        "turn on class resource",
+        "turn on class resources",
+        "turn on class power",
+        "turn on class power bar",
+        "turn on class resource bar",
+        "enable class resource",
+        "enable class resources",
+        "enable class power",
+        "enable class power bar",
+        "enable class resource bar",
+        "class resource on",
+        "class resources on",
+        "class power on",
+        "hide class resource",
+        "hide class resources",
+        "hide class power",
+        "hide class power bar",
+        "hide class resource bar",
+        "hide class resources bar",
+        "hide combo points",
+        "turn off class resource",
+        "turn off class resources",
+        "turn off class power",
+        "turn off class power bar",
+        "turn off class resource bar",
+        "disable class resource",
+        "disable class resources",
+        "disable class power",
+        "disable class power bar",
+        "disable class resource bar",
+        "class resource off",
+        "class resources off",
+        "class power off",
+    },
     description = "Enables or disables MSUF Class Resources live outside combat.",
 })
 RegisterBarsNumber("classPowerHeight", "height", "Class Resource Height", 4, 1, 40, ClassPowerAliases("height", "class resource bar height"), {
@@ -496,13 +608,121 @@ RegisterBarsNumber("classPowerWidth", "width", "Class Resource Width", 0, 30, 80
 })
 RegisterBarsNumber("classPowerOffsetX", "offsetX", "Class Resource Offset X", 0, -800, 800, ClassPowerAliases("x offset", "class resource x", "class power x", "move class resource horizontally"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_X",
+    moveAxis = "x",
+    moveStep = 10,
+    exactAliases = {
+        "move class resource left",
+        "move class resource right",
+        "move class resources left",
+        "move class resources right",
+        "nudge class resource left",
+        "nudge class resource right",
+        "shift class resource left",
+        "shift class resource right",
+        "move class power left",
+        "move class power right",
+        "move combo point left",
+        "move combo point right",
+        "move combo points left",
+        "move combo points right",
+        "shift combo points left",
+        "shift combo points right",
+        "verschiebe class resource links",
+        "verschiebe class resource rechts",
+        "verschiebe combo points links",
+        "verschiebe combo points rechts",
+    },
 })
 RegisterBarsNumber("classPowerOffsetY", "offsetY", "Class Resource Offset Y", 0, -800, 800, ClassPowerAliases("y offset", "class resource y", "class power y", "move class resource vertically"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_Y",
+    moveAxis = "y",
+    moveStep = 10,
+    exactAliases = {
+        "move class resource up",
+        "move class resource down",
+        "move class resources up",
+        "move class resources down",
+        "nudge class resource up",
+        "nudge class resource down",
+        "shift class resource up",
+        "shift class resource down",
+        "move class power up",
+        "move class power down",
+        "move combo point up",
+        "move combo point down",
+        "move combo points up",
+        "move combo points down",
+        "shift combo points up",
+        "shift combo points down",
+        "verschiebe class resource hoch",
+        "verschiebe class resource runter",
+        "verschiebe combo points hoch",
+        "verschiebe combo points runter",
+    },
 })
 RegisterBarsNumber("classPowerFrameLevelOffset", "frameLevel", "Class Resource Frame Level", 5, 0, 30, ClassPowerAliases("frame level", "class resource strata level"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_FRAME_LEVEL",
 })
+
+local CLASS_POWER_PLACEMENT_TERMS = {
+    "under", "below", "beneath", "bottom of", "underneath", "unter", "darunter",
+    "above", "over", "top of", "ueber", "darueber",
+    "on player", "on the player", "inside player", "inside the player",
+}
+
+local function ClassPowerPlacementForText(text)
+    text = tostring(text or ""):lower()
+    local hay = " " .. text:gsub("[^%w]+", " ") .. " "
+    if hay:find(" under ", 1, true)
+        or hay:find(" below ", 1, true)
+        or hay:find(" beneath ", 1, true)
+        or hay:find(" bottom of ", 1, true)
+        or hay:find(" underneath ", 1, true)
+        or hay:find(" unter ", 1, true)
+        or hay:find(" darunter ", 1, true)
+    then
+        return "below"
+    end
+    if hay:find(" above ", 1, true)
+        or hay:find(" over ", 1, true)
+        or hay:find(" top of ", 1, true)
+        or hay:find(" ueber ", 1, true)
+        or hay:find(" darueber ", 1, true)
+    then
+        return "above"
+    end
+    if hay:find(" on player ", 1, true)
+        or hay:find(" on the player ", 1, true)
+        or hay:find(" inside player ", 1, true)
+        or hay:find(" inside the player ", 1, true)
+    then
+        return "top"
+    end
+    return nil
+end
+
+local function ClassPowerPlacementOffsetsForText(text)
+    local db = _G.MSUF_DB or {}
+    local player = type(db.player) == "table" and db.player or {}
+    local bars = type(db.bars) == "table" and db.bars or {}
+    local playerH = tonumber(player.height) or 40
+    local cpH = tonumber(bars.classPowerHeight) or 4
+    local placement = ClassPowerPlacementForText(text)
+    if placement == "below" then return 0, -math.floor(playerH + cpH + 6 + 0.5) end
+    if placement == "above" then return 0, math.floor(cpH + 6 + 0.5) end
+    if placement == "top" then return 0, 0 end
+    return nil, nil
+end
+
+local function ClassPowerPlacementXValue(_, _, text)
+    local x = ClassPowerPlacementOffsetsForText(text)
+    return x
+end
+
+local function ClassPowerPlacementYValue(_, _, text)
+    local _, y = ClassPowerPlacementOffsetsForText(text)
+    return y
+end
 
 RegisterBarsBoolean("classPowerAnchorToCooldown", "anchorToCooldown", "Class Resource Anchor To Essential Cooldowns", false, ClassPowerAliases(
     "anchor to cooldown", "anchor to cooldowns", "anchor to essential cooldowns",
@@ -512,12 +732,184 @@ RegisterBarsBoolean("classPowerAnchorToCooldown", "anchorToCooldown", "Class Res
     "follow essential cooldowns", "follow cooldownmanager", "position above essential cooldowns"
 ), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_ANCHOR_COOLDOWN",
+    valueAliases = {
+        ["to cooldown"] = true,
+        ["to cooldowns"] = true,
+        ["to cooldown manager"] = true,
+        ["to cooldownmanager"] = true,
+        ["to essential cooldowns"] = true,
+        ["to essential cooldownmanager"] = true,
+        ["attach to cooldownmanager"] = true,
+        ["dock to cooldownmanager"] = true,
+        ["follow cooldownmanager"] = true,
+        ["follow essential cooldowns"] = true,
+        player = false,
+        ["player frame"] = false,
+        playerframe = false,
+        ["unit frame"] = false,
+        detach = false,
+        detached = false,
+        undock = false,
+        disconnect = false,
+        ["stop following"] = false,
+        ["do not follow"] = false,
+        ["dont follow"] = false,
+        ["remove from"] = false,
+    },
+    companionChanges = {
+        {
+            key = "bars.classPowerWidthMode",
+            value = "player",
+            whenValue = false,
+            whenTextHas = { "player", "player frame", "unit frame" },
+        },
+        {
+            key = "bars.classPowerOffsetX",
+            value = ClassPowerPlacementXValue,
+            whenValue = false,
+            whenTextHas = CLASS_POWER_PLACEMENT_TERMS,
+        },
+        {
+            key = "bars.classPowerOffsetY",
+            value = ClassPowerPlacementYValue,
+            whenValue = false,
+            whenTextHas = CLASS_POWER_PLACEMENT_TERMS,
+        },
+        {
+            key = "bars.classPowerWidthMode",
+            value = "cooldown",
+            whenValue = true,
+            whenTextHas = { "width", "match width", "same width" },
+        },
+    },
+    exactAliases = {
+        "anchor class resource to cooldownmanager",
+        "anchor class resources to cooldownmanager",
+        "anchor class resource to cooldown manager",
+        "anchor class resources to cooldown manager",
+        "anchor class resource to essential cooldowns",
+        "anchor class resources to essential cooldowns",
+        "anchor class resource to essential cooldownmanager",
+        "anchor class resources to essential cooldownmanager",
+        "attach class resource to cooldownmanager",
+        "attach class resources to cooldownmanager",
+        "dock class resource to cooldownmanager",
+        "dock class resources to cooldownmanager",
+        "follow cooldownmanager with class resource",
+        "follow cooldownmanager with class resources",
+        "anchor combo points to cooldownmanager",
+        "anchor combo points to cooldown manager",
+        "anchor combo points to essential cooldowns",
+        "attach combo points to cooldownmanager",
+        "dock combo points to cooldownmanager",
+        "anchor class resource to player frame",
+        "anchor class resources to player frame",
+        "anchor class resource player frame",
+        "anchor class resources player frame",
+        "class resource anchor to player frame",
+        "class resources anchor to player frame",
+        "anchor combo points to player frame",
+        "combo points anchor to player frame",
+        "move class resource under player frame",
+        "move class resources under player frame",
+        "move class resource below player frame",
+        "move class resources below player frame",
+        "put class resource under player frame",
+        "put class resources under player frame",
+        "put class resource below player frame",
+        "put class resources below player frame",
+        "move combo points under player frame",
+        "put combo points under player frame",
+        "move combo points below player frame",
+        "put combo points below player frame",
+        "move class resource above player frame",
+        "move class resources above player frame",
+        "put class resource above player frame",
+        "put class resources above player frame",
+        "move combo points above player frame",
+        "put combo points above player frame",
+        "move class resource on player frame",
+        "move class resources on player frame",
+        "put class resource on player frame",
+        "put class resources on player frame",
+        "move combo points on player frame",
+        "put combo points on player frame",
+        "detach class resource from cooldownmanager",
+        "detach class resources from cooldownmanager",
+        "detach class resource from cooldown manager",
+        "detach class resources from cooldown manager",
+        "detach combo points from cooldownmanager",
+        "detach combo points from cooldown manager",
+        "undock class resource from cooldownmanager",
+        "undock combo points from cooldownmanager",
+        "stop class resource following cooldownmanager",
+        "stop combo points following cooldownmanager",
+    },
 })
 RegisterBarsBoolean("showChargedComboPoints", "chargedComboPoints", "Empowered Combo Points", true, ClassPowerAliases("empowered combo points", "charged combo points", "combo point charges"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_CHARGED_COMBO_POINTS",
 })
 RegisterBarsBoolean("classPowerShowText", "text", "Class Resource Text", false, ClassPowerAliases("text", "resource text", "class resource numbers", "class power numbers"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_TEXT",
+    valueAliases = {
+        ["astext"] = true,
+        ["showtext"] = true,
+        ["shownumbers"] = true,
+        ["shownumber"] = true,
+        ["numbersonly"] = true,
+        ["textonly"] = true,
+        ["aspips"] = false,
+        ["asdots"] = false,
+        ["asbars"] = false,
+        ["showpips"] = false,
+        ["showdots"] = false,
+        ["showbars"] = false,
+        ["pipsonly"] = false,
+        ["dotsonly"] = false,
+        ["hide numbers"] = false,
+        ["hide number"] = false,
+        ["hidetext"] = false,
+        ["turnoffnumbers"] = false,
+        ["turnoffnumber"] = false,
+        ["turnofftext"] = false,
+        ["disablenumbers"] = false,
+        ["disablenumber"] = false,
+        ["disabletext"] = false,
+        ["withoutnumbers"] = false,
+        ["nonumbers"] = false,
+    },
+    companionChanges = {
+        { key = "bars.showClassPower", value = true, whenTextHas = { "show", "turn on", "enable" }, prepend = true },
+    },
+    exactAliases = {
+        "class resource text",
+        "class resources text",
+        "class power text",
+        "class resource numbers",
+        "class resources numbers",
+        "class power numbers",
+        "resource numbers",
+        "resource number",
+        "show class resources as text",
+        "show class resource as text",
+        "show class resources as pips",
+        "show class resource as pips",
+        "show class resources as dots",
+        "show class resource as dots",
+        "show class resources as bars",
+        "show class resource as bars",
+        "show combo point numbers",
+        "show combo points numbers",
+        "hide combo point numbers",
+        "hide combo points numbers",
+        "show resource numbers",
+        "show resource number",
+        "hide resource numbers",
+        "hide resource number",
+        "combo point numbers",
+        "combo points numbers",
+        "resource text",
+    },
 })
 RegisterBarsBoolean("runeShowTime", "runeTime", "Rune Time", true, ClassPowerAliases("rune time", "rune timers", "rune timer text"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_RUNE_TIME",
@@ -600,6 +992,25 @@ RegisterBarsBoolean("showShadowMana", "shadowMana", "Shadow Insanity Bar", false
 })
 RegisterBarsBoolean("classPowerShowPrediction", "prediction", "Class Resource Prediction", true, ClassPowerAliases("prediction", "resource prediction", "incoming resource"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_PREDICTION",
+    exactAliases = {
+        "class resource prediction",
+        "class resources prediction",
+        "class power prediction",
+        "resource prediction",
+        "incoming resource",
+        "show class resource prediction",
+        "show class resources prediction",
+        "turn on class resource prediction",
+        "turn on class resources prediction",
+        "enable class resource prediction",
+        "enable class resources prediction",
+        "hide class resource prediction",
+        "hide class resources prediction",
+        "turn off class resource prediction",
+        "turn off class resources prediction",
+        "disable class resource prediction",
+        "disable class resources prediction",
+    },
 })
 
 RegisterBarsBoolean("classPowerColorByType", "colorByType", "Class Resource Color By Type", true, ClassPowerAliases("color by type", "resource type colors", "class resource class colors"), {
@@ -653,6 +1064,63 @@ RegisterBarsNumber("classPowerBgAlpha", "backgroundAlpha", "Class Resource Backg
     reason = "MSUF_ASSISTANT_CLASSPOWER_BG_ALPHA",
     percent = true,
     step = 0.01,
+    relativeStep = 0.05,
+    booleanOnValue = 0.3,
+    booleanOffValue = 0,
+    booleanAliases = {
+        ["show"] = 0.3,
+        ["enable"] = 0.3,
+        ["turnon"] = 0.3,
+        ["withbackground"] = 0.3,
+        ["backgroundon"] = 0.3,
+        ["hide"] = 0,
+        ["remove"] = 0,
+        ["turnoff"] = 0,
+        ["without"] = 0,
+        ["withoutbackground"] = 0,
+        ["nobackground"] = 0,
+        ["backgroundoff"] = 0,
+    },
+    exactAliases = {
+        "class resource background",
+        "class resources background",
+        "class power background",
+        "show class resource background",
+        "show class resources background",
+        "turn on class resource background",
+        "turn on class resources background",
+        "enable class resource background",
+        "enable class resources background",
+        "hide class resource background",
+        "hide class resources background",
+        "turn off class resource background",
+        "turn off class resources background",
+        "disable class resource background",
+        "disable class resources background",
+        "combo point background",
+        "combo points background",
+        "show combo point background",
+        "show combo points background",
+        "hide combo point background",
+        "hide combo points background",
+        "turn off combo point background",
+        "turn off combo points background",
+        "resource background",
+        "class resource background opacity",
+        "class resources background opacity",
+        "class power background opacity",
+        "class resource background alpha",
+        "class resources background alpha",
+        "class power background alpha",
+        "class resource empty background",
+        "class resource empty background opacity",
+        "class resources empty background opacity",
+        "class resource bg",
+        "class resource bg alpha",
+        "class resources bg alpha",
+        "class resource bg opacity",
+        "class resources bg opacity",
+    },
 })
 RegisterBarsNumber("classPowerTickWidth", "separator", "Class Resource Separator Width", 1, 0, 4, ClassPowerAliases("separator", "separator width", "tick width", "pip separator", "divider", "divider width", "divider line width"), {
     reason = "MSUF_ASSISTANT_CLASSPOWER_SEPARATOR",
@@ -1173,6 +1641,7 @@ Registry:RegisterSetting({
         "preview resource",
         "resource preview",
     },
+    exactAliases = ClassPowerPreviewExactAliases(),
     values = CLASS_POWER_PREVIEW_VALUES,
     valueAliases = ClassPowerPreviewValueAliases(),
     get = function()
@@ -1213,6 +1682,7 @@ Registry:RegisterAction({
         "start resource preview animation",
         "stop resource preview animation",
     },
+    parseAliasArgs = ParseClassPowerPreviewAnimationAliasArgs,
     combatSafe = true,
     run = function(args)
         local preview = M and M._msuf2ClassPowerInlinePreview
@@ -1230,6 +1700,19 @@ Registry:RegisterAction({
     key = "class_power_quick_setup",
     label = "Quick Setup Class Bar",
     type = "classPower",
+    aliases = {
+        "quick setup class resources",
+        "quick setup class resource",
+        "quick setup class power",
+        "quick setup class bar",
+        "class resource quick setup",
+        "class resources quick setup",
+        "class power quick setup",
+        "setup class resources",
+        "setup class resource",
+        "setup class power",
+    },
+    aliasNoArgs = true,
     combatSafe = false,
     confirmRequired = true,
     captureSnapshot = true,

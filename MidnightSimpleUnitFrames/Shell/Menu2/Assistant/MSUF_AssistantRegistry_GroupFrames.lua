@@ -707,7 +707,14 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "shorten group names")
     AddAliasesForUnit(aliases, scope, "shorten names")
     AddAliasesForUnit(aliases, scope, "name shortening")
-    RegisterGroupBoolean(scope, "nameShortening", "nameShortenEnabled", "Name Shortening", false, "font", aliases)
+    RegisterGroupBoolean(scope, "nameShortening", "nameShortenEnabled", "Name Shortening", false, "font", aliases, {
+        get = function(groupScope)
+            local db = GroupDB(groupScope)
+            local value = db.nameShortenEnabled
+            if value == nil then return (tonumber(db.nameMaxChars) or 0) > 0 end
+            return value and true or false
+        end,
+    })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name truncation style")

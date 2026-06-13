@@ -554,25 +554,29 @@ local function EnumValueForText(setting, text)
 end
 
 P.BooleanAliasValueForText = P.BooleanAliasValueForText or function(setting, text)
-    local aliases = setting and setting.valueAliases
+    local aliases = setting and (setting.booleanAliases or setting.valueAliases)
     if type(aliases) ~= "table" then return nil end
     local compactText = Compact(text)
     local bestValue
     local bestLen = 0
     for alias, value in pairs(aliases) do
-        local boolValue
-        if value == true or value == "true" or value == 1 then
-            boolValue = true
-        elseif value == false or value == "false" or value == 0 then
-            boolValue = false
+        local aliasValue
+        if setting and setting.type == "number" then
+            aliasValue = tonumber(value)
+        else
+            if value == true or value == "true" or value == 1 then
+                aliasValue = true
+            elseif value == false or value == "false" or value == 0 then
+                aliasValue = false
+            end
         end
-        if boolValue ~= nil then
+        if aliasValue ~= nil then
             local compactAlias = Compact(alias)
             if HasPhrase(text, alias) or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true)) then
                 local len = #compactAlias
                 if len > bestLen then
                     bestLen = len
-                    bestValue = boolValue
+                    bestValue = aliasValue
                 end
             end
         end
@@ -1470,6 +1474,7 @@ end
 
 local function NumberSettingSupportsBooleanToggle(setting)
     if type(setting) ~= "table" then return false end
+    if setting.booleanOnValue ~= nil or setting.booleanOffValue ~= nil or type(setting.booleanAliases) == "table" then return true end
     local hay = (tostring(setting.key or "") .. " " .. tostring(setting.label or "") .. " " .. tostring(setting.attribute or "")):lower()
     return hay:find("outline", 1, true) ~= nil
         or hay:find("border", 1, true) ~= nil
@@ -1478,14 +1483,21 @@ end
 
 local function BooleanValueForNumberSetting(setting, text)
     if not NumberSettingSupportsBooleanToggle(setting) then return nil end
-    if not ContainsAny(text, { "on", "off", "enable", "disable", "show", "hide", "an", "aus", "aktivieren", "deaktivieren" }) then return nil end
+    local hasBooleanCue = ContainsAny(text, { "on", "off", "enable", "disable", "show", "hide", "remove", "without", "no ", "with ", "an", "aus", "aktivieren", "deaktivieren" })
+    if not hasBooleanCue then return nil end
+    local aliasValue = P.BooleanAliasValueForText and P.BooleanAliasValueForText(setting, text)
+    if aliasValue ~= nil then return aliasValue end
     local bool = DetectBoolean(text)
     if bool == nil then return nil end
     if bool == false then
+        local offValue = tonumber(setting.booleanOffValue)
+        if offValue ~= nil then return offValue end
         local minValue = tonumber(setting.min)
         if minValue ~= nil then return minValue end
         return 0
     end
+    local onValue = tonumber(setting.booleanOnValue)
+    if onValue ~= nil then return onValue end
     local step = tonumber(setting.step) or 1
     local minValue = tonumber(setting.min)
     local maxValue = tonumber(setting.max)

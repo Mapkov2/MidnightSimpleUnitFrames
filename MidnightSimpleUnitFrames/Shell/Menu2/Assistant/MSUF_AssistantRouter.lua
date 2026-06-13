@@ -1024,7 +1024,8 @@ function A.RouteInput(text, coreHandler)
 
     local parser = A.Parser or {}
     local normForScope = Normalize(text)
-    local hasClassPowerScope = type(parser.CLASS_POWER_TERMS) == "table" and ContainsAny(normForScope, parser.CLASS_POWER_TERMS)
+    local hasClassPowerScope = (type(parser.CLASS_POWER_TERMS) == "table" and ContainsAny(normForScope, parser.CLASS_POWER_TERMS))
+        or ContainsAny(normForScope, { "resource numbers", "resource number", "resource text", "resource texts" })
     local hasExplicitScope = ContainsAny(normForScope, {
         "unitframe", "unitframes", "unit frame", "unit frames",
         "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",

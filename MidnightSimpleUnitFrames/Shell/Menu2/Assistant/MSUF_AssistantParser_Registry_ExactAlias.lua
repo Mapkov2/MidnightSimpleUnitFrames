@@ -158,6 +158,66 @@ local function GuardedSettingResponse(setting, text, raw)
     return nil
 end
 
+local function TextHasAny(text, terms)
+    if type(terms) ~= "table" then return true end
+    local hay = " " .. Normalize(text) .. " "
+    for i = 1, #terms do
+        local term = Normalize(terms[i])
+        if term ~= "" and hay:find(" " .. term .. " ", 1, true) then return true end
+    end
+    return false
+end
+
+local function ResolveCompanionValue(spec, companionSetting, text, primaryValue)
+    local value = spec and spec.value
+    if type(value) == "function" then
+        local ok, result = pcall(value, spec, companionSetting, text, primaryValue)
+        if not ok then return nil, nil end
+        value = result
+    end
+
+    local relativeDelta = spec and spec.relativeDelta
+    if type(relativeDelta) == "function" then
+        local ok, result = pcall(relativeDelta, spec, companionSetting, text, primaryValue)
+        if not ok then return value, nil end
+        relativeDelta = result
+    end
+    return value, relativeDelta
+end
+
+local function AddExactAliasChange(changes, seenKeys, setting, value, relativeDelta, score, text)
+    local key = tostring(setting and setting.key or "")
+    if key ~= "" and not seenKeys[key] then
+        seenKeys[key] = true
+        changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, matchScore = score }
+    end
+
+    local companions = type(setting) == "table" and setting.companionChanges or nil
+    if type(companions) ~= "table" then return end
+    for i = 1, #companions do
+        local spec = companions[i]
+        local companionKey = tostring(spec and spec.key or "")
+        local companionSetting = companionKey ~= "" and Registry and Registry:GetSetting(companionKey) or nil
+        local whenValue = spec and spec.whenValue
+        if companionSetting
+            and not seenKeys[companionKey]
+            and (whenValue == nil or whenValue == value)
+            and TextHasAny(text, spec.whenTextHas)
+        then
+            local companionValue, companionRelativeDelta = ResolveCompanionValue(spec, companionSetting, text, value)
+            if companionValue ~= nil or companionRelativeDelta ~= nil then
+                local companion = { setting = companionSetting, value = companionValue, relativeDelta = companionRelativeDelta, matchScore = score, companion = true }
+                seenKeys[companionKey] = true
+                if spec.prepend == true then
+                    table.insert(changes, 1, companion)
+                else
+                    changes[#changes + 1] = companion
+                end
+            end
+        end
+    end
+end
+
 function P.ParseRegistryExactAliasShortcut(text, raw)
     local allSettings = Registry and Registry:AllSettings() or {}
     if #allSettings == 0 then return nil end
@@ -177,7 +237,7 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
     local bestScore = 0
     for i = 1, #matches do if matches[i].score > bestScore then bestScore = matches[i].score end end
 
-    local changes, missingValue = {}, {}
+    local changes, missingValue, seenChangeKeys = {}, {}, {}
     for i = 1, #matches do
         local match = matches[i]
         if match.score == bestScore then
@@ -188,7 +248,7 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
             local value
             if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
             if value ~= nil or relativeDelta ~= nil then
-                changes[#changes + 1] = { setting = setting, value = value, relativeDelta = relativeDelta, matchScore = match.score }
+                AddExactAliasChange(changes, seenChangeKeys, setting, value, relativeDelta, match.score, text)
             elseif setting.type ~= "boolean" then
                 missingValue[#missingValue + 1] = { setting = setting, score = match.score }
             end
@@ -196,6 +256,26 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
     end
 
     if #changes == 0 then return MissingValueResponse and MissingValueResponse(missingValue, raw) or nil end
+    local primaryChangeCount = 0
+    for i = 1, #changes do
+        if not changes[i].companion then primaryChangeCount = primaryChangeCount + 1 end
+    end
+    if #changes > 1 and primaryChangeCount == 1 then
+        local setting
+        for i = 1, #changes do
+            if not changes[i].companion then
+                setting = changes[i].setting
+                break
+            end
+        end
+        return {
+            kind = "changes",
+            changes = changes,
+            bulkSafe = true,
+            label = setting and setting.label or "Assistant setting change",
+            summary = "Registry exact-alias setting change.",
+        }
+    end
     if #changes > 1 then
         if HasExactAliasBulkScope(text)
             or (P.ShouldApplyMultipleAuraLaneChanges and P.ShouldApplyMultipleAuraLaneChanges(text, changes))
