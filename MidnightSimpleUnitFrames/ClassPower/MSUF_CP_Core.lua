@@ -1,10 +1,11 @@
---- ClassPower/MSUF_CP_Core.lua - class power build and layout helpers
-
---- MSUF_CP_Build.lua
-
---- MSUF_CP_Build.lua
---- Phase 7C: move Class Power build helpers out of MSUF_ClassPower.lua with
---- minimal risk. Only CP_EnsureBars and CP_Create live here.
+--- ClassPower/MSUF_CP_Core.lua
+--- Builder bundle for the ClassPower controller.
+---
+--- The controller owns events and live state; this file contributes closures for
+--- build, layout, presentation, runtime routing, and class-specific prediction.
+--- Keep the split intact when extending ClassPower: frame creation belongs in
+--- BUILD, anchoring and sizing in LAYOUT, texture/font refresh in PRESENTATION,
+--- event handlers in RUNTIME, and speculative class mechanics in SPECIALS.
 
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
@@ -12,6 +13,8 @@ if type(builders) ~= "table" then
     _G.MSUF_CP_CORE_BUILDERS = builders
 end
 
+--- Layout can be blocked while unit frames are protected. Queue the shared
+--- unit-frame reanchor instead of attempting to move ClassPower immediately.
 local function RequestUFReanchorAfterCombat()
     local MSUF = _G.MSUF_NS
     local UF = MSUF and MSUF.UF
@@ -45,52 +48,18 @@ local function CP_NormalizeShape(value)
     return "BAR"
 end
 
+local function CP_NormalizeShapeAlign(value)
+    value = tostring(value or "CENTER"):upper()
+    if value == "LEFT" or value == "RIGHT" then return value end
+    return "CENTER"
+end
+
 local function CP_ShapeTextures(shape)
     return CP_SHAPE_TEXTURES[CP_NormalizeShape(shape)]
 end
 
-local function CP_UpdateShapeFillClip(bar, value)
-    local secret = _G.issecretvalue
-    if secret and secret(value) == true then return end
-    local tex = bar and (bar._shapeFillTex or (bar.GetStatusBarTexture and bar:GetStatusBarTexture()))
-    if not tex then return end
-    local minV, maxV = bar._msufCPMin or 0, bar._msufCPMax or 1
-    if secret and (secret(minV) == true or secret(maxV) == true) then
-        tex:SetTexCoord(0, 1, 0, 1)
-        tex._msufCPShapeL, tex._msufCPShapeR = nil, nil
-        return
-    end
-    value = tonumber(value) or minV or 0
-    minV = tonumber(minV) or 0
-    maxV = tonumber(maxV) or 1
-    local span = maxV - minV
-    local frac = span > 0 and ((value - minV) / span) or 0
-    if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-    local left, right
-    if frac <= 0 or frac >= 1 then
-        left, right = 0, 1
-    elseif bar._shapeFillReverse == true then
-        left, right = 1 - frac, 1
-    else
-        left, right = 0, frac
-    end
-    if tex._msufCPShapeL ~= left or tex._msufCPShapeR ~= right then
-        tex:SetTexCoord(left, right, 0, 1)
-        tex._msufCPShapeL, tex._msufCPShapeR = left, right
-    end
-end
-
-local function CP_EnableShapeFillClip(bar, reverse)
-    if not bar then return end
-    bar._shapeFillTex = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
-    bar._shapeFillReverse = reverse == true
-    if bar.SetScript and bar._shapeFillClipEnabled ~= true then
-        bar:SetScript("OnValueChanged", CP_UpdateShapeFillClip)
-        bar._shapeFillClipEnabled = true
-    end
-    CP_UpdateShapeFillClip(bar, bar.GetValue and bar:GetValue() or 0)
-end
-
+--- Shape mode uses native StatusBar filling where possible. This cleanup resets
+--- old/manual clipping state before a bar returns to segmented rectangular mode.
 local function CP_DisableShapeFillClip(bar)
     if not bar then return end
     if bar.SetScript and bar._shapeFillClipEnabled == true then
@@ -106,16 +75,27 @@ local function CP_DisableShapeFillClip(bar)
     bar._shapeFillTex = nil
 end
 
+local function CP_UseNativeShapeFill(bar, reverse)
+    CP_DisableShapeFillClip(bar)
+    if bar and bar.SetReverseFill then
+        bar:SetReverseFill(reverse == true)
+    end
+end
+
+--- BUILD is the only block that creates ClassPower frames. It is cold-path code:
+--- create reusable bars and text once, then let layout/runtime reuse them.
 builders.BUILD = function(E)
     local CP = E.CP
     local _cpDB = E._cpDB
     local CreateFrame = E.CreateFrame
     local CP_ResolveTexture = E.CP_ResolveTexture
 
-local function CP_EnsureBars(parent, count)
+    local function CP_EnsureBars(parent, count)
         if count <= CP.maxBars then return end
 
-        --- Resolve textures once for all new bars
+        --- Resolve textures once for all new bars. Existing bars are refreshed
+        --- by PRESENTATION so this path only pays setup cost for newly needed
+        --- resource slots.
         local b = _cpDB.bars or {}
         local fgPath = CP_ResolveTexture(b.classPowerTexture)
         local bgKey  = b.classPowerBgTexture
@@ -171,9 +151,11 @@ local function CP_EnsureBars(parent, count)
         CP.maxBars = count
     end
 
-local function CP_Create(playerFrame)
+    local function CP_Create(playerFrame)
         if CP.container then return end
 
+        --- Parent to the player frame so ClassPower follows scale, strata, and
+        --- secure visibility rules from the owning unit frame.
         local c = CreateFrame("Frame", "MSUF_ClassPowerContainer", playerFrame)
         local b = _cpDB.bars or {}
         local levelOffset = tonumber(b.classPowerFrameLevelOffset) or 5
@@ -217,11 +199,9 @@ local function CP_Create(playerFrame)
     }
 end
 
---- MSUF_CP_Layout.lua
-
---- MSUF_CP_Layout.lua
---- Phase 7D: move Class Power layout helper out of MSUF_ClassPower.lua with
---- minimal risk. Only CP_Layout lives here.
+--- LAYOUT computes geometry and anchoring for the already-created bars.
+--- The function also coordinates with detached power bars and external cooldown
+--- anchors, so keep combat-deferred work here rather than in value updates.
 
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
@@ -242,23 +222,15 @@ builders.LAYOUT = function(E)
     local SetEmptyAlpha = E.SetEmptyAlpha
     local SetAutoHideActive = E.SetAutoHideActive
 
-    local function EnsureShapeEdge(bar)
-        if not bar then return nil end
-        if bar._shapeEdge then return bar._shapeEdge end
-        local edge = bar:CreateTexture(nil, "OVERLAY", nil, 5)
-        edge:SetAllPoints(bar)
-        edge:SetVertexColor(0, 0, 0, 1)
-        edge:Hide()
-        bar._shapeEdge = edge
-        return edge
-    end
-
     local function ClearShapeEdge(bar)
         if bar and bar._shapeEdge then
             bar._shapeEdge:Hide()
         end
     end
 
+    --- Applies size, anchor, segment placement, tick separators, and outline.
+    --- This is warm-path code: it can run often during option changes, but it
+    --- must not be called for every power value update.
     local function CP_Layout(playerFrame, maxPower, height, powerType)
         if not CP.container or maxPower <= 0 then return end
 
@@ -266,6 +238,9 @@ builders.LAYOUT = function(E)
             or (InCombatLockdown and InCombatLockdown())
             or false
         if inLockdown and CP.container._msufLayoutInitialized == true then
+            --- Once the protected frame has a valid layout, do not move it in
+            --- combat. Mark the layout dirty and let the unit-frame anchor pass
+            --- replay the requested geometry when lockdown ends.
             CP._layoutDirty = true
             _G.MSUF_ClassPowerLayoutDirty = true
             RequestUFReanchorAfterCombat()
@@ -297,12 +272,27 @@ builders.LAYOUT = function(E)
 
         local snap = _G.MSUF_Snap
 
+        local shape = CP_NormalizeShape(b.classPowerShape)
+        local shapeInfo = CP_ShapeTextures(shape)
+        local shapeMode = shapeInfo ~= nil
         local widthMode = b.classPowerWidthMode or "player"
         local userW
         local playerSpecW = (playerFrame and playerFrame.MSUFSpec and tonumber(playerFrame.MSUFSpec.width)) or 275
+        local autoFitGap = tonumber(b.classPowerGap) or 0
+        if autoFitGap < 0 then autoFitGap = 0 elseif autoFitGap > 8 then autoFitGap = 8 end
+        local snapAutoGap = (autoFitGap > 0 and type(snap) == "function") and snap(CP.container, autoFitGap) or autoFitGap
 
+        --- Width can follow the player frame, explicit settings, or supported
+        --- cooldown frames. Cooldown widths are cached so entering combat does
+        --- not force protected anchor/measurement work.
         local cdmName = CPConst.CDM_FRAMES[widthMode]
-        if cdmName then
+        if shapeMode and widthMode == "auto_pips" then
+            local slot = tonumber(h) or 1
+            if slot < 1 then slot = 1 end
+            if type(snap) == "function" then slot = snap(CP.container, slot) or slot end
+            if slot < 1 then slot = 1 end
+            userW = (slot * maxPower) + ((maxPower - 1) * snapAutoGap)
+        elseif cdmName then
             local cachedW = (layoutCache and tonumber(layoutCache["width:" .. cdmName])) or tonumber(CP.container._msufStableWidth)
             if inLockdown and cachedW and cachedW >= 30 then
                 userW = cachedW
@@ -346,6 +336,8 @@ builders.LAYOUT = function(E)
         local oX = tonumber(b.classPowerOffsetX) or 0
         local oY = tonumber(b.classPowerOffsetY) or 0
 
+        --- Direct cooldown anchoring is a secure-frame edge case. In combat we
+        --- can only reuse a cached screen position; if that is missing, defer.
         local cachedCooldownAnchor = false
         if inLockdown and b.classPowerAnchorToCooldown == true then
             CP.container:SetSize(userW, h)
@@ -412,13 +404,11 @@ builders.LAYOUT = function(E)
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
 
-        local shape = CP_NormalizeShape(b.classPowerShape)
-        local shapeInfo = CP_ShapeTextures(shape)
-        local shapeMode = shapeInfo ~= nil
-
         local outlineThick = tonumber(b.classPowerOutline) or 1
         if outlineThick < 0 then outlineThick = 0 elseif outlineThick > 4 then outlineThick = 4 end
 
+        --- Shape mode treats each resource as an independent pip. Rectangular
+        --- mode divides one row into stable segments and optional separators.
         if shapeMode then
             if CP._outline then CP._outline:Hide() end
         elseif outlineThick > 0 then
@@ -494,7 +484,6 @@ builders.LAYOUT = function(E)
         if shapeMode then
             local shapeFill = shapeInfo.fill
             local shapeBg = shapeInfo.bg
-            local shapeEdge = shapeInfo.edge
             local slot = h
             if slot < 1 then slot = 1 end
             if type(snap) == "function" then slot = snap(CP.container, slot) or slot end
@@ -505,32 +494,36 @@ builders.LAYOUT = function(E)
             if slot > maxSlot then slot = maxSlot end
             local rowW = (slot * maxPower) + totalGap
             if rowW > frameW then rowW = frameW end
-            local startX = math_floor((frameW - rowW) * 0.5 + 0.5)
+            local align = CP_NormalizeShapeAlign(b.classPowerShapeAlign)
+            local startX
+            if align == "LEFT" then
+                startX = 0
+            elseif align == "RIGHT" then
+                startX = math_floor(frameW - rowW + 0.5)
+            else
+                startX = math_floor((frameW - rowW) * 0.5 + 0.5)
+            end
             if startX < 0 then startX = 0 end
+            local rightInset = math_floor(frameW - rowW - startX + 0.5)
+            if rightInset < 0 then rightInset = 0 end
             local xPos = 0
             for i = 1, maxPower do
                 local bar = CP.bars[i]
                 if bar then
                     bar:ClearAllPoints()
                     bar:SetStatusBarTexture(shapeFill)
-                    if bar.SetReverseFill then bar:SetReverseFill(fillReverse) end
-                    CP_EnableShapeFillClip(bar, fillReverse)
+                    CP_UseNativeShapeFill(bar, fillReverse)
                     if bar._bg then
                         bar._bg:SetTexture(shapeBg)
                         bar._bg:SetVertexColor(bgR, bgG, bgB, bgA)
                     end
                     if fillReverse then
-                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(startX + xPos), 0)
+                        bar:SetPoint("TOPRIGHT", CP.container, "TOPRIGHT", -(rightInset + xPos), 0)
                     else
                         bar:SetPoint("TOPLEFT", CP.container, "TOPLEFT", startX + xPos, 0)
                     end
                     bar:SetSize(slot, h)
-                    local edge = EnsureShapeEdge(bar)
-                    if edge then
-                        edge:SetTexture(shapeEdge)
-                        edge:SetVertexColor(0, 0, 0, 1)
-                        edge:Hide()
-                    end
+                    ClearShapeEdge(bar)
                     bar:Show()
                     xPos = xPos + slot + snapGap
                 end
@@ -597,6 +590,9 @@ builders.LAYOUT = function(E)
         CP.currentMax = maxPower
         CP.height = h
 
+        --- Detached player power can anchor to ClassPower. If ClassPower's
+        --- anchor dimensions changed, ask the power-bar embed layout to refresh
+        --- outside combat or mark it dirty for the post-combat pass.
         local needPBRefresh = false
         local uf = _G.MSUF_UnitFrames
         local pf = uf and uf.player
@@ -630,11 +626,8 @@ builders.LAYOUT = function(E)
     }
 end
 
---- MSUF_CP_Presentation.lua
-
---- MSUF_CP_Presentation.lua
---- Pure presentation helpers for Class Power (phase 7A split).
---- Intentionally low-risk: no build/layout/value-flow logic moves here.
+--- PRESENTATION owns visual refresh that does not change geometry or values:
+--- fonts, text offsets, colors, textures, and media swaps.
 
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
@@ -683,6 +676,9 @@ builders.PRESENTATION = function(E)
         fs:SetPoint("CENTER", tf, "CENTER", ox, oy)
     end
 
+    --- Font refresh is driven by global font serials and ClassPower options.
+    --- Keep it stamped so profile/font changes repaint once instead of during
+    --- every class-resource event.
     local function CP_ApplyFont()
         local fs = CP.text
         if not fs then return end
@@ -775,6 +771,8 @@ builders.PRESENTATION = function(E)
         end
     end
 
+    --- Texture refresh is shared by bar and shape modes. Layout decides sizes;
+    --- this function only replaces media and clears stale shape clipping state.
     local function CP_RefreshTexture()
         local b = _cpDB.bars or {}
         local fgKey = b.classPowerTexture
@@ -798,14 +796,13 @@ builders.PRESENTATION = function(E)
                 bar:SetStatusBarTexture(activeFgPath)
                 if shapeInfo then
                     local reverse = (_cpDB.bars and _cpDB.bars.classPowerFillReverse) == true
-                    if bar.SetReverseFill then bar:SetReverseFill(reverse) end
-                    CP_EnableShapeFillClip(bar, reverse)
+                    CP_UseNativeShapeFill(bar, reverse)
                 else
                     if bar.SetReverseFill then bar:SetReverseFill(false) end
                     CP_DisableShapeFillClip(bar)
                 end
                 if bar._bg then bar._bg:SetTexture(activeBgPath) end
-                if not shapeInfo then ClearShapeEdge(bar) end
+                ClearShapeEdge(bar)
             end
         end
         if CP.bgTex then CP.bgTex:SetTexture(activeBgPath) end
@@ -820,10 +817,9 @@ builders.PRESENTATION = function(E)
     }
 end
 
---- MSUF_CP_Runtime.lua
-
---- MSUF_CP_Runtime.lua ? hot-path runtime/light-refresh handlers for the CP core
---- Loaded before the ClassPower controller and exposes lightweight runtime builders.
+--- RUNTIME exposes hot-path event handlers back to the controller. These
+--- handlers should update values or request a throttled structural refresh; they
+--- should not allocate frames or perform full option normalization.
 local builders = _G.MSUF_CP_FEATURE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
@@ -868,6 +864,9 @@ builders.RUNTIME = function(env)
     local OnTipOfTheSpearSpellCast = env.OnTipOfTheSpearSpellCast
     local OnSpellTrackerReset = env.OnSpellTrackerReset
 
+    --- Resolve the visible segment count for the active render mode. This is
+    --- intentionally separate from layout so rare max-power changes can be
+    --- handled without a full ClassPower rebuild.
     local function GetResolvedVisibleMax()
         if not CP.visible or not CP.powerType then return CP.currentMax end
         local mode = CP.renderMode
@@ -911,6 +910,8 @@ builders.RUNTIME = function(env)
         return maxP
     end
 
+    --- Lightweight refresh for cases where the mode is still valid but the
+    --- visible max or displayed values changed.
     local function RefreshVisibleModeLight(newMax)
         if not CP.visible or not CP.powerType then return end
         local maxP = tonumber(newMax) or tonumber(CP.currentMax) or 1
@@ -967,6 +968,9 @@ builders.RUNTIME = function(env)
         end
     end
 
+    --- Talent/spec/display events can invalidate render mode. Compare the
+    --- structural signature first; only fall back to FullRefresh when the shape
+    --- of the resource display actually changed.
     local function HandleRareStructuralEvent(useTimer)
         if CP_ShouldUseLiteBindings() then
             local newSig = CP_ComputeStructuralSignature()
@@ -996,6 +1000,8 @@ builders.RUNTIME = function(env)
         end
     end
 
+    --- Frequent UNIT_POWER path. Filter by token and render mode before calling
+    --- RunActiveUpdate so aura/timer/stagger modes do not do duplicate work.
     local function OnPowerUpdate(powerToken)
         if not CP.visible or not CP.powerType then return end
         if CP.isAuraPower then return end
@@ -1009,6 +1015,9 @@ builders.RUNTIME = function(env)
         RunActiveUpdate(CP.powerType, CP.currentMax)
     end
 
+    --- Aura-backed resources share UNIT_AURA traffic with the rest of the addon.
+    --- Keep the branch narrow: segmented aura resources, timer bars, and stagger
+    --- each have a dedicated value updater.
     local function OnAuraUpdate(unit)
         if CP.visible and CP.isAuraPower then
             RunActiveUpdate(CP.powerType, CP.currentMax)
@@ -1062,10 +1071,9 @@ builders.RUNTIME = function(env)
     }
 end
 
---- MSUF_CP_Specials.lua
-
---- MSUF_CP_Specials.lua ? class/resource special handlers for the CP core
---- Loaded before the ClassPower controller and exposes lightweight feature builders.
+--- SPECIALS contains class-specific prediction/state that is not a generic
+--- power-token event. Keeping these rules isolated prevents RUNTIME from turning
+--- into a spec-by-spec rules table.
 local builders = _G.MSUF_CP_FEATURE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
@@ -1085,6 +1093,8 @@ builders.SPECIALS = function(env)
     local RunActiveUpdate = env.RunActiveUpdate
     local RunAuraSegmentedUpdate = env.RunAuraSegmentedUpdate
 
+    --- Warlock shard prediction is speculative UI only; it is cleared on cast
+    --- end and never writes profile/runtime structure.
     local function OnWarlockCastStart(spellID)
         if PLAYER_CLASS ~= "WARLOCK" then return end
         if _cpDB.showPrediction == false then return end
@@ -1103,6 +1113,9 @@ builders.SPECIALS = function(env)
         RunActiveUpdate()
     end
 
+    --- Tip of the Spear is tracked from spell casts because the visible stack
+    --- state can lead aura refreshes. The authoritative aura update still gets
+    --- a chance to correct the display afterward.
     local function OnTipOfTheSpearSpellCast(spellID)
         local known = C_SpellBook and C_SpellBook.IsSpellKnown
         if not known then return end

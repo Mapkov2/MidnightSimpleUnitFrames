@@ -1,3 +1,11 @@
+--- Shell/Menu2/MSUF_Menu2_Widgets.lua
+--- Shared Menu2 widget factory.
+---
+--- Pages should compose controls through this module instead of constructing
+--- raw frames ad hoc. Widgets also register search metadata, edit-mode preview
+--- focus hooks, collapse state, pinned previews, and enable gates, so adding a
+--- new control here keeps cross-page behavior consistent.
+
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
@@ -75,6 +83,8 @@ local NormalizeFocusKey = EM2Util.NormalizeFocusKey
 local NormalizeFocusComponent = EM2Util.NormalizeFocusComponent
 local NormalizeFocusSlot = EM2Util.NormalizeFocusSlot
 
+--- Bridge hover/selection in menu controls to the live unit/group preview focus
+--- system. The preview modules own rendering; widgets only send focus intent.
 function W.SetPreviewFocus(key, component, slot, active)
     key = NormalizeFocusKey(ResolveFocusValue(key))
     component = NormalizeFocusComponent(ResolveFocusValue(component))
@@ -242,6 +252,9 @@ local function FlashCollapsibleHeader(entry)
     if C_Timer and C_Timer.After then C_Timer.After(0.14, FadeOut) else FadeOut() end
 end
 
+--- Used by search/edit-mode deep links. Opens the section, scrolls it into view,
+--- and flashes the header without permanently changing accordion state unless
+--- the caller asks to persist.
 function W.FocusCollapsibleSection(section, opts)
     local entry = section and section._msuf2CollapsibleEntry
     if not entry then return false end
@@ -341,6 +354,8 @@ local function HideSliderTemplateParts(slider)
     end
 end
 
+--- Page layout builder used by most Menu2 pages. It owns vertical flow,
+--- collapsible section state, search metadata registration, and content height.
 function W.PageBuilder(ctx)
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local b = {
@@ -1074,6 +1089,8 @@ local function ApplyControlCardChrome(card)
     card._msuf2CardDepthLine = depth
 end
 
+--- Toggle visuals are custom-built to avoid Blizzard template art leaking into
+--- Menu2 styling. State changes are still driven by CheckButton semantics.
 local function RefreshToggleControl(button, hover, down)
     local refresh = button and button._msuf2RefreshToggleFeedback
     if refresh then refresh(button, hover, down) end
@@ -1772,6 +1789,8 @@ local function ApplyControlEnabled(control)
 end
 
 --- Shared by all Menu2 pages so disabled dependent options do not drift visually.
+--- Enable gates keep disabled controls visible but inert, which preserves page
+--- layout and lets tooltips/explanatory text still be attached by callers.
 function W.SetControlEnabled(control, enabled)
     if not control then return end
     control._msuf2DesiredEnabled = enabled and true or false
@@ -1821,6 +1840,8 @@ local function ClampPlacedControlWidth(widget, parent, x)
     end
 end
 
+--- Shared positioning helper for widgets that can be placed in normal page flow
+--- or moved into card/preview surfaces.
 function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     if not (widget and widget.ClearAllPoints) then return widget end
     parent = parent or widget:GetParent()
@@ -1963,6 +1984,8 @@ function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
     for i = writeIndex, #list do list[i] = nil end
 end
 
+--- Pinned previews are owned by their page body but coordinated globally so a
+--- page rebuild can release stale preview frames and keep only the active one.
 function W.AttachPinnedPreview(body, box, opts)
     if not (body and box) then return nil end
     opts = opts or {}
@@ -2099,6 +2122,7 @@ function W.AttachPinnedPreview(body, box, opts)
             RefreshButton()
             return
         end
+        if box.Show then box:Show() end
         if ShouldPin() then
             local active = scroll._msuf2PinnedPreviewActiveRecord
             if active and active ~= record and active.restore then active.restore() end
@@ -2176,6 +2200,8 @@ function W.AttachPinnedPreview(body, box, opts)
     return record
 end
 
+--- Slider wraps Blizzard's slider template but hides native art and stamps
+--- callbacks so profile writes only happen when the effective value changes.
 function W.Slider(section, label, minVal, maxVal, step, width)
     local x, y = NextRow(section, 48)
     local valueGap = 8
@@ -2480,6 +2506,8 @@ end
 
 local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn end
 
+--- Text inputs commit on Enter or focus loss; callers attach the actual profile
+--- write through SetOnValueCommitted.
 function W.TextInput(section, label, width)
     local x, y = NextRow(section, 50)
     width = width or 260
@@ -2554,6 +2582,8 @@ local function ColorButtonOnClick(self)
     end
 end
 
+--- Color buttons use Blizzard's shared ColorPickerFrame but keep previous RGB
+--- values on the button so cancel can restore the UI state.
 function W.Color(section, label)
     local x, y = NextRow(section, 34)
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)

@@ -10,6 +10,7 @@
     <Script file="Pages\MSUF_Menu2_Advanced.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedColors.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedGameplay.lua"/>
+    <Script file="Preview\MSUF_Menu2_ClassPowerPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedClassPower.lua"/>
     <Script file="Pages\MSUF_Menu2_AdvancedProfiles.lua"/>
     <Script file="Pages\MSUF_Menu2_Auras.lua"/>

@@ -3,6 +3,13 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
 
+--- UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua
+---
+--- Power bar element for single unit frames. Config compilation decides whether
+--- power is embedded/detached/shaped; this element creates the regions, applies
+--- the compiled layout, and exposes fast update functions used by Dispatch.
+--- Keep DB reads out of Update paths; use frame.MSUFSpec.power instead.
+
 local C = MSUF.UFBarTextCommon
 if not C then return end
 
@@ -47,11 +54,17 @@ local POWER_SHAPE_TEXTURES = {
     bg = POWER_SHAPE_MEDIA .. "power_crystal_bg.tga",
     edge = POWER_SHAPE_MEDIA .. "power_crystal_edge.tga",
   },
+  ORB = {
+    fill = POWER_SHAPE_MEDIA .. "pip_circle_fill.tga",
+    bg = POWER_SHAPE_MEDIA .. "pip_circle_bg.tga",
+    edge = POWER_SHAPE_MEDIA .. "pip_circle_edge.tga",
+    axis = "VERTICAL",
+  },
 }
 
 local function NormalizePowerShape(value)
   value = tostring(value or "BAR"):upper()
-  if value == "ROUND" or value == "CRYSTAL" then return value end
+  if value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
   return "BAR"
 end
 
@@ -59,62 +72,45 @@ local function PowerShapeTextures(value)
   return POWER_SHAPE_TEXTURES[NormalizePowerShape(value)]
 end
 
-local function UpdatePowerShapeFillClip(bar, value)
-  local secret = _G.issecretvalue
-  if secret and secret(value) == true then return end
-  local tex = bar and (bar._msufPowerShapeFillTex or (bar.GetStatusBarTexture and bar:GetStatusBarTexture()))
-  if not tex then return end
-  local minV = 0
-  local maxV = (bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue)
-    or (bar._msufMaxValuePlain == true and bar._msufMaxValue)
-    or 1
-  if secret and (secret(minV) == true or secret(maxV) == true) then
-    tex:SetTexCoord(0, 1, 0, 1)
-    tex._msufPowerShapeL, tex._msufPowerShapeR = nil, nil
-    return
-  end
-  value = tonumber(value) or minV or 0
-  minV = tonumber(minV) or 0
-  maxV = tonumber(maxV) or 1
-  local span = maxV - minV
-  local frac = span > 0 and ((value - minV) / span) or 0
-  if frac < 0 then frac = 0 elseif frac > 1 then frac = 1 end
-  local left, right
-  if frac <= 0 or frac >= 1 then
-    left, right = 0, 1
-  elseif bar._msufReverseFill == true then
-    left, right = 1 - frac, 1
-  else
-    left, right = 0, frac
-  end
-  if tex._msufPowerShapeL ~= left or tex._msufPowerShapeR ~= right then
-    tex:SetTexCoord(left, right, 0, 1)
-    tex._msufPowerShapeL, tex._msufPowerShapeR = left, right
-  end
+local function ShapeOutlineAlpha(value)
+  value = tonumber(value) or 0
+  if value <= 0 then return 0 end
+  if value >= 8 then return 1 end
+  return 0.49 + (value * 0.065)
 end
 
-local function EnablePowerShapeFillClip(bar)
-  if not bar then return end
-  bar._msufPowerShapeFillTex = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
-  if bar.SetScript and bar._msufPowerShapeFillClipEnabled ~= true then
-    bar:SetScript("OnValueChanged", UpdatePowerShapeFillClip)
-    bar._msufPowerShapeFillClipEnabled = true
-  end
-  UpdatePowerShapeFillClip(bar, bar.GetValue and bar:GetValue() or 0)
-end
-
-local function DisablePowerShapeFillClip(bar)
+local function ClearPowerShapeFillClip(bar)
   if not bar then return end
   if bar.SetScript and bar._msufPowerShapeFillClipEnabled == true then
     bar:SetScript("OnValueChanged", nil)
   end
   bar._msufPowerShapeFillClipEnabled = nil
+  bar._msufPowerShapeAxis = nil
   local tex = bar._msufPowerShapeFillTex or (bar.GetStatusBarTexture and bar:GetStatusBarTexture())
   if tex then
     tex:SetTexCoord(0, 1, 0, 1)
     tex._msufPowerShapeL, tex._msufPowerShapeR = nil, nil
+    tex._msufPowerShapeT, tex._msufPowerShapeB = nil, nil
   end
   bar._msufPowerShapeFillTex = nil
+end
+
+local function ApplyNativePowerShapeFill(bar, axis)
+  ClearPowerShapeFillClip(bar)
+  if bar and bar.SetOrientation then
+    bar:SetOrientation(axis == "VERTICAL" and "VERTICAL" or "HORIZONTAL")
+  end
+  if bar then
+    bar._msufPowerShapeAxis = axis == "VERTICAL" and "VERTICAL" or nil
+  end
+end
+
+local function DisablePowerShapeFillClip(bar)
+  local wasVertical = bar and bar._msufPowerShapeAxis == "VERTICAL"
+  ClearPowerShapeFillClip(bar)
+  if bar and bar.SetOrientation and wasVertical then
+    bar:SetOrientation("HORIZONTAL")
+  end
 end
 
 local function StorePowerMax(frame, bar, unit, maxPower, maxSecret)
@@ -251,10 +247,16 @@ end
 local function HidePowerBorderEdges(bar)
   local edges = bar and bar.MSUFPowerBorderEdges
   if not edges then
+    if bar and bar.MSUFPowerBorderHost then
+      SetShownCached(bar.MSUFPowerBorderHost, false)
+    end
     return
   end
   for i = 1, 4 do
     SetShownCached(edges[i], false)
+  end
+  if bar and bar.MSUFPowerBorderHost then
+    SetShownCached(bar.MSUFPowerBorderHost, false)
   end
 end
 
@@ -266,18 +268,35 @@ local function HidePowerBorder(bar)
 end
 
 local function EnsurePowerBorder(bar)
+  if not bar then return nil end
+  local parent = bar.GetParent and bar:GetParent()
+  if not parent then return nil end
+  local host = bar.MSUFPowerBorderHost
+  if not host then
+    host = CreateFrame("Frame", nil, parent)
+    host:EnableMouse(false)
+    bar.MSUFPowerBorderHost = host
+  elseif host.GetParent and host:GetParent() ~= parent then
+    host:SetParent(parent)
+    bar.MSUFPowerBorderEdges = nil
+    bar._msufPowerBorderThickness = nil
+    bar._msufPowerBorderR, bar._msufPowerBorderG, bar._msufPowerBorderB, bar._msufPowerBorderA = nil, nil, nil, nil
+  end
   local edges = bar.MSUFPowerBorderEdges
-  if edges then
-    return edges
+  if edges and edges._host == host then
+    return edges, host
   end
   edges = {}
   for i = 1, 4 do
-    local edge = bar:CreateTexture(nil, "OVERLAY", nil, 6)
+    local edge = host:CreateTexture(nil, "OVERLAY", nil, 6)
     edge:SetColorTexture(0, 0, 0, 1)
     edges[i] = edge
   end
+  edges._host = host
   bar.MSUFPowerBorderEdges = edges
-  return edges
+  bar._msufPowerBorderThickness = nil
+  bar._msufPowerBorderR, bar._msufPowerBorderG, bar._msufPowerBorderB, bar._msufPowerBorderA = nil, nil, nil, nil
+  return edges, host
 end
 
 local function ApplyPowerBorder(bar, power)
@@ -288,36 +307,45 @@ local function ApplyPowerBorder(bar, power)
   if bar and bar._msufPowerShapeEdge then
     SetShownCached(bar._msufPowerShapeEdge, false)
   end
-  local thickness = floor((tonumber(power and power.borderThickness) or 0) + 0.5)
-  if not (power and power.borderEnabled == true) or thickness <= 0 then
+  local detached = power and power.detached == true
+  local thickness = floor((tonumber(detached and power.detachedOutline or power and power.borderThickness) or 0) + 0.5)
+  if thickness <= 0 or (not detached and not (power and power.borderEnabled == true)) then
     HidePowerBorder(bar)
     return
   end
-  if thickness > 10 then
-    thickness = 10
+  if thickness > 8 then
+    thickness = 8
   end
   local r, g, b, a = power.borderR or 0, power.borderG or 0, power.borderB or 0, power.borderA or 1
-  local edges = EnsurePowerBorder(bar)
+  local edges, host = EnsurePowerBorder(bar)
+  if not edges then return end
+  host:ClearAllPoints()
+  host:SetPoint("TOPLEFT", bar, "TOPLEFT", -thickness, thickness)
+  host:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", thickness, -thickness)
+  if host.SetFrameLevel and bar.GetFrameLevel then
+    host:SetFrameLevel((bar:GetFrameLevel() or 1) + 2)
+  end
+  SetShownCached(host, true)
   local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
   if bar._msufPowerBorderThickness ~= thickness then
     top:ClearAllPoints()
-    top:SetPoint("BOTTOMLEFT", bar, "TOPLEFT", -thickness, 0)
-    top:SetPoint("BOTTOMRIGHT", bar, "TOPRIGHT", thickness, 0)
+    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
     top:SetHeight(thickness)
 
     bottom:ClearAllPoints()
-    bottom:SetPoint("TOPLEFT", bar, "BOTTOMLEFT", -thickness, 0)
-    bottom:SetPoint("TOPRIGHT", bar, "BOTTOMRIGHT", thickness, 0)
+    bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
+    bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
     bottom:SetHeight(thickness)
 
     left:ClearAllPoints()
-    left:SetPoint("TOPRIGHT", bar, "TOPLEFT", 0, thickness)
-    left:SetPoint("BOTTOMRIGHT", bar, "BOTTOMLEFT", 0, -thickness)
+    left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
+    left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
     left:SetWidth(thickness)
 
     right:ClearAllPoints()
-    right:SetPoint("TOPLEFT", bar, "TOPRIGHT", 0, thickness)
-    right:SetPoint("BOTTOMLEFT", bar, "BOTTOMRIGHT", 0, -thickness)
+    right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
+    right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
     right:SetWidth(thickness)
     bar._msufPowerBorderThickness = thickness
   end
@@ -354,7 +382,7 @@ local function ApplyPowerShape(bar, bg, power, powerColorR, powerColorG, powerCo
   end
 
   SetStatusTexture(bar, shapeInfo.fill)
-  EnablePowerShapeFillClip(bar)
+  ApplyNativePowerShapeFill(bar, shapeInfo.axis)
   if bg then
     local bgSpec = power and power.background
     bg:SetTexture(shapeInfo.bg)
@@ -366,12 +394,19 @@ local function ApplyPowerShape(bar, bg, power, powerColorR, powerColorG, powerCo
     )
   end
 
-  local thickness = floor((tonumber(power and power.detachedOutline or power and power.borderThickness) or 0) + 0.5)
-  local showEdge = power and thickness > 0
+  local detached = power and power.detached == true
+  local thickness = floor((tonumber(detached and power.detachedOutline or power and power.borderThickness) or 0) + 0.5)
+  if thickness > 8 then thickness = 8 end
+  local showEdge = power and thickness > 0 and (detached or power.borderEnabled == true)
   local edge = EnsurePowerShapeEdge(bar)
   if edge then
     edge:SetTexture(shapeInfo.edge)
-    edge:SetVertexColor(power.borderR or 0, power.borderG or 0, power.borderB or 0, power.borderA or 1)
+    edge:SetVertexColor(power.borderR or 0, power.borderG or 0, power.borderB or 0, (power.borderA or 1) * ShapeOutlineAlpha(thickness))
+    if showEdge and edge._msufPowerShapeOutline ~= "FIT" then
+      edge:ClearAllPoints()
+      edge:SetAllPoints(bar)
+      edge._msufPowerShapeOutline = "FIT"
+    end
     SetShownCached(edge, showEdge)
   end
   return true
@@ -462,6 +497,12 @@ function Power.Apply(frame, spec)
     width = tonumber(spec and spec.width) or 20
   end
   local detachedH = tonumber(power.detachedHeight) or h
+  if shape == "ORB" then
+    local orbSize = tonumber(power.orbSize) or 54
+    if orbSize < 20 then orbSize = 20 elseif orbSize > 160 then orbSize = 160 end
+    width = orbSize
+    detachedH = orbSize
+  end
   local detachedX = tonumber(power.detachedX) or 0
   local detachedY = tonumber(power.detachedY) or -4
   local detachedLevel = tonumber(power.detachedLevel) or 6

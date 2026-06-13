@@ -54,9 +54,11 @@ local function RequestRefreshForBox(box, reason)
         return
     end
     if InstallPreviewHooks then InstallPreviewHooks() end
+    local refresh = Preview.Refresh
+    if type(refresh) ~= "function" then return end
     if reason == "OPTIONS_APPLY_DB_IMMEDIATE" then
         box._refreshQueued = nil
-        Preview.Refresh(box, reason)
+        refresh(box, reason)
         return
     end
     box._refreshReason = reason or box._refreshReason
@@ -67,7 +69,8 @@ local function RequestRefreshForBox(box, reason)
         local refreshReason = box._refreshReason
         box._refreshReason = nil
         box._refreshQueued = nil
-        if box:IsShown() and (not box.IsVisible or box:IsVisible()) then Preview.Refresh(box, refreshReason) end
+        local queuedRefresh = Preview.Refresh
+        if type(queuedRefresh) == "function" and box:IsShown() and (not box.IsVisible or box:IsVisible()) then queuedRefresh(box, refreshReason) end
     end
     if C_Timer and C_Timer.After then C_Timer.After(0, run) else run() end
 end

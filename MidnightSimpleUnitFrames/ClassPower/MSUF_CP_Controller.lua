@@ -30,6 +30,7 @@ local table_sort = table.sort
 local wipe = wipe
 local CreateFrame = CreateFrame
 local UnitPower, UnitPowerMax = UnitPower, UnitPowerMax
+local UnitHealth = UnitHealth
 local UnitPowerType = UnitPowerType
 local UnitPowerDisplayMod = UnitPowerDisplayMod
 local UnitClass = UnitClass
@@ -106,8 +107,17 @@ local function CP_ConfigAltManaEnabled()
     return b and b.showAltMana == true or false
 end
 
+local function CP_ConfigPlayerHPBarEnabled()
+    local b = _cpDB.bars
+    if not b then
+        local db = MSUF_DB
+        b = db and db.bars
+    end
+    return b and b.playerHPBarEnabled == true or false
+end
+
 local function CP_ConfigAnyFeatureEnabled()
-    return CP_ConfigClassPowerEnabled() or CP_ConfigAltManaEnabled()
+    return CP_ConfigClassPowerEnabled() or CP_ConfigAltManaEnabled() or CP_ConfigPlayerHPBarEnabled()
 end
 
 --- Spec API (12.0: C_SpecializationInfo preferred, fallback to global)
@@ -337,6 +347,7 @@ local function EnsureDefaults()
     if b.showClassPower       == nil then b.showClassPower       = true  end
     if b.classPowerHeight     == nil then b.classPowerHeight     = 4     end
     if b.classPowerShape      == nil then b.classPowerShape      = "BAR" end
+    if b.classPowerShapeAlign == nil then b.classPowerShapeAlign = "CENTER" end
     if b.classPowerColorByType == nil then b.classPowerColorByType = true end
     if b.classPowerBgAlpha    == nil then b.classPowerBgAlpha    = 0.3   end
     if b.classPowerTickWidth  == nil then b.classPowerTickWidth  = 1     end
@@ -354,6 +365,9 @@ local function EnsureDefaults()
     if b.classPowerShowPrediction == nil then b.classPowerShowPrediction = true end
     if b.classPowerTextOffsetX    == nil then b.classPowerTextOffsetX    = 0    end
     if b.classPowerTextOffsetY    == nil then b.classPowerTextOffsetY    = 0    end
+    if b.detachedPowerBarTexture  == nil then b.detachedPowerBarTexture  = ""   end
+    if b.detachedPowerBarBgTexture == nil then b.detachedPowerBarBgTexture = ""  end
+    if b.detachedPowerBarOutline  == nil then b.detachedPowerBarOutline  = 1    end
 
     --- AltMana defaults
     if b.showAltMana          == nil then b.showAltMana          = false end
@@ -362,6 +376,35 @@ local function EnsureDefaults()
     if b.altManaColorR        == nil then b.altManaColorR        = 0.0   end
     if b.altManaColorG        == nil then b.altManaColorG        = 0.0   end
     if b.altManaColorB        == nil then b.altManaColorB        = 0.8   end
+
+    --- Class Resources-owned second Player HP bar (off by default)
+    if b.playerHPBarEnabled     == nil then b.playerHPBarEnabled     = false end
+    if b.playerHPBarAnchor      == nil then b.playerHPBarAnchor      = "CLASS_TOP" end
+    if b.playerHPBarWidthMode   == nil then b.playerHPBarWidthMode   = "class" end
+    if b.playerHPBarWidth       == nil then b.playerHPBarWidth       = 0 end
+    if b.playerHPBarHeight      == nil then b.playerHPBarHeight      = 6 end
+    if b.playerHPBarGap         == nil then b.playerHPBarGap         = 2 end
+    if b.playerHPBarOffsetX     == nil then b.playerHPBarOffsetX     = 0 end
+    if b.playerHPBarOffsetY     == nil then b.playerHPBarOffsetY     = 0 end
+    if b.playerHPBarFrameLevelOffset == nil then b.playerHPBarFrameLevelOffset = 7 end
+    if b.playerHPBarShape       == nil then b.playerHPBarShape       = "BAR" end
+    if b.playerHPBarOrbSize     == nil then b.playerHPBarOrbSize     = 54 end
+    if b.playerHPBarTexture     == nil then b.playerHPBarTexture     = "" end
+    if b.playerHPBarBgTexture   == nil then b.playerHPBarBgTexture   = "" end
+    if b.playerHPBarBgAlpha     == nil then b.playerHPBarBgAlpha     = 0.35 end
+    if b.playerHPBarOutline     == nil then b.playerHPBarOutline     = 1 end
+    if b.playerHPBarColorMode   == nil then b.playerHPBarColorMode   = "GLOBAL" end
+    if b.playerHPBarSmoothFill  == nil then b.playerHPBarSmoothFill  = false end
+    if b.playerHPBarTextEnabled == nil then b.playerHPBarTextEnabled = true end
+    if b.playerHPBarUsePlayerText == nil then b.playerHPBarUsePlayerText = true end
+    if b.playerHPBarTextLeft    == nil then b.playerHPBarTextLeft    = "NONE" end
+    if b.playerHPBarTextCenter  == nil then b.playerHPBarTextCenter  = "NONE" end
+    if b.playerHPBarTextRight   == nil then b.playerHPBarTextRight   = "CURPERCENT" end
+    if b.playerHPBarTextSeparator == nil then b.playerHPBarTextSeparator = "" end
+    if b.playerHPBarTextReverse == nil then b.playerHPBarTextReverse = false end
+    if b.playerHPBarTextSize    == nil then b.playerHPBarTextSize    = 14 end
+    if b.playerHPBarTextOffsetX == nil then b.playerHPBarTextOffsetX = 0 end
+    if b.playerHPBarTextOffsetY == nil then b.playerHPBarTextOffsetY = 0 end
 
     --- Stagger bar defaults (Brewmaster Monk)
     if b.showStagger          == nil then b.showStagger          = true  end
@@ -1372,6 +1415,43 @@ local function GetPlayerFrame()
     return _G.MSUF_player or (_G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player) or nil
 end
 
+local PHP = { visible = false }
+local CP_PlayerHPRefresh = CP_Noop
+local CP_PlayerHPUpdate = CP_Noop
+local CP_PlayerHPApplyFont = CP_Noop
+
+local function CP_PlayerHPNeedsRefresh()
+    return PHP.visible == true or CP_ConfigPlayerHPBarEnabled()
+end
+
+do
+    local playerHP = CP_CallBuilder(CPCoreBuilders.PLAYER_HP, {
+            PHP = PHP,
+            CP = CP,
+            _cpDB = _cpDB,
+            UnitHealth = UnitHealth,
+            UnitHealthMax = UnitHealthMax,
+            UnitClass = UnitClass,
+            RAID_CLASS_COLORS = RAID_CLASS_COLORS,
+            CreateFrame = CreateFrame,
+            GetPlayerFrame = GetPlayerFrame,
+            ResolveTexture = CP_ResolveTexture,
+            tonumber = tonumber,
+            type = type,
+            tostring = tostring,
+            pairs = pairs,
+            pcall = pcall,
+            math_floor = math_floor,
+            string_format = string_format,
+        })
+    if playerHP then
+        PHP = playerHP.PHP or PHP
+        CP_PlayerHPRefresh = playerHP.Refresh or CP_PlayerHPRefresh
+        CP_PlayerHPUpdate = playerHP.Update or CP_PlayerHPUpdate
+        CP_PlayerHPApplyFont = playerHP.ApplyFont or CP_PlayerHPApplyFont
+    end
+end
+
 local function CP_ShouldMaintainHiddenAnchor()
     local p = MSUF_DB and MSUF_DB.player
     if not p or p.powerBarDetached ~= true or p.detachedPowerBarAnchorToClassPower ~= true then
@@ -1629,6 +1709,10 @@ local function FullRefresh()
         AM.visible = false
     end
 
+    if CP_PlayerHPNeedsRefresh() then
+        CP_PlayerHPRefresh(playerFrame)
+    end
+
     CP.structuralSig = CP_ComputeStructuralSignature()
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
@@ -1764,7 +1848,7 @@ end
 --- clears the stamp cache so the detached power bar picks up final dimensions.
 --- Defined once at file scope - zero closure allocations per PLAYER_ENTERING_WORLD.
 local function _CP_DeferredPBRelayout()
-    if not (CP.visible or AM.visible or CP.CDMWidthWantsSync()) then return end
+    if not (CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync()) then return end
     local fr = _G.MSUF_UnitFrames and _G.MSUF_UnitFrames.player
     if fr and fr._msufStampCache then
         fr._msufStampCache["PBEmbedLayout"] = nil
@@ -1902,7 +1986,7 @@ CP_RefreshEventBindings = function()
     local wantCDMWidthSync, wantCDMTrackedBuffs = CP.CDMWidthWantsSync()
     local cdmWidthEventsActive = wantCDMWidthSync and not CP.CDMWidthIsPositionLocked()
 
-    if not CP.visible and not AM.visible then
+    if not CP.visible and not AM.visible and not PHP.visible then
         CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_MAXPOWER", false, "player")
@@ -1911,6 +1995,8 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_AURA", wantCDMTrackedBuffs and cdmWidthEventsActive, "player")
         CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", false)
         CP_SetEventBound(eventFrame, "UNIT_HEALTH", false, "player")
+        CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", false, "player")
+        CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_STOP", false, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", false, "player")
@@ -1933,6 +2019,8 @@ CP_RefreshEventBindings = function()
         CP_SetEventBound(eventFrame, "UNIT_AURA", true, "player")
         CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", true)
         CP_SetEventBound(eventFrame, "UNIT_HEALTH", true, "player")
+        CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", PHP.visible, "player")
+        CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", PHP.visible, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_STOP", true, "player")
         CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", true, "player")
@@ -1951,13 +2039,14 @@ CP_RefreshEventBindings = function()
     local wantMaxPower = CP_ShouldUseMaxPowerEvent()
     local wantAura = CP.visible and profile.aura == true
     local wantRune = CP.visible and profile.rune == true
-    local wantHealth = CP.visible and profile.health == true
+    local wantHealth = (CP.visible and profile.health == true) or PHP.visible
+    local wantMaxHealth = PHP.visible
     local wantPointCharge = CP.visible and profile.pointCharge == true
     local wantWarlockPred = CP.visible and profile.warlockPred == true
     local wantSpellSucceeded = CP.visible and profile.spellSucceeded == true
     local wantDisplayPower = CP.visible or AM.visible
     local wantRegen = _autoHideActive and CP.visible
-    local wantDeadAlive = CP.visible and profile.deadAlive == true
+    local wantDeadAlive = (CP.visible and profile.deadAlive == true) or PHP.visible
 
     CP_SetEventBound(eventFrame, "UNIT_POWER_UPDATE", wantPower, "player")
     CP_SetEventBound(eventFrame, "UNIT_POWER_FREQUENT", false, "player")
@@ -1967,6 +2056,8 @@ CP_RefreshEventBindings = function()
     CP_SetEventBound(eventFrame, "UNIT_AURA", wantAura or (wantCDMTrackedBuffs and cdmWidthEventsActive), "player")
     CP_SetEventBound(eventFrame, "RUNE_POWER_UPDATE", wantRune)
     CP_SetEventBound(eventFrame, "UNIT_HEALTH", wantHealth, "player")
+    CP_SetEventBound(eventFrame, "UNIT_MAXHEALTH", wantMaxHealth, "player")
+    CP_SetEventBound(eventFrame, "UNIT_MAX_HEALTH_MODIFIERS_CHANGED", wantMaxHealth, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_START", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_STOP", wantWarlockPred, "player")
     CP_SetEventBound(eventFrame, "UNIT_SPELLCAST_FAILED", wantWarlockPred, "player")
@@ -2105,10 +2196,20 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     --- Stagger: health changes affect threshold colors + bar max
     if event == "UNIT_HEALTH" then
         if arg1 == "player" then
+            if PHP.visible then
+                CP_PlayerHPUpdate(event)
+            end
             --- CP stagger: max health = bar max, threshold recalculation
             if CP.visible and CP.renderMode == CPK.MODE.STAGGER then
                 CP_UpdateValues_Stagger(CP.powerType, CP.currentMax)
             end
+        end
+        return
+    end
+
+    if event == "UNIT_MAXHEALTH" or event == "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" then
+        if arg1 == "player" and PHP.visible then
+            CP_PlayerHPUpdate(event)
         end
         return
     end
@@ -2141,6 +2242,9 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
     --- Death/resurrection: reset spell tracker state (Sensei pattern)
     if event == "PLAYER_DEAD" or event == "PLAYER_ALIVE" then
         OnSpellTrackerReset()
+        if PHP.visible then
+            CP_PlayerHPUpdate(event)
+        end
         if CP.visible then
             CP_UpdateValues_AuraSegmented(CP.powerType, CP.currentMax)
         end
@@ -2173,7 +2277,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2, arg3)
                 --- that clears the PBEmbedLayout stamp so the detached power bar
                 --- re-computes its width from the now-correct frame geometry.
                 --- Uses pre-allocated _CP_DeferredPBRelayout (zero closures).
-                if C_Timer and C_Timer.After and (CP.visible or AM.visible or CP.CDMWidthWantsSync()) then
+                if C_Timer and C_Timer.After and (CP.visible or AM.visible or PHP.visible or CP.CDMWidthWantsSync()) then
                     C_Timer.After(0.35, _CP_DeferredPBRelayout)
                 end
             elseif retries < 20 then
@@ -2205,6 +2309,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 function _G.MSUF_ClassPower_IsRuntimeActive()
     return CP.visible == true
         or AM.visible == true
+        or PHP.visible == true
         or _cpTickActive == true
         or _cpStructuralEventsBound == true
         or CP._cdmWidthEventsActive == true
@@ -2219,9 +2324,26 @@ end
 
 function _G.MSUF_ClassPower_RefreshCDMWidthBindings(syncNow)
     _CP_RefreshConfig()
+    if CP_PlayerHPNeedsRefresh() then
+        CP_PlayerHPRefresh(GetPlayerFrame())
+    end
     CP_RefreshEventBindings()
     if syncNow == true and (CP.visible or AM.visible or CP.CDMWidthWantsSync()) then
         CP.CDMWidthSyncLayouts(true)
+    end
+end
+
+function _G.MSUF_ClassPower_PlayerHP_Refresh()
+    _CP_RefreshConfig()
+    CP_PlayerHPRefresh(GetPlayerFrame())
+    CP_RefreshEventBindings()
+    CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
+end
+
+function _G.MSUF_ClassPower_PlayerHP_RefreshTextures()
+    if PHP.visible then
+        PHP._textureStamp = nil
+        CP_PlayerHPRefresh(GetPlayerFrame())
     end
 end
 
@@ -2229,13 +2351,22 @@ end
 function _G.MSUF_ClassPower_RefreshTextures()
     if CP.visible then CP_RefreshTexture() end
     if AM.visible then AM_RefreshTexture() end
+    if PHP.visible then
+        PHP._textureStamp = nil
+        CP_PlayerHPRefresh(GetPlayerFrame())
+    end
 end
 
 --- Refresh class power text font (called from UpdateAllFonts)
 function _G.MSUF_ClassPower_ApplyFonts()
-    if not CP.visible or not _cpDB.showText then return end
-    _cpFontRev = 0  --- force re-apply
-    CP_ApplyFont()
+    if CP.visible and _cpDB.showText then
+        _cpFontRev = 0  --- force re-apply
+        CP_ApplyFont()
+    end
+    if PHP.visible then
+        PHP._fontStamp = nil
+        CP_PlayerHPApplyFont()
+    end
 end
 
 --- Compatibility: hook bar texture change for live refresh.
@@ -2253,6 +2384,10 @@ do
                     origTex(...)
                     if CP.visible then CP_RefreshTexture() end
                     if AM.visible then AM_RefreshTexture() end
+                    if PHP.visible then
+                        PHP._textureStamp = nil
+                        CP_PlayerHPRefresh(GetPlayerFrame())
+                    end
                 end
                 _texHooked = true
             end
@@ -2284,7 +2419,10 @@ do
             IsEnabled = function()
                 if not MSUF_DB then return true end
                 local b = MSUF_DB.bars
-                return not b or b.showClassPower ~= false
+                return not b
+                    or b.showClassPower ~= false
+                    or b.showAltMana == true
+                    or b.playerHPBarEnabled == true
             end,
             Init = function()
                 EnsureDefaults()

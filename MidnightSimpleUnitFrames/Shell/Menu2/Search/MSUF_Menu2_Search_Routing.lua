@@ -674,6 +674,7 @@ classpower_behavior=behavior|prediction|quick actions
 classpower_visuals=style|visual|texture|spacing|colors
 classpower_visibility=auto hide|visibility|hide empty
 classpower_detached_power=detached power|detached power bar|alternate power|dual resource
+classpower_player_hp=player hp bar|second player hp bar|duplicate hp|duplicate health|class resource hp|class resources hp|shared hp text|smooth fill|hp shape|follow player power|orb size|hp orb|health orb|hp color|class color|dark mode|hp gradient
 classpower_alt_mana=alternative mana|alt mana|mana bar
 ]])
     elseif pageKey == "auras3" or pageKey == "auras3_buffs" or pageKey == "auras3_debuffs" or pageKey == "auras3_rendering" or pageKey == "auras3_filters" or pageKey == "auras3_styling" then
