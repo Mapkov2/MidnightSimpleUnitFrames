@@ -86,6 +86,15 @@ local function AddHeader(lines, title)
     Add(lines, "=== " .. tostring(title or "Section") .. " ===")
 end
 
+local function AddCallKV(lines, key, fn, arg)
+    if type(fn) ~= "function" then return end
+    AddKV(lines, key, arg ~= nil and SafeValue(nil, fn, arg) or SafeValue(nil, fn))
+end
+
+local function AddMethodKV(lines, key, owner, method, arg)
+    if owner and type(owner[method]) == "function" then AddCallKV(lines, key, owner[method], arg) end
+end
+
 local function SafeTableValue(tbl, key)
     if type(tbl) ~= "table" or not CanAccessTable(tbl) then return nil end
     local ok, value = pcall(function() return tbl[key] end)
@@ -290,10 +299,9 @@ local function AddClientContext(lines)
             AddKV(lines, "Build info", buildInfo)
         end
     end
-    AddKV(lines, "Locale", SafeValue(nil, _G.GetLocale))
+    AddCallKV(lines, "Locale", _G.GetLocale)
     if type(_G.GetCVar) == "function" then
-        AddKV(lines, "useUiScale", SafeValue(nil, _G.GetCVar, "useUiScale"))
-        AddKV(lines, "uiScale", SafeValue(nil, _G.GetCVar, "uiScale"))
+        for _, key in ipairs({ "useUiScale", "uiScale" }) do AddCallKV(lines, key, _G.GetCVar, key) end
     end
 end
 
@@ -309,23 +317,20 @@ local function AddPlayerContext(lines)
         if ok then AddKV(lines, "Class", ValueText(classFile) .. " (" .. ValueText(classID) .. ")") end
     end
     AddKV(lines, "Spec", SpecText())
-    AddKV(lines, "Level", SafeValue(nil, _G.UnitLevel, "player"))
+    AddCallKV(lines, "Level", _G.UnitLevel, "player")
     if type(_G.UnitRace) == "function" then
         local ok, _, race, raceID = pcall(_G.UnitRace, "player")
         if ok then AddKV(lines, "Race", ValueText(race) .. " (" .. ValueText(raceID) .. ")") end
     end
-    AddKV(lines, "Faction", SafeValue(nil, _G.UnitFactionGroup, "player"))
-    AddKV(lines, "Assigned role", SafeValue(nil, _G.UnitGroupRolesAssigned, "player"))
+    AddCallKV(lines, "Faction", _G.UnitFactionGroup, "player")
+    AddCallKV(lines, "Assigned role", _G.UnitGroupRolesAssigned, "player")
 end
 
 local function AddSituationContext(lines)
     AddHeader(lines, "Situation")
-    AddKV(lines, "Zone", SafeValue(nil, _G.GetZoneText))
-    AddKV(lines, "Subzone", SafeValue(nil, _G.GetSubZoneText))
-    if _G.C_Map and type(_G.C_Map.GetBestMapForUnit) == "function" then
-        local ok, mapID = pcall(_G.C_Map.GetBestMapForUnit, "player")
-        if ok then AddKV(lines, "Map ID", mapID) end
-    end
+    AddCallKV(lines, "Zone", _G.GetZoneText)
+    AddCallKV(lines, "Subzone", _G.GetSubZoneText)
+    AddMethodKV(lines, "Map ID", _G.C_Map, "GetBestMapForUnit", "player")
     if type(_G.IsInInstance) == "function" then
         local ok, inInstance, instanceType = pcall(_G.IsInInstance)
         if ok then
@@ -346,50 +351,32 @@ local function AddSituationContext(lines)
             AddKV(lines, "Has world tier", hasWorldTier)
         end
     end
-    AddKV(lines, "InCombatLockdown", SafeValue(nil, _G.InCombatLockdown))
-    AddKV(lines, "Player affecting combat", SafeValue(nil, _G.UnitAffectingCombat, "player"))
-    AddKV(lines, "Mounted", SafeValue(nil, _G.IsMounted))
-    AddKV(lines, "In vehicle", SafeValue(nil, _G.UnitInVehicle, "player"))
-    AddKV(lines, "Dead or ghost", SafeValue(nil, _G.UnitIsDeadOrGhost, "player"))
-    AddKV(lines, "Resting", SafeValue(nil, _G.IsResting))
-    AddKV(lines, "In group", SafeValue(nil, _G.IsInGroup))
-    AddKV(lines, "In raid", SafeValue(nil, _G.IsInRaid))
-    if _G.C_PvP and type(_G.C_PvP.IsWarModeDesired) == "function" then
-        AddKV(lines, "War mode desired", SafeValue(nil, _G.C_PvP.IsWarModeDesired))
-    end
-    if _G.C_ChallengeMode and type(_G.C_ChallengeMode.IsChallengeModeActive) == "function" then
-        AddKV(lines, "Challenge mode active", SafeValue(nil, _G.C_ChallengeMode.IsChallengeModeActive))
-    end
-    if _G.C_InstanceEncounter and type(_G.C_InstanceEncounter.IsEncounterInProgress) == "function" then
-        AddKV(lines, "Encounter in progress", SafeValue(nil, _G.C_InstanceEncounter.IsEncounterInProgress))
-    end
-    if _G.C_CombatLog and type(_G.C_CombatLog.IsCombatLogRestricted) == "function" then
-        AddKV(lines, "Combat log restricted", SafeValue(nil, _G.C_CombatLog.IsCombatLogRestricted))
-    end
+    AddCallKV(lines, "InCombatLockdown", _G.InCombatLockdown)
+    AddCallKV(lines, "Player affecting combat", _G.UnitAffectingCombat, "player")
+    AddCallKV(lines, "Mounted", _G.IsMounted)
+    AddCallKV(lines, "In vehicle", _G.UnitInVehicle, "player")
+    AddCallKV(lines, "Dead or ghost", _G.UnitIsDeadOrGhost, "player")
+    AddCallKV(lines, "Resting", _G.IsResting)
+    AddCallKV(lines, "In group", _G.IsInGroup)
+    AddCallKV(lines, "In raid", _G.IsInRaid)
+    AddMethodKV(lines, "War mode desired", _G.C_PvP, "IsWarModeDesired")
+    AddMethodKV(lines, "Challenge mode active", _G.C_ChallengeMode, "IsChallengeModeActive")
+    AddMethodKV(lines, "Encounter in progress", _G.C_InstanceEncounter, "IsEncounterInProgress")
+    AddMethodKV(lines, "Combat log restricted", _G.C_CombatLog, "IsCombatLogRestricted")
 end
 
 local function AddRuntimeContext(lines)
     AddHeader(lines, "Runtime / Restrictions")
-    AddKV(lines, "InCombatLockdown", SafeValue(nil, _G.InCombatLockdown))
-    AddKV(lines, "Player affecting combat", SafeValue(nil, _G.UnitAffectingCombat, "player"))
+    AddCallKV(lines, "InCombatLockdown", _G.InCombatLockdown)
+    AddCallKV(lines, "Player affecting combat", _G.UnitAffectingCombat, "player")
     AddKV(lines, "issecretvalue API", type(_G.issecretvalue) == "function")
     AddKV(lines, "canaccesstable API", type(_G.canaccesstable) == "function")
     AddKV(lines, "CopyToClipboard API", type(_G.CopyToClipboard) == "function")
-    if _G.C_CombatLog and type(_G.C_CombatLog.IsCombatLogRestricted) == "function" then
-        AddKV(lines, "Combat log restricted", SafeValue(nil, _G.C_CombatLog.IsCombatLogRestricted))
-    end
-    if _G.C_ChatInfo and type(_G.C_ChatInfo.InChatMessagingLockdown) == "function" then
-        AddKV(lines, "Chat messaging lockdown", SafeValue(nil, _G.C_ChatInfo.InChatMessagingLockdown))
-    end
-    if _G.C_LimitedInput and type(_G.C_LimitedInput.LimitedInputAllowed) == "function" then
-        AddKV(lines, "Limited input allowed", SafeValue(nil, _G.C_LimitedInput.LimitedInputAllowed))
-    end
-    if _G.C_RestrictedActions and type(_G.C_RestrictedActions.IsAddOnRestrictionActive) == "function" then
-        AddKV(lines, "AddOn restriction active", SafeValue(nil, _G.C_RestrictedActions.IsAddOnRestrictionActive))
-    end
-    if _G.C_Secrets and type(_G.C_Secrets.HasSecretRestrictions) == "function" then
-        AddKV(lines, "Secret restrictions active", SafeValue(nil, _G.C_Secrets.HasSecretRestrictions))
-    end
+    AddMethodKV(lines, "Combat log restricted", _G.C_CombatLog, "IsCombatLogRestricted")
+    AddMethodKV(lines, "Chat messaging lockdown", _G.C_ChatInfo, "InChatMessagingLockdown")
+    AddMethodKV(lines, "Limited input allowed", _G.C_LimitedInput, "LimitedInputAllowed")
+    AddMethodKV(lines, "AddOn restriction active", _G.C_RestrictedActions, "IsAddOnRestrictionActive")
+    AddMethodKV(lines, "Secret restrictions active", _G.C_Secrets, "HasSecretRestrictions")
 end
 
 local UI_CVARS = {
@@ -451,8 +438,8 @@ end
 
 local function AddUnitTokenContext(lines)
     AddHeader(lines, "Unit Tokens")
-    AddKV(lines, "Group members", SafeValue(nil, _G.GetNumGroupMembers))
-    AddKV(lines, "Party members", SafeValue(nil, _G.GetNumSubgroupMembers))
+    AddCallKV(lines, "Group members", _G.GetNumGroupMembers)
+    AddCallKV(lines, "Party members", _G.GetNumSubgroupMembers)
     if type(_G.UnitExists) ~= "function" then
         Add(lines, "Unit API unavailable.")
         return
@@ -608,10 +595,7 @@ local function AddPerformance(lines)
         end
     end
     if type(_G.UpdateAddOnMemoryUsage) == "function" then pcall(_G.UpdateAddOnMemoryUsage) end
-    if type(_G.GetAddOnMemoryUsage) == "function" then
-        local ok, memory = pcall(_G.GetAddOnMemoryUsage, ADDON_NAME)
-        if ok then AddKV(lines, "MSUF memory KB", memory) end
-    end
+    AddCallKV(lines, "MSUF memory KB", _G.GetAddOnMemoryUsage, ADDON_NAME)
 end
 
 local IMPORTANT_ADDONS = {
@@ -717,9 +701,9 @@ local function AddBugSection(lines, bug)
     Add(lines, bug and LimitText(bug.errorText or "", 18000) or "No MSUF error was available through BugGrabber/BugSack.")
 end
 
-local function AddUserReportSection(lines)
+local function AddUserReportSection(lines, bug)
     AddHeader(lines, "User Report")
-    AddKV(lines, "Issue type", manualIssueType or "Not selected")
+    AddKV(lines, "Issue type", manualIssueType or (bug and "Lua error report" or "Manual report"))
     AddKV(lines, "Description", manualDescription or "Not provided")
 end
 
@@ -759,7 +743,7 @@ function BR.BuildText(opts)
     AddKV(lines, "Generated", DateText())
     AddKV(lines, "Report kind", bug and (bug.dummy and "dummy" or "buggrabber") or "manual")
 
-    AddUserReportSection(lines)
+    AddUserReportSection(lines, bug)
     AddBugSection(lines, bug)
     AddMSUFContext(lines)
     AddClientContext(lines)

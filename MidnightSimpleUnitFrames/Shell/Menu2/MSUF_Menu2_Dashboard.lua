@@ -468,20 +468,15 @@ local function BuildDashboardUX(ctx)
         end
 
         if _G.StaticPopupDialogs and _G.StaticPopup_Show then
-            local popup = _G.StaticPopupDialogs.MSUF2_WAGO_PROFILE_BACKUP_CONFIRM or {
+            local popup = M.InstallStaticPopup("MSUF2_WAGO_PROFILE_BACKUP_CONFIRM", {
                 text = "%s",
                 button1 = _G.YES or "Yes",
                 button2 = _G.NO or "No",
-                timeout = 0,
-                whileDead = true,
-                hideOnEscape = true,
-                preferredIndex = 3,
                 OnAccept = accept,
-            }
+            })
             popup.button1 = _G.YES or "Yes"
             popup.button2 = _G.NO or "No"
             popup.OnAccept = accept
-            _G.StaticPopupDialogs.MSUF2_WAGO_PROFILE_BACKUP_CONFIRM = popup
             _G.StaticPopup_Show("MSUF2_WAGO_PROFILE_BACKUP_CONFIRM", M.Tr("Have you backed up this MSUF profile before using the Wago MSUF page?"))
             return
         end
@@ -669,13 +664,15 @@ local function BuildDashboardUX(ctx)
         local manualReport = M.dashboardBugReportOpen == true
         local hasReport = autoReport or manualReport
         local missing = status == "missing"
-        local height = hasReport and (width < 330 and 456 or 432) or (missing and 158 or 124)
+        local height = hasReport
+            and (autoReport and (width < 330 and 282 or 262) or (width < 330 and 326 or 306))
+            or (missing and 158 or 124)
         local accent = hasReport and (T.colors.danger or T.colors.accent2)
             or (missing and T.colors.accent2 or T.colors.ok)
-        local bg = hasReport and { 0.070, 0.034, 0.046, 0.88 }
+        local bg = hasReport and { 0.032, 0.038, 0.058, 0.92 }
             or (missing and { 0.060, 0.050, 0.035, 0.86 } or { 0.030, 0.040, 0.078, 0.86 })
 
-        local card = Card(root, "", x, top, width, height, bg, accent or T.colors.borderSoft)
+        local card = Card(root, "", x, top, width, height, bg, hasReport and T.colors.borderSoft or (accent or T.colors.borderSoft))
         local title = T.Font(card, "GameFontNormal", M.Tr("Bug report"), T.colors.text)
         title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
 
@@ -722,8 +719,8 @@ local function BuildDashboardUX(ctx)
         end
 
         local bodyText = autoReport
-            and "MSUF error detected. Select the report, copy it, then paste it on one of these pages."
-            or "Describe the issue in one sentence. MSUF will add the technical context automatically."
+            and "MSUF captured the error. Three steps: select, Ctrl+C, open a link."
+            or "Describe the issue briefly. MSUF adds the technical context automatically."
         W.Text(card, bodyText, 16, -42, width - 32, T.colors.muted)
 
         local reportBox
@@ -737,46 +734,33 @@ local function BuildDashboardUX(ctx)
             selectedIssue, selectedDescription = bug.GetManualIssue()
         end
 
-        local issueButtons = {
-            { "Visual", "Visual/Layout issue", 58 },
-            { "Setting", "Setting did not save", 62 },
-            { "Text", "Text issue", 46 },
-            { "Other", "Other issue", 52 },
-        }
-        local issueX = 16
-        for i = 1, #issueButtons do
-            local info = issueButtons[i]
-            local btn = Button(card, info[1], issueX, -78, info[3], 22, function()
-                SetManualIssue(info[2])
-                if M.ShowStatusFeedback then M.ShowStatusFeedback(info[2], "info", 1.1) end
-            end, selectedIssue == info[2] and "primary" or nil)
-            if selectedIssue == info[2] and btn.SetActive then btn:SetActive(true) end
-            issueX = issueX + info[3] + 8
+        local actionTop = autoReport and -78 or -116
+        if not autoReport then
+            local descBox = CreateFrame("EditBox", nil, card, "InputBoxTemplate")
+            descBox:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -76)
+            descBox:SetSize(width - 32, 30)
+            descBox:SetAutoFocus(false)
+            descBox:SetMaxLetters(240)
+            descBox:SetJustifyH("LEFT")
+            if descBox.SetFont then descBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11, "") end
+            if descBox.SetTextInsets then descBox:SetTextInsets(8, 8, 0, 0) end
+            if T.SkinEditBox then T.SkinEditBox(descBox) end
+            descBox:SetText(selectedDescription or "")
+            local placeholder = descBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            placeholder:SetPoint("LEFT", descBox, "LEFT", 10, 0)
+            placeholder:SetPoint("RIGHT", descBox, "RIGHT", -10, 0)
+            placeholder:SetJustifyH("LEFT")
+            placeholder:SetText(M.Tr("Optional note: what went wrong?"))
+            if placeholder.SetTextColor then placeholder:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.82) end
+            placeholder:SetShown((selectedDescription or "") == "")
+            descBox:SetScript("OnTextChanged", function(self)
+                local text = self:GetText() or ""
+                SetManualIssue(nil, text)
+                placeholder:SetShown(text == "")
+            end)
+            descBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+            descBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         end
-
-        local descBox = CreateFrame("EditBox", nil, card, "InputBoxTemplate")
-        descBox:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -106)
-        descBox:SetSize(width - 32, 30)
-        descBox:SetAutoFocus(false)
-        descBox:SetMaxLetters(240)
-        descBox:SetJustifyH("LEFT")
-        if descBox.SetTextInsets then descBox:SetTextInsets(8, 8, 0, 0) end
-        if T.SkinEditBox then T.SkinEditBox(descBox) end
-        descBox:SetText(selectedDescription or "")
-        local placeholder = descBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        placeholder:SetPoint("LEFT", descBox, "LEFT", 10, 0)
-        placeholder:SetPoint("RIGHT", descBox, "RIGHT", -10, 0)
-        placeholder:SetJustifyH("LEFT")
-        placeholder:SetText(M.Tr("What went wrong? One short sentence is enough."))
-        if placeholder.SetTextColor then placeholder:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.82) end
-        placeholder:SetShown((selectedDescription or "") == "")
-        descBox:SetScript("OnTextChanged", function(self)
-            local text = self:GetText() or ""
-            SetManualIssue(nil, text)
-            placeholder:SetShown(text == "")
-        end)
-        descBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
-        descBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
         local scroll
         local function RefreshReportText()
@@ -799,39 +783,27 @@ local function BuildDashboardUX(ctx)
             end
             if M.ShowStatusFeedback then M.ShowStatusFeedback("Report selected. Press Ctrl+C.", "info", 1.4) end
         end
-        local function CopyReport()
-            local text = RefreshReportText()
-            local copied = false
-            if type(_G.CopyToClipboard) == "function" then
-                copied = pcall(_G.CopyToClipboard, text)
-            end
-            if copied then
-                if M.ShowStatusFeedback then M.ShowStatusFeedback("Report copied.", "ok", 1.3) end
-                return
-            end
-            SelectReport()
-        end
 
-        local copyBtn = Button(card, "Copy report", 16, -146, 92, 22, CopyReport, "primary")
-        AddTooltip(copyBtn, "Copy report", "Tries to copy directly. If WoW blocks it, the report is selected for Ctrl+C.")
-        Button(card, "Select all", 116, -146, 76, 22, SelectReport)
-        Button(card, "Clear", 200, -146, 62, 22, function()
+        local selectBtn = Button(card, "1 Select", 16, actionTop, 96, 22, SelectReport, "primary")
+        AddTooltip(selectBtn, "Select report", "Selects the full report so it can be copied with Ctrl+C.")
+        Pill(card, "2 Ctrl+C", 120, actionTop + 1, 66, T.colors.accent2)
+        Button(card, "3 GitHub", width - 102, actionTop, 86, 22, function()
+            CopyLink("GitHub Issue", links.github or "https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new")
+        end, "primary")
+        Button(card, "Discord", 16, actionTop - 30, 76, 22, function()
+            CopyLink("Discord", links.discord or "https://discord.gg/2Gf9b2Wprz")
+        end)
+        Button(card, "Curse", 100, actionTop - 30, 76, 22, function()
+            CopyLink("CurseForge", links.curseforge or "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
+        end)
+        Button(card, "Clear", width - 78, actionTop - 30, 62, 22, function()
             if type(bug.Clear) == "function" then bug.Clear() end
             RefreshDashboard()
         end)
-        Button(card, "GitHub", 16, -174, 76, 22, function()
-            CopyLink("GitHub Issue", links.github or "https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new")
-        end, "primary")
-        Button(card, "Discord", 100, -174, 76, 22, function()
-            CopyLink("Discord", links.discord or "https://discord.gg/2Gf9b2Wprz")
-        end)
-        Button(card, "Curse", 184, -174, 76, 22, function()
-            CopyLink("CurseForge", links.curseforge or "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
-        end)
 
         local reportText = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
-        local reportTop = -204
-        local reportH = max(110, height - 220)
+        local reportTop = actionTop - 62
+        local reportH = max(82, height + reportTop - 16)
         scroll = CreateFrame("ScrollFrame", nil, card)
         scroll:SetPoint("TOPLEFT", card, "TOPLEFT", 16, reportTop)
         scroll:SetSize(width - 48, reportH)
@@ -844,6 +816,7 @@ local function BuildDashboardUX(ctx)
         reportBox:SetJustifyV("TOP")
         reportBox:EnableMouse(true)
         reportBox:SetWidth(width - 56)
+        if reportBox.SetFont then reportBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 10, "") end
         if reportBox.SetTextInsets then reportBox:SetTextInsets(8, 8, 8, 8) end
         if T.SkinEditBox then T.SkinEditBox(reportBox) end
         reportBox:SetText(reportText)

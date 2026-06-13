@@ -548,6 +548,11 @@ local function WidgetHistorySource(ctx, widget, suffix)
     return tostring(key) .. ":" .. tostring(kind) .. ":" .. tostring(suffix or WidgetHistoryLabel(ctx, widget))
 end
 
+local function CaptureWidgetChange(ctx, widget, label, fn)
+    label = label or WidgetHistoryLabel(ctx, widget)
+    return M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn)
+end
+
 function M.RequestUnitApply(unit, reason, opts)
     if M.BlockCombatAction() then return false end
     unit = (unit == "tot") and "targettarget" or unit
@@ -1153,22 +1158,14 @@ function M.ShowPageResetConfirm(pageKey)
     if not _G.StaticPopupDialogs then
         return M.ResetPageToDefaults(pageKey)
     end
-    if not _G.StaticPopupDialogs.MSUF2_PAGE_RESET_CONFIRM then
-        _G.StaticPopupDialogs.MSUF2_PAGE_RESET_CONFIRM = {
-            text = "%s",
-            button1 = _G.YES or "Yes",
-            button2 = _G.NO or "No",
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-            OnAccept = function(_, data)
-                if data and data.pageKey then
-                    M.ResetPageToDefaults(data.pageKey)
-                end
-            end,
-        }
-    end
+    M.InstallStaticPopup("MSUF2_PAGE_RESET_CONFIRM", {
+        text = "%s",
+        button1 = _G.YES or "Yes",
+        button2 = _G.NO or "No",
+        OnAccept = function(_, data)
+            if data and data.pageKey then M.ResetPageToDefaults(data.pageKey) end
+        end,
+    })
     if _G.StaticPopup_Show then
         _G.StaticPopup_Show("MSUF2_PAGE_RESET_CONFIRM", message, nil, { pageKey = pageKey })
         return true
@@ -1331,8 +1328,7 @@ function M.BindToggle(ctx, widget, getValue, setValue)
             SyncFromValue(self)
             return
         end
-        local label = WidgetHistoryLabel(ctx, self)
-        M.CaptureHistory(label, WidgetHistorySource(ctx, self, label), function()
+        CaptureWidgetChange(ctx, self, nil, function()
             setValue(nextValue)
         end)
         SyncFromValue(self)
@@ -1378,8 +1374,7 @@ function M.BindSlider(ctx, slider, getValue, setValue)
         end
         local current = tonumber(getValue()) or 0
         if math.abs(current - value) < 0.0001 then return end
-        local label = WidgetHistoryLabel(ctx, self)
-        M.CaptureHistory(label, WidgetHistorySource(ctx, self, label), function()
+        CaptureWidgetChange(ctx, self, nil, function()
             setValue(value)
         end)
     end)
@@ -1414,8 +1409,7 @@ function M.BindSegment(ctx, segment, getValue, setValue)
                 segment:SetValue(self._msuf2Value)
                 return
             end
-            local label = WidgetHistoryLabel(ctx, segment)
-            M.CaptureHistory(label, WidgetHistorySource(ctx, segment, label), function()
+            CaptureWidgetChange(ctx, segment, nil, function()
                 setValue(self._msuf2Value)
             end)
             segment:SetValue(self._msuf2Value)
@@ -1438,8 +1432,7 @@ function M.BindDropdown(ctx, dropdown, getValue, setValue)
             dropdown:SetValue(value)
             return
         end
-        local label = WidgetHistoryLabel(ctx, dropdown)
-        M.CaptureHistory(label, WidgetHistorySource(ctx, dropdown, label), function()
+        CaptureWidgetChange(ctx, dropdown, nil, function()
             setValue(value)
         end)
         if type(getValue) == "function" then
@@ -1460,8 +1453,7 @@ function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
     editBox:SetOnValueCommitted(function(value)
         if BlockCombatAndRefresh(ctx) then return end
         if tostring(getValue() or "") == tostring(value or "") then return end
-        local label = WidgetHistoryLabel(ctx, editBox)
-        M.CaptureHistory(label, WidgetHistorySource(ctx, editBox, label), function()
+        CaptureWidgetChange(ctx, editBox, nil, function()
             setValue(value or "")
         end)
     end)
@@ -1494,8 +1486,7 @@ function M.BindColor(ctx, colorButton, getRGB, setRGB)
                 return
             end
         end
-        local label = WidgetHistoryLabel(ctx, colorButton)
-        M.CaptureHistory(label, WidgetHistorySource(ctx, colorButton, label), function()
+        CaptureWidgetChange(ctx, colorButton, nil, function()
             if type(setRGB) == "function" then setRGB(r, g, b) end
         end)
         RefreshColor()
