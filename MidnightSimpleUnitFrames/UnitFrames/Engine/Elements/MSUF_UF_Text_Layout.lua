@@ -655,7 +655,7 @@ local SIG_TEXT_KEYS = {
   "shortNumbers", "hidePercentSymbol", "hideNameOnDeadOffline",
 }
 local SIG_TEXT_COLOR_KEYS = { "nameColor", "directNameColor", "directHealthLeftColor", "directHealthCenterColor", "directHealthRightColor", "directPowerLeftColor", "directPowerCenterColor", "directPowerRightColor" }
-local SIG_INLINE_KEYS = { "enabled", "separator", "unit", "colorMode", "targetNameClassColor", "targetNameNpcColor", "totNameClassColor", "totNameNpcColor", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth" }
+local SIG_INLINE_KEYS = { "enabled", "separator", "unit", "colorMode", "targetNameClassColor", "targetNameNpcColor", "targetNameNpcClassColor", "totNameClassColor", "totNameNpcColor", "totNameNpcClassColor", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth" }
 local SIG_PARTS = {}
 
 local function SigAddKeys(parts, n, src, keys)

@@ -2099,6 +2099,7 @@ local MSUF_PROFILEIO_UUF_SCOPED_FONT_KEYS = {
     "fontBaselineOffset",
     "nameClassColor",
     "npcNameRed",
+    "nameNpcClassColor",
     "colorHealthTextByHealth",
     "colorPowerTextByType",
     "powerTextColorByType",
@@ -2153,6 +2154,7 @@ end
 local MSUF_PROFILEIO_UUF_INHERITED_FONT_FLAGS = {
     "nameClassColor",
     "npcNameRed",
+    "nameNpcClassColor",
     "colorHealthTextByHealth",
     "colorPowerTextByType",
     "powerTextColorByType",
@@ -2655,6 +2657,7 @@ local function MSUF_ProfileIO_ConvertUUFProfile(profile, baseProfile)
     MSUF_ProfileIO_ResetUUFSharedFontControls(out)
     out.general.nameClassColor = false
     out.general.npcNameRed = false
+    out.general.nameNpcClassColor = false
     out.general.colorHealthTextByHealth = false
     out.general.colorPowerTextByType = false
     out.general.npcColorMode = "reaction"

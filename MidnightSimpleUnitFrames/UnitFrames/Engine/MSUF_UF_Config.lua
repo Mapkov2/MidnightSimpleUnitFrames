@@ -463,6 +463,7 @@ end
 local function ResolveNameColorFlags(general, conf)
   local classColor = general and general.nameClassColor == true
   local npcColor = general and general.npcNameRed == true
+  local npcClassColor = general and general.nameNpcClassColor == true
   if conf and conf.fontOverride == true then
     if conf.nameClassColor ~= nil then
       classColor = conf.nameClassColor == true
@@ -470,8 +471,11 @@ local function ResolveNameColorFlags(general, conf)
     if conf.npcNameRed ~= nil then
       npcColor = conf.npcNameRed == true
     end
+    if conf.nameNpcClassColor ~= nil then
+      npcClassColor = conf.nameNpcClassColor == true
+    end
   end
-  return classColor, npcColor
+  return classColor, npcColor, npcClassColor
 end
 
 local function ResolveHealthTextColorByHealth(general, conf)
@@ -558,7 +562,8 @@ local function ResolveToTInline(db, general, unit, targetText)
   inline.colorMode = ResolveToTInlineColorMode(tot.totInlineColorMode)
   inline.targetNameClassColor = targetText.nameClassColor == true
   inline.targetNameNpcColor = targetText.nameNpcColor == true
-  inline.totNameClassColor, inline.totNameNpcColor = ResolveNameColorFlags(general, tot)
+  inline.targetNameNpcClassColor = targetText.nameNpcClassColor == true
+  inline.totNameClassColor, inline.totNameNpcColor, inline.totNameNpcClassColor = ResolveNameColorFlags(general, tot)
 end
 
 local function NormalizePortraitMode(conf)
@@ -1389,7 +1394,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.healthLayer = Number(conf.hpTextLayer or conf.textLayer or general.hpTextLayer or general.textLayer, 5)
   text.powerLayer = Number(conf.powerTextLayer or general.powerTextLayer, 2)
   ResolveNameShortening(db, general, conf, unit, text)
-  text.nameClassColor, text.nameNpcColor = ResolveNameColorFlags(general, conf)
+  text.nameClassColor, text.nameNpcColor, text.nameNpcClassColor = ResolveNameColorFlags(general, conf)
   ApplyNpcTypeFlags(text, general, "npcTypeColorText")
   ResolveToTInline(db, general, unit, text)
   text.healthColorByHealth = ResolveHealthTextColorByHealth(general, conf)
@@ -1403,7 +1408,7 @@ local function CompileUnitText(out, db, unit, key, conf, general, bars)
   text.directLayout = conf.directTextLayout == true
   if text.directLayout == true then
     CopyDirectTextLayout(text, conf)
-    if text.nameClassColor ~= true and text.nameNpcColor ~= true then
+    if text.nameClassColor ~= true and text.nameNpcColor ~= true and text.nameNpcClassColor ~= true then
       text.nameColor = text.directNameColor
     else
       text.nameColor = nil

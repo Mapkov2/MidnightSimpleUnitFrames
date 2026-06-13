@@ -557,7 +557,7 @@ local function MSUF_Defaults_HasScopedFontOverrideValue(scope)
     if scope.fontOutline ~= nil or scope.noOutline ~= nil or scope.boldText ~= nil then return true end
     if scope.fontMonochrome ~= nil or scope.fontTextAlpha ~= nil or scope.fontBaselineOffset ~= nil then return true end
     if scope.textBackdrop ~= nil or scope.fontShadowStrength ~= nil or scope.colorPowerTextByType ~= nil or scope.colorHealthTextByHealth ~= nil then return true end
-    if scope.nameClassColor ~= nil or scope.npcNameRed ~= nil then return true end
+    if scope.nameClassColor ~= nil or scope.npcNameRed ~= nil or scope.nameNpcClassColor ~= nil then return true end
     if scope.useGlobalFontColor == false then return true end
     if scope.fontR ~= nil or scope.fontG ~= nil or scope.fontB ~= nil then return true end
     local mode = scope.nameColorMode
@@ -956,6 +956,9 @@ end
     end
     if g.npcNameRed == nil then
         g.npcNameRed = false
+    end
+    if g.nameNpcClassColor == nil then
+        g.nameNpcClassColor = false
     end
     if g.fontColor == nil then
         g.fontColor = "white"

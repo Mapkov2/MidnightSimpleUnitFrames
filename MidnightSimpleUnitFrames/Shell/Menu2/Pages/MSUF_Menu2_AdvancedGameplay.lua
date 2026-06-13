@@ -85,6 +85,20 @@ local function BuildGameplay(ctx)
 
     local function AddControls(list, section, specs) return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI) end
     local function AddBackdrops(section, specs) for i = 1, #specs do local s = specs[i]; W.ControlCardBackdrop(section, 14, s[1], s[2], s[3]) end end
+    local function AddTextInput(list, input, getValue, setValue)
+        M.BindTextInput(ctx, input, getValue, function(v) setValue(v); ApplyGameplayUI() end, true)
+        return Add(list, input)
+    end
+    local function AddGameplayTextInput(list, input, key, fallback)
+        return AddTextInput(list, input, function() return Gameplay()[key] or fallback end, function(v) Gameplay()[key] = tostring(v or "") end)
+    end
+    local function PaintSpellInput(input, edgeAlpha, withFill, withBorder)
+        local accent = T.colors.accent
+        if withFill and input._msuf2SpellInputFill then input._msuf2SpellInputFill:SetVertexColor(0.025, 0.034, 0.070, 0.98) end
+        if input._msuf2SpellInputEdge then input._msuf2SpellInputEdge:SetVertexColor(accent[1], accent[2], accent[3], edgeAlpha) end
+        if withFill and input.SetBackdropColor then input:SetBackdropColor(0.025, 0.034, 0.070, 0.98) end
+        if withBorder and input.SetBackdropBorderColor then input:SetBackdropBorderColor(accent[1], accent[2], accent[3], edgeAlpha) end
+    end
 
     local function GameplayContentWidth()
         return min(tonumber(M.formContentMaxWidth) or 980, tonumber(ctx.width) or 900)
@@ -184,20 +198,8 @@ local function BuildGameplay(ctx)
             { "slider", "Y offset", stateRightX, -238, -800, 800, 1, stateColW, "combatStateOffsetY", 80 },
         })
     end
-    M.BindTextInput(ctx, enterInput,
-        function() return Gameplay().combatStateEnterText or "+Combat" end,
-        function(v)
-            Gameplay().combatStateEnterText = tostring(v or "")
-            ApplyGameplayUI()
-        end, true)
-    Add(stateControls, enterInput)
-    M.BindTextInput(ctx, leaveInput,
-        function() return Gameplay().combatStateLeaveText or "-Combat" end,
-        function(v)
-            Gameplay().combatStateLeaveText = tostring(v or "")
-            ApplyGameplayUI()
-        end, true)
-    Add(stateControls, leaveInput)
+    AddGameplayTextInput(stateControls, enterInput, "combatStateEnterText", "+Combat")
+    AddGameplayTextInput(stateControls, leaveInput, "combatStateLeaveText", "-Combat")
 
     local classStacked = GameplayStacked()
     local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", classStacked and 1120 or 736, false)
@@ -373,34 +375,18 @@ local function BuildGameplay(ctx)
             local fill, edge = T.CreateSuperellipseLayers(spellInput, "_msuf2SpellInput", 1, "BACKGROUND", "OVERLAY")
             spellInput._msuf2SpellInputFill = fill
             spellInput._msuf2SpellInputEdge = edge
-            if fill then fill:SetVertexColor(0.025, 0.034, 0.070, 0.98) end
-            if edge then edge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
         end
-        if spellInput.SetBackdropColor then spellInput:SetBackdropColor(0.025, 0.034, 0.070, 0.98) end
-        if spellInput.SetBackdropBorderColor then spellInput:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
-        spellInput:HookScript("OnEditFocusGained", function(self)
-            if self._msuf2SpellInputEdge then self._msuf2SpellInputEdge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
-        end)
-        spellInput:HookScript("OnEditFocusLost", function(self)
-            if self._msuf2SpellInputEdge then self._msuf2SpellInputEdge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
-            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
-        end)
-        spellInput:HookScript("OnShow", function(self)
-            if self._msuf2SpellInputFill then self._msuf2SpellInputFill:SetVertexColor(0.025, 0.034, 0.070, 0.98) end
-            if self._msuf2SpellInputEdge then self._msuf2SpellInputEdge:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
-            if self.SetBackdropBorderColor then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.58) end
-        end)
+        PaintSpellInput(spellInput, 0.58, true, true)
+        spellInput:HookScript("OnEditFocusGained", function(self) PaintSpellInput(self, 0.95, false, false) end)
+        spellInput:HookScript("OnEditFocusLost", function(self) PaintSpellInput(self, 0.58, false, true) end)
+        spellInput:HookScript("OnShow", function(self) PaintSpellInput(self, 0.58, true, true) end)
     end
-    M.BindTextInput(ctx, spellInput,
+    AddTextInput(crossControls, spellInput,
         function()
             local id = CurrentMeleeSpellID()
             return id > 0 and tostring(id) or ""
         end,
-        function(v)
-            SetMeleeSpellID(v)
-            ApplyGameplayUI()
-        end, true)
-    Add(crossControls, spellInput)
+        function(v) SetMeleeSpellID(v) end)
     Add(meleeControls, spellInput)
     Add(meleeControls, classSpellToggle)
     Add(meleeControls, specSpellToggle)

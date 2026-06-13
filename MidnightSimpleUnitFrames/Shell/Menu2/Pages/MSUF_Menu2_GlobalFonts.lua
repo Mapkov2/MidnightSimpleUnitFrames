@@ -169,6 +169,7 @@ local function NPCColorValues()
     return {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
         { value = "NPC", text = "NPC / Reaction Color", swatchColor = NPCReactionColorPreview },
+        { value = "CLASS", text = "Class Color (Reaction fallback)", swatchColor = PlayerClassColorPreview },
     }
 end
 
@@ -541,7 +542,15 @@ local function BuildFonts(ctx)
             end
             SetFontAndApply("nameClassColor", v == "CLASS", "MSUF2_NAME_CLASS_COLOR")
         end)
-    local npcColor = BindFontModeDropdown(colors, "NPC / Boss Name Color", NPCColorValues, "npcNameRed", "NPC", "MSUF2_NPC_RED")
+    local npcColor = BindFontDropdown(colors, "NPC / Boss Name Color", NPCColorValues,
+        function()
+            if FontScopeGet("nameNpcClassColor", false) then return "CLASS" end
+            return FontScopeGet("npcNameRed", false) and "NPC" or "DEFAULT"
+        end,
+        function(v)
+            SetFontAndApply("nameNpcClassColor", v == "CLASS", "MSUF2_NPC_CLASS_COLOR")
+            SetFontAndApply("npcNameRed", v == "NPC", "MSUF2_NPC_RED")
+        end)
     local healthColor = BindFontModeDropdown(colors, "HP Text Color", HealthColorValues, "colorHealthTextByHealth", "HEALTH", "MSUF2_HP_TEXT_COLOR")
     local powerColor = BindFontModeDropdown(colors, "Power Text Color", PowerColorValues, "colorPowerTextByType", "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
     local scopedFontControls = { outline, sharp, shadow, opacity, baseline, nameColor, healthColor }
