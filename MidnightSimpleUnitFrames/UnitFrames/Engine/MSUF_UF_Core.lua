@@ -888,6 +888,16 @@ function UF.OnUnitChanged(frame, oldUnit, newUnit)
     frame.unit = newUnit
     frame.unitKey = newUnit
   end
+  -- Unit unchanged: every event is already registered to this unit, so the
+  -- routing refresh is pure waste. RefreshFrameUnitEventRouting loops all
+  -- registered events and re-calls RegisterUnitEvent for each (a C call per
+  -- event) -- on a group child with ~15-20 events that ran per click even when
+  -- the secure header rewrote the unit attribute to the SAME value. The
+  -- fallback ReindexFrameUnitEvents already guards oldUnit==newUnit; this makes
+  -- the primary path match.
+  if oldUnit == frame.unit then
+    return true
+  end
   if RefreshFrameUnitEventRouting then
     RefreshFrameUnitEventRouting(frame)
   else
