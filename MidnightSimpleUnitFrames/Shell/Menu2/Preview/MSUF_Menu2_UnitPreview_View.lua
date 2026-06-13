@@ -929,121 +929,56 @@ local function BuildPreview(parent, panel, width, height)
 
     box.layerVisibility = {}
     box.layerButtons = {}
-    for i = 1, #PREVIEW_LAYERS do
-        local def = PREVIEW_LAYERS[i]
-        box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
-        local btn = CreateFrame("Button", nil, sidebar)
-        btn:SetSize(sideW - 10, 18)
-        btn:SetPoint("TOP", sidebar, "TOP", 0, -(20 + (i - 1) * 18))
-        btn:EnableMouse(true)
-        local bg = btn:CreateTexture(nil, "BACKGROUND")
-        bg:SetAllPoints()
-        btn.bg = bg
-        local bar = btn:CreateTexture(nil, "ARTWORK")
-        bar:SetSize(2, 14)
-        bar:SetPoint("LEFT", btn, "LEFT", 2, 0)
-        btn.bar = bar
-        local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        fs:SetPoint("LEFT", bar, "RIGHT", 5, 0)
-        fs:SetPoint("RIGHT", btn, "RIGHT", -18, 0)
-        fs:SetJustifyH("LEFT")
-        fs:SetText(TR(def.label))
-        btn.fs = fs
-        local off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-        off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
-        off:SetText("OFF")
-        off:SetJustifyH("RIGHT")
-        off:Hide()
-        btn.off = off
-        btn.key = def.key
-        btn.color = def.color
-        btn.tooltip = def.tooltip
-        btn.refresh = function(self)
-            local on = box.layerVisibility[self.key] ~= false
-            local available = not (box.layerAvailable and box.layerAvailable[self.key] == false)
-            local c = self.color
-            self.off:SetText("OFF")
-            self.off:SetShown((not available) or not on)
-            if not available then
-                self.bg:SetColorTexture(0.020, 0.020, 0.028, 0.48)
-                self.bar:SetColorTexture(0.18, 0.18, 0.22, 0.35)
-                self.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
-                self.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
-            elseif on then
-                self.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.58)
-                self.bar:SetColorTexture(c[1], c[2], c[3], 0.88)
-                self.fs:SetTextColor(0.76, 0.80, 0.90, 0.95)
-                self.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
-            else
-                self.bg:SetColorTexture(0.035, 0.035, 0.045, 0.35)
-                self.bar:SetColorTexture(0.18, 0.18, 0.22, 0.32)
-                self.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
-                self.off:SetTextColor(0.40, 0.42, 0.50, 0.78)
-            end
-        end
-        btn:SetScript("OnClick", function(self)
-            if box.layerAvailable and box.layerAvailable[self.key] == false then
-                box.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))
+    local function UnitLayerAvailable(owner, key)
+        return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
+    end
+    local unitLayerButtonOpts = {
+        Tr = TR,
+        IsAvailable = UnitLayerAvailable,
+        IsOn = function(owner, key) return UnitLayerAvailable(owner, key) and owner.layerVisibility[key] ~= false end,
+        OnClick = function(self, owner)
+            if owner.layerAvailable and owner.layerAvailable[self.key] == false then
+                owner.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))
                 return
             end
-            box.layerVisibility[self.key] = (box.layerVisibility[self.key] == false)
-            if self.key == "guides" then
-                SetPreviewGuidesEnabled(box.layerVisibility[self.key] ~= false)
-            end
-            for j = 1, #box.layerButtons do box.layerButtons[j]:refresh() end
-            Preview.Refresh(box)
-            RefreshHandleSelectionVisuals(box)
-        end)
-        btn:SetScript("OnEnter", function(self)
-            local c = self.color
-            if box.layerAvailable and box.layerAvailable[self.key] == false then
+            owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
+            if self.key == "guides" then SetPreviewGuidesEnabled(owner.layerVisibility[self.key] ~= false) end
+            for j = 1, #owner.layerButtons do owner.layerButtons[j]:refresh() end
+            Preview.Refresh(owner)
+            RefreshHandleSelectionVisuals(owner)
+        end,
+        OnEnter = function(self, owner, available, on, tr)
+            if not available then
                 self.bg:SetColorTexture(0.045, 0.045, 0.055, 0.62)
                 self.fs:SetTextColor(0.42, 0.42, 0.48, 0.75)
-                box.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))
+                owner.hint:SetText(TR("This layer is off in settings and cannot be shown in preview."))
                 if GameTooltip then
                     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                     GameTooltip:SetText(TR("Layer disabled"), 1, 1, 1)
                     GameTooltip:AddLine(TR("Turn this feature on in settings to make the preview layer available."), 0.82, 0.82, 0.82, true)
                     GameTooltip:Show()
                 end
-            elseif box.layerVisibility[self.key] ~= false then
-                self.bg:SetColorTexture(c[1] * 0.18, c[2] * 0.18, c[3] * 0.18, 0.78)
-                if GameTooltip and self.tooltip then
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText(TR(self.fs and self.fs:GetText() or self.key), 1, 1, 1)
-                    GameTooltip:AddLine(TR(self.tooltip), 0.82, 0.82, 0.82, true)
-                    if self.key == "guides" then
-                        GameTooltip:AddLine(TR("Turn off to inspect the frame without mover outlines. The selected element can still be nudged with arrow keys."), 0.55, 0.68, 0.86, true)
-                    end
-                    GameTooltip:Show()
-                elseif GameTooltip then
-                    GameTooltip:Hide()
-                end
-            else
-                self.bg:SetColorTexture(0.08, 0.08, 0.10, 0.55)
-                if GameTooltip and self.tooltip then
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:SetText(TR(self.fs and self.fs:GetText() or self.key), 1, 1, 1)
-                    GameTooltip:AddLine(TR(self.tooltip), 0.82, 0.82, 0.82, true)
-                    if self.key == "guides" then
-                        GameTooltip:AddLine(TR("Guides are hidden. Turn this back on to see drag handles and selected borders."), 0.55, 0.68, 0.86, true)
-                    end
-                    GameTooltip:Show()
-                elseif GameTooltip then
-                    GameTooltip:Hide()
-                end
+                return
             end
-            if not (box.layerAvailable and box.layerAvailable[self.key] == false) then
-                self.fs:SetTextColor(0.90, 0.92, 1.0, 1)
+            if GameTooltip and self.tooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(tr(self.fs and self.fs:GetText() or self.key), 1, 1, 1)
+                GameTooltip:AddLine(tr(self.tooltip), 0.82, 0.82, 0.82, true)
+                if self.key == "guides" then
+                    GameTooltip:AddLine(tr(on and "Turn off to inspect the frame without mover outlines. The selected element can still be nudged with arrow keys." or "Guides are hidden. Turn this back on to see drag handles and selected borders."), 0.55, 0.68, 0.86, true)
+                end
+                GameTooltip:Show()
+            elseif GameTooltip then
+                GameTooltip:Hide()
             end
-        end)
-        btn:SetScript("OnLeave", function(self)
-            if GameTooltip then GameTooltip:Hide() end
-            self:refresh()
-            UpdateHandleHint(box, box._selectedHandle)
-        end)
+        end,
+        OnLeave = function(_, owner) UpdateHandleHint(owner, owner._selectedHandle) end,
+    }
+    for i = 1, #PREVIEW_LAYERS do
+        local def = PREVIEW_LAYERS[i]
+        box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
+        local btn = PreviewHelpers.CreateLayerButton(sidebar, box, def, i, sideW, unitLayerButtonOpts)
         box.layerButtons[#box.layerButtons + 1] = btn
-        btn:refresh()
     end
 
     local mock = CreateFrame("Frame", nil, canvas, "BackdropTemplate")
@@ -1148,12 +1083,6 @@ local function BuildPreview(parent, panel, width, height)
     mock.portrait.border = CreateFrame("Frame", nil, mock.portrait)
     mock.portrait.border:SetAllPoints()
     mock.portrait.border.edges = {}
-    for i = 1, 4 do
-        local edge = mock.portrait.border:CreateTexture(nil, "OVERLAY")
-        edge:SetTexture(TEX_W8)
-        edge:Hide()
-        mock.portrait.border.edges[i] = edge
-    end
     mock.portrait.initial = MakeFS(mock.portrait, "OVERLAY", 22)
     mock.portrait.initial:SetPoint("CENTER")
 
