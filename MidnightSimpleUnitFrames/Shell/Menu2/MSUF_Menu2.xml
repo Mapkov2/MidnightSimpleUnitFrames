@@ -52,5 +52,6 @@
     <Script file="Assistant\MSUF_AssistantParser.lua"/>
     <Script file="Assistant\MSUF_Assistant.lua"/>
     <Script file="Assistant\MSUF_AssistantDashboard.lua"/>
+    <Script file="MSUF_Menu2_BugReport.lua"/>
     <Script file="MSUF_Menu2_Dashboard.lua"/>
 </Ui>

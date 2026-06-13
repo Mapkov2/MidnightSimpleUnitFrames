@@ -71,12 +71,48 @@ SlashCmdList["MSUF2OPTIONS"] = function(msg)
     msg = tostring(msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
     msg = msg:lower()
     local cmd = msg:match("^(%S+)") or ""
+    local bugReportCombat = ((_G.InCombatLockdown and _G.InCombatLockdown())
+        or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))) and true or false
     if cmd == "versiontest" then
         if type(_G.MSUF_VersionCheck_DebugFakeUpdate) == "function" then
             pcall(_G.MSUF_VersionCheck_DebugFakeUpdate)
         else
             print("|cffffd700MSUF:|r Version test helper is not loaded.")
         end
+        return
+    end
+    if cmd == "bugdummy" then
+        if bugReportCombat then
+            print("|cffffd700MSUF:|r Bug report generation is deferred while combat lockdown is active. Run /msuf bugdummy after combat.")
+            return
+        end
+        if type(_G.MSUF_BugReport_TriggerDummy) == "function" then
+            local ok, report, reason = pcall(_G.MSUF_BugReport_TriggerDummy)
+            if not ok or not report then
+                print("|cffffd700MSUF:|r Bug report dummy was not created" .. (reason and (": " .. tostring(reason)) or "."))
+                return
+            end
+            print("|cff00b7ebMSUF:|r Dummy bug report created. Open the Dashboard bug report panel to copy it.")
+            M.Open("home")
+        else
+            print("|cffffd700MSUF:|r Bug report helper is not loaded.")
+        end
+        return
+    end
+    if cmd == "bug" or cmd == "bugreport" then
+        if bugReportCombat then
+            print("|cffffd700MSUF:|r Bug report generation is deferred while combat lockdown is active. Open it after combat.")
+            return
+        end
+        if type(_G.MSUF_BugReport_OpenManual) == "function" then
+            pcall(_G.MSUF_BugReport_OpenManual)
+        else
+            M.dashboardBugReportOpen = true
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue("dashboardBugReportOpen", true)
+            end
+        end
+        M.Open("home")
         return
     end
     if cmd == "help" or cmd == "reset" or cmd == "fullreset" or cmd == "absorb" or cmd == "analytics" then

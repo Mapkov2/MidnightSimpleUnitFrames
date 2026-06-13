@@ -658,6 +658,205 @@ local function BuildDashboardUX(ctx)
         Pill(row, state, sideW - 86, -9, 54, color or T.colors.ok)
         MakeDashboardActionCard(row, title, body, onClick, false)
     end
+    local function BuildBugReportCard(x, top, width)
+        local bug = M.BugReport
+        if type(bug) ~= "table" or type(bug.GetStatus) ~= "function" then return 0 end
+        if type(bug.IsCombatDeferred) == "function" and bug.IsCombatDeferred() then return 0 end
+
+        local status, integration = bug.GetStatus()
+        integration = type(integration) == "table" and integration or {}
+        local autoReport = status == "has_error" or status == "dummy"
+        local manualReport = M.dashboardBugReportOpen == true
+        local hasReport = autoReport or manualReport
+        local missing = status == "missing"
+        local height = hasReport and (width < 330 and 456 or 432) or (missing and 158 or 124)
+        local accent = hasReport and (T.colors.danger or T.colors.accent2)
+            or (missing and T.colors.accent2 or T.colors.ok)
+        local bg = hasReport and { 0.070, 0.034, 0.046, 0.88 }
+            or (missing and { 0.060, 0.050, 0.035, 0.86 } or { 0.030, 0.040, 0.078, 0.86 })
+
+        local card = Card(root, "", x, top, width, height, bg, accent or T.colors.borderSoft)
+        local title = T.Font(card, "GameFontNormal", M.Tr("Bug report"), T.colors.text)
+        title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
+
+        local statusText = hasReport and (status == "dummy" and "test" or (autoReport and "error" or "manual"))
+            or (missing and "setup" or "clean")
+        Pill(card, statusText, width - 82, -13, 66, accent)
+
+        local links = type(bug.GetLinks) == "function" and bug.GetLinks() or {}
+        local function CopyLink(label, url)
+            if type(_G.MSUF_ShowCopyLink) == "function" then
+                _G.MSUF_ShowCopyLink(label, url)
+            elseif M.ShowStatusFeedback then
+                M.ShowStatusFeedback("Copy popup unavailable", "danger", 1.2)
+            end
+        end
+        local function OpenManualReport()
+            if type(bug.OpenManual) == "function" then
+                bug.OpenManual()
+            else
+                M.dashboardBugReportOpen = true
+                if type(M.PersistMenuStateValue) == "function" then
+                    M.PersistMenuStateValue("dashboardBugReportOpen", true)
+                end
+            end
+            RefreshDashboard()
+        end
+
+        if missing and not manualReport then
+            W.Text(card, "Install BugSack/BugGrabber to let MSUF include the captured Lua error and stacktrace automatically.", 16, -42, width - 32, T.colors.muted)
+            local bugSack = Button(card, "BugSack", 16, -92, 86, 22, function()
+                CopyLink("BugSack", links.bugsack or "https://www.curseforge.com/wow/addons/bugsack")
+            end, "primary")
+            AddTooltip(bugSack, "BugSack", "Copies the BugSack addon page link.")
+            Button(card, "Report issue", 112, -92, 104, 22, OpenManualReport)
+            return height
+        end
+
+        if not hasReport then
+            local installText = integration.bugGrabberLoaded and "BugGrabber ready."
+                or (integration.bugSackLoaded and "BugSack ready." or "Bug helper unavailable.")
+            W.Text(card, "No MSUF errors detected. " .. installText, 16, -42, width - 32, T.colors.muted)
+            Button(card, "Report issue", 16, -82, 104, 22, OpenManualReport, "primary")
+            return height
+        end
+
+        local bodyText = autoReport
+            and "MSUF error detected. Select the report, copy it, then paste it on one of these pages."
+            or "Describe the issue in one sentence. MSUF will add the technical context automatically."
+        W.Text(card, bodyText, 16, -42, width - 32, T.colors.muted)
+
+        local reportBox
+        local function SetManualIssue(issueType, description)
+            if type(bug.SetManualIssue) == "function" then
+                bug.SetManualIssue(issueType, description)
+            end
+        end
+        local selectedIssue, selectedDescription
+        if type(bug.GetManualIssue) == "function" then
+            selectedIssue, selectedDescription = bug.GetManualIssue()
+        end
+
+        local issueButtons = {
+            { "Visual", "Visual/Layout issue", 58 },
+            { "Setting", "Setting did not save", 62 },
+            { "Text", "Text issue", 46 },
+            { "Other", "Other issue", 52 },
+        }
+        local issueX = 16
+        for i = 1, #issueButtons do
+            local info = issueButtons[i]
+            local btn = Button(card, info[1], issueX, -78, info[3], 22, function()
+                SetManualIssue(info[2])
+                if M.ShowStatusFeedback then M.ShowStatusFeedback(info[2], "info", 1.1) end
+            end, selectedIssue == info[2] and "primary" or nil)
+            if selectedIssue == info[2] and btn.SetActive then btn:SetActive(true) end
+            issueX = issueX + info[3] + 8
+        end
+
+        local descBox = CreateFrame("EditBox", nil, card, "InputBoxTemplate")
+        descBox:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -106)
+        descBox:SetSize(width - 32, 30)
+        descBox:SetAutoFocus(false)
+        descBox:SetMaxLetters(240)
+        descBox:SetJustifyH("LEFT")
+        if descBox.SetTextInsets then descBox:SetTextInsets(8, 8, 0, 0) end
+        if T.SkinEditBox then T.SkinEditBox(descBox) end
+        descBox:SetText(selectedDescription or "")
+        local placeholder = descBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        placeholder:SetPoint("LEFT", descBox, "LEFT", 10, 0)
+        placeholder:SetPoint("RIGHT", descBox, "RIGHT", -10, 0)
+        placeholder:SetJustifyH("LEFT")
+        placeholder:SetText(M.Tr("What went wrong? One short sentence is enough."))
+        if placeholder.SetTextColor then placeholder:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.82) end
+        placeholder:SetShown((selectedDescription or "") == "")
+        descBox:SetScript("OnTextChanged", function(self)
+            local text = self:GetText() or ""
+            SetManualIssue(nil, text)
+            placeholder:SetShown(text == "")
+        end)
+        descBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        descBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+        local scroll
+        local function RefreshReportText()
+            local text = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
+            if reportBox then
+                reportBox:SetText(text)
+                reportBox:SetCursorPosition(0)
+                local lineCount = 1
+                for _ in tostring(text):gmatch("\n") do lineCount = lineCount + 1 end
+                reportBox:SetHeight(max((scroll and scroll:GetHeight()) or 96, (lineCount * 13) + 24))
+                if scroll and scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
+            end
+            return text
+        end
+        local function SelectReport()
+            RefreshReportText()
+            if reportBox then
+                reportBox:SetFocus()
+                if reportBox.HighlightText then reportBox:HighlightText() end
+            end
+            if M.ShowStatusFeedback then M.ShowStatusFeedback("Report selected. Press Ctrl+C.", "info", 1.4) end
+        end
+        local function CopyReport()
+            local text = RefreshReportText()
+            local copied = false
+            if type(_G.CopyToClipboard) == "function" then
+                copied = pcall(_G.CopyToClipboard, text)
+            end
+            if copied then
+                if M.ShowStatusFeedback then M.ShowStatusFeedback("Report copied.", "ok", 1.3) end
+                return
+            end
+            SelectReport()
+        end
+
+        local copyBtn = Button(card, "Copy report", 16, -146, 92, 22, CopyReport, "primary")
+        AddTooltip(copyBtn, "Copy report", "Tries to copy directly. If WoW blocks it, the report is selected for Ctrl+C.")
+        Button(card, "Select all", 116, -146, 76, 22, SelectReport)
+        Button(card, "Clear", 200, -146, 62, 22, function()
+            if type(bug.Clear) == "function" then bug.Clear() end
+            RefreshDashboard()
+        end)
+        Button(card, "GitHub", 16, -174, 76, 22, function()
+            CopyLink("GitHub Issue", links.github or "https://github.com/Mapkov2/MidnightSimpleUnitFrames/issues/new")
+        end, "primary")
+        Button(card, "Discord", 100, -174, 76, 22, function()
+            CopyLink("Discord", links.discord or "https://discord.gg/2Gf9b2Wprz")
+        end)
+        Button(card, "Curse", 184, -174, 76, 22, function()
+            CopyLink("CurseForge", links.curseforge or "https://www.curseforge.com/wow/addons/midnightsimpleunitframes")
+        end)
+
+        local reportText = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
+        local reportTop = -204
+        local reportH = max(110, height - 220)
+        scroll = CreateFrame("ScrollFrame", nil, card)
+        scroll:SetPoint("TOPLEFT", card, "TOPLEFT", 16, reportTop)
+        scroll:SetSize(width - 48, reportH)
+
+        reportBox = CreateFrame("EditBox", nil, scroll, "InputBoxTemplate")
+        reportBox:SetMultiLine(true)
+        reportBox:SetAutoFocus(false)
+        reportBox:SetMaxLetters(200000)
+        reportBox:SetJustifyH("LEFT")
+        reportBox:SetJustifyV("TOP")
+        reportBox:EnableMouse(true)
+        reportBox:SetWidth(width - 56)
+        if reportBox.SetTextInsets then reportBox:SetTextInsets(8, 8, 8, 8) end
+        if T.SkinEditBox then T.SkinEditBox(reportBox) end
+        reportBox:SetText(reportText)
+        reportBox:SetCursorPosition(0)
+        local lines = 1
+        for _ in tostring(reportText):gmatch("\n") do lines = lines + 1 end
+        reportBox:SetHeight(max(reportH, (lines * 13) + 24))
+        reportBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        scroll:SetScrollChild(reportBox)
+        if T.StyleScrollFrame then T.StyleScrollFrame(scroll, card) end
+
+        return height
+    end
     local movedFrames = HasMovedFramesInEditMode()
     Row(1, "Profile ready", "Active profile is loaded.", "done", T.colors.ok, function() Select("profiles") end)
     Row(2, "Pages available", "Use pages to tune frames.", "done", T.colors.ok, function() Select("uf_player") end)
@@ -695,7 +894,9 @@ local function BuildDashboardUX(ctx)
         return head
     end
 
-    local sideBottom = checklistTop - checklistH
+    local bugReportTop = checklistTop - checklistH - 10
+    local bugReportH = BuildBugReportCard(sideX, bugReportTop, sideW)
+    local sideBottom = bugReportH > 0 and (bugReportTop - bugReportH) or (checklistTop - checklistH)
     local recoveryTop = sideBySide and (featureBlockBottom - 16) or (sideBottom - 16)
     local recoveryW = sideBySide and mainW or layoutW
     local recoveryOpen = M.dashboardRecoveryOpen == true
@@ -1051,4 +1252,4 @@ local function BuildDashboardUX(ctx)
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
 
-M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboardUX, version = 6 })
+M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboardUX, version = 7 })
