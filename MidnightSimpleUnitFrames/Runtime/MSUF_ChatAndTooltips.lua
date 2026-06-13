@@ -760,6 +760,12 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
     local cache = MSUF_GetTooltipCache()
     local g = cache.general
     local provider, anchor = cache.provider, cache.anchor
+    -- Fast disabled path: when the mode is NEVER, never reach gt:SetUnit (the
+    -- ~0.3ms Blizzard tooltip build billed to MSUF on every hover). Cheap
+    -- string compare before any cache/anchor work.
+    if cache.mode == TOOLTIP_MODE_NEVER and not (opts and opts.ignoreMode == true) then
+        return false
+    end
     if not (opts and opts.ignoreMode == true) and not MSUF_TooltipModeAllowed(cache.mode, cache.modifier) then
         return false
     end
@@ -782,6 +788,19 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
     MSUF_HidePlayerInfoTooltip()
     local gt = MSUF_AnchorGameTooltip(owner, g, anchor)
     if not gt or type(gt.SetUnit) ~= "function" then return false end
+    -- Dedupe: re-hovering the same frame/unit (mouse jitter, or OnEnter
+    -- re-firing) must not rebuild the tooltip. SetUnit is the ~0.3ms cost; if
+    -- it is already showing this owner+unit, leave it. Guarded on the tooltip
+    -- still being visible so a hidden tooltip always rebuilds.
+    if gt._msufUnitTooltipOwner == owner
+        and gt._msufUnitTooltipUnit == unit
+        and gt.IsShown and gt:IsShown()
+        and gt.GetUnit then
+        local _, shownUnit = gt:GetUnit()
+        if shownUnit == unit then
+            return true
+        end
+    end
     gt._msufUnitTooltipOwner = owner
     gt._msufUnitTooltipUnit = unit
     gt:SetUnit(unit)

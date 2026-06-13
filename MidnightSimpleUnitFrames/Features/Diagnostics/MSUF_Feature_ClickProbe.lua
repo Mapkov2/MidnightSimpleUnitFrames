@@ -673,10 +673,9 @@ SlashCmdList["MSUFIDPROBE"] = function()
         print("MSUF IdProbe: already armed.")
         return
     end
-    if InCombatLockdown and InCombatLockdown() then
-        print("MSUF IdProbe: leave combat first.")
-        return
-    end
+    -- Safe in combat: only wraps element update functions (frame[_msufUpdate*]),
+    -- never secure attributes/scripts -- no taint. Combat is exactly when we
+    -- need to measure (secret values, friendly-player clicks).
     local UFNS = MSUF.UF
     local frames = UFNS and UFNS.frames
     if not frames then
@@ -811,7 +810,6 @@ end
 SLASH_MSUFOPPROBE1 = "/msufopprobe"
 SlashCmdList["MSUFOPPROBE"] = function()
     if opProbeActive then print("op probe already armed.") return end
-    if InCombatLockdown and InCombatLockdown() then print("leave combat first.") return end
     results = {}
     local UF = MSUF.UF
     local A3 = MSUF.MSUF_Auras3
@@ -939,7 +937,10 @@ local dispSaved
 SLASH_MSUFDISPATCH1 = "/msufdispatch"
 SlashCmdList["MSUFDISPATCH"] = function()
     if dispActive then print("dispatch probe already armed.") return end
-    if InCombatLockdown and InCombatLockdown() then print("leave combat first.") return end
+    -- Safe in combat: swaps the UF.DispatchFrameEvent table field and re-points
+    -- frame OnEvent scripts. SetScript("OnEvent") on a unit button does not
+    -- taint the secure *type1 click action, so this is combat-safe and combat
+    -- is exactly the repro we need to measure.
     local UF = MSUF.UF
     if not (UF and type(UF.DispatchFrameEvent) == "function") then print("no DispatchFrameEvent.") return end
     results = {}
@@ -1102,4 +1103,36 @@ SlashCmdList["MSUFGFCLICK"] = function()
             GfRestore(); results = {}
         end)
     else gfClickActive = false; GfRestore() end
+end
+
+-- /msufdrivers: lists which live frames still carry a secure RegisterStateDriver
+-- ("visibility") vs plain unit-watch. Secure state drivers re-evaluate in the
+-- protected environment on combat/target changes and bill to MSUF invisibly to
+-- Lua probes. This shows if any clicked frame still has one (it shouldn't, post
+-- the VisibilityNeedsDriver fix, unless it has real load conditions).
+SLASH_MSUFDRIVERS1 = "/msufdrivers"
+SlashCmdList["MSUFDRIVERS"] = function()
+    local UF = MSUF.UF
+    local frames = UF and UF.frames
+    print("|cff7fd5ffMSUF Drivers|r per unit frame:")
+    if frames then
+        for unit, f in pairs(frames) do
+            local managed = f._msufVisibilityManaged == true
+            local expr = f._msufVisibilityExpr
+            local watched = f._msufUnitWatched == true
+            print(string.format("  %s: stateDriver=%s watch=%s expr=%s",
+                tostring(unit), tostring(managed), tostring(watched),
+                expr and ("'" .. tostring(expr) .. "'") or "nil"))
+        end
+    end
+    local GF = MSUF.GF or _G.MSUF_GF
+    local list = GF and GF.frameList
+    if type(list) == "table" then
+        local withDriver = 0
+        for i = 1, #list do
+            local f = list[i]
+            if f and f._msufVisibilityExpr ~= nil then withDriver = withDriver + 1 end
+        end
+        print(string.format("  GROUP children: %d total, %d with state driver (should be 0)", #list, withDriver))
+    end
 end

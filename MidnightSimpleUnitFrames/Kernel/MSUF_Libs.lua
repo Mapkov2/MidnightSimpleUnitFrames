@@ -348,8 +348,30 @@ local function TryInitLSM()
     return false
 end
 
+local LSM_REGISTERED_EVENT = "LibSharedMedia_Registered"
+local LSM_CALLBACK_OWNER = MSUF.LSMCallbackOwner
+if type(LSM_CALLBACK_OWNER) ~= "table" then
+    LSM_CALLBACK_OWNER = { name = "MSUF_LSM_CallbackOwner" }
+    MSUF.LSMCallbackOwner = LSM_CALLBACK_OWNER
+end
+
 local _MSUF_StatusbarMediaRefreshPending = false
 local _MSUF_StatusbarMediaRefreshFrame
+local _MSUF_FontMediaRefreshPending = false
+local _MSUF_FontMediaRefreshFrame
+local _MSUF_LSMCombatFrame
+local _MSUF_LSMCallbackActive = false
+local _MSUF_LSMMediaCounts = { font = 0, statusbar = 0 }
+local _MSUF_BundledMediaRegistrationPending = false
+
+local RegisterBundledFonts
+local RegisterLSMCallback
+local UnregisterLSMCallback
+local EnsureLSMCombatFrame
+
+local function IsCombatLocked()
+    return (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) and true or false
+end
 
 local function RunStatusbarMediaRefresh()
     _MSUF_StatusbarMediaRefreshPending = false
@@ -385,10 +407,6 @@ local function RunStatusbarMediaRefresh()
     end
 end
 
-local function IsCombatLocked()
-    return (type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown()) and true or false
-end
-
 local function EnsureStatusbarMediaRefreshFrame()
     if _MSUF_StatusbarMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
         return _MSUF_StatusbarMediaRefreshFrame
@@ -407,6 +425,63 @@ local function EnsureStatusbarMediaRefreshFrame()
     end)
     _MSUF_StatusbarMediaRefreshFrame = frame
     return frame
+end
+
+local function RunFontMediaRefresh()
+    _MSUF_FontMediaRefreshPending = false
+    if type(_G.MSUF_UpdateAllFonts) == "function" then
+        pcall(_G.MSUF_UpdateAllFonts)
+    end
+end
+
+local function EnsureFontMediaRefreshFrame()
+    if _MSUF_FontMediaRefreshFrame or type(_G.CreateFrame) ~= "function" then
+        return _MSUF_FontMediaRefreshFrame
+    end
+    local frame = _G.CreateFrame("Frame")
+    frame:SetScript("OnEvent", function(self, event)
+        if event ~= "PLAYER_REGEN_ENABLED" then return end
+        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+        if _MSUF_FontMediaRefreshPending then
+            if IsCombatLocked() then
+                self:RegisterEvent("PLAYER_REGEN_ENABLED")
+            else
+                RunFontMediaRefresh()
+            end
+        end
+    end)
+    _MSUF_FontMediaRefreshFrame = frame
+    return frame
+end
+
+local function FlushFontMediaRefresh()
+    if IsCombatLocked() then
+        local frame = EnsureFontMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    RunFontMediaRefresh()
+end
+
+local function ScheduleFontMediaRefresh()
+    if _MSUF_FontMediaRefreshPending then return end
+    _MSUF_FontMediaRefreshPending = true
+    if IsCombatLocked() then
+        local frame = EnsureFontMediaRefreshFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+            return
+        end
+    end
+    if _G.MSUF_ScheduleOnce then
+        _G.MSUF_ScheduleOnce("LSM_FONT_MEDIA_REFRESH", FlushFontMediaRefresh)
+    elseif _G.C_Timer and type(_G.C_Timer.After) == "function" then
+        _G.C_Timer.After(0, FlushFontMediaRefresh)
+    else
+        FlushFontMediaRefresh()
+    end
 end
 
 local function FlushStatusbarMediaRefresh()
@@ -439,41 +514,146 @@ local function ScheduleStatusbarMediaRefresh()
     end
 end
 
+local function CountLSMMediaType(LSM, mediatype)
+    if not (LSM and type(LSM.HashTable) == "function") then return 0 end
+    local ok, media = pcall(LSM.HashTable, LSM, mediatype)
+    if not ok or type(media) ~= "table" then return 0 end
+    local count = 0
+    for _ in pairs(media) do
+        count = count + 1
+    end
+    return count
+end
+
+local function SnapshotLSMMediaCounts(LSM)
+    LSM = LSM or MSUF.LSM
+    _MSUF_LSMMediaCounts.font = CountLSMMediaType(LSM, "font")
+    _MSUF_LSMMediaCounts.statusbar = CountLSMMediaType(LSM, "statusbar")
+end
+
+local function RefreshFontMedia(key, forceApply)
+    if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
+        pcall(_G.MSUF_ClearResolvedFontPathCache)
+    end
+    if type(_G.MSUF_RebuildFontChoices) == "function" then
+        pcall(_G.MSUF_RebuildFontChoices)
+    end
+
+    local needsFontRefresh = forceApply == true
+    if not needsFontRefresh and key ~= nil then
+        local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
+        local general = _G.MSUF_DB and _G.MSUF_DB.general
+        needsFontRefresh = general and normalizeFontKey(general.fontKey) == normalizeFontKey(key)
+    end
+    if needsFontRefresh then
+        ScheduleFontMediaRefresh()
+    end
+end
+
+local function RefreshStatusbarMedia()
+    if type(_G.MSUF_RebuildStatusbarChoices) == "function" then
+        pcall(_G.MSUF_RebuildStatusbarChoices)
+    end
+    ScheduleStatusbarMediaRefresh()
+end
+
+local function RefreshChangedMediaAfterCombat()
+    local LSM = MSUF.LSM
+    local fontCount = CountLSMMediaType(LSM, "font")
+    local statusbarCount = CountLSMMediaType(LSM, "statusbar")
+    local fontChanged = fontCount ~= _MSUF_LSMMediaCounts.font
+    local statusbarChanged = statusbarCount ~= _MSUF_LSMMediaCounts.statusbar
+
+    _MSUF_LSMMediaCounts.font = fontCount
+    _MSUF_LSMMediaCounts.statusbar = statusbarCount
+
+    if fontChanged then
+        RefreshFontMedia(nil, true)
+    end
+    if statusbarChanged then
+        RefreshStatusbarMedia()
+    end
+end
+
+local function OnLSMRegistered(_, mediatype, key)
+    if IsCombatLocked() then
+        _G.MSUF_LSM_CombatRefreshPending = true
+        if UnregisterLSMCallback then
+            UnregisterLSMCallback()
+        end
+        local frame = EnsureLSMCombatFrame and EnsureLSMCombatFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        end
+        return
+    end
+
+    if mediatype == "font" then
+        RefreshFontMedia(key, false)
+    elseif mediatype == "statusbar" then
+        RefreshStatusbarMedia()
+    end
+    SnapshotLSMMediaCounts(MSUF.LSM)
+end
+
+UnregisterLSMCallback = function()
+    if not _MSUF_LSMCallbackActive then return true end
+    local LSM = MSUF.LSM
+    if LSM and type(LSM.UnregisterCallback) == "function" then
+        pcall(LSM.UnregisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT)
+    end
+    _MSUF_LSMCallbackActive = false
+    _G.MSUF_LSM_CallbackActive = false
+    return true
+end
+
+RegisterLSMCallback = function()
+    local LSM = MSUF.LSM
+    if not (LSM and type(LSM.RegisterCallback) == "function") then return false end
+    if IsCombatLocked() then return false end
+    if _MSUF_LSMCallbackActive then return true end
+
+    local ok = pcall(LSM.RegisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
+    if ok then
+        _MSUF_LSMCallbackActive = true
+        _G.MSUF_LSM_CallbackActive = true
+        return true
+    end
+    return false
+end
+
+EnsureLSMCombatFrame = function()
+    if _MSUF_LSMCombatFrame or type(_G.CreateFrame) ~= "function" then
+        return _MSUF_LSMCombatFrame
+    end
+    local frame = _G.CreateFrame("Frame")
+    frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+    frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+    frame:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_REGEN_DISABLED" then
+            UnregisterLSMCallback()
+            return
+        end
+        if event ~= "PLAYER_REGEN_ENABLED" or IsCombatLocked() then return end
+
+        if _MSUF_BundledMediaRegistrationPending and RegisterBundledFonts then
+            RegisterBundledFonts()
+        end
+        RegisterLSMCallback()
+        RefreshChangedMediaAfterCombat()
+        _G.MSUF_LSM_CombatRefreshPending = nil
+    end)
+    _MSUF_LSMCombatFrame = frame
+    return frame
+end
+
 local function EnsureLSMCallbacks()
     local LSM = MSUF.LSM
     if not LSM then return end
-    if _G.MSUF_LSM_CallbacksRegistered then return end
     _G.MSUF_LSM_CallbacksRegistered = true
-
-    LSM:RegisterCallback("LibSharedMedia_Registered", function(_, mediatype, key)
-        if mediatype == "font" then
-            if type(_G.MSUF_ClearResolvedFontPathCache) == "function" then
-                _G.MSUF_ClearResolvedFontPathCache()
-            end
-            if _G.MSUF_RebuildFontChoices then
-                _G.MSUF_RebuildFontChoices()
-            end
-
-            local normalizeFontKey = _G.MSUF_NormalizeFontKey or function(k) return k end
-            if _G.MSUF_DB and _G.MSUF_DB.general and normalizeFontKey(_G.MSUF_DB.general.fontKey) == normalizeFontKey(key) then
-                if _G.C_Timer and _G.C_Timer.After then
-                    _G.C_Timer.After(0, function()
-                        if _G.MSUF_UpdateAllFonts then
-                            _G.MSUF_UpdateAllFonts()
-                        end
-                    end)
-                elseif _G.MSUF_UpdateAllFonts then
-                    _G.MSUF_UpdateAllFonts()
-                end
-            end
-
-        elseif mediatype == "statusbar" then
-            if _G.MSUF_RebuildStatusbarChoices then
-                _G.MSUF_RebuildStatusbarChoices()
-            end
-            ScheduleStatusbarMediaRefresh()
-        end
-    end)
+    EnsureLSMCombatFrame()
+    SnapshotLSMMediaCounts(LSM)
+    RegisterLSMCallback()
 end
 
 --- Shared statusbar texture choices for Menu2 dropdowns.
@@ -585,15 +765,29 @@ _G.MSUF_RebuildStatusbarChoices = _G.MSUF_RebuildStatusbarChoices or function() 
 
 --- Bundled fonts (Media/Fonts)
 
-local function RegisterBundledFonts()
-    if _G.MSUF_BUNDLED_FONTS_REGISTERED then return end
+RegisterBundledFonts = function()
+    if _G.MSUF_BUNDLED_FONTS_REGISTERED == true then return end
+
+    if IsCombatLocked() then
+        _MSUF_BundledMediaRegistrationPending = true
+        _G.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED = true
+        local frame = EnsureLSMCombatFrame and EnsureLSMCombatFrame()
+        if frame then
+            frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+        end
+        return
+    end
 
     local LSM = MSUF.LSM
     if not LSM or type(LSM.Register) ~= "function" then return end
+    local wasDeferred = _MSUF_BundledMediaRegistrationPending == true
+        or _G.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED == true
+    _MSUF_BundledMediaRegistrationPending = false
+    _G.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED = nil
 
     local base = "Interface/AddOns/" .. tostring(addonName) .. "/Media/Fonts/"
     local fonts = {
-        { key = "EXPRESSWAY", name = "Expressway Regular (MSUF)", file = "Expressway Regular.ttf" },
+        { key = "EXPRESSWAY", name = "Expressway Regular (MSUF)", file = "Expressway Regular.ttf", aliases = { "Expressway (MSUF)" } },
         { key = "EXPRESSWAY_BOLD", name = "Expressway Bold (MSUF)", file = "Expressway Bold.ttf" },
         { key = "EXPRESSWAY_SEMIBOLD", name = "Expressway SemiBold (MSUF)", file = "Expressway SemiBold.ttf" },
         { key = "EXPRESSWAY_EXTRABOLD", name = "Expressway ExtraBold (MSUF)", file = "Expressway ExtraBold.ttf" },
@@ -603,6 +797,12 @@ local function RegisterBundledFonts()
     for _, info in ipairs(fonts) do
         local path = base .. info.file
         pcall(LSM.Register, LSM, "font", info.key, path)
+        pcall(LSM.Register, LSM, "font", info.name, path)
+        if type(info.aliases) == "table" then
+            for i = 1, #info.aliases do
+                pcall(LSM.Register, LSM, "font", info.aliases[i], path)
+            end
+        end
     end
 
     --- Bundled bar/castbar textures (Media/Bars).
@@ -677,12 +877,19 @@ local function RegisterBundledFonts()
     end
 
     _G.MSUF_BUNDLED_FONTS_REGISTERED = true
+    SnapshotLSMMediaCounts(LSM)
+    if wasDeferred then
+        RefreshFontMedia(nil, true)
+        RefreshStatusbarMedia()
+    end
 end
+
+_G.MSUF_RegisterBundledMediaWithLSM = RegisterBundledFonts
 
 --- Initial attempt (works when libs are already available)
 if TryInitLSM() then
-    EnsureLSMCallbacks()
     RegisterBundledFonts()
+    EnsureLSMCallbacks()
 else
     --- Load-order-safe fallback: retry when other addons load / on login.
     local f = CreateFrame("Frame")
@@ -690,8 +897,8 @@ else
     f:RegisterEvent("PLAYER_LOGIN")
     f:SetScript("OnEvent", function()
         if TryInitLSM() then
-            EnsureLSMCallbacks()
             RegisterBundledFonts()
+            EnsureLSMCallbacks()
             f:UnregisterEvent("ADDON_LOADED")
             f:UnregisterEvent("PLAYER_LOGIN")
             f:SetScript("OnEvent", nil)

@@ -1,6 +1,11 @@
 --- Registers MSUF bundled fonts/textures with LibSharedMedia-3.0 (if available).
 --- Keep this file lightweight and load-order safe.
 
+if type(_G.MSUF_RegisterBundledMediaWithLSM) == "function" then
+    _G.MSUF_RegisterBundledMediaWithLSM()
+    return
+end
+
 local LibStub = _G.LibStub
 local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
 if not LSM or type(LSM.Register) ~= "function" then return end
