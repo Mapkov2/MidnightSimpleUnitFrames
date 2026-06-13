@@ -9,6 +9,10 @@ local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
 
+-- Advanced Class Power page.
+-- Builds the Menu2 controls for class-resource pips, detached power, player HP bridge, and
+-- shape media. Runtime changes are delegated through ClassPower refresh helpers and the
+-- general apply queue so preview and live frames stay in sync.
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -19,6 +23,8 @@ local CallGlobal, Bars, BoolValue, NumValue, SetValue, DeepCopyTable, BindTableT
 local MoveWidget = W.MoveWidget or AP.MoveWidget
 local CPPreview = M.ClassPowerPreview or {}
 local function ApplyClassPower()
+    -- ClassPower spans several runtimes: core bars, textures, cooldown-manager width binding,
+    -- inline preview, and global preview alpha. Keep the page fanout centralized here.
     CallGlobal("MSUF_ClassPower_Refresh")
     CallGlobal("MSUF_ClassPower_RefreshTextures")
     CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
@@ -1167,7 +1173,7 @@ end
 
 local function BuildClassPower(ctx)
     local b = W.PageBuilder(ctx)
-    local head = b:Header("Class Resources", "Native class-resource layout, visibility and text controls.", 94)
+    local head = b:Header("Class Resources", "Class resource first; optional attached Player Power, second HP and alternative mana bars below.", 94)
 
     local previewW = min(330, max(220, (ctx.width or 900) - 380))
     local previewDrop = W.Dropdown(head, "Preview resource", CLASS_POWER_PREVIEW_VALUES, previewW)
@@ -1236,7 +1242,8 @@ local function BuildClassPower(ctx)
 
     local layoutWidth = ctx.width or 900
     local compactLayout = layoutWidth < 620
-    local display = b:CollapsibleSection("classpower_display", "Layout", compactLayout and 820 or 540, true)
+    b:Header("Class Resource Bar", "Combo Points, Runes, Holy Power, Chi and similar class-specific resources.", 64)
+    local display = b:CollapsibleSection("classpower_display", "Class Resource Layout", compactLayout and 820 or 540, true)
     local cpControls = {}
     local textControls = {}
     local dpbControls = {}
@@ -1318,7 +1325,7 @@ local function BuildClassPower(ctx)
     PlaceColumn(display, layoutLeftX, -116, 54, layoutControlW, nil, cpPreset, cpShapeQuick, cpShape, cpHeight, cpWidthMode, cpWidth, cpAlign)
     PlaceColumn(display, layoutRightX, positionTopY, 54, layoutControlW, nil, cpX, cpY, cpLevel)
 
-    local behavior = b:CollapsibleSection("classpower_behavior", "Behavior", 206, false)
+    local behavior = b:CollapsibleSection("classpower_behavior", "Class Resource Behavior", 206, false)
     local cpAnchor = BindTableToggle(ctx, behavior, "Anchor to Essential Cooldown", Bars, "classPowerAnchorToCooldown", false, ApplyClassPower)
     local cpCharged = BindTableToggle(ctx, behavior, "Show empowered combo points", Bars, "showChargedComboPoints", true, ApplyClassPower)
     local cpText = BindTableToggle(ctx, behavior, "Show resource text", Bars, "classPowerShowText", false, ApplyClassPower)
@@ -1338,7 +1345,7 @@ local function BuildClassPower(ctx)
     PlaceColumn(behavior, 14, -38, 32, nil, nil, cpAnchor, cpCharged, cpText, cpRune, cpReverse)
     PlaceColumn(behavior, behaviorRightX, -38, 32, nil, nil, cpEle, cpEbon, cpShadow, cpPrediction)
 
-    local visual = b:CollapsibleSection("classpower_visuals", "Style", 430, false)
+    local visual = b:CollapsibleSection("classpower_visuals", "Class Resource Style", 430, false)
     local styleWidth = visual._msuf2Width or ctx.width or 900
     local styleInnerW = max(320, styleWidth - 64)
     local styleLeftX = 32
@@ -1403,7 +1410,7 @@ local function BuildClassPower(ctx)
     PlaceColumn(opacityFrame, styleLeftX, -84, 52, styleControlW, nil, cpBg, cpFilled, cpEmpty)
     PlaceColumn(pipsFrame, styleLeftX, -84, 52, styleControlW, nil, cpSeparator, cpOutline, cpGap)
 
-    local visibility = b:CollapsibleSection("classpower_visibility", "Auto-Hide", 216, false)
+    local visibility = b:CollapsibleSection("classpower_visibility", "Class Resource Visibility", 216, false)
     local visibilityW = min(560, (visibility._msuf2Width or ctx.width or 900) - 28)
     W.ControlCard(visibility, "Auto-Hide Rules", nil, 14, -54, visibilityW, 142)
     local hideOOC = SwitchAt(ctx, visibility, "Hide out of combat", 32, -86, visibilityW - 48, Bars, "classPowerHideOOC", false, ApplyClassPower)
@@ -1411,8 +1418,9 @@ local function BuildClassPower(ctx)
     local hideEmpty = SwitchAt(ctx, visibility, "Hide when empty", 32, -150, visibilityW - 48, Bars, "classPowerHideWhenEmpty", false, ApplyClassPower)
     AddControls(cpControls, hideOOC, hideFull, hideEmpty)
 
+    b:Header("Attached Player Bars", "Optional Player Power and second HP bars managed by the Class Resources stack.", 64)
     local dpbCompact = layoutWidth < 680
-    local dpb = b:CollapsibleSection("classpower_detached_power", "Detached Power Bar", dpbCompact and 920 or 640, false)
+    local dpb = b:CollapsibleSection("classpower_detached_power", "Player Power Bar", dpbCompact and 920 or 640, false)
     local dpbWidth = dpb._msuf2Width or ctx.width or 900
     local dpbInnerW = max(320, dpbWidth - 64)
     local dpbCardW = min(650, dpbWidth - 28)
@@ -1552,7 +1560,7 @@ local function BuildClassPower(ctx)
     AddControls(dpbPlayerControls, dpbAnchor, dpbSync, dpbTextOnBar, dpbX, dpbY, dpbHeight, dpbLayer, dpbShape, dpbOrbSize, dpbTextPreset, dpbTextSize)
 
     local phpCompact = layoutWidth < 680
-    local php = b:CollapsibleSection("classpower_player_hp", "Player HP Bar", phpCompact and 980 or 700, false)
+    local php = b:CollapsibleSection("classpower_player_hp", "Second Player HP Bar", phpCompact and 980 or 700, false)
     local phpWidth = php._msuf2Width or ctx.width or 900
     local phpInnerW = max(320, phpWidth - 64)
     local phpCardW = min(650, phpWidth - 28)
@@ -1670,10 +1678,11 @@ local function BuildClassPower(ctx)
         M.AddTooltip(phpTextShared, "Use Player HP Text", "Uses Player HP text settings and copies already-rendered Player HP text when it is current. Local Text X/Y still belong to this bar.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
 
-    local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana Bar", 306, false)
+    b:Header("Other Resource Bars", "Extra class/resource bars that are not the main class-resource row.", 64)
+    local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 306, false)
     local altManaCardW = min(620, (altMana._msuf2Width or ctx.width or 900) - 28)
     local altManaControlW = min(360, altManaCardW - 64)
-    W.ControlCard(altMana, "Alternative Mana Bar", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, altManaCardW, 234)
+    W.ControlCard(altMana, "Alternative Mana", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, altManaCardW, 234)
     local altManaToggle = SwitchAt(ctx, altMana, "Show mana bar (dual resource)", 32, -98, altManaControlW, Bars, "showAltMana", false, ApplyClassPower)
     local altManaHeight = BindTableSlider(ctx, altMana, "Height", 2, 30, 1, 300, Bars, "altManaHeight", 4, ApplyClassPower)
     local altManaY = BindTableSlider(ctx, altMana, "Y offset", -50, 50, 1, 300, Bars, "altManaOffsetY", -2, ApplyClassPower)
@@ -1740,4 +1749,4 @@ local function BuildClassPower(ctx)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 
-M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 13 })
+M.RegisterPage("classpower", { title = "MSUF Class Resources", build = BuildClassPower, version = 14 })

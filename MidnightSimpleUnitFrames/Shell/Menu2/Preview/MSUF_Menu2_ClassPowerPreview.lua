@@ -66,6 +66,19 @@ local function TR(text)
     return (M.Tr and M.Tr(text)) or text
 end
 
+local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
+    if not (box and box.summary and box.summary.SetText) then return end
+    local parts = {}
+    if classFrame then parts[#parts + 1] = "Class Resource" end
+    if powerFrame then parts[#parts + 1] = "Player Power" end
+    if hpFrame then parts[#parts + 1] = "Second HP" end
+    if #parts == 0 then
+        box.summary:SetText(TR("Shown here: Player frame reference only"))
+    else
+        box.summary:SetText(TR("Shown here: ") .. table.concat(parts, " + "))
+    end
+end
+
 if Helpers.InstallZoomPan and not ZoomPan._msufCPPreviewInstalled then
     ZoomPan._msufCPPreviewInstalled = true
     Helpers.InstallZoomPan(ZoomPan, {
@@ -89,11 +102,11 @@ local CP_PREVIEW_LAYERS = {
     { key = "guides", label = "Guides", color = { 0.42, 0.72, 1.00 }, tooltip = "Mover handles and selected borders." },
     { key = "border", label = "Border", color = PREVIEW_BORDER_COLOR, tooltip = "Actual HP, Power and Class Resource outlines." },
     { key = "reference", label = "Reference", color = { 0.60, 0.66, 0.78 }, tooltip = "Player frame reference used for relative layout." },
-    { key = "class", label = "Class", color = { 0.30, 0.78, 0.55 }, tooltip = "Class resource bar or pips." },
-    { key = "classText", label = "Class Text", color = { 0.30, 0.78, 0.55 }, tooltip = "Class resource numeric text." },
-    { key = "power", label = "Power", color = { 0.95, 0.72, 0.18 }, tooltip = "Detached player power bar bound to Class Resources." },
-    { key = "powerText", label = "Pwr Text", color = { 0.95, 0.72, 0.18 }, tooltip = "Detached player power text." },
-    { key = "hp", label = "HP", color = { 0.25, 0.90, 0.42 }, tooltip = "Extra player HP bar in Class Resources." },
+    { key = "class", label = "Resource", color = { 0.30, 0.78, 0.55 }, tooltip = "Class resource bar or pips." },
+    { key = "classText", label = "Res Text", color = { 0.30, 0.78, 0.55 }, tooltip = "Class resource numeric text." },
+    { key = "power", label = "Power Bar", color = { 0.95, 0.72, 0.18 }, tooltip = "Detached player power bar bound to Class Resources." },
+    { key = "powerText", label = "Power Txt", color = { 0.95, 0.72, 0.18 }, tooltip = "Detached player power text." },
+    { key = "hp", label = "HP Bar", color = { 0.25, 0.90, 0.42 }, tooltip = "Extra player HP bar in Class Resources." },
     { key = "hpText", label = "HP Text", color = { 0.25, 0.90, 0.42 }, tooltip = "Extra player HP text." },
     { key = "bounds", label = "Bounds", color = { 1.00, 0.22, 0.12 }, tooltip = "Preview-only bounds around visible elements." },
 }
@@ -1773,14 +1786,14 @@ end
 --- function. All live apply calls are opt-in through handle actions.
 function Preview.Create(ctx, builder)
     if not (W and T and builder and builder.Section) then return nil end
-    local section = builder:Section("Preview", 368)
+    local section = builder:Section("Preview", 388)
     local width = section._msuf2Width or builder.width or ctx.width or 720
     local innerW = max(470, width - 28)
     local sideW = 80
 
     local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
     box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -38)
-    box:SetSize(innerW, 310)
+    box:SetSize(innerW, 330)
     box.canvasW, box.canvasH = max(340, innerW - sideW - 38), 260
     box.playerW, box.playerH = min(275, max(190, box.canvasW - 160)), 38
     box.handles = {}
@@ -1796,8 +1809,13 @@ function Preview.Create(ctx, builder)
     hint:SetJustifyH("LEFT")
     box.hint = hint
 
+    box.summary = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
+    box.summary:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
+    box.summary:SetPoint("RIGHT", box, "RIGHT", -12, 0)
+    box.summary:SetJustifyH("LEFT")
+
     box.canvas = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
-    box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
+    box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -54)
     box.canvas:SetSize(box.canvasW, box.canvasH)
     box._canvasBorderColor = T.colors.borderSoft
     if box.canvas.SetClipsChildren then box.canvas:SetClipsChildren(true) end
@@ -1854,12 +1872,12 @@ function Preview.Create(ctx, builder)
     box.dragFrame:Hide()
     box.dragUpdate = DragUpdate
 
-    box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource", { 0.30, 0.78, 0.55 }, "class", "class")
+    box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource bar", { 0.30, 0.78, 0.55 }, "class", "class")
     box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text", { 0.30, 0.78, 0.55 }, "classText", "classText")
-    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Detached player power", { 0.95, 0.72, 0.18 }, "power", "power")
-    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Detached power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText")
-    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Class Resources player HP", { 0.25, 0.90, 0.42 }, "hp", "hp")
-    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Class Resources player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
+    box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar", { 0.95, 0.72, 0.18 }, "power", "power")
+    box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText")
+    box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp")
+    box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
 
     function section:Refresh()
         local bars = Bars()
@@ -1870,6 +1888,7 @@ function Preview.Create(ctx, builder)
         if classFrame and classFrame.IsShown and classFrame:IsShown() then box.noResource:Hide() else box.noResource:Show() end
         local powerFrame = RenderDetachedPower(box, bars, player, classFrame)
         local hpFrame = RenderPlayerHP(box, bars, player, classFrame, powerFrame, spec)
+        SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
         box.layerAvailable = {
             guides = true,
             border = true,
