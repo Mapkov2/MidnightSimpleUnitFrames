@@ -1036,3 +1036,70 @@ SlashCmdList["MSUFVS"] = function()
         end
     end)
 end
+
+-- /msufgfclick: times the GROUP-CHILD attribute path that fires when the secure
+-- header touches a child's unit on click. Wraps GF.ApplyButton + the global
+-- UF.OnUnitChanged, and counts OnAttributeChanged fires on live group children.
+-- This is the group-only path no prior probe timed.
+local gfClickActive = false
+local gfSaved = {}
+local function GfWrap(tbl, key, label)
+    if type(tbl) ~= "table" or type(tbl[key]) ~= "function" or gfSaved[label] then return end
+    local fn = tbl[key]
+    gfSaved[label] = { tbl = tbl, key = key, fn = fn }
+    tbl[key] = function(...)
+        if not gfClickActive then return fn(...) end
+        local t0 = GetTimePreciseSec()
+        local a,b,c = fn(...)
+        Record("gf:"..label, "", (GetTimePreciseSec()-t0)*1000)
+        return a,b,c
+    end
+end
+local function GfRestore()
+    for label, s in pairs(gfSaved) do s.tbl[s.key] = s.fn; gfSaved[label] = nil end
+end
+SLASH_MSUFGFCLICK1 = "/msufgfclick"
+SlashCmdList["MSUFGFCLICK"] = function()
+    if gfClickActive then print("gfclick probe already armed.") return end
+    if InCombatLockdown and InCombatLockdown() then print("leave combat first.") return end
+    local UF = MSUF.UF
+    local GF = MSUF.GF or _G.MSUF_GF
+    results = {}
+    if GF then GfWrap(GF, "ApplyButton", "GF.ApplyButton") end
+    if GF then GfWrap(GF, "CompileSpec", "GF.CompileSpec") end
+    if UF then GfWrap(UF, "OnUnitChanged", "UF.OnUnitChanged") end
+    if UF then GfWrap(UF, "SetFrameSpec", "UF.SetFrameSpec") end
+    if UF then GfWrap(UF, "ApplySpec", "UF.ApplySpec") end
+    -- count + time OnAttributeChanged on live group children
+    local list = GF and GF.frameList
+    if type(list) == "table" then
+        for i = 1, #list do
+            local f = list[i]
+            if f and f.HookScript and not gfSaved["attr"..i] then
+                gfSaved["attr"..i] = false
+                f:HookScript("OnAttributeChanged", function(self, name)
+                    if gfClickActive and name == "unit" then
+                        Record("gf:OnAttributeChanged(unit)", "", 0)
+                    end
+                end)
+            end
+        end
+    end
+    gfClickActive = true
+    print("|cff7fd5ffMSUF GFClick|r armed 6s -- click 3 different GROUP members NOW.")
+    if C_Timer and C_Timer.After then
+        C_Timer.After(6, function()
+            gfClickActive = false
+            local out = {}
+            for k,r in pairs(results) do out[#out+1] = {key=k,total=r.total,count=r.count,max=r.max} end
+            table.sort(out, function(a,b) return a.total>b.total end)
+            print("|cff7fd5ffMSUF GFClick|r (total | count | worst):")
+            if #out == 0 then print("  no group-child path ran on click -- cost is the secure target action (Blizzard floor).") end
+            for i=1,math.min(#out,15) do
+                local e=out[i]
+                print(string.format("  %.3fms | %dx | max %.3fms | %s", e.total, e.count, e.max, e.key))
+            end
+            GfRestore(); results = {}
+        end)
+    else gfClickActive = false; GfRestore() end
+end
