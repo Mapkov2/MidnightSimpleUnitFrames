@@ -143,6 +143,7 @@ ClassPower\MSUF_CP_Constants.lua
 ClassPower\MSUF_CP_Modes.lua
 ClassPower\MSUF_CP_Core.lua
 ClassPower\MSUF_CP_AltMana.lua
+ClassPower\MSUF_CP_PlayerHP.lua
 ClassPower\MSUF_CP_BalanceDruid.lua
 ClassPower\MSUF_CP_Controller.lua
 

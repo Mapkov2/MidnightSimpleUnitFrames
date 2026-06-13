@@ -3,6 +3,13 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
 
+--- UnitFrames/Engine/MSUF_UF_Config.lua
+---
+--- Cold config compiler for unit frames. It reads MSUF_DB, resolves legacy
+--- aliases/defaults, and produces per-unit specs consumed by Factory, Core, and
+--- hot Dispatch code. Keep DB walking and schema interpretation here; runtime
+--- event handlers should read compiled frame.MSUFSpec fields instead.
+
 local UF = MSUF.UF
 UF.Config = UF.Config or {}
 local Config = UF.Config
@@ -117,6 +124,9 @@ local NPC_COLOR_DEFAULTS = {
 
 local dbInitialized = false
 
+--- Config can be asked for specs before every module has finished loading.
+--- EnsureDB centralizes that bootstrap without making the hot dispatch layer
+--- know about profile initialization.
 local function EnsureDB()
   if not dbInitialized or type(_G.MSUF_DB) ~= "table" then
     if type(_G.MSUF_InitProfiles) == "function" then
@@ -946,8 +956,37 @@ local function BackgroundTextureFromScope(conf, general, foregroundTexture)
   return BackgroundTextureFromGlobal()
 end
 
+local function DetachedPowerTextureFromBars(bars, fallback)
+  local key = bars and bars.detachedPowerBarTexture
+  if type(key) == "string" and key ~= "" then
+    return ResolveStatusbarTextureKey(key, fallback or TextureFromGlobal())
+  end
+  return fallback or TextureFromGlobal()
+end
+
+local function DetachedPowerBackgroundTextureFromBars(bars, foregroundTexture, fallback)
+  local key = bars and bars.detachedPowerBarBgTexture
+  if type(key) == "string" then
+    if key == "" then
+      return foregroundTexture or fallback or TextureFromGlobal()
+    end
+    return ResolveStatusbarTextureKey(key, foregroundTexture or fallback or WHITE)
+  end
+  return fallback or foregroundTexture or BackgroundTextureFromGlobal()
+end
+
 local function ClassPowerFallbackWidth(out, bars)
   local widthMode = bars and bars.classPowerWidthMode or "player"
+  if widthMode == "auto_pips" then
+    local shape = tostring((bars and bars.classPowerShape) or "BAR"):upper()
+    if shape == "CIRCLE" or shape == "DIAMOND" or shape == "HEX" then
+      local container = _G.MSUF_ClassPowerContainer
+      local liveW = container and container.GetWidth and container:GetWidth() or nil
+      if liveW and liveW >= 20 then
+        return liveW
+      end
+    end
+  end
   if widthMode == "custom" then
     local custom = Number(bars and bars.classPowerWidth, 0)
     if custom >= 30 then
@@ -969,7 +1008,7 @@ end
 
 local function ResolveDetachedPowerShape(conf, bars)
   local value = tostring((conf and conf.detachedPowerBarShape) or "FOLLOW_CLASS"):upper()
-  if value == "BAR" or value == "ROUND" or value == "CRYSTAL" then return value end
+  if value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
   if value ~= "FOLLOW_CLASS" then value = "FOLLOW_CLASS" end
   local classShape = NormalizeClassPowerShape(bars and bars.classPowerShape)
   if classShape == "CIRCLE" then return "ROUND" end
@@ -1244,10 +1283,7 @@ local function CompileUnitStatus(out, conf, general, key)
   status.enabled = statusEnabled
 end
 
-local function ResolveUnit(db, unit, out)
-  out = out or {}
-  wipe(out)
-
+local function ResolveUnitContext(db, unit)
   local key = UF.ConfigKeyForUnit(unit)
   local def = DEFAULTS[key] or DEFAULTS.player
   local conf = type(db[key]) == "table" and db[key] or {}
@@ -1257,7 +1293,10 @@ local function ResolveUnit(db, unit, out)
   local general = type(db.general) == "table" and db.general or {}
   local bars = type(db.bars) == "table" and db.bars or {}
   local bossIndex = unit and unit:match("^boss(%d+)$")
+  return key, def, conf, general, bars, bossIndex
+end
 
+local function CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
   out.unit = unit
   out.key = key
   out.enabled = conf.enabled ~= false
@@ -1318,7 +1357,9 @@ local function ResolveUnit(db, unit, out)
     out.fontShadowX = shadowX
     out.fontShadowY = shadowY
   end
+end
 
+local function CompileUnitText(out, db, unit, key, conf, general, bars)
   local text = out.text or {}
   out.text = text
   text.healthLeft = NormalizeHealthTextMode(conf.textLeft, "NONE")
@@ -1380,7 +1421,9 @@ local function ResolveUnit(db, unit, out)
       conf.powerTextThrottle or general.powerTextThrottle, key == "player" and 0.05 or 0.10),
     key == "player" and bars.realtimePowerText == true
       or conf.powerTextThrottleEnabled == false or general.powerTextThrottleEnabled == false)
+end
 
+local function CompileUnitHealth(out, conf, general, bars)
   local health = out.health or {}
   out.health = health
   health.texture = out.texture
@@ -1404,7 +1447,10 @@ local function ResolveUnit(db, unit, out)
   end
   health.background = ResolveHealthBackground(general, bars, health, health.background or {}, conf)
   health.backgroundMatchHealth = general.barBgMatchHPColor == true
+  return health
+end
 
+local function CompileUnitPower(out, unit, key, conf, general, bars, health)
   local power = out.power or {}
   out.power = power
   power.enabled = PowerEnabled(unit, key, conf, bars)
@@ -1425,8 +1471,18 @@ local function ResolveUnit(db, unit, out)
     power.embed = true
   end
   power.detached = conf.powerBarDetached == true
+  if key == "player" and power.detached == true then
+    power.texture = DetachedPowerTextureFromBars(bars, out.texture)
+    power.backgroundTexture = DetachedPowerBackgroundTextureFromBars(bars, power.texture, out.backgroundTexture)
+  end
   power.detachedWidth = Number(conf.detachedPowerBarWidth, out.width)
   power.detachedHeight = Number(conf.detachedPowerBarHeight, power.height)
+  power.orbSize = Number(conf.detachedPowerOrbSize, 54)
+  if power.orbSize < 20 then
+    power.orbSize = 20
+  elseif power.orbSize > 160 then
+    power.orbSize = 160
+  end
   power.detachedX = Number(conf.detachedPowerBarOffsetX, 0)
   power.detachedY = Number(conf.detachedPowerBarOffsetY, -4)
   power.detachedLevel = Number(conf.detachedPowerBarFrameLevelOffset, 6)
@@ -1447,8 +1503,8 @@ local function ResolveUnit(db, unit, out)
   power.detachedOutline = Number(bars.detachedPowerBarOutline, power.borderThickness)
   if power.detachedOutline < 0 then
     power.detachedOutline = 0
-  elseif power.detachedOutline > 10 then
-    power.detachedOutline = 10
+  elseif power.detachedOutline > 8 then
+    power.detachedOutline = 8
   end
   power.borderR = Number(ScopedValue(conf, general, "barOutlineColorR", general.barBorderR), 0)
   power.borderG = Number(ScopedValue(conf, general, "barOutlineColorG", general.barBorderG), 0)
@@ -1472,7 +1528,9 @@ local function ResolveUnit(db, unit, out)
   else
     power.smooth = unit == "player" and bars.smoothPowerBar ~= false or false
   end
+end
 
+local function CompileUnitPrediction(out, conf, general, key)
   local pred = out.prediction or {}
   out.prediction = pred
   local absorbMode = Number(ScopedValue(conf, general, "absorbTextMode", nil), nil)
@@ -1496,12 +1554,9 @@ local function ResolveUnit(db, unit, out)
   pred.absorbTexture = ScopedValue(conf, general, "absorbBarTexture", nil)
   pred.healAbsorbTexture = ScopedValue(conf, general, "healAbsorbBarTexture", nil)
   FillPredictionColors(pred, general, conf, ScopedValue, Number)
+end
 
-  CompileAlpha(out, conf, general, key)
-  CompileRange(out, conf, general, key)
-
-  CompileLoadConditions(out, conf)
-
+local function CompileUnitDispel(out, conf, general)
   local dispel = out.dispel or {}
   out.dispel = dispel
   local dispelColorMode = general.hlDispelColorMode or "SINGLE"
@@ -1518,7 +1573,9 @@ local function ResolveUnit(db, unit, out)
   overlay.style = NormalizeDispelOverlayStyle(ScopedValue(conf, general, "unitDispelOverlayStyle", "FULL"))
   overlay.onHealth = ScopedValue(conf, general, "unitDispelOverlayOnHealth", true) ~= false
   overlay.alpha = Clamp01(ScopedValue(conf, general, "unitDispelOverlayAlpha", 0.35), 0.35)
+end
 
+local function CompileUnitBorder(out, conf, general, bars)
   local border = out.border or {}
   out.border = border
   local outlineThickness = conf.hlOverride == true and conf.barOutlineThickness ~= nil and conf.barOutlineThickness or bars.barOutlineThickness
@@ -1554,7 +1611,9 @@ local function ResolveUnit(db, unit, out)
   border.dispelTrigger = NormalizeDispelDetectTrigger(ScopedValue(conf, general, "dispelBorderTrigger", "BY_ME"))
   border.purge = OutlineModeEnabled(ScopedValue(conf, general, "purgeOutlineMode", nil),
     general.purgeBorderEnabled == true or general.hlPurgeBorderEnabled == true)
+end
 
+local function CompileUnitTail(out, unit, key, conf, general, bars)
   CompileUnitPortrait(out, conf, general)
   CompileUnitStatus(out, conf, general, key)
 
@@ -1567,6 +1626,29 @@ local function ResolveUnit(db, unit, out)
 
   out.classPower = out.classPower or {}
   out.classPower.enabled = key == "player" and bars.showClassPower ~= false or false
+end
+
+--- ResolveUnit is the main DB-to-runtime-spec compiler for one unit token.
+--- Keep it deterministic and side-effect-light: frame creation, region updates,
+--- and event registration happen in Factory/Core after this spec exists.
+local function ResolveUnit(db, unit, out)
+  out = out or {}
+  wipe(out)
+
+  local key, def, conf, general, bars, bossIndex = ResolveUnitContext(db, unit)
+  CompileUnitBase(out, unit, key, def, conf, general, bars, bossIndex)
+  CompileUnitText(out, db, unit, key, conf, general, bars)
+  local health = CompileUnitHealth(out, conf, general, bars)
+  CompileUnitPower(out, unit, key, conf, general, bars, health)
+  CompileUnitPrediction(out, conf, general, key)
+
+  CompileAlpha(out, conf, general, key)
+  CompileRange(out, conf, general, key)
+
+  CompileLoadConditions(out, conf)
+  CompileUnitDispel(out, conf, general)
+  CompileUnitBorder(out, conf, general, bars)
+  CompileUnitTail(out, unit, key, conf, general, bars)
 
   return out
 end
@@ -1585,6 +1667,9 @@ function Config.BossLayoutOffset(conf, index)
   return BossOffset(conf, index, DEFAULTS.boss)
 end
 
+--- Full refresh recompiles every managed unit spec. This is a cold/warm
+--- operation for profile changes, option edits, and explicit rebuild requests;
+--- do not call it from UNIT_HEALTH/POWER/AURA style gameplay events.
 function Config.Refresh()
   if ConfigInCombat() then
     Config.dirty = true
@@ -1641,6 +1726,8 @@ end
 
 Config.settingsCache = Config.settingsCache or {}
 
+--- Small read-mostly cache for runtime color/font decisions that are shared by
+--- many frames. Hot code reads this cache instead of walking MSUF_DB.general.
 local function BuildSettingsCache(db)
   local cache = Config.settingsCache
   local general = type(db.general) == "table" and db.general or {}

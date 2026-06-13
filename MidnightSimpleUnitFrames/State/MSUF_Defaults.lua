@@ -1861,6 +1861,99 @@ if MSUF_DB.bars == nil then
     if MSUF_DB.bars.classPowerShape == nil then
         MSUF_DB.bars.classPowerShape = "BAR"
     end
+    if MSUF_DB.bars.classPowerShapeAlign == nil then
+        MSUF_DB.bars.classPowerShapeAlign = "CENTER"
+    end
+    if MSUF_DB.bars.detachedPowerBarTexture == nil then
+        MSUF_DB.bars.detachedPowerBarTexture = ""
+    end
+    if MSUF_DB.bars.detachedPowerBarBgTexture == nil then
+        MSUF_DB.bars.detachedPowerBarBgTexture = ""
+    end
+    if MSUF_DB.bars.detachedPowerBarOutline == nil then
+        MSUF_DB.bars.detachedPowerBarOutline = 1
+    end
+    if MSUF_DB.bars.playerHPBarEnabled == nil then
+        MSUF_DB.bars.playerHPBarEnabled = false
+    end
+    if MSUF_DB.bars.playerHPBarAnchor == nil then
+        MSUF_DB.bars.playerHPBarAnchor = "CLASS_TOP"
+    end
+    if MSUF_DB.bars.playerHPBarWidthMode == nil then
+        MSUF_DB.bars.playerHPBarWidthMode = "class"
+    end
+    if MSUF_DB.bars.playerHPBarWidth == nil then
+        MSUF_DB.bars.playerHPBarWidth = 0
+    end
+    if MSUF_DB.bars.playerHPBarHeight == nil then
+        MSUF_DB.bars.playerHPBarHeight = 6
+    end
+    if MSUF_DB.bars.playerHPBarGap == nil then
+        MSUF_DB.bars.playerHPBarGap = 2
+    end
+    if MSUF_DB.bars.playerHPBarOffsetX == nil then
+        MSUF_DB.bars.playerHPBarOffsetX = 0
+    end
+    if MSUF_DB.bars.playerHPBarOffsetY == nil then
+        MSUF_DB.bars.playerHPBarOffsetY = 0
+    end
+    if MSUF_DB.bars.playerHPBarFrameLevelOffset == nil then
+        MSUF_DB.bars.playerHPBarFrameLevelOffset = 7
+    end
+    if MSUF_DB.bars.playerHPBarShape == nil then
+        MSUF_DB.bars.playerHPBarShape = "BAR"
+    end
+    if MSUF_DB.bars.playerHPBarOrbSize == nil then
+        MSUF_DB.bars.playerHPBarOrbSize = 54
+    end
+    if MSUF_DB.bars.playerHPBarTexture == nil then
+        MSUF_DB.bars.playerHPBarTexture = ""
+    end
+    if MSUF_DB.bars.playerHPBarBgTexture == nil then
+        MSUF_DB.bars.playerHPBarBgTexture = ""
+    end
+    if MSUF_DB.bars.playerHPBarBgAlpha == nil then
+        MSUF_DB.bars.playerHPBarBgAlpha = 0.35
+    end
+    if MSUF_DB.bars.playerHPBarOutline == nil then
+        MSUF_DB.bars.playerHPBarOutline = 1
+    end
+    if MSUF_DB.bars.playerHPBarColorMode == nil then
+        MSUF_DB.bars.playerHPBarColorMode = "GLOBAL"
+    end
+    if MSUF_DB.bars.playerHPBarSmoothFill == nil then
+        MSUF_DB.bars.playerHPBarSmoothFill = false
+    end
+    if MSUF_DB.bars.playerHPBarTextEnabled == nil then
+        MSUF_DB.bars.playerHPBarTextEnabled = true
+    end
+    if MSUF_DB.bars.playerHPBarUsePlayerText == nil then
+        MSUF_DB.bars.playerHPBarUsePlayerText = true
+    end
+    if MSUF_DB.bars.playerHPBarTextLeft == nil then
+        MSUF_DB.bars.playerHPBarTextLeft = "NONE"
+    end
+    if MSUF_DB.bars.playerHPBarTextCenter == nil then
+        MSUF_DB.bars.playerHPBarTextCenter = "NONE"
+    end
+    if MSUF_DB.bars.playerHPBarTextRight == nil then
+        MSUF_DB.bars.playerHPBarTextRight = "CURPERCENT"
+    end
+    if MSUF_DB.bars.playerHPBarTextSeparator == nil then
+        MSUF_DB.bars.playerHPBarTextSeparator = ""
+    end
+    if MSUF_DB.bars.playerHPBarTextReverse == nil then
+        MSUF_DB.bars.playerHPBarTextReverse = false
+    end
+    if MSUF_DB.bars.playerHPBarTextSize == nil then
+        MSUF_DB.bars.playerHPBarTextSize = 14
+    end
+    if MSUF_DB.bars.playerHPBarTextOffsetX == nil then
+        MSUF_DB.bars.playerHPBarTextOffsetX = 0
+    end
+    if MSUF_DB.bars.playerHPBarTextOffsetY == nil then
+        MSUF_DB.bars.playerHPBarTextOffsetY = 0
+    end
     if MSUF_DB.bars.realtimePowerText == nil then
         MSUF_DB.bars.realtimePowerText = true
     end
@@ -2421,6 +2514,9 @@ local function fill(key, defaults)
             end
             if unitKey == "player" and u.detachedPowerBarShape == nil then
                 u.detachedPowerBarShape = "FOLLOW_CLASS"
+            end
+            if unitKey == "player" and u.detachedPowerOrbSize == nil then
+                u.detachedPowerOrbSize = 54
             end
             if u.powerBarDetached == true and u.detachedPowerBarWidth == nil then
                 local syncedClassWidth = unitKey == "player"

@@ -2,6 +2,13 @@ local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
 
+--- UnitFrames/Engine/Elements/MSUF_UF_Text_Layout.lua
+---
+--- Cold/warm text layout and FontString apply code. Text formatting/runtime
+--- lives in the companion text modules; this file positions FontStrings, applies
+--- font/color/layer settings, and rebuilds compiled text runtime after layout
+--- changes. Hot text updates should use the compiled functions, not layout work.
+
 local CreateFrame = Text.CreateFrame
 local UF = Text.UF
 local tonumber = Text.tonumber
@@ -637,7 +644,7 @@ function Text.Create(frame, spec)
 end
 
 local SIG_SPEC_KEYS = { "key", "scope", "width", "height", "font", "fontFlags", "nameFontSize", "healthFontSize", "powerFontSize", "fontShadow", "fontShadowAlpha", "fontShadowX", "fontShadowY", "_msufGFCompileSerial" }
-local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
+local SIG_POWER_KEYS = { "enabled", "detached", "textOnDetached", "shape", "orbSize", "detachedLevel", "detachedHeight", "detachedWidth", "detachedX", "detachedY", "detachedSyncClass", "detachedAnchorClass", "detachedClassWidth", "detachedWidthFrameName", "detachedClassWidthFrameName" }
 local SIG_TEXT_KEYS = {
   "anchorToBars", "nameAnchor", "nameX", "nameY", "nameLayer", "nameShorten", "nameShortenSide", "nameShortenDots", "nameShortenMax", "nameShortenWidth", "nameLeftWidth",
   "directLayout", "directNamePoint", "directNameRelativePoint", "directNameX", "directNameY",
