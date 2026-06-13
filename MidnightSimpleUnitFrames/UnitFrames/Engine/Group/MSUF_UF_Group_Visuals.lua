@@ -1,3 +1,11 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Visuals.lua
+--- Group-only visual runtime elements.
+---
+--- This file handles target/focus edge indicators, dispel/debuff visuals,
+--- health fade/dead-background behavior, and per-GUID indicator dispatch for
+--- group frames. It is an element implementation registered with the UF engine;
+--- header creation, roster scanning, and DB compilation live elsewhere.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -72,6 +80,8 @@ local function SetWidthCached(region, width, key)
   end
 end
 
+--- Color writes can receive secret values on Midnight clients. Cache normal
+--- values, but pass secret values through and clear cache stamps.
 local function SetColorTextureCached(tex, r, g, b, a)
   if not (tex and tex.SetColorTexture) then return end
   r, g, b, a = r or 1, g or 1, b or 1, a or 1
@@ -139,6 +149,8 @@ local function HideEdges(edges)
   end
 end
 
+--- Compare unit tokens by GUID when possible so target/focus indicators still
+--- work across party/raid token aliases.
 local function SameUnit(unit, otherUnit)
   if issecretvalue(unit) == true then
     return false
@@ -489,6 +501,8 @@ local function EnsureIndicatorDriver()
   return indicatorDriver
 end
 
+--- Unitless target/focus driver keeps edge indicators current without forcing
+--- every group frame to listen to PLAYER_TARGET_CHANGED/PLAYER_FOCUS_CHANGED.
 local function RefreshIndicatorDriver()
   if not indicatorDriver and targetIndicatorCount <= 0 and focusIndicatorCount <= 0 then
     return
@@ -627,6 +641,8 @@ local function CachedHealthValues(frame)
   return hp, maxHP
 end
 
+--- Health fade is a hotpath visual. Use seeded dispatch values when available
+--- and throttle secret-value fallbacks to avoid expensive repeated reads.
 local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
   if not frame.hpBar then return end
   local rangeAlpha = frame._msufGFRangeHealthAlpha or 1

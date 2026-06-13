@@ -17,7 +17,9 @@ A.Workflow = A.Workflow or {}
 local C = A.RegistryCore
 if type(C) ~= "table" then return end
 
--- Global registry domain. Shared helpers live in MSUF_AssistantRegistry_Core.lua.
+-- Global registry domain.
+-- Owns assistant entries for shared colors, fonts, textures, bar behavior, and global visuals.
+-- Apply callbacks fan out to the focused runtime refreshers to avoid full addon rebuilds.
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit

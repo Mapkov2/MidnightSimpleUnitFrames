@@ -11,6 +11,9 @@ M.PreviewHelpers = H
 local CP = M.ClassPowerPreview or {}
 M.ClassPowerPreview = CP
 
+-- Shared Menu2 preview helpers.
+-- Centralizes mock class-power colors, shape helpers, and small rendering utilities used by
+-- preview modules. Keep preview-only fallbacks here instead of coupling pages to live runtime.
 local floor = math.floor
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
 CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
@@ -56,6 +59,8 @@ function CP.ColorOverride(tableName, token)
 end
 
 function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
+    -- User overrides should show in preview, then fall back to runtime power-color helpers,
+    -- and finally to fixed preview colors when the real runtime is unavailable.
     local r, g, b = CP.ColorOverride("classPowerColorOverrides", token)
     if r then return r, g, b end
     if type(_G.MSUF_GetPowerBarColor) == "function" and token then

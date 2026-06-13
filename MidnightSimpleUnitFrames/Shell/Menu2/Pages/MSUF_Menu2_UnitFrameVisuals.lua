@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Unit visual sections.
+-- Builds controls for portrait, castbar detail, detached power, border/shape, and related
+-- frame visuals. It writes through UnitPage helpers and delegates live refresh to runtimes.
 local W = M.Widgets or {}
 local UP = M.UnitPage or {}
 
@@ -14,7 +17,7 @@ local min = math.min
 local VT = M.ValueTextList
 
 local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BORDERS = M.PickDefaults(UP, [[POWER_UNITS CASTBAR_FIELDS PORTRAIT_RENDER PORTRAIT_SHAPES PORTRAIT_BORDERS]])
-local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, SetControlEnabled, NormalizePortrait, SetPortraitValue = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool SetControlEnabled NormalizePortrait SetPortraitValue]])
+local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, SetControlEnabled, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool SetControlEnabled NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources]])
 
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = {
@@ -37,6 +40,7 @@ local CASTBAR_TAB_HEIGHTS = {
 local CASTBAR_TEXT_ALIGN = VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right")
 local CASTBAR_TRUNCATE_VALUES = VT("AUTO", "Auto", "CLIP", "Fixed Clip", "NONE", "No Limit")
 local CASTBAR_ICON_BORDER_VALUES = VT("NONE", "None", "DARK", "Dark Border", "CASTBAR", "Castbar Border")
+local DETACHED_POWER_SHAPE_VALUES = VT("FOLLOW_CLASS", "Follow Class Resource", "BAR", "Bar", "ROUND", "Round", "CRYSTAL", "Crystal", "ORB", "Orb")
 
 
 local UnitSectionShared = M.UnitSectionsShared or {}
@@ -44,9 +48,19 @@ local SetSectionHeaderStatus = UnitSectionShared.SetSectionHeaderStatus or funct
 local CreateSectionNotice = UnitSectionShared.CreateSectionNotice or function() end
 
 local function RefreshClassPowerDetachedState()
+    -- Detached player power is influenced by both unitframe and class-resource controls, so
+    -- ask the ClassPower page/runtime to recompute enabled state after relevant edits.
     if type(M.RefreshClassPowerDetachedState) == "function" then
         M.RefreshClassPowerDetachedState()
     end
+end
+
+local function NormalizeDetachedPowerShape(value)
+    value = tostring(value or "FOLLOW_CLASS"):upper()
+    if value == "FOLLOW_CLASS" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then
+        return value
+    end
+    return "FOLLOW_CLASS"
 end
 
 local function PortraitClassStyleValues()
@@ -187,7 +201,7 @@ local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
     local isPlayer = unit == "player"
     local detachedCardY = -254
-    local detachedCardHeight = isPlayer and 336 or 304
+    local detachedCardHeight = isPlayer and 406 or 304
     local powerSectionHeight = math.abs(detachedCardY) + detachedCardHeight + 52
     local powerNoticeY = detachedCardY - detachedCardHeight - 12
     local sec = builder:CollapsibleSection("power_bar", "Power Bar", powerSectionHeight, false)
@@ -210,6 +224,11 @@ local function BuildPower(ctx, builder, unit)
     local RefreshPowerEnabled
     local powerControls = {}
     local detachedControls = {}
+    local detachedShape
+    local detachedSync
+    local detachedWidth
+    local detachedHeight
+    local orbSize
     local function AddPowerControl(control)
         powerControls[#powerControls + 1] = control
         if W.AttachEditFocus then W.AttachEditFocus(control, unit, "powerbar", nil, { source = "menu2-unit" }) end
@@ -235,9 +254,13 @@ local function BuildPower(ctx, builder, unit)
         return control
     end
 
-    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 104)
+    local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 126)
     if powerNoticeButton then
         powerNoticeButton:SetScript("OnClick", function()
+            if isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) then
+                if type(M.SelectPage) == "function" then M.SelectPage("classpower") end
+                return
+            end
             SetBool(unit, "showPowerBar", true, "MSUF2_POWER_SHOW", { power = true, preview = true })
             if RefreshPowerEnabled then RefreshPowerEnabled() end
         end)
@@ -308,6 +331,7 @@ local function BuildPower(ctx, builder, unit)
                 conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
                 if isPlayer and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
                 if isPlayer and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "FOLLOW_CLASS" end
+                if isPlayer and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
             end
             M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED", { power = true, preview = true })
             if RefreshPowerEnabled then RefreshPowerEnabled() end
@@ -322,8 +346,8 @@ local function BuildPower(ctx, builder, unit)
     local sliderTop = -116
     if isPlayer then
         sliderTop = -148
-        local sync = AddDetachedControl(W.ToggleAt(detachedCard, "Sync width to Class Resource", 16, -94, detachedLeftW))
-        M.BindToggle(ctx, sync,
+        detachedSync = AddDetachedControl(W.ToggleAt(detachedCard, "Sync width to Class Resource", 16, -94, detachedLeftW))
+        M.BindToggle(ctx, detachedSync,
             function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end,
             function(v) SetBool(unit, "detachedPowerBarSyncClassPower", v, "MSUF2_POWER_DETACHED_SYNC", { power = true, preview = true }) end)
 
@@ -335,22 +359,62 @@ local function BuildPower(ctx, builder, unit)
 
     BindPowerSlider(detachedCard, AddDetachedControl, "Detached X", 16, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetX", 0, "MSUF2_POWER_DETACHED_X")
     BindPowerSlider(detachedCard, AddDetachedControl, "Detached Y", detachedRightX, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetY", -4, "MSUF2_POWER_DETACHED_Y")
-    BindPowerSlider(detachedCard, AddDetachedControl, "Detached width", 16, sliderTop - 66, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W")
-    BindPowerSlider(detachedCard, AddDetachedControl, "Detached height", detachedRightX, sliderTop - 66, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H")
+    detachedWidth = BindPowerSlider(detachedCard, AddDetachedControl, "Detached width", 16, sliderTop - 66, detachedSliderW, 20, 800, 1, "detachedPowerBarWidth", function() return ReadNumber(unit, "width", 250) end, "MSUF2_POWER_DETACHED_W")
+    detachedHeight = BindPowerSlider(detachedCard, AddDetachedControl, "Detached height", detachedRightX, sliderTop - 66, detachedSliderW, 2, 80, 1, "detachedPowerBarHeight", 6, "MSUF2_POWER_DETACHED_H")
     BindPowerSlider(detachedCard, AddDetachedControl, "Detached layer", 16, sliderTop - 132, detachedSliderW, 0, 20, 1, "detachedPowerBarFrameLevelOffset", 6, "MSUF2_POWER_DETACHED_LAYER")
+    if isPlayer then
+        detachedShape = AddDetachedControl(W.Dropdown(detachedCard, "Detached shape", DETACHED_POWER_SHAPE_VALUES, detachedSliderW))
+        W.MoveWidget(detachedShape, detachedCard, detachedRightX, sliderTop - 132, detachedSliderW)
+        M.BindDropdown(ctx, detachedShape,
+            function()
+                return NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape)
+            end,
+            function(v)
+                v = NormalizeDetachedPowerShape(v)
+                local conf = GetConf(unit)
+                conf.detachedPowerBarShape = v
+                if v == "ORB" and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
+                M.RequestUnitApply(unit, "MSUF2_POWER_DETACHED_SHAPE", { power = true, preview = true })
+                if RefreshPowerEnabled then RefreshPowerEnabled() end
+                RefreshClassPowerDetachedState()
+            end)
+        if M.AddTooltip then
+            M.AddTooltip(detachedShape, "Detached Shape", "Orb is a single bottom-to-top filled mana/power sphere. Follow Class Resource maps Circle to Round and Diamond/Hex to Crystal.", { hook = true, owner = "ANCHOR_RIGHT" })
+        end
+        orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE")
+    end
 
     RefreshPowerEnabled = function()
         local powerOn = ReadBool(unit, "showPowerBar", true)
         local detachedOn = powerOn and ReadBool(unit, "powerBarDetached", false)
+        local classManaged = isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
         for i = 1, #powerControls do SetControlEnabled(powerControls[i], powerOn) end
         for i = 1, #detachedControls do SetControlEnabled(detachedControls[i], detachedOn) end
         SetControlEnabled(borderSize, powerOn and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true))
         SetControlEnabled(show, true)
+        local orbSelected = isPlayer and NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape) == "ORB"
+        if detachedSync then SetControlEnabled(detachedSync, detachedOn and not orbSelected) end
+        if detachedWidth then SetControlEnabled(detachedWidth, detachedOn and not orbSelected) end
+        if detachedHeight then SetControlEnabled(detachedHeight, detachedOn and not orbSelected) end
+        if detachedShape then SetControlEnabled(detachedShape, detachedOn) end
+        if orbSize then SetControlEnabled(orbSize, detachedOn and orbSelected) end
+        if classManaged then
+            for i = 1, #powerControls do SetControlEnabled(powerControls[i], false) end
+            for i = 1, #detachedControls do SetControlEnabled(detachedControls[i], false) end
+            SetControlEnabled(show, false)
+            SetControlEnabled(borderSize, false)
+        end
 
-        if not powerOn then
+        if classManaged then
+            if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Class Resources") or "Class Resources") end
+            powerNotice:SetMessage("Player power bar is connected to Class Resources. Manage detached power and power text in Class Resources > Detached Power Bar.", "warning")
+            powerNotice:Show()
+        elseif not powerOn then
+            if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
             powerNotice:SetMessage(UnitTopLabel(unit) .. " power bar is hidden. Turn it on to configure size, embed, or detached settings.", "warning")
             powerNotice:Show()
         else
+            if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
             powerNotice:Hide()
         end
         SetSectionHeaderStatus(sec, nil)

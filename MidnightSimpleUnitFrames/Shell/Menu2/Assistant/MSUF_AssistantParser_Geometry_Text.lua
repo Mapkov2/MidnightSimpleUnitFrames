@@ -24,6 +24,10 @@ local RelativeNumberDeltaForText = P.RelativeNumberDeltaForText
 local EnumValueForText = P.EnumValueForText
 local CurrentPageUnit = P.CurrentPageUnit
 local GroupScopesOrCurrentPage = P.GroupScopesOrCurrentPage
+
+-- Text geometry parser helpers.
+-- These identify text tabs, anchor slots, and font-size/offset intent before the broader
+-- geometry parser maps the result to registered settings.
 local function TextSelectorTab(text)
     if ContainsAny(text, { "advanced text tab", "advanced text", "text advanced", "text layers", "advanced tab" }) then return "advanced" end
     if ContainsAny(text, { "power text tab", "power text", "mana text", "power number", "power numbers", "mana number", "mana numbers", "power tab", "mana tab", "power", "mana" }) then return "power" end

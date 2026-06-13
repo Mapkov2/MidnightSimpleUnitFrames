@@ -23,6 +23,9 @@ local MissingValueResponse = P.MissingValueResponse
 
 if not (Normalize and Compact and AliasRelationText and ValueForRegistrySetting) then return end
 
+-- Exact-alias acceleration for registry settings.
+-- This index catches precise multi-word aliases before slower fuzzy scoring. Common command
+-- words are ignored as triggers so broad phrases do not fan out across the whole registry.
 local MAX_EXACT_ALIAS_TOKENS = 8
 local COMMON_EXACT_ALIAS_TOKENS = {
     a = true,
@@ -106,6 +109,15 @@ local function HasTriggerToken(index, tokens)
     return false
 end
 
+local function HasExactAliasBulkScope(text)
+    text = Normalize(text)
+    return (" " .. text .. " "):find(" all ", 1, true) ~= nil
+        or (" " .. text .. " "):find(" every ", 1, true) ~= nil
+        or (" " .. text .. " "):find(" alle ", 1, true) ~= nil
+        or (" " .. text .. " "):find(" jede ", 1, true) ~= nil
+        or (" " .. text .. " "):find(" jeder ", 1, true) ~= nil
+end
+
 local function AddMatches(out, seen, index, tokens)
     local maxLen = math.min(index.maxTokens or 0, #tokens, MAX_EXACT_ALIAS_TOKENS)
     for len = maxLen, 1, -1 do
@@ -185,6 +197,17 @@ function P.ParseRegistryExactAliasShortcut(text, raw)
 
     if #changes == 0 then return MissingValueResponse and MissingValueResponse(missingValue, raw) or nil end
     if #changes > 1 then
+        if HasExactAliasBulkScope(text)
+            or (P.ShouldApplyMultipleAuraLaneChanges and P.ShouldApplyMultipleAuraLaneChanges(text, changes))
+        then
+            return {
+                kind = "changes",
+                changes = changes,
+                bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(changes) or nil,
+                label = "Multiple matching settings",
+                summary = "Registry exact-alias multi-scope setting change.",
+            }
+        end
         return {
             kind = "ambiguous",
             choices = changes,

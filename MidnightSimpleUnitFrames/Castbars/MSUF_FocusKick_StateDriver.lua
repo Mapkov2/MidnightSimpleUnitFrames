@@ -1,3 +1,11 @@
+--- Castbars/MSUF_FocusKick_StateDriver.lua
+--- Focus-kick ownership driver.
+---
+--- When the focus kick icon is enabled, this driver suppresses the regular focus
+--- castbar, watches focus spellcast events, asks the CastbarEngine for current
+--- cast-state, and hands that state to the icon UI. The icon file should stay
+--- visual; backend decisions and event registration belong here.
+
 local G = _G
 
 G.MSUF_FocusKickUseEngineDriver = true
@@ -42,6 +50,8 @@ local function FocusKickEnabled()
     return db.general.enableFocusKickIcon == true
 end
 
+--- Suppression uses alpha rather than destroying/hiding the focus castbar so the
+--- cast-state plumbing and range-alpha refresh can still coexist safely.
 local function SetFocusCastbarSuppressed(suppressed)
     local focusCastbar = G.FocusCastBar or G.MSUF_FocusCastBar or G["MSUF_FocusCastBar"]
     if focusCastbar and focusCastbar.SetAlpha then
@@ -87,6 +97,9 @@ local function SetEventsRegistered(enabled)
     end
 end
 
+--- Recompute ownership and current cast-state. Event handlers queue this to the
+--- next frame so several spellcast events from the same transition collapse into
+--- one UI update.
 local function Refresh()
     local enabled = FocusKickEnabled()
     SetEventsRegistered(enabled)

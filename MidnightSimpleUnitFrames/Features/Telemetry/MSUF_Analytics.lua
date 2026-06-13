@@ -1,5 +1,7 @@
 --- Wago Analytics integration for MSUF beta telemetry.
 --- Cold-path only: one session snapshot, never from combat, no OnUpdate or hot-path hooks.
+--- Telemetry must stay opt-in/defensive and may read coarse configuration state only; it
+--- should not observe unit events, frame state, profile import payloads, or user text input.
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF

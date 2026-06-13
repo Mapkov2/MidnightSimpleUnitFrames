@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Shared Unit page sections.
+-- Builds reusable controls for per-unit basics, load rules, target-of-target text behavior,
+-- and copy/edit-mode actions. Runtime ownership stays in UnitFrames and EditMode modules.
 local W = M.Widgets
 local T = M.Theme
 local ControlGates = M.ControlGates or {}

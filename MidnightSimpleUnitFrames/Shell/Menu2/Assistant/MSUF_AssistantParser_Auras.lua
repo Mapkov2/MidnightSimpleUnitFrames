@@ -13,6 +13,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+
+-- Aura parser shard for quick presets, blacklist commands, and aura-lane bulk intent.
+-- Keep the language matching here separate from Auras3 runtime code: this file decides what
+-- the user likely meant, while Auras3 owns saved data and visual refresh.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -90,6 +94,8 @@ local AURA_BLACKLIST_PRESETS = {
     { key = "SHAMAN_IMBUE", aliases = { "shaman imbues", "shaman imbue", "shaman imbuements", "imbues" } },
     { key = "RESOURCE_AURAS", aliases = { "resource auras", "resource aura", "resource buffs", "resource buff" } },
     { key = "COOLDOWNS", aliases = { "cooldowns", "cooldown aura", "cooldown auras" } },
+    { key = "SATED", aliases = { "sated", "exhaustion", "heroism exhaustion", "bloodlust exhaustion" } },
+    { key = "DESERTER", aliases = { "deserter", "deserteur" } },
 }
 
 local function AuraBlacklistScope(text)
@@ -411,91 +417,6 @@ local function AuraEditScopeForText(text)
     return nil
 end
 
-local function ParseAuraEditScope(text)
-    if not ContainsAny(text, { "aura", "auras", "aura scope", "aura editing scope" }) then return nil end
-    if ContainsAny(text, { "reset", "preset", "blacklist", "filter", "icon", "size", "color", "colour", "growth", "buff reminder", "sated" }) then return nil end
-    local explicitScopeWording = ContainsAny(text, { "aura editing scope", "editing aura scope", "aura scope", "edit aura scope", "scope to", "scope as" })
-    local naturalEditWording = ContainsAny(text, { "edit player auras", "edit target auras", "edit focus auras", "edit boss auras", "edit party auras", "edit raid auras", "edit group auras", "edit shared auras", "select player auras", "select target auras", "select party auras", "select raid auras", "switch to player auras", "switch to target auras", "switch to party auras", "switch to raid auras" })
-    if not (explicitScopeWording or naturalEditWording) then return nil end
-    local scope = AuraEditScopeForText(text)
-    if not scope then return nil end
-    local action = Registry and Registry:GetAction("set_aura_edit_scope")
-    return action and {
-        kind = "action",
-        action = action,
-        args = { scope = scope },
-        label = "Set aura editing scope",
-        summary = "Selects the Aura page editing scope.",
-    } or nil
-end
-
-local function ParseAuraReset(text)
-    if not ContainsAny(text, { "aura", "auras" }) then return nil end
-    if not ContainsAny(text, { "reset", "clear", "remove overrides", "reset overrides", "zuruecksetzen" }) then return nil end
-    if ContainsAny(text, { "blacklist", "blacklisted", "blocked aura", "blocked auras", "ignore aura", "ignore auras" }) then return nil end
-    if ContainsAny(text, { "color", "colors", "colour", "colours" }) then return nil end
-    local all = ContainsAny(text, { "all aura overrides", "all auras overrides", "all overrides", "every aura override", "all aura custom", "reset all auras" })
-    local action
-    if all then
-        action = Registry and Registry:GetAction("reset_all_aura_overrides")
-        return action and {
-            kind = "action",
-            action = action,
-            args = {},
-            confirmRequired = true,
-            label = "Reset all aura overrides",
-            summary = "Resets every per-scope Aura override.",
-        } or nil
-    end
-    local scope = AuraEditScopeForText(text)
-    if not scope or scope == "shared" then return nil end
-    if not ContainsAny(text, { "scope", "override", "overrides", "custom", "settings", "target aura", "player aura", "focus aura", "boss aura" }) then return nil end
-    action = Registry and Registry:GetAction("reset_aura_scope_overrides")
-    return action and {
-        kind = "action",
-        action = action,
-        args = { scope = scope },
-        confirmRequired = true,
-        label = "Reset aura scope overrides",
-        summary = "Resets one Aura editing scope back to Shared.",
-    } or nil
-end
-
-local function ParseAuraSettingsView(text)
-    if not ContainsAny(text, { "aura settings", "aura setting", "aura view", "aura mode", "auras view", "auras mode" }) then return nil end
-    if not ContainsAny(text, { "basic", "simple", "advanced", "all settings", "all options", "show all", "show basic" }) then return nil end
-    local value
-    if ContainsAny(text, { "advanced", "all settings", "all options", "show all" }) then
-        value = "advanced"
-    elseif ContainsAny(text, { "basic", "simple", "show basic" }) then
-        value = "basic"
-    end
-    if not value then return nil end
-    local setting = Registry and Registry:GetSetting("menu.aurasUXMode")
-    return setting and {
-        kind = "changes",
-        changes = { { setting = setting, value = value } },
-        label = "Aura settings view",
-        summary = "Changes the Aura page Basic/All Settings view.",
-    } or nil
-end
-
-local function ParseAuraQuickPreset(text)
-    if not ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" }) then return nil end
-    if not ContainsAny(text, { "preset", "quick setup", "quicksetup", "setup", "apply", "use" }) then return nil end
-    local preset = AuraQuickPresetForText(text)
-    if not preset then return nil end
-    local action = Registry and Registry:GetAction("apply_aura_quick_preset")
-    return action and {
-        kind = "action",
-        action = action,
-        args = { scope = AuraBlacklistScope(text), preset = preset },
-        confirmRequired = true,
-        label = "Apply aura quick preset",
-        summary = "Applies the shared Auras quick setup helper.",
-    } or nil
-end
-
 local function AuraBlacklistPresetForText(text)
     for i = 1, #AURA_BLACKLIST_PRESETS do
         local spec = AURA_BLACKLIST_PRESETS[i]
@@ -531,69 +452,14 @@ local function AuraGroupBlacklistCategoryForText(text)
     return AuraBlacklistPresetForText(text)
 end
 
-local function ParseAuraGroupCategoryBlacklist(text)
-    if ContainsAny(text, { "copy category", "copy categories", "group copy", "unit copy" }) then return nil end
-    local categoryIntent = ContainsAny(text, {
-        "category", "categories", "public category", "public categories",
-        "category blacklist", "category blacklists", "blacklisted category", "blacklisted categories",
-    })
-    if not categoryIntent then return nil end
-    if not ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "group", "party", "raid", "mythic raid", "mythicraid" }) then return nil end
-
-    local category = AuraGroupBlacklistCategoryForText(text)
-    local summaryIntent = ContainsAny(text, { "list", "summary", "current", "what is", "whats" })
-        or (ContainsAny(text, { "show" }) and ContainsAny(text, { "blacklist", "category blacklist", "blacklisted category", "blacklisted categories" }))
-    if summaryIntent then
-        local action = Registry and Registry:GetAction("aura_group_category_blacklist_summary")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { scope = AuraGroupBlacklistScope(text), lane = AuraGroupBlacklistLane(text) },
-            label = "Show group aura category blacklist",
-            summary = "Shows the public aura category blacklist for group-frame auras.",
-        } or nil
-    end
-
-    local clearAllIntent = ContainsAny(text, { "clear all", "allow all", "unblacklist all", "remove all", "reset", "empty" })
-        or (ContainsAny(text, { "clear", "allow", "unblacklist", "remove", "reset", "empty" }) and ContainsAny(text, { "all categories", "every category", "categories" }))
-    if clearAllIntent then
-        local action = Registry and Registry:GetAction("aura_group_category_blacklist_clear")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { scope = AuraGroupBlacklistScope(text), lane = AuraGroupBlacklistLane(text) },
-            label = "Clear group aura category blacklist",
-            summary = "Allows all public aura categories for the selected group-frame aura lane.",
-        } or nil
-    end
-
-    if not category then return nil end
-    local value
-    if ContainsAny(text, { "allow", "unblacklist", "remove", "clear", "include", "show", "anzeigen", "entfernen", "loeschen" }) then
-        value = false
-    elseif ContainsAny(text, { "blacklist", "hide", "block", "exclude", "disable", "ausblenden", "verstecken", "deaktivieren" }) then
-        value = true
-    end
-    if value == nil then return nil end
-
-    local action = Registry and Registry:GetAction("aura_group_category_blacklist_set")
-    return action and {
-        kind = "action",
-        action = action,
-        args = {
-            scope = AuraGroupBlacklistScope(text),
-            lane = AuraGroupBlacklistLane(text),
-            category = category,
-            value = value,
-        },
-        label = "Set group aura category blacklist",
-        summary = "Edits the group-frame public aura category blacklist through the Auras3 MenuModel.",
-    } or nil
-end
-
 local function CleanAuraBlacklistSpellValue(value)
     value = Trim(tostring(value or ""))
+    local spellID = value:match("[Hh]spell:(%d+)") or value:match("spell:(%d+)")
+    if spellID then return "spell:" .. tostring(spellID) end
+    local linkedName = value:match("|h%[(.-)%]|h")
+    if linkedName and linkedName ~= "" then value = linkedName end
     value = value:gsub("^['\"]", ""):gsub("['\"]$", "")
+    value = value:gsub("^%[", ""):gsub("%]$", "")
     value = value:gsub("^spell%s+", "")
     value = value:gsub("^named%s+", "")
     value = value:gsub("^called%s+", "")
@@ -603,7 +469,9 @@ local function CleanAuraBlacklistSpellValue(value)
     local normalized = Normalize(value)
     if normalized == "" or normalized == "all" or normalized == "all spell" or normalized == "all spells"
         or normalized == "all aura" or normalized == "all auras" or normalized == "every spell"
-        or normalized == "every aura" then
+        or normalized == "every aura" or normalized == "aura" or normalized == "auras"
+        or normalized == "buff" or normalized == "buffs" or normalized == "debuff"
+        or normalized == "debuffs" or normalized == "spell" or normalized == "spells" then
         return nil
     end
     return value
@@ -623,14 +491,30 @@ local function AuraBlacklistSpellValue(raw)
         "[Bb]lock%s+(.+)%s+[Oo]n%s+",
         "[Ii]gnore%s+(.+)%s+[Ff]or%s+",
         "[Ii]gnore%s+(.+)%s+[Oo]n%s+",
+        "[Hh]ide%s+(.+)%s+[Ff]or%s+",
+        "[Hh]ide%s+(.+)%s+[Oo]n%s+",
+        "[Ss]uppress%s+(.+)%s+[Ff]or%s+",
+        "[Ss]uppress%s+(.+)%s+[Oo]n%s+",
+        "[Ss]top%s+showing%s+(.+)%s+[Ff]or%s+",
+        "[Ss]top%s+showing%s+(.+)%s+[Oo]n%s+",
         "[Rr]emove%s+(.+)%s+from%s+.+[Bb]lacklist",
         "[Rr]emove%s+(.+)%s+from%s+.+[Aa]uras?",
         "[Aa]llow%s+(.+)%s+[Ff]or%s+.+[Aa]uras?",
         "[Aa]llow%s+(.+)%s+[Oo]n%s+.+[Aa]uras?",
+        "[Aa]llow%s+(.+)%s+[Ff]or%s+.+[Bb]lacklist",
+        "[Aa]llow%s+(.+)%s+[Oo]n%s+.+[Bb]lacklist",
         "[Uu]nblacklist%s+(.+)%s+[Ff]or%s+",
         "[Uu]nblacklist%s+(.+)%s+[Oo]n%s+",
         "[Uu]nblock%s+(.+)%s+[Ff]or%s+",
         "[Uu]nblock%s+(.+)%s+[Oo]n%s+",
+        "[Uu]nhide%s+(.+)%s+[Ff]or%s+",
+        "[Uu]nhide%s+(.+)%s+[Oo]n%s+",
+        "[Ss]top%s+hiding%s+(.+)%s+[Ff]or%s+",
+        "[Ss]top%s+hiding%s+(.+)%s+[Oo]n%s+",
+        "[Ss]how%s+(.+)%s+again%s+[Ff]or%s+",
+        "[Ss]how%s+(.+)%s+again%s+[Oo]n%s+",
+        "[Ll]et%s+(.+)%s+show%s+[Ff]or%s+",
+        "[Ll]et%s+(.+)%s+show%s+[Oo]n%s+",
     }
     for i = 1, #patterns do
         value = CleanAuraBlacklistSpellValue(raw:match(patterns[i]))
@@ -639,78 +523,14 @@ local function AuraBlacklistSpellValue(raw)
     return nil
 end
 
-local function ParseAuraBlacklist(text, raw)
-    if not ContainsAny(text, { "blacklist", "blocked aura", "blocked auras", "ignore aura", "ignore auras", "block", "unblock", "unblacklist" })
-        and not (ContainsAny(text, { "allow", "remove" }) and ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "spell" })) then
-        return nil
-    end
-    if not ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs", "spell" }) then return nil end
-
-    local scope = AuraBlacklistScope(text)
-    if ContainsAny(text, { "show", "list", "summary", "current", "what is", "whats" }) then
-        local action = Registry and Registry:GetAction("aura_blacklist_summary")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { scope = scope },
-            label = "Show aura blacklist",
-            summary = "Shows the prepared aura blacklist for the selected scope.",
-        } or nil
-    end
-
-    local preset = AuraBlacklistPresetForText(text)
-    if preset then
-        local action = Registry and Registry:GetAction("aura_blacklist_add_preset")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { scope = scope, preset = preset },
-            label = "Add aura blacklist preset",
-            summary = "Adds a curated public spell-ID preset to the selected aura blacklist.",
-        } or nil
-    end
-
-    local value = AuraBlacklistSpellValue(raw)
-    local clearAllIntent = ContainsAny(text, { "clear all", "allow all", "remove all", "delete all", "unblacklist all", "empty", "reset" })
-        or (ContainsAny(text, { "clear", "allow", "remove", "delete", "unblacklist" }) and ContainsAny(text, { "all spells", "all auras", "every spell", "every aura" }))
-        or (not value and ContainsAny(text, { "clear", "remove", "delete" }) and ContainsAny(text, { "blacklist", "blocked aura", "blocked auras", "ignore aura", "ignore auras" }))
-    if clearAllIntent and not ContainsAny(text, { "preset", "category", "categories" }) then
-        local action = Registry and Registry:GetAction("aura_blacklist_clear_spells")
-        return action and {
-            kind = "action",
-            action = action,
-            args = { scope = scope },
-            label = "Clear aura blacklist",
-            summary = "Allows all spell entries for the selected aura blacklist scope.",
-        } or nil
-    end
-
-    if not value then return nil end
-    local remove = ContainsAny(text, { "remove", "delete", "unblacklist", "allow", "unblock", "loeschen", "entfernen" })
-    local action = Registry and Registry:GetAction(remove and "aura_blacklist_remove_spell" or "aura_blacklist_add_spell")
-    return action and {
-        kind = "action",
-        action = action,
-        args = { scope = scope, value = value },
-        label = remove and "Remove aura blacklist spell" or "Add aura blacklist spell",
-        summary = "Edits the prepared aura blacklist through the Auras3 MenuModel.",
-    } or nil
-end
-
 P.AURA_BLACKLIST_PRESETS = AURA_BLACKLIST_PRESETS
 P.AuraBlacklistScope = AuraBlacklistScope
 P.AURA_QUICK_PRESETS = AURA_QUICK_PRESETS
 P.AuraQuickPresetForText = AuraQuickPresetForText
 P.AuraEditScopeForText = AuraEditScopeForText
-P.ParseAuraEditScope = ParseAuraEditScope
-P.ParseAuraReset = ParseAuraReset
-P.ParseAuraSettingsView = ParseAuraSettingsView
 P.ParseAuraGeometryShortcut = ParseAuraGeometryShortcut
-P.ParseAuraQuickPreset = ParseAuraQuickPreset
 P.AuraBlacklistPresetForText = AuraBlacklistPresetForText
 P.AuraGroupBlacklistScope = AuraGroupBlacklistScope
 P.AuraGroupBlacklistLane = AuraGroupBlacklistLane
 P.AuraGroupBlacklistCategoryForText = AuraGroupBlacklistCategoryForText
-P.ParseAuraGroupCategoryBlacklist = ParseAuraGroupCategoryBlacklist
 P.AuraBlacklistSpellValue = AuraBlacklistSpellValue
-P.ParseAuraBlacklist = ParseAuraBlacklist

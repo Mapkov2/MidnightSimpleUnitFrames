@@ -1,3 +1,11 @@
+--- Castbars/MSUF_CastbarStyle.lua
+--- Shared castbar outline, time text layout, boss text layout, and fill-direction
+--- helpers.
+---
+--- Style is allowed to touch existing regions, but not to create cast-state or
+--- register events. Runtime/Driver own live casts; Visuals owns richer per-unit
+--- detail layout.
+
 local _, ns = ...
 ns = ns or {}
 
@@ -56,6 +64,8 @@ local function SetText(fontString, text)
     end
 end
 
+--- Outlines are built from simple textures so all castbar variants can share
+--- the same border behavior without depending on BackdropTemplate.
 local function EnsureOutline(frame)
     if not frame or frame._msufOutline then
         return
@@ -253,6 +263,8 @@ function Style:ApplyCastbarTimeTextLayout(frame, unit)
     end
 end
 
+--- Boss castbars use a compact left-name/right-time layout. Detail-layout code
+--- may refine fonts/positions afterward, but this keeps old boss callers stable.
 function Style:ApplyBossCastbarTextsLayout(frame, options)
     if not (frame and frame.statusBar and frame.castText and frame.timeText) then
         return
@@ -308,6 +320,8 @@ function Style:ApplyBossCastbarTextsLayout(frame, options)
     end
 end
 
+--- Re-apply fill direction to every existing castbar after profile changes.
+--- Active timer objects are preserved and only their direction is refreshed.
 function _G.MSUF_UpdateCastbarFillDirection()
     local function Apply(frame)
         if not (frame and frame.statusBar) then

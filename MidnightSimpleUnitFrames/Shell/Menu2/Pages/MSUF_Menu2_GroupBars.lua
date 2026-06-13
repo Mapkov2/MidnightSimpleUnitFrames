@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Group Bars page.
+-- Builds party/raid health, power, range, dispel overlay, and text controls for the selected
+-- group scope. Applies are queued through GroupPage helpers to respect secure header runtime.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}

@@ -7,6 +7,9 @@ _G.MSUF = MSUF
 local Secrets = MSUF.Secrets or {}
 MSUF.Secrets = Secrets
 
+-- Secret-value compatibility helpers.
+-- War Within restricted APIs can return secret values that must not be compared, serialized,
+-- or coerced casually. Centralize the safe predicates so element files handle them the same.
 local issecretvalue = _G.issecretvalue or function(...) return false end
 local nativeSecrets = _G.issecretvalue ~= nil
 local tonumber = tonumber

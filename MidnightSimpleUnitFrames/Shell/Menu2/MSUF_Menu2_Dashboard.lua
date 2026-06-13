@@ -8,12 +8,17 @@ _G.MSUF2 = M
 local T = M.Theme
 local W = M.Widgets
 
+-- Menu2 dashboard page.
+-- Builds the home overview, recovery panels, changelog preview, and quick actions. Dashboard
+-- widgets should call workflow/page helpers; profile/runtime mutation stays outside this file.
 local floor = math.floor
 local max = math.max
 local min = math.min
 local CreateFrame = _G.CreateFrame
 local CreateColor = _G.CreateColor
 local function GetBundledChangelog()
+    -- Changelog data is bundled as static state. The dashboard renders it read-only and should
+    -- tolerate older builds where no changelog table exists.
     local data = (type(MSUF) == "table" and MSUF.MSUF_Changelog) or _G.MSUF_Changelog
     if type(data) ~= "table" or type(data.entries) ~= "table" or type(data.entries[1]) ~= "table" then
         return nil

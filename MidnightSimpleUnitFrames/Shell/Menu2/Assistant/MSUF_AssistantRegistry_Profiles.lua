@@ -13,6 +13,9 @@ M.Assistant = A
 local Registry = A.Registry
 if not (Registry and type(Registry.RegisterAction) == "function" and type(Registry.RegisterSetting) == "function") then return end
 
+-- Profile assistant registry.
+-- Actions here stage or invoke profile operations, but parsing must preserve user-provided
+-- profile names exactly enough for import/export/copy flows to resolve them safely.
 local function ProfileTable()
     local global = _G.MSUF_GlobalDB
     local profiles = type(global) == "table" and global.profiles or nil

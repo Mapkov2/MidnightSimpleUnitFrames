@@ -1,3 +1,10 @@
+--- Castbars/MSUF_BossCastbars.lua
+--- Live boss castbar pool and boss-unit event driver.
+---
+--- Boss castbars reuse the generic castbar frame/runtime stack, but they need
+--- their own frame pool, boss-specific anchoring, encounter/unit lifecycle
+--- handling, and menu-facing enable/position globals.
+
 local _ = ...
 
 local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
@@ -98,6 +105,8 @@ local function SetHeightIfChanged(frame, height)
     return true
 end
 
+--- Applies only internal boss castbar region layout. Positioning relative to
+--- boss unit frames or UIParent is handled by UpdateBossCastbarAnchor.
 local function ApplyBossCastbarLayout(frame)
     if not (frame and frame.statusBar) then
         return
@@ -184,6 +193,9 @@ local function ApplyBossCastbarLayout(frame)
     end
 end
 
+--- Anchor/size pass for one boss castbar. This can be called from settings,
+--- login, encounter events, and preview sync, so it only mutates when values
+--- actually changed.
 local function UpdateBossCastbarAnchor(frame, forceLayout)
     if not frame then
         return false
@@ -261,6 +273,8 @@ local function StopBossCastbar(frame)
     end
 end
 
+--- Boss castbars listen to the same spellcast events as target/focus plus
+--- encounter lifecycle events that reveal or invalidate boss units.
 local function SetBossEventsRegistered(frame, enabled)
     if not frame then
         return
@@ -290,6 +304,8 @@ local function SetBossEventsRegistered(frame, enabled)
     frame._msufBossEventsRegistered = nil
 end
 
+--- Create or reuse one boss castbar frame. The generic driver handles most cast
+--- behavior; this hook only adds boss lifecycle reactions.
 local function EnsureBossCastbar(index)
     local unit = "boss" .. index
     local name = "MSUF_BossCastbar" .. index
@@ -420,6 +436,8 @@ function _G.MSUF_ApplyBossCastbarPositionSetting(forceLayout)
     RefreshBossPreviewIfAllowed()
 end
 
+--- Public menu/profile entry. Keep backend flags, event subscriptions, live
+--- frame state, visuals, and previews synchronized from this one path.
 function _G.MSUF_SetBossCastbarsEnabled(enabled)
     EnsureDB()
 

@@ -1,3 +1,9 @@
+--- Castbars/MSUF_CastbarRegistry.lua
+--- Minimal registry for castbar frames keyed by logical owner.
+---
+--- Keep this table boring: it is a lookup/indexing service, not the place for
+--- event registration, layout, style, or backend policy.
+
 local _, ns = ...
 ns = ns or {}
 

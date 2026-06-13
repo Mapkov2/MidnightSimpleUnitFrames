@@ -4,6 +4,9 @@ MSUF = MSUF or {}
 local Gameplay = MSUF.Gameplay or {}
 MSUF.Gameplay = Gameplay
 
+-- Shared gameplay helper bundle.
+-- Provides spec caching, clamping, nudge/history helpers, and lightweight predicates used by
+-- gameplay config, runtime, and preview modules. No frames should be created here.
 local InCombatLockdown = InCombatLockdown
 local IsShiftKeyDown = IsShiftKeyDown
 local IsControlKeyDown = IsControlKeyDown
@@ -17,6 +20,8 @@ local SUB_ROGUE_SPEC_ID = 261
 local isSubRogue = false
 
 local function MSUF_Gameplay_GetPlayerSpecID()
+    -- Spec lookup can be nil during early login/reload. Callers use the cached helper when
+    -- they need stable behavior between spec-update events.
     if not GetSpecialization then return nil end
     local specIndex = GetSpecialization()
     if not specIndex or specIndex <= 0 then return nil end

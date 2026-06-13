@@ -1,3 +1,11 @@
+--- Castbars/MSUF_CastbarVisuals.lua
+--- Profile-driven detail layout for castbar icons, spell text, time text, and
+--- per-unit font/icon overrides.
+---
+--- This file is visual/layout only. It may inspect existing frame sizes and
+--- SavedVariables, but it should not decide whether a unit is currently casting
+--- or register spellcast events.
+
 local previousUpdateCastbarVisuals = _G.MSUF_UpdateCastbarVisuals
 local issecretvalue = _G.issecretvalue
 
@@ -62,6 +70,8 @@ local function Num(value, fallback)
     return value
 end
 
+--- Width/height reads can be secret/protected on some clients. Treat those as
+--- "unknown" and keep the caller's fallback instead of propagating wrappers.
 local function RegionNumber(region, method, fallback)
     if not (region and method and region[method]) then return fallback end
     local value = region[method](region)
@@ -194,6 +204,9 @@ local function FontPathForSelection(value, globalPath)
     return value, value
 end
 
+--- Castbar details can use global font settings or per-unit overrides. The
+--- helper keeps all font-path, outline, color, alpha, and shadow rules in one
+--- place so text layout functions only choose geometry.
 local function ApplyFont(fontString, g, prefix, suffix, size, colorSuffix)
     if not fontString then return end
     local globalPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
@@ -297,6 +310,9 @@ local function ApplyIconBorder(frame, host, g, prefix)
     end
 end
 
+--- Applies icon visibility and reserves statusbar space when the icon is outside
+--- the bar. Inside-icon modes must not shrink the statusbar because text layout
+--- still needs the full bar width.
 local function ApplyIconLayout(frame, g, unit, prefix)
     local statusBar = frame and frame.statusBar
     if not statusBar then return end
@@ -416,6 +432,9 @@ local function ApproxTimeTextReserve(frame, g, prefix, statusW)
     return math.max(44, reserve)
 end
 
+--- Spell text width is derived from remaining statusbar space after reserving
+--- time text. This prevents the two font strings from fighting over the same
+--- pixels when users increase font size.
 local function ApplySpellTextLayout(frame, g, unit, prefix)
     local fs = frame and frame.castText
     local statusBar = frame and frame.statusBar
@@ -495,6 +514,8 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
     AnchorFontString(fs, statusBar, position, x, y, position == "LEFT" and "LEFT" or position == "CENTER" and "CENTER" or "RIGHT")
 end
 
+--- Public visual entry for one frame. Call this after frame creation, anchoring,
+--- profile changes, or castbar size changes.
 local function ApplyCastbarDetailLayout(frame, forcedUnit)
     if not (frame and frame.statusBar) then return end
     local unit = NormalizeUnit(forcedUnit) or UnitFromFrame(frame)
@@ -515,6 +536,8 @@ local function ApplyPlayerCastbarDetailFrames()
 end
 
 local playerReanchorHooked
+--- Player castbar reanchor can change the statusbar width after visual refresh.
+--- Hook once and replay detail layout immediately after the anchor pass.
 local function HookPlayerCastbarReanchor()
     if playerReanchorHooked then return end
     local previous = _G.MSUF_ReanchorPlayerCastBar
@@ -532,6 +555,8 @@ if C_Timer and C_Timer.After then
     C_Timer.After(0, HookPlayerCastbarReanchor)
 end
 
+--- Refreshes one existing frame without touching cast state. This is used by the
+--- global visual refresh and by profile/style changes.
 local function RefreshCastbarFrame(frame)
     if not (frame and frame.statusBar) then
         return

@@ -10,6 +10,9 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+-- Assistant history and context storage.
+-- This is profile-local assistant UX state, not gameplay runtime state. Keep it bounded so
+-- chat-style history never becomes a SavedVariables growth problem.
 local DEFAULT_HISTORY_LIMIT = 100
 local SUPPORT_HINT_SUCCESS_THRESHOLD = 100
 local SUPPORT_HINT_COOLDOWN_SECONDS = 7 * 24 * 60 * 60
@@ -39,6 +42,8 @@ local function EnsureRootDB()
 end
 
 function A.EnsureDB()
+    -- Assistant data lives under the active profile DB because history/context follows the
+    -- profile the user is editing.
     local db = EnsureRootDB()
     db.assistant = type(db.assistant) == "table" and db.assistant or {}
     local adb = db.assistant

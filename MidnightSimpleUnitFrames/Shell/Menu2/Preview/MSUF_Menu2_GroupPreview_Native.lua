@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Native group preview renderer.
+-- Draws the Menu2 party/raid preview using lightweight mock data and page settings. It should
+-- mirror runtime layout decisions but never create secure headers or mutate live group frames.
 local T = M.Theme
 local PreviewHelpers = M.PreviewHelpers or {}
 local Specs = M.GroupPreviewSpecs or {}

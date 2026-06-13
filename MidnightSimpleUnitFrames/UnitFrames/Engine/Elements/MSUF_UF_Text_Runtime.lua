@@ -3,6 +3,9 @@ local Text = MSUF and MSUF.UFText
 local UF = MSUF and MSUF.UF
 if not (Text and UF) then return end
 
+-- Text runtime dispatcher for unitframe slots.
+-- This layer decides which text slots need refresh for a unit/event, handles combat-safe
+-- visibility updates, and keeps secret-value branches separate from plain cached updates.
 local UnitHealth = Text.UnitHealth
 local UnitHealthMax = Text.UnitHealthMax
 local UnitPower = Text.UnitPower
@@ -47,6 +50,8 @@ local POWER_TEXT_VALUE_META_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_DISPLAYPOWER",
 local POWER_TEXT_VALUE_META_EVENTS_FREQUENT = { "UNIT_POWER_UPDATE", "UNIT_POWER_FREQUENT", "UNIT_DISPLAYPOWER", "UNIT_POWER_BAR_SHOW", "UNIT_POWER_BAR_HIDE" }
 
 local function MissingHealthFromValues(hp, hpMax)
+  -- Missing health is derived from API values that may become secret. Return nil in that case
+  -- so callers can keep the previous safe display instead of doing math on protected values.
   if issecretvalue(hp) == true or issecretvalue(hpMax) == true then
     return nil
   end
@@ -68,6 +73,8 @@ local function RegionShown(region)
 end
 
 local function RefreshCachedPowerType(frame, unit)
+  -- Power type changes less often than power values. Cache token/type per frame so frequent
+  -- UNIT_POWER_UPDATE events do not repeatedly ask the client for display metadata.
   local cacheUnit = unit
   if not UnitPowerType then
     frame._msufTextPowerType = nil

@@ -12,6 +12,9 @@ _G.MSUF2 = M
 local Render = M.GroupPreviewRender or {}
 M.GroupPreviewRender = Render
 
+--- Installs the group preview renderer into the preview host. Native.lua owns
+--- frame creation and input handles; this function owns repeated composition
+--- from compiled group specs, visible layers, zoom state, and selected handles.
 function Render.Install(box, ctx, deps)
     if not box then return end
     deps = deps or {}
@@ -76,6 +79,9 @@ function Render.Install(box, ctx, deps)
     local NudgeHandlePosition = deps.NudgeHandlePosition or function() end
     local AddIconPool = deps.AddIconPool or function() end
     local GFPreviewRefreshHandleSelection = deps.RefreshHandleSelection or function() end
+    --- Refresh is menu-only. It reads compiled/runtime-like specs to draw a mock
+    --- group frame and must not rebuild secure headers or subscribe to roster
+    --- events.
     function box:Refresh()
         local textHandles = self._textHandles or {}
         local kind = H.CurrentScope()
@@ -116,7 +122,7 @@ function Render.Install(box, ctx, deps)
                 break
             end
         end
-        local rawCustomRenderer = (rawAuras.renderer or conf.auraRenderer or "BLIZZARD") == "CUSTOM"
+        local rawCustomRenderer = true
         local customRenderer = false
         local aurasEnabled
         if runtimeAuras then

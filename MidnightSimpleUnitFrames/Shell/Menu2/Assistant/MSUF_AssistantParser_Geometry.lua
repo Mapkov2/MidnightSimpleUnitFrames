@@ -13,6 +13,11 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+
+-- Geometry and layout parser shard.
+-- These helpers translate natural-language move/size/anchor/copy requests into declarative
+-- changes. They must not mutate frame anchors directly; secure/combat-safe application is
+-- handled by the normal settings and edit-mode runtimes.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -77,14 +82,11 @@ local AURA_BLACKLIST_PRESETS = P.AURA_BLACKLIST_PRESETS
 local AuraBlacklistScope = P.AuraBlacklistScope
 local AURA_QUICK_PRESETS = P.AURA_QUICK_PRESETS
 local AuraQuickPresetForText = P.AuraQuickPresetForText
-local ParseAuraQuickPreset = P.ParseAuraQuickPreset
 local AuraBlacklistPresetForText = P.AuraBlacklistPresetForText
 local AuraGroupBlacklistScope = P.AuraGroupBlacklistScope
 local AuraGroupBlacklistLane = P.AuraGroupBlacklistLane
 local AuraGroupBlacklistCategoryForText = P.AuraGroupBlacklistCategoryForText
-local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
-local ParseAuraBlacklist = P.ParseAuraBlacklist
 local CopyTextParts = P.CopyTextParts
 local RemoveUnit = P.RemoveUnit
 local CopyTargetsForText = P.CopyTargetsForText
@@ -179,6 +181,8 @@ local function BuildChanges(settings, value, relativeDelta, direction)
 end
 
 function P.ParseUnitSizeMatchShortcut(text)
+    -- "Make player as big as target" depends on current live setting values. Read them here
+    -- to build an explicit width/height plan, then let the router apply the change normally.
     if not ContainsAny(text, {
         "as big as", "same size as", "the same size as", "same width and height as",
         "so gross wie", "gleich gross wie", "gleiche groesse wie", "dieselbe groesse wie",
@@ -264,6 +268,8 @@ local function ParseUnsupportedDetailShortcut(text)
 end
 
 local function CurrentPageUnit()
+    -- Commands issued from a unit page can omit the unit name. This keeps the assistant
+    -- ergonomic without making global pages guess at a target frame.
     local page = M and M.activeKey
     if type(page) ~= "string" then return nil end
     for i = 1, #ALL_UNITFRAMES do
@@ -409,6 +415,8 @@ local DETAIL_MOVE_SPECS = {
     { terms = { "power text", "mana text", "power value", "mana value", "power number", "mana number", "power label", "mana label", "energie text", "energie", "ressource", "ressourcen", "power", "mana" }, x = "powerOffsetX", y = "powerOffsetY", label = "Move power text" },
 }
 
+-- Detail movement is registry-driven: the parser finds which text/portrait detail was named
+-- and maps the movement onto the corresponding X/Y attributes.
 local GROUP_DETAIL_MOVE_SPECS = {
     { terms = { "name text", "frame name text", "unit name text", "unit name", "frame name", "name label", "name labels", "party name", "raid name", "group name", "names", "name" }, x = "nameOffsetX", y = "nameOffsetY", label = "Move group name text" },
     { terms = { "hp text", "health text", "health value", "hp value", "hp number", "health number", "hp label", "health label", "life text", "party hp", "party health", "raid hp", "raid health", "group hp", "group health", "hp", "health", "leben", "gesundheit", "lebenspunkte", "lebensanzeige" }, x = "hpOffsetX", y = "hpOffsetY", label = "Move group HP text" },
@@ -418,6 +426,8 @@ local GROUP_DETAIL_MOVE_SPECS = {
 local OM = A._OffsetMoveHelpers or {}
 A._OffsetMoveHelpers = OM
 
+-- Offset parsing is called from several feature shortcuts. Keep the parsed text caches small
+-- and local to this helper bundle; they are query accelerators, not persistent state.
 OM.moveTerms = OM.moveTerms or {
     "move", "nudge", "shift", "verschiebe", "offset", "x offset", "y offset",
     "x position", "y position", "x pos", "y pos",
@@ -500,6 +510,8 @@ end
 function OM.ScopeBlocked(setting, text)
     if type(setting) ~= "table" then return true end
     local frameType = tostring(setting.frameType or "")
+    -- For offset settings, broad words like "name" or "power" are not enough; explicit
+    -- unit/group scope still wins so a party command cannot drift onto player text offsets.
     if frameType == "group" then
         local wanted
         if HasPhrase(text, "mythicraid") or HasPhrase(text, "mythic raid") then
@@ -2637,7 +2649,7 @@ end
 
 local function ParseBorderThicknessShortcut(text)
     if not ContainsAny(text, { "border", "outline" }) then return nil end
-    if ContainsAny(text, { "portrait", "castbar", "cast bar", "class power", "class resource", "power bar", "mana bar", "power border", "mana border", "detached power", "group border", "group frame border" }) then return nil end
+    if ContainsAny(text, { "portrait", "castbar", "cast bar", "class power", "class resource", "class resources", "power bar", "mana bar", "power border", "mana border", "detached power", "group border", "group frame border" }) then return nil end
     if ContainsAny(text, { "color", "colour", "farbe", "reset" }) then return nil end
     if ContainsAny(text, { "aggro", "threat", "dispel", "dispellable", "purge", "purgeable", "boss target", "highlight" }) then return nil end
 

@@ -2,6 +2,10 @@
 --- API: MSUF_EventBus_Register(event, key, fn, unitFilter, once)
 --- MSUF_EventBus_Unregister(event, key)
 --- MSUF_EventBus_UnregisterAll(keyPrefix)
+---
+--- This keeps shared runtime events on one hidden driver frame. UNIT_* events
+--- are registered with the union of requested unit filters so modules do not
+--- each create their own event frame for the same traffic.
 local _, MSUF = ...
 MSUF = MSUF or {}
 local type, pairs, pcall, tostring = type, pairs, pcall, tostring
@@ -59,6 +63,8 @@ local function BuildUnitList(ev)
     return list
 end
 
+--- Rebuild the driver's event registration when unit filters change. For UNIT_*
+--- events this is the only place that talks to RegisterUnitEvent.
 local function RefreshDriverRegistration(event, ev)
     if not ev then return end
     if not ev.unitEvent then
@@ -194,6 +200,8 @@ function bus:UnregisterAll(prefix)
     end
 end
 
+--- Dispatch can unregister handlers while iterating. `dd` and dirty compaction
+--- let removals mark handlers dead and compact after the current fanout.
 driver:SetScript("OnEvent", function(_, event, ...)
     local ev = bus.handlers[event]; if not ev then return end
     ev.dd = (ev.dd or 0) + 1

@@ -1,5 +1,10 @@
---- Chat/Slash commands (/msuf) + small tooltip helpers + Blizzard Edit Mode bridge
---- Thinking about just scrapping this if this causes more erros
+--- Runtime/MSUF_ChatAndTooltips.lua
+--- Slash commands, lightweight debug print helpers, reset commands, tooltip
+--- helpers, and Blizzard Edit Mode bridge.
+---
+--- This is the user-command edge of the addon. Keep gameplay/runtime mutation
+--- behind existing public helpers where possible, and keep destructive commands
+--- guarded by combat checks and explicit confirmation.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
@@ -78,6 +83,8 @@ local function MSUF_ResetPositionAnchorsToScreen()
         end
     end
 end
+--- Full reset intentionally clears SavedVariables references and asks for a
+--- reload so defaults/migrations rebuild state from a clean profile.
 local function MSUF_DoFullReset(opts)
     opts = opts or {}
     local skipReload = (opts.skipReload == true)
@@ -131,6 +138,8 @@ local function MSUF_SafeGetKeyboardPropagation(frame)
     return value
 end
 
+--- Diagnostic command for stuck movement/keybind reports. It only prints state;
+--- it must not change keyboard propagation or frame focus.
 local function MSUF_PrintInputDebug()
     print("|cff7aa2f7MSUF INPUT|r keyboard diagnostics")
     print("Bindings: W=" .. tostring(GetBindingAction and GetBindingAction("W") or "?")

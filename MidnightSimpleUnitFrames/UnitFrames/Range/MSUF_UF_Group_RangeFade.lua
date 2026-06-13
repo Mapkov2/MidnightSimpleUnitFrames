@@ -9,6 +9,9 @@ MSUF.GF = GF
 
 if not (UF and UF.RegisterElement) then return end
 
+-- Group-frame range/offline fade element.
+-- Runs across many secure header children, so it favors chunked settle passes and cached unit
+-- state instead of full-group scans on every range event. It never changes secure attributes.
 local CreateFrame = _G.CreateFrame
 local tonumber = tonumber
 local type = type

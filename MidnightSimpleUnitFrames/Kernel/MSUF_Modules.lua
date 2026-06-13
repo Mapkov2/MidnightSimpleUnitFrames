@@ -1,6 +1,9 @@
 --- MSUF_Modules.lua
 --- Lightweight module registry + lifecycle manager for Midnight Simple Unit Frames.
---- Over the course of the development this amounted to all sorts of stuff that has nothing to do with its intentional idea of managing modules and addons for MSUF.
+---
+--- Modules register desired lifecycle hooks here. The registry owns ordering,
+--- late registration, enable/disable state, settings refresh fanout, shutdown,
+--- and debug toggles. Individual modules still own their runtime behavior.
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
@@ -15,6 +18,8 @@ MSUF.MSUF_ModulesByKey = MSUF.MSUF_ModulesByKey or {}
 MSUF.__MSUF_ModulesInitialized = MSUF.__MSUF_ModulesInitialized or false
 MSUF.__MSUF_ModulesApplied = MSUF.__MSUF_ModulesApplied or false
 
+--- Module hooks are optional by contract. SafeCall keeps lifecycle fanout simple
+--- without forcing every module table to provide every method.
 local function SafeCall(fn, ...)
     if type(fn) ~= "function" then return false end
     return true, fn(...)
@@ -114,6 +119,8 @@ function MSUF.MSUF_InitModules()
 end
 
 --- Public: Apply desired enabled/disabled states to all modules.
+--- Apply is idempotent: it only calls Enable/Disable when the desired state
+--- differs from the current module state.
 function MSUF.MSUF_ApplyModules()
     SortModulesIfNeeded()
 

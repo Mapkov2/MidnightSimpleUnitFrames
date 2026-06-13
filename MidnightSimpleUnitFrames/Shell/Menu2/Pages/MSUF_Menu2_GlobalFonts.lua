@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 global Fonts page.
+-- Binds shared/scoped font family, size, outline, shadow, alpha, and baseline controls.
+-- Runtime font resolution and live font-string updates remain in the font runtime registry.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GlobalPage or {}

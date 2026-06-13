@@ -17,7 +17,9 @@ A.Workflow = A.Workflow or {}
 local C = A.RegistryCore
 if type(C) ~= "table" then return end
 
--- Auras registry domain. Shared helpers live in MSUF_AssistantRegistry_Core.lua.
+-- Auras registry domain.
+-- Maps assistant phrases onto Auras3 unit/group settings and filter toggles. The registry
+-- writes saved config only; aura scanning, pooling, and visual refresh stay in Auras3.
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local UNIT_ALIASES = C.UNIT_ALIASES
@@ -247,6 +249,62 @@ local function AddAuraLaneAliases(out, scope, lane, noun, nounDE)
     AddAliasesForAuraScope(out, scope, "aura " .. lanePlural .. " " .. noun)
 end
 
+local AURA_RELATIVE_SIZE_NOUNS = {
+    "bigger", "larger", "smaller", "groesser", "kleiner",
+    "icon bigger", "icon larger", "icon smaller", "icon groesser", "icon kleiner",
+    "icons bigger", "icons larger", "icons smaller", "icons groesser", "icons kleiner",
+    "size bigger", "size larger", "size smaller", "size groesser", "size kleiner",
+    "icon size bigger", "icon size larger", "icon size smaller", "icon size groesser", "icon size kleiner",
+}
+
+local function AddAuraLaneRelativeSizeAliases(out, scope, lane)
+    for i = 1, #AURA_RELATIVE_SIZE_NOUNS do
+        AddAuraLaneAliases(out, scope, lane, AURA_RELATIVE_SIZE_NOUNS[i])
+    end
+end
+
+A._AssistantAddAuraAllLaneAliases = A._AssistantAddAuraAllLaneAliases or function(out, scope, noun)
+    local aliases = AURA_SCOPE_ALIASES[scope] or UNIT_ALIASES[scope] or { scope }
+    for i = 1, #aliases do
+        local s = aliases[i]
+        out[#out + 1] = s .. " aura " .. noun
+        out[#out + 1] = s .. " auras " .. noun
+        out[#out + 1] = "aura " .. noun .. " " .. s
+        out[#out + 1] = "auras " .. noun .. " " .. s
+    end
+end
+
+A._AssistantAddAuraAllLaneNouns = A._AssistantAddAuraAllLaneNouns or function(out, scope, nouns)
+    for i = 1, #(nouns or {}) do
+        A._AssistantAddAuraAllLaneAliases(out, scope, nouns[i])
+    end
+end
+
+A._AssistantAddAuraAllLaneRelativeSizeAliases = A._AssistantAddAuraAllLaneRelativeSizeAliases or function(out, scope)
+    for i = 1, #AURA_RELATIVE_SIZE_NOUNS do
+        A._AssistantAddAuraAllLaneAliases(out, scope, AURA_RELATIVE_SIZE_NOUNS[i])
+    end
+end
+
+A._AssistantAddAllAuraNounAliases = A._AssistantAddAllAuraNounAliases or function(out, lane, prefix, noun)
+    local lanePlural = lane == "buff" and "buffs" or "debuffs"
+    out[#out + 1] = prefix .. " aura " .. noun
+    out[#out + 1] = prefix .. " auras " .. noun
+    out[#out + 1] = prefix .. " " .. lanePlural .. " " .. noun
+end
+
+A._AssistantAddAllAuraRelativeSizeAliases = A._AssistantAddAllAuraRelativeSizeAliases or function(out, lane, prefix)
+    for i = 1, #AURA_RELATIVE_SIZE_NOUNS do
+        A._AssistantAddAllAuraNounAliases(out, lane, prefix, AURA_RELATIVE_SIZE_NOUNS[i])
+    end
+end
+
+A._AssistantAddAllAuraNouns = A._AssistantAddAllAuraNouns or function(out, lane, prefix, nouns)
+    for i = 1, #(nouns or {}) do
+        A._AssistantAddAllAuraNounAliases(out, lane, prefix, nouns[i])
+    end
+end
+
 local function AuraLaneAttribute(lane, attr)
     return "aura" .. (lane == "buff" and "Buff" or "Debuff") .. attr
 end
@@ -268,7 +326,8 @@ local function RegisterAuraUnitLaneBoolean(unit, lane, attr, label, aliases)
     })
 end
 
-local function RegisterAuraUnitLaneNumber(unit, lane, attr, label, defaultValue, minValue, maxValue, step, aliases, read, write)
+local function RegisterAuraUnitLaneNumber(unit, lane, attr, label, defaultValue, minValue, maxValue, step, aliases, read, write, opts)
+    opts = opts or {}
     Registry:RegisterSetting({
         key = "auras3." .. unit .. "." .. lane .. "." .. attr,
         label = UNIT_LABELS[unit] .. " " .. label,
@@ -278,9 +337,13 @@ local function RegisterAuraUnitLaneNumber(unit, lane, attr, label, defaultValue,
         attribute = AuraLaneAttribute(lane, attr),
         type = "number",
         aliases = aliases,
+        exactAliases = opts.exactAliases or aliases,
         min = minValue,
         max = maxValue,
         step = step or 1,
+        moveAxis = opts.moveAxis,
+        moveStep = opts.moveStep,
+        moveAmount = opts.moveAmount,
         get = read,
         set = write,
         apply = function() ApplyAura(unit, "MSUF_ASSISTANT_AURA_LAYOUT") end,
@@ -288,7 +351,8 @@ local function RegisterAuraUnitLaneNumber(unit, lane, attr, label, defaultValue,
     })
 end
 
-local function RegisterAuraUnitLaneEnum(unit, lane, attr, label, values, valueAliases, aliases, read, write)
+local function RegisterAuraUnitLaneEnum(unit, lane, attr, label, values, valueAliases, aliases, read, write, opts)
+    opts = opts or {}
     local allowed = {}
     for i = 1, #values do allowed[values[i]] = true end
     Registry:RegisterSetting({
@@ -300,6 +364,7 @@ local function RegisterAuraUnitLaneEnum(unit, lane, attr, label, values, valueAl
         attribute = AuraLaneAttribute(lane, attr),
         type = "enum",
         aliases = aliases,
+        exactAliases = opts.exactAliases or aliases,
         values = values,
         valueAliases = valueAliases,
         get = read,
@@ -909,6 +974,7 @@ Registry:RegisterSetting({
         "RAID_BUFFS", "PRESERVATION_EVOKER", "AUGMENTATION_EVOKER", "RESTO_DRUID", "DISC_PRIEST",
         "HOLY_PRIEST", "MISTWEAVER_MONK", "RESTO_SHAMAN", "HOLY_PALADIN", "BLESSING_BRONZE",
         "SELF_BUFFS", "ROGUE_POISONS", "SHAMAN_IMBUE", "RESOURCE_AURAS", "COOLDOWNS",
+        "SATED", "DESERTER",
     },
     valueAliases = {
         raidbuffs = "RAID_BUFFS",
@@ -942,6 +1008,10 @@ Registry:RegisterSetting({
         resourceauras = "RESOURCE_AURAS",
         ["resource auras"] = "RESOURCE_AURAS",
         cooldowns = "COOLDOWNS",
+        sated = "SATED",
+        exhaustion = "SATED",
+        deserter = "DESERTER",
+        deserteur = "DESERTER",
     },
     get = function() return tostring(M.auraBlacklistPreset or "RAID_BUFFS") end,
     set = function(value)
@@ -1273,6 +1343,9 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "max icons")
         AddAuraLaneAliases(aliases, unit, lane, "count")
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "max icons", "maximum icons", "icon count", "count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "max icons", "maximum icons", "icon count", "count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "max icons", "maximum icons", "icon count", "count" })
         RegisterAuraUnitLaneNumber(unit, lane, "max", laneInfo.label .. " Max Icons", AuraLaneDefaultMax(lane), 0, 80, 1, aliases,
             function() return AuraReadNumber(unit, AuraLaneMaxKey(lane), AuraLaneDefaultMax(lane), 0, 80) end,
             function(value) AuraWriteNumber(unit, AuraLaneMaxKey(lane), value, 0, 80) end)
@@ -1280,6 +1353,13 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "size")
         AddAuraLaneAliases(aliases, unit, lane, "icon size")
+        AddAuraLaneRelativeSizeAliases(aliases, unit, lane)
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "size", "icon size" })
+        A._AssistantAddAuraAllLaneRelativeSizeAliases(aliases, unit)
+        A._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "size", "icon size" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "size", "icon size" })
+        A._AssistantAddAllAuraRelativeSizeAliases(aliases, lane, "all unit")
+        A._AssistantAddAllAuraRelativeSizeAliases(aliases, lane, "all")
         RegisterAuraUnitLaneNumber(unit, lane, "size", laneInfo.label .. " Icon Size", 26, 10, 80, 1, aliases,
             function() return AuraReadNumber(unit, AuraLaneSizeKey(lane), 26, 1, 128) end,
             function(value) AuraWriteNumber(unit, AuraLaneSizeKey(lane), value, 1, 128) end)
@@ -1287,6 +1367,9 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "per row")
         AddAuraLaneAliases(aliases, unit, lane, "icons per row")
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "per row", "icons per row", "wrap count", "row count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "per row", "icons per row", "wrap count", "row count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "per row", "icons per row", "wrap count", "row count" })
         RegisterAuraUnitLaneNumber(unit, lane, "perRow", laneInfo.label .. " Icons Per Row", 12, 1, 40, 1, aliases,
             function() return AuraReadLanePerRow(unit, lane) end,
             function(value) AuraWriteLanePerRow(unit, lane, value) end)
@@ -1294,20 +1377,66 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "x")
         AddAuraLaneAliases(aliases, unit, lane, "x offset")
+        AddAuraLaneAliases(aliases, unit, lane, "left")
+        AddAuraLaneAliases(aliases, unit, lane, "right")
+        AddAuraLaneAliases(aliases, unit, lane, "links")
+        AddAuraLaneAliases(aliases, unit, lane, "rechts")
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "x", "x offset", "left", "right", "links", "rechts" })
+        aliases[#aliases + 1] = "all unit aura left"
+        aliases[#aliases + 1] = "all unit auras left"
+        aliases[#aliases + 1] = "all unit aura right"
+        aliases[#aliases + 1] = "all unit auras right"
+        aliases[#aliases + 1] = "all aura left"
+        aliases[#aliases + 1] = "all auras left"
+        aliases[#aliases + 1] = "all aura right"
+        aliases[#aliases + 1] = "all auras right"
+        aliases[#aliases + 1] = lane == "buff" and "all unit buffs left" or "all unit debuffs left"
+        aliases[#aliases + 1] = lane == "buff" and "all unit buffs right" or "all unit debuffs right"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs left" or "all debuffs left"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs right" or "all debuffs right"
         RegisterAuraUnitLaneNumber(unit, lane, "offsetX", laneInfo.label .. " X Offset", 0, -300, 300, 1, aliases,
             function() return AuraReadNumber(unit, AuraLaneXKey(lane), 0, -4096, 4096) end,
-            function(value) AuraWriteNumber(unit, AuraLaneXKey(lane), value, -4096, 4096) end)
+            function(value) AuraWriteNumber(unit, AuraLaneXKey(lane), value, -4096, 4096) end,
+            { moveAxis = "x", moveStep = 10 })
 
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "y")
         AddAuraLaneAliases(aliases, unit, lane, "y offset")
+        AddAuraLaneAliases(aliases, unit, lane, "up")
+        AddAuraLaneAliases(aliases, unit, lane, "down")
+        AddAuraLaneAliases(aliases, unit, lane, "hoch")
+        AddAuraLaneAliases(aliases, unit, lane, "runter")
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "y", "y offset", "up", "down", "hoch", "runter" })
+        aliases[#aliases + 1] = "all unit aura up"
+        aliases[#aliases + 1] = "all unit auras up"
+        aliases[#aliases + 1] = "all unit aura down"
+        aliases[#aliases + 1] = "all unit auras down"
+        aliases[#aliases + 1] = "all aura up"
+        aliases[#aliases + 1] = "all auras up"
+        aliases[#aliases + 1] = "all aura down"
+        aliases[#aliases + 1] = "all auras down"
+        aliases[#aliases + 1] = lane == "buff" and "all unit buffs up" or "all unit debuffs up"
+        aliases[#aliases + 1] = lane == "buff" and "all unit buffs down" or "all unit debuffs down"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs up" or "all debuffs up"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs down" or "all debuffs down"
         RegisterAuraUnitLaneNumber(unit, lane, "offsetY", laneInfo.label .. " Y Offset", AuraLaneDefaultY(lane), -300, 300, 1, aliases,
             function() return AuraReadNumber(unit, AuraLaneYKey(lane), AuraLaneDefaultY(lane), -4096, 4096) end,
-            function(value) AuraWriteNumber(unit, AuraLaneYKey(lane), value, -4096, 4096) end)
+            function(value) AuraWriteNumber(unit, AuraLaneYKey(lane), value, -4096, 4096) end,
+            { moveAxis = "y", moveStep = 10 })
 
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "growth")
+        AddAuraLaneAliases(aliases, unit, lane, "grow")
         AddAuraLaneAliases(aliases, unit, lane, "growth direction")
+        AddAuraLaneAliases(aliases, unit, lane, "grow direction")
+        aliases[#aliases + 1] = "unit aura growth"
+        aliases[#aliases + 1] = "unit auras growth"
+        aliases[#aliases + 1] = "unit aura grow"
+        aliases[#aliases + 1] = "all unit aura growth"
+        aliases[#aliases + 1] = "all unit auras growth"
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "growth", "grow", "growth direction", "grow direction" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "growth", "grow", "growth direction", "grow direction" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "growth", "grow", "growth direction", "grow direction" })
         RegisterAuraUnitLaneEnum(unit, lane, "growth", laneInfo.label .. " Growth", AURA_LANE_GROWTH_VALUES, AURA_LANE_GROWTH_ALIASES, aliases,
             function() return AuraReadLaneGrowthPair(unit, lane) end,
             function(value) AuraWriteLaneGrowthPair(unit, lane, value) end)
@@ -1315,6 +1444,9 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "anchor")
         AddAuraLaneAliases(aliases, unit, lane, "anchor point")
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "anchor", "anchor point", "position anchor" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "anchor", "anchor point", "position anchor" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "anchor", "anchor point", "position anchor" })
         RegisterAuraUnitLaneEnum(unit, lane, "anchor", laneInfo.label .. " Anchor", AURA_ANCHOR_VALUES, AURA_ANCHOR_ALIASES, aliases,
             function() return AuraReadLaneAnchor(unit, lane) end,
             function(value) AuraWriteLaneAnchor(unit, lane, value) end)
@@ -1322,6 +1454,9 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "spacing")
         AddAuraLaneAliases(aliases, unit, lane, "gap")
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "spacing", "gap", "icon gap" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "spacing", "gap", "icon gap" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "spacing", "gap", "icon gap" })
         RegisterAuraUnitLaneNumber(unit, lane, "spacing", laneInfo.label .. " Spacing", 2, 0, 12, 1, aliases,
             function() return AuraReadNumber(unit, "spacing", 2, 0, 64) end,
             function(value) AuraWriteNumber(unit, "spacing", value, 0, 64) end)
@@ -1329,6 +1464,9 @@ for _, unit in ipairs(AURA_UNITS) do
         aliases = {}
         AddAuraLaneAliases(aliases, unit, lane, "layer")
         AddAuraLaneAliases(aliases, unit, lane, "z order")
+        A._AssistantAddAuraAllLaneNouns(aliases, unit, { "layer", "z order", "frame level" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all unit", { "layer", "z order", "frame level" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z order", "frame level" })
         RegisterAuraUnitLaneNumber(unit, lane, "layer", laneInfo.label .. " Layer", lane == "buff" and 5 or 6, 1, 15, 1, aliases,
             function() return AuraReadLaneLayer(unit, lane) end,
             function(value) AuraWriteLaneLayer(unit, lane, value) end)
@@ -1571,6 +1709,54 @@ local function AddGFAuraAliases(out, scope, lane, noun)
     AddAliasesForUnit(out, scope, "aura " .. lanePlural .. " " .. noun)
 end
 
+local function AddGFAuraStrictAliases(out, scope, lane, noun)
+    local laneWord = lane == "buff" and "buff" or "debuff"
+    local lanePlural = lane == "buff" and "buffs" or "debuffs"
+    local aliases = UNIT_ALIASES[scope] or { scope }
+    for i = 1, #aliases do
+        local s = aliases[i]
+        if s ~= "group" and s ~= "group frames" and s ~= "gruppenframes" and s ~= "gruppe" then
+            out[#out + 1] = s .. " " .. laneWord .. " " .. noun
+            out[#out + 1] = s .. " " .. lanePlural .. " " .. noun
+            out[#out + 1] = laneWord .. " " .. noun .. " " .. s
+            out[#out + 1] = lanePlural .. " " .. noun .. " " .. s
+            out[#out + 1] = s .. " aura " .. laneWord .. " " .. noun
+            out[#out + 1] = s .. " aura " .. lanePlural .. " " .. noun
+        end
+    end
+end
+
+local function AddGFAuraRelativeSizeAliases(out, scope, lane)
+    for i = 1, #AURA_RELATIVE_SIZE_NOUNS do
+        AddGFAuraStrictAliases(out, scope, lane, AURA_RELATIVE_SIZE_NOUNS[i])
+    end
+end
+
+A._AssistantAddGFAuraAllLaneAlias = A._AssistantAddGFAuraAllLaneAlias or function(out, scope, noun)
+    local aliases = UNIT_ALIASES[scope] or { scope }
+    for i = 1, #aliases do
+        local s = aliases[i]
+        if s ~= "group" and s ~= "group frames" and s ~= "gruppenframes" and s ~= "gruppe" then
+            out[#out + 1] = s .. " aura " .. noun
+            out[#out + 1] = s .. " auras " .. noun
+            out[#out + 1] = "aura " .. noun .. " " .. s
+            out[#out + 1] = "auras " .. noun .. " " .. s
+        end
+    end
+end
+
+A._AssistantAddGFAuraAllLaneAliases = A._AssistantAddGFAuraAllLaneAliases or function(out, scope, nouns)
+    for i = 1, #(nouns or {}) do
+        A._AssistantAddGFAuraAllLaneAlias(out, scope, nouns[i])
+    end
+end
+
+A._AssistantAddGFAuraAllLaneRelativeSizeAliases = A._AssistantAddGFAuraAllLaneRelativeSizeAliases or function(out, scope)
+    for i = 1, #AURA_RELATIVE_SIZE_NOUNS do
+        A._AssistantAddGFAuraAllLaneAlias(out, scope, AURA_RELATIVE_SIZE_NOUNS[i])
+    end
+end
+
 local function RegisterGFAuraBoolean(scope, lane, attr, key, label, defaultValue, aliases)
     Registry:RegisterSetting({
         key = "gf_" .. scope .. ".auras." .. lane .. "." .. key,
@@ -1595,7 +1781,8 @@ local function RegisterGFAuraBoolean(scope, lane, attr, key, label, defaultValue
     })
 end
 
-local function RegisterGFAuraNumber(scope, lane, attr, key, label, defaultValue, minValue, maxValue, aliases, mode)
+local function RegisterGFAuraNumber(scope, lane, attr, key, label, defaultValue, minValue, maxValue, aliases, mode, opts)
+    opts = opts or {}
     Registry:RegisterSetting({
         key = "gf_" .. scope .. ".auras." .. lane .. "." .. key,
         label = UNIT_LABELS[scope] .. " " .. label,
@@ -1605,10 +1792,13 @@ local function RegisterGFAuraNumber(scope, lane, attr, key, label, defaultValue,
         attribute = "gfAura" .. lane .. attr,
         type = "number",
         aliases = aliases,
-        exactAliases = aliases,
+        exactAliases = opts.exactAliases or aliases,
         min = minValue,
         max = maxValue,
         step = 1,
+        moveAxis = opts.moveAxis,
+        moveStep = opts.moveStep,
+        moveAmount = opts.moveAmount,
         get = function() return GFReadAuraNumber(scope, lane, key, defaultValue) end,
         set = function(value) GFWriteAuraNumber(scope, lane, key, value, minValue, maxValue, 1) end,
         apply = function() ApplyGroup(scope, mode or "geometry") end,
@@ -1616,7 +1806,8 @@ local function RegisterGFAuraNumber(scope, lane, attr, key, label, defaultValue,
     })
 end
 
-local function RegisterGFAuraEnum(scope, lane, attr, key, label, values, valueAliases, defaultValue, aliases, mode)
+local function RegisterGFAuraEnum(scope, lane, attr, key, label, values, valueAliases, defaultValue, aliases, mode, opts)
+    opts = opts or {}
     local allowed = {}
     for i = 1, #values do allowed[values[i]] = true end
     Registry:RegisterSetting({
@@ -1628,7 +1819,7 @@ local function RegisterGFAuraEnum(scope, lane, attr, key, label, values, valueAl
         attribute = "gfAura" .. lane .. attr,
         type = "enum",
         aliases = aliases,
-        exactAliases = aliases,
+        exactAliases = opts.exactAliases or aliases,
         values = values,
         valueAliases = valueAliases,
         get = function()
@@ -1680,6 +1871,8 @@ local GF_AURA_CATEGORY_FALLBACK = {
     { key = "SHAMAN_IMBUE", label = "Shaman Imbuements", aliases = { "shaman imbues", "shaman imbuements", "imbues" } },
     { key = "RESOURCE_AURAS", label = "Resource Auras", aliases = { "resource auras", "resource buffs" } },
     { key = "COOLDOWNS", label = "Cooldowns", aliases = { "cooldowns", "cooldown auras" } },
+    { key = "SATED", label = "Sated / Exhaustion", aliases = { "sated", "exhaustion", "heroism exhaustion", "bloodlust exhaustion" } },
+    { key = "DESERTER", label = "Deserter", aliases = { "deserter", "deserteur" } },
 }
 
 local function CompactAuraCategory(value)
@@ -1888,6 +2081,38 @@ local function ClearGFAuraCategoryBlacklist(scope, lane)
     if count > 0 then ApplyGFAuraCategory(scope) end
     return count
 end
+
+local function AddGFAuraBlacklistSpell(scope, lane, value)
+    local Model = AuraModel()
+    if not (Model and type(Model.AddGroupBlacklistSpell) == "function") then return false end
+    return Model.AddGroupBlacklistSpell(GFAuraCategoryScope(scope), GFAuraCategoryLane(lane), value)
+end
+
+local function RemoveGFAuraBlacklistSpell(scope, lane, value)
+    local Model = AuraModel()
+    if not (Model and type(Model.RemoveGroupBlacklistSpell) == "function") then return false end
+    return Model.RemoveGroupBlacklistSpell(GFAuraCategoryScope(scope), GFAuraCategoryLane(lane), value)
+end
+
+local function ClearGFAuraBlacklistSpells(scope, lane)
+    local Model = AuraModel()
+    if not (Model and type(Model.ClearGroupBlacklistSpells) == "function") then return 0 end
+    return Model.ClearGroupBlacklistSpells(GFAuraCategoryScope(scope), GFAuraCategoryLane(lane))
+end
+
+local function GFAuraBlacklistSummary(scope, lane)
+    local Model = AuraModel()
+    if Model and type(Model.GroupBlacklistSummary) == "function" then
+        return Model.GroupBlacklistSummary(GFAuraCategoryScope(scope), GFAuraCategoryLane(lane))
+    end
+    return "No blacklisted spells."
+end
+
+local function AddGFAuraBlacklistPreset(scope, lane, preset)
+    local Model = AuraModel()
+    if not (Model and type(Model.AddGroupBlacklistPresetGroup) == "function") then return 0 end
+    return Model.AddGroupBlacklistPresetGroup(GFAuraCategoryScope(scope), GFAuraCategoryLane(lane), preset)
+end
 A.GroupAuraCategoryScope = GFAuraCategoryScope
 A.GroupAuraCategoryScopeLabel = GFAuraCategoryScopeLabel
 A.GroupAuraCategoryLane = GFAuraCategoryLane
@@ -1896,6 +2121,11 @@ A.WriteGroupAuraCategoryState = WriteGFAuraCategoryState
 A.ApplyGroupAuraCategory = ApplyGFAuraCategory
 A.GroupAuraCategorySummary = GFAuraCategorySummary
 A.ClearGroupAuraCategoryBlacklist = ClearGFAuraCategoryBlacklist
+A.AddGroupAuraBlacklistSpell = AddGFAuraBlacklistSpell
+A.RemoveGroupAuraBlacklistSpell = RemoveGFAuraBlacklistSpell
+A.ClearGroupAuraBlacklistSpells = ClearGFAuraBlacklistSpells
+A.GroupAuraBlacklistSummary = GFAuraBlacklistSummary
+A.AddGroupAuraBlacklistPreset = AddGFAuraBlacklistPreset
 
 for _, scope in ipairs(GF_AURA_GROUPS) do
     for _, laneInfo in ipairs(AURA_LANES) do
@@ -1914,39 +2144,115 @@ for _, scope in ipairs(GF_AURA_GROUPS) do
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "max icons")
         AddGFAuraAliases(aliases, scope, lane, "count")
+        local exactAliases = {}
+        for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "max icons", "maximum icons", "icon count", "count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all group", { "max icons", "maximum icons", "icon count", "count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "max icons", "maximum icons", "icon count", "count" })
         RegisterGFAuraNumber(scope, lane, "Max", "max", laneInfo.label .. " Max Icons", maxDefault, 0, 20, aliases, "visual")
 
         aliases = {}
-        AddGFAuraAliases(aliases, scope, lane, "size")
-        AddGFAuraAliases(aliases, scope, lane, "icon size")
+        exactAliases = {}
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "size")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "icon size")
+        AddGFAuraRelativeSizeAliases(exactAliases, scope, lane)
+        for i = 1, #exactAliases do aliases[#aliases + 1] = exactAliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "size", "icon size" })
+        A._AssistantAddGFAuraAllLaneRelativeSizeAliases(aliases, scope)
+        A._AssistantAddAllAuraNouns(aliases, lane, "all group", { "size", "icon size" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "size", "icon size" })
+        A._AssistantAddAllAuraRelativeSizeAliases(aliases, lane, "all group")
+        A._AssistantAddAllAuraRelativeSizeAliases(aliases, lane, "all")
         RegisterGFAuraNumber(scope, lane, "Size", "size", laneInfo.label .. " Icon Size", sizeDefault, 8, 64, aliases, "geometry")
 
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "per row")
         AddGFAuraAliases(aliases, scope, lane, "icons per row")
+        exactAliases = {}
+        for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "per row", "icons per row", "wrap count", "row count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all group", { "per row", "icons per row", "wrap count", "row count" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "per row", "icons per row", "wrap count", "row count" })
         RegisterGFAuraNumber(scope, lane, "PerRow", "perRow", laneInfo.label .. " Icons Per Row", perRowDefault, 1, 20, aliases, "geometry")
 
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "spacing")
+        exactAliases = {}
+        for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "spacing", "gap", "icon gap" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all group", { "spacing", "gap", "icon gap" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "spacing", "gap", "icon gap" })
         RegisterGFAuraNumber(scope, lane, "Spacing", "spacing", laneInfo.label .. " Spacing", 1, 0, 12, aliases, "geometry")
 
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "layer")
         AddGFAuraAliases(aliases, scope, lane, "z order")
+        exactAliases = {}
+        for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "layer", "z order", "frame level" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all group", { "layer", "z order", "frame level" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "layer", "z order", "frame level" })
         RegisterGFAuraNumber(scope, lane, "Layer", "layer", laneInfo.label .. " Layer", layerDefault, 1, 15, aliases, "geometry")
 
         aliases = {}
-        AddGFAuraAliases(aliases, scope, lane, "x")
-        AddGFAuraAliases(aliases, scope, lane, "x offset")
-        RegisterGFAuraNumber(scope, lane, "OffsetX", "x", laneInfo.label .. " X Offset", 0, -160, 160, aliases, "geometry")
+        local exactAliases = {}
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "x")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "x offset")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "left")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "right")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "links")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "rechts")
+        for i = 1, #exactAliases do aliases[#aliases + 1] = exactAliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "x", "x offset", "left", "right", "links", "rechts" })
+        aliases[#aliases + 1] = "all group aura left"
+        aliases[#aliases + 1] = "all group auras left"
+        aliases[#aliases + 1] = "all group aura right"
+        aliases[#aliases + 1] = "all group auras right"
+        aliases[#aliases + 1] = "all aura left"
+        aliases[#aliases + 1] = "all auras left"
+        aliases[#aliases + 1] = "all aura right"
+        aliases[#aliases + 1] = "all auras right"
+        aliases[#aliases + 1] = "all group frame auras left"
+        aliases[#aliases + 1] = "all group frame auras right"
+        aliases[#aliases + 1] = lane == "buff" and "all group buffs left" or "all group debuffs left"
+        aliases[#aliases + 1] = lane == "buff" and "all group buffs right" or "all group debuffs right"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs left" or "all debuffs left"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs right" or "all debuffs right"
+        RegisterGFAuraNumber(scope, lane, "OffsetX", "x", laneInfo.label .. " X Offset", 0, -160, 160, aliases, "geometry", { moveAxis = "x", moveStep = 10 })
 
         aliases = {}
-        AddGFAuraAliases(aliases, scope, lane, "y")
-        AddGFAuraAliases(aliases, scope, lane, "y offset")
-        RegisterGFAuraNumber(scope, lane, "OffsetY", "y", laneInfo.label .. " Y Offset", 0, -160, 160, aliases, "geometry")
+        exactAliases = {}
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "y")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "y offset")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "up")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "down")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "hoch")
+        AddGFAuraStrictAliases(exactAliases, scope, lane, "runter")
+        for i = 1, #exactAliases do aliases[#aliases + 1] = exactAliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "y", "y offset", "up", "down", "hoch", "runter" })
+        aliases[#aliases + 1] = "all group aura up"
+        aliases[#aliases + 1] = "all group auras up"
+        aliases[#aliases + 1] = "all group aura down"
+        aliases[#aliases + 1] = "all group auras down"
+        aliases[#aliases + 1] = "all aura up"
+        aliases[#aliases + 1] = "all auras up"
+        aliases[#aliases + 1] = "all aura down"
+        aliases[#aliases + 1] = "all auras down"
+        aliases[#aliases + 1] = "all group frame auras up"
+        aliases[#aliases + 1] = "all group frame auras down"
+        aliases[#aliases + 1] = lane == "buff" and "all group buffs up" or "all group debuffs up"
+        aliases[#aliases + 1] = lane == "buff" and "all group buffs down" or "all group debuffs down"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs up" or "all debuffs up"
+        aliases[#aliases + 1] = lane == "buff" and "all buffs down" or "all debuffs down"
+        RegisterGFAuraNumber(scope, lane, "OffsetY", "y", laneInfo.label .. " Y Offset", 0, -160, 160, aliases, "geometry", { moveAxis = "y", moveStep = 10 })
 
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "anchor")
+        exactAliases = {}
+        for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "anchor", "anchor point", "position anchor" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all group", { "anchor", "anchor point", "position anchor" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "anchor", "anchor point", "position anchor" })
         RegisterGFAuraEnum(scope, lane, "Anchor", "anchor", laneInfo.label .. " Anchor", GF_AURA_ANCHORS, {
             center = "CENTER",
             middle = "CENTER",
@@ -1964,6 +2270,13 @@ for _, scope in ipairs(GF_AURA_GROUPS) do
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "growth")
         AddGFAuraAliases(aliases, scope, lane, "growth direction")
+        AddGFAuraAliases(aliases, scope, lane, "grow")
+        AddGFAuraAliases(aliases, scope, lane, "grow direction")
+        exactAliases = {}
+        for i = 1, #aliases do exactAliases[#exactAliases + 1] = aliases[i] end
+        A._AssistantAddGFAuraAllLaneAliases(aliases, scope, { "growth", "grow", "growth direction", "grow direction" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all group", { "growth", "grow", "growth direction", "grow direction" })
+        A._AssistantAddAllAuraNouns(aliases, lane, "all", { "growth", "grow", "growth direction", "grow direction" })
         RegisterGFAuraEnum(scope, lane, "Growth", "growth", laneInfo.label .. " Growth", GF_AURA_GROWTH, {
             rightdown = "RIGHTDOWN",
             right = "RIGHTDOWN",
@@ -1979,7 +2292,7 @@ for _, scope in ipairs(GF_AURA_GROUPS) do
         AddGFAuraAliases(aliases, scope, lane, "filter")
         AddGFAuraAliases(aliases, scope, lane, "filter type")
         AddGFAuraAliases(aliases, scope, lane, "inclusive filter")
-        RegisterGFAuraEnum(scope, lane, "FilterToken", "filterToken", laneInfo.label .. " Filter", GF_AURA_FILTER_VALUES[lane], GF_AURA_FILTER_ALIASES, lane == "buff" and "RAID" or "ALL", aliases, "visual")
+        RegisterGFAuraEnum(scope, lane, "FilterToken", "filterToken", laneInfo.label .. " Filter", GF_AURA_FILTER_VALUES[lane], GF_AURA_FILTER_ALIASES, "ALL", aliases, "visual")
 
         aliases = {}
         AddGFAuraAliases(aliases, scope, lane, "cooldown anchor")
@@ -2109,10 +2422,33 @@ local function ParseAuraEditScopeAliasArgs(text)
 end
 
 local function ParseAuraScopeResetAliasArgs(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    if type(P.ContainsAny) == "function" then
+        if not P.ContainsAny(normalized, { "reset", "clear", "remove", "zuruecksetzen" }) then return false end
+    elseif not (normalized:find("reset", 1, true) or normalized:find("clear", 1, true)
+        or normalized:find("remove", 1, true) or normalized:find("zuruecksetzen", 1, true)) then
+        return false
+    end
     local scope = AuraActionEditScope(text)
     if scope == "shared" then return false end
     return { scope = scope }, {
         summary = "Resets one Aura editing scope back to Shared through registered action metadata.",
+    }
+end
+
+local function ParseAuraAllResetAliasArgs(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    if type(P.ContainsAny) == "function" then
+        if not P.ContainsAny(normalized, { "reset", "clear", "remove", "zuruecksetzen" }) then return false end
+    elseif not (normalized:find("reset", 1, true) or normalized:find("clear", 1, true)
+        or normalized:find("remove", 1, true) or normalized:find("zuruecksetzen", 1, true)) then
+        return false
+    end
+    if not (normalized:find("all", 1, true) or normalized:find("every", 1, true)) then return false end
+    return {}, {
+        summary = "Resets all Aura overrides through registered action metadata.",
     }
 end
 
@@ -2146,10 +2482,37 @@ local function AuraActionContainsAny(text, phrases)
     return false
 end
 
+local function AuraActionHasToken(text, token)
+    token = tostring(token or "")
+    for value in AuraActionNormalized(text):gmatch("%S+") do
+        if value == token then return true end
+    end
+    return false
+end
+
+local function AuraBlacklistHasDirectGroupScope(text)
+    local normalized = AuraActionNormalized(text)
+    if AuraActionContainsAny(normalized, {
+        "player aura", "player auras", "target aura", "target auras",
+        "focus aura", "focus auras", "boss aura", "boss auras",
+    }) then
+        return false
+    end
+    if not normalized:find("blacklist", 1, true) then return false end
+    return AuraActionContainsAny(normalized, {
+        "group aura", "group auras", "group frame aura", "group frame auras",
+        "party aura", "party auras", "party buff", "party buffs", "party debuff", "party debuffs",
+        "raid aura", "raid auras", "raid buff", "raid buffs", "raid debuff", "raid debuffs",
+        "mythic raid aura", "mythic raid auras", "mythic raid buff", "mythic raid buffs",
+        "for party", "on party", "for raid", "on raid",
+    })
+end
+
 local function ParseAuraBlacklistSummaryAliasArgs(text)
     if not AuraActionContainsAny(text, { "show", "list", "summary", "current", "what is", "whats" }) then
         return false
     end
+    if AuraBlacklistHasDirectGroupScope(text) then return false end
     local args = ParseAuraBlacklistScopeAliasArgs(text)
     if not args then return false end
     return args, {
@@ -2197,7 +2560,10 @@ local function ParseAuraBlacklistAddSpellAliasArgs(text, raw)
     if normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
         or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
         or normalized:find("unblock", 1, true) or normalized:find("entfernen", 1, true)
-        or normalized:find("loeschen", 1, true) then
+        or normalized:find("loeschen", 1, true) or normalized:find("unhide", 1, true)
+        or normalized:find("stop hiding", 1, true)
+        or (normalized:find("show", 1, true) and normalized:find("again", 1, true))
+        or (normalized:find("let", 1, true) and normalized:find("show", 1, true)) then
         return false
     end
     local P = A.Parser or {}
@@ -2212,7 +2578,10 @@ local function ParseAuraBlacklistRemoveSpellAliasArgs(text, raw)
     if not (normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
         or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
         or normalized:find("unblock", 1, true) or normalized:find("entfernen", 1, true)
-        or normalized:find("loeschen", 1, true)) then
+        or normalized:find("loeschen", 1, true) or normalized:find("unhide", 1, true)
+        or normalized:find("stop hiding", 1, true)
+        or (normalized:find("show", 1, true) and normalized:find("again", 1, true))
+        or (normalized:find("let", 1, true) and normalized:find("show", 1, true))) then
         return false
     end
     return ParseAuraBlacklistSpellAliasArgs(text, raw)
@@ -2230,7 +2599,10 @@ local function ParseAuraBlacklistPresetAliasArgs(text)
     if normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
         or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
         or normalized:find("unblock", 1, true) or normalized:find("entfernen", 1, true)
-        or normalized:find("loeschen", 1, true) then
+        or normalized:find("loeschen", 1, true) or normalized:find("clear", 1, true)
+        or AuraActionHasToken(normalized, "reset") or normalized:find("empty", 1, true)
+        or normalized:find("all spells", 1, true) or normalized:find("all auras", 1, true)
+        or normalized:find("every spell", 1, true) or normalized:find("every aura", 1, true) then
         return false
     end
     if not (normalized:find("blacklist", 1, true) or normalized:find("blocked", 1, true)
@@ -2290,6 +2662,9 @@ local function ParseGroupAuraCategorySetAliasArgs(text)
     if GroupAuraCategoryAliasBlocked(normalized) then return false end
     if GroupAuraCategoryHasUnitAuraScope(normalized) then return false end
     if AuraActionContainsAny(normalized, { "show", "list", "summary", "current", "what is", "whats" }) then return false end
+    if not (normalized:find("category", 1, true) or normalized:find("categories", 1, true) or normalized:find("public", 1, true)) then
+        return false
+    end
     if normalized:find("clear all", 1, true) or normalized:find("allow all", 1, true)
         or normalized:find("remove all", 1, true) or normalized:find("reset", 1, true)
         or normalized:find("every category", 1, true) or normalized:find("all categories", 1, true) then
@@ -2346,6 +2721,179 @@ local function ParseGroupAuraCategoryClearAliasArgs(text)
     }
 end
 
+local function DirectGroupAuraBlacklistBlocked(text)
+    local normalized = AuraActionNormalized(text)
+    return GroupAuraCategoryAliasBlocked(normalized)
+        or GroupAuraCategoryHasUnitAuraScope(normalized)
+        or normalized:find("category", 1, true) ~= nil
+        or normalized:find("categories", 1, true) ~= nil
+        or normalized:find("public category", 1, true) ~= nil
+        or normalized:find("public categories", 1, true) ~= nil
+end
+
+local function HasDirectGroupAuraBlacklistScope(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local phrases = {
+        "group aura", "group auras", "group frame aura", "group frame auras",
+        "party aura", "party auras", "party buff", "party buffs", "party debuff", "party debuffs",
+        "raid aura", "raid auras", "raid buff", "raid buffs", "raid debuff", "raid debuffs",
+        "mythic raid aura", "mythic raid auras", "mythic raid buff", "mythic raid buffs",
+        "group aura blacklist", "party aura blacklist", "raid aura blacklist",
+        "party buff blacklist", "party debuff blacklist", "raid buff blacklist", "raid debuff blacklist",
+        "for party", "on party", "for raid", "on raid",
+    }
+    if type(P.ContainsAny) == "function" then return P.ContainsAny(normalized, phrases) end
+    for i = 1, #phrases do
+        if normalized:find(phrases[i], 1, true) then return true end
+    end
+    return false
+end
+
+local function DirectGroupAuraBlacklistScopeLane(text)
+    local P = A.Parser or {}
+    local normalized = AuraActionNormalized(text)
+    local scope = type(P.AuraGroupBlacklistScope) == "function" and P.AuraGroupBlacklistScope(normalized) or nil
+    local lane = type(P.AuraGroupBlacklistLane) == "function" and P.AuraGroupBlacklistLane(normalized) or nil
+    scope = A.GroupAuraCategoryScope and A.GroupAuraCategoryScope(scope) or (scope or "raid")
+    lane = A.GroupAuraCategoryLane and A.GroupAuraCategoryLane(lane) or (lane or "buff")
+    return scope, lane
+end
+
+local function DirectGroupAuraBlacklistIntent(text)
+    if DirectGroupAuraBlacklistBlocked(text) then return false end
+    if not HasDirectGroupAuraBlacklistScope(text) then return false end
+    local normalized = AuraActionNormalized(text)
+    if not (normalized:find("blacklist", 1, true) ~= nil
+        or normalized:find("blacklisted", 1, true) ~= nil
+        or normalized:find("aura", 1, true) ~= nil
+        or normalized:find("buff", 1, true) ~= nil
+        or normalized:find("debuff", 1, true) ~= nil
+        or normalized:find("spell", 1, true) ~= nil) then
+        return false
+    end
+    return normalized:find("blacklist", 1, true) ~= nil
+        or normalized:find("blacklisted", 1, true) ~= nil
+        or normalized:find("blocked", 1, true) ~= nil
+        or normalized:find("block", 1, true) ~= nil
+        or normalized:find("ignore", 1, true) ~= nil
+        or normalized:find("allow", 1, true) ~= nil
+        or normalized:find("remove", 1, true) ~= nil
+        or normalized:find("clear", 1, true) ~= nil
+        or normalized:find("reset", 1, true) ~= nil
+        or normalized:find("unblacklist", 1, true) ~= nil
+        or normalized:find("unblock", 1, true) ~= nil
+        or normalized:find("hide", 1, true) ~= nil
+end
+
+local function ParseGroupAuraDirectBlacklistSpellAliasArgs(text, raw)
+    if not DirectGroupAuraBlacklistIntent(text) then return false end
+    local normalized = AuraActionNormalized(text)
+    if normalized:find("all spells", 1, true) or normalized:find("all auras", 1, true)
+        or normalized:find("every spell", 1, true) or normalized:find("every aura", 1, true)
+        or normalized:find("clear all", 1, true) or normalized:find("allow all", 1, true)
+        or normalized:find("remove all", 1, true) or normalized:find("delete all", 1, true) then
+        return false
+    end
+    local P = A.Parser or {}
+    local value = type(P.AuraBlacklistSpellValue) == "function" and P.AuraBlacklistSpellValue(raw or text) or nil
+    if type(value) ~= "string" or value == "" then return false end
+    local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
+    return { scope = scope, lane = lane, value = value }, {
+        summary = "Edits the direct group-frame aura blacklist through registered action metadata.",
+    }
+end
+
+local function ParseGroupAuraDirectBlacklistAddSpellAliasArgs(text, raw)
+    local normalized = AuraActionNormalized(text)
+    if normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
+        or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
+        or normalized:find("unblock", 1, true) or normalized:find("unhide", 1, true)
+        or normalized:find("clear", 1, true) or normalized:find("reset", 1, true) then
+        return false
+    end
+    local P = A.Parser or {}
+    if normalized:find("preset", 1, true)
+        and type(P.AuraBlacklistPresetForText) == "function"
+        and P.AuraBlacklistPresetForText(normalized) then
+        return false
+    end
+    return ParseGroupAuraDirectBlacklistSpellAliasArgs(text, raw)
+end
+
+local function ParseGroupAuraDirectBlacklistRemoveSpellAliasArgs(text, raw)
+    local normalized = AuraActionNormalized(text)
+    if not (normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
+        or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
+        or normalized:find("unblock", 1, true) or normalized:find("unhide", 1, true)) then
+        return false
+    end
+    return ParseGroupAuraDirectBlacklistSpellAliasArgs(text, raw)
+end
+
+local function ParseGroupAuraDirectBlacklistClearAliasArgs(text)
+    if not DirectGroupAuraBlacklistIntent(text) then return false end
+    local normalized = AuraActionNormalized(text)
+    if not (normalized:find("clear all", 1, true) or normalized:find("allow all", 1, true)
+        or normalized:find("unblacklist all", 1, true) or normalized:find("remove all", 1, true)
+        or normalized:find("delete all", 1, true) or normalized:find("reset", 1, true)
+        or normalized:find("empty", 1, true)
+        or ((normalized:find("clear", 1, true) or normalized:find("allow", 1, true)
+            or normalized:find("remove", 1, true) or normalized:find("delete", 1, true))
+            and (normalized:find("all spells", 1, true) or normalized:find("every spell", 1, true)
+                or normalized:find("all auras", 1, true) or normalized:find("every aura", 1, true)))) then
+        return false
+    end
+    local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
+    return { scope = scope, lane = lane }, {
+        summary = "Allows all direct spell entries through registered action metadata.",
+    }
+end
+
+local function ParseGroupAuraDirectBlacklistPresetAliasArgs(text)
+    if not DirectGroupAuraBlacklistIntent(text) then return false end
+    local normalized = AuraActionNormalized(text)
+    if AuraActionContainsAny(normalized, { "show", "list", "summary", "current", "what is", "whats" }) then return false end
+    if normalized:find("remove", 1, true) or normalized:find("delete", 1, true)
+        or normalized:find("allow", 1, true) or normalized:find("unblacklist", 1, true)
+        or normalized:find("unblock", 1, true) or normalized:find("clear", 1, true)
+        or AuraActionHasToken(normalized, "reset") or normalized:find("empty", 1, true)
+        or normalized:find("all spells", 1, true) or normalized:find("all auras", 1, true)
+        or normalized:find("every spell", 1, true) or normalized:find("every aura", 1, true) then
+        return false
+    end
+    local P = A.Parser or {}
+    local preset = type(P.AuraBlacklistPresetForText) == "function" and P.AuraBlacklistPresetForText(normalized) or nil
+    if not preset then return false end
+    if not (normalized:find("preset", 1, true) or normalized:find("blacklist", 1, true)
+        or normalized:find("ignore", 1, true) or normalized:find("block", 1, true)) then
+        return false
+    end
+    local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
+    return { scope = scope, lane = lane, preset = preset }, {
+        summary = "Adds a curated direct group-frame aura blacklist preset through registered action metadata.",
+    }
+end
+
+local function ParseGroupAuraDirectBlacklistSummaryAliasArgs(text)
+    local normalized = AuraActionNormalized(text)
+    if DirectGroupAuraBlacklistBlocked(normalized) then return false end
+    if not HasDirectGroupAuraBlacklistScope(normalized) then return false end
+    if not (normalized:find("summary", 1, true) or normalized:find("list", 1, true)
+        or normalized:find("current", 1, true) or normalized:find("what is", 1, true)
+        or (normalized:find("show", 1, true) and normalized:find("blacklist", 1, true))) then
+        return false
+    end
+    if not (normalized:find("blacklist", 1, true) or normalized:find("blacklisted", 1, true)
+        or normalized:find("blocked", 1, true) or normalized:find("ignore", 1, true)) then
+        return false
+    end
+    local scope, lane = DirectGroupAuraBlacklistScopeLane(normalized)
+    return { scope = scope, lane = lane }, {
+        summary = "Shows the direct group-frame aura blacklist through registered action metadata.",
+    }
+end
+
 Registry:RegisterAction({
     key = "set_aura_edit_scope",
     label = "Set Aura Editing Scope",
@@ -2383,6 +2931,26 @@ Registry:RegisterAction({
         "reset aura custom settings", "reset player aura overrides", "reset target aura overrides",
         "reset focus aura overrides", "reset boss aura overrides",
         "reset player aura scope", "reset target aura scope", "reset focus aura scope", "reset boss aura scope",
+        "reset player aura custom settings", "reset target aura custom settings",
+        "reset focus aura custom settings", "reset boss aura custom settings",
+        "reset player custom aura settings", "reset target custom aura settings",
+        "reset focus custom aura settings", "reset boss custom aura settings",
+        "clear player aura overrides", "clear target aura overrides",
+        "clear focus aura overrides", "clear boss aura overrides",
+        "remove player aura overrides", "remove target aura overrides",
+        "remove focus aura overrides", "remove boss aura overrides",
+        "clear player aura custom settings", "clear target aura custom settings",
+        "clear focus aura custom settings", "clear boss aura custom settings",
+        "clear player custom aura settings", "clear target custom aura settings",
+        "clear focus custom aura settings", "clear boss custom aura settings",
+        "remove player aura custom settings", "remove target aura custom settings",
+        "remove focus aura custom settings", "remove boss aura custom settings",
+        "remove player custom aura settings", "remove target custom aura settings",
+        "remove focus custom aura settings", "remove boss custom aura settings",
+        "clear player aura scope", "clear target aura scope",
+        "clear focus aura scope", "clear boss aura scope",
+        "remove player aura scope", "remove target aura scope",
+        "remove focus aura scope", "remove boss aura scope",
     },
     parseAliasArgs = ParseAuraScopeResetAliasArgs,
     run = function(args)
@@ -2406,7 +2974,11 @@ Registry:RegisterAction({
     aliases = {
         "reset all aura overrides", "reset every aura override", "clear all aura overrides",
         "remove all aura overrides", "reset all auras",
+        "reset all aura custom settings", "reset all custom aura settings",
+        "clear all aura custom settings", "clear all custom aura settings",
+        "remove all aura custom settings", "remove all custom aura settings",
     },
+    parseAliasArgs = ParseAuraAllResetAliasArgs,
     aliasNoArgs = true,
     run = function()
         ResetAllAuraOverrides()
@@ -2429,6 +3001,7 @@ Registry:RegisterAction({
         "aura quick setup", "auras quick setup", "aura preset setup", "aura setup preset",
         "apply clean aura preset", "apply focused aura preset", "apply performance aura preset",
         "use clean aura preset", "use focused aura preset", "use performance aura preset",
+        "use clean aura quick preset", "use focused aura quick preset", "use performance aura quick preset",
         "use clean preset", "use focused preset", "use performance preset",
         "clean aura quick setup", "focused aura quick setup", "performance aura quick setup",
     },
@@ -2526,6 +3099,139 @@ Registry:RegisterAction({
 })
 
 Registry:RegisterAction({
+    key = "aura_group_blacklist_add_spell",
+    label = "Add Group Aura Blacklist Spell",
+    type = "auras",
+    combatSafe = false,
+    captureSnapshot = true,
+    aliases = {
+        "blacklist", "hide", "block", "ignore",
+        "blacklist group aura spell", "blacklist group frame aura spell",
+        "blacklist party aura spell", "blacklist raid aura spell",
+        "hide group aura spell", "hide party aura spell", "hide raid aura spell",
+        "block group aura spell", "block party aura spell", "block raid aura spell",
+    },
+    parseAliasArgs = ParseGroupAuraDirectBlacklistAddSpellAliasArgs,
+    run = function(args)
+        local scope = A.GroupAuraCategoryScope(args and args.scope)
+        local lane = A.GroupAuraCategoryLane(args and args.lane)
+        local value = args and args.value
+        if type(value) ~= "string" or value == "" then return false, "I need a spell ID, spell link, or resolvable spell name." end
+        if not A.AddGroupAuraBlacklistSpell(scope, lane, value) then return false, "That spell could not be resolved for the group aura blacklist." end
+        A.ApplyGroupAuraCategory(scope)
+        return true, "Done. Added " .. tostring(value) .. " to the " .. A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " blacklist."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "aura_group_blacklist_remove_spell",
+    label = "Remove Group Aura Blacklist Spell",
+    type = "auras",
+    combatSafe = false,
+    captureSnapshot = true,
+    aliases = {
+        "remove", "allow", "unblacklist", "unblock", "unhide",
+        "remove group aura blacklist spell", "remove group frame aura blacklist spell",
+        "allow group aura spell", "allow party aura spell", "allow raid aura spell",
+        "unblacklist group aura spell", "unblacklist party aura spell", "unblacklist raid aura spell",
+        "show group aura spell", "show party aura spell", "show raid aura spell",
+    },
+    parseAliasArgs = ParseGroupAuraDirectBlacklistRemoveSpellAliasArgs,
+    run = function(args)
+        local scope = A.GroupAuraCategoryScope(args and args.scope)
+        local lane = A.GroupAuraCategoryLane(args and args.lane)
+        local value = args and args.value
+        if type(value) ~= "string" or value == "" then return false, "I need a spell ID, spell link, or resolvable spell name." end
+        A.RemoveGroupAuraBlacklistSpell(scope, lane, value)
+        A.ApplyGroupAuraCategory(scope)
+        return true, "Done. Removed " .. tostring(value) .. " from the " .. A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " blacklist."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "aura_group_blacklist_clear_spells",
+    label = "Clear Group Aura Blacklist",
+    type = "auras",
+    combatSafe = false,
+    captureSnapshot = true,
+    aliases = {
+        "clear", "clear all", "allow all", "remove all", "reset",
+        "clear group aura blacklist", "clear group frame aura blacklist",
+        "clear party aura blacklist", "clear raid aura blacklist",
+        "allow all group aura spells", "allow all party aura spells", "allow all raid aura spells",
+        "remove all group aura blacklist spells", "remove all party aura blacklist spells", "remove all raid aura blacklist spells",
+    },
+    parseAliasArgs = ParseGroupAuraDirectBlacklistClearAliasArgs,
+    run = function(args)
+        local scope = A.GroupAuraCategoryScope(args and args.scope)
+        local lane = A.GroupAuraCategoryLane(args and args.lane)
+        local count = A.ClearGroupAuraBlacklistSpells(scope, lane)
+        A.ApplyGroupAuraCategory(scope)
+        local target = A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane)
+        if count and count > 0 then
+            return true, "Done. Allowed all direct spell blacklist entries for " .. target .. ". Cleared " .. tostring(count) .. " blacklisted " .. (count == 1 and "spell." or "spells.")
+        end
+        return true, "Already set. No direct spells are blacklisted for " .. target .. "."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "aura_group_blacklist_add_preset",
+    label = "Add Group Aura Blacklist Preset",
+    type = "auras",
+    combatSafe = false,
+    confirmRequired = true,
+    captureSnapshot = true,
+    aliases = {
+        "group aura blacklist preset", "group frame aura blacklist preset",
+        "party aura blacklist preset", "raid aura blacklist preset",
+        "blacklist preset for group auras", "blacklist preset for party auras", "blacklist preset for raid auras",
+        "aura blacklist preset", "add aura blacklist preset", "blacklist aura preset", "add blacklist preset",
+    },
+    parseAliasArgs = ParseGroupAuraDirectBlacklistPresetAliasArgs,
+    run = function(args)
+        local scope = A.GroupAuraCategoryScope(args and args.scope)
+        local lane = A.GroupAuraCategoryLane(args and args.lane)
+        local preset = args and args.preset
+        if type(preset) ~= "string" or preset == "" then return false, "I need an aura blacklist preset name." end
+        local count = A.AddGroupAuraBlacklistPreset(scope, lane, preset)
+        A.ApplyGroupAuraCategory(scope)
+        return true, "Done. Added " .. tostring(count or 0) .. " preset spells to the " .. A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " blacklist."
+    end,
+})
+
+Registry:RegisterAction({
+    key = "aura_group_blacklist_summary",
+    label = "Show Group Aura Blacklist",
+    type = "auras",
+    combatSafe = true,
+    aliases = {
+        "show group aura blacklist", "show group frame aura blacklist",
+        "list group aura blacklist", "list party aura blacklist", "list raid aura blacklist",
+        "current group aura blacklist", "current party aura blacklist", "current raid aura blacklist",
+        "show aura blacklist", "list aura blacklist", "current aura blacklist",
+        "show party buff aura blacklist", "show party debuff aura blacklist",
+        "show raid buff aura blacklist", "show raid debuff aura blacklist",
+        "show party buff blacklist", "show party debuff blacklist",
+        "show raid buff blacklist", "show raid debuff blacklist",
+        "list party buff aura blacklist", "list party debuff aura blacklist",
+        "list raid buff aura blacklist", "list raid debuff aura blacklist",
+        "list party buff blacklist", "list party debuff blacklist",
+        "list raid buff blacklist", "list raid debuff blacklist",
+        "current party buff aura blacklist", "current party debuff aura blacklist",
+        "current raid buff aura blacklist", "current raid debuff aura blacklist",
+        "current party buff blacklist", "current party debuff blacklist",
+        "current raid buff blacklist", "current raid debuff blacklist",
+    },
+    parseAliasArgs = ParseGroupAuraDirectBlacklistSummaryAliasArgs,
+    run = function(args)
+        local scope = A.GroupAuraCategoryScope(args and args.scope)
+        local lane = A.GroupAuraCategoryLane(args and args.lane)
+        return true, A.GroupAuraCategoryScopeLabel(scope) .. " " .. A.GroupAuraCategoryLanePlural(lane) .. " blacklist:\n" .. tostring(A.GroupAuraBlacklistSummary(scope, lane))
+    end,
+})
+
+Registry:RegisterAction({
     key = "aura_blacklist_add_spell",
     label = "Add Aura Blacklist Spell",
     type = "auras",
@@ -2534,6 +3240,9 @@ Registry:RegisterAction({
     aliases = {
         "blacklist", "blacklist spell", "blacklist aura", "blacklist aura spell",
         "block aura", "block aura spell", "ignore aura", "ignore aura spell",
+        "hide", "suppress", "stop showing",
+        "hide aura", "hide aura spell", "hide spell", "suppress aura", "suppress spell",
+        "stop showing aura", "stop showing spell",
     },
     parseAliasArgs = ParseAuraBlacklistAddSpellAliasArgs,
     run = function(args)
@@ -2560,6 +3269,9 @@ Registry:RegisterAction({
         "allow aura spell", "allow spell", "allow aura",
         "unblacklist", "unblacklist spell", "unblacklist aura",
         "unblock aura", "unblock spell",
+        "unhide", "stop hiding", "show", "let",
+        "unhide aura", "unhide spell", "stop hiding aura", "stop hiding spell",
+        "show aura again", "show spell again", "let aura show", "let spell show",
     },
     parseAliasArgs = ParseAuraBlacklistRemoveSpellAliasArgs,
     run = function(args)

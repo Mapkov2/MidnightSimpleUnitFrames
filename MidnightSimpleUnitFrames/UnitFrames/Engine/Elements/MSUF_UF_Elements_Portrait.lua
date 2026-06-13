@@ -5,6 +5,10 @@ _G.MSUF_NS = MSUF
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
+
+-- Unitframe portrait element.
+-- Handles 2D/class portraits, shape masks, dynamic border colors, and queued portrait busts.
+-- It bridges identity events into cached visual updates without owning unitframe layout.
 local CreateFrame = V.CreateFrame or CreateFrame
 local UnitClass = V.UnitClass or UnitClass
 local UnitReaction = V.UnitReaction or UnitReaction

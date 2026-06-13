@@ -13,6 +13,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+
+-- Feature parser shard for higher-level shortcuts such as class power, gameplay, global
+-- bars, diagnostics, and guided setup. Each shortcut should narrow broad human phrasing into
+-- registry changes or workflow plans without bypassing the assistant router.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -77,14 +81,11 @@ local AURA_BLACKLIST_PRESETS = P.AURA_BLACKLIST_PRESETS
 local AuraBlacklistScope = P.AuraBlacklistScope
 local AURA_QUICK_PRESETS = P.AURA_QUICK_PRESETS
 local AuraQuickPresetForText = P.AuraQuickPresetForText
-local ParseAuraQuickPreset = P.ParseAuraQuickPreset
 local AuraBlacklistPresetForText = P.AuraBlacklistPresetForText
 local AuraGroupBlacklistScope = P.AuraGroupBlacklistScope
 local AuraGroupBlacklistLane = P.AuraGroupBlacklistLane
 local AuraGroupBlacklistCategoryForText = P.AuraGroupBlacklistCategoryForText
-local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
-local ParseAuraBlacklist = P.ParseAuraBlacklist
 local CopyTextParts = P.CopyTextParts
 local RemoveUnit = P.RemoveUnit
 local CopyTargetsForText = P.CopyTargetsForText
@@ -193,6 +194,7 @@ local function ClassPowerSetting(key)
 end
 
 local function ClassPowerWidthModeForText(text)
+    if ContainsAny(text, { "auto fit", "autofit", "auto-fit", "auto fit pips", "fit pips", "compact pips", "pip width" }) then return "auto_pips" end
     if ContainsAny(text, CLASS_POWER_COOLDOWN_TARGET_TERMS) then return "cooldown" end
     if ContainsAny(text, { "utility cooldown", "utility cooldowns", "utility cooldown manager", "utility cooldownmanager" }) then return "utility" end
     if ContainsAny(text, { "tracked buff", "tracked buffs", "buff tracker", "tracked-buffs" }) then return "tracked_buffs" end
@@ -208,10 +210,10 @@ function A._ParseClassPowerWidthModeShortcut(text)
     if not mode then return nil end
     local widthIntent = ContainsAny(text, {
         "width", "wide", "match", "same width", "width mode", "width source", "match width",
-        "player width", "player frame width",
+        "player width", "player frame width", "auto fit", "fit pips", "pip width",
     })
     if not widthIntent then return nil end
-    if FirstNumber(text) and not ContainsAny(text, { "width mode", "width source", "match", "same width", "player width", "cooldown", "cooldowns", "tracked buff", "utility" }) then
+    if FirstNumber(text) and not ContainsAny(text, { "width mode", "width source", "match", "same width", "player width", "cooldown", "cooldowns", "tracked buff", "utility", "auto fit", "fit pips", "pip width" }) then
         return nil
     end
     local setting = ClassPowerSetting("bars.classPowerWidthMode")
@@ -501,6 +503,7 @@ end
 
 function A._ParseClassPowerSizeShortcut(text)
     if not HasClassPowerIntent(text) then return nil end
+    if ContainsAny(text, { "player hp", "player hp bar", "second hp", "duplicate hp" }) then return nil end
     if ContainsAny(text, {
         "text", "number", "numbers", "font", "outline", "border", "gap", "gaps", "spacing",
         "space", "spaces", "distance", "separator", "separators", "divider", "dividers", "tick",
@@ -1666,6 +1669,36 @@ local function ParseSupportWorkflow(text)
         return nil
     end
 
+    local function NoMatchResolutionFilterForText(value)
+        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
+        if ContainsAny(value, { "unresolved", "open no match", "open nomatch", "open misses", "not resolved", "still failing" }) then return "unresolved" end
+        if ContainsAny(value, { "needs clarification", "needs-clarification", "ambiguous no match", "ambiguous nomatch" }) then return "needs-clarification" end
+        if ContainsAny(value, { "resolved", "fixed no match", "fixed nomatch", "solved no match", "covered no match" }) then return "resolved" end
+        return nil
+    end
+
+    local function NoMatchPriorityFilterForText(value)
+        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
+        if ContainsAny(value, { "high priority", "high-priority", "urgent no match", "urgent nomatch", "top priority", "top misses" }) then return "high" end
+        if ContainsAny(value, { "medium priority", "medium-priority", "normal priority" }) then return "medium" end
+        if ContainsAny(value, { "low priority", "low-priority", "minor no match", "minor nomatch" }) then return "low" end
+        return nil
+    end
+
+    local function NoMatchTagFilterForText(value)
+        if ContainsAny(value, { "all no match", "all nomatch", "all missed", "all unmatched" }) then return nil end
+        if ContainsAny(value, { "uncategorized", "untagged" }) then return "uncategorized" end
+        if ContainsAny(value, { "geometry tag", "geometry tagged", "geometry no match", "geometry misses", "movement no match", "movement misses", "layout no match", "layout misses" }) then return "geometry" end
+        if ContainsAny(value, { "media tag", "media tagged", "media no match", "media misses", "texture no match", "texture misses", "font no match", "font misses" }) then return "media" end
+        if ContainsAny(value, { "setting tag", "setting tagged", "setting no match", "setting misses", "control no match", "control misses" }) then return "setting" end
+        if ContainsAny(value, { "scope tag", "scope tagged", "scope no match", "scope misses", "unit no match", "unit misses", "frame no match", "frame misses" }) then return "scope" end
+        if ContainsAny(value, { "aura tag", "aura tagged", "aura no match", "aura misses", "buff no match", "debuff no match" }) then return "aura" end
+        if ContainsAny(value, { "anchor tag", "anchor tagged", "anchor no match", "anchor misses" }) then return "anchor" end
+        if ContainsAny(value, { "action tag", "action tagged", "action no match", "action misses", "workflow no match", "workflow misses" }) then return "action" end
+        if ContainsAny(value, { "knowledge tag", "knowledge tagged", "knowledge no match", "knowledge misses", "help no match", "help misses" }) then return "knowledge" end
+        return nil
+    end
+
     if ContainsAny(text, {
         "no match worklist", "nomatch worklist", "assistant no match worklist",
         "assistant learning worklist", "learning worklist", "missed command worklist",
@@ -1677,14 +1710,25 @@ local function ParseSupportWorkflow(text)
         "knowledge review candidates", "knowledge no match worklist", "knowledge nomatch worklist",
         "media review candidates", "media no match worklist", "media nomatch worklist",
         "action review candidates", "action no match worklist", "action nomatch worklist",
+        "geometry review candidates", "geometry no match worklist", "geometry nomatch worklist",
+        "scope review candidates", "scope no match worklist", "scope nomatch worklist",
+        "tagged no match worklist", "tagged nomatch worklist", "tagged misses",
         "show learning candidates", "show review candidates", "show alias candidates",
     }) then
         local action = Registry and Registry:GetAction("assistant_nomatch_worklist")
         local owner = NoMatchOwnerFilterForText(text)
+        local resolution = NoMatchResolutionFilterForText(text)
+        local priority = NoMatchPriorityFilterForText(text)
+        local tag = NoMatchTagFilterForText(text)
+        local args = {}
+        if owner then args.owner = owner end
+        if resolution then args.resolution = resolution end
+        if priority then args.priority = priority end
+        if tag then args.tag = tag end
         return action and {
             kind = "action",
             action = action,
-            args = owner and { owner = owner } or {},
+            args = args,
             label = "Show Assistant NoMatch worklist",
             summary = "Shows prioritized unmatched Assistant wording as review work items.",
         } or nil

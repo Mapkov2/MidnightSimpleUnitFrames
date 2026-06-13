@@ -1,3 +1,10 @@
+--- Castbars/MSUF_CastbarFrames.lua
+--- Frame construction helpers for real castbars and menu/edit previews.
+---
+--- This file creates regions and initial visual structure only. Runtime applies
+--- live cast state, Visuals applies profile-driven detail layout, and Anchors
+--- moves/sizes existing frames.
+
 local G = _G
 
 local function Translate(text)
@@ -64,6 +71,8 @@ local function CreateText(parent, justifyH, point, relativeTo, offsetX)
     return text
 end
 
+--- Builds the common frame element set used by target/focus/boss style castbars:
+--- background, status bar, icon, text, time text, spark, and outline.
 function G.MSUF_BuildCastbarFrameElements(frame)
     local barHeight = 18
 
@@ -122,6 +131,9 @@ function G.MSUF_BuildCastbarFrameElements(frame)
     end
 end
 
+--- Preview frames are intentionally non-secure and self-contained. They mimic
+--- real castbar regions closely enough for menu/edit-mode layout without
+--- subscribing to live spellcast events.
 function G.MSUF_CreateCastbarPreviewFrame(unit, name, options)
     options = options or {}
 

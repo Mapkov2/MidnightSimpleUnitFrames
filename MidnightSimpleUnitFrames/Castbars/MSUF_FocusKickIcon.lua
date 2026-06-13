@@ -1,3 +1,10 @@
+--- Castbars/MSUF_FocusKickIcon.lua
+--- Legacy/minified visual widget for the focus-kick replacement cast display.
+---
+--- The StateDriver owns enable checks, event registration, and cast-state
+--- selection. This file owns the draggable icon frame, copied time text, border
+--- coloring, and short interrupt feedback animation.
+
 local e,e=...local i=UIParent
 local l=C_Timer and C_Timer.After
 local r=C_Timer and C_Timer.NewTicker

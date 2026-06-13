@@ -13,6 +13,10 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+
+-- Action parser shard for concrete assistant commands that are not simple setting writes.
+-- It still returns plan tables rather than executing the action, which keeps undo,
+-- confirmation, and combat gating in one downstream path.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -79,14 +83,11 @@ local AURA_BLACKLIST_PRESETS = P.AURA_BLACKLIST_PRESETS
 local AuraBlacklistScope = P.AuraBlacklistScope
 local AURA_QUICK_PRESETS = P.AURA_QUICK_PRESETS
 local AuraQuickPresetForText = P.AuraQuickPresetForText
-local ParseAuraQuickPreset = P.ParseAuraQuickPreset
 local AuraBlacklistPresetForText = P.AuraBlacklistPresetForText
 local AuraGroupBlacklistScope = P.AuraGroupBlacklistScope
 local AuraGroupBlacklistLane = P.AuraGroupBlacklistLane
 local AuraGroupBlacklistCategoryForText = P.AuraGroupBlacklistCategoryForText
-local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
-local ParseAuraBlacklist = P.ParseAuraBlacklist
 
 local COPY_VERBS = { "copy", "use", "kopiere", "kopieren", "uebernehme", "uebernehmen" }
 local COPY_LIKE_TERMS = {
@@ -1685,11 +1686,102 @@ local function RegistryActionAliasScore(action, text)
     return best
 end
 
+local ACTION_ALIAS_COMMON_TOKENS = {
+    a = true,
+    an = true,
+    ["and"] = true,
+    ["for"] = true,
+    ["in"] = true,
+    my = true,
+    of = true,
+    on = true,
+    please = true,
+    the = true,
+    to = true,
+    with = true,
+}
+
+local function ActionAliasTokens(text)
+    local out = {}
+    for token in Normalize(text):gmatch("%S+") do out[#out + 1] = token end
+    return out
+end
+
+local function AddActionAliasBucket(index, token, action)
+    if token == "" or ACTION_ALIAS_COMMON_TOKENS[token] then return false end
+    local bucket = index.byToken[token]
+    if not bucket then
+        bucket = {}
+        index.byToken[token] = bucket
+    end
+    bucket[#bucket + 1] = action
+    return true
+end
+
+local function EnsureRegistryActionAliasIndex(actions)
+    actions = actions or {}
+    if P._registryActionAliasActions == actions
+        and P._registryActionAliasCount == #actions
+        and type(P._registryActionAliasIndex) == "table" then
+        return P._registryActionAliasIndex
+    end
+
+    local index = { byToken = {}, always = {} }
+    for i = 1, #actions do
+        local action = actions[i]
+        if type(action) == "table"
+            and (type(action.parseAliasArgs) == "function" or action.aliasNoArgs == true)
+            and type(action.aliases) == "table" then
+            local indexed = false
+            for j = 1, #action.aliases do
+                for _, token in ipairs(ActionAliasTokens(action.aliases[j])) do
+                    indexed = AddActionAliasBucket(index, token, action) or indexed
+                end
+            end
+            if not indexed then index.always[#index.always + 1] = action end
+        end
+    end
+
+    P._registryActionAliasActions = actions
+    P._registryActionAliasCount = #actions
+    P._registryActionAliasIndex = index
+    return index
+end
+
+local function AddActionAliasCandidates(candidateSet, index, tokens)
+    for i = 1, #(tokens or {}) do
+        local bucket = index.byToken[tokens[i]]
+        if bucket then
+            for j = 1, #bucket do candidateSet[bucket[j]] = true end
+        end
+    end
+end
+
+local function RegistryActionAliasCandidates(actions, text)
+    local index = EnsureRegistryActionAliasIndex(actions)
+    local candidateSet = {}
+    AddActionAliasCandidates(candidateSet, index, ActionAliasTokens(text))
+    local relationText = AliasRelationText(text)
+    if relationText ~= text then AddActionAliasCandidates(candidateSet, index, ActionAliasTokens(relationText)) end
+    for i = 1, #(index.always or {}) do candidateSet[index.always[i]] = true end
+
+    local out = {}
+    for i = 1, #actions do
+        local action = actions[i]
+        if candidateSet[action] then out[#out + 1] = action end
+    end
+    if #out == 0 then out = actions end
+    P._lastRegistryActionAliasCandidateCount = #out
+    P._lastRegistryActionAliasTotalCount = #actions
+    return out
+end
+
 function P.ParseRegistryActionAliasShortcut(text, raw)
     local actions = Registry and Registry:AllActions() or {}
     local bestAction, bestArgs, bestMeta, bestScore
-    for i = 1, #actions do
-        local action = actions[i]
+    local candidates = RegistryActionAliasCandidates(actions, text)
+    for i = 1, #candidates do
+        local action = candidates[i]
         local score = RegistryActionAliasScore(action, text)
         if score > 0 and (not bestScore or score > bestScore) then
             local args, meta

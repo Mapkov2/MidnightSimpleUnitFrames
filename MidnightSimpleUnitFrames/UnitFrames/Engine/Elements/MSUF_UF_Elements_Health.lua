@@ -3,6 +3,12 @@ local _, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
 _G.MSUF_NS = MSUF
 
+--- UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua
+---
+--- Health bar element for single unit frames. It owns bar creation, compiled
+--- health visual apply, and the narrow health fast paths used by Dispatch.
+--- Health events are hot: avoid DB lookups and broad visual refreshes here.
+
 local C = MSUF.UFBarTextCommon
 if not C then return end
 

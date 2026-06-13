@@ -7,6 +7,13 @@ _G.MSUF = MSUF
 local Apply = MSUF.Apply or {}
 MSUF.Apply = Apply
 
+--- UnitFrames/Engine/MSUF_UF_Apply.lua
+---
+--- Tiny idempotent wrappers around common Region/StatusBar setters. Elements
+--- use these in hot and warm paths to avoid repeated SetTexture/SetPoint/SetText
+--- calls when the value has not changed. Secret values bypass the cache because
+--- comparing or storing them can be unsafe on Midnight clients.
+
 local Secrets = MSUF.Secrets or {}
 local IsSecret = Secrets.IsSecret or function(_) return false end
 Apply.IsSecret = IsSecret

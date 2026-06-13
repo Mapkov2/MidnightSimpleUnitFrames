@@ -5,6 +5,10 @@ _G.MSUF_NS = MSUF
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
+
+-- Unitframe alpha element.
+-- Combines configured opacity, range fade, combat/target modifiers, and linked castbar alpha.
+-- Keep this as a visual-only layer; load conditions decide whether frames exist/show.
 local tonumber = V.tonumber or tonumber
 local EMPTY_EVENTS = V.EMPTY_EVENTS or {}
 local Clamp01 = V.Clamp01

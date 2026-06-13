@@ -1,3 +1,9 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Config_Indicators.lua
+--- Compile-time normalization for group corner and spell indicators.
+---
+--- Keep SavedVariables interpretation here. Runtime indicator elements should
+--- receive simple booleans, slots, colors, layers, and event needs.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -38,6 +44,8 @@ local CI_SLOT_FIELDS = {
   { "C", "CENTER", 0, 0 },
 }
 
+--- Corner indicators currently support threat/aggro slots in runtime. Disabled
+--- legacy aura categories are normalized to none during compile.
 function GF.CompileCornerIndicators(conf)
   conf = conf or {}
   local slots, slotMap, aggroSlots = {}, {}, {}
@@ -83,6 +91,8 @@ function GF.CompileCornerIndicators(conf)
   }
 end
 
+--- Spell indicators are compiled by the newer spell registry/data path. Return
+--- a disabled placeholder here so older config callers have a stable field.
 function GF.CompileSpellIndicators(conf)
   return {
     enabled = false,

@@ -1007,6 +1007,13 @@ local function NormalizeFontField(conf)
     conf._msufGFNameTruncationOverride = nil
 end
 
+local function NormalizeAuraRenderer(conf)
+    if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
+    if conf.auras.renderer ~= "CUSTOM" then
+        conf.auras.renderer = "CUSTOM"
+    end
+end
+
 function GF.EnsureDB()
     local db = _G.MSUF_DB
     if not db then return end
@@ -1054,6 +1061,9 @@ function GF.EnsureDB()
         GF.MigrateAuraConfig(db.gf_raid, true)
         GF.MigrateAuraConfig(db.gf_mythicraid, true)
     end
+    NormalizeAuraRenderer(db.gf_party)
+    NormalizeAuraRenderer(db.gf_raid)
+    NormalizeAuraRenderer(db.gf_mythicraid)
     --- Ensure spell filter fields exist on each aura sub-group
     for _, conf in pairs({db.gf_party, db.gf_raid, db.gf_mythicraid}) do
         --- Migrate: remove legacy absorb/heal defaults that blocked global override
@@ -1081,7 +1091,7 @@ function GF.EnsureDB()
                         if g.filterMode and not g.filterToken then
                             local fm = g.filterMode
                             if fm == "RAID_PLAYER" or fm == "RAID_IN_COMBAT" or fm == "ALL_PLAYER" then
-                                g.filterToken = (gk == "debuff") and "ALL" or "RAID"
+                                g.filterToken = "ALL"
                             elseif fm == "ALL" or fm == "PLAYER" or fm == "RAID" then
                                 g.filterToken = fm
                             elseif fm == "NOT_PLAYER" then
@@ -1090,6 +1100,14 @@ function GF.EnsureDB()
                         end
                         --- Convert old spellFilter+spellList - blacklistCats
                         if g.spellFilter == "BLACKLIST" and type(g.spellList) == "table" then
+                            if type(g.blacklist) ~= "table" then g.blacklist = {} end
+                            if type(g.blacklist.spells) ~= "table" then g.blacklist.spells = {} end
+                            for spellID, enabled in pairs(g.spellList) do
+                                if enabled == true then
+                                    local id = tonumber(spellID)
+                                    if id then g.blacklist.spells[tostring(math.floor(id + 0.5))] = true end
+                                end
+                            end
                             if not g.blacklistCats then g.blacklistCats = {} end
                             --- Check if old spellList contained Sated spells
                             if g.spellList[57723] or g.spellList[57724] or g.spellList[80354] then
@@ -1106,7 +1124,7 @@ function GF.EnsureDB()
                     end
                     --- Ensure new keys exist with defaults
                     if g.filterToken == nil then
-                        g.filterToken = (gk == "debuff") and "ALL" or "RAID"
+                        g.filterToken = (gk == "externals") and "RAID" or "ALL"
                     end
                     if type(g.blacklistCats) ~= "table" then
                         --- Apply sensible defaults from AuraFilter module
@@ -1125,6 +1143,8 @@ function GF.EnsureDB()
                             g.blacklistCats = {}
                         end
                     end
+                    if type(g.blacklist) ~= "table" then g.blacklist = {} end
+                    if type(g.blacklist.spells) ~= "table" then g.blacklist.spells = {} end
                 end
             end
         end

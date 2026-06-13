@@ -1,3 +1,11 @@
+--- Castbars/MSUF_CastbarUtils.lua
+--- Legacy/minified utility exports for castbar colors, preview sync, interrupt
+--- tinting, shake/glow feedback, reverse fill, and spell-name shortening.
+---
+--- Many modules call these globals directly. Keep this file as a compatibility
+--- surface; new code should prefer clearer helpers in Runtime/Style/Visuals and
+--- leave these exports stable unless a migration is planned.
+
 local e,e=...if type(_G.MSUF_HardSyncCastbarPreview)~="function"then
 local function t(e)local n=_G.issecretvalue
 if type(n)=="function"and n(e)==true then return nil end

@@ -10,9 +10,14 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+-- Combat queue for assistant plans.
+-- Plans that cannot be applied during combat are stored here and replayed after
+-- PLAYER_REGEN_ENABLED through the same ExecutePlan path used for immediate commands.
 local queueFrame
 
 local function EnsureQueueFrame()
+    -- Use one hidden event frame for the queue lifetime instead of allocating a new frame for
+    -- every blocked assistant command.
     if queueFrame then return queueFrame end
     queueFrame = CreateFrame("Frame")
     queueFrame:SetScript("OnEvent", function(self, event)
@@ -48,6 +53,8 @@ function A.FlushQueue()
     if queueFrame then queueFrame:UnregisterEvent("PLAYER_REGEN_ENABLED") end
 
     local function RequeueFrom(index)
+        -- Combat can restart while a queued batch is being replayed. Preserve the remaining
+        -- plans in order instead of dropping partially applied work.
         A.queuedPlans = A.queuedPlans or {}
         for i = index, #plans do
             A.queuedPlans[#A.queuedPlans + 1] = plans[i]

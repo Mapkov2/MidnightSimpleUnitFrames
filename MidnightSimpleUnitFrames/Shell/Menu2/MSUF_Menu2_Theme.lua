@@ -8,6 +8,9 @@ _G.MSUF2 = M
 local T = M.Theme or {}
 M.Theme = T
 
+-- Menu2 theme and widget styling layer.
+-- Owns reusable visual primitives, locale-aware labels, and skin helpers for the options UI.
+-- Page modules should call this layer instead of restyling frames ad hoc.
 local GLASS_VARIANTS = T.glassVariants or {}
 T.collapseHintClickHideThreshold = T.collapseHintClickHideThreshold or 8
 
@@ -25,6 +28,8 @@ local function ActiveLocale()
 end
 
 local function TrackLocaleKey(key, translated)
+    -- Locale coverage is collected while UI text is resolved. This gives diagnostics a cheap
+    -- way to list missing translations without a separate scan of every page file.
     M.localeKeys = M.localeKeys or {}
     M.localeKeys[key] = true
     if ENGLISH_LOCALES[ActiveLocale()] or translated then return end

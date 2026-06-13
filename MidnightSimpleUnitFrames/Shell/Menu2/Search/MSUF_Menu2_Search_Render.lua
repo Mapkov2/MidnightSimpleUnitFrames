@@ -1,4 +1,6 @@
 --- Search results page rendering. Cold-path UI only; indexing/query/routing stay in Search_IndexQuery.
+--- Renders result rows and detail bodies from the prepared render context. Clicking a result
+--- delegates to routing; this file should not mutate settings or rebuild the search index.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -35,6 +37,8 @@ local function SearchResultHasDetail(rec)
     return rec.answer ~= nil and rec.answer ~= ""
 end
 local function BuildSearchPage(ctx)
+    -- Render can lazily refresh stale results when the query changed, but it still calls the
+    -- search query layer instead of reconstructing index data here.
     local width = ctx.width
     local query = TrimText(M.searchQuery or "")
     local combatLocked = SearchCombatLocked() and true or false

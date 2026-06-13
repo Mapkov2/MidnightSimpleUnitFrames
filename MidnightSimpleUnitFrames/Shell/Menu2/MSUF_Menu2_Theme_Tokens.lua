@@ -8,6 +8,9 @@ _G.MSUF2 = M
 local T = M.Theme or {}
 M.Theme = T
 
+-- Menu2 theme tokens.
+-- Declarative media paths, color rows, typography defaults, and token maps consumed by the
+-- Theme module. Avoid runtime frame work here; this file is loaded as shared design data.
 local ADDON = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
 local ADDON_PATH = "Interface\\AddOns\\" .. ADDON .. "\\"
 

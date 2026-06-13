@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Blizzard.lua
+--- Ownership adapter for Blizzard party/raid frames.
+---
+--- When MSUF group frames are enabled, Blizzard's group frames must be hidden or
+--- restored without tainting protected frames. This file centralizes the
+--- hide/reparent/restore logic and defers protected work out of combat.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -123,6 +130,8 @@ local function DeferRestore(frame, showAfter)
   EnsureEventFrame():RegisterEvent("PLAYER_REGEN_ENABLED")
 end
 
+--- Hard hiding prefers reparenting to a hidden parent. Protected frames cannot
+--- always be reparented in combat, so those requests are queued for regen.
 local function ReparentHidden(frame)
   if not (frame and frame.SetParent) or IsForbidden(frame) then
     return
@@ -566,6 +575,8 @@ function GF.RestoreBlizzardGroupFrames(showAfter)
   RestoreRaidFrames(showAfter == true)
 end
 
+--- Main ownership reconciliation. It compares MSUF group-frame state and the
+--- configured Blizzard fallback mode, then hides/restores party and raid frames.
 function GF.ApplyBlizzardGroupFrameOwnership(reason)
   if InCombat() then
     GF._pendingBlizzardGroupOwnership = reason or true

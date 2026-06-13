@@ -8,6 +8,9 @@ _G.MSUF2 = M
 local Data = M.SearchData or {}
 M.SearchData = Data
 
+-- Search query alias catalogue.
+-- Expands human terms and common misspellings into the canonical search keywords used by the
+-- index/query layer. This is declarative data; routing/rendering live in other search shards.
 local ZERO_INDEX_ALIASES = M.KeySetFromWords [[
     debuff debuffs dispel dispels dispell dispellable dispelable cleansing cleanse decurse cure magic curse poison disease bleed
     stealable purge spellsteal aggro threat highlight highlights border borders glow overlay stripe priority

@@ -14,6 +14,10 @@ local P = A.Parser or {}
 A.Parser = P
 local Registry = A.Registry
 
+-- Compound command parser.
+-- Splits one natural sentence into smaller setting/action plans and yields between chunks
+-- through the assistant scheduler. The output is still declarative so every child change can
+-- use the same confirmation, undo, and bulk-safety rules as a standalone command.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local ContainsAny = P.ContainsAny

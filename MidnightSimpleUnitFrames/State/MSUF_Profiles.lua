@@ -1,6 +1,23 @@
 --- State/MSUF_Profiles.lua
 --- Profile storage, import/export, and active-profile state.
+---
+--- This file is the cold boundary between SavedVariables and the live addon.
+--- It is allowed to copy tables, normalize old schemas, and fan out profile
+--- changes to runtime modules, but gameplay event handlers should never call
+--- into the expensive import/export paths directly.
+---
+--- Mental model:
+--- * MSUF_GlobalDB.profiles stores named profile tables.
+--- * MSUF_GlobalDB.char[charKey] stores the active profile and spec bindings.
+--- * MSUF_DB always points at the active profile table for legacy callers.
+--- Keep the MSUF_DB table reference stable during imports where possible:
+--- several modules cache table references and only invalidate on the explicit
+--- post-profile apply hook below.
 local addonName, MSUF = ...
+
+--- Legacy import accepts only table literals. The sandboxed loadstring path is
+--- intentionally kept narrow so old exports still work without letting arbitrary
+--- chunks observe addon globals.
 local function MSUF_ProfileIO_NormalizeLegacyTableChunk(str)
     if type(str) ~= "string" then
         return nil
@@ -39,6 +56,10 @@ local function MSUF_ProfileIO_LoadLegacyChunk(str)
     end
     return func, err
 end
+
+--- Small runtime bridge helpers. Profile code owns the DB mutation, then asks
+--- each subsystem to rebuild whatever cached view it keeps. These wrappers keep
+--- the rest of the file readable and make missing optional modules harmless.
 local function MSUF_ProfileIO_RunEnsureDB(force)
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then
@@ -91,6 +112,10 @@ local function MSUF_ProfileIO_RunFrameScaleApply()
     return false
 end
 local MSUF_ProfileIO_CallGlobal
+
+--- UUF imports may carry absolute positions from another addon. If we keep the
+--- old MSUF screen-position cache around, a converted import can look correct in
+--- the DB but render at the previous cached coordinates.
 local function MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
     local bucketFn = _G.MSUF_GetUnitFrameScreenCacheBucket
     local keyFn = _G.MSUF_GetUnitFrameScreenCacheKey
@@ -126,6 +151,10 @@ local MSUF_ProfileIO_PostProfileRuntimeApply
 local function MSUF_ProfileIO_InCombatLockdown()
     return (_G.InCombatLockdown and _G.InCombatLockdown()) and true or false
 end
+
+--- One fanout point after profile mutations. If protected frame work is unsafe
+--- in combat, the expensive/restricted part is deferred but cheap visual state
+--- such as scale and Blizzard-frame ownership is still nudged immediately.
 local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
     if not MSUF_ProfileIO_InCombatLockdown() then
         return false
@@ -485,6 +514,10 @@ do
     _G.MSUF_EncodeCompactTable = _G.MSUF_EncodeCompactTable or EncodeCompactTable
     _G.MSUF_TryDecodeCompactString = _G.MSUF_TryDecodeCompactString or TryDecodeCompactString
 end
+
+--- Profile lifecycle API. These globals are used by Menu2, assistant actions,
+--- slash handlers, and legacy callers, so the public surface stays global even
+--- though the implementation is isolated in this State module.
 function MSUF_GetCharKey()
     return UnitName("player") .. "-" .. GetRealmName()
 end
@@ -724,6 +757,8 @@ end
 --- Stored in:
 --- MSUF_GlobalDB.char[charKey].specAutoSwitch (boolean)
 --- MSUF_GlobalDB.char[charKey].specProfileMap (table: specID -> profileName)
+--- This is intentionally not profile-local: a profile switch must not rewrite
+--- the player's "which spec should load which profile" preference.
 --- Design goals:
 --- - Very small, fully optional (off by default).
 --- - Combat-safe: if spec changes in combat, we defer the switch.
@@ -1210,12 +1245,15 @@ local function MSUF_ProfileIO_EnsureCompleteProfileDB()
     end
 end
 
+--- Export normalization does not try to make the live DB pretty. It creates a
+--- clean payload copy, translates old aliases, and strips runtime/cache-only
+--- state so copied profile strings stay portable across characters and clients.
 local MSUF_GF_BLIZZARD_TYPE_DEFAULTS = {
-    buffs = true,
-    debuffs = true,
-    dispels = true,
-    externals = true,
-    privateAuras = true,
+    buffs = false,
+    debuffs = false,
+    dispels = false,
+    externals = false,
+    privateAuras = false,
 }
 
 local function MSUF_ProfileIO_NormalizeBlizzardAuraPosition(auras)
@@ -1248,7 +1286,7 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, def
     if group.filterToken == nil then
         local fm = group.filterMode
         if fm == "RAID_PLAYER" or fm == "RAID_IN_COMBAT" or fm == "ALL_PLAYER" then
-            group.filterToken = (groupKey == "debuff") and "ALL" or "RAID"
+            group.filterToken = "ALL"
         elseif fm == "ALL" or fm == "PLAYER" or fm == "RAID" then
             group.filterToken = fm
         elseif fm == "NOT_PLAYER" then
@@ -1261,6 +1299,8 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, def
     if type(group.blacklistCats) ~= "table" then
         group.blacklistCats = MSUF_ProfileIO_CopyDefaultBlacklistCats(groupKey)
     end
+    if type(group.blacklist) ~= "table" then group.blacklist = {} end
+    if type(group.blacklist.spells) ~= "table" then group.blacklist.spells = {} end
 end
 
 local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
@@ -1268,7 +1308,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if type(conf.auras) ~= "table" then return end
 
     local auras = conf.auras
-    if auras.renderer == nil then auras.renderer = "BLIZZARD" end
+    if auras.renderer ~= "CUSTOM" then auras.renderer = "CUSTOM" end
     if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
     for key, value in pairs(MSUF_GF_BLIZZARD_TYPE_DEFAULTS) do
         if auras.blizzardTypes[key] == nil then
@@ -1282,7 +1322,7 @@ local function MSUF_ProfileIO_NormalizeGroupFrameForExport(conf)
     if auras.blizzardDispelBorder == nil then auras.blizzardDispelBorder = false end
     MSUF_ProfileIO_NormalizeBlizzardAuraPosition(auras)
 
-    MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "buff", "RAID")
+    MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "buff", "ALL")
     MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "debuff", "ALL")
     MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, "externals", "RAID")
 end
@@ -1358,6 +1398,10 @@ local function MSUF_SnapshotForKind(kind)
         payload = payload,
     }
 end
+
+--- UUF conversion is a compatibility adapter, not a second profile format.
+--- The converter maps UUF's saved-variable shape into normal MSUF profile
+--- tables, then the regular legacy import path applies and refreshes it.
 local function MSUF_ProfileIO_IsUUFConvertedPayload(payload)
     return type(payload) == "table"
         and type(payload._uufImport) == "table"
@@ -1491,6 +1535,8 @@ local function MSUF_ApplySnapshotToActiveProfile(snapshot)
         MSUF_ProfileIO_ClearUUFUnitFrameScreenCache()
     end
     --- Always keep the profile-table reference stable (important!).
+    --- Do not replace MSUF_DB with a new table here. Runtime modules keep
+    --- references into the active profile and are invalidated by the apply hook.
     if type(MSUF_DB) ~= "table" then
         MSUF_DB = {}
     end

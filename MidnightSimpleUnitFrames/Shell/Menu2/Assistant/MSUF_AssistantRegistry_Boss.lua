@@ -14,6 +14,9 @@ local Registry = A.Registry or { settings = {}, settingsByKey = {}, actions = {}
 A.Registry = Registry
 A.Workflow = A.Workflow or {}
 
+-- Boss coverage manifest for the Assistant.
+-- Boss unitframe and boss castbar settings are registered by the normal unitframe/castbar
+-- domains; this table documents that split so no duplicate boss registry is introduced.
 A.RegistryBossCoverage = {
     unitframes = "MSUF_AssistantRegistry_Unitframes.lua",
     castbars = "MSUF_AssistantRegistry_Castbars.lua",

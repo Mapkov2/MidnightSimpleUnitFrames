@@ -2,6 +2,20 @@ local addonName, addonNS = ...
 local MSUF = (_G.MSUF_NS) or addonNS or {}
 _G.MSUF_NS = MSUF
 
+--- State/MSUF_Defaults.lua
+---
+--- Owns the saved-variable schema bootstrap for MSUF_DB. This file is allowed
+--- to be large because it is coldpath: it runs at login, profile creation,
+--- profile switch, import, and explicit default repair. Runtime modules should
+--- consume the normalized DB or compiled config, not read migration rules from
+--- here during gameplay events.
+---
+--- Rules for future changes:
+--- * Add new saved fields here with nil-preserving defaults.
+--- * Put one-shot profile repairs in this file, guarded by migration flags.
+--- * Keep factory-profile seeding separate from normal default filling so
+---   existing users are never overwritten by a new shipped baseline.
+
 --- MSUF default class-resource colors
 --- Keep this tiny and global so:
 --- 1) class power fallback colors use the new defaults
@@ -116,6 +130,9 @@ local function MSUF_Defaults_GetProfilePayload(tbl)
     return tbl
 end
 
+--- Portrait values have changed names more than once. Normalize them before
+--- any frame/compiler code sees the DB so downstream modules only need to
+--- understand the current enum set.
 local function MSUF_Defaults_NormalizePortraitRenderValue(v)
     if v == "CLASS" then return "CLASS" end
     return "2D"
@@ -191,17 +208,17 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         conf.offsetX = x
         conf.offsetY = y
     end
-    local function ForceFreshGroupAuraBlizzardRenderer(conf)
+    local function ForceFreshGroupAuraCustomRenderer(conf)
         if type(conf) ~= "table" or type(conf.auras) ~= "table" then return end
         local auras = conf.auras
-        auras.renderer = "BLIZZARD"
+        auras.renderer = "CUSTOM"
         if type(auras.blizzardTypes) ~= "table" then auras.blizzardTypes = {} end
         local types = auras.blizzardTypes
-        if types.buffs == nil then types.buffs = true end
-        if types.debuffs == nil then types.debuffs = true end
-        if types.dispels == nil then types.dispels = true end
-        if types.externals == nil then types.externals = true end
-        if types.privateAuras == nil then types.privateAuras = true end
+        types.buffs = false
+        types.debuffs = false
+        types.dispels = false
+        types.externals = false
+        types.privateAuras = false
         if auras.blizzardIconSize == nil then auras.blizzardIconSize = 20 end
         if auras.blizzardShowCooldownText == nil then auras.blizzardShowCooldownText = true end
         if auras.blizzardOrganizationType == nil then auras.blizzardOrganizationType = "default" end
@@ -210,6 +227,11 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
         auras.blizzardContainerAnchor = "FRAME"
         auras.blizzardContainerX = 0
         auras.blizzardContainerY = 0
+        for _, key in pairs({ "buff", "debuff", "externals" }) do
+            if type(auras[key]) ~= "table" then auras[key] = {} end
+            if type(auras[key].blacklist) ~= "table" then auras[key].blacklist = {} end
+            if type(auras[key].blacklist.spells) ~= "table" then auras[key].blacklist.spells = {} end
+        end
     end
     EnsureUnitAlphaDefaults(db.player)
     --- Fresh-install default: player name hidden
@@ -233,9 +255,9 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     ForceFreshUnitframeScreenPosition(db.pet, -260, 135)
     ForceFreshUnitframeScreenPosition(db.targettarget or db.tot, 260, 225)
     ForceFreshUnitframeScreenPosition(db.boss, MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y)
-    ForceFreshGroupAuraBlizzardRenderer(db.gf_party)
-    ForceFreshGroupAuraBlizzardRenderer(db.gf_raid)
-    ForceFreshGroupAuraBlizzardRenderer(db.gf_mythicraid)
+    ForceFreshGroupAuraCustomRenderer(db.gf_party)
+    ForceFreshGroupAuraCustomRenderer(db.gf_raid)
+    ForceFreshGroupAuraCustomRenderer(db.gf_mythicraid)
     db.bars = db.bars or {}
     db.bars.showAltMana = false
     db.bars.roundedFramesEnabled = false
@@ -272,6 +294,11 @@ local function MSUF_Defaults_ApplyFreshInstallOverrides(db)
     end
     MSUF_Defaults_NormalizePortraitRenderDB(db)
  end
+
+--- Factory profile flow:
+--- The embedded compact string is a product baseline for brand-new installs.
+--- It is decoded only when MSUF_DB exists and is empty, then normal defaults
+--- and migrations still run afterward to fill fields added after the snapshot.
 local function MSUF_Defaults_CreateFactoryProfile()
     local tbl = MSUF_Defaults_TryDecodeCompactString(MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
     if not tbl then  return nil end
@@ -301,6 +328,10 @@ local function MSUF_Defaults_TryApplyFactoryProfileIfFreshInstall()
     MSUF_Defaults_DeepCopy(MSUF_DB, payload)
 end
 local MSUF_DB_LastHeavyRun
+
+--- Root tables are the contract every other module assumes after EnsureDB.
+--- Add new top-level SavedVariables buckets here before modules start reading
+--- them, then fill nested defaults later in MSUF_EnsureDB_Heavy.
 local MSUF_DEFAULTS_ROOT_TABLE_KEYS = {
     "general",
     "classColors",
@@ -322,6 +353,11 @@ local function MSUF_Defaults_EnsureRootTables()
         end
     end
 end
+
+--- Migration helpers live above MSUF_EnsureDB_Heavy so the heavy function reads
+--- as "ensure roots, migrate old profile shapes, then fill missing defaults".
+--- Keep migrations idempotent: EnsureDB can be forced after imports/profile
+--- switches and must be safe to run repeatedly on the same profile table.
 local MSUF_DEFAULTS_FONT_KEY_ALIASES = {
     ["Friz Quadrata TT"]        = "FRIZQT",
     ["Arial Narrow"]            = "ARIALN",
@@ -552,6 +588,9 @@ local function MSUF_Defaults_ClearScopedFontKeys()
     end
 end
 
+--- Main DB repair pass. This is deliberately broad and cold: it may normalize
+--- several systems in one run, but it is protected by MSUF_DB_LastHeavyRun in
+--- the public wrapper below so normal callers do not pay for it repeatedly.
 function MSUF_EnsureDB_Heavy()
     if type(MSUF_DB) ~= "table" then
         MSUF_DB = {}
@@ -2268,6 +2307,9 @@ filters = {
         end
     end
 
+--- Legacy/unit defaults live in the long fill() section below. The helper only
+--- fills nil fields, so saved user choices survive even when new defaults are
+--- added for later versions.
 local function fill(key, defaults)
         MSUF_DB[key] = MSUF_DB[key] or {}
         local t = MSUF_DB[key]
@@ -2644,6 +2686,10 @@ local function fill(key, defaults)
     end
     MSUF_DB_LastHeavyRun = MSUF_DB
  end
+
+--- Cheap public guard used by the rest of the addon. Pass force=true only after
+--- changing profile tables or importing data, when the full repair/migration
+--- pass must be allowed to run again on the active MSUF_DB reference.
 function _G.MSUF_EnsureDB(force)
     if force ~= true and type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table" and MSUF_DB_LastHeavyRun == MSUF_DB then
          return

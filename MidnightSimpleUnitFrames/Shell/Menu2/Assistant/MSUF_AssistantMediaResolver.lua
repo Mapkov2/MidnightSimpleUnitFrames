@@ -13,6 +13,10 @@ M.Assistant = A
 local R = A.MediaResolver or {}
 A.MediaResolver = R
 
+-- Assistant media resolver.
+-- Converts human font/texture names into the same stored values Menu2 uses. It searches
+-- registry labels, LibSharedMedia data, and MSUF's normalized font helpers without applying
+-- the selection itself.
 local function Trim(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -48,6 +52,8 @@ local function AddItem(out, usedValue, usedLabel, value, label, key, path, sourc
 end
 
 local function FontSelectionValue(key, path)
+    -- Font registry keys and actual file paths both appear in SavedVariables depending on
+    -- addon version/import source. Normalize through the runtime font helpers when present.
     local normalizeFontKey = _G.MSUF_NormalizeFontKey
     if type(normalizeFontKey) == "function" then key = normalizeFontKey(key) end
     local normalizePath = _G.MSUF_NormalizeFontPath

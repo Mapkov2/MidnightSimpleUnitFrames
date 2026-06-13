@@ -1,6 +1,10 @@
---- Core/MSUF_IconLayoutRuntime.lua
+--- Runtime/MSUF_IconLayoutRuntime.lua
 --- Leader / raid-marker shared icon layout helpers.
 --- Shared icon layout runtime helpers with stable exported globals.
+---
+--- This is a narrow layout service for existing icon regions. Status runtime
+--- decides which icons are shown; this file only resolves size/anchor/layer and
+--- applies those values consistently across unit frames.
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
@@ -62,6 +66,8 @@ function MSUF.Icons._layout.Layer(conf, g, key, defaultVal)
     return v
 end
 
+--- Icons use optional holder frames so high layer values can become frame-level
+--- offsets instead of relying only on draw-layer sublevels.
 function MSUF.Icons._layout.EnsureLayerFrame(owner, region, key, parent)
     if not owner or not region or not key then return nil end
     local layerKey = key .. "LayerFrame"
@@ -155,6 +161,8 @@ local function MSUF_ApplyRaidMarkerLayout(f)
     MSUF.Icons._layout.Apply(f.raidMarkerIcon, f, size, point, relPoint, ox, oy)
 end
 
+--- Global refresh helpers iterate existing UF frames only. Group-frame icon
+--- layout is handled by the group status/visual elements.
 local function RefreshFrames(applyFn, fieldName)
     if type(applyFn) ~= "function" then return end
     local UF = MSUF and MSUF.UF

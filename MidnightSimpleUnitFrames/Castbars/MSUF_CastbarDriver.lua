@@ -1,3 +1,12 @@
+--- Castbars/MSUF_CastbarDriver.lua
+--- Legacy/minified target/focus castbar driver.
+---
+--- This file owns unit spellcast event registration, delayed stop confirmation,
+--- death/unit-change cleanup, and the handoff from Engine cast-state to Runtime
+--- application for non-player castbars. Treat it as hotpath code: add new visual
+--- behavior in Frames/Runtime/Visuals where possible, and refactor this file in
+--- small behavior-preserving steps before changing event semantics.
+
 local e,e=...local n=GetTime
 local e=math.floor local i=_G.C_Timer and _G.C_Timer.NewTicker
 local r local function a(e,t)if not e or not e.unit then return end if not e:IsShown()then

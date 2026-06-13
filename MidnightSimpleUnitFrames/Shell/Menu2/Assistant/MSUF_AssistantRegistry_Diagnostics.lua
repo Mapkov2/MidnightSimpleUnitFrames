@@ -17,7 +17,9 @@ A.Workflow = A.Workflow or {}
 local C = A.RegistryCore
 if type(C) ~= "table" then return end
 
--- Diagnostics registry domain. Shared helpers live in MSUF_AssistantRegistry_Core.lua.
+-- Diagnostics registry domain.
+-- Read-only assistant actions that summarize state for support and self-check workflows.
+-- Keep this file observational; repair actions belong in explicit workflows with confirmation.
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit
@@ -114,6 +116,12 @@ function A.Workflow.StatusText()
     lines[#lines + 1] = "Combat lockdown: " .. combat
     lines[#lines + 1] = "Edit mode: " .. edit
     lines[#lines + 1] = "Assistant registry: " .. tostring(#(Registry.settings or {})) .. " settings, " .. tostring(#(Registry.actions or {})) .. " actions"
+    local parser = A.Parser or {}
+    local actionAliasCandidates = tonumber(parser._lastRegistryActionAliasCandidateCount)
+    local actionAliasTotal = tonumber(parser._lastRegistryActionAliasTotalCount)
+    if actionAliasCandidates and actionAliasTotal and actionAliasTotal > 0 then
+        lines[#lines + 1] = "Registry action alias candidates: " .. tostring(actionAliasCandidates) .. "/" .. tostring(actionAliasTotal)
+    end
     lines[#lines + 1] = "Queued Assistant changes: " .. tostring(type(A.queuedPlans) == "table" and #A.queuedPlans or 0)
     local jobSummary = A.GetJobSummary and A.GetJobSummary() or nil
     if type(jobSummary) == "table" then
@@ -1538,7 +1546,10 @@ Registry:RegisterAction({
     combatSafe = true,
     run = function(args)
         local owner = args and (args.owner or args.ownerFilter)
-        local text = A.NoMatchWorklistText and A.NoMatchWorklistText(20, owner) or "Assistant NoMatch worklist is not available."
+        local resolution = args and (args.resolution or args.resolutionFilter)
+        local priority = args and (args.priority or args.priorityFilter)
+        local tag = args and (args.tag or args.tagFilter)
+        local text = A.NoMatchWorklistText and A.NoMatchWorklistText(20, owner, resolution, priority, tag) or "Assistant NoMatch worklist is not available."
         if A and type(A.ShowLargeTextPanel) == "function" then
             A.ShowLargeTextPanel({
                 kind = "text",

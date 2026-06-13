@@ -1,5 +1,8 @@
 --- Shell/Menu2/Preview/MSUF_Menu2_UnitPreview_Castbar.lua
 --- Cold-path castbar preview helpers.
+---
+--- Resolves castbar DB fields and mock layout values for Menu2 previews. It intentionally
+--- does not subscribe to UNIT_SPELLCAST events or mutate live castbar frames.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -13,6 +16,8 @@ local Castbar = MSUF.UFPreviewCastbar or {}
 MSUF.UFPreviewCastbar = Castbar
 
 function Castbar.OffsetFields(unitKey)
+    -- Runtime and preview need the same DB keys for offsets, but only runtime owns live frame
+    -- anchoring. Keep the key translation here and the actual SetPoint calls in render code.
     unitKey = CanonKey(unitKey)
     local dx, dy = 0, 0
     if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then

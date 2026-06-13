@@ -1,6 +1,10 @@
 local _, MSUF = ...
 MSUF = MSUF or {}
 
+-- Gameplay feature runtime.
+-- Coordinates optional gameplay overlays such as combat timer, crosshair, totem/statue
+-- helpers, and First Dance tracking. Config writes are scheduled through the gameplay apply
+-- queue so UI updates coalesce instead of rebuilding several feature frames per setting edit.
 local CreateFrame   = CreateFrame
 local UIParent      = UIParent
 local C_Spell       = C_Spell
@@ -70,6 +74,8 @@ do
     end
 
     function MSUF.MSUF_RequestGameplayApply()
+        -- Multiple Menu2 controls can change in one frame. Coalesce them into a single apply
+        -- so feature frames and event registrations are rebuilt once.
         if _applyPending then return end
         _applyPending = true
 

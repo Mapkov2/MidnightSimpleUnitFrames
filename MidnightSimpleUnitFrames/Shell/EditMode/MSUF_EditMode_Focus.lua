@@ -1,4 +1,6 @@
 --- EditMode/MSUF_EditMode_Focus.lua - shared Edit Mode focus, hover, and Menu2 state.
+--- Owns visual focus/highlight bookkeeping between edit-mode movers, quick popups, and Menu2.
+--- It should not save positions directly; drag/commit code owns persistent layout writes.
 local addonName, MSUF = ...
 
 local EM2 = _G.MSUF_EM2

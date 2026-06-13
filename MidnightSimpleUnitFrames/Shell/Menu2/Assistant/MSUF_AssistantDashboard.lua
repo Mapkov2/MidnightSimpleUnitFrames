@@ -10,6 +10,10 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+-- Assistant dashboard UI.
+-- This file builds the Menu2-facing chat/import/help surface and delegates command parsing,
+-- plan execution, and profile import work to the assistant/runtime layers. Keep direct DB
+-- writes here limited to local UI state that belongs to the dashboard.
 local T = M.Theme or {}
 local W = M.Widgets or {}
 
@@ -28,6 +32,8 @@ local function Trim(text)
 end
 
 local function IsUUFImportString(value)
+    -- UUF imports need an explicit confirmation path because conversion is best-effort and
+    -- cannot promise one-to-one aura or unsupported-setting mapping.
     local fn = _G.MSUF_IsUUFImportString
     if type(fn) == "function" then
         local ok, result = pcall(fn, value)

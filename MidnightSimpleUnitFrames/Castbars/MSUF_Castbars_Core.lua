@@ -1,3 +1,11 @@
+--- Castbars/MSUF_Castbars_Core.lua
+--- Legacy/minified castbar settings, media resolution, font helpers, visual
+--- refresh glue, and global compatibility exports.
+---
+--- This is a compatibility hub rather than a clean ownership layer. Keep new
+--- feature logic in the newer readable modules when possible, and use this file
+--- mainly to preserve old globals and bridge profile/media settings.
+
 local e,a=...local e=a.Cache and a.Cache.F or{}local e,n,t,S=type,tonumber,ipairs,pairs local t=string.format local m=math.floor
 local i=(a and a.LSM)or _G.MSUF_LSM or(LibStub and LibStub("LibSharedMedia-3.0",true))local l=_G.MSUF_FONT_LIST
 local function c(o,n,r,t)local a=a and a.Util

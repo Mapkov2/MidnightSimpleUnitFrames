@@ -17,7 +17,9 @@ A.Workflow = A.Workflow or {}
 local C = A.RegistryCore
 if type(C) ~= "table" then return end
 
--- Unitframes registry domain. Shared helpers live in MSUF_AssistantRegistry_Core.lua.
+-- Unitframes registry domain.
+-- Registers declarative controls for individual player/target/focus/pet/boss frames. Setters
+-- only update the owning DB field; apply callbacks route through the normal unitframe refresh.
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit
@@ -101,7 +103,7 @@ local TEXT_ANCHOR_VALUES = { "LEFT", "CENTER", "RIGHT" }
 local HP_MODE_VALUES = { "PERCENT", "CURRENT", "MAX", "DEFICIT", "CURMAX", "CURPERCENT", "CURMAXPERCENT", "MAXPERCENT", "PERCENTCUR", "PERCENTMAX", "PERCENTCURMAX", "NONE" }
 local POWER_MODE_VALUES = { "CURRENT", "MAX", "CURMAX", "PERCENT", "CURPERCENT", "CURMAXPERCENT", "NONE" }
 local SEPARATOR_VALUES = { "", "-", "/", "\\", "|", "<", ">", "~", ":" }
-local DETACHED_POWER_SHAPE_VALUES = { "FOLLOW_CLASS", "BAR", "ROUND", "CRYSTAL" }
+local DETACHED_POWER_SHAPE_VALUES = { "FOLLOW_CLASS", "BAR", "ROUND", "CRYSTAL", "ORB" }
 local DETACHED_POWER_SHAPE_ALIASES = {
     follow = "FOLLOW_CLASS",
     followclass = "FOLLOW_CLASS",
@@ -118,7 +120,15 @@ local DETACHED_POWER_SHAPE_ALIASES = {
     rounded = "ROUND",
     circle = "ROUND",
     circular = "ROUND",
-    orb = "ROUND",
+    orb = "ORB",
+    orbs = "ORB",
+    sphere = "ORB",
+    ball = "ORB",
+    manaball = "ORB",
+    manaorb = "ORB",
+    powerball = "ORB",
+    powerorb = "ORB",
+    powersphere = "ORB",
     crystal = "CRYSTAL",
     crystals = "CRYSTAL",
     diamond = "CRYSTAL",
@@ -777,6 +787,7 @@ local function InitDetachedPowerBar(unit)
     conf.detachedPowerBarFrameLevelOffset = tonumber(conf.detachedPowerBarFrameLevelOffset) or 6
     if unit == "player" and conf.detachedPowerBarSyncClassPower == nil then conf.detachedPowerBarSyncClassPower = true end
     if unit == "player" and conf.detachedPowerBarShape == nil then conf.detachedPowerBarShape = "FOLLOW_CLASS" end
+    if unit == "player" and conf.detachedPowerOrbSize == nil then conf.detachedPowerOrbSize = 54 end
 end
 
 local function RegisterUnitTextNumber(unit, attr, dbKey, label, defaultValue, aliases, opts)
@@ -1153,16 +1164,23 @@ for i = 1, #UNIT_KEYS do
             RegisterUnitBooleanSetting(unit, "detachedPowerBarAnchorToClassPower", "detachedPowerBarAnchorToClassPower", "Detached Power Bar Anchors To Class Resource", false, MakeAliases(unit, "anchor detached power to class resource", "detached power anchor class resource"), { category = "Power Bar", power = true })
             RegisterUnitEnum(unit, "detachedPowerBarShape", "detachedPowerBarShape", "Detached Power Bar Shape", "FOLLOW_CLASS", DETACHED_POWER_SHAPE_VALUES, MakeAliases(unit,
                 "player power shape", "detached power shape", "detached power bar shape", "player detached power shape",
-                "follow class resource shape", "power bar shape"
+                "follow class resource shape", "power bar shape", "mana orb", "power orb", "mana ball", "power ball", "power sphere"
             ), {
                 category = "Power Bar",
                 power = true,
                 valueAliases = DETACHED_POWER_SHAPE_ALIASES,
                 get = function(unitKey)
                     local value = tostring(UnitDB(unitKey).detachedPowerBarShape or "FOLLOW_CLASS"):upper()
-                    if value == "FOLLOW_CLASS" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" then return value end
+                    if value == "FOLLOW_CLASS" or value == "BAR" or value == "ROUND" or value == "CRYSTAL" or value == "ORB" then return value end
                     return "FOLLOW_CLASS"
                 end,
+            })
+            RegisterUnitNumberSetting(unit, "detachedPowerOrbSize", "detachedPowerOrbSize", "Detached Power Orb Size", 54, 20, 160, MakeAliases(unit,
+                "mana orb size", "power orb size", "detached power orb size", "orb size", "mana ball size", "power ball size"
+            ), {
+                category = "Power Bar",
+                power = true,
+                get = function(unitKey) return tonumber(UnitDB(unitKey).detachedPowerOrbSize) or 54 end,
             })
         end
         RegisterUnitNumberSetting(unit, "detachedPowerBarOffsetX", "detachedPowerBarOffsetX", "Detached Power Bar X Offset", 0, -1000, 1000, MakeAliases(unit, "detached power x", "detached power bar x offset"), {

@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_SpellRegistry.lua
+--- Runtime registry for group-frame spell indicators.
+---
+--- Data files declare default spells and specs. This registry merges saved
+--- profile config with those defaults, builds trackable aura lists, resolves
+--- icons, and invalidates runtime caches after profile changes.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -67,6 +74,8 @@ if type(SI.GetPlayerSpec) ~= "function" then
   end
 end
 
+--- Convert a saved/default indicator entry into the compact spell-id list that
+--- aura runtime can watch. User-entered numeric strings are accepted.
 local function EnsureTrackable(specKey, auraKey, entry)
   if not specKey then return end
   local ids = {}
@@ -117,6 +126,8 @@ function SI.RefreshFromDB()
   end
 end
 
+--- Ensure one spec has a saved table before menus/runtime read it. Defaults are
+--- copied into SavedVariables once; afterward the profile remains authoritative.
 function SI.EnsureSpecConfig(siCfg, specKey)
   if not (siCfg and specKey) then return false end
   siCfg.specs = siCfg.specs or {}

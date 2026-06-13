@@ -17,7 +17,9 @@ A.Workflow = A.Workflow or {}
 local C = A.RegistryCore
 if type(C) ~= "table" then return end
 
--- GroupFrames registry domain. Shared helpers live in MSUF_AssistantRegistry_Core.lua.
+-- GroupFrames registry domain.
+-- Registers party/raid/mythicraid controls against the group DB. Group header rebuilds and
+-- secure combat deferral remain in the group runtime, not in these assistant setters.
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit

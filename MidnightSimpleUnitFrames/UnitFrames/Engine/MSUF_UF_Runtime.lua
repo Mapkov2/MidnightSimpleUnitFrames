@@ -5,6 +5,13 @@ _G.MSUF_NS = MSUF
 
 MSUF.UF = MSUF.UF or {}
 
+--- UnitFrames/Engine/MSUF_UF_Runtime.lua
+---
+--- Warm runtime scheduler for unit frames. This file handles deferred element
+--- refreshes, dirty queues, profile/config invalidation, identity coalescing,
+--- and post-combat reanchors. It should coordinate work that is too broad for
+--- Dispatch hot handlers but still needs to happen without a full /reload.
+
 local UF = MSUF.UF
 local Metadata = UF.Metadata or {}
 local type = type
@@ -19,12 +26,16 @@ local InCombatLockdown = InCombatLockdown
 local math_floor = math.floor
 local math_min = math.min
 local UnitExists = UnitExists
+local UnitGUID = UnitGUID
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
 local EMPTY_METADATA_SET = {}
 local ApplyElementToFrame = UF.ApplyElementToFrame
 local DEFERRED_REFRESH_ALL = "*"
 
+--- Element refreshes can be requested while config is dirty or combat prevents
+--- a safe apply. Queue by unit/config-key so multiple option changes collapse
+--- into one element reapply on the deferred driver.
 local function QueueDeferredElementRefresh(unit, names, updateReason)
   local pending = UF.pendingElementRefreshes
   local key = unit or DEFERRED_REFRESH_ALL
@@ -76,6 +87,10 @@ end
 local dirtyQueueMethods = {}
 local dirtyQueueMeta = { __index = dirtyQueueMethods }
 local dirtyQueues = UF.dirtyQueues
+
+--- Generic budgeted queue used by runtime systems that can coalesce repeated
+--- frame work. Mark() records the newest bitmask per frame; Flush() processes a
+--- bounded number of frames and reschedules itself when the queue is still busy.
 local bit_bor = (bit and bit.bor) or function(a, b)
   if type(a) ~= "number" then return b end
   if type(b) ~= "number" then return a end
@@ -485,7 +500,9 @@ local pendingIdentityFlush = false
 local RuntimeFlushOnUpdate
 local dependentUnitTicker
 local dependentUnitTickerBudget = 0
-local DEPENDENT_UNIT_TICK_SECONDS = 0.2
+local dependentUnitPollTick = 0
+local DependentIdentityGuidChanged
+local DEPENDENT_UNIT_TICK_SECONDS = 0.5
 local DEPENDENT_UNIT_TICK_BUDGET = 3
 local DEPENDENT_UNIT_TICK_REASON = "MSUF_UNIT_IDENTITY_SOFT_FAST"
 local DEPENDENT_UNITS = { "targettarget", "focustarget" }
@@ -493,6 +510,9 @@ local QueueRuntimeVisualPhase
 local RunQueuedVisualPhase
 local PendingVisualPhaseWork
 
+--- Identity flushes collapse target/focus/boss changes into one pass per frame.
+--- The goal is to keep immediate bar/name feedback while moving expensive aura
+--- and visual work off the click/event tick when possible.
 local function PendingIdentityFlushWork()
   return pendingTargetVisual
     or pendingTargetAuras
@@ -745,25 +765,53 @@ local function StopDependentUnitTicker()
   dependentUnitTickerBudget = 0
 end
 
+-- oUF's eventless-unit model: ToT/FoT have no unit events, so a shared poll
+-- owns them outright. Target swaps never schedule dependent work -- the poll
+-- notices the GUID change on its next tick (oUF behaves identically with a
+-- full UpdateAllElements every 0.5s; we run the full pass only on GUID
+-- change or every 4th tick, bars-only otherwise).
 local function RunDependentUnitTicker()
   local active = false
+  dependentUnitPollTick = dependentUnitPollTick + 1
+  local fullTick = dependentUnitPollTick % 4 == 0
   for i = 1, #DEPENDENT_UNITS do
-    local frame = DependentUnitPollFrame(DEPENDENT_UNITS[i])
+    local unit = DEPENDENT_UNITS[i]
+    local frame = DependentUnitPollFrame(unit)
     if frame then
       active = true
-      RunRuntimeFrame(frame, DEPENDENT_UNIT_TICK_REASON)
+      if frame:IsShown() then
+        if DependentIdentityGuidChanged(frame, unit) or fullTick then
+          RunRuntimeFrame(frame, "MSUF_UNIT_IDENTITY_SOFT")
+        else
+          RunRuntimeFrame(frame, DEPENDENT_UNIT_TICK_REASON)
+        end
+      end
     end
   end
-  dependentUnitTickerBudget = dependentUnitTickerBudget - 1
-  if not active or dependentUnitTickerBudget <= 0 then
+  if not active then
     StopDependentUnitTicker()
   end
 end
 
 local function EnsureDependentUnitTicker()
-  dependentUnitTickerBudget = DEPENDENT_UNIT_TICK_BUDGET
+  -- No dependent frame (ToT/FoT disabled or GUID-gated away): never arm the
+  -- post-swap ticker. Rapid target swaps must not start fanout lanes that
+  -- have no consumer -- that is exactly the work oUF never pays when those
+  -- frames do not exist.
+  local any = false
+  for i = 1, #DEPENDENT_UNITS do
+    if DependentUnitPollFrame(DEPENDENT_UNITS[i]) then
+      any = true
+      break
+    end
+  end
+  if not any then
+    StopDependentUnitTicker()
+    return
+  end
   if dependentUnitTicker then return end
   if not (C_Timer and C_Timer.NewTicker) then return end
+  dependentUnitPollTick = 0
   dependentUnitTicker = C_Timer.NewTicker(DEPENDENT_UNIT_TICK_SECONDS, RunDependentUnitTicker)
 end
 
@@ -815,40 +863,25 @@ local function ScheduleFocusIdentityDeferred(skipAuras, frame)
   ScheduleFocusVisual(skipAuras, frame)
 end
 
-local function ScheduleTargetTargetUpdate()
-  if pendingTargetTargetFast and pendingTargetTargetVisual and pendingTargetTargetAuras then return end
-  local frame = RuntimeFrame("targettarget")
-  if not frame then return end
-  local wantAuras = frame and frame._msufUpdateAuras ~= nil
-  local wantVisual = frame._msufRuntimeSoftVisualCount ~= nil or wantAuras
-  if pendingTargetTargetFast
-    and (wantVisual ~= true or pendingTargetTargetVisual)
-    and (wantAuras ~= true or pendingTargetTargetAuras) then return end
-  if QueueIdentityFlush() then
-    pendingTargetTargetFast = true
-    if wantVisual then pendingTargetTargetVisual = true end
-    if wantAuras then pendingTargetTargetAuras = true end
-  else
-    UF.UpdateRuntime("targettarget", "MSUF_UNIT_IDENTITY_SOFT")
+-- oUF-style identity gate for dependent units: a group click changes MY
+-- target, but ToT/FoT often still resolve to the same GUID (everyone is
+-- targeting the boss). The token never stopped pointing at that GUID, so the
+-- live event stream kept the frame current and the full identity fanout is
+-- redundant -- this is the main reason oUF showed ~0 on group clicks while
+-- MSUF re-ran 11 ToT elements per click. Secret GUIDs disable the skip
+-- (stored as false so the next plain compare always mismatches).
+DependentIdentityGuidChanged = function(frame, unit)
+  if not UnitGUID then return true end
+  local guid = UnitGUID(unit)
+  if issecretvalue(guid) == true then
+    frame._msufIdentityGUID = false
+    return true
   end
-end
-
-local function ScheduleFocusTargetUpdate()
-  if pendingFocusTargetFast and pendingFocusTargetVisual and pendingFocusTargetAuras then return end
-  local frame = RuntimeFrame("focustarget")
-  if not frame then return end
-  local wantAuras = frame and frame._msufUpdateAuras ~= nil
-  local wantVisual = frame._msufRuntimeSoftVisualCount ~= nil or wantAuras
-  if pendingFocusTargetFast
-    and (wantVisual ~= true or pendingFocusTargetVisual)
-    and (wantAuras ~= true or pendingFocusTargetAuras) then return end
-  if QueueIdentityFlush() then
-    pendingFocusTargetFast = true
-    if wantVisual then pendingFocusTargetVisual = true end
-    if wantAuras then pendingFocusTargetAuras = true end
-  else
-    UF.UpdateRuntime("focustarget", "MSUF_UNIT_IDENTITY_SOFT")
+  if guid == frame._msufIdentityGUID then
+    return false
   end
+  frame._msufIdentityGUID = guid
+  return true
 end
 
 local function RunImmediateIdentityAuras(frame, reason)
@@ -935,7 +968,7 @@ local function DriverOnEvent(self, event, unit)
       RunIdentityAurasCoalesced(frame, "target")
     end
     ScheduleTargetIdentityDeferred(true, frame)
-    ScheduleTargetTargetUpdate()
+    EnsureDependentUnitTicker()
   elseif event == "PLAYER_FOCUS_CHANGED" then
     local frame = RuntimeFrame("focus")
     if frame then
@@ -943,13 +976,11 @@ local function DriverOnEvent(self, event, unit)
       RunIdentityAurasCoalesced(frame, "focus")
     end
     ScheduleFocusIdentityDeferred(true, frame)
-    ScheduleFocusTargetUpdate()
+    EnsureDependentUnitTicker()
   elseif event == "UNIT_TARGET" then
-    if unit == "target" then
-      ScheduleTargetTargetUpdate()
-    elseif unit == "focus" then
-      ScheduleFocusTargetUpdate()
-    end
+    -- oUF model: dependent units are poll-owned. UNIT_TARGET only guarantees
+    -- the poll is armed; the next tick picks up the new ToT/FoT identity.
+    EnsureDependentUnitTicker()
   elseif event == "UNIT_PET" then
     if unit == "player" then
       local frame = RuntimeFrame("pet")

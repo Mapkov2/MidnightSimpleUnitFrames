@@ -8,6 +8,9 @@ _G.MSUF2 = M
 local UnitPage = M.UnitPage or {}
 M.UnitPage = UnitPage
 
+-- Lazy section registry for unit pages.
+-- Lets large Unit page sections register themselves independently, then builds only the
+-- sections supported by the current unit. This keeps Menu2 load/rebuild cost manageable.
 UnitPage._sectionRegistry = UnitPage._sectionRegistry or {}
 UnitPage._sectionIds = UnitPage._sectionIds or {}
 

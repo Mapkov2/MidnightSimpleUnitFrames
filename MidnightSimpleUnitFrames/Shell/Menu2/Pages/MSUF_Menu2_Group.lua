@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Group page foundation.
+-- Owns party/raid/mythicraid option binding, preview sync, and page-local batching. Secure
+-- header creation/rebuilds remain in the GroupFrames runtime and are only requested here.
 local W = M.Widgets
 local T = M.Theme
 local ControlGates = M.ControlGates or {}
@@ -31,6 +34,8 @@ local function GF()
 end
 
 local function RefreshGFPreview()
+    -- Preview and live group frames have separate render paths. Refresh both when controls
+    -- change so the page does not hide a stale runtime configuration.
     local gf = GF()
     if gf and type(gf.RefreshPreviewLayout) == "function" then
         gf.RefreshPreviewLayout()
@@ -898,6 +903,7 @@ end
 local function AurasRoot(kind)
     local conf = Conf(kind)
     conf.auras = conf.auras or {}
+    if conf.auras.renderer ~= "CUSTOM" then conf.auras.renderer = "CUSTOM" end
     conf.auras.blizzardTypes = conf.auras.blizzardTypes or {}
     conf.auras.buff = conf.auras.buff or {}
     conf.auras.debuff = conf.auras.debuff or {}

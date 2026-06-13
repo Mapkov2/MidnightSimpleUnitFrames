@@ -10,6 +10,9 @@ local T = M.Theme or {}
 local Shared = M.UnitSectionsShared or {}
 M.UnitSectionsShared = Shared
 
+-- Shared helpers for Unit page sections.
+-- Provides common warning notices, name-anchor filtering, badges, and small UI adapters used
+-- by text/status/visual subpages without coupling them to each other's internals.
 local CreateFrame = _G.CreateFrame
 local pairs = pairs
 local tostring = tostring

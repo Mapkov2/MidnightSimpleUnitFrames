@@ -6,6 +6,10 @@ MSUF.MSUF2 = M
 _G.MSUF2 = M
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
 
+-- Menu2 binding/apply layer.
+-- Owns DB accessors, pending apply coalescing, edit history snapshots, and fanout into the
+-- older MSUF global refresh APIs. Page files bind controls here instead of calling globals
+-- directly for every slider/toggle movement.
 local pendingUnits = {}
 local pendingGeneral
 local pendingOpts = {}
@@ -77,6 +81,8 @@ local RESTORE_GLOBALS = WL [[
 ]]
 
 local function ApplyUnitFrame(unit)
+    -- Keep the modern UF apply path first, then fall back to legacy globals for older modules
+    -- that still listen outside the UnitFrames engine.
     local UF = MSUF and MSUF.UF
     if UF and UF.Apply then
         UF.Apply(unit)

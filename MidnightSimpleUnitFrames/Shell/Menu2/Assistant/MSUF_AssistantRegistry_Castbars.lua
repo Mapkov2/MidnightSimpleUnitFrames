@@ -17,7 +17,9 @@ A.Workflow = A.Workflow or {}
 local C = A.RegistryCore
 if type(C) ~= "table" then return end
 
--- Castbars registry domain. Shared helpers live in MSUF_AssistantRegistry_Core.lua.
+-- Castbars registry domain.
+-- Describes backend, size, text/icon, interrupt, and visual controls for assistant matching.
+-- Actual castbar frame mutation still belongs to the castbar runtime/bridge modules.
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit

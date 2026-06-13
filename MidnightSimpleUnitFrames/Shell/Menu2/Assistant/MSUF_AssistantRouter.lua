@@ -10,6 +10,16 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
+--- Shell/Menu2/Assistant/MSUF_AssistantRouter.lua
+---
+--- Conversation router that decides whether an input should be treated as a
+--- pending confirmation/choice, contextual assistant command, knowledge/help
+--- request, or friendly no-match response. It intentionally runs before the
+--- heavy parser fallback so short page-local commands can resolve quickly.
+---
+--- Keep routing heuristics conservative: mutation-like text should reach the
+--- parser, while pure help/conversation can be answered here.
+
 local function Trim(text)
     if A.Trim then return A.Trim(text) end
     text = tostring(text or "")
@@ -1014,11 +1024,13 @@ function A.RouteInput(text, coreHandler)
 
     local parser = A.Parser or {}
     local normForScope = Normalize(text)
+    local hasClassPowerScope = type(parser.CLASS_POWER_TERMS) == "table" and ContainsAny(normForScope, parser.CLASS_POWER_TERMS)
     local hasExplicitScope = ContainsAny(normForScope, {
         "unitframe", "unitframes", "unit frame", "unit frames",
         "target of target", "focus target", "mythic raid", "player", "target", "focus", "pet", "boss",
         "party", "raid", "party frames", "raid frames", "group frames",
     })
+        or hasClassPowerScope
         or (type(parser.DetectUnits) == "function" and #(parser.DetectUnits(text) or {}) > 0)
         or (type(parser.DetectGroups) == "function" and #(parser.DetectGroups(text) or {}) > 0)
     if hasExplicitScope and hasCore and not LooksLikeKnowledgeFirstRequest(text) then

@@ -7,6 +7,13 @@ local UF = MSUF.UF
 UF.Factory = UF.Factory or {}
 local Factory = UF.Factory
 
+--- UnitFrames/Engine/MSUF_UF_Factory.lua
+---
+--- Creates and applies the concrete Blizzard frames for unit frames. Factory is
+--- the protected-frame boundary: size, point, secure attributes, RegisterUnitWatch,
+--- and combat-deferred apply work belong here. Event dispatch and element logic
+--- should stay in Core/Dispatch/Elements after the frame exists.
+
 local type = type
 local ipairs = ipairs
 local tonumber = tonumber
@@ -24,6 +31,10 @@ local COOLDOWN_ANCHORS = {
   BuffIconCooldownViewer = true,
 }
 
+--- Anchors may be ordinary globals, MSUF unit frames, or cooldown-viewer frames
+--- that can appear late. ResolveNamedAnchor returns both the frame (if present)
+--- and the missing name so Factory can schedule a late reanchor without losing
+--- the user's intended attachment.
 local function IsCooldownViewerAnchor(name)
   return COOLDOWN_ANCHORS[name] == true
 end
@@ -83,6 +94,9 @@ local function ShouldCacheScreenPosition(spec, requestedAnchor)
   return COOLDOWN_ANCHORS[requestedAnchor] == true
 end
 
+--- Combat lockdown cannot safely rebuild protected frame positions/attributes.
+--- Defer by config key rather than raw unit where possible so boss/alias units
+--- are reapplied together after combat.
 local function DeferApply(unit)
   if unit then
     local units = UF.UnitsForConfigKey and UF.UnitsForConfigKey(unit)
@@ -119,6 +133,9 @@ local function ResolveConfig(refresh)
   return config
 end
 
+--- Position apply is intentionally conservative. While dragging, in combat, or
+--- waiting for a late anchor, it preserves the current visible position and
+--- queues the real apply instead of forcing a potentially protected SetPoint.
 local function ApplyPosition(frame, spec)
   if frame._msufDragActive == true then
     return true
@@ -351,6 +368,9 @@ local function ApplyOne(unit)
   return config and ApplyFrame(frame, config.GetSpec(unit)) or false
 end
 
+--- SpawnAll is the first-time construction path. It creates all managed unit
+--- frames out of combat, applies their compiled specs, and then marks the engine
+--- initialized so later changes can use the narrower Apply path.
 function Factory.SpawnAll()
   if UF.spawned then
     UF.initialized = true
@@ -385,6 +405,9 @@ function Factory.SpawnAll()
   return true
 end
 
+--- Public cold/warm apply entry. It may refresh compiled config, apply one
+--- unit/config-key, or queue the work through the deferred driver when protected
+--- frame operations are unsafe.
 function Factory.Apply(unit)
   if not UF.spawned then
     return Factory.SpawnAll()

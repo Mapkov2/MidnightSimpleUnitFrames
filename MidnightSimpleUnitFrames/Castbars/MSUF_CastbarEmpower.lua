@@ -1,3 +1,6 @@
+-- Compact empower castbar support.
+-- Computes empower stage timing and draws stage tick/blink visuals for castbars. It is kept
+-- isolated from the main castbar runtime because empower APIs vary by client/build.
 local s=_G.MSUF_EnsureDBLazy or function()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end
 end local r=_G.MSUF_CastbarRuntime_PlainNumber or function(e)if e==nil then return nil end local t=_G.ToPlain
 if type(t)=="function"then local e=t(e)local e=tonumber(tostring(e))if e~=nil then return e end

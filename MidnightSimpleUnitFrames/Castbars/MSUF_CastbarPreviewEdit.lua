@@ -1,3 +1,6 @@
+-- Castbar preview edit bridge.
+-- Maps preview drag/resize handles back to the same DB keys and reanchor helpers used by live
+-- castbars. This is an edit-mode cold path and should not observe live cast events.
 local UNIT_CONFIG = {
     player = {
         w = "castbarPlayerBarWidth",

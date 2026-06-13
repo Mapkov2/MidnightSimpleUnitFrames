@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Headers.lua
+--- Secure party/raid header creation and anchoring.
+---
+--- This file owns protected header frames, anchor/mover geometry, sorting/group
+--- attributes, and header retirement. It must avoid mutating protected header
+--- attributes in combat; Runtime handles deferral and calls back here afterward.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -64,6 +71,8 @@ local function InCombat()
   return InCombatLockdown and InCombatLockdown()
 end
 
+--- Retiring a header must also untrack its children so Adapter does not keep
+--- stale unit indexes for frames hidden by a secure header rebuild.
 local function SuspendHeaderChildren(...)
   for i = 1, select("#", ...) do
     local child = select(i, ...)
@@ -135,6 +144,8 @@ local function UnknownRaidLayoutCount(kind)
   return UNKNOWN_RAID_LAYOUT_COUNT
 end
 
+--- Header size estimates use live roster counts when available, otherwise the
+--- last known count. This keeps preview/mover geometry stable during login.
 local function ConfiguredCount(kind, conf)
   if kind == "party" then
     if GetNumSubgroupMembers then
@@ -212,6 +223,8 @@ local function PointFraction(point)
   return fx, fy
 end
 
+--- Keep anchor frames on screen when possible; child layout remains relative to
+--- the anchor so saved offsets stay meaningful.
 local function ClampAnchorOnScreen(anchor, point, parent, offsetX, offsetY, totalW, totalH)
   if not (anchor and parent and parent.GetLeft and UIParent and UIParent.GetWidth) then
     return

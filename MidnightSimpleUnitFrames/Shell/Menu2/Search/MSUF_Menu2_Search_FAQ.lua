@@ -9,6 +9,9 @@ local Data = M.SearchData or {}
 M.SearchData = Data
 local unpack = table.unpack or unpack
 
+-- Search FAQ catalogue.
+-- Stores compact help rows that expand into searchable records. FAQ answers may route users
+-- to pages/anchors but should not execute settings or profile actions.
 local providers = Data.FAQProviders or {}
 Data.FAQProviders = providers
 local FAQ_COMPACT_FIELDS = {

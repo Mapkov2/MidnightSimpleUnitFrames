@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Unit page definitions.
+-- Declares per-unit page metadata, value lists, copy categories, and shared control constants.
+-- Concrete section rendering is split into UnitSections/UnitText/UnitFrameVisuals.
 local W = M.Widgets
 
 local floor = math.floor
@@ -25,6 +28,8 @@ local UNIT_PAGES = {
 local POWER_UNITS = KSW("player target focus targettarget focustarget pet boss")
 
 local CASTBAR_FIELDS = {
+    -- Castbar settings live in general DB rather than each unit DB. Keep this map as the one
+    -- place where unit pages translate a unit key into the correct castbar field names.
     player = { enable = "enablePlayerCastbar", backend = "castbarPlayerBackend", providerMemory = "castbarPlayerBackendBeforeHide", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", text = "castbarPlayerShowSpellName", timeFormat = "castbarPlayerTimeFormat" },
     target = { enable = "enableTargetCastbar", backend = "castbarTargetBackend", providerMemory = "castbarTargetBackendBeforeHide", time = "showTargetCastTime", icon = "castbarTargetShowIcon", text = "castbarTargetShowSpellName", timeFormat = "castbarTargetTimeFormat" },
     focus = { enable = "enableFocusCastbar", backend = "castbarFocusBackend", providerMemory = "castbarFocusBackendBeforeHide", time = "showFocusCastTime", icon = "castbarFocusShowIcon", text = "castbarFocusShowSpellName", timeFormat = "castbarFocusTimeFormat" },
@@ -232,7 +237,7 @@ local function DeepCopy(src)
     return M.DeepCopy(src)
 end
 
-local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower]]
+local COPY_POWER_BAR_FIELDS = WL [[showPowerBar powerBarHeight embedPowerBarIntoHealth powerBarBorderEnabled powerBarBorderThickness powerSmoothFill powerBarDetached detachedPowerBarShape detachedPowerOrbSize detachedPowerBarWidth detachedPowerBarHeight detachedPowerBarOffsetX detachedPowerBarOffsetY detachedPowerBarFrameLevelOffset detachedPowerBarTextOnBar detachedPowerBarSyncClassPower detachedPowerBarAnchorToClassPower]]
 local COPY_PORTRAIT_FIELDS = WL [[portraitMode portraitRender portraitClassStyle portraitShape portraitSizeOverride portraitOffsetX portraitOffsetY portraitBorderStyle portraitBorderThickness portraitBgEnabled portraitFillBorder]]
 local COPY_TEXT_FIELDS = WL [[showName showHP showPower nameTextAnchor nameOffsetX nameOffsetY nameFontSize showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle hpOffsetX hpOffsetY hpFontSize hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator powerOffsetX powerOffsetY powerFontSize powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator nameTextLayer hpTextLayer powerTextLayer]]
 local COPY_INDICATOR_FIELDS = WL [[showLeaderIcon leaderIconStyle leaderIconOffsetX leaderIconOffsetY leaderIconAnchor leaderIconSize leaderIconLayer showRaidMarker raidMarkerOffsetX raidMarkerOffsetY raidMarkerAnchor raidMarkerSize raidMarkerLayer showRaidGroupInName raidGroupNameAnchor raidGroupNameOffsetX raidGroupNameOffsetY raidGroupNameStyle showLevelIndicator levelIndicatorOffsetX levelIndicatorOffsetY levelIndicatorAnchor levelIndicatorSize levelIndicatorLayer showEliteIcon eliteIconSize eliteIconAnchor eliteIconOffsetX eliteIconOffsetY eliteIconLayer]]
@@ -645,6 +650,13 @@ local function SetNumber(unit, key, value, reason, opts)
     M.SetUnitValue(unit, key, value, reason, opts)
 end
 
+local function IsPlayerPowerManagedByClassResources(unit)
+    if unit ~= "player" then return false end
+    local conf = GetConf("player")
+    if not (conf and conf.powerBarDetached == true) then return false end
+    return conf.detachedPowerBarAnchorToClassPower == true or conf.detachedPowerBarSyncClassPower ~= false
+end
+
 local function SetString(unit, key, value, reason, opts)
     M.SetUnitValue(unit, key, tostring(value or ""), reason, opts)
 end
@@ -839,6 +851,7 @@ M.Assign(UnitPage, {
     SetBool = SetBool,
     ReadNumber = ReadNumber,
     SetNumber = SetNumber,
+    IsPlayerPowerManagedByClassResources = IsPlayerPowerManagedByClassResources,
     SetString = SetString,
     ReadGeneralBool = ReadGeneralBool,
     SetGeneralBool = SetGeneralBool,

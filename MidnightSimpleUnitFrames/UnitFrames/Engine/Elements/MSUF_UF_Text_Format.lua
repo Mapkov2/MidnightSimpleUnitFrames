@@ -2,6 +2,9 @@ local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
 
+-- Text formatting helpers for unitframe name/health/power strings.
+-- Runtime modules call into this file on frequent UNIT_* events, so formatting tables,
+-- short-number helpers, and secret-safe fallbacks are kept local and allocation-light.
 local Apply = MSUF.Apply or {}
 local luaType = type
 local CreateFrame = Text.CreateFrame
@@ -58,6 +61,8 @@ local pairs = pairs
 
 local INT_TEXT_0_100 = {}
 local PERCENT_TEXT_0_100 = {}
+-- Precompute the common 0..100 strings used by percent displays; this avoids rebuilding
+-- identical strings during health/power updates across many frames.
 for i = 0, 100 do
   local text = format("%d", i)
   INT_TEXT_0_100[i] = text

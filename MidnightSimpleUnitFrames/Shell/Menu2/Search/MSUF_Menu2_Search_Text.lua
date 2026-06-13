@@ -11,6 +11,9 @@ local SearchData = M.SearchData or {}
 local Text = Search.Text or {}
 Search.Text = Text
 
+-- Search text utilities and shared search UI context.
+-- Normalizes labels, placeholder text, content metrics, and keyword tables for index/render/
+-- routing shards. This file should not expand sections or select controls by itself.
 local function ContentMetrics()
     local w, h = 720, 520
     if type(M.GetContentMetrics) == "function" then
@@ -35,7 +38,6 @@ end
 
 local SEARCH_KEYWORDS, SEARCH_TEXT_FOLDS, SEARCH_UTF_PUNCTUATION = M.PickDefaults(SearchData, [[KEYWORDS TEXT_FOLDS UTF_PUNCTUATION]])
 
-
 local function TrimText(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -50,6 +52,8 @@ end
 
 
 local function SearchPlaceholderText()
+    -- The placeholder is translated through Menu2, but always has an English fallback so the
+    -- search box remains useful when locale data loads late.
     local text = M.Tr("Ask MSUF anything...")
     if type(text) ~= "string" or text == "" then text = "Ask MSUF anything..." end
     return text

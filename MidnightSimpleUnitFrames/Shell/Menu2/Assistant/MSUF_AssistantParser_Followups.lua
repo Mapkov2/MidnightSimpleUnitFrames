@@ -13,6 +13,11 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+
+-- Follow-up parser for multi-step assistant flows.
+-- These handlers interpret short replies like "yes", "party only", or a copied profile name
+-- in the context of the pending assistant state. They should be conservative because the
+-- original command may have been parsed in a previous frame or after a yield.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -77,14 +82,11 @@ local AURA_BLACKLIST_PRESETS = P.AURA_BLACKLIST_PRESETS
 local AuraBlacklistScope = P.AuraBlacklistScope
 local AURA_QUICK_PRESETS = P.AURA_QUICK_PRESETS
 local AuraQuickPresetForText = P.AuraQuickPresetForText
-local ParseAuraQuickPreset = P.ParseAuraQuickPreset
 local AuraBlacklistPresetForText = P.AuraBlacklistPresetForText
 local AuraGroupBlacklistScope = P.AuraGroupBlacklistScope
 local AuraGroupBlacklistLane = P.AuraGroupBlacklistLane
 local AuraGroupBlacklistCategoryForText = P.AuraGroupBlacklistCategoryForText
-local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
-local ParseAuraBlacklist = P.ParseAuraBlacklist
 local CopyTextParts = P.CopyTextParts
 local RemoveUnit = P.RemoveUnit
 local CopyTargetsForText = P.CopyTargetsForText
@@ -982,7 +984,19 @@ local function BuildBooleanCorrection(text, ctx)
     }
 end
 
+P.NON_AURA_DEBUFF_CONTROL_TERMS = P.NON_AURA_DEBUFF_CONTROL_TERMS or {
+    "debuff stripe", "debuff stripes",
+    "dispel overlay", "dispel overlays", "unitframe dispel", "unit frame dispel",
+    "unitframe dispel overlay", "unit frame dispel overlay",
+    "debuff overlay", "debuff overlays",
+    "health bar dispel overlay", "healthbar dispel overlay",
+}
+
 local function ParseSetting(text, ctx)
+    if ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+        and not ContainsAny(text, P.NON_AURA_DEBUFF_CONTROL_TERMS) then
+        return nil
+    end
     local frameType = DetectFrameType(text, ctx)
     local direction = DetectDirection(text, ctx)
     local movementIntent = direction and ContainsAny(text, { "move", "nudge", "shift", "verschiebe", "offset", "position", "x", "y" }) and not ContainsAny(text, { "anchor" })

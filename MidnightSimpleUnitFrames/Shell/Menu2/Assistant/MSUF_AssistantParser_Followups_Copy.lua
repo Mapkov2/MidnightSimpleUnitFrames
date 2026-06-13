@@ -14,11 +14,16 @@ local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
 
+-- Follow-up parser for "do the same/copy that" replies.
+-- It clones only plain action args from the previous context, then builds a fresh action
+-- plan for the new target so undo/confirmation still see a normal assistant command.
 local ContainsAny = P.ContainsAny
 local DetectUnits = P.DetectUnits
 local DetectGroups = P.DetectGroups
 
 local function CopyPlainArgs(value, depth)
+    -- Follow-up state can contain runtime tables; copy only simple serializable values so a
+    -- later action cannot accidentally retain frames, functions, or deep cyclic structures.
     depth = (depth or 0) + 1
     if depth > 4 then return nil end
     local valueType = type(value)

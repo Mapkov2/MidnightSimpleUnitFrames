@@ -1,3 +1,10 @@
+--- UnitFrames/Engine/Group/MSUF_UF_Group_Preview.lua
+--- Non-combat preview frames for group-frame menu/edit workflows.
+---
+--- Preview frames reuse the same compiled specs and visual elements as live
+--- group frames, but they use fake roster data and never join secure headers.
+--- Runtime hides live headers while previews are active so both do not overlap.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
 _G.MSUF_NS = MSUF
@@ -140,6 +147,8 @@ local function EnsureContainer(kind, parent)
   return container, layout
 end
 
+--- Position the preview container using the same grid math as live headers so
+--- menu edits match the real layout as closely as possible.
 local function PositionContainer(kind, count)
   local conf = GF.GetConf and GF.GetConf(kind) or {}
   local posCount = GetPositionCount(kind) or DefaultPreviewCount(kind)
@@ -322,6 +331,8 @@ local function ApplyPreviewStatus(frame, kind, index, role)
   SetShown(frame.statusIndicatorText, false)
 end
 
+--- Seed fake unit state into one preview frame after UF.ApplySpec has built the
+--- regions. Keep this data fake/local; live group frames own real roster state.
 local function ApplyPreviewData(frame, index, kind)
   if not frame then return false end
   kind = NormalizeKind(kind) or "party"

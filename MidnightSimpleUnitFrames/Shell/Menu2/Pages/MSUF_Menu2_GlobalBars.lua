@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 global Bars page.
+-- Binds shared/scoped texture, gradient, outline, absorb, and highlight controls. Page code
+-- updates DB through GlobalPage helpers and lets runtime refreshers repaint live frames.
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GlobalPage or {}
@@ -53,6 +56,8 @@ local function BuildBars(ctx)
     end
 
     local function RefreshGroupFrameVisuals()
+        -- Group frames have their own visual caches. Invalidate them explicitly when global
+        -- bar settings can affect party/raid previews or live secure children.
         local GF = _G.MSUF_NS and _G.MSUF_NS.GF
         if not GF then return end
         if GF.InvalidateConfCache then GF.InvalidateConfCache() end

@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Menu2 Unit status section.
+-- Builds per-unit status icon, status text, level/raid-marker, and raid-group-name controls.
+-- Runtime status event handling is owned by MSUF_UF_Elements_Status.lua.
 local W = M.Widgets
 local T = M.Theme
 local UP = M.UnitPage or {}

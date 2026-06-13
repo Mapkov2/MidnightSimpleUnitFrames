@@ -13,6 +13,11 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
+
+-- Registry-backed parser for "change a setting" commands.
+-- It ranks declarative registry entries and returns planned changes only. Do not write to
+-- SavedVariables or touch frames here; confirmation, undo, and combat handling live after
+-- parsing in the assistant router/runtime.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -77,14 +82,11 @@ local AURA_BLACKLIST_PRESETS = P.AURA_BLACKLIST_PRESETS
 local AuraBlacklistScope = P.AuraBlacklistScope
 local AURA_QUICK_PRESETS = P.AURA_QUICK_PRESETS
 local AuraQuickPresetForText = P.AuraQuickPresetForText
-local ParseAuraQuickPreset = P.ParseAuraQuickPreset
 local AuraBlacklistPresetForText = P.AuraBlacklistPresetForText
 local AuraGroupBlacklistScope = P.AuraGroupBlacklistScope
 local AuraGroupBlacklistLane = P.AuraGroupBlacklistLane
 local AuraGroupBlacklistCategoryForText = P.AuraGroupBlacklistCategoryForText
-local ParseAuraGroupCategoryBlacklist = P.ParseAuraGroupCategoryBlacklist
 local AuraBlacklistSpellValue = P.AuraBlacklistSpellValue
-local ParseAuraBlacklist = P.ParseAuraBlacklist
 local CopyTextParts = P.CopyTextParts
 local RemoveUnit = P.RemoveUnit
 local CopyTargetsForText = P.CopyTargetsForText
@@ -127,6 +129,8 @@ local explicitScopeCacheText
 local explicitScopeCacheUnits
 local explicitScopeCacheGroups
 
+-- Scope detection is reused for every candidate setting during one parse. Cache the result
+-- for the raw text so large registries do not repeatedly scan the same command.
 local function ExplicitScopes(text)
     local key = tostring(text or "")
     if key == explicitScopeCacheText then return explicitScopeCacheUnits, explicitScopeCacheGroups end
@@ -178,6 +182,9 @@ end
 local function ScopeAdjustedTextForSetting(setting, text)
     if type(setting) ~= "table" or not setting.unit then return text end
     if setting.unit == "global" or setting.unit == "shared" or setting.frameType == "aura" or setting.frameType == "groupAura" then return text end
+    -- When a sentence names several frames, remove the other frame names before matching a
+    -- candidate. This lets "make player bigger than target" score the player width setting
+    -- without target aliases making unrelated target settings look equally valid.
     local unit = tostring(setting.unit)
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
@@ -264,19 +271,139 @@ local function ClassPowerBlockedByExplicitUnitPowerIntent(setting, text)
     return (#units + #groups) > 0
 end
 
+P.NON_AURA_DEBUFF_CONTROL_TERMS = P.NON_AURA_DEBUFF_CONTROL_TERMS or {
+    "debuff stripe", "debuff stripes",
+    "dispel overlay", "dispel overlays", "unitframe dispel", "unit frame dispel",
+    "unitframe dispel overlay", "unit frame dispel overlay",
+    "debuff overlay", "debuff overlays",
+    "health bar dispel overlay", "healthbar dispel overlay",
+}
+
+local function HasAuraSettingIntent(text)
+    -- "Debuff stripe" and "dispel overlay" belong to unitframe visuals, not aura filtering.
+    -- Guard them here before broad buff/debuff words pull the command into the aura registry.
+    if ContainsAny(text, P.NON_AURA_DEBUFF_CONTROL_TERMS) then return false end
+    return ContainsAny(text, { "aura", "auras", "buff", "buffs", "debuff", "debuffs" })
+end
+
+P.AURA_VAGUE_ICON_SIZE_TERMS = P.AURA_VAGUE_ICON_SIZE_TERMS or {
+    "bigger", "larger", "smaller", "shrink", "groesser", "kleiner",
+    "icon bigger", "icon larger", "icon smaller", "icons bigger", "icons larger", "icons smaller",
+}
+
+P.AURA_VAGUE_ICON_SIZE_BLOCKERS = P.AURA_VAGUE_ICON_SIZE_BLOCKERS or {
+    "text", "font", "stack", "cooldown", "timer", "spacing", "gap",
+    "offset", "x offset", "y offset", "left", "right", "up", "down",
+    "per row", "icons per row", "max", "count", "filter", "exclusive",
+    "layer", "z order",
+}
+
+P.HasVagueAuraIconSizeIntent = P.HasVagueAuraIconSizeIntent or function(text)
+    if not HasAuraSettingIntent(text) then return false end
+    if not ContainsAny(text, P.AURA_VAGUE_ICON_SIZE_TERMS) then return false end
+    if ContainsAny(text, P.AURA_VAGUE_ICON_SIZE_BLOCKERS) then return false end
+    return true
+end
+
+P.IsAuraIconSizeSetting = P.IsAuraIconSizeSetting or function(setting)
+    if type(setting) ~= "table" then return false end
+    local frameType = tostring(setting.frameType or "")
+    if frameType ~= "aura" and frameType ~= "groupAura" then return false end
+    if setting.type ~= "number" then return false end
+    local hay = (tostring(setting.key or "") .. " " .. tostring(setting.label or "") .. " " .. tostring(setting.attribute or "")):lower()
+    if not (hay:find("size", 1, true) or hay:find("iconsize", 1, true) or hay:find("icon size", 1, true)) then return false end
+    return not (
+        hay:find("stack", 1, true)
+        or hay:find("cooldown", 1, true)
+        or hay:find("timer", 1, true)
+        or hay:find("text", 1, true)
+        or hay:find("font", 1, true)
+    )
+end
+
+local function NonAuraSettingBlockedByAuraIntent(setting, text)
+    if not HasAuraSettingIntent(text) then return false end
+    local frameType = tostring(setting and setting.frameType or "")
+    if frameType == "aura" or frameType == "groupAura" then return false end
+    local key = tostring(setting and setting.key or "")
+    local attribute = tostring(setting and setting.attribute or ""):lower()
+    local category = tostring(setting and setting.category or ""):lower()
+    if key:find("^general%.auras") or key:find("^auras3%.") then return false end
+    if attribute:find("aura", 1, true) or category:find("auras", 1, true) then return false end
+    return true
+end
+
 local function ShouldApplyMultipleRegistryChanges(text, changes)
     if #(changes or {}) <= 1 then return false end
+    -- Bulk writes must be opt-in by language or by an unmistakable two-lane aura command.
+    -- Ambiguous matches stay as choices so the user can pick before anything is applied.
     if HasAllScopeIntent(text) then return true end
+    if P.ShouldApplyMultipleAuraLaneChanges and P.ShouldApplyMultipleAuraLaneChanges(text, changes) then return true end
     local units, groups = ExplicitScopes(text)
     return (#units + #groups) > 1
+end
+
+P.ShouldApplyMultipleAuraLaneChanges = P.ShouldApplyMultipleAuraLaneChanges or function(text, changes)
+    if #(changes or {}) ~= 2 then return false end
+    if not ContainsAny(text, { "aura", "auras", "aura icon", "aura icons" }) then return false end
+    local base
+    local sawBuff, sawDebuff = false, false
+    for i = 1, #changes do
+        local setting = changes[i] and changes[i].setting
+        local frameType = tostring(setting and setting.frameType or "")
+        if frameType ~= "aura" and frameType ~= "groupAura" then return false end
+        local key = tostring(setting and setting.key or "")
+        if key:find(".buff.", 1, true) then
+            sawBuff = true
+        elseif key:find(".debuff.", 1, true) then
+            sawDebuff = true
+        else
+            return false
+        end
+        local normalized = key:gsub("%.buff%.", ".lane."):gsub("%.debuff%.", ".lane.")
+        if base and base ~= normalized then return false end
+        base = normalized
+    end
+    return sawBuff and sawDebuff
+end
+
+P.AreBulkSafeAuraSettingChanges = P.AreBulkSafeAuraSettingChanges or function(changes)
+    if #(changes or {}) <= 1 then return false end
+    for i = 1, #changes do
+        local setting = changes[i] and changes[i].setting
+        if type(setting) ~= "table" or setting.confirmRequired == true then return false end
+        local frameType = tostring(setting.frameType or "")
+        if frameType ~= "aura" and frameType ~= "groupAura" then return false end
+    end
+    return true
 end
 
 local function SettingAllowedByExplicitScopes(setting, text)
     if type(setting) ~= "table" then return false end
     if ClassPowerBlockedByExplicitUnitPowerIntent(setting, text) then return false end
+    if NonAuraSettingBlockedByAuraIntent(setting, text) then return false end
+    local frameType = tostring(setting.frameType or "")
+    if P.HasVagueAuraIconSizeIntent(text)
+        and (frameType == "aura" or frameType == "groupAura")
+        and not P.IsAuraIconSizeSetting(setting)
+    then
+        return false
+    end
     local unit = tostring(setting.unit or "")
     local keyScope = SettingKeyScope(setting)
     local units, groups = ExplicitScopes(text)
+    -- Shared aura controls can be valid for "all auras", but some lane-level shared growth
+    -- options are deliberately excluded because they would fight the per-frame buff/debuff
+    -- settings the user usually means.
+    if frameType == "aura"
+        and unit == "shared"
+        and HasAllScopeIntent(text)
+        and ContainsAny(text, { "growth", "grow", "growth direction", "grow direction" })
+        and ContainsAny(text, { "all buffs", "all debuffs", "all aura", "all auras" })
+    then
+        local key = tostring(setting.key or ""):lower()
+        if key == "auras3.shared.buffgrowth" or key == "auras3.shared.debuffgrowth" then return false end
+    end
     if setting.frameType == "aura" and ContainsAny(text, { "filter", "filters" })
         and not tostring(setting.attribute or ""):lower():find("filter", 1, true) then
         return false
@@ -327,6 +454,8 @@ end
 local function SettingMatchScore(setting, text)
     if type(setting) ~= "table" then return 0 end
     text = tostring(text or "")
+    -- The score is based on the longest useful alias/label that survived scope filtering.
+    -- This favors precise controls over broad page words like "bars" or "text".
     if type(P._settingMatchScoreCache) == "table" then
         local cached = P.SettingMatchScoreCacheGet and P.SettingMatchScoreCacheGet(setting, text)
         if cached ~= nil then return cached end
@@ -422,6 +551,33 @@ local function EnumValueForText(setting, text)
     local tailValue = tail and tail ~= "" and matchSegment(tail)
     if tailValue ~= nil then return tailValue end
     return matchSegment(norm)
+end
+
+P.BooleanAliasValueForText = P.BooleanAliasValueForText or function(setting, text)
+    local aliases = setting and setting.valueAliases
+    if type(aliases) ~= "table" then return nil end
+    local compactText = Compact(text)
+    local bestValue
+    local bestLen = 0
+    for alias, value in pairs(aliases) do
+        local boolValue
+        if value == true or value == "true" or value == 1 then
+            boolValue = true
+        elseif value == false or value == "false" or value == 0 then
+            boolValue = false
+        end
+        if boolValue ~= nil then
+            local compactAlias = Compact(alias)
+            if HasPhrase(text, alias) or (#compactAlias >= 5 and compactText:find(compactAlias, 1, true)) then
+                local len = #compactAlias
+                if len > bestLen then
+                    bestLen = len
+                    bestValue = boolValue
+                end
+            end
+        end
+    end
+    return bestValue
 end
 
 P._ExactEnumValueForText = P._ExactEnumValueForText or function(setting, text)
@@ -629,6 +785,7 @@ local function MissingValueResponse(matches, raw)
 end
 
 local RelativeNumberDeltaForText
+local RelativeNumberDeltaAllowedForSetting
 local ValueForRegistrySetting
 
 local SUGGESTION_IGNORE_TOKENS = {
@@ -1193,6 +1350,7 @@ local function RegistrySuggestions(text, raw, settings)
         local score = SettingPartialSuggestionScore(setting, text)
         if score > 0 then
             local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText(setting, text) or nil
+            if not RelativeNumberDeltaAllowedForSetting(setting, text, relativeDelta) then relativeDelta = nil end
             local value
             if setting.type == "boolean" and boolValue ~= nil then
                 value = boolValue
@@ -1221,6 +1379,7 @@ local function RegistrySuggestions(text, raw, settings)
         return {
             kind = "changes",
             changes = filtered,
+            bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(filtered) or nil,
             label = "Multiple matching settings",
             summary = "Registry-backed multi-scope setting change.",
         }
@@ -1286,11 +1445,27 @@ RelativeNumberDeltaForText = function(setting, text, fallbackAmount)
     local amount = A._RelativeNumberAmountForText(text)
     if amount == nil then
         amount = fallbackAmount
+            or (setting and tonumber(setting.relativeStep))
             or (setting and tonumber(setting.step))
             or 1
     end
     if setting and setting.percent == true and amount > 1 then amount = amount / 100 end
     return amount * sign
+end
+
+RelativeNumberDeltaAllowedForSetting = function(setting, text, relativeDelta)
+    if relativeDelta == nil then return true end
+    if not HasAuraSettingIntent(text) then return true end
+    if not ContainsAny(text, { "bigger", "larger", "smaller", "shrink", "groesser", "kleiner" }) then return true end
+    if P.HasVagueAuraIconSizeIntent(text) then return P.IsAuraIconSizeSetting(setting) end
+    if ContainsAny(text, {
+        "size", "icon size", "text size", "font size", "spacing", "gap", "offset", "x offset", "y offset",
+        "x ", " y ", "layer", "per row", "icons per row", "max", "count", "stack", "cooldown", "timer",
+    }) then
+        return true
+    end
+    local hay = (tostring(setting and setting.key or "") .. " " .. tostring(setting and setting.label or "") .. " " .. tostring(setting and setting.attribute or "")):lower()
+    return hay:find("size", 1, true) ~= nil or hay:find("iconsize", 1, true) ~= nil or hay:find("icon size", 1, true) ~= nil
 end
 
 local function NumberSettingSupportsBooleanToggle(setting)
@@ -1343,6 +1518,8 @@ ValueForRegistrySetting = function(setting, text, raw)
             if ContainsAny(text, { "turn off", "disable", "disabled", "off", "false", "no", "dont hide", "do not hide", "never hide", "always show", "show" }) then return false end
             if ContainsAny(text, { "hide", "enable", "enabled", "turn on", "on", "true", "yes" }) then return true end
         end
+        local aliasValue = P.BooleanAliasValueForText and P.BooleanAliasValueForText(setting, text)
+        if aliasValue ~= nil then return aliasValue end
         return DetectBoolean(text)
     end
     if setting.type == "number" then
@@ -3191,7 +3368,10 @@ function P.ParseExactRegistryKeyShortcut(text, raw)
         if value == nil then value = ValueForRegistrySetting(bestSetting, text, raw) end
         if value == nil and bestSetting.type == "string" then value = ExplicitFreeformValue(raw or text) end
         local relativeDelta
-        if value == nil and bestSetting.type == "number" then relativeDelta = RelativeNumberDeltaForText(bestSetting, text) end
+        if value == nil and bestSetting.type == "number" then
+            relativeDelta = RelativeNumberDeltaForText(bestSetting, text)
+            if not RelativeNumberDeltaAllowedForSetting(bestSetting, text, relativeDelta) then relativeDelta = nil end
+        end
         if value ~= nil or relativeDelta ~= nil then
             return {
                 kind = "changes",
@@ -3249,6 +3429,7 @@ function P.ParseGroupNumberRegistryShortcut(text)
         local key = "gf_" .. tostring(scopes[i]) .. "." .. attr
         local setting = Registry and Registry:GetSetting(key)
         local relativeDelta = setting and setting.type == "number" and RelativeNumberDeltaForText(setting, text) or nil
+        if not RelativeNumberDeltaAllowedForSetting(setting, text, relativeDelta) then relativeDelta = nil end
         local value
         if relativeDelta == nil then value = FirstNumber(text) end
         if value ~= nil or relativeDelta ~= nil then AddRegisteredChange(changes, key, value, relativeDelta) end
@@ -3302,6 +3483,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
             end
             if not handledMedia then
                 local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText(setting, text) or nil
+                if not RelativeNumberDeltaAllowedForSetting(setting, text, relativeDelta) then relativeDelta = nil end
                 local value
                 if relativeDelta == nil then value = ValueForRegistrySetting(setting, text, raw) end
                 if value ~= nil or relativeDelta ~= nil then
@@ -3346,6 +3528,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
         return {
             kind = "changes",
             changes = changes,
+            bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(changes) or nil,
             label = "Multiple matching settings",
             summary = "Registry-backed multi-scope setting change.",
         }
@@ -3362,6 +3545,7 @@ P.ParseRegistryAliasCandidates = function(text, raw, settings)
         return {
             kind = "changes",
             changes = changes,
+            bulkSafe = P.AreBulkSafeAuraSettingChanges and P.AreBulkSafeAuraSettingChanges(changes) or nil,
             label = "Multiple matching settings",
             summary = "Registry-backed multi-scope setting change.",
         }
@@ -3455,6 +3639,7 @@ local function ParseScopedOnlyOverride(text, raw)
             local score = math.max(SettingMatchScore(setting, text), SettingMatchScore(setting, matchText))
             if score > 0 then
                 local relativeDelta = setting.type == "number" and RelativeNumberDeltaForText(setting, matchText) or nil
+                if not RelativeNumberDeltaAllowedForSetting(setting, text, relativeDelta) then relativeDelta = nil end
                 local value
                 if relativeDelta == nil then value = ValueForRegistrySetting(setting, matchText, raw) end
                 if value ~= nil or relativeDelta ~= nil then

@@ -3,6 +3,10 @@
 ---
 --- The model writes profile values and invalidates prepared runtime config.
 --- It intentionally does not hook UNIT_AURA and does not install render logic.
+---
+--- Menus should use this model instead of touching MSUF_DB directly. The model
+--- preserves shared-vs-per-unit override semantics and knows which writes must
+--- invalidate prepared runtime config or blacklist hashes.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
@@ -380,6 +384,13 @@ local FALLBACK_PUBLIC_AURA_SPELLS = {
     COOLDOWNS = {
         [8690] = true, [20608] = true,
     },
+    SATED = {
+        [57723] = true, [57724] = true, [80354] = true,
+        [95809] = true, [160455] = true, [264689] = true,
+    },
+    DESERTER = {
+        [26013] = true, [71041] = true,
+    },
 }
 
 local FALLBACK_PUBLIC_AURA_META = {
@@ -398,6 +409,8 @@ local FALLBACK_PUBLIC_AURA_META = {
     { key = "SHAMAN_IMBUE", label = "Shaman Imbuements", category = "Class", tooltip = "Windfury, Flametongue, Earthliving, Tidecaller's Guard, Thunderstrike Ward." },
     { key = "RESOURCE_AURAS", label = "Resource Auras", category = "Utility", tooltip = "Mage Icicles and Hunter Tip of the Spear." },
     { key = "COOLDOWNS", label = "Cooldowns", category = "Utility", tooltip = "Hearthstone and Shaman Reincarnation. Mythic+ teleports are not listed by Wowhead." },
+    { key = "SATED", label = "Sated / Exhaustion", category = "Utility", tooltip = "Bloodlust/Heroism exhaustion lockout auras." },
+    { key = "DESERTER", label = "Deserter", category = "Utility", tooltip = "Dungeon and battleground deserter lockout auras." },
 }
 
 local PRESET_CATEGORY_ORDER = { "Raid", "Healer", "Support", "Class", "Utility", "Other" }
@@ -418,6 +431,8 @@ local PRESET_LABELS = {
     SHAMAN_IMBUE = "Shaman Imbuements",
     RESOURCE_AURAS = "Resource Auras",
     COOLDOWNS = "Cooldowns",
+    SATED = "Sated / Exhaustion",
+    DESERTER = "Deserter",
 }
 local PRESET_CATEGORIES = {
     RAID_BUFFS = "Raid",
@@ -435,6 +450,8 @@ local PRESET_CATEGORIES = {
     SHAMAN_IMBUE = "Class",
     RESOURCE_AURAS = "Utility",
     COOLDOWNS = "Utility",
+    SATED = "Utility",
+    DESERTER = "Utility",
 }
 
 local function DeepCopy(value)
@@ -555,25 +572,85 @@ end
 
 local _gfBlacklistHashCache = setmetatable({}, { __mode = "k" })
 
-local function GroupBlacklistSignature(cats)
-    if type(cats) ~= "table" then return nil end
-    local keys, count = nil, 0
-    for key, enabled in pairs(cats) do
-        if enabled == true and type(key) == "string" and key ~= "" then
-            if not keys then keys = {} end
-            count = count + 1
-            keys[count] = key
+local function GroupBlacklistSpellID(value)
+    value = tostring(value or "")
+    local id = tonumber(value:match("spell:(%d+)") or value:match("#(%d+)") or value:match("^(%d+)$"))
+    return id and math_floor(id + 0.5) or nil
+end
+
+local function DirectGroupBlacklistSpells(group)
+    if type(group) ~= "table" then return nil end
+    local blacklist = type(group.blacklist) == "table" and group.blacklist or nil
+    local spells = blacklist and blacklist.spells
+    if type(spells) == "table" then return spells end
+    spells = group.blacklistSpells
+    return type(spells) == "table" and spells or nil
+end
+
+local function GroupBlacklistSignature(group)
+    if type(group) ~= "table" then return nil end
+    local parts, count = nil, 0
+    local cats = group.blacklistCats
+    if type(cats) == "table" then
+        for key, enabled in pairs(cats) do
+            if enabled == true and type(key) == "string" and key ~= "" then
+                if not parts then parts = {} end
+                count = count + 1
+                parts[count] = "cat:" .. key
+            end
+        end
+    end
+    local spells = DirectGroupBlacklistSpells(group)
+    if type(spells) == "table" then
+        for key, enabled in pairs(spells) do
+            if enabled == true then
+                local spellID = GroupBlacklistSpellID(key)
+                if spellID then
+                    if not parts then parts = {} end
+                    count = count + 1
+                    parts[count] = "spell:" .. tostring(spellID)
+                end
+            end
         end
     end
     if count == 0 then return nil end
-    table_sort(keys)
-    return table.concat(keys, "\001")
+    table_sort(parts)
+    return table.concat(parts, "\001")
+end
+
+local function AddGroupBlacklistSpell(hash, n, spellID)
+    spellID = GroupBlacklistSpellID(spellID)
+    if not spellID then return hash, n end
+    if not hash then hash = {} end
+    if hash[spellID] ~= true then
+        hash[spellID] = true
+        n = n + 1
+    end
+    return hash, n
+end
+
+local function AddGroupBlacklistEntry(hash, n, key, value)
+    local valueType = type(value)
+    if value == true then
+        return AddGroupBlacklistSpell(hash, n, key)
+    elseif valueType == "number" or valueType == "string" then
+        local nextHash, nextN = AddGroupBlacklistSpell(hash, n, value)
+        if nextN ~= n then return nextHash, nextN end
+        return AddGroupBlacklistSpell(hash, n, key)
+    elseif valueType == "table" then
+        local nextHash, nextN = AddGroupBlacklistSpell(hash, n, value.spellID or value.spellId or value.id or value[1])
+        if nextN ~= n then return nextHash, nextN end
+        if value.enabled ~= false then return AddGroupBlacklistSpell(hash, n, key) end
+    elseif value ~= false then
+        return AddGroupBlacklistSpell(hash, n, key)
+    end
+    return hash, n
 end
 
 local function BuildGroupBlacklistHash(group)
     if type(group) ~= "table" then return nil end
     local cats = group.blacklistCats
-    local signature = GroupBlacklistSignature(cats)
+    local signature = GroupBlacklistSignature(group)
     if not signature then return nil end
 
     local cached = _gfBlacklistHashCache[group]
@@ -586,16 +663,16 @@ local function BuildGroupBlacklistHash(group)
             local spells = presets and presets[catKey]
             if type(spells) == "table" then
                 for spellID, value in pairs(spells) do
-                    if value == true then
-                        spellID = tonumber(spellID)
-                        if spellID then
-                            if not hash then hash = {} end
-                            hash[math_floor(spellID + 0.5)] = true
-                            n = n + 1
-                        end
-                    end
+                    hash, n = AddGroupBlacklistEntry(hash, n, spellID, value)
                 end
             end
+        end
+    end
+
+    local directSpells = DirectGroupBlacklistSpells(group)
+    if type(directSpells) == "table" then
+        for spellID, value in pairs(directSpells) do
+            hash, n = AddGroupBlacklistEntry(hash, n, spellID, value)
         end
     end
 
@@ -633,6 +710,7 @@ end
 local function GroupAuraRoot(kind)
     local conf = GroupConf(kind)
     if type(conf.auras) ~= "table" then conf.auras = {} end
+    if conf.auras.renderer ~= "CUSTOM" then conf.auras.renderer = "CUSTOM" end
     if type(conf.auras.buff) ~= "table" then conf.auras.buff = {} end
     if type(conf.auras.debuff) ~= "table" then conf.auras.debuff = {} end
     return conf.auras
@@ -706,6 +784,9 @@ local function SpellLabel(spellID)
     return name .. " (#" .. tostring(id) .. ")"
 end
 
+--- Ensure the Auras3 DB shape for menu operations. This is coldpath and may
+--- seed defaults; live UNIT_AURA rendering consumes compiled config from the
+--- UnitFrames backend after Model.Apply invalidates it.
 function Model.EnsureDB()
     local auras, shared
     if A3.EnsureDB then
@@ -782,6 +863,9 @@ local function PerUnit(auras, unit, create)
     return pu
 end
 
+--- Layout values can come from shared defaults, per-unit layout overrides, or
+--- per-unit shared-layout overrides. Keep that fallback order centralized here
+--- so pages, assistant commands, and edit-mode popups do not diverge.
 local function EffectiveLayoutTables(auras, unit)
     local pu = PerUnit(auras, unit, false)
     local layout = (pu and pu.overrideLayout == true and type(pu.layout) == "table") and pu.layout or nil
@@ -1134,6 +1218,9 @@ function Model.SetGroupShown(unit, kind, shown)
     end
 end
 
+--- Filter scopes are independent from visual layout scopes. A unit can share
+--- its icon positions while overriding aura rules, so reads/writes go through
+--- EnsureScopeFilters rather than the layout helpers above.
 local function EnsureScopeFilters(scope, create)
     local auras, shared = Model.EnsureDB()
     scope = NormalizeScope(scope)
@@ -1278,6 +1365,9 @@ function Model.SetScopeFiltersEnabled(scope, enabled)
     filters.enabled = false
 end
 
+--- Blacklists are compiled into hashes by the runtime. Model writes keep the
+--- saved form human-editable, then invalidate prepared hashes so UNIT_AURA does
+--- not rebuild blacklist tables on every event.
 local function EnsureBlacklist(scope, create)
     local auras, shared = Model.EnsureDB()
     scope = NormalizeScope(scope)
@@ -1493,6 +1583,117 @@ function Model.AddBlacklistPresetGroup(scope, presetKey)
     for i = 1, #values do
         local item = values[i]
         if item and item.value and Model.AddBlacklistSpell(scope, item.value) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function EnsureGroupBlacklistSpells(kind, groupKey, create)
+    local group = GroupAuraGroup(kind, groupKey)
+    if type(group.blacklist) ~= "table" then
+        if not create then return nil end
+        group.blacklist = {}
+    end
+    if type(group.blacklist.spells) ~= "table" then
+        if not create then return nil end
+        group.blacklist.spells = {}
+    end
+    return group.blacklist.spells
+end
+
+function Model.AddGroupBlacklistSpell(scope, groupKey, value)
+    local spellID = SpellIDFromInput(value)
+    if not spellID then return false end
+    local key = tostring(spellID)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    local changed = false
+    local a, b = GroupScopeKinds(scope)
+    local function write(kind)
+        local spells = EnsureGroupBlacklistSpells(kind, groupKey, true)
+        if spells and spells[key] ~= true then
+            spells[key] = true
+            changed = true
+        end
+    end
+    write(a)
+    if b then write(b) end
+    if changed then InvalidateGroupBlacklist(scope, groupKey) end
+    return true
+end
+
+function Model.RemoveGroupBlacklistSpell(scope, groupKey, value)
+    local raw = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local spellID = SpellIDFromInput(raw)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    local changed = false
+    local a, b = GroupScopeKinds(scope)
+    local function remove(kind)
+        local spells = EnsureGroupBlacklistSpells(kind, groupKey, false)
+        if type(spells) ~= "table" then return end
+        if spellID and spells[tostring(spellID)] ~= nil then
+            spells[tostring(spellID)] = nil
+            changed = true
+        end
+        if raw ~= "" and spells[raw] ~= nil then
+            spells[raw] = nil
+            changed = true
+        end
+    end
+    remove(a)
+    if b then remove(b) end
+    if changed then InvalidateGroupBlacklist(scope, groupKey) end
+    return true
+end
+
+function Model.ClearGroupBlacklistSpells(scope, groupKey)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    local count, changed = 0, false
+    local a, b = GroupScopeKinds(scope)
+    local function clear(kind)
+        local spells = EnsureGroupBlacklistSpells(kind, groupKey, false)
+        local n = CountBlacklistSpells(spells)
+        if n > 0 then
+            count = count + n
+            local group = GroupAuraGroup(kind, groupKey)
+            if type(group.blacklist) ~= "table" then group.blacklist = {} end
+            group.blacklist.spells = {}
+            changed = true
+        end
+    end
+    clear(a)
+    if b then clear(b) end
+    if changed then InvalidateGroupBlacklist(scope, groupKey) end
+    return count
+end
+
+function Model.GroupBlacklistSummary(scope, groupKey)
+    scope = NormalizeGroupScope(scope)
+    groupKey = NormalizeKind(groupKey)
+    local a = GroupScopeKinds(scope)
+    local spells = EnsureGroupBlacklistSpells(a, groupKey, false)
+    if type(spells) ~= "table" then return "No blacklisted spells." end
+    local out = {}
+    for key, enabled in pairs(spells) do
+        if enabled == true then
+            local spellID = SpellIDFromInput(key)
+            out[#out + 1] = spellID and SpellLabel(spellID) or (tostring(key) .. " (unresolved)")
+        end
+    end
+    table_sort(out)
+    if #out == 0 then return "No blacklisted spells." end
+    return table.concat(out, "\n")
+end
+
+function Model.AddGroupBlacklistPresetGroup(scope, groupKey, presetKey)
+    local values = Model.BlacklistSpellValues(presetKey)
+    local count = 0
+    for i = 1, #values do
+        local item = values[i]
+        if item and item.value and Model.AddGroupBlacklistSpell(scope, groupKey, item.value) then
             count = count + 1
         end
     end
@@ -1742,17 +1943,44 @@ end
 function Model.Apply(unit, reason)
     if A3.BumpRuntimeConfig then A3.BumpRuntimeConfig() end
     reason = reason or "AURAS3_MENU"
+    local function IsGroupApplyScope(scope)
+        scope = tostring(scope or ""):lower()
+        return scope == "group" or scope == "groups"
+            or scope == "party" or scope == "raid" or scope == "mythicraid"
+            or scope == "gf_party" or scope == "gf_raid" or scope == "gf_mythicraid"
+    end
+    local function RefreshGroup(scope)
+        if A3.RequestUnit then
+            return A3.RequestUnit(scope, 0)
+        end
+        local gf = MSUF and MSUF.GF
+        if gf and type(gf.RefreshVisuals) == "function" then
+            if scope == "party" or scope == "gf_party" then
+                return gf.RefreshVisuals("party", gf.DIRTY_AURAS)
+            elseif scope == "mythicraid" or scope == "gf_mythicraid" then
+                return gf.RefreshVisuals("mythicraid", gf.DIRTY_AURAS)
+            elseif scope == "raid" or scope == "gf_raid" then
+                local didWork = gf.RefreshVisuals("raid", gf.DIRTY_AURAS)
+                return gf.RefreshVisuals("mythicraid", gf.DIRTY_AURAS) or didWork
+            end
+            return gf.RefreshVisuals(nil, gf.DIRTY_AURAS)
+        end
+        return false
+    end
     local function Refresh(runtimeUnit)
         if type(_G.MSUF_Auras3_UpdateUnitAnchor) == "function" then _G.MSUF_Auras3_UpdateUnitAnchor(runtimeUnit) end
         if type(_G.MSUF_Auras3_RefreshUnit) == "function" then _G.MSUF_Auras3_RefreshUnit(runtimeUnit) end
     end
-    if unit and NormalizeScope(unit) ~= "shared" then
+    if unit and IsGroupApplyScope(unit) then
+        RefreshGroup(unit)
+    elseif unit and NormalizeScope(unit) ~= "shared" then
         EachRuntimeUnit(unit, Refresh)
     else
         Refresh("player")
         Refresh("target")
         Refresh("focus")
         for i = 1, #BOSS_UNITS do Refresh(BOSS_UNITS[i]) end
+        RefreshGroup("group")
     end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason) end
 end

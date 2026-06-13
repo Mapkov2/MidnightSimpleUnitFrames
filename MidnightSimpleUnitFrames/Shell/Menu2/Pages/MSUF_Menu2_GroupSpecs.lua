@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Group page spec catalogue.
+-- Declarative dropdown values and status/indicator specs shared by group layout, bars,
+-- indicators, and auras pages. Runtime group defaults live in the GroupFrames engine.
 local VT, VTR = M.ValueTextList, M.ValueTextRows
 
 local function StatusIconSpec(value, text, enabled, iconStyle, size, anchor, x, y, layer, defaultSize, defaultAnchor, defaultLayer)

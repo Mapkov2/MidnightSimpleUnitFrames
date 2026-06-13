@@ -6,6 +6,10 @@ _G.MSUF_NS = MSUF
 local UF = MSUF.UF
 if not UF then return end
 
+-- Unitframe status indicator element.
+-- Owns level/classification/PvP/ready-check/role/raid-marker style icons for normal unit
+-- frames. This is an event-hot path, so helpers prefer cached unit state, secret-safe reads,
+-- and cached region mutation instead of rebuilding textures every event.
 local CreateFrame = CreateFrame
 local UnitIsGroupLeader = UnitIsGroupLeader
 local UnitIsGroupAssistant = UnitIsGroupAssistant
@@ -43,6 +47,8 @@ local Secrets = MSUF.Secrets or {}
 
 local issecretvalue = _G.issecretvalue or function(_) return false end
 local function BoolTrue(value)
+  -- Secret values from restricted APIs must not leak into boolean UI decisions. Treat them as
+  -- unknown rather than truthy so protected/hidden state cannot accidentally show an icon.
   if issecretvalue(value) == true then
     return false
   end

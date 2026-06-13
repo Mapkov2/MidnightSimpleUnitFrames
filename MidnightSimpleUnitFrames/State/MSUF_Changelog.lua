@@ -1,5 +1,7 @@
 -- Auto-generated from CHANGELOG.md by tools/update-addon-changelog.ps1.
 -- Edit CHANGELOG.md, then regenerate this file before packaging.
+-- Runtime reads this as static display data for Menu2; do not hand-edit release notes here
+-- unless you also update the source changelog used by the packaging tool.
 local _, ns = ...
 ns = ns or {}
 

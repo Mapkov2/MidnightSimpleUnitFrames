@@ -5,6 +5,9 @@ local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
 
+-- Advanced Gameplay page.
+-- Builds controls for optional gameplay helpers such as combat timer, crosshair, melee range,
+-- totem/statue frames, and First Dance tracking. Live frame work belongs to GameplayRuntime.
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
@@ -32,6 +35,8 @@ local function BuildGameplay(ctx)
     local disabledRefresh
     local previewRefresh
     local function ApplyGameplayUI()
+        -- Gameplay edits often change both enabled state and preview visibility. Apply the
+        -- runtime once, then refresh page-local disabled/preview controls.
         ApplyGameplay()
         if disabledRefresh then disabledRefresh() end
         if previewRefresh then previewRefresh() end

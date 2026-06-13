@@ -10,6 +10,9 @@ local W = M.Widgets
 local GroupPreview = M.GroupPreview or {}
 M.GroupPreview = GroupPreview
 
+-- Menu2 Group preview page section.
+-- Hosts the group preview box, explanatory note, and preview refresh hooks. The actual mock
+-- renderer lives in Preview/MSUF_Menu2_GroupPreview_Native.lua.
 local floor = math.floor
 local max = math.max
 local min = math.min
