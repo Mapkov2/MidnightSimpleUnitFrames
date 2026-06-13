@@ -6,42 +6,31 @@
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
-
 local format = string.format
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
-
 local Castbar = MSUF.UFPreviewCastbar or {}
 MSUF.UFPreviewCastbar = Castbar
-
 function Castbar.OffsetFields(unitKey)
     -- Runtime and preview need the same DB keys for offsets, but only runtime owns live frame
     -- anchoring. Keep the key translation here and the actual SetPoint calls in render code.
     unitKey = CanonKey(unitKey)
     local dx, dy = 0, 0
-    if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then
-        dx, dy = _G.MSUF_GetCastbarDefaultOffsets(unitKey)
-    end
-    if unitKey == "boss" then
-        return "bossCastbarOffsetX", "bossCastbarOffsetY", dx or 0, dy or 0
-    end
+    if type(_G.MSUF_GetCastbarDefaultOffsets) == "function" then dx, dy = _G.MSUF_GetCastbarDefaultOffsets(unitKey) end
+    if unitKey == "boss" then return "bossCastbarOffsetX", "bossCastbarOffsetY", dx or 0, dy or 0 end
     local prefix = type(_G.MSUF_GetCastbarPrefix) == "function" and _G.MSUF_GetCastbarPrefix(unitKey) or nil
     if not prefix or prefix == "" then return nil, nil, dx or 0, dy or 0 end
     return prefix .. "OffsetX", prefix .. "OffsetY", dx or 0, dy or 0
 end
-
 function Castbar.Prefix(unitKey)
     unitKey = CanonKey(unitKey)
-    if type(_G.MSUF_GetCastbarPrefix) == "function" then
-        return _G.MSUF_GetCastbarPrefix(unitKey)
-    end
+    if type(_G.MSUF_GetCastbarPrefix) == "function" then return _G.MSUF_GetCastbarPrefix(unitKey) end
     if unitKey == "player" then return "castbarPlayer" end
     if unitKey == "target" then return "castbarTarget" end
     if unitKey == "focus" then return "castbarFocus" end
     return nil
 end
-
 function Castbar.Detached(key, g)
     key = CanonKey(key)
     if not g then return false end
@@ -49,7 +38,6 @@ function Castbar.Detached(key, g)
     local prefix = Castbar.Prefix(key)
     return prefix and g[prefix .. "Detached"] == true or false
 end
-
 local function NormalizeWidthSource(v)
     local fn = _G.MSUF_NormalizeCastbarWidthSource or _G.MSUF_NormalizePlayerCastbarWidthSource
     if type(fn) == "function" then return fn(v) end
@@ -57,7 +45,6 @@ local function NormalizeWidthSource(v)
     if v == "unitframe" or v == "essential" or v == "utility" then return v end
     return nil
 end
-
 local function WidthSourceKey(key)
     key = CanonKey(key)
     local fn = _G.MSUF_GetCastbarWidthSourceKey
@@ -70,7 +57,6 @@ local function WidthSourceKey(key)
     if key == "focus" then return "castbarFocusMatchWidth", "castbarFocusMatchUnitWidth" end
     if key == "boss" then return "bossCastbarMatchWidth", "castbarBossMatchUnitWidth", "castbarBossMatchWidth" end
 end
-
 local function WidthSource(g, key)
     if not g then return nil end
     local primary, legacy, alias = WidthSourceKey(key)
@@ -81,7 +67,6 @@ local function WidthSource(g, key)
     if legacy and g[legacy] == true then return "unitframe" end
     return nil
 end
-
 local function ExternalWidthSourceFrame(source)
     if source == "essential" then
         return (type(_G.MSUF_GetEffectiveCooldownFrame) == "function" and _G.MSUF_GetEffectiveCooldownFrame("EssentialCooldownViewer"))
@@ -90,7 +75,6 @@ local function ExternalWidthSourceFrame(source)
         return _G.UtilityCooldownViewer
     end
 end
-
 local function RuntimeCastbarFrame(key)
     key = CanonKey(key)
     if key == "boss" then
@@ -107,14 +91,12 @@ local function RuntimeCastbarFrame(key)
         return _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar
     end
 end
-
 local function RuntimeUnitFrame(key)
     key = CanonKey(key)
     local unit = key == "boss" and "boss1" or key
     local frames = _G.MSUF_UnitFrames
     return unit and ((frames and frames[unit]) or _G["MSUF_" .. unit])
 end
-
 local function EffectiveScaleProxy(frame)
     local scale = frame and frame.GetEffectiveScale and frame:GetEffectiveScale()
     scale = tonumber(scale)
@@ -125,7 +107,6 @@ local function EffectiveScaleProxy(frame)
         end
     }
 end
-
 local function ReadExternalWidth(source, targetFrame)
     local frame = ExternalWidthSourceFrame(source)
     if not (frame and frame.GetWidth and frame.IsShown and frame:IsShown()) then return nil end
@@ -137,7 +118,6 @@ local function ReadExternalWidth(source, targetFrame)
     local w = frame:GetWidth()
     if w and w > 0 then return w end
 end
-
 function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     key = CanonKey(key)
     fallbackW = tonumber(fallbackW) or 250
@@ -178,14 +158,12 @@ function Castbar.ReadSize(key, g, fallbackW, fallbackH)
     if h < 6 then h = 6 elseif h > 80 then h = 80 end
     return w, h
 end
-
 local function TextKey(key, suffix, bossKey)
     key = CanonKey(key)
     if key == "boss" then return bossKey end
     local prefix = Castbar.Prefix(key)
     return prefix and (prefix .. suffix) or nil
 end
-
 function Castbar.ReadNumber(g, key, suffix, bossKey, fallback)
     local dbKey = TextKey(key, suffix, bossKey)
     local v = dbKey and g and tonumber(g[dbKey]) or nil
@@ -195,30 +173,21 @@ function Castbar.ReadNumber(g, key, suffix, bossKey, fallback)
     end
     return (v ~= nil) and v or fallback
 end
-
 function Castbar.FormatPreviewTime(g, key, current, total)
     local mode = "CURRENT"
-    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-        mode = _G.MSUF_GetCastbarTimeFormat(key, g)
-    end
-    if type(_G.MSUF_FormatCastbarTimeText) == "function" then
-        return _G.MSUF_FormatCastbarTimeText(mode, current, total) or ""
-    end
+    if type(_G.MSUF_GetCastbarTimeFormat) == "function" then mode = _G.MSUF_GetCastbarTimeFormat(key, g) end
+    if type(_G.MSUF_FormatCastbarTimeText) == "function" then return _G.MSUF_FormatCastbarTimeText(mode, current, total) or "" end
     return format("%.1f", tonumber(current) or 0)
 end
-
 function Castbar.Enabled(key, g)
     local fn = _G.MSUF_ShouldUseMSUFCastbar
-    if type(fn) == "function" then
-        return fn(key, g) == true
-    end
+    if type(fn) == "function" then return fn(key, g) == true end
     if key == "player" then return g.enablePlayerCastbar ~= false end
     if key == "target" then return g.enableTargetCastbar ~= false end
     if key == "focus" then return g.enableFocusCastbar ~= false end
     if key == "boss" then return g.enableBossCastbar ~= false end
     return false
 end
-
 function Castbar.ShowIcon(key, g)
     if key == "boss" then return g.showBossCastIcon ~= false end
     if key == "player" and g.castbarPlayerShowIcon ~= nil then return g.castbarPlayerShowIcon ~= false end
@@ -226,7 +195,6 @@ function Castbar.ShowIcon(key, g)
     if key == "focus" and g.castbarFocusShowIcon ~= nil then return g.castbarFocusShowIcon ~= false end
     return g.castbarShowIcon ~= false
 end
-
 function Castbar.ShowText(key, g)
     if key == "boss" then return g.showBossCastName ~= false end
     if key == "player" and g.castbarPlayerShowSpellName ~= nil then return g.castbarPlayerShowSpellName ~= false end

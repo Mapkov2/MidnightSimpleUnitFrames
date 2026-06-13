@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -12,44 +11,37 @@ local W = M.Widgets
 local T = M.Theme
 local GP = M.GlobalPage or {}
 local VT = M.ValueTextList
-
 local floor = math.floor
 local max = math.max
 local min = math.min
-
 local UNIT_SCOPE_KEYS = GP.UNIT_SCOPE_KEYS or {}
 local DB, G, Unit, NormalizeScopeKey, ScopeDBKeys, ScopeHasOverride, ScopeSetOverride, CurrentFontScope, IsGFScope, FontScopeGet, FontScopeSet, NormalizeFontKey, FontValues, FontKeyGet, FontKeySet, SetControlEnabled, SetControlsEnabled, ApplyFonts = M.Pick(GP, [[DB G Unit NormalizeScopeKey ScopeDBKeys ScopeHasOverride ScopeSetOverride CurrentFontScope IsGFScope FontScopeGet FontScopeSet NormalizeFontKey FontValues FontKeyGet FontKeySet SetControlEnabled SetControlsEnabled ApplyFonts]])
 local function RGB(r, g, b, a)
     return { r or 1, g or 1, b or 1, a or 1 }
 end
-
 local function NormalizeShadowStrength(value)
     value = tostring(value or "NORMAL"):upper()
     if value == "SOFT" or value == "DEEP" then return value end
     return "NORMAL"
 end
-
 local function ShadowMetrics(value)
     value = NormalizeShadowStrength(value)
     if value == "SOFT" then return 0.55, 1, -1 end
     if value == "DEEP" then return 1, 2, -2 end
     return 1, 1, -1
 end
-
 local function NormalizeTextAlpha(value)
     value = tonumber(value) or 1
     if value <= 0.75 then return 0.70 end
     if value <= 0.925 then return 0.85 end
     return 1
 end
-
 local function NormalizeBaselineOffset(value)
     value = floor((tonumber(value) or 0) + 0.5)
     if value < -4 then return -4 end
     if value > 4 then return 4 end
     return value
 end
-
 local function ComposeFontFlags(outline, monochrome)
     local flags = ""
     outline = tostring(outline or "OUTLINE"):upper()
@@ -58,34 +50,26 @@ local function ComposeFontFlags(outline, monochrome)
     elseif outline ~= "NONE" and outline ~= "" then
         flags = "OUTLINE"
     end
-    if monochrome == true then
-        flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME"
-    end
+    if monochrome == true then flags = flags ~= "" and (flags .. ",MONOCHROME") or "MONOCHROME" end
     return flags
 end
-
 local function ConfiguredFontColorPreview()
     local fn = _G.MSUF_GetConfiguredFontColor or (MSUF and MSUF.MSUF_GetConfiguredFontColor)
     if type(fn) == "function" then
         local ok, r, g, b = pcall(fn)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return RGB(r, g, b)
-        end
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
-
     local general = G()
     if general.useCustomFontColor and type(general.fontColorCustomR) == "number"
         and type(general.fontColorCustomG) == "number"
         and type(general.fontColorCustomB) == "number" then
         return RGB(general.fontColorCustomR, general.fontColorCustomG, general.fontColorCustomB)
     end
-
     local colors = (MSUF and MSUF.MSUF_FONT_COLORS) or _G.MSUF_FONT_COLORS
     local key = tostring(general.fontColor or "white"):lower()
     local color = colors and (colors[key] or colors.white)
     return RGB((color and color[1]) or 1, (color and color[2]) or 1, (color and color[3]) or 1)
 end
-
 local function PlayerClassColorPreview()
     local classToken
     if type(_G.UnitClass) == "function" then
@@ -95,14 +79,11 @@ local function PlayerClassColorPreview()
     classToken = classToken or "WARRIOR"
     if type(_G.MSUF_GetClassBarColor) == "function" then
         local r, g, b = _G.MSUF_GetClassBarColor(classToken)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return RGB(r, g, b)
-        end
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
     local color = _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
     return RGB((color and color.r) or 0.78, (color and color.g) or 0.61, (color and color.b) or 0.43)
 end
-
 local function NPCReactionColorPreview()
     local kind = "enemy"
     if type(_G.UnitExists) == "function" and _G.UnitExists("target")
@@ -120,51 +101,37 @@ local function NPCReactionColorPreview()
     end
     if type(_G.MSUF_GetNPCReactionColor) == "function" then
         local r, g, b = _G.MSUF_GetNPCReactionColor(kind)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return RGB(r, g, b)
-        end
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
     return RGB(0.85, 0.10, 0.10)
 end
-
 local function CurrentPowerColorPreview()
     local powerType, powerToken
-    if type(_G.UnitPowerType) == "function" then
-        powerType, powerToken = _G.UnitPowerType("player")
-    end
+    if type(_G.UnitPowerType) == "function" then powerType, powerToken = _G.UnitPowerType("player") end
     if _G.MSUF_EleMaelstromActive or _G.MSUF_ShadowManaActive then
         powerType, powerToken = 0, "MANA"
     elseif _G.MSUF_AugEvokerActive then
         powerType, powerToken = 19, "ESSENCE"
     end
-    if powerType == nil and (powerToken == nil or powerToken == "") then
-        powerType, powerToken = 0, "MANA"
-    end
-
+    if powerType == nil and (powerToken == nil or powerToken == "") then powerType, powerToken = 0, "MANA" end
     local fn = _G.MSUF_GetResolvedPowerColor or (MSUF and MSUF.MSUF_GetResolvedPowerColor)
     if type(fn) == "function" then
         local r, g, b = fn(powerType, powerToken)
-        if type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return RGB(r, g, b)
-        end
+        if type(r) == "number" and type(g) == "number" and type(b) == "number" then return RGB(r, g, b) end
     end
-
     local pbc = _G.PowerBarColor
     local color = pbc and ((powerToken and pbc[powerToken]) or (powerType and pbc[powerType]) or pbc.MANA or pbc[0])
     return RGB((color and (color.r or color[1])) or 0.00, (color and (color.g or color[2])) or 0.44, (color and (color.b or color[3])) or 0.87)
 end
-
 local function CurrentHealthGradientPreview()
     return RGB(1, 0.7, 0)
 end
-
 local function NameColorValues()
     return {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
         { value = "CLASS", text = "Class Color", swatchColor = PlayerClassColorPreview },
     }
 end
-
 local function NPCColorValues()
     return {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
@@ -172,29 +139,23 @@ local function NPCColorValues()
         { value = "CLASS", text = "Class Color (Reaction fallback)", swatchColor = PlayerClassColorPreview },
     }
 end
-
 local function HealthColorValues()
     return {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
         { value = "HEALTH", text = "Health Gradient", swatchColor = CurrentHealthGradientPreview },
     }
 end
-
 local function PowerColorValues()
     return {
         { value = "DEFAULT", text = "Default (Font Color)", swatchColor = ConfiguredFontColorPreview },
         { value = "RESOURCE", text = "By Power Type", swatchColor = CurrentPowerColorPreview },
     }
 end
-
 local function PreviewFontKey()
     local key = FontKeyGet()
-    if key == nil or key == "" then
-        key = NormalizeFontKey(G().fontKey or "FRIZQT")
-    end
+    if key == nil or key == "" then key = NormalizeFontKey(G().fontKey or "FRIZQT") end
     return key
 end
-
 local function PreviewFontFlags()
     local monochrome = FontScopeGet("fontMonochrome", false) == true
     if IsGFScope(CurrentFontScope()) then
@@ -207,7 +168,6 @@ local function PreviewFontFlags()
     elseif FontScopeGet("boldText", false) then outline = "THICKOUTLINE" end
     return ComposeFontFlags(outline, monochrome)
 end
-
 local function ApplyPreviewFont(fs)
     if not (fs and fs.SetFont) then return end
     local key = PreviewFontKey()
@@ -215,9 +175,7 @@ local function ApplyPreviewFont(fs)
     local flags = PreviewFontFlags()
     local path
     local pathForKey = _G.MSUF_ResolveFontKeyPath or _G.MSUF_GetFontPathForKey or (MSUF and MSUF.MSUF_GetFontPathForKey)
-    if type(pathForKey) == "function" then
-        path = pathForKey(key, size, flags)
-    end
+    if type(pathForKey) == "function" then path = pathForKey(key, size, flags) end
     if (not path or path == "") and key and key ~= "" then
         local fetch = _G.MSUF_FetchFontPathFromLSM or (MSUF and MSUF.MSUF_FetchFontPathFromLSM)
         if type(fetch) == "function" then path = fetch(key) end
@@ -231,7 +189,6 @@ local function ApplyPreviewFont(fs)
     else
         pcall(fs.SetFont, fs, path, size, flags)
     end
-
     local c = ConfiguredFontColorPreview()
     c[4] = NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1))
     if fs.SetTextColor then fs:SetTextColor(c[1], c[2], c[3], c[4] or 1) end
@@ -246,7 +203,6 @@ local function ApplyPreviewFont(fs)
         end
     end
 end
-
 local function ApplyNameShortening(reason)
     ApplyFonts(reason)
     local scope = CurrentFontScope()
@@ -257,17 +213,13 @@ local function ApplyNameShortening(reason)
         end
     elseif UNIT_SCOPE_KEYS[scope] then
         M.RequestUnitApply(scope, reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
-        if scope == "targettarget" then
-            M.RequestUnitApply("target", reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true })
-        end
+        if scope == "targettarget" then M.RequestUnitApply("target", reason or "MSUF2_SHORTEN_NAMES", { text = true, preview = true }) end
     end
 end
-
 local function CurrentFontScopeCanEdit()
     local scope = CurrentFontScope()
     return scope == "shared" or ScopeHasOverride(scope, "fontOverride")
 end
-
 local function GFNameScopeGet(key, default)
     local db = DB()
     local keys = ScopeDBKeys(CurrentFontScope())
@@ -277,7 +229,6 @@ local function GFNameScopeGet(key, default)
     end
     return default
 end
-
 local function GFNameScopeSet(key, value)
     local db = DB()
     local keys = ScopeDBKeys(CurrentFontScope())
@@ -289,57 +240,39 @@ local function GFNameScopeSet(key, value)
         db[scopeKey]._msufGFNameTruncationOverride = nil
     end
 end
-
 local function SharedNameShorteningEnabled()
     return DB().shortenNames == true
 end
-
 local function SharedNameShorteningSide()
     local g = G()
     return (g and g.shortenNameClipSide) or "LEFT"
 end
-
 local function SharedNameShorteningMax()
     local g = G()
     return tonumber(g and g.shortenNameMaxChars) or 6
 end
-
 local function SharedNameShorteningNoEllipsis()
     local g = G()
     return not (g and g.shortenNameShowDots ~= false)
 end
-
 local function GFNameUsesLocalScope()
     return IsGFScope(CurrentFontScope()) and ScopeHasOverride(CurrentFontScope(), "fontOverride")
 end
-
 local function SeedGFNameShorteningFromShared()
     if not IsGFScope(CurrentFontScope()) then return end
-    if GFNameScopeGet("nameShortenEnabled", nil) == nil then
-        GFNameScopeSet("nameShortenEnabled", SharedNameShorteningEnabled())
-    end
-    if GFNameScopeGet("nameClipSide", nil) == nil then
-        GFNameScopeSet("nameClipSide", SharedNameShorteningSide())
-    end
-    if GFNameScopeGet("nameNoEllipsis", nil) == nil then
-        GFNameScopeSet("nameNoEllipsis", SharedNameShorteningNoEllipsis())
-    end
-    if (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then
-        GFNameScopeSet("nameMaxChars", SharedNameShorteningMax())
-    end
+    if GFNameScopeGet("nameShortenEnabled", nil) == nil then GFNameScopeSet("nameShortenEnabled", SharedNameShorteningEnabled()) end
+    if GFNameScopeGet("nameClipSide", nil) == nil then GFNameScopeSet("nameClipSide", SharedNameShorteningSide()) end
+    if GFNameScopeGet("nameNoEllipsis", nil) == nil then GFNameScopeSet("nameNoEllipsis", SharedNameShorteningNoEllipsis()) end
+    if (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then GFNameScopeSet("nameMaxChars", SharedNameShorteningMax()) end
 end
-
 local function SetFontAndApply(key, value, reason, sourceKey)
     FontScopeSet(key, value, reason, sourceKey)
     ApplyFonts(reason)
 end
-
 local function BuildFonts(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Fonts", "Shared font, text style, name and power colors.", 72)
-
     local scopeValues = GP.SCOPE_VALUES
-
     local function ActiveFontOverrideLabels(filter)
         local active = {}
         for i = 1, #scopeValues do
@@ -353,7 +286,6 @@ local function BuildFonts(ctx)
         end
         return active
     end
-
     GP.BuildScopeOverrideSection(ctx, b, {
         values = scopeValues,
         getValue = function() return CurrentFontScope() end,
@@ -403,7 +335,6 @@ local function BuildFonts(ctx)
             end
         end,
     })
-
     local font = b:CollapsibleSection("fonts_global_font", "Global Font", 146, true)
     local RefreshFontPreview
     local fontDrop = W.Dropdown(font, "Font (SharedMedia)", function() return FontValues(false) end, 340)
@@ -420,30 +351,27 @@ local function BuildFonts(ctx)
         if fontScopeInfo and fontScopeInfo.SetWidth then fontScopeInfo:SetWidth(ctx.width - 402) end
         ApplyPreviewFont(preview)
     end
-    M.BindDropdown(ctx, fontDrop,
+    M.BindDropdownWidget(ctx, fontDrop,
         function() return FontKeyGet() end,
         function(v)
             FontKeySet(v)
             M.RequestGeneralApply("MSUF2_FONT_KEY", { preview = true, applyAll = false })
             if type(_G.MSUF_NormalizeStoredFontKeys) == "function" then _G.MSUF_NormalizeStoredFontKeys() end
             ApplyFonts("MSUF2_FONT_KEY")
-            if RefreshFontPreview then RefreshFontPreview() end
+            RefreshFontPreview()
         end)
-    M.AddRefresher(ctx, RefreshFontPreview)
-    RefreshFontPreview()
-
-    local RefreshScopedFontControls
+    M.TrackRefresh(ctx, RefreshFontPreview)
+    local RefreshScopedFontControls = M.RefreshProxy()
     local text = b:CollapsibleSection("fonts_text_style", "Text Style", 330, true)
     local function BindTextSegment(label, values, width, getValue, setValue, afterSet)
         local control = W.Segment(text, label, values, width)
         M.BindSegment(ctx, control, getValue, function(v)
             setValue(v)
-            if RefreshFontPreview then RefreshFontPreview() end
-            if afterSet then afterSet() end
+            RefreshFontPreview()
+            M.CallIf(afterSet)
         end)
         return control
     end
-
     local outline = W.Segment(text, "Outline", VT("OUTLINE", "Outline", "THICKOUTLINE", "Thick Outline", "NONE", "None"), 420)
     M.BindSegment(ctx, outline,
         function()
@@ -459,44 +387,39 @@ local function BuildFonts(ctx)
         function(v)
             if IsGFScope(CurrentFontScope()) then
                 SetFontAndApply("fontOutline", v or "OUTLINE", "MSUF2_GF_FONT_OUTLINE")
-                if RefreshFontPreview then RefreshFontPreview() end
+                RefreshFontPreview()
                 return
             end
             FontScopeSet("boldText", v == "THICKOUTLINE", "MSUF2_FONT_OUTLINE")
             SetFontAndApply("noOutline", v == "NONE", "MSUF2_FONT_OUTLINE")
-            if RefreshFontPreview then RefreshFontPreview() end
+            RefreshFontPreview()
         end)
-
     local sharp = BindTextSegment("Rendering", VT("SMOOTH", "Smooth", "SHARP", "Sharp"), 260,
         function() return FontScopeGet("fontMonochrome", false) and "SHARP" or "SMOOTH" end,
         function(v) SetFontAndApply("fontMonochrome", v == "SHARP", "MSUF2_FONT_MONOCHROME") end)
-
     local shadow = BindTextSegment("Text shadow", VT("ON", "On", "OFF", "Off"), 260,
         function() return FontScopeGet("textBackdrop", true) and "ON" or "OFF" end,
         function(v) SetFontAndApply("textBackdrop", v == "ON", "MSUF2_FONT_SHADOW") end,
-        function() if RefreshScopedFontControls then RefreshScopedFontControls() end end)
-
+        function() RefreshScopedFontControls() end)
     local shadowStrength = BindTextSegment("Shadow strength", VT("SOFT", "Soft", "NORMAL", "Normal", "DEEP", "Deep"), 360,
         function() return NormalizeShadowStrength(FontScopeGet("fontShadowStrength", "NORMAL")) end,
         function(v) SetFontAndApply("fontShadowStrength", NormalizeShadowStrength(v), "MSUF2_FONT_SHADOW_STRENGTH") end)
-
     local opacity = BindTextSegment("Text opacity", VT(1, "100%", 0.85, "85%", 0.70, "70%"), 320,
         function() return NormalizeTextAlpha(FontScopeGet("fontTextAlpha", 1)) end,
         function(v) SetFontAndApply("fontTextAlpha", NormalizeTextAlpha(v), "MSUF2_FONT_TEXT_ALPHA") end)
-
     local baseline = W.Slider(text, "Baseline", -4, 4, 1, 300)
     baseline:SetValueFormatter(function(v)
         v = NormalizeBaselineOffset(v)
         if v > 0 then return "+" .. tostring(v) .. " px" end
         return tostring(v) .. " px"
     end)
-    M.BindSlider(ctx, baseline,
+    M.BindNumberWidget(ctx, baseline,
         function() return NormalizeBaselineOffset(FontScopeGet("fontBaselineOffset", 0)) end,
-        function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end)
-
+        function(v) SetFontAndApply("fontBaselineOffset", NormalizeBaselineOffset(v), "MSUF2_FONT_BASELINE") end,
+        0, { step = 1, roundStep = true })
     local function BindFontDropdown(parent, label, values, getValue, setValue, width)
         local control = W.Dropdown(parent, label, values, width or 280)
-        M.BindDropdown(ctx, control, getValue, setValue)
+        M.BindDropdownWidget(ctx, control, getValue, setValue)
         return control
     end
     local function BindFontModeDropdown(parent, label, values, key, activeValue, reason)
@@ -504,35 +427,27 @@ local function BuildFonts(ctx)
             function() return FontScopeGet(key, false) and activeValue or "DEFAULT" end,
             function(v) SetFontAndApply(key, v == activeValue, reason) end)
     end
-
     local function BuildNameShorteningControls(parent, label, minChars, noticeFallbackY, getEnabled, setEnabled, getSide, setSide, getChars, setChars, getNoEllipsis, setNoEllipsis, formatChars)
         local controls = {}
         controls.shorten = W.Toggle(parent, label)
-        M.BindToggle(ctx, controls.shorten, getEnabled, setEnabled)
-
+        M.BindBoolWidget(ctx, controls.shorten, getEnabled, setEnabled)
         controls.side = W.Segment(parent, "Truncation style", VT("LEFT", "Keep end (last letters)", "RIGHT", "Keep start (first letters)"), 430)
         M.BindSegment(ctx, controls.side, getSide, setSide)
-
         controls.chars = W.Slider(parent, "Max name length", minChars or 4, 30, 1, 300)
         if formatChars then controls.chars:SetValueFormatter(formatChars) end
-        M.BindSlider(ctx, controls.chars, getChars, setChars)
-
+        M.BindNumberWidget(ctx, controls.chars, getChars, setChars, minChars or 4, { step = 1, roundStep = true })
         controls.noEllipsis = W.Toggle(parent, "No Ellipsis (truncate without ..)")
-        M.BindToggle(ctx, controls.noEllipsis, getNoEllipsis, setNoEllipsis)
-
+        M.BindBoolWidget(ctx, controls.noEllipsis, getNoEllipsis, setNoEllipsis)
         local scopeNoticeY = (parent._msuf2CursorY or noticeFallbackY or -194) - 8
         controls.scopeNotice = W.Text(parent, "", 14, scopeNoticeY, ctx.width - 28, T.colors.muted)
         if controls.scopeNotice.SetWordWrap then controls.scopeNotice:SetWordWrap(true) end
         if controls.scopeNotice.SetHeight then controls.scopeNotice:SetHeight(44) end
         return controls
     end
-
     local colors = b:CollapsibleSection("fonts_name_power_colors", "Text Colors", 280, true)
     local nameColor = BindFontDropdown(colors, "Player Name Color", NameColorValues,
         function()
-            if IsGFScope(CurrentFontScope()) then
-                return FontScopeGet("nameColorMode", "DEFAULT") == "CLASS" and "CLASS" or "DEFAULT"
-            end
+            if IsGFScope(CurrentFontScope()) then return FontScopeGet("nameColorMode", "DEFAULT") == "CLASS" and "CLASS" or "DEFAULT" end
             return FontScopeGet("nameClassColor", false) and "CLASS" or "DEFAULT"
         end,
         function(v)
@@ -554,7 +469,7 @@ local function BuildFonts(ctx)
     local healthColor = BindFontModeDropdown(colors, "HP Text Color", HealthColorValues, "colorHealthTextByHealth", "HEALTH", "MSUF2_HP_TEXT_COLOR")
     local powerColor = BindFontModeDropdown(colors, "Power Text Color", PowerColorValues, "colorPowerTextByType", "RESOURCE", "MSUF2_POWER_TEXT_COLOR")
     local scopedFontControls = { outline, sharp, shadow, opacity, baseline, nameColor, healthColor }
-    RefreshScopedFontControls = function()
+    RefreshScopedFontControls = RefreshScopedFontControls(function()
         local scopeKey = CurrentFontScope()
         local canEdit = CurrentFontScopeCanEdit()
         local gfScope = IsGFScope(scopeKey)
@@ -562,41 +477,31 @@ local function BuildFonts(ctx)
         SetControlEnabled(shadowStrength, canEdit and FontScopeGet("textBackdrop", true) == true)
         SetControlEnabled(npcColor, canEdit and not gfScope)
         SetControlEnabled(powerColor, canEdit and not gfScope)
-    end
-    M.AddRefresher(ctx, RefreshScopedFontControls)
-    RefreshScopedFontControls()
-
+    end)
+    M.TrackRefresh(ctx, RefreshScopedFontControls)
     local nameScope = CurrentFontScope()
     if IsGFScope(nameScope) then
         local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 322, true)
         W.Text(names, "Group Frame Name Truncation", 14, -38, ctx.width - 28, T.colors.text)
         names._msuf2CursorY = -72
-
         local shorten, side, chars, noEllipsis
         local function RefreshGFNameShorteningUI()
             if M.Refresh then M.Refresh(ctx) end
         end
-
         local controls = BuildNameShorteningControls(names, "Shorten group names", 1, -228,
             function()
-                if GFNameUsesLocalScope() then
-                    return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false
-                end
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameShortenEnabled", (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) > 0) and true or false end
                 return SharedNameShorteningEnabled()
             end,
             function(v)
                 if not GFNameUsesLocalScope() then return end
                 GFNameScopeSet("nameShortenEnabled", v and true or false)
-                if v and (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then
-                    GFNameScopeSet("nameMaxChars", SharedNameShorteningMax())
-                end
+                if v and (tonumber(GFNameScopeGet("nameMaxChars", 0)) or 0) <= 0 then GFNameScopeSet("nameMaxChars", SharedNameShorteningMax()) end
                 ApplyFonts("MSUF2_GF_NAME_SHORTEN")
                 RefreshGFNameShorteningUI()
             end,
             function()
-                if GFNameUsesLocalScope() then
-                    return GFNameScopeGet("nameClipSide", "RIGHT")
-                end
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameClipSide", "RIGHT") end
                 return SharedNameShorteningSide()
             end,
             function(v)
@@ -606,9 +511,7 @@ local function BuildFonts(ctx)
                 RefreshGFNameShorteningUI()
             end,
             function()
-                if GFNameUsesLocalScope() then
-                    return tonumber(GFNameScopeGet("nameMaxChars", 6)) or 6
-                end
+                if GFNameUsesLocalScope() then return tonumber(GFNameScopeGet("nameMaxChars", 6)) or 6 end
                 return SharedNameShorteningMax()
             end,
             function(v)
@@ -619,9 +522,7 @@ local function BuildFonts(ctx)
                 RefreshGFNameShorteningUI()
             end,
             function()
-                if GFNameUsesLocalScope() then
-                    return GFNameScopeGet("nameNoEllipsis", false) and true or false
-                end
+                if GFNameUsesLocalScope() then return GFNameScopeGet("nameNoEllipsis", false) and true or false end
                 return SharedNameShorteningNoEllipsis()
             end,
             function(v)
@@ -649,11 +550,9 @@ local function BuildFonts(ctx)
                 scopeNotice:SetText("This group scope follows Shared name shortening. Turn on custom settings above only when group names need different truncation.")
             end
         end
-        M.AddRefresher(ctx, RefreshGFNameShorteningControls)
-        RefreshGFNameShorteningControls()
+        M.TrackRefresh(ctx, RefreshGFNameShorteningControls)
     elseif nameScope ~= "player" then
         local names = b:CollapsibleSection("fonts_name_shortening", "Name Shortening", 294, true)
-
         local shorten, side, chars, noEllipsis, scopeNotice, nameShorteningControls
         local function CanEditNameShortening()
             return CurrentFontScopeCanEdit() and not IsGFScope(CurrentFontScope())
@@ -687,11 +586,8 @@ local function BuildFonts(ctx)
         end
         local function ApplyNameShorteningChange(reason, onlyWhenEnabled)
             RefreshNameShorteningControls()
-            if (not onlyWhenEnabled) or NameShorteningEnabled() then
-                ApplyNameShortening(reason)
-            end
+            if (not onlyWhenEnabled) or NameShorteningEnabled() then ApplyNameShortening(reason) end
         end
-
         local controls = BuildNameShorteningControls(names,
             nameScope == "shared" and "Shorten names (except Player)" or "Shorten unit names (except Player)",
             4, -194, NameShorteningEnabled,
@@ -715,11 +611,8 @@ local function BuildFonts(ctx)
                 ApplyNameShorteningChange("MSUF2_SHORTEN_DOTS", false)
             end)
         shorten, side, chars, noEllipsis, scopeNotice = controls.shorten, controls.side, controls.chars, controls.noEllipsis, controls.scopeNotice; nameShorteningControls = { side, chars }
-        M.AddRefresher(ctx, RefreshNameShorteningControls)
-        RefreshNameShorteningControls()
+        M.TrackRefresh(ctx, RefreshNameShorteningControls)
     end
-
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-
 M.RegisterPage("opt_fonts", { title = "MSUF Fonts", build = BuildFonts, version = 3 })

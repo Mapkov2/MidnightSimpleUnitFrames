@@ -7,11 +7,17 @@ _G.MSUF2 = M
 
 local Data = M.SearchData or {}
 M.SearchData = Data
+local Lines = M.Lines or function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
+local KeySetFromWords = M.KeySetFromWords or function(text)
+    local out = {}
+    for word in tostring(text or ""):gmatch("%S+") do out[word] = true end
+    return out
+end
 
 -- Search query alias catalogue.
 -- Expands human terms and common misspellings into the canonical search keywords used by the
 -- index/query layer. This is declarative data; routing/rendering live in other search shards.
-local ZERO_INDEX_ALIASES = M.KeySetFromWords [[
+local ZERO_INDEX_ALIASES = KeySetFromWords [[
     debuff debuffs dispel dispels dispell dispellable dispelable cleansing cleanse decurse cure magic curse poison disease bleed
     stealable purge spellsteal aggro threat highlight highlights border borders glow overlay stripe priority
 ]]
@@ -33,7 +39,7 @@ local function AliasMap(rows)
         end
     end
     if type(rows) == "string" then
-        for line in rows:gmatch("[^\r\n]+") do
+        for line in Lines(rows) do
             local keys, terms = line:match("^([^=]+)=(.*)$")
             Add(keys, terms)
         end

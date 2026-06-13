@@ -6,12 +6,10 @@
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
-
 local floor, max, min = math.floor, math.max, math.min
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local PREVIEW_ICONS = 4
-
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
 local CanonKey = PreviewModel.CanonKey
@@ -22,56 +20,45 @@ local RoundOffset = (MSUF.UFPreviewCore and MSUF.UFPreviewCore.RoundOffset) or f
     if v >= 0 then return floor(v + 0.5) end
     return -floor((-v) + 0.5)
 end
-
 local Auras = MSUF.UFPreviewAuras or {}
 MSUF.UFPreviewAuras = Auras
-
 local AURA_HANDLE_FIELDS = {
     buff = { x = "buffGroupOffsetX", y = "buffGroupOffsetY", defaultX = 0, defaultY = 36, label = "Buffs", color = { 0.20, 0.74, 0.42 } },
     debuff = { x = "debuffGroupOffsetX", y = "debuffGroupOffsetY", defaultX = 0, defaultY = 6, label = "Debuffs", color = { 0.84, 0.26, 0.28 } },
 }
-
 local AURA_TEXTURES = {
     buff = { 135987, 136116, 135932, 136085, 132333, 135981, 136048, 135964 },
     debuff = { 136118, 136139, 136197, 135817, 132851, 136188, 136170, 135813 },
 }
-
 local function MenuModel()
     -- Prefer the Auras3 module table when loaded, with a global fallback for older load orders
     -- and test harnesses that inject only the menu model.
     local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
     return type(a3) == "table" and a3.MenuModel or _G.MSUF_Auras3_MenuModel
 end
-
 local function NormalizeKind(kind)
     kind = tostring(kind or ""):lower()
     if kind == "buffs" then kind = "buff" end
     if kind == "debuffs" then kind = "debuff" end
     return AURA_HANDLE_FIELDS[kind] and kind or nil
 end
-
 function Auras.PreviewUnitKey(unit)
     if unit == nil then return nil end
     unit = CanonKey(unit)
     if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
     return nil
 end
-
 local function PreviewUnit(box)
     if not box then return nil end
     local key = box.key
-    if not key and box._msufPanel and (box._msufPanel._msufGetCurrentKey or box._msufPanel._msufLastApplyKey ~= nil) then
-        key = CurrentPanelKey(box._msufPanel)
-    end
+    if not key and box._msufPanel and (box._msufPanel._msufGetCurrentKey or box._msufPanel._msufLastApplyKey ~= nil) then key = CurrentPanelKey(box._msufPanel) end
     key = Auras.PreviewUnitKey(key)
     if key then box.key = key end
     return key
 end
-
 local function RuntimeUnit(unit)
     return unit == "boss" and "boss1" or unit
 end
-
 local function RefreshRuntime(unit)
     unit = Auras.PreviewUnitKey(unit)
     if not unit then return false end
@@ -93,13 +80,9 @@ local function RefreshRuntime(unit)
     end
     return true
 end
-
 local function SyncPopup(unit)
-    if type(_G.MSUF_SyncAuras3PositionPopup) == "function" then
-        pcall(_G.MSUF_SyncAuras3PositionPopup, RuntimeUnit(unit))
-    end
+    if type(_G.MSUF_SyncAuras3PositionPopup) == "function" then pcall(_G.MSUF_SyncAuras3PositionPopup, RuntimeUnit(unit)) end
 end
-
 function Auras.ReadOffsets(handle)
     local fields = handle and handle._fields
     local spec = fields and AURA_HANDLE_FIELDS[NormalizeKind(fields.auraPreviewKind)]
@@ -111,7 +94,6 @@ function Auras.ReadOffsets(handle)
         spec.x,
         spec.y
 end
-
 function Auras.WriteOffsets(handle, x, y, reason)
     local fields = handle and handle._fields
     local kind = fields and NormalizeKind(fields.auraPreviewKind)
@@ -123,15 +105,12 @@ function Auras.WriteOffsets(handle, x, y, reason)
     model.WriteNumber(unit, spec.y, RoundOffset(y), -4096, 4096)
     if reason ~= "UNIT_PREVIEW_DRAG" then
         local a3 = (MSUF and MSUF.MSUF_Auras3) or _G.MSUF_Auras3
-        if a3 and type(a3.BumpRuntimeConfig) == "function" then
-            pcall(a3.BumpRuntimeConfig)
-        end
+        if a3 and type(a3.BumpRuntimeConfig) == "function" then pcall(a3.BumpRuntimeConfig) end
         RefreshRuntime(unit)
         SyncPopup(unit)
     end
     return true
 end
-
 local function MoveFrameBy(frame, dx, dy)
     if not (frame and dx and dy) then return false end
     local point, rel, relPoint, ox, oy = frame:GetPoint(1)
@@ -141,13 +120,11 @@ local function MoveFrameBy(frame, dx, dy)
     frame:SetPoint(point, rel, relPoint, (tonumber(ox) or 0) + dx, (tonumber(oy) or 0) + dy)
     return true
 end
-
 function Auras.DragOffsets(handle, x, y)
     local fields = handle and handle._fields
     local kind = fields and NormalizeKind(fields.auraPreviewKind)
     local box = handle and handle._preview
     if not (kind and box) then return false end
-
     x = RoundOffset(x)
     y = RoundOffset(y)
     local prevX = handle._msufAuraDragX
@@ -155,7 +132,6 @@ function Auras.DragOffsets(handle, x, y)
     if prevX == nil then prevX = tonumber(handle._startX) or x end
     if prevY == nil then prevY = tonumber(handle._startY) or y end
     if prevX == x and prevY == y then return true end
-
     local scale = tonumber(box._mockEffectiveScale) or tonumber(box._mockScale) or 1
     if scale <= 0 then scale = 1 end
     local dx = RoundOffset((x - prevX) * scale)
@@ -163,19 +139,16 @@ function Auras.DragOffsets(handle, x, y)
     handle._msufAuraDragX = x
     handle._msufAuraDragY = y
     if dx == 0 and dy == 0 then return true end
-
     local moved = MoveFrameBy(handle, dx, dy)
     local visual = box.auraPreviewVisuals and box.auraPreviewVisuals[kind]
     MoveFrameBy(visual, dx, dy)
     return moved == true
 end
-
 function Auras.ClearDragOffsets(handle)
     if not handle then return end
     handle._msufAuraDragX = nil
     handle._msufAuraDragY = nil
 end
-
 function Auras.CommitOffsets(handle)
     local unit = PreviewUnit(handle and handle._preview)
     if not unit then return false end
@@ -184,7 +157,6 @@ function Auras.CommitOffsets(handle)
     SyncPopup(unit)
     return true
 end
-
 function Auras.CreateHandles(box, makeHandle)
     if not (box and type(makeHandle) == "function") then return end
     if not box.handleAuraBuffs then
@@ -218,14 +190,10 @@ function Auras.CreateHandles(box, makeHandle)
         }, spec.label, spec.color)
     end
 end
-
 local function ButtonAnchor(xSign, ySign)
-    if ySign > 0 then
-        return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT"
-    end
+    if ySign > 0 then return xSign < 0 and "BOTTOMRIGHT" or "BOTTOMLEFT" end
     return xSign < 0 and "TOPRIGHT" or "TOPLEFT"
 end
-
 local function Growth(cfg, kind)
     local isBuff = kind == "buff"
     local growth = isBuff and (cfg.buffGrowthX or cfg.growth) or (cfg.debuffGrowthX or cfg.growth)
@@ -242,7 +210,6 @@ local function Growth(cfg, kind)
     end
     return gx, gy, vertical, ButtonAnchor(gx, gy)
 end
-
 local function AnchorOffset(anchor, w, h)
     w = tonumber(w) or 0
     h = tonumber(h) or 0
@@ -253,20 +220,15 @@ local function AnchorOffset(anchor, w, h)
     if anchor == "CENTER" then return w * 0.5, h * 0.5 end
     return 0, h
 end
-
 local function AnchorBase(anchor, frameW, frameH)
     return AnchorOffset(anchor, frameW, frameH)
 end
-
 local function GridShape(count, perRow, vertical)
     count = max(1, RoundOffset(count))
     perRow = max(1, RoundOffset(perRow))
-    if vertical then
-        return max(1, ceil(count / perRow)), min(count, perRow)
-    end
+    if vertical then return max(1, ceil(count / perRow)), min(count, perRow) end
     return min(count, perRow), max(1, ceil(count / perRow))
 end
-
 local function IconGridCoord(index, perRow, vertical)
     local per = max(1, RoundOffset(perRow))
     local idx = index - 1
@@ -277,7 +239,6 @@ local function IconGridCoord(index, perRow, vertical)
     local col = idx % per
     return col, (idx - col) / per
 end
-
 local function IconRect(anchor, laneW, laneH, size, x, y)
     local laneAnchorX, laneAnchorY = AnchorOffset(anchor, laneW, laneH)
     local iconAnchorX, iconAnchorY = AnchorOffset(anchor, size, size)
@@ -285,7 +246,6 @@ local function IconRect(anchor, laneW, laneH, size, x, y)
     local bottom = laneAnchorY + y - iconAnchorY
     return left, bottom, left + size, bottom + size
 end
-
 local function LaneBounds(cfg, kind, frameW, frameH)
     if not cfg then return nil end
     local isBuff = kind == "buff"
@@ -357,7 +317,6 @@ local function LaneBounds(cfg, kind, frameW, frameH)
         initialAnchor = initialAnchor,
     }
 end
-
 function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     local runtimeAuras = runtimeSpec and runtimeSpec.auras
     local model = MenuModel()
@@ -370,7 +329,6 @@ function Auras.BuildState(key, frameW, frameH, runtimeSpec)
     if not buff and not debuff then return nil end
     return { unit = key, cfg = cfg, runtime = runtimeAuras, buff = buff, debuff = debuff }
 end
-
 function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
     if not state then return minX, maxX, minY, maxY end
     for _, kind in ipairs({ "buff", "debuff" }) do
@@ -384,14 +342,11 @@ function Auras.ExpandFootprint(state, minX, maxX, minY, maxY)
     end
     return minX, maxX, minY, maxY
 end
-
 local function ApplyAuraFont(fs, size)
     if not fs then return end
     size = max(7, tonumber(size) or 14)
     local fontPath, fontFlags, r, g, b, _, useShadow
-    if type(_G.MSUF_GetGlobalFontSettings) == "function" then
-        fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings()
-    end
+    if type(_G.MSUF_GetGlobalFontSettings) == "function" then fontPath, fontFlags, r, g, b, _, useShadow = _G.MSUF_GetGlobalFontSettings() end
     fontPath = fontPath or FONT
     fontFlags = fontFlags or "OUTLINE"
     local fontKey = (_G.MSUF_DB and _G.MSUF_DB.general and _G.MSUF_DB.general.fontKey) or "FRIZQT"
@@ -403,7 +358,6 @@ local function ApplyAuraFont(fs, size)
     if fs.SetTextColor then fs:SetTextColor(r or 1, g or 1, b or 1, 1) end
     if fs.SetShadowOffset then fs:SetShadowOffset(useShadow and 1 or 0, useShadow and -1 or 0) end
 end
-
 local function EnsureVisual(box, kind, baseLevel)
     if not box then return nil end
     box.auraPreviewVisuals = box.auraPreviewVisuals or {}
@@ -418,7 +372,6 @@ local function EnsureVisual(box, kind, baseLevel)
     if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + (kind == "buff" and 29 or 30)) end
     return visual
 end
-
 local function CreateIcon(parent)
     local f = CreateFrame("Frame", nil, parent)
     f:EnableMouse(false)
@@ -439,7 +392,6 @@ local function CreateIcon(parent)
     f:Hide()
     return f
 end
-
 local function EnsureIcon(visual, index)
     visual._icons = visual._icons or {}
     local icon = visual._icons[index]
@@ -449,7 +401,6 @@ local function EnsureIcon(visual, index)
     end
     return icon
 end
-
 local function HideHandle(handle)
     if not handle then return end
     handle:Hide()
@@ -457,7 +408,6 @@ local function HideHandle(handle)
         handle._msufAuraPreviewIcons[i]:Hide()
     end
 end
-
 local function HideVisual(visual)
     if not visual then return end
     visual:Hide()
@@ -465,7 +415,6 @@ local function HideVisual(visual)
         visual._icons[i]:Hide()
     end
 end
-
 function Auras.Hide(box)
     if not box then return end
     HideHandle(box.handleAuraBuffs)
@@ -475,7 +424,6 @@ function Auras.Hide(box)
         HideVisual(box.auraPreviewVisuals.debuff)
     end
 end
-
 local function LaneTextConfig(cfg, kind)
     if kind == "buff" then
         return {
@@ -502,7 +450,6 @@ local function LaneTextConfig(cfg, kind)
         cooldownY = cfg.debuffCooldownY or cfg.cooldownY,
     }
 end
-
 local function PlaceStack(fs, icon, cfg, S)
     if not fs then return end
     local stackAnchor = cfg.stackAnchor or "TOPRIGHT"
@@ -527,7 +474,6 @@ local function PlaceStack(fs, icon, cfg, S)
         if fs.SetJustifyV then fs:SetJustifyV("TOP") end
     end
 end
-
 local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local bounds = state and state[kind]
     if not (handle and bounds) then
@@ -556,19 +502,16 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     local handleBottom = S((bounds.laneBottom or 0) + (bounds.iconMinY or 0))
     local handleW = max(1, S((bounds.iconMaxX or 0) - (bounds.iconMinX or 0)))
     local handleH = max(1, S((bounds.iconMaxY or 0) - (bounds.iconMinY or 0)))
-
     visual:SetSize(max(1, S(bounds.laneW)), max(1, S(bounds.laneH)))
     visual:ClearAllPoints()
     visual:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", laneX, laneY)
     if visual.SetFrameLevel then visual:SetFrameLevel((baseLevel or 0) + layer) end
     visual:Show()
-
     if handle.SetFrameLevel then handle:SetFrameLevel((baseLevel or 0) + max(50, layer + 45)) end
     if handle._selBorder and handle._selBorder.SetFrameLevel then handle._selBorder:SetFrameLevel((handle:GetFrameLevel() or 0) + 5) end
     handle:SetSize(max(18, handleW + 8), max(18, handleH + 8))
     handle:ClearAllPoints()
     handle:SetPoint("BOTTOMLEFT", box.mock, "BOTTOMLEFT", handleLeft - 4, handleBottom - 4)
-
     for i = 1, bounds.shown do
         local icon = EnsureIcon(visual, i)
         if icon.SetFrameLevel then icon:SetFrameLevel((visual:GetFrameLevel() or 0) + 1) end
@@ -593,7 +536,6 @@ local function LayoutHandle(box, handle, state, kind, S, baseLevel)
     end
     handle:Show()
 end
-
 function Auras.Layout(box, mock, state, S, baseLevel)
     if not (box and mock and type(S) == "function") then return end
     if not state then

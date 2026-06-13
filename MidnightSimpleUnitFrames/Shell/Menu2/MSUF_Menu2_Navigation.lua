@@ -6,16 +6,26 @@
 --- through frame construction code.
 local _, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
+local Lines = M.Lines or function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
+local PipeRows = M.PipeRows
+if type(PipeRows) ~= "function" then
+    PipeRows = function(rows)
+        local out = {}
+        for line in Lines(rows) do
+            local cols, n = {}, 0
+            for col in (line .. "|"):gmatch("(.-)|") do n = n + 1; cols[n] = col end
+            out[#out + 1] = cols
+        end
+        return out
+    end
+end
 
 local function NavRows(rows)
     local nav = {}
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
-        local cols, n = {}, 0
-        for col in (line .. "|"):gmatch("(.-)|") do n = n + 1; cols[n] = col end
+    for _, cols in ipairs(PipeRows(rows)) do
         if cols[1] == "H" then
             nav[#nav + 1] = { header = cols[2], id = cols[3], defaultOpen = cols[4] ~= "0" }
         elseif cols[1] == "P" then
@@ -26,7 +36,6 @@ local function NavRows(rows)
     end
     return nav
 end
-
 M.navItems = NavRows [[
 P|home|Dashboard
 H|Frames|unitframes|1
@@ -57,10 +66,9 @@ P|profiles|Profiles
 H|Advanced|modules|0
 P|modules|Modules|modules
 ]]
-
 local function AliasRows(rows)
     local aliases = {}
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+    for line in Lines(rows) do
         local target, keys = line:match("^([^=]+)=(.+)$")
         if target and keys then
             for key in keys:gmatch("[^|]+") do
@@ -70,7 +78,6 @@ local function AliasRows(rows)
     end
     return aliases
 end
-
 M.ALIASES = AliasRows [[
 home=<empty>|home|menu|main|options|opt
 uf_player=player

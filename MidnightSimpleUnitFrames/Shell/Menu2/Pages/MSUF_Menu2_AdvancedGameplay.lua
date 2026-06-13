@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -11,28 +10,21 @@ _G.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
-
 local floor = math.floor
 local max = math.max
 local min = math.min
-
 local Gameplay, MoveWidget, LabelAt, DividerAt, SwitchAt, AddTableControlSpecs, SetControlEnabled = M.Pick(AP, [[Gameplay MoveWidget LabelAt DividerAt SwitchAt AddTableControlSpecs SetControlEnabled]])
 local SetControlsEnabled = W.SetControlsEnabled
-local ApplyGameplay = M.ApplyGameplay or function() end
+local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
-
 local function BuildGameplay(ctx)
     local b = W.PageBuilder(ctx)
     local head = b:Header("Gameplay", "Here are several gameplay enhancement options you can toggle on or off.", 74)
-
     local edit = T.Button(head, "MSUF Edit Mode", 128, 24)
     if W.StyleTopActionButton then W.StyleTopActionButton(edit) end
     edit:SetPoint("TOPRIGHT", head, "TOPRIGHT", -14, -20)
-    if W.CreatePageResetButton then
-        W.CreatePageResetButton(ctx, head, edit, { width = 88 })
-    end
+    if W.CreatePageResetButton then W.CreatePageResetButton(ctx, head, edit, { width = 88 }) end
     M.WireEditModeButton(ctx, edit, { defer = true })
-
     local disabledRefresh
     local previewRefresh
     local function ApplyGameplayUI()
@@ -42,52 +34,35 @@ local function BuildGameplay(ctx)
         if disabledRefresh then disabledRefresh() end
         if previewRefresh then previewRefresh() end
     end
-
     local anchorValues = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
     local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
-
     local function CurrentMeleeSpellID()
         if type(M.GetGameplayMeleeSpellID) == "function" then return M.GetGameplayMeleeSpellID(Gameplay()) end
         return tonumber(Gameplay().nameplateMeleeSpellID) or 0
     end
-
     local function SpellName(id)
         if type(M.GetGameplaySpellName) == "function" then return M.GetGameplaySpellName(id) end
         return nil
     end
-
     local function SeedMeleeClass()
         if type(M.SeedGameplayMeleeSpellScope) == "function" then M.SeedGameplayMeleeSpellScope("class") end
     end
-
     local function SeedMeleeSpec()
         if type(M.SeedGameplayMeleeSpellScope) == "function" then M.SeedGameplayMeleeSpellScope("spec") end
     end
-
     local function SetMeleeSpellID(value)
         if type(M.SetGameplayMeleeSpellID) == "function" then return M.SetGameplayMeleeSpellID(value) end
         Gameplay().nameplateMeleeSpellID = floor((tonumber(value) or 0) + 0.5)
     end
-
-    local timerControls = {}
-    local stateControls = {}
-    local totemControls = {}
-    local firstDanceControls = {}
-    local crossControls = {}
-    local meleeControls = {}
+    local timerControls, stateControls, totemControls = {}, {}, {}
+    local firstDanceControls, crossControls, meleeControls = {}, {}, {}
     local selectedSpellText
     local noSpellWarn
-
-    local function Add(list, widget)
-        list[#list + 1] = widget
-        return widget
-    end
-
     local function AddControls(list, section, specs) return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI) end
     local function AddBackdrops(section, specs) for i = 1, #specs do local s = specs[i]; W.ControlCardBackdrop(section, 14, s[1], s[2], s[3]) end end
     local function AddTextInput(list, input, getValue, setValue)
         M.BindTextInput(ctx, input, getValue, function(v) setValue(v); ApplyGameplayUI() end, true)
-        return Add(list, input)
+        M.AppendValues(list, input)
     end
     local function AddGameplayTextInput(list, input, key, fallback)
         return AddTextInput(list, input, function() return Gameplay()[key] or fallback end, function(v) Gameplay()[key] = tostring(v or "") end)
@@ -99,23 +74,18 @@ local function BuildGameplay(ctx)
         if withFill and input.SetBackdropColor then input:SetBackdropColor(0.025, 0.034, 0.070, 0.98) end
         if withBorder and input.SetBackdropBorderColor then input:SetBackdropBorderColor(accent[1], accent[2], accent[3], edgeAlpha) end
     end
-
     local function GameplayContentWidth()
         return min(tonumber(M.formContentMaxWidth) or 980, tonumber(ctx.width) or 900)
     end
-
     local function GameplayStacked() return GameplayContentWidth() < 620 end
-
     local function SectionCardWidth(section, maxWidth)
         local sectionW = tonumber(section and section._msuf2Width) or GameplayContentWidth()
         return max(220, sectionW - 28)
     end
-
     local function SectionControlWidth(section, requested, minWidth)
         local sectionW = tonumber(section and section._msuf2Width) or GameplayContentWidth()
         return min(requested or 300, max(minWidth or 120, sectionW - 60))
     end
-
     local function SectionColumns(section, requested)
         local cardW = SectionCardWidth(section)
         local innerX = 30
@@ -164,7 +134,6 @@ local function BuildGameplay(ctx)
         })
         LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, -312, min(520, timerW - 60), "GameFontDisableSmall", T.colors.muted)
     end
-
     local stateStacked = GameplayStacked()
     local state = b:CollapsibleSection("gameplay_state", "Combat Enter/Leave", stateStacked and 580 or 340, false)
     local stateCardW = SectionCardWidth(state, 680)
@@ -200,7 +169,6 @@ local function BuildGameplay(ctx)
     end
     AddGameplayTextInput(stateControls, enterInput, "combatStateEnterText", "+Combat")
     AddGameplayTextInput(stateControls, leaveInput, "combatStateLeaveText", "-Combat")
-
     local classStacked = GameplayStacked()
     local classSec = b:CollapsibleSection("gameplay_class_specific", "Class-specific toggles", classStacked and 1120 or 736, false)
     local classW = classSec._msuf2Width or ctx.width or 900
@@ -235,7 +203,6 @@ local function BuildGameplay(ctx)
             { "dropdown", "From", 30, -448, frameAnchors, min(220, classControlW), "playerTotemsAnchorFrom", "TOPLEFT" },
             { "dropdown", "To", 30, -502, frameAnchors, min(220, classControlW), "playerTotemsAnchorTo", "BOTTOMLEFT" },
         })
-
         DividerAt(classSec, -570)
         LabelAt(classSec, "Rogue: First Dance tracker", 30, -596, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Optional helper. Shows a 6s timer after leaving combat.", 30, -618, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
@@ -266,7 +233,6 @@ local function BuildGameplay(ctx)
             { "dropdown", "From", classLeftX, -202, frameAnchors, min(180, classColW), "playerTotemsAnchorFrom", "TOPLEFT" },
             { "dropdown", "To", classLeftX + min(196, classColW * 0.55), -202, frameAnchors, min(180, classColW), "playerTotemsAnchorTo", "BOTTOMLEFT" },
         })
-
         DividerAt(classSec, -330)
         LabelAt(classSec, "Rogue: First Dance tracker", classLeftX, -354, min(360, classColW), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Optional helper. Shows a 6s timer after leaving combat.", classLeftX, -376, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
@@ -282,9 +248,7 @@ local function BuildGameplay(ctx)
         })
     end
     previewBtn:SetScript("OnClick", function()
-        if MSUF and type(MSUF.MSUF_PlayerTotems_TogglePreview) == "function" then
-            pcall(MSUF.MSUF_PlayerTotems_TogglePreview)
-        end
+        if MSUF and type(MSUF.MSUF_PlayerTotems_TogglePreview) == "function" then pcall(MSUF.MSUF_PlayerTotems_TogglePreview) end
     end)
     resetTotemBtn:SetScript("OnClick", function()
         local g = Gameplay()
@@ -297,7 +261,6 @@ local function BuildGameplay(ctx)
         if M.Refresh then M.Refresh(ctx) end
     end)
     local totemActionControls = { previewBtn, resetTotemBtn }
-
     local crossStacked = GameplayStacked()
     local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", crossStacked and 800 or 588, false)
     local crossW = cross._msuf2Width or ctx.width or 900
@@ -387,23 +350,17 @@ local function BuildGameplay(ctx)
             return id > 0 and tostring(id) or ""
         end,
         function(v) SetMeleeSpellID(v) end)
-    Add(meleeControls, spellInput)
-    Add(meleeControls, classSpellToggle)
-    Add(meleeControls, specSpellToggle)
-
+    M.AppendValues(meleeControls, spellInput, classSpellToggle, specSpellToggle)
     local bars = {}
     for i = 1, 4 do
         bars[i] = preview:CreateTexture(nil, "ARTWORK")
         bars[i]:SetColorTexture(1, 0, 0, 1)
     end
-
     previewRefresh = function()
         local g = Gameplay()
         local id = CurrentMeleeSpellID()
         local name = SpellName(id)
-        if selectedSpellText then
-            selectedSpellText:SetText((id > 0 and M.Format(M.Tr("Selected: %s (%d)"), name or M.Tr("Spell"), id)) or M.Tr("Selected: none"))
-        end
+        if selectedSpellText then selectedSpellText:SetText((id > 0 and M.Format(M.Tr("Selected: %s (%d)"), name or M.Tr("Spell"), id)) or M.Tr("Selected: none")) end
         if noSpellWarn then noSpellWarn:SetShown((g.enableCombatCrosshairMeleeRangeColor == true) and id <= 0) end
         local size = math.max(20, tonumber(g.crosshairSize) or 40)
         local thick = math.max(1, tonumber(g.crosshairThickness) or 3)
@@ -427,40 +384,28 @@ local function BuildGameplay(ctx)
         bars[4]:SetSize(thick, size * 0.42)
         for i = 1, 4 do bars[i]:SetVertexColor(r or 1, gr or 0, b or 0, g.enableCombatCrosshair and 1 or 0.35) end
     end
-
     disabledRefresh = function()
         local g = Gameplay()
         local timerOn = g.enableCombatTimer == true
         SetControlsEnabled(timerControls, timerOn)
         SetControlEnabled(timerEnable, true)
-
         local stateOn = g.enableCombatStateText == true
         SetControlsEnabled(stateControls, stateOn)
         SetControlEnabled(stateEnable, true)
-
         local totemsOn = hasTotemFrame and g.enablePlayerTotems == true
         SetControlEnabled(totemEnable, hasTotemFrame)
         SetControlsEnabled(totemActionControls, hasTotemFrame)
         SetControlsEnabled(totemControls, totemsOn)
-
         local firstOn = isRogue and g.enableFirstDanceTimer == true
         SetControlEnabled(firstDanceEnable, isRogue)
         SetControlsEnabled(firstDanceControls, firstOn)
-
         local crossOn = g.enableCombatCrosshair == true
         SetControlEnabled(crossEnable, true)
         SetControlsEnabled(crossControls, crossOn)
         local meleeOn = crossOn and g.enableCombatCrosshairMeleeRangeColor == true
         SetControlsEnabled(meleeControls, meleeOn)
     end
-
-    M.AddRefresher(ctx, function()
-        disabledRefresh()
-        previewRefresh()
-    end)
-    disabledRefresh()
-    previewRefresh()
+    M.TrackRefresh(ctx, function() disabledRefresh(); previewRefresh() end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-
 M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 3 })

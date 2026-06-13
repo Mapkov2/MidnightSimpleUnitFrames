@@ -1,10 +1,8 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local W = M.Widgets or {}
 local T = M.Theme or {}
 local Shared = M.UnitSectionsShared or {}
@@ -17,23 +15,18 @@ local CreateFrame = _G.CreateFrame
 local pairs = pairs
 local tostring = tostring
 local type = type
-
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_NOTICE_BG = { 0.105, 0.082, 0.052, 0.34 }
 local WARNING_NOTICE_TOP = { 0.48, 0.36, 0.20, 0.55 }
 local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
-
 local function IsNameRelativeAnchor(value)
     return value == "NAMERIGHT" or value == "NAMELEFT"
 end
-
 local DISABLED_NAME_ANCHOR_VALUE_CACHE = setmetatable({}, { __mode = "k" })
-
 function Shared.DisabledNameAnchorValues(values)
     if type(values) ~= "table" then return {} end
     local cached = DISABLED_NAME_ANCHOR_VALUE_CACHE[values]
     if cached then return cached end
-
     local out = {}
     for i = 1, #(values or {}) do
         local item = values[i]
@@ -50,21 +43,15 @@ function Shared.DisabledNameAnchorValues(values)
     DISABLED_NAME_ANCHOR_VALUE_CACHE[values] = out
     return out
 end
-
 function Shared.SetSectionHeaderStatus(sec, opts)
     local entry = sec and sec._msuf2CollapsibleEntry
     if not entry then return end
-
-    if T.ApplyCollapseVisual then T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open) end
-
-    if entry.headerBg and entry.headerBg.SetColorTexture then
-        entry.headerBg:SetColorTexture(0.040, 0.050, 0.088, entry.open and 0.40 or 0.34)
-    end
+    M.CallIf(T.ApplyCollapseVisual, entry.arrow, entry.hint, entry.open)
+    if entry.headerBg and entry.headerBg.SetColorTexture then entry.headerBg:SetColorTexture(0.040, 0.050, 0.088, entry.open and 0.40 or 0.34) end
     if entry.label and entry.label.SetTextColor and T and T.colors and T.colors.text then
         local c = T.colors.text
         entry.label:SetTextColor(c[1], c[2], c[3], c[4] or 1)
     end
-
     opts = opts or {}
     if opts.bg and entry.headerBg and entry.headerBg.SetColorTexture then
         local bg = opts.bg
@@ -86,11 +73,10 @@ function Shared.SetSectionHeaderStatus(sec, opts)
                 entry.hint:SetTextColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
             end
         else
-            if T.ApplyCollapseVisual then T.ApplyCollapseVisual(entry.arrow, entry.hint, entry.open) end
+            M.CallIf(T.ApplyCollapseVisual, entry.arrow, entry.hint, entry.open)
         end
     end
 end
-
 function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey)
     local notice = CreateFrame("Frame", nil, sec)
     notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, topY)
@@ -98,7 +84,6 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     notice:SetHeight(24)
     gateKey = gateKey or "_msuf2UnitFrameGateAlwaysEnabled"
     notice[gateKey] = true
-
     local bg = notice:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()
     bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
@@ -112,11 +97,9 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     bottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
     bottom:SetHeight(1)
     bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
-
     local text = T.Font(notice, "GameFontDisableSmall", "", T.colors.dim)
     text:SetPoint("LEFT", notice, "LEFT", 10, 0)
     text:SetJustifyH("LEFT")
-
     local button
     if buttonLabel and buttonLabel ~= "" then
         button = (W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, buttonLabel, buttonWidth or 92, 20))) or T.Button(notice, buttonLabel, buttonWidth or 92, 20)
@@ -126,7 +109,6 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     else
         text:SetPoint("RIGHT", notice, "RIGHT", -10, 0)
     end
-
     function notice:SetTone(kind)
         if kind == "warning" then
             bg:SetColorTexture(WARNING_NOTICE_BG[1], WARNING_NOTICE_BG[2], WARNING_NOTICE_BG[3], WARNING_NOTICE_BG[4])
@@ -137,21 +119,16 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
             bg:SetColorTexture(0.018, 0.040, 0.088, 0.30)
             top:SetColorTexture(0.16, 0.34, 0.66, 0.55)
             bottom:SetColorTexture(0.10, 0.20, 0.38, 0.48)
-            if text.SetTextColor and T.colors and T.colors.dim then
-                text:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
-            end
+            if text.SetTextColor and T.colors and T.colors.dim then text:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1) end
         end
     end
-
     function notice:SetMessage(message, tone)
         self:SetTone(tone)
         text:SetText(tostring(message or ""))
     end
-
     notice:Hide()
     return notice, text, button
 end
-
 function Shared.MakeTabFrame(parent, key, topOffset, width, store)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, topOffset or -118)
@@ -160,17 +137,13 @@ function Shared.MakeTabFrame(parent, key, topOffset, width, store)
     if store and key then store[key] = frame end
     return frame
 end
-
 function Shared.MakeTabFrames(parent, topOffset, width, store, ...)
     local frames = {}
     for i = 1, select("#", ...) do frames[i] = Shared.MakeTabFrame(parent, select(i, ...), topOffset, width, store) end
     return (table.unpack or _G.unpack)(frames)
 end
-
 function Shared.PlaceDropdown(parent, control, x, y, width) return W.MoveWidget(control, parent, x, y, width or 200, "LEFT") end
-
 function Shared.PlaceSlider(parent, control, x, y, width) W.MoveWidget(control, parent, x, y, width, "CENTER") end
-
 function Shared.ValueTextControlSets(kind, controls, layer, hookControls, currentSlot)
     controls = controls or {}
     local delimiter = controls.delimiter or controls.separator
@@ -189,33 +162,24 @@ function Shared.ValueTextControlSets(kind, controls, layer, hookControls, curren
     if hookControls then hookControls(kind, hookSpecs) end
     return textControls, { controls.slot, controls.slotX, controls.slotY }
 end
-
 function Shared.CustomAnchorEditor(ctx, parent, opts)
     opts = opts or {}
     local x, y, width = opts.x or 14, opts.y or -104, opts.width or 200
     local label = T.Font(parent, "GameFontHighlightSmall", M.Tr(opts.label or "Custom Anchor Frame"), opts.labelColor or { 0.62, 0.74, 0.96, 1 })
     label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); label:SetJustifyH("LEFT")
-
     local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 22); box:SetSize(width, 22); box:SetAutoFocus(false)
     box:SetMaxLetters(opts.maxLetters or 100); box:SetJustifyH("LEFT")
     box._msuf2Title, box._msuf2ControlKind = label, "textinput"
-    if T.SkinEditBox then T.SkinEditBox(box) end
-
+    M.CallIf(T.SkinEditBox, box)
     local function Attach(widget) if opts.attachFocus then opts.attachFocus(widget) end end
     Attach(box)
-
     local function Refresh()
         if box and not box:HasFocus() then box:SetText((opts.getValue and opts.getValue()) or "") end
     end
     local function WithHistory(title, key, fn)
-        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory(type(title) == "function" and title() or title, type(key) == "function" and key() or key, fn)
-        else
-            fn()
-        end
+        M.RunWithHistory(type(title) == "function" and title() or title, type(key) == "function" and key() or key, fn)
     end
-
     box:SetScript("OnEnterPressed", function(self)
         local value = self:GetText() or ""
         WithHistory(opts.commitTitle or "Set Anchor", opts.commitKey, function() if opts.setValue then opts.setValue(value, "commit") end end)
@@ -223,7 +187,6 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
     end)
     box:SetScript("OnEscapePressed", function(self) Refresh(); self:ClearFocus() end)
     box:SetScript("OnEditFocusLost", Refresh)
-
     local function SmallButton(after, labelText, widthText, gap, danger)
         local btn = T.Button(parent, labelText, widthText, 22)
         if danger and T.SkinDangerButton then btn = T.SkinDangerButton(btn) end; btn:SetPoint("LEFT", after, "RIGHT", gap, 0)
@@ -239,15 +202,11 @@ function Shared.CustomAnchorEditor(ctx, parent, opts)
         end
         overlay:Show()
     end)
-
     local clear = SmallButton(pick, opts.clearLabel or "Clear", opts.clearWidth or 50, 4, true)
     clear:SetScript("OnClick", function() if opts.clearValue then opts.clearValue() elseif opts.setValue then opts.setValue("", "clear") end; box:SetText("") end)
-
-    if ctx then M.AddRefresher(ctx, Refresh) end
-    Refresh()
+    M.TrackRefresh(ctx, Refresh)
     return { label = label, box = box, pick = pick, clear = clear, Refresh = Refresh }
 end
-
 function Shared.MakeDragSortRows(parent, defs, opts)
     opts = opts or {}
     defs = defs or {}
@@ -257,7 +216,6 @@ function Shared.MakeDragSortRows(parent, defs, opts)
     holder:SetPoint("TOPLEFT", parent, "TOPLEFT", opts.x or 0, opts.y or 0)
     holder:SetSize(rowW, rowCount * (rowH + rowGap))
     holder.rows, holder._enabled, holder._activeCount = {}, true, rowCount
-
     local function SlotY(slot) return -((slot - 1) * (rowH + rowGap)) end
     function holder:SnapRows()
         local active = self._activeCount or rowCount
@@ -287,7 +245,6 @@ function Shared.MakeDragSortRows(parent, defs, opts)
             end
         end
     end
-
     local function DragAllowed(row) return holder._enabled and (not opts.dragAllowed or opts.dragAllowed(row, holder) ~= false) end
     local function OnEnter(self)
         local row = self._msuf2DragRow
@@ -318,7 +275,6 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         if not row then return end
         if self.StopMovingOrSizing then self:StopMovingOrSizing() end
         if self.SetFrameStrata and self._msuf2OldStrata then self:SetFrameStrata(self._msuf2OldStrata) end
-
         local _, centerY = self:GetCenter()
         local top = holder:GetTop()
         local active, bestSlot, bestDist = holder._activeCount or rowCount, 1, math.huge
@@ -328,7 +284,6 @@ function Shared.MakeDragSortRows(parent, defs, opts)
                 if dist < bestDist then bestDist, bestSlot = dist, slot end
             end
         end
-
         local changed = row.slotIndex ~= bestSlot
         if changed then
             for i = 1, #holder.rows do
@@ -342,7 +297,6 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         holder:SnapRows()
         if (changed or opts.saveAlways) and opts.onReorder then opts.onReorder(holder.rows, holder) end
     end
-
     for i = 1, rowCount do
         local def = defs[i] or {}
         local frame = CreateFrame("Frame", nil, holder, T.Template and T.Template() or nil)
@@ -376,7 +330,6 @@ function Shared.MakeDragSortRows(parent, defs, opts)
         local row = { frame = frame, key = def.key or "", slotIndex = i, def = def }
         frame._msuf2DragRow, holder.rows[i] = row, row
     end
-
     holder:SnapRows()
     return holder
 end

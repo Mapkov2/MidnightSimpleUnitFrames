@@ -6,20 +6,16 @@
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
-
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local SYMBOL_MEDIA = MEDIA .. "Symbols\\"
 local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"
 local PVP_HORDE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-HordeIcon"
-
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}
 local MakeFS = PreviewModel.MakeFS
 local FontColor = PreviewModel.FontColor
-
 local Status = MSUF.UFPreviewStatus or {}
 MSUF.UFPreviewStatus = Status
-
 local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)
     -- Runtime supports name-relative anchors; preview duplicates that math so the editor shows
     -- the same visual result without depending on a real unitframe.
@@ -44,28 +40,22 @@ local function AnchorLikeRuntime(region, anchor, x, y, frame, nameText)
     region:ClearAllPoints()
     region:SetPoint(point, target, relPoint, x, y)
 end
-
 function Status.PositionFromAnchor(frame, anchor, x, y, target)
     AnchorLikeRuntime(frame, anchor, x, y, target)
 end
-
 function Status.PositionRuntimeLayoutIconPreview(frame, anchor, x, y, target, allowCenter)
     AnchorLikeRuntime(frame, anchor, x, y, target)
 end
-
 function Status.PositionStatusCornerPreview(frame, anchor, x, y, target, pad)
     AnchorLikeRuntime(frame, anchor, x, y, target)
 end
-
 function Status.PositionSameAnchorPreview(frame, anchor, x, y, target)
     AnchorLikeRuntime(frame, anchor, x, y, target)
 end
-
 function Status.PositionLevelPreview(frame, anchor, x, y, mock, gap)
     if not (frame and mock) then return end
     AnchorLikeRuntime(frame, anchor or "NAMERIGHT", x, y, mock, mock.nameText)
 end
-
 local function StatusSymbolTexture(symbolKey)
     if type(symbolKey) ~= "string" or symbolKey == "" or symbolKey == "DEFAULT" then return nil end
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
@@ -78,7 +68,6 @@ local function StatusSymbolTexture(symbolKey)
     end
     return SYMBOL_MEDIA .. folder .. "\\" .. symbolKey .. suffix
 end
-
 function Status.StatusTextPreviewText(source)
     local cfg
     if type(source) == "table" and (source.showDead ~= nil or source.showGhost ~= nil or source.showAFK ~= nil or source.showDND ~= nil) then
@@ -96,7 +85,6 @@ function Status.StatusTextPreviewText(source)
     if showDND then return "DND" end
     return nil
 end
-
 function Status.CreateIcon(parent, color, text)
     local f = CreateFrame("Frame", nil, parent)
     f:SetSize(16, 16)
@@ -111,7 +99,6 @@ function Status.CreateIcon(parent, color, text)
     f.txt:SetTextColor(color[1], color[2], color[3], 1)
     return f
 end
-
 function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
     if not icon or not spec then return end
     local tex, txt = icon.tex, icon.txt
@@ -190,7 +177,6 @@ function Status.SetIconTexture(icon, spec, conf, g, key, data, runtimeCfg)
         if tex then tex:SetTexture("Interface\\Buttons\\WHITE8X8"); tex:SetVertexColor((spec.color and spec.color[1]) or 1, (spec.color and spec.color[2]) or 1, (spec.color and spec.color[3]) or 1, 0.85) end
     end
 end
-
 function Status.ResolveAnchor(spec, conf, g)
     if not spec then return "TOPLEFT" end
     conf = conf or {}

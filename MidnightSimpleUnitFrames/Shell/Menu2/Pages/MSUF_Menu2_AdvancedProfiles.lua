@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -11,21 +10,17 @@ _G.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
-
 local floor = math.floor
 local max = math.max
 local min = math.min
-
 local CallGlobal, G, Gameplay, SetValue, LabelAt = M.Pick(AP, [[CallGlobal G Gameplay SetValue LabelAt]])
 local MoveWidget = W.MoveWidget or AP.MoveWidget
 local Tr = M.TranslateText or M.Tr or function(text) return text end
 local VT = M.ValueTextList
 local WAGO_PROFILES_URL = "https://wago.io/search/imports/wow/msuf"
-
 local function Trim(value)
     return tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
-
 local function IsUUFImportString(value)
     local fn = _G.MSUF_IsUUFImportString
     if type(fn) == "function" then
@@ -34,7 +29,6 @@ local function IsUUFImportString(value)
     end
     return type(value) == "string" and value:match("^%s*!UUF_") ~= nil
 end
-
 local function ProfileValues(includeNone)
     local values = {}
     if includeNone then values[#values + 1] = { value = "None", text = "None" } end
@@ -42,26 +36,27 @@ local function ProfileValues(includeNone)
     for i = 1, #list do values[#values + 1] = { value = list[i], text = list[i] } end
     return values
 end
-
 local function GetSpecMeta()
     local n = type(_G.GetNumSpecializations) == "function" and _G.GetNumSpecializations() or 0
     local out = {}
     for i = 1, n do
         if type(_G.GetSpecializationInfo) == "function" then
             local specID, specName = _G.GetSpecializationInfo(i)
-            if type(specID) == "number" and type(specName) == "string" then
-                out[#out + 1] = { id = specID, name = specName }
-            end
+            if type(specID) == "number" and type(specName) == "string" then out[#out + 1] = { id = specID, name = specName } end
         end
     end
     return out
 end
-
 local function RefreshAfterProfileChange(ctx)
     if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
     if M.Refresh then M.Refresh(ctx) end
 end
-
+local function ActiveProfileName() return _G.MSUF_ActiveProfile or "Default" end
+local function CallMSUF(name, ...)
+    local fn = _G[name]
+    return type(fn) == "function" and pcall(fn, ...) or false
+end
+local function ClearProfileHistory() if M.ClearHistory then M.ClearHistory() end end
 local function PrintProfileMessage(color, message)
     if M.ShowStatusFeedback then
         local kind = tostring(color or ""):find("ff0000", 1, true) and "danger" or "info"
@@ -69,27 +64,19 @@ local function PrintProfileMessage(color, message)
     end
     print((color or "|cffffd700") .. "MSUF:|r " .. tostring(message or ""))
 end
-
 local function BlockCombatAction()
     if M.BlockCombatAction then return M.BlockCombatAction() and true or false end
-    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then
-        return _G.MSUF_BlockConfigCombatLocked() and true or false
-    end
+    if type(_G.MSUF_BlockConfigCombatLocked) == "function" then return _G.MSUF_BlockConfigCombatLocked() and true or false end
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-            _G.MSUF_ShowConfigCombatLockMessage()
-        end
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
         return true
     end
     if _G.UnitAffectingCombat and _G.UnitAffectingCombat("player") then
-        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-            _G.MSUF_ShowConfigCombatLockMessage()
-        end
+        if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
         return true
     end
     return false
 end
-
 local function StyleProfileInput(editBox, width, height, multiline)
     if not editBox then return editBox end
     local w = tonumber(width) or (editBox.GetWidth and editBox:GetWidth()) or 260
@@ -111,14 +98,11 @@ local function StyleProfileInput(editBox, width, height, multiline)
     if editBox._msuf2PaintEditBox then editBox:_msuf2PaintEditBox(false) end
     return editBox
 end
-
 local function InstallProfilePopup(key, spec)
     return M.InstallStaticPopup and M.InstallStaticPopup(key, spec)
 end
-
 local function EnsureProfilePopups()
     if not _G.StaticPopupDialogs then return end
-
     InstallProfilePopup("MSUF2_IMPORT_RELOAD_PROMPT", {
         text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
         button1 = _G.RELOAD or M.Tr("Reload"),
@@ -143,11 +127,11 @@ local function EnsureProfilePopups()
         OnAccept = function(_, data)
             if BlockCombatAction() then return end
             if not (data and data.name) then return end
-            if type(_G.MSUF_ResetProfile) == "function" then pcall(_G.MSUF_ResetProfile, data.name) end
-            if M.ClearHistory then M.ClearHistory() end
+            CallMSUF("MSUF_ResetProfile", data.name)
+            ClearProfileHistory()
             if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true }) end
             if type(data.after) == "function" then data.after() end
-            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
+            CallMSUF("MSUF_ShowReloadRecommendedPopup", "Profile reset")
         end,
     })
     InstallProfilePopup("MSUF2_CONFIRM_DELETE_PROFILE", {
@@ -157,13 +141,12 @@ local function EnsureProfilePopups()
         OnAccept = function(_, data)
             if BlockCombatAction() then return end
             if not (data and data.name) then return end
-            if type(_G.MSUF_DeleteProfile) == "function" then pcall(_G.MSUF_DeleteProfile, data.name) end
-            if M.ClearHistory then M.ClearHistory() end
+            CallMSUF("MSUF_DeleteProfile", data.name)
+            ClearProfileHistory()
             if type(data.after) == "function" then data.after() end
         end,
     })
 end
-
 local function ConfirmUUFBestEffortImport(text, after)
     if not IsUUFImportString(text) then
         if type(after) == "function" then return after() end
@@ -179,7 +162,6 @@ local function ConfirmUUFBestEffortImport(text, after)
     PrintProfileMessage("|cffff0000", "Import blocked: UUF best-effort confirmation is not available.")
     return false
 end
-
 local function ShowImportReloadPrompt()
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         PrintProfileMessage("|cffffd700", "Profile imported. Reload after combat with /reload.")
@@ -195,7 +177,6 @@ local function ShowImportReloadPrompt()
         PrintProfileMessage("|cffffd700", "Profile imported. Reload the UI with /reload.")
     end
 end
-
 local function ReloadAfterNewProfileImport(profileName)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         PrintProfileMessage("|cffffd700", "Imported profile '" .. tostring(profileName) .. "'. Reload after combat with /reload.")
@@ -207,31 +188,24 @@ local function ReloadAfterNewProfileImport(profileName)
         PrintProfileMessage("|cffffd700", "Imported profile '" .. tostring(profileName) .. "'. Reload the UI with /reload.")
     end
 end
-
 local function ProfileExists(name)
     local gdb = _G.MSUF_GlobalDB
     local profiles = type(gdb) == "table" and gdb.profiles or nil
     return type(profiles) == "table" and profiles[name] ~= nil
 end
-
 local function DeleteCreatedProfile(name)
     local gdb = _G.MSUF_GlobalDB
     local profiles = type(gdb) == "table" and gdb.profiles or nil
-    if type(profiles) == "table" then
-        profiles[name] = nil
-    end
+    if type(profiles) == "table" then profiles[name] = nil end
 end
-
 local function BuildProfiles(ctx)
     local b = W.PageBuilder(ctx)
     local head = b:Header("Profiles", "Create, switch, copy, delete, export and import profiles.", 64)
     EnsureProfilePopups()
-
     local contentW = ctx.width or 920
     local buttonW, buttonH, buttonGap = 190, 24, 14
     local buttonGridW = (buttonW * 2) + buttonGap
     local rightX = min(max(420, floor(contentW * 0.52)), max(360, contentW - buttonGridW - 28))
-
     local PROFILE_TOOLTIP = { hook = true, titleAsLine = true, bodyColor = { 0.85, 0.85, 0.85 } }
     local function AddProfileTooltip(frame, title, text) return M.AddTooltip and M.AddTooltip(frame, tostring(title or ""), text, PROFILE_TOOLTIP) or frame end
     local function PlaceActionRow(parent, x, left, right, y) left:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0) end
@@ -241,7 +215,6 @@ local function BuildProfiles(ctx)
         btn:SetScript("OnClick", onClick)
         return btn
     end
-
     local current = b:CollapsibleSection("profiles_management", "Profile Management", 238, true)
     local fieldW = min(360, max(300, rightX - 42))
     local profileDrop = W.Dropdown(current, "Active profile", {}, fieldW)
@@ -250,19 +223,16 @@ local function BuildProfiles(ctx)
     end
     profileDrop:SetOnValueChanged(function(value)
         if BlockCombatAction() then
-            profileDrop:SetValue(_G.MSUF_ActiveProfile or "Default")
+            profileDrop:SetValue(ActiveProfileName())
             return
         end
-        if value and value ~= "" and value ~= _G.MSUF_ActiveProfile and type(_G.MSUF_SwitchProfile) == "function" then
-            pcall(_G.MSUF_SwitchProfile, value)
-            if M.ClearHistory then M.ClearHistory() end
-        end
+        if value and value ~= "" and value ~= _G.MSUF_ActiveProfile and CallMSUF("MSUF_SwitchProfile", value) then ClearProfileHistory() end
         M.RequestGeneralApply("MSUF2_PROFILE_SWITCH", { preview = true })
         RefreshAfterProfileChange(ctx)
     end)
-    M.AddRefresher(ctx, function()
+    M.TrackRefresh(ctx, function()
         RefreshProfileValues()
-        profileDrop:SetValue(_G.MSUF_ActiveProfile or "Default")
+        profileDrop:SetValue(ActiveProfileName())
     end)
     local nameInput = W.TextInput(current, "Profile name for create/copy", fieldW)
     M.BindTextInput(ctx, nameInput,
@@ -274,10 +244,9 @@ local function BuildProfiles(ctx)
     local create = ProfileButton(current, "Create profile", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
-        if name and name ~= "" and type(_G.MSUF_CreateProfile) == "function" then
-            pcall(_G.MSUF_CreateProfile, name)
-            pcall(_G.MSUF_SwitchProfile, name)
-            if M.ClearHistory then M.ClearHistory() end
+        if name and name ~= "" and CallMSUF("MSUF_CreateProfile", name) then
+            CallMSUF("MSUF_SwitchProfile", name)
+            ClearProfileHistory()
         end
         M.profileCreateCopyName = ""
         nameInput:SetText("")
@@ -286,10 +255,10 @@ local function BuildProfiles(ctx)
     local copy = ProfileButton(current, "Copy current to name", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
-        if name and name ~= "" and type(_G.MSUF_CopyProfile) == "function" then
-            local ok, copied = pcall(_G.MSUF_CopyProfile, _G.MSUF_ActiveProfile or "Default", name)
-            if ok and copied and type(_G.MSUF_SwitchProfile) == "function" then pcall(_G.MSUF_SwitchProfile, name) end
-            if M.ClearHistory then M.ClearHistory() end
+        if name and name ~= "" then
+            local ok, copied = CallMSUF("MSUF_CopyProfile", ActiveProfileName(), name)
+            if ok and copied then CallMSUF("MSUF_SwitchProfile", name) end
+            if ok then ClearProfileHistory() end
             M.profileCreateCopyName = ""
             nameInput:SetText("")
             RefreshAfterProfileChange(ctx)
@@ -301,24 +270,22 @@ local function BuildProfiles(ctx)
             M.ShowPageResetConfirm("profiles")
             return
         end
-        local name = _G.MSUF_ActiveProfile or "Default"
+        local name = ActiveProfileName()
         if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
             _G.StaticPopup_Show("MSUF2_CONFIRM_RESET_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
-        elseif type(_G.MSUF_ResetProfile) == "function" then
-            pcall(_G.MSUF_ResetProfile, name)
-            if M.ClearHistory then M.ClearHistory() end
+        elseif CallMSUF("MSUF_ResetProfile", name) then
+            ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
         end
     end)
     local delete = ProfileButton(current, "Delete current profile", function()
         if BlockCombatAction() then return end
-        local name = _G.MSUF_ActiveProfile or "Default"
+        local name = ActiveProfileName()
         if name == "Default" then return end
         if _G.StaticPopup_Show and _G.StaticPopupDialogs and _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE then
             _G.StaticPopup_Show("MSUF2_CONFIRM_DELETE_PROFILE", name, nil, { name = name, after = function() RefreshAfterProfileChange(ctx) end })
-        elseif type(_G.MSUF_DeleteProfile) == "function" then
-            pcall(_G.MSUF_DeleteProfile, name)
-            if M.ClearHistory then M.ClearHistory() end
+        elseif CallMSUF("MSUF_DeleteProfile", name) then
+            ClearProfileHistory()
             RefreshAfterProfileChange(ctx)
         end
     end, true)
@@ -328,21 +295,19 @@ local function BuildProfiles(ctx)
     W.LabelAt(current, "Profile actions", rightX, -42, buttonGridW, "GameFontNormalSmall", T.colors.text)
     PlaceActionRow(current, rightX, create, copy, -70)
     PlaceActionRow(current, rightX, reset, delete, -110)
-    M.AddRefresher(ctx, function()
-        local active = _G.MSUF_ActiveProfile or "Default"
-        if delete.SetEnabled then delete:SetEnabled(active ~= "Default") end
+    M.TrackRefresh(ctx, function()
+        if delete.SetEnabled then delete:SetEnabled(ActiveProfileName() ~= "Default") end
     end)
-
     local specs = GetSpecMeta()
     local specRows = max(1, math.ceil((#specs > 0 and #specs or 1) / 2))
     local spec = b:CollapsibleSection("profiles_specs", "Spec Profiles", 120 + (specRows * 58), true)
     local auto = W.SwitchAt(spec, "Auto-switch profile by specialization", 14, -38, 360)
-    M.BindToggle(ctx, auto,
+    M.BindBoolWidget(ctx, auto,
         function()
             return type(_G.MSUF_IsSpecAutoSwitchEnabled) == "function" and _G.MSUF_IsSpecAutoSwitchEnabled() or false
         end,
         function(v)
-            if type(_G.MSUF_SetSpecAutoSwitchEnabled) == "function" then pcall(_G.MSUF_SetSpecAutoSwitchEnabled, v and true or false) end
+            CallMSUF("MSUF_SetSpecAutoSwitchEnabled", v and true or false)
             RefreshAfterProfileChange(ctx)
         end)
     W.Text(spec, "Assign profiles per specialization. If you change spec in combat, MSUF switches after combat.", 14, -70, contentW - 28, T.colors.muted)
@@ -357,34 +322,25 @@ local function BuildProfiles(ctx)
             local y = -112 - (row * 58)
             local drop = W.Dropdown(spec, s.name, function() return ProfileValues(true) end, 260)
             MoveWidget(drop, spec, x, y, 260)
-            M.BindDropdown(ctx, drop,
+            M.BindDropdownWidget(ctx, drop,
                 function()
-                    if type(_G.MSUF_GetSpecProfile) == "function" then
-                        return _G.MSUF_GetSpecProfile(s.id) or "None"
-                    end
+                    if type(_G.MSUF_GetSpecProfile) == "function" then return _G.MSUF_GetSpecProfile(s.id) or "None" end
                     return "None"
                 end,
                 function(v)
-                    if type(_G.MSUF_SetSpecProfile) == "function" then
-                        pcall(_G.MSUF_SetSpecProfile, s.id, (v ~= "None") and v or nil)
-                    end
+                    CallMSUF("MSUF_SetSpecProfile", s.id, (v ~= "None") and v or nil)
                     RefreshAfterProfileChange(ctx)
                 end)
         end
     end
-
     local io = b:CollapsibleSection("profiles_io", "Export / Import", 424, false)
     local ioActionX = min(max(380, floor(contentW * 0.46)), max(340, contentW - 460))
     local ioLeftW = max(320, min(620, ioActionX - 28))
     local exportKind = W.Dropdown(io, "Export kind", VT("all", "Full profile", "unitframe", "Unitframes", "castbar", "Castbars", "colors", "Colors", "gameplay", "Gameplay", "groupframe", "Group Frames"), 240)
-    M.BindDropdown(ctx, exportKind,
+    M.BindDropdownWidget(ctx, exportKind,
         function() return M.profileExportKind or "all" end,
         function(v)
-            if type(M.PersistMenuStateValue) == "function" then
-                M.PersistMenuStateValue("profileExportKind", v or "all")
-            else
-                M.profileExportKind = v or "all"
-            end
+            M.SetMenuStateValue("profileExportKind", v or "all")
         end)
     local blob = W.TextInput(io, "Profile string", 640)
     blob._msuf2CommitOnBlur = false
@@ -414,18 +370,19 @@ local function BuildProfiles(ctx)
     AddProfileTooltip(importCreateNew, "Import and create new profile", "Creates a separate profile before importing so you can test the import without changing your current profile.")
     local importProfileName = W.TextInput(io, "New profile name", 260)
     importProfileName._msuf2CommitOnBlur = false
-    M.AddRefresher(ctx, function()
+    M.TrackRefresh(ctx, function()
         if importProfileName:HasFocus() then return end
         importProfileName:SetText(tostring(M.profileImportNewName or ""))
     end)
-
-    local function ImportIntoCurrent()
-        if BlockCombatAction() then return false end
+    local function ImportTextOrFail()
+        if BlockCombatAction() then return nil end
         local text = blob:GetText()
-        if not (text and text ~= "") then
-            PrintProfileMessage("|cffff0000", "Import failed (empty string).")
-            return false
-        end
+        if text and text ~= "" then return text end
+        PrintProfileMessage("|cffff0000", "Import failed (empty string).")
+    end
+    local function ImportIntoCurrent()
+        local text = ImportTextOrFail()
+        if not text then return false end
         if type(_G.MSUF_ImportFromString) ~= "function" then
             PrintProfileMessage("|cffff0000", "Import failed: profile import API is not available.")
             return false
@@ -436,24 +393,17 @@ local function BuildProfiles(ctx)
                 PrintProfileMessage("|cffff0000", "Import failed: " .. tostring(imported))
                 return false
             end
-            if imported ~= true then
-                return false
-            end
-            if M.ClearHistory then M.ClearHistory() end
+            if imported ~= true then return false end
+            ClearProfileHistory()
             M.RequestGeneralApply("MSUF2_PROFILE_IMPORT", { preview = true })
             RefreshAfterProfileChange(ctx)
             ShowImportReloadPrompt()
             return true
         end)
     end
-
     local function ImportIntoNewProfile(rawName)
-        if BlockCombatAction() then return false end
-        local text = blob:GetText()
-        if not (text and text ~= "") then
-            PrintProfileMessage("|cffff0000", "Import failed (empty string).")
-            return false
-        end
+        local text = ImportTextOrFail()
+        if not text then return false end
         local name = Trim(rawName or importProfileName:GetText())
         if not (name and name ~= "") then
             PrintProfileMessage("|cffff0000", "Enter a new profile name first.")
@@ -470,34 +420,30 @@ local function BuildProfiles(ctx)
             PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
             return false
         end
-
         return ConfirmUUFBestEffortImport(text, function()
-            local previous = _G.MSUF_ActiveProfile or "Default"
-            pcall(_G.MSUF_CreateProfile, name)
+            local previous = ActiveProfileName()
+            CallMSUF("MSUF_CreateProfile", name)
             if not ProfileExists(name) then
                 PrintProfileMessage("|cffff0000", "Import failed: could not create profile '" .. name .. "'.")
                 return false
             end
             local previousExists = ProfileExists(previous)
-
-            pcall(_G.MSUF_SwitchProfile, name)
+            CallMSUF("MSUF_SwitchProfile", name)
             if _G.MSUF_ActiveProfile ~= name then
-                if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
+                if previousExists then CallMSUF("MSUF_SwitchProfile", previous) end
                 DeleteCreatedProfile(name)
                 PrintProfileMessage("|cffff0000", "Import failed: could not switch to profile '" .. name .. "'.")
                 return false
             end
-
             local ok, imported = pcall(_G.MSUF_ImportFromString, text)
             if not ok or imported ~= true then
-                if previousExists then pcall(_G.MSUF_SwitchProfile, previous) end
+                if previousExists then CallMSUF("MSUF_SwitchProfile", previous) end
                 DeleteCreatedProfile(name)
                 PrintProfileMessage("|cffff0000", ok and "Import failed." or ("Import failed: " .. tostring(imported)))
                 RefreshAfterProfileChange(ctx)
                 return false
             end
-
-            if M.ClearHistory then M.ClearHistory() end
+            ClearProfileHistory()
             M.RequestGeneralApply("MSUF2_PROFILE_IMPORT_NEW", { preview = true })
             RefreshAfterProfileChange(ctx)
             M.profileImportNewName = ""
@@ -506,7 +452,6 @@ local function BuildProfiles(ctx)
             return true
         end)
     end
-
     import:SetScript("OnClick", function()
         if M.profileImportCreateNew == true then
             ImportIntoNewProfile()
@@ -516,24 +461,16 @@ local function BuildProfiles(ctx)
     end)
     importProfileName:SetOnValueCommitted(function(value)
         M.profileImportNewName = Trim(value or "")
-        if M.profileImportCreateNew == true then
-            ImportIntoNewProfile(value)
-        end
+        if M.profileImportCreateNew == true then ImportIntoNewProfile(value) end
     end)
     importCreateNew:SetScript("OnClick", function(self)
         if BlockCombatAction() then
             self:SetChecked(M.profileImportCreateNew == true)
             return
         end
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
-        else
-            M.profileImportCreateNew = not (M.profileImportCreateNew == true)
-        end
+        M.SetMenuStateValue("profileImportCreateNew", not (M.profileImportCreateNew == true))
         self:SetChecked(M.profileImportCreateNew == true)
-        if M.ShowStatusFeedback then
-            M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2)
-        end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.profileImportCreateNew == true and "New-profile import on" or "New-profile import off", "info", 1.2) end
         if M.Refresh then M.Refresh(ctx) end
     end)
     local legacy = ProfileButton(io, "Import Legacy", function()
@@ -541,8 +478,8 @@ local function BuildProfiles(ctx)
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
             ConfirmUUFBestEffortImport(text, function()
-                pcall(_G.MSUF_ImportLegacyFromString, text)
-                if M.ClearHistory then M.ClearHistory() end
+                CallMSUF("MSUF_ImportLegacyFromString", text)
+                ClearProfileHistory()
                 M.RequestGeneralApply("MSUF2_PROFILE_LEGACY_IMPORT", { preview = true })
                 RefreshAfterProfileChange(ctx)
                 if M.ShowStatusFeedback then M.ShowStatusFeedback("Legacy profile imported", "ok", 1.7) end
@@ -552,9 +489,7 @@ local function BuildProfiles(ctx)
         end
     end)
     local wago = ProfileButton(io, "Browse Wago Profiles", function()
-        if type(_G.MSUF_ShowCopyLink) == "function" then
-            _G.MSUF_ShowCopyLink("Wago MSUF Profiles", WAGO_PROFILES_URL)
-        else
+        if not CallMSUF("MSUF_ShowCopyLink", "Wago MSUF Profiles", WAGO_PROFILES_URL) then
             blob:SetText(WAGO_PROFILES_URL)
             blob:HighlightText()
         end
@@ -568,44 +503,33 @@ local function BuildProfiles(ctx)
     MoveWidget(importProfileName, io, ioActionX, -202, 300)
     StyleProfileInput(importProfileName, 300, 24, false)
     W.Text(io, "Importing to the current profile changes the active profile. To test safely, enable new-profile import or copy/export your profile first.", ioActionX, -250, max(260, contentW - ioActionX - 28), T.colors.muted)
-    M.AddRefresher(ctx, function()
+    M.TrackRefresh(ctx, function()
         local createNew = M.profileImportCreateNew == true
         importCreateNew:SetChecked(createNew)
-        if import.SetText then
-            import:SetText(createNew and "Import new profile" or "Import to current profile")
-        end
+        if import.SetText then import:SetText(createNew and "Import new profile" or "Import to current profile") end
         W.SetControlShown(importProfileName, createNew)
-        if not createNew and importProfileName.HasFocus and importProfileName:HasFocus() then
-            importProfileName:ClearFocus()
-        end
+        if not createNew and importProfileName.HasFocus and importProfileName:HasFocus() then importProfileName:ClearFocus() end
     end)
-
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-
 local function BuildModules(ctx)
     local b = W.PageBuilder(ctx)
     local head = b:Header("Modules", "Optional MSUF style and visual modules.", 64)
-    if W.CreatePageResetButton then
-        W.CreatePageResetButton(ctx, head, nil, { width = 88, y = -20 })
-    end
+    if W.CreatePageResetButton then W.CreatePageResetButton(ctx, head, nil, { width = 88, y = -20 }) end
     local style = b:CollapsibleSection("modules_style", "Style", 96, true)
     local enable = W.SwitchAt(style, "MSUF Style", 14, -38, 220)
-    M.BindToggle(ctx, enable,
+    M.BindBoolWidget(ctx, enable,
         function()
-            if type(_G.MSUF_StyleIsEnabled) == "function" then
-                local ok, v = pcall(_G.MSUF_StyleIsEnabled)
-                if ok then return v and true or false end
-            end
+            local ok, v = CallMSUF("MSUF_StyleIsEnabled")
+            if ok then return v and true or false end
             return G().styleEnabled ~= false
         end,
         function(v)
-            if type(_G.MSUF_SetStyleEnabled) == "function" then pcall(_G.MSUF_SetStyleEnabled, v and true or false) end
+            CallMSUF("MSUF_SetStyleEnabled", v and true or false)
             G().styleEnabled = v and true or false
             CallGlobal("MSUF_ApplyModules")
         end)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-
 M.RegisterPage("profiles", { title = "MSUF Profiles", build = BuildProfiles, version = 5 })
 M.RegisterPage("modules", { title = "MSUF Modules", build = BuildModules })

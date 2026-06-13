@@ -23,6 +23,8 @@ if type(C) ~= "table" then return end
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local AddAliasesForUnit = C.AddAliasesForUnit
+local EnsureDB = C.EnsureDB
+local GeneralDB = C.GeneralDB
 local GroupDB = C.GroupDB
 local ClampNumber = C.ClampNumber
 local ApplyGroup = C.ApplyGroup
@@ -39,6 +41,10 @@ local function RegisterGroupBoolean(scope, attr, dbKey, label, defaultValue, mod
         attribute = attr,
         type = "boolean",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
+        booleanAliases = opts.booleanAliases,
+        valueAliases = opts.valueAliases,
+        intentGuard = opts.intentGuard,
         get = function()
             if opts.get then return opts.get(scope) end
             local value = GroupDB(scope)[dbKey]
@@ -99,6 +105,7 @@ local function RegisterGroupEnum(scope, attr, dbKey, label, defaultValue, values
         attribute = attr,
         type = "enum",
         aliases = aliases,
+        exactAliases = opts.exactAliases,
         values = values,
         valueAliases = valueAliases,
         get = function()
@@ -174,6 +181,74 @@ end
 
 local function TrimString(value)
     return (tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function ClearGroupNameShorteningLegacyFlags(conf)
+    if type(conf) ~= "table" then return end
+    conf.nameShortenOverride = nil
+    conf._msufGFNameTruncationOverride = nil
+end
+
+local function SetGroupFontOverrideValue(scope, key, value)
+    local conf = GroupDB(scope)
+    conf.fontOverride = true
+    conf[key] = value
+    ClearGroupNameShorteningLegacyFlags(conf)
+end
+
+local function SharedNameShorteningEnabled()
+    local db = EnsureDB and EnsureDB() or _G.MSUF_DB
+    return db and db.shortenNames == true
+end
+
+local function SharedNameShorteningMax()
+    local g = GeneralDB and GeneralDB() or (_G.MSUF_DB and _G.MSUF_DB.general)
+    return tonumber(g and g.shortenNameMaxChars) or 6
+end
+
+local function SharedNameShorteningSide()
+    local g = GeneralDB and GeneralDB() or (_G.MSUF_DB and _G.MSUF_DB.general)
+    local side = g and g.shortenNameClipSide
+    return side == "RIGHT" and "RIGHT" or "LEFT"
+end
+
+local function SharedNameShorteningNoEllipsis()
+    local g = GeneralDB and GeneralDB() or (_G.MSUF_DB and _G.MSUF_DB.general)
+    return not (g and g.shortenNameShowDots ~= false)
+end
+
+local function GroupNameShorteningEnabled(scope)
+    local conf = GroupDB(scope)
+    if conf.fontOverride == true then
+        local value = conf.nameShortenEnabled
+        if value == nil then return (tonumber(conf.nameMaxChars) or 0) > 0 end
+        return value == true
+    end
+    return SharedNameShorteningEnabled()
+end
+
+local function GroupNameShorteningMax(scope)
+    local conf = GroupDB(scope)
+    if conf.fontOverride == true then
+        local value = tonumber(conf.nameMaxChars)
+        if value ~= nil then return value end
+        return conf.nameShortenEnabled == true and 6 or 0
+    end
+    return SharedNameShorteningMax()
+end
+
+local function GroupNameShorteningSide(scope)
+    local conf = GroupDB(scope)
+    if conf.fontOverride == true then
+        return conf.nameClipSide == "LEFT" and "LEFT" or "RIGHT"
+    end
+    return SharedNameShorteningSide()
+end
+
+local function GroupNameShorteningNoEllipsis(scope)
+    local conf = GroupDB(scope)
+    if conf.fontOverride == true then return conf.nameNoEllipsis == true end
+    return SharedNameShorteningNoEllipsis()
 end
 
 local function StandardGroupAnchorTarget(value)
@@ -267,6 +342,158 @@ local GROUP_DELIMITER_VALUES = { " ", "  ", " / ", " - ", " : ", " | " }
 local GROUP_STATUS_ICON_STYLE_VALUES = { "BLIZZARD", "CLASSIC", "MIDNIGHT" }
 local GROUP_STATUS_ICON_PACK_VALUES = { "DEFAULT", "BLIZZARD", "CLASSIC", "MIDNIGHT" }
 local GROUP_STATUS_ANCHOR_VALUES = { "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT", "CENTER", "TOP", "BOTTOM", "LEFT", "RIGHT" }
+
+local function GroupBarModeExactAliases(scope)
+    local out = {}
+    local function add(value)
+        if value and value ~= "" then out[#out + 1] = value end
+    end
+    local function addModePhrases(term)
+        add(term .. " class color")
+        add(term .. " class colors")
+        add(term .. " class colored")
+        add(term .. " colored by class")
+        add(term .. " use class color")
+        add(term .. " use class colors")
+        add(term .. " bar color mode")
+        add(term .. " health bar color mode")
+        add(term .. " group bar style")
+        add(term .. " global color")
+        add(term .. " global colors")
+        add(term .. " use global color")
+        add(term .. " use global colors")
+        add(term .. " default color")
+        add(term .. " default colors")
+        add(term .. " use default colors")
+    end
+    local function addModeForScopePhrases(term)
+        add("class color mode for " .. term)
+        add("class colors for " .. term)
+        add("class colored bars for " .. term)
+        add("global colors for " .. term)
+        add("default colors for " .. term)
+    end
+    local scopeTerms = {
+        party = { "party", "party frame", "party frames", "partyframe", "partyframes" },
+        raid = { "raid", "raid frame", "raid frames", "raidframe", "raidframes" },
+        mythicraid = { "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid", "mythicraidframe", "mythicraidframes" },
+    }
+    for _, term in ipairs(scopeTerms[scope] or {}) do
+        addModePhrases(term)
+        addModeForScopePhrases(term)
+    end
+    for _, term in ipairs({ "group frame", "group frames", "groupframes", "all group frames" }) do
+        addModePhrases(term)
+        addModeForScopePhrases(term)
+    end
+    return out
+end
+
+local function GroupGrowthExactAliases(scope)
+    local out = {}
+    local function add(value)
+        if value and value ~= "" then out[#out + 1] = value end
+    end
+    local function addDirectionPhrases(term)
+        for _, phrase in ipairs({
+            "grow right", "grows right", "to grow right", "frames grow right", "frames to grow right",
+            "grow right then down", "grow right and down", "right then down growth", "right first growth",
+            "grow left", "grows left", "to grow left", "frames grow left", "frames to grow left",
+            "grow left then down", "grow left and down", "left then down growth", "left first growth",
+            "grow down", "grows down", "to grow down", "frames grow down", "frames to grow down",
+            "grow down then right", "grow down and right", "down then right growth", "down first growth",
+            "grow up", "grows up", "to grow up", "frames grow up", "frames to grow up",
+            "grow up then right", "grow up and right", "up then right growth", "up first growth",
+            "growth right", "growth left", "growth down", "growth up",
+            "growth direction right", "growth direction left", "growth direction down", "growth direction up",
+        }) do
+            add(term .. " " .. phrase)
+        end
+    end
+    local scopeTerms = {
+        party = { "party", "party frame", "party frames", "partyframe", "partyframes", "party group", "party groups" },
+        raid = { "raid", "raid frame", "raid frames", "raidframe", "raidframes", "raid group", "raid groups" },
+        mythicraid = { "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid", "mythicraidframe", "mythicraidframes", "mythic raid group", "mythic raid groups" },
+    }
+    for _, term in ipairs(scopeTerms[scope] or {}) do addDirectionPhrases(term) end
+    for _, term in ipairs({ "group frame", "group frames", "groupframes", "all group frames" }) do addDirectionPhrases(term) end
+    return out
+end
+
+local GROUP_REVERSE_FILL_BOOLEAN_ALIASES = {
+    ["right to left"] = true,
+    ["fill right to left"] = true,
+    ["fill backwards"] = true,
+    ["fill backward"] = true,
+    ["fills backwards"] = true,
+    ["fills backward"] = true,
+    ["reverse fill"] = true,
+    ["reverse direction"] = true,
+    ["fill reverse"] = true,
+    ["fill reversed"] = true,
+    ["other way"] = true,
+    ["left to right"] = false,
+    ["fill left to right"] = false,
+    ["fill left"] = false,
+    ["normal direction"] = false,
+    ["normal fill"] = false,
+    ["fill normal"] = false,
+    ["forward fill"] = false,
+    ["fill forward"] = false,
+    ["same direction"] = false,
+}
+
+local function GroupReverseFillExactAliases(scope)
+    local out = {}
+    local function add(value)
+        if value and value ~= "" then out[#out + 1] = value end
+    end
+    local scopeTerms = {
+        party = { "party", "party frame", "party frames", "partyframe", "partyframes" },
+        raid = { "raid", "raid frame", "raid frames", "raidframe", "raidframes" },
+        mythicraid = { "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid", "mythicraidframe", "mythicraidframes" },
+    }
+    local phrases = {
+        "reverse fill",
+        "reverse health fill",
+        "fill backwards",
+        "fill backward",
+        "fill right to left",
+        "right to left fill",
+        "fill normal direction",
+        "fill normal",
+        "normal direction",
+        "normal fill",
+        "fill left to right",
+        "left to right fill",
+    }
+    for _, term in ipairs(scopeTerms[scope] or {}) do
+        for _, phrase in ipairs(phrases) do add(term .. " " .. phrase) end
+    end
+    for _, term in ipairs({ "group frame", "group frames", "groupframes", "all group frames" }) do
+        for _, phrase in ipairs(phrases) do add(term .. " " .. phrase) end
+    end
+    return out
+end
+
+local function GroupReverseFillBooleanAliases(scope)
+    local out = {}
+    for key, value in pairs(GROUP_REVERSE_FILL_BOOLEAN_ALIASES) do out[key] = value end
+    local scopeTerms = {
+        party = { "party", "party frame", "party frames", "partyframe", "partyframes" },
+        raid = { "raid", "raid frame", "raid frames", "raidframe", "raidframes" },
+        mythicraid = { "mythic raid", "mythic raid frame", "mythic raid frames", "mythicraid", "mythicraidframe", "mythicraidframes" },
+    }
+    for _, term in ipairs(scopeTerms[scope] or {}) do
+        out["turn off " .. term .. " reverse fill"] = false
+        out["disable " .. term .. " reverse fill"] = false
+        out[term .. " reverse fill off"] = false
+        out["turn on " .. term .. " reverse fill"] = true
+        out["enable " .. term .. " reverse fill"] = true
+        out[term .. " reverse fill on"] = true
+    end
+    return out
+end
 
 local GROUP_TEXT_MODE_ALIASES = {
     none = "NONE",
@@ -561,7 +788,10 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "fill right to left")
     AddAliasesForUnit(aliases, scope, "normal fill")
     AddAliasesForUnit(aliases, scope, "left to right fill")
-    RegisterGroupBoolean(scope, "reverseFill", "reverseFill", "Reverse Health Fill", false, "visual", aliases)
+    RegisterGroupBoolean(scope, "reverseFill", "reverseFill", "Reverse Health Fill", false, "visual", aliases, {
+        exactAliases = GroupReverseFillExactAliases(scope),
+        booleanAliases = GroupReverseFillBooleanAliases(scope),
+    })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name", "name")
@@ -701,18 +931,21 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     aliases = {}
     AddAliasesForUnit(aliases, scope, "name max chars", "name max zeichen")
     AddAliasesForUnit(aliases, scope, "name length", "name laenge")
-    RegisterGroupNumber(scope, "nameMaxChars", "nameMaxChars", "Name Max Characters", 0, 0, 30, 1, "font", aliases)
+    RegisterGroupNumber(scope, "nameMaxChars", "nameMaxChars", "Name Max Characters", 0, 0, 30, 1, "font", aliases, {
+        get = GroupNameShorteningMax,
+        set = function(groupScope, value)
+            SetGroupFontOverrideValue(groupScope, "nameMaxChars", ClampNumber(value, 0, 30, 1))
+        end,
+    })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "shorten group names")
     AddAliasesForUnit(aliases, scope, "shorten names")
     AddAliasesForUnit(aliases, scope, "name shortening")
     RegisterGroupBoolean(scope, "nameShortening", "nameShortenEnabled", "Name Shortening", false, "font", aliases, {
-        get = function(groupScope)
-            local db = GroupDB(groupScope)
-            local value = db.nameShortenEnabled
-            if value == nil then return (tonumber(db.nameMaxChars) or 0) > 0 end
-            return value and true or false
+        get = GroupNameShorteningEnabled,
+        set = function(groupScope, value)
+            SetGroupFontOverrideValue(groupScope, "nameShortenEnabled", value and true or false)
         end,
     })
 
@@ -727,13 +960,23 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
         right = "RIGHT",
         startletters = "RIGHT",
         ["keep start"] = "RIGHT",
-    }, "font", aliases)
+    }, "font", aliases, {
+        get = GroupNameShorteningSide,
+        set = function(groupScope, value)
+            SetGroupFontOverrideValue(groupScope, "nameClipSide", value == "LEFT" and "LEFT" or "RIGHT")
+        end,
+    })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "no ellipsis")
     AddAliasesForUnit(aliases, scope, "name no ellipsis")
     AddAliasesForUnit(aliases, scope, "truncate without dots")
-    RegisterGroupBoolean(scope, "nameNoEllipsis", "nameNoEllipsis", "Name No Ellipsis", false, "font", aliases)
+    RegisterGroupBoolean(scope, "nameNoEllipsis", "nameNoEllipsis", "Name No Ellipsis", false, "font", aliases, {
+        get = GroupNameShorteningNoEllipsis,
+        set = function(groupScope, value)
+            SetGroupFontOverrideValue(groupScope, "nameNoEllipsis", value and true or false)
+        end,
+    })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "range fade alpha", "reichweite fade alpha")
@@ -751,17 +994,43 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "frames grow")
     AddAliasesForUnit(aliases, scope, "frames to grow")
     RegisterGroupEnum(scope, "growth", "growth", "Growth Direction", "DOWN", { "DOWN", "UP", "RIGHT", "LEFT" }, {
+        ["right then down"] = "RIGHT",
+        ["right and down"] = "RIGHT",
+        ["right first"] = "RIGHT",
+        ["grow right"] = "RIGHT",
+        ["to the right"] = "RIGHT",
+        horizontal = "RIGHT",
+        horizontally = "RIGHT",
         down = "DOWN",
+        ["down then right"] = "DOWN",
+        ["down and right"] = "DOWN",
+        ["down first"] = "DOWN",
+        ["grow down"] = "DOWN",
+        downwards = "DOWN",
+        vertical = "DOWN",
+        vertically = "DOWN",
         runter = "DOWN",
         unten = "DOWN",
         up = "UP",
+        ["up then right"] = "UP",
+        ["up and right"] = "UP",
+        ["up first"] = "UP",
+        ["grow up"] = "UP",
+        upwards = "UP",
         hoch = "UP",
         oben = "UP",
         right = "RIGHT",
         rechts = "RIGHT",
         left = "LEFT",
+        ["left then down"] = "LEFT",
+        ["left and down"] = "LEFT",
+        ["left first"] = "LEFT",
+        ["grow left"] = "LEFT",
+        ["to the left"] = "LEFT",
         links = "LEFT",
-    }, "rebuild", aliases)
+    }, "rebuild", aliases, {
+        exactAliases = GroupGrowthExactAliases(scope),
+    })
 
     aliases = {}
     AddAliasesForUnit(aliases, scope, "health text center", "leben text mitte")
@@ -1108,12 +1377,24 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
     AddAliasesForUnit(aliases, scope, "use default colors")
     RegisterGroupEnum(scope, "groupBarMode", "gfBarMode", "Bar Color Mode", "GLOBAL", GROUP_BAR_MODE_VALUES, {
         global = "GLOBAL",
+        ["global color"] = "GLOBAL",
+        ["global colors"] = "GLOBAL",
         inherit = "GLOBAL",
+        ["inherit color"] = "GLOBAL",
+        ["inherit colors"] = "GLOBAL",
         default = "GLOBAL",
+        ["default color"] = "GLOBAL",
+        ["default colors"] = "GLOBAL",
         ["global style"] = "GLOBAL",
         class = "CLASS",
         classcolor = "CLASS",
         ["class color"] = "CLASS",
+        ["class colors"] = "CLASS",
+        ["class colored"] = "CLASS",
+        ["colored by class"] = "CLASS",
+        ["coloured by class"] = "CLASS",
+        ["class colored bars"] = "CLASS",
+        ["class color bars"] = "CLASS",
         dark = "dark",
         darkmode = "dark",
         ["dark mode"] = "dark",
@@ -1126,6 +1407,7 @@ for _, scope in ipairs({ "party", "raid", "mythicraid" }) do
         custom = "CUSTOM",
         manual = "CUSTOM",
     }, "visual", aliases, {
+        exactAliases = GroupBarModeExactAliases(scope),
         get = function(scopeKey) return GroupDB(scopeKey).gfBarMode or "GLOBAL" end,
         set = function(scopeKey, value)
             local conf = GroupDB(scopeKey)

@@ -4,15 +4,12 @@
 --- renderer.
 local _, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local TextFocus = M.GroupPreviewTextFocus or {}
 M.GroupPreviewTextFocus = TextFocus
 local PreviewHelpers = M.PreviewHelpers or {}
-
 function TextFocus.Install(deps)
     deps = deps or {}
     local CurrentScope = deps.CurrentScope or function() return M.gfScope or "party" end
@@ -22,11 +19,9 @@ local function GFPreviewCurrentTextKind()
     if selected == "hp" or selected == "power" then return selected end
     return "name"
 end
-
 local function GFPreviewTextOffsetKeys(kind, slot)
     return M.TextSlotOffsetKeys(kind, slot)
 end
-
 local function GFPreviewTextLabel(kind, slot)
     if kind == "hp" then
         if slot == "left" then return "HP Left Text" end
@@ -42,25 +37,21 @@ local function GFPreviewTextLabel(kind, slot)
     end
     return "Name Text"
 end
-
 local function GFPreviewTextMovesTogether(scope, kind)
     local byScope = M.gfTextMoveTogether and M.gfTextMoveTogether[scope or CurrentScope()]
     local value = byScope and byScope[kind]
     if value == nil then return true end
     return value == true
 end
-
 local function GFPreviewSetTextMoveTogether(scope, kind, value)
     scope = scope or CurrentScope()
     M.gfTextMoveTogether = M.gfTextMoveTogether or {}
     M.gfTextMoveTogether[scope] = M.gfTextMoveTogether[scope] or {}
     M.gfTextMoveTogether[scope][kind] = value ~= false
 end
-
 local function GFPreviewPlaceHandleAroundRegions(handle, parent, regions, pad)
     return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad, { fitText = true })
 end
-
 local GFPreviewNormalizeTextFocusKind = PreviewHelpers.NormalizeTextFocusKind or function(kind)
     if kind == "name" or kind == "hp" or kind == "power" then return kind end
     return nil
@@ -69,7 +60,6 @@ local GFPreviewNormalizeTextFocusSlot = PreviewHelpers.NormalizeTextFocusSlot or
     if slot == "left" or slot == "center" or slot == "right" then return slot end
     return nil
 end
-
 local function GFPreviewTextFocusRegions(mock, kind, slot)
     if not mock then return nil end
     if kind == "name" then
@@ -87,7 +77,6 @@ local function GFPreviewTextFocusRegions(mock, kind, slot)
     end
     return nil
 end
-
 local function GFPreviewApplyTextFocus(box, mock)
     return PreviewHelpers.ApplyTextFocus(box, mock, mock, {
         Regions = GFPreviewTextFocusRegions,
@@ -95,8 +84,6 @@ local function GFPreviewApplyTextFocus(box, mock)
         colors = { hp = { 0.25, 0.90, 0.42 } },
     })
 end
-
-
     return {
         CurrentTextKind = GFPreviewCurrentTextKind,
         TextOffsetKeys = GFPreviewTextOffsetKeys,

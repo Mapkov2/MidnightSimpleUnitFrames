@@ -457,15 +457,7 @@ local SEARCH_GENERIC_LOCATION_QUESTION_TERMS = "where|where is|where are|where d
 
 local SEARCH_GENERIC_LOCATION_ACTION_TERMS = "change|changed|changing|configure|customize|customise|edit|find|set|select|choose|adjust|move|resize|enable|disable|show|hide|turn on|turn off|aendern|aendere|andern|einstellen|finden|auswaehlen|verschieben|aktivieren|deaktivieren|anzeigen|ausblenden"
 
-local SEARCH_CONTROL_KINDS = {
-    toggle = true,
-    dropdown = true,
-    segment = true,
-    slider = true,
-    color = true,
-    button = true,
-    textinput = true,
-}
+local SEARCH_CONTROL_KINDS = M.KeySetFromWords "toggle dropdown segment slider color button textinput"
 
 local function SearchContainsTerm(normalized, term)
     normalized = tostring(normalized or "")

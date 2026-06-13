@@ -1,32 +1,26 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local T = M.Theme or {}
 M.Theme = T
+local WL = M.WordList
 
 -- Menu2 theme and widget styling layer.
 -- Owns reusable visual primitives, locale-aware labels, and skin helpers for the options UI.
 -- Page modules should call this layer instead of restyling frames ad hoc.
 local GLASS_VARIANTS = T.glassVariants or {}
 T.collapseHintClickHideThreshold = T.collapseHintClickHideThreshold or 8
-
 local function Template()
     return _G.BackdropTemplateMixin and "BackdropTemplate" or nil
 end
-T.Template = Template
-
 local ENGLISH_LOCALES = { enUS = true, enGB = true }
 local LOCALE_ORDER = { "enUS", "enGB", "deDE", "esES", "esMX", "frFR", "itIT", "koKR", "ptBR", "ruRU", "zhCN", "zhTW" }
-
 local function ActiveLocale()
     if type(MSUF.GetEffectiveLocale) == "function" then return MSUF.GetEffectiveLocale() end
     return MSUF.LOCALE or ((type(GetLocale) == "function" and GetLocale()) or "enUS")
 end
-
 local function TrackLocaleKey(key, translated)
     -- Locale coverage is collected while UI text is resolved. This gives diagnostics a cheap
     -- way to list missing translations without a separate scan of every page file.
@@ -36,7 +30,6 @@ local function TrackLocaleKey(key, translated)
     M.missingLocaleKeys = M.missingLocaleKeys or {}
     M.missingLocaleKeys[key] = true
 end
-
 function M.GetLocaleCoverage()
     local keys, missing = M.localeKeys or {}, M.missingLocaleKeys or {}
     local total, missingTotal, missingList = 0, 0, {}
@@ -48,7 +41,6 @@ function M.GetLocaleCoverage()
     table.sort(missingList)
     return total, missingTotal, missingList
 end
-
 local function Tr(text)
     if type(text) ~= "string" then return text end
     if type(MSUF.Translate) == "function" then
@@ -75,17 +67,13 @@ local function Tr(text)
     return text
 end
 M.Tr = M.Tr or Tr
-T.Tr = M.Tr
-
 local function ClientLocale()
     return (type(GetLocale) == "function" and GetLocale()) or MSUF.CLIENT_LOCALE or "enUS"
 end
-
 local function IsSupportedLocale(locale)
     local supported = MSUF.SUPPORTED_LOCALES
     return type(locale) == "string" and type(supported) == "table" and supported[locale] == true
 end
-
 function M.GetLocaleDropdownValues()
     local names = MSUF.LOCALE_NAMES or {}
     local values = {
@@ -97,54 +85,42 @@ function M.GetLocaleDropdownValues()
     end
     return values
 end
-
 function M.GetLocaleSelection()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     local selected = type(g) == "table" and g.menuLocale
     if IsSupportedLocale(selected) then return selected end
     return "auto"
 end
-
 function M.ResolveLocaleSelection(selection)
     if IsSupportedLocale(selection) then return selection end
     local locale = ClientLocale()
     if IsSupportedLocale(locale) then return locale end
     return "enUS"
 end
-
 function M.ApplyLocaleSelection(selection)
     local selected = selection or M.GetLocaleSelection()
     local locale = M.ResolveLocaleSelection(selected)
     M.missingLocaleKeys = {}
-    if type(MSUF.SetLocale) == "function" then
-        return MSUF.SetLocale(locale), selected
-    end
+    if type(MSUF.SetLocale) == "function" then return MSUF.SetLocale(locale), selected end
     MSUF.LOCALE = locale
     return locale, selected
 end
-
 M.Format = M.Format or function(text, ...)
     local translated = M.Tr(text)
     if select("#", ...) == 0 then return translated end
     local ok, value = pcall(string.format, translated, ...)
     return ok and value or translated
 end
-
 local function SetColor(tex, c)
     if tex and c then tex:SetColorTexture(c[1], c[2], c[3], c[4] or 1) end
 end
-T.SetColor = SetColor
-
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
-
 local function SmoothTexture(tex)
     if not tex then return end
     if tex.SetSnapToPixelGrid then tex:SetSnapToPixelGrid(false) end
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
 end
-
 local Clamp01 = M.Clamp01
-
 local function ShadeColor(c, amount, alphaMul)
     c = c or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
     amount = tonumber(amount) or 0
@@ -164,8 +140,6 @@ local function ShadeColor(c, amount, alphaMul)
         Clamp01((c[4] or 1) * (alphaMul or 1)),
     }
 end
-T.ShadeColor = ShadeColor
-
 local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preserveTexture)
     if not tex then return false end
     fromColor = fromColor or T.colors.panel2 or { 0.04, 0.05, 0.08, 1 }
@@ -196,15 +170,12 @@ local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preser
     end
     return false
 end
-T.ApplyTextureGradient = ApplyTextureGradient
-
 local function ApplyGradientToParts(parts, orientation, fromColor, toColor)
     if not parts then return end
     for i = 1, #parts do
         ApplyTextureGradient(parts[i], orientation, fromColor, toColor, true)
     end
 end
-
 local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMul)
     if not fill then return end
     baseColor = baseColor or T.colors.pillBase
@@ -218,8 +189,8 @@ local function SetFillGradient(fill, baseColor, amountTop, amountBottom, alphaMu
         fill:SetVertexColor(baseColor[1], baseColor[2], baseColor[3], (baseColor[4] or 1) * (alphaMul or 1))
     end
 end
-T.SetFillGradient = SetFillGradient
-
+M.AssignNamedValues(T, "Tr Template SetColor ShadeColor ApplyTextureGradient SetFillGradient",
+    M.Tr, Template, SetColor, ShadeColor, ApplyTextureGradient, SetFillGradient)
 function T.StyleFontString(fs, color, bump)
     if not fs then return fs end
     local c = color or T.colors.text
@@ -229,9 +200,7 @@ function T.StyleFontString(fs, color, bump)
     if fs.GetFont and fs.SetFont then
         local ok, font, size, flags = pcall(fs.GetFont, fs)
         if ok and font and size then
-            if not fs._msuf2FontOriginal then
-                fs._msuf2FontOriginal = { font = font, size = size, flags = flags }
-            end
+            if not fs._msuf2FontOriginal then fs._msuf2FontOriginal = { font = font, size = size, flags = flags } end
             local orig = fs._msuf2FontOriginal
             local nextSize = math.max(8, (tonumber(orig.size) or size) + (tonumber(bump) or T.fontBump or 0))
             pcall(fs.SetFont, fs, orig.font or font, nextSize, orig.flags or flags or "")
@@ -239,7 +208,6 @@ function T.StyleFontString(fs, color, bump)
     end
     return fs
 end
-
 local function CreateSuperellipseParts(frame, layer, subLevel)
     local parts = {}
     local specs = {
@@ -263,7 +231,6 @@ local function CreateSuperellipseParts(frame, layer, subLevel)
     end
     return parts
 end
-
 local function LayoutSuperellipseParts(parts, frame, inset, capW)
     parts.L:ClearAllPoints()
     parts.M:ClearAllPoints()
@@ -277,18 +244,13 @@ local function LayoutSuperellipseParts(parts, frame, inset, capW)
     parts.M:SetPoint("TOPLEFT", parts.L, "TOPRIGHT", 0, 0)
     parts.M:SetPoint("BOTTOMRIGHT", parts.R, "BOTTOMLEFT", 0, 0)
 end
-
 function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     if not (frame and frame.CreateTexture) then return nil, nil end
     key = key or "_msuf2SE"
-    if frame[key .. "Fill"] and frame[key .. "Border"] then
-        return frame[key .. "Fill"], frame[key .. "Border"]
-    end
-
+    if frame[key .. "Fill"] and frame[key .. "Border"] then return frame[key .. "Fill"], frame[key .. "Border"] end
     inset = inset or 1
     fillLayer = fillLayer or "BACKGROUND"
     borderLayer = borderLayer or "BORDER"
-
     local h = (frame.GetHeight and frame:GetHeight()) or 22
     local fill = CreateSuperellipseParts(frame, fillLayer, 0)
     local border = CreateSuperellipseParts(frame, borderLayer, -1)
@@ -300,7 +262,6 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
         local innerH = math.max(1, h2 - p * 2)
         local nextCapW = math.min(math.floor(innerH * 0.5 + 0.5), math.floor(innerW * 0.5))
         LayoutSuperellipseParts(fill, frame, p, nextCapW)
-
         local bInset = math.max(0, p - 1)
         local borderInnerW = math.max(1, w - bInset * 2)
         local borderInnerH = math.max(1, h2 - bInset * 2)
@@ -316,7 +277,6 @@ function T.CreateSuperellipseLayers(frame, key, inset, fillLayer, borderLayer)
     frame[key .. "Border"] = border
     return fill, border
 end
-
 function T.ApplyBackdrop(frame, bg, border)
     if not frame then return frame end
     if frame.SetBackdrop then
@@ -342,7 +302,6 @@ function T.ApplyBackdrop(frame, bg, border)
     end
     return frame
 end
-
 local function ColorTexture(tex, c)
     if not (tex and c) then return end
     if tex.SetColorTexture then
@@ -352,7 +311,6 @@ local function ColorTexture(tex, c)
         if tex.SetVertexColor then tex:SetVertexColor(c[1], c[2], c[3], c[4] or 1) end
     end
 end
-
 local function ApplyFocusVeilLayer(frame, spec)
     if not (frame and frame.CreateTexture and type(spec) == "table" and type(spec.key) == "string") then return end
     local tex = frame[spec.key]
@@ -360,7 +318,6 @@ local function ApplyFocusVeilLayer(frame, spec)
         tex = frame:CreateTexture(nil, spec.layer or "BORDER", nil, spec.subLevel or 0)
         frame[spec.key] = tex
     end
-
     tex:ClearAllPoints()
     local p = spec.points
     if p then
@@ -369,26 +326,19 @@ local function ApplyFocusVeilLayer(frame, spec)
     else
         tex:SetAllPoints()
     end
-
     local texture = spec.texture
     if texture then
         if T.media and T.media[texture] then texture = T.media[texture] end
         tex:SetTexture(texture)
-        if spec.color and tex.SetVertexColor then
-            tex:SetVertexColor(spec.color[1], spec.color[2], spec.color[3], spec.color[4] or 1)
-        end
+        if spec.color and tex.SetVertexColor then tex:SetVertexColor(spec.color[1], spec.color[2], spec.color[3], spec.color[4] or 1) end
     else
         ColorTexture(tex, spec.color)
     end
-
     local tc = spec.texCoord
-    if tc and tex.SetTexCoord then
-        tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8])
-    end
+    if tc and tex.SetTexCoord then tex:SetTexCoord(tc[1], tc[2], tc[3], tc[4], tc[5], tc[6], tc[7], tc[8]) end
     if tex.SetBlendMode then tex:SetBlendMode(spec.blend or "BLEND") end
     if tex.Show then tex:Show() end
 end
-
 function T.ApplyFocusVeil(frame, variant)
     local veil = T.focusVeils and T.focusVeils[variant or "dropdown"]
     if type(veil) ~= "table" then return frame end
@@ -397,7 +347,6 @@ function T.ApplyFocusVeil(frame, variant)
     end
     return frame
 end
-
 local function ClampMotionDuration(value, fallback)
     if T.ReducedMotionEnabled and T.ReducedMotionEnabled() then return 0.001 end
     value = tonumber(value) or tonumber(fallback) or T.motion.standard or 0.105
@@ -408,14 +357,12 @@ local function ClampMotionDuration(value, fallback)
     if value > maxDur then return maxDur end
     return value
 end
-
 function T.ReducedMotionEnabled()
     if T.reduceMotion == true or T.reducedMotion == true then return true end
     local db = _G.MSUF_DB
     local general = type(db) == "table" and db.general or nil
     return type(general) == "table" and (general.reduceMotion == true or general.reducedMotion == true) or false
 end
-
 function T.MotionDuration(name, fallback)
     if type(name) == "number" then return ClampMotionDuration(name, fallback) end
     local profile = type(name) == "string" and T.motionProfiles and T.motionProfiles[name] or nil
@@ -423,14 +370,12 @@ function T.MotionDuration(name, fallback)
     local value = key and T.motion and T.motion[key]
     return ClampMotionDuration(value, fallback)
 end
-
 function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
     if not (frame and frame.SetAlpha and frame.CreateAnimationGroup) then
         if frame and frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
         if type(onFinished) == "function" then onFinished(frame) end
         return
     end
-
     if frame._msuf2AlphaScale and frame._msuf2AlphaScale.Stop then
         frame._msuf2AlphaScale:SetScript("OnFinished", nil)
         frame._msuf2AlphaScale:Stop()
@@ -446,7 +391,6 @@ function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
         group:SetScript("OnFinished", nil)
         group:Stop()
     end
-
     if anim.SetFromAlpha then anim:SetFromAlpha(fromAlpha or 0) end
     if anim.SetToAlpha then anim:SetToAlpha(toAlpha or 1) end
     if anim.SetDuration then anim:SetDuration(ClampMotionDuration(duration, T.motion.standard)) end
@@ -459,14 +403,12 @@ function T.PlayAlpha(frame, fromAlpha, toAlpha, duration, onFinished, smoothing)
     if frame.Show then frame:Show() end
     group:Play()
 end
-
 function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, onFinished, smoothing, origin)
     if not (frame and frame.SetAlpha and frame.CreateAnimationGroup) then
         if frame and frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
         if type(onFinished) == "function" then onFinished(frame) end
         return
     end
-
     if frame._msuf2AlphaFade and frame._msuf2AlphaFade.Stop then
         frame._msuf2AlphaFade:SetScript("OnFinished", nil)
         frame._msuf2AlphaFade:Stop()
@@ -475,7 +417,6 @@ function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleT
         frame._msuf2AlphaScale:SetScript("OnFinished", nil)
         frame._msuf2AlphaScale:Stop()
     end
-
     local group = frame:CreateAnimationGroup()
     local alpha = group:CreateAnimation("Alpha")
     local scale = group:CreateAnimation("Scale")
@@ -500,7 +441,6 @@ function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleT
         if group.Stop then group:Stop() end
         return T.PlayAlpha(frame, fromAlpha, toAlpha, dur, onFinished, smoothing)
     end
-
     frame._msuf2AlphaScale = group
     group:SetScript("OnFinished", function()
         if frame.SetAlpha then frame:SetAlpha(toAlpha or 1) end
@@ -510,7 +450,6 @@ function T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleT
     if frame.Show then frame:Show() end
     group:Play()
 end
-
 function T.PlayMotion(frame, motion, opts)
     opts = opts or {}
     local profile = type(motion) == "table" and motion or (T.motionProfiles and T.motionProfiles[motion])
@@ -519,7 +458,6 @@ function T.PlayMotion(frame, motion, opts)
         if toAlpha == nil then toAlpha = 1 end
         return T.PlayAlpha(frame, opts.fromAlpha or 0, toAlpha, opts.duration or T.MotionDuration(motion), opts.onFinished, opts.smoothing)
     end
-
     local fromAlpha = opts.fromAlpha
     if fromAlpha == nil then
         if profile.fromCurrent and frame and frame.GetAlpha then
@@ -529,23 +467,18 @@ function T.PlayMotion(frame, motion, opts)
         end
     end
     if fromAlpha == nil then fromAlpha = 0 end
-
     local toAlpha = opts.toAlpha
     if toAlpha == nil then toAlpha = profile.toAlpha end
     if toAlpha == nil then toAlpha = 1 end
-
     local duration = opts.duration or T.MotionDuration(profile.duration or motion)
     local smoothing = opts.smoothing or profile.smoothing
     local scaleFrom = opts.scaleFrom
     if scaleFrom == nil then scaleFrom = profile.scaleFrom end
     local scaleTo = opts.scaleTo
     if scaleTo == nil then scaleTo = profile.scaleTo end
-    if scaleFrom ~= nil and scaleTo ~= nil then
-        return T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, opts.onFinished, smoothing, opts.scaleOrigin or profile.scaleOrigin)
-    end
+    if scaleFrom ~= nil and scaleTo ~= nil then return T.PlayAlphaScale(frame, fromAlpha, toAlpha, duration, scaleFrom, scaleTo, opts.onFinished, smoothing, opts.scaleOrigin or profile.scaleOrigin) end
     return T.PlayAlpha(frame, fromAlpha, toAlpha, duration, opts.onFinished, smoothing)
 end
-
 local function IsDescendantOf(frame, ancestor)
     local current = frame
     while current do
@@ -554,7 +487,6 @@ local function IsDescendantOf(frame, ancestor)
     end
     return false
 end
-
 local function FocusVeilRoot(owner, opts)
     opts = opts or {}
     if opts.root then return opts.root end
@@ -564,7 +496,6 @@ local function FocusVeilRoot(owner, opts)
     if host and owner and IsDescendantOf(owner, host) then return host end
     return frame.content or frame
 end
-
 local function EnsureFocusVeilFrame()
     if M._focusVeilFrame then return M._focusVeilFrame end
     local overlay = CreateFrame("Frame", "MSUF2FocusVeil", _G.UIParent)
@@ -575,7 +506,6 @@ local function EnsureFocusVeilFrame()
     M._focusVeilFrame = overlay
     return overlay
 end
-
 function M.ShowFocusVeil(owner, variant, opts)
     opts = opts or {}
     variant = variant or "dropdown"
@@ -584,7 +514,6 @@ function M.ShowFocusVeil(owner, variant, opts)
         if M.HideFocusVeil then M.HideFocusVeil(variant, { animated = true }) end
         return nil
     end
-
     local overlay = EnsureFocusVeilFrame()
     if T.ApplyMaterial and variant == "dropdown" then
         T.ApplyMaterial(overlay, "focus")
@@ -599,19 +528,16 @@ function M.ShowFocusVeil(owner, variant, opts)
         local refLevel = ref and ref.GetFrameLevel and ref:GetFrameLevel()
         overlay:SetFrameLevel(math.max(0, (opts.frameLevel or (refLevel and refLevel - 1) or 119)))
     end
-
     local state = M._focusVeilState or {}
     M._focusVeilState = state
     state.owner = owner
     state.variant = variant
     state.hiding = nil
     overlay._msuf2FocusToken = (overlay._msuf2FocusToken or 0) + 1
-
     local fromAlpha = (overlay.IsShown and overlay:IsShown() and overlay.GetAlpha and overlay:GetAlpha()) or 0
     T.PlayMotion(overlay, "focusIn", { fromAlpha = fromAlpha, duration = opts.duration })
     return overlay
 end
-
 function M.HideFocusVeil(variant, opts)
     opts = opts or {}
     local overlay = M._focusVeilFrame
@@ -619,7 +545,6 @@ function M.HideFocusVeil(variant, opts)
     local state = M._focusVeilState or {}
     M._focusVeilState = state
     if variant and state.variant and variant ~= state.variant and not opts.force then return end
-
     if opts.animated == false then
         state.hiding = nil
         state.owner = nil
@@ -634,7 +559,6 @@ function M.HideFocusVeil(variant, opts)
         overlay:SetAlpha(1)
         return
     end
-
     state.hiding = true
     overlay._msuf2FocusToken = (overlay._msuf2FocusToken or 0) + 1
     local closeToken = overlay._msuf2FocusToken
@@ -648,7 +572,6 @@ function M.HideFocusVeil(variant, opts)
         self:SetAlpha(1)
     end })
 end
-
 local function GlassTexture(frame, key, layer, subLevel)
     if not (frame and frame.CreateTexture) then return nil end
     local tex = frame[key]
@@ -658,7 +581,6 @@ local function GlassTexture(frame, key, layer, subLevel)
     end
     return tex
 end
-
 local function PlaceGlassFill(tex, frame, inset)
     if not tex then return end
     inset = tonumber(inset) or 0
@@ -666,7 +588,6 @@ local function PlaceGlassFill(tex, frame, inset)
     tex:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
     tex:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inset, inset)
 end
-
 local function PlaceGlassLine(tex, frame, point, height)
     if not tex then return end
     tex:ClearAllPoints()
@@ -679,74 +600,48 @@ local function PlaceGlassLine(tex, frame, point, height)
     end
     tex:SetHeight(height or 1)
 end
-
+local function PaintGlassLayer(frame, key, subLevel, color, texture, inset, blend, texCoord)
+    local tex = GlassTexture(frame, key, "BORDER", subLevel)
+    if color then
+        PlaceGlassFill(tex, frame, inset)
+        tex:SetTexture(texture or WHITE8)
+        if texCoord and tex.SetTexCoord then tex:SetTexCoord(texCoord[1], texCoord[2], texCoord[3], texCoord[4], texCoord[5], texCoord[6], texCoord[7], texCoord[8]) end
+        if tex.SetVertexColor then tex:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
+        if tex.SetBlendMode then tex:SetBlendMode(blend or "BLEND") end
+        if tex.Show then tex:Show() end
+    elseif tex and tex.Hide then
+        tex:Hide()
+    end
+    return tex
+end
 function T.ApplyGlass(frame, variant)
     if not (frame and frame.CreateTexture) then return frame end
-    if T.ApplyGradient and T.gradients and T.gradients[variant or "card"] then
-        T.ApplyGradient(frame, variant or "card", { key = "_msuf2MaterialGradient" })
-    end
+    if T.ApplyGradient and T.gradients and T.gradients[variant or "card"] then T.ApplyGradient(frame, variant or "card", { key = "_msuf2MaterialGradient" }) end
     local spec = GLASS_VARIANTS[variant or "card"] or GLASS_VARIANTS.card
     if frame._msuf2GlassVariant == variant and frame._msuf2GlassApplied then return frame end
     frame._msuf2GlassVariant = variant
     frame._msuf2GlassApplied = true
-
     local tint = GlassTexture(frame, "_msuf2GlassTint", "BORDER", 0)
     PlaceGlassFill(tint, frame, 2)
     ColorTexture(tint, spec.tint)
     if tint and tint.Show then tint:Show() end
-
-    local wash = GlassTexture(frame, "_msuf2GlassWash", "BORDER", 1)
-    if spec.wash then
-        PlaceGlassFill(wash, frame, 3)
-        wash:SetTexture(T.media.bgSmooth or "Interface\\Buttons\\WHITE8X8")
-        if wash.SetVertexColor then wash:SetVertexColor(spec.wash[1], spec.wash[2], spec.wash[3], spec.wash[4] or 1) end
-        if wash.SetBlendMode then wash:SetBlendMode("ADD") end
-        if wash.Show then wash:Show() end
-    elseif wash.Hide then
-        wash:Hide()
-    end
-
-    local depth = GlassTexture(frame, "_msuf2GlassDepth", "BORDER", 2)
-    if spec.depth then
-        PlaceGlassFill(depth, frame, 3)
-        depth:SetTexture(T.media.bgSmooth or "Interface\\Buttons\\WHITE8X8")
-        depth:SetTexCoord(0, 0, 1, 0, 0, 1, 1, 1)
-        if depth.SetVertexColor then depth:SetVertexColor(spec.depth[1], spec.depth[2], spec.depth[3], spec.depth[4] or 1) end
-        if depth.SetBlendMode then depth:SetBlendMode("BLEND") end
-        if depth.Show then depth:Show() end
-    elseif depth.Hide then
-        depth:Hide()
-    end
-
-    local grain = GlassTexture(frame, "_msuf2GlassGrain", "BORDER", 3)
-    if spec.grain then
-        PlaceGlassFill(grain, frame, 2)
-        grain:SetTexture(T.media.bgCharcoal or "Interface\\Buttons\\WHITE8X8")
-        if grain.SetVertexColor then grain:SetVertexColor(spec.grain[1], spec.grain[2], spec.grain[3], spec.grain[4] or 1) end
-        if grain.SetBlendMode then grain:SetBlendMode("BLEND") end
-        if grain.Show then grain:Show() end
-    elseif grain.Hide then
-        grain:Hide()
-    end
-
+    PaintGlassLayer(frame, "_msuf2GlassWash", 1, spec.wash, T.media.bgSmooth, 3, "ADD")
+    PaintGlassLayer(frame, "_msuf2GlassDepth", 2, spec.depth, T.media.bgSmooth, 3, "BLEND", { 0, 0, 1, 0, 0, 1, 1, 1 })
+    PaintGlassLayer(frame, "_msuf2GlassGrain", 3, spec.grain, T.media.bgCharcoal, 2)
     local top = GlassTexture(frame, "_msuf2GlassTopLine", "ARTWORK", 0)
     PlaceGlassLine(top, frame, "TOP", 1)
     ColorTexture(top, spec.top)
     if top and top.Show then top:Show() end
-
     local bottom = GlassTexture(frame, "_msuf2GlassBottomLine", "ARTWORK", 0)
     PlaceGlassLine(bottom, frame, "BOTTOM", 1)
     ColorTexture(bottom, spec.bottom)
     if bottom and bottom.Show then bottom:Show() end
-
     return frame
 end
-
 local function ResolveGradientSpec(token)
     if type(token) == "table" then return token end
     return T.gradients and T.gradients[token or "card"] or nil
 end
-
 local function DynamicGradientFromColor(color)
     color = color or T.colors.panel2
     return {
@@ -756,7 +651,6 @@ local function DynamicGradientFromColor(color)
         inset = 2,
     }
 end
-
 function T.ApplyGradient(frame, token, opts)
     if not (frame and frame.CreateTexture) then return frame end
     opts = opts or {}
@@ -785,14 +679,11 @@ function T.ApplyGradient(frame, token, opts)
     if tex.Show then tex:Show() end
     return frame
 end
-
 function T.ApplyMaterial(frame, material)
     if not frame then return frame end
     local spec = type(material) == "table" and material or (T.materials and T.materials[material or "card"])
     if type(spec) ~= "table" then return frame end
-    if spec.bg or spec.border then
-        T.ApplyBackdrop(frame, spec.bg or T.colors.panel, spec.border or T.colors.borderSoft)
-    end
+    if spec.bg or spec.border then T.ApplyBackdrop(frame, spec.bg or T.colors.panel, spec.border or T.colors.borderSoft) end
     if spec.gradient and T.ApplyGradient then
         T.ApplyGradient(frame, spec.gradient, { key = "_msuf2MaterialGradient" })
     elseif frame._msuf2MaterialGradient and frame._msuf2MaterialGradient.Hide then
@@ -802,15 +693,15 @@ function T.ApplyMaterial(frame, material)
     if spec.veil and T.ApplyFocusVeil then T.ApplyFocusVeil(frame, spec.veil) end
     return frame
 end
-
+function T.ApplySurface(frame, material, glass)
+    if T.ApplyMaterial then return T.ApplyMaterial(frame, material) end
+    return T.ApplyGlass and T.ApplyGlass(frame, glass or (type(material) == "table" and material.glass) or material) or frame
+end
 local function CollapseHintLearned()
     local state = M.collapseHintClickState
-    if type(state) ~= "table" and type(M.GetPersistentMenuStateTable) == "function" then
-        state = M.GetPersistentMenuStateTable("collapseHintClickState")
-    end
+    if type(state) ~= "table" and type(M.GetPersistentMenuStateTable) == "function" then state = M.GetPersistentMenuStateTable("collapseHintClickState") end
     return (tonumber(state and state.total) or 0) >= (tonumber(T.collapseHintClickHideThreshold) or 8)
 end
-
 function T.ApplyCollapseVisual(chevron, hint, open)
     if chevron then
         if chevron.SetRotation then chevron:SetRotation(open and (math.pi * 0.5) or 0) end
@@ -827,7 +718,6 @@ function T.ApplyCollapseVisual(chevron, hint, open)
         if hint.SetTextColor then hint:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.74) end
     end
 end
-
 local function CreateAtmosphereTexture(parent, layer, subLevel, texture, color, inset, texCoord)
     local tex = parent:CreateTexture(nil, layer, nil, subLevel)
     tex:SetTexture(texture)
@@ -838,38 +728,24 @@ local function CreateAtmosphereTexture(parent, layer, subLevel, texture, color, 
     tex:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
     return tex
 end
-
 function T.ApplyMenuAtmosphere(frame, host, nav)
     if not frame or frame._msuf2AtmosphereApplied then return end
     frame._msuf2AtmosphereApplied = true
     host = host or frame
-
-    if T.ApplyMaterial then
-        T.ApplyMaterial(frame, "shell")
-        if host and host ~= frame then T.ApplyMaterial(host, "host") end
-        if nav then T.ApplyMaterial(nav, "rail") end
-    elseif T.ApplyGlass then
-        T.ApplyGlass(frame, "shell")
-        if host and host ~= frame then T.ApplyGlass(host, "host") end
-        if nav then T.ApplyGlass(nav, "rail") end
-    end
-
+    T.ApplySurface(frame, "shell")
+    if host and host ~= frame then T.ApplySurface(host, "host") end
+    if nav then T.ApplySurface(nav, "rail") end
     CreateAtmosphereTexture(host, "BACKGROUND", 1, T.media.bgSmooth, { 0.08, 0.11, 0.20, 0.065 })
     CreateAtmosphereTexture(host, "BACKGROUND", 2, T.media.bgSmooth, { 0.04, 0.05, 0.12, 0.085 }, nil, { 0, 0, 1, 0, 0, 1, 1, 1 })
     CreateAtmosphereTexture(host, "BACKGROUND", 3, T.media.bgCharcoal, { 0.08, 0.08, 0.14, 0.055 })
-
     local logo = host:CreateTexture(nil, "BORDER", nil, 0)
     logo:SetTexture(T.media.logo)
     logo:SetSize(120, 120)
     logo:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -12, 12)
     logo:SetVertexColor(0.22, 0.28, 0.42, 0.024)
     if logo.SetBlendMode then logo:SetBlendMode("ADD") end
-
-    if nav then
-        CreateAtmosphereTexture(nav, "BORDER", 1, T.media.bgSmooth, { 0.06, 0.08, 0.18, 0.085 }, 3, { 0, 0, 1, 0, 0, 1, 1, 1 })
-    end
+    if nav then CreateAtmosphereTexture(nav, "BORDER", 1, T.media.bgSmooth, { 0.06, 0.08, 0.18, 0.085 }, 3, { 0, 0, 1, 0, 0, 1, 1, 1 }) end
 end
-
 function T.AttachNavIcon(btn, navKey, isChild)
     if not (btn and btn.CreateTexture and navKey) then return end
     local grid = T.navIconGrid and T.navIconGrid[navKey]
@@ -899,13 +775,18 @@ function T.AttachNavIcon(btn, navKey, isChild)
         btn._msuf2Label:SetJustifyH("LEFT")
     end
 end
-
 local function HideNativeSliderTexture(region, keep)
     if not region or region == keep then return end
     if region.SetAlpha then region:SetAlpha(0) end
     if region.Hide then region:Hide() end
 end
-
+local function IsTextureRegion(region)
+    if not region then return false end
+    if region.IsObjectType then return region:IsObjectType("Texture") and true or false end
+    return region.GetObjectType and region:GetObjectType() == "Texture"
+end
+local SLIDER_STYLED_TEXTURE_KEYS = { "_msufTrack", "_msufTrackTop", "_msufTrackBottom", "_msufFill", "_msufFillGlow", "_msuf2Thumb", "_msufPeelTrack", "_msufPeelTrackFill" }
+local SLIDER_NATIVE_SUFFIXES = WL "Left Middle Right Text Low High"
 local function HideNativeSliderParts(slider)
     if not slider then return end
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
@@ -914,34 +795,21 @@ local function HideNativeSliderParts(slider)
         if region then keep[region] = true end
     end
     Keep(thumb)
-    Keep(slider._msufTrack)
-    Keep(slider._msufTrackTop)
-    Keep(slider._msufTrackBottom)
-    Keep(slider._msufFill)
-    Keep(slider._msufFillGlow)
-    Keep(slider._msuf2Thumb)
-    Keep(slider._msufPeelTrack)
-    Keep(slider._msufPeelTrackFill)
-
+    for i = 1, #SLIDER_STYLED_TEXTURE_KEYS do Keep(slider[SLIDER_STYLED_TEXTURE_KEYS[i]]) end
     if slider.GetRegions then
         local regions = { slider:GetRegions() }
         for i = 1, #regions do
             local region = regions[i]
-            local isTexture = false
-            if region and region.IsObjectType then isTexture = region:IsObjectType("Texture") and true or false end
-            if (not isTexture) and region and region.GetObjectType then isTexture = region:GetObjectType() == "Texture" end
-            if isTexture and not keep[region] then HideNativeSliderTexture(region) end
+            if IsTextureRegion(region) and not keep[region] then HideNativeSliderTexture(region) end
         end
     end
-
     local name = slider.GetName and slider:GetName()
     if name and _G then
-        for _, suffix in ipairs({ "Left", "Middle", "Right", "Text", "Low", "High" }) do
+        for _, suffix in ipairs(SLIDER_NATIVE_SUFFIXES) do
             HideNativeSliderTexture(_G[name .. suffix])
         end
     end
 end
-
 local function SetSliderTextureColor(texture, r, g, b, a)
     if not texture then return end
     if texture.SetColorTexture then
@@ -951,7 +819,12 @@ local function SetSliderTextureColor(texture, r, g, b, a)
         if texture.SetVertexColor then texture:SetVertexColor(r, g, b, a) end
     end
 end
-
+local function SliderTexture(slider, key, layer, subLevel, height)
+    local tex = slider:CreateTexture(nil, layer, nil, subLevel)
+    tex:SetHeight(height)
+    slider[key] = tex
+    return tex
+end
 local function SliderValuePercent(slider)
     if not (slider and slider.GetMinMaxValues and slider.GetValue) then return 0 end
     local minV, maxV = slider:GetMinMaxValues()
@@ -962,7 +835,6 @@ local function SliderValuePercent(slider)
     if pct > 1 then return 1 end
     return pct
 end
-
 local function UpdateSliderThumb(slider)
     local thumb = slider and slider._msuf2Thumb
     if not thumb then return end
@@ -979,7 +851,6 @@ local function UpdateSliderThumb(slider)
     thumb:SetPoint("CENTER", slider, "LEFT", x, 0)
     if thumb.Show then thumb:Show() end
 end
-
 local SLIDER_STYLE_HOOKS = {
     OnEnter = function(self) self._msuf2SliderHovered = true; T.StyleSlider(self) end,
     OnLeave = function(self) self._msuf2SliderHovered = nil; T.StyleSlider(self) end,
@@ -990,64 +861,42 @@ local SLIDER_STYLE_HOOKS = {
     OnValueChanged = function(self) if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end end,
     OnSizeChanged = function(self) if self._msuf2UpdateFill then self:_msuf2UpdateFill() end; if self._msuf2UpdateThumb then self:_msuf2UpdateThumb() end end,
 }
-
 function T.StyleSlider(slider)
     if not slider then return end
     slider.__msufPeelSliderSkinned = true
     slider._msuf2SliderStyled = true
-
     if slider.SetOrientation then slider:SetOrientation("HORIZONTAL") end
-    if slider.SetThumbTexture and slider.GetThumbTexture and not slider:GetThumbTexture() then
-        slider:SetThumbTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8")
-    end
+    if slider.SetThumbTexture and slider.GetThumbTexture and not slider:GetThumbTexture() then slider:SetThumbTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8") end
     HideNativeSliderParts(slider)
-
     if not slider._msufTrack and slider.CreateTexture then
-        local track = slider:CreateTexture(nil, "BACKGROUND", nil, 1)
+        local track = SliderTexture(slider, "_msufTrack", "BACKGROUND", 1, 8)
         track:SetPoint("LEFT", slider, "LEFT", 0, 0)
         track:SetPoint("RIGHT", slider, "RIGHT", 0, 0)
-        track:SetHeight(8)
-        slider._msufTrack = track
-
-        local top = slider:CreateTexture(nil, "BORDER", nil, 1)
+        local top = SliderTexture(slider, "_msufTrackTop", "BORDER", 1, 1)
         top:SetPoint("LEFT", track, "LEFT", 0, 0)
         top:SetPoint("RIGHT", track, "RIGHT", 0, 0)
         top:SetPoint("TOP", track, "TOP", 0, 0)
-        top:SetHeight(1)
-        slider._msufTrackTop = top
-
-        local bottom = slider:CreateTexture(nil, "BORDER", nil, 1)
+        local bottom = SliderTexture(slider, "_msufTrackBottom", "BORDER", 1, 1)
         bottom:SetPoint("LEFT", track, "LEFT", 0, 0)
         bottom:SetPoint("RIGHT", track, "RIGHT", 0, 0)
         bottom:SetPoint("BOTTOM", track, "BOTTOM", 0, 0)
-        bottom:SetHeight(1)
-        slider._msufTrackBottom = bottom
-
-        local fill = slider:CreateTexture(nil, "ARTWORK", nil, 1)
+        local fill = SliderTexture(slider, "_msufFill", "ARTWORK", 1, 4)
         fill:SetPoint("LEFT", slider, "LEFT", 1, 0)
-        fill:SetHeight(4)
-        slider._msufFill = fill
-
-        local glow = slider:CreateTexture(nil, "OVERLAY", nil, 1)
+        local glow = SliderTexture(slider, "_msufFillGlow", "OVERLAY", 1, 8)
         glow:SetPoint("LEFT", fill, "LEFT", 0, 0)
         glow:SetPoint("RIGHT", fill, "RIGHT", 0, 0)
-        glow:SetHeight(8)
-        slider._msufFillGlow = glow
     end
-
     if not slider._msuf2Thumb and slider.CreateTexture then
         local thumb = slider:CreateTexture(nil, "OVERLAY", nil, 4)
         slider._msuf2Thumb = thumb
     end
     slider._msuf2UpdateThumb = UpdateSliderThumb
-
     local enabled = not (slider.IsEnabled and not slider:IsEnabled())
     local hovered = slider._msuf2SliderHovered and true or false
     local active = enabled and slider._msuf2SliderActive and true or false
     local alpha = enabled and 1 or 0.45
     local accent = T.colors.accent
     local edge = T.colors.border or T.colors.borderSoft
-
     if slider._msufTrack then
         local trackBase = { active and 0.045 or 0.035, active and 0.058 or 0.043, active and 0.098 or 0.078, 0.98 * alpha }
         SetSliderTextureColor(slider._msufTrack, trackBase[1], trackBase[2], trackBase[3], trackBase[4])
@@ -1075,14 +924,12 @@ function T.StyleSlider(slider)
         SetSliderTextureColor(slider._msufFillGlow, accent[1], accent[2], accent[3], (active and 0.28 or hovered and 0.16 or 0.08) * alpha)
         slider._msufFillGlow:Show()
     end
-
     local nativeThumb = slider.GetThumbTexture and slider:GetThumbTexture()
     if nativeThumb then
         if nativeThumb.SetSize then nativeThumb:SetSize(18, 18) end
         if nativeThumb.SetAlpha then nativeThumb:SetAlpha(0.001) end
         if nativeThumb.Show then nativeThumb:Show() end
     end
-
     local thumb = slider._msuf2Thumb
     if thumb then
         thumb:SetTexture(T.media.sliderThumb or "Interface\\Buttons\\WHITE8X8")
@@ -1095,26 +942,21 @@ function T.StyleSlider(slider)
         if thumb.SetAlpha then thumb:SetAlpha(alpha) end
         UpdateSliderThumb(slider)
     end
-
     if slider.HookScript and not slider._msuf2SliderStyleHooks then
         slider._msuf2SliderStyleHooks = true
         for script, handler in pairs(SLIDER_STYLE_HOOKS) do slider:HookScript(script, handler) end
     end
-
 end
-
 function T.StyleCheckmark(checkButton)
     if not checkButton then return end
     local UI = MSUF and MSUF.UI
     local styleText = (_G and _G.MSUF_StyleToggleText) or (MSUF and MSUF.MSUF_StyleToggleText) or (UI and UI.StyleToggleText)
     if type(styleText) == "function" then pcall(styleText, checkButton) end
-
     local function HideQuietCheckboxTexture(texture)
         if not texture then return end
         if texture.SetAlpha then texture:SetAlpha(0) end
         if texture.Hide then texture:Hide() end
     end
-
     local function HideQuietCheckboxNative()
         if not checkButton._msuf2QuietCheckBox then return end
         HideQuietCheckboxTexture(checkButton.GetNormalTexture and checkButton:GetNormalTexture())
@@ -1122,7 +964,6 @@ function T.StyleCheckmark(checkButton)
         HideQuietCheckboxTexture(checkButton.GetHighlightTexture and checkButton:GetHighlightTexture())
         HideQuietCheckboxTexture(checkButton.GetDisabledTexture and checkButton:GetDisabledTexture())
     end
-
     if not checkButton._msuf2NativeCheckStyled then
         checkButton._msuf2NativeCheckStyled = true
         if checkButton.SetHitRectInsets then checkButton:SetHitRectInsets(0, 0, 0, 0) end
@@ -1134,14 +975,10 @@ function T.StyleCheckmark(checkButton)
             checkButton.text:SetJustifyH("LEFT")
         end
     end
-
     local function ApplyCheckTexture()
         local oldStyle = (_G and _G.MSUF_StyleCheckmark) or (MSUF and MSUF.MSUF_StyleCheckmark) or (UI and UI.StyleCheckmark)
-        if type(oldStyle) == "function" then
-            pcall(oldStyle, checkButton)
-        end
+        if type(oldStyle) == "function" then pcall(oldStyle, checkButton) end
         HideQuietCheckboxNative()
-
         local check = checkButton.GetCheckedTexture and checkButton:GetCheckedTexture()
         if not check and checkButton.GetName and checkButton:GetName() then check = _G[checkButton:GetName() .. "Check"] end
         if check and check.SetTexture then
@@ -1165,33 +1002,23 @@ function T.StyleCheckmark(checkButton)
             end
         end
     end
-
     ApplyCheckTexture()
     HideQuietCheckboxNative()
 end
-
 function T.Panel(parent, name, bg, border)
     local f = CreateFrame("Frame", name, parent, Template())
     T.ApplyBackdrop(f, bg or T.colors.panel, border or T.colors.borderSoft)
-    if T.ApplyGradient then
-        T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" })
-    end
+    if T.ApplyGradient then T.ApplyGradient(f, DynamicGradientFromColor(bg or T.colors.panel), { key = "_msuf2MaterialGradient" }) end
     return f
 end
-
-local EDIT_BOX_EDGE_SPECS = {
-    { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 },
-    { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 },
-    { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 },
-    { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 },
-}
-
+local EDIT_BOX_EDGE_SPECS = { { "TOPLEFT", "TOPRIGHT", "SetHeight", 1 }, { "BOTTOMLEFT", "BOTTOMRIGHT", "SetHeight", 1 }, { "TOPLEFT", "BOTTOMLEFT", "SetWidth", 1 }, { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth", 1 } }
+local EDIT_BOX_NATIVE_SUFFIXES = WL "Left Right Middle Mid"
 function T.SkinEditBox(editBox)
     if not editBox or editBox._msuf2EditSkinned then return editBox end
     editBox._msuf2EditSkinned = true
     local name = editBox.GetName and editBox:GetName() or nil
     if name then
-        for _, suffix in ipairs({ "Left", "Right", "Middle", "Mid" }) do
+        for _, suffix in ipairs(EDIT_BOX_NATIVE_SUFFIXES) do
             local tex = _G[name .. suffix]
             if tex and tex.SetAlpha then tex:SetAlpha(0) end
         end
@@ -1201,10 +1028,7 @@ function T.SkinEditBox(editBox)
         local regions = { editBox:GetRegions() }
         for i = 1, #regions do
             local region = regions[i]
-            local isTexture = false
-            if region and region.IsObjectType then isTexture = region:IsObjectType("Texture") and true or false end
-            if (not isTexture) and region and region.GetObjectType then isTexture = region:GetObjectType() == "Texture" end
-            if isTexture and region ~= fontString then
+            if IsTextureRegion(region) and region ~= fontString then
                 if region.SetAlpha then region:SetAlpha(0) end
                 if region.Hide then region:Hide() end
             end
@@ -1216,7 +1040,6 @@ function T.SkinEditBox(editBox)
         bg:SetPoint("TOPLEFT", editBox, "TOPLEFT", 0, 0)
         bg:SetPoint("BOTTOMRIGHT", editBox, "BOTTOMRIGHT", 0, 0)
         editBox._msuf2EditBg = bg
-
         local edges = {}
         for i = 1, #EDIT_BOX_EDGE_SPECS do
             local spec = EDIT_BOX_EDGE_SPECS[i]
@@ -1268,15 +1091,11 @@ function T.SkinEditBox(editBox)
     T.StyleFontString(fs, T.colors.text, 1)
     editBox:HookScript("OnEditFocusGained", function(self)
         PaintEditBox(self, true)
-        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then
-            self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95)
-        end
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then self:SetBackdropBorderColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.95) end
     end)
     editBox:HookScript("OnEditFocusLost", function(self)
         PaintEditBox(self, false)
-        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then
-            self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1)
-        end
+        if self.SetBackdropBorderColor and not self._msuf2RoundedEditFill then self:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 1) end
     end)
     pcall(editBox.HookScript, editBox, "OnEnable", function(self) PaintEditBox(self, self.HasFocus and self:HasFocus()) end)
     pcall(editBox.HookScript, editBox, "OnDisable", function(self) PaintEditBox(self, false) end)
@@ -1284,9 +1103,7 @@ function T.SkinEditBox(editBox)
     PaintEditBox(editBox, false)
     return editBox
 end
-
 local function FontSetText(self, value) return self._msuf2RawSetText(self, Tr(value or "")) end
-
 function T.Font(parent, template, text, color)
     local fs = parent:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
     fs._msuf2RawSetText = fs.SetText
@@ -1294,7 +1111,6 @@ function T.Font(parent, template, text, color)
     fs:SetText(text or "")
     return T.StyleFontString(fs, color or T.colors.text, 1)
 end
-
 function T.CenterButtonLabel(btn)
     if btn and btn._msuf2Label then
         btn._msuf2Label:ClearAllPoints()
@@ -1303,24 +1119,20 @@ function T.CenterButtonLabel(btn)
     end
     return btn
 end
-
 local function SetLabelColor(label, color, alpha)
     label:SetTextColor(color[1], color[2], color[3], alpha or color[4] or 1)
 end
-
 local function PaintButtonParts(fill, edge, label, bg, br, tx, top, bottom, textAlpha)
     SetFillGradient(fill, bg, top, bottom)
     edge:SetVertexColor(br[1], br[2], br[3], br[4] or 1)
     SetLabelColor(label, tx, textAlpha)
 end
-
 local function PaintStoredNavIcon(btn, alpha)
     if btn._msuf2NavIcon and btn._msuf2NavIconColor then
         local ic = btn._msuf2NavIconColor
         btn._msuf2NavIcon:SetVertexColor(ic[1], ic[2], ic[3], alpha)
     end
 end
-
 local function ButtonVisual(btn, active, hover)
     local c = T.colors
     local fill = btn._msuf2Fill
@@ -1413,7 +1225,6 @@ local function ButtonVisual(btn, active, hover)
         btn._msuf2Label:SetTextColor(c.accent[1], c.accent[2], c.accent[3], 1)
     end
 end
-
 local function ButtonSetText(self, value)
     local raw = value or ""
     local text = Tr(raw)
@@ -1422,25 +1233,19 @@ local function ButtonSetText(self, value)
     self._msuf2SearchText = raw
     if self._msuf2Label then self._msuf2Label._msuf2SearchText = raw end
     self._msuf2Label:SetText(text)
-    if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then
-        M.RegisterSearchWidget(self, { label = value, kind = "button", anchor = self._msuf2Label })
-    end
+    if M and type(M.RegisterSearchWidget) == "function" and value and value ~= "" then M.RegisterSearchWidget(self, { label = value, kind = "button", anchor = self._msuf2Label }) end
 end
-
 local function ButtonGetText(self)
     return self._msuf2Label:GetText()
 end
-
 local function ButtonSetActive(self, active)
     active = active and true or false
     if self._msuf2Active ~= active then self._msuf2Active = active end
     ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
 end
-
 local function ButtonRefreshVisual(self)
     ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
 end
-
 local function ButtonSetEnabled(self, enabled)
     enabled = enabled and true or false
     if self._msuf2Enabled ~= enabled then
@@ -1453,7 +1258,6 @@ local function ButtonSetEnabled(self, enabled)
     end
     ButtonVisual(self, self._msuf2Active, self._msuf2Hover)
 end
-
 local function ButtonSetScript(self, scriptType, handler)
     local rawSetScript = self._msuf2RawSetScript
     if scriptType == "OnClick" and type(handler) == "function" then
@@ -1468,9 +1272,7 @@ local function ButtonSetScript(self, scriptType, handler)
                     or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
                 then
                     blocked = true
-                    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
-                        _G.MSUF_ShowConfigCombatLockMessage()
-                    end
+                    if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then _G.MSUF_ShowConfigCombatLockMessage() end
                 end
                 if blocked then return end
             end
@@ -1480,14 +1282,12 @@ local function ButtonSetScript(self, scriptType, handler)
     end
     return rawSetScript(self, scriptType, handler)
 end
-
 local BUTTON_STYLE_HOOKS = {
     OnEnter = function(self) self._msuf2Hover = true; ButtonVisual(self, self._msuf2Active, true) end,
     OnLeave = function(self) self._msuf2Hover = nil; ButtonVisual(self, self._msuf2Active, false) end,
     OnEnable = ButtonRefreshVisual,
     OnDisable = ButtonRefreshVisual,
 }
-
 local function ButtonHistoryCheckpoint(self)
     if self._msuf2SkipHistoryCheckpoint then return end
     local checkpoint = M and M.CheckpointHistory
@@ -1498,16 +1298,13 @@ local function ButtonHistoryCheckpoint(self)
     if label == "" then label = "MSUF2 button" end
     checkpoint(label, self._msuf2HistorySource or ("button:" .. tostring(self)))
 end
-
 function T.Button(parent, text, width, height)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(width or 120, height or 24)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -2, -2) end
-
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Btn", 2, "BACKGROUND", "BORDER")
     btn._msuf2Fill = fill
     btn._msuf2Edge = edge
-
     local label = T.Font(btn, "GameFontHighlightSmall", text or "", T.colors.muted)
     label:SetPoint("LEFT", 10, 0)
     label:SetPoint("RIGHT", -10, 0)
@@ -1515,10 +1312,7 @@ function T.Button(parent, text, width, height)
     btn._msuf2Label = label
     btn._msuf2SearchText = text or ""
     label._msuf2SearchText = text or ""
-    if M and type(M.RegisterSearchWidget) == "function" and text and text ~= "" then
-        M.RegisterSearchWidget(btn, { label = text, kind = "button", anchor = label })
-    end
-
+    if M and type(M.RegisterSearchWidget) == "function" and text and text ~= "" then M.RegisterSearchWidget(btn, { label = text, kind = "button", anchor = label }) end
     btn._msuf2RawSetScript = btn.SetScript
     btn.SetScript = ButtonSetScript
     btn.SetText, btn.GetText = ButtonSetText, ButtonGetText
@@ -1528,21 +1322,10 @@ function T.Button(parent, text, width, height)
     ButtonVisual(btn, false, false)
     return btn
 end
-
 function T.SkinDangerButton(btn) return T.ApplyButtonRole(btn, "danger") end
 function T.SkinPrimaryButton(btn) return T.ApplyButtonRole(btn, "primary") end
 function T.SkinSuccessButton(btn) return T.ApplyButtonRole(btn, "success") end
-
-local BUTTON_ROLE_VARIANTS = {
-    primary = "primary",
-    destructive = "danger",
-    danger = "danger",
-    delete = "danger",
-    reset = "danger",
-    success = "success",
-    confirm = "success",
-}
-
+local BUTTON_ROLE_VARIANTS = { primary = "primary", destructive = "danger", danger = "danger", delete = "danger", reset = "danger", success = "success", confirm = "success" }
 function T.ApplyButtonRole(btn, role)
     if not btn then return btn end
     role = tostring(role or "normal")
@@ -1554,11 +1337,9 @@ function T.ApplyButtonRole(btn, role)
     if btn.RefreshVisual then btn:RefreshVisual() elseif btn.SetActive then btn:SetActive(btn._msuf2Active) end
     return btn
 end
-
 function T.RoleButton(parent, text, role, width, height)
     return T.ApplyButtonRole(T.Button(parent, text, width, height), role)
 end
-
 local function CloseButtonVisual(btn, hover, down)
     if not btn then return end
     local fill = btn._msuf2CloseFill
@@ -1567,7 +1348,6 @@ local function CloseButtonVisual(btn, hover, down)
     local lineB = btn._msuf2CloseLineB
     local label = btn._msuf2CloseFallback
     local alpha = (btn.IsEnabled and not btn:IsEnabled()) and 0.42 or 1
-
     if fill and fill.SetVertexColor then
         if down then
             SetFillGradient(fill, { 0.310, 0.050, 0.070, 0.98 * alpha }, 0.16, -0.18)
@@ -1584,13 +1364,11 @@ local function CloseButtonVisual(btn, hover, down)
             edge:SetVertexColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.78 * alpha)
         end
     end
-
     local lr, lg, lb = 1.00, hover and 0.88 or 0.72, hover and 0.86 or 0.78
     if lineA and lineA.SetVertexColor then lineA:SetVertexColor(lr, lg, lb, alpha) end
     if lineB and lineB.SetVertexColor then lineB:SetVertexColor(lr, lg, lb, alpha) end
     if label and label.SetTextColor then label:SetTextColor(lr, lg, lb, alpha) end
 end
-
 local CLOSE_BUTTON_HOOKS = {
     OnEnter = function(self) self._msuf2CloseHover = true; CloseButtonVisual(self, true, self._msuf2CloseDown) end,
     OnLeave = function(self) self._msuf2CloseHover = nil; self._msuf2CloseDown = nil; CloseButtonVisual(self, false, false) end,
@@ -1599,21 +1377,20 @@ local CLOSE_BUTTON_HOOKS = {
     OnEnable = function(self) CloseButtonVisual(self, self._msuf2CloseHover, self._msuf2CloseDown) end,
     OnDisable = function(self) CloseButtonVisual(self, false, false) end,
 }
-
+local function SetupCloseButtonLine(line, parent)
+    line:SetTexture("Interface\\Buttons\\WHITE8X8")
+    line:SetSize(12, 2)
+    line:SetPoint("CENTER", parent, "CENTER", 0, 0)
+end
 function T.CloseButton(parent)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(24, 24)
-
     local fill, edge = T.CreateSuperellipseLayers(btn, "_msuf2Close", 2, "BACKGROUND", "BORDER")
     btn._msuf2CloseFill = fill
     btn._msuf2CloseEdge = edge
-
     local lineA, lineB = btn:CreateTexture(nil, "ARTWORK"), btn:CreateTexture(nil, "ARTWORK")
-    for _, line in ipairs({ lineA, lineB }) do
-        line:SetTexture("Interface\\Buttons\\WHITE8X8")
-        line:SetSize(12, 2)
-        line:SetPoint("CENTER", btn, "CENTER", 0, 0)
-    end
+    SetupCloseButtonLine(lineA, btn)
+    SetupCloseButtonLine(lineB, btn)
     if lineA.SetRotation and lineB.SetRotation then
         lineA:SetRotation(math.pi * 0.25)
         lineB:SetRotation(-math.pi * 0.25)
@@ -1626,13 +1403,10 @@ function T.CloseButton(parent)
     end
     btn._msuf2CloseLineA = lineA
     btn._msuf2CloseLineB = lineB
-
     for script, handler in pairs(CLOSE_BUTTON_HOOKS) do btn:SetScript(script, handler) end
-
     CloseButtonVisual(btn, false, false)
     return btn
 end
-
 local function ClampScrollValue(value, maxValue)
     value = tonumber(value) or 0
     maxValue = tonumber(maxValue) or 0
@@ -1640,7 +1414,6 @@ local function ClampScrollValue(value, maxValue)
     if value > maxValue then return maxValue end
     return value
 end
-
 local function PixelBarTexture(texture)
     if not texture then return texture end
     texture:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -1648,11 +1421,9 @@ local function PixelBarTexture(texture)
     if texture.SetTexelSnappingBias then texture:SetTexelSnappingBias(0) end
     return texture
 end
-
 function T.StyleScrollFrame(scroll, anchor)
     if not scroll or scroll._msuf2ScrollStyled then return scroll and scroll._msuf2ScrollBar end
     scroll._msuf2ScrollStyled = true
-
     local parent = anchor or (scroll.GetParent and scroll:GetParent()) or scroll
     local bar = CreateFrame("Slider", nil, parent)
     bar:SetOrientation("VERTICAL")
@@ -1664,30 +1435,25 @@ function T.StyleScrollFrame(scroll, anchor)
     if bar.SetObeyStepOnDrag then bar:SetObeyStepOnDrag(false) end
     if bar.EnableMouse then bar:EnableMouse(true) end
     if bar.SetFrameLevel and scroll.GetFrameLevel then bar:SetFrameLevel(scroll:GetFrameLevel() + 8) end
-
     local track = PixelBarTexture(bar:CreateTexture(nil, "BACKGROUND"))
     track:SetPoint("TOP", bar, "TOP", 0, 0)
     track:SetPoint("BOTTOM", bar, "BOTTOM", 0, 0)
     track:SetWidth(2)
     ApplyTextureGradient(track, "VERTICAL", { 0.042, 0.052, 0.095, 0.82 }, { 0.010, 0.014, 0.030, 0.82 }, true)
     bar._msuf2Track = track
-
     local trackEdge = PixelBarTexture(bar:CreateTexture(nil, "BORDER"))
     trackEdge:SetPoint("TOPLEFT", track, "TOPRIGHT", 1, 0)
     trackEdge:SetPoint("BOTTOMLEFT", track, "BOTTOMRIGHT", 1, 0)
     trackEdge:SetWidth(1)
     trackEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.38)
     bar._msuf2TrackEdge = trackEdge
-
     local thumbBase = { 0.240, 0.300, 0.430 }
     local thumbHover = { 0.320, 0.420, 0.560 }
-
     local thumb = PixelBarTexture(bar:CreateTexture(nil, "OVERLAY"))
     thumb:SetSize(5, 42)
     ApplyTextureGradient(thumb, "VERTICAL", { thumbBase[1] * 1.22, thumbBase[2] * 1.18, thumbBase[3] * 1.12, 0.72 }, { thumbBase[1] * 0.72, thumbBase[2] * 0.78, thumbBase[3] * 0.86, 0.72 }, true)
     bar:SetThumbTexture(thumb)
     bar._msuf2Thumb = thumb
-
     local function Paint(hover)
         local shown = bar.IsShown and bar:IsShown()
         local alpha = shown and 1 or 0
@@ -1702,7 +1468,6 @@ function T.StyleScrollFrame(scroll, anchor)
             ApplyTextureGradient(thumb, "VERTICAL", { math.min(c[1] * 1.22, 1), math.min(c[2] * 1.18, 1), math.min(c[3] * 1.12, 1), a }, { c[1] * 0.72, c[2] * 0.78, c[3] * 0.86, a }, true)
         end
     end
-
     local rawSetVerticalScroll = scroll.SetVerticalScroll
     local function Refresh()
         local child = scroll.GetScrollChild and scroll:GetScrollChild()
@@ -1710,34 +1475,26 @@ function T.StyleScrollFrame(scroll, anchor)
         local frameH = (scroll.GetHeight and scroll:GetHeight()) or 0
         local maxScroll = math.max(0, childH - frameH)
         scroll._msuf2MaxScroll = maxScroll
-
         if maxScroll <= 1 or frameH <= 0 then
-            if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then
-                rawSetVerticalScroll(scroll, 0)
-            end
+            if rawSetVerticalScroll and (scroll:GetVerticalScroll() or 0) ~= 0 then rawSetVerticalScroll(scroll, 0) end
             bar._msuf2Refreshing = true
             bar:SetValue(0)
             bar._msuf2Refreshing = nil
             bar:Hide()
             return
         end
-
         bar:Show()
         bar:SetMinMaxValues(0, maxScroll)
         local visibleRatio = frameH / math.max(childH, 1)
         local thumbH = math.floor(math.max(34, math.min(frameH, frameH * visibleRatio)) + 0.5)
         if thumb and thumb.SetHeight then thumb:SetHeight(thumbH) end
-
         local offset = ClampScrollValue(scroll:GetVerticalScroll() or 0, maxScroll)
-        if offset ~= (scroll:GetVerticalScroll() or 0) and rawSetVerticalScroll then
-            rawSetVerticalScroll(scroll, offset)
-        end
+        if offset ~= (scroll:GetVerticalScroll() or 0) and rawSetVerticalScroll then rawSetVerticalScroll(scroll, offset) end
         bar._msuf2Refreshing = true
         bar:SetValue(offset)
         bar._msuf2Refreshing = nil
         Paint(bar._msuf2Hover)
     end
-
     scroll._msuf2RefreshScrollBar = Refresh
     scroll.SetVerticalScroll = function(self, offset)
         local maxScroll = self._msuf2MaxScroll
@@ -1750,7 +1507,6 @@ function T.StyleScrollFrame(scroll, anchor)
         rawSetVerticalScroll(self, ClampScrollValue(offset, maxScroll))
         if self._msuf2RefreshScrollBar then self:_msuf2RefreshScrollBar() end
     end
-
     local function ScrollBy(delta)
         if not delta or delta == 0 then return end
         local step = 64
@@ -1758,7 +1514,6 @@ function T.StyleScrollFrame(scroll, anchor)
         if IsControlKeyDown and IsControlKeyDown() then step = math.max(step, (scroll.GetHeight and scroll:GetHeight()) or step) end
         scroll:SetVerticalScroll((scroll:GetVerticalScroll() or 0) - delta * step)
     end
-
     scroll:EnableMouseWheel(true)
     scroll:SetScript("OnMouseWheel", function(_, delta) ScrollBy(delta) end)
     local wheelChild = scroll.GetScrollChild and scroll:GetScrollChild()
@@ -1785,12 +1540,10 @@ function T.StyleScrollFrame(scroll, anchor)
     scroll:HookScript("OnScrollRangeChanged", Refresh)
     scroll:HookScript("OnSizeChanged", Refresh)
     if bar.HookScript then bar:HookScript("OnShow", function() Paint(bar._msuf2Hover) end) end
-
     Refresh()
     scroll._msuf2ScrollBar = bar
     return bar
 end
-
 if MSUF and MSUF.UI and MSUF.UI.BindMenu2Theme then
     MSUF.UI.BindMenu2Theme(T)
     M.UI = MSUF.UI

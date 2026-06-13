@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -13,13 +12,11 @@ local T = M.Theme
 local UP = M.UnitPage or {}
 local Shared = M.UnitSectionsShared or {}
 if not (W and T) then return end
-
 local CreateFrame = _G.CreateFrame
 local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-
 local STATUS_ANCHORS, DEFAULT_SYMBOLS, StatusIconPackValues, GetConf, GetGeneral, Call, UnitTopLabel, ReadBool, SetBool, SetNumber, SetString, ReadGeneralBool, SetGeneralBool, ClampStatusLayer, StatusValues, FindStatusSpec, CurrentStatusSpec, ReadStatusBool, ReadStatusNumber, ReadStatusString, RefreshStatusRuntime, SetControlEnabled = M.Pick(UP, [[STATUS_ANCHORS DEFAULT_SYMBOLS StatusIconPackValues GetConf GetGeneral Call UnitTopLabel ReadBool SetBool SetNumber SetString ReadGeneralBool SetGeneralBool ClampStatusLayer StatusValues FindStatusSpec CurrentStatusSpec ReadStatusBool ReadStatusNumber ReadStatusString RefreshStatusRuntime SetControlEnabled]])
 local SetControlsEnabled = W.SetControlsEnabled
 STATUS_ANCHORS = STATUS_ANCHORS or {}
@@ -33,7 +30,6 @@ local STATUS_TEXT_STATE_TOGGLES = {
     { key = "showAFK", text = "AFK", default = false },
     { key = "showDND", text = "DND", default = false },
 }
-
 local DisabledNameAnchorValues = Shared.DisabledNameAnchorValues or function(values) return values or {} end
 local SetSectionHeaderStatus = Shared.SetSectionHeaderStatus or function() end
 local function BuildStatus(ctx, builder, unit)
@@ -46,14 +42,12 @@ local function BuildStatus(ctx, builder, unit)
     local rightX = leftX + leftW + topGap
     local rightW = max(220, min(320, topInnerW - leftW - topGap))
     local statusTabW = min(380, sectionW - 40)
-
     M.unitStatusTabSelection = M.unitStatusTabSelection or {}
     local function CurrentStatusTab()
         local key = M.unitStatusTabSelection[unit] or "basic"
         if key ~= "basic" and key ~= "advanced" then key = "basic" end
         return key
     end
-
     local tabFrames = {}
     local basicTab, advancedTab = Shared.MakeTabFrames(sec, -104, sectionW, tabFrames, "basic", "advanced")
     W.SegmentTabs(ctx, sec, {
@@ -63,7 +57,6 @@ local function BuildStatus(ctx, builder, unit)
         set = function(value) M.unitStatusTabSelection[unit] = value or "basic" end,
         x = 20, y = -50,
     })
-
     local selectedCard = W.ControlCard(basicTab, "Selected Indicator", nil, leftX - 2, -38, leftW + 28, 142)
     local previewCard = W.ControlCard(basicTab, "Status Preview", nil, rightX - 14, -38, rightW + 28, 142)
     local placementCardX = leftX - 2
@@ -77,7 +70,6 @@ local function BuildStatus(ctx, builder, unit)
     local placeRightW = max(180, min(320, placementCardW - placeRightX - 16))
     local selectedControlW = max(180, leftW - 4)
     local previewControlW = max(190, rightW - 4)
-
     local function PlaceButton(control, parent, x, y, width)
         if not control then return end
         parent = parent or (control.GetParent and control:GetParent()) or sec
@@ -111,13 +103,10 @@ local function BuildStatus(ctx, builder, unit)
         value = value and true or false
         if state[key] == value then return end
         state[key] = value
-        if M.RequestGeneralApply then
-            M.RequestGeneralApply("MSUF2_STATUS_TEXT_STATE", { preview = true, applyAll = true })
-        end
+        if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_STATUS_TEXT_STATE", { preview = true, applyAll = true }) end
         Call("MSUF_RequestStatusTextRefresh")
         RefreshStatusMenu()
     end
-
     local unitLabel = UnitTopLabel(unit)
     local unitLabelLower = string.lower(unitLabel or tostring(unit or "unit"))
     local statusSearchBase = {
@@ -152,7 +141,7 @@ local function BuildStatus(ctx, builder, unit)
     local function BindStatusPlacementSlider(parent, label, minValue, maxValue, xPos, yPos, width, specKey, defaultKey, fallback, reason, searchLabel, keywords, normalize)
         local control = W.Slider(parent, label, minValue, maxValue, 1, 300)
         Shared.PlaceSlider(parent, control, xPos, yPos, width)
-        M.BindSlider(ctx, control,
+        M.BindNumberWidget(ctx, control,
             function()
                 local spec = CurrentStatusSpec(unit)
                 if not spec then return fallback end
@@ -164,7 +153,8 @@ local function BuildStatus(ctx, builder, unit)
                 if not spec then return end
                 SetNumber(unit, spec[specKey], normalize and normalize(value, spec) or value, reason, { preview = true })
                 RefreshStatusRuntime(unit, spec)
-            end)
+            end,
+            fallback, { step = 1, roundStep = true })
         RegisterStatusSearch(control, searchLabel, keywords)
         return control
     end
@@ -173,7 +163,7 @@ local function BuildStatus(ctx, builder, unit)
     end
     local function BindStatusTestToggle(parent, label, xPos, yPos, width, reason, searchLabel, keywords)
         local control = W.ToggleAt(parent, label, xPos, yPos, width)
-        M.BindToggle(ctx, control,
+        M.BindBoolWidget(ctx, control,
             function() return ReadBool(unit, "stateIconsTestMode", ReadGeneralBool("stateIconsTestMode", false)) end,
             function(value)
                 SetBool(unit, "stateIconsTestMode", value, reason, { preview = true })
@@ -201,7 +191,7 @@ local function BuildStatus(ctx, builder, unit)
     local function BindStatusSpecDropdown(parent, label, values, width, xPos, yPos, moveWidth, specField, defaultValue, reason, searchLabel, keywords, searchValues)
         local control = W.Dropdown(parent, label, values, width)
         Shared.PlaceDropdown(parent, control, xPos, yPos, moveWidth)
-        M.BindDropdown(ctx, control,
+        M.BindDropdownWidget(ctx, control,
             function()
                 local spec = CurrentStatusSpec(unit)
                 local key = spec and spec[specField]
@@ -218,13 +208,10 @@ local function BuildStatus(ctx, builder, unit)
         RegisterStatusSearch(control, searchLabel, keywords, searchValues or values)
         return control
     end
-
     local selector = W.Dropdown(selectedCard, "Indicator", function() return StatusValues(unit) end, 260)
-    if selector._msuf2Title and selector._msuf2Title.SetTextColor then
-        selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1)
-    end
+    if selector._msuf2Title and selector._msuf2Title.SetTextColor then selector._msuf2Title:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], T.colors.accent[4] or 1) end
     Shared.PlaceDropdown(selectedCard, selector, 16, -54, selectedControlW)
-    M.BindDropdown(ctx, selector,
+    M.BindDropdownWidget(ctx, selector,
         function()
             local spec = CurrentStatusSpec(unit)
             return spec and spec.value or ""
@@ -241,11 +228,9 @@ local function BuildStatus(ctx, builder, unit)
         "indicator dropdown", "select level", "choose level", "status icon dropdown", "level dropdown",
         "raid group", "raid group name", "group number", "subgroup",
     }, function() return StatusValues(unit) end, "Choose Level or Raid Group here, then adjust the available controls for the selected indicator.")
-
     local previewLabel = previewCard and previewCard.title
-
     local midnight = W.ToggleAt(previewCard, "Use Midnight style", 16, -92, previewControlW)
-    M.BindToggle(ctx, midnight,
+    M.BindBoolWidget(ctx, midnight,
         function() return ReadGeneralBool("statusIconsUseMidnightStyle", false) end,
         function(value)
             SetGeneralBool("statusIconsUseMidnightStyle", value, "MSUF2_STATUS_STYLE", { preview = true, applyAll = true })
@@ -255,9 +240,8 @@ local function BuildStatus(ctx, builder, unit)
     RegisterStatusSearch(midnight, "Status indicator style", {
         "midnight style", "status style", "indicator style", "icon style",
     })
-
     local enabled = W.SwitchAt(selectedCard, "Enabled", 16, -106, selectedControlW)
-    M.BindToggle(ctx, enabled,
+    M.BindBoolWidget(ctx, enabled,
         function()
             local spec = CurrentStatusSpec(unit)
             return spec and ReadStatusBool(unit, spec.show, spec.defaultShow) or false
@@ -273,7 +257,6 @@ local function BuildStatus(ctx, builder, unit)
         "enabled", "show selected indicator", "hide selected indicator", "show level", "hide level",
         "enable level", "disable level", "turn level on", "turn level off",
     })
-
     local function CurrentStatusSymbolValues()
         local spec = CurrentStatusSpec(unit)
         return (spec and spec.symbols) or DEFAULT_SYMBOLS
@@ -282,12 +265,10 @@ local function BuildStatus(ctx, builder, unit)
         "symbol", "DEFAULT", "MSUF2_STATUS_SYMBOL", "Status indicator symbol", {
         "symbol", "icon", "status symbol", "indicator symbol", "combat symbol", "rested symbol", "incoming rez symbol",
     }, CurrentStatusSymbolValues)
-
     local iconPack = BindStatusSpecDropdown(placementCard, "Icon pack", StatusIconPackValues, 260, placeRightX, -54, placeRightW,
         "iconStyle", function(spec) return spec and spec.defaultIconStyle or "BLIZZARD" end, "MSUF2_STATUS_ICON_PACK", "Status indicator icon pack", {
         "icon pack", "leader icon pack", "assist icon pack", "role icon pack", "status icon pack",
     }, StatusIconPackValues)
-
     local statusTextStates = CreateFrame("Frame", nil, placementCard)
     statusTextStates:SetPoint("TOPLEFT", placementCard, "TOPLEFT", placeRightX, -48)
     statusTextStates:SetSize(placeRightW, 72)
@@ -299,7 +280,7 @@ local function BuildStatus(ctx, builder, unit)
         local row = floor((i - 1) / 2)
         local toggle = W.ToggleAt(statusTextStates, info.text, col * max(84, floor(placeRightW * 0.44)), -24 - row * 28, 72)
         statusTextStateControls[#statusTextStateControls + 1] = toggle
-        M.BindToggle(ctx, toggle,
+        M.BindBoolWidget(ctx, toggle,
             function() return ReadStatusTextState(info.key, info.default) end,
             function(value) SetStatusTextState(info.key, value) end)
         RegisterStatusSearch(toggle, "Dead text state " .. tostring(info.text), {
@@ -307,10 +288,9 @@ local function BuildStatus(ctx, builder, unit)
         })
     end
     statusTextStates:Hide()
-
     local raidGroupStyle = W.Dropdown(placementCard, "Style", RAID_GROUP_NAME_STYLES, 180)
     Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
-    M.BindDropdown(ctx, raidGroupStyle,
+    M.BindDropdownWidget(ctx, raidGroupStyle,
         function() return ReadStatusString(unit, "raidGroupNameStyle", "PAREN") end,
         function(value)
             if value ~= "BRACKET" and value ~= "NONE" then value = "PAREN" end
@@ -320,10 +300,9 @@ local function BuildStatus(ctx, builder, unit)
     RegisterStatusSearch(raidGroupStyle, "Raid group style", {
         "raid group style", "parentheses", "brackets", "no brackets", "group number style",
     }, RAID_GROUP_NAME_STYLES)
-
     local size = W.Slider(placementCard, "Size", 8, 64, 1, 300)
     Shared.PlaceSlider(placementCard, size, placeLeftX, -54, placeLeftW)
-    M.BindSlider(ctx, size,
+    M.BindNumberWidget(ctx, size,
         function()
             local spec = CurrentStatusSpec(unit)
             if not spec then return 14 end
@@ -336,17 +315,15 @@ local function BuildStatus(ctx, builder, unit)
             if not spec then return end
             SetNumber(unit, spec.size, value, "MSUF2_STATUS_SIZE", { preview = true })
             RefreshStatusRuntime(unit, spec)
-        end)
+        end,
+        14, { step = 1, roundStep = true })
     RegisterStatusSearch(size, "Status indicator size", {
         "level size", "level text size", "indicator size", "icon size", "font size",
     })
-
     local function CurrentStatusAnchorValues()
         local spec = CurrentStatusSpec(unit)
         local values = (spec and spec.anchors) or STATUS_ANCHORS
-        if spec and ReadBool(unit, "showName", true) == false then
-            return DisabledNameAnchorValues(values)
-        end
+        if spec and ReadBool(unit, "showName", true) == false then return DisabledNameAnchorValues(values) end
         return values
     end
     local anchor = BindStatusSpecDropdown(placementCard, "Anchor", CurrentStatusAnchorValues, 220, placeLeftX, -116, placeLeftW,
@@ -354,19 +331,15 @@ local function BuildStatus(ctx, builder, unit)
         "level anchor", "level anchoring", "level text anchor", "level text anchoring",
         "right to player name", "left to player name", "top left", "top right", "bottom left", "bottom right",
     }, CurrentStatusAnchorValues)
-
     local x = BindStatusPlacementSlider(placementCard, "X Offset", -500, 500, placeLeftX, -178, placeLeftW, "x", "defaultX", 0, "MSUF2_STATUS_X", "Status indicator X offset", {
         "x", "x offset", "horizontal offset", "level x", "level x offset", "move level left", "move level right",
     })
-
     local y = BindStatusPlacementSlider(placementCard, "Y Offset", -500, 500, placeRightX, -116, placeRightW, "y", "defaultY", 0, "MSUF2_STATUS_Y", "Status indicator Y offset", {
         "y", "y offset", "vertical offset", "level y", "level y offset", "move level up", "move level down",
     })
-
     local layer = BindStatusPlacementSlider(placementCard, "Layer", 1, 10, placeLeftX, -240, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_LAYER", "Status indicator layer", {
         "level layer", "level draw order", "indicator layer", "draw order", "above text", "behind text",
     }, ClampSelectedStatusLayer)
-
     local reset = W.Button(placementCard, "Reset selected", 150)
     PlaceButton(reset, placementCard, placeRightX, -178, 150)
     reset._msuf2SkipHistoryCheckpoint = true
@@ -385,41 +358,31 @@ local function BuildStatus(ctx, builder, unit)
             RefreshStatusRuntime(unit, spec)
             RefreshStatusMenu()
         end
-        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Reset: " .. tostring(spec.text or spec.value or "Status icon"), "status:reset:" .. tostring(unit) .. ":" .. tostring(spec.value), ResetSelectedStatus)
-        else
-            ResetSelectedStatus()
-        end
+        M.RunWithHistory("Reset: " .. tostring(spec.text or spec.value or "Status icon"), "status:reset:" .. tostring(unit) .. ":" .. tostring(spec.value), ResetSelectedStatus)
     end)
     RegisterStatusSearch(reset, "Reset selected status indicator", {
         "reset level", "reset level position", "reset level anchor", "reset indicator position",
     })
-
     local test = BindStatusTestToggle(previewCard, "Test mode", 16, -120, previewControlW, "MSUF2_STATUS_TEST", "Status indicator test mode", {
         "test mode", "preview level", "test level", "status preview",
     })
-
     local current = StatusPreviewButton(previewCard, "Preview current", 16, -54, min(142, previewControlW), "current", "Preview current status indicator", {
         "preview current", "current indicator", "preview level",
     })
     local all = StatusPreviewButton(previewCard, "Show all", min(166, previewControlW - 112), -54, min(112, previewControlW), "all", "Show all status indicators", {
         "show all", "all indicators", "preview all", "all status icons",
     })
-
     local advanced = {}
     advanced.card = W.ControlCard(advancedTab, "Advanced Placement", nil, placementCardX, -38, placementCardW, 316)
     advanced.x = BindStatusPlacementSlider(advanced.card, "X Offset (extended)", -1000, 1000, placeLeftX, -58, placeLeftW, "x", "defaultX", 0, "MSUF2_STATUS_ADV_X", "Advanced status indicator X offset", {
         "advanced x", "extended x offset", "wide x offset", "status icon advanced",
     })
-
     advanced.y = BindStatusPlacementSlider(advanced.card, "Y Offset (extended)", -1000, 1000, placeRightX, -58, placeRightW, "y", "defaultY", 0, "MSUF2_STATUS_ADV_Y", "Advanced status indicator Y offset", {
         "advanced y", "extended y offset", "wide y offset", "status icon advanced",
     })
-
     advanced.layer = BindStatusPlacementSlider(advanced.card, "Layer", 1, 10, placeLeftX, -128, placeLeftW, "layer", "defaultLayer", 7, "MSUF2_STATUS_ADV_LAYER", "Advanced status indicator layer", {
         "advanced layer", "draw order", "status icon advanced",
     }, ClampSelectedStatusLayer)
-
     advanced.reset = W.Button(advanced.card, "Reset selected", 150)
     PlaceButton(advanced.reset, advanced.card, placeRightX, -128, 150)
     advanced.reset._msuf2SkipHistoryCheckpoint = true
@@ -429,21 +392,17 @@ local function BuildStatus(ctx, builder, unit)
     RegisterStatusSearch(advanced.reset, "Advanced reset selected status indicator", {
         "advanced reset", "reset status icon advanced",
     })
-
     advanced.test = BindStatusTestToggle(advanced.card, "Test mode", placeLeftX, -202, placeLeftW, "MSUF2_STATUS_ADV_TEST", "Advanced status indicator test mode", {
         "advanced test mode", "status icon advanced preview",
     })
-
     advanced.current = StatusPreviewButton(advanced.card, "Preview current", placeLeftX, -252, min(142, placeLeftW), "current", "Advanced preview current status indicator", {
         "advanced preview current", "status icon advanced preview",
     })
-
     advanced.all = StatusPreviewButton(advanced.card, "Show all", placeRightX, -252, min(112, placeRightW), "all", "Advanced show all status indicators", {
         "advanced show all", "status icon advanced preview all",
     })
     local statusEnabledControls = { anchor, x, y, advanced.x, advanced.y }
     local statusDetachedControls = { size, layer, advanced.layer }
-
     local function LayoutStatusControls(inlineName)
         if inlineName then
             Shared.PlaceDropdown(placementCard, raidGroupStyle, placeRightX, -54, min(180, placeRightW))
@@ -463,7 +422,6 @@ local function BuildStatus(ctx, builder, unit)
         Shared.PlaceSlider(placementCard, layer, placeLeftX, -240, placeLeftW)
         PlaceButton(reset, placementCard, placeRightX, -178, 150)
     end
-
     local function ShowControl(control, shown)
         if W.SetControlShown then
             W.SetControlShown(control, shown)
@@ -473,7 +431,6 @@ local function BuildStatus(ctx, builder, unit)
         end
     end
     local function ShowControls(shown, ...) for i = 1, select("#", ...) do ShowControl(select(i, ...), shown) end end
-
     local function RefreshStatusSectionState()
         local spec = CurrentStatusSpec(unit)
         local inlineName = spec and spec.inlineName == true
@@ -505,13 +462,8 @@ local function BuildStatus(ctx, builder, unit)
         SetControlEnabled(advanced.test, showTestMode and isEnabled)
         SetControlEnabled(advanced.current, (not inlineName) and spec ~= nil)
         SetControlEnabled(advanced.all, not inlineName)
-
         SetSectionHeaderStatus(sec, nil)
     end
-    M.SetCollapsibleRefreshState(sec, RefreshStatusSectionState)
-    M.AddRefresher(ctx, RefreshStatusSectionState)
-    RefreshStatusSectionState()
+    M.TrackCollapsibleRefresh(ctx, sec, RefreshStatusSectionState)
 end
-
-
 M.BuildUnitStatusSection = BuildStatus

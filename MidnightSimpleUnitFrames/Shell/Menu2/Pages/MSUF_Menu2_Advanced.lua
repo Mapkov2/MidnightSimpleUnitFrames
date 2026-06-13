@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -9,48 +8,40 @@ _G.MSUF2 = M
 -- Provides shared DB helpers, binding adapters, and layout primitives for advanced option
 -- pages. Keep page-specific controls in their domain files and common glue here.
 local W = M.Widgets
-local T = M.Theme
-
-local floor = math.floor
-
+local WL = M.WordList
+local AURA_LAYOUT_OVERRIDE_KEYS = WL "iconSize spacing cooldownTextSize stackTextSize reminderGrowth"
+local AURA_CAPS_OVERRIDE_KEYS = WL "maxBuffs maxDebuffs maxIcons perRow layoutMode growth buffGrowth debuffGrowth rowWrap buffRowWrap debuffRowWrap buffDebuffAnchor splitSpacing stackCountAnchor sortOrder"
 local function CallGlobal(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then return pcall(fn, ...) end
     return false
 end
-
 local function DB()
     return M.EnsureDB()
 end
-
 local function G()
     local db = DB()
     db.general = db.general or {}
     return db.general
 end
-
 local function Bars()
     local db = DB()
     db.bars = db.bars or {}
     return db.bars
 end
-
 local function Gameplay()
     local db = DB()
     db.gameplay = db.gameplay or {}
     return db.gameplay
 end
-
 local function BoolValue(tbl, key, default)
     local value = tbl and tbl[key]
     if value == nil then return default and true or false end
     return value and true or false
 end
-
 local function NumValue(tbl, key, default)
     return tonumber(tbl and tbl[key]) or default or 0
 end
-
 local function SetValue(tbl, key, value, apply)
     if not tbl or tbl[key] == value then return end
     local function Write()
@@ -59,18 +50,13 @@ local function SetValue(tbl, key, value, apply)
         if type(apply) == "function" then apply() end
         return true
     end
-    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-        return M.CaptureHistory(tostring(key), "advanced:" .. tostring(key), Write)
-    end
-    return Write()
+    return M.RunWithHistory(tostring(key), "advanced:" .. tostring(key), Write)
 end
-
 local function DeepCopyTable(src)
     if type(src) ~= "table" then return src end
     if type(CopyTable) == "function" then return CopyTable(src) end
     return M.DeepCopy(src)
 end
-
 local function IsEmptyAuraFilterTable(filters)
     if type(filters) ~= "table" then return true end
     for key, value in pairs(filters) do
@@ -86,49 +72,26 @@ local function IsEmptyAuraFilterTable(filters)
     end
     return true
 end
-
-local function BindToggleControl(ctx, toggle, getValue, setValue)
-    M.BindToggle(ctx, toggle,
-        function() return getValue() and true or false end,
-        function(v) setValue(v and true or false) end)
-    return toggle
-end
-
+local BindToggleControl, BindDropdownControl = M.BindBoolWidget, M.BindDropdownWidget
 local function BindSliderControl(ctx, slider, getValue, setValue, fallback, step)
-    M.BindSlider(ctx, slider,
-        function() return tonumber(getValue()) or fallback or 0 end,
-        function(v)
-            v = tonumber(v) or fallback or 0
-            if (step or 1) >= 1 then v = floor(v + 0.5) end
-            setValue(v)
-        end)
-    return slider
+    return M.BindNumberWidget(ctx, slider, getValue, setValue, fallback, { step = step, roundStep = true })
 end
-
-local function BindDropdownControl(ctx, dropdown, getValue, setValue)
-    M.BindDropdown(ctx, dropdown, getValue, setValue)
-    return dropdown
-end
-
 local function BindTableToggle(ctx, section, label, getTable, key, default, apply)
     return BindToggleControl(ctx, W.Toggle(section, label),
         function() return BoolValue(getTable(), key, default) end,
         function(v) SetValue(getTable(), key, v, apply) end)
 end
-
 local function BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
     return BindToggleControl(ctx, W.SwitchAt(section, label, x, y, labelWidth),
         function() return BoolValue(getTable(), key, default) end,
         function(v) SetValue(getTable(), key, v, apply) end)
 end
-
 local function BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply)
     return BindSliderControl(ctx, W.Slider(section, label, minVal, maxVal, step, width or 300),
         function() return NumValue(getTable(), key, default) end,
         function(v) SetValue(getTable(), key, v, apply) end,
         default, step)
 end
-
 local function BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply)
     return BindDropdownControl(ctx, W.Dropdown(section, label, values, width or 220),
         function()
@@ -138,11 +101,9 @@ local function BindTableDropdown(ctx, section, label, values, width, getTable, k
         end,
         function(v) SetValue(getTable(), key, v or default, apply) end)
 end
-
 local function BindValueDropdown(ctx, section, label, values, width, getValue, setValue)
     return BindDropdownControl(ctx, W.Dropdown(section, label, values, width or 220), getValue, setValue)
 end
-
 local A3_APPLY_QUEUED = false
 local function ApplyAuras()
     if A3_APPLY_QUEUED then return end
@@ -160,7 +121,6 @@ local function ApplyAuras()
     end
     if C_Timer and C_Timer.After then C_Timer.After(0, Run) else Run() end
 end
-
 local function AurasDB()
     local db = DB()
     db.auras3 = db.auras3 or {}
@@ -169,7 +129,6 @@ local function AurasDB()
     a2.perUnit = a2.perUnit or {}
     return a2, a2.shared
 end
-
 local function AurasUnit(key)
     local a2 = AurasDB()
     a2.perUnit[key] = a2.perUnit[key] or {}
@@ -181,16 +140,13 @@ local function AurasUnit(key)
     u.filters.debuffs = u.filters.debuffs or {}
     return u
 end
-
 local function AuraScope()
     return M.auraScope or "shared"
 end
-
 local function AuraShared()
     local _, shared = AurasDB()
     return shared
 end
-
 local function AuraLayout()
     local scope = AuraScope()
     if scope == "shared" then return AuraShared() end
@@ -198,7 +154,6 @@ local function AuraLayout()
     if u.overrideLayout == true then return u.layout end
     return AuraShared()
 end
-
 local function AuraCaps()
     local scope = AuraScope()
     if scope == "shared" then return AuraShared() end
@@ -206,7 +161,6 @@ local function AuraCaps()
     if u.overrideSharedLayout == true then return u.layoutShared end
     return AuraShared()
 end
-
 local function AuraFilters()
     local scope = AuraScope()
     local shared = AuraShared()
@@ -218,19 +172,16 @@ local function AuraFilters()
     if u.overrideFilters == true then return u.filters end
     return shared.filters
 end
-
 local function AuraBuffFilters()
     local f = AuraFilters()
     f.buffs = f.buffs or {}
     return f.buffs
 end
-
 local function AuraDebuffFilters()
     local f = AuraFilters()
     f.debuffs = f.debuffs or {}
     return f.debuffs
 end
-
 local function ForceAuraLayoutOverride()
     local scope = AuraScope()
     if scope == "shared" then return end
@@ -239,11 +190,10 @@ local function ForceAuraLayoutOverride()
     u.overrideLayout = true
     if type(u.layout) ~= "table" then u.layout = {} end
     local layout = u.layout
-    for _, key in ipairs({ "iconSize", "spacing", "cooldownTextSize", "stackTextSize", "reminderGrowth" }) do
+    for _, key in ipairs(AURA_LAYOUT_OVERRIDE_KEYS) do
         if layout[key] == nil then layout[key] = shared[key] end
     end
 end
-
 local function ForceAuraCapsOverride()
     local scope = AuraScope()
     if scope == "shared" then return end
@@ -252,16 +202,10 @@ local function ForceAuraCapsOverride()
     u.overrideSharedLayout = true
     if type(u.layoutShared) ~= "table" then u.layoutShared = {} end
     local layout = u.layoutShared
-    for _, key in ipairs({
-        "maxBuffs", "maxDebuffs", "maxIcons", "perRow", "layoutMode", "growth",
-        "buffGrowth", "debuffGrowth", "rowWrap", "buffRowWrap",
-        "debuffRowWrap", "buffDebuffAnchor", "splitSpacing", "stackCountAnchor",
-        "sortOrder",
-    }) do
+    for _, key in ipairs(AURA_CAPS_OVERRIDE_KEYS) do
         if layout[key] == nil then layout[key] = shared[key] end
     end
 end
-
 local function ForceAuraFilterOverride()
     local scope = AuraScope()
     if scope == "shared" then return end
@@ -269,94 +213,75 @@ local function ForceAuraFilterOverride()
     local u = AurasUnit(scope)
     local hadOverride = (u.overrideFilters == true)
     u.overrideFilters = true
-    if type(u.filters) ~= "table" or u.filters == shared.filters or (not hadOverride and IsEmptyAuraFilterTable(u.filters)) then
-        u.filters = DeepCopyTable(shared.filters or {})
-    end
+    if type(u.filters) ~= "table" or u.filters == shared.filters or (not hadOverride and IsEmptyAuraFilterTable(u.filters)) then u.filters = DeepCopyTable(shared.filters or {}) end
     u.filters.buffs = u.filters.buffs or {}
     u.filters.debuffs = u.filters.debuffs or {}
 end
-
 local function MoveWidget(widget, parent, x, y)
     return W.MoveWidget(widget, parent, x, y)
 end
-
 local function LabelAt(parent, text, x, y, width, template, color)
     return W.LabelAt(parent, text, x, y, width, template, color)
 end
-
 local function DividerAt(parent, y, leftPad, rightPad)
     return W.DividerAt(parent, y, leftPad, rightPad)
 end
-
 local function BindValueToggle(ctx, section, label, getValue, setValue)
     return BindToggleControl(ctx, W.Toggle(section, label), getValue, setValue)
 end
-
 local function BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
     return BindToggleControl(ctx, W.SwitchAt(section, label, x, y, labelWidth), getValue, setValue)
 end
-
 local function BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue)
     return BindSliderControl(ctx, W.Slider(section, label, minVal, maxVal, step, width or 160), getValue, setValue, minVal, step)
 end
-
 local function ToggleAt(ctx, section, label, x, y, getTable, key, default, apply)
     return MoveWidget(BindTableToggle(ctx, section, label, getTable, key, default, apply), section, x, y)
 end
-
 local function SwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
     return BindTableSwitchAt(ctx, section, label, x, y, labelWidth, getTable, key, default, apply)
 end
-
 local function ValueToggleAt(ctx, section, label, x, y, getValue, setValue)
     return MoveWidget(BindValueToggle(ctx, section, label, getValue, setValue), section, x, y)
 end
-
 local function ValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
     return BindValueSwitchAt(ctx, section, label, x, y, labelWidth, getValue, setValue)
 end
-
 local function SliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getTable, key, default, apply)
     return MoveWidget(BindTableSlider(ctx, section, label, minVal, maxVal, step, width, getTable, key, default, apply), section, x, y)
 end
-
 local function ValueSliderAt(ctx, section, label, x, y, minVal, maxVal, step, width, getValue, setValue)
     return MoveWidget(BindValueSlider(ctx, section, label, minVal, maxVal, step, width, getValue, setValue), section, x, y)
 end
-
 local function DropdownAt(ctx, section, label, x, y, values, width, getTable, key, default, apply)
     return MoveWidget(BindTableDropdown(ctx, section, label, values, width, getTable, key, default, apply), section, x, y)
 end
-
 local function ValueDropdownAt(ctx, section, label, x, y, values, width, getValue, setValue)
     return MoveWidget(BindValueDropdown(ctx, section, label, values, width, getValue, setValue), section, x, y)
 end
-
 local function AddTableControlSpecs(ctx, list, section, getTable, specs, defaultApply)
-    for i = 1, #specs do
-        local s = specs[i]
-        local kind = s[1]
-        local control
-        if kind == "toggle" then
-            control = ToggleAt(ctx, section, s[2], s[3], s[4], getTable, s[5], s[6], s[7] or defaultApply)
-        elseif kind == "switch" then
-            control = SwitchAt(ctx, section, s[2], s[3], s[4], s[5], getTable, s[6], s[7], s[8] or defaultApply)
-        elseif kind == "slider" then
-            control = SliderAt(ctx, section, s[2], s[3], s[4], s[5], s[6], s[7], s[8], getTable, s[9], s[10], s[11] or defaultApply)
-        elseif kind == "dropdown" then
-            control = DropdownAt(ctx, section, s[2], s[3], s[4], s[5], s[6], getTable, s[7], s[8], s[9] or defaultApply)
-        end
-        if control and list then list[#list + 1] = control end
-    end
+    M.BuildControlSpecs(specs, {
+        toggle = function(s) return ToggleAt(ctx, section, s[2], s[3], s[4], getTable, s[5], s[6], s[7] or defaultApply) end,
+        switch = function(s) return SwitchAt(ctx, section, s[2], s[3], s[4], s[5], getTable, s[6], s[7], s[8] or defaultApply) end,
+        slider = function(s) return SliderAt(ctx, section, s[2], s[3], s[4], s[5], s[6], s[7], s[8], getTable, s[9], s[10], s[11] or defaultApply) end,
+        dropdown = function(s) return DropdownAt(ctx, section, s[2], s[3], s[4], s[5], s[6], getTable, s[7], s[8], s[9] or defaultApply) end,
+    }, nil, list)
     return list
 end
-
+local function BuildTableControlSpecs(ctx, parent, getTable, defaultApply, specs, customKinds)
+    return M.BuildControlSpecs(specs, { ["*"] = function(s)
+        local kind = s[2]
+        if kind == "toggle" then return BindTableToggle(ctx, parent, s[3], getTable, s[4], s[5], s[6] or defaultApply), s[1] end
+        if kind == "slider" then return BindTableSlider(ctx, parent, s[3], s[4], s[5], s[6], s[7], getTable, s[8], s[9], s[10] or defaultApply), s[1] end
+        if kind == "dropdown" then return BindTableDropdown(ctx, parent, s[3], s[4], s[5], getTable, s[6], s[7], s[8] or defaultApply), s[1] end
+        local custom = customKinds and customKinds[kind]
+        if custom then return custom(ctx, parent, getTable, defaultApply, s), s[1] end
+    end })
+end
 local SetControlEnabled = W.SetControlEnabled
-
 local function RefreshAurasPage(ctx)
     if M.Refresh then M.Refresh(ctx) end
 end
-
 local AURA_QUICK_PRESETS = {
     clean = {
         label = "Clean",
@@ -383,7 +308,6 @@ local AURA_QUICK_PRESETS = {
         highlightOwnBuffs = false, highlightOwnDebuffs = false, showCooldownSwipe = false, showCooldownText = true, showStackCount = false, useBlizzardTimerText = true,
     },
 }
-
 function M.ApplyAuraQuickPreset(scope, name, opts)
     local p = AURA_QUICK_PRESETS[name]
     if not p then return false end
@@ -425,7 +349,6 @@ function M.ApplyAuraQuickPreset(scope, name, opts)
     if opts and opts.refresh == true then RefreshAurasPage(opts.ctx) end
     return true, p.label
 end
-
 local AdvancedPage = M.AdvancedPage or {}
 M.AdvancedPage = AdvancedPage
 M.Assign(AdvancedPage, {
@@ -436,6 +359,6 @@ M.Assign(AdvancedPage, {
     BindValueToggle = BindValueToggle, BindValueSwitchAt = BindValueSwitchAt, BindValueSlider = BindValueSlider,
     ToggleAt = ToggleAt, SwitchAt = SwitchAt, ValueToggleAt = ValueToggleAt, ValueSwitchAt = ValueSwitchAt,
     SliderAt = SliderAt, ValueSliderAt = ValueSliderAt, DropdownAt = DropdownAt, ValueDropdownAt = ValueDropdownAt,
-    AddTableControlSpecs = AddTableControlSpecs,
+    AddTableControlSpecs = AddTableControlSpecs, BuildTableControlSpecs = BuildTableControlSpecs,
     SetControlEnabled = SetControlEnabled,
 })
