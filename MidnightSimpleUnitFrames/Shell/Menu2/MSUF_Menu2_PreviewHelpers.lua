@@ -571,6 +571,115 @@ function H.BuildZoomBar(box, surface, opts)
     return zoomBar, ZoomWheel
 end
 
+local LAYER_BUTTON_FALLBACK_COLOR = { 1, 1, 1 }
+
+local function LayerButtonAvailable(owner, key)
+    return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
+end
+
+local function LayerButtonOn(owner, key)
+    return LayerButtonAvailable(owner, key) and not (owner and owner.layerVisibility and owner.layerVisibility[key] == false)
+end
+
+local function LayerButtonAvailableFor(owner, key, opts)
+    if opts and opts.IsAvailable then return opts.IsAvailable(owner, key) end
+    return LayerButtonAvailable(owner, key)
+end
+
+local function LayerButtonOnFor(owner, key, opts)
+    if opts and opts.IsOn then return opts.IsOn(owner, key) end
+    return LayerButtonOn(owner, key)
+end
+
+function H.RefreshLayerButton(btn, owner, opts)
+    if not btn then return end
+    opts = opts or {}
+    local available = LayerButtonAvailableFor(owner, btn.key, opts)
+    local on = LayerButtonOnFor(owner, btn.key, opts)
+    local c = btn.color or LAYER_BUTTON_FALLBACK_COLOR
+    if btn.off then
+        btn.off:SetText(opts.offText or "OFF")
+        btn.off:SetShown((not available) or not on)
+    end
+    if not available then
+        btn.bg:SetColorTexture(0.020, 0.020, 0.028, 0.48)
+        btn.bar:SetColorTexture(0.18, 0.18, 0.22, 0.35)
+        btn.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
+        btn.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
+    elseif on then
+        btn.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.58)
+        btn.bar:SetColorTexture(c[1], c[2], c[3], 0.88)
+        btn.fs:SetTextColor(0.76, 0.80, 0.90, 0.95)
+        btn.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
+    else
+        btn.bg:SetColorTexture(0.035, 0.035, 0.045, 0.35)
+        btn.bar:SetColorTexture(0.18, 0.18, 0.22, 0.32)
+        btn.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
+        btn.off:SetTextColor(0.40, 0.42, 0.50, 0.78)
+    end
+end
+
+function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
+    if not (parent and def) then return nil end
+    opts = opts or {}
+    local tr = opts.Tr or function(text) return text end
+    local btn = CreateFrame("Button", nil, parent)
+    local h = opts.height or 18
+    btn:SetSize((sideW or 80) - 10, h)
+    btn:SetPoint("TOP", parent, "TOP", 0, -((opts.topOffset or 20) + ((index or 1) - 1) * (opts.rowHeight or h)))
+    btn:EnableMouse(true)
+    btn.key, btn.color, btn.tooltip = def.key, def.color, def.tooltip
+    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
+    btn.bg:SetAllPoints()
+    btn.bar = btn:CreateTexture(nil, "ARTWORK")
+    btn.bar:SetSize(2, 14)
+    btn.bar:SetPoint("LEFT", btn, "LEFT", 2, 0)
+    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 5, 0)
+    btn.fs:SetPoint("RIGHT", btn, "RIGHT", -18, 0)
+    btn.fs:SetJustifyH("LEFT")
+    btn.fs:SetText(tr(def.label))
+    btn.off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
+    btn.off:SetText(opts.offText or "OFF")
+    btn.off:SetJustifyH("RIGHT")
+
+    function btn:Refresh() H.RefreshLayerButton(self, owner, opts) end
+    btn.refresh = btn.Refresh
+    btn:SetScript("OnClick", function(self)
+        if opts.OnClick then
+            opts.OnClick(self, owner)
+            return
+        end
+        if not LayerButtonAvailable(owner, self.key) then return end
+        owner.layerVisibility[self.key] = owner.layerVisibility[self.key] == false
+        self:Refresh()
+    end)
+    btn:SetScript("OnEnter", function(self)
+        local available = LayerButtonAvailableFor(owner, self.key, opts)
+        local on = LayerButtonOnFor(owner, self.key, opts)
+        local c = self.color or LAYER_BUTTON_FALLBACK_COLOR
+        self.bg:SetColorTexture((available and on) and c[1] * 0.18 or 0.08, (available and on) and c[2] * 0.18 or 0.08, (available and on) and c[3] * 0.18 or 0.10, (available and on) and 0.78 or 0.55)
+        self.fs:SetTextColor(0.90, 0.92, 1, 1)
+        if opts.OnEnter then
+            opts.OnEnter(self, owner, available, on, tr)
+        elseif GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(tr(self.fs:GetText() or self.key), 1, 1, 1)
+            if self.tooltip then GameTooltip:AddLine(tr(self.tooltip), 0.82, 0.82, 0.82, true) end
+            if not available and opts.disabledLine then GameTooltip:AddLine(tr(opts.disabledLine), 0.55, 0.68, 0.86, true) end
+            GameTooltip:Show()
+        end
+    end)
+    btn:SetScript("OnLeave", function(self)
+        if GameTooltip then GameTooltip:Hide() end
+        self:Refresh()
+        if opts.OnLeave then opts.OnLeave(self, owner) end
+    end)
+    btn:Refresh()
+    return btn
+end
+
 local TEXT_FOCUS_SIDES = { "top", "bottom", "left", "right" }
 local EDGE_ANCHORS = {
     top = { "TOPLEFT", "TOPRIGHT", "SetHeight" },

@@ -98,34 +98,28 @@ local function BuildGFAuras(ctx)
         local enable = BindAuraLaneEnabled(ctx, W.SwitchAt(section, def.enabledLabel, leftX, -44, 190), groupKey)
         enable._msuf2GroupFrameGateAlwaysEnabled = true
 
-        local anchor = BindNestedDropdown(ctx, W.Dropdown(section, "Anchor", AURA_POSITION_ANCHORS, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "anchor", def.anchor, "geometry")
-        local growth = BindNestedDropdown(ctx, W.Dropdown(section, "Growth", AURA_GROWTH_VALUES, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "growth", def.growth, "geometry")
-        local offsetX = BindNestedSlider(ctx, W.Slider(section, "Offset X", -160, 160, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "x", 0, "geometry")
-        local offsetY = BindNestedSlider(ctx, W.Slider(section, "Offset Y", -160, 160, 1, leftW), function() return AuraGroup(CurrentScope(), groupKey) end, "y", 0, "geometry")
-        W.MoveWidget(anchor, section, leftX, -118, leftW, "LEFT")
-        W.MoveWidget(growth, section, leftX, -172, leftW, "LEFT")
-        W.MoveWidget(offsetX, section, leftX, -226, leftW, "CENTER")
-        W.MoveWidget(offsetY, section, leftX, -280, leftW, "CENTER")
-        controls[#controls + 1] = anchor
-        controls[#controls + 1] = growth
-        controls[#controls + 1] = offsetX
-        controls[#controls + 1] = offsetY
-
-        local maxIcons = BindNestedSlider(ctx, W.Slider(section, def.maxLabel, 0, def.maxMax, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "max", def.max, "visual")
-        local iconSize = BindNestedSlider(ctx, W.Slider(section, "Icon size", 8, 64, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "size", def.size, "geometry")
-        local perRow = BindNestedSlider(ctx, W.Slider(section, "Per row", 1, 20, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "perRow", def.perRow, "geometry")
-        local spacing = BindNestedSlider(ctx, W.Slider(section, "Spacing", 0, 12, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "spacing", def.spacing, "geometry")
-        local layer = BindNestedSlider(ctx, W.Slider(section, "Layer (Z-Order)", 1, 15, 1, rightW), function() return AuraGroup(CurrentScope(), groupKey) end, "layer", def.layer, "geometry")
-        W.MoveWidget(maxIcons, section, rightX, -118, rightW, "CENTER")
-        W.MoveWidget(iconSize, section, rightX, -172, rightW, "CENTER")
-        W.MoveWidget(perRow, section, rightX, -226, rightW, "CENTER")
-        W.MoveWidget(spacing, section, rightX, -280, rightW, "CENTER")
-        W.MoveWidget(layer, section, rightX, -334, rightW, "CENTER")
-        controls[#controls + 1] = maxIcons
-        controls[#controls + 1] = iconSize
-        controls[#controls + 1] = perRow
-        controls[#controls + 1] = spacing
-        controls[#controls + 1] = layer
+        local auraControlSpecs = {
+            { kind = "dropdown", label = "Anchor", values = AURA_POSITION_ANCHORS, key = "anchor", default = def.anchor, mode = "geometry", x = leftX, y = -118, width = leftW, justify = "LEFT" },
+            { kind = "dropdown", label = "Growth", values = AURA_GROWTH_VALUES, key = "growth", default = def.growth, mode = "geometry", x = leftX, y = -172, width = leftW, justify = "LEFT" },
+            { label = "Offset X", min = -160, max = 160, key = "x", default = 0, mode = "geometry", x = leftX, y = -226, width = leftW },
+            { label = "Offset Y", min = -160, max = 160, key = "y", default = 0, mode = "geometry", x = leftX, y = -280, width = leftW },
+            { label = def.maxLabel, min = 0, max = def.maxMax, key = "max", default = def.max, mode = "visual", x = rightX, y = -118, width = rightW },
+            { label = "Icon size", min = 8, max = 64, key = "size", default = def.size, mode = "geometry", x = rightX, y = -172, width = rightW },
+            { label = "Per row", min = 1, max = 20, key = "perRow", default = def.perRow, mode = "geometry", x = rightX, y = -226, width = rightW },
+            { label = "Spacing", min = 0, max = 12, key = "spacing", default = def.spacing, mode = "geometry", x = rightX, y = -280, width = rightW },
+            { label = "Layer (Z-Order)", min = 1, max = 15, key = "layer", default = def.layer, mode = "geometry", x = rightX, y = -334, width = rightW },
+        }
+        for i = 1, #auraControlSpecs do
+            local spec = auraControlSpecs[i]
+            local widget
+            if spec.kind == "dropdown" then
+                widget = BindNestedDropdown(ctx, W.Dropdown(section, spec.label, spec.values, spec.width), function() return AuraGroup(CurrentScope(), groupKey) end, spec.key, spec.default, spec.mode)
+            else
+                widget = BindNestedSlider(ctx, W.Slider(section, spec.label, spec.min, spec.max, spec.step or 1, spec.width), function() return AuraGroup(CurrentScope(), groupKey) end, spec.key, spec.default, spec.mode)
+            end
+            W.MoveWidget(widget, section, spec.x, spec.y, spec.width, spec.justify or "CENTER")
+            controls[#controls + 1] = widget
+        end
 
         local function RefreshAuraGroupState()
             local cfg = AuraGroup(CurrentScope(), groupKey)

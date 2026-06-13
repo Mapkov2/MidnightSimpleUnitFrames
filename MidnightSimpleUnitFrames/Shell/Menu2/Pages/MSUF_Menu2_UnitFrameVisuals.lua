@@ -18,6 +18,7 @@ local VT = M.ValueTextList
 
 local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BORDERS = M.PickDefaults(UP, [[POWER_UNITS CASTBAR_FIELDS PORTRAIT_RENDER PORTRAIT_SHAPES PORTRAIT_BORDERS]])
 local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, SetControlEnabled, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool SetControlEnabled NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources]])
+local SetControlsEnabled = W.SetControlsEnabled
 
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = {
@@ -170,6 +171,7 @@ local function BuildPortrait(ctx, builder, unit)
     local borderSize = BindPortraitSlider(borderCard, "Border thickness", 16, -170, leftW - 58, 1, 12, 1, "portraitBorderThickness", 2, "MSUF2_PORTRAIT_BORDER_SIZE")
     local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -238, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
+    local portraitActiveControls = { portrait, render, shape, size, x, y, border, portraitBg }
 
     RefreshPortraitControls = function()
         local conf = GetConf(unit)
@@ -178,17 +180,10 @@ local function BuildPortrait(ctx, builder, unit)
         local hasBorder = active and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
 
         SetControlEnabled(portraitEnable, true)
-        SetControlEnabled(portrait, active)
-        SetControlEnabled(render, active)
-        SetControlEnabled(shape, active)
-        SetControlEnabled(size, active)
-        SetControlEnabled(x, active)
-        SetControlEnabled(y, active)
-        SetControlEnabled(border, active)
+        SetControlsEnabled(portraitActiveControls, active)
         SetControlEnabled(borderSize, hasBorder)
         SetControlEnabled(fillBorder, hasBorder)
         SetControlEnabled(classStyle, classRender)
-        SetControlEnabled(portraitBg, active)
 
         SetSectionHeaderStatus(sec, nil)
     end
@@ -253,6 +248,18 @@ local function BuildPower(ctx, builder, unit)
             function(v) SetNumber(unit, key, v, reason, { power = true, preview = true }) end)
         return control
     end
+    local POWER_OPTS = { power = true, preview = true }
+    local POWER_TEXT_OPTS = { power = true, text = true, preview = true }
+    local function BindPowerToggle(parent, addFn, label, x, y, width, key, defaultValue, reason, readFn, afterSet, opts)
+        local control = addFn(W.ToggleAt(parent, label, x, y, width))
+        M.BindToggle(ctx, control,
+            readFn or function() return ReadBool(unit, key, defaultValue) end,
+            function(v)
+                SetBool(unit, key, v, reason, opts or POWER_OPTS)
+                if afterSet then afterSet(v) end
+            end)
+        return control
+    end
 
     local powerNotice, _, powerNoticeButton = CreateSectionNotice(sec, powerNoticeY, "Show Power", 126)
     if powerNoticeButton then
@@ -279,17 +286,13 @@ local function BuildPower(ctx, builder, unit)
             if RefreshPowerEnabled then RefreshPowerEnabled() end
         end)
 
-    local border = AddPowerControl(W.ToggleAt(borderCard, "Power bar border", 16, -62, rightW - 32))
-    M.BindToggle(ctx, border,
+    local border = BindPowerToggle(borderCard, AddPowerControl, "Power bar border", 16, -62, rightW - 32, "powerBarBorderEnabled", true, "MSUF2_POWER_BORDER",
         function()
             local conf = GetConf(unit)
             if conf.powerBarBorderEnabled ~= nil then return conf.powerBarBorderEnabled == true end
             return GetBars().powerBarBorderEnabled == true
         end,
-        function(v)
-            SetBool(unit, "powerBarBorderEnabled", v, "MSUF2_POWER_BORDER", { power = true, preview = true })
-            if RefreshPowerEnabled then RefreshPowerEnabled() end
-        end)
+        function() if RefreshPowerEnabled then RefreshPowerEnabled() end end)
 
     local height = BindPowerSlider(mainCard, AddPowerControl, "Power bar height", 16, -76, cardW - 72, 1, 20, 1, "powerBarHeight", 3, "MSUF2_POWER_HEIGHT",
         function()
@@ -303,19 +306,14 @@ local function BuildPower(ctx, builder, unit)
             return tonumber(conf.powerBarBorderThickness) or tonumber(GetBars().powerBarBorderThickness or GetBars().powerBarBorderSize) or 1
         end)
 
-    local embed = AddPowerControl(W.ToggleAt(mainCard, "Embed into health", 16, -138, cardW - 32))
-    M.BindToggle(ctx, embed,
+    local embed = BindPowerToggle(mainCard, AddPowerControl, "Embed into health", 16, -138, cardW - 32, "embedPowerBarIntoHealth", false, "MSUF2_POWER_EMBED",
         function()
             local conf = GetConf(unit)
             if conf.embedPowerBarIntoHealth ~= nil then return conf.embedPowerBarIntoHealth == true end
             return GetBars().embedPowerBarIntoHealth == true
-        end,
-        function(v) SetBool(unit, "embedPowerBarIntoHealth", v, "MSUF2_POWER_EMBED", { power = true, preview = true }) end)
+        end)
 
-    local smooth = AddPowerControl(W.ToggleAt(borderCard, "Smooth fill", 16, -158, rightW - 32))
-    M.BindToggle(ctx, smooth,
-        function() return ReadBool(unit, "powerSmoothFill", unit == "player") end,
-        function(v) SetBool(unit, "powerSmoothFill", v, "MSUF2_POWER_SMOOTH", { power = true, preview = true }) end)
+    local smooth = BindPowerToggle(borderCard, AddPowerControl, "Smooth fill", 16, -158, rightW - 32, "powerSmoothFill", unit == "player", "MSUF2_POWER_SMOOTH")
 
     local detached = AddPowerControl(W.ToggleAt(mainCard, "Detach from frame", 16, -166, cardW - 32))
     M.BindToggle(ctx, detached,
@@ -338,23 +336,15 @@ local function BuildPower(ctx, builder, unit)
             RefreshClassPowerDetachedState()
         end)
 
-    local textOnBar = AddDetachedControl(W.ToggleAt(detachedCard, "Text on detached bar", 16, -62, detachedLeftW))
-    M.BindToggle(ctx, textOnBar,
-        function() return ReadBool(unit, "detachedPowerBarTextOnBar", false) end,
-        function(v) SetBool(unit, "detachedPowerBarTextOnBar", v, "MSUF2_POWER_DETACHED_TEXT", { power = true, text = true, preview = true }) end)
+    local textOnBar = BindPowerToggle(detachedCard, AddDetachedControl, "Text on detached bar", 16, -62, detachedLeftW, "detachedPowerBarTextOnBar", false, "MSUF2_POWER_DETACHED_TEXT", nil, nil, POWER_TEXT_OPTS)
 
     local sliderTop = -116
     if isPlayer then
         sliderTop = -148
-        detachedSync = AddDetachedControl(W.ToggleAt(detachedCard, "Sync width to Class Resource", 16, -94, detachedLeftW))
-        M.BindToggle(ctx, detachedSync,
-            function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end,
-            function(v) SetBool(unit, "detachedPowerBarSyncClassPower", v, "MSUF2_POWER_DETACHED_SYNC", { power = true, preview = true }) end)
+        detachedSync = BindPowerToggle(detachedCard, AddDetachedControl, "Sync width to Class Resource", 16, -94, detachedLeftW, "detachedPowerBarSyncClassPower", true, "MSUF2_POWER_DETACHED_SYNC",
+            function() return GetConf(unit).detachedPowerBarSyncClassPower ~= false end)
 
-        local anchor = AddDetachedControl(W.ToggleAt(detachedCard, "Anchor to Class Resource", detachedRightX, -94, detachedRightW))
-        M.BindToggle(ctx, anchor,
-            function() return ReadBool(unit, "detachedPowerBarAnchorToClassPower", false) end,
-            function(v) SetBool(unit, "detachedPowerBarAnchorToClassPower", v, "MSUF2_POWER_DETACHED_ANCHOR", { power = true, preview = true }) end)
+        local anchor = BindPowerToggle(detachedCard, AddDetachedControl, "Anchor to Class Resource", detachedRightX, -94, detachedRightW, "detachedPowerBarAnchorToClassPower", false, "MSUF2_POWER_DETACHED_ANCHOR")
     end
 
     BindPowerSlider(detachedCard, AddDetachedControl, "Detached X", 16, sliderTop, detachedSliderW, -1000, 1000, 1, "detachedPowerBarOffsetX", 0, "MSUF2_POWER_DETACHED_X")
@@ -378,9 +368,7 @@ local function BuildPower(ctx, builder, unit)
                 if RefreshPowerEnabled then RefreshPowerEnabled() end
                 RefreshClassPowerDetachedState()
             end)
-        if M.AddTooltip then
-            M.AddTooltip(detachedShape, "Detached Shape", "Orb is a single bottom-to-top filled mana/power sphere. Follow Class Resource maps Circle to Round and Diamond/Hex to Crystal.", { hook = true, owner = "ANCHOR_RIGHT" })
-        end
+        if M.AddTooltip then M.AddTooltip(detachedShape, "Detached Shape", "Orb is a single bottom-to-top filled mana/power sphere. Follow Class Resource maps Circle to Round and Diamond/Hex to Crystal.", { hook = true, owner = "ANCHOR_RIGHT" }) end
         orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE")
     end
 
@@ -388,8 +376,8 @@ local function BuildPower(ctx, builder, unit)
         local powerOn = ReadBool(unit, "showPowerBar", true)
         local detachedOn = powerOn and ReadBool(unit, "powerBarDetached", false)
         local classManaged = isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
-        for i = 1, #powerControls do SetControlEnabled(powerControls[i], powerOn) end
-        for i = 1, #detachedControls do SetControlEnabled(detachedControls[i], detachedOn) end
+        SetControlsEnabled(powerControls, powerOn)
+        SetControlsEnabled(detachedControls, detachedOn)
         SetControlEnabled(borderSize, powerOn and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true))
         SetControlEnabled(show, true)
         local orbSelected = isPlayer and NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape) == "ORB"
@@ -399,8 +387,8 @@ local function BuildPower(ctx, builder, unit)
         if detachedShape then SetControlEnabled(detachedShape, detachedOn) end
         if orbSize then SetControlEnabled(orbSize, detachedOn and orbSelected) end
         if classManaged then
-            for i = 1, #powerControls do SetControlEnabled(powerControls[i], false) end
-            for i = 1, #detachedControls do SetControlEnabled(detachedControls[i], false) end
+            SetControlsEnabled(powerControls, false)
+            SetControlsEnabled(detachedControls, false)
             SetControlEnabled(show, false)
             SetControlEnabled(borderSize, false)
         end
@@ -611,26 +599,9 @@ local function BuildCastbar(ctx, builder, unit)
         end
     end
 
-    local tabs = W.Segment(sec, "Castbar area", CASTBAR_TAB_VALUES, min(620, sectionW - 48))
-    W.MoveWidget(tabs, sec, 20, -58, min(620, sectionW - 48), "LEFT")
-    local RefreshCastbarTabs
-    M.BindSegment(ctx, tabs,
-        CurrentCastbarTab,
-        function(v)
-            M.unitCastbarTabSelection[unit] = v or "general"
-            if RefreshCastbarTabs then RefreshCastbarTabs() end
-        end)
-
     local tabFrames = {}
-    local function MakeTabFrame(key)
-        return UnitSectionShared.MakeTabFrame(sec, key, -118, sectionW, tabFrames)
-    end
-
-    local generalTab = MakeTabFrame("general")
-    local iconTab = MakeTabFrame("icon")
-    local spellTab = MakeTabFrame("spell")
-    local timeTab = MakeTabFrame("time")
-    local advancedTab = MakeTabFrame("advanced")
+    local generalTab, iconTab, spellTab, timeTab, advancedTab =
+        UnitSectionShared.MakeTabFrames(sec, -118, sectionW, tabFrames, "general", "icon", "spell", "time", "advanced")
 
     local generalCard = W.ControlCard(generalTab, "General", nil, leftX, -4, leftW, 132)
     local providerCard = W.ControlCard(generalTab, "Provider", nil, rightX, -4, rightW, 132)
@@ -639,6 +610,14 @@ local function BuildCastbar(ctx, builder, unit)
     local timeCard = W.ControlCard(timeTab, "Cast Time Text", nil, leftX, -4, leftW, 332)
     local textAdvancedCard = W.ControlCard(advancedTab, "Spell Text Behavior", nil, leftX, -4, leftW, 190)
     local iconAdvancedCard = W.ControlCard(advancedTab, "Icon Style", nil, rightX, -4, rightW, 118)
+    W.SegmentTabs(ctx, sec, {
+        label = "Castbar area", values = CASTBAR_TAB_VALUES, width = min(620, sectionW - 48),
+        frames = tabFrames, defaultTab = "general",
+        get = CurrentCastbarTab,
+        set = function(v) M.unitCastbarTabSelection[unit] = v or "general" end,
+        afterRefresh = function(tab) SetCastbarSectionHeight(CASTBAR_TAB_HEIGHTS[tab] or CASTBAR_TAB_HEIGHTS.general) end,
+        x = 20, y = -58,
+    })
 
     local castbarNotice, _, castbarNoticeButton = CreateSectionNotice(generalTab, -156, "Use MSUF", 96)
     if castbarNoticeButton then
@@ -671,28 +650,25 @@ local function BuildCastbar(ctx, builder, unit)
         function() return ReadBool(unit, "showInterrupt", true) end,
         function(v) SetBool(unit, "showInterrupt", v, "MSUF2_CASTBAR_INTERRUPT", { castbar = true, preview = true }) end)
 
-    local icon = W.SwitchAt(iconCard, "Enable", 16, -52, 160)
-    if W.AttachEditFocus then W.AttachEditFocus(icon, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, icon,
-        function() return ReadGeneralBool(fields.icon, true) end,
-        function(v)
-            SetGeneralBool(fields.icon, v, "MSUF2_CASTBAR_ICON", { castbar = true, preview = true })
-            if RefreshCastbarEnabled then RefreshCastbarEnabled() end
-        end)
+    local function BindCastbarFeatureToggle(parent, field, reason)
+        local control = W.SwitchAt(parent, "Enable", 16, -52, 160)
+        if W.AttachEditFocus then W.AttachEditFocus(control, unit, "castbar", nil, { source = "menu2-unit" }) end
+        M.BindToggle(ctx, control,
+            function() return ReadGeneralBool(field, true) end,
+            function(v)
+                SetGeneralBool(field, v, reason, { castbar = true, preview = true })
+                if RefreshCastbarEnabled then RefreshCastbarEnabled() end
+            end)
+        return control
+    end
+    local icon = BindCastbarFeatureToggle(iconCard, fields.icon, "MSUF2_CASTBAR_ICON")
     local iconPosition = BindDetailDropdown(iconCard, iconControls, "Position", 16, -88, min(260, controlWLeft), CASTBAR_ICON_POSITIONS, DetailKey("IconPosition"), "LEFT", "MSUF2_CASTBAR_ICON_POSITION")
     local iconSize = BindDetailSlider(iconCard, iconControls, "Size", 16, -142, controlWLeft, 0, 128, 1, DetailKey("IconSize"), 0, "MSUF2_CASTBAR_ICON_SIZE")
     local iconX = BindDetailSlider(iconCard, iconControls, "X offset", 16, -196, controlWLeft, -300, 300, 1, DetailKey("IconOffsetX"), 0, "MSUF2_CASTBAR_ICON_X")
     local iconY = BindDetailSlider(iconCard, iconControls, "Y offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("IconOffsetY"), 0, "MSUF2_CASTBAR_ICON_Y")
     local iconSpacing = BindDetailSlider(iconCard, iconControls, "Spacing", 16, -304, controlWLeft, 0, 40, 1, DetailKey("IconSpacing"), 1, "MSUF2_CASTBAR_ICON_SPACING")
 
-    local text = W.SwitchAt(spellCard, "Enable", 16, -52, 160)
-    if W.AttachEditFocus then W.AttachEditFocus(text, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, text,
-        function() return ReadGeneralBool(fields.text, true) end,
-        function(v)
-            SetGeneralBool(fields.text, v, "MSUF2_CASTBAR_TEXT", { castbar = true, preview = true })
-            if RefreshCastbarEnabled then RefreshCastbarEnabled() end
-        end)
+    local text = BindCastbarFeatureToggle(spellCard, fields.text, "MSUF2_CASTBAR_TEXT")
     local spellPosition = BindDetailDropdown(spellCard, spellControls, "Position preset", 16, -88, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("SpellNamePosition"), "LEFT", "MSUF2_CASTBAR_SPELL_POSITION")
     local spellSize = BindDetailSlider(spellCard, spellControls, "Size", 16, -142, controlWLeft, 0, 48, 1, DetailKey("SpellNameFontSize"), 0, "MSUF2_CASTBAR_SPELL_SIZE")
     local spellAlign = BindDetailDropdown(spellCard, spellControls, "Alignment", 16, -196, min(260, controlWLeft), CASTBAR_TEXT_ALIGN, DetailKey("SpellNameAlign"), "LEFT", "MSUF2_CASTBAR_SPELL_ALIGN")
@@ -702,19 +678,13 @@ local function BuildCastbar(ctx, builder, unit)
     local spellTruncate = BindDetailDropdown(textAdvancedCard, spellControls, "Truncate behavior", 16, -106, min(260, controlWLeft), CASTBAR_TRUNCATE_VALUES, DetailKey("SpellNameTruncate"), "AUTO", "MSUF2_CASTBAR_SPELL_TRUNCATE")
     local iconBorder = BindDetailDropdown(iconAdvancedCard, iconControls, "Border style", 16, -52, min(260, controlWRight), CASTBAR_ICON_BORDER_VALUES, DetailKey("IconBorderStyle"), "NONE", "MSUF2_CASTBAR_ICON_BORDER")
 
-    local time = W.SwitchAt(timeCard, "Enable", 16, -52, 160)
-    if W.AttachEditFocus then W.AttachEditFocus(time, unit, "castbar", nil, { source = "menu2-unit" }) end
-    M.BindToggle(ctx, time,
-        function() return ReadGeneralBool(fields.time, true) end,
-        function(v)
-            SetGeneralBool(fields.time, v, "MSUF2_CASTBAR_TIME", { castbar = true, preview = true })
-            if RefreshCastbarEnabled then RefreshCastbarEnabled() end
-        end)
+    local time = BindCastbarFeatureToggle(timeCard, fields.time, "MSUF2_CASTBAR_TIME")
     local timeFormat = BindDetailDropdown(timeCard, timeControls, "Format", 16, -88, min(260, controlWLeft), CASTBAR_TIME_FORMATS, fields.timeFormat, "CURRENT", "MSUF2_CASTBAR_TIME_FORMAT")
     local timePosition = BindDetailDropdown(timeCard, timeControls, "Position preset", 16, -142, min(260, controlWLeft), CASTBAR_TEXT_POSITIONS, DetailKey("TimePosition"), "RIGHT", "MSUF2_CASTBAR_TIME_POSITION")
     local timeSize = BindDetailSlider(timeCard, timeControls, "Size", 16, -196, controlWLeft, 0, 48, 1, DetailKey("TimeFontSize"), 0, "MSUF2_CASTBAR_TIME_SIZE")
     local timeX = BindDetailSlider(timeCard, timeControls, "X offset", 16, -250, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetX"), unit == "boss" and 0 or -2, "MSUF2_CASTBAR_TIME_X")
     local timeY = BindDetailSlider(timeCard, timeControls, "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetY"), 0, "MSUF2_CASTBAR_TIME_Y")
+    local castbarFeatureToggles = { time, interrupt, icon, text }
 
     RefreshCastbarEnabled = function()
         local backend = ReadCastbarBackend()
@@ -723,24 +693,13 @@ local function BuildCastbar(ctx, builder, unit)
         local iconOn = msufOn and ReadGeneralBool(fields.icon, true)
         local spellOn = msufOn and ReadGeneralBool(fields.text, true)
         local timeOn = msufOn and ReadGeneralBool(fields.time, true)
-        SetControlEnabled(time, msufOn)
-        SetControlEnabled(interrupt, msufOn)
-        SetControlEnabled(icon, msufOn)
-        SetControlEnabled(text, msufOn)
+        SetControlsEnabled(castbarFeatureToggles, msufOn)
         SetControlEnabled(enabled, true)
         if provider then SetControlEnabled(provider, enabledOn) end
-        for i = 1, #allCastbarControls do
-            SetControlEnabled(allCastbarControls[i], msufOn)
-        end
-        for i = 1, #iconControls do
-            SetControlEnabled(iconControls[i], iconOn)
-        end
-        for i = 1, #spellControls do
-            SetControlEnabled(spellControls[i], spellOn)
-        end
-        for i = 1, #timeControls do
-            SetControlEnabled(timeControls[i], timeOn)
-        end
+        SetControlsEnabled(allCastbarControls, msufOn)
+        SetControlsEnabled(iconControls, iconOn)
+        SetControlsEnabled(spellControls, spellOn)
+        SetControlsEnabled(timeControls, timeOn)
 
         if not msufOn then
             if backend == "HIDE" then
@@ -754,17 +713,8 @@ local function BuildCastbar(ctx, builder, unit)
         end
         SetSectionHeaderStatus(sec, nil)
     end
-    RefreshCastbarTabs = function()
-        local tab = CurrentCastbarTab()
-        for key, frame in pairs(tabFrames) do
-            frame:SetShown(key == tab)
-        end
-        SetCastbarSectionHeight(CASTBAR_TAB_HEIGHTS[tab] or CASTBAR_TAB_HEIGHTS.general)
-    end
     M.SetCollapsibleRefreshState(sec, RefreshCastbarEnabled)
     M.AddRefresher(ctx, RefreshCastbarEnabled)
-    M.AddRefresher(ctx, RefreshCastbarTabs)
-    RefreshCastbarTabs()
     RefreshCastbarEnabled()
 end
 

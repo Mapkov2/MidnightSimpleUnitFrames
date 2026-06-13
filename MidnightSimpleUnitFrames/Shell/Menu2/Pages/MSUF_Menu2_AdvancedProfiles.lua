@@ -19,6 +19,7 @@ local min = math.min
 local CallGlobal, G, Gameplay, SetValue, LabelAt = M.Pick(AP, [[CallGlobal G Gameplay SetValue LabelAt]])
 local MoveWidget = W.MoveWidget or AP.MoveWidget
 local Tr = M.TranslateText or M.Tr or function(text) return text end
+local VT = M.ValueTextList
 local WAGO_PROFILES_URL = "https://wago.io/search/imports/wow/msuf"
 
 local function Trim(value)
@@ -111,83 +112,56 @@ local function StyleProfileInput(editBox, width, height, multiline)
     return editBox
 end
 
+local function InstallProfilePopup(key, spec)
+    return M.InstallStaticPopup and M.InstallStaticPopup(key, spec)
+end
+
 local function EnsureProfilePopups()
     if not _G.StaticPopupDialogs then return end
 
-    if not _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT then
-        _G.StaticPopupDialogs.MSUF2_IMPORT_RELOAD_PROMPT = {
-            text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
-            button1 = _G.RELOAD or M.Tr("Reload"),
-            button2 = _G.CANCEL or M.Tr("Not now"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-            OnAccept = function()
-                if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-            end,
-        }
-    end
-
-    if not _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT then
-        _G.StaticPopupDialogs.MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT = {
-            text = M.Tr("This is an UnhaltedUnitFrames profile.\n\nMSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1.\n\nImport anyway?"),
-            button1 = M.Tr("Import"),
-            button2 = _G.CANCEL or M.Tr("Cancel"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-            OnAccept = function(_, data)
-                if BlockCombatAction() then return end
-                if data and type(data.after) == "function" then
-                    data.after()
-                end
-            end,
-        }
-    end
-
-    if not _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE then
-        _G.StaticPopupDialogs.MSUF2_CONFIRM_RESET_PROFILE = {
-            text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
-            button1 = YES or M.Tr("Yes"),
-            button2 = NO or M.Tr("No"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-            OnAccept = function(_, data)
-                if BlockCombatAction() then return end
-                if not (data and data.name) then return end
-                if type(_G.MSUF_ResetProfile) == "function" then pcall(_G.MSUF_ResetProfile, data.name) end
-                if M.ClearHistory then M.ClearHistory() end
-                if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true }) end
-                if type(data.after) == "function" then data.after() end
-                if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-                    _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
-                end
-            end,
-        }
-    end
-
-    if not _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE then
-        _G.StaticPopupDialogs.MSUF2_CONFIRM_DELETE_PROFILE = {
-            text = M.Tr("Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first."),
-            button1 = DELETE or M.Tr("Delete"),
-            button2 = CANCEL or M.Tr("Cancel"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-            OnAccept = function(_, data)
-                if BlockCombatAction() then return end
-                if not (data and data.name) then return end
-                if type(_G.MSUF_DeleteProfile) == "function" then pcall(_G.MSUF_DeleteProfile, data.name) end
-                if M.ClearHistory then M.ClearHistory() end
-                if type(data.after) == "function" then data.after() end
-            end,
-        }
-    end
+    InstallProfilePopup("MSUF2_IMPORT_RELOAD_PROMPT", {
+        text = M.Tr("Profile imported into the current profile.\n\nReload the UI now so every imported setting is applied?"),
+        button1 = _G.RELOAD or M.Tr("Reload"),
+        button2 = _G.CANCEL or M.Tr("Not now"),
+        OnAccept = function()
+            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+        end,
+    })
+    InstallProfilePopup("MSUF2_CONFIRM_UUF_IMPORT_BEST_EFFORT", {
+        text = M.Tr("This is an UnhaltedUnitFrames profile.\n\nMSUF will translate it as a best-effort import. Auras are not imported, and unsupported UUF-only settings may not map 1:1.\n\nImport anyway?"),
+        button1 = M.Tr("Import"),
+        button2 = _G.CANCEL or M.Tr("Cancel"),
+        OnAccept = function(_, data)
+            if BlockCombatAction() then return end
+            if data and type(data.after) == "function" then data.after() end
+        end,
+    })
+    InstallProfilePopup("MSUF2_CONFIRM_RESET_PROFILE", {
+        text = M.Tr("Reset profile '%s' to defaults?\n\nThis resets the entire selected profile to the current MSUF factory defaults. Every menu in that profile will be affected."),
+        button1 = YES or M.Tr("Yes"),
+        button2 = NO or M.Tr("No"),
+        OnAccept = function(_, data)
+            if BlockCombatAction() then return end
+            if not (data and data.name) then return end
+            if type(_G.MSUF_ResetProfile) == "function" then pcall(_G.MSUF_ResetProfile, data.name) end
+            if M.ClearHistory then M.ClearHistory() end
+            if M.RequestGeneralApply then M.RequestGeneralApply("MSUF2_PROFILE_RESET", { preview = true }) end
+            if type(data.after) == "function" then data.after() end
+            if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
+        end,
+    })
+    InstallProfilePopup("MSUF2_CONFIRM_DELETE_PROFILE", {
+        text = M.Tr("Delete profile '%s'?\n\nThis removes the selected profile from MSUF. Other profiles are not affected, but this profile cannot be restored unless you exported or copied it first."),
+        button1 = DELETE or M.Tr("Delete"),
+        button2 = CANCEL or M.Tr("Cancel"),
+        OnAccept = function(_, data)
+            if BlockCombatAction() then return end
+            if not (data and data.name) then return end
+            if type(_G.MSUF_DeleteProfile) == "function" then pcall(_G.MSUF_DeleteProfile, data.name) end
+            if M.ClearHistory then M.ClearHistory() end
+            if type(data.after) == "function" then data.after() end
+        end,
+    })
 end
 
 local function ConfirmUUFBestEffortImport(text, after)
@@ -258,12 +232,14 @@ local function BuildProfiles(ctx)
     local buttonGridW = (buttonW * 2) + buttonGap
     local rightX = min(max(420, floor(contentW * 0.52)), max(360, contentW - buttonGridW - 28))
 
-    local function AddProfileTooltip(frame, title, text)
-        return M.AddTooltip and M.AddTooltip(frame, tostring(title or ""), text, {
-            hook = true,
-            titleAsLine = true,
-            bodyColor = { 0.85, 0.85, 0.85 },
-        }) or frame
+    local PROFILE_TOOLTIP = { hook = true, titleAsLine = true, bodyColor = { 0.85, 0.85, 0.85 } }
+    local function AddProfileTooltip(frame, title, text) return M.AddTooltip and M.AddTooltip(frame, tostring(title or ""), text, PROFILE_TOOLTIP) or frame end
+    local function PlaceActionRow(parent, x, left, right, y) left:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); right:SetPoint("LEFT", left, "RIGHT", buttonGap, 0) end
+    local function ProfileButton(parent, label, onClick, danger)
+        local btn = T.Button(parent, label, buttonW, buttonH)
+        if danger and T.SkinDangerButton then T.SkinDangerButton(btn) end
+        btn:SetScript("OnClick", onClick)
+        return btn
     end
 
     local current = b:CollapsibleSection("profiles_management", "Profile Management", 238, true)
@@ -295,8 +271,7 @@ local function BuildProfiles(ctx)
         true)
     local nameHelp = W.Text(current, "Type a name here before creating or copying a profile.", 14, -158, fieldW, T.colors.muted)
     if nameHelp and nameHelp.SetWordWrap then nameHelp:SetWordWrap(true) end
-    local create = T.Button(current, "Create profile", buttonW, buttonH)
-    create:SetScript("OnClick", function()
+    local create = ProfileButton(current, "Create profile", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
         if name and name ~= "" and type(_G.MSUF_CreateProfile) == "function" then
@@ -308,8 +283,7 @@ local function BuildProfiles(ctx)
         nameInput:SetText("")
         RefreshAfterProfileChange(ctx)
     end)
-    local copy = T.Button(current, "Copy current to name", buttonW, buttonH)
-    copy:SetScript("OnClick", function()
+    local copy = ProfileButton(current, "Copy current to name", function()
         if BlockCombatAction() then return end
         local name = Trim(nameInput:GetText())
         if name and name ~= "" and type(_G.MSUF_CopyProfile) == "function" then
@@ -321,8 +295,7 @@ local function BuildProfiles(ctx)
             RefreshAfterProfileChange(ctx)
         end
     end)
-    local reset = T.Button(current, "Reset current profile", buttonW, buttonH)
-    reset:SetScript("OnClick", function()
+    local reset = ProfileButton(current, "Reset current profile", function()
         if BlockCombatAction() then return end
         if M.ShowPageResetConfirm then
             M.ShowPageResetConfirm("profiles")
@@ -337,9 +310,7 @@ local function BuildProfiles(ctx)
             RefreshAfterProfileChange(ctx)
         end
     end)
-    local delete = T.Button(current, "Delete current profile", buttonW, buttonH)
-    T.SkinDangerButton(delete)
-    delete:SetScript("OnClick", function()
+    local delete = ProfileButton(current, "Delete current profile", function()
         if BlockCombatAction() then return end
         local name = _G.MSUF_ActiveProfile or "Default"
         if name == "Default" then return end
@@ -350,15 +321,13 @@ local function BuildProfiles(ctx)
             if M.ClearHistory then M.ClearHistory() end
             RefreshAfterProfileChange(ctx)
         end
-    end)
+    end, true)
     MoveWidget(profileDrop, current, 14, -42, fieldW)
     MoveWidget(nameInput, current, 14, -104, fieldW)
     StyleProfileInput(nameInput, fieldW, 24, false)
     W.LabelAt(current, "Profile actions", rightX, -42, buttonGridW, "GameFontNormalSmall", T.colors.text)
-    create:SetPoint("TOPLEFT", current, "TOPLEFT", rightX, -70)
-    copy:SetPoint("LEFT", create, "RIGHT", buttonGap, 0)
-    reset:SetPoint("TOPLEFT", current, "TOPLEFT", rightX, -110)
-    delete:SetPoint("LEFT", reset, "RIGHT", buttonGap, 0)
+    PlaceActionRow(current, rightX, create, copy, -70)
+    PlaceActionRow(current, rightX, reset, delete, -110)
     M.AddRefresher(ctx, function()
         local active = _G.MSUF_ActiveProfile or "Default"
         if delete.SetEnabled then delete:SetEnabled(active ~= "Default") end
@@ -407,14 +376,7 @@ local function BuildProfiles(ctx)
     local io = b:CollapsibleSection("profiles_io", "Export / Import", 424, false)
     local ioActionX = min(max(380, floor(contentW * 0.46)), max(340, contentW - 460))
     local ioLeftW = max(320, min(620, ioActionX - 28))
-    local exportKind = W.Dropdown(io, "Export kind", {
-        { value = "all", text = "Full profile" },
-        { value = "unitframe", text = "Unitframes" },
-        { value = "castbar", text = "Castbars" },
-        { value = "colors", text = "Colors" },
-        { value = "gameplay", text = "Gameplay" },
-        { value = "groupframe", text = "Group Frames" },
-    }, 240)
+    local exportKind = W.Dropdown(io, "Export kind", VT("all", "Full profile", "unitframe", "Unitframes", "castbar", "Castbars", "colors", "Colors", "gameplay", "Gameplay", "groupframe", "Group Frames"), 240)
     M.BindDropdown(ctx, exportKind,
         function() return M.profileExportKind or "all" end,
         function(v)
@@ -430,8 +392,7 @@ local function BuildProfiles(ctx)
         function() return M.profileImportString or "" end,
         function(value) M.profileImportString = tostring(value or "") end,
         false)
-    local export = T.Button(io, "Export", buttonW, buttonH)
-    export:SetScript("OnClick", function()
+    local export = ProfileButton(io, "Export", function()
         local fn = _G.MSUF_ExportSelectionToString
         if type(fn) == "function" then
             local ok, value = pcall(fn, M.profileExportKind or "all")
@@ -575,8 +536,7 @@ local function BuildProfiles(ctx)
         end
         if M.Refresh then M.Refresh(ctx) end
     end)
-    local legacy = T.Button(io, "Import Legacy", buttonW, buttonH)
-    legacy:SetScript("OnClick", function()
+    local legacy = ProfileButton(io, "Import Legacy", function()
         if BlockCombatAction() then return end
         local text = blob:GetText()
         if text and text ~= "" and type(_G.MSUF_ImportLegacyFromString) == "function" then
@@ -591,8 +551,7 @@ local function BuildProfiles(ctx)
             M.ShowStatusFeedback("Legacy import unavailable", "danger", 1.8)
         end
     end)
-    local wago = T.Button(io, "Browse Wago Profiles", buttonW, buttonH)
-    wago:SetScript("OnClick", function()
+    local wago = ProfileButton(io, "Browse Wago Profiles", function()
         if type(_G.MSUF_ShowCopyLink) == "function" then
             _G.MSUF_ShowCopyLink("Wago MSUF Profiles", WAGO_PROFILES_URL)
         else
@@ -604,10 +563,8 @@ local function BuildProfiles(ctx)
     MoveWidget(blob, io, 14, -104, ioLeftW)
     StyleProfileInput(blob, ioLeftW, 168, true)
     W.LabelAt(io, "Actions", ioActionX, -42, buttonGridW, "GameFontNormalSmall", T.colors.text)
-    export:SetPoint("TOPLEFT", io, "TOPLEFT", ioActionX, -70)
-    import:SetPoint("LEFT", export, "RIGHT", buttonGap, 0)
-    legacy:SetPoint("TOPLEFT", io, "TOPLEFT", ioActionX, -110)
-    wago:SetPoint("LEFT", legacy, "RIGHT", buttonGap, 0)
+    PlaceActionRow(io, ioActionX, export, import, -70)
+    PlaceActionRow(io, ioActionX, legacy, wago, -110)
     MoveWidget(importProfileName, io, ioActionX, -202, 300)
     StyleProfileInput(importProfileName, 300, 24, false)
     W.Text(io, "Importing to the current profile changes the active profile. To test safely, enable new-profile import or copy/export your profile first.", ioActionX, -250, max(260, contentW - ioActionX - 28), T.colors.muted)

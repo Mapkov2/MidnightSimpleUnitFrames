@@ -1079,16 +1079,13 @@ local function BuildSearchRecords()
     return records
 end
 
-local SearchPages
+local SearchPages, SetSearchResults
 
 local function RefreshSearchResultsPage()
     if M.activeKey ~= "search" then return end
     local query = TrimText(M.searchQuery or "")
     if query == "" or #NormalizeSearchText(query) < MIN_SEARCH_QUERY_LEN then return end
-    M.searchResults = nil
-    M.searchResultsQuery = nil
-    M.searchResults = SearchPages(query)
-    M.searchResultsQuery = query
+    SetSearchResults(SearchPages(query), query)
     if M.InvalidatePage then M.InvalidatePage("search") end
     if M.SelectPage then M.SelectPage("search") end
 end
@@ -1282,6 +1279,8 @@ local function SearchQueryReady(query)
     return #NormalizeSearchText(query or "") >= MIN_SEARCH_QUERY_LEN
 end
 
+SetSearchResults = function(results, query) M.searchResults = results or {}; M.searchResultsQuery = query or "" end
+
 local function ShowSearchPageForQuery(query)
     query = TrimText(query)
     if query ~= "" and M.activeKey ~= "search" then
@@ -1322,29 +1321,25 @@ local function RunSearchInputQuery(query, openPage)
     M.searchResultsPending = nil
 
     if query == "" then
-        M.searchResults = {}
-        M.searchResultsQuery = ""
+        SetSearchResults(nil, "")
         if openPage then ShowSearchPageForQuery(query) end
         return
     end
 
     if SearchCombatLocked() then
         CancelSearchBackgroundIndex()
-        M.searchResults = {}
-        M.searchResultsQuery = query
+        SetSearchResults(nil, query)
         if openPage and M.activeKey ~= "search" then ShowSearchPageForQuery(query) end
         return
     end
 
     if not SearchQueryReady(query) then
-        M.searchResults = {}
-        M.searchResultsQuery = query
+        SetSearchResults(nil, query)
         if openPage then ShowSearchPageForQuery(query) end
         return
     end
 
-    M.searchResults = SearchPages(query)
-    M.searchResultsQuery = query
+    SetSearchResults(SearchPages(query), query)
     if openPage then ShowSearchPageForQuery(query) end
 end
 

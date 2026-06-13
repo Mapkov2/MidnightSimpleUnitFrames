@@ -2493,6 +2493,46 @@ function W.Segment(section, label, values, width)
     return holder
 end
 
+--- Shared page-tab binder for cold Menu2 UI state; no combat/runtime path.
+function W.SegmentTabs(ctx, parent, opts)
+    opts = opts or {}
+    local frames, allowed = opts.frames or {}, opts.allowed
+    if not allowed then
+        allowed = {}
+        local values = opts.values or {}
+        for i = 1, #values do allowed[values[i].value] = true end
+    end
+    local defaultTab = opts.defaultTab or opts.default or "main"
+    local segment
+    local function CurrentTab() local tab = opts.get and opts.get() or (opts.stateKey and M[opts.stateKey]) or defaultTab; return allowed[tab] and tab or defaultTab end
+    local function RefreshTabs()
+        local tab = CurrentTab()
+        for key, frame in pairs(frames) do
+            if frame and frame.SetShown then frame:SetShown(key == tab) end
+        end
+        if segment and segment.SetValue then segment:SetValue(tab) end
+        if opts.afterRefresh then opts.afterRefresh(tab) end
+    end
+    local function SetTab(tab)
+        tab = allowed[tab] and tab or defaultTab
+        if opts.set then opts.set(tab)
+        elseif opts.stateKey then
+            if type(M.PersistMenuStateValue) == "function" then
+                M.PersistMenuStateValue(opts.stateKey, tab)
+            else
+                M[opts.stateKey] = tab
+            end
+        end
+        RefreshTabs()
+        if opts.afterSet then opts.afterSet(tab) end
+    end
+    segment = W.Segment(parent, opts.label, opts.values, opts.width)
+    W.MoveWidget(segment, parent, opts.x or 0, opts.y or 0, opts.width, opts.titleJustify or "LEFT")
+    M.BindSegment(ctx, segment, CurrentTab, SetTab)
+    M.AddRefresher(ctx, RefreshTabs); RefreshTabs()
+    return segment, RefreshTabs, CurrentTab, SetTab
+end
+
 local function TextInputEscape(self) self:ClearFocus() end
 
 local function TextInputEnter(self)

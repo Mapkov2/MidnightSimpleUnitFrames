@@ -14,6 +14,7 @@ local GP = M.GroupPage or {}
 local A3 = MSUF.MSUF_Auras3 or _G.MSUF_Auras3
 local Model = A3 and A3.MenuModel
 local VTR = M.ValueTextRows
+local PreviewHelpers = M.PreviewHelpers or {}
 
 if type(W) ~= "table" or type(T) ~= "table" or type(Model) ~= "table" then return end
 
@@ -22,6 +23,7 @@ local GameTooltip = _G.GameTooltip
 local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local FONT = _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
+local AURA_PREVIEW_EDGE_OPTS = { linesKey = "edge", maxEdgeSize = 1, texture = TEX_W8, color = function() return 1, 1, 1, 0.95 end }
 
 local floor, ceil, max, min, abs = math.floor, math.ceil, math.max, math.min, math.abs
 local tonumber, tostring, type, ipairs, pairs = tonumber, tostring, type, ipairs, pairs
@@ -168,6 +170,30 @@ local function BindColor(ctx, parent, label, x, y, getRGB, setRGB)
     return widget
 end
 
+local function BuildActionTabs(ctx, parent, values, x, y, width, getValue, setValue, gap, buttonFactory)
+    gap = gap or 6
+    local count = #values
+    local bw = max(54, floor(((width or 720) - gap * (count - 1)) / count))
+    local buttons = {}
+    for i = 1, count do
+        local item = values[i]
+        local btn = (buttonFactory and buttonFactory(parent, item, bw)) or ActionButton(parent, item.text, bw)
+        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (bw + gap), y)
+        btn:SetScript("OnClick", function() setValue(item.value) end)
+        buttons[i] = btn
+        if item.value ~= nil then buttons[item.value] = btn end
+    end
+    local function RefreshButtons()
+        local current = getValue()
+        for i = 1, count do
+            if buttons[i].SetActive then buttons[i]:SetActive(values[i].value == current) end
+        end
+    end
+    M.AddRefresher(ctx, RefreshButtons)
+    RefreshButtons()
+    return getValue(), buttons, RefreshButtons
+end
+
 local function CurrentScope()
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local scope = M.auraScope or "shared"
@@ -197,27 +223,10 @@ local function ScopeLabel(scope)
 end
 
 local function BuildScopeTabs(ctx, section, x, y, width)
-    local gap = 6
-    local count = #AURA_SCOPE_VALUES
-    local bw = max(54, floor(((width or 720) - gap * (count - 1)) / count))
-    local buttons = {}
-    for i = 1, count do
-        local item = AURA_SCOPE_VALUES[i]
-        local btn = ActionButton(section, item.text, bw)
-        btn:SetPoint("TOPLEFT", section, "TOPLEFT", x + (i - 1) * (bw + gap), y)
-        btn:SetScript("OnClick", function()
-            SetCurrentScope(item.value)
-            Rebuild(ctx)
-        end)
-        buttons[i] = btn
-    end
-    M.AddRefresher(ctx, function()
-        local current = CurrentScope()
-        for i = 1, count do
-            if buttons[i].SetActive then buttons[i]:SetActive(AURA_SCOPE_VALUES[i].value == current) end
-        end
+    return BuildActionTabs(ctx, section, AURA_SCOPE_VALUES, x, y, width, CurrentScope, function(value)
+        SetCurrentScope(value)
+        Rebuild(ctx)
     end)
-    return CurrentScope()
 end
 
 local function BuildAuraChrome(ctx, b, title, subtitle)
@@ -253,24 +262,9 @@ function SetCurrentLane(stateKey, lane)
 end
 
 local function BuildLaneTabs(ctx, parent, stateKey, x, y, width)
-    local gap = 6
-    local bw = floor(((width or 260) - gap) / 2)
-    local buttons = {}
-    for i = 1, #LANE_VALUES do
-        local item = LANE_VALUES[i]
-        local btn = ActionButton(parent, item.text, bw)
-        btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x + (i - 1) * (bw + gap), y)
-        btn:SetScript("OnClick", function()
-            SetCurrentLane(stateKey, item.value)
-            Rebuild(ctx)
-        end)
-        buttons[i] = btn
-    end
-    M.AddRefresher(ctx, function()
-        local lane = CurrentLane(stateKey, "debuff")
-        for i = 1, #LANE_VALUES do
-            if buttons[i].SetActive then buttons[i]:SetActive(LANE_VALUES[i].value == lane) end
-        end
+    BuildActionTabs(ctx, parent, LANE_VALUES, x, y, width, function() return CurrentLane(stateKey, "debuff") end, function(value)
+        SetCurrentLane(stateKey, value)
+        Rebuild(ctx)
     end)
 end
 
@@ -296,34 +290,22 @@ local function BuildAuraStyleNav(ctx, b)
     local w = section._msuf2Width or b.width or 720
     local navW = min(460, w - 32)
     local gap = 8
-    local bw = floor((navW - gap) / 2)
-    local buttons = {}
-
-    local function NavButton(kind, x)
-        local btn = T.Button(section, LanePlural(kind), bw, 24)
+    local function NavButton(parent, item, width)
+        local btn = T.Button(parent, item.text or LanePlural(item.value), width, 24)
         if T.CenterButtonLabel then T.CenterButtonLabel(btn) end
-        btn:SetPoint("TOPLEFT", section, "TOPLEFT", x, -15)
-        btn:SetScript("OnClick", function()
-            SetCurrentLane("auraStyleGFLane", kind)
-            local key = (ctx and ctx.key) or M.activeKey
-            if key == "auras3_buffs" or key == "auras3_debuffs" then
-                SelectPage("auras3_styling", CurrentScope())
-            else
-                Rebuild(ctx)
-            end
-        end)
-        buttons[kind] = btn
         return btn
     end
-
-    NavButton("buff", 16)
-    NavButton("debuff", 16 + bw + gap)
-
-    M.AddRefresher(ctx, function()
-        local lane = CurrentLane("auraStyleGFLane", "debuff")
-        if buttons.buff and buttons.buff.SetActive then buttons.buff:SetActive(lane == "buff") end
-        if buttons.debuff and buttons.debuff.SetActive then buttons.debuff:SetActive(lane == "debuff") end
-    end)
+    BuildActionTabs(ctx, section, LANE_VALUES, 16, -15, navW, function()
+        return CurrentLane("auraStyleGFLane", "debuff")
+    end, function(kind)
+        SetCurrentLane("auraStyleGFLane", kind)
+        local key = (ctx and ctx.key) or M.activeKey
+        if key == "auras3_buffs" or key == "auras3_debuffs" then
+            SelectPage("auras3_styling", CurrentScope())
+        else
+            Rebuild(ctx)
+        end
+    end, gap, NavButton)
 end
 
 local function OtherLane(kind)
@@ -482,32 +464,15 @@ local function GroupFilterValues(groupKey)
     end
     if #out > 0 then return out end
     if groupKey == "buff" then
-        return {
-            { value = "ALL", text = "All Buffs" },
-            { value = "PLAYER", text = "My Buffs Only" },
-            { value = "RAID", text = "Raid Buffs" },
-            { value = "IMPORTANT", text = "Important" },
-        }
+        return VT("ALL", "All Buffs", "PLAYER", "My Buffs Only", "RAID", "Raid Buffs", "IMPORTANT", "Important")
     end
-    return {
-        { value = "ALL", text = "All Debuffs" },
-        { value = "PLAYER", text = "My Debuffs Only" },
-        { value = "RAID", text = "Boss / Raid" },
-        { value = "DISPELLABLE", text = "Dispellable" },
-        { value = "IMPORTANT", text = "Important" },
-    }
+    return VT("ALL", "All Debuffs", "PLAYER", "My Debuffs Only", "RAID", "Boss / Raid", "DISPELLABLE", "Dispellable", "IMPORTANT", "Important")
 end
 
 local function GFAnchorValues()
     local values = GP.STATUS_ICON_ANCHORS or GP.AURA_ANCHORS
     if type(values) == "table" and #values > 0 then return values end
-    return {
-        { value = "CENTER", text = "Center" },
-        { value = "TOPLEFT", text = "Top Left" },
-        { value = "TOPRIGHT", text = "Top Right" },
-        { value = "BOTTOMLEFT", text = "Bottom Left" },
-        { value = "BOTTOMRIGHT", text = "Bottom Right" },
-    }
+    return VT("CENTER", "Center", "TOPLEFT", "Top Left", "TOPRIGHT", "Top Right", "BOTTOMLEFT", "Bottom Left", "BOTTOMRIGHT", "Bottom Right")
 end
 
 local function BindGroupSwitch(ctx, parent, label, x, y, width, scope, groupKey, key, defaultValue, mode)
@@ -588,14 +553,9 @@ local function CreateAuraPreviewIcon(parent)
     f.icon:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -1, 1)
     if f.icon.SetTexCoord then f.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
     f.edge = {}
-    for i = 1, 4 do
-        f.edge[i] = f:CreateTexture(nil, "OVERLAY")
-        f.edge[i]:SetTexture(TEX_W8)
+    if PreviewHelpers.LayoutEdgeLines then
+        PreviewHelpers.LayoutEdgeLines(f, 1, AURA_PREVIEW_EDGE_OPTS)
     end
-    f.edge[1]:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0); f.edge[1]:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0); f.edge[1]:SetHeight(1)
-    f.edge[2]:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0); f.edge[2]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0); f.edge[2]:SetHeight(1)
-    f.edge[3]:SetPoint("TOPLEFT", f, "TOPLEFT", 0, 0); f.edge[3]:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 0, 0); f.edge[3]:SetWidth(1)
-    f.edge[4]:SetPoint("TOPRIGHT", f, "TOPRIGHT", 0, 0); f.edge[4]:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", 0, 0); f.edge[4]:SetWidth(1)
     f.stack = f:CreateFontString(nil, "OVERLAY")
     f.stack:SetFont(FONT, 9, "OUTLINE")
     f.stack:SetPoint("TOPRIGHT", f, "TOPRIGHT", -1, -1)
@@ -655,7 +615,7 @@ local function BuildMiniAuraPreview(ctx, parent, scope, x, y, width, height, lan
                 local tex = isBuffIcon and buffTex or debuffTex
                 icon.icon:SetTexture(tex[((i - 1) % #tex) + 1])
                 local r, g, b = isBuffIcon and 0.20 or 0.78, isBuffIcon and 0.72 or 0.20, isBuffIcon and 0.42 or 0.24
-                for e = 1, 4 do icon.edge[e]:SetVertexColor(r, g, b, 0.95) end
+                for _, edge in pairs(icon.edge) do edge:SetVertexColor(r, g, b, 0.95) end
                 if icon.stack.SetFont then icon.stack:SetFont(FONT, stackSize, "OUTLINE") end
                 if icon.timer.SetFont then icon.timer:SetFont(FONT, cooldownSize, "OUTLINE") end
                 icon.stack:SetText(showStacks and (i % 3 == 1 and "2" or "") or "")
@@ -945,31 +905,31 @@ local function BuildUnitFilterRulesByLane(ctx, b, scope)
     end
 
     W.LabelAt(card, "Inclusive Filters", 16, -70, colW, "GameFontNormalSmall", T.colors.accent)
-    if lane == "buff" then
-        FilterToggle("Player", "onlyMine", 16, -100, "Auras applied by the player.")
-        FilterToggle("Raid", "raid", 16, -134, "Raid-useful public Buffs.")
-        FilterToggle("Cancelable", "cancelable", 16, -168, "Buffs that can be cancelled.")
-        FilterToggle("Not Cancelable", "notCancelable", rightX, -100, "Buffs that cannot be cancelled.")
-        FilterToggle("Stealable", "includeStealable", rightX, -134, "Stealable Buff marker.")
-        filterControls[#filterControls + 1] = BindDropdown(ctx, card, "Exclusive Filter", rightX, -204, BUFF_EXCLUSIVE, min(250, colW - 32),
-            function() return Model.ReadFilter(scope, "buff", "exclusive", "none") end,
-            function(v)
-                Model.WriteFilter(scope, "buff", "exclusive", v or "none")
-                ApplyUnit(ctx, scope, "AURAS3_FILTER_BUFF_EXCLUSIVE", true)
-            end)
-    else
-        FilterToggle("Player", "onlyMine", 16, -100, "Debuffs applied by the player.")
-        FilterToggle("Raid", "raid", 16, -134, "Raid and encounter Debuffs.")
-        FilterToggle("Dispellable", "includeDispellable", 16, -168, "Dispellable Debuffs.")
-        FilterToggle("Not Dispellable", "notDispellable", rightX, -100, "Non-dispellable Debuffs.")
-        FilterToggle("Boss", "boss", rightX, -134, "Boss Debuffs.")
-        filterControls[#filterControls + 1] = BindDropdown(ctx, card, "Exclusive Filter", rightX, -204, DEBUFF_EXCLUSIVE, min(250, colW - 32),
-            function() return Model.ReadFilter(scope, "debuff", "exclusive", "none") end,
-            function(v)
-                Model.WriteFilter(scope, "debuff", "exclusive", v or "none")
-                ApplyUnit(ctx, scope, "AURAS3_FILTER_DEBUFF_EXCLUSIVE", true)
-            end)
+    local filterSpecs = lane == "buff" and {
+        { "Player", "onlyMine", 1, 1, "Auras applied by the player." },
+        { "Raid", "raid", 1, 2, "Raid-useful public Buffs." },
+        { "Cancelable", "cancelable", 1, 3, "Buffs that can be cancelled." },
+        { "Not Cancelable", "notCancelable", 2, 1, "Buffs that cannot be cancelled." },
+        { "Stealable", "includeStealable", 2, 2, "Stealable Buff marker." },
+    } or {
+        { "Player", "onlyMine", 1, 1, "Debuffs applied by the player." },
+        { "Raid", "raid", 1, 2, "Raid and encounter Debuffs." },
+        { "Dispellable", "includeDispellable", 1, 3, "Dispellable Debuffs." },
+        { "Not Dispellable", "notDispellable", 2, 1, "Non-dispellable Debuffs." },
+        { "Boss", "boss", 2, 2, "Boss Debuffs." },
+    }
+    for i = 1, #filterSpecs do
+        local spec = filterSpecs[i]
+        FilterToggle(spec[1], spec[2], spec[3] == 2 and rightX or 16, -100 - ((spec[4] - 1) * 34), spec[5])
     end
+    local exclusiveValues = lane == "buff" and BUFF_EXCLUSIVE or DEBUFF_EXCLUSIVE
+    local exclusiveEvent = lane == "buff" and "AURAS3_FILTER_BUFF_EXCLUSIVE" or "AURAS3_FILTER_DEBUFF_EXCLUSIVE"
+    filterControls[#filterControls + 1] = BindDropdown(ctx, card, "Exclusive Filter", rightX, -204, exclusiveValues, min(250, colW - 32),
+        function() return Model.ReadFilter(scope, lane, "exclusive", "none") end,
+        function(v)
+            Model.WriteFilter(scope, lane, "exclusive", v or "none")
+            ApplyUnit(ctx, scope, exclusiveEvent, true)
+        end)
 
     W.Text(section, "Blacklist entries below apply to both Buff and Debuff preparation for the selected unit-frame scope.", 24, -456, w - 48, T.colors.muted)
     M.AddRefresher(ctx, function()
@@ -1066,6 +1026,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
         Model.AddBlacklistPresetGroup(scope, CurrentPreset())
         ApplyUnit(ctx, scope, "AURAS3_BLACKLIST_PRESET_GROUP_ADD", true)
     end)
+    local blacklistEditControls = { input, add, remove, presetDrop, spellDrop, addPreset, addPresetGroup }
 
     local current = Card(section, "Current List", nil, 24, -318, w - 48, 184)
     local prepared = W.Text(current, "", 16, -18, w - 80, T.colors.accent)
@@ -1119,13 +1080,7 @@ local function BuildUnitBlacklist(ctx, b, scope)
     M.AddRefresher(ctx, function()
         editEnabled = scope == "shared" or not Model.UseSharedBlacklist(scope)
         if useShared then W.SetControlEnabled(useShared, scope ~= "shared") end
-        W.SetControlEnabled(input, editEnabled)
-        W.SetControlEnabled(add, editEnabled)
-        W.SetControlEnabled(remove, editEnabled)
-        W.SetControlEnabled(presetDrop, editEnabled)
-        W.SetControlEnabled(spellDrop, editEnabled)
-        W.SetControlEnabled(addPreset, editEnabled)
-        W.SetControlEnabled(addPresetGroup, editEnabled)
+        W.SetControlsEnabled(blacklistEditControls, editEnabled)
         local count = Model.BlacklistPreparedCount(scope)
         prepared:SetText(count == 1 and "1 prepared blacklist entry" or (tostring(count) .. " prepared blacklist entries"))
         local entries = Model.BlacklistEntries(scope)
@@ -1347,21 +1302,16 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     local top = Card(sec, "Aura Area", "Visibility, placement and icon grid for this unit frame.", 18, -38, sectionW - 36, 112)
 
     W.LabelAt(top, "Lane", 16, -66, 54, "GameFontNormalSmall", T.colors.accent)
-    local laneButtons = {}
-    local function LaneButton(kind, x)
-        local label = kind == "buff" and "Buffs" or "Debuffs"
-        local btn = ActionButton(top, label, 96)
-        btn:SetPoint("TOPLEFT", top, "TOPLEFT", x, -62)
-        btn:SetScript("OnClick", function()
-            M.unitAuraTabSelection = M.unitAuraTabSelection or {}
-            M.unitAuraTabSelection[unit] = kind
-            if M.Refresh then M.Refresh(ctx) end
-        end)
-        laneButtons[kind] = btn
-        return btn
+    M.unitAuraTabSelection = M.unitAuraTabSelection or {}
+    local function CurrentTab()
+        local tab = M.unitAuraTabSelection[unit] or "buff"
+        if tab ~= "buff" and tab ~= "debuff" then tab = "buff" end
+        return tab
     end
-    LaneButton("buff", 74)
-    LaneButton("debuff", 178)
+    local _, laneButtons = BuildActionTabs(ctx, top, LANE_VALUES, 74, -62, 200, CurrentTab, function(kind)
+        M.unitAuraTabSelection[unit] = kind
+        if M.Refresh then M.Refresh(ctx) end
+    end, 8)
 
     local actionsX = max(360, sectionW - 206)
     local style = ActionButton(top, "Style", 72)
@@ -1371,26 +1321,15 @@ function M.BuildAuras3UnitSection(ctx, builder, unit)
     filters:SetPoint("LEFT", style, "RIGHT", 8, 0)
     filters:SetScript("OnClick", function() SelectPage("auras3_filters", unit) end)
 
-    M.unitAuraTabSelection = M.unitAuraTabSelection or {}
-    local function CurrentTab()
-        local tab = M.unitAuraTabSelection[unit] or "buff"
-        if tab ~= "buff" and tab ~= "debuff" then tab = "buff" end
-        return tab
-    end
-
     local tabFrames = {}
-    local function MakeTabFrame(key)
-        return M.UnitSectionsShared.MakeTabFrame(sec, key, -170, sectionW, tabFrames)
-    end
+    local buffFrame, debuffFrame = M.UnitSectionsShared.MakeTabFrames(sec, -170, sectionW, tabFrames, "buff", "debuff")
 
-    BuildUnitAuraPlacementCard(ctx, MakeTabFrame("buff"), unit, "buff", 18, -6, laneCardW)
-    BuildUnitAuraPlacementCard(ctx, MakeTabFrame("debuff"), unit, "debuff", 18, -6, laneCardW)
+    BuildUnitAuraPlacementCard(ctx, buffFrame, unit, "buff", 18, -6, laneCardW)
+    BuildUnitAuraPlacementCard(ctx, debuffFrame, unit, "debuff", 18, -6, laneCardW)
 
     local function RefreshTabs()
         local tab = CurrentTab()
         for key, frame in pairs(tabFrames) do frame:SetShown(key == tab) end
-        if laneButtons.buff and laneButtons.buff.SetActive then laneButtons.buff:SetActive(tab == "buff") end
-        if laneButtons.debuff and laneButtons.debuff.SetActive then laneButtons.debuff:SetActive(tab == "debuff") end
     end
 
     M.AddRefresher(ctx, function()

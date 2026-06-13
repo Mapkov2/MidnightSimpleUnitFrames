@@ -20,7 +20,7 @@ local MSUF_SetIconTexture = _G.MSUF_SetIconTexture
 local VT = M.ValueTextList
 
 local AURA_ANCHORS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS = M.PickDefaults(GP, [[AURA_ANCHORS STATUS_ICON_ANCHORS GF_STATUS_ICON_SPECS GF_STATUS_ICON_VALUES PLACED_INDICATOR_TYPES FRAME_EFFECT_TYPES SPELL_GROWTH_VALUES CI_SLOT_VALUES CI_SLOT_DEFAULTS]])
-local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeSlider, BindScopeDropdown, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, OptionText = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeSlider BindScopeDropdown SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge OptionText]])
+local GF, RefreshGFPreview, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeSlider, BindScopeDropdown, ScopeDropdown, ScopeSlider, SpellIndicators, IconStyleValues, CurrentGFStatusSpec, QueueSpellIndicators, SpellSpecValues, SpellTrackedSpecValues, CurrentSpellMultiSpec, EffectiveSpellSpec, SpellAuraValues, CurrentSpellAura, CurrentSpellConfig, PlacedConfig, FrameEffectConfig, CICategoryValues, CIFilterValues, CIModeValues, CurrentCISlot, CICustomConfig, BindNestedSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, OptionText = M.Pick(GP, [[GF RefreshGFPreview Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeSlider BindScopeDropdown ScopeDropdown ScopeSlider SpellIndicators IconStyleValues CurrentGFStatusSpec QueueSpellIndicators SpellSpecValues SpellTrackedSpecValues CurrentSpellMultiSpec EffectiveSpellSpec SpellAuraValues CurrentSpellAura CurrentSpellConfig PlacedConfig FrameEffectConfig CICategoryValues CIFilterValues CIModeValues CurrentCISlot CICustomConfig BindNestedSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge OptionText]])
 SetSectionBadges = SetSectionBadges or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 OptionText = OptionText or M.OptionText
@@ -72,6 +72,34 @@ local function BuildGFIndicators(ctx)
     local function SetManyEnabled(enabled, ...)
         for i = 1, select("#", ...) do SetOptionEnabled(select(i, ...), enabled) end
     end
+    local function AddScopeSlider(list, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, y, moveWidth)
+        local control = ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, defaultValue, mode, 16, y, moveWidth or (width - 58))
+        if list then list[#list + 1] = control end
+        return control
+    end
+    local function AddScopeDropdown(list, parent, label, values, width, key, defaultValue, mode, y)
+        local control = ScopeDropdown(ctx, parent, label, values, width, key, defaultValue, mode, 16, y, width - 32)
+        if list then list[#list + 1] = control end
+        return control
+    end
+    local function AddScopeColor(list, parent, label, y, width, rKey, gKey, bKey, defaults)
+        local control = W.Color(parent, label)
+        defaults = defaults or {}
+        M.BindColor(ctx, control,
+            function()
+                return Num(CurrentScope(), rKey, defaults[1] or 1),
+                    Num(CurrentScope(), gKey, defaults[2] or 1),
+                    Num(CurrentScope(), bKey, defaults[3] or 1)
+            end,
+            function(r, g, bcol)
+                local conf = Conf(CurrentScope())
+                conf[rKey], conf[gKey], conf[bKey] = r, g, bcol
+                QueueGF(CurrentScope(), "visual")
+            end)
+        W.MoveWidget(control, parent, 16, y, width - 32)
+        if list then list[#list + 1] = control end
+        return control
+    end
 
     local highlightCard = W.ControlCard(indicators, "Target Highlight", nil, leftX, -38, innerW, 92)
     local targetToggle = BindScopeToggle(ctx, W.SwitchAt(highlightCard, "Target Highlight", innerW - 62, -24, 0, "HIDDEN"), "targetIndicator", true, "visual")
@@ -82,14 +110,11 @@ local function BuildGFIndicators(ctx)
     local groupNumberCard = W.ControlCard(indicators, "Group Number", "Small group index label on each frame.", leftX, -148, leftW, 246)
     local groupNumberToggle = BindScopeToggle(ctx, W.SwitchAt(groupNumberCard, "Group Number", leftW - 62, -24, 0, "HIDDEN"), "showGroupNumber", false, "visual")
     groupNumberToggle._msuf2GroupFrameGateAlwaysEnabled = true
-    local groupNumberSize = BindScopeSlider(ctx, W.Slider(groupNumberCard, "Size", 6, 24, 1, leftW), "groupNumberSize", 10, "font")
-    local groupNumberAnchor = BindScopeDropdown(ctx, W.Dropdown(groupNumberCard, "Anchor", AURA_ANCHORS, leftW), "groupNumberAnchor", "BOTTOMRIGHT", "geometry")
-    local groupNumberX = BindScopeSlider(ctx, W.Slider(groupNumberCard, "X Offset", -100, 100, 1, leftW), "groupNumberX", -2, "geometry")
-    local groupNumberY = BindScopeSlider(ctx, W.Slider(groupNumberCard, "Y Offset", -100, 100, 1, leftW), "groupNumberY", 2, "geometry")
-    W.MoveWidget(groupNumberSize, groupNumberCard, 16, -66, leftW - 58, "CENTER")
-    W.MoveWidget(groupNumberAnchor, groupNumberCard, 16, -116, leftW - 32, "LEFT")
-    W.MoveWidget(groupNumberX, groupNumberCard, 16, -166, leftW - 58, "CENTER")
-    W.MoveWidget(groupNumberY, groupNumberCard, 16, -216, leftW - 58, "CENTER")
+    local groupNumberControls = {}
+    AddScopeSlider(groupNumberControls, groupNumberCard, "Size", 6, 24, 1, leftW, "groupNumberSize", 10, "font", -66)
+    AddScopeDropdown(groupNumberControls, groupNumberCard, "Anchor", AURA_ANCHORS, leftW, "groupNumberAnchor", "BOTTOMRIGHT", "geometry", -116)
+    AddScopeSlider(groupNumberControls, groupNumberCard, "X Offset", -100, 100, 1, leftW, "groupNumberX", -2, "geometry", -166)
+    AddScopeSlider(groupNumberControls, groupNumberCard, "Y Offset", -100, 100, 1, leftW, "groupNumberY", 2, "geometry", -216)
 
     local hoverCard = W.ControlCard(indicators, "Hover Highlight", "Enable + color: |cff38c7f0Global Style > Colors|r > Mouseover Highlight", rightX, -148, rightW, 126)
     local hoverHint = hoverCard and hoverCard.subtitle
@@ -116,50 +141,17 @@ local function BuildGFIndicators(ctx)
     focusToggle._msuf2GroupFrameGateAlwaysEnabled = true
     local focusHint = focusCard and focusCard.subtitle
     if focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
-    local focusSize = BindScopeSlider(ctx, W.Slider(focusCard, "Border Thickness", 1, 6, 1, rightW), "hlFocusSize", 2, "visual")
-    local focusColor = W.Color(focusCard, "Focus Glow Color")
-    M.BindColor(ctx, focusColor,
-        function()
-            return Num(CurrentScope(), "hlFocusColorR", 0.50),
-                Num(CurrentScope(), "hlFocusColorG", 0.50),
-                Num(CurrentScope(), "hlFocusColorB", 1.00)
-        end,
-        function(r, g, bcol)
-            local conf = Conf(CurrentScope())
-            conf.hlFocusColorR = r
-            conf.hlFocusColorG = g
-            conf.hlFocusColorB = bcol
-            QueueGF(CurrentScope(), "visual")
-        end)
-    W.MoveWidget(focusSize, focusCard, 16, -88, rightW - 58, "CENTER")
-    W.MoveWidget(focusColor, focusCard, 16, -142, rightW - 32)
+    local focusControls = {}
+    AddScopeSlider(focusControls, focusCard, "Border Thickness", 1, 6, 1, rightW, "hlFocusSize", 2, "visual", -88)
+    AddScopeColor(focusControls, focusCard, "Focus Glow Color", -142, rightW, "hlFocusColorR", "hlFocusColorG", "hlFocusColorB", { 0.50, 0.50, 1.00 })
 
     local groupBorderCard = W.ControlCard(indicators, "Group Border", "Optional border around the full group frame.", leftX, -412, leftW, 202)
     local groupBorderToggle = BindScopeToggle(ctx, W.SwitchAt(groupBorderCard, "Group Border", leftW - 62, -24, 0, "HIDDEN"), "groupBorderEnabled", false, "visual")
     groupBorderToggle._msuf2GroupFrameGateAlwaysEnabled = true
-    local groupBorderSize = BindScopeSlider(ctx, W.Slider(groupBorderCard, "Border Thickness", 1, 12, 1, leftW), "groupBorderSize", 1, "visual")
-    local groupBorderPadding = BindScopeSlider(ctx, W.Slider(groupBorderCard, "Padding", 0, 40, 1, leftW), "groupBorderPadding", 2, "visual")
-    local groupBorderColor = W.Color(groupBorderCard, "Group Border Color")
-    M.BindColor(ctx, groupBorderColor,
-        function()
-            return Num(CurrentScope(), "groupBorderR", 0.38),
-                Num(CurrentScope(), "groupBorderG", 0.68),
-                Num(CurrentScope(), "groupBorderB", 1.00)
-        end,
-        function(r, g, bcol)
-            local conf = Conf(CurrentScope())
-            conf.groupBorderR = r
-            conf.groupBorderG = g
-            conf.groupBorderB = bcol
-            QueueGF(CurrentScope(), "visual")
-        end)
-    W.MoveWidget(groupBorderSize, groupBorderCard, 16, -66, leftW - 58, "CENTER")
-    W.MoveWidget(groupBorderPadding, groupBorderCard, 16, -116, leftW - 58, "CENTER")
-    W.MoveWidget(groupBorderColor, groupBorderCard, 16, -168, leftW - 32)
-
-    local groupNumberControls = { groupNumberSize, groupNumberAnchor, groupNumberX, groupNumberY }
-    local focusControls = { focusSize, focusColor }
-    local groupBorderControls = { groupBorderSize, groupBorderPadding, groupBorderColor }
+    local groupBorderControls = {}
+    AddScopeSlider(groupBorderControls, groupBorderCard, "Border Thickness", 1, 12, 1, leftW, "groupBorderSize", 1, "visual", -66)
+    AddScopeSlider(groupBorderControls, groupBorderCard, "Padding", 0, 40, 1, leftW, "groupBorderPadding", 2, "visual", -116)
+    AddScopeColor(groupBorderControls, groupBorderCard, "Group Border Color", -168, leftW, "groupBorderR", "groupBorderG", "groupBorderB", { 0.38, 0.68, 1.00 })
     local function RefreshIndicatorsState()
         local groupNumberEnabled = Bool(CurrentScope(), "showGroupNumber", false)
         SetOptionsEnabled(groupNumberControls, groupNumberEnabled)
@@ -202,9 +194,6 @@ local function BuildGFIndicators(ctx)
     local siconLeftW = floor((siconInnerW - siconGap) * 0.46)
     local siconRightX = siconLeftX + siconLeftW + siconGap
     local siconRightW = siconInnerW - siconLeftW - siconGap
-    local siconTabW = min(420, siconInnerW)
-    local siconTabs = W.Segment(sicons, "Status icon controls", STATUS_ICON_TAB_VALUES, siconTabW)
-    W.MoveWidget(siconTabs, sicons, siconLeftX, -50, siconTabW, "LEFT")
 
     M.gfStatusIconTabSelection = M.gfStatusIconTabSelection or {}
     local function CurrentStatusIconTab()
@@ -212,23 +201,16 @@ local function BuildGFIndicators(ctx)
         if key ~= "basic" and key ~= "advanced" then key = "basic" end
         return key
     end
-    local RefreshStatusIconTabs
-    M.BindSegment(ctx, siconTabs,
-        CurrentStatusIconTab,
-        function(value)
-            M.gfStatusIconTabSelection[CurrentScope()] = value or "basic"
-            if RefreshStatusIconTabs then RefreshStatusIconTabs() end
-        end)
 
-    local siconBasicTab = CreateFrame("Frame", nil, sicons)
-    siconBasicTab:SetPoint("TOPLEFT", sicons, "TOPLEFT", 0, -104)
-    siconBasicTab:SetPoint("BOTTOMRIGHT", sicons, "BOTTOMRIGHT", 0, 12)
-    siconBasicTab._msuf2Width = siconW
-
-    local siconAdvancedTab = CreateFrame("Frame", nil, sicons)
-    siconAdvancedTab:SetPoint("TOPLEFT", sicons, "TOPLEFT", 0, -104)
-    siconAdvancedTab:SetPoint("BOTTOMRIGHT", sicons, "BOTTOMRIGHT", 0, 12)
-    siconAdvancedTab._msuf2Width = siconW
+    local siconTabFrames = {}
+    local siconBasicTab, siconAdvancedTab = M.UnitSectionsShared.MakeTabFrames(sicons, -104, siconW, siconTabFrames, "basic", "advanced")
+    W.SegmentTabs(ctx, sicons, {
+        get = CurrentStatusIconTab,
+        set = function(value) M.gfStatusIconTabSelection[CurrentScope()] = value or "basic" end,
+        label = "Status icon controls", values = STATUS_ICON_TAB_VALUES, width = min(420, siconInnerW),
+        frames = siconTabFrames,
+        defaultTab = "basic", x = siconLeftX, y = -50,
+    })
 
     local styleCard = W.ControlCard(siconBasicTab, "Style", nil, siconLeftX, -38, siconLeftW, 132)
     local selectedCard = W.ControlCard(siconBasicTab, "Selected Indicator", nil, siconLeftX, -188, siconLeftW, 258)
@@ -247,16 +229,20 @@ local function BuildGFIndicators(ctx)
         return value
     end
 
-    local function BindStatusDropdown(parent, label, values, width, specField, defaultValue, reason, x, y, moveWidth)
+    local function BindStatusDropdown(parent, label, values, width, specField, defaultValue, reason, x, y, moveWidth, afterSet)
         local control = W.Dropdown(parent, label, values, width)
         M.BindDropdown(ctx, control,
             function()
                 local spec = CurrentGFStatusSpec()
-                return Val(CurrentScope(), spec[specField], StatusSpecDefault(spec, defaultValue))
+                local key = spec and spec[specField]
+                return key and Val(CurrentScope(), key, StatusSpecDefault(spec, defaultValue)) or StatusSpecDefault(spec, defaultValue)
             end,
             function(value)
                 local spec = CurrentGFStatusSpec()
-                Set(CurrentScope(), spec[specField], value or StatusSpecDefault(spec, defaultValue), reason)
+                local key = spec and spec[specField]
+                if not key then return end
+                Set(CurrentScope(), key, value or StatusSpecDefault(spec, defaultValue), reason)
+                if afterSet then afterSet(value, spec) end
             end)
         W.MoveWidget(control, parent, x, y, moveWidth or width, "LEFT")
         return control
@@ -285,8 +271,7 @@ local function BuildGFIndicators(ctx)
         return control
     end
 
-    local iconStyle = BindScopeDropdown(ctx, W.Dropdown(styleCard, "Icon style", IconStyleValues, siconLeftW), "iconStyle", "BLIZZARD", "visual")
-    W.MoveWidget(iconStyle, styleCard, 16, -56, siconLeftW - 32, "LEFT")
+    local iconStyle = ScopeDropdown(ctx, styleCard, "Icon style", IconStyleValues, siconLeftW, "iconStyle", "BLIZZARD", "visual", 16, -56, siconLeftW - 32)
     local midnightStyle = BindScopeToggle(ctx, W.ToggleAt(styleCard, "Use Midnight Style", 16, -106, siconLeftW - 32), "useMidnightIcons", false, "visual")
 
     local statusSelector = W.Dropdown(selectedCard, "Indicator", GF_STATUS_ICON_VALUES, siconLeftW)
@@ -322,19 +307,8 @@ local function BuildGFIndicators(ctx)
             RefreshStatusIconMenu()
         end)
 
-    local iconPack = W.Dropdown(selectedCard, "Icon pack", IconPackValues, siconLeftW)
-    M.BindDropdown(ctx, iconPack,
-        function()
-            local spec = CurrentGFStatusSpec()
-            return spec and spec.iconStyle and Val(CurrentScope(), spec.iconStyle, "DEFAULT") or "DEFAULT"
-        end,
-        function(value)
-            local spec = CurrentGFStatusSpec()
-            if not (spec and spec.iconStyle) then return end
-            Set(CurrentScope(), spec.iconStyle, value or "DEFAULT", "visual")
-            if RefreshGFPreview then RefreshGFPreview() end
-        end)
-    W.MoveWidget(iconPack, selectedCard, 16, -106, siconLeftW - 32, "LEFT")
+    local iconPack = BindStatusDropdown(selectedCard, "Icon pack", IconPackValues, siconLeftW, "iconStyle", "DEFAULT", "visual", 16, -106, siconLeftW - 32,
+        function() if RefreshGFPreview then RefreshGFPreview() end end)
 
     --- Role filter group: only visible when Role Icon indicator is selected
     local roleFilterGroup = CreateFrame("Frame", nil, selectedCard)
@@ -441,13 +415,6 @@ local function BuildGFIndicators(ctx)
     local statusPlacementControls = { statusSize, statusAnchor, statusX, statusY, statusLayer, advanced.x, advanced.y, advanced.layer }
     local statusActionControls = { advanced.reset, advanced.previewCurrent, statusReset, previewCurrent }
 
-    RefreshStatusIconTabs = function()
-        local tab = CurrentStatusIconTab()
-        siconBasicTab:SetShown(tab ~= "advanced")
-        siconAdvancedTab:SetShown(tab == "advanced")
-    end
-    M.AddRefresher(ctx, RefreshStatusIconTabs)
-
     local function RefreshStatusIconState()
         local spec = CurrentGFStatusSpec()
         local enabled = Bool(CurrentScope(), spec.enabled, false)
@@ -476,7 +443,6 @@ local function BuildGFIndicators(ctx)
     end
     M.AddRefresher(ctx, RefreshStatusIconState)
     RefreshStatusIconState()
-    RefreshStatusIconTabs()
     M.SetCollapsibleRefreshState(sicons, RefreshStatusIconState)
 
     local spells = b:CollapsibleSection("si", Tr("Spell Indicators"), 864, false)
@@ -888,20 +854,24 @@ local function BuildGFIndicators(ctx)
         return control
     end
 
-    local function BindPlacedSlider(label, minValue, maxValue, step, key, default, y)
-        local control = W.Slider(spells, Tr(label), minValue, maxValue, step, siLeftW)
+    local function BindConfigSlider(configFn, x, width, label, minValue, maxValue, step, key, default, y)
+        local control = W.Slider(spells, Tr(label), minValue, maxValue, step, width)
         M.BindSlider(ctx, control,
             function()
-                local placed = PlacedConfig(CurrentScope(), false)
-                return tonumber(placed and placed[key]) or default
+                local cfg = configFn(CurrentScope(), false)
+                return tonumber(cfg and cfg[key]) or default
             end,
             function(value)
-                local placed = PlacedConfig(CurrentScope(), true)
-                if placed then placed[key] = floor((tonumber(value) or default) + 0.5) end
+                local cfg = configFn(CurrentScope(), true)
+                if cfg then cfg[key] = floor((tonumber(value) or default) + 0.5) end
                 QueueSpellIndicators(CurrentScope())
             end)
-        W.MoveWidget(control, spells, siLeftX, y, siLeftW, "LEFT")
+        W.MoveWidget(control, spells, x, y, width, "LEFT")
         return control
+    end
+
+    local function BindPlacedSlider(label, minValue, maxValue, step, key, default, y)
+        return BindConfigSlider(PlacedConfig, siLeftX, siLeftW, label, minValue, maxValue, step, key, default, y)
     end
 
     local function BindPlacedToggle(label, key, defaultWhenPlaced, y)
@@ -923,43 +893,44 @@ local function BuildGFIndicators(ctx)
     end
 
     local function BindFrameSlider(label, minValue, maxValue, step, key, default, y)
-        local control = W.Slider(spells, Tr(label), minValue, maxValue, step, siRightW)
-        M.BindSlider(ctx, control,
+        return BindConfigSlider(FrameEffectConfig, siRightX, siRightW, label, minValue, maxValue, step, key, default, y)
+    end
+
+    local function BindSpellSubType(label, values, x, y, width, field, applyDefaults, afterSet)
+        local control = W.Dropdown(spells, Tr(label), values, width)
+        M.BindDropdown(ctx, control,
             function()
-                local frame = FrameEffectConfig(CurrentScope(), false)
-                return tonumber(frame and frame[key]) or default
+                local cfg = CurrentSpellConfig(CurrentScope(), false)
+                local sub = cfg and cfg[field]
+                return type(sub) == "table" and sub.type or "none"
             end,
             function(value)
-                local frame = FrameEffectConfig(CurrentScope(), true)
-                if frame then frame[key] = floor((tonumber(value) or default) + 0.5) end
+                local cfg = CurrentSpellConfig(CurrentScope(), true)
+                if not cfg then return end
+                if value == "none" then
+                    cfg[field] = false
+                else
+                    cfg[field] = type(cfg[field]) == "table" and cfg[field] or {}
+                    cfg[field].type = value
+                    if applyDefaults then applyDefaults(cfg[field]) end
+                end
                 QueueSpellIndicators(CurrentScope())
+                if afterSet then afterSet() end
             end)
-        W.MoveWidget(control, spells, siRightX, y, siRightW, "LEFT")
+        W.MoveWidget(control, spells, x, y, width, "LEFT")
         return control
     end
 
-    local placedType = W.Dropdown(spells, Tr("Indicator Type"), PLACED_INDICATOR_TYPES, siLeftW)
-    M.BindDropdown(ctx, placedType,
-        function()
-            local placed = PlacedConfig(CurrentScope(), false)
-            return placed and placed.type or "none"
+    local placedType = BindSpellSubType("Indicator Type", PLACED_INDICATOR_TYPES, siLeftX, -410, siLeftW, "placed",
+        function(placed)
+            placed.type = placed.type or "icon"
+            placed.anchor = placed.anchor or "TOPLEFT"
+            placed.size = tonumber(placed.size) or 18
+            if placed.showCooldownSwipe == nil then placed.showCooldownSwipe = true end
         end,
         function(value)
-            local cfg = CurrentSpellConfig(CurrentScope(), true)
-            if not cfg then return end
-            if value == "none" then
-                cfg.placed = false
-            else
-                cfg.placed = cfg.placed or {}
-                cfg.placed.type = value or "icon"
-                cfg.placed.anchor = cfg.placed.anchor or "TOPLEFT"
-                cfg.placed.size = tonumber(cfg.placed.size) or 18
-                if cfg.placed.showCooldownSwipe == nil then cfg.placed.showCooldownSwipe = true end
-            end
-            QueueSpellIndicators(CurrentScope())
             if M.SelectPage then M.SelectPage(ctx.key) end
         end)
-    W.MoveWidget(placedType, spells, siLeftX, -410, siLeftW, "LEFT")
 
     local placedAnchor = BindPlacedDropdown("Anchor", STATUS_ICON_ANCHORS, "anchor", "TOPLEFT", -464)
     local placedSize = BindPlacedSlider("Size", 6, 48, 1, "size", 18, -518)
@@ -968,29 +939,14 @@ local function BuildGFIndicators(ctx)
     local placedBarWidth = BindPlacedSlider("Bar Width", 8, 120, 1, "barWidth", 42, -680)
     local placedGrowth = BindPlacedDropdown("Growth", SPELL_GROWTH_VALUES, "growth", "RIGHTDOWN", -734)
 
-    local frameType = W.Dropdown(spells, Tr("Frame Effect"), FRAME_EFFECT_TYPES, siRightW)
-    M.BindDropdown(ctx, frameType,
-        function()
-            local frame = FrameEffectConfig(CurrentScope(), false)
-            return frame and frame.type or "none"
-        end,
-        function(value)
-            local cfg = CurrentSpellConfig(CurrentScope(), true)
-            if not cfg then return end
-            if value == "none" then
-                cfg.frame = false
-            else
-                cfg.frame = cfg.frame or {}
-                cfg.frame.type = value
-                if not cfg.frame.color then
-                    local c = CurrentAuraColor(CurrentScope())
-                    cfg.frame.color = { c[1] or 1, c[2] or 1, c[3] or 1, 0.8 }
-                end
-                cfg.frame.priority = cfg.frame.priority or 5
+    local frameType = BindSpellSubType("Frame Effect", FRAME_EFFECT_TYPES, siRightX, -390, siRightW, "frame",
+        function(frame)
+            if not frame.color then
+                local c = CurrentAuraColor(CurrentScope())
+                frame.color = { c[1] or 1, c[2] or 1, c[3] or 1, 0.8 }
             end
-            QueueSpellIndicators(CurrentScope())
+            frame.priority = frame.priority or 5
         end)
-    W.MoveWidget(frameType, spells, siRightX, -390, siRightW, "LEFT")
 
     local frameColor = W.Color(spells, Tr("Color"))
     M.BindColor(ctx, frameColor,
@@ -1035,18 +991,7 @@ local function BuildGFIndicators(ctx)
     local placedCooldownSwipe = BindPlacedToggle("Show Cooldown Swipe", "showCooldownSwipe", true, -722)
     local placedCooldown = BindPlacedToggle("Show Cooldown Text", "showCooldown", true, -754)
 
-    local placedCooldownSize = W.Slider(spells, Tr("Cooldown Text Size"), 6, 24, 1, siRightW)
-    M.BindSlider(ctx, placedCooldownSize,
-        function()
-            local placed = PlacedConfig(CurrentScope(), false)
-            return tonumber(placed and placed.cooldownSize) or 8
-        end,
-        function(value)
-            local placed = PlacedConfig(CurrentScope(), true)
-            if placed then placed.cooldownSize = floor((tonumber(value) or 8) + 0.5) end
-            QueueSpellIndicators(CurrentScope())
-        end)
-    W.MoveWidget(placedCooldownSize, spells, siRightX, -786, siRightW, "LEFT")
+    local placedCooldownSize = BindConfigSlider(PlacedConfig, siRightX, siRightW, "Cooldown Text Size", 6, 24, 1, "cooldownSize", 8, -786)
 
     RefreshSpellIndicatorState = function()
         EnsureSpellDefaults(CurrentScope(), EffectiveSpellSpec(CurrentScope()))
@@ -1109,12 +1054,11 @@ local function BuildGFIndicators(ctx)
     W.LabelAt(corners, "Global", leftX, -42, leftW, "GameFontNormalSmall", T.colors.accent)
     local ciEnable = BindScopeToggle(ctx, W.SwitchAt(corners, "Corner Indicators", leftX, -72, leftW), "ciEnabled", false, "visual")
     ciEnable._msuf2GroupFrameGateAlwaysEnabled = true
-    local ciSize = BindScopeSlider(ctx, W.Slider(corners, "Icon Size", 4, 24, 1, leftW), "ciSize", 8, "visual")
+    local ciSize = ScopeSlider(ctx, corners, "Icon Size", 4, 24, 1, leftW, "ciSize", 8, "visual", leftX, -116, leftW, "LEFT")
     local ciAlpha = W.Slider(corners, "Alpha", 10, 100, 5, leftW)
     M.BindSlider(ctx, ciAlpha,
         function() return floor((Num(CurrentScope(), "ciAlpha", 1) * 100) + 0.5) end,
         function(value) Set(CurrentScope(), "ciAlpha", (tonumber(value) or 100) / 100, "visual") end)
-    W.MoveWidget(ciSize, corners, leftX, -116, leftW, "LEFT")
     W.MoveWidget(ciAlpha, corners, leftX, -170, leftW, "LEFT")
 
     W.LabelAt(corners, "Slot Assignments", leftX, -228, leftW, "GameFontNormalSmall", T.colors.accent)
@@ -1199,31 +1143,23 @@ local function BuildGFIndicators(ctx)
         true)
     W.MoveWidget(customSpells, corners, rightX, -286, rightW)
 
-    local customMode = W.Dropdown(corners, "When", CIModeValues, rightW)
-    M.BindDropdown(ctx, customMode,
-        function()
-            local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), false)
-            return cfg and cfg.mode or "present"
-        end,
-        function(value)
-            local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), true)
-            if cfg then cfg.mode = value or "present" end
-            QueueGF(CurrentScope(), "visual")
-        end)
-    W.MoveWidget(customMode, corners, rightX, -350, rightW, "LEFT")
-
-    local customFilter = W.Dropdown(corners, "Filter", CIFilterValues, rightW)
-    M.BindDropdown(ctx, customFilter,
-        function()
-            local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), false)
-            return cfg and cfg.filter or "HELPFUL|PLAYER"
-        end,
-        function(value)
-            local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), true)
-            if cfg then cfg.filter = value or "HELPFUL|PLAYER" end
-            QueueGF(CurrentScope(), "visual")
-        end)
-    W.MoveWidget(customFilter, corners, rightX, -404, rightW, "LEFT")
+    local function BindCICustomDropdown(label, values, key, defaultValue, y)
+        local control = W.Dropdown(corners, label, values, rightW)
+        M.BindDropdown(ctx, control,
+            function()
+                local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), false)
+                return cfg and cfg[key] or defaultValue
+            end,
+            function(value)
+                local cfg = CICustomConfig(CurrentScope(), CurrentCISlot(), true)
+                if cfg then cfg[key] = value or defaultValue end
+                QueueGF(CurrentScope(), "visual")
+            end)
+        W.MoveWidget(control, corners, rightX, y, rightW, "LEFT")
+        return control
+    end
+    local customMode = BindCICustomDropdown("When", CIModeValues, "mode", "present", -350)
+    local customFilter = BindCICustomDropdown("Filter", CIFilterValues, "filter", "HELPFUL|PLAYER", -404)
 
     local customColor = W.Color(corners, "Custom Color")
     M.BindColor(ctx, customColor,
@@ -1240,6 +1176,7 @@ local function BuildGFIndicators(ctx)
 
     local customHelp = W.Text(corners, "Tip: HELPFUL|PLAYER and HARMFUL|PLAYER are the safest filters because WoW exposes your own spell IDs reliably.", rightX, -506, rightW, T.colors.dim)
     if customHelp.SetWordWrap then customHelp:SetWordWrap(true) end
+    local ciGlobalControls, ciEditorControls, ciCustomControls = { ciSize, ciAlpha }, { slotDrop, categoryDrop }, { customSpells, customMode, customFilter, customColor }
 
     local function RefreshCornerIndicatorState()
         local slot = CurrentCISlot()
@@ -1247,10 +1184,10 @@ local function BuildGFIndicators(ctx)
         local showCustom = category == "custom"
         local enabled = Bool(CurrentScope(), "ciEnabled", false)
         SetOptionEnabled(ciEnable, true)
-        SetOptionsEnabled({ ciSize, ciAlpha }, enabled)
+        SetOptionsEnabled(ciGlobalControls, enabled)
         SetOptionsEnabled(slotControls, enabled)
-        SetOptionsEnabled({ slotDrop, categoryDrop }, enabled)
-        SetOptionsEnabled({ customSpells, customMode, customFilter, customColor }, enabled and showCustom)
+        SetOptionsEnabled(ciEditorControls, enabled)
+        SetOptionsEnabled(ciCustomControls, enabled and showCustom)
         local slotLabel = slot
         for i = 1, #CI_SLOT_VALUES do
             if CI_SLOT_VALUES[i].value == slot then
