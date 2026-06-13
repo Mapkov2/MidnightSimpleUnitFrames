@@ -804,7 +804,7 @@ local INLINE_COLOR_UNITLESS_EVENTS = { "UNIT_NAME_UPDATE", "UNIT_FACTION", "UNIT
 local function NameNeedsNPCColorEvents(text)
   return text
     and type(text.nameColor) ~= "table"
-    and text.nameNpcColor == true
+    and (text.nameNpcColor == true or text.nameNpcClassColor == true)
 end
 
 local function ModeEnabled(mode)
@@ -1090,8 +1090,10 @@ function InlineToT.GetUnitlessEvents(frame, spec)
   if (inline.colorMode and inline.colorMode ~= "DEFAULT")
     or inline.targetNameClassColor == true
     or inline.targetNameNpcColor == true
+    or inline.targetNameNpcClassColor == true
     or inline.totNameClassColor == true
-    or inline.totNameNpcColor == true then
+    or inline.totNameNpcColor == true
+    or inline.totNameNpcClassColor == true then
     return INLINE_COLOR_UNITLESS_EVENTS
   end
   return INLINE_NAME_UNITLESS_EVENTS

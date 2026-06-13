@@ -197,6 +197,7 @@ local function ResolveNameTextOptions(kind, conf)
   else
     text.nameClassColor = general and general.nameClassColor == true
     text.nameNpcColor = general and general.npcNameRed == true
+    text.nameNpcClassColor = general and general.nameNpcClassColor == true
   end
   text.healthColorByHealth = general and general.colorHealthTextByHealth == true
   if conf.fontOverride == true and conf.colorHealthTextByHealth ~= nil then
@@ -856,6 +857,7 @@ local function CompileSpecUncached(kind, frame, unit, conf)
       anchorToBars = true,
       nameClassColor = nameTextOptions.nameClassColor == true,
       nameNpcColor = nameTextOptions.nameNpcColor == true,
+      nameNpcClassColor = nameTextOptions.nameNpcClassColor == true,
       nameColor = nameTextOptions.nameColor,
       nameAnchor = conf.nameAnchor or "LEFT",
       nameX = Num(conf.nameOffsetX, 0),

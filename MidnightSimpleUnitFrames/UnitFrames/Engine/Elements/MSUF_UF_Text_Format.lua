@@ -856,8 +856,10 @@ local function CompileTextRuntime(frame, spec, text)
     inlineRt.colorMode = inline.colorMode or "AUTO"
     inlineRt.targetNameClassColor = inline.targetNameClassColor == true
     inlineRt.targetNameNpcColor = inline.targetNameNpcColor == true
+    inlineRt.targetNameNpcClassColor = inline.targetNameNpcClassColor == true
     inlineRt.totNameClassColor = inline.totNameClassColor == true
     inlineRt.totNameNpcColor = inline.totNameNpcColor == true
+    inlineRt.totNameNpcClassColor = inline.totNameNpcClassColor == true
     inlineRt.nameShortenMax = inline.nameShorten == true and (tonumber(inline.nameShortenMax) or 6) or 0
     if inlineRt.nameShortenMax > 0 then
       inlineRt.nameShortenMax = floor(max(4, inlineRt.nameShortenMax) + 0.5)

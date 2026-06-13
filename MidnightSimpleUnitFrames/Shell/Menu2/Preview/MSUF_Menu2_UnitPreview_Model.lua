@@ -675,21 +675,26 @@ local function PreviewNameColorFlags(key)
     local gen = db.general or {}
     local wantClass = gen.nameClassColor
     local wantNpc = gen.npcNameRed
+    local wantNpcClass = gen.nameNpcClassColor
     local conf = db[key]
     if conf and conf.fontOverride then
         if conf.nameClassColor ~= nil then wantClass = conf.nameClassColor end
         if conf.npcNameRed ~= nil then wantNpc = conf.npcNameRed end
+        if conf.nameNpcClassColor ~= nil then wantNpcClass = conf.nameNpcClassColor end
     end
-    return wantClass == true, wantNpc == true
+    return wantClass == true, wantNpc == true, wantNpcClass == true
 end
 
 local function PreviewNameColor(key, data, fallbackR, fallbackG, fallbackB)
     data = data or UNIT_DATA[CanonKey(key)] or UNIT_DATA.player
-    local wantClass, wantNpc = PreviewNameColorFlags(key)
+    local wantClass, wantNpc, wantNpcClass = PreviewNameColorFlags(key)
     if data.isPlayer then
         if wantClass then return ClassColor(data.class) end
-    elseif wantNpc then
-        return NPCColor(PreviewNPCKind(key, data, SettingsCache(), true))
+    else
+        if wantNpcClass and data.class then return ClassColor(data.class) end
+        if wantNpc or wantNpcClass then
+            return NPCColor(PreviewNPCKind(key, data, SettingsCache(), true))
+        end
     end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
