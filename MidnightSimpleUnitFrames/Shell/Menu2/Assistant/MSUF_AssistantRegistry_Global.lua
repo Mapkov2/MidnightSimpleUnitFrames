@@ -203,7 +203,7 @@ local CLASS_DEFAULT_ALIASES = {
     ["class color"] = "CLASS",
     classcolored = "CLASS",
 }
-local DEFAULT_NPC_VALUES = { "DEFAULT", "NPC" }
+local DEFAULT_NPC_VALUES = { "DEFAULT", "NPC", "CLASS" }
 local DEFAULT_NPC_ALIASES = {
     default = "DEFAULT",
     palette = "DEFAULT",
@@ -211,6 +211,14 @@ local DEFAULT_NPC_ALIASES = {
     red = "NPC",
     npcred = "NPC",
     ["npc red"] = "NPC",
+    reaction = "NPC",
+    ["reaction color"] = "NPC",
+    class = "CLASS",
+    classcolor = "CLASS",
+    ["class color"] = "CLASS",
+    classcolored = "CLASS",
+    ["npc class"] = "CLASS",
+    ["npc class color"] = "CLASS",
 }
 local DEFAULT_HEALTH_VALUES = { "DEFAULT", "HEALTH" }
 local DEFAULT_HEALTH_ALIASES = {
@@ -376,12 +384,20 @@ for _, scope in ipairs({ "shared", "player", "target", "targettarget", "focustar
     if not GlobalScopeIsGroup(scope) then
         RegisterScopedSetting("fontScope", scope, "npcNameRed", "npcNameColor", "NPC Name Text Color", "enum", "DEFAULT", SharedOrScopedAliases(scope, {
             "npc name color", "npc name red", "npc text color",
+            "npc name class color", "color npc name by class", "class color npc name",
+            "npc class colored name", "npc reaction color",
         }), {
             flag = "fontOverride",
             values = DEFAULT_NPC_VALUES,
             valueAliases = DEFAULT_NPC_ALIASES,
-            get = function(scopeKey) return GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "npcNameRed", false) and "NPC" or "DEFAULT" end,
-            set = function(scopeKey, value) GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "npcNameRed", value == "NPC") end,
+            get = function(scopeKey)
+                if GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "nameNpcClassColor", false) then return "CLASS" end
+                return GlobalScopeRead(scopeKey, "fontOverride", GeneralDB(), "npcNameRed", false) and "NPC" or "DEFAULT"
+            end,
+            set = function(scopeKey, value)
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "nameNpcClassColor", value == "CLASS")
+                GlobalScopeWrite(scopeKey, "fontOverride", GeneralDB(), "npcNameRed", value == "NPC")
+            end,
             apply = ApplyFonts,
             reason = "MSUF_ASSISTANT_NPC_NAME_COLOR",
         })

@@ -720,6 +720,11 @@ local function PreviewToTInlineColor(mode, totData, targetR, targetG, targetB, f
         if wantClass then return ClassColor(totData.class) end
         return 1, 1, 1
     end
+    local _, wantNpc, wantNpcClass = PreviewNameColorFlags("target")
+    if wantNpcClass and totData and totData.class then return ClassColor(totData.class) end
+    if (wantNpc or wantNpcClass) and totData then
+        return NPCColor(PreviewNPCKind("target", totData, SettingsCache(), true))
+    end
     return NPCColor(totData and totData.reactionKind or "enemy")
 end
 

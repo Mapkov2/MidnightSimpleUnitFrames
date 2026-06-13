@@ -153,7 +153,8 @@ local function SubmitAssistantQuery(query)
     local A = AssistantAPI()
     if not (A and type(A.SubmitDeferred) == "function") then return false end
     if type(M.SelectPage) == "function" and M.activeKey ~= "home" then M.SelectPage("home") end
-    A.SubmitDeferred(query)
+    local result = A.SubmitDeferred(query)
+    if result and result.status == "combat" then return true end
     if type(A.RequestRefreshUI) == "function" then
         A.RequestRefreshUI("assistant.navrail")
     elseif type(A.RefreshUI) == "function" then

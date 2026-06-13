@@ -1663,6 +1663,8 @@ P._FontTextColorDefaultIntent = function(text, spec)
         return ContainsAny(text, {
             "not red", "not npc red", "without npc red", "without red", "no npc red",
             "dont make npc red", "do not make npc red",
+            "no npc color", "no npc name color", "without npc color", "disable npc color",
+            "turn off npc color", "no npc class color", "disable npc class color",
         })
     end
     return false
@@ -1705,8 +1707,17 @@ local function ParseScopedFontTextColorShortcut(text)
         spec = { key = "nameColorMode", on = "CLASS", label = "Name Text Color Mode" }
     elseif ContainsAny(text, {
         "npc name color", "npc text color", "npc name red", "npc red name",
+        "npc name class color", "npc class color name", "color npc name by class",
+        "npc name by class", "npc class colored name",
     }) then
-        spec = { key = "npcNameRed", on = "NPC", label = "NPC Name Text Color" }
+        local npcClass = ContainsAny(text, {
+            "class color", "class colour", "by class", "class colored", "class coloured",
+        })
+        spec = {
+            key = "npcNameRed",
+            on = npcClass and "CLASS" or "NPC",
+            label = "NPC Name Text Color",
+        }
     end
     if not spec then return nil end
     scope = scope or "shared"
