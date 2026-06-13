@@ -244,8 +244,10 @@ local function ApplyFrame(frame, spec)
   if frame._msufVisibilityManaged ~= true and frame._msufUnitWatched ~= true then
     if frame.Enable then
       frame:Enable()
+      frame._msufUnitWatched = true
     elseif RegisterUnitWatch then
       RegisterUnitWatch(frame)
+      frame._msufUnitWatched = true
     else
       frame:Show()
     end

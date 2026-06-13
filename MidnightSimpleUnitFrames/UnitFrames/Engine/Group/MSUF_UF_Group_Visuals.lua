@@ -60,6 +60,30 @@ local function SetAlphaCached(region, alpha, key)
   end
 end
 
+local function SetAlphaFromBoolean(region, value, alphaIfTrue, alphaIfFalse, key)
+  if not (region and region.SetAlphaFromBoolean) then
+    return false
+  end
+  region:SetAlphaFromBoolean(value, Clamp01(alphaIfTrue, 1), Clamp01(alphaIfFalse, 1))
+  if key then
+    region[key] = nil
+  end
+  return true
+end
+
+local function PlainBool(value)
+  if issecretvalue(value) == true then
+    return nil
+  end
+  if value == true or value == 1 then
+    return true
+  end
+  if value == false or value == 0 then
+    return false
+  end
+  return nil
+end
+
 local function SetHeightCached(region, height, key)
   if not (region and region.SetHeight) then return end
   height = tonumber(height) or 0
@@ -646,6 +670,11 @@ end
 local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
   if not frame.hpBar then return end
   local rangeAlpha = frame._msufGFRangeHealthAlpha or 1
+  local rangeBool = frame._msufGFRangeHealthBool
+  local rangeBoolSecret = frame._msufGFRangeHealthBoolSecret == true or issecretvalue(rangeBool) == true
+  local rangeBoolKnown = rangeBoolSecret or rangeBool ~= nil
+  local rangeBoolIn = frame._msufGFRangeHealthBoolIn or 1
+  local rangeBoolOut = frame._msufGFRangeHealthBoolOut or 1
   local keyHP, keyMax = seedHP, seedMaxHP
   local seedHPSecret = issecretvalue(seedHP) == true
   local seedMaxSecret = issecretvalue(seedMaxHP) == true
@@ -668,18 +697,29 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
     local now = GetTime()
     local nextAt = frame._msufGFHealthFadeSecretNextAt
     if frame._msufGFHealthFadeSecretRangeAlpha == rangeAlpha
-      and frame._msufGFVisualHealthAlpha ~= nil
+      and frame._msufGFHealthFadeSecretRangeBoolKnown == rangeBoolKnown
+      and frame._msufGFHealthFadeSecretRangeBoolIn == rangeBoolIn
+      and frame._msufGFHealthFadeSecretRangeBoolOut == rangeBoolOut
+      and (frame._msufGFVisualHealthAlpha ~= nil or frame._msufGFVisualHealthBoolApplied == true)
       and nextAt
       and now < nextAt then
       return
     end
     frame._msufGFHealthFadeSecretNextAt = now + HEALTH_FADE_SECRET_THROTTLE
     frame._msufGFHealthFadeSecretRangeAlpha = rangeAlpha
+    frame._msufGFHealthFadeSecretRangeBoolKnown = rangeBoolKnown
+    frame._msufGFHealthFadeSecretRangeBoolIn = rangeBoolIn
+    frame._msufGFHealthFadeSecretRangeBoolOut = rangeBoolOut
   end
   if keyCacheable
+    and rangeBoolSecret ~= true
     and frame._msufGFHealthFadeSeedHP == keyHP
     and frame._msufGFHealthFadeSeedMax == keyMax
-    and frame._msufGFHealthFadeRangeAlpha == rangeAlpha then
+    and frame._msufGFHealthFadeRangeAlpha == rangeAlpha
+    and frame._msufGFHealthFadeRangeBoolKnown == rangeBoolKnown
+    and frame._msufGFHealthFadeRangeBool == rangeBool
+    and frame._msufGFHealthFadeRangeBoolIn == rangeBoolIn
+    and frame._msufGFHealthFadeRangeBoolOut == rangeBoolOut then
     return
   end
 
@@ -704,23 +744,54 @@ local function UpdateHealthFade(frame, cfg, seedHP, seedMaxHP, event)
       alpha = alpha * (cfg.runtimeHealthFadeAlpha or cfg.healthFadeAlpha or 0.45)
     end
   end
-  alpha = alpha * rangeAlpha
   if keyCacheable then
     frame._msufGFHealthFadeSeedHP = keyHP
     frame._msufGFHealthFadeSeedMax = keyMax
     frame._msufGFHealthFadeRangeAlpha = rangeAlpha
+    if rangeBoolSecret ~= true then
+      frame._msufGFHealthFadeRangeBoolKnown = rangeBoolKnown
+      frame._msufGFHealthFadeRangeBool = rangeBool
+      frame._msufGFHealthFadeRangeBoolIn = rangeBoolIn
+      frame._msufGFHealthFadeRangeBoolOut = rangeBoolOut
+    else
+      frame._msufGFHealthFadeRangeBoolKnown = nil
+      frame._msufGFHealthFadeRangeBool = nil
+      frame._msufGFHealthFadeRangeBoolIn = nil
+      frame._msufGFHealthFadeRangeBoolOut = nil
+    end
     frame._msufGFHealthFadeSecretNextAt = nil
     frame._msufGFHealthFadeSecretRangeAlpha = nil
+    frame._msufGFHealthFadeSecretRangeBoolKnown = nil
+    frame._msufGFHealthFadeSecretRangeBoolIn = nil
+    frame._msufGFHealthFadeSecretRangeBoolOut = nil
   else
     frame._msufGFHealthFadeSeedHP = nil
     frame._msufGFHealthFadeSeedMax = nil
     frame._msufGFHealthFadeRangeAlpha = nil
+    frame._msufGFHealthFadeRangeBoolKnown = nil
+    frame._msufGFHealthFadeRangeBool = nil
+    frame._msufGFHealthFadeRangeBoolIn = nil
+    frame._msufGFHealthFadeRangeBoolOut = nil
+  end
+  if rangeBoolKnown then
+    if SetAlphaFromBoolean(frame.hpBar, rangeBool, alpha * rangeBoolIn, alpha * rangeBoolOut, "_msufGFVisualHealthAlpha") then
+      frame._msufGFVisualHealthAlpha = nil
+      frame._msufGFVisualHealthBoolApplied = true
+      return
+    end
+    local safe = PlainBool(rangeBool)
+    if safe ~= nil then
+      alpha = alpha * (safe and rangeBoolIn or rangeBoolOut)
+    end
+  else
+    alpha = alpha * rangeAlpha
   end
   if frame._msufGFVisualHealthAlpha == alpha then
     return
   end
   SetAlphaCached(frame.hpBar, alpha, "_msufGFVisualHealthAlpha")
   frame._msufGFVisualHealthAlpha = alpha
+  frame._msufGFVisualHealthBoolApplied = nil
 end
 
 local BarTextCommon
@@ -1032,6 +1103,14 @@ function GroupVisuals.Apply(frame)
     frame._msufGFHealthFadeSeedHP = nil
     frame._msufGFHealthFadeSeedMax = nil
     frame._msufGFHealthFadeRangeAlpha = nil
+    frame._msufGFHealthFadeRangeBoolKnown = nil
+    frame._msufGFHealthFadeRangeBool = nil
+    frame._msufGFHealthFadeRangeBoolIn = nil
+    frame._msufGFHealthFadeRangeBoolOut = nil
+    frame._msufGFHealthFadeSecretRangeBoolKnown = nil
+    frame._msufGFHealthFadeSecretRangeBoolIn = nil
+    frame._msufGFHealthFadeSecretRangeBoolOut = nil
+    frame._msufGFVisualHealthBoolApplied = nil
   end
   CompileVisualRuntime(frame and frame.MSUFSpec)
   local cfg = frame and frame.MSUFSpec and frame.MSUFSpec.group
@@ -1067,6 +1146,14 @@ function GroupVisuals.Disable(frame)
   frame._msufGFHealthFadeSeedHP = nil
   frame._msufGFHealthFadeSeedMax = nil
   frame._msufGFHealthFadeRangeAlpha = nil
+  frame._msufGFHealthFadeRangeBoolKnown = nil
+  frame._msufGFHealthFadeRangeBool = nil
+  frame._msufGFHealthFadeRangeBoolIn = nil
+  frame._msufGFHealthFadeRangeBoolOut = nil
+  frame._msufGFHealthFadeSecretRangeBoolKnown = nil
+  frame._msufGFHealthFadeSecretRangeBoolIn = nil
+  frame._msufGFHealthFadeSecretRangeBoolOut = nil
+  frame._msufGFVisualHealthBoolApplied = nil
   frame._msufGFVisualRuntimeGroup = nil
   frame._msufGFVisualRuntimeHealth = nil
   frame._msufGFVisualRuntimeGone = nil
