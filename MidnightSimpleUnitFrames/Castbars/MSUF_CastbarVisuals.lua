@@ -1,4 +1,14 @@
 local previousUpdateCastbarVisuals = _G.MSUF_UpdateCastbarVisuals
+local issecretvalue = _G.issecretvalue
+
+local function IsSecretValue(value)
+    local fn = issecretvalue
+    if type(fn) ~= "function" then
+        fn = _G.issecretvalue
+        if type(fn) == "function" then issecretvalue = fn end
+    end
+    return type(fn) == "function" and fn(value) == true
+end
 
 local function GeneralDB()
     if type(_G.MSUF_EnsureDB) == "function" and not _G.MSUF_DB then
@@ -54,7 +64,9 @@ end
 
 local function RegionNumber(region, method, fallback)
     if not (region and method and region[method]) then return fallback end
-    return Num(region[method](region), fallback)
+    local value = region[method](region)
+    if IsSecretValue(value) then return fallback end
+    return Num(value, fallback)
 end
 
 local function DetailNum(g, prefix, suffix, globalKey, fallback)
@@ -384,6 +396,26 @@ local function AnchorFontString(fs, relativeTo, position, x, y, defaultJustify)
     end
 end
 
+local function ResolveTimeTextFontSize(g, prefix)
+    local spellSize = DetailNum(g, prefix, "SpellNameFontSize", nil, Num(g.castbarSpellNameFontSize, 0))
+    if not spellSize or spellSize <= 0 then spellSize = Num(g.fontSize, 14) end
+    local baseSize = Num(g.castbarTimeFontSize, 0)
+    if baseSize <= 0 then baseSize = spellSize end
+    local size = DetailNum(g, prefix, "TimeFontSize", nil, baseSize)
+    if not size or size <= 0 then size = baseSize end
+    return Clamp(size, 6, 128)
+end
+
+local function ApproxTimeTextReserve(frame, g, prefix, statusW)
+    local size = ResolveTimeTextFontSize(g, prefix)
+    local format = tostring((frame and frame._msufCastTimeFormat) or DetailString(g, prefix, "TimeFormat", nil, "CURRENT") or "CURRENT"):upper()
+    local widthFactor = (format == "CURRENT" or format == "") and 3.2 or 6.8
+    local reserve = math.floor(size * widthFactor + 8.5)
+    local cap = math.floor((tonumber(statusW) or 250) * 0.45 + 0.5)
+    if cap > 0 and reserve > cap then reserve = cap end
+    return math.max(44, reserve)
+end
+
 local function ApplySpellTextLayout(frame, g, unit, prefix)
     local fs = frame and frame.castText
     local statusBar = frame and frame.statusBar
@@ -423,8 +455,8 @@ local function ApplySpellTextLayout(frame, g, unit, prefix)
     else
         local reserve = 0
         if frame.timeText and frame.timeText.IsShown and frame.timeText:IsShown() then
-            local timeW = RegionNumber(frame.timeText, "GetStringWidth", 44)
-            reserve = math.max(44, timeW + 10)
+            local timeW = RegionNumber(frame.timeText, "GetStringWidth", nil)
+            reserve = timeW and math.max(44, timeW + 10) or ApproxTimeTextReserve(frame, g, prefix, statusW)
         end
         width = math.max(20, statusW - reserve - 8)
     end
@@ -450,12 +482,7 @@ local function ApplyTimeTextLayout(frame, g, unit, prefix)
         return
     end
 
-    local spellSize = DetailNum(g, prefix, "SpellNameFontSize", nil, Num(g.castbarSpellNameFontSize, 0))
-    if not spellSize or spellSize <= 0 then spellSize = Num(g.fontSize, 14) end
-    local baseSize = Num(g.castbarTimeFontSize, 0)
-    if baseSize <= 0 then baseSize = spellSize end
-    local size = DetailNum(g, prefix, "TimeFontSize", nil, baseSize)
-    if not size or size <= 0 then size = baseSize end
+    local size = ResolveTimeTextFontSize(g, prefix)
     ApplyFont(fs, g, prefix, "Time", size, "Time")
 
     if fs.SetMaxLines then fs:SetMaxLines(1) end
