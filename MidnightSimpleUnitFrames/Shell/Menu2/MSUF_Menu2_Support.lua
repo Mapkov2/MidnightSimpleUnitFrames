@@ -112,6 +112,18 @@ end
 _G.MSUF_AddTooltip = _G.MSUF_AddTooltip or AddTooltip
 M.AddTooltip = M.AddTooltip or AddTooltip
 
+local STATIC_POPUP_DEFAULTS = { timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3 }
+function M.InstallStaticPopup(key, spec, defaults)
+    if not (_G.StaticPopupDialogs and key and type(spec) == "table") then return nil end
+    local existing = _G.StaticPopupDialogs[key]
+    if existing then return existing end
+    for field, value in pairs(defaults or STATIC_POPUP_DEFAULTS) do
+        if spec[field] == nil then spec[field] = value end
+    end
+    _G.StaticPopupDialogs[key] = spec
+    return spec
+end
+
 local function LeftJustifyButtonText(btn, leftPad)
     leftPad = leftPad or 10
     if not (btn and btn.GetFontString) then return end
@@ -706,24 +718,16 @@ function _G.MSUF_ShowReloadRecommendedPopup(label)
     if pendingReloadRecommendedLabel == "" then pendingReloadRecommendedLabel = "these changes" end
     pendingReloadRecommendedLabel = Tr(pendingReloadRecommendedLabel)
 
-    if not _G.StaticPopupDialogs.MSUF_RELOAD_RECOMMENDED then
-        _G.StaticPopupDialogs.MSUF_RELOAD_RECOMMENDED = {
-            text = Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
-            button1 = _G.RELOAD or Tr("Reload"),
-            button2 = _G.CANCEL or Tr("Not now"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-            OnAccept = function()
-                pendingReloadRecommendedLabel = nil
-                if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-            end,
-            OnCancel = function()
-                pendingReloadRecommendedLabel = nil
-            end,
-        }
-    end
+    M.InstallStaticPopup("MSUF_RELOAD_RECOMMENDED", {
+        text = Tr("MSUF recommends reloading the UI to ensure all changes apply correctly.\n\nApply: %s\n\nReload now?"),
+        button1 = _G.RELOAD or Tr("Reload"),
+        button2 = _G.CANCEL or Tr("Not now"),
+        OnAccept = function()
+            pendingReloadRecommendedLabel = nil
+            if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+        end,
+        OnCancel = function() pendingReloadRecommendedLabel = nil end,
+    })
 
     _G.StaticPopup_Show("MSUF_RELOAD_RECOMMENDED", pendingReloadRecommendedLabel)
 end
@@ -839,21 +843,17 @@ do
     local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
         and _G.C_AddOns.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version")
     local isAlpha = type(version) == "string" and version:lower():find("alpha", 1, true) ~= nil
-    if isAlpha and _G.StaticPopupDialogs and not _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD then
-        _G.StaticPopupDialogs.MSUF_ALPHA_DISCORD = {
+    if isAlpha then
+        M.InstallStaticPopup("MSUF_ALPHA_DISCORD", {
             text = Tr("|cffb088f0MSUF Alpha Build|r\n\nThis is an early Alpha version.\nPlease report bugs and share feedback on our Discord!\n\n|cff7289dahttps://discord.gg/2Gf9b2Wprz|r"),
             button1 = Tr("Copy Discord Link"),
             button2 = _G.CLOSE or Tr("Close"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
             OnAccept = function()
                 if type(_G.MSUF_ShowCopyLink) == "function" then
                     _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz")
                 end
             end,
-        }
+        })
     end
 end
 
@@ -870,6 +870,8 @@ local blizzardUiParentScale
 local UI_SCALE_1080 = 768 / 1080
 local UI_SCALE_1440 = 768 / 1440
 local UI_SCALE_4K = 768 / 2160
+local UI_SCALE_PRESETS = { ["1080p"] = UI_SCALE_1080, ["1440p"] = UI_SCALE_1440, ["4k"] = UI_SCALE_4K }
+local MSUF_SCALE_FRAME_GLOBALS = { "MSUF_PlayerCastbar", "MSUF_TargetCastbar", "MSUF_FocusCastbar", "MSUF_PlayerCastbarPreview", "MSUF_TargetCastbarPreview", "MSUF_FocusCastbarPreview", "MSUF_BossCastbar", "MSUF_BossCastbarPreview" }
 
 local function IsGroupFrameUnitKey(unitKey)
     if type(unitKey) ~= "string" then return false end
@@ -906,14 +908,7 @@ local function CollectMsufScaleFrames()
     if type(_G.MSUF_UnitFrames) == "table" then
         for unitKey, frame in pairs(_G.MSUF_UnitFrames) do add(frame, unitKey) end
     end
-    add(_G.MSUF_PlayerCastbar)
-    add(_G.MSUF_TargetCastbar)
-    add(_G.MSUF_FocusCastbar)
-    add(_G.MSUF_PlayerCastbarPreview)
-    add(_G.MSUF_TargetCastbarPreview)
-    add(_G.MSUF_FocusCastbarPreview)
-    add(_G.MSUF_BossCastbar)
-    add(_G.MSUF_BossCastbarPreview)
+    for i = 1, #MSUF_SCALE_FRAME_GLOBALS do add(_G[MSUF_SCALE_FRAME_GLOBALS[i]]) end
     if type(_G.MSUF_BossCastbars) == "table" then
         for i = 1, 5 do add(_G.MSUF_BossCastbars[i]) end
     end
@@ -995,11 +990,8 @@ local function GetPixelPerfectScale()
 end
 
 local function ResolveGlobalPresetScale(preset, scale)
-    if preset == "1080p" then return UI_SCALE_1080 end
-    if preset == "1440p" then return UI_SCALE_1440 end
-    if preset == "4k" then return UI_SCALE_4K end
     if preset == "pixel" then return GetPixelPerfectScale() end
-    return tonumber(scale)
+    return UI_SCALE_PRESETS[preset] or tonumber(scale)
 end
 
 local function EnsureGlobalUiScaleTable(g)

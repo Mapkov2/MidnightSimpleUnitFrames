@@ -373,18 +373,12 @@ local function ScopeSection(ctx, builder)
         if edit.SetText then edit:SetText(M.IsMSUFEditModeActive() and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
     end
 
-    if not StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] then
-        StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"] = {
-            text = M.Tr("Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
-            button1 = YES or M.Tr("Yes"),
-            button2 = NO or M.Tr("No"),
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
-    end
-    StaticPopupDialogs["MSUF2_GF_RESET_ALL_CONFIRM"].OnAccept = function()
+    local gfResetPopup = M.InstallStaticPopup("MSUF2_GF_RESET_ALL_CONFIRM", {
+        text = M.Tr("Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
+        button1 = YES or M.Tr("Yes"),
+        button2 = NO or M.Tr("No"),
+    })
+    gfResetPopup.OnAccept = function()
         local function ResetAllGroupFrames()
             local gf = GF()
             if gf and type(gf.ResetAllToDefaults) == "function" and gf.ResetAllToDefaults() then
@@ -424,6 +418,15 @@ local function ScopeSection(ctx, builder)
 
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup
+    local function SetCopyScopesSelected(selected, feedback)
+        for i = 1, #GF_COPY_CATEGORIES do
+            local cat = GF_COPY_CATEGORIES[i]
+            M.gfCopyScopes[cat.key] = selected and true or false
+            if copyPopup and copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(selected and true or false) end
+        end
+        if M.ShowStatusFeedback then M.ShowStatusFeedback(feedback, "info", 1.1) end
+    end
+
     local function ShowCopyPopup(anchor)
         if copyPopup and copyPopup:IsShown() then copyPopup:Hide(); return end
         if not copyPopup then
@@ -505,22 +508,12 @@ local function ScopeSection(ctx, builder)
             local allBtn = MakeTopButton(copyPopup, M.Tr("All"), 48)
             allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
-                for i = 1, #GF_COPY_CATEGORIES do
-                    local cat = GF_COPY_CATEGORIES[i]
-                    M.gfCopyScopes[cat.key] = true
-                    if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(true) end
-                end
-                if M.ShowStatusFeedback then M.ShowStatusFeedback("All copy categories selected", "info", 1.1) end
+                SetCopyScopesSelected(true, "All copy categories selected")
             end)
             local noneBtn = MakeTopButton(copyPopup, M.Tr("None"), 58)
             noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
             noneBtn:SetScript("OnClick", function()
-                for i = 1, #GF_COPY_CATEGORIES do
-                    local cat = GF_COPY_CATEGORIES[i]
-                    M.gfCopyScopes[cat.key] = false
-                    if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(false) end
-                end
-                if M.ShowStatusFeedback then M.ShowStatusFeedback("Copy categories cleared", "info", 1.1) end
+                SetCopyScopesSelected(false, "Copy categories cleared")
             end)
         end
 
@@ -585,6 +578,18 @@ local function BindScopeDropdown(ctx, widget, key, default, mode)
         function() return Val(CurrentScope(), key, default) end,
         function(v) Set(CurrentScope(), key, v or default, mode or "visual") end)
     return widget
+end
+
+local function ScopeDropdown(ctx, parent, label, values, width, key, default, mode, x, y, placeWidth, justify)
+    local control = BindScopeDropdown(ctx, W.Dropdown(parent, label, values, width), key, default, mode)
+    if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "LEFT") end
+    return control
+end
+
+local function ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify)
+    local control = BindScopeSlider(ctx, W.Slider(parent, label, minValue, maxValue, step, width), key, default, mode)
+    if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "CENTER") end
+    return control
 end
 
 local GROWTH_TILE_VALUES = {
@@ -1246,6 +1251,8 @@ M.Assign(GroupPage, {
     BindScopeToggle = BindScopeToggle,
     BindScopeSlider = BindScopeSlider,
     BindScopeDropdown = BindScopeDropdown,
+    ScopeDropdown = ScopeDropdown,
+    ScopeSlider = ScopeSlider,
     BuildGrowthDirectionTiles = BuildGrowthDirectionTiles,
     BuildRoleOrderRows = BuildRoleOrderRows,
     AuraGroup = AuraGroup,

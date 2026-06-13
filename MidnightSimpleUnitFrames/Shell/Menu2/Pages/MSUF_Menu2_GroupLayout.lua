@@ -15,7 +15,7 @@ local min = math.min
 local VT = M.ValueTextList
 
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES BLIZZARD_FALLBACK_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeSlider, BindScopeDropdown, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeSlider BindScopeDropdown BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge BadgeNumber OptionText CreateSectionNotice]])
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeSlider, BindScopeDropdown, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeSlider BindScopeDropdown ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge BadgeNumber OptionText CreateSectionNotice]])
 SetSectionBadges = SetSectionBadges or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
@@ -70,11 +70,9 @@ local function BuildGFLayout(ctx)
     BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Click casting / Clique", generalRightX, -154, generalRightToggleW), "layout"), "clickCastEnabled", true, "rebuild")
 
     local fallbackModeW = min(260, generalLeftW)
-    local fallbackMode = W.Dropdown(general, "If this switch is off", BLIZZARD_FALLBACK_VALUES, fallbackModeW)
+    local fallbackMode = ScopeDropdown(ctx, general, "If this switch is off", BLIZZARD_FALLBACK_VALUES, fallbackModeW, "blizzardFallbackMode", "AUTO", "rebuild", generalLeftX, -196, fallbackModeW)
     fallbackMode._msuf2GroupFrameGateAlwaysEnabled = true
-    W.MoveWidget(fallbackMode, general, generalLeftX, -196, fallbackModeW, "LEFT")
     AttachGroupFocus(fallbackMode, "layout")
-    BindScopeDropdown(ctx, fallbackMode, "blizzardFallbackMode", "AUTO", "rebuild")
 
     local fallbackHelp = W.Text(general, "Blizzard default is the simple off-state when no MSUF group-frame scope is active. If any MSUF group frames are on, Auto keeps Blizzard group frames hidden to avoid duplicates.", generalRightX, -184, generalRightW, T.colors.muted)
     if fallbackHelp and fallbackHelp.SetWordWrap then fallbackHelp:SetWordWrap(true) end
@@ -83,8 +81,8 @@ local function BuildGFLayout(ctx)
     W.LabelAt(general, "Offline Members", generalLeftX, -274, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -300, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
     local hideOfflineCombat = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide offline in combat", generalRightX, -300, generalRightToggleW), "layout"), "hideOfflineInCombat", false, "visual")
-    local hideOffline = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(general, "Hide offline after", 0, 120, 1, offlineSliderW), "layout"), "hideOfflineDelay", 0, "visual")
-    W.MoveWidget(hideOffline, general, generalLeftX, -334, offlineSliderW, "LEFT")
+    local hideOffline = AttachGroupFocus(ScopeSlider(ctx, general, "Hide offline after", 0, 120, 1, offlineSliderW, "hideOfflineDelay", 0, "visual", generalLeftX, -334, offlineSliderW, "LEFT"), "layout")
+    local hideOfflineControls = { hideOfflineCombat, hideOffline }
     local generalNotice, generalNoticeButton
     if type(CreateSectionNotice) == "function" then
         local _
@@ -99,8 +97,7 @@ local function BuildGFLayout(ctx)
     local function RefreshHideOfflineState()
         local enabled = Bool(CurrentScope(), "hideOfflineEnabled", false)
         local scopeEnabled = Bool(CurrentScope(), "enabled", false)
-        SetOptionEnabled(hideOfflineCombat, enabled)
-        SetOptionEnabled(hideOffline, enabled)
+        SetOptionsEnabled(hideOfflineControls, enabled)
         SetSectionBadges(general, {
             OnOffBadge(scopeEnabled, "Enabled", "Disabled"),
             { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden", kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" },
@@ -151,21 +148,19 @@ local function BuildGFLayout(ctx)
     local sizeCard = W.ControlCard(advancedLayout, "Size", "Dimensions and spacing for each group member.", advancedLeftX, -38, advancedLeftW, 188)
     local gridCard = W.ControlCard(advancedLayout, "Columns", "Column behavior for raid-like scopes.", advancedLeftX, -244, advancedLeftW, 158)
     local growthCard = W.ControlCard(advancedLayout, "Growth", "How new members fill the group frame.", advancedRightX, -38, advancedRightW, 188)
+    local function LayoutSlider(parent, label, minValue, maxValue, step, key, defaultValue, y)
+        return AttachGroupFocus(ScopeSlider(ctx, parent, label, minValue, maxValue, step, layoutSliderW, key, defaultValue, "rebuild", 16, y, layoutSliderW, "LEFT"), "layout")
+    end
 
-    local widthSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(sizeCard, "Width", 40, 300, 1, layoutSliderW), "layout"), "width", 120, "rebuild")
-    local heightSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(sizeCard, "Height", 16, 120, 1, layoutSliderW), "layout"), "height", 40, "rebuild")
-    local spacingSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(sizeCard, "Spacing", 0, 20, 1, layoutSliderW), "layout"), "spacing", 1, "rebuild")
-    W.MoveWidget(widthSlider, sizeCard, 16, -66, layoutSliderW, "LEFT")
-    W.MoveWidget(heightSlider, sizeCard, 16, -114, layoutSliderW, "LEFT")
-    W.MoveWidget(spacingSlider, sizeCard, 16, -162, layoutSliderW, "LEFT")
+    LayoutSlider(sizeCard, "Width", 40, 300, 1, "width", 120, -66)
+    LayoutSlider(sizeCard, "Height", 16, 120, 1, "height", 40, -114)
+    LayoutSlider(sizeCard, "Spacing", 0, 20, 1, "spacing", 1, -162)
 
     BuildGrowthDirectionTiles(ctx, growthCard, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
 
-    local unitsSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(gridCard, "Units per column", 1, 40, 1, layoutSliderW), "layout"), "unitsPerColumn", 5, "rebuild")
-    local maxColumnsSlider = BindScopeSlider(ctx, AttachGroupFocus(W.Slider(gridCard, "Max columns", 1, 8, 1, layoutSliderW), "layout"), "maxColumns", 8, "rebuild")
+    LayoutSlider(gridCard, "Units per column", 1, 40, 1, "unitsPerColumn", 5, -62)
+    LayoutSlider(gridCard, "Max columns", 1, 8, 1, "maxColumns", 8, -108)
     local preserveRaidGroups = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(gridCard, "Preserve raid groups", 16, -138, advancedLeftW - 32), "layout"), "preserveRaidGroups", false, "rebuild")
-    W.MoveWidget(unitsSlider, gridCard, 16, -62, layoutSliderW, "LEFT")
-    W.MoveWidget(maxColumnsSlider, gridCard, 16, -108, layoutSliderW, "LEFT")
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
         SetSectionBadges(advancedLayout, {
@@ -317,24 +312,21 @@ local function BuildGFLayout(ctx)
         return widget
     end
 
-    local manualScale = BindScaleSlider(W.Slider(manualCard, "", 50, 150, 5, scaleLeftW), "frameScaleManual", 100,
-        function(v) return string.format("Manual Scale: %d%%", v) end)
-    W.MoveWidget(manualScale, manualCard, 16, -64, scaleLeftW - 58, "LEFT")
+    local function AddScaleSlider(parent, spec, width)
+        local slider = BindScaleSlider(W.Slider(parent, "", 50, spec.max or 100, 5, width), spec.key, spec.default, spec.label)
+        W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
+        return slider
+    end
+
+    local manualScale = AddScaleSlider(manualCard, { key = "frameScaleManual", default = 100, max = 150, y = -64, label = function(v) return string.format("Manual Scale: %d%%", v) end }, scaleLeftW)
 
     local autoLabel = autoCard and autoCard.title
 
-    local scaleAt10 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleAt10", 100,
-        function(v) return string.format("1-10 players: %d%%", v) end)
-    W.MoveWidget(scaleAt10, autoCard, 16, -66, scaleRightW - 58, "LEFT")
-    local scaleAt20 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleAt20", 85,
-        function(v) return string.format("11-20 players: %d%%", v) end)
-    W.MoveWidget(scaleAt20, autoCard, 16, -120, scaleRightW - 58, "LEFT")
-    local scaleAt25 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleAt25", 80,
-        function(v) return string.format("21-25 players: %d%%", v) end)
-    W.MoveWidget(scaleAt25, autoCard, 16, -174, scaleRightW - 58, "LEFT")
-    local scaleOver25 = BindScaleSlider(W.Slider(autoCard, "", 50, 100, 5, scaleRightW), "scaleOver25", 70,
-        function(v) return string.format("26+ players: %d%%", v) end)
-    W.MoveWidget(scaleOver25, autoCard, 16, -228, scaleRightW - 58, "LEFT")
+    local scaleAt10 = AddScaleSlider(autoCard, { key = "scaleAt10", default = 100, y = -66, label = function(v) return string.format("1-10 players: %d%%", v) end }, scaleRightW)
+    local scaleAt20 = AddScaleSlider(autoCard, { key = "scaleAt20", default = 85, y = -120, label = function(v) return string.format("11-20 players: %d%%", v) end }, scaleRightW)
+    local scaleAt25 = AddScaleSlider(autoCard, { key = "scaleAt25", default = 80, y = -174, label = function(v) return string.format("21-25 players: %d%%", v) end }, scaleRightW)
+    local scaleOver25 = AddScaleSlider(autoCard, { key = "scaleOver25", default = 70, y = -228, label = function(v) return string.format("26+ players: %d%%", v) end }, scaleRightW)
+    local autoScaleControls = { scaleAt10, scaleAt20, scaleAt25, scaleOver25 }
 
     local scaleHint = manualCard and manualCard.subtitle
     if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
@@ -347,10 +339,7 @@ local function BuildGFLayout(ctx)
         SetOptionEnabled(scaleEnabled, true)
         SetOptionEnabled(scaleMode, scalingOn)
         SetOptionEnabled(manualScale, manualOn)
-        SetOptionEnabled(scaleAt10, autoOn)
-        SetOptionEnabled(scaleAt20, autoOn)
-        SetOptionEnabled(scaleAt25, autoOn)
-        SetOptionEnabled(scaleOver25, autoOn)
+        SetOptionsEnabled(autoScaleControls, autoOn)
         if autoLabel then
             if autoOn then
                 autoLabel:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
@@ -436,22 +425,8 @@ local function BuildGFLayout(ctx)
 
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
 
-    local function PlaceAnchorDropdown(control, x, y, width)
-        if not control then return end
-        width = width or 200
-        if control._msuf2Title then
-            control._msuf2Title:ClearAllPoints()
-            control._msuf2Title:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, y)
-            control._msuf2Title:SetWidth(width)
-            control._msuf2Title:SetJustifyH("LEFT")
-        end
-        control:ClearAllPoints()
-        control:SetPoint("TOPLEFT", anchor, "TOPLEFT", x, y - 22)
-        control:SetSize(width, 22)
-    end
-
     local anchorTo = W.Dropdown(anchor, "Anchor To", GF_ANCHOR_TO, 200)
-    PlaceAnchorDropdown(anchorTo, 14, -38, 200)
+    M.UnitSectionsShared.PlaceDropdown(anchor, anchorTo, 14, -38, 200)
     M.BindDropdown(ctx, anchorTo,
         function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
         function(v)
@@ -460,91 +435,35 @@ local function BuildGFLayout(ctx)
             QueueGF(CurrentScope(), "rebuild")
         end)
 
-    local anchorPoint = W.Dropdown(anchor, "Anchor Point", GF_ANCHOR_POINTS, 160)
-    PlaceAnchorDropdown(anchorPoint, 254, -38, 160)
-    BindScopeDropdown(ctx, anchorPoint, "anchorPoint", "CENTER", "rebuild")
-
-    local customLabel = T.Font(anchor, "GameFontHighlightSmall", M.Tr("Custom Anchor Frame"), { 0.62, 0.74, 0.96, 1 })
-    customLabel:SetPoint("TOPLEFT", anchor, "TOPLEFT", 14, -104)
-    customLabel:SetJustifyH("LEFT")
-
-    local customBox = CreateFrame("EditBox", nil, anchor, "InputBoxTemplate")
-    customBox:SetPoint("TOPLEFT", anchor, "TOPLEFT", 14, -126)
-    customBox:SetSize(200, 22)
-    customBox:SetAutoFocus(false)
-    customBox:SetMaxLetters(100)
-    customBox:SetJustifyH("LEFT")
-    T.SkinEditBox(customBox)
+    local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, 160, "anchorPoint", "CENTER", "rebuild", 254, -38, 160)
 
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
             or value == "targettarget" or value == "focustarget" or value == "focus"
     end
-
-    local function RefreshCustomAnchorBox()
+    local function CurrentCustomAnchor()
         local value = Conf(CurrentScope()).anchorToFrame or ""
-        if customBox and not customBox:HasFocus() then
-            customBox:SetText(IsStandardAnchorTarget(value) and "" or value)
-        end
+        return IsStandardAnchorTarget(value) and "" or value
     end
-
-    customBox:SetScript("OnEnterPressed", function(self)
-        local value = self:GetText() or ""
+    local function SetCustomAnchor(value)
+        value = value or ""
         local kind = CurrentScope()
-        local function CommitCustomAnchor()
-            local conf = Conf(kind)
-            conf.anchorToFrame = (value ~= "") and value or nil
-            QueueGF(kind, "rebuild")
-        end
-        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Set Group Anchor", "group:anchorCustom:" .. tostring(kind), CommitCustomAnchor)
-        else
-            CommitCustomAnchor()
-        end
-        self:ClearFocus()
-    end)
-    customBox:SetScript("OnEscapePressed", function(self)
-        RefreshCustomAnchorBox()
-        self:ClearFocus()
-    end)
-    customBox:SetScript("OnEditFocusLost", RefreshCustomAnchorBox)
+        Conf(kind).anchorToFrame = (value ~= "") and value or nil
+        QueueGF(kind, "rebuild")
+    end
+    local customAnchor = M.UnitSectionsShared.CustomAnchorEditor(ctx, anchor, {
+        getValue = CurrentCustomAnchor,
+        setValue = SetCustomAnchor,
+        clearValue = function() SetCustomAnchor("") end,
+        commitTitle = "Set Group Anchor",
+        commitKey = function() return "group:anchorCustom:" .. tostring(CurrentScope()) end,
+        pickTitle = "Pick Group Anchor",
+        pickKey = function() return "group:anchorPick:" .. tostring(CurrentScope()) end,
+    })
 
-    local pick = T.Button(anchor, "Pick", 50, 22)
-    pick:SetPoint("LEFT", customBox, "RIGHT", 6, 0)
-    T.CenterButtonLabel(pick)
-    pick:SetScript("OnClick", function()
-        local overlay = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
-        if not overlay then return end
-        overlay._onPick = function(frameName)
-            local kind = CurrentScope()
-            local function PickGroupAnchor()
-                local conf = Conf(kind)
-                conf.anchorToFrame = frameName
-                customBox:SetText(frameName or "")
-                QueueGF(kind, "rebuild")
-            end
-            if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-                M.CaptureHistory("Pick Group Anchor", "group:anchorPick:" .. tostring(kind), PickGroupAnchor)
-            else
-                PickGroupAnchor()
-            end
-        end
-        overlay:Show()
-    end)
-
-    local clear = T.SkinDangerButton(T.Button(anchor, "Clear", 50, 22))
-    clear:SetPoint("LEFT", pick, "RIGHT", 4, 0)
-    T.CenterButtonLabel(clear)
-    clear:SetScript("OnClick", function()
-        local conf = Conf(CurrentScope())
-        conf.anchorToFrame = nil
-        customBox:SetText("")
-        QueueGF(CurrentScope(), "rebuild")
-    end)
-
-    M.AddRefresher(ctx, RefreshCustomAnchorBox)
     local function RefreshAnchorHeader()
         if type(SetSectionHeaderStatus) ~= "function" then return end
+        customAnchor.Refresh()
         SetSectionBadges(anchor, {
             { text = OptionText(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame or "FREE", "Free"), kind = "info" },
             { text = OptionText(GF_ANCHOR_POINTS, Val(CurrentScope(), "anchorPoint", "CENTER"), "CENTER"), kind = "accent" },

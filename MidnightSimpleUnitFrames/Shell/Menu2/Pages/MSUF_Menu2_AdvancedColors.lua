@@ -17,8 +17,7 @@ local max = math.max
 local min = math.min
 
 local CallGlobal, DB, G, Bars, Gameplay, BindTableToggle, ApplyAuras, MoveWidget, LabelAt, SwitchAt, ValueToggleAt, ValueSwitchAt, SliderAt, ValueSliderAt, ValueDropdownAt, SetControlEnabled = M.Pick(AP, [[CallGlobal DB G Bars Gameplay BindTableToggle ApplyAuras MoveWidget LabelAt SwitchAt ValueToggleAt ValueSwitchAt SliderAt ValueSliderAt ValueDropdownAt SetControlEnabled]])
-local KLR = M.KeyLabelRows
-local WL = M.WordList
+local KLR, WL, SetControlsEnabled = M.KeyLabelRows, M.WordList, W.SetControlsEnabled
 
 local function ColorRows(...)
     local out = {}
@@ -259,6 +258,11 @@ local function SetTableRGB(tbl, key, r, g, b)
     if not tbl then return end
     tbl[key] = { r, g, b }
 end
+local function ClearRGB(tbl, prefix)
+    if tbl then tbl[prefix .. "R"], tbl[prefix .. "G"], tbl[prefix .. "B"] = nil, nil, nil end
+end
+local function ClearRGBs(tbl, ...) for i = 1, select("#", ...) do ClearRGB(tbl, select(i, ...)) end end
+local function ClearRGBAs(tbl, ...) for i = 1, select("#", ...) do local prefix = select(i, ...); ClearRGB(tbl, prefix); tbl[prefix .. "A"] = nil end end
 
 local function FontPaletteRGB(key, dr, dg, db)
     local colors = _G.MSUF_FONT_COLORS
@@ -324,6 +328,16 @@ local function GeneralColorAt(ctx, section, label, x, y, prefix, dr, dg, db, app
         labelWidth, swatchWidth)
 end
 
+local function ApiOrGeneralColorAt(ctx, section, label, x, y, getName, setName, prefix, dr, dg, db, apply, alpha)
+    return ColorValueAt(ctx, section, label, x, y,
+        function() return ApiRGB(getName, dr, dg, db) end,
+        function(r, g, c)
+            local ok = alpha ~= nil and ApiCall(setName, r, g, c, alpha) or ApiCall(setName, r, g, c)
+            if not ok then SetGeneralRGB(prefix, r, g, c) end
+            if type(apply) == "function" then apply() end
+        end)
+end
+
 local function TableColorAt(ctx, section, label, x, y, getTable, key, dr, dg, db, apply, labelWidth, swatchWidth)
     return ColorValueAt(ctx, section, label, x, y,
         function() return TableRGB(getTable(), key, dr, dg, db) end,
@@ -344,6 +358,14 @@ local function ButtonAt(parent, label, x, y, width, onClick)
         end)
     end
     return btn
+end
+
+local function NPCColorAt(ctx, section, row, x, y)
+    return ColorValueAt(ctx, section, row.label, x, y,
+        function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
+        function(r, g, c)
+            if not ApiCall("SetNPCColor", row.key, r, g, c) then ApplyColors() end
+        end)
 end
 
 local COLOR_HELPERS = {
@@ -622,7 +644,7 @@ local function BuildColors(ctx)
     CH.ButtonAt(font, "Use font palette", 12, -50, 150, function()
         if not ApiCall("ResetGlobalFontToPalette") then
             G().useCustomFontColor = false
-            G().fontColorCustomR, G().fontColorCustomG, G().fontColorCustomB = nil, nil, nil
+            ClearRGB(G(), "fontColorCustom")
         end
         ApplyColors()
     end)
@@ -653,11 +675,7 @@ local function BuildColors(ctx)
 
     local background = b:CollapsibleSection("colors_background", "Bar Background Tint", 226, false)
     LabelAt(background, "Tint applied to the bar background in *all* bar modes. Dark Mode uses this tint too.", 12, -8, 660, "GameFontHighlightSmall", T.colors.muted)
-    ColorValueAt(ctx, background, "Bar background tint", 12, -46,
-        function() return ApiRGB("GetClassBarBgColor", 0, 0, 0) end,
-        function(r, g, c)
-            if not ApiCall("SetClassBarBgColor", r, g, c) then SetGeneralRGB("classBarBg", r, g, c) end
-        end)
+    ApiOrGeneralColorAt(ctx, background, "Bar background tint", 12, -46, "GetClassBarBgColor", "SetClassBarBgColor", "classBarBg", 0, 0, 0)
     ValueToggleAt(ctx, background, "Background follows HP color", 12, -86,
         function() return ApiValue("GetBarBgMatchHP", function() return G().barBgMatchHPColor == true end) end,
         function(v)
@@ -681,7 +699,7 @@ local function BuildColors(ctx)
         function(v) G().darkBgCustomColor = v and true or false; ApplyColors() end)
     CH.ButtonAt(background, "Reset to black", 12, -184, 140, function()
         if not ApiCall("ResetClassBarBgColor") then
-            G().classBarBgR, G().classBarBgG, G().classBarBgB = nil, nil, nil
+            ClearRGB(G(), "classBarBg")
         end
         ApplyColors()
     end)
@@ -722,11 +740,7 @@ local function BuildColors(ctx)
     local unit = b:CollapsibleSection("colors_unit", "Unitframe Colors", 230, false)
     for i = 1, #COLOR_DATA.NPC_ROWS do
         local row = COLOR_DATA.NPC_ROWS[i]
-        ColorValueAt(ctx, unit, row.label, 12, -10 - (i - 1) * 36,
-            function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
-            function(r, g, c)
-                if not ApiCall("SetNPCColor", row.key, r, g, c) then ApplyColors() end
-            end)
+        NPCColorAt(ctx, unit, row, 12, -10 - (i - 1) * 36)
     end
     CH.ApiColorAt(ctx, unit, "Pet Frame Color", 360, -10, "GetPetFrameColor", "SetPetFrameColor", 0, 0.8, 0)
     CH.ButtonAt(unit, "Reset Unitframe Colors", 12, -190, 190, function()
@@ -739,7 +753,7 @@ local function BuildColors(ctx)
     local npcMaster
     local function RefreshNPCTypeControls(enabled)
         if enabled == nil then enabled = npcMaster and npcMaster:GetChecked() and true or false end
-        for i = 1, #npcControls do SetControlEnabled(npcControls[i], enabled) end
+        SetControlsEnabled(npcControls, enabled)
     end
     npcControls[#npcControls + 1] = ValueToggleAt(ctx, npcType, "Color HP bar (Class Color mode only)", 32, -38,
         function() return ApiValue("GetNPCTypeColorBar", function() return G().npcTypeColorBar ~= false end) end,
@@ -779,11 +793,7 @@ local function BuildColors(ctx)
         local row = COLOR_DATA.NPC_TYPE_ROWS[i]
         local col = (i - 1) % 2
         local line = floor((i - 1) / 2)
-        local sw = ColorValueAt(ctx, npcType, row.label, 12 + col * 330, -174 - line * 38,
-            function() return ApiRGB("GetNPCColor", row.dr, row.dg, row.db, row.key) end,
-            function(r, g, c)
-                if not ApiCall("SetNPCColor", row.key, r, g, c) then ApplyColors() end
-            end)
+        local sw = NPCColorAt(ctx, npcType, row, 12 + col * 330, -174 - line * 38)
         npcControls[#npcControls + 1] = sw
     end
     CH.ButtonAt(npcType, "Reset NPC Type Colors", 12, -292, 190, function()
@@ -822,13 +832,9 @@ local function BuildColors(ctx)
         end)
     CH.ButtonAt(barColors, "Reset Bar Colors", barLeftX, -194, 160, function()
         local g = G()
-        for _, prefix in ipairs({ "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor", "barOutlineColor" }) do
-            g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"], g[prefix .. "A"] = nil, nil, nil, nil
-        end
+        ClearRGBAs(g, "absorbBarColor", "healAbsorbBarColor", "powerBarBgColor", "aggroBorder", "purgeBorderColor", "barOutlineColor")
         g.barOutlineColorMode = nil
-        g.hlAggroColorR, g.hlAggroColorG, g.hlAggroColorB = nil, nil, nil
-        g.hlPurgeColorR, g.hlPurgeColorG, g.hlPurgeColorB = nil, nil, nil
-        g.aggroBorderColorR, g.aggroBorderColorG, g.aggroBorderColorB = nil, nil, nil
+        ClearRGBs(g, "hlAggroColor", "hlPurgeColor", "aggroBorderColor")
         g.powerBarBgMatchBarColor = nil
         ApplyGlobalOutlineColor()
     end)
@@ -853,18 +859,15 @@ local function BuildColors(ctx)
         local def = COLOR_DATA.DISPEL_TYPES[i]
         local col = (i - 1) % 2
         local row = floor((i - 1) / 2)
-        typeControls[#typeControls + 1] = ColorValueAt(ctx, dispel, def.label, 12 + col * 330, -146 - row * 36,
-            function() return GeneralRGB("dispelType" .. def.key, def.dr, def.dg, def.db) end,
-            function(r, g, c) SetGeneralRGB("dispelType" .. def.key, r, g, c) end)
+        typeControls[#typeControls + 1] = CH.GeneralColorAt(ctx, dispel, def.label, 12 + col * 330, -146 - row * 36,
+            "dispelType" .. def.key, def.dr, def.dg, def.db)
     end
     CH.ButtonAt(dispel, "Reset Dispel Colors", 12, -274, 180, function()
         local g = G()
-        g.dispelBorderColorR, g.dispelBorderColorG, g.dispelBorderColorB = nil, nil, nil
-        g.hlDispelColorR, g.hlDispelColorG, g.hlDispelColorB = nil, nil, nil
+        ClearRGBs(g, "dispelBorderColor", "hlDispelColor")
         g.hlDispelColorMode = nil
         for i = 1, #COLOR_DATA.DISPEL_TYPES do
-            local prefix = "dispelType" .. COLOR_DATA.DISPEL_TYPES[i].key
-            g[prefix .. "R"], g[prefix .. "G"], g[prefix .. "B"] = nil, nil, nil
+            ClearRGB(g, "dispelType" .. COLOR_DATA.DISPEL_TYPES[i].key)
         end
         ApplyColors()
         CallGlobal("MSUF_PrioRows_Reinit")
@@ -872,7 +875,7 @@ local function BuildColors(ctx)
     M.AddRefresher(ctx, function()
         local single = (G().hlDispelColorMode or "SINGLE") ~= "TYPE"
         SetControlEnabled(singleDispel, single)
-        for i = 1, #typeControls do SetControlEnabled(typeControls[i], not single) end
+        SetControlsEnabled(typeControls, not single)
     end)
 
     local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 544, false)
@@ -881,18 +884,8 @@ local function BuildColors(ctx)
     CH.ApiColorAt(ctx, castbar, "Non-interruptible cast color", 12, -46, "GetNonInterruptibleCastColor", "SetNonInterruptibleCastColor", 0.4, 0.01, 0.01, ApplyCastbarColors)
     CH.ApiColorAt(ctx, castbar, "Interrupt color (all castbars)", 12, -82, "GetInterruptFeedbackCastColor", "SetInterruptFeedbackCastColor", 1.0, 0.82, 0.0, ApplyCastbarColors)
     CH.ApiColorAt(ctx, castbar, "Castbar text color", 360, -10, "GetCastbarTextColor", "SetCastbarTextColor", 1, 1, 1, ApplyCastbarColors)
-    ColorValueAt(ctx, castbar, "Castbar border color", 360, -46,
-        function() return ApiRGB("GetCastbarBorderColor", 0, 0, 0) end,
-        function(r, g, c)
-            if not ApiCall("SetCastbarBorderColor", r, g, c, 1) then SetGeneralRGB("castbarBorder", r, g, c) end
-            ApplyCastbarColors()
-        end)
-    ColorValueAt(ctx, castbar, "Castbar background color", 360, -82,
-        function() return ApiRGB("GetCastbarBackgroundColor", 0.10, 0.10, 0.10) end,
-        function(r, g, c)
-            if not ApiCall("SetCastbarBackgroundColor", r, g, c, 0.85) then SetGeneralRGB("castbarBg", r, g, c) end
-            ApplyCastbarColors()
-        end)
+    ApiOrGeneralColorAt(ctx, castbar, "Castbar border color", 360, -46, "GetCastbarBorderColor", "SetCastbarBorderColor", "castbarBorder", 0, 0, 0, ApplyCastbarColors, 1)
+    ApiOrGeneralColorAt(ctx, castbar, "Castbar background color", 360, -82, "GetCastbarBackgroundColor", "SetCastbarBackgroundColor", "castbarBg", 0.10, 0.10, 0.10, ApplyCastbarColors, 0.85)
     LabelAt(castbar, "Player castbar override", 12, -134, 260, "GameFontNormal", T.colors.text)
     local overrideModeX, overrideModeW = 300, 190
     local overrideColorX = min(max(overrideModeX + overrideModeW + 36, floor(castW * 0.56)), castW - 236)
@@ -935,12 +928,10 @@ local function BuildColors(ctx)
         ApiCall("ResetCastbarBorderColor")
         ApiCall("ResetCastbarBackgroundColor")
         local g = G()
-        g.castbarInterruptibleR, g.castbarInterruptibleG, g.castbarInterruptibleB = nil, nil, nil
-        g.castbarNonInterruptibleR, g.castbarNonInterruptibleG, g.castbarNonInterruptibleB = nil, nil, nil
-        g.castbarInterruptFeedbackR, g.castbarInterruptFeedbackG, g.castbarInterruptFeedbackB = nil, nil, nil
+        ClearRGBs(g, "castbarInterruptible", "castbarNonInterruptible", "castbarInterruptFeedback")
         g.playerCastbarOverrideEnabled = false
         g.playerCastbarOverrideMode = "CLASS"
-        g.playerCastbarOverrideR, g.playerCastbarOverrideG, g.playerCastbarOverrideB = nil, nil, nil
+        ClearRGB(g, "playerCastbarOverride")
         g.kickReadyColor, g.kickNotReadyColor = nil, nil
         ApplyCastbarColors()
     end)

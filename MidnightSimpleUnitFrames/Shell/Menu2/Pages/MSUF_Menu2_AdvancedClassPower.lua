@@ -21,7 +21,9 @@ local RefreshClassPowerInlinePreview
 
 local CallGlobal, Bars, BoolValue, NumValue, SetValue, DeepCopyTable, BindTableToggle, BindTableSlider, BindTableDropdown, SwitchAt, SetControlEnabled = M.Pick(AP, [[CallGlobal Bars BoolValue NumValue SetValue DeepCopyTable BindTableToggle BindTableSlider BindTableDropdown SwitchAt SetControlEnabled]])
 local MoveWidget = W.MoveWidget or AP.MoveWidget
+local SetControlsEnabled = W.SetControlsEnabled
 local CPPreview = M.ClassPowerPreview or {}
+local function AddTooltip(control, title, body) if M.AddTooltip then M.AddTooltip(control, title, body, { hook = true, owner = "ANCHOR_RIGHT" }) end end
 local function ApplyClassPower()
     -- ClassPower spans several runtimes: core bars, textures, cooldown-manager width binding,
     -- inline preview, and global preview alpha. Keep the page fanout centralized here.
@@ -364,21 +366,25 @@ local function BindBarsAlphaPercent(ctx, section, label, key, default, apply, st
     return slider
 end
 
-local function ApplyDetachedPowerBar()
-    CallGlobal("MSUF_DetachedPowerBar_RefreshTextures")
-    CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
-    CallGlobal("MSUF_ClassPower_PlayerHP_Refresh")
+local APPLY_DETACHED_POWER = { preview = true, power = true, applyAll = false }
+local APPLY_DETACHED_POWER_TEXT = { preview = true, power = true, text = true, applyAll = false }
+local APPLY_PLAYER_HP = { preview = true, applyAll = false }
+local APPLY_PLAYER_HP_TEXT = { preview = true, text = true, applyAll = false }
+
+local function ApplyClassPowerPage(reason, flags, ...)
+    for i = 1, select("#", ...) do CallGlobal(select(i, ...)) end
     if RefreshClassPowerInlinePreview then RefreshClassPowerInlinePreview() end
-    M.RequestGeneralApply("MSUF2_DETACHED_POWER_BAR", { preview = true, power = true, applyAll = false })
+    M.RequestGeneralApply(reason, flags)
+end
+
+local function ApplyDetachedPowerBar()
+    ApplyClassPowerPage("MSUF2_DETACHED_POWER_BAR", APPLY_DETACHED_POWER,
+        "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh")
 end
 
 local function ApplyDetachedPowerText()
-    CallGlobal("MSUF_DetachedPowerBar_RefreshTextures")
-    CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
-    CallGlobal("MSUF_ClassPower_PlayerHP_Refresh")
-    CallGlobal("MSUF_UpdateAllFonts_Immediate")
-    if RefreshClassPowerInlinePreview then RefreshClassPowerInlinePreview() end
-    M.RequestGeneralApply("MSUF2_DETACHED_POWER_TEXT", { preview = true, power = true, text = true, applyAll = false })
+    ApplyClassPowerPage("MSUF2_DETACHED_POWER_TEXT", APPLY_DETACHED_POWER_TEXT,
+        "MSUF_DetachedPowerBar_RefreshTextures", "MSUF_ApplyPowerBarEmbedLayout_All", "MSUF_ClassPower_PlayerHP_Refresh", "MSUF_UpdateAllFonts_Immediate")
 end
 
 local function ApplyDetachedPowerBarOutline()
@@ -387,22 +393,15 @@ local function ApplyDetachedPowerBarOutline()
 end
 
 local function ApplyPlayerHPBar()
-    CallGlobal("MSUF_ClassPower_PlayerHP_Refresh")
-    if RefreshClassPowerInlinePreview then RefreshClassPowerInlinePreview() end
-    M.RequestGeneralApply("MSUF2_CLASSPOWER_PLAYER_HP", { preview = true, applyAll = false })
+    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP", APPLY_PLAYER_HP, "MSUF_ClassPower_PlayerHP_Refresh")
 end
 
 local function ApplyPlayerHPTextures()
-    CallGlobal("MSUF_ClassPower_PlayerHP_RefreshTextures")
-    if RefreshClassPowerInlinePreview then RefreshClassPowerInlinePreview() end
-    M.RequestGeneralApply("MSUF2_CLASSPOWER_PLAYER_HP_TEXTURES", { preview = true, applyAll = false })
+    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXTURES", APPLY_PLAYER_HP, "MSUF_ClassPower_PlayerHP_RefreshTextures")
 end
 
 local function ApplyPlayerHPText()
-    CallGlobal("MSUF_ClassPower_PlayerHP_Refresh")
-    CallGlobal("MSUF_UpdateAllFonts_Immediate")
-    if RefreshClassPowerInlinePreview then RefreshClassPowerInlinePreview() end
-    M.RequestGeneralApply("MSUF2_CLASSPOWER_PLAYER_HP_TEXT", { preview = true, text = true, applyAll = false })
+    ApplyClassPowerPage("MSUF2_CLASSPOWER_PLAYER_HP_TEXT", APPLY_PLAYER_HP_TEXT, "MSUF_ClassPower_PlayerHP_Refresh", "MSUF_UpdateAllFonts_Immediate")
 end
 
 local function Player()
@@ -503,6 +502,28 @@ local function QuickCopyValue(value)
     local out = {}
     for k, v in pairs(value) do out[k] = QuickCopyValue(v) end
     return out
+end
+
+local function QuickAssign(target, values)
+    for key, value in pairs(values) do target[key] = value end
+end
+
+local function QuickAssignOffsets(target, offsets, values, asBool)
+    for key, offsetKey in pairs(values) do
+        local value = offsets[offsetKey]
+        target[key] = asBool and (value and true or false) or value
+    end
+end
+
+local function QuickFillDefaultsFromGeneral(player, general, values)
+    for key, generalKey in pairs(values) do
+        if player[key] == nil then player[key] = general[generalKey] end
+    end
+end
+
+local function QuickSeedTextSlots(player, leftKey, centerKey, rightKey, modeKey, fallback)
+    if player[leftKey] ~= nil or player[centerKey] ~= nil or player[rightKey] ~= nil then return end
+    player[leftKey], player[centerKey], player[rightKey] = "NONE", "NONE", player[modeKey] or fallback or "CURPERCENT"
 end
 
 local function QuickSnapshot()
@@ -647,50 +668,28 @@ local function QuickApplyPhase1(offsets)
     local player = db.player
     local general = db.general or {}
 
-    bars.showClassPower = true
-    bars.classPowerShowText = true
-    bars.classPowerAnchorToCooldown = offsets.anchorCPtoCDM and true or false
-    bars.classPowerWidthMode = "cooldown"
-    bars.detachedPowerBarWidthMode = "cooldown"
-    bars.showEleMaelstrom = true
-    bars.showEbonMight = true
-    bars.showChargedComboPoints = true
-    bars.runeShowTime = true
-    bars.runeShowTimeText = true
-    bars.classPowerOffsetX = offsets.cpOffsetX
-    bars.classPowerOffsetY = offsets.cpOffsetY
-    bars.classPowerOutline = 1
-    bars.detachedPowerBarOutline = 1
+    QuickAssign(bars, {
+        showClassPower = true, classPowerShowText = true, classPowerWidthMode = "cooldown", detachedPowerBarWidthMode = "cooldown",
+        showEleMaelstrom = true, showEbonMight = true, showChargedComboPoints = true, runeShowTime = true, runeShowTimeText = true,
+        classPowerOutline = 1, detachedPowerBarOutline = 1,
+    })
+    QuickAssignOffsets(bars, offsets, { classPowerAnchorToCooldown = "anchorCPtoCDM" }, true)
+    QuickAssignOffsets(bars, offsets, { classPowerOffsetX = "cpOffsetX", classPowerOffsetY = "cpOffsetY" })
 
-    player.powerBarDetached = true
-    player.detachedPowerBarSyncClassPower = offsets.anchorDPBtoCP and true or false
-    player.detachedPowerBarAnchorToClassPower = offsets.anchorDPBtoCP and true or false
-    player.detachedPowerBarTextOnBar = true
-    player.detachedPowerBarOffsetX = offsets.dpbOffsetX
-    player.detachedPowerBarOffsetY = offsets.dpbOffsetY
-    player.hpPowerTextOverride = true
-
-    if player.hpTextMode == nil then player.hpTextMode = general.hpTextMode end
-    if player.powerTextMode == nil then player.powerTextMode = general.powerTextMode end
-    if player.textLeft == nil and player.textCenter == nil and player.textRight == nil then
-        player.textLeft = "NONE"
-        player.textCenter = "NONE"
-        player.textRight = player.hpTextMode or general.hpTextMode or "CURPERCENT"
-    end
-    if player.powerTextLeft == nil and player.powerTextCenter == nil and player.powerTextRight == nil then
-        player.powerTextLeft = "NONE"
-        player.powerTextCenter = "NONE"
-        player.powerTextRight = player.powerTextMode or general.powerTextMode or "CURPERCENT"
-    end
-    if player.hpTextSeparator == nil then player.hpTextSeparator = general.hpTextSeparator end
+    QuickAssign(player, { powerBarDetached = true, detachedPowerBarTextOnBar = true, hpPowerTextOverride = true })
+    QuickAssignOffsets(player, offsets, {
+        detachedPowerBarSyncClassPower = "anchorDPBtoCP",
+        detachedPowerBarAnchorToClassPower = "anchorDPBtoCP",
+    }, true)
+    QuickAssignOffsets(player, offsets, { detachedPowerBarOffsetX = "dpbOffsetX", detachedPowerBarOffsetY = "dpbOffsetY" })
+    QuickFillDefaultsFromGeneral(player, general, {
+        hpTextMode = "hpTextMode", powerTextMode = "powerTextMode", hpTextSeparator = "hpTextSeparator",
+        absorbTextMode = "absorbTextMode", absorbAnchorMode = "absorbAnchorMode", healPredAnchorMode = "healPredAnchorMode",
+    })
+    QuickSeedTextSlots(player, "textLeft", "textCenter", "textRight", "hpTextMode", general.hpTextMode)
+    QuickSeedTextSlots(player, "powerTextLeft", "powerTextCenter", "powerTextRight", "powerTextMode", general.powerTextMode)
     if player.powerTextSeparator == nil then player.powerTextSeparator = general.powerTextSeparator or general.hpTextSeparator end
-    if player.absorbTextMode == nil then player.absorbTextMode = general.absorbTextMode end
-    if player.absorbAnchorMode == nil then player.absorbAnchorMode = general.absorbAnchorMode end
-    if player.healPredAnchorMode == nil then player.healPredAnchorMode = general.healPredAnchorMode end
-    player.powerTextMode = "CURRENT"
-    player.powerTextLeft = "NONE"
-    player.powerTextCenter = "CURRENT"
-    player.powerTextRight = "NONE"
+    QuickAssign(player, { powerTextMode = "CURRENT", powerTextLeft = "NONE", powerTextCenter = "CURRENT", powerTextRight = "NONE" })
 end
 
 local function QuickApplyPhase2NoCP(offsets)
@@ -722,55 +721,38 @@ end
 
 local function QuickEnsurePopups()
     if not _G.StaticPopupDialogs then return end
-    if not _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_RESULT then
-        _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_RESULT = {
-            text = "%s",
-            button1 = OKAY,
-            button2 = QuickTr("Undo"),
-            OnAccept = function() quickSetupUndoSnapshot = nil end,
-            OnCancel = function()
-                if quickSetupUndoSnapshot then
-                    QuickRestore(quickSetupUndoSnapshot)
-                    quickSetupUndoSnapshot = nil
-                    QuickRefreshAll("ClassPowerQuickSetupUndo")
-                end
-            end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = false,
-            preferredIndex = 3,
-        }
-    end
-    if not _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_OFFER then
-        _G.StaticPopupDialogs.MSUF2_CLASSPOWER_QUICK_OFFER = {
-            text = QuickTr("Welcome to Class Resources!\n\n"
-                .. "Would you like to automatically set up a\n"
-                .. "detached Class Bar positioned above your\n"
-                .. "Essential Cooldowns?\n\n"
-                .. "This configures class resources, power bar,\n"
-                .. "anchoring and width matching in one click.\n\n"
-                .. "You can always run this later via the\n"
-                .. "|cff00ff00Quick Setup: Class Bar|r button below."),
-            button1 = QuickTr("Setup Now"),
-            button2 = QuickTr("Not Now"),
-            OnAccept = function()
-                QuickMarkOffered()
-                if C_Timer and C_Timer.After then
-                    C_Timer.After(0.05, function()
-                        if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
-                    end)
-                elseif _G.MSUF2_ClassPowerQuickSetup then
-                    _G.MSUF2_ClassPowerQuickSetup()
-                end
-            end,
-            OnCancel = QuickMarkOffered,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-            showAlert = true,
-        }
-    end
+    M.InstallStaticPopup("MSUF2_CLASSPOWER_QUICK_RESULT", {
+        text = "%s", button1 = OKAY, button2 = QuickTr("Undo"), hideOnEscape = false,
+        OnAccept = function() quickSetupUndoSnapshot = nil end,
+        OnCancel = function()
+            if not quickSetupUndoSnapshot then return end
+            QuickRestore(quickSetupUndoSnapshot)
+            quickSetupUndoSnapshot = nil
+            QuickRefreshAll("ClassPowerQuickSetupUndo")
+        end,
+    })
+    M.InstallStaticPopup("MSUF2_CLASSPOWER_QUICK_OFFER", {
+        text = QuickTr("Welcome to Class Resources!\n\n"
+            .. "Would you like to automatically set up a\n"
+            .. "detached Class Bar positioned above your\n"
+            .. "Essential Cooldowns?\n\n"
+            .. "This configures class resources, power bar,\n"
+            .. "anchoring and width matching in one click.\n\n"
+            .. "You can always run this later via the\n"
+            .. "|cff00ff00Quick Setup: Class Bar|r button below."),
+        button1 = QuickTr("Setup Now"), button2 = QuickTr("Not Now"), hideOnEscape = true, showAlert = true,
+        OnAccept = function()
+            QuickMarkOffered()
+            if C_Timer and C_Timer.After then
+                C_Timer.After(0.05, function()
+                    if _G.MSUF2_ClassPowerQuickSetup then _G.MSUF2_ClassPowerQuickSetup() end
+                end)
+            elseif _G.MSUF2_ClassPowerQuickSetup then
+                _G.MSUF2_ClassPowerQuickSetup()
+            end
+        end,
+        OnCancel = QuickMarkOffered,
+    })
 end
 
 local function ExecuteQuickSetup()
@@ -1183,9 +1165,7 @@ local function BuildClassPower(ctx)
         previewDrop:SetValue(M.GetClassPowerPreviewSpecKey())
     end)
     previewDrop:SetValue(M.GetClassPowerPreviewSpecKey())
-    if M.AddTooltip then
-        M.AddTooltip(previewDrop, "Class Resource Preview", "Shows the selected class/spec resource below without changing your character, spec or saved settings.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
+    AddTooltip(previewDrop, "Class Resource Preview", "Shows the selected class/spec resource below without changing your character, spec or saved settings.")
     M.AddRefresher(ctx, function()
         previewDrop:SetValue(M.GetClassPowerPreviewSpecKey())
     end)
@@ -1267,6 +1247,25 @@ local function BuildClassPower(ctx)
             MoveWidget(select(i, ...), parent, x, y - ((i - 1) * step), width, titleJustify)
         end
     end
+    local function BuildBoundControls(parent, source, defaultApply, specs)
+        local controls = {}
+        for i = 1, #specs do
+            local spec = specs[i]
+            local name, kind, control = spec[1], spec[2]
+            if kind == "toggle" then
+                control = BindTableToggle(ctx, parent, spec[3], source, spec[4], spec[5], spec[6] or defaultApply)
+            elseif kind == "slider" then
+                control = BindTableSlider(ctx, parent, spec[3], spec[4], spec[5], spec[6], spec[7], source, spec[8], spec[9], spec[10] or defaultApply)
+            elseif kind == "dropdown" then
+                control = BindTableDropdown(ctx, parent, spec[3], spec[4], spec[5], source, spec[6], spec[7], spec[8] or defaultApply)
+            elseif kind == "alpha" then
+                control = BindBarsAlphaPercent(ctx, parent, spec[3], spec[4], spec[5], spec[6] or defaultApply, spec[7])
+            end
+            controls[name] = control
+        end
+        return controls
+    end
+    local function AddNamedControls(list, controls, ...) for i = 1, select("#", ...) do AddControls(list, controls[select(i, ...)]) end end
 
     local cpEnable = SwitchAt(ctx, display, "Class Resource", 32, -64, 180, Bars, "showClassPower", true, function()
         ApplyClassPower()
@@ -1277,9 +1276,7 @@ local function BuildClassPower(ctx)
         ApplyShapePreset(value)
         if RefreshClassPowerControls then RefreshClassPowerControls() end
     end)
-    if M.AddTooltip then
-        M.AddTooltip(cpPreset, "Shape Presets", "Applies a ready style by setting only Shape, Height/Pip size, Pip gap, Outline off and opacity values.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
+    AddTooltip(cpPreset, "Shape Presets", "Applies a ready style by setting only Shape, Height/Pip size, Pip gap, Outline off and opacity values.")
     local cpShapeQuick = W.Segment(display, "Quick shape", VT("BAR", "Bar", "CIRCLE", "Dot", "DIAMOND", "Gem", "HEX", "Hex"), 300)
     M.BindSegment(ctx, cpShapeQuick,
         function() return NormalizeClassPowerShape(Bars().classPowerShape) end,
@@ -1288,19 +1285,20 @@ local function BuildClassPower(ctx)
             ApplyClassPower()
             if RefreshClassPowerControls then RefreshClassPowerControls() end
         end)
-    local cpShape = BindTableDropdown(ctx, display, "Shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260, Bars, "classPowerShape", "BAR", function()
+    local function ApplyClassPowerAndRefresh()
         ApplyClassPower()
         if RefreshClassPowerControls then RefreshClassPowerControls() end
-    end)
-    local cpHeight = BindTableSlider(ctx, display, "Height", 1, 40, 1, 300, Bars, "classPowerHeight", 4, ApplyClassPower)
-    local cpWidthMode = BindTableDropdown(ctx, display, "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, Bars, "classPowerWidthMode", "player", function()
-        ApplyClassPower()
-        if RefreshClassPowerControls then RefreshClassPowerControls() end
-    end)
-    if M.AddTooltip then
-        M.AddTooltip(cpWidthMode, "Width Mode", "Auto fit pips is active only for Circle, Diamond and Hex. It uses pip count x pip size plus gaps.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
-    local cpWidth = BindTableSlider(ctx, display, "Width", 30, 800, 1, 300, Bars, "classPowerWidth", 0, ApplyClassPower)
+    local cp = BuildBoundControls(display, Bars, ApplyClassPower, {
+        { "shape", "dropdown", "Shape", VT("BAR", "Bar", "CIRCLE", "Circle", "DIAMOND", "Diamond", "HEX", "Hex"), 260, "classPowerShape", "BAR", ApplyClassPowerAndRefresh },
+        { "height", "slider", "Height", 1, 40, 1, 300, "classPowerHeight", 4 },
+        { "widthMode", "dropdown", "Width mode", VT("player", "Player frame", "auto_pips", "Auto fit pips", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs", "custom", "Custom"), 260, "classPowerWidthMode", "player", ApplyClassPowerAndRefresh },
+        { "width", "slider", "Width", 30, 800, 1, 300, "classPowerWidth", 0 },
+        { "x", "slider", "Offset X", -800, 800, 1, 300, "classPowerOffsetX", 0 },
+        { "y", "slider", "Offset Y", -800, 800, 1, 300, "classPowerOffsetY", 0 },
+        { "level", "slider", "Frame level", 0, 30, 1, 300, "classPowerFrameLevelOffset", 5 },
+    })
+    AddTooltip(cp.widthMode, "Width Mode", "Auto fit pips is active only for Circle, Diamond and Hex. It uses pip count x pip size plus gaps.")
     local cpAlign = W.Segment(display, "Shape alignment", VT("LEFT", "Left", "CENTER", "Center", "RIGHT", "Right"), 300)
     M.BindSegment(ctx, cpAlign,
         function() return NormalizeClassPowerShapeAlign(Bars().classPowerShapeAlign) end,
@@ -1308,10 +1306,7 @@ local function BuildClassPower(ctx)
             Bars().classPowerShapeAlign = NormalizeClassPowerShapeAlign(value)
             ApplyClassPower()
         end)
-    local cpX = BindTableSlider(ctx, display, "Offset X", -800, 800, 1, 300, Bars, "classPowerOffsetX", 0, ApplyClassPower)
-    local cpY = BindTableSlider(ctx, display, "Offset Y", -800, 800, 1, 300, Bars, "classPowerOffsetY", 0, ApplyClassPower)
-    local cpLevel = BindTableSlider(ctx, display, "Frame level", 0, 30, 1, 300, Bars, "classPowerFrameLevelOffset", 5, ApplyClassPower)
-    AddControls(cpControls, cpPreset, cpShapeQuick, cpShape, cpHeight, cpWidthMode, cpAlign, cpX, cpY, cpLevel)
+    AddControls(cpControls, cpPreset, cpShapeQuick, cp.shape, cp.height, cp.widthMode, cpAlign, cp.x, cp.y, cp.level)
     local layoutLeftX = 32
     local layoutRightX = compactLayout and layoutLeftX or min(max(430, floor(layoutWidth * 0.52)), max(360, layoutWidth - 360))
     local layoutLeftW = compactLayout and max(250, layoutWidth - layoutLeftX - 32) or max(250, layoutRightX - layoutLeftX - 42)
@@ -1322,28 +1317,30 @@ local function BuildClassPower(ctx)
     W.ControlCard(display, "Class Resource", nil, layoutLeftX - 14, -38, layoutLeftW + 28, compactLayout and 504 or 478)
     W.ControlCard(display, "Position", nil, layoutRightX - 14, positionCardY, layoutRightW + 28, 232)
     MoveWidget(cpEnable, display, layoutLeftX, -78)
-    PlaceColumn(display, layoutLeftX, -116, 54, layoutControlW, nil, cpPreset, cpShapeQuick, cpShape, cpHeight, cpWidthMode, cpWidth, cpAlign)
-    PlaceColumn(display, layoutRightX, positionTopY, 54, layoutControlW, nil, cpX, cpY, cpLevel)
+    PlaceColumn(display, layoutLeftX, -116, 54, layoutControlW, nil, cpPreset, cpShapeQuick, cp.shape, cp.height, cp.widthMode, cp.width, cpAlign)
+    PlaceColumn(display, layoutRightX, positionTopY, 54, layoutControlW, nil, cp.x, cp.y, cp.level)
 
     local behavior = b:CollapsibleSection("classpower_behavior", "Class Resource Behavior", 206, false)
-    local cpAnchor = BindTableToggle(ctx, behavior, "Anchor to Essential Cooldown", Bars, "classPowerAnchorToCooldown", false, ApplyClassPower)
-    local cpCharged = BindTableToggle(ctx, behavior, "Show empowered combo points", Bars, "showChargedComboPoints", true, ApplyClassPower)
-    local cpText = BindTableToggle(ctx, behavior, "Show resource text", Bars, "classPowerShowText", false, ApplyClassPower)
-    local cpRune = BindTableToggle(ctx, behavior, "Show rune time (per rune)", Bars, "runeShowTime", true, ApplyClassPower)
-    local cpReverse = BindTableToggle(ctx, behavior, "Fill right-to-left", Bars, "classPowerFillReverse", false, ApplyClassPower)
-    local cpEle = BindTableToggle(ctx, behavior, "Show Maelstrom bar (Ele)", Bars, "showEleMaelstrom", false, ApplyClassPower)
-    local cpEbon = BindTableToggle(ctx, behavior, "Show Ebon Might timer (Aug)", Bars, "showEbonMight", true, ApplyClassPower)
-    local cpShadow = BindTableToggle(ctx, behavior, "Show Insanity bar (Shadow)", Bars, "showShadowMana", false, ApplyClassPower)
-    local cpPrediction = BindTableToggle(ctx, behavior, "Show resource prediction", Bars, "classPowerShowPrediction", true, ApplyClassPower)
-    AddControls(cpControls, cpAnchor, cpCharged, cpText, cpRune, cpReverse, cpEle, cpEbon, cpShadow, cpPrediction)
+    local cpBehavior = BuildBoundControls(behavior, Bars, ApplyClassPower, {
+        { "anchor", "toggle", "Anchor to Essential Cooldown", "classPowerAnchorToCooldown", false },
+        { "charged", "toggle", "Show empowered combo points", "showChargedComboPoints", true },
+        { "text", "toggle", "Show resource text", "classPowerShowText", false },
+        { "rune", "toggle", "Show rune time (per rune)", "runeShowTime", true },
+        { "reverse", "toggle", "Fill right-to-left", "classPowerFillReverse", false },
+        { "ele", "toggle", "Show Maelstrom bar (Ele)", "showEleMaelstrom", false },
+        { "ebon", "toggle", "Show Ebon Might timer (Aug)", "showEbonMight", true },
+        { "shadow", "toggle", "Show Insanity bar (Shadow)", "showShadowMana", false },
+        { "prediction", "toggle", "Show resource prediction", "classPowerShowPrediction", true },
+    })
+    AddNamedControls(cpControls, cpBehavior, "anchor", "charged", "text", "rune", "reverse", "ele", "ebon", "shadow", "prediction")
     local behaviorRightX = min(max(380, floor((ctx.width or 900) * 0.45)), max(320, (ctx.width or 900) - 420))
     local behaviorW = behavior._msuf2Width or ctx.width or 900
     local behaviorLeftW = max(280, behaviorRightX - 42)
     local behaviorRightW = max(280, behaviorW - behaviorRightX - 28)
     W.ControlCardBackdrop(behavior, 14, -38, behaviorLeftW, 154)
     W.ControlCardBackdrop(behavior, behaviorRightX - 14, -38, behaviorRightW + 14, 154)
-    PlaceColumn(behavior, 14, -38, 32, nil, nil, cpAnchor, cpCharged, cpText, cpRune, cpReverse)
-    PlaceColumn(behavior, behaviorRightX, -38, 32, nil, nil, cpEle, cpEbon, cpShadow, cpPrediction)
+    PlaceColumn(behavior, 14, -38, 32, nil, nil, cpBehavior.anchor, cpBehavior.charged, cpBehavior.text, cpBehavior.rune, cpBehavior.reverse)
+    PlaceColumn(behavior, behaviorRightX, -38, 32, nil, nil, cpBehavior.ele, cpBehavior.ebon, cpBehavior.shadow, cpBehavior.prediction)
 
     local visual = b:CollapsibleSection("classpower_visuals", "Class Resource Style", 430, false)
     local styleWidth = visual._msuf2Width or ctx.width or 900
@@ -1352,63 +1349,47 @@ local function BuildClassPower(ctx)
     local styleCardW = min(540, styleInnerW)
     local styleControlW = min(360, styleCardW - 32)
     local styleTabFrames = {}
-    local function CurrentStyleTab()
-        local tab = M.classPowerStyleTab or "resources"
-        if tab ~= "resources" and tab ~= "text" and tab ~= "opacity" and tab ~= "pips" then tab = "resources" end
-        return tab
-    end
-    local function RefreshStyleTabs()
-        local tab = CurrentStyleTab()
-        for key, frame in pairs(styleTabFrames) do frame:SetShown(key == tab) end
-    end
-    local function SetStyleTab(tab)
-        tab = (tab == "text" or tab == "opacity" or tab == "pips") and tab or "resources"
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("classPowerStyleTab", tab)
-        else
-            M.classPowerStyleTab = tab
-        end
-        RefreshStyleTabs()
-    end
+    local resourcesFrame, textFrame, opacityFrame, pipsFrame = M.UnitSectionsShared.MakeTabFrames(visual, -88, styleWidth, styleTabFrames, "resources", "text", "opacity", "pips")
+    W.SegmentTabs(ctx, visual, {
+        stateKey = "classPowerStyleTab", label = "Style area",
+        values = VT("resources", "Textures", "text", "Text", "opacity", "Opacity", "pips", "Pips"),
+        width = min(620, styleInnerW), frames = styleTabFrames, defaultTab = "resources",
+        x = styleLeftX, y = -44,
+    })
 
-    local styleTabs = W.Segment(visual, "Style area", VT("resources", "Textures", "text", "Text", "opacity", "Opacity", "pips", "Pips"), min(620, styleInnerW))
-    MoveWidget(styleTabs, visual, styleLeftX, -44, min(620, styleInnerW), "LEFT")
-    M.BindSegment(ctx, styleTabs, CurrentStyleTab, SetStyleTab)
-
-    local function StyleTabFrame(key)
-        return M.UnitSectionsShared.MakeTabFrame(visual, key, -88, styleWidth, styleTabFrames)
-    end
-    local resourcesFrame, textFrame = StyleTabFrame("resources"), StyleTabFrame("text")
-    local opacityFrame, pipsFrame = StyleTabFrame("opacity"), StyleTabFrame("pips")
-    if styleTabs.SetValue then styleTabs:SetValue(CurrentStyleTab()) end
-    M.AddRefresher(ctx, RefreshStyleTabs)
-    RefreshStyleTabs()
-
-    local cpColor = BindTableToggle(ctx, resourcesFrame, "Color by resource type", Bars, "classPowerColorByType", true, ApplyClassPower)
-    local cpComboColor = BindTableDropdown(ctx, resourcesFrame, "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260, Bars, "classPowerComboPointColorMode", "default", ApplyClassPower)
-    local cpFgTex = BindTableDropdown(ctx, resourcesFrame, "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, Bars, "classPowerTexture", "", ApplyClassPower)
-    local cpBgTex = BindTableDropdown(ctx, resourcesFrame, "Background texture", function() return TextureValues("Use foreground texture") end, 300, Bars, "classPowerBgTexture", "", ApplyClassPower)
-    local cpFont = BindTableSlider(ctx, textFrame, "Font size", 6, 32, 1, 300, Bars, "classPowerFontSize", 16, ApplyClassPower)
-    local cpTextX = BindTableSlider(ctx, textFrame, "Text X", -200, 200, 1, 300, Bars, "classPowerTextOffsetX", 0, ApplyClassPower)
-    local cpTextY = BindTableSlider(ctx, textFrame, "Text Y", -200, 200, 1, 300, Bars, "classPowerTextOffsetY", 0, ApplyClassPower)
-    local cpBg = BindBarsAlphaPercent(ctx, opacityFrame, "BG opacity", "classPowerBgAlpha", 0.3, ApplyClassPower, 1)
-    local cpFilled = BindBarsAlphaPercent(ctx, opacityFrame, "Filled %", "classPowerFilledAlpha", 1.0, ApplyClassPower, 5)
-    local cpEmpty = BindBarsAlphaPercent(ctx, opacityFrame, "Empty %", "classPowerEmptyAlpha", 0.3, ApplyClassPower, 5)
-    local cpSeparator = BindTableSlider(ctx, pipsFrame, "Separator", 0, 4, 1, 300, Bars, "classPowerTickWidth", 1, ApplyClassPower)
-    local cpOutline = BindTableSlider(ctx, pipsFrame, "Outline", 0, 4, 1, 300, Bars, "classPowerOutline", 1, ApplyClassPower)
-    local cpGap = BindTableSlider(ctx, pipsFrame, "Pip gap", 0, 8, 1, 300, Bars, "classPowerGap", 0, ApplyClassPower)
-    AddControls(cpControls, cpColor, cpComboColor, cpBg, cpSeparator, cpOutline, cpFilled, cpEmpty, cpGap, cpFgTex, cpBgTex)
-    AddControls(textControls, cpFont, cpTextX, cpTextY)
+    M.Assign(cp, BuildBoundControls(resourcesFrame, Bars, ApplyClassPower, {
+        { "color", "toggle", "Color by resource type", "classPowerColorByType", true },
+        { "comboColor", "dropdown", "Combo point colors", VT("default", "Resource color", "ramp", "Combo ramp", "custom", "Custom slots"), 260, "classPowerComboPointColorMode", "default" },
+        { "fgTex", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "classPowerTexture", "" },
+        { "bgTex", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "classPowerBgTexture", "" },
+    }))
+    M.Assign(cp, BuildBoundControls(textFrame, Bars, ApplyClassPower, {
+        { "font", "slider", "Font size", 6, 32, 1, 300, "classPowerFontSize", 16 },
+        { "textX", "slider", "Text X", -200, 200, 1, 300, "classPowerTextOffsetX", 0 },
+        { "textY", "slider", "Text Y", -200, 200, 1, 300, "classPowerTextOffsetY", 0 },
+    }))
+    M.Assign(cp, BuildBoundControls(opacityFrame, Bars, ApplyClassPower, {
+        { "bg", "alpha", "BG opacity", "classPowerBgAlpha", 0.3, nil, 1 },
+        { "filled", "alpha", "Filled %", "classPowerFilledAlpha", 1.0, nil, 5 },
+        { "empty", "alpha", "Empty %", "classPowerEmptyAlpha", 0.3, nil, 5 },
+    }))
+    M.Assign(cp, BuildBoundControls(pipsFrame, Bars, ApplyClassPower, {
+        { "separator", "slider", "Separator", 0, 4, 1, 300, "classPowerTickWidth", 1 },
+        { "outline", "slider", "Outline", 0, 4, 1, 300, "classPowerOutline", 1 },
+        { "gap", "slider", "Pip gap", 0, 8, 1, 300, "classPowerGap", 0 },
+    }))
+    AddControls(cpControls, cp.color, cp.comboColor, cp.bg, cp.separator, cp.outline, cp.filled, cp.empty, cp.gap, cp.fgTex, cp.bgTex)
+    AddControls(textControls, cp.font, cp.textX, cp.textY)
     W.ControlCard(resourcesFrame, "Resource & Textures", nil, styleLeftX - 14, -38, styleCardW + 28, 248)
     W.ControlCard(textFrame, "Text", nil, styleLeftX - 14, -38, styleCardW + 28, 210)
     W.ControlCard(opacityFrame, "Opacity", nil, styleLeftX - 14, -38, styleCardW + 28, 204)
     W.ControlCard(pipsFrame, "Pips & Border", nil, styleLeftX - 14, -38, styleCardW + 28, 230)
-    MoveWidget(cpColor, resourcesFrame, styleLeftX, -72)
-    MoveWidget(cpComboColor, resourcesFrame, styleLeftX, -104, styleControlW)
-    PlaceColumn(resourcesFrame, styleLeftX, -192, 54, styleControlW, nil, cpFgTex, cpBgTex)
-    PlaceColumn(textFrame, styleLeftX, -84, 52, styleControlW, nil, cpFont, cpTextX, cpTextY)
-    PlaceColumn(opacityFrame, styleLeftX, -84, 52, styleControlW, nil, cpBg, cpFilled, cpEmpty)
-    PlaceColumn(pipsFrame, styleLeftX, -84, 52, styleControlW, nil, cpSeparator, cpOutline, cpGap)
+    MoveWidget(cp.color, resourcesFrame, styleLeftX, -72)
+    MoveWidget(cp.comboColor, resourcesFrame, styleLeftX, -104, styleControlW)
+    PlaceColumn(resourcesFrame, styleLeftX, -192, 54, styleControlW, nil, cp.fgTex, cp.bgTex)
+    PlaceColumn(textFrame, styleLeftX, -84, 52, styleControlW, nil, cp.font, cp.textX, cp.textY)
+    PlaceColumn(opacityFrame, styleLeftX, -84, 52, styleControlW, nil, cp.bg, cp.filled, cp.empty)
+    PlaceColumn(pipsFrame, styleLeftX, -84, 52, styleControlW, nil, cp.separator, cp.outline, cp.gap)
 
     local visibility = b:CollapsibleSection("classpower_visibility", "Class Resource Visibility", 216, false)
     local visibilityW = min(560, (visibility._msuf2Width or ctx.width or 900) - 28)
@@ -1430,33 +1411,13 @@ local function BuildClassPower(ctx)
     local dpbSecondColY = dpbTwoColumn and -154 or -520
     local dpbTextSecondColY = dpbTwoColumn and -154 or -300
     local dpbTabFrames = {}
-    local function CurrentDetachedPowerTab()
-        local tab = M.classPowerDetachedPowerTab or "layout"
-        if tab ~= "layout" and tab ~= "textures" and tab ~= "text" then tab = "layout" end
-        return tab
-    end
-    local function RefreshDetachedPowerTabs()
-        local tab = CurrentDetachedPowerTab()
-        for key, frame in pairs(dpbTabFrames) do frame:SetShown(key == tab) end
-    end
-    local function SetDetachedPowerTab(tab)
-        tab = (tab == "textures" or tab == "text") and tab or "layout"
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("classPowerDetachedPowerTab", tab)
-        else
-            M.classPowerDetachedPowerTab = tab
-        end
-        RefreshDetachedPowerTabs()
-    end
-    local dpbTabs = W.Segment(dpb, "Power area", VT("layout", "Layout", "textures", "Textures", "text", "Text"), min(520, dpbInnerW))
-    MoveWidget(dpbTabs, dpb, 32, -44, min(520, dpbInnerW), "LEFT")
-    M.BindSegment(ctx, dpbTabs, CurrentDetachedPowerTab, SetDetachedPowerTab)
-    local dpbLayout = M.UnitSectionsShared.MakeTabFrame(dpb, "layout", -88, dpbWidth, dpbTabFrames)
-    local dpbTextures = M.UnitSectionsShared.MakeTabFrame(dpb, "textures", -88, dpbWidth, dpbTabFrames)
-    local dpbText = M.UnitSectionsShared.MakeTabFrame(dpb, "text", -88, dpbWidth, dpbTabFrames)
-    if dpbTabs.SetValue then dpbTabs:SetValue(CurrentDetachedPowerTab()) end
-    M.AddRefresher(ctx, RefreshDetachedPowerTabs)
-    RefreshDetachedPowerTabs()
+    local dpbLayout, dpbTextures, dpbText = M.UnitSectionsShared.MakeTabFrames(dpb, -88, dpbWidth, dpbTabFrames, "layout", "textures", "text")
+    W.SegmentTabs(ctx, dpb, {
+        stateKey = "classPowerDetachedPowerTab", label = "Power area",
+        values = VT("layout", "Layout", "textures", "Textures", "text", "Text"),
+        width = min(520, dpbInnerW), frames = dpbTabFrames, defaultTab = "layout",
+        x = 32, y = -44,
+    })
 
     W.ControlCard(dpbLayout, "Detached Player Power", "When anchored or synced here, Player power settings are managed by Class Resources.", 14, -38, dpbCardW, dpbTwoColumn and 482 or 760)
     local dpbUse = W.SwitchAt(dpbLayout, "Detached player power", 32, -104, dpbControlW)
@@ -1477,12 +1438,14 @@ local function BuildClassPower(ctx)
             ApplyDetachedPowerBar()
             if RefreshClassPowerControls then RefreshClassPowerControls() end
         end)
-    local dpbAnchor = BindTableToggle(ctx, dpbLayout, "Anchor to Class Resource", Player, "detachedPowerBarAnchorToClassPower", false, ApplyDetachedPowerBar)
-    local dpbSync = BindTableToggle(ctx, dpbLayout, "Sync width to Class Resource", Player, "detachedPowerBarSyncClassPower", true, ApplyDetachedPowerBar)
-    local dpbX = BindTableSlider(ctx, dpbLayout, "Power X", -1000, 1000, 1, 300, Player, "detachedPowerBarOffsetX", 0, ApplyDetachedPowerBar)
-    local dpbY = BindTableSlider(ctx, dpbLayout, "Power Y", -1000, 1000, 1, 300, Player, "detachedPowerBarOffsetY", -4, ApplyDetachedPowerBar)
-    local dpbHeight = BindTableSlider(ctx, dpbLayout, "Power height", 2, 80, 1, 300, Player, "detachedPowerBarHeight", 6, ApplyDetachedPowerBar)
-    local dpbLayer = BindTableSlider(ctx, dpbLayout, "Power layer", 0, 20, 1, 300, Player, "detachedPowerBarFrameLevelOffset", 6, ApplyDetachedPowerBar)
+    local dpbFields = BuildBoundControls(dpbLayout, Player, ApplyDetachedPowerBar, {
+        { "anchor", "toggle", "Anchor to Class Resource", "detachedPowerBarAnchorToClassPower", false },
+        { "sync", "toggle", "Sync width to Class Resource", "detachedPowerBarSyncClassPower", true },
+        { "x", "slider", "Power X", -1000, 1000, 1, 300, "detachedPowerBarOffsetX", 0 },
+        { "y", "slider", "Power Y", -1000, 1000, 1, 300, "detachedPowerBarOffsetY", -4 },
+        { "height", "slider", "Power height", 2, 80, 1, 300, "detachedPowerBarHeight", 6 },
+        { "layer", "slider", "Power layer", 0, 20, 1, 300, "detachedPowerBarFrameLevelOffset", 6 },
+    })
     local dpbMode = W.Dropdown(dpbLayout, "Width mode", VT("manual", "Manual", "cooldown", "Essential Cooldowns", "utility", "Utility Cooldowns", "tracked_buffs", "Tracked Buffs"), 260)
     M.BindDropdown(ctx, dpbMode,
         function() return Bars().detachedPowerBarWidthMode or "manual" end,
@@ -1509,12 +1472,10 @@ local function BuildClassPower(ctx)
             ApplyDetachedPowerBar()
             if RefreshClassPowerControls then RefreshClassPowerControls() end
         end)
-    if M.AddTooltip then
-        M.AddTooltip(dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. When Sync width or Anchor is enabled, Player power settings are managed here.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(dpbAnchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(dpbSync, "Sync Width", "Uses the Class Resource width for detached Player power. Player power controls are disabled while this connection is active.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(dpbShape, "Player Power Shape", "FOLLOW_CLASS resolves from Class Resource shape: Bar -> Bar, Circle -> Round, Diamond/Hex -> Crystal. Orb is a single bottom-to-top filled mana/power sphere.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
+    AddTooltip(dpbUse, "Detached Player Power", "Moves the Player power bar out of the unit frame. When Sync width or Anchor is enabled, Player power settings are managed here.")
+    AddTooltip(dpbFields.anchor, "Anchor To Class Resource", "Keeps detached Player power attached to the Class Resource bar. Player power controls are disabled while this connection is active.")
+    AddTooltip(dpbFields.sync, "Sync Width", "Uses the Class Resource width for detached Player power. Player power controls are disabled while this connection is active.")
+    AddTooltip(dpbShape, "Player Power Shape", "FOLLOW_CLASS resolves from Class Resource shape: Bar -> Bar, Circle -> Round, Diamond/Hex -> Crystal. Orb is a single bottom-to-top filled mana/power sphere.")
     local dpbOrbSize = W.Slider(dpbLayout, "Orb size", 20, 160, 1, 300)
     M.BindSlider(ctx, dpbOrbSize,
         function()
@@ -1531,7 +1492,10 @@ local function BuildClassPower(ctx)
             ApplyDetachedPowerBar()
         end)
     W.ControlCard(dpbText, "Power Text", "Text shown on the detached Player power bar managed here.", 14, -38, dpbCardW, dpbTwoColumn and 260 or 410)
-    local dpbTextOnBar = BindTableToggle(ctx, dpbText, "Power text on bar", Player, "detachedPowerBarTextOnBar", false, ApplyDetachedPowerText)
+    local dpbTextFields = BuildBoundControls(dpbText, Player, ApplyDetachedPowerText, {
+        { "onBar", "toggle", "Power text on bar", "detachedPowerBarTextOnBar", false },
+        { "size", "slider", "Power text size", 6, 48, 1, 300, "powerFontSize", 14 },
+    })
     local dpbTextPreset = W.Dropdown(dpbText, "Power text", DETACHED_POWER_TEXT_PRESET_VALUES, 300)
     M.BindDropdown(ctx, dpbTextPreset,
         function() return NormalizeDetachedPowerTextPreset(Player()) end,
@@ -1540,24 +1504,24 @@ local function BuildClassPower(ctx)
             ApplyDetachedPowerText()
             if RefreshClassPowerControls then RefreshClassPowerControls() end
         end)
-    local dpbTextSize = BindTableSlider(ctx, dpbText, "Power text size", 6, 48, 1, 300, Player, "powerFontSize", 14, ApplyDetachedPowerText)
-    if M.AddTooltip then
-        M.AddTooltip(dpbTextPreset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
+    AddTooltip(dpbTextPreset, "Power Text", "Simple presets for Player power text while detached power is managed by Class Resources. Custom Slots means the existing slot layout is kept until you choose a preset.")
     W.ControlCard(dpbTextures, "Power Textures", "Bar uses SharedMedia textures. Shapes use fixed alpha assets.", 14, -38, dpbCardW, 260)
-    local dpbFg = BindTableDropdown(ctx, dpbTextures, "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, Bars, "detachedPowerBarTexture", "", ApplyDetachedPowerBar)
-    local dpbBg = BindTableDropdown(ctx, dpbTextures, "Background texture", function() return TextureValues("Use foreground texture") end, 300, Bars, "detachedPowerBarBgTexture", "", ApplyDetachedPowerBar)
-    local dpbOutline = BindTableSlider(ctx, dpbTextures, "Power bar outline", 0, 8, 1, 300, Bars, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline)
-    if M.AddTooltip then
-        M.AddTooltip(dpbOutline, "Power Bar Outline", "Controls only the detached Player power outline managed here. Bar uses an outside border; shapes use their fixed edge texture. 0 disables only the outline.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
-    PlaceColumn(dpbLayout, 32, -154, 54, dpbControlW, "LEFT", dpbAnchor, dpbSync, dpbMode, dpbShape, dpbOrbSize, dpbHeight)
-    PlaceColumn(dpbLayout, dpbRightX, dpbSecondColY, 54, dpbControlW, "LEFT", dpbX, dpbY, dpbLayer)
-    PlaceColumn(dpbTextures, 32, -104, 54, dpbControlW, "LEFT", dpbFg, dpbBg, dpbOutline)
-    PlaceColumn(dpbText, 32, -104, 54, dpbControlW, "LEFT", dpbTextOnBar, dpbTextPreset)
-    PlaceColumn(dpbText, dpbRightX, dpbTextSecondColY, 54, dpbControlW, "LEFT", dpbTextSize)
-    AddControls(dpbControls, dpbMode, dpbFg, dpbBg, dpbOutline)
-    AddControls(dpbPlayerControls, dpbAnchor, dpbSync, dpbTextOnBar, dpbX, dpbY, dpbHeight, dpbLayer, dpbShape, dpbOrbSize, dpbTextPreset, dpbTextSize)
+    local dpbTextureFields = BuildBoundControls(dpbTextures, Bars, ApplyDetachedPowerBar, {
+        { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "detachedPowerBarTexture", "" },
+        { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "detachedPowerBarBgTexture", "" },
+        { "outline", "slider", "Power bar outline", 0, 8, 1, 300, "detachedPowerBarOutline", 1, ApplyDetachedPowerBarOutline },
+    })
+    AddTooltip(dpbTextureFields.outline, "Power Bar Outline", "Controls only the detached Player power outline managed here. Bar uses an outside border; shapes use their fixed edge texture. 0 disables only the outline.")
+    PlaceColumn(dpbLayout, 32, -154, 54, dpbControlW, "LEFT", dpbFields.anchor, dpbFields.sync, dpbMode, dpbShape, dpbOrbSize, dpbFields.height)
+    PlaceColumn(dpbLayout, dpbRightX, dpbSecondColY, 54, dpbControlW, "LEFT", dpbFields.x, dpbFields.y, dpbFields.layer)
+    PlaceColumn(dpbTextures, 32, -104, 54, dpbControlW, "LEFT", dpbTextureFields.fg, dpbTextureFields.bg, dpbTextureFields.outline)
+    PlaceColumn(dpbText, 32, -104, 54, dpbControlW, "LEFT", dpbTextFields.onBar, dpbTextPreset)
+    PlaceColumn(dpbText, dpbRightX, dpbTextSecondColY, 54, dpbControlW, "LEFT", dpbTextFields.size)
+    AddControls(dpbControls, dpbMode)
+    AddNamedControls(dpbControls, dpbTextureFields, "fg", "bg", "outline")
+    AddNamedControls(dpbPlayerControls, dpbFields, "anchor", "sync", "x", "y", "height", "layer")
+    AddNamedControls(dpbPlayerControls, dpbTextFields, "onBar", "size")
+    AddControls(dpbPlayerControls, dpbShape, dpbOrbSize, dpbTextPreset)
 
     local phpCompact = layoutWidth < 680
     local php = b:CollapsibleSection("classpower_player_hp", "Second Player HP Bar", phpCompact and 980 or 700, false)
@@ -1570,85 +1534,63 @@ local function BuildClassPower(ctx)
     local phpSecondColY = phpTwoColumn and -154 or -580
     local phpTextSecondColY = phpTwoColumn and -188 or -440
     local phpTabFrames = {}
-    local function CurrentPlayerHPTab()
-        local tab = M.classPowerPlayerHPTab or "layout"
-        if tab ~= "layout" and tab ~= "textures" and tab ~= "text" then tab = "layout" end
-        return tab
-    end
-    local function RefreshPlayerHPTabs()
-        local tab = CurrentPlayerHPTab()
-        for key, frame in pairs(phpTabFrames) do frame:SetShown(key == tab) end
-    end
-    local function SetPlayerHPTab(tab)
-        tab = (tab == "textures" or tab == "text") and tab or "layout"
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("classPowerPlayerHPTab", tab)
-        else
-            M.classPowerPlayerHPTab = tab
-        end
-        RefreshPlayerHPTabs()
-    end
-    local phpTabs = W.Segment(php, "HP area", VT("layout", "Layout", "textures", "Textures", "text", "Text"), min(520, phpInnerW))
-    MoveWidget(phpTabs, php, 32, -44, min(520, phpInnerW), "LEFT")
-    M.BindSegment(ctx, phpTabs, CurrentPlayerHPTab, SetPlayerHPTab)
-    local phpLayout = M.UnitSectionsShared.MakeTabFrame(php, "layout", -88, phpWidth, phpTabFrames)
-    local phpTextures = M.UnitSectionsShared.MakeTabFrame(php, "textures", -88, phpWidth, phpTabFrames)
-    local phpText = M.UnitSectionsShared.MakeTabFrame(php, "text", -88, phpWidth, phpTabFrames)
-    if phpTabs.SetValue then phpTabs:SetValue(CurrentPlayerHPTab()) end
-    M.AddRefresher(ctx, RefreshPlayerHPTabs)
-    RefreshPlayerHPTabs()
+    local phpLayout, phpTextures, phpText = M.UnitSectionsShared.MakeTabFrames(php, -88, phpWidth, phpTabFrames, "layout", "textures", "text")
+    W.SegmentTabs(ctx, php, {
+        stateKey = "classPowerPlayerHPTab", label = "HP area",
+        values = VT("layout", "Layout", "textures", "Textures", "text", "Text"),
+        width = min(520, phpInnerW), frames = phpTabFrames, defaultTab = "layout",
+        x = 32, y = -44,
+    })
 
     W.ControlCard(phpLayout, "Second Player HP Bar", "Optional duplicate HP bar managed by Class Resources.", 14, -38, phpCardW, phpTwoColumn and 500 or 760)
     local phpUse = SwitchAt(ctx, phpLayout, "Second Player HP bar", 32, -104, phpControlW, Bars, "playerHPBarEnabled", false, function()
         ApplyPlayerHPBar()
         if RefreshClassPowerControls then RefreshClassPowerControls() end
     end)
-    local phpAnchor = BindTableDropdown(ctx, phpLayout, "Anchor", PLAYER_HP_ANCHOR_VALUES, 300, Bars, "playerHPBarAnchor", "CLASS_TOP", ApplyPlayerHPBar)
-    local phpWidthMode = BindTableDropdown(ctx, phpLayout, "Width mode", PLAYER_HP_WIDTH_VALUES, 300, Bars, "playerHPBarWidthMode", "class", function()
+    local function ApplyPlayerHPBarAndRefresh()
         ApplyPlayerHPBar()
         if RefreshClassPowerControls then RefreshClassPowerControls() end
-    end)
-    local phpManualWidth = BindTableSlider(ctx, phpLayout, "Custom width", 20, 1200, 1, 300, Bars, "playerHPBarWidth", 0, ApplyPlayerHPBar)
-    local phpShape = BindTableDropdown(ctx, phpLayout, "HP shape", PLAYER_HP_SHAPE_VALUES, 300, Bars, "playerHPBarShape", "BAR", function()
-        ApplyPlayerHPBar()
-        if RefreshClassPowerControls then RefreshClassPowerControls() end
-    end)
-    local phpOrbSize = BindTableSlider(ctx, phpLayout, "Orb size", 20, 160, 1, 300, Bars, "playerHPBarOrbSize", 54, ApplyPlayerHPBar)
-    local phpHeight = BindTableSlider(ctx, phpLayout, "Height", 2, 80, 1, 300, Bars, "playerHPBarHeight", 6, ApplyPlayerHPBar)
-    local phpSmooth = BindTableToggle(ctx, phpLayout, "Smooth fill", Bars, "playerHPBarSmoothFill", false, ApplyPlayerHPBar)
-    local phpGap = BindTableSlider(ctx, phpLayout, "Gap", 0, 60, 1, 300, Bars, "playerHPBarGap", 2, ApplyPlayerHPBar)
-    local phpX = BindTableSlider(ctx, phpLayout, "Offset X", -1000, 1000, 1, 300, Bars, "playerHPBarOffsetX", 0, ApplyPlayerHPBar)
-    local phpY = BindTableSlider(ctx, phpLayout, "Offset Y", -1000, 1000, 1, 300, Bars, "playerHPBarOffsetY", 0, ApplyPlayerHPBar)
-    local phpLayer = BindTableSlider(ctx, phpLayout, "Frame layer", 0, 30, 1, 300, Bars, "playerHPBarFrameLevelOffset", 7, ApplyPlayerHPBar)
-    PlaceColumn(phpLayout, 32, -154, 54, phpControlW, "LEFT", phpAnchor, phpWidthMode, phpManualWidth, phpShape, phpOrbSize, phpHeight, phpSmooth)
-    PlaceColumn(phpLayout, phpRightX, phpSecondColY, 54, phpControlW, "LEFT", phpGap, phpX, phpY, phpLayer)
-    AddControls(phpControls, phpAnchor, phpWidthMode, phpShape, phpHeight, phpSmooth, phpGap, phpX, phpY, phpLayer)
-    AddControls(phpManualControls, phpManualWidth)
-    AddControls(phpOrbControls, phpOrbSize)
-
-    if M.AddTooltip then
-        M.AddTooltip(phpUse, "Second Player HP Bar", "Renders a second native Player health bar. The normal Player unitframe HP bar is untouched, so you can show HP twice.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpAnchor, "Anchor", "Power anchors use the Player power bar when it is visible; otherwise the HP bar falls back to the Class Resource anchor.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpWidthMode, "Width Mode", "Class Resource and Player Power follow existing frames. Custom uses the slider below. Width is resolved only during layout refresh.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpShape, "HP Shape", "Bar keeps the normal statusbar. Follow Player Power mirrors the effective detached Player power shape: Follow Class Resource still resolves Circle to Round and Diamond/Hex to Crystal. Orb uses a single vertical fill.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpOrbSize, "Orb Size", "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpSmooth, "Smooth Fill", "Optional interpolation for this second HP bar. Off keeps direct native SetValue updates.", { hook = true, owner = "ANCHOR_RIGHT" })
     end
+    local phpLayoutControls = BuildBoundControls(phpLayout, Bars, ApplyPlayerHPBar, {
+        { "anchor", "dropdown", "Anchor", PLAYER_HP_ANCHOR_VALUES, 300, "playerHPBarAnchor", "CLASS_TOP" },
+        { "widthMode", "dropdown", "Width mode", PLAYER_HP_WIDTH_VALUES, 300, "playerHPBarWidthMode", "class", ApplyPlayerHPBarAndRefresh },
+        { "manualWidth", "slider", "Custom width", 20, 1200, 1, 300, "playerHPBarWidth", 0 },
+        { "shape", "dropdown", "HP shape", PLAYER_HP_SHAPE_VALUES, 300, "playerHPBarShape", "BAR", ApplyPlayerHPBarAndRefresh },
+        { "orbSize", "slider", "Orb size", 20, 160, 1, 300, "playerHPBarOrbSize", 54 },
+        { "height", "slider", "Height", 2, 80, 1, 300, "playerHPBarHeight", 6 },
+        { "smooth", "toggle", "Smooth fill", "playerHPBarSmoothFill", false },
+        { "gap", "slider", "Gap", 0, 60, 1, 300, "playerHPBarGap", 2 },
+        { "x", "slider", "Offset X", -1000, 1000, 1, 300, "playerHPBarOffsetX", 0 },
+        { "y", "slider", "Offset Y", -1000, 1000, 1, 300, "playerHPBarOffsetY", 0 },
+        { "layer", "slider", "Frame layer", 0, 30, 1, 300, "playerHPBarFrameLevelOffset", 7 },
+    })
+    PlaceColumn(phpLayout, 32, -154, 54, phpControlW, "LEFT", phpLayoutControls.anchor, phpLayoutControls.widthMode, phpLayoutControls.manualWidth, phpLayoutControls.shape, phpLayoutControls.orbSize, phpLayoutControls.height, phpLayoutControls.smooth)
+    PlaceColumn(phpLayout, phpRightX, phpSecondColY, 54, phpControlW, "LEFT", phpLayoutControls.gap, phpLayoutControls.x, phpLayoutControls.y, phpLayoutControls.layer)
+    AddNamedControls(phpControls, phpLayoutControls, "anchor", "widthMode", "shape", "height", "smooth", "gap", "x", "y", "layer")
+    AddNamedControls(phpManualControls, phpLayoutControls, "manualWidth")
+    AddNamedControls(phpOrbControls, phpLayoutControls, "orbSize")
+
+    AddTooltip(phpUse, "Second Player HP Bar", "Renders a second native Player health bar. The normal Player unitframe HP bar is untouched, so you can show HP twice.")
+    AddTooltip(phpLayoutControls.anchor, "Anchor", "Power anchors use the Player power bar when it is visible; otherwise the HP bar falls back to the Class Resource anchor.")
+    AddTooltip(phpLayoutControls.widthMode, "Width Mode", "Class Resource and Player Power follow existing frames. Custom uses the slider below. Width is resolved only during layout refresh.")
+    AddTooltip(phpLayoutControls.shape, "HP Shape", "Bar keeps the normal statusbar. Follow Player Power mirrors the effective detached Player power shape: Follow Class Resource still resolves Circle to Round and Diamond/Hex to Crystal. Orb uses a single vertical fill.")
+    AddTooltip(phpLayoutControls.orbSize, "Orb Size", "Used only when this HP bar is explicitly set to Orb. Follow Player Power inherits the Player power orb size instead.")
+    AddTooltip(phpLayoutControls.smooth, "Smooth Fill", "Optional interpolation for this second HP bar. Off keeps direct native SetValue updates.")
 
     W.ControlCard(phpTextures, "HP Textures", "Bar uses SharedMedia textures. Shapes use fixed alpha assets.", 14, -38, phpCardW, 346)
-    local phpColor = BindTableDropdown(ctx, phpTextures, "HP color", PLAYER_HP_COLOR_VALUES, 300, Bars, "playerHPBarColorMode", "GLOBAL", ApplyPlayerHPBar)
-    local phpFg = BindTableDropdown(ctx, phpTextures, "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, Bars, "playerHPBarTexture", "", ApplyPlayerHPTextures)
-    local phpBg = BindTableDropdown(ctx, phpTextures, "Background texture", function() return TextureValues("Use foreground texture") end, 300, Bars, "playerHPBarBgTexture", "", ApplyPlayerHPTextures)
-    local phpBgAlpha = BindBarsAlphaPercent(ctx, phpTextures, "BG opacity", "playerHPBarBgAlpha", 0.35, ApplyPlayerHPBar, 1)
-    local phpOutline = BindTableSlider(ctx, phpTextures, "Outline", 0, 8, 1, 300, Bars, "playerHPBarOutline", 1, ApplyPlayerHPBar)
-    PlaceColumn(phpTextures, 32, -104, 54, phpControlW, "LEFT", phpColor, phpFg, phpBg, phpBgAlpha, phpOutline)
-    AddControls(phpControls, phpColor, phpFg, phpBg, phpBgAlpha, phpOutline)
-    AddControls(phpTextureControls, phpFg, phpBg)
-    if M.AddTooltip then
-        M.AddTooltip(phpColor, "HP Color", "Global follows the normal MSUF health color mode. Class Color forces your class color. Dark Mode forces the configured dark bar color. HP Gradient colors only this second HP bar by current health.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpBg, "Background Texture", "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpOutline, "HP Outline", "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
+    local phpTextureFields = BuildBoundControls(phpTextures, Bars, ApplyPlayerHPBar, {
+        { "color", "dropdown", "HP color", PLAYER_HP_COLOR_VALUES, 300, "playerHPBarColorMode", "GLOBAL" },
+        { "fg", "dropdown", "Foreground texture", function() return TextureValues("Use global bar texture") end, 300, "playerHPBarTexture", "", ApplyPlayerHPTextures },
+        { "bg", "dropdown", "Background texture", function() return TextureValues("Use foreground texture") end, 300, "playerHPBarBgTexture", "", ApplyPlayerHPTextures },
+        { "bgAlpha", "alpha", "BG opacity", "playerHPBarBgAlpha", 0.35, ApplyPlayerHPBar, 1 },
+        { "outline", "slider", "Outline", 0, 8, 1, 300, "playerHPBarOutline", 1 },
+    })
+    PlaceColumn(phpTextures, 32, -104, 54, phpControlW, "LEFT", phpTextureFields.color, phpTextureFields.fg, phpTextureFields.bg, phpTextureFields.bgAlpha, phpTextureFields.outline)
+    AddNamedControls(phpControls, phpTextureFields, "color", "fg", "bg", "bgAlpha", "outline")
+    AddNamedControls(phpTextureControls, phpTextureFields, "fg", "bg")
+    AddTooltip(phpTextureFields.color, "HP Color", "Global follows the normal MSUF health color mode. Class Color forces your class color. Dark Mode forces the configured dark bar color. HP Gradient colors only this second HP bar by current health.")
+    AddTooltip(phpTextureFields.bg, "Background Texture", "Visible behind the filled HP amount. At 100% HP the fill covers the background; Outline 0 does not disable this texture.")
+    AddTooltip(phpTextureFields.outline, "HP Outline", "Controls only the second HP bar outline. Bar uses four outside border edges; shapes use their fixed edge texture. 0 disables only the outline.")
 
     W.ControlCard(phpText, "HP Text", "Same value modes as Player unitframe health text.", 14, -38, phpCardW, phpTwoColumn and 440 or 690)
     local phpTextEnable = SwitchAt(ctx, phpText, "Show HP text", 32, -104, phpControlW, Bars, "playerHPBarTextEnabled", true, function()
@@ -1659,24 +1601,24 @@ local function BuildClassPower(ctx)
         ApplyPlayerHPText()
         if RefreshClassPowerControls then RefreshClassPowerControls() end
     end)
-    local phpTextRight = BindTableDropdown(ctx, phpText, "Right slot", PLAYER_HP_TEXT_VALUES, 300, Bars, "playerHPBarTextRight", "CURPERCENT", ApplyPlayerHPText)
-    local phpTextLeft = BindTableDropdown(ctx, phpText, "Left slot", PLAYER_HP_TEXT_VALUES, 300, Bars, "playerHPBarTextLeft", "NONE", ApplyPlayerHPText)
-    local phpTextCenter = BindTableDropdown(ctx, phpText, "Center slot", PLAYER_HP_TEXT_VALUES, 300, Bars, "playerHPBarTextCenter", "NONE", ApplyPlayerHPText)
-    local phpTextSep = BindTableDropdown(ctx, phpText, "Delimiter", PLAYER_HP_SEPARATORS, 180, Bars, "playerHPBarTextSeparator", "", ApplyPlayerHPText)
-    local phpTextReverse = BindTableToggle(ctx, phpText, "Reverse order", Bars, "playerHPBarTextReverse", false, ApplyPlayerHPText)
-    local phpTextSize = BindTableSlider(ctx, phpText, "Text size", 6, 48, 1, 300, Bars, "playerHPBarTextSize", 14, ApplyPlayerHPText)
-    local phpTextX = BindTableSlider(ctx, phpText, "Text X", -300, 300, 1, 300, Bars, "playerHPBarTextOffsetX", 0, ApplyPlayerHPText)
-    local phpTextY = BindTableSlider(ctx, phpText, "Text Y", -300, 300, 1, 300, Bars, "playerHPBarTextOffsetY", 0, ApplyPlayerHPText)
-    PlaceColumn(phpText, 32, -188, 54, phpControlW, "LEFT", phpTextRight, phpTextLeft, phpTextCenter, phpTextSep)
-    PlaceColumn(phpText, phpRightX, phpTextSecondColY, 54, phpControlW, "LEFT", phpTextReverse, phpTextSize, phpTextX, phpTextY)
+    local phpTextFields = BuildBoundControls(phpText, Bars, ApplyPlayerHPText, {
+        { "right", "dropdown", "Right slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextRight", "CURPERCENT" },
+        { "left", "dropdown", "Left slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextLeft", "NONE" },
+        { "center", "dropdown", "Center slot", PLAYER_HP_TEXT_VALUES, 300, "playerHPBarTextCenter", "NONE" },
+        { "sep", "dropdown", "Delimiter", PLAYER_HP_SEPARATORS, 180, "playerHPBarTextSeparator", "" },
+        { "reverse", "toggle", "Reverse order", "playerHPBarTextReverse", false },
+        { "size", "slider", "Text size", 6, 48, 1, 300, "playerHPBarTextSize", 14 },
+        { "x", "slider", "Text X", -300, 300, 1, 300, "playerHPBarTextOffsetX", 0 },
+        { "y", "slider", "Text Y", -300, 300, 1, 300, "playerHPBarTextOffsetY", 0 },
+    })
+    PlaceColumn(phpText, 32, -188, 54, phpControlW, "LEFT", phpTextFields.right, phpTextFields.left, phpTextFields.center, phpTextFields.sep)
+    PlaceColumn(phpText, phpRightX, phpTextSecondColY, 54, phpControlW, "LEFT", phpTextFields.reverse, phpTextFields.size, phpTextFields.x, phpTextFields.y)
     AddControls(phpControls, phpTextEnable)
     AddControls(phpTextControls, phpTextShared)
-    AddControls(phpCustomTextControls, phpTextRight, phpTextLeft, phpTextCenter, phpTextSep, phpTextReverse, phpTextSize)
-    AddControls(phpTextPositionControls, phpTextX, phpTextY)
-    if M.AddTooltip then
-        M.AddTooltip(phpTextEnable, "HP Text", "Controls only this second HP bar. The normal Player unitframe HP text remains separate.", { hook = true, owner = "ANCHOR_RIGHT" })
-        M.AddTooltip(phpTextShared, "Use Player HP Text", "Uses Player HP text settings and copies already-rendered Player HP text when it is current. Local Text X/Y still belong to this bar.", { hook = true, owner = "ANCHOR_RIGHT" })
-    end
+    AddNamedControls(phpCustomTextControls, phpTextFields, "right", "left", "center", "sep", "reverse", "size")
+    AddNamedControls(phpTextPositionControls, phpTextFields, "x", "y")
+    AddTooltip(phpTextEnable, "HP Text", "Controls only this second HP bar. The normal Player unitframe HP text remains separate.")
+    AddTooltip(phpTextShared, "Use Player HP Text", "Uses Player HP text settings and copies already-rendered Player HP text when it is current. Local Text X/Y still belong to this bar.")
 
     b:Header("Other Resource Bars", "Extra class/resource bars that are not the main class-resource row.", 64)
     local altMana = b:CollapsibleSection("classpower_alt_mana", "Alternative Mana", 306, false)
@@ -1684,10 +1626,12 @@ local function BuildClassPower(ctx)
     local altManaControlW = min(360, altManaCardW - 64)
     W.ControlCard(altMana, "Alternative Mana", "Shadow, Ret, Ele, Enh, Balance, Feral, WW", 14, -38, altManaCardW, 234)
     local altManaToggle = SwitchAt(ctx, altMana, "Show mana bar (dual resource)", 32, -98, altManaControlW, Bars, "showAltMana", false, ApplyClassPower)
-    local altManaHeight = BindTableSlider(ctx, altMana, "Height", 2, 30, 1, 300, Bars, "altManaHeight", 4, ApplyClassPower)
-    local altManaY = BindTableSlider(ctx, altMana, "Y offset", -50, 50, 1, 300, Bars, "altManaOffsetY", -2, ApplyClassPower)
-    PlaceColumn(altMana, 32, -138, 54, altManaControlW, "LEFT", altManaHeight, altManaY)
-    AddControls(altManaControls, altManaHeight, altManaY)
+    local altManaFields = BuildBoundControls(altMana, Bars, ApplyClassPower, {
+        { "height", "slider", "Height", 2, 30, 1, 300, "altManaHeight", 4 },
+        { "y", "slider", "Y offset", -50, 50, 1, 300, "altManaOffsetY", -2 },
+    })
+    PlaceColumn(altMana, 32, -138, 54, altManaControlW, "LEFT", altManaFields.height, altManaFields.y)
+    AddNamedControls(altManaControls, altManaFields, "height", "y")
 
     RefreshClassPowerControls = function()
         local bars = Bars()
@@ -1701,43 +1645,43 @@ local function BuildClassPower(ctx)
             if db[key] and db[key].powerBarDetached then anyDetached = true; break end
         end
         playerDetached = db.player and db.player.powerBarDetached == true
-        for i = 1, #cpControls do SetControlEnabled(cpControls[i], cpOn) end
-        SetControlEnabled(cpWidth, customWidth)
+        SetControlsEnabled(cpControls, cpOn)
+        SetControlEnabled(cp.width, customWidth)
         local classShapeIsBar = NormalizeClassPowerShape(bars.classPowerShape) == "BAR"
-        if cpHeight and cpHeight._msuf2Title then
-            cpHeight._msuf2Title:SetText(M.Tr(classShapeIsBar and "Height" or "Pip size"))
+        if cp.height and cp.height._msuf2Title then
+            cp.height._msuf2Title:SetText(M.Tr(classShapeIsBar and "Height" or "Pip size"))
         end
-        SetControlEnabled(cpSeparator, cpOn and classShapeIsBar)
-        SetControlEnabled(cpOutline, cpOn and classShapeIsBar)
+        SetControlEnabled(cp.separator, cpOn and classShapeIsBar)
+        SetControlEnabled(cp.outline, cpOn and classShapeIsBar)
         SetControlEnabled(cpAlign, cpOn and not classShapeIsBar)
-        for i = 1, #textControls do SetControlEnabled(textControls[i], textOn) end
-        for i = 1, #dpbControls do SetControlEnabled(dpbControls[i], anyDetached) end
-        for i = 1, #dpbPlayerControls do SetControlEnabled(dpbPlayerControls[i], playerDetached) end
+        SetControlsEnabled(textControls, textOn)
+        SetControlsEnabled(dpbControls, anyDetached)
+        SetControlsEnabled(dpbPlayerControls, playerDetached)
         SetControlEnabled(dpbUse, true)
         local playerShape = tostring((db.player and db.player.detachedPowerBarShape) or "FOLLOW_CLASS"):upper()
         SetControlEnabled(dpbOrbSize, playerDetached and playerShape == "ORB")
-        SetControlEnabled(dpbHeight, playerDetached and playerShape ~= "ORB")
+        SetControlEnabled(dpbFields.height, playerDetached and playerShape ~= "ORB")
         local playerTextOn = db.player and db.player.showPower ~= false
-        SetControlEnabled(dpbTextOnBar, playerDetached and playerTextOn)
-        SetControlEnabled(dpbTextSize, playerDetached and playerTextOn)
+        SetControlEnabled(dpbTextFields.onBar, playerDetached and playerTextOn)
+        SetControlEnabled(dpbTextFields.size, playerDetached and playerTextOn)
         local phpOn = BoolValue(bars, "playerHPBarEnabled", false)
         local phpShapeValue = ResolvePlayerHPShape(bars, db)
         local phpRawShape = NormalizePlayerHPShape(bars.playerHPBarShape)
         local phpShapeIsBar = phpShapeValue == "BAR"
         local phpShapeIsOrb = phpShapeValue == "ORB"
-        for i = 1, #phpControls do SetControlEnabled(phpControls[i], phpOn) end
-        for i = 1, #phpManualControls do SetControlEnabled(phpManualControls[i], phpOn and not phpShapeIsOrb and (bars.playerHPBarWidthMode or "class") == "custom") end
-        for i = 1, #phpOrbControls do SetControlEnabled(phpOrbControls[i], phpOn and phpRawShape == "ORB") end
-        for i = 1, #phpTextureControls do SetControlEnabled(phpTextureControls[i], phpOn and phpShapeIsBar) end
-        SetControlEnabled(phpHeight, phpOn and not phpShapeIsOrb)
+        SetControlsEnabled(phpControls, phpOn)
+        SetControlsEnabled(phpManualControls, phpOn and not phpShapeIsOrb and (bars.playerHPBarWidthMode or "class") == "custom")
+        SetControlsEnabled(phpOrbControls, phpOn and phpRawShape == "ORB")
+        SetControlsEnabled(phpTextureControls, phpOn and phpShapeIsBar)
+        SetControlEnabled(phpLayoutControls.height, phpOn and not phpShapeIsOrb)
         local phpTextOn = phpOn and BoolValue(bars, "playerHPBarTextEnabled", true)
         local phpSharedText = BoolValue(bars, "playerHPBarUsePlayerText", true)
-        for i = 1, #phpTextControls do SetControlEnabled(phpTextControls[i], phpTextOn) end
-        for i = 1, #phpCustomTextControls do SetControlEnabled(phpCustomTextControls[i], phpTextOn and not phpSharedText) end
-        for i = 1, #phpTextPositionControls do SetControlEnabled(phpTextPositionControls[i], phpTextOn) end
+        SetControlsEnabled(phpTextControls, phpTextOn)
+        SetControlsEnabled(phpCustomTextControls, phpTextOn and not phpSharedText)
+        SetControlsEnabled(phpTextPositionControls, phpTextOn)
         SetControlEnabled(phpUse, true)
         local altOn = BoolValue(bars, "showAltMana", false)
-        for i = 1, #altManaControls do SetControlEnabled(altManaControls[i], altOn) end
+        SetControlsEnabled(altManaControls, altOn)
         SetControlEnabled(altManaToggle, true)
         SetControlEnabled(cpEnable, true)
     end

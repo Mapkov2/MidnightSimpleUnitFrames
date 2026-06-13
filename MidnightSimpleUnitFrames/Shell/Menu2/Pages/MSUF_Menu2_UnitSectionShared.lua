@@ -161,6 +161,93 @@ function Shared.MakeTabFrame(parent, key, topOffset, width, store)
     return frame
 end
 
+function Shared.MakeTabFrames(parent, topOffset, width, store, ...)
+    local frames = {}
+    for i = 1, select("#", ...) do frames[i] = Shared.MakeTabFrame(parent, select(i, ...), topOffset, width, store) end
+    return (table.unpack or _G.unpack)(frames)
+end
+
+function Shared.PlaceDropdown(parent, control, x, y, width) return W.MoveWidget(control, parent, x, y, width or 200, "LEFT") end
+
+function Shared.PlaceSlider(parent, control, x, y, width) W.MoveWidget(control, parent, x, y, width, "CENTER") end
+
+function Shared.ValueTextControlSets(kind, controls, layer, hookControls, currentSlot)
+    controls = controls or {}
+    local delimiter = controls.delimiter or controls.separator
+    local function CurrentSlotFocus() return currentSlot and currentSlot(kind) end
+    local hookSpecs = {
+        { controls.show }, { controls.left, "left" }, { controls.center, "center" }, { controls.right, "right" },
+        { delimiter }, { controls.x }, { controls.y }, { controls.moveTogether },
+        { controls.slot, CurrentSlotFocus }, { controls.slotX, CurrentSlotFocus }, { controls.slotY, CurrentSlotFocus },
+        { controls.size }, { layer },
+    }
+    local textControls = { controls.left, controls.center, controls.right, delimiter, controls.size, controls.x, controls.y, controls.moveTogether, layer }
+    if controls.reverse then
+        hookSpecs[#hookSpecs + 1] = { controls.reverse }
+        textControls[#textControls + 1] = controls.reverse
+    end
+    if hookControls then hookControls(kind, hookSpecs) end
+    return textControls, { controls.slot, controls.slotX, controls.slotY }
+end
+
+function Shared.CustomAnchorEditor(ctx, parent, opts)
+    opts = opts or {}
+    local x, y, width = opts.x or 14, opts.y or -104, opts.width or 200
+    local label = T.Font(parent, "GameFontHighlightSmall", M.Tr(opts.label or "Custom Anchor Frame"), opts.labelColor or { 0.62, 0.74, 0.96, 1 })
+    label:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y); label:SetJustifyH("LEFT")
+
+    local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    box:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 22); box:SetSize(width, 22); box:SetAutoFocus(false)
+    box:SetMaxLetters(opts.maxLetters or 100); box:SetJustifyH("LEFT")
+    box._msuf2Title, box._msuf2ControlKind = label, "textinput"
+    if T.SkinEditBox then T.SkinEditBox(box) end
+
+    local function Attach(widget) if opts.attachFocus then opts.attachFocus(widget) end end
+    Attach(box)
+
+    local function Refresh()
+        if box and not box:HasFocus() then box:SetText((opts.getValue and opts.getValue()) or "") end
+    end
+    local function WithHistory(title, key, fn)
+        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
+            M.CaptureHistory(type(title) == "function" and title() or title, type(key) == "function" and key() or key, fn)
+        else
+            fn()
+        end
+    end
+
+    box:SetScript("OnEnterPressed", function(self)
+        local value = self:GetText() or ""
+        WithHistory(opts.commitTitle or "Set Anchor", opts.commitKey, function() if opts.setValue then opts.setValue(value, "commit") end end)
+        self:ClearFocus()
+    end)
+    box:SetScript("OnEscapePressed", function(self) Refresh(); self:ClearFocus() end)
+    box:SetScript("OnEditFocusLost", Refresh)
+
+    local function SmallButton(after, labelText, widthText, gap, danger)
+        local btn = T.Button(parent, labelText, widthText, 22)
+        if danger and T.SkinDangerButton then btn = T.SkinDangerButton(btn) end; btn:SetPoint("LEFT", after, "RIGHT", gap, 0)
+        if T.CenterButtonLabel then T.CenterButtonLabel(btn) end; Attach(btn)
+        return btn
+    end
+    local pick = SmallButton(box, opts.pickLabel or "Pick", opts.pickWidth or 50, 6)
+    pick:SetScript("OnClick", function()
+        local overlay = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker() or nil
+        if not overlay then return end
+        overlay._onPick = function(frameName)
+            WithHistory(opts.pickTitle or opts.commitTitle or "Pick Anchor", opts.pickKey or opts.commitKey, function() if opts.setValue then opts.setValue(frameName or "", "pick") end; box:SetText(frameName or "") end)
+        end
+        overlay:Show()
+    end)
+
+    local clear = SmallButton(pick, opts.clearLabel or "Clear", opts.clearWidth or 50, 4, true)
+    clear:SetScript("OnClick", function() if opts.clearValue then opts.clearValue() elseif opts.setValue then opts.setValue("", "clear") end; box:SetText("") end)
+
+    if ctx then M.AddRefresher(ctx, Refresh) end
+    Refresh()
+    return { label = label, box = box, pick = pick, clear = clear, Refresh = Refresh }
+end
+
 function Shared.MakeDragSortRows(parent, defs, opts)
     opts = opts or {}
     defs = defs or {}

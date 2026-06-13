@@ -1221,24 +1221,19 @@ local function BuildWindow()
     statusTopLine:SetPoint("TOPRIGHT", status, "TOPRIGHT", 0, 0)
     statusTopLine:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.25)
 
-    local sbProfile = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
-    sbProfile:SetPoint("LEFT", status, "LEFT", 10, 0)
-    sbProfile:SetJustifyH("LEFT")
-    local sbEdit = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
-    sbEdit:SetPoint("LEFT", sbProfile, "RIGHT", 14, 0)
-    sbEdit:SetJustifyH("LEFT")
-    local sbCombat = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
-    sbCombat:SetPoint("LEFT", sbEdit, "RIGHT", 14, 0)
-    sbCombat:SetJustifyH("LEFT")
-    local sbVersion = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
-    sbVersion:SetPoint("RIGHT", status, "RIGHT", -10, 0)
-    sbVersion:SetJustifyH("RIGHT")
-    sbVersion:SetAlpha(0.50)
-    local sbFeedback = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
-    sbFeedback:SetPoint("RIGHT", sbVersion, "LEFT", -18, 0)
+    local function StatusText(point, relativeTo, relativePoint, x, y, justify, alpha)
+        local fs = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
+        fs:SetPoint(point, relativeTo, relativePoint, x, y)
+        fs:SetJustifyH(justify or "LEFT")
+        if alpha then fs:SetAlpha(alpha) end
+        return fs
+    end
+    local sbProfile = StatusText("LEFT", status, "LEFT", 10, 0)
+    local sbEdit = StatusText("LEFT", sbProfile, "RIGHT", 14, 0)
+    local sbCombat = StatusText("LEFT", sbEdit, "RIGHT", 14, 0)
+    local sbVersion = StatusText("RIGHT", status, "RIGHT", -10, 0, "RIGHT", 0.50)
+    local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -18, 0, "RIGHT", 0)
     sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 0)
-    sbFeedback:SetJustifyH("RIGHT")
-    sbFeedback:SetAlpha(0)
 
     status.profileText = sbProfile
     status.editText = sbEdit
@@ -1330,19 +1325,15 @@ local function BuildWindow()
         RefreshDashboardEditModeButton()
     end
     local STATUS_EVENTS = { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_DIFFICULTY_CHANGED" }
-    local function RegisterStatusEvents()
-        if status._msuf2EventsRegistered then return end
-        status._msuf2EventsRegistered = true
-        for i = 1, #STATUS_EVENTS do status:RegisterEvent(STATUS_EVENTS[i]) end
-    end
-    local function UnregisterStatusEvents()
-        if not status._msuf2EventsRegistered then return end
-        status._msuf2EventsRegistered = nil
-        for i = 1, #STATUS_EVENTS do status:UnregisterEvent(STATUS_EVENTS[i]) end
+    local function SetStatusEventsRegistered(registered)
+        if (status._msuf2EventsRegistered == true) == (registered == true) then return end
+        status._msuf2EventsRegistered = registered and true or nil
+        local method = registered and status.RegisterEvent or status.UnregisterEvent
+        for i = 1, #STATUS_EVENTS do method(status, STATUS_EVENTS[i]) end
     end
     status:SetScript("OnEvent", function(_, event)
         if not (f and f:IsShown()) then
-            UnregisterStatusEvents()
+            SetStatusEventsRegistered(false)
             return
         end
         if event == "PLAYER_REGEN_DISABLED" then
@@ -1367,7 +1358,7 @@ local function BuildWindow()
         self._msuf2Minimized = nil
         if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
         if M.StartHistorySession then M.StartHistorySession() end
-        RegisterStatusEvents()
+        SetStatusEventsRegistered(true)
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
@@ -1379,7 +1370,7 @@ local function BuildWindow()
         if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
         if FinishResizeProxy then FinishResizeProxy(false) end
         CancelSearchBackgroundIndex()
-        UnregisterStatusEvents()
+        SetStatusEventsRegistered(false)
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
         if M.EndHistorySession then M.EndHistorySession() end
         ResetStatusIndicatorTestModeOnMenuExit()

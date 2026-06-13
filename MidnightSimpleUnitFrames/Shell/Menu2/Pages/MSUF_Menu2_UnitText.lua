@@ -12,6 +12,7 @@ local W = M.Widgets or {}
 local T = M.Theme or {}
 local UP = M.UnitPage or {}
 local UnitSectionShared = M.UnitSectionsShared or {}
+local SetControlsEnabled = W.SetControlsEnabled
 
 local floor = math.floor
 local max = math.max
@@ -189,32 +190,14 @@ local function BuildText(ctx, builder, unit)
         widget:HookScript("OnLeave", RestorePreviewTextFocus)
     end
 
-    local tabs = W.Segment(sec, "Text area", tabValues, math.min(520, sectionW - 48))
-    W.MoveWidget(tabs, sec, 20, -68, math.min(520, sectionW - 48), "LEFT")
-    M.BindSegment(ctx, tabs,
-        CurrentTextTab,
-        function(v)
-            M.unitTextTabSelection[unit] = v or "name"
-            FocusActivePreviewText()
-            if RefreshTextControlState then RefreshTextControlState() end
-        end)
-
     local tabFrames = {}
-    local function MakeTabFrame(key)
-        return UnitSectionShared.MakeTabFrame(sec, key, -118, sectionW, tabFrames)
-    end
+    local tabs, RefreshTextTabs
 
     local function TextCard(parent, title, subtitle, x, y, width, height)
         return W.ControlCard(parent, title, subtitle, x, y, width, height)
     end
 
-    local function PlaceDropdown(parent, control, x, y, width)
-        W.MoveWidget(control, parent, x, y, width or dropdownW)
-    end
-
-    local function PlaceSlider(parent, control, x, y, width)
-        W.MoveWidget(control, parent, x, y, width or sliderW, "CENTER")
-    end
+    local PlaceDropdown, PlaceSlider = UnitSectionShared.PlaceDropdown, UnitSectionShared.PlaceSlider
 
     local function ReadSlot(unitKey, slotKey, legacyKey, fallback)
         local value = ReadText(unitKey, slotKey, nil)
@@ -349,10 +332,19 @@ local function BuildText(ctx, builder, unit)
         end
     end
 
-    local nameTab = MakeTabFrame("name")
-    local hpTab = MakeTabFrame("hp")
-    local powerTab = MakeTabFrame("power")
-    local advancedTab = MakeTabFrame("advanced")
+    local nameTab, hpTab, powerTab, advancedTab =
+        UnitSectionShared.MakeTabFrames(sec, -118, sectionW, tabFrames, "name", "hp", "power", "advanced")
+    tabs, RefreshTextTabs = W.SegmentTabs(ctx, sec, {
+        label = "Text area", values = tabValues, width = math.min(520, sectionW - 48),
+        frames = tabFrames, defaultTab = "name",
+        get = CurrentTextTab,
+        set = function(v) M.unitTextTabSelection[unit] = v or "name" end,
+        afterSet = function()
+            FocusActivePreviewText()
+            if RefreshTextControlState then RefreshTextControlState() end
+        end,
+        x = 20, y = -68,
+    })
 
     local nameContent = TextCard(nameTab, "Name text", "Controls whether the unit name is shown on this frame.", leftX, -4, cardW, 116)
     local _, namePreviewValue = PreviewText(nameContent, NamePreviewText(), 16, -54, cardW - 32)
@@ -376,25 +368,20 @@ local function BuildText(ctx, builder, unit)
             RefreshTextHeader()
         end)
 
-    local nameX = W.Slider(namePosition, "X Offset", -300, 300, 1, 260)
-    PlaceSlider(namePosition, nameX, 16, -112, cardW - 72)
-    M.BindSlider(ctx, nameX,
-        function() return ReadNumber(unit, "nameOffsetX", 4) end,
-        function(v)
-            SetNumber(unit, "nameOffsetX", v, "MSUF2_NAME_X", { text = true, preview = true })
-            FocusPreviewText("name", nil, true)
-            RefreshTextHeader()
-        end)
-
-    local nameY = W.Slider(namePosition, "Y Offset", -300, 300, 1, 260)
-    PlaceSlider(namePosition, nameY, 16, -174, cardW - 72)
-    M.BindSlider(ctx, nameY,
-        function() return ReadNumber(unit, "nameOffsetY", -4) end,
-        function(v)
-            SetNumber(unit, "nameOffsetY", v, "MSUF2_NAME_Y", { text = true, preview = true })
-            FocusPreviewText("name", nil, true)
-            RefreshTextHeader()
-        end)
+    local function BindNameOffsetSlider(label, y, key, defaultValue, reason)
+        local control = W.Slider(namePosition, label, -300, 300, 1, 260)
+        PlaceSlider(namePosition, control, 16, y, cardW - 72)
+        M.BindSlider(ctx, control,
+            function() return ReadNumber(unit, key, defaultValue) end,
+            function(v)
+                SetNumber(unit, key, v, reason, { text = true, preview = true })
+                FocusPreviewText("name", nil, true)
+                RefreshTextHeader()
+            end)
+        return control
+    end
+    local nameX = BindNameOffsetSlider("X Offset", -112, "nameOffsetX", 4, "MSUF2_NAME_X")
+    local nameY = BindNameOffsetSlider("Y Offset", -174, "nameOffsetY", -4, "MSUF2_NAME_Y")
 
     local nameAppearance = TextCard(nameTab, "Appearance", nil, rightX, -4, rightW, 150)
     local nameSize = W.Slider(nameAppearance, "Size", 6, 48, 1, 260)
@@ -451,25 +438,24 @@ local function BuildText(ctx, builder, unit)
         end
 
         local position = TextCard(tab, cfg.positionTitle, cfg.positionSubtitle, rightX, -4, rightW, 410)
-        controls.x = W.Slider(position, "X Offset", -300, 300, 1, 260)
-        PlaceSlider(position, controls.x, 16, -64, rightW - 58)
-        M.BindSlider(ctx, controls.x,
-            function() return ReadNumber(unit, cfg.xKey, cfg.xDefault) end,
-            function(v)
-                SetNumber(unit, cfg.xKey, v, cfg.xReason, { text = true, preview = true })
-                FocusPreviewText(kind, nil, true)
-                RefreshTextHeader()
-            end)
-
-        controls.y = W.Slider(position, "Y Offset", -300, 300, 1, 260)
-        PlaceSlider(position, controls.y, 16, -122, rightW - 58)
-        M.BindSlider(ctx, controls.y,
-            function() return ReadNumber(unit, cfg.yKey, cfg.yDefault) end,
-            function(v)
-                SetNumber(unit, cfg.yKey, v, cfg.yReason, { text = true, preview = true })
-                FocusPreviewText(kind, nil, true)
-                RefreshTextHeader()
-            end)
+        local function BindPositionSlider(name, label, y, key, defaultValue, reason, focusSlot, afterSet)
+            local control = W.Slider(position, label, -300, 300, 1, 260)
+            controls[name] = control
+            PlaceSlider(position, control, 16, y, rightW - 58)
+            local function CurrentKey()
+                return type(key) == "function" and key() or key
+            end
+            M.BindSlider(ctx, control,
+                function() return ReadNumber(unit, CurrentKey(), defaultValue) end,
+                function(v)
+                    SetNumber(unit, CurrentKey(), v, reason, { text = true, preview = true })
+                    FocusPreviewText(kind, focusSlot and focusSlot() or nil, true)
+                    if afterSet then afterSet() end
+                end)
+            return control
+        end
+        BindPositionSlider("x", "X Offset", -64, cfg.xKey, cfg.xDefault, cfg.xReason, nil, RefreshTextHeader)
+        BindPositionSlider("y", "Y Offset", -122, cfg.yKey, cfg.yDefault, cfg.yReason, nil, RefreshTextHeader)
 
         controls.moveTogether = SwitchOrToggle(position, "Move text as one group", 16, -176, rightW - 32)
         M.BindToggle(ctx, controls.moveTogether,
@@ -490,31 +476,8 @@ local function BuildText(ctx, builder, unit)
                 M.Refresh(ctx)
             end)
 
-        controls.slotX = W.Slider(position, "Slot X", -300, 300, 1, 260)
-        PlaceSlider(position, controls.slotX, 16, -284, rightW - 58)
-        M.BindSlider(ctx, controls.slotX,
-            function()
-                local xKey = SlotOffsetKeys(kind)
-                return ReadNumber(unit, xKey, 0)
-            end,
-            function(v)
-                local xKey = SlotOffsetKeys(kind)
-                SetNumber(unit, xKey, v, cfg.slotXReason, { text = true, preview = true })
-                FocusPreviewText(kind, CurrentSlot(kind), true)
-            end)
-
-        controls.slotY = W.Slider(position, "Slot Y", -300, 300, 1, 260)
-        PlaceSlider(position, controls.slotY, 16, -342, rightW - 58)
-        M.BindSlider(ctx, controls.slotY,
-            function()
-                local _, yKey = SlotOffsetKeys(kind)
-                return ReadNumber(unit, yKey, 0)
-            end,
-            function(v)
-                local _, yKey = SlotOffsetKeys(kind)
-                SetNumber(unit, yKey, v, cfg.slotYReason, { text = true, preview = true })
-                FocusPreviewText(kind, CurrentSlot(kind), true)
-            end)
+        BindPositionSlider("slotX", "Slot X", -284, function() return SlotOffsetKeys(kind) end, 0, cfg.slotXReason, function() return CurrentSlot(kind) end)
+        BindPositionSlider("slotY", "Slot Y", -342, function() local _, yKey = SlotOffsetKeys(kind); return yKey end, 0, cfg.slotYReason, function() return CurrentSlot(kind) end)
 
         local appearance = TextCard(tab, "Appearance", nil, leftX, -310, cardW, 144)
         controls.size = W.Slider(appearance, "Size", 6, 48, 1, 260)
@@ -558,8 +521,6 @@ local function BuildText(ctx, builder, unit)
         generalSizeKey = "hpFontSize",
         sizeReason = "MSUF2_HP_SIZE",
     })
-    local showHPText, hpLeft, hpCenter, hpRight, hpSep, hpReverse, hpX, hpY, hpMoveTogether, hpSlot, hpSlotX, hpSlotY, hpSize =
-        hpControls.show, hpControls.left, hpControls.center, hpControls.right, hpControls.separator, hpControls.reverse, hpControls.x, hpControls.y, hpControls.moveTogether, hpControls.slot, hpControls.slotX, hpControls.slotY, hpControls.size
 
     local powerControls = BuildValueTextTab("power", powerTab, {
         preview = "100 Energy",
@@ -592,8 +553,6 @@ local function BuildText(ctx, builder, unit)
         generalSizeKey = "powerFontSize",
         sizeReason = "MSUF2_POWER_TEXT_SIZE",
     })
-    local showPowerText, pLeft, pCenter, pRight, pSep, pX, pY, pMoveTogether, pSlot, pSlotX, pSlotY, pSize =
-        powerControls.show, powerControls.left, powerControls.center, powerControls.right, powerControls.separator, powerControls.x, powerControls.y, powerControls.moveTogether, powerControls.slot, powerControls.slotX, powerControls.slotY, powerControls.size
     local powerManagedNotice, powerManagedNoticeButton
     if UnitSectionShared.CreateSectionNotice then
         local notice, _, button = UnitSectionShared.CreateSectionNotice(powerTab, -470, "Class Resources", 126)
@@ -607,63 +566,33 @@ local function BuildText(ctx, builder, unit)
 
     local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, portraits, or status icons.", leftX, -4, cardW, 260)
 
-    local advNameLayer = W.Slider(advancedLayers, "Name layer", 0, 30, 1, 260)
-    PlaceSlider(advancedLayers, advNameLayer, 16, -76, cardW - 72)
-    M.BindSlider(ctx, advNameLayer,
-        function() return ReadNumber(unit, "nameTextLayer", 5) end,
-        function(v)
-            SetNumber(unit, "nameTextLayer", v, "MSUF2_NAME_TEXT_LAYER_ADV", { text = true, preview = true })
-            Call("MSUF_UpdateAllFonts_Immediate")
-            RefreshTextHeader()
-        end)
-
-    local advHpLayer = W.Slider(advancedLayers, "HP layer", 0, 30, 1, 260)
-    PlaceSlider(advancedLayers, advHpLayer, 16, -136, cardW - 72)
-    M.BindSlider(ctx, advHpLayer,
-        function() return ReadNumber(unit, "hpTextLayer", 5) end,
-        function(v)
-            SetNumber(unit, "hpTextLayer", v, "MSUF2_HP_TEXT_LAYER_ADV", { text = true, preview = true })
-            Call("MSUF_UpdateAllFonts_Immediate")
-            RefreshTextHeader()
-        end)
-
-    local advPowerLayer = W.Slider(advancedLayers, "Power layer", 0, 30, 1, 260)
-    PlaceSlider(advancedLayers, advPowerLayer, 16, -196, cardW - 72)
-    M.BindSlider(ctx, advPowerLayer,
-        function() return ReadNumber(unit, "powerTextLayer", 2) end,
-        function(v)
-            SetNumber(unit, "powerTextLayer", v, "MSUF2_POWER_TEXT_LAYER_ADV", { text = true, preview = true })
-            Call("MSUF_UpdateAllFonts_Immediate")
-            RefreshTextHeader()
-        end)
+    local function BindAdvancedLayer(label, y, key, defaultValue, reason)
+        local control = W.Slider(advancedLayers, label, 0, 30, 1, 260)
+        PlaceSlider(advancedLayers, control, 16, y, cardW - 72)
+        M.BindSlider(ctx, control,
+            function() return ReadNumber(unit, key, defaultValue) end,
+            function(v)
+                SetNumber(unit, key, v, reason, { text = true, preview = true })
+                Call("MSUF_UpdateAllFonts_Immediate")
+                RefreshTextHeader()
+            end)
+        return control
+    end
+    local advNameLayer = BindAdvancedLayer("Name layer", -76, "nameTextLayer", 5, "MSUF2_NAME_TEXT_LAYER_ADV")
+    local advHpLayer = BindAdvancedLayer("HP layer", -136, "hpTextLayer", 5, "MSUF2_HP_TEXT_LAYER_ADV")
+    local advPowerLayer = BindAdvancedLayer("Power layer", -196, "powerTextLayer", 2, "MSUF2_POWER_TEXT_LAYER_ADV")
 
     local function HookTextControls(kind, controls)
         for i = 1, #controls do HookPreviewTextFocus(controls[i][1], kind, controls[i][2]) end
     end
     HookTextControls("name", { { showNameText }, { nameAnchor }, { nameX }, { nameY }, { nameSize }, { advNameLayer } })
-    HookTextControls("hp", {
-        { showHPText }, { hpLeft, "left" }, { hpCenter, "center" }, { hpRight, "right" }, { hpSep }, { hpReverse },
-        { hpX }, { hpY }, { hpMoveTogether }, { hpSlot, function() return CurrentSlot("hp") end },
-        { hpSlotX, function() return CurrentSlot("hp") end }, { hpSlotY, function() return CurrentSlot("hp") end },
-        { hpSize }, { advHpLayer },
-    })
-    HookTextControls("power", {
-        { showPowerText }, { pLeft, "left" }, { pCenter, "center" }, { pRight, "right" }, { pSep },
-        { pX }, { pY }, { pMoveTogether }, { pSlot, function() return CurrentSlot("power") end },
-        { pSlotX, function() return CurrentSlot("power") end }, { pSlotY, function() return CurrentSlot("power") end },
-        { pSize }, { advPowerLayer },
-    })
-
-    local function EnableControls(enabled, ...)
-        for i = 1, select("#", ...) do SetControlEnabled(select(i, ...), enabled) end
-    end
+    local nameTextControls = { nameAnchor, nameSize, nameX, nameY, advNameLayer }
+    local hpTextControls, hpSlotControls = UnitSectionShared.ValueTextControlSets("hp", hpControls, advHpLayer, HookTextControls, CurrentSlot)
+    local powerTextControls, powerSlotControls = UnitSectionShared.ValueTextControlSets("power", powerControls, advPowerLayer, HookTextControls, CurrentSlot)
 
     RefreshTextControlState = function()
         local tab = CurrentTextTab()
-        for key, frame in pairs(tabFrames) do
-            frame:SetShown(key == tab)
-        end
-        if tabs and tabs.SetValue then tabs:SetValue(tab) end
+        if RefreshTextTabs then RefreshTextTabs() end
 
         local nameOn = ReadBool(unit, "showName", true)
         local hpOn = ReadBool(unit, "showHP", true)
@@ -672,16 +601,17 @@ local function BuildText(ctx, builder, unit)
         if namePreviewValue and namePreviewValue.SetText then namePreviewValue:SetText(NamePreviewText()) end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         SetControlEnabled(showNameText, true)
-        EnableControls(nameOn, nameAnchor, nameSize, nameX, nameY, advNameLayer)
-        SetControlEnabled(showHPText, true)
-        EnableControls(hpOn, hpLeft, hpCenter, hpRight, hpSep, hpReverse, hpSize, hpX, hpY, hpMoveTogether, advHpLayer)
-        EnableControls(hpOn and not MoveTogether("hp"), hpSlot, hpSlotX, hpSlotY)
-        SetControlEnabled(showPowerText, true)
-        EnableControls(powerOn, pLeft, pCenter, pRight, pSep, pSize, pX, pY, pMoveTogether, advPowerLayer)
-        EnableControls(powerOn and not MoveTogether("power"), pSlot, pSlotX, pSlotY)
+        SetControlsEnabled(nameTextControls, nameOn)
+        SetControlEnabled(hpControls.show, true)
+        SetControlsEnabled(hpTextControls, hpOn)
+        SetControlsEnabled(hpSlotControls, hpOn and not MoveTogether("hp"))
+        SetControlEnabled(powerControls.show, true)
+        SetControlsEnabled(powerTextControls, powerOn)
+        SetControlsEnabled(powerSlotControls, powerOn and not MoveTogether("power"))
         if powerManaged then
-            SetControlEnabled(showPowerText, false)
-            EnableControls(false, pLeft, pCenter, pRight, pSep, pSize, pX, pY, pMoveTogether, pSlot, pSlotX, pSlotY, advPowerLayer)
+            SetControlEnabled(powerControls.show, false)
+            SetControlsEnabled(powerTextControls, false)
+            SetControlsEnabled(powerSlotControls, false)
             if powerManagedNotice then
                 powerManagedNotice:SetMessage("Player power text is managed in Class Resources because the detached power bar is connected there.", "warning")
                 powerManagedNotice:Show()

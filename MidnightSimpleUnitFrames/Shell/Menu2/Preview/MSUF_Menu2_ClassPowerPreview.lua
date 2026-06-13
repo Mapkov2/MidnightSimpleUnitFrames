@@ -25,6 +25,12 @@ local min = math.min
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
 local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\"
 local PREVIEW_BORDER_COLOR = { 1.00, 0.02, 0.02, 1.00 }
+local CP_OUTLINE_OPTS = {
+    linesKey = "_msufCPPreviewEdges",
+    maxEdgeSize = 8,
+    texture = WHITE8,
+    color = function() return PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], PREVIEW_BORDER_COLOR[4] end,
+}
 
 local CP_SHAPES = {
     CIRCLE = { fill = MEDIA .. "pip_circle_fill.tga", bg = MEDIA .. "pip_circle_bg.tga", edge = MEDIA .. "pip_circle_edge.tga" },
@@ -451,7 +457,7 @@ local function HideTableRegions(t)
     end
 end
 
-local function EnsureOutlineEdges(frame)
+local function EnsureOutlineHost(frame)
     local parent = frame and frame:GetParent()
     if not parent then return nil end
     local host = frame._msufCPPreviewOutlineHost
@@ -461,24 +467,15 @@ local function EnsureOutlineEdges(frame)
         frame._msufCPPreviewOutlineHost = host
     end
     if host:GetParent() ~= parent then host:SetParent(parent) end
-    if frame._msufCPPreviewEdges then return frame._msufCPPreviewEdges, host end
-    local edges = {}
-    for i = 1, 4 do
-        local edge = host:CreateTexture(nil, "OVERLAY", nil, 7)
-        edge:SetColorTexture(PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], PREVIEW_BORDER_COLOR[4])
-        edge:Hide()
-        edges[i] = edge
-    end
-    frame._msufCPPreviewEdges = edges
-    return edges, host
+    return host
 end
 
 local function ApplyBarOutline(frame, outline)
-    local edges, host = EnsureOutlineEdges(frame)
-    if not edges then return end
+    local host = EnsureOutlineHost(frame)
+    if not (host and Helpers.LayoutEdgeLines) then return end
     outline = floor((tonumber(outline) or 0) + 0.5)
     if outline <= 0 then
-        HideTableRegions(edges)
+        if Helpers.SetEdgeLinesShown then Helpers.SetEdgeLinesShown(host, false, CP_OUTLINE_OPTS) end
         if host then host:Hide() end
         return
     end
@@ -489,32 +486,13 @@ local function ApplyBarOutline(frame, outline)
     local parent = host:GetParent()
     host:SetFrameLevel(((parent and parent.GetFrameLevel and parent:GetFrameLevel()) or 0) + 74)
     host:Show()
-    local top, bottom, left, right = edges[1], edges[2], edges[3], edges[4]
-    for i = 1, 4 do
-        edges[i]:SetColorTexture(PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], PREVIEW_BORDER_COLOR[4])
-    end
-    top:ClearAllPoints()
-    top:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-    top:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    top:SetHeight(outline)
-    bottom:ClearAllPoints()
-    bottom:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-    bottom:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-    bottom:SetHeight(outline)
-    left:ClearAllPoints()
-    left:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
-    left:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, 0)
-    left:SetWidth(outline)
-    right:ClearAllPoints()
-    right:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
-    right:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 0, 0)
-    right:SetWidth(outline)
-    for i = 1, 4 do edges[i]:Show() end
+    Helpers.LayoutEdgeLines(host, outline, CP_OUTLINE_OPTS)
 end
 
 local function HideBarOutline(frame)
-    HideTableRegions(frame and frame._msufCPPreviewEdges)
-    if frame and frame._msufCPPreviewOutlineHost then frame._msufCPPreviewOutlineHost:Hide() end
+    local host = frame and frame._msufCPPreviewOutlineHost
+    if host and Helpers.SetEdgeLinesShown then Helpers.SetEdgeLinesShown(host, false, CP_OUTLINE_OPTS) end
+    if host then host:Hide() end
 end
 
 local function CallApply(handle, reason)
@@ -1565,49 +1543,12 @@ local function LayerAvailable(preview, key)
     return not (available and available[key] == false)
 end
 
-local function CreateLayerButton(sidebar, preview, def, index, sideW)
-    local btn = CreateFrame("Button", nil, sidebar)
-    btn:SetSize(sideW - 10, 18)
-    btn:SetPoint("TOP", sidebar, "TOP", 0, -(20 + (index - 1) * 18))
-    btn.key, btn.color, btn.tooltip = def.key, def.color, def.tooltip
-    btn.bg = btn:CreateTexture(nil, "BACKGROUND")
-    btn.bg:SetAllPoints()
-    btn.bar = btn:CreateTexture(nil, "ARTWORK")
-    btn.bar:SetSize(2, 14)
-    btn.bar:SetPoint("LEFT", btn, "LEFT", 2, 0)
-    btn.fs = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    btn.fs:SetPoint("LEFT", btn.bar, "RIGHT", 5, 0)
-    btn.fs:SetPoint("RIGHT", btn, "RIGHT", -18, 0)
-    btn.fs:SetJustifyH("LEFT")
-    btn.fs:SetText(TR(def.label))
-    btn.off = btn:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
-    btn.off:SetText("OFF")
-    btn.off:SetJustifyH("RIGHT")
-
-    function btn:Refresh()
-        local c = self.color or { 1, 1, 1 }
-        local available = LayerAvailable(preview, self.key)
-        local on = LayerOn(preview, self.key)
-        self.off:SetShown((not available) or not on)
-        if not available then
-            self.bg:SetColorTexture(0.020, 0.020, 0.028, 0.48)
-            self.bar:SetColorTexture(0.18, 0.18, 0.22, 0.35)
-            self.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
-            self.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
-        elseif on then
-            self.bg:SetColorTexture(c[1] * 0.12, c[2] * 0.12, c[3] * 0.12, 0.58)
-            self.bar:SetColorTexture(c[1], c[2], c[3], 0.88)
-            self.fs:SetTextColor(0.76, 0.80, 0.90, 0.95)
-            self.off:SetTextColor(0.36, 0.36, 0.42, 0.65)
-        else
-            self.bg:SetColorTexture(0.035, 0.035, 0.045, 0.35)
-            self.bar:SetColorTexture(0.18, 0.18, 0.22, 0.32)
-            self.fs:SetTextColor(0.30, 0.30, 0.36, 0.55)
-            self.off:SetTextColor(0.40, 0.42, 0.50, 0.78)
-        end
-    end
-    btn:SetScript("OnClick", function(self)
+local CP_LAYER_BUTTON_OPTS = {
+    Tr = TR,
+    IsAvailable = LayerAvailable,
+    IsOn = LayerOn,
+    disabledLine = "This element is disabled in the current settings.",
+    OnClick = function(self, preview)
         if not LayerAvailable(preview, self.key) then return end
         preview.layerVisibility[self.key] = preview.layerVisibility[self.key] == false
         if self.key == "guides" then SetPreviewGuidesEnabled(preview.layerVisibility[self.key] ~= false) end
@@ -1618,32 +1559,8 @@ local function CreateLayerButton(sidebar, preview, def, index, sideW)
             RefreshHandleVisuals(preview)
             RefreshLayerButtons(preview)
         end
-    end)
-    btn:SetScript("OnEnter", function(self)
-        local c = self.color or { 1, 1, 1 }
-        if LayerAvailable(preview, self.key) and LayerOn(preview, self.key) then
-            self.bg:SetColorTexture(c[1] * 0.18, c[2] * 0.18, c[3] * 0.18, 0.78)
-        else
-            self.bg:SetColorTexture(0.08, 0.08, 0.10, 0.55)
-        end
-        self.fs:SetTextColor(0.90, 0.92, 1, 1)
-        if GameTooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(TR(self.fs:GetText() or self.key), 1, 1, 1)
-            if self.tooltip then GameTooltip:AddLine(TR(self.tooltip), 0.82, 0.82, 0.82, true) end
-            if not LayerAvailable(preview, self.key) then
-                GameTooltip:AddLine(TR("This element is disabled in the current settings."), 0.55, 0.68, 0.86, true)
-            end
-            GameTooltip:Show()
-        end
-    end)
-    btn:SetScript("OnLeave", function(self)
-        if GameTooltip then GameTooltip:Hide() end
-        self:Refresh()
-    end)
-    btn:Refresh()
-    return btn
-end
+    end,
+}
 
 local function CreateLayerSidebar(box, sideW)
     local sidebar = T.Panel(box, nil, { 0.025, 0.028, 0.04, 0.82 }, T.colors.borderSoft)
@@ -1659,7 +1576,7 @@ local function CreateLayerSidebar(box, sideW)
     for i = 1, #CP_PREVIEW_LAYERS do
         local def = CP_PREVIEW_LAYERS[i]
         box.layerVisibility[def.key] = (def.key == "guides") and PreviewGuidesEnabled() or true
-        box.layerButtons[#box.layerButtons + 1] = CreateLayerButton(sidebar, box, def, i, sideW)
+        box.layerButtons[#box.layerButtons + 1] = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
     end
 end
 

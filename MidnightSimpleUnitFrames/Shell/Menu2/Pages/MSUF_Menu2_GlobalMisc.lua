@@ -19,6 +19,8 @@ local Call, G, ReadG, SetG, ReadGBool, SetGBool = M.Pick(GP, [[Call G ReadG SetG
 local VT = M.ValueTextList
 local TOOLTIP_MODES = VT("ALWAYS", "Always", "OOC", "Out of Combat", "MODIFIER", "Modifier Key", "NEVER", "Never")
 local TOOLTIP_MODIFIERS = VT("ALT", "Alt", "CTRL", "Ctrl", "SHIFT", "Shift")
+local MENU_WRITE_OPTS = { preview = false, applyAll = false, notify = false }
+local PREVIEW_FALSE = { preview = false }
 
 local function NormalizeTooltipMode(mode)
     if mode == "OOC" or mode == "MODIFIER" or mode == "NEVER" then return mode end
@@ -103,28 +105,40 @@ local function BuildMisc(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Miscellaneous", "Language, menu behavior, tooltips and Blizzard frames.", 72)
 
-    if _G.StaticPopupDialogs and not _G.StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] then
-        _G.StaticPopupDialogs["MSUF_RELOAD_PLAYERFRAME_HIDE_MODE"] = {
-            text = M.Tr("This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."),
-            button1 = RELOADUI or M.Tr("Reload"),
-            button2 = CANCEL or M.Tr("Cancel"),
-            OnAccept = function() if ReloadUI then ReloadUI() end end,
-            timeout = 0,
-            whileDead = true,
-            hideOnEscape = true,
-            preferredIndex = 3,
-        }
+    M.InstallStaticPopup("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE", {
+        text = M.Tr("This changes how MSUF hides the Blizzard PlayerFrame.\n\nA UI reload is required."),
+        button1 = RELOADUI or M.Tr("Reload"),
+        button2 = CANCEL or M.Tr("Cancel"),
+        OnAccept = function() if ReloadUI then ReloadUI() end end,
+    })
+
+    local function BindMiscToggle(parent, label, key, default, reason, x, y, width, opts, afterSet)
+        local control = W.Toggle(parent, label)
+        M.BindToggle(ctx, control,
+            function() return ReadGBool(key, default) end,
+            function(v)
+                SetGBool(key, v, reason, opts or PREVIEW_FALSE)
+                if afterSet then afterSet(v) end
+            end)
+        if x then W.MoveWidget(control, parent, x, y, width, "LEFT") end
+        return control
+    end
+
+    local function BindMiscDropdown(parent, label, values, width, x, y, getValue, setValue)
+        local control = W.Dropdown(parent, label, values, width)
+        M.BindDropdown(ctx, control, getValue, setValue)
+        W.MoveWidget(control, parent, x, y, width, "LEFT")
+        return control
     end
 
     local language = b:CollapsibleSection("misc_language", "Language", 146, true)
     local languageW = language._msuf2Width or ctx.width or 720
     local languageDropW = max(260, min(360, languageW - 70))
-    local languageDrop = W.Dropdown(language, "Menu language", function()
+    local languageDrop = BindMiscDropdown(language, "Menu language", function()
         return (M.GetLocaleDropdownValues and M.GetLocaleDropdownValues()) or {
             { value = "auto", text = "Follow Blizzard" },
         }
-    end, languageDropW)
-    M.BindDropdown(ctx, languageDrop,
+    end, languageDropW, 30, -44,
         function()
             return (M.GetLocaleSelection and M.GetLocaleSelection()) or "auto"
         end,
@@ -142,44 +156,20 @@ local function BuildMisc(ctx)
                 RebuildLocalePages()
             end
         end)
-    W.MoveWidget(languageDrop, language, 30, -44, languageDropW, "LEFT")
     local languageHelp = W.Text(language, "Follow Blizzard uses the WoW client language. Manual selection affects only MSUF menus.", 30, -96, languageW - 70, T.colors.muted)
     if languageHelp.SetWordWrap then languageHelp:SetWordWrap(true) end
 
     local menuBehavior = b:CollapsibleSection("misc_menu_behavior", "Menu behavior", 194, true)
-    local menuSnap = W.Toggle(menuBehavior, "Enable Windows-style edge snap for this menu")
-    M.BindToggle(ctx, menuSnap,
-        function() return ReadGBool("slashMenuSnapEnabled", true) end,
-        function(v) SetGBool("slashMenuSnapEnabled", v, "MSUF2_MENU_SNAP", { preview = false, applyAll = false, notify = false }) end)
+    BindMiscToggle(menuBehavior, "Enable Windows-style edge snap for this menu", "slashMenuSnapEnabled", true, "MSUF2_MENU_SNAP", nil, nil, nil, MENU_WRITE_OPTS)
     local menuSnapHelp = W.Text(menuBehavior, "Drag the MSUF menu to a screen side for a half-screen layout, to a corner for a quarter layout, or to the top edge for a maximized layout.", 30, -72, (menuBehavior._msuf2Width or ctx.width or 720) - 70, T.colors.muted)
     if menuSnapHelp.SetWordWrap then menuSnapHelp:SetWordWrap(true) end
-    local advancedHidden = W.Toggle(menuBehavior, "Hide Advanced menu section")
-    M.BindToggle(ctx, advancedHidden,
-        function() return ReadGBool("hideAdvancedMenu", true) end,
-        function(v)
-            SetGBool("hideAdvancedMenu", v, "MSUF2_ADVANCED_MENU_VISIBILITY", { preview = false, applyAll = false, notify = false })
-            if M.RefreshAdvancedNavVisibility then M.RefreshAdvancedNavVisibility() end
-        end)
-    W.MoveWidget(advancedHidden, menuBehavior, 14, -118, 280, "LEFT")
-
-    local reduceMotion = W.Toggle(menuBehavior, "Reduce menu motion")
-    M.BindToggle(ctx, reduceMotion,
-        function() return ReadGBool("reduceMotion", false) end,
-        function(v) SetGBool("reduceMotion", v, "MSUF2_REDUCE_MOTION", { preview = false, applyAll = false, notify = false }) end)
-    W.MoveWidget(reduceMotion, menuBehavior, 14, -148, 280, "LEFT")
+    BindMiscToggle(menuBehavior, "Hide Advanced menu section", "hideAdvancedMenu", true, "MSUF2_ADVANCED_MENU_VISIBILITY", 14, -118, 280, MENU_WRITE_OPTS,
+        function() if M.RefreshAdvancedNavVisibility then M.RefreshAdvancedNavVisibility() end end)
+    BindMiscToggle(menuBehavior, "Reduce menu motion", "reduceMotion", false, "MSUF2_REDUCE_MOTION", 14, -148, 280, MENU_WRITE_OPTS)
 
     local startup = b:CollapsibleSection("misc_startup", "Startup", 124, true)
-    local welcome = W.Toggle(startup, "Show welcome message")
-    M.BindToggle(ctx, welcome,
-        function() return ReadGBool("showWelcomeMessage", true) end,
-        function(v) SetGBool("showWelcomeMessage", v, "MSUF2_WELCOME", { preview = false }) end)
-    W.MoveWidget(welcome, startup, 14, -42, 320, "LEFT")
-
-    local version = W.Toggle(startup, "Enable version check (peer-to-peer)")
-    M.BindToggle(ctx, version,
-        function() return ReadGBool("versionCheckEnabled", true) end,
-        function(v) SetGBool("versionCheckEnabled", v, "MSUF2_VERSION_CHECK", { preview = false }) end)
-    W.MoveWidget(version, startup, 14, -76, 360, "LEFT")
+    BindMiscToggle(startup, "Show welcome message", "showWelcomeMessage", true, "MSUF2_WELCOME", 14, -42, 320)
+    BindMiscToggle(startup, "Enable version check (peer-to-peer)", "versionCheckEnabled", true, "MSUF2_VERSION_CHECK", 14, -76, 360)
 
     local tooltips = b:CollapsibleSection("misc_tooltips", "Unitframe tooltips", 236, false)
     local tooltipW = tooltips._msuf2Width or ctx.width or 720
@@ -187,32 +177,24 @@ local function BuildMisc(ctx)
     local tooltipRightX = max(tooltipLeftX + 300, floor(tooltipW * 0.52))
     local tooltipLeftW = max(240, min(300, tooltipRightX - tooltipLeftX - 48))
     local tooltipRightW = max(220, min(300, tooltipW - tooltipRightX - 36))
-    local tooltipProvider = W.Dropdown(tooltips, "Tooltip source", VT("GAME", "GameTooltip (addon-compatible)", "MSUF", "MSUF custom panel"), tooltipLeftW)
-    M.BindDropdown(ctx, tooltipProvider,
+    BindMiscDropdown(tooltips, "Tooltip source", VT("GAME", "GameTooltip (addon-compatible)", "MSUF", "MSUF custom panel"), tooltipLeftW, tooltipLeftX, -44,
         function() return ReadTooltipProvider() end,
         function(v) WriteTooltipSettings(v, ReadTooltipAnchor()) end)
-    W.MoveWidget(tooltipProvider, tooltips, tooltipLeftX, -44, tooltipLeftW, "LEFT")
-    local tooltipAnchor = W.Dropdown(tooltips, "Tooltip anchor", VT("EXTERNAL", "Addon / Blizzard controlled", "FIXED", "MSUF fixed position", "CURSOR", "MSUF cursor"), tooltipRightW)
-    M.BindDropdown(ctx, tooltipAnchor,
+    BindMiscDropdown(tooltips, "Tooltip anchor", VT("EXTERNAL", "Addon / Blizzard controlled", "FIXED", "MSUF fixed position", "CURSOR", "MSUF cursor"), tooltipRightW, tooltipRightX, -44,
         function() return ReadTooltipAnchor() end,
         function(v) WriteTooltipSettings(ReadTooltipProvider(), v) end)
-    W.MoveWidget(tooltipAnchor, tooltips, tooltipRightX, -44, tooltipRightW, "LEFT")
 
     local tooltipModifier
-    local tooltipMode = W.Dropdown(tooltips, "Show unitframe tooltips", TOOLTIP_MODES, tooltipLeftW)
-    M.BindDropdown(ctx, tooltipMode,
+    BindMiscDropdown(tooltips, "Show unitframe tooltips", TOOLTIP_MODES, tooltipLeftW, tooltipLeftX, -112,
         function() return ReadTooltipMode() end,
         function(v)
             WriteTooltipBehavior(v, ReadTooltipModifier())
             if W.SetControlEnabled then W.SetControlEnabled(tooltipModifier, ReadTooltipMode() == "MODIFIER") end
         end)
-    W.MoveWidget(tooltipMode, tooltips, tooltipLeftX, -112, tooltipLeftW, "LEFT")
 
-    tooltipModifier = W.Dropdown(tooltips, "Modifier key", TOOLTIP_MODIFIERS, tooltipRightW)
-    M.BindDropdown(ctx, tooltipModifier,
+    tooltipModifier = BindMiscDropdown(tooltips, "Modifier key", TOOLTIP_MODIFIERS, tooltipRightW, tooltipRightX, -112,
         function() return ReadTooltipModifier() end,
         function(v) WriteTooltipBehavior(ReadTooltipMode(), v) end)
-    W.MoveWidget(tooltipModifier, tooltips, tooltipRightX, -112, tooltipRightW, "LEFT")
 
     local function RefreshTooltipControls()
         if W.SetControlEnabled then W.SetControlEnabled(tooltipModifier, ReadTooltipMode() == "MODIFIER") end
@@ -223,25 +205,12 @@ local function BuildMisc(ctx)
     if tooltipHelp.SetWordWrap then tooltipHelp:SetWordWrap(true) end
 
     local blizzard = b:CollapsibleSection("misc_blizzard_frames", "Blizzard Frames", 190, false)
-    local blizzUF = W.Toggle(blizzard, "Disable Blizzard unitframes")
-    M.BindToggle(ctx, blizzUF,
-        function() return ReadGBool("disableBlizzardUnitFrames", true) end,
+    BindMiscToggle(blizzard, "Disable Blizzard unitframes", "disableBlizzardUnitFrames", true, "MSUF2_DISABLE_BLIZZARD_UF", nil, nil, nil, nil,
+        function() if print then print("|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.") end end)
+    BindMiscToggle(blizzard, "Fully Hide Blizzard PlayerFrame - resource bar compatibility", "hardKillBlizzardPlayerFrame", false, "MSUF2_HARDKILL_PLAYERFRAME", nil, nil, nil, nil,
+        function() if StaticPopup_Show then StaticPopup_Show("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE") end end)
+    BindMiscToggle(blizzard, "Show MSUF minimap icon", "showMinimapIcon", true, "MSUF2_MINIMAP_ICON", nil, nil, nil, nil,
         function(v)
-            SetGBool("disableBlizzardUnitFrames", v, "MSUF2_DISABLE_BLIZZARD_UF", { preview = false })
-            if print then print("|cffffd700MSUF:|r Changing Blizzard unitframes visibility requires a /reload.") end
-        end)
-    local hardKill = W.Toggle(blizzard, "Fully Hide Blizzard PlayerFrame - resource bar compatibility")
-    M.BindToggle(ctx, hardKill,
-        function() return ReadGBool("hardKillBlizzardPlayerFrame", false) end,
-        function(v)
-            SetGBool("hardKillBlizzardPlayerFrame", v, "MSUF2_HARDKILL_PLAYERFRAME", { preview = false })
-            if StaticPopup_Show then StaticPopup_Show("MSUF_RELOAD_PLAYERFRAME_HIDE_MODE") end
-        end)
-    local minimap = W.Toggle(blizzard, "Show MSUF minimap icon")
-    M.BindToggle(ctx, minimap,
-        function() return ReadGBool("showMinimapIcon", true) end,
-        function(v)
-            SetGBool("showMinimapIcon", v, "MSUF2_MINIMAP_ICON", { preview = false })
             if type(_G.MSUF_SetMinimapIconEnabled) == "function" then
                 pcall(_G.MSUF_SetMinimapIconEnabled, v)
             else
@@ -250,11 +219,8 @@ local function BuildMisc(ctx)
                 g.minimapIconDB.hide = not v
             end
         end)
-    local sounds = W.Toggle(blizzard, "Play sound on Target/Target Lost")
-    M.BindToggle(ctx, sounds,
-        function() return ReadGBool("playTargetSelectLostSounds", false) end,
+    BindMiscToggle(blizzard, "Play sound on Target/Target Lost", "playTargetSelectLostSounds", false, "MSUF2_TARGET_SOUNDS", nil, nil, nil, nil,
         function(v)
-            SetGBool("playTargetSelectLostSounds", v, "MSUF2_TARGET_SOUNDS", { preview = false })
             Call("MSUF_TargetSoundDriver_ResetState")
             if v then Call("MSUF_TargetSoundDriver_Ensure") end
         end)

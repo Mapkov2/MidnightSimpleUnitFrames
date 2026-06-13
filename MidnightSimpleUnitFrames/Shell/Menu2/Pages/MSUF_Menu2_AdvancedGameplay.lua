@@ -16,7 +16,8 @@ local floor = math.floor
 local max = math.max
 local min = math.min
 
-local Gameplay, MoveWidget, LabelAt, DividerAt, ToggleAt, SwitchAt, SliderAt, DropdownAt, SetControlEnabled = M.Pick(AP, [[Gameplay MoveWidget LabelAt DividerAt ToggleAt SwitchAt SliderAt DropdownAt SetControlEnabled]])
+local Gameplay, MoveWidget, LabelAt, DividerAt, SwitchAt, AddTableControlSpecs, SetControlEnabled = M.Pick(AP, [[Gameplay MoveWidget LabelAt DividerAt SwitchAt AddTableControlSpecs SetControlEnabled]])
+local SetControlsEnabled = W.SetControlsEnabled
 local ApplyGameplay = M.ApplyGameplay or function() end
 local VT = M.ValueTextList
 
@@ -82,13 +83,14 @@ local function BuildGameplay(ctx)
         return widget
     end
 
+    local function AddControls(list, section, specs) return AddTableControlSpecs(ctx, list, section, Gameplay, specs, ApplyGameplayUI) end
+    local function AddBackdrops(section, specs) for i = 1, #specs do local s = specs[i]; W.ControlCardBackdrop(section, 14, s[1], s[2], s[3]) end end
+
     local function GameplayContentWidth()
         return min(tonumber(M.formContentMaxWidth) or 980, tonumber(ctx.width) or 900)
     end
 
-    local function GameplayStacked()
-        return GameplayContentWidth() < 620
-    end
+    local function GameplayStacked() return GameplayContentWidth() < 620 end
 
     local function SectionCardWidth(section, maxWidth)
         local sectionW = tonumber(section and section._msuf2Width) or GameplayContentWidth()
@@ -118,30 +120,34 @@ local function BuildGameplay(ctx)
     local timerEnable
     if compactTimer then
         local timerSliderW = SectionControlWidth(timer, 300, 120)
-        W.ControlCardBackdrop(timer, 14, -38, timerCardW, 220)
-        W.ControlCardBackdrop(timer, 14, -274, timerCardW, 238)
+        AddBackdrops(timer, { { -38, timerCardW, 220 }, { -274, timerCardW, 238 } })
         timerEnable = SwitchAt(ctx, timer, "Combat Timer", 30, -40, min(230, timerSliderW), Gameplay, "enableCombatTimer", false, ApplyGameplayUI)
-        local timerAnchor = DropdownAt(ctx, timer, "Anchor", 30, -84, anchorValues, min(220, timerSliderW), Gameplay, "combatTimerAnchor", "none", ApplyGameplayUI)
-        Add(timerControls, timerAnchor)
-        Add(timerControls, SliderAt(ctx, timer, "Timer size", 30, -138, 10, 64, 1, timerSliderW, Gameplay, "combatFontSize", 24, ApplyGameplayUI))
-        Add(timerControls, ToggleAt(ctx, timer, "Lock position", 30, -192, Gameplay, "lockCombatTimer", false, ApplyGameplayUI))
-        Add(timerControls, ToggleAt(ctx, timer, "Click-through (ALT to drag when unlocked)", 30, -224, Gameplay, "combatTimerClickThrough", false, ApplyGameplayUI))
+        AddControls(timerControls, timer, {
+            { "dropdown", "Anchor", 30, -84, anchorValues, min(220, timerSliderW), "combatTimerAnchor", "none" },
+            { "slider", "Timer size", 30, -138, 10, 64, 1, timerSliderW, "combatFontSize", 24 },
+            { "toggle", "Lock position", 30, -192, "lockCombatTimer", false },
+            { "toggle", "Click-through (ALT to drag when unlocked)", 30, -224, "combatTimerClickThrough", false },
+        })
         LabelAt(timer, "Timer position (offset)", 30, -284, 260, "GameFontHighlightSmall", T.colors.muted)
-        Add(timerControls, SliderAt(ctx, timer, "X offset", 30, -316, -800, 800, 1, timerSliderW, Gameplay, "combatOffsetX", 0, ApplyGameplayUI))
-        Add(timerControls, SliderAt(ctx, timer, "Y offset", 30, -386, -800, 800, 1, timerSliderW, Gameplay, "combatOffsetY", -200, ApplyGameplayUI))
+        AddControls(timerControls, timer, {
+            { "slider", "X offset", 30, -316, -800, 800, 1, timerSliderW, "combatOffsetX", 0 },
+            { "slider", "Y offset", 30, -386, -800, 800, 1, timerSliderW, "combatOffsetY", -200 },
+        })
         LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, -492, min(520, timerW - 60), "GameFontDisableSmall", T.colors.muted)
     else
-        W.ControlCardBackdrop(timer, 14, -38, timerCardW, 126)
-        W.ControlCardBackdrop(timer, 14, -178, timerCardW, 150)
+        AddBackdrops(timer, { { -38, timerCardW, 126 }, { -178, timerCardW, 150 } })
         timerEnable = SwitchAt(ctx, timer, "Combat Timer", timerLeftX, -40, min(230, timerColW), Gameplay, "enableCombatTimer", false, ApplyGameplayUI)
-        local timerAnchor = DropdownAt(ctx, timer, "Anchor", timerRightX, -40, anchorValues, min(220, timerColW), Gameplay, "combatTimerAnchor", "none", ApplyGameplayUI)
-        Add(timerControls, timerAnchor)
-        Add(timerControls, SliderAt(ctx, timer, "Timer size", timerLeftX, -94, 10, 64, 1, min(270, timerColW), Gameplay, "combatFontSize", 24, ApplyGameplayUI))
-        Add(timerControls, ToggleAt(ctx, timer, "Lock position", timerRightX, -100, Gameplay, "lockCombatTimer", false, ApplyGameplayUI))
-        Add(timerControls, ToggleAt(ctx, timer, "Click-through (ALT to drag when unlocked)", timerRightX, -132, Gameplay, "combatTimerClickThrough", false, ApplyGameplayUI))
+        AddControls(timerControls, timer, {
+            { "dropdown", "Anchor", timerRightX, -40, anchorValues, min(220, timerColW), "combatTimerAnchor", "none" },
+            { "slider", "Timer size", timerLeftX, -94, 10, 64, 1, min(270, timerColW), "combatFontSize", 24 },
+            { "toggle", "Lock position", timerRightX, -100, "lockCombatTimer", false },
+            { "toggle", "Click-through (ALT to drag when unlocked)", timerRightX, -132, "combatTimerClickThrough", false },
+        })
         LabelAt(timer, "Timer position (offset)", 30, -186, 260, "GameFontHighlightSmall", T.colors.muted)
-        Add(timerControls, SliderAt(ctx, timer, "X offset", timerLeftX, -216, -800, 800, 1, timerColW, Gameplay, "combatOffsetX", 0, ApplyGameplayUI))
-        Add(timerControls, SliderAt(ctx, timer, "Y offset", timerRightX, -216, -800, 800, 1, timerColW, Gameplay, "combatOffsetY", -200, ApplyGameplayUI))
+        AddControls(timerControls, timer, {
+            { "slider", "X offset", timerLeftX, -216, -800, 800, 1, timerColW, "combatOffsetX", 0 },
+            { "slider", "Y offset", timerRightX, -216, -800, 800, 1, timerColW, "combatOffsetY", -200 },
+        })
         LabelAt(timer, "Colors are configured in Colors > Gameplay.", 30, -312, min(520, timerW - 60), "GameFontDisableSmall", T.colors.muted)
     end
 
@@ -154,27 +160,29 @@ local function BuildGameplay(ctx)
     local enterInput
     local leaveInput
     if stateStacked then
-        W.ControlCardBackdrop(state, 14, -38, stateCardW, 196)
-        W.ControlCardBackdrop(state, 14, -250, stateCardW, 282)
+        AddBackdrops(state, { { -38, stateCardW, 196 }, { -250, stateCardW, 282 } })
         stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", 30, -40, min(270, stateControlW), Gameplay, "enableCombatStateText", false, ApplyGameplayUI)
-        Add(stateControls, ToggleAt(ctx, state, "Lock position", 30, -74, Gameplay, "lockCombatState", false, ApplyGameplayUI))
+        AddControls(stateControls, state, { { "toggle", "Lock position", 30, -74, "lockCombatState", false } })
         enterInput = MoveWidget(W.TextInput(state, "Enter text", stateControlW), state, 30, -120)
         leaveInput = MoveWidget(W.TextInput(state, "Leave text", stateControlW), state, 30, -174)
-        Add(stateControls, SliderAt(ctx, state, "Text size", 30, -258, 10, 64, 1, stateControlW, Gameplay, "combatStateFontSize", 24, ApplyGameplayUI))
-        Add(stateControls, SliderAt(ctx, state, "Duration (s)", 30, -328, 0.5, 5.0, 0.5, stateControlW, Gameplay, "combatStateDuration", 1.5, ApplyGameplayUI))
-        Add(stateControls, SliderAt(ctx, state, "X offset", 30, -398, -800, 800, 1, stateControlW, Gameplay, "combatStateOffsetX", 0, ApplyGameplayUI))
-        Add(stateControls, SliderAt(ctx, state, "Y offset", 30, -468, -800, 800, 1, stateControlW, Gameplay, "combatStateOffsetY", 80, ApplyGameplayUI))
+        AddControls(stateControls, state, {
+            { "slider", "Text size", 30, -258, 10, 64, 1, stateControlW, "combatStateFontSize", 24 },
+            { "slider", "Duration (s)", 30, -328, 0.5, 5.0, 0.5, stateControlW, "combatStateDuration", 1.5 },
+            { "slider", "X offset", 30, -398, -800, 800, 1, stateControlW, "combatStateOffsetX", 0 },
+            { "slider", "Y offset", 30, -468, -800, 800, 1, stateControlW, "combatStateOffsetY", 80 },
+        })
     else
-        W.ControlCardBackdrop(state, 14, -38, stateCardW, 136)
-        W.ControlCardBackdrop(state, 14, -144, stateCardW, 154)
+        AddBackdrops(state, { { -38, stateCardW, 136 }, { -144, stateCardW, 154 } })
         stateEnable = SwitchAt(ctx, state, "Combat Enter/Leave", stateLeftX, -40, min(270, stateColW), Gameplay, "enableCombatStateText", false, ApplyGameplayUI)
-        Add(stateControls, ToggleAt(ctx, state, "Lock position", stateRightX, -40, Gameplay, "lockCombatState", false, ApplyGameplayUI))
+        AddControls(stateControls, state, { { "toggle", "Lock position", stateRightX, -40, "lockCombatState", false } })
         enterInput = MoveWidget(W.TextInput(state, "Enter text", min(220, stateColW)), state, stateLeftX, -86)
         leaveInput = MoveWidget(W.TextInput(state, "Leave text", min(220, stateColW)), state, stateRightX, -86)
-        Add(stateControls, SliderAt(ctx, state, "Text size", stateLeftX, -152, 10, 64, 1, stateColW, Gameplay, "combatStateFontSize", 24, ApplyGameplayUI))
-        Add(stateControls, SliderAt(ctx, state, "Duration (s)", stateRightX, -152, 0.5, 5.0, 0.5, stateColW, Gameplay, "combatStateDuration", 1.5, ApplyGameplayUI))
-        Add(stateControls, SliderAt(ctx, state, "X offset", stateLeftX, -238, -800, 800, 1, stateColW, Gameplay, "combatStateOffsetX", 0, ApplyGameplayUI))
-        Add(stateControls, SliderAt(ctx, state, "Y offset", stateRightX, -238, -800, 800, 1, stateColW, Gameplay, "combatStateOffsetY", 80, ApplyGameplayUI))
+        AddControls(stateControls, state, {
+            { "slider", "Text size", stateLeftX, -152, 10, 64, 1, stateColW, "combatStateFontSize", 24 },
+            { "slider", "Duration (s)", stateRightX, -152, 0.5, 5.0, 0.5, stateColW, "combatStateDuration", 1.5 },
+            { "slider", "X offset", stateLeftX, -238, -800, 800, 1, stateColW, "combatStateOffsetX", 0 },
+            { "slider", "Y offset", stateRightX, -238, -800, 800, 1, stateColW, "combatStateOffsetY", 80 },
+        })
     end
     M.BindTextInput(ctx, enterInput,
         function() return Gameplay().combatStateEnterText or "+Combat" end,
@@ -209,8 +217,7 @@ local function BuildGameplay(ctx)
     local resetTotemBtn
     local firstDanceEnable
     if classStacked then
-        W.ControlCardBackdrop(classSec, 14, -38, classCardW, 520)
-        W.ControlCardBackdrop(classSec, 14, -590, classCardW, 430)
+        AddBackdrops(classSec, { { -38, classCardW, 520 }, { -590, classCardW, 430 } })
         LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", 30, -38, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", 30, -60, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", 30, -92, min(300, classControlW), Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
@@ -219,26 +226,29 @@ local function BuildGameplay(ctx)
         resetTotemBtn = T.Button(classSec, "Reset TotemFrame layout", min(190, classControlW), 22)
         resetTotemBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", 30, -160)
         LabelAt(classSec, "Tip: Move the preview via mousedrag or arrow keys.", 30, -196, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
-        Add(totemControls, SliderAt(ctx, classSec, "Icon size", 30, -238, 8, 64, 1, classControlW, Gameplay, "playerTotemsIconSize", 24, ApplyGameplayUI))
-        Add(totemControls, SliderAt(ctx, classSec, "X offset", 30, -308, -200, 200, 1, classControlW, Gameplay, "playerTotemsOffsetX", 0, ApplyGameplayUI))
-        Add(totemControls, SliderAt(ctx, classSec, "Y offset", 30, -378, -200, 200, 1, classControlW, Gameplay, "playerTotemsOffsetY", -6, ApplyGameplayUI))
-        Add(totemControls, DropdownAt(ctx, classSec, "From", 30, -448, frameAnchors, min(220, classControlW), Gameplay, "playerTotemsAnchorFrom", "TOPLEFT", ApplyGameplayUI))
-        Add(totemControls, DropdownAt(ctx, classSec, "To", 30, -502, frameAnchors, min(220, classControlW), Gameplay, "playerTotemsAnchorTo", "BOTTOMLEFT", ApplyGameplayUI))
+        AddControls(totemControls, classSec, {
+            { "slider", "Icon size", 30, -238, 8, 64, 1, classControlW, "playerTotemsIconSize", 24 },
+            { "slider", "X offset", 30, -308, -200, 200, 1, classControlW, "playerTotemsOffsetX", 0 },
+            { "slider", "Y offset", 30, -378, -200, 200, 1, classControlW, "playerTotemsOffsetY", -6 },
+            { "dropdown", "From", 30, -448, frameAnchors, min(220, classControlW), "playerTotemsAnchorFrom", "TOPLEFT" },
+            { "dropdown", "To", 30, -502, frameAnchors, min(220, classControlW), "playerTotemsAnchorTo", "BOTTOMLEFT" },
+        })
 
         DividerAt(classSec, -570)
         LabelAt(classSec, "Rogue: First Dance tracker", 30, -596, min(360, classW - 60), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Optional helper. Shows a 6s timer after leaving combat.", 30, -618, min(520, classW - 60), "GameFontDisableSmall", T.colors.muted)
         firstDanceEnable = SwitchAt(ctx, classSec, "First Dance tracker", 30, -652, min(340, classControlW), Gameplay, "enableFirstDanceTimer", false, ApplyGameplayUI)
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Lock position", 30, -686, Gameplay, "lockFirstDance", false, ApplyGameplayUI))
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Click-through (ALT to drag when unlocked)", 30, -720, Gameplay, "firstDanceClickThrough", false, ApplyGameplayUI))
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Show as icon with cooldown swipe", 30, -754, Gameplay, "firstDanceShowIcon", true, ApplyGameplayUI))
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Keep visible when ready (hide on combat enter)", 30, -788, Gameplay, "firstDanceShowReady", false, ApplyGameplayUI))
-        Add(firstDanceControls, SliderAt(ctx, classSec, "Icon size", 30, -836, 16, 96, 1, classControlW, Gameplay, "firstDanceIconSize", 40, ApplyGameplayUI))
-        Add(firstDanceControls, SliderAt(ctx, classSec, "X offset", 30, -906, -800, 800, 1, classControlW, Gameplay, "firstDanceOffsetX", 0, ApplyGameplayUI))
-        Add(firstDanceControls, SliderAt(ctx, classSec, "Y offset", 30, -976, -800, 800, 1, classControlW, Gameplay, "firstDanceOffsetY", 80, ApplyGameplayUI))
+        AddControls(firstDanceControls, classSec, {
+            { "toggle", "Lock position", 30, -686, "lockFirstDance", false },
+            { "toggle", "Click-through (ALT to drag when unlocked)", 30, -720, "firstDanceClickThrough", false },
+            { "toggle", "Show as icon with cooldown swipe", 30, -754, "firstDanceShowIcon", true },
+            { "toggle", "Keep visible when ready (hide on combat enter)", 30, -788, "firstDanceShowReady", false },
+            { "slider", "Icon size", 30, -836, 16, 96, 1, classControlW, "firstDanceIconSize", 40 },
+            { "slider", "X offset", 30, -906, -800, 800, 1, classControlW, "firstDanceOffsetX", 0 },
+            { "slider", "Y offset", 30, -976, -800, 800, 1, classControlW, "firstDanceOffsetY", 80 },
+        })
     else
-        W.ControlCardBackdrop(classSec, 14, -38, classCardW, 276)
-        W.ControlCardBackdrop(classSec, 14, -348, classCardW, 318)
+        AddBackdrops(classSec, { { -38, classCardW, 276 }, { -348, classCardW, 318 } })
         LabelAt(classSec, hasTotemFrame and "Totem / Statue frame" or "(Totem/Statue frame is Shaman/Monk-only)", classLeftX, -38, min(360, classColW), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Uses Blizzard TotemFrame; MSUF only re-anchors it out of combat.", classLeftX, -60, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
         totemEnable = SwitchAt(ctx, classSec, "Blizzard TotemFrame", classLeftX, -92, classColW, Gameplay, "enablePlayerTotems", false, ApplyGameplayUI)
@@ -247,23 +257,27 @@ local function BuildGameplay(ctx)
         resetTotemBtn = T.Button(classSec, "Reset TotemFrame layout", 190, 22)
         resetTotemBtn:SetPoint("TOPLEFT", classSec, "TOPLEFT", classLeftX + 132, -128)
         LabelAt(classSec, "Tip: Move the preview via mousedrag or arrow keys.", classLeftX, -158, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
-        Add(totemControls, SliderAt(ctx, classSec, "Icon size", classRightX, -84, 8, 64, 1, classColW, Gameplay, "playerTotemsIconSize", 24, ApplyGameplayUI))
-        Add(totemControls, SliderAt(ctx, classSec, "X offset", classRightX, -168, -200, 200, 1, classColW, Gameplay, "playerTotemsOffsetX", 0, ApplyGameplayUI))
-        Add(totemControls, SliderAt(ctx, classSec, "Y offset", classRightX, -252, -200, 200, 1, classColW, Gameplay, "playerTotemsOffsetY", -6, ApplyGameplayUI))
-        Add(totemControls, DropdownAt(ctx, classSec, "From", classLeftX, -202, frameAnchors, min(180, classColW), Gameplay, "playerTotemsAnchorFrom", "TOPLEFT", ApplyGameplayUI))
-        Add(totemControls, DropdownAt(ctx, classSec, "To", classLeftX + min(196, classColW * 0.55), -202, frameAnchors, min(180, classColW), Gameplay, "playerTotemsAnchorTo", "BOTTOMLEFT", ApplyGameplayUI))
+        AddControls(totemControls, classSec, {
+            { "slider", "Icon size", classRightX, -84, 8, 64, 1, classColW, "playerTotemsIconSize", 24 },
+            { "slider", "X offset", classRightX, -168, -200, 200, 1, classColW, "playerTotemsOffsetX", 0 },
+            { "slider", "Y offset", classRightX, -252, -200, 200, 1, classColW, "playerTotemsOffsetY", -6 },
+            { "dropdown", "From", classLeftX, -202, frameAnchors, min(180, classColW), "playerTotemsAnchorFrom", "TOPLEFT" },
+            { "dropdown", "To", classLeftX + min(196, classColW * 0.55), -202, frameAnchors, min(180, classColW), "playerTotemsAnchorTo", "BOTTOMLEFT" },
+        })
 
         DividerAt(classSec, -330)
         LabelAt(classSec, "Rogue: First Dance tracker", classLeftX, -354, min(360, classColW), "GameFontNormalSmall", T.colors.text)
         LabelAt(classSec, "Optional helper. Shows a 6s timer after leaving combat.", classLeftX, -376, min(520, classCardW - 32), "GameFontDisableSmall", T.colors.muted)
         firstDanceEnable = SwitchAt(ctx, classSec, "First Dance tracker", classLeftX, -410, classColW, Gameplay, "enableFirstDanceTimer", false, ApplyGameplayUI)
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Lock position", classRightX, -410, Gameplay, "lockFirstDance", false, ApplyGameplayUI))
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Click-through (ALT to drag when unlocked)", classLeftX, -444, Gameplay, "firstDanceClickThrough", false, ApplyGameplayUI))
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Show as icon with cooldown swipe", classLeftX, -478, Gameplay, "firstDanceShowIcon", true, ApplyGameplayUI))
-        Add(firstDanceControls, ToggleAt(ctx, classSec, "Keep visible when ready (hide on combat enter)", classRightX, -444, Gameplay, "firstDanceShowReady", false, ApplyGameplayUI))
-        Add(firstDanceControls, SliderAt(ctx, classSec, "Icon size", classLeftX, -524, 16, 96, 1, classColW, Gameplay, "firstDanceIconSize", 40, ApplyGameplayUI))
-        Add(firstDanceControls, SliderAt(ctx, classSec, "X offset", classRightX, -524, -800, 800, 1, classColW, Gameplay, "firstDanceOffsetX", 0, ApplyGameplayUI))
-        Add(firstDanceControls, SliderAt(ctx, classSec, "Y offset", classLeftX, -608, -800, 800, 1, classColW, Gameplay, "firstDanceOffsetY", 80, ApplyGameplayUI))
+        AddControls(firstDanceControls, classSec, {
+            { "toggle", "Lock position", classRightX, -410, "lockFirstDance", false },
+            { "toggle", "Click-through (ALT to drag when unlocked)", classLeftX, -444, "firstDanceClickThrough", false },
+            { "toggle", "Show as icon with cooldown swipe", classLeftX, -478, "firstDanceShowIcon", true },
+            { "toggle", "Keep visible when ready (hide on combat enter)", classRightX, -444, "firstDanceShowReady", false },
+            { "slider", "Icon size", classLeftX, -524, 16, 96, 1, classColW, "firstDanceIconSize", 40 },
+            { "slider", "X offset", classRightX, -524, -800, 800, 1, classColW, "firstDanceOffsetX", 0 },
+            { "slider", "Y offset", classLeftX, -608, -800, 800, 1, classColW, "firstDanceOffsetY", 80 },
+        })
     end
     previewBtn:SetScript("OnClick", function()
         if MSUF and type(MSUF.MSUF_PlayerTotems_TogglePreview) == "function" then
@@ -280,9 +294,7 @@ local function BuildGameplay(ctx)
         ApplyGameplayUI()
         if M.Refresh then M.Refresh(ctx) end
     end)
-    Add(totemControls, totemEnable)
-    Add(totemControls, previewBtn)
-    Add(totemControls, resetTotemBtn)
+    local totemActionControls = { previewBtn, resetTotemBtn }
 
     local crossStacked = GameplayStacked()
     local cross = b:CollapsibleSection("gameplay_crosshair", "Combat Crosshair", crossStacked and 800 or 588, false)
@@ -291,61 +303,64 @@ local function BuildGameplay(ctx)
     local crossControlW = SectionControlWidth(cross, 300, 120)
     local crossLeftX, crossRightX, crossColW = SectionColumns(cross, 300)
     local crossEnable
-    local rangeToggle
     local spellInput
     local classSpellToggle
     local specSpellToggle
     local spellInputW
     local preview
+    local function ApplyMeleeClassScope()
+        if Gameplay().meleeSpellPerClass then SeedMeleeClass() end
+        ApplyGameplayUI()
+    end
+    local function ApplyMeleeSpecScope()
+        if Gameplay().meleeSpellPerSpec then SeedMeleeSpec() end
+        ApplyGameplayUI()
+    end
     if crossStacked then
         spellInputW = min(260, crossControlW)
-        W.ControlCardBackdrop(cross, 14, -38, crossCardW, 332)
-        W.ControlCardBackdrop(cross, 14, -390, crossCardW, 346)
+        AddBackdrops(cross, { { -38, crossCardW, 332 }, { -390, crossCardW, 346 } })
         crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", 30, -40, min(390, crossControlW), Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
-        rangeToggle = ToggleAt(ctx, cross, "Crosshair: color by melee range to target (green=in range, red=out)", 30, -74, Gameplay, "enableCombatCrosshairMeleeRangeColor", false, ApplyGameplayUI)
+        AddControls(crossControls, cross, { { "toggle", "Crosshair: color by melee range to target (green=in range, red=out)", 30, -74, "enableCombatCrosshairMeleeRangeColor", false } })
         LabelAt(cross, "Uses the spell selected below.", 54, -104, min(420, crossW - 82), "GameFontDisableSmall", T.colors.muted)
         noSpellWarn = LabelAt(cross, "No melee range spell selected - Crosshair will not work.", 54, -126, min(520, crossW - 82), "GameFontNormalSmall", { 1, 0.55, 0.1, 1 })
         spellInput = MoveWidget(W.TextInput(cross, "Choose spell ID or name", spellInputW), cross, 30, -178)
         selectedSpellText = LabelAt(cross, "", 30, -242, min(360, crossW - 60), "GameFontDisableSmall", T.colors.muted)
         LabelAt(cross, "Used by: Crosshair melee-range color.", 30, -264, min(360, crossW - 60), "GameFontDisableSmall", T.colors.muted)
-        classSpellToggle = ToggleAt(ctx, cross, "Store per class", 30, -298, Gameplay, "meleeSpellPerClass", false, function()
-            if Gameplay().meleeSpellPerClass then SeedMeleeClass() end
-            ApplyGameplayUI()
-        end)
-        specSpellToggle = ToggleAt(ctx, cross, "Store per spec", 30, -332, Gameplay, "meleeSpellPerSpec", false, function()
-            if Gameplay().meleeSpellPerSpec then SeedMeleeSpec() end
-            ApplyGameplayUI()
-        end)
+        AddControls(crossControls, cross, {
+            { "toggle", "Store per class", 30, -298, "meleeSpellPerClass", false, ApplyMeleeClassScope },
+            { "toggle", "Store per spec", 30, -332, "meleeSpellPerSpec", false, ApplyMeleeSpecScope },
+        })
+        classSpellToggle, specSpellToggle = crossControls[#crossControls - 1], crossControls[#crossControls]
         preview = T.Panel(cross, nil, { 0, 0, 0, 0.92 }, T.colors.borderSoft)
         preview:SetPoint("TOPLEFT", cross, "TOPLEFT", 30, -410)
         preview:SetSize(min(260, max(160, crossCardW - 28)), 120)
-        Add(crossControls, SliderAt(ctx, cross, "Crosshair thickness", 30, -560, 1, 12, 1, crossControlW, Gameplay, "crosshairThickness", 3, ApplyGameplayUI))
-        Add(crossControls, SliderAt(ctx, cross, "Crosshair size", 30, -630, 20, 120, 2, crossControlW, Gameplay, "crosshairSize", 40, ApplyGameplayUI))
+        AddControls(crossControls, cross, {
+            { "slider", "Crosshair thickness", 30, -560, 1, 12, 1, crossControlW, "crosshairThickness", 3 },
+            { "slider", "Crosshair size", 30, -630, 20, 120, 2, crossControlW, "crosshairSize", 40 },
+        })
         LabelAt(cross, "Colors are configured in Colors > Gameplay.", 30, -734, min(360, crossW - 60), "GameFontDisableSmall", T.colors.muted)
     else
         spellInputW = min(260, crossColW)
-        W.ControlCardBackdrop(cross, 14, -38, crossCardW, 242)
-        W.ControlCardBackdrop(cross, 14, -312, crossCardW, 214)
+        AddBackdrops(cross, { { -38, crossCardW, 242 }, { -312, crossCardW, 214 } })
         crossEnable = SwitchAt(ctx, cross, "Combat Crosshair", crossLeftX, -40, min(390, crossColW), Gameplay, "enableCombatCrosshair", false, ApplyGameplayUI)
-        rangeToggle = ToggleAt(ctx, cross, "Crosshair: color by melee range to target (green=in range, red=out)", crossLeftX, -74, Gameplay, "enableCombatCrosshairMeleeRangeColor", false, ApplyGameplayUI)
+        AddControls(crossControls, cross, { { "toggle", "Crosshair: color by melee range to target (green=in range, red=out)", crossLeftX, -74, "enableCombatCrosshairMeleeRangeColor", false } })
         LabelAt(cross, "Uses the spell selected below.", crossLeftX + 24, -104, min(420, crossColW), "GameFontDisableSmall", T.colors.muted)
         noSpellWarn = LabelAt(cross, "No melee range spell selected - Crosshair will not work.", crossLeftX + 24, -126, min(520, crossCardW - 56), "GameFontNormalSmall", { 1, 0.55, 0.1, 1 })
         spellInput = MoveWidget(W.TextInput(cross, "Choose spell ID or name", spellInputW), cross, crossLeftX, -170)
         selectedSpellText = LabelAt(cross, "", crossRightX, -192, min(360, crossColW), "GameFontDisableSmall", T.colors.muted)
         LabelAt(cross, "Used by: Crosshair melee-range color.", crossRightX, -214, min(360, crossColW), "GameFontDisableSmall", T.colors.muted)
-        classSpellToggle = ToggleAt(ctx, cross, "Store per class", crossRightX, -244, Gameplay, "meleeSpellPerClass", false, function()
-            if Gameplay().meleeSpellPerClass then SeedMeleeClass() end
-            ApplyGameplayUI()
-        end)
-        specSpellToggle = ToggleAt(ctx, cross, "Store per spec", crossRightX + min(180, crossColW * 0.52), -244, Gameplay, "meleeSpellPerSpec", false, function()
-            if Gameplay().meleeSpellPerSpec then SeedMeleeSpec() end
-            ApplyGameplayUI()
-        end)
+        AddControls(crossControls, cross, {
+            { "toggle", "Store per class", crossRightX, -244, "meleeSpellPerClass", false, ApplyMeleeClassScope },
+            { "toggle", "Store per spec", crossRightX + min(180, crossColW * 0.52), -244, "meleeSpellPerSpec", false, ApplyMeleeSpecScope },
+        })
+        classSpellToggle, specSpellToggle = crossControls[#crossControls - 1], crossControls[#crossControls]
         preview = T.Panel(cross, nil, { 0, 0, 0, 0.92 }, T.colors.borderSoft)
         preview:SetPoint("TOPLEFT", cross, "TOPLEFT", crossLeftX, -312)
         preview:SetSize(min(260, crossColW), 120)
-        Add(crossControls, SliderAt(ctx, cross, "Crosshair thickness", crossRightX, -334, 1, 12, 1, crossColW, Gameplay, "crosshairThickness", 3, ApplyGameplayUI))
-        Add(crossControls, SliderAt(ctx, cross, "Crosshair size", crossRightX, -418, 20, 120, 2, crossColW, Gameplay, "crosshairSize", 40, ApplyGameplayUI))
+        AddControls(crossControls, cross, {
+            { "slider", "Crosshair thickness", crossRightX, -334, 1, 12, 1, crossColW, "crosshairThickness", 3 },
+            { "slider", "Crosshair size", crossRightX, -418, 20, 120, 2, crossColW, "crosshairSize", 40 },
+        })
         LabelAt(cross, "Colors are configured in Colors > Gameplay.", crossRightX, -514, min(360, crossColW), "GameFontDisableSmall", T.colors.muted)
     end
     if spellInput then
@@ -385,10 +400,7 @@ local function BuildGameplay(ctx)
             SetMeleeSpellID(v)
             ApplyGameplayUI()
         end, true)
-    Add(crossControls, rangeToggle)
     Add(crossControls, spellInput)
-    Add(crossControls, classSpellToggle)
-    Add(crossControls, specSpellToggle)
     Add(meleeControls, spellInput)
     Add(meleeControls, classSpellToggle)
     Add(meleeControls, specSpellToggle)
@@ -433,29 +445,27 @@ local function BuildGameplay(ctx)
     disabledRefresh = function()
         local g = Gameplay()
         local timerOn = g.enableCombatTimer == true
-        for i = 1, #timerControls do SetControlEnabled(timerControls[i], timerOn) end
+        SetControlsEnabled(timerControls, timerOn)
         SetControlEnabled(timerEnable, true)
 
         local stateOn = g.enableCombatStateText == true
-        for i = 1, #stateControls do SetControlEnabled(stateControls[i], stateOn) end
+        SetControlsEnabled(stateControls, stateOn)
         SetControlEnabled(stateEnable, true)
 
         local totemsOn = hasTotemFrame and g.enablePlayerTotems == true
         SetControlEnabled(totemEnable, hasTotemFrame)
-        for i = 1, #totemControls do
-            local control = totemControls[i]
-            if control ~= totemEnable then SetControlEnabled(control, hasTotemFrame and (totemsOn or control == previewBtn or control == resetTotemBtn)) end
-        end
+        SetControlsEnabled(totemActionControls, hasTotemFrame)
+        SetControlsEnabled(totemControls, totemsOn)
 
         local firstOn = isRogue and g.enableFirstDanceTimer == true
         SetControlEnabled(firstDanceEnable, isRogue)
-        for i = 1, #firstDanceControls do SetControlEnabled(firstDanceControls[i], firstOn) end
+        SetControlsEnabled(firstDanceControls, firstOn)
 
         local crossOn = g.enableCombatCrosshair == true
         SetControlEnabled(crossEnable, true)
-        for i = 1, #crossControls do SetControlEnabled(crossControls[i], crossOn) end
+        SetControlsEnabled(crossControls, crossOn)
         local meleeOn = crossOn and g.enableCombatCrosshairMeleeRangeColor == true
-        for i = 1, #meleeControls do SetControlEnabled(meleeControls[i], meleeOn) end
+        SetControlsEnabled(meleeControls, meleeOn)
     end
 
     M.AddRefresher(ctx, function()

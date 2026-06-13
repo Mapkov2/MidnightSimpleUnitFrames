@@ -545,10 +545,11 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_pet = "pet",
     uf_boss = "boss",
 }
-local function SearchRouteUnitPage(route, pageKey, normalized)
-    local unit = SEARCH_UNIT_BY_PAGE[pageKey]
-    if not unit then return end
-    SearchRouteApplySectionRows(route, pageKey, normalized, [[
+
+local SEARCH_AURA_ROUTE_PAGES = { auras3 = true, auras3_buffs = true, auras3_debuffs = true, auras3_rendering = true, auras3_styling = true }
+
+local SEARCH_ROUTE_SECTION_ROWS = {
+    unit = [[
 preview=preview|hide preview
 frame_basics=frame basics|enable|disable|width|height|scale|frame size|smooth fill|health animation
 anchoring=anchoring|anchor|position|x offset|y offset|custom anchor|global anchor
@@ -561,30 +562,16 @@ castbar=castbar|cast bar|spell name|cast icon|cast time
 status_icons=status icons|status icon|indicator|level|level text|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez|advanced status|advanced x offset|advanced y offset|extended x offset|extended y offset
 load_conditions=load conditions|visibility conditions|show conditions|hide conditions|when to show|when to hide
 boss_layout=boss layout|boss preview|boss frames
-]])
-    if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
-    SearchRouteTextState(route, "unitTextTabSelection", "unitTextSlotSelection", unit, normalized)
-    if SearchRouteHasAny(normalized, "advanced status|status icon advanced|advanced x offset|advanced y offset|extended x offset|extended y offset|wide x offset|wide y offset") then
-        SearchRouteSetTable(route, "unitStatusTabSelection", unit, "advanced")
-    elseif SearchRouteHasAny(normalized, "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez") then
-        SearchRouteSetTable(route, "unitStatusTabSelection", unit, "basic")
-    end
-    SearchRouteUnitStatusSelection(route, unit, normalized)
-end
-local function SearchRouteGroupPage(route, pageKey, normalized)
-    local scope = SearchGroupScopeForText(normalized)
-    if scope then SearchRouteSetState(route, "gfScope", scope) end
-    if pageKey == "gf_layout" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    gf_layout = [[
 general=general|enable|disable|turn off|off|hide group frames|hide raid frames|hide party frames|group frames off|raid frames off|party frames off|use msuf group frames|show player|show solo|solo|visibility|party frames not showing|raid frames not showing|ausschalten|deaktivieren|ausblenden
 layout=layout|growth|direction|spacing|columns|rows|width|height
 sorting=sorting|sort|role order|player first|groups first
 scaling=frame scaling|scale|smooth health fill|smooth fill|party smooth fill|raid smooth fill
 border=transparency|alpha|opacity|fade
 anchor=anchoring|anchor|position|move party|move raid|x offset|y offset
-]])
-    elseif pageKey == "gf_bars" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    gf_bars = [[
 hcolor=health colors|health color|class color|hp color
 bars=bars custom|health bar|bar texture|bar height
 power=power bar|mana bar|power text|smooth fill
@@ -592,49 +579,23 @@ text=text|name text|health text|hp text|power text|font size
 dispel=dispel overlay|overlay style|overlay detects|overlay priority|health bar tint
 dstripe=debuff stripe|stripe edge|stripe height|stripe opacity
 range=range fade|range check|distance check|out of range
-]])
-        if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
-        SearchRouteTextState(route, "gfTextTabSelection", "gfTextSlotSelection", scope or M.gfScope or "party", normalized)
-    elseif pageKey == "gf_auras" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    gf_auras = [[
 buffs=buffs|buff|hots|own buffs|healer buffs|buff position|buff size|buff layer
 debuffs=debuffs|debuff|boss debuff|raid debuff|debuff position|debuff size|debuff layer
-]])
-    elseif pageKey == "gf_indicators" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    gf_indicators = [[
 indicators=indicators|spell indicators|placed indicators|focus glow|frame effects
 sicons=status icons|status icon|dead icon|ghost text|offline icon|afk|dnd|ready check|summon|resurrect|phase|leader icon|assist icon|role icon|raid marker|advanced status|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset
 si=spell indicators|custom spell|spell id|indicator spell|healer hots indicators
 ci=corner indicators|corner dots|corner indicator|custom spell editor|slot assignments
-]])
-        local tabScope = scope or M.gfScope or "party"
-        if SearchRouteHasAny(normalized, "advanced status|status icon advanced|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset|draw order") then
-            SearchRouteSetTable(route, "gfStatusIconTabSelection", tabScope, "advanced")
-        elseif SearchRouteHasAny(normalized, "status icons|status icon|ready check|summon|resurrect|phase|dead|ghost|offline|afk|dnd|leader icon|assist icon|role icon|raid marker") then
-            SearchRouteSetTable(route, "gfStatusIconTabSelection", tabScope, "basic")
-        end
-        SearchRouteGroupStatusSelection(route, normalized)
-        local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
-        if cornerSlot then SearchRouteSetState(route, "gfCornerSlotSelection", cornerSlot) end
-    end
-end
-local function SearchRouteGlobalPage(route, pageKey, normalized)
-    if pageKey == "profiles" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    profiles = [[
 profiles_management=profile management|active profile|rename|copy profile|reset profile
 profiles_specs=spec profiles|specialization|auto switch
 profiles_io=export|import|wago|legacy import|profile string|backup|share profile
-]])
-        local exportKind = SearchFirstMatch(normalized, PROFILE_EXPORT_TERMS)
-        if exportKind then SearchRouteSetState(route, "profileExportKind", exportKind) end
-        local importCreateNew = SearchFirstMatch(normalized, PROFILE_IMPORT_TERMS)
-        if importCreateNew ~= nil then SearchRouteSetState(route, "profileImportCreateNew", importCreateNew) end
-    elseif pageKey == "modules" then
-        SearchRouteOpenAccordion(route, pageKey, "modules_style")
-    elseif pageKey == "opt_bars" then
-        local scope = SearchGlobalScopeForText(normalized)
-        if scope then SearchRouteSetGeneral(route, "hpPowerTextSelectedKey", scope) end
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    opt_bars = [[
 bars_textures=textures|texture|gradient|bar texture|background texture
 bars_absorb=absorb|heal prediction|incoming heals|shield
 bars_outline=frame outline|outline|bar outline|border thickness
@@ -642,39 +603,30 @@ bars_rounded=rounded|round corners|rounded texture|rounded frames
 bars_highlight=highlight borders|highlight border|dispel border|dispel overlay|aggro border|purge border|boss target border|priority order
 bars_unit_dispel_overlay=unitframe dispel overlay|unit frame dispel overlay|overlay detects|overlay priority|unit dispel overlay
 bars_power=bar animation|text accuracy|smooth fill|power animation
-]])
-    elseif pageKey == "opt_fonts" then
-        local scope = SearchGlobalScopeForText(normalized)
-        if scope then SearchRouteSetGeneral(route, "_fontScopeKey", scope) end
-        if not scope and SearchRouteHasAny(normalized, "font|fonts|global font|font family|font dropdown|sharedmedia|change font|change fonts|where to change font|where change font|schriftart|schriftart aendern|schrift aendern") then
-            SearchRouteSetGeneral(route, "_fontScopeKey", "shared")
-        end
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    opt_fonts = [[
 fonts_global_font=global font|font family|font|font dropdown|sharedmedia|change font|change fonts|where to change font|where change font
 fonts_text_style=text style|outline|shadow|font size
 fonts_name_power_colors=name colors|power colors|name color|power color
 fonts_name_shortening=name shortening|short names|realm names|truncate|names too long
-]])
-    elseif pageKey == "opt_castbar" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    opt_castbar = [[
 castbar_behavior=shake|fill direction|castbar direction|castbar behavior
 castbar_textures=textures|texture|outline|castbar texture
 castbar_empowered=empowered casts|evoker|empower|stage blink|hold cast|release cast
 castbar_name_shortening=name shortening|spell name|cast name|max name length
 castbar_focus_kick=focus kick|target kick|interrupt focus|kick cooldown
 castbar_interrupt_ready=interrupt ready|demon hunter|devour|consume magic|disrupt|kick ready
-]])
-    elseif pageKey == "opt_misc" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    opt_misc = [[
 misc_language=language|locale|translation|localization|localisation
 misc_menu_behavior=menu behavior|menu snap|edge snap|window snap|menu resize
 misc_startup=startup|welcome|welcome message|version check|versioncheck|notices
 misc_tooltips=tooltips|tooltip|unitframe tooltips|group frame tooltips|mouseover tooltip|modifier tooltip
 misc_blizzard_frames=blizzard frames|default frames|hide blizzard|disable blizzard
 misc_range_fade=range fade|range check|distance check|out of range
-]])
-    elseif pageKey == "classpower" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    classpower = [[
 classpower_display=layout|display|combo points|holy power|soul shards|chi|essence|runes
 classpower_behavior=behavior|prediction|quick actions
 classpower_visuals=style|visual|texture|spacing|colors
@@ -682,25 +634,19 @@ classpower_visibility=auto hide|visibility|hide empty
 classpower_detached_power=detached power|detached power bar|alternate power|dual resource
 classpower_player_hp=player hp bar|second player hp bar|duplicate hp|duplicate health|class resource hp|class resources hp|shared hp text|smooth fill|hp shape|follow player power|orb size|hp orb|health orb|hp color|class color|dark mode|hp gradient
 classpower_alt_mana=alternative mana|alt mana|mana bar
-]])
-    elseif pageKey == "auras3" or pageKey == "auras3_buffs" or pageKey == "auras3_debuffs" or pageKey == "auras3_rendering" or pageKey == "auras3_filters" or pageKey == "auras3_styling" then
-        if pageKey == "auras3_filters" then
-            SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    auras3_filters = [[
 Filter Rules=filters|inclusive filter|exclusive filter|only mine|own buffs|own debuffs|dispellable|stealable|buff filter|debuff filter
 Blacklist=blacklist|ignore list|spell id|blacklist presets
 Group Frame Filters=inclusive filter|exclusive filter|base filter|category blacklist|declassified
-]])
-        else
-            SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    auras3_default = [[
 Aura Type=buffs|debuffs|buff|debuff|back|style
 Unit Aura Text=stack size|cooldown size|stack anchor|timer text|unit aura text
 Group Frame Styling=group frame aura style|stack font|cooldown font|cooldown swipe|tooltip|sort by duration|prefer player|aura behavior
 Colors=timer color|cooldown text color|stack color|own buff|own debuff|safe warning urgent
-]])
-            SearchRouteAuraScope(route, normalized)
-        end
-    elseif pageKey == "opt_colors" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
+]],
+    opt_colors = [[
 colors_font=global font color|font color
 colors_classes=class bar colors|class color|class colored
 colors_background=bar background tint|background color|backdrop|missing health|dark mode|preserve hp color
@@ -716,7 +662,74 @@ colors_power=power bar colors|power bar color|mana color|rage color|energy color
 colors_class_power=class power colors|combo point color|holy power color|soul shard|chi color|arcane charges|runes color|essence color|soul fragments|maelstrom weapon|astral power|eclipse|stagger|icicles|ebon might
 colors_auras=auras|buff color|debuff color
 colors_portrait=portrait colors|portrait color
-]])
+]],
+    gameplay = [[
+gameplay_timer=combat timer|timer
+gameplay_state=combat enter|combat leave|enter combat|leave combat
+gameplay_class_specific=class-specific|class specific|demon hunter|interrupt|devour
+gameplay_crosshair=combat crosshair|crosshair|targeting|mouse
+]],
+}
+
+local function SearchRouteApplyPageRows(route, pageKey, normalized)
+    local rows = SEARCH_ROUTE_SECTION_ROWS[SEARCH_UNIT_BY_PAGE[pageKey] and "unit" or pageKey]
+        or (SEARCH_AURA_ROUTE_PAGES[pageKey] and SEARCH_ROUTE_SECTION_ROWS.auras3_default)
+    if rows then SearchRouteApplySectionRows(route, pageKey, normalized, rows) end
+end
+
+local function SearchRouteStatusTab(route, tableName, scope, normalized, advancedTerms, basicTerms)
+    local value = SearchRouteHasAny(normalized, advancedTerms) and "advanced" or (SearchRouteHasAny(normalized, basicTerms) and "basic" or nil)
+    if value then SearchRouteSetTable(route, tableName, scope, value) end
+end
+
+local function SearchRouteUnitPage(route, pageKey, normalized)
+    local unit = SEARCH_UNIT_BY_PAGE[pageKey]
+    if not unit then return end
+    if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
+    SearchRouteTextState(route, "unitTextTabSelection", "unitTextSlotSelection", unit, normalized)
+    SearchRouteStatusTab(route, "unitStatusTabSelection", unit, normalized,
+        "advanced status|status icon advanced|advanced x offset|advanced y offset|extended x offset|extended y offset|wide x offset|wide y offset",
+        "status icons|status icon|indicator|level|raid group|group number|raid marker|leader|assist|elite|rare|dead|offline|combat icon|rested|incoming rez")
+    SearchRouteUnitStatusSelection(route, unit, normalized)
+end
+
+local function SearchRouteGroupPage(route, pageKey, normalized)
+    local scope = SearchGroupScopeForText(normalized)
+    if scope then SearchRouteSetState(route, "gfScope", scope) end
+    if pageKey == "gf_bars" then
+        if SearchTextKindForText(normalized) then SearchRouteOpenAccordion(route, pageKey, "text") end
+        SearchRouteTextState(route, "gfTextTabSelection", "gfTextSlotSelection", scope or M.gfScope or "party", normalized)
+    elseif pageKey == "gf_indicators" then
+        local tabScope = scope or M.gfScope or "party"
+        SearchRouteStatusTab(route, "gfStatusIconTabSelection", tabScope, normalized,
+            "advanced status|status icon advanced|advanced x offset|advanced y offset|advanced placement|extended x offset|extended y offset|draw order",
+            "status icons|status icon|ready check|summon|resurrect|phase|dead|ghost|offline|afk|dnd|leader icon|assist icon|role icon|raid marker")
+        SearchRouteGroupStatusSelection(route, normalized)
+        local cornerSlot = SearchFirstMatch(normalized, CORNER_SLOT_TERMS)
+        if cornerSlot then SearchRouteSetState(route, "gfCornerSlotSelection", cornerSlot) end
+    end
+end
+
+local function SearchRouteGlobalPage(route, pageKey, normalized)
+    if pageKey == "profiles" then
+        local exportKind = SearchFirstMatch(normalized, PROFILE_EXPORT_TERMS)
+        if exportKind then SearchRouteSetState(route, "profileExportKind", exportKind) end
+        local importCreateNew = SearchFirstMatch(normalized, PROFILE_IMPORT_TERMS)
+        if importCreateNew ~= nil then SearchRouteSetState(route, "profileImportCreateNew", importCreateNew) end
+    elseif pageKey == "modules" then
+        SearchRouteOpenAccordion(route, pageKey, "modules_style")
+    elseif pageKey == "opt_bars" then
+        local scope = SearchGlobalScopeForText(normalized)
+        if scope then SearchRouteSetGeneral(route, "hpPowerTextSelectedKey", scope) end
+    elseif pageKey == "opt_fonts" then
+        local scope = SearchGlobalScopeForText(normalized)
+        if scope then SearchRouteSetGeneral(route, "_fontScopeKey", scope) end
+        if not scope and SearchRouteHasAny(normalized, "font|fonts|global font|font family|font dropdown|sharedmedia|change font|change fonts|where to change font|where change font|schriftart|schriftart aendern|schrift aendern") then
+            SearchRouteSetGeneral(route, "_fontScopeKey", "shared")
+        end
+    elseif SEARCH_AURA_ROUTE_PAGES[pageKey] then
+        SearchRouteAuraScope(route, normalized)
+    elseif pageKey == "opt_colors" then
         local powerToken = SearchPowerColorTokenForText(normalized)
         if powerToken then SearchRouteSetState(route, "colorsPowerToken", powerToken) end
         local classPowerToken = SearchClassPowerTokenForText(normalized)
@@ -725,13 +738,6 @@ colors_portrait=portrait colors|portrait color
             SearchRouteOpenAccordion(route, pageKey, "colors_power")
         end
         if classPowerToken then SearchRouteOpenAccordion(route, pageKey, "colors_class_power") end
-    elseif pageKey == "gameplay" then
-        SearchRouteApplySectionRows(route, pageKey, normalized, [[
-gameplay_timer=combat timer|timer
-gameplay_state=combat enter|combat leave|enter combat|leave combat
-gameplay_class_specific=class-specific|class specific|demon hunter|interrupt|devour
-gameplay_crosshair=combat crosshair|crosshair|targeting|mouse
-]])
     end
 end
 local function SearchRouteForTarget(pageKey, query, fallback)
@@ -741,6 +747,7 @@ local function SearchRouteForTarget(pageKey, query, fallback)
         return SearchFirstMatch(normalized, DASHBOARD_ROUTE_TERMS)
     end
     local route = SearchNewRoute()
+    SearchRouteApplyPageRows(route, pageKey, normalized)
     SearchRouteUnitPage(route, pageKey, normalized)
     SearchRouteGroupPage(route, pageKey, normalized)
     SearchRouteGlobalPage(route, pageKey, normalized)

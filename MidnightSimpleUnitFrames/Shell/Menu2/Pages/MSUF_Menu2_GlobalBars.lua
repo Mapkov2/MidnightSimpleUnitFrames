@@ -172,25 +172,18 @@ local function BuildBars(ctx)
             end
             return
         end
-        if not _G.StaticPopupDialogs.MSUF2_ROUNDED_RELOAD_REQUIRED then
-            _G.StaticPopupDialogs.MSUF2_ROUNDED_RELOAD_REQUIRED = {
-                text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
-                button1 = _G.RELOAD or M.Tr("Reload"),
-                timeout = 0,
-                whileDead = true,
-                hideOnEscape = false,
-                preferredIndex = 3,
-                OnAccept = function()
-                    if _G.InCombatLockdown and _G.InCombatLockdown() then
-                        if _G.print then
-                            _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload."))
-                        end
-                        return
-                    end
-                    if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
-                end,
-            }
-        end
+        M.InstallStaticPopup("MSUF2_ROUNDED_RELOAD_REQUIRED", {
+            text = M.Tr("Rounded frame texture was changed.\n\nA UI reload is required because this style rebuilds frame masks and protected frame visuals.\n\nReload now?"),
+            button1 = _G.RELOAD or M.Tr("Reload"),
+            hideOnEscape = false,
+            OnAccept = function()
+                if _G.InCombatLockdown and _G.InCombatLockdown() then
+                    if _G.print then _G.print(M.Tr("|cffff5555MSUF|r: Can't reload UI in combat. Leave combat, then type /reload.")) end
+                    return
+                end
+                if type(_G.ReloadUI) == "function" then _G.ReloadUI() end
+            end,
+        })
         _G.StaticPopup_Show("MSUF2_ROUNDED_RELOAD_REQUIRED")
     end
 
@@ -265,43 +258,37 @@ local function BuildBars(ctx)
         sample:SetSize(sampleW, sampleH)
         card._msuf2RoundedPreviewSample = sample
 
-        local bg = sample:CreateTexture(nil, "BACKGROUND", nil, -7)
-        bg:SetTexture(ROUNDED_PREVIEW_WHITE8)
-        bg:SetAllPoints(sample)
-        bg:SetColorTexture(0.015, 0.020, 0.032, 0.96)
-        SnapPreviewRegion(bg)
-        sample._previewBg = bg
-
-        local healthBg = sample:CreateTexture(nil, "BORDER", nil, -1)
-        healthBg:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
-        healthBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerH)
-        healthBg:SetColorTexture(0.060, 0.070, 0.075, 1)
-        sample._previewHealthBg = healthBg
-
-        local health = sample:CreateTexture(nil, "ARTWORK", nil, 1)
-        health:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
-        health:SetSize(floor(sampleW * 0.78 + 0.5), sampleH - powerH)
-        health:SetColorTexture(0.70, 0.69, 0.30, 0.94)
-        sample._previewHealth = health
-
-        local powerBg = sample:CreateTexture(nil, "ARTWORK", nil, 2)
-        powerBg:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
-        powerBg:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, 0)
-        powerBg:SetHeight(powerH)
-        powerBg:SetColorTexture(0.090, 0.055, 0.115, 1)
-        sample._previewPowerBg = powerBg
-
-        local power = sample:CreateTexture(nil, "ARTWORK", nil, 3)
-        power:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
-        power:SetSize(floor(sampleW * 0.66 + 0.5), powerH)
-        power:SetColorTexture(0.62, 0.12, 0.78, 1)
-        sample._previewPower = power
-
-        local gloss = sample:CreateTexture(nil, "ARTWORK", nil, 4)
-        gloss:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
-        gloss:SetPoint("BOTTOMRIGHT", sample, "RIGHT", 0, -1)
-        gloss:SetColorTexture(1, 1, 1, 0.045)
-        sample._previewGloss = gloss
+        local function PreviewTex(field, layer, level, r, g, b, a, point)
+            local tex = sample:CreateTexture(nil, layer, nil, level)
+            if field == "_previewBg" then tex:SetTexture(ROUNDED_PREVIEW_WHITE8) end
+            point(tex)
+            tex:SetColorTexture(r, g, b, a)
+            SnapPreviewRegion(tex)
+            sample[field] = tex
+            return tex
+        end
+        local bg = PreviewTex("_previewBg", "BACKGROUND", -7, 0.015, 0.020, 0.032, 0.96, function(tex) tex:SetAllPoints(sample) end)
+        local healthBg = PreviewTex("_previewHealthBg", "BORDER", -1, 0.060, 0.070, 0.075, 1, function(tex)
+            tex:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
+            tex:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, powerH)
+        end)
+        local health = PreviewTex("_previewHealth", "ARTWORK", 1, 0.70, 0.69, 0.30, 0.94, function(tex)
+            tex:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
+            tex:SetSize(floor(sampleW * 0.78 + 0.5), sampleH - powerH)
+        end)
+        local powerBg = PreviewTex("_previewPowerBg", "ARTWORK", 2, 0.090, 0.055, 0.115, 1, function(tex)
+            tex:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
+            tex:SetPoint("BOTTOMRIGHT", sample, "BOTTOMRIGHT", 0, 0)
+            tex:SetHeight(powerH)
+        end)
+        local power = PreviewTex("_previewPower", "ARTWORK", 3, 0.62, 0.12, 0.78, 1, function(tex)
+            tex:SetPoint("BOTTOMLEFT", sample, "BOTTOMLEFT", 0, 0)
+            tex:SetSize(floor(sampleW * 0.66 + 0.5), powerH)
+        end)
+        local gloss = PreviewTex("_previewGloss", "ARTWORK", 4, 1, 1, 1, 0.045, function(tex)
+            tex:SetPoint("TOPLEFT", sample, "TOPLEFT", 0, 0)
+            tex:SetPoint("BOTTOMRIGHT", sample, "RIGHT", 0, -1)
+        end)
 
         local name = T.Font(sample, "GameFontHighlightSmall", "Mapkotwo", T.colors.text)
         name:SetPoint("LEFT", sample, "LEFT", 10, 4)
@@ -661,22 +648,15 @@ local function BuildBars(ctx)
     local function SyncGradientControls()
         if RefreshGradientControls then RefreshGradientControls() end
     end
-    local hpGradient = W.ToggleAt(textures, "HP bar gradient", rightX, gradientY - 24, compactTextures and 150 or 180)
-    M.BindToggle(ctx, hpGradient,
-        function() return GradientScopeGet("enableGradient", false) == true end,
-        function(v)
-            GradientScopeSet("enableGradient", v and true or false)
-            ApplyGradientRuntime("MSUF2_HP_GRADIENT")
-            SyncGradientControls()
-        end)
-    local powerGradient = W.ToggleAt(textures, "Power bar gradient", rightX, gradientY - 54, compactTextures and 170 or 190)
-    M.BindToggle(ctx, powerGradient,
-        function() return GradientScopeGet("enablePowerGradient", false) == true end,
-        function(v)
-            GradientScopeSet("enablePowerGradient", v and true or false)
-            ApplyGradientRuntime("MSUF2_POWER_GRADIENT")
-            SyncGradientControls()
-        end)
+    local function BindGradientToggle(label, y, width, key, reason)
+        local control = W.ToggleAt(textures, label, rightX, y, width)
+        M.BindToggle(ctx, control,
+            function() return GradientScopeGet(key, false) == true end,
+            function(v) GradientScopeSet(key, v and true or false); ApplyGradientRuntime(reason); SyncGradientControls() end)
+        return control
+    end
+    local hpGradient = BindGradientToggle("HP bar gradient", gradientY - 24, compactTextures and 150 or 180, "enableGradient", "MSUF2_HP_GRADIENT")
+    local powerGradient = BindGradientToggle("Power bar gradient", gradientY - 54, compactTextures and 170 or 190, "enablePowerGradient", "MSUF2_POWER_GRADIENT")
     local strength = W.Slider(textures, "Gradient strength", 0, 1, 0.05, 220)
     M.BindSlider(ctx, strength,
         function() return tonumber(GradientScopeGet("gradientStrength", 0.45)) or 0.45 end,
@@ -711,14 +691,12 @@ local function BuildBars(ctx)
     PadButton("<", "LEFT", 8, -27)
     PadButton(">", "RIGHT", 54, -27)
     PadButton("v", "DOWN", 31, -49)
+    local textureScopeControls = { barTexture, bgTexture, hpGradient, powerGradient }
     RefreshGradientControls = function()
         local current = CurrentGradientDirectionsForScope()
         local controlsActive = GradientControlsActive()
         local valueControlsActive = controlsActive and ((GradientScopeGet("enableGradient", false) == true) or (GradientScopeGet("enablePowerGradient", false) == true))
-        SetControlEnabled(barTexture, controlsActive)
-        SetControlEnabled(bgTexture, controlsActive)
-        SetControlEnabled(hpGradient, controlsActive)
-        SetControlEnabled(powerGradient, controlsActive)
+        SetControlsEnabled(textureScopeControls, controlsActive)
         SetControlEnabled(strength, valueControlsActive)
         pad:SetAlpha(valueControlsActive and 1 or 0.45)
         for value, btn in pairs(directionButtons) do
@@ -741,36 +719,21 @@ local function BuildBars(ctx)
         local mode = tonumber(BarScopeGet("absorbTextMode", 2)) or 2
         return (mode == 1 or mode == 4) and 1 or 2
     end
-    local function ApplyAbsorbRuntime(reason)
-        Call("MSUF_InvalidateAbsorbCache")
-        ApplyBars(reason)
-        RefreshGroupFrameVisuals()
-    end
+    local function ApplyAbsorbRuntime(reason) Call("MSUF_InvalidateAbsorbCache"); ApplyBars(reason); RefreshGroupFrameVisuals() end
     local RefreshAbsorbControls
-    local function SyncAbsorbControls()
-        if RefreshAbsorbControls then RefreshAbsorbControls() end
-    end
-    local function AbsorbDefault(value)
-        if type(value) == "function" then return value() end
-        return value
-    end
-    local function BindAbsorbDropdown(label, values, key, defaultValue, reason, x, y, width)
+    local function SyncAbsorbControls() if RefreshAbsorbControls then RefreshAbsorbControls() end end
+    local function AbsorbDefault(value) return type(value) == "function" and value() or value end
+    local function BindAbsorbDropdown(label, values, key, defaultValue, reason, x, y, width, numeric)
         local control = W.Dropdown(absorb, label, values, width)
         M.BindDropdown(ctx, control,
-            function() return BarScopeGet(key, AbsorbDefault(defaultValue)) end,
+            function()
+                local fallback = AbsorbDefault(defaultValue)
+                local value = BarScopeGet(key, fallback)
+                return numeric and (tonumber(value) or fallback) or value
+            end,
             function(v)
-                BarScopeSet(key, v or AbsorbDefault(defaultValue), reason)
-                ApplyAbsorbRuntime(reason)
-            end)
-        W.MoveWidget(control, absorb, x, y, width, "LEFT")
-        return control
-    end
-    local function BindAbsorbNumberDropdown(label, values, key, defaultValue, reason, x, y, width)
-        local control = W.Dropdown(absorb, label, values, width)
-        M.BindDropdown(ctx, control,
-            function() return tonumber(BarScopeGet(key, defaultValue)) or defaultValue end,
-            function(v)
-                BarScopeSet(key, tonumber(v) or defaultValue, reason)
+                local fallback = AbsorbDefault(defaultValue)
+                BarScopeSet(key, numeric and (tonumber(v) or fallback) or (v or fallback), reason)
                 ApplyAbsorbRuntime(reason)
             end)
         W.MoveWidget(control, absorb, x, y, width, "LEFT")
@@ -800,7 +763,7 @@ local function BuildBars(ctx)
     local absorbAnchors = VT(
         1, "Anchor to left side", 2, "Anchor to right side", 3, "Follow HP bar",
         4, "Follow HP bar (overflow)", 5, "Reverse from max")
-    local absorbAnchor = BindAbsorbNumberDropdown("Absorb bar anchoring", absorbAnchors, "absorbAnchorMode", 2, "MSUF2_ABSORB_ANCHOR", absorbLeftX, -124, absorbLeftW)
+    local absorbAnchor = BindAbsorbDropdown("Absorb bar anchoring", absorbAnchors, "absorbAnchorMode", 2, "MSUF2_ABSORB_ANCHOR", absorbLeftX, -124, absorbLeftW, true)
 
     local healPredToggle = W.ToggleAt(absorb, "Heal Prediction Overlay", absorbLeftX, -186, absorbLeftW)
     M.BindToggle(ctx, healPredToggle,
@@ -825,7 +788,7 @@ local function BuildBars(ctx)
             SyncAbsorbControls()
         end)
 
-    local healPredAnchor = BindAbsorbNumberDropdown("Heal prediction anchoring", absorbAnchors, "healPredAnchorMode", 3, "MSUF2_HEALPRED_ANCHOR", absorbLeftX, -240, absorbLeftW)
+    local healPredAnchor = BindAbsorbDropdown("Heal prediction anchoring", absorbAnchors, "healPredAnchorMode", 3, "MSUF2_HEALPRED_ANCHOR", absorbLeftX, -240, absorbLeftW, true)
 
     local absorbOpacity = BindAbsorbSlider("Absorb bar opacity", 0, 1, 0.05, "absorbBarOpacity", 0.75, "MSUF2_ABSORB_OPACITY", absorbLeftX, -294, absorbLeftW)
 
@@ -917,28 +880,25 @@ local function BuildBars(ctx)
         RegisterRoundedSearch(control, label, searchKeywords, help)
         return control
     end
-    BindRoundedToggle("Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true,
-        "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames",
-        "Master switch for the rounded frame texture style.", true)
-    local roundUnits = BindRoundedToggle("Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil,
-        "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded",
-        "Enable or disable rounded textures on unit frames.")
-    local roundGroups = BindRoundedToggle("Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil,
-        "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet",
-        "Enable or disable rounded textures on group frames.")
-    local roundPower = BindRoundedToggle("Power bars", roundRightX, -52, "roundedPowerBars", true, nil,
-        "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden",
-        "Enable or disable rounded textures on power bars.")
-    local roundMouseover = BindRoundedToggle("Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil,
-        "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet",
-        "Enable or disable rounded mouseover highlight edges.")
+    local roundedControls, roundedToggleSpecs = {}, {
+        { "master", "Rounded frame texture", roundLeftX, -52, "roundedFramesEnabled", false, true, "master toggle|all rounded frames|rounded frames master|rounded frames on|rounded frames off|rounded frames einschalten|rounded frames ausschalten|alle abgerundeten frames", "Master switch for the rounded frame texture style.", true },
+        { "units", "Unit frames", roundLeftX, -90, "roundedUnitFrames", true, nil, "rounded unit frames|rounded unitframes|unit frame corners|unitframe corners|abgerundete unitframes|unitframes abgerundet|player target focus boss rounded", "Enable or disable rounded textures on unit frames." },
+        { "groups", "Group frames", roundLeftX, -128, "roundedGroupFrames", true, nil, "rounded group frames|rounded party frames|rounded raid frames|group frame corners|abgerundete gruppenframes|party raid abgerundet", "Enable or disable rounded textures on group frames." },
+        { "power", "Power bars", roundRightX, -52, "roundedPowerBars", true, nil, "rounded power bars|rounded powerbar|power bar corners|powerbar corners|powerbars abgerundet|powerbar abrunden", "Enable or disable rounded textures on power bars." },
+        { "mouseover", "Mouseover highlights", roundRightX, -90, "roundedMouseover", true, nil, "rounded mouseover|rounded hover|rounded hover border|mouseover rounded|mouseover highlight rounded|mouseover abgerundet|hover abgerundet", "Enable or disable rounded mouseover highlight edges." },
+    }
+    for i = 1, #roundedToggleSpecs do
+        local s = roundedToggleSpecs[i]
+        roundedControls[s[1]] = BindRoundedToggle(s[2], s[3], s[4], s[5], s[6], s[7], s[8], s[9], s[10])
+    end
     local roundedPreview = CreateRoundedTexturePreview(rounded, roundLeftX, -154, max(320, (rounded._msuf2Width or ctx.width or 720) - 60))
     RegisterRoundedSearch(roundedPreview, "Rounded Texture Preview",
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
+    local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover }
     RefreshRoundedControls = function()
         local active = ReadB("roundedFramesEnabled", false) == true
-        SetControlsEnabled({ roundUnits, roundGroups, roundPower, roundMouseover }, active)
+        SetControlsEnabled(roundedDependentControls, active)
         if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end
     end
     M.AddRefresher(ctx, RefreshRoundedControls)
@@ -953,36 +913,14 @@ local function BuildBars(ctx)
     local hlPreviewW = max(280, min(440, hlInnerW - 28))
 
     local highlightTabFrames = {}
-    local function CurrentHighlightTab()
-        local tab = M.barsHighlightTab or "modes"
-        if tab ~= "modes" and tab ~= "preview" and tab ~= "priority" then tab = "modes" end
-        return tab
-    end
-    local function RefreshHighlightTabs()
-        local tab = CurrentHighlightTab()
-        for key, frame in pairs(highlightTabFrames) do frame:SetShown(key == tab) end
-    end
-    local function SetHighlightTab(tab)
-        tab = (tab == "preview" or tab == "priority") and tab or "modes"
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("barsHighlightTab", tab)
-        else
-            M.barsHighlightTab = tab
-        end
-        RefreshHighlightTabs()
-    end
-
-    local highlightTabs = W.Segment(highlights, "Highlight area", VT("modes", "Modes", "preview", "Preview", "priority", "Priority"), min(520, hlInnerW))
-    W.MoveWidget(highlightTabs, highlights, hlLeftX, -44, min(520, hlInnerW), "LEFT")
-    M.BindSegment(ctx, highlightTabs, CurrentHighlightTab, SetHighlightTab)
-
-    local function HighlightTabFrame(key)
-        return M.UnitSectionsShared.MakeTabFrame(highlights, key, -88, hlW, highlightTabFrames)
-    end
-    local modesFrame, previewFrame, priorityFrame = HighlightTabFrame("modes"), HighlightTabFrame("preview"), HighlightTabFrame("priority")
-    if highlightTabs.SetValue then highlightTabs:SetValue(CurrentHighlightTab()) end
-    M.AddRefresher(ctx, RefreshHighlightTabs)
-    RefreshHighlightTabs()
+    local modesFrame, previewFrame, priorityFrame =
+        M.UnitSectionsShared.MakeTabFrames(highlights, -88, hlW, highlightTabFrames, "modes", "preview", "priority")
+    W.SegmentTabs(ctx, highlights, {
+        stateKey = "barsHighlightTab", label = "Highlight area",
+        values = VT("modes", "Modes", "preview", "Preview", "priority", "Priority"),
+        width = min(520, hlInnerW), frames = highlightTabFrames, defaultTab = "modes",
+        x = hlLeftX, y = -44,
+    })
 
     W.ControlCard(modesFrame, "Border Modes", nil, hlLeftX - 14, -38, hlLeftW + 28, 438)
     local priorityCardW = min(360, max(260, hlLeftW + 28))
@@ -1058,18 +996,7 @@ local function BuildBars(ctx)
     local bossSharedHint = W.Text(modesFrame, "Boss target border is a shared boss-frame setting.", hlLeftX, -414, hlLeftW, T.colors.dim)
     if bossSharedHint.SetWordWrap then bossSharedHint:SetWordWrap(true) end
 
-    local function AggroBorderOn()
-        return tonumber(BarScopeGet("aggroOutlineMode", 1)) == 1
-    end
-
-    local function DispelBorderOn()
-        return tonumber(BarScopeGet("dispelOutlineMode", 1)) == 1
-    end
-
-    local function PurgeBorderOn()
-        return tonumber(BarScopeGet("purgeOutlineMode", 0)) == 1
-    end
-
+    local function ScopeBorderModeOn(key, defaultValue) return tonumber(BarScopeGet(key, defaultValue)) == 1 end
     local function BossTargetBorderOn()
         local fallback = ReadGBool("bossTargetHighlightEnabled", true) and 1 or 0
         return (tonumber(ReadG("bossTargetOutlineMode", fallback)) or fallback) == 1
@@ -1097,8 +1024,8 @@ local function BuildBars(ctx)
         return control
     end
 
-    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", AggroBorderOn)
-    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", DispelBorderOn)
+    local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end)
+    local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end)
     _G.MSUF_DispelBorderTestType = _G.MSUF_DispelBorderTestType or "Magic"
     local dispelType = W.Dropdown(previewFrame, "Dispel test type",
         VT("Magic", "Magic", "Curse", "Curse", "Disease", "Disease", "Poison", "Poison", "Bleed", "Bleed"), hlPreviewW)
@@ -1110,8 +1037,10 @@ local function BuildBars(ctx)
         end)
     W.MoveWidget(dispelType, previewFrame, hlPreviewX, -150, hlPreviewW, "LEFT")
 
-    local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", PurgeBorderOn)
+    local purgeTest = BindBorderTestToggle("Test purge border", -214, "MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", function() return ScopeBorderModeOn("purgeOutlineMode", 0) end)
     local bossTargetTest = BindBorderTestToggle("Test boss target border", -246, "MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", BossTargetBorderOn, true)
+    local scopedBorderControls = { highlight, aggro, dispelBorder, purge }
+    local dispelBorderControls = { dispelTrigger, dispelTest, dispelType }
 
     local function ClearBorderTestIfDisabled(flagName, setterName, enabled)
         local fn = _G[setterName]
@@ -1121,23 +1050,18 @@ local function BuildBars(ctx)
     M.AddRefresher(ctx, function()
         local scopedActive = HighlightControlsActive()
         local sharedActive = SharedBarsControlsActive()
-        local aggroOn = AggroBorderOn()
-        local dispelOn = DispelBorderOn()
-        local purgeOn = PurgeBorderOn()
+        local aggroOn = ScopeBorderModeOn("aggroOutlineMode", 1)
+        local dispelOn = ScopeBorderModeOn("dispelOutlineMode", 1)
+        local purgeOn = ScopeBorderModeOn("purgeOutlineMode", 0)
         local bossTargetOn = BossTargetBorderOn()
         ClearBorderTestIfDisabled("MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", aggroOn)
         ClearBorderTestIfDisabled("MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", dispelOn)
         ClearBorderTestIfDisabled("MSUF_PurgeBorderTestMode", "MSUF_SetPurgeBorderTestMode", purgeOn)
         ClearBorderTestIfDisabled("MSUF_BossTargetBorderTestMode", "MSUF_SetBossTargetBorderTestMode", sharedActive and bossTargetOn)
-        SetControlEnabled(highlight, scopedActive)
-        SetControlEnabled(aggro, scopedActive)
-        SetControlEnabled(dispelBorder, scopedActive)
-        SetControlEnabled(dispelTrigger, scopedActive and dispelOn)
-        SetControlEnabled(purge, scopedActive)
+        SetControlsEnabled(scopedBorderControls, scopedActive)
         SetControlEnabled(bossTarget, sharedActive)
         SetControlEnabled(aggroTest, scopedActive and aggroOn)
-        SetControlEnabled(dispelTest, scopedActive and dispelOn)
-        SetControlEnabled(dispelType, scopedActive and dispelOn)
+        SetControlsEnabled(dispelBorderControls, scopedActive and dispelOn)
         SetControlEnabled(purgeTest, scopedActive and purgeOn)
         SetControlEnabled(bossTargetTest, sharedActive and bossTargetOn)
         local hintColor = sharedActive and T.colors.dim or T.colors.muted

@@ -10,6 +10,7 @@ _G.MSUF2 = M
 -- and copy/edit-mode actions. Runtime ownership stays in UnitFrames and EditMode modules.
 local W = M.Widgets
 local T = M.Theme
+local SetControlsEnabled = W.SetControlsEnabled
 local ControlGates = M.ControlGates or {}
 local UP = M.UnitPage or {}
 
@@ -41,9 +42,6 @@ local TOT_INLINE_COLOR_VALUES = {
 }
 local WARNING_HINT = { 0.90, 0.84, 0.76, 1 }
 local WARNING_ARROW = { 0.88, 0.62, 0.22, 1 }
-local WARNING_NOTICE_BG = { 0.105, 0.082, 0.052, 0.34 }
-local WARNING_NOTICE_TOP = { 0.48, 0.36, 0.20, 0.55 }
-local WARNING_NOTICE_BOTTOM = { 0.28, 0.21, 0.12, 0.48 }
 local WARNING_BADGE_FILL = { 0.205, 0.148, 0.080, 0.96 }
 local WARNING_BADGE_EDGE = { 0.52, 0.39, 0.18, 0.78 }
 local WARNING_HEADER_BG = { 0.096, 0.078, 0.050, 0.56 }
@@ -730,44 +728,18 @@ local function BuildBasics(ctx, builder, unit, label)
         function() return ReadBool(unit, "smoothFill", true) end,
         function(v) SetBool(unit, "smoothFill", v, "MSUF2_SMOOTH_FILL", { preview = true }) end)
     if W.AttachEditFocus then
-        W.AttachEditFocus(enable, unit, "frame", nil, { source = "menu2-unit" })
-        W.AttachEditFocus(reverse, unit, "frame", nil, { source = "menu2-unit" })
-        W.AttachEditFocus(smooth, unit, "frame", nil, { source = "menu2-unit" })
+        for _, control in ipairs({ enable, reverse, smooth }) do
+            W.AttachEditFocus(control, unit, "frame", nil, { source = "menu2-unit" })
+        end
     end
 
     local sectionEntry = sec and sec._msuf2CollapsibleEntry
     local RefreshBasicsState = AttachBasicsHeaderStatus(sec, unit) or function() end
     if sectionEntry then sectionEntry._msuf2RefreshState = RefreshBasicsState end
 
-    local notice = CreateFrame("Frame", nil, sec)
-    notice:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -70)
-    notice:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -14, -70)
-    notice:SetHeight(24)
-    notice._msuf2UnitFrameGateAlwaysEnabled = true
-    local noticeBg = notice:CreateTexture(nil, "BACKGROUND")
-    noticeBg:SetAllPoints()
-    noticeBg:SetColorTexture(WARNING_NOTICE_BG[1], WARNING_NOTICE_BG[2], WARNING_NOTICE_BG[3], WARNING_NOTICE_BG[4])
-    local noticeEdge = notice:CreateTexture(nil, "BORDER")
-    noticeEdge:SetPoint("TOPLEFT", notice, "TOPLEFT", 0, 0)
-    noticeEdge:SetPoint("TOPRIGHT", notice, "TOPRIGHT", 0, 0)
-    noticeEdge:SetHeight(1)
-    noticeEdge:SetColorTexture(WARNING_NOTICE_TOP[1], WARNING_NOTICE_TOP[2], WARNING_NOTICE_TOP[3], WARNING_NOTICE_TOP[4])
-    local noticeBottom = notice:CreateTexture(nil, "BORDER")
-    noticeBottom:SetPoint("BOTTOMLEFT", notice, "BOTTOMLEFT", 0, 0)
-    noticeBottom:SetPoint("BOTTOMRIGHT", notice, "BOTTOMRIGHT", 0, 0)
-    noticeBottom:SetHeight(1)
-    noticeBottom:SetColorTexture(WARNING_NOTICE_BOTTOM[1], WARNING_NOTICE_BOTTOM[2], WARNING_NOTICE_BOTTOM[3], WARNING_NOTICE_BOTTOM[4])
-
     local unitLabel = label or UnitTopLabel(unit)
-    local noticeText = T.Font(notice, "GameFontDisableSmall", "", { 0.92, 0.82, 0.72, 1 })
-    noticeText:SetPoint("LEFT", notice, "LEFT", 10, 0)
-    noticeText:SetPoint("RIGHT", notice, "RIGHT", -122, 0)
-    noticeText:SetJustifyH("LEFT")
-    noticeText:SetText(unitLabel .. " frame is disabled and will not appear.")
-
-    local enableNow = W.StyleTopActionButton and W.StyleTopActionButton(T.Button(notice, "Enable", 92, 20)) or T.Button(notice, "Enable", 92, 20)
-    enableNow:SetPoint("RIGHT", notice, "RIGHT", -2, 0)
-    enableNow._msuf2UnitFrameGateAlwaysEnabled = true
+    local notice, _, enableNow = UnitSectionShared.CreateSectionNotice(sec, -70, "Enable", 92)
+    notice:SetMessage(unitLabel .. " frame is disabled and will not appear.", "warning")
     enableNow:SetScript("OnClick", function()
         if unit == "focustarget" and not ReadBool("focus", "enabled", true) then
             SetBool("focus", "enabled", true, "MSUF2_FOCUSTARGET_PARENT_ENABLED", { preview = true })
@@ -776,19 +748,18 @@ local function BuildBasics(ctx, builder, unit, label)
         if M.RequestRefresh then M.RequestRefresh(ctx, "frame-basics-enable-now") elseif M.Refresh then M.Refresh(ctx) end
     end)
     notice:Hide()
+    local basicsDependentControls = { reverse, smooth }
 
     local function RefreshBasicsEnabled()
         local ownOn = ReadBool(unit, "enabled", true)
         local parentOff = unit == "focustarget" and not ReadBool("focus", "enabled", true)
-        local on = ownOn and not parentOff
         SetControlEnabled(enable, true)
-        SetControlEnabled(reverse, ownOn)
-        SetControlEnabled(smooth, ownOn)
+        SetControlsEnabled(basicsDependentControls, ownOn)
         if parentOff then
-            noticeText:SetText("Focus Target follows the Focus frame. Enable Focus to show it.")
+            notice:SetMessage("Focus Target follows the Focus frame. Enable Focus to show it.", "warning")
             if enableNow.SetText then enableNow:SetText("Enable Focus") end
         else
-            noticeText:SetText(unitLabel .. " frame is disabled and will not appear.")
+            notice:SetMessage(unitLabel .. " frame is disabled and will not appear.", "warning")
             if enableNow.SetText then enableNow:SetText("Enable") end
         end
         notice:SetShown(not ownOn or parentOff)
@@ -860,22 +831,8 @@ local function BuildLayout(ctx, builder, unit)
     local function ApplyAnchorChange()
         M.RequestUnitApply(unit, "MSUF2_ANCHORING", { preview = true })
     end
-    local function PlaceAnchorDropdown(control, x, y, width)
-        if not control then return end
-        width = width or 200
-        if control._msuf2Title then
-            control._msuf2Title:ClearAllPoints()
-            control._msuf2Title:SetPoint("TOPLEFT", sec, "TOPLEFT", x, y)
-            control._msuf2Title:SetWidth(width)
-            control._msuf2Title:SetJustifyH("LEFT")
-        end
-        control:ClearAllPoints()
-        control:SetPoint("TOPLEFT", sec, "TOPLEFT", x, y - 22)
-        control:SetSize(width, 22)
-    end
-
     local anchorTo = W.Dropdown(sec, "Anchor To", AnchorValues, 230)
-    PlaceAnchorDropdown(anchorTo, 14, -38, 230)
+    UnitSectionShared.PlaceDropdown(sec, anchorTo, 14, -38, 230)
     if W.AttachEditFocus then W.AttachEditFocus(anchorTo, unit, "anchoring", nil, { source = "menu2-unit" }) end
     M.BindDropdown(ctx, anchorTo,
         AnchorValue,
@@ -888,7 +845,7 @@ local function BuildLayout(ctx, builder, unit)
         end)
 
     local anchorPoint = W.Dropdown(sec, "Anchor Point", anchorPoints, 160)
-    PlaceAnchorDropdown(anchorPoint, 284, -38, 160)
+    UnitSectionShared.PlaceDropdown(sec, anchorPoint, 284, -38, 160)
     if W.AttachEditFocus then W.AttachEditFocus(anchorPoint, unit, "anchoring", nil, { source = "menu2-unit" }) end
     M.BindDropdown(ctx, anchorPoint,
         AnchorPointValue,
@@ -900,90 +857,39 @@ local function BuildLayout(ctx, builder, unit)
             ApplyAnchorChange()
         end)
 
-    local customLabel = T.Font(sec, "GameFontHighlightSmall", M.Tr("Custom Anchor Frame"), { 0.62, 0.74, 0.96, 1 })
-    customLabel:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -104)
-    customLabel:SetJustifyH("LEFT")
-
-    local customBox = CreateFrame("EditBox", nil, sec, "InputBoxTemplate")
-    customBox:SetPoint("TOPLEFT", sec, "TOPLEFT", 14, -126)
-    customBox:SetSize(200, 22)
-    customBox:SetAutoFocus(false)
-    customBox:SetMaxLetters(100)
-    customBox:SetJustifyH("LEFT")
-    customBox._msuf2Title = customLabel
-    customBox._msuf2ControlKind = "textinput"
-    T.SkinEditBox(customBox)
-    if W.AttachEditFocus then W.AttachEditFocus(customBox, unit, "anchoring", nil, { source = "menu2-unit" }) end
-
-    local function RefreshCustomAnchorBox()
-        if customBox and not customBox:HasFocus() then
-            customBox:SetText(CustomAnchorName(GetConf(unit)))
-        end
+    local function SetCustomAnchorValue(value)
+        value = value or ""
+        local conf = GetConf(unit)
+        conf.anchorFrameName = (value ~= "") and value or nil
+        if value ~= "" or CustomAnchorName(conf) ~= "" then conf.anchorToUnitframe = "GLOBAL" end
+        ApplyAnchorChange()
     end
-
-    customBox:SetScript("OnEnterPressed", function(self)
-        local value = self:GetText() or ""
-        local function CommitCustomAnchor()
-            local conf = GetConf(unit)
-            conf.anchorFrameName = (value ~= "") and value or nil
-            if value ~= "" or CustomAnchorName(conf) ~= "" then
-                conf.anchorToUnitframe = "GLOBAL"
-            end
-            ApplyAnchorChange()
-        end
-        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Set Unit Anchor", "unit:anchorCustom:" .. tostring(unit), CommitCustomAnchor)
-        else
-            CommitCustomAnchor()
-        end
-        self:ClearFocus()
-    end)
-    customBox:SetScript("OnEscapePressed", function(self)
-        RefreshCustomAnchorBox()
-        self:ClearFocus()
-    end)
-    customBox:SetScript("OnEditFocusLost", RefreshCustomAnchorBox)
-
-    local pick = T.Button(sec, "Pick", 50, 22)
-    pick:SetPoint("LEFT", customBox, "RIGHT", 6, 0)
-    T.CenterButtonLabel(pick)
-    if W.AttachEditFocus then W.AttachEditFocus(pick, unit, "anchoring", nil, { source = "menu2-unit" }) end
-    pick:SetScript("OnClick", function()
-        local ensure = _G.MSUF_EnsureAnchorPicker
-        local overlay = type(ensure) == "function" and ensure()
-        if not overlay then return end
-        overlay._onPick = function(frameName)
-            local function PickCustomAnchor()
-                local conf = GetConf(unit)
-                conf.anchorFrameName = frameName
-                conf.anchorToUnitframe = "GLOBAL"
-                customBox:SetText(frameName or "")
-                ApplyAnchorChange()
-            end
-            if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-                M.CaptureHistory("Pick custom anchor", "unit:anchorPick:" .. tostring(unit), PickCustomAnchor)
-            else
-                PickCustomAnchor()
-            end
-        end
-        overlay:Show()
-    end)
-
-    local clear = T.SkinDangerButton(T.Button(sec, "Clear", 50, 22))
-    clear:SetPoint("LEFT", pick, "RIGHT", 4, 0)
-    T.CenterButtonLabel(clear)
-    clear:SetScript("OnClick", function()
+    local customAnchor = UnitSectionShared.CustomAnchorEditor(ctx, sec, {
+        getValue = function() return CustomAnchorName(GetConf(unit)) end,
+        setValue = function(value) SetCustomAnchorValue(value) end,
+        clearValue = function()
+            SetCustomAnchorValue("")
+        end,
+        commitTitle = "Set Unit Anchor",
+        commitKey = function() return "unit:anchorCustom:" .. tostring(unit) end,
+        pickTitle = "Pick custom anchor",
+        pickKey = function() return "unit:anchorPick:" .. tostring(unit) end,
+        attachFocus = function(widget)
+            if W.AttachEditFocus then W.AttachEditFocus(widget, unit, "anchoring", nil, { source = "menu2-unit" }) end
+        end,
+    })
+    customAnchor.clear:SetScript("OnClick", function()
         local conf = GetConf(unit)
         conf.anchorFrameName = nil
         if CustomAnchorName(conf) ~= "" then
             conf.anchorToUnitframe = "GLOBAL"
         end
-        customBox:SetText("")
+        customAnchor.box:SetText("")
         ApplyAnchorChange()
     end)
 
     local function RefreshLayoutState()
-        RefreshCustomAnchorBox()
+        customAnchor.Refresh()
         if anchorTo.SetValue then anchorTo:SetValue(AnchorValue()) end
         if anchorPoint.SetValue then anchorPoint:SetValue(AnchorPointValue()) end
         SetSectionHeaderStatus(sec, nil)
@@ -1004,6 +910,15 @@ local function BuildInlineText(ctx, builder, unit)
 
     W.Text(sec, "Target of Target inline text is shown on the Target frame name line.", 14, -38, sectionW - 28, T.colors.muted)
     sec._msuf2CursorY = -72
+    local inlineApplyFlags = { text = true, preview = true }
+    local function ApplyToTInline(reason, forceToT, skipRefresh)
+        M.RequestUnitApply("target", reason, inlineApplyFlags)
+        M.RequestUnitApply("targettarget", reason, inlineApplyFlags)
+        if forceToT and MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate("targettarget") end
+        Call("MSUF_UpdateTargetToTInlineNow")
+        Call("MSUF_UFPreview_RequestRefresh", reason)
+        if not skipRefresh and RefreshInlineControlState then RefreshInlineControlState() end
+    end
 
     local show = W.Toggle(sec, "Show Target of Target text inline")
     M.BindToggle(ctx, show,
@@ -1011,11 +926,7 @@ local function BuildInlineText(ctx, builder, unit)
         function(v)
             local conf = GetConf("targettarget")
             conf.showToTInTargetName = v and true or false
-            M.RequestUnitApply("target", "MSUF2_TOT_INLINE", { text = true, preview = true })
-            M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE", { text = true, preview = true })
-            Call("MSUF_UpdateTargetToTInlineNow")
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE")
-            if RefreshInlineControlState then RefreshInlineControlState() end
+            ApplyToTInline("MSUF2_TOT_INLINE")
         end)
 
     local color = W.Dropdown(sec, "Inline color", ToTInlineColorOptions, rightW)
@@ -1025,12 +936,7 @@ local function BuildInlineText(ctx, builder, unit)
         function(v)
             local conf = GetConf("targettarget")
             conf.totInlineColorMode = NormalizeToTInlineColorMode(v)
-            M.RequestUnitApply("target", "MSUF2_TOT_INLINE_COLOR", { text = true, preview = true })
-            M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_COLOR", { text = true, preview = true })
-            if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate("targettarget") end
-            Call("MSUF_UpdateTargetToTInlineNow")
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_COLOR")
-            if RefreshInlineControlState then RefreshInlineControlState() end
+            ApplyToTInline("MSUF2_TOT_INLINE_COLOR", true)
         end)
 
     local sep = W.Dropdown(sec, "Inline separator", TOT_INLINE_SEPARATOR_OPTIONS, 170)
@@ -1045,12 +951,7 @@ local function BuildInlineText(ctx, builder, unit)
             else
                 conf.totInlineSeparator = (v ~= nil and tostring(v) ~= "") and tostring(v) or " "
             end
-            M.RequestUnitApply("target", "MSUF2_TOT_INLINE_SEPARATOR", { text = true, preview = true })
-            M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_SEPARATOR", { text = true, preview = true })
-            if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate("targettarget") end
-            Call("MSUF_UpdateTargetToTInlineNow")
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_SEPARATOR")
-            if RefreshInlineControlState then RefreshInlineControlState() end
+            ApplyToTInline("MSUF2_TOT_INLINE_SEPARATOR", true)
         end)
 
     local customSep = W.TextInput(sec, "Custom separator", rightW)
@@ -1073,30 +974,22 @@ local function BuildInlineText(ctx, builder, unit)
             conf.totInlineCustomSeparator = CleanToTInlineCustomSeparator(v)
             if isCustom then
                 conf.totInlineSeparator = TOT_INLINE_CUSTOM_SEPARATOR
-                M.RequestUnitApply("target", "MSUF2_TOT_INLINE_CUSTOM_SEPARATOR", { text = true, preview = true })
-                M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_CUSTOM_SEPARATOR", { text = true, preview = true })
-                if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate("targettarget") end
-                Call("MSUF_UpdateTargetToTInlineNow")
-                Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_CUSTOM_SEPARATOR")
+                ApplyToTInline("MSUF2_TOT_INLINE_CUSTOM_SEPARATOR", true, true)
             end
         end,
         true)
 
+    local totInlineBaseControls = { color, sep }
     RefreshInlineControlState = function()
         local conf = GetConf("targettarget")
         local enabled = GetConf("targettarget").showToTInTargetName == true
         local npcAvailable = ToTInlineNPCColorAvailable()
         if conf.totInlineColorMode == TOT_INLINE_COLOR_NPC and not npcAvailable then
             conf.totInlineColorMode = TOT_INLINE_COLOR_AUTO
-            M.RequestUnitApply("target", "MSUF2_TOT_INLINE_COLOR_AUTO", { text = true, preview = true })
-            M.RequestUnitApply("targettarget", "MSUF2_TOT_INLINE_COLOR_AUTO", { text = true, preview = true })
-            if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate("targettarget") end
-            Call("MSUF_UpdateTargetToTInlineNow")
-            Call("MSUF_UFPreview_RequestRefresh", "MSUF2_TOT_INLINE_COLOR_AUTO")
+            ApplyToTInline("MSUF2_TOT_INLINE_COLOR_AUTO", true, true)
         end
         local isCustom = ToTInlineSeparatorDropdownValue(conf) == TOT_INLINE_CUSTOM_SEPARATOR
-        SetControlEnabled(color, enabled)
-        SetControlEnabled(sep, enabled)
+        SetControlsEnabled(totInlineBaseControls, enabled)
         SetControlEnabled(customSep, enabled and isCustom)
         if color.SetValues then color:SetValues(ToTInlineColorOptions()) end
         if color.SetValue then color:SetValue(ToTInlineColorDropdownValue(conf)) end
@@ -1144,10 +1037,6 @@ local function BuildLoadConditions(ctx, builder, unit)
     end
 
     local function RefreshLoadConditionState()
-        local activeCount = 0
-        for i = 1, #LOAD_CONDITIONS do
-            if ReadBool(unit, LOAD_CONDITIONS[i].key, false) then activeCount = activeCount + 1 end
-        end
         SetSectionHeaderStatus(sec, nil)
     end
     M.SetCollapsibleRefreshState(sec, RefreshLoadConditionState)
@@ -1162,21 +1051,14 @@ local function BuildBossLayout(ctx, builder, unit)
     local leftX = 14
     local rightX = math.max(350, floor(sectionW * 0.50) + 8)
     local sliderW = math.min(300, math.max(220, rightX - leftX - 68))
-    local function PlaceSlider(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or sliderW, "CENTER")
-    end
-    local function PlaceDropdown(control, x, y, width)
-        W.MoveWidget(control, sec, x, y, width or 220)
-    end
-
     local spacing = W.Slider(sec, "Boss spacing", -400, 0, 1, 300)
-    PlaceSlider(spacing, leftX, -42, sliderW)
+    W.MoveWidget(spacing, sec, leftX, -42, sliderW, "CENTER")
     M.BindSlider(ctx, spacing,
         function() return ReadNumber(unit, "spacing", -36) end,
         function(v) SetNumber(unit, "spacing", v, "MSUF2_BOSS_SPACING", { preview = true }) end)
 
     local layout = W.Dropdown(sec, "Boss frame layout", BOSS_LAYOUT_OPTIONS, 220)
-    PlaceDropdown(layout, rightX, -42, 220)
+    UnitSectionShared.PlaceDropdown(sec, layout, rightX, -42, 220)
     M.BindDropdown(ctx, layout,
         function()
             local conf = GetConf(unit)

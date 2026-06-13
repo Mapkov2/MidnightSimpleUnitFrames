@@ -34,24 +34,17 @@ local function BuildAlpha(ctx, builder, unit)
     local barsCard = W.ControlCard(sec, "Opacity", "Fade the health bar and its background.", leftX, -38, leftW, 130)
     local optionsCard = W.ControlCard(sec, "Options", "Keep text and portrait readable while bars fade.", rightX, -38, rightW, 130)
 
-    -- HP bar fill opacity.
-    local hpAlpha = W.Slider(barsCard, "", 0, 1, 0.05, leftW)
-    M.BindSlider(ctx, hpAlpha,
-        function() return ReadNumber(unit, "hpBarAlpha", 1) end,
-        function(v) SetNumber(unit, "hpBarAlpha", v, "MSUF2_ALPHA_HP", { alpha = true, preview = true }) end)
-    M.BindSliderLiveLabel(ctx, hpAlpha, function() return ReadNumber(unit, "hpBarAlpha", 1) end,
-        function(value) return AlphaLabel("HP Bar", value) end, true)
-    W.MoveWidget(hpAlpha, barsCard, 16, -62, leftW - 58, "LEFT")
-
-    -- Background texture opacity. Background opacity lives in the bar background colour,
-    -- so a normal visual reapply (preview) repaints it -- no alpha refresh needed.
-    local bgAlpha = W.Slider(barsCard, "", 0, 1, 0.05, leftW)
-    M.BindSlider(ctx, bgAlpha,
-        function() return ReadNumber(unit, "hpBgAlpha", 0.85) end,
-        function(v) SetNumber(unit, "hpBgAlpha", v, "MSUF2_ALPHA_BG", { preview = true }) end)
-    M.BindSliderLiveLabel(ctx, bgAlpha, function() return ReadNumber(unit, "hpBgAlpha", 0.85) end,
-        function(value) return AlphaLabel("Background", value) end, true)
-    W.MoveWidget(bgAlpha, barsCard, 16, -100, leftW - 58, "LEFT")
+    local function AddAlphaSlider(spec)
+        local slider = W.Slider(barsCard, "", 0, 1, 0.05, leftW)
+        M.BindSlider(ctx, slider,
+            function() return ReadNumber(unit, spec.key, spec.default) end,
+            function(v) SetNumber(unit, spec.key, v, spec.reason, spec.flags) end)
+        M.BindSliderLiveLabel(ctx, slider, function() return ReadNumber(unit, spec.key, spec.default) end,
+            function(value) return AlphaLabel(spec.label, value) end, true)
+        W.MoveWidget(slider, barsCard, 16, spec.y, leftW - 58, "LEFT")
+    end
+    AddAlphaSlider({ label = "HP Bar", key = "hpBarAlpha", default = 1, reason = "MSUF2_ALPHA_HP", flags = { alpha = true, preview = true }, y = -62 })
+    AddAlphaSlider({ label = "Background", key = "hpBgAlpha", default = 0.85, reason = "MSUF2_ALPHA_BG", flags = { preview = true }, y = -100 })
 
     local exclude = W.ToggleAt(optionsCard, "Keep text + portrait visible", 16, -62, rightW - 32)
     M.BindToggle(ctx, exclude,
