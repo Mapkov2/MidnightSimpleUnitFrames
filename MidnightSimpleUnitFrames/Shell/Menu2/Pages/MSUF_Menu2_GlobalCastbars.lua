@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -12,30 +11,25 @@ local W = M.Widgets
 local T = M.Theme
 local GP = M.GlobalPage or {}
 local VT = M.ValueTextList
-
+local CastbarPreview = MSUF.UFPreviewCastbar or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
-
 local Call, G, ReadG, SetG, ReadGBool, SetGBool, TextureValues, SetControlEnabled, SetControlsEnabled, ApplyCastbars = M.Pick(GP, [[Call G ReadG SetG ReadGBool SetGBool TextureValues SetControlEnabled SetControlsEnabled ApplyCastbars]])
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
-
-local CASTBAR_PREVIEW_UNITS = { player = true, target = true, focus = true, boss = true }
-local CASTBAR_PREVIEW_TYPES = { normal = true, channel = true, empowered = true }
-
+local CASTBAR_PREVIEW_UNITS = M.KeySetFromWords "player target focus boss"
+local CASTBAR_PREVIEW_TYPES = M.KeySetFromWords "normal channel empowered"
 local function NormalizeCastbarPreviewUnit(unit)
     unit = tostring(unit or ""):lower()
     if unit == "boss1" or unit == "bosses" or unit == "boss frames" then unit = "boss" end
     return CASTBAR_PREVIEW_UNITS[unit] and unit or "player"
 end
-
 local function NormalizeCastbarPreviewType(kind)
     kind = tostring(kind or ""):lower()
     if kind == "channeled" or kind == "channelled" then kind = "channel" end
     if kind == "empower" or kind == "empowerment" then kind = "empowered" end
     return CASTBAR_PREVIEW_TYPES[kind] and kind or "normal"
 end
-
 function M.SetCastbarPreviewUnit(unit)
     unit = NormalizeCastbarPreviewUnit(unit)
     M._msuf2CastbarPreviewUnit = unit
@@ -46,7 +40,6 @@ function M.SetCastbarPreviewUnit(unit)
     end
     return true, unit
 end
-
 function M.SetCastbarPreviewType(kind, progress)
     -- Preview type changes are local UI state. They simulate normal/channel/empowered casts
     -- without mutating live unit castbar runtime state.
@@ -64,7 +57,6 @@ function M.SetCastbarPreviewType(kind, progress)
     end
     return true, kind
 end
-
 function M.PlayCastbarPreviewInterrupt()
     M._msuf2CastbarPreviewInterruptPending = true
     local preview = M._msuf2CastbarPreview
@@ -75,11 +67,9 @@ function M.PlayCastbarPreviewInterrupt()
     end
     return false
 end
-
 local function BuildCastbars(ctx)
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Castbar", "Castbar behavior, textures and interrupt indicators.", 72)
-
     local function ApplyCastbarTextures(reason)
         Call("MSUF_UpdateCastbarTextures_Immediate")
         Call("MSUF_UpdateCastbarTextures")
@@ -88,7 +78,6 @@ local function BuildCastbars(ctx)
         Call("MSUF_UpdateBossCastbarPreview")
         ApplyCastbars(reason or "MSUF2_CASTBAR_TEXTURES")
     end
-
     local function BuildPreview()
         local section = b:Section("Preview", 132)
         local sectionW = section._msuf2Width or b.width or ctx.width or 720
@@ -102,7 +91,6 @@ local function BuildCastbars(ctx)
             shakeStart = 0,
             shakeStrength = tonumber(ReadG("castbarShakeStrength", 8)) or 8,
         }
-
         local function ResetEmpowerBlinkState(target)
             if not target then return end
             local flashStart = target._stageFlashStart or {}
@@ -117,87 +105,28 @@ local function BuildCastbars(ctx)
             target._lastEmpowerProgress = nil
         end
         ResetEmpowerBlinkState(preview)
-
         local subtitle = T.Font(section, "GameFontDisableSmall", "Normal / Channel / Empowered", T.colors.muted)
         subtitle:SetPoint("TOPLEFT", section.title or section, "BOTTOMLEFT", 0, -5)
         subtitle:SetJustifyH("LEFT")
         subtitle:Hide()
-
-        local function CastbarPrefix(unit)
-            if type(_G.MSUF_GetCastbarPrefix) == "function" then
-                return _G.MSUF_GetCastbarPrefix(unit)
-            end
-            if unit == "player" then return "castbarPlayer" end
-            if unit == "target" then return "castbarTarget" end
-            if unit == "focus" then return "castbarFocus" end
-            return nil
-        end
-
-        local function CastbarReferenceFrame(unit)
-            if unit == "player" then return _G.MSUF_PlayerCastbarPreview or _G.MSUF_PlayerCastbar end
-            if unit == "target" then return _G.MSUF_TargetCastbarPreview or _G.MSUF_TargetCastbar end
-            if unit == "focus" then return _G.MSUF_FocusCastbarPreview or _G.MSUF_FocusCastbar end
-            if unit == "boss" then return _G.MSUF_BossCastbarPreview or _G.MSUF_BossCastbarPreview1 or _G.MSUF_BossCastbar1 end
-            return nil
-        end
-
         local function ReadPreviewCastbarSize(unit, g)
             local fallbackW, fallbackH = 271, 18
             if unit == "target" then fallbackW = 272
             elseif unit == "focus" then fallbackW = 175
             elseif unit == "boss" then fallbackW, fallbackH = 176, 12 end
-            if type(_G.MSUF_GetCastbarDesiredSize) == "function" then
-                local desiredW, desiredH = _G.MSUF_GetCastbarDesiredSize(unit == "boss" and "boss1" or unit, g or {}, CastbarReferenceFrame(unit), fallbackW, fallbackH)
-                if desiredW and desiredW > 0 and desiredH and desiredH > 0 then
-                    return min(900, max(40, desiredW)), min(80, max(6, desiredH))
-                end
-            end
-            local w, h
-            if unit == "boss" then
-                w = g and tonumber(g.bossCastbarWidth)
-                h = g and tonumber(g.bossCastbarHeight)
-            else
-                local prefix = CastbarPrefix(unit)
-                w = prefix and g and tonumber(g[prefix .. "BarWidth"]) or nil
-                h = prefix and g and tonumber(g[prefix .. "BarHeight"]) or nil
-            end
-            w = tonumber(w) or tonumber(ReadG("castbarGlobalWidth", fallbackW)) or fallbackW
-            h = tonumber(h) or tonumber(ReadG("castbarGlobalHeight", fallbackH)) or fallbackH
-            return min(900, max(40, w)), min(80, max(6, h))
+            return CastbarPreview.ReadSize(unit, g,
+                tonumber(ReadG("castbarGlobalWidth", fallbackW)) or fallbackW,
+                tonumber(ReadG("castbarGlobalHeight", fallbackH)) or fallbackH)
         end
-
-        local function CastbarTextKey(unit, suffix, bossKey)
-            if unit == "boss" then return bossKey end
-            local prefix = CastbarPrefix(unit)
-            return prefix and (prefix .. suffix) or nil
-        end
-
         local function ReadCastbarNum(g, unit, suffix, bossKey, fallback)
-            local key = CastbarTextKey(unit, suffix, bossKey)
-            local value = key and g and tonumber(g[key]) or nil
-            if value == nil and suffix and suffix:find("Icon", 1, true) then
-                local globalKey = suffix:gsub("^Icon", "castbarIcon")
-                value = g and tonumber(g[globalKey]) or nil
-            end
-            return value ~= nil and value or fallback
+            return CastbarPreview.ReadNumber(g, unit, suffix, bossKey, fallback)
         end
-
         local function CastbarShowIcon(unit, g)
-            if unit == "boss" then return not (g and g.showBossCastIcon == false) end
-            local prefix = CastbarPrefix(unit)
-            local key = prefix and (prefix .. "ShowIcon") or nil
-            if key and g and g[key] ~= nil then return g[key] ~= false end
-            return ReadGBool("castbarShowIcon", true)
+            return CastbarPreview.ShowIcon(unit, g or G())
         end
-
         local function CastbarShowText(unit, g)
-            if unit == "boss" then return not (g and g.showBossCastName == false) end
-            local prefix = CastbarPrefix(unit)
-            local key = prefix and (prefix .. "ShowSpellName") or nil
-            if key and g and g[key] ~= nil then return g[key] ~= false end
-            return ReadGBool("castbarShowSpellName", true)
+            return CastbarPreview.ShowText(unit, g or G())
         end
-
         local function CastbarShowTime(unit, g)
             if unit == "boss" then return not (g and g.showBossCastTime == false) end
             local key = (unit == "player" and "showPlayerCastTime")
@@ -205,14 +134,12 @@ local function BuildCastbars(ctx)
                 or (unit == "focus" and "showFocusCastTime")
             return not (key and g and g[key] == false)
         end
-
         local function PreviewTexture(parent, layer, r, g, b, a, texture, subLevel)
             local tex = parent:CreateTexture(nil, layer, nil, subLevel)
             tex:SetTexture(texture or WHITE8)
             if r then tex:SetVertexColor(r, g, b, a or 1) end
             return tex
         end
-
         local function PreviewButtonGroup(parent, point, relPoint, x, y, specs, buttonW, gap, extraW, onClick)
             local buttons = {}
             local box = T.Panel(parent, nil, { 0.020, 0.026, 0.052, 0.94 }, T.colors.borderSoft)
@@ -230,21 +157,18 @@ local function BuildCastbars(ctx)
             end
             return buttons, box
         end
-
         local unitButtons = PreviewButtonGroup(section, "TOPLEFT", "TOPLEFT", 82, -12, {
             { key = "player", text = "Player" },
             { key = "target", text = "Target" },
             { key = "focus", text = "Focus" },
             { key = "boss", text = "Boss" },
         }, 52, 4, 12, M.SetCastbarPreviewUnit)
-
         local buttonW, buttonGap, interruptW = 82, 6, 90
         local typeButtons = PreviewButtonGroup(section, "TOPRIGHT", "TOPRIGHT", -(14 + interruptW + 10), -12, {
             { key = "normal", text = "Normal" },
             { key = "channel", text = "Channel" },
             { key = "empowered", text = "Empowered" },
         }, buttonW, buttonGap, 12, M.SetCastbarPreviewType)
-
         local interrupt = T.CenterButtonLabel(T.SkinDangerButton(T.Button(section, "Interrupt", interruptW, 24)))
         interrupt._msuf2AllowCombatClick = true
         interrupt._msuf2SkipHistoryCheckpoint = true
@@ -252,11 +176,9 @@ local function BuildCastbars(ctx)
         interrupt:SetScript("OnClick", function()
             M.PlayCastbarPreviewInterrupt()
         end)
-
         local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
         box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -50)
         box:SetSize(innerW, 62)
-
         local portrait = T.Panel(box, nil, { 0.040, 0.060, 0.120, 0.96 }, { 0.16, 0.22, 0.42, 0.75 })
         portrait:SetSize(52, 52)
         portrait:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -19)
@@ -267,7 +189,6 @@ local function BuildCastbars(ctx)
         portraitBody:SetPoint("BOTTOM", portrait, "BOTTOM", 0, 6)
         portraitBody:SetSize(38, 16)
         portrait:Hide()
-
         local mainX = 18
         local barW = min(720, max(280, innerW - 36))
         local unitName = T.Font(box, "GameFontNormalSmall", "Target of Target", T.colors.text)
@@ -276,7 +197,6 @@ local function BuildCastbars(ctx)
         local unitLevel = T.Font(box, "GameFontHighlightSmall", "Elite 72", { 1.0, 0.82, 0.38, 1 })
         unitLevel:SetPoint("TOPRIGHT", box, "TOPRIGHT", -12, -12)
         unitLevel:Hide()
-
         local function MakeTrack(parent, width, height, x, y, fillColor)
             local track = T.Panel(parent, nil, { 0.020, 0.024, 0.034, 0.96 }, { 0.10, 0.16, 0.30, 0.65 })
             track:SetSize(width, height)
@@ -288,18 +208,15 @@ local function BuildCastbars(ctx)
             track.fill = fill
             return track
         end
-
         local healthTrack = MakeTrack(box, barW, 14, mainX, -31, { 0.16, 0.78, 0.38, 0.95 })
         local powerTrack = MakeTrack(box, barW, 7, mainX, -50, { 0.24, 0.58, 1.00, 0.95 })
         healthTrack:Hide()
         powerTrack:Hide()
-
         local castRow = CreateFrame("Frame", nil, box)
         castRow:SetSize(barW, 46)
         castRow:SetPoint("TOPLEFT", box, "TOPLEFT", mainX, -8)
         preview.castRow = castRow
         preview.castRowBase = { parent = box, x = mainX, y = -8 }
-
         local icon = T.Panel(castRow, nil, { 0.030, 0.050, 0.100, 0.98 }, { 0.16, 0.22, 0.42, 0.75 })
         icon:SetSize(20, 20)
         icon:SetPoint("BOTTOMLEFT", castRow, "BOTTOMLEFT", 0, 0)
@@ -312,47 +229,37 @@ local function BuildCastbars(ctx)
         iconTexture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         preview.iconTexture = iconTexture
         preview.icon = icon
-
         local castbar = T.Panel(castRow, nil, { 0.018, 0.020, 0.030, 0.98 }, T.colors.borderSoft)
         castbar:SetSize(max(180, barW), 20)
         castbar:SetPoint("CENTER", castRow, "CENTER", 0, 0)
         preview.bar = castbar
-
         local textLayer = CreateFrame("Frame", nil, castbar)
         textLayer:SetAllPoints(castbar)
-        if textLayer.SetFrameLevel and castbar.GetFrameLevel then
-            textLayer:SetFrameLevel((castbar:GetFrameLevel() or 1) + 8)
-        end
+        if textLayer.SetFrameLevel and castbar.GetFrameLevel then textLayer:SetFrameLevel((castbar:GetFrameLevel() or 1) + 8) end
         preview.textLayer = textLayer
-
         local statusAnchor = CreateFrame("Frame", nil, textLayer)
         statusAnchor:EnableMouse(false)
         preview.statusBar = statusAnchor
-
         local spell = T.Font(textLayer, "GameFontHighlightSmall", "", T.colors.text)
         spell:SetPoint("LEFT", textLayer, "LEFT", 2, 0)
         spell:SetWidth(max(120, barW - 138))
         spell:SetJustifyH("LEFT")
         preview.spell = spell
         preview.castText = spell
-
         local time = T.Font(textLayer, "GameFontHighlightSmall", "", T.colors.text)
         time:SetPoint("RIGHT", textLayer, "RIGHT", -2, 0)
         time:SetWidth(82)
         time:SetJustifyH("RIGHT")
         preview.time = time
         preview.timeText = time
-
         local barBg = PreviewTexture(castbar, "BACKGROUND", 0.10, 0.10, 0.10, 0.85)
         barBg:SetPoint("TOPLEFT", castbar, "TOPLEFT", 1, -1)
         barBg:SetPoint("BOTTOMRIGHT", castbar, "BOTTOMRIGHT", -1, 1)
         preview.barBg = barBg
-
         local fill = PreviewTexture(castbar, "ARTWORK")
         fill:SetPoint("TOPLEFT", castbar, "TOPLEFT", 1, -1)
         fill:SetPoint("BOTTOMLEFT", castbar, "BOTTOMLEFT", 1, 1)
         preview.fill = fill
-
         local empowerColors = {
             { 0.20, 0.90, 0.20, 0.72 },
             { 0.95, 0.80, 0.20, 0.76 },
@@ -371,13 +278,11 @@ local function BuildCastbars(ctx)
             seg:Hide()
             preview.empowerFills[i] = seg
         end
-
         local latency = PreviewTexture(castbar, "OVERLAY", 1, 0, 0, 0.25)
         latency:SetPoint("TOPRIGHT", castbar, "TOPRIGHT", -1, -1)
         latency:SetPoint("BOTTOMRIGHT", castbar, "BOTTOMRIGHT", -1, 1)
         latency:SetWidth(max(8, (barW - 28) * 0.12))
         preview.latency = latency
-
         local spark = PreviewTexture(castbar, "OVERLAY", 1, 1, 1, 1, 4417031)
         spark:SetTexCoord(0.222168, 0.232422, 0.294434, 0.317383)
         spark:SetDesaturated(true)
@@ -385,7 +290,6 @@ local function BuildCastbars(ctx)
         spark:SetBlendMode("ADD")
         spark:Hide()
         preview.spark = spark
-
         preview.ticks = {}
         for i = 1, 4 do
             local tick = PreviewTexture(castbar, "OVERLAY", 1, 1, 1, 0.80)
@@ -393,13 +297,11 @@ local function BuildCastbars(ctx)
             tick:Hide()
             preview.ticks[i] = tick
         end
-
         preview.stageTicks = {}
         for i = 1, 3 do
             local tick = PreviewTexture(castbar, "OVERLAY", 1, 1, 1, 0.85)
             tick:SetWidth(2)
             tick:Hide()
-
             local flash = PreviewTexture(castbar, "OVERLAY", 1.0, 0.10, 0.10, 1.0)
             flash:SetBlendMode("ADD")
             flash:SetAlpha(0)
@@ -407,14 +309,11 @@ local function BuildCastbars(ctx)
             tick.MSUF_flash = flash
             tick.MSUF_baseWidth = 2
             tick.MSUF_baseAlpha = 0.85
-
             preview.stageTicks[i] = tick
         end
         local outlineFrame = CreateFrame("Frame", nil, castbar)
         outlineFrame:SetAllPoints(castbar)
-        if outlineFrame.SetFrameLevel and castbar.GetFrameLevel then
-            outlineFrame:SetFrameLevel((castbar:GetFrameLevel() or 1) + 6)
-        end
+        if outlineFrame.SetFrameLevel and castbar.GetFrameLevel then outlineFrame:SetFrameLevel((castbar:GetFrameLevel() or 1) + 6) end
         outlineFrame.edges = {}
         for _, key in ipairs({ "top", "bottom", "left", "right" }) do
             local edge = PreviewTexture(outlineFrame, "OVERLAY")
@@ -422,13 +321,11 @@ local function BuildCastbars(ctx)
             outlineFrame.edges[key] = edge
         end
         preview.outlineFrame = outlineFrame
-
         local kick = T.Panel(castRow, nil, { 0.12, 0.72, 0.36, 0.92 }, { 0.40, 1.00, 0.62, 0.70 })
         kick:SetSize(20, 20)
         kick:SetPoint("LEFT", castbar, "RIGHT", 7, 0)
         kick:Hide()
         preview.kick = kick
-
         function preview:PlayShake(strength, interrupted)
             self.shakeStrength = max(0, tonumber(strength) or tonumber(ReadG("castbarShakeStrength", 8)) or 8)
             self.shakeStart = GetTime and GetTime() or 0
@@ -436,40 +333,28 @@ local function BuildCastbars(ctx)
             if interrupted then self.interruptUntil = self.shakeStart + 0.58 end
             if self.Refresh then self:Refresh() end
         end
-
         function preview:SetRowOffset(x)
             local base = self.castRowBase
             self.castRow:ClearAllPoints()
             self.castRow:SetPoint("TOPLEFT", base.parent, "TOPLEFT", base.x + (x or 0), base.y)
         end
-
         local previewSpellNames = {
             normal = "Glacial Spike of the Infinite Midnight Archive",
             channel = "Mind Flay: Insanity of the Devouring Void",
             empowered = "Fire Breath of the Obsidian Aspect",
         }
-
         local function SpellText(kind)
             return previewSpellNames[kind or "normal"] or previewSpellNames.normal
         end
-
         local function CastDuration(kind)
             if kind == "channel" then return 4.5 end
             if kind == "empowered" then return 3.0 end
             return 2.0
         end
-
         local function FormatPreviewTime(unit, g, current, total)
-            local mode = "CURRENT"
-            if type(_G.MSUF_GetCastbarTimeFormat) == "function" then
-                mode = _G.MSUF_GetCastbarTimeFormat(unit, g)
-            end
-            if type(_G.MSUF_FormatCastbarTimeText) == "function" then
-                return _G.MSUF_FormatCastbarTimeText(mode, current, total) or ""
-            end
+            if type(CastbarPreview.FormatPreviewTime) == "function" then return CastbarPreview.FormatPreviewTime(g or G(), unit, current, total) end
             return string.format("%.1f", tonumber(current) or 0)
         end
-
         local function EmpowerBlinkEnabled()
             if type(_G.MSUF_IsEmpowerStageBlinkEnabled) == "function" then
                 local ok, enabled = pcall(_G.MSUF_IsEmpowerStageBlinkEnabled)
@@ -477,18 +362,14 @@ local function BuildCastbars(ctx)
             end
             return ReadGBool("empowerStageBlink", true)
         end
-
         local function EmpowerBlinkTime()
             if type(_G.MSUF_GetEmpowerStageBlinkTime) == "function" then
                 local ok, value = pcall(_G.MSUF_GetEmpowerStageBlinkTime)
-                if ok and tonumber(value) then
-                    return max(0.05, min(1.00, tonumber(value)))
-                end
+                if ok and tonumber(value) then return max(0.05, min(1.00, tonumber(value))) end
             end
             local value = tonumber(ReadG("empowerStageBlinkTime", 0.25)) or 0.25
             return max(0.05, min(1.00, value))
         end
-
         local function ResolvePreviewReverse(frame, unit, kind, g)
             local isChanneled = kind == "channel" or kind == "empowered"
             frame.unit = unit
@@ -496,30 +377,20 @@ local function BuildCastbars(ctx)
             frame._msufBarKey = unit
             frame.MSUF_isChanneled = isChanneled and true or nil
             frame.isEmpower = (kind == "empowered") and true or nil
-
             local direction = (g and g.castbarFillDirection) or ReadG("castbarFillDirection", "RTL")
             if direction == "LEFT" then direction = "RTL" end
             if direction == "RIGHT" then direction = "LTR" end
             local reverse = direction ~= "LTR"
-            if unit == "target" and ((g and g.castbarOpositeDirectionTarget == true) or ReadGBool("castbarOpositeDirectionTarget", false)) then
-                reverse = not reverse
-            end
-            if isChanneled and not ((g and g.castbarUnifiedDirection == true) or ReadGBool("castbarUnifiedDirection", false)) then
-                reverse = not reverse
-            end
-
+            if unit == "target" and ((g and g.castbarOpositeDirectionTarget == true) or ReadGBool("castbarOpositeDirectionTarget", false)) then reverse = not reverse end
+            if isChanneled and not ((g and g.castbarUnifiedDirection == true) or ReadGBool("castbarUnifiedDirection", false)) then reverse = not reverse end
             return reverse
         end
-
         local function GlowBlend(r, g, b, progress)
-            if not ReadGBool("castbarShowGlow", false) then
-                return r, g, b
-            end
+            if not ReadGBool("castbarShowGlow", false) then return r, g, b end
             local p = max(0, min(1, tonumber(progress) or 0))
             p = p * p
             return r + ((1 - r) * p), g + ((1 - g) * p), b + ((1 - b) * p)
         end
-
         local function KickReadyKey(unit)
             if unit == "player" then return "kickReadyShowPlayer" end
             if unit == "target" then return "kickReadyShowTarget" end
@@ -527,19 +398,16 @@ local function BuildCastbars(ctx)
             if unit == "boss" then return "kickReadyShowBoss" end
             return nil
         end
-
         local function ReadColorTable(tbl, dr, dg, db)
             if type(tbl) ~= "table" then return dr, dg, db end
             return tonumber(tbl["1"]) or tonumber(tbl[1]) or dr,
                    tonumber(tbl["2"]) or tonumber(tbl[2]) or dg,
                    tonumber(tbl["3"]) or tonumber(tbl[3]) or db
         end
-
         local function LayoutOutline(frame, scale)
             local holder = frame and frame.outlineFrame
             local edges = holder and holder.edges
             if not edges then return end
-
             local thickness = floor((tonumber(ReadG("castbarOutlineThickness", 1)) or 1) + 0.5)
             if thickness < 0 then thickness = 0 end
             if thickness > 12 then thickness = 12 end
@@ -548,7 +416,6 @@ local function BuildCastbars(ctx)
                 return
             end
             thickness = max(1, floor((thickness * (scale or 1)) + 0.5))
-
             local gdb = (type(G) == "function" and G()) or {}
             local r = tonumber(gdb.castbarBorderR) or 0
             local gg = tonumber(gdb.castbarBorderG) or 0
@@ -559,34 +426,28 @@ local function BuildCastbars(ctx)
                 r, gg, b = ReadColorTable(gdb.kickReadyColor, 0, 1, 0)
                 a = 1
             end
-
             local top, bottom, left, right = edges.top, edges.bottom, edges.left, edges.right
             top:ClearAllPoints()
             top:SetPoint("BOTTOMLEFT", frame.bar, "TOPLEFT", 0, 0)
             top:SetPoint("BOTTOMRIGHT", frame.bar, "TOPRIGHT", 0, 0)
             top:SetHeight(thickness)
-
             bottom:ClearAllPoints()
             bottom:SetPoint("TOPLEFT", frame.bar, "BOTTOMLEFT", 0, 0)
             bottom:SetPoint("TOPRIGHT", frame.bar, "BOTTOMRIGHT", 0, 0)
             bottom:SetHeight(thickness)
-
             left:ClearAllPoints()
             left:SetPoint("TOPRIGHT", frame.bar, "TOPLEFT", 0, thickness)
             left:SetPoint("BOTTOMRIGHT", frame.bar, "BOTTOMLEFT", 0, -thickness)
             left:SetWidth(thickness)
-
             right:ClearAllPoints()
             right:SetPoint("TOPLEFT", frame.bar, "TOPRIGHT", 0, thickness)
             right:SetPoint("BOTTOMLEFT", frame.bar, "BOTTOMRIGHT", 0, -thickness)
             right:SetWidth(thickness)
-
             for _, edge in pairs(edges) do
                 edge:SetVertexColor(r, gg, b, a)
                 edge:Show()
             end
         end
-
         function preview:Refresh()
             local now = GetTime and GetTime() or 0
             local kind = self.castType or "normal"
@@ -600,9 +461,7 @@ local function BuildCastbars(ctx)
             iconSize = min(128, max(6, iconSize or realH))
             local rowW = max(1, self.castRow:GetWidth())
             local needW = realW
-            if showIcon then
-                needW = needW + max(0, -(iconX or 0)) + max(0, (iconX or 0) + iconSize - realW)
-            end
+            if showIcon then needW = needW + max(0, -(iconX or 0)) + max(0, (iconX or 0) + iconSize - realW) end
             local scale = min(1, (rowW - 8) / max(1, needW))
             if scale <= 0 then scale = 1 end
             local function S(v) return floor(((tonumber(v) or 0) * scale) + 0.5) end
@@ -610,7 +469,6 @@ local function BuildCastbars(ctx)
             self.bar:SetSize(scw, sch)
             self.bar:ClearAllPoints()
             self.bar:SetPoint("CENTER", self.castRow, "CENTER", 0, 0)
-
             local sIcon = max(6, S(iconSize))
             local iconDetached = showIcon and ((unit == "player" and iconX ~= 0) or (unit ~= "player" and (iconX ~= 0 or iconY ~= 0)))
             self.icon:SetShown(showIcon)
@@ -637,23 +495,17 @@ local function BuildCastbars(ctx)
             local visual = (kind == "channel") and (1 - progress) or progress
             visual = max(0.01, min(1, visual))
             local fillW = max(1, floor(barWLocal * visual + 0.5))
-
             local ir, ig, ib = 0.20, 0.78, 0.94
             if type(_G.MSUF_ResolveCastbarColors) == "function" then
                 local ok, r, g, b = pcall(_G.MSUF_ResolveCastbarColors)
                 if ok and r then ir, ig, ib = r, g or ig, b or ib end
             end
-            if now < (self.interruptUntil or 0) then
-                ir, ig, ib = 0.90, 0.14, 0.20
-            end
+            if now < (self.interruptUntil or 0) then ir, ig, ib = 0.90, 0.14, 0.20 end
             ir, ig, ib = GlowBlend(ir, ig, ib, progress)
-
             if self.bar.SetBackdropBorderColor then
                 self.bar:SetBackdropBorderColor(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], T.colors.borderSoft[4] or 0.7)
                 local kickKey = KickReadyKey(unit)
-                if kickKey and ReadGBool(kickKey, false) and ReadG("kickReadyStyle", "border") == "border" then
-                    self.bar:SetBackdropBorderColor(0.24, 0.86, 0.46, 0.95)
-                end
+                if kickKey and ReadGBool(kickKey, false) and ReadG("kickReadyStyle", "border") == "border" then self.bar:SetBackdropBorderColor(0.24, 0.86, 0.46, 0.95) end
             end
             self.barBg:SetTexture(bgTexture)
             self.barBg:ClearAllPoints()
@@ -666,15 +518,12 @@ local function BuildCastbars(ctx)
                 self.barBg:SetVertexColor(0.10, 0.10, 0.10, 0.85)
             end
             LayoutOutline(self, scale)
-
             local remaining = max(0, (1 - progress) * duration)
             local previewTimeText = FormatPreviewTime(unit, g, remaining, duration)
             local fontPath = type(_G.MSUF_GetFontPath) == "function" and _G.MSUF_GetFontPath() or _G.STANDARD_TEXT_FONT
             local fontFlags = type(_G.MSUF_GetFontFlags) == "function" and _G.MSUF_GetFontFlags() or "OUTLINE"
             local tr, tg, tb = 1, 1, 1
-            if type(_G.MSUF_GetCastbarTextColor) == "function" then
-                tr, tg, tb = _G.MSUF_GetCastbarTextColor()
-            end
+            if type(_G.MSUF_GetCastbarTextColor) == "function" then tr, tg, tb = _G.MSUF_GetCastbarTextColor() end
             local showTime = CastbarShowTime(unit, g)
             local timeW = 0
             self.time:SetShown(showTime)
@@ -720,10 +569,7 @@ local function BuildCastbars(ctx)
                 local leftPad = (unit == "boss") and 2 or 4
                 local gap = (unit == "boss") and 6 or 4
                 local shorteningMode = tonumber(ReadG("castbarSpellNameShortening", 0)) or 0
-                if unit == "boss" and g.bossCastSpellNameShortening ~= nil then
-                    shorteningMode = tonumber(g.bossCastSpellNameShortening) or shorteningMode
-                end
-
+                if unit == "boss" and g.bossCastSpellNameShortening ~= nil then shorteningMode = tonumber(g.bossCastSpellNameShortening) or shorteningMode end
                 if shorteningMode > 0 then
                     local maxLen = tonumber(g.castbarSpellNameMaxLen) or tonumber(ReadG("castbarSpellNameMaxLen", 30)) or 30
                     local reservedSpace = tonumber(g.castbarSpellNameReservedSpace) or tonumber(ReadG("castbarSpellNameReservedSpace", 8)) or 8
@@ -776,7 +622,6 @@ local function BuildCastbars(ctx)
                 self.kick:ClearAllPoints()
                 self.kick:SetPoint("LEFT", self.bar, "LEFT", statusX + barWLocal + S(7), 0)
             end
-
             self.fill:SetTexture(texture)
             self.fill:SetVertexColor(ir, ig, ib, 1)
             self.fill:ClearAllPoints()
@@ -788,7 +633,6 @@ local function BuildCastbars(ctx)
                 self.fill:SetPoint("BOTTOMLEFT", self.bar, "TOPLEFT", statusX, -1 - barHLocal)
             end
             self.fill:SetWidth(fillW)
-
             local useEmpowerSegs = kind == "empowered" and ReadGBool("empowerColorStages", true)
             for i = 1, #self.empowerBands do
                 self.empowerBands[i]:Hide()
@@ -834,11 +678,9 @@ local function BuildCastbars(ctx)
                     end
                 end
             end
-
             self.spark:ClearAllPoints()
             self.spark:SetSize(max(4, S(16)), ReadGBool("castbarSparkOverflow", true) and max(sch, S(realH * 2.1)) or sch)
             self.spark:SetPoint("CENTER", self.bar, "LEFT", reverse and (statusX + barWLocal - fillW) or (statusX + fillW), 0)
-
             for i = 1, #self.ticks do self.ticks[i]:Hide() end
             if kind == "channel" and ReadGBool("castbarShowChannelTicks", false) then
                 local count = 5
@@ -853,7 +695,6 @@ local function BuildCastbars(ctx)
                     end
                 end
             end
-
             local blinkEnabled = false
             local blinkTime = 0.25
             if kind == "empowered" then
@@ -862,15 +703,11 @@ local function BuildCastbars(ctx)
             end
             local currentStageTick = min(#self.stageTicks, max(0, floor(progress * 4)))
             if kind ~= "empowered" then
-                if self._lastEmpowerProgress or self._lastEmpowerStageTick then
-                    ResetEmpowerBlinkState(self)
-                end
+                if self._lastEmpowerProgress or self._lastEmpowerStageTick then ResetEmpowerBlinkState(self) end
             else
                 self._stageFlashStart = self._stageFlashStart or {}
                 self._stageFlashUntil = self._stageFlashUntil or {}
-                if self._lastEmpowerProgress and progress < (self._lastEmpowerProgress - 0.001) then
-                    ResetEmpowerBlinkState(self)
-                end
+                if self._lastEmpowerProgress and progress < (self._lastEmpowerProgress - 0.001) then ResetEmpowerBlinkState(self) end
                 if blinkEnabled and currentStageTick > 0 and currentStageTick ~= self._lastEmpowerStageTick then
                     self._stageFlashStart[currentStageTick] = now
                     self._stageFlashUntil[currentStageTick] = now + blinkTime
@@ -878,7 +715,6 @@ local function BuildCastbars(ctx)
                 self._lastEmpowerStageTick = currentStageTick
                 self._lastEmpowerProgress = progress
             end
-
             for i = 1, #self.stageTicks do
                 local tick = self.stageTicks[i]
                 local flash = tick and tick.MSUF_flash
@@ -924,7 +760,6 @@ local function BuildCastbars(ctx)
                     end
                 end
             end
-
             for key, btn in pairs(typeButtons) do
                 if btn.SetActive then btn:SetActive(key == kind) end
             end
@@ -932,12 +767,10 @@ local function BuildCastbars(ctx)
                 if btn.SetActive then btn:SetActive(key == unit) end
             end
         end
-
         box:SetScript("OnUpdate", function(_, elapsed)
             elapsed = tonumber(elapsed) or 0
             preview.progress = (preview.progress or 0) + (elapsed / CastDuration(preview.castType or "normal"))
             if preview.progress > 1 then preview.progress = preview.progress - floor(preview.progress) end
-
             local now = GetTime and GetTime() or 0
             if now < (preview.shakeUntil or 0) then
                 local span = max(0.001, (preview.shakeUntil or now) - (preview.shakeStart or now))
@@ -949,90 +782,87 @@ local function BuildCastbars(ctx)
             end
             preview:Refresh()
         end)
-
         M._msuf2CastbarPreview = preview
         if M._msuf2CastbarPreviewUnit then M.SetCastbarPreviewUnit(M._msuf2CastbarPreviewUnit) end
         if M._msuf2CastbarPreviewType then M.SetCastbarPreviewType(M._msuf2CastbarPreviewType) end
         if M._msuf2CastbarPreviewInterruptPending then M.PlayCastbarPreviewInterrupt() end
-        preview:Refresh()
-        M.AddRefresher(ctx, function() preview:Refresh() end)
+        M.TrackMethodRefresh(ctx, preview, "Refresh")
         return preview
     end
-
     local castPreview = BuildPreview()
     local function RefreshCastPreview() if castPreview and castPreview.Refresh then castPreview:Refresh() end end
     local function ShakeCastPreview(strength) if castPreview and castPreview.PlayShake then castPreview:PlayShake(strength, false) end end
     local function ShowEmpoweredPreview() M.SetCastbarPreviewType("empowered", 0.62) end
     local function MoveToggle(toggle, parent, x, y, labelWidth)
         W.MoveWidget(toggle, parent, x, y)
-        if toggle and toggle._msuf2Label and toggle._msuf2Label.SetWidth then
-            toggle._msuf2Label:SetWidth(max(40, tonumber(labelWidth) or 260))
-        end
+        if toggle and toggle._msuf2Label and toggle._msuf2Label.SetWidth then toggle._msuf2Label:SetWidth(max(40, tonumber(labelWidth) or 260)) end
         return toggle
     end
-    local function BindCastToggle(parent, label, x, y, labelWidth, key, default, reason, afterSet, useSwitch, getValue, setValue)
-        local toggle = useSwitch and W.SwitchAt(parent, label, x, y, labelWidth) or W.Toggle(parent, label)
-        if not useSwitch then MoveToggle(toggle, parent, x, y, labelWidth) end
-        M.BindToggle(ctx, toggle,
-            getValue or function() return ReadGBool(key, default) end,
-            setValue or function(v)
+    local function BindCastToggle(parent, label, x, y, labelWidth, key, default, reason, afterSet, opts)
+        opts = opts or {}
+        local toggle = opts.switch and W.SwitchAt(parent, label, x, y, labelWidth) or W.Toggle(parent, label)
+        if not opts.switch then MoveToggle(toggle, parent, x, y, labelWidth) end
+        M.BindBoolWidget(ctx, toggle,
+            opts.getValue or function() return ReadGBool(key, default) end,
+            opts.setValue or function(v)
                 SetGBool(key, v, reason, { castbar = true, preview = true })
                 if afterSet then afterSet(reason, v) end
             end)
         return toggle
     end
-    local function BindCastSlider(parent, label, x, y, width, minValue, maxValue, step, key, default, reason, afterSet, precise, setDefault, getValue, setValue)
+    local function BindCastSlider(parent, label, x, y, width, minValue, maxValue, step, key, default, reason, afterSet, opts)
+        opts = opts or {}
         local slider = W.Slider(parent, label, minValue, maxValue, step, 300)
         W.MoveWidget(slider, parent, x, y, width or 320)
-        M.BindSlider(ctx, slider,
-            getValue or function() return tonumber(ReadG(key, default)) or default end,
-            setValue or function(v)
-                local fallback = setDefault ~= nil and setDefault or default
-                local nextValue = precise and (tonumber(v) or fallback) or floor((tonumber(v) or fallback) + 0.5)
+        M.BindNumberWidget(ctx, slider,
+            opts.getValue or function() return tonumber(ReadG(key, default)) or default end,
+            opts.setValue or function(v)
+                local fallback = opts.setDefault ~= nil and opts.setDefault or default
+                local nextValue = opts.precise and (tonumber(v) or fallback) or floor((tonumber(v) or fallback) + 0.5)
                 SetG(key, nextValue, reason, { castbar = true, preview = true })
                 if afterSet then afterSet(reason, nextValue) end
-            end)
+            end,
+            opts.setDefault ~= nil and opts.setDefault or default, { step = step, roundStep = not opts.precise })
         return slider
     end
-    local function BindCastDropdown(parent, label, x, y, width, values, getValue, setValue)
+    local function BindCastDropdown(parent, label, x, y, width, values, key, default, reason, afterSet, opts)
+        opts = opts or {}
+        local getValue, setValue = opts.getValue, opts.setValue
+        if key then
+            getValue = getValue or function() return ReadG(key, default) end
+            setValue = setValue or function(v)
+                local normalize = opts.normalize
+                local nextValue = normalize and normalize(v, default) or (v or default)
+                SetG(key, nextValue, reason, { castbar = true, preview = true })
+                if afterSet then afterSet(reason, nextValue) end
+            end
+        end
         local dropdown = W.Dropdown(parent, label, values, width or 260)
         W.MoveWidget(dropdown, parent, x, y, width or 300)
-        M.BindDropdown(ctx, dropdown, getValue, setValue)
+        M.BindDropdownWidget(ctx, dropdown, getValue, setValue)
         return dropdown
     end
+    local CAST_SPEC_OPTION_INDEX = { toggle = 10, slider = 13, dropdown = 11 }
     local function BuildCastControlSpecs(parent, specs)
-        local controls = {}
-        for i = 1, #specs do
-            local spec, control, key = specs[i]; local kind, label, x, y, width = spec[1], spec[2], spec[3], spec[4], spec[5]
-            local opts = ((kind == "toggle" and spec[10]) or (kind == "slider" and spec[13]) or (kind == "dropdown" and spec[11])) or {}
-            if kind == "toggle" then
-                key = spec[6]
-                control = BindCastToggle(parent, label, x, y, width, key, spec[7], spec[8],
-                    opts.afterSet or spec[9], opts.switch, opts.getValue, opts.setValue)
-            elseif kind == "slider" then
-                key = spec[9]
-                control = BindCastSlider(parent, label, x, y, width, spec[6], spec[7], spec[8],
-                    key, spec[10], spec[11], opts.afterSet or spec[12], opts.precise, opts.setDefault, opts.getValue, opts.setValue)
-            elseif kind == "dropdown" then
-                key = spec[7]
-                local default, reason, afterSet, getValue, setValue = spec[8], spec[9], opts.afterSet or spec[10], opts.getValue, opts.setValue
-                if key then
-                    getValue = getValue or function() return ReadG(key, default) end
-                    setValue = setValue or function(v)
-                        local normalize = opts.normalize
-                        local nextValue = normalize and normalize(v, default) or (v or default)
-                        SetG(key, nextValue, reason, { castbar = true, preview = true })
-                        if afterSet then afterSet(reason, nextValue) end
-                    end
-                end
-                control = BindCastDropdown(parent, label, x, y, width, spec[6], getValue, setValue)
-            end
-            controls[opts.name or key or i] = control
-        end
-        return controls
+        return M.BuildControlSpecs(specs, {
+            toggle = function(spec, i)
+                local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[6]
+                local opts = spec[CAST_SPEC_OPTION_INDEX.toggle] or {}
+                return BindCastToggle(parent, label, x, y, width, key, spec[7], spec[8], opts.afterSet or spec[9], opts), opts.name or key or i
+            end,
+            slider = function(spec, i)
+                local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[9]
+                local opts = spec[CAST_SPEC_OPTION_INDEX.slider] or {}
+                return BindCastSlider(parent, label, x, y, width, spec[6], spec[7], spec[8], key, spec[10], spec[11], opts.afterSet or spec[12], opts), opts.name or key or i
+            end,
+            dropdown = function(spec, i)
+                local label, x, y, width, key = spec[2], spec[3], spec[4], spec[5], spec[7]
+                local opts = spec[CAST_SPEC_OPTION_INDEX.dropdown] or {}
+                return BindCastDropdown(parent, label, x, y, width, spec[6], key, spec[8], spec[9], opts.afterSet or spec[10], opts), opts.name or key or i
+            end,
+        })
     end
     local function ApplyAndRefresh(reason) ApplyCastbars(reason); RefreshCastPreview() end
-
     local behavior = b:CollapsibleSection("castbar_behavior", "Shake & Fill Direction", 196, true)
     local leftX, rightX = 14, 392
     BuildCastControlSpecs(behavior, {
@@ -1043,7 +873,6 @@ local function BuildCastbars(ctx)
         { "toggle", "Use opposite fill direction for target", rightX, -126, 360, "castbarOpositeDirectionTarget", false, "MSUF2_CASTBAR_TARGET_DIRECTION", ApplyAndRefresh },
         { "toggle", "Show channel tick lines (5)", rightX, -150, 360, "castbarShowChannelTicks", false, "MSUF2_CASTBAR_TICKS", ApplyAndRefresh },
     })
-
     local textures = b:CollapsibleSection("castbar_textures", "Textures & Outline", 220, false)
     local texLeftX, texRightX = 14, 392
     local function ApplyTexturesAndPreview(reason) ApplyCastbarTextures(reason); RefreshCastPreview() end
@@ -1060,7 +889,6 @@ local function BuildCastbars(ctx)
         { "toggle", "Show spark (leading edge highlight)", texRightX, -144, 360, "castbarShowSpark", false, "MSUF2_CASTBAR_SPARK", ApplyTexturesAndPreview },
         { "toggle", "Spark extends beyond bar", texRightX, -168, 360, "castbarSparkOverflow", true, "MSUF2_CASTBAR_SPARK_OVERFLOW", ApplyTexturesAndPreview },
     })
-
     local empowered = b:CollapsibleSection("castbar_empowered", "Empowered Casts", 130, false)
     local empoweredLeftX, empoweredRightX = 14, 392
     local syncEmpowered
@@ -1072,9 +900,7 @@ local function BuildCastbars(ctx)
     })
     local blinkControls = { empoweredControls.empowerStageBlinkTime }
     syncEmpowered = function() SetControlsEnabled(blinkControls, ReadGBool("empowerStageBlink", true)) end
-    M.AddRefresher(ctx, syncEmpowered)
-    syncEmpowered()
-
+    M.TrackRefresh(ctx, syncEmpowered)
     local text = b:CollapsibleSection("castbar_name_shortening", "Name Shortening", 154, false)
     local textLeftX, textRightX = 14, 392
     local syncNameShortening
@@ -1092,9 +918,7 @@ local function BuildCastbars(ctx)
     })
     local nameShorteningControls = { textControls.castbarSpellNameMaxLen, textControls.castbarSpellNameReservedSpace }
     syncNameShortening = function() SetControlsEnabled(nameShorteningControls, NameShorteningEnabled()) end
-    M.AddRefresher(ctx, syncNameShortening)
-    syncNameShortening()
-
+    M.TrackRefresh(ctx, syncNameShortening)
     local focusKick = b:CollapsibleSection("castbar_focus_kick", "Focus Kick", 326, false)
     local focusHint = W.Text(focusKick, "Track interrupts on your focus without showing the focus castbar.", 14, -38, (focusKick._msuf2Width or ctx.width or 720) - 28, T.colors.muted)
     if focusHint and focusHint.SetWordWrap then focusHint:SetWordWrap(true) end
@@ -1137,9 +961,7 @@ local function BuildCastbars(ctx)
     end)
     local focusKickControls = { focusControls.preview, focusControls.width, focusControls.height, focusControls.text, focusControls.x, focusControls.y, resetFocus }
     syncFocusKick = function() SetControlsEnabled(focusKickControls, ReadGBool("enableFocusKickIcon", false)) end
-    M.AddRefresher(ctx, syncFocusKick)
-    syncFocusKick()
-
+    M.TrackRefresh(ctx, syncFocusKick)
     local kick = b:CollapsibleSection("castbar_interrupt_ready", "Interrupt Ready Indicator", 360, false)
     W.Text(kick, "Shows a colored indicator on castbars when your interrupt is ready or on cooldown.", 14, -38, ctx.width - 28, T.colors.muted)
     local kickLeftX, kickRightX = 14, 392
@@ -1175,10 +997,7 @@ local function BuildCastbars(ctx)
         SetControlEnabled(size, enabled and not autoOn)
         SetControlEnabled(colorHint, enabled)
     end
-    M.AddRefresher(ctx, syncKickReady)
-    syncKickReady()
-
+    M.TrackRefresh(ctx, syncKickReady)
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
-
 M.RegisterPage("opt_castbar", { title = "MSUF Castbar", build = BuildCastbars, version = 5 })

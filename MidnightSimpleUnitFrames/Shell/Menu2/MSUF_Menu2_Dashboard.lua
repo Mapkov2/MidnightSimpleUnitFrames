@@ -1,10 +1,8 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local T = M.Theme
 local W = M.Widgets
 
@@ -16,16 +14,14 @@ local max = math.max
 local min = math.min
 local CreateFrame = _G.CreateFrame
 local CreateColor = _G.CreateColor
+local MOVED_FRAME_DEFAULTS = { player = { -256, -180 }, target = { 320, -180 }, focus = { -260, -300 }, targettarget = { 220, -300 }, pet = { -275, -250 }, boss = { 360, 230 }, gf_party = { -400, 0 }, gf_raid = { -500, 0 }, gf_mythicraid = { -500, 0 } }
 local function GetBundledChangelog()
     -- Changelog data is bundled as static state. The dashboard renders it read-only and should
     -- tolerate older builds where no changelog table exists.
     local data = (type(MSUF) == "table" and MSUF.MSUF_Changelog) or _G.MSUF_Changelog
-    if type(data) ~= "table" or type(data.entries) ~= "table" or type(data.entries[1]) ~= "table" then
-        return nil
-    end
+    if type(data) ~= "table" or type(data.entries) ~= "table" or type(data.entries[1]) ~= "table" then return nil end
     return data
 end
-
 local function BuildDashboardChangelog(parent, cardWidth, opts)
     opts = opts or {}
     local data = GetBundledChangelog()
@@ -33,7 +29,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     local headerH = 42
     local contentW = max(120, cardWidth or 420)
     local scrollW = max(80, contentW - 60)
-
     local function RawFont(parentFrame, template, text, color, bump)
         local fs = parentFrame:CreateFontString(nil, "OVERLAY", template or "GameFontHighlightSmall")
         if T.StyleFontString then
@@ -44,40 +39,32 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         fs:SetText(tostring(text or ""))
         return fs
     end
-
     local header = CreateFrame("Button", nil, parent)
     header:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, top)
     header:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, top)
     header:SetHeight(headerH)
-
     local headerBg = header:CreateTexture(nil, "BACKGROUND")
     headerBg:SetAllPoints()
     headerBg:SetColorTexture(0, 0, 0, 0)
-
     local headerEdge = header:CreateTexture(nil, "BORDER")
     headerEdge:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 0, 0)
     headerEdge:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", 0, 0)
     headerEdge:SetHeight(1)
     headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], 0.44)
-
     local hover = header:CreateTexture(nil, "HIGHLIGHT")
     hover:SetAllPoints()
     hover:SetColorTexture(1, 1, 1, 0.025)
-
     local arrow = header:CreateTexture(nil, "OVERLAY")
     arrow:SetSize(10, 10)
     arrow:SetPoint("LEFT", header, "LEFT", 16, 0)
     arrow:SetTexture(T.media.collapseArrow)
-
     local title = T.Font(header, "GameFontNormal", M.Tr(opts.title or "Changelog"), T.colors.text)
     title:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
     title:SetPoint("RIGHT", header, "RIGHT", -94, 0)
     title:SetJustifyH("LEFT")
-
     local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
     hint:SetPoint("RIGHT", header, "RIGHT", -16, 0)
     hint:SetJustifyH("RIGHT")
-
     if not data then
         header:EnableMouse(false)
         hint:SetText("")
@@ -86,21 +73,16 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         if arrow.SetVertexColor then arrow:SetVertexColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], 0.55) end
         return
     end
-
     local scroll = CreateFrame("ScrollFrame", nil, parent)
     scroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, top - headerH - 10)
     scroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -34, opts.bottom or 70)
-
     local child = CreateFrame("Frame", nil, scroll)
     child:SetSize(scrollW, 1)
     scroll:SetScrollChild(child)
-
     local y = -2
     local function AddText(text, fontObject, color, indent, gap, translate)
         local rawText = tostring(text or "")
-        if translate and type(M.Tr) == "function" then
-            rawText = M.Tr(rawText)
-        end
+        if translate and type(M.Tr) == "function" then rawText = M.Tr(rawText) end
         local fs = RawFont(child, fontObject or "GameFontHighlightSmall", rawText, color or T.colors.muted, 0)
         indent = indent or 0
         fs:SetPoint("TOPLEFT", child, "TOPLEFT", indent, y)
@@ -114,7 +96,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         y = y - h - (gap or 4)
         return fs
     end
-
     local function AddBullet(text, dotColor, textColor)
         dotColor = dotColor or T.colors.accent
         textColor = textColor or T.colors.muted
@@ -124,7 +105,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
         dot:SetColorTexture(dotColor[1], dotColor[2], dotColor[3], 0.88)
         return AddText(text, "GameFontHighlightSmall", textColor, 18, 5, true)
     end
-
     local entries = data.entries
     local maxEntries = min(#entries, 4)
     for entryIndex = 1, maxEntries do
@@ -134,7 +114,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
             local date = tostring(entry.date or "")
             local heading = (date ~= "" and (version .. " - " .. date)) or version
             AddText(heading, "GameFontNormalSmall", T.colors.accent, 0, 8)
-
             local sections = entry.sections
             if type(sections) == "table" then
                 for sectionIndex = 1, #sections do
@@ -156,22 +135,17 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
             end
         end
     end
-
     child:SetHeight(max(1, math.abs(y) + 8))
-    if T.StyleScrollFrame then T.StyleScrollFrame(scroll, parent) end
-
+    M.CallIf(T.StyleScrollFrame, scroll, parent)
     local open = M.dashboardChangelogOpen == true
     local function PaintHeader(isOpen)
-        if T.ApplyCollapseVisual then T.ApplyCollapseVisual(arrow, nil, isOpen) end
+        M.CallIf(T.ApplyCollapseVisual, arrow, nil, isOpen)
         if headerBg.SetColorTexture then headerBg:SetColorTexture(0, 0, 0, 0) end
-        if headerEdge.SetColorTexture then
-            headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], isOpen and 0.58 or 0.34)
-        end
+        if headerEdge.SetColorTexture then headerEdge:SetColorTexture(T.colors.borderSoft[1], T.colors.borderSoft[2], T.colors.borderSoft[3], isOpen and 0.58 or 0.34) end
         hint:SetText(isOpen and M.Tr("Hide") or M.Tr("View"))
     end
     local function RefreshOpenState()
-        M.dashboardChangelogOpen = open
-        if M.PersistMenuStateValue then M.PersistMenuStateValue("dashboardChangelogOpen", open) end
+        M.SetMenuStateValue("dashboardChangelogOpen", open)
         scroll:SetShown(open)
         PaintHeader(open)
         if open then
@@ -180,7 +154,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
             scroll._msuf2ScrollBar:Hide()
         end
     end
-
     header:SetScript("OnClick", function()
         open = not open
         RefreshOpenState()
@@ -194,7 +167,6 @@ local function BuildDashboardChangelog(parent, cardWidth, opts)
     end)
     RefreshOpenState()
 end
-
 local function BuildDashboardUX(ctx)
     local root = ctx.wrapper
     local width = ctx.width or 760
@@ -204,7 +176,6 @@ local function BuildDashboardUX(ctx)
     local sideW = sideBySide and min(330, max(300, math.floor(layoutW * 0.31))) or layoutW
     local mainW = sideBySide and (layoutW - sideW - gap) or layoutW
     local sideX = sideBySide and (x0 + mainW + gap) or x0
-
     local function Card(parent, title, x, y, w, h, bg, border)
         local card = T.Panel(parent or root, nil, bg or T.colors.panel2, border or T.colors.cardBorder or T.colors.borderSoft)
         card:SetPoint("TOPLEFT", parent or root, "TOPLEFT", x, y)
@@ -216,7 +187,6 @@ local function BuildDashboardUX(ctx)
         end
         return card
     end
-
     local function SetDashboardGradient(texture, orientation, from, to)
         if not texture then return end
         from = from or { 1, 1, 1, 0 }
@@ -227,7 +197,6 @@ local function BuildDashboardUX(ctx)
         local horizontal = (orientation or "HORIZONTAL") == "HORIZONTAL"
         local path
         local color
-
         if horizontal then
             path = (toA >= fromA) and (media and media.gradHRev) or (media and media.gradH)
             color = (toA >= fromA) and to or from
@@ -235,13 +204,10 @@ local function BuildDashboardUX(ctx)
             path = (fromA >= toA) and (media and media.gradV) or (media and media.gradVRev)
             color = (fromA >= toA) and from or to
         end
-
         if path and path ~= "" then
             texture:SetTexture(path)
             texture:SetTexCoord(0, 1, 0, 1)
-            if texture.SetVertexColor then
-                texture:SetVertexColor(color[1], color[2], color[3], color[4] or 1)
-            end
+            if texture.SetVertexColor then texture:SetVertexColor(color[1], color[2], color[3], color[4] or 1) end
         elseif texture.SetGradientAlpha then
             texture:SetTexture("Interface\\Buttons\\WHITE8X8")
             texture:SetGradientAlpha(orientation or "HORIZONTAL", from[1], from[2], from[3], fromA, to[1], to[2], to[3], toA)
@@ -252,28 +218,23 @@ local function BuildDashboardUX(ctx)
             texture:SetColorTexture(color[1], color[2], color[3], color[4] or 1)
         end
     end
-
     local function ApplyDashboardHeroGradient(card, w, h)
         if not (card and card.CreateTexture) or card._msuf2DashboardHeroGradient then return end
         card._msuf2DashboardHeroGradient = true
-
         local wash = card:CreateTexture(nil, "BACKGROUND", nil, 1)
         wash:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         wash:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
         SetDashboardGradient(wash, "HORIZONTAL", { 0.020, 0.026, 0.064, 0.00 }, { 0.030, 0.210, 0.285, 0.16 })
-
         local top = card:CreateTexture(nil, "BACKGROUND", nil, 2)
         top:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         top:SetPoint("TOPRIGHT", card, "TOPRIGHT", -2, -2)
         top:SetHeight(max(54, min(96, floor((h or 190) * 0.42))))
         SetDashboardGradient(top, "VERTICAL", { 0.080, 0.320, 0.430, 0.08 }, { 0.020, 0.030, 0.070, 0.00 })
-
         local focus = card:CreateTexture(nil, "BACKGROUND", nil, 3)
         focus:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         focus:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
         SetDashboardGradient(focus, "HORIZONTAL", { 0.080, 0.420, 0.560, 0.00 }, { 0.080, 0.420, 0.560, 0.05 })
     end
-
     local function Button(parent, text, x, y, w, h, onClick, skin)
         local btn = T.Button(parent, M.Tr(text or ""), w, h or 24)
         btn:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -283,13 +244,11 @@ local function BuildDashboardUX(ctx)
         if onClick then btn:SetScript("OnClick", onClick) end
         return btn
     end
-
     local function Kicker(parent, text, x, y, color)
         local fs = T.Font(parent, "GameFontDisableSmall", string.upper(M.Tr(text or "")), color or T.colors.accent)
         fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 16, y or -14)
         return fs
     end
-
     local function Pill(parent, text, x, y, w, color)
         local pill = T.Panel(parent, nil, { 0.055, 0.070, 0.135, 0.92 }, { 0.160, 0.220, 0.430, 0.70 })
         pill:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
@@ -300,7 +259,6 @@ local function BuildDashboardUX(ctx)
         pill._msuf2Label = label
         return pill
     end
-
     local function AddTooltip(frame, title, text)
         return M.AddTooltip and M.AddTooltip(frame, title, text, {
             hook = true,
@@ -308,107 +266,74 @@ local function BuildDashboardUX(ctx)
             bodyColor = { 0.85, 0.85, 0.85 },
         }) or frame
     end
-
     local function MakeDashboardActionCard(card, title, tooltip, onClick, showArrow)
         if not (card and card.CreateTexture and card.HookScript) then return card end
         card:EnableMouse(true)
-
         local hover = card:CreateTexture(nil, "BORDER", nil, 4)
         hover:SetPoint("TOPLEFT", card, "TOPLEFT", 2, -2)
         hover:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -2, 2)
         hover:SetColorTexture(0.240, 0.780, 0.940, 0.055)
         hover:Hide()
         card._msuf2DashboardActionHover = hover
-
         if showArrow then
             local arrow = T.Font(card, "GameFontNormal", ">", T.colors.dim)
             arrow:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -18)
             arrow:SetJustifyH("RIGHT")
             card._msuf2DashboardActionArrow = arrow
         end
-
         card:HookScript("OnEnter", function(self)
             if self._msuf2DashboardActionHover then self._msuf2DashboardActionHover:Show() end
             local arrow = self._msuf2DashboardActionArrow
-            if arrow and arrow.SetTextColor then
-                arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
-            end
+            if arrow and arrow.SetTextColor then arrow:SetTextColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1) end
         end)
         card:HookScript("OnLeave", function(self)
             if self._msuf2DashboardActionHover then self._msuf2DashboardActionHover:Hide() end
             local arrow = self._msuf2DashboardActionArrow
-            if arrow and arrow.SetTextColor then
-                arrow:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
-            end
+            if arrow and arrow.SetTextColor then arrow:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1) end
         end)
         if onClick then card:SetScript("OnMouseUp", onClick) end
         AddTooltip(card, title, tooltip)
         return card
     end
-
-    local function Select(pageKey)
-        if M.SelectPage then M.SelectPage(pageKey) end
-    end
-
+    local function Select(pageKey) M.CallIf(M.SelectPage, pageKey) end
     local function IsDashboardEditModeActive()
         return M.IsMSUFEditModeActive(true)
     end
-
     local function IsDashboardEditModeCombatLocked()
         return M.IsEditModeCombatLocked(true)
     end
-
-    local function RefreshDashboardEditModeButtonSafe()
-        if type(M.RefreshDashboardEditModeButton) == "function" then
-            M.RefreshDashboardEditModeButton()
-        end
-    end
-
-    local function RefreshMenuFramePrioritySafe()
-        local fn = M.RefreshMenuFramePriority
-        if type(fn) == "function" then fn() end
-    end
-
+    local function RefreshDashboardEditModeButtonSafe() M.CallIf(M.RefreshDashboardEditModeButton) end
+    local function RefreshMenuFramePrioritySafe() M.CallIf(M.RefreshMenuFramePriority) end
+    local function RefreshDashboardFrameStatus() local f = M.frame; if f and f.RefreshStatus then f:RefreshStatus() end end
     local function ToggleEditMode()
         local active = IsDashboardEditModeActive()
         if (not active) and IsDashboardEditModeCombatLocked() then
-            if M.BlockCombatAction then M.BlockCombatAction() end
+            M.CallIf(M.BlockCombatAction)
             RefreshDashboardEditModeButtonSafe()
-            if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+            RefreshDashboardFrameStatus()
             return
         end
-        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then
-            _G.MSUF_SetMSUFEditModeDirect(not active)
-        end
+        if type(_G.MSUF_SetMSUFEditModeDirect) == "function" then _G.MSUF_SetMSUFEditModeDirect(not active) end
         RefreshMenuFramePrioritySafe()
         if C_Timer and C_Timer.After then C_Timer.After(0, RefreshMenuFramePrioritySafe) end
         RefreshDashboardEditModeButtonSafe()
-        if M.frame and M.frame.RefreshStatus then M.frame:RefreshStatus() end
+        RefreshDashboardFrameStatus()
     end
-
     local function StartNewAssistantTask()
         local A = MSUF and MSUF.Assistant
         if not A then return end
-
-        if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then
-            pcall(A.Workflow.CancelActiveWorkflow)
-        end
+        if A.Workflow and type(A.Workflow.CancelActiveWorkflow) == "function" then pcall(A.Workflow.CancelActiveWorkflow) end
         if type(A.CloseLargeTextPanel) == "function" then
             pcall(A.CloseLargeTextPanel)
         else
             A.largeTextPanel = nil
         end
-        if type(A.ClearHistory) == "function" then
-            A.ClearHistory()
-        end
-
+        if type(A.ClearHistory) == "function" then A.ClearHistory() end
         local ui = A.dashboardUI
         if ui and ui.input then
             ui.input:SetText("")
             if ui.input.ClearFocus then ui.input:ClearFocus() end
-            if ui.input._msufAssistantPlaceholder and ui.input._msufAssistantPlaceholder.SetShown then
-                ui.input._msufAssistantPlaceholder:SetShown(true)
-            end
+            if ui.input._msufAssistantPlaceholder and ui.input._msufAssistantPlaceholder.SetShown then ui.input._msufAssistantPlaceholder:SetShown(true) end
         end
         if type(A.RequestRefreshUI) == "function" then
             A.RequestRefreshUI("assistant.new_task")
@@ -416,13 +341,9 @@ local function BuildDashboardUX(ctx)
             A.RefreshUI()
         end
     end
-
     local function CopyWagoLink()
-        if type(_G.MSUF_ShowCopyLink) == "function" then
-            _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf")
-        end
+        if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end
     end
-
     local function DashboardGlobalState()
         _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
         local gdb = _G.MSUF_GlobalDB
@@ -430,19 +351,16 @@ local function BuildDashboardUX(ctx)
         gdb.global.dashboard = (type(gdb.global.dashboard) == "table") and gdb.global.dashboard or {}
         return gdb.global.dashboard
     end
-
     local function ActiveProfileKey()
         local key = tostring(_G.MSUF_ActiveProfile or "Default")
         if key == "" then key = "Default" end
         return key
     end
-
     local function WagoBackupConfirmed()
         local dash = DashboardGlobalState()
         local byProfile = dash.wagoProfileBackupConfirmed
         return type(byProfile) == "table" and byProfile[ActiveProfileKey()] == true
     end
-
     local function SetWagoBackupConfirmed(confirmed)
         local dash = DashboardGlobalState()
         dash.wagoProfileBackupConfirmed = (type(dash.wagoProfileBackupConfirmed) == "table") and dash.wagoProfileBackupConfirmed or {}
@@ -453,20 +371,16 @@ local function BuildDashboardUX(ctx)
             byProfile[ActiveProfileKey()] = nil
         end
     end
-
     local function RefreshDashboard()
-        if M.InvalidatePage then M.InvalidatePage("home") end
-        if M.SelectPage then M.SelectPage("home") end
+        M.CallIf(M.InvalidatePage, "home")
+        M.CallIf(M.SelectPage, "home")
     end
-
     local function ConfirmWagoBackup()
         if WagoBackupConfirmed() then return end
-
         local function accept()
             SetWagoBackupConfirmed(true)
             RefreshDashboard()
         end
-
         if _G.StaticPopupDialogs and _G.StaticPopup_Show then
             local popup = M.InstallStaticPopup("MSUF2_WAGO_PROFILE_BACKUP_CONFIRM", {
                 text = "%s",
@@ -480,27 +394,22 @@ local function BuildDashboardUX(ctx)
             _G.StaticPopup_Show("MSUF2_WAGO_PROFILE_BACKUP_CONFIRM", M.Tr("Have you backed up this MSUF profile before using the Wago MSUF page?"))
             return
         end
-
         accept()
     end
-
     local function Percent(value, fallback)
         return math.floor(((tonumber(value) or fallback or 1) * 100) + 0.5)
     end
-
     local function Clamp(v, minV, maxV)
         v = tonumber(v) or minV
         if v < minV then return minV end
         if v > maxV then return maxV end
         return v
     end
-
     local function SnapPct(value, minPct, maxPct, stepPct)
         stepPct = stepPct or 1
         local pct = math.floor((tonumber(value) or 100) / stepPct + 0.5) * stepPct
         return Clamp(pct, minPct or 25, maxPct or 150)
     end
-
     local function SetSliderValueSafe(slider, value)
         if not (slider and slider.SetValue) then return end
         slider._msuf2Refreshing = true
@@ -509,7 +418,6 @@ local function BuildDashboardUX(ctx)
         if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
         slider._msuf2Refreshing = nil
     end
-
     local function HideSliderValueBox(slider)
         if slider and slider.editBox then slider.editBox:Hide() end
         if slider and slider._msuf2StepButtons then
@@ -517,11 +425,8 @@ local function BuildDashboardUX(ctx)
                 slider._msuf2StepButtons[i]:Hide()
             end
         end
-        if slider and slider._msuf2Title and slider._msuf2Title.SetFontObject then
-            slider._msuf2Title:SetFontObject("GameFontHighlight")
-        end
+        if slider and slider._msuf2Title and slider._msuf2Title.SetFontObject then slider._msuf2Title:SetFontObject("GameFontHighlight") end
     end
-
     local function EnablePercentWheel(slider, minPct, maxPct, stepPct)
         if not slider then return end
         slider:EnableMouseWheel(true)
@@ -532,7 +437,6 @@ local function BuildDashboardUX(ctx)
             self:SetValue(SnapPct(value, minPct, maxPct, stepPct))
         end)
     end
-
     local function PixelScale()
         if type(_G.MSUF_GetPixelPerfectScale) == "function" then
             local ok, v = pcall(_G.MSUF_GetPixelPerfectScale)
@@ -545,7 +449,6 @@ local function BuildDashboardUX(ctx)
         end
         return 1
     end
-
     local function GlobalState()
         local g = M.GetGeneralDB()
         g.UIScale = (type(g.UIScale) == "table") and g.UIScale or { Enabled = false, Scale = 1 }
@@ -554,27 +457,14 @@ local function BuildDashboardUX(ctx)
         ui.Scale = Clamp(ui.Scale, 0.3, 1.5)
         return g, ui
     end
-
     local function HasMovedFramesInEditMode()
         local g = M.GetGeneralDB and M.GetGeneralDB()
         if type(g) == "table" and g.hasMovedFramesInEditMode == true then return true end
         local st = rawget(_G, "MSUF_EditState")
         if type(st) == "table" and st.hasMovedFramesInEditMode == true then return true end
-
         local db = M.EnsureDB and M.EnsureDB() or _G.MSUF_DB
         if type(db) ~= "table" then return false end
-        local defaults = {
-            player = { -256, -180 },
-            target = { 320, -180 },
-            focus = { -260, -300 },
-            targettarget = { 220, -300 },
-            pet = { -275, -250 },
-            boss = { 360, 230 },
-            gf_party = { -400, 0 },
-            gf_raid = { -500, 0 },
-            gf_mythicraid = { -500, 0 },
-        }
-        for key, def in pairs(defaults) do
+        for key, def in pairs(MOVED_FRAME_DEFAULTS) do
             local conf = db[key]
             if type(conf) == "table" then
                 local x, y = tonumber(conf.offsetX), tonumber(conf.offsetY)
@@ -586,26 +476,21 @@ local function BuildDashboardUX(ctx)
         end
         return false
     end
-
     local function RunMSUFSlashCommand(message)
         local slash = _G.SlashCmdList and _G.SlashCmdList["MIDNIGHTSUF"]
         if type(slash) ~= "function" then return false end
         local ok = pcall(slash, message or "")
         return ok and true or false
     end
-
     M.dashboardEditModeButton = nil
-
     local compactHeader = layoutW < 640
     local tinyHeader = layoutW < 430
     local headerH = tinyHeader and 128 or (compactHeader and 104 or 86)
     local header = Card(root, "Dashboard", x0, y0, layoutW, headerH, { 0.030, 0.036, 0.058, 0.94 }, { 0.100, 0.140, 0.220, 0.82 })
-
     local editW = 150
     local taskW = 96
     local headerTextW = compactHeader and (layoutW - 32) or max(180, layoutW - editW - taskW - 76)
     W.Text(header, "Ask MSUF, review setup, and open recovery tools when needed.", 16, -42, headerTextW, T.colors.muted)
-
     if tinyHeader then
         local available = max(160, layoutW - 32)
         local smallTaskW = min(taskW, floor((available - 10) * 0.40))
@@ -618,11 +503,7 @@ local function BuildDashboardUX(ctx)
         M.dashboardEditModeButton = Button(header, "MSUF Edit Mode", actionX, actionY, editW, 28, ToggleEditMode, "primary")
         Button(header, "New Task", actionX - taskW - 12, actionY, taskW, 28, StartNewAssistantTask)
     end
-    RefreshDashboardEditModeButtonSafe()
-    if type(M.AddRefresher) == "function" then
-        M.AddRefresher(ctx, RefreshDashboardEditModeButtonSafe)
-    end
-
+    M.TrackRefresh(ctx, RefreshDashboardEditModeButtonSafe)
     local mainTop = y0 - headerH - 16
     local tinyHero = mainW < 390
     local heroH = tinyHero and 398 or (mainW < 560 and 382 or 360)
@@ -637,7 +518,6 @@ local function BuildDashboardUX(ctx)
         title:SetWidth(mainW - 44)
         W.Text(hero, "The Assistant dashboard module is not available. Use the navigation pages and search to configure MSUF.", 22, -82, mainW - 44, T.colors.muted)
     end
-
     local featureBlockBottom = mainTop - heroH
     local sideTop = sideBySide and mainTop or (featureBlockBottom - 16)
     local checklistTop = sideTop
@@ -657,7 +537,6 @@ local function BuildDashboardUX(ctx)
         local bug = M.BugReport
         if type(bug) ~= "table" or type(bug.GetStatus) ~= "function" then return 0 end
         if type(bug.IsCombatDeferred) == "function" and bug.IsCombatDeferred() then return 0 end
-
         local status, integration = bug.GetStatus()
         integration = type(integration) == "table" and integration or {}
         local autoReport = status == "has_error" or status == "dummy"
@@ -671,15 +550,12 @@ local function BuildDashboardUX(ctx)
             or (missing and T.colors.accent2 or T.colors.ok)
         local bg = hasReport and { 0.032, 0.038, 0.058, 0.92 }
             or (missing and { 0.060, 0.050, 0.035, 0.86 } or { 0.030, 0.040, 0.078, 0.86 })
-
         local card = Card(root, "", x, top, width, height, bg, hasReport and T.colors.borderSoft or (accent or T.colors.borderSoft))
         local title = T.Font(card, "GameFontNormal", M.Tr("Bug report"), T.colors.text)
         title:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
-
         local statusText = hasReport and (status == "dummy" and "test" or (autoReport and "error" or "manual"))
             or (missing and "setup" or "clean")
         Pill(card, statusText, width - 82, -13, 66, accent)
-
         local links = type(bug.GetLinks) == "function" and bug.GetLinks() or {}
         local function CopyLink(label, url)
             if type(_G.MSUF_ShowCopyLink) == "function" then
@@ -692,14 +568,10 @@ local function BuildDashboardUX(ctx)
             if type(bug.OpenManual) == "function" then
                 bug.OpenManual()
             else
-                M.dashboardBugReportOpen = true
-                if type(M.PersistMenuStateValue) == "function" then
-                    M.PersistMenuStateValue("dashboardBugReportOpen", true)
-                end
+                M.SetMenuStateValue("dashboardBugReportOpen", true)
             end
             RefreshDashboard()
         end
-
         if missing and not manualReport then
             W.Text(card, "Install BugSack/BugGrabber to let MSUF include the captured Lua error and stacktrace automatically.", 16, -42, width - 32, T.colors.muted)
             local bugSack = Button(card, "BugSack", 16, -92, 86, 22, function()
@@ -709,7 +581,6 @@ local function BuildDashboardUX(ctx)
             Button(card, "Report issue", 112, -92, 104, 22, OpenManualReport)
             return height
         end
-
         if not hasReport then
             local installText = integration.bugGrabberLoaded and "BugGrabber ready."
                 or (integration.bugSackLoaded and "BugSack ready." or "Bug helper unavailable.")
@@ -717,23 +588,16 @@ local function BuildDashboardUX(ctx)
             Button(card, "Report issue", 16, -82, 104, 22, OpenManualReport, "primary")
             return height
         end
-
         local bodyText = autoReport
             and "MSUF captured the error. Three steps: select, Ctrl+C, open a link."
             or "Describe the issue briefly. MSUF adds the technical context automatically."
         W.Text(card, bodyText, 16, -42, width - 32, T.colors.muted)
-
         local reportBox
         local function SetManualIssue(issueType, description)
-            if type(bug.SetManualIssue) == "function" then
-                bug.SetManualIssue(issueType, description)
-            end
+            if type(bug.SetManualIssue) == "function" then bug.SetManualIssue(issueType, description) end
         end
         local selectedIssue, selectedDescription
-        if type(bug.GetManualIssue) == "function" then
-            selectedIssue, selectedDescription = bug.GetManualIssue()
-        end
-
+        if type(bug.GetManualIssue) == "function" then selectedIssue, selectedDescription = bug.GetManualIssue() end
         local actionTop = autoReport and -78 or -116
         if not autoReport then
             local descBox = CreateFrame("EditBox", nil, card, "InputBoxTemplate")
@@ -744,7 +608,7 @@ local function BuildDashboardUX(ctx)
             descBox:SetJustifyH("LEFT")
             if descBox.SetFont then descBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 11, "") end
             if descBox.SetTextInsets then descBox:SetTextInsets(8, 8, 0, 0) end
-            if T.SkinEditBox then T.SkinEditBox(descBox) end
+            M.CallIf(T.SkinEditBox, descBox)
             descBox:SetText(selectedDescription or "")
             local placeholder = descBox:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
             placeholder:SetPoint("LEFT", descBox, "LEFT", 10, 0)
@@ -761,7 +625,6 @@ local function BuildDashboardUX(ctx)
             descBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
             descBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         end
-
         local scroll
         local function RefreshReportText()
             local text = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
@@ -781,9 +644,8 @@ local function BuildDashboardUX(ctx)
                 reportBox:SetFocus()
                 if reportBox.HighlightText then reportBox:HighlightText() end
             end
-            if M.ShowStatusFeedback then M.ShowStatusFeedback("Report selected. Press Ctrl+C.", "info", 1.4) end
+            M.CallIf(M.ShowStatusFeedback, "Report selected. Press Ctrl+C.", "info", 1.4)
         end
-
         local selectBtn = Button(card, "1 Select", 16, actionTop, 96, 22, SelectReport, "primary")
         AddTooltip(selectBtn, "Select report", "Selects the full report so it can be copied with Ctrl+C.")
         Pill(card, "2 Ctrl+C", 120, actionTop + 1, 66, T.colors.accent2)
@@ -800,14 +662,12 @@ local function BuildDashboardUX(ctx)
             if type(bug.Clear) == "function" then bug.Clear() end
             RefreshDashboard()
         end)
-
         local reportText = type(bug.BuildText) == "function" and bug.BuildText({ includeLoadedAddons = true }) or "Bug report unavailable."
         local reportTop = actionTop - 62
         local reportH = max(82, height + reportTop - 16)
         scroll = CreateFrame("ScrollFrame", nil, card)
         scroll:SetPoint("TOPLEFT", card, "TOPLEFT", 16, reportTop)
         scroll:SetSize(width - 48, reportH)
-
         reportBox = CreateFrame("EditBox", nil, scroll, "InputBoxTemplate")
         reportBox:SetMultiLine(true)
         reportBox:SetAutoFocus(false)
@@ -818,7 +678,7 @@ local function BuildDashboardUX(ctx)
         reportBox:SetWidth(width - 56)
         if reportBox.SetFont then reportBox:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", 10, "") end
         if reportBox.SetTextInsets then reportBox:SetTextInsets(8, 8, 8, 8) end
-        if T.SkinEditBox then T.SkinEditBox(reportBox) end
+        M.CallIf(T.SkinEditBox, reportBox)
         reportBox:SetText(reportText)
         reportBox:SetCursorPosition(0)
         local lines = 1
@@ -826,8 +686,7 @@ local function BuildDashboardUX(ctx)
         reportBox:SetHeight(max(reportH, (lines * 13) + 24))
         reportBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         scroll:SetScrollChild(reportBox)
-        if T.StyleScrollFrame then T.StyleScrollFrame(scroll, card) end
-
+        M.CallIf(T.StyleScrollFrame, scroll, card)
         return height
     end
     local movedFrames = HasMovedFramesInEditMode()
@@ -836,7 +695,6 @@ local function BuildDashboardUX(ctx)
     Row(3, "Move frames", "Recommended before detail tuning.", movedFrames and "done" or "start", movedFrames and T.colors.ok or T.colors.accent2, ToggleEditMode, movedFrames and "OK" or "!")
     local wagoBackupConfirmed = WagoBackupConfirmed()
     Row(4, "Wago backup", "Confirm backup before using the Wago MSUF page.", wagoBackupConfirmed and "done" or "start", wagoBackupConfirmed and T.colors.ok or T.colors.accent2, ConfirmWagoBackup, wagoBackupConfirmed and "OK" or "!")
-
     local function DashboardDisclosure(parent, title, open, stateKey, width, fillPills)
         local head = CreateFrame("Button", nil, parent)
         head:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
@@ -849,12 +707,12 @@ local function BuildDashboardUX(ctx)
         arrow:SetTexture(T.media.collapseArrow)
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", head, "LEFT", 16, 0)
-        if T.ApplyCollapseVisual then T.ApplyCollapseVisual(arrow, nil, open) end
+        M.CallIf(T.ApplyCollapseVisual, arrow, nil, open)
         local label = T.Font(head, "GameFontNormal", M.Tr(title), T.colors.text)
         label:SetPoint("LEFT", arrow, "RIGHT", 8, 0)
         if type(fillPills) == "function" then fillPills(head, width) end
         head:SetScript("OnClick", function()
-            M.PersistMenuStateValue(stateKey, not open)
+            M.SetMenuStateValue(stateKey, not open)
             M.InvalidatePage("home")
             M.SelectPage("home")
         end)
@@ -866,7 +724,6 @@ local function BuildDashboardUX(ctx)
         end)
         return head
     end
-
     local bugReportTop = checklistTop - checklistH - 10
     local bugReportH = BuildBugReportCard(sideX, bugReportTop, sideW)
     local sideBottom = bugReportH > 0 and (bugReportTop - bugReportH) or (checklistTop - checklistH)
@@ -881,21 +738,15 @@ local function BuildDashboardUX(ctx)
     DashboardDisclosure(recovery, "Display & recovery", recoveryOpen, "dashboardRecoveryOpen", recoveryW, function(head)
         if recoveryW >= 520 then Pill(head, "Factory reset hidden", recoveryW - 124, -11, 110, T.colors.accent2) end
     end)
-
     if recoveryOpen then
         W.Text(recovery, "Reset tools, Wago access, and recovery shortcuts live here.", 16, -60, recoveryW - 32, T.colors.muted)
         local resetPositions = Button(recovery, "Reset Positions", 16, -94, 118, 22, function()
-            if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then
-                M.ShowStatusFeedback("Reset unavailable", "danger", 1.4)
-            end
+            if not RunMSUFSlashCommand("reset") and M.ShowStatusFeedback then M.ShowStatusFeedback("Reset unavailable", "danger", 1.4) end
         end, "primary")
         AddTooltip(resetPositions, "Reset Positions", "Runs /msuf reset for frame positions and visibility.")
-
         local wagoX, helpX, discordX = 146, 270, 368
         local helpY, factoryY = -94, (recoveryWrap and -126 or -94)
-        if recoveryNarrow then
-            helpX, helpY, discordX, factoryY = 16, -126, 114, -158
-        end
+        if recoveryNarrow then helpX, helpY, discordX, factoryY = 16, -126, 114, -158 end
         Button(recovery, "Wago Profiles", wagoX, -94, 112, 22, CopyWagoLink)
         Button(recovery, "Print Help", helpX, helpY, 86, 22, function()
             if _G.SlashCmdList and type(_G.SlashCmdList["MIDNIGHTSUF"]) == "function" then pcall(_G.SlashCmdList["MIDNIGHTSUF"], "help") end
@@ -904,7 +755,7 @@ local function BuildDashboardUX(ctx)
             if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Discord", "https://discord.gg/2Gf9b2Wprz") end
         end)
         Button(recovery, "Factory Reset All", recoveryWrap and 16 or (recoveryW - 152), factoryY, 136, 22, function()
-            if M.StageFactoryReset then M.StageFactoryReset() end
+            M.CallIf(M.StageFactoryReset)
         end, "danger")
         if recoveryWrap then
             local textX = recoveryNarrow and 160 or 160
@@ -912,7 +763,6 @@ local function BuildDashboardUX(ctx)
             W.Text(recovery, "Factory reset affects every MSUF setting.", textX, textY, recoveryW - textX - 16, T.colors.muted)
         end
     end
-
     local scalingTop = recoveryTop - recoveryH - 10
     local scalingOpen = M.dashboardScalingOpen == true
     local scalingColumns = (recoveryW >= 960) and 3 or ((recoveryW >= 680) and 2 or 1)
@@ -926,10 +776,8 @@ local function BuildDashboardUX(ctx)
         Pill(scaleHead, M.Format("Menu %d%%", Percent(g.slashMenuScale, 1)), recoveryW - 180, -11, 76)
         Pill(scaleHead, M.Format("Frames %d%%", Percent(g.msufUiScale, 1)), recoveryW - 98, -11, 84)
     end)
-
     if scalingOpen then
         W.Text(scaling, "Use sliders for exact scale changes. Apply commits the selected value; Revert returns to the active value.", 16, -60, recoveryW - 32, T.colors.muted)
-
         local pendingGlobalEnabled, pendingGlobalScale, pendingMsufScale, pendingMenuScale
         local colGap = 24
         local colW = (scalingColumns == 3) and math.floor((recoveryW - 32 - (colGap * 2)) / 3)
@@ -939,7 +787,6 @@ local function BuildDashboardUX(ctx)
         local msufTop = (scalingColumns == 3 or scalingColumns == 2) and -94 or -242
         local menuX = (scalingColumns == 3) and (16 + ((colW + colGap) * 2)) or 16
         local menuTop = (scalingColumns == 3) and -94 or ((scalingColumns == 2) and -242 or -390)
-
         local function AppliedGlobalScale()
             local _, ui = GlobalState()
             return ui.Enabled, Clamp(ui.Scale, 0.3, 1.5)
@@ -950,7 +797,6 @@ local function BuildDashboardUX(ctx)
             local selectedScale = Clamp(pendingGlobalScale or appliedScale, 0.3, 1.5)
             return selectedEnabled, selectedScale, enabled, appliedScale
         end
-
         local function AppliedMsufScale()
             local dbScale = M.GetGeneralDB()
             return Clamp(tonumber(dbScale.msufUiScale) or 1, 0.25, 1.5)
@@ -965,7 +811,6 @@ local function BuildDashboardUX(ctx)
         local function PendingMenuScale()
             return Clamp(pendingMenuScale or AppliedMenuScale(), 0.25, 1.5)
         end
-
         local function BuildScaleSlider(parent, label, x, top, width, minPct, maxPct, stepPct)
             local slider = W.Slider(parent, label, minPct, maxPct, stepPct, width)
             HideSliderValueBox(slider)
@@ -980,12 +825,10 @@ local function BuildDashboardUX(ctx)
             EnablePercentWheel(slider, minPct, maxPct, stepPct)
             return slider
         end
-
         local function BuildSimpleScaleColumn(opts)
             W.Text(scaling, opts.help, opts.x, opts.top - 20, colW, T.colors.muted)
             local status = W.Text(scaling, "", opts.x, opts.top - 40, colW, T.colors.muted)
             local slider = BuildScaleSlider(scaling, opts.label, opts.x, opts.top, colW, opts.minPct, opts.maxPct, opts.stepPct)
-
             local apply, revert
             local function Refresh()
                 local applied = opts.applied()
@@ -1018,11 +861,9 @@ local function BuildDashboardUX(ctx)
             end)
             return Refresh
         end
-
         W.Text(scaling, "Changes the global WoW UI scale through MSUF presets.", globalX, globalTop - 20, colW, T.colors.muted)
         local globalStatus = W.Text(scaling, "", globalX, globalTop - 40, colW, T.colors.muted)
         local globalScale = BuildScaleSlider(scaling, "Global UI Scale", globalX, globalTop, colW, 30, 150, 1)
-
         local globalApply, globalRevert
         local function RefreshGlobalScale()
             local selectedEnabled, selectedScale, appliedEnabled, appliedScale = SelectedGlobalScale()
@@ -1078,7 +919,6 @@ local function BuildDashboardUX(ctx)
             pendingGlobalEnabled = false
             RefreshGlobalScale()
         end)
-
         local RefreshMsufScale = BuildSimpleScaleColumn({
             x = msufX, top = msufTop, label = "MSUF Frame Scale", help = "Changes the actual MSUF unit frames in-game.",
             minPct = 25, maxPct = 150, stepPct = 5,
@@ -1110,15 +950,10 @@ local function BuildDashboardUX(ctx)
                 if M.frame and M.frame.SetScale then M.frame:SetScale((M.GetEffectiveMenuScale and M.GetEffectiveMenuScale(scaleValue)) or scaleValue) end
             end,
         })
-
-        RefreshGlobalScale()
-        RefreshMsufScale()
-        RefreshMenuScale()
-        M.AddRefresher(ctx, RefreshGlobalScale)
-        M.AddRefresher(ctx, RefreshMsufScale)
-        M.AddRefresher(ctx, RefreshMenuScale)
+        M.TrackRefresh(ctx, RefreshGlobalScale)
+        M.TrackRefresh(ctx, RefreshMsufScale)
+        M.TrackRefresh(ctx, RefreshMenuScale)
     end
-
     local changelogTop = scalingTop - scalingH - 10
     local changelogOpen = M.dashboardChangelogOpen == true
     local changelogH = changelogOpen and 360 or 42
@@ -1134,7 +969,6 @@ local function BuildDashboardUX(ctx)
             M.SelectPage("home")
         end,
     })
-
     local supportTop = changelogTop - changelogH - 10
     local supportCompact = recoveryW < 560
     local supportH = supportCompact and 116 or 78
@@ -1145,11 +979,8 @@ local function BuildDashboardUX(ctx)
     local supportDesc = W.Text(support, "If MSUF helps your UI, support links are one click away.", 16, -42, supportTextW, T.colors.muted)
     if supportDesc.SetWordWrap then supportDesc:SetWordWrap(true) end
     if supportDesc.SetNonSpaceWrap then supportDesc:SetNonSpaceWrap(true) end
-
     local aboutVer
-    if _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then
-        aboutVer = _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version")
-    end
+    if _G.C_AddOns and type(_G.C_AddOns.GetAddOnMetadata) == "function" then aboutVer = _G.C_AddOns.GetAddOnMetadata("MidnightSimpleUnitFrames", "Version") end
     local aboutText = M.Tr("by Mapko with the help from R41z0r")
     if type(aboutVer) == "string" and aboutVer ~= "" then
         local displayVersion = aboutVer:match("^%d") and ("v" .. aboutVer) or aboutVer
@@ -1161,7 +992,6 @@ local function BuildDashboardUX(ctx)
     local supportAbout = W.Text(support, aboutText, 16, aboutY, supportTextW, T.colors.muted)
     if supportAbout.SetWordWrap then supportAbout:SetWordWrap(true) end
     if supportAbout.SetNonSpaceWrap then supportAbout:SetNonSpaceWrap(true) end
-
     local supportAboutH = (supportAbout.GetStringHeight and supportAbout:GetStringHeight()) or 0
     if supportAboutH < 12 then supportAboutH = 12 end
     local supportTextBottom = math.abs(aboutY - supportAboutH)
@@ -1171,7 +1001,6 @@ local function BuildDashboardUX(ctx)
         supportH = max(supportH, floor(supportTextBottom + 14))
     end
     support:SetHeight(supportH)
-
     local iconDir = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\Masks\\"
     local supportLinks = {
         { texture = "Patreon.png", title = "Patreon", tooltip = "Click to copy the Patreon support link.", url = "https://www.patreon.com/cw/MidnightSimpleUnitframes" },
@@ -1198,9 +1027,7 @@ local function BuildDashboardUX(ctx)
         hover:SetAllPoints()
         hover:SetColorTexture(1, 1, 1, 0.10)
         btn:SetScript("OnClick", function()
-            if type(_G.MSUF_ShowCopyLink) == "function" then
-                _G.MSUF_ShowCopyLink(data.title, data.url)
-            end
+            if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink(data.title, data.url) end
         end)
         AddTooltip(btn, data.title, data.tooltip)
         if type(M.RegisterSearchWidget) == "function" then
@@ -1219,10 +1046,8 @@ local function BuildDashboardUX(ctx)
         end
         previous = btn
     end
-
     local bottom = supportTop - supportH
     if sideBySide then bottom = min(bottom, sideBottom) end
     ctx:SetContentHeight(math.abs(bottom) + 42)
 end
-
 M.RegisterPage("home", { title = "MSUF Menu", build = BuildDashboardUX, version = 7 })

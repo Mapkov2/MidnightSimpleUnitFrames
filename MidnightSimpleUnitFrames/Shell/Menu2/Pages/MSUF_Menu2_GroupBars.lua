@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -11,26 +10,28 @@ _G.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
-
 local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-
 local SCOPE_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, GF_BAR_MODES, SIMPLE_TEXTURES, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(GP, [[SCOPE_VALUES HEALTH_MODES TEXT_MODES DELIMITER_VALUES ANCHORS GF_BAR_MODES SIMPLE_TEXTURES DISPEL_OVERLAY_STYLES DEBUFF_STRIPE_EDGES]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeSlider, BindScopeDropdown, ScopeDropdown, ScopeSlider, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeSlider BindScopeDropdown ScopeDropdown ScopeSlider SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge BadgeNumber OptionText]])
-SetSectionBadges = SetSectionBadges or M.Noop
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeDropdown, ScopeDropdown, ScopeSlider, ScopeColor, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeDropdown ScopeDropdown ScopeSlider ScopeColor SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText]])
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
-
 local GF_DISPEL_OVERLAY_TRIGGERS = VT("BORDER", "Use Dispel border detects", "BY_ME", "Dispellable by me", "DISPEL_TYPE", "Any dispel-type debuff", "ANY_DEBUFF", "Any debuff")
-
+local function ScopeNumberSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify)
+    local control = W.Slider(parent, label, minValue, maxValue, step, width)
+    M.BindNumberWidget(ctx, control,
+        function() return Num(CurrentScope(), key, default) end,
+        function(value) Set(CurrentScope(), key, tonumber(value) or default, mode or "visual") end,
+        default)
+    if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "CENTER") end
+    return control
+end
 local function NormalizeGFDispelOverlayTrigger(value)
     local gf = GF and GF()
-    if gf and type(gf.NormalizeDispelOverlayTrigger) == "function" then
-        return gf.NormalizeDispelOverlayTrigger(value)
-    end
+    if gf and type(gf.NormalizeDispelOverlayTrigger) == "function" then return gf.NormalizeDispelOverlayTrigger(value) end
     local fn = _G.MSUF_NormalizeUnitDispelOverlayTrigger
     if type(fn) == "function" then return fn(value) end
     if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
@@ -38,7 +39,6 @@ local function NormalizeGFDispelOverlayTrigger(value)
     if value == "ANY_DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
     return "BY_ME"
 end
-
 local function BuildDispelOverlaySection(ctx, b)
     local sectionW = ctx.width or b.width or 720
     local probeW = min(900, max(320, sectionW - 40))
@@ -49,43 +49,30 @@ local function BuildDispelOverlaySection(ctx, b)
     wide = dispelCardW >= 760
     local dispelCardH = wide and 296 or 406
     local dispelCard = W.ControlCard(dispel, "Dispel Overlay", "Tints the health bar when a configured debuff condition is active.", 20, -38, dispelCardW, dispelCardH)
-
     local dispelToggle = BindScopeToggle(ctx, W.SwitchAt(dispelCard, "Dispel Overlay", dispelCardW - 62, -24, 0, "HIDDEN"), "dispelOverlayEnabled", false, "visual")
     local dispelTrigger = W.Dropdown(dispelCard, "Overlay detects", GF_DISPEL_OVERLAY_TRIGGERS, 300)
-    M.BindDropdown(ctx, dispelTrigger,
+    M.BindDropdownWidget(ctx, dispelTrigger,
         function() return NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")) end,
         function(value)
             Set(CurrentScope(), "dispelOverlayTrigger", NormalizeGFDispelOverlayTrigger(value), "visual")
             if M.Refresh then M.Refresh(ctx) end
         end)
     W.MoveWidget(dispelTrigger, dispelCard, 16, -74, min(300, dispelCardW - 32), "LEFT")
-
     local dispelStyle = ScopeDropdown(ctx, dispelCard, "Overlay style", DISPEL_OVERLAY_STYLES, 300, "dispelOverlayStyle", "FULL", "visual", 16, -126, min(300, dispelCardW - 32))
-
     local dispelCurrent = BindScopeToggle(ctx, W.ToggleAt(dispelCard, "Show on current health only", 16, -174, dispelCardW - 32), "dispelOverlayOnHealth", true, "visual")
-
-    local dispelAlpha = W.Slider(dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340)
-    M.BindSlider(ctx, dispelAlpha,
-        function() return Num(CurrentScope(), "dispelOverlayAlpha", 0.35) end,
-        function(value) Set(CurrentScope(), "dispelOverlayAlpha", tonumber(value) or 0.35, "visual") end)
-    W.MoveWidget(dispelAlpha, dispelCard, 16, -218, min(360, dispelCardW - 72), "CENTER"); local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha }
-
+    local dispelAlpha = ScopeNumberSlider(ctx, dispelCard, "Overlay opacity", 0.05, 1, 0.05, 340, "dispelOverlayAlpha", 0.35, "visual", 16, -218, min(360, dispelCardW - 72)); local dispelControls = { dispelTrigger, dispelStyle, dispelCurrent, dispelAlpha }
     local function RefreshDispelState()
         local overlayOn = Bool(CurrentScope(), "dispelOverlayEnabled", false)
         SetOptionsEnabled(dispelControls, overlayOn)
         SetOptionEnabled(dispelToggle, true)
-        SetSectionBadges(dispel, {
+        SetSectionBadgesAndStatus(dispel, {
             OnOffBadge(overlayOn, "Active", "Off"),
             { text = OptionText(GF_DISPEL_OVERLAY_TRIGGERS, NormalizeGFDispelOverlayTrigger(Val(CurrentScope(), "dispelOverlayTrigger", "BORDER")), "Border"), kind = overlayOn and "info" or "muted" },
             { text = OptionText(DISPEL_OVERLAY_STYLES, Val(CurrentScope(), "dispelOverlayStyle", "FULL"), "Full Frame"), kind = overlayOn and "accent" or "muted" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(dispel, nil) end
     end
-    M.AddRefresher(ctx, RefreshDispelState)
-    RefreshDispelState()
-    M.SetCollapsibleRefreshState(dispel, RefreshDispelState)
+    TrackSectionRefresh(ctx, dispel, RefreshDispelState)
 end
-
 local function BuildDeadBgSection(ctx, b)
     local deadW = b.width or 720
     local deadSec = b:CollapsibleSection("deadbg", "Dead / Offline Background", 300, false)
@@ -94,45 +81,22 @@ local function BuildDeadBgSection(ctx, b)
     local deadCard = W.ControlCard(deadSec, "Dead / Offline Background",
         "Tints the health background when a member is dead, a ghost, or offline. Event-driven, no per-frame polling.",
         20, -38, deadCardW, 224)
-
     local deadToggle = BindScopeToggle(ctx, W.SwitchAt(deadCard, "Dead Background", deadCardW - 62, -24, 0, "HIDDEN"), "deadBgEnabled", false, "visual")
-
-    local deadColor = W.Color(deadCard, "Background color")
-    M.BindColor(ctx, deadColor,
-        function()
-            return Num(CurrentScope(), "deadBgR", 0.60), Num(CurrentScope(), "deadBgG", 0.05), Num(CurrentScope(), "deadBgB", 0.05)
-        end,
-        function(r, g, b)
-            local conf = Conf(CurrentScope())
-            conf.deadBgR, conf.deadBgG, conf.deadBgB = r, g, b
-            QueueGF(CurrentScope(), "visual")
-        end)
-    W.MoveWidget(deadColor, deadCard, 16, -74, min(360, deadCardW - 32), "LEFT")
-
-    local deadAlpha = W.Slider(deadCard, "Background opacity", 0.05, 1, 0.05, 340)
-    M.BindSlider(ctx, deadAlpha,
-        function() return Num(CurrentScope(), "deadBgA", 0.90) end,
-        function(value) Set(CurrentScope(), "deadBgA", tonumber(value) or 0.90, "visual") end)
-    W.MoveWidget(deadAlpha, deadCard, 16, -120, min(360, deadCardW - 72), "CENTER")
-
+    local deadColor = ScopeColor(ctx, deadCard, "Background color", min(360, deadCardW - 32), "deadBgR", "deadBgG", "deadBgB", { 0.60, 0.05, 0.05 }, "visual", 16, -74)
+    local deadAlpha = ScopeNumberSlider(ctx, deadCard, "Background opacity", 0.05, 1, 0.05, 340, "deadBgA", 0.90, "visual", 16, -120, min(360, deadCardW - 72))
     local deadOffline = BindScopeToggle(ctx, W.ToggleAt(deadCard, "Also tint offline members", 16, -168, deadCardW - 32), "deadBgOffline", true, "visual"); local deadControls = { deadColor, deadAlpha, deadOffline }
-
     local function RefreshDeadBgState()
         local enabled = Bool(CurrentScope(), "deadBgEnabled", false)
         SetOptionsEnabled(deadControls, enabled)
         SetOptionEnabled(deadToggle, true)
-        SetSectionBadges(deadSec, {
+        SetSectionBadgesAndStatus(deadSec, {
             OnOffBadge(enabled, "Active", "Off"),
             { text = Bool(CurrentScope(), "deadBgOffline", true) and "Dead + Offline" or "Dead only", kind = enabled and "info" or "muted" },
             { text = tostring(floor(Num(CurrentScope(), "deadBgA", 0.90) * 100 + 0.5)) .. "%", kind = enabled and "accent" or "muted" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(deadSec, nil) end
     end
-    M.AddRefresher(ctx, RefreshDeadBgState)
-    RefreshDeadBgState()
-    M.SetCollapsibleRefreshState(deadSec, RefreshDeadBgState)
+    TrackSectionRefresh(ctx, deadSec, RefreshDeadBgState)
 end
-
 local function HealthModeHint(mode)
     if not mode or mode == "GLOBAL" then return "follows global style" end
     if mode == "CLASS" then return "class-colored health bars" end
@@ -146,12 +110,10 @@ local function BuildGFBars(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
-
     local AlphaLabel = M.AlphaLabel
-
     local hcolor = b:CollapsibleSection("hcolor", "Health Colors  (Global)", 156, true)
     local mode = W.Dropdown(hcolor, "Bar Color Mode", GF_BAR_MODES, 270)
-    M.BindDropdown(ctx, mode,
+    M.BindDropdownWidget(ctx, mode,
         function() return Conf(CurrentScope()).gfBarMode or "GLOBAL" end,
         function(v)
             local conf = Conf(CurrentScope())
@@ -218,21 +180,16 @@ local function BuildGFBars(ctx)
         else
             colorHint:Hide()
         end
-        SetSectionBadges(hcolor, {
+        SetSectionBadgesAndStatus(hcolor, {
             { text = OptionText(GF_BAR_MODES, m or "GLOBAL", "Global"), kind = editable and "accent" or "info" },
             { text = HealthModeHint(m), kind = editable and "info" or "muted" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(hcolor, nil) end
     end
-    M.AddRefresher(ctx, RefreshHealthColorState)
-    RefreshHealthColorState()
-    M.SetCollapsibleRefreshState(hcolor, RefreshHealthColorState)
-
+    TrackSectionRefresh(ctx, hcolor, RefreshHealthColorState)
     local bars = b:CollapsibleSection("bars", "Bars  (Custom)", 206, false)
     BindScopeDropdown(ctx, W.Dropdown(bars, "Foreground Texture", SIMPLE_TEXTURES, 280), "barTexture", "", "visual")
     BindScopeDropdown(ctx, W.Dropdown(bars, "Background Texture", SIMPLE_TEXTURES, 280), "barBgTexture", "", "visual")
     BindScopeDropdown(ctx, W.Dropdown(bars, "Health color mode", HEALTH_MODES, 220), "healthColorMode", "CLASS", "visual")
-
     local power = b:CollapsibleSection("power", "Power Bar", 240, false)
     local powerW = power._msuf2Width or b.width or 720
     local powerGap = 16
@@ -262,25 +219,23 @@ local function BuildGFBars(ctx)
     end
     local powerMainCard = W.ControlCard(power, "Power bar", "Global visibility and size for this group scope.", powerLeftX, -38, powerLeftW, 178)
     local powerRoleCard = W.ControlCard(power, "Roles", "Limit power display to selected group roles.", powerRightX, -38, powerRightW, 178)
-
     local powerEnabled = W.SwitchAt(powerMainCard, "Show Power Bar", powerLeftW - 62, -24, 0, "HIDDEN")
-    M.BindToggle(ctx, powerEnabled,
+    M.BindBoolWidget(ctx, powerEnabled,
         function() return IsPowerBarEnabled(CurrentScope()) end,
         function(v)
             local scope = CurrentScope()
             Set(scope, "powerBarEnabled", v and true or false, "geometry")
-            if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then
-                Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry")
-            end
+            if v and (tonumber(Conf(scope).powerHeight) or 0) <= 0 then Set(scope, "powerHeight", DefaultPowerHeight(scope), "geometry") end
             if M.Refresh then M.Refresh(ctx) end
         end)
     local powerHeight = W.Slider(powerMainCard, "Power height", 1, 30, 1, powerSliderW)
-    M.BindSlider(ctx, powerHeight,
+    M.BindNumberWidget(ctx, powerHeight,
         function() return CurrentPowerHeight(CurrentScope()) end,
         function(v)
             v = floor(max(1, min(30, tonumber(v) or CurrentPowerHeight(CurrentScope()))) + 0.5)
             Set(CurrentScope(), "powerHeight", v, "geometry")
-        end)
+        end,
+        3, { step = 1, roundStep = true })
     local smoothFill = BindScopeToggle(ctx, W.ToggleAt(powerMainCard, "Smooth fill", 16, -126, powerLeftW - 32), "powerSmoothFill", false, "visual")
     local powerHint = W.Text(powerMainCard, "Power text modes, delimiter and font size are in Text.", 16, -152, powerLeftW - 32, { 0.60, 0.75, 1.00, 1 })
     if powerHint.SetWordWrap then powerHint:SetWordWrap(true) end
@@ -301,18 +256,13 @@ local function BuildGFBars(ctx)
         if Bool(CurrentScope(), "powerShowTank", true) then roles[#roles + 1] = "Tank" end
         if Bool(CurrentScope(), "powerShowHealer", true) then roles[#roles + 1] = "Healer" end
         if Bool(CurrentScope(), "powerShowDamager", false) then roles[#roles + 1] = "DPS" end
-        SetSectionBadges(power, {
+        SetSectionBadgesAndStatus(power, {
             OnOffBadge(enabled, "Shown", "Hidden"),
             { text = BadgeNumber(CurrentPowerHeight(CurrentScope())) .. "px", kind = enabled and "info" or "muted" },
             { text = #roles > 0 and table.concat(roles, "/") or "No roles", kind = enabled and "accent" or "muted" },
         })
-        if type(SetSectionHeaderStatus) ~= "function" then return end
-        SetSectionHeaderStatus(power, nil)
     end
-    M.AddRefresher(ctx, RefreshPowerState)
-    RefreshPowerState()
-    M.SetCollapsibleRefreshState(power, RefreshPowerState)
-
+    TrackSectionRefresh(ctx, power, RefreshPowerState)
     local text = b:CollapsibleSection("text", "Text", 620, false)
     text._msuf2CollapsibleBadgesOnlyWhenOpen = true
     local textW = text._msuf2Width or b.width or 720
@@ -324,7 +274,6 @@ local function BuildGFBars(ctx)
     local hpSliderW = min(310, max(230, textRightW))
     local textDropW = min(310, max(220, textCardW))
     local textHalfDropW = floor((textCardW - 44) / 2)
-
     local function TextModeExampleStr(mode, delim, isPower)
         local cur     = isPower and "100"  or "12,450"
         local max_    = isPower and "100"  or "15,000"
@@ -346,7 +295,6 @@ local function BuildGFBars(ctx)
         end
         return nil
     end
-
     local function ReverseHpPreviewMode(mode)
         local gf = MSUF and MSUF.GF
         if gf and gf.ReverseHealthTextMode then return gf.ReverseHealthTextMode(mode) end
@@ -359,11 +307,8 @@ local function BuildGFBars(ctx)
         }
         return rev[mode] or mode
     end
-
     local function BuildTextPreviewStr(leftMode, centerMode, rightMode, delim, reverse, isPower)
-        if reverse and not isPower then
-            leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode)
-        end
+        if reverse and not isPower then leftMode, centerMode, rightMode = ReverseHpPreviewMode(rightMode), ReverseHpPreviewMode(centerMode), ReverseHpPreviewMode(leftMode) end
         local slots = { leftMode, centerMode, rightMode }
         local parts = {}
         for _, mode in ipairs(slots) do
@@ -372,7 +317,6 @@ local function BuildGFBars(ctx)
         end
         return #parts > 0 and table.concat(parts, "  ") or "(none)"
     end
-
     local hint = W.Text(text, "Font style is shared in Global Style > Fonts. Position can be adjusted here or dragged in Edit Mode.", 14, -38, textW - 210, { 0.60, 0.75, 1.00, 1 })
     if hint.SetWordWrap then hint:SetWordWrap(true) end
     local scopeLabel = T.Font(text, "GameFontDisableSmall", "", T.colors.dim)
@@ -380,7 +324,6 @@ local function BuildGFBars(ctx)
     scopeLabel:SetJustifyH("RIGHT")
     scopeLabel:SetWidth(170)
     text._msuf2CursorY = -62
-
     local tabValues = VT("name", "Name", "hp", "HP Text", "power", "Power Text", "advanced", "Advanced")
     M.gfTextTabSelection = M.gfTextTabSelection or {}
     local function CurrentTextTab()
@@ -426,9 +369,7 @@ local function BuildGFBars(ctx)
         return "gf_party"
     end
     local function FocusGFPreviewText(kind, slot, active)
-        if type(M.FocusGFPreviewTextSlot) == "function" then
-            M.FocusGFPreviewTextSlot(kind, slot, active == true)
-        end
+        if type(M.FocusGFPreviewTextSlot) == "function" then M.FocusGFPreviewTextSlot(kind, slot, active == true) end
         if kind then
             if active == true then
                 local set = _G.MSUF_EM2_SetFocusSelection
@@ -467,9 +408,7 @@ local function BuildGFBars(ctx)
     end
     local function ActivateGFPreviewText(kind, slot)
         local resolvedSlot = ResolveFocusSlot(slot)
-        if (kind == "hp" or kind == "power") and resolvedSlot then
-            SetCurrentSlot(kind, resolvedSlot)
-        end
+        if (kind == "hp" or kind == "power") and resolvedSlot then SetCurrentSlot(kind, resolvedSlot) end
         FocusGFPreviewText(kind, resolvedSlot, true)
     end
     local function HookGFPreviewTextFocus(widget, kind, slot)
@@ -482,7 +421,6 @@ local function BuildGFBars(ctx)
         end)
         widget:HookScript("OnLeave", RestoreGFPreviewTextFocus)
     end
-
     local function ScopeDisplayName()
         local scope = CurrentScope() or "party"
         for i = 1, #SCOPE_VALUES do
@@ -492,11 +430,9 @@ local function BuildGFBars(ctx)
         scope = tostring(scope)
         return scope:sub(1, 1):upper() .. scope:sub(2)
     end
-
     local function BadgeValue(value)
         return tostring(value or ""):gsub("%s*/%s*", " + ")
     end
-
     local function TextSlotSummary(kind)
         local scope = CurrentScope()
         local slots
@@ -513,7 +449,6 @@ local function BuildGFBars(ctx)
                 { "left", "textLeft", "NONE" },
             }
         end
-
         for i = 1, #slots do
             local slot = slots[i]
             local value = Val(scope, slot[2], slot[3])
@@ -524,37 +459,36 @@ local function BuildGFBars(ctx)
         end
         return "No slot text"
     end
-
     local function UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
-        if not W.SetCollapsibleBadges then return end
         local scope = CurrentScope()
+        local badges
         if tab == "hp" then
-            W.SetCollapsibleBadges(text, {
+            badges = {
                 { text = hpOn and "Shown" or "Hidden", kind = hpOn and "ok" or "muted" },
                 { text = TextSlotSummary("hp"), kind = hpOn and "info" or "muted" },
                 { text = "X " .. BadgeNumber(Val(scope, "hpOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "hpOffsetY", 0)), kind = hpOn and "accent" or "muted" },
-            })
+            }
         elseif tab == "power" then
-            W.SetCollapsibleBadges(text, {
+            badges = {
                 { text = powerOn and "Shown" or "Hidden", kind = powerOn and "ok" or "muted" },
                 { text = TextSlotSummary("power"), kind = powerOn and "info" or "muted" },
                 { text = "X " .. BadgeNumber(Val(scope, "powerOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "powerOffsetY", 0)), kind = powerOn and "accent" or "muted" },
-            })
+            }
         elseif tab == "advanced" then
-            W.SetCollapsibleBadges(text, {
+            badges = {
                 { text = "Name " .. BadgeNumber(Val(scope, "nameTextLayer", 5)), kind = nameOn and "info" or "muted" },
                 { text = "HP " .. BadgeNumber(Val(scope, "textLayer", 5)), kind = hpOn and "info" or "muted" },
                 { text = "Power " .. BadgeNumber(Val(scope, "powerTextLayer", 2)), kind = powerOn and "info" or "muted" },
-            })
+            }
         else
-            W.SetCollapsibleBadges(text, {
+            badges = {
                 { text = nameOn and "Shown" or "Hidden", kind = nameOn and "ok" or "muted" },
                 { text = BadgeValue(OptionText(ANCHORS, Val(scope, "nameAnchor", "LEFT"))), kind = nameOn and "info" or "muted" },
                 { text = "X " .. BadgeNumber(Val(scope, "nameOffsetX", 0)) .. "  Y " .. BadgeNumber(Val(scope, "nameOffsetY", 0)), kind = nameOn and "accent" or "muted" },
-            })
+            }
         end
+        SetSectionBadgesAndStatus(text, badges)
     end
-
     local function PreviewText(parent, textValue, x, y, width)
         W.Text(parent, "Preview", x, y, width, T.colors.dim)
         local value = T.Font(parent, "GameFontNormalSmall", textValue, T.colors.text)
@@ -563,21 +497,15 @@ local function BuildGFBars(ctx)
         value:SetJustifyH("LEFT")
         return value
     end
-
     local tabFrames = {}
-
     local function TextCard(parent, title, subtitle, x, y, width, height)
         return W.ControlCard(parent, title, subtitle, x, y, width, height)
     end
-
     local function IsPowerTextEnabled()
         local gf = GF()
-        if gf and type(gf.IsPowerTextEnabled) == "function" then
-            return gf.IsPowerTextEnabled(CurrentScope(), Conf(CurrentScope())) and true or false
-        end
+        if gf and type(gf.IsPowerTextEnabled) == "function" then return gf.IsPowerTextEnabled(CurrentScope(), Conf(CurrentScope())) and true or false end
         return Bool(CurrentScope(), "showPowerText", false) or Bool(CurrentScope(), "showPower", false)
     end
-
     local function SetPowerTextEnabled(enabled)
         local gf = GF()
         if gf and type(gf.SetPowerTextEnabled) == "function" then
@@ -588,7 +516,6 @@ local function BuildGFBars(ctx)
             Set(CurrentScope(), "showPower", enabled and true or false, "visual")
         end
     end
-
     local nameTab, hpTab, powerTab, advancedTab =
         M.UnitSectionsShared.MakeTabFrames(text, -118, textW, tabFrames, "name", "hp", "power", "advanced")
     local _, RefreshTextTabs = W.SegmentTabs(ctx, text, {
@@ -602,35 +529,27 @@ local function BuildGFBars(ctx)
         end,
         x = 20, y = -68,
     })
-
     local nameContent = TextCard(nameTab, "Name text", "Controls whether names are shown on group frames.", textLeftX, -4, textCardW, 158)
     PreviewText(nameContent, "Mapko", 16, -54, textCardW - 32)
-
     local showName = BindScopeToggle(ctx, W.SwitchAt(nameContent, "Show Name", textCardW - 62, -24, 0, "HIDDEN"), "showName", true, "font")
     local hideNameOnStatus = BindScopeToggle(ctx, W.ToggleAt(nameContent, "Hide name on dead/offline", 16, -104, textCardW - 32), "hideNameOnDeadOffline", false, "visual")
-
     local namePosition = TextCard(nameTab, "Position", nil, textLeftX, -178, textCardW, 260)
     local nameAnchor = ScopeDropdown(ctx, namePosition, "Anchor", ANCHORS, textDropW, "nameAnchor", "LEFT", "font", 16, -48, textCardW - 32)
     local nameX = ScopeSlider(ctx, namePosition, "X Offset", -100, 100, 1, textSliderW, "nameOffsetX", 0, "font", 16, -112, textCardW - 72)
     local nameY = ScopeSlider(ctx, namePosition, "Y Offset", -100, 100, 1, textSliderW, "nameOffsetY", 0, "font", 16, -174, textCardW - 72)
-
     local nameAppearance = TextCard(nameTab, "Appearance", nil, textRightX, -4, textRightW, 150)
     local nameSize = ScopeSlider(ctx, nameAppearance, "Size", 6, 48, 1, hpSliderW, "nameFontSize", 12, "font", 16, -58, textRightW - 58)
-
     local SLOT_VALUES = VT("left", "Left", "center", "Center", "right", "Right")
-
     local function BuildValueTextTab(kind, tab, cfg)
         local controls = {}
         local content = TextCard(tab, "What text appears", "Slots are explained before advanced position controls.", textLeftX, -4, textCardW, 286)
         controls.preview = PreviewText(content, "", 16, -54, textCardW - 32)
-
         if cfg.showGet then
             controls.show = W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN")
-            M.BindToggle(ctx, controls.show, cfg.showGet, cfg.showSet)
+            M.BindBoolWidget(ctx, controls.show, cfg.showGet, cfg.showSet)
         else
             controls.show = BindScopeToggle(ctx, W.SwitchAt(content, cfg.showLabel, textCardW - 62, -24, 0, "HIDDEN"), cfg.showKey, cfg.showDefault, "font")
         end
-
         local function SlotControl(slot, label, x, y, width)
             local spec = cfg.slots[slot]
             controls[slot] = ScopeDropdown(ctx, content, label, TEXT_MODES, width, spec.key, spec.default, "visual", x, y, width)
@@ -638,18 +557,13 @@ local function BuildGFBars(ctx)
         SlotControl("right", "Right slot", 16, -96, textCardW - 32)
         SlotControl("left", "Left slot", 16, -150, textHalfDropW)
         SlotControl("center", "Center slot", 28 + textHalfDropW, -150, textHalfDropW)
-
         controls.delimiter = ScopeDropdown(ctx, content, "Delimiter", DELIMITER_VALUES, textHalfDropW, cfg.delimiterKey, " / ", "visual", 16, -206, textHalfDropW)
-        if cfg.reverseKey then
-            controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -228, textHalfDropW), cfg.reverseKey, false, "visual")
-        end
-
+        if cfg.reverseKey then controls.reverse = BindScopeToggle(ctx, W.ToggleAt(content, "Reverse order", 28 + textHalfDropW, -228, textHalfDropW), cfg.reverseKey, false, "visual") end
         local position = TextCard(tab, "Position", cfg.positionSubtitle, textRightX, -4, textRightW, 410)
         controls.x = ScopeSlider(ctx, position, "X Offset", -100, 100, 1, hpSliderW, cfg.xKey, 0, "font", 16, -64, textRightW - 58)
         controls.y = ScopeSlider(ctx, position, "Y Offset", -100, 100, 1, hpSliderW, cfg.yKey, 0, "font", 16, -122, textRightW - 58)
-
         controls.moveTogether = W.ToggleAt(position, "Move text as one group", 16, -176, textRightW - 32)
-        M.BindToggle(ctx, controls.moveTogether,
+        M.BindBoolWidget(ctx, controls.moveTogether,
             function() return MoveTogether(kind) end,
             function(v)
                 SetMoveTogether(kind, v)
@@ -666,12 +580,11 @@ local function BuildGFBars(ctx)
                 FocusGFPreviewText(kind, v, true)
                 M.Refresh(ctx)
             end)
-
         local function SlotAxis(axis)
             local slider = W.Slider(position, "Slot " .. axis, -100, 100, 1, hpSliderW)
             controls["slot" .. axis] = slider
             PlaceSlider(position, slider, 16, axis == "X" and -284 or -342, textRightW - 58)
-            M.BindSlider(ctx, slider,
+            M.BindNumberWidget(ctx, slider,
                 function()
                     local xKey, yKey = SlotOffsetKeys(kind)
                     return Val(CurrentScope(), axis == "X" and xKey or yKey, 0)
@@ -680,16 +593,15 @@ local function BuildGFBars(ctx)
                     local xKey, yKey = SlotOffsetKeys(kind)
                     Set(CurrentScope(), axis == "X" and xKey or yKey, v, "font")
                     FocusGFPreviewText(kind, CurrentSlot(kind), true)
-                end)
+                end,
+                0, { step = 1, roundStep = true })
         end
         SlotAxis("X")
         SlotAxis("Y")
-
         local appearance = TextCard(tab, "Appearance", nil, textLeftX, -310, textCardW, 144)
         controls.size = ScopeSlider(ctx, appearance, "Size", 6, 48, 1, textSliderW, cfg.sizeKey, cfg.sizeDefault, "font", 16, -58, textCardW - 72)
         return controls
     end
-
     local hpControls = BuildValueTextTab("hp", hpTab, {
         showLabel = "Show HP Text",
         showKey = "showHPText",
@@ -707,7 +619,6 @@ local function BuildGFBars(ctx)
         sizeKey = "hpFontSize",
         sizeDefault = 10,
     })
-
     local powerControls = BuildValueTextTab("power", powerTab, {
         showLabel = "Show Power Text",
         showGet = IsPowerTextEnabled,
@@ -727,12 +638,10 @@ local function BuildGFBars(ctx)
         sizeKey = "powerFontSize",
         sizeDefault = 9,
     })
-
     local advancedLayers = TextCard(advancedTab, "Text Layers", "Controls draw order when text overlaps bars, icons, or indicators.", textLeftX, -4, textCardW, 260)
     local nameLayer = ScopeSlider(ctx, advancedLayers, "Name layer", 1, 15, 1, textSliderW, "nameTextLayer", 5, "font", 16, -76, textCardW - 72)
     local hpLayer = ScopeSlider(ctx, advancedLayers, "HP layer", 1, 15, 1, textSliderW, "textLayer", 5, "font", 16, -136, textCardW - 72)
     local powerLayer = ScopeSlider(ctx, advancedLayers, "Power layer", 1, 15, 1, textSliderW, "powerTextLayer", 2, "font", 16, -196, textCardW - 72)
-
     local function HookTextControls(kind, controls)
         for i = 1, #controls do HookGFPreviewTextFocus(controls[i][1], kind, controls[i][2]) end
     end
@@ -740,13 +649,12 @@ local function BuildGFBars(ctx)
     local nameTextControls = { hideNameOnStatus, nameSize, nameAnchor, nameX, nameY, nameLayer }
     local hpTextControls, hpSlotControls = M.UnitSectionsShared.ValueTextControlSets("hp", hpControls, hpLayer, HookTextControls, CurrentSlot)
     local powerTextControls, powerSlotControls = M.UnitSectionsShared.ValueTextControlSets("power", powerControls, powerLayer, HookTextControls, CurrentSlot)
-
     refreshTextControls = function()
         local tab = CurrentTextTab()
         local nameOn = Bool(CurrentScope(), "showName", true)
         local hpOn = Bool(CurrentScope(), "showHPText", true)
         local powerOn = IsPowerTextEnabled()
-        if RefreshTextTabs then RefreshTextTabs() end
+        M.CallIf(RefreshTextTabs)
         scopeLabel:SetText(M.Format(M.Tr("Editing %s"), ScopeDisplayName()))
         SetOptionsEnabled(nameTextControls, nameOn)
         SetOptionsEnabled(hpTextControls, hpOn)
@@ -770,17 +678,11 @@ local function BuildGFBars(ctx)
                 delim, false, true))
         end
         UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(text, nil) end
         FocusActiveGFPreviewText()
     end
-    M.AddRefresher(ctx, refreshTextControls)
-    refreshTextControls()
-    M.SetCollapsibleRefreshState(text, refreshTextControls)
-
+    TrackSectionRefresh(ctx, text, refreshTextControls)
     BuildDispelOverlaySection(ctx, b)
-
     BuildDeadBgSection(ctx, b)
-
     local stripe = b:CollapsibleSection("dstripe", "Debuff Stripe", 360, false)
     local stripeW = stripe._msuf2Width or b.width or 720
     local stripeCardW = min(560, stripeW - 40)
@@ -788,37 +690,20 @@ local function BuildGFBars(ctx)
     local stripeToggle = BindScopeToggle(ctx, W.SwitchAt(stripeCard, "Debuff Stripe", stripeCardW - 62, -24, 0, "HIDDEN"), "debuffStripeEnabled", false, "visual")
     local stripeEdge = ScopeDropdown(ctx, stripeCard, "Stripe edge", DEBUFF_STRIPE_EDGES, 260, "debuffStripeEdge", "BOTTOM", "visual", 16, -74, min(260, stripeCardW - 32))
     local stripeHeight = ScopeSlider(ctx, stripeCard, "Stripe height", 1, 8, 1, 300, "debuffStripeHeight", 3, "visual", 16, -126, min(360, stripeCardW - 72))
-    local stripeAlpha = ScopeSlider(ctx, stripeCard, "Stripe opacity", 0.10, 1, 0.05, 300, "debuffStripeAlpha", 0.60, "visual", 16, -174, min(360, stripeCardW - 72))
-    local stripeColor = W.Color(stripeCard, "Stripe color")
-    M.BindColor(ctx, stripeColor,
-        function()
-            return Num(CurrentScope(), "debuffStripeColorR", 0.80),
-                Num(CurrentScope(), "debuffStripeColorG", 0.20),
-                Num(CurrentScope(), "debuffStripeColorB", 0.20)
-        end,
-        function(r, g, bcol)
-            local conf = Conf(CurrentScope())
-            conf.debuffStripeColorR = r
-            conf.debuffStripeColorG = g
-            conf.debuffStripeColorB = bcol
-            QueueGF(CurrentScope(), "visual")
-        end)
-    W.MoveWidget(stripeColor, stripeCard, 16, -236, min(360, stripeCardW - 32), "LEFT"); local stripeControls = { stripeEdge, stripeHeight, stripeAlpha, stripeColor }
+    local stripeAlpha = ScopeNumberSlider(ctx, stripeCard, "Stripe opacity", 0.10, 1, 0.05, 300, "debuffStripeAlpha", 0.60, "visual", 16, -174, min(360, stripeCardW - 72))
+    local stripeColor = ScopeColor(ctx, stripeCard, "Stripe color", min(360, stripeCardW - 32), "debuffStripeColorR", "debuffStripeColorG", "debuffStripeColorB", { 0.80, 0.20, 0.20 }, "visual", 16, -236)
+    local stripeControls = { stripeEdge, stripeHeight, stripeAlpha, stripeColor }
     local function RefreshStripeState()
         local enabled = Bool(CurrentScope(), "debuffStripeEnabled", false)
         SetOptionsEnabled(stripeControls, enabled)
         SetOptionEnabled(stripeToggle, true)
-        SetSectionBadges(stripe, {
+        SetSectionBadgesAndStatus(stripe, {
             OnOffBadge(enabled, "Active", "Off"),
             { text = OptionText(DEBUFF_STRIPE_EDGES, Val(CurrentScope(), "debuffStripeEdge", "BOTTOM"), "Bottom Edge"), kind = enabled and "info" or "muted" },
             { text = BadgeNumber(Num(CurrentScope(), "debuffStripeHeight", 3)) .. "px", kind = enabled and "accent" or "muted" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(stripe, nil) end
     end
-    M.AddRefresher(ctx, RefreshStripeState)
-    RefreshStripeState()
-    M.SetCollapsibleRefreshState(stripe, RefreshStripeState)
-
+    TrackSectionRefresh(ctx, stripe, RefreshStripeState)
     local range = b:CollapsibleSection("range", "Range Fade", 220, false)
     local rangeW = range._msuf2Width or b.width or 720
     local rangeGap = 16
@@ -830,13 +715,9 @@ local function BuildGFBars(ctx)
     local rangeEffectCard = W.ControlCard(range, "Range Fade", "Controls what fades when group members are not reachable.", rangeLeftX, -38, rangeLeftWidth, 160)
     local rangeAlphaCard = W.ControlCard(range, "Alpha", "Opacity values used by range and offline states.", rangeRightX, -38, rangeRightWidth, 160)
     local rangeToggle = BindScopeToggle(ctx, W.SwitchAt(rangeEffectCard, "Range Fade", rangeLeftWidth - 62, -24, 0, "HIDDEN"), "rangeFadeEnabled", false, "visual")
-
-    local function PlaceRangeSlider(control, parent, x, y, width)
-        W.MoveWidget(control, parent, x, y, width or 270, "CENTER")
-    end
-
-    local function BindRangeSlider(widget, key, default, labelFn)
-        M.BindSlider(ctx, widget,
+    local function BindRangeAlphaSlider(key, label, default, y)
+        local control = W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth)
+        M.BindNumberWidget(ctx, control,
             function() return Num(CurrentScope(), key, default) end,
             function(v)
                 local n = tonumber(v) or default or 0
@@ -844,43 +725,34 @@ local function BuildGFBars(ctx)
                 if conf[key] == n then return end
                 conf[key] = n
                 QueueGF(CurrentScope(), "visual")
-            end)
-        return M.BindSliderLiveLabel(ctx, widget, function() return Num(CurrentScope(), key, default) end, function(value) return labelFn(tonumber(value) or default or 0) end, true)
+            end,
+            default)
+        W.MoveWidget(control, rangeAlphaCard, 16, y, rangeRightWidth - 58, "CENTER")
+        return M.BindSliderLiveLabel(ctx, control, function() return Num(CurrentScope(), key, default) end,
+            function(value) return AlphaLabel(label, tonumber(value) or default or 0) end, true)
     end
-
     local rangeModeW = min(240, rangeLeftWidth - 32)
     local rangeMode = W.Segment(rangeEffectCard, "Affects", VT("frame", "Frame", "health", "HP"), rangeModeW)
     M.BindSegment(ctx, rangeMode,
         function() return Val(CurrentScope(), "rangeFadeLayerMode", "frame") end,
         function(v) Set(CurrentScope(), "rangeFadeLayerMode", v or "frame", "visual") end)
     W.MoveWidget(rangeMode, rangeEffectCard, 16, -88, rangeModeW, "LEFT")
-
-    local rangeAlpha = BindRangeSlider(W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth), "rangeFadeAlpha", 0.4,
-        function(v) return AlphaLabel("Out of range", v) end)
-    PlaceRangeSlider(rangeAlpha, rangeAlphaCard, 16, -70, rangeRightWidth - 58)
-
-    local offlineAlpha = BindRangeSlider(W.Slider(rangeAlphaCard, "", 0, 1, 0.05, rangeRightWidth), "offlineAlpha", 0.5,
-        function(v) return AlphaLabel("Offline", v) end)
-    PlaceRangeSlider(offlineAlpha, rangeAlphaCard, 16, -124, rangeRightWidth - 58); local rangeControls = { rangeMode, rangeAlpha, offlineAlpha }
-
+    local rangeControls = {
+        rangeMode,
+        BindRangeAlphaSlider("rangeFadeAlpha", "Out of range", 0.4, -70),
+        BindRangeAlphaSlider("offlineAlpha", "Offline", 0.5, -124),
+    }
     local function RefreshRangeState()
         local enabled = Bool(CurrentScope(), "rangeFadeEnabled", false)
         SetOptionsEnabled(rangeControls, enabled)
         SetOptionEnabled(rangeToggle, true)
-        SetSectionBadges(range, {
+        SetSectionBadgesAndStatus(range, {
             OnOffBadge(enabled, "Active", "Off"),
             { text = Val(CurrentScope(), "rangeFadeLayerMode", "frame") == "health" and "HP only" or "Whole frame", kind = enabled and "info" or "muted" },
             { text = tostring(floor(Num(CurrentScope(), "rangeFadeAlpha", 0.4) * 100 + 0.5)) .. "%", kind = enabled and "accent" or "muted" },
         })
-        if type(SetSectionHeaderStatus) == "function" then
-            SetSectionHeaderStatus(range, nil)
-        end
     end
-    M.AddRefresher(ctx, RefreshRangeState)
-    RefreshRangeState()
-    M.SetCollapsibleRefreshState(range, RefreshRangeState)
-
+    TrackSectionRefresh(ctx, range, RefreshRangeState)
     FinalizeScopePage(ctx, b)
 end
-
 M.RegisterPage("gf_bars", { title = "MSUF Group Health & Text", build = BuildGFBars, version = 13 })

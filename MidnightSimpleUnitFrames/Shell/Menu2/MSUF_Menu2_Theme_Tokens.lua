@@ -1,10 +1,8 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local T = M.Theme or {}
 M.Theme = T
 
@@ -13,7 +11,6 @@ M.Theme = T
 -- Theme module. Avoid runtime frame work here; this file is loaded as shared design data.
 local ADDON = (type(addonName) == "string" and addonName ~= "" and addonName) or "MidnightSimpleUnitFrames"
 local ADDON_PATH = "Interface\\AddOns\\" .. ADDON .. "\\"
-
 T.media = T.media or {
     superellipse = ADDON_PATH .. "Media\\superellipse.tga",
     checkBoxFill = ADDON_PATH .. "Media\\msuf_checkbox_fill.tga",
@@ -40,10 +37,9 @@ T.media.gradH = T.media.gradH or ADDON_PATH .. "Media\\MSUF_Grad_H.tga"
 T.media.gradHRev = T.media.gradHRev or ADDON_PATH .. "Media\\MSUF_Grad_H_Rev.tga"
 T.media.gradV = T.media.gradV or ADDON_PATH .. "Media\\MSUF_Grad_V.tga"
 T.media.gradVRev = T.media.gradVRev or ADDON_PATH .. "Media\\MSUF_Grad_V_Rev.tga"
-
 local function ColorRows(rows)
     local out = {}
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+    for line in M.Lines(rows) do
         local key, values = line:match("^([^=]+)=(.+)$")
         if key then
             local c, n = {}, 0
@@ -53,7 +49,6 @@ local function ColorRows(rows)
     end
     return out
 end
-
 T.colors = ColorRows [[
 bg=0.040,0.046,0.064,0.985
 panel=0.040,0.048,0.070,0.300
@@ -105,21 +100,18 @@ guide=0.180,0.720,0.900,0.82
 focus=0.115,0.220,0.460,0.62
 warning=0.920,0.680,0.250,1.00
 ]]
-
 T.fontBump = T.fontBump or 1
-
 local function NavIconGrid(rows)
     local out = {}
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+    for line in M.Lines(rows) do
         local key, x, y = line:match("^(%S+)%s+(%d+)%s+(%d+)$")
         if key then out[key] = { tonumber(x), tonumber(y) } end
     end
     return out
 end
-
 local function NavIconColors(rows)
     local out = {}
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+    for line in M.Lines(rows) do
         local keys, values = line:match("^([^=]+)=(.+)$")
         if keys then
             local c, n = {}, 0
@@ -129,7 +121,20 @@ local function NavIconColors(rows)
     end
     return out
 end
-
+local function GlassVariants(rows)
+    local out = {}
+    for line in M.Lines(rows) do
+        local key, rest = line:match("^(%S+)%s+(.+)$")
+        local spec = {}
+        for field, values in tostring(rest or ""):gmatch("(%w+)=([%d%.,]+)") do
+            local c, n = {}, 0
+            for value in values:gmatch("[^,]+") do n = n + 1; c[n] = tonumber(value) end
+            spec[field] = c
+        end
+        if key then out[key] = spec end
+    end
+    return out
+end
 T.navIconGrid = NavIconGrid [[
 home 0 0
 uf_player 1 0
@@ -159,7 +164,6 @@ gf_indicators 6 1
 modules 4 2
 profiles 5 2
 ]]
-
 T.navIconColors = NavIconColors [[
 home=0.30,0.60,1.00
 uf_player uf_target uf_targettarget uf_focustarget uf_focus uf_boss uf_pet=0.40,0.78,0.98
@@ -170,63 +174,23 @@ groupframes gf_layout gf_bars gf_auras gf_indicators=0.45,0.75,0.88
 modules=0.40,0.80,0.75
 profiles=0.90,0.62,0.30
 ]]
-
-T.glassVariants = T.glassVariants or {
-    shell = {
-        tint = { 0.020, 0.026, 0.048, 0.18 },
-        wash = { 0.070, 0.105, 0.190, 0.070 },
-        depth = { 0.010, 0.014, 0.034, 0.14 },
-        grain = { 0.060, 0.070, 0.115, 0.046 },
-        top = { 0.220, 0.620, 0.900, 0.18 },
-        bottom = { 0.000, 0.000, 0.000, 0.24 },
-    },
-    rail = {
-        tint = { 0.016, 0.024, 0.048, 0.16 },
-        wash = { 0.058, 0.088, 0.180, 0.065 },
-        grain = { 0.050, 0.060, 0.108, 0.044 },
-        top = { 0.210, 0.560, 0.860, 0.14 },
-        bottom = { 0.000, 0.000, 0.000, 0.20 },
-    },
-    host = {
-        tint = { 0.016, 0.024, 0.052, 0.135 },
-        wash = { 0.058, 0.094, 0.190, 0.058 },
-        depth = { 0.012, 0.014, 0.040, 0.105 },
-        grain = { 0.052, 0.058, 0.108, 0.036 },
-        top = { 0.210, 0.610, 0.900, 0.12 },
-        bottom = { 0.000, 0.000, 0.000, 0.21 },
-    },
-    status = {
-        tint = { 0.020, 0.030, 0.060, 0.20 },
-        wash = { 0.080, 0.120, 0.230, 0.080 },
-        top = { 0.300, 0.800, 1.000, 0.24 },
-        bottom = { 0.000, 0.000, 0.000, 0.20 },
-    },
-    popup = {
-        tint = { 0.008, 0.012, 0.024, 0.20 },
-        wash = { 0.050, 0.090, 0.180, 0.084 },
-        grain = { 0.060, 0.070, 0.115, 0.048 },
-        top = { 0.230, 0.680, 0.920, 0.20 },
-        bottom = { 0.000, 0.000, 0.000, 0.24 },
-    },
-    card = {
-        tint = { 0.012, 0.018, 0.034, 0.105 },
-        wash = { 0.038, 0.066, 0.132, 0.036 },
-        top = { 0.200, 0.560, 0.820, 0.08 },
-        bottom = { 0.000, 0.000, 0.000, 0.14 },
-    },
-}
-
+T.glassVariants = T.glassVariants or GlassVariants [[
+shell tint=0.020,0.026,0.048,0.18 wash=0.070,0.105,0.190,0.070 depth=0.010,0.014,0.034,0.14 grain=0.060,0.070,0.115,0.046 top=0.220,0.620,0.900,0.18 bottom=0.000,0.000,0.000,0.24
+rail tint=0.016,0.024,0.048,0.16 wash=0.058,0.088,0.180,0.065 grain=0.050,0.060,0.108,0.044 top=0.210,0.560,0.860,0.14 bottom=0.000,0.000,0.000,0.20
+host tint=0.016,0.024,0.052,0.135 wash=0.058,0.094,0.190,0.058 depth=0.012,0.014,0.040,0.105 grain=0.052,0.058,0.108,0.036 top=0.210,0.610,0.900,0.12 bottom=0.000,0.000,0.000,0.21
+status tint=0.020,0.030,0.060,0.20 wash=0.080,0.120,0.230,0.080 top=0.300,0.800,1.000,0.24 bottom=0.000,0.000,0.000,0.20
+popup tint=0.008,0.012,0.024,0.20 wash=0.050,0.090,0.180,0.084 grain=0.060,0.070,0.115,0.048 top=0.230,0.680,0.920,0.20 bottom=0.000,0.000,0.000,0.24
+card tint=0.012,0.018,0.034,0.105 wash=0.038,0.066,0.132,0.036 top=0.200,0.560,0.820,0.08 bottom=0.000,0.000,0.000,0.14
+]]
 local function DefaultToken(tbl, key, value)
     if tbl[key] == nil then tbl[key] = value end
 end
-
 local function DefaultNumberRows(tbl, rows)
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+    for line in M.Lines(rows) do
         local key, value = line:match("^(%S+)%s+([%d%.]+)$")
         if key then DefaultToken(tbl, key, tonumber(value)) end
     end
 end
-
 T.gradients = T.gradients or {}
 DefaultToken(T.gradients, "shell", { orientation = "VERTICAL", from = { 0.070, 0.096, 0.170, 0.40 }, to = { 0.008, 0.012, 0.026, 0.58 }, inset = 3 })
 DefaultToken(T.gradients, "rail", { orientation = "VERTICAL", from = { 0.060, 0.088, 0.170, 0.32 }, to = { 0.010, 0.014, 0.030, 0.46 }, inset = 3 })
@@ -238,7 +202,6 @@ DefaultToken(T.gradients, "guide", { orientation = "VERTICAL", from = { 0.090, 0
 DefaultToken(T.gradients, "warning", { orientation = "VERTICAL", from = { 0.260, 0.180, 0.080, 0.26 }, to = { 0.044, 0.028, 0.012, 0.36 }, inset = 2 })
 DefaultToken(T.gradients, "button", { orientation = "VERTICAL", amountTop = 0.16, amountBottom = -0.20 })
 DefaultToken(T.gradients, "sliderFill", { orientation = "HORIZONTAL", from = { 0.235, 0.820, 1.000, 0.96 }, to = { 0.115, 0.560, 0.760, 0.86 } })
-
 T.motion = T.motion or {}
 DefaultNumberRows(T.motion, [[
 fast 0.075
@@ -258,7 +221,6 @@ controlFocusIn 0.060
 controlFocusOut 0.055
 controlFeedback 0.100
 ]])
-
 T.motionPolicy = T.motionPolicy or {}
 DefaultNumberRows(T.motionPolicy, [[
 min 0.045
@@ -266,13 +228,11 @@ max 0.160
 popupScaleFrom 0.988
 popupScaleOut 0.994
 ]])
-
 T.dropdownMotion = T.dropdownMotion or {}
 DefaultToken(T.dropdownMotion, "listFadeIn", T.motion.dropdownIn)
 DefaultToken(T.dropdownMotion, "listFadeOut", T.motion.dropdownOut)
 DefaultToken(T.dropdownMotion, "focusFadeIn", T.motion.focusIn)
 DefaultToken(T.dropdownMotion, "focusFadeOut", T.motion.focusOut)
-
 T.motionProfiles = T.motionProfiles or {}
 DefaultToken(T.motionProfiles, "dropdownIn", { type = "alpha", fromAlpha = 0, toAlpha = 1, duration = "dropdownIn", smoothing = "OUT" })
 DefaultToken(T.motionProfiles, "dropdownOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "dropdownOut", smoothing = "IN" })
@@ -287,7 +247,6 @@ DefaultToken(T.motionProfiles, "contentOut", { type = "alpha", fromCurrent = tru
 DefaultToken(T.motionProfiles, "controlFocusIn", { type = "alpha", fromCurrent = true, toAlpha = 1, duration = "controlFocusIn", smoothing = "OUT" })
 DefaultToken(T.motionProfiles, "controlFocusOut", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFocusOut", smoothing = "IN" })
 DefaultToken(T.motionProfiles, "controlFeedback", { type = "alpha", fromCurrent = true, toAlpha = 0, duration = "controlFeedback", smoothing = "OUT" })
-
 T.materials = T.materials or {}
 DefaultToken(T.materials, "shell", { bg = T.colors.glassShell, border = T.colors.border, glass = "shell", gradient = "shell" })
 DefaultToken(T.materials, "rail", { bg = T.colors.glassRail, border = T.colors.borderSoft, glass = "rail", gradient = "rail" })
@@ -298,7 +257,6 @@ DefaultToken(T.materials, "popup", { bg = T.colors.glassPopup, border = { 0.140,
 DefaultToken(T.materials, "focus", { veil = "dropdown" })
 DefaultToken(T.materials, "guide", { bg = { 0.018, 0.052, 0.082, 0.28 }, border = T.colors.guide, glass = "card", gradient = "guide" })
 DefaultToken(T.materials, "warning", { bg = { 0.105, 0.082, 0.052, 0.34 }, border = { 0.480, 0.360, 0.200, 0.62 }, glass = "card", gradient = "warning" })
-
 T.focusVeils = T.focusVeils or {}
 T.focusVeils.dropdown = T.focusVeils.dropdown or {
     { key = "_msuf2FocusDim", layer = "BACKGROUND", subLevel = 0, color = { 0.000, 0.000, 0.000, 0.145 } },

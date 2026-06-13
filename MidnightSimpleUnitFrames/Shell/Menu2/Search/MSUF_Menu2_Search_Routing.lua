@@ -318,7 +318,7 @@ local function SearchRouteApplySectionRows(route, pageKey, normalized, rows)
     local specs = SECTION_ROW_CACHE[rows]
     if not specs then
         specs = {}
-        for line in tostring(rows or ""):gmatch("[^\r\n]+") do
+        for line in M.Lines(rows) do
             local id, terms = line:match("^%s*([^=]+)=(.+)$")
             if id and terms then
                 id = id:gsub("^%s+", ""):gsub("%s+$", "")
@@ -344,7 +344,7 @@ local function SearchTermRows(text)
         if v == "false" then return false end
         return v
     end
-    for line in tostring(text or ""):gmatch("[^\r\n]+") do
+    for line in M.Lines(text) do
         local first, rest = line:match("^([^=]+)=(.*)$")
         if first then
             local second, third = rest:match("^([^=]*)=(.*)$")
@@ -546,7 +546,7 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_boss = "boss",
 }
 
-local SEARCH_AURA_ROUTE_PAGES = { auras3 = true, auras3_buffs = true, auras3_debuffs = true, auras3_rendering = true, auras3_styling = true }
+local SEARCH_AURA_ROUTE_PAGES = M.KeySetFromWords "auras3 auras3_buffs auras3_debuffs auras3_rendering auras3_styling"
 
 local SEARCH_ROUTE_SECTION_ROWS = {
     unit = [[
@@ -772,8 +772,7 @@ local function ApplySearchRoute(pageKey, route)
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     local state = route.state
     if type(state) == "table" then
-        local persist = type(M.PersistMenuStateValue) == "function" and M.PersistMenuStateValue or nil
-        changed = ApplyRouteValues(M, state, persist and function(field, value) persist(field, value) end) or changed
+        changed = ApplyRouteValues(M, state, M.SetMenuStateValue) or changed
     end
     local accordion = route.accordion
     if type(accordion) == "table" then

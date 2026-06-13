@@ -3,27 +3,22 @@
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
-
 local specs = MSUF.UFPreviewSpecs or {}
 MSUF.UFPreviewSpecs = specs
-
+local PipeRows = (MSUF.MSUF2 or _G.MSUF2).PipeRows
 local function Color(text)
     local r, g, b = tostring(text or ""):match("^([^,]+),([^,]+),([^,]+)$")
     return { tonumber(r) or 1, tonumber(g) or 1, tonumber(b) or 1 }
 end
-
 local function Allowed(words)
     if not words or words == "" then return nil end
     local set = {}
     for key in words:gmatch("%S+") do set[key] = true end
     return function(key) return set[key] == true end
 end
-
 local function StatusRows(rows)
     local out = {}
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
-        local c, n = {}, 0
-        for col in (line .. "|"):gmatch("(.-)|") do n = n + 1; c[n] = col end
+    for _, c in ipairs(PipeRows(rows)) do
         out[#out + 1] = {
             id = c[1], show = c[2], size = c[3], anchor = c[4], x = c[5], y = c[6], layer = c[7],
             defaultLayer = tonumber(c[8]), defaultSize = tonumber(c[9]), defaultAnchor = c[10],
@@ -33,17 +28,13 @@ local function StatusRows(rows)
     end
     return out
 end
-
 local function LayerRows(rows)
     local out = {}
-    for line in tostring(rows or ""):gmatch("[^\r\n]+") do
-        local c, n = {}, 0
-        for col in (line .. "|"):gmatch("(.-)|") do n = n + 1; c[n] = col end
+    for _, c in ipairs(PipeRows(rows)) do
         out[#out + 1] = { key = c[1], label = c[2], color = Color(c[3]), tooltip = c[4] ~= "" and c[4] or nil }
     end
     return out
 end
-
 specs.StatusPreview = StatusRows [[
 raidmarker|showRaidMarker|raidMarkerSize|raidMarkerAnchor|raidMarkerOffsetX|raidMarkerOffsetY|raidMarkerLayer|7|18|TOPLEFT|16|3|8|1,0.82,0.05|Raid marker|MSUF_RefreshRaidMarkerFrames||
 leader|showLeaderIcon|leaderIconSize|leaderIconAnchor|leaderIconOffsetX|leaderIconOffsetY|leaderIconLayer|7|14|TOPLEFT|0|3|L|0.95,0.82,0.20|Leader icon|MSUF_RefreshLeaderIconFrames||player target
@@ -55,7 +46,6 @@ statusResting|showRestingIndicator|restedStateIndicatorSize|restedStateIndicator
 statusIncomingRes|showIncomingResIndicator|incomingResIndicatorSize|incomingResIndicatorAnchor|incomingResIndicatorOffsetX|incomingResIndicatorOffsetY|incomingResIndicatorLayer|7|18|TOPRIGHT|0|0|+|0.22,1.0,0.56|Incoming Rez icon|MSUF_RequestStatusIncomingResIndicatorRefresh||player target
 statusPvp|showPvpIndicator|pvpIndicatorSize|pvpIndicatorAnchor|pvpIndicatorOffsetX|pvpIndicatorOffsetY|pvpIndicatorLayer|7|18|TOPRIGHT|0|0|PVP|0.32,0.62,1.0|PvP flag (War Mode/PvP)|MSUF_RequestStatusPvpIndicatorRefresh||player target focus targettarget focustarget
 ]]
-
 specs.PreviewLayers = LayerRows [[
 guides|Guides|0.42,0.72,1.00|Mover highlights and selected borders.
 body|Body|0.36,0.62,0.95

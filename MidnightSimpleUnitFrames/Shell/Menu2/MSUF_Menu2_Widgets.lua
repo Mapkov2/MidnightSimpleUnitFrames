@@ -8,42 +8,32 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local T = M.Theme
 local W = M.Widgets or {}
 M.Widgets = W
-
 local floor = math.floor
 local max = math.max
 local min = math.min
 local sliderSerial = 0
-
 local Tr = M.TranslateText or function(text) return text end
 local EM2Util = (_G.MSUF_EM2 and _G.MSUF_EM2.Util) or {}
-
 local function SetSearchText(object, text)
     if object and text ~= nil then object._msuf2SearchText = text end
     return object
 end
-
 local function SetSearchTitle(object, text)
     if object and text ~= nil then object._msuf2SearchTitle = text end
     return object
 end
-
 local function PlaceBackdropFrameBehindControls(frame, parent)
     if not (frame and frame.SetFrameLevel) then return end
     local parentLevel = 0
-    if parent and parent.GetFrameLevel then
-        parentLevel = tonumber(parent:GetFrameLevel()) or 0
-    end
+    if parent and parent.GetFrameLevel then parentLevel = tonumber(parent:GetFrameLevel()) or 0 end
     frame:SetFrameLevel(max(0, parentLevel))
 end
-
 local function RegisterSearchObject(object, label, kind, opts)
     SetSearchText(object, label)
     if object and type(M.RegisterSearchWidget) == "function" then
@@ -54,22 +44,11 @@ local function RegisterSearchObject(object, label, kind, opts)
     end
     return object
 end
-
 local function ResolveFocusValue(value)
     if type(value) == "function" then return value() end
     return value
 end
-
-local UNIT_FOCUS_KEYS = {
-    player = true,
-    target = true,
-    targettarget = true,
-    focustarget = true,
-    focus = true,
-    pet = true,
-    boss = true,
-}
-
+local UNIT_FOCUS_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss"
 local GROUP_FOCUS_KIND = {
     gf_party = "party",
     gf_raid = "raid",
@@ -78,7 +57,6 @@ local GROUP_FOCUS_KIND = {
     raid = "raid",
     mythicraid = "mythicraid",
 }
-
 local NormalizeFocusKey = EM2Util.NormalizeFocusKey
 local NormalizeFocusComponent = EM2Util.NormalizeFocusComponent
 local NormalizeFocusSlot = EM2Util.NormalizeFocusSlot
@@ -91,37 +69,26 @@ function W.SetPreviewFocus(key, component, slot, active)
     slot = NormalizeFocusSlot(ResolveFocusValue(slot))
     local textComponent = (component == "name" or component == "hp" or component == "power")
     local didFocus = false
-
     if (not key) or (not component) then
         local clearUnit = _G.MSUF_UFPreview_ClearFocus
         if type(clearUnit) == "function" then didFocus = clearUnit() or didFocus end
         if type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(nil, nil, false) or didFocus end
         return didFocus
     end
-
     if textComponent and UNIT_FOCUS_KEYS[key] then
         local fn = _G.MSUF_UFPreview_FocusTextSlot
-        if type(fn) == "function" then
-            didFocus = fn(key, component, slot, active == true) or didFocus
-        end
+        if type(fn) == "function" then didFocus = fn(key, component, slot, active == true) or didFocus end
     end
-
-    if textComponent and GROUP_FOCUS_KIND[key] and type(M.FocusGFPreviewTextSlot) == "function" then
-        didFocus = M.FocusGFPreviewTextSlot(component, slot, active == true) or didFocus
-    end
-
+    if textComponent and GROUP_FOCUS_KIND[key] and type(M.FocusGFPreviewTextSlot) == "function" then didFocus = M.FocusGFPreviewTextSlot(component, slot, active == true) or didFocus end
     return didFocus
 end
-
 function W.AttachEditFocus(widget, key, component, slot, opts)
     if not (widget and widget.HookScript) then return widget end
     opts = opts or {}
     widget:HookScript("OnEnter", function()
         W.SetPreviewFocus(key, component, slot, false)
         local fn = _G.MSUF_EM2_SetFocusHover
-        if type(fn) == "function" then
-            fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" })
-        end
+        if type(fn) == "function" then fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" }) end
     end)
     widget:HookScript("OnLeave", function()
         W.SetPreviewFocus(nil, nil, nil, false)
@@ -132,14 +99,14 @@ function W.AttachEditFocus(widget, key, component, slot, opts)
         widget:HookScript("OnMouseDown", function()
             W.SetPreviewFocus(key, component, slot, true)
             local fn = _G.MSUF_EM2_SetFocusSelection
-            if type(fn) == "function" then
-                fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" })
-            end
+            if type(fn) == "function" then fn(ResolveFocusValue(key), ResolveFocusValue(component), ResolveFocusValue(slot), { source = opts.source or "menu2" }) end
         end)
     end
     return widget
 end
-
+local UNIT_EDIT_FOCUS_OPTS, GROUP_EDIT_FOCUS_OPTS = { source = "menu2-unit" }, { source = "menu2-group" }
+function W.AttachUnitEditFocus(widget, unit, component, slot) return W.AttachEditFocus(widget, unit, component, slot, UNIT_EDIT_FOCUS_OPTS) end
+function W.AttachGroupEditFocus(widget, key, component, slot) return W.AttachEditFocus(widget, key, component, slot, GROUP_EDIT_FOCUS_OPTS) end
 local function MenuFocusRequestMatches(pageKey, sectionId)
     local req = _G.MSUF_EM2_MenuFocusRequest
     if type(req) ~= "table" or not req.sectionId then return nil end
@@ -149,22 +116,18 @@ local function MenuFocusRequestMatches(pageKey, sectionId)
     if req.pageKey and tostring(req.pageKey) ~= tostring(pageKey or "") then return nil end
     return req
 end
-
 local function ConsumeMenuFocusRequest(req)
-    if type(req) == "table" and _G.MSUF_EM2_MenuFocusRequest == req then
-        req.consumed = true
-    end
+    if type(req) == "table" and _G.MSUF_EM2_MenuFocusRequest == req then req.consumed = true end
 end
-
-local function GetCollapseHintClickState()
+local function MenuStateTable(field)
     if type(M.GetPersistentMenuStateTable) == "function" then
-        M.collapseHintClickState = M.GetPersistentMenuStateTable("collapseHintClickState")
+        M[field] = M.GetPersistentMenuStateTable(field)
     else
-        M.collapseHintClickState = M.collapseHintClickState or {}
+        M[field] = M[field] or {}
     end
-    return M.collapseHintClickState
+    return M[field]
 end
-
+local function GetCollapseHintClickState() return MenuStateTable("collapseHintClickState") end
 local function RefreshCollapseHintSuppression(entry)
     local hint = entry and entry.hint
     if not hint then return end
@@ -172,7 +135,6 @@ local function RefreshCollapseHintSuppression(entry)
     local count = tonumber(counts and counts.total) or 0
     hint._msuf2SuppressCollapseHint = count >= (tonumber(T.collapseHintClickHideThreshold) or 8)
 end
-
 local function CloseAutoFocusedSections(pageKey)
     local entry = M.cache and M.cache[pageKey]
     local sections = entry and entry.sections
@@ -200,7 +162,6 @@ local function CloseAutoFocusedSections(pageKey)
     if changed and relayout and relayout.RelayoutCollapsibles then relayout:RelayoutCollapsibles() end
     return changed and true or false
 end
-
 local function ScrollToCollapsibleEntry(entry)
     local outer = entry and entry.outer
     local scroll = M.scrollFrame
@@ -213,7 +174,6 @@ local function ScrollToCollapsibleEntry(entry)
     if scroll._msuf2RefreshScrollBar then scroll:_msuf2RefreshScrollBar() end
     return true
 end
-
 local function FlashCollapsibleHeader(entry)
     local header = entry and entry.header
     if not header then return end
@@ -260,9 +220,7 @@ function W.FocusCollapsibleSection(section, opts)
     if not entry then return false end
     opts = opts or {}
     entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
-    if entry._msuf2MotionActive then
-        entry._msuf2MotionActive = nil
-    end
+    if entry._msuf2MotionActive then entry._msuf2MotionActive = nil end
     entry.open = true
     entry._msuf2Closing = nil
     if opts.persist == true then
@@ -276,7 +234,6 @@ function W.FocusCollapsibleSection(section, opts)
         if entry.body.SetAlpha then entry.body:SetAlpha(1) end
     end
     if entry.builder and entry.builder.RelayoutCollapsibles then entry.builder:RelayoutCollapsibles() end
-
     local function FinishFocus()
         ScrollToCollapsibleEntry(entry)
         if opts.flash ~= false then FlashCollapsibleHeader(entry) end
@@ -284,7 +241,6 @@ function W.FocusCollapsibleSection(section, opts)
     if C_Timer and C_Timer.After then C_Timer.After(0, FinishFocus) else FinishFocus() end
     return true
 end
-
 function M.FocusRequestedSection(pageKey, opts)
     local req = _G.MSUF_EM2_MenuFocusRequest
     if type(req) ~= "table" or not req.sectionId then
@@ -313,38 +269,34 @@ function M.FocusRequestedSection(pageKey, opts)
     if focused then ConsumeMenuFocusRequest(req) end
     return focused
 end
-
 function M.CloseAutoFocusedSections(pageKey)
     return CloseAutoFocusedSections(pageKey or M.activeKey)
 end
-
+local SLIDER_TEMPLATE_KEEP_KEYS, SLIDER_TEMPLATE_SUFFIXES = M.WordList "_msufTrack _msufTrackTop _msufTrackBottom _msufFill _msufFillGlow _msuf2Thumb _msufPeelTrack _msufPeelTrackFill", M.WordList "Left Middle Right Text Low High"
+local function IsTextureRegion(region)
+    if not region then return false end
+    if region.IsObjectType then return region:IsObjectType("Texture") and true or false end
+    return region.GetObjectType and region:GetObjectType() == "Texture"
+end
 local function HideSliderTemplateParts(slider)
     if not slider then return end
     local thumb = slider.GetThumbTexture and slider:GetThumbTexture()
+    local keep = {}
+    if thumb then keep[thumb] = true end
+    for i = 1, #SLIDER_TEMPLATE_KEEP_KEYS do
+        local region = slider[SLIDER_TEMPLATE_KEEP_KEYS[i]]
+        if region then keep[region] = true end
+    end
     local regions = { slider:GetRegions() }
     for i = 1, #regions do
         local region = regions[i]
-        local isTexture = false
-        if region and region.IsObjectType then isTexture = region:IsObjectType("Texture") and true or false end
-        if (not isTexture) and region and region.GetObjectType then isTexture = (region:GetObjectType() == "Texture") end
-        if isTexture
-            and region ~= thumb
-            and region ~= slider._msufTrack
-            and region ~= slider._msufTrackTop
-            and region ~= slider._msufTrackBottom
-            and region ~= slider._msufFill
-            and region ~= slider._msufFillGlow
-            and region ~= slider._msuf2Thumb
-            and region ~= slider._msufPeelTrack
-            and region ~= slider._msufPeelTrackFill
-        then
+        if IsTextureRegion(region) and not keep[region] then
             if region.SetAlpha then region:SetAlpha(0) end
             if region.Hide then region:Hide() end
         end
     end
-
     local name = slider.GetName and slider:GetName()
-    for _, suffix in ipairs({ "Left", "Middle", "Right", "Text", "Low", "High" }) do
+    for _, suffix in ipairs(SLIDER_TEMPLATE_SUFFIXES) do
         local region = (name and _G[name .. suffix]) or slider[suffix]
         if region then
             if region.SetText then region:SetText("") end
@@ -367,7 +319,6 @@ function W.PageBuilder(ctx)
         collapsibles = {},
         layoutEntries = {},
     }
-
     function b:RelayoutCollapsibles()
         if not self._collapsibleStartY then return end
         local y = self._collapsibleStartY
@@ -399,10 +350,9 @@ function W.PageBuilder(ctx)
         self.y = y
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(y) + 42) end
     end
-
     function b:Section(title, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
-        if T.ApplyMaterial then T.ApplyMaterial(section, "card") elseif T.ApplyGlass then T.ApplyGlass(section, "card") end
+        T.ApplySurface(section, "card")
         SetSearchTitle(section, title)
         RegisterSearchObject(section, title, "section")
         section:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
@@ -410,12 +360,10 @@ function W.PageBuilder(ctx)
         section._msuf2CursorY = -38
         section._msuf2ContentX = 14
         section._msuf2Width = self.width
-
         local fs = T.Font(section, "GameFontNormal", Tr(title or ""), T.colors.text)
         SetSearchText(fs, title)
         fs:SetPoint("TOPLEFT", 14, -12)
         section.title = fs
-
         self.y = self.y - (height or 120) - 12
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
         if self._collapsibleStartY then
@@ -428,29 +376,21 @@ function W.PageBuilder(ctx)
         end
         return section
     end
-
     function b:CollapsibleSection(id, title, height, defaultOpen)
-        if type(M.GetPersistentMenuStateTable) == "function" then
-            M.accordionState = M.GetPersistentMenuStateTable("accordionState")
-        else
-            M.accordionState = M.accordionState or {}
-        end
+        M.accordionState = MenuStateTable("accordionState")
         local collapseHintClickState = GetCollapseHintClickState()
         local sectionId = tostring(id or title or "section")
         local stateKey = tostring(ctx.key or "page") .. ":" .. sectionId
         local saved = M.accordionState[stateKey]
         local open = (saved == nil) and (defaultOpen and true or false) or (saved and true or false)
         local headerH = 28
-
         if not self._collapsibleStartY then self._collapsibleStartY = self.y end
-
         local outer = T.Panel(self.parent, nil, T.colors.panel2, T.colors.cardBorder or T.colors.borderSoft)
-        if T.ApplyMaterial then T.ApplyMaterial(outer, "card") elseif T.ApplyGlass then T.ApplyGlass(outer, "card") end
+        T.ApplySurface(outer, "card")
         SetSearchTitle(outer, title)
         RegisterSearchObject(outer, title, "section")
         outer:SetPoint("TOPLEFT", self.parent, "TOPLEFT", self.x, self.y)
         outer:SetSize(self.width, headerH + (open and (height or 120) or 0))
-
         local header = CreateFrame("Button", nil, outer)
         SetSearchTitle(header, title)
         header:SetPoint("TOPLEFT", outer, "TOPLEFT", 0, 0)
@@ -462,19 +402,15 @@ function W.PageBuilder(ctx)
         local headerHover = header:CreateTexture(nil, "HIGHLIGHT")
         headerHover:SetAllPoints()
         headerHover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.045)
-
         local arrow = header:CreateTexture(nil, "OVERLAY")
         arrow:SetSize(10, 10)
         arrow:SetPoint("LEFT", header, "LEFT", 12, 0)
         arrow:SetTexture(T.media.collapseArrow)
-
         local label = T.Font(header, "GameFontNormal", Tr(title or ""), T.colors.text)
         SetSearchText(label, title)
         label:SetJustifyH("LEFT")
-
         local hint = T.Font(header, "GameFontDisableSmall", "", T.colors.dim)
         hint:SetJustifyH("RIGHT")
-
         local contentW = math.min(self.width, M.formContentMaxWidth or 980)
         local body = CreateFrame("Frame", nil, outer)
         SetSearchTitle(body, title)
@@ -483,7 +419,6 @@ function W.PageBuilder(ctx)
         body._msuf2CursorY = -38
         body._msuf2ContentX = 14
         body._msuf2Width = contentW
-
         local entry = {
             outer = outer,
             header = header,
@@ -527,10 +462,7 @@ function W.PageBuilder(ctx)
                         totalW = totalW - ((badge.GetWidth and badge:GetWidth()) or 0) - (#availableBadges > 1 and 6 or 0)
                         availableBadges[#availableBadges] = nil
                     end
-                    if #availableBadges == 1 and totalW > availableW then
-                        availableBadges[1] = nil
-                    end
-
+                    if #availableBadges == 1 and totalW > availableW then availableBadges[1] = nil end
                     local right = -12
                     for i = #badges, 1, -1 do
                         local badge = badges[i]
@@ -544,10 +476,8 @@ function W.PageBuilder(ctx)
                         badge:SetShown(true)
                         right = right - bw - 6
                     end
-
                     if #availableBadges > 0 then
                         if hint.Hide then hint:Hide() end
-
                         label:ClearAllPoints()
                         label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
                         label:SetPoint("RIGHT", header, "RIGHT", right - 8, 0)
@@ -555,14 +485,12 @@ function W.PageBuilder(ctx)
                         return
                     end
                 end
-
                 if hint.Show then hint:Show() end
                 hint:ClearAllPoints()
                 hint:SetPoint("TOPRIGHT", header, "TOPRIGHT", -12, -1)
                 hint:SetPoint("BOTTOMRIGHT", header, "BOTTOMRIGHT", -12, 1)
                 hint:SetPoint("LEFT", header, "RIGHT", -(12 + reserve), 0)
                 hint:SetJustifyH("RIGHT")
-
                 label:ClearAllPoints()
                 label:SetPoint("LEFT", arrow, "RIGHT", 6, 0)
                 label:SetPoint("RIGHT", hint, "LEFT", -8, 0)
@@ -600,7 +528,6 @@ function W.PageBuilder(ctx)
             RefreshCollapseHintSuppression(entry)
             entry._msuf2MotionSerial = (entry._msuf2MotionSerial or 0) + 1
             local motionSerial = entry._msuf2MotionSerial
-
             if nextOpen then
                 entry.open = true
                 entry._msuf2MotionActive = true
@@ -618,7 +545,6 @@ function W.PageBuilder(ctx)
                 end
                 return
             end
-
             entry._msuf2MotionActive = true
             entry._msuf2Closing = true
             T.ApplyCollapseVisual(entry.arrow, entry.hint, false)
@@ -644,7 +570,6 @@ function W.PageBuilder(ctx)
         header:HookScript("OnEnter", function() RefreshHeaderTone(true) end)
         header:HookScript("OnLeave", function() RefreshHeaderTone(false) end)
         header:HookScript("OnSizeChanged", RefreshHeaderLayout)
-
         self.y = self.y - outer:GetHeight() - 8
         RefreshHeaderLayout()
         RefreshHeaderTone(false)
@@ -653,13 +578,10 @@ function W.PageBuilder(ctx)
         local focusReq = MenuFocusRequestMatches(ctx.key, sectionId)
         if focusReq then
             _G.MSUF_EM2_MenuFocusSection = body
-            if W.FocusCollapsibleSection(body, { flash = true }) then
-                ConsumeMenuFocusRequest(focusReq)
-            end
+            if W.FocusCollapsibleSection(body, { flash = true }) then ConsumeMenuFocusRequest(focusReq) end
         end
         return body
     end
-
     function b:Header(title, subtitle, height)
         local section = T.Panel(self.parent, nil, T.colors.panel2, T.colors.border)
         SetSearchTitle(section, title)
@@ -689,11 +611,9 @@ function W.PageBuilder(ctx)
         end
         return section
     end
-
     function b:GlobalStyleHeader(title, subtitle, height)
         return W.GlobalStyleHeader(ctx, self, title, subtitle, height)
     end
-
     function b:Spacer(height)
         self.y = self.y - (height or 10)
         if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(self.y) + 28) end
@@ -704,10 +624,8 @@ function W.PageBuilder(ctx)
             }
         end
     end
-
     return b
 end
-
 local function TopButtonStyle(bg, border, textColor, hoverBg, hoverBorder)
     return {
         bg = bg, border = border, textColor = textColor,
@@ -715,12 +633,10 @@ local function TopButtonStyle(bg, border, textColor, hoverBg, hoverBorder)
         activeBg = bg, activeBorder = border, activeTextColor = textColor,
     }
 end
-
 local TOP_ACTION_BUTTON_STYLE = TopButtonStyle({ 0.018, 0.028, 0.058, 0.95 }, { 0.082, 0.125, 0.245, 0.66 }, { 0.82, 0.90, 1.00, 1 }, { 0.026, 0.040, 0.078, 0.97 }, { 0.125, 0.220, 0.430, 0.80 })
 local TOP_DANGER_BUTTON_STYLE = TopButtonStyle({ 0.070, 0.026, 0.034, 0.94 }, { 0.340, 0.090, 0.110, 0.82 }, { 1.00, 0.82, 0.82, 1 }, { 0.090, 0.035, 0.045, 0.96 }, { 0.420, 0.120, 0.140, 0.90 })
 local TOP_SUCCESS_BUTTON_STYLE = TopButtonStyle({ 0.018, 0.145, 0.090, 0.94 }, { 0.055, 0.440, 0.270, 0.82 }, { 0.780, 1.000, 0.875, 1 }, { 0.026, 0.185, 0.115, 0.96 }, { 0.075, 0.560, 0.345, 0.90 })
 local TOP_ROLE_STYLES = { primary = TOP_ACTION_BUTTON_STYLE, destructive = TOP_DANGER_BUTTON_STYLE, danger = TOP_DANGER_BUTTON_STYLE, reset = TOP_DANGER_BUTTON_STYLE, delete = TOP_DANGER_BUTTON_STYLE, success = TOP_SUCCESS_BUTTON_STYLE, confirm = TOP_SUCCESS_BUTTON_STYLE }
-
 local function ApplyTopActionButtonVisual(btn, hover)
     local bg = btn._msuf2TopActive and btn._msuf2TopActiveBg or (hover and btn._msuf2TopHoverBg or btn._msuf2TopBg)
     local br = btn._msuf2TopActive and btn._msuf2TopActiveBorder or (hover and btn._msuf2TopHoverBorder or btn._msuf2TopBorder)
@@ -734,9 +650,7 @@ local function ApplyTopActionButtonVisual(btn, hover)
     if btn._msuf2Label then btn._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1) end
     if btn._msuf2TopStripe then btn._msuf2TopStripe:SetShown(btn._msuf2TopActive and true or false) end
 end
-
 local TOP_BUTTON_HOOKS = { OnEnter = function(self) ApplyTopActionButtonVisual(self, true) end, OnLeave = function(self) ApplyTopActionButtonVisual(self) end, OnEnable = function(self) ApplyTopActionButtonVisual(self) end, OnDisable = function(self) ApplyTopActionButtonVisual(self) end }
-
 local function StyleTopButton(btn, style)
     local s = style or TOP_ACTION_BUTTON_STYLE
     local defaults = TOP_ACTION_BUTTON_STYLE
@@ -780,34 +694,27 @@ local function StyleTopButton(btn, style)
     ApplyTopActionButtonVisual(btn)
     return btn
 end
-
 local function StyleTopActionButton(btn)
     return StyleTopButton(btn, TOP_ACTION_BUTTON_STYLE)
 end
-W.StyleTopActionButton = StyleTopActionButton
-
 local function StyleTopDangerButton(btn)
     return StyleTopButton(btn, TOP_DANGER_BUTTON_STYLE)
 end
-W.StyleTopDangerButton = StyleTopDangerButton
-
 local function StyleTopSuccessButton(btn)
     return StyleTopButton(btn, TOP_SUCCESS_BUTTON_STYLE)
 end
-W.StyleTopSuccessButton = StyleTopSuccessButton
-
+M.AssignNamedValues(W, "StyleTopActionButton StyleTopDangerButton StyleTopSuccessButton",
+    StyleTopActionButton, StyleTopDangerButton, StyleTopSuccessButton)
 function W.RoleButton(parent, label, role, width, height)
     local btn = (T.RoleButton and T.RoleButton(parent, label, role, width, height)) or T.Button(parent, label, width, height)
     role = tostring(role or "normal")
     return StyleTopButton(btn, TOP_ROLE_STYLES[role] or TOP_ACTION_BUTTON_STYLE)
 end
-
 function W.TopButton(parent, label, width, height, style, active)
     local btn = StyleTopButton(T.Button(parent, label, width, height), style)
     if active ~= nil and btn.SetActive then btn:SetActive(active) end
     return btn
 end
-
 function W.CreatePageResetButton(ctx, parent, anchor, opts)
     opts = opts or {}
     local key = ctx and ctx.key
@@ -826,7 +733,6 @@ function W.CreatePageResetButton(ctx, parent, anchor, opts)
     RegisterSearchObject(btn, label, "button")
     return btn
 end
-
 function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     if not (builder and builder.Header) then return nil end
     local head = builder:Header(title, subtitle, height or 72)
@@ -842,15 +748,12 @@ function W.GlobalStyleHeader(ctx, builder, title, subtitle, height)
     })
     return head, edit
 end
-
 function W.SetCollapsibleToggleText(section, openText, closedText)
     local entry = section and section._msuf2CollapsibleEntry
     if not (entry and entry.label and entry.label.SetText) then return nil end
-
     local function Refresh()
         entry.label:SetText(Tr(entry.open and (openText or "") or (closedText or openText or "")))
     end
-
     if entry.header and entry.header.HookScript and not entry._msuf2DynamicTitleHooked then
         entry._msuf2DynamicTitleHooked = true
         entry.header:HookScript("OnClick", Refresh)
@@ -858,7 +761,6 @@ function W.SetCollapsibleToggleText(section, openText, closedText)
     Refresh()
     return Refresh
 end
-
 local COLLAPSIBLE_BADGE_STYLES = {
     ok = {
         bg = { 0.018, 0.230, 0.145, 0.94 },
@@ -881,17 +783,14 @@ local COLLAPSIBLE_BADGE_STYLES = {
         text = { 0.680, 0.730, 0.860, 1 },
     },
 }
-
 local function CollapsibleBadgeWidth(text)
     text = tostring(Tr(text or ""))
     return max(48, min(176, floor(22 + (#text * 6.2) + 0.5)))
 end
-
 function W.SetCollapsibleBadges(section, specs)
     local entry = section and section._msuf2CollapsibleEntry
     local header = entry and entry.header
     if not header then return end
-
     entry._msuf2Badges = entry._msuf2Badges or {}
     specs = specs or {}
     local showAllWhenClosed = section._msuf2CollapsibleBadgesShowWhenClosed == true
@@ -899,7 +798,6 @@ function W.SetCollapsibleBadges(section, specs)
         or section._msuf2CollapsibleBadgesOnlyWhenOpen == false
         or entry._msuf2CollapsibleBadgesOnlyWhenOpen == false
     local badgesOpen = entry.open == true and entry._msuf2Closing ~= true
-
     for i = 1, #specs do
         local spec = specs[i] or {}
         local badge = entry._msuf2Badges[i]
@@ -915,7 +813,6 @@ function W.SetCollapsibleBadges(section, specs)
             badge.text:SetJustifyH("CENTER")
             entry._msuf2Badges[i] = badge
         end
-
         local text = Tr(spec.text or "")
         local style = COLLAPSIBLE_BADGE_STYLES[spec.kind or spec.style or "info"] or COLLAPSIBLE_BADGE_STYLES.info
         badge:SetSize(tonumber(spec.width) or CollapsibleBadgeWidth(text), tonumber(spec.height) or 20)
@@ -943,22 +840,15 @@ function W.SetCollapsibleBadges(section, specs)
                 or spec.showCollapsed == true
                 or spec.important == true
                 or spec.alwaysShow == true
-            if not badgesOpen and not allowCollapsed then
-                shown = false
-            end
-            if spec.onlyWhenOpen == true and not badgesOpen then
-                shown = false
-            end
+            if not badgesOpen and not allowCollapsed then shown = false end
+            if spec.onlyWhenOpen == true and not badgesOpen then shown = false end
         end
         badge._msuf2BadgeWantedShown = shown and true or false
-        if badge.text and badge.text.SetWidth then
-            badge.text:SetWidth(max(20, (badge.GetWidth and badge:GetWidth() or 54) - 10))
-        end
+        if badge.text and badge.text.SetWidth then badge.text:SetWidth(max(20, (badge.GetWidth and badge:GetWidth() or 54) - 10)) end
         if badge.text and badge.text.SetMaxLines then badge.text:SetMaxLines(1) end
         if badge.text and badge.text.SetWordWrap then badge.text:SetWordWrap(false) end
         badge:SetShown(shown)
     end
-
     for i = #specs + 1, #entry._msuf2Badges do
         local badge = entry._msuf2Badges[i]
         if badge then
@@ -966,16 +856,13 @@ function W.SetCollapsibleBadges(section, specs)
             badge:SetShown(false)
         end
     end
-
     if entry._msuf2RefreshLayout then entry._msuf2RefreshLayout() end
 end
-
 local function NextRow(section, height)
     local y = section._msuf2CursorY or -38
     section._msuf2CursorY = y - (height or 28)
     return section._msuf2ContentX or 14, y
 end
-
 local function PlayWidgetMotion(region, motion, opts)
     if T.PlayMotion then
         T.PlayMotion(region, motion, opts)
@@ -984,7 +871,6 @@ local function PlayWidgetMotion(region, motion, opts)
     opts = opts or {}
     if region and region.SetAlpha then region:SetAlpha(opts.toAlpha or 0) end
 end
-
 local function ClickCheckButton(button, mouseButton)
     if not button then return end
     if button.IsEnabled and not button:IsEnabled() then return end
@@ -995,22 +881,14 @@ local function ClickCheckButton(button, mouseButton)
     end
     local click = button.GetScript and button:GetScript("OnClick")
     if type(click) == "function" then click(button, mouseButton or "LeftButton", false) end
-    if button._msuf2RefreshToggleFeedback then
-        button:_msuf2RefreshToggleFeedback(button._msuf2ToggleHovered, button._msuf2TogglePressed)
-    end
-    if button._msuf2RefreshSwitchVisual then
-        button:_msuf2RefreshSwitchVisual(button._msuf2SwitchHovered)
-    end
+    if button._msuf2RefreshToggleFeedback then button:_msuf2RefreshToggleFeedback(button._msuf2ToggleHovered, button._msuf2TogglePressed) end
+    if button._msuf2RefreshSwitchVisual then button:_msuf2RefreshSwitchVisual(button._msuf2SwitchHovered) end
     return nextValue
 end
-
 local function SyncCheckedTexture(button, checked, enabled, alpha)
     local check = button and button.GetCheckedTexture and button:GetCheckedTexture()
-    if (not check) and button and button.GetName and button:GetName() then
-        check = _G[button:GetName() .. "Check"]
-    end
+    if (not check) and button and button.GetName and button:GetName() then check = _G[button:GetName() .. "Check"] end
     if not check then return end
-
     checked = checked and true or false
     alpha = alpha or (enabled and 0.96 or 0.42)
     if check.SetVertexColor then check:SetVertexColor(1, 1, 1, checked and alpha or 0) end
@@ -1021,7 +899,6 @@ local function SyncCheckedTexture(button, checked, enabled, alpha)
         check:Hide()
     end
 end
-
 local function UpdateToggleProxyBounds(button)
     if not button then return end
     local label = button._msuf2Label
@@ -1032,19 +909,15 @@ local function UpdateToggleProxyBounds(button)
         textWidth = #text * 7
     end
     local labelWidth = label and label.GetWidth and tonumber(label:GetWidth()) or nil
-    if labelWidth and labelWidth > 0 then
-        textWidth = textWidth > 0 and min(textWidth, labelWidth) or labelWidth
-    end
+    if labelWidth and labelWidth > 0 then textWidth = textWidth > 0 and min(textWidth, labelWidth) or labelWidth end
     textWidth = max(0, textWidth)
     local hitWidth = max(36, floor(40 + textWidth + 0.5))
-
     local rowHover = button._msuf2ToggleRowHover
     if rowHover then
         rowHover:ClearAllPoints()
         rowHover:SetPoint("LEFT", button, "LEFT", -4, 0)
         rowHover:SetSize(hitWidth, 28)
     end
-
     local labelHit = button._msuf2LabelHit
     if labelHit then
         labelHit:ClearAllPoints()
@@ -1052,7 +925,6 @@ local function UpdateToggleProxyBounds(button)
         labelHit:SetSize(hitWidth, 28)
     end
 end
-
 local function UseControlTexture(tex, texture)
     if not tex then return tex end
     tex:SetTexture(texture)
@@ -1061,17 +933,27 @@ local function UseControlTexture(tex, texture)
     if tex.SetTexelSnappingBias then tex:SetTexelSnappingBias(0) end
     return tex
 end
-
+local function ControlTexture(parent, key, layer, subLevel, texture)
+    local tex = UseControlTexture(parent:CreateTexture(nil, layer, nil, subLevel), texture)
+    if key then parent[key] = tex end
+    return tex
+end
 local function HideNativeCheckTexture(texture)
     if not texture then return end
     if texture.SetAlpha then texture:SetAlpha(0) end
     if texture.Hide then texture:Hide() end
 end
-
+local NATIVE_CHECK_TEXTURE_METHODS = { { "SetNormalTexture", "GetNormalTexture" }, { "SetPushedTexture", "GetPushedTexture" }, { "SetHighlightTexture", "GetHighlightTexture" }, { "SetDisabledTexture", "GetDisabledTexture" } }
+local function SuppressNativeCheckChrome(self)
+    for i = 1, #NATIVE_CHECK_TEXTURE_METHODS do
+        local spec = NATIVE_CHECK_TEXTURE_METHODS[i]
+        if self[spec[1]] then pcall(self[spec[1]], self, nil) end
+        HideNativeCheckTexture(self[spec[2]] and self[spec[2]](self))
+    end
+end
 local function ApplyControlCardChrome(card)
     if not (card and card.CreateTexture) or card._msuf2ControlCardChrome then return end
     card._msuf2ControlCardChrome = true
-
     local top = card:CreateTexture(nil, "ARTWORK", nil, 4)
     top:SetTexture("Interface\\Buttons\\WHITE8X8")
     top:SetPoint("TOPLEFT", card, "TOPLEFT", 8, -2)
@@ -1079,7 +961,6 @@ local function ApplyControlCardChrome(card)
     top:SetHeight(1)
     top:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.050)
     card._msuf2CardTopLine = top
-
     local depth = card:CreateTexture(nil, "BORDER", nil, 4)
     depth:SetTexture("Interface\\Buttons\\WHITE8X8")
     depth:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 8, 2)
@@ -1095,7 +976,6 @@ local function RefreshToggleControl(button, hover, down)
     local refresh = button and button._msuf2RefreshToggleFeedback
     if refresh then refresh(button, hover, down) end
 end
-
 local TOGGLE_CONTROL_HOOKS = {
     OnShow = function(self)
         if T.StyleCheckmark then T.StyleCheckmark(self) end
@@ -1111,48 +991,49 @@ local TOGGLE_CONTROL_HOOKS = {
     OnEnable = function(self) RefreshToggleControl(self, self._msuf2ToggleHovered) end,
     OnDisable = function(self) RefreshToggleControl(self) end,
 }
-
+local function LabelOwner(self, key, requireEnabled)
+    local btn = self and self[key]
+    return (btn and not (requireEnabled and btn.IsEnabled and not btn:IsEnabled())) and btn or nil
+end
 local TOGGLE_LABEL_HOOKS = {
     OnClick = function(self)
-        local btn = self and self._msuf2ToggleOwner
-        if not btn or (btn.IsEnabled and not btn:IsEnabled()) then return end
+        local btn = LabelOwner(self, "_msuf2ToggleOwner", true)
+        if not btn then return end
         ClickCheckButton(btn, "LeftButton")
         RefreshToggleControl(btn, true)
     end,
     OnEnter = function(self)
-        local btn = self and self._msuf2ToggleOwner
+        local btn = LabelOwner(self, "_msuf2ToggleOwner")
         if not btn then return end
         btn._msuf2ToggleHovered = true
         RefreshToggleControl(btn, true)
     end,
     OnMouseDown = function(self)
-        local btn = self and self._msuf2ToggleOwner
-        if not btn or (btn.IsEnabled and not btn:IsEnabled()) then return end
+        local btn = LabelOwner(self, "_msuf2ToggleOwner", true)
+        if not btn then return end
         btn._msuf2TogglePressed = true
         RefreshToggleControl(btn, true, true)
     end,
     OnMouseUp = function(self)
-        local btn = self and self._msuf2ToggleOwner
+        local btn = LabelOwner(self, "_msuf2ToggleOwner")
         if not btn then return end
         btn._msuf2TogglePressed = nil
         RefreshToggleControl(btn, btn._msuf2ToggleHovered)
     end,
     OnLeave = function(self)
-        local btn = self and self._msuf2ToggleOwner
+        local btn = LabelOwner(self, "_msuf2ToggleOwner")
         if not btn then return end
         btn._msuf2ToggleHovered = nil
         btn._msuf2TogglePressed = nil
         RefreshToggleControl(btn)
     end,
 }
-
 local SWITCH_BG_ON = { 0.020, 0.090, 0.135, 0.96 }
 local SWITCH_BG_OFF = { 0.014, 0.022, 0.048, 0.96 }
 local SWITCH_EDGE_ON = { 0.160, 0.560, 0.760, 0.86 }
 local SWITCH_EDGE_OFF = { 0.095, 0.145, 0.255, 0.82 }
 local SWITCH_KNOB_ON = { 0.380, 0.760, 0.900, 1.00 }
 local SWITCH_KNOB_OFF = { 0.680, 0.760, 0.940, 1.00 }
-
 local function PlaySwitchFeedback(button)
     if not (button and button._msuf2SwitchFlash) then return end
     local checked = button.GetChecked and button:GetChecked()
@@ -1162,7 +1043,6 @@ local function PlaySwitchFeedback(button)
     button._msuf2SwitchFlash:SetAlpha(alpha)
     PlayWidgetMotion(button._msuf2SwitchFlash, "controlFeedback", { fromAlpha = alpha, toAlpha = 0 })
 end
-
 local function RefreshSwitchVisual(button, hover)
     if not button then return end
     hover = hover or button._msuf2SwitchHovered
@@ -1192,7 +1072,6 @@ local function RefreshSwitchVisual(button, hover)
         button._msuf2Label:SetTextColor(tx[1], tx[2], tx[3], tx[4] or 1)
     end
 end
-
 local function SetSwitchChecked(button, value)
     local checked = value and true or false
     local before = button.GetChecked and button:GetChecked()
@@ -1200,7 +1079,6 @@ local function SetSwitchChecked(button, value)
     if before ~= checked then PlaySwitchFeedback(button) end
     RefreshSwitchVisual(button)
 end
-
 local SWITCH_CONTROL_HOOKS = {
     OnEnter = function(self) self._msuf2SwitchHovered = true; RefreshSwitchVisual(self, true) end,
     OnLeave = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
@@ -1210,22 +1088,21 @@ local SWITCH_CONTROL_HOOKS = {
     OnEnable = RefreshSwitchVisual,
     OnDisable = function(self) self._msuf2SwitchHovered = nil; self._msuf2SwitchPressed = nil; RefreshSwitchVisual(self) end,
 }
-
 local SWITCH_LABEL_HOOKS = {
     OnClick = function(self)
-        local btn = self and self._msuf2SwitchOwner
-        if not btn or (btn.IsEnabled and not btn:IsEnabled()) then return end
+        local btn = LabelOwner(self, "_msuf2SwitchOwner", true)
+        if not btn then return end
         ClickCheckButton(btn, "LeftButton")
     end,
     OnEnter = function(self)
-        local btn = self and self._msuf2SwitchOwner
+        local btn = LabelOwner(self, "_msuf2SwitchOwner")
         if not btn then return end
         btn._msuf2SwitchHovered = true
         RefreshSwitchVisual(btn, true)
         if btn.LockHighlight then btn:LockHighlight() end
     end,
     OnLeave = function(self)
-        local btn = self and self._msuf2SwitchOwner
+        local btn = LabelOwner(self, "_msuf2SwitchOwner")
         if not btn then return end
         btn._msuf2SwitchHovered = nil
         btn._msuf2SwitchPressed = nil
@@ -1233,60 +1110,35 @@ local SWITCH_LABEL_HOOKS = {
         if btn.UnlockHighlight then btn:UnlockHighlight() end
     end,
 }
-
 local function CreateToggle(section, label, x, y, labelWidth)
     local btn = CreateFrame("CheckButton", nil, section, "UICheckButtonTemplate")
     btn._msuf2ControlKind = "toggle"
     btn._msuf2QuietCheckBox = true
     btn:SetPoint("TOPLEFT", x, y)
     btn:SetSize(28, 28)
-
     btn._msuf2Label = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(btn._msuf2Label, label)
     btn._msuf2Label:SetPoint("LEFT", btn, "RIGHT", 8, 0)
     btn._msuf2Label:SetJustifyH("LEFT")
-    if not labelWidth and section and section._msuf2Width then
-        labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - 50)
-    end
+    if not labelWidth and section and section._msuf2Width then labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - 50) end
     if labelWidth then btn._msuf2Label:SetWidth(labelWidth) end
     btn.text = btn._msuf2Label
     if T.StyleCheckmark then T.StyleCheckmark(btn) end
-
-    function btn:_msuf2SuppressNativeCheckChrome()
-        if self.SetNormalTexture then pcall(self.SetNormalTexture, self, nil) end
-        if self.SetPushedTexture then pcall(self.SetPushedTexture, self, nil) end
-        if self.SetHighlightTexture then pcall(self.SetHighlightTexture, self, nil) end
-        if self.SetDisabledTexture then pcall(self.SetDisabledTexture, self, nil) end
-        HideNativeCheckTexture(self.GetNormalTexture and self:GetNormalTexture())
-        HideNativeCheckTexture(self.GetPushedTexture and self:GetPushedTexture())
-        HideNativeCheckTexture(self.GetHighlightTexture and self:GetHighlightTexture())
-        HideNativeCheckTexture(self.GetDisabledTexture and self:GetDisabledTexture())
-    end
+    btn._msuf2SuppressNativeCheckChrome = SuppressNativeCheckChrome
     btn:_msuf2SuppressNativeCheckChrome()
-
     local checkFillTexture = (T.media and T.media.checkBoxFill) or "Interface\\Buttons\\WHITE8X8"
     local checkEdgeTexture = (T.media and T.media.checkBoxEdge) or checkFillTexture
-
-    local boxEdge = btn:CreateTexture(nil, "BACKGROUND", nil, -3)
-    UseControlTexture(boxEdge, checkEdgeTexture)
+    local boxEdge = ControlTexture(btn, "_msuf2ToggleEdge", "BACKGROUND", -3, checkEdgeTexture)
     boxEdge:SetSize(23, 23)
     boxEdge:SetPoint("CENTER", btn, "CENTER", 0, 0)
-    btn._msuf2ToggleEdge = boxEdge
-
-    local boxFill = btn:CreateTexture(nil, "BACKGROUND", nil, -2)
-    UseControlTexture(boxFill, checkFillTexture)
+    local boxFill = ControlTexture(btn, "_msuf2ToggleFill", "BACKGROUND", -2, checkFillTexture)
     boxFill:SetSize(21, 21)
     boxFill:SetPoint("CENTER", btn, "CENTER", 0, 0)
-    btn._msuf2ToggleFill = boxFill
-
-    local hoverFill = btn:CreateTexture(nil, "BACKGROUND", nil, -1)
-    UseControlTexture(hoverFill, checkFillTexture)
+    local hoverFill = ControlTexture(btn, "_msuf2ToggleHoverFill", "BACKGROUND", -1, checkFillTexture)
     hoverFill:SetAllPoints(boxFill)
     hoverFill:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
     hoverFill:SetAlpha(0)
     hoverFill:Show()
-    btn._msuf2ToggleHoverFill = hoverFill
-
     local rowHover = section:CreateTexture(nil, "BORDER", nil, 1)
     rowHover:SetTexture("Interface\\Buttons\\WHITE8X8")
     rowHover:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 1)
@@ -1294,7 +1146,6 @@ local function CreateToggle(section, label, x, y, labelWidth)
     rowHover:Show()
     btn._msuf2ToggleRowHover = rowHover
     btn._msuf2UpdateToggleProxyBounds = UpdateToggleProxyBounds
-
     local function SetToggleHoverVisual(self, show, down)
         local tex = self._msuf2ToggleHoverFill
         local rowTex = self._msuf2ToggleRowHover
@@ -1317,7 +1168,6 @@ local function CreateToggle(section, label, x, y, labelWidth)
             if rowTex.Show then rowTex:Show() end
         end
     end
-
     local function RefreshToggleFeedback(self, hover, down)
         local enabled = not (self.IsEnabled and not self:IsEnabled())
         local checked = (self.GetChecked and self:GetChecked()) and true or false
@@ -1332,19 +1182,13 @@ local function CreateToggle(section, label, x, y, labelWidth)
             and (checked and (down and 0.96 or hover and 0.88 or 0.76) or (down and 0.78 or hover and 0.64 or 0.50))
             or 0.30
         local alpha = enabled and 1 or 0.45
-
         if self._msuf2ToggleFill then
             local bgAlpha = checked and 0.96 or (down and 0.86 or hover and 0.78 or 0.70)
             self._msuf2ToggleFill:SetVertexColor(min(bg[1] * bgMul, 1), min(bg[2] * bgMul, 1), min(bg[3] * bgMul, 1), bgAlpha * alpha)
         end
-        if self._msuf2ToggleEdge then
-            self._msuf2ToggleEdge:SetVertexColor(br[1], br[2], br[3], borderAlpha * alpha)
-        end
-
+        if self._msuf2ToggleEdge then self._msuf2ToggleEdge:SetVertexColor(br[1], br[2], br[3], borderAlpha * alpha) end
         local check = self.GetCheckedTexture and self:GetCheckedTexture()
-        if check and check.SetVertexColor then
-            check:SetVertexColor(1.000, 1.000, 1.000, enabled and 0.96 or 0.42)
-        end
+        if check and check.SetVertexColor then check:SetVertexColor(1.000, 1.000, 1.000, enabled and 0.96 or 0.42) end
         SyncCheckedTexture(self, checked, enabled)
         SetToggleHoverVisual(self, hover and enabled, down and enabled)
         if self._msuf2Label and self._msuf2Label.SetTextColor then
@@ -1353,7 +1197,6 @@ local function CreateToggle(section, label, x, y, labelWidth)
         end
     end
     btn._msuf2RefreshToggleFeedback = RefreshToggleFeedback
-
     local rawSetChecked = btn.SetChecked
     btn.SetChecked = function(self, value)
         rawSetChecked(self, value and true or false)
@@ -1361,7 +1204,6 @@ local function CreateToggle(section, label, x, y, labelWidth)
         RefreshToggleFeedback(self, self._msuf2ToggleHovered, self._msuf2TogglePressed)
     end
     for script, handler in pairs(TOGGLE_CONTROL_HOOKS) do btn:HookScript(script, handler) end
-
     local labelHit = CreateFrame("Button", nil, section)
     labelHit:EnableMouse(true)
     if labelHit.RegisterForClicks then labelHit:RegisterForClicks("LeftButtonUp") end
@@ -1377,7 +1219,6 @@ local function CreateToggle(section, label, x, y, labelWidth)
     RegisterSearchObject(btn, label, "toggle", { anchor = btn._msuf2Label })
     return btn
 end
-
 function W.Text(parent, text, x, y, width, color)
     local fs = T.Font(parent, "GameFontHighlightSmall", Tr(text or ""), color or T.colors.muted)
     SetSearchText(fs, text)
@@ -1387,16 +1228,14 @@ function W.Text(parent, text, x, y, width, color)
     fs:SetJustifyH("LEFT")
     return fs
 end
-
 function W.ControlCard(parent, title, subtitle, x, y, width, height)
     if not parent then return nil end
     width = width or 360
     height = height or 120
-
     local cardBg = { 0.018, 0.026, 0.052, 0.86 }
     local cardBorder = T.colors.cardBorder or T.colors.borderSoft
     local card = T.Panel(parent, nil, cardBg, cardBorder)
-    if T.ApplyMaterial then T.ApplyMaterial(card, { bg = cardBg, border = cardBorder, glass = "card" }) elseif T.ApplyGlass then T.ApplyGlass(card, "card") end
+    T.ApplySurface(card, { bg = cardBg, border = cardBorder, glass = "card" })
     ApplyControlCardChrome(card)
     SetSearchTitle(card, title)
     RegisterSearchObject(card, title, "section")
@@ -1407,14 +1246,12 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
     card._msuf2ContentX = 16
     card._msuf2CursorY = -52
     if card.EnableMouse then card:EnableMouse(false) end
-
     local heading = T.Font(card, "GameFontNormal", Tr(title or ""), T.colors.text)
     SetSearchText(heading, title)
     heading:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
     heading:SetWidth(max(24, width - 32))
     heading:SetJustifyH("LEFT")
     card.title = heading
-
     if subtitle and subtitle ~= "" then
         local sub = T.Font(card, "GameFontDisableSmall", Tr(subtitle), T.colors.muted)
         SetSearchText(sub, subtitle)
@@ -1424,21 +1261,18 @@ function W.ControlCard(parent, title, subtitle, x, y, width, height)
         if sub.SetWordWrap then sub:SetWordWrap(true) end
         card.subtitle = sub
     end
-
     return card
 end
-
 function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     if not parent then return nil end
     width = max(24, floor((tonumber(width) or 360) + 0.5))
     height = max(24, floor((tonumber(height) or 120) + 0.5))
     x = floor((tonumber(x) or 0) + 0.5)
     y = floor((tonumber(y) or 0) + 0.5)
-
     local cardBg = bg or { 0.018, 0.026, 0.052, 0.86 }
     local cardBorder = border or T.colors.cardBorder or T.colors.borderSoft
     local card = T.Panel(parent, nil, cardBg, cardBorder)
-    if T.ApplyMaterial then T.ApplyMaterial(card, { bg = cardBg, border = cardBorder, glass = "card" }) elseif T.ApplyGlass then T.ApplyGlass(card, "card") end
+    T.ApplySurface(card, { bg = cardBg, border = cardBorder, glass = "card" })
     ApplyControlCardChrome(card)
     card:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     card:SetSize(width, height)
@@ -1449,63 +1283,44 @@ function W.ControlCardBackdrop(parent, x, y, width, height, bg, border)
     if card.SetHitRectInsets then card:SetHitRectInsets(0, 0, 0, 0) end
     return card
 end
-
 function W.Toggle(section, label)
     local x, y = NextRow(section, 30)
     return CreateToggle(section, label, x, y)
 end
-
 function W.ToggleAt(section, label, x, y, labelWidth)
     return CreateToggle(section, label, x or 14, y or -38, labelWidth)
 end
-
 function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     local switchW, switchH = 44, 22
     local knobSize = 18
     local knobPad = 2
     local switchTrackTexture = (T.media and T.media.switchTrack) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
     local switchKnobTexture = (T.media and T.media.switchKnob) or (T.media and T.media.sliderThumb) or (T.media and T.media.superellipse) or "Interface\\Buttons\\WHITE8X8"
-
     local btn = CreateFrame("CheckButton", nil, section)
     btn._msuf2ControlKind = "toggle"
     btn:SetPoint("TOPLEFT", x or 14, y or -38)
     btn:SetSize(switchW, switchH)
     if btn.SetHitRectInsets then btn:SetHitRectInsets(-2, -2, -4, -4) end
-
-    local edge = btn:CreateTexture(nil, "BACKGROUND", nil, 0)
-    UseControlTexture(edge, switchTrackTexture)
+    local edge = ControlTexture(btn, "_msuf2SwitchEdge", "BACKGROUND", 0, switchTrackTexture)
     edge:SetAllPoints(btn)
-
-    local fill = btn:CreateTexture(nil, "BACKGROUND", nil, 1)
-    UseControlTexture(fill, switchTrackTexture)
+    local fill = ControlTexture(btn, "_msuf2SwitchFill", "BACKGROUND", 1, switchTrackTexture)
     fill:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
     fill:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
-    btn._msuf2SwitchFill = fill
-    btn._msuf2SwitchEdge = edge
-
-    local flash = btn:CreateTexture(nil, "ARTWORK", nil, 2)
-    UseControlTexture(flash, switchTrackTexture)
+    local flash = ControlTexture(btn, "_msuf2SwitchFlash", "ARTWORK", 2, switchTrackTexture)
     flash:SetPoint("TOPLEFT", btn, "TOPLEFT", 1, -1)
     flash:SetPoint("BOTTOMRIGHT", btn, "BOTTOMRIGHT", -1, 1)
     flash:SetVertexColor(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0)
     flash:SetAlpha(0)
-    btn._msuf2SwitchFlash = flash
-
-    local knob = btn:CreateTexture(nil, "OVERLAY")
-    UseControlTexture(knob, switchKnobTexture)
+    local knob = ControlTexture(btn, "_msuf2SwitchKnob", "OVERLAY", nil, switchKnobTexture)
     knob:SetSize(knobSize, knobSize)
-    btn._msuf2SwitchKnob = knob
     btn._msuf2SwitchKnobSize = knobSize
     btn._msuf2SwitchKnobPad = knobPad
     btn._msuf2SwitchKnobTexture = switchKnobTexture
-
     local side = labelSide or "RIGHT"
     local labelFS = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(labelFS, label)
     labelFS:SetJustifyH(side == "LEFT" and "RIGHT" or "LEFT")
-    if not labelWidth and section and section._msuf2Width then
-        labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 34)
-    end
+    if not labelWidth and section and section._msuf2Width then labelWidth = max(40, (section._msuf2Width or 0) - (x or 0) - switchW - 34) end
     if labelWidth then labelFS:SetWidth(max(20, labelWidth - (side == "RIGHT" and 22 or 0))) end
     if side == "LEFT" then
         labelFS:SetPoint("RIGHT", btn, "LEFT", -9, 0)
@@ -1515,12 +1330,10 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
     if side == "HIDDEN" then labelFS:Hide() end
     btn._msuf2Label = labelFS
     btn.text = labelFS
-
     btn._msuf2RefreshSwitchVisual = RefreshSwitchVisual
     btn._msuf2RawSetChecked = btn.SetChecked
     btn.SetChecked = SetSwitchChecked
     for script, handler in pairs(SWITCH_CONTROL_HOOKS) do btn:HookScript(script, handler) end
-
     if side ~= "HIDDEN" then
         local labelHit = CreateFrame("Button", nil, section)
         labelHit:SetFrameLevel(btn:GetFrameLevel() + 2)
@@ -1530,12 +1343,10 @@ function W.SwitchAt(section, label, x, y, labelWidth, labelSide)
         for script, handler in pairs(SWITCH_LABEL_HOOKS) do labelHit:SetScript(script, handler) end
         btn._msuf2LabelHit = labelHit
     end
-
     btn:SetChecked(false)
     RegisterSearchObject(btn, label, "toggle", { anchor = side ~= "HIDDEN" and labelFS or btn })
     return btn
 end
-
 local function ScopeButtonWidth(item)
     if item and item.width then return item.width end
     local value = item and item.value
@@ -1546,7 +1357,6 @@ local function ScopeButtonWidth(item)
     if text:match("^Boss [1-5]$") then return 74 end
     return math.max(54, math.min(96, 28 + (#text * 7)))
 end
-
 local function MeasureScopeOverrideLayout(values, opts)
     opts = opts or {}
     values = values or opts.values or {}
@@ -1561,7 +1371,6 @@ local function MeasureScopeOverrideLayout(values, opts)
     local startX = opts.startX or (labelX + labelW + 8)
     local x, y = startX, centerY
     local rows = 1
-
     for i = 1, #values do
         local width = ScopeButtonWidth(values[i])
         if x > startX and x + width > maxRight then
@@ -1571,7 +1380,6 @@ local function MeasureScopeOverrideLayout(values, opts)
         end
         x = x + width + gap
     end
-
     return {
         rows = rows,
         bottomY = y - math.floor(buttonH * 0.5 + 0.5),
@@ -1584,7 +1392,6 @@ local function MeasureScopeOverrideLayout(values, opts)
         startX = startX,
     }
 end
-
 function W.MeasureScopeOverrideBar(values, opts)
     if type(values) == "table" and values.values and opts == nil then
         opts = values
@@ -1592,7 +1399,6 @@ function W.MeasureScopeOverrideBar(values, opts)
     end
     return MeasureScopeOverrideLayout(values, opts)
 end
-
 function W.ScopeOverrideBar(ctx, section, opts)
     opts = opts or {}
     local values = opts.values or {}
@@ -1616,14 +1422,12 @@ function W.ScopeOverrideBar(ctx, section, opts)
         maxRight = maxRight,
         startX = startX,
     })
-
     local label = T.Font(section, opts.labelFont or "GameFontHighlightSmall", Tr(opts.label or "Editing:"), opts.labelColor or T.colors.text)
     SetSearchText(label, opts.label or "Editing:")
     RegisterSearchObject(label, opts.label or "Editing:", "text")
     label:SetPoint("LEFT", section, "TOPLEFT", labelX, centerY)
     label:SetWidth(labelW)
     label:SetJustifyH("LEFT")
-
     local bar = CreateFrame("Frame", nil, section)
     SetSearchTitle(bar, opts.label or "Editing:")
     RegisterSearchObject(bar, opts.label or "Editing:", "segment", { values = values })
@@ -1635,7 +1439,6 @@ function W.ScopeOverrideBar(ctx, section, opts)
     bar._msuf2Rows = metrics.rows
     bar._msuf2BottomY = metrics.bottomY
     bar._msuf2LastRowCenterY = metrics.lastRowCenterY
-
     local x, y = startX, centerY
     for i = 1, #values do
         local item = values[i]
@@ -1658,7 +1461,6 @@ function W.ScopeOverrideBar(ctx, section, opts)
         bar.buttons[i] = btn
         x = x + width + gap
     end
-
     function bar:GetValue()
         if type(opts.getValue) == "function" then return opts.getValue() end
         return opts.value
@@ -1677,12 +1479,9 @@ function W.ScopeOverrideBar(ctx, section, opts)
             btn:SetActive(active)
         end
     end
-
-    if ctx and M.AddRefresher then M.AddRefresher(ctx, function() bar:Refresh() end) end
-    bar:Refresh()
+    M.TrackRefresh(ctx, function() bar:Refresh() end)
     return bar
 end
-
 function W.SetControlShown(control, shown)
     if not control then return end
     shown = shown and true or false
@@ -1705,11 +1504,8 @@ function W.SetControlShown(control, shown)
             control._msuf2StepButtons[i]:SetShown(shown)
         end
     end
-    if shown and control._msuf2SetLayoutWidth then
-        control:_msuf2SetLayoutWidth(control._msuf2RowWidth or control._msuf2RequestedWidth)
-    end
+    if shown and control._msuf2SetLayoutWidth then control:_msuf2SetLayoutWidth(control._msuf2RowWidth or control._msuf2RequestedWidth) end
 end
-
 local function SetEnabledState(frame, enabled)
     if not frame then return end
     if frame.Enable and frame.Disable then
@@ -1719,13 +1515,11 @@ local function SetEnabledState(frame, enabled)
     end
     if frame.EnableMouse then frame:EnableMouse(enabled and not frame._msuf2UseProxyMouse) end
 end
-
 local function SetTextEnabledColor(fontString, enabled)
     if not (fontString and fontString.SetTextColor) then return end
     local c = enabled and T.colors.text or T.colors.dim
     fontString:SetTextColor(c[1], c[2], c[3], c[4] or 1)
 end
-
 local function HasDisableGate(control)
     local gates = control and control._msuf2DisableGates
     if type(gates) ~= "table" then return false end
@@ -1734,7 +1528,6 @@ local function HasDisableGate(control)
     end
     return false
 end
-
 local function ApplyEnabledVisuals(control, enabled)
     SetEnabledState(control, enabled)
     if control.SetAlpha then control:SetAlpha(enabled and 1 or 0.45) end
@@ -1742,9 +1535,7 @@ local function ApplyEnabledVisuals(control, enabled)
     SetTextEnabledColor(control._msuf2Label, enabled)
     if control._msuf2RefreshSwitchVisual then control:_msuf2RefreshSwitchVisual() end
     if control._msuf2RefreshToggleFeedback then control:_msuf2RefreshToggleFeedback() end
-    if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse then
-        control._msuf2LabelHit:EnableMouse(enabled)
-    end
+    if control._msuf2LabelHit and control._msuf2LabelHit.EnableMouse then control._msuf2LabelHit:EnableMouse(enabled) end
     local edit = control.editBox or control.__MSUF_valueBox
     if edit then
         SetEnabledState(edit, enabled)
@@ -1765,7 +1556,6 @@ local function ApplyEnabledVisuals(control, enabled)
         end
     end
 end
-
 local function ApplyControlEnabled(control)
     if not control then return end
     local enabled = (control._msuf2DesiredEnabled ~= false) and not HasDisableGate(control)
@@ -1775,7 +1565,6 @@ local function ApplyControlEnabled(control)
         return
     end
     control._msuf2AppliedEnabled = enabled
-
     if control._msuf2ControlKind == "slider" then
         HideSliderTemplateParts(control)
         if T.StyleSlider then T.StyleSlider(control) end
@@ -1796,7 +1585,6 @@ function W.SetControlEnabled(control, enabled)
     control._msuf2DesiredEnabled = enabled and true or false
     ApplyControlEnabled(control)
 end
-
 function W.SetControlGateEnabled(control, gateKey, enabled)
     if not control then return end
     gateKey = tostring(gateKey or "default")
@@ -1809,34 +1597,27 @@ function W.SetControlGateEnabled(control, gateKey, enabled)
     end
     ApplyControlEnabled(control)
 end
-
 function W.SetControlsEnabled(controls, enabled)
     for i = 1, #(controls or {}) do
         W.SetControlEnabled(controls[i], enabled)
     end
 end
-
 local function ClampPlacedControlWidth(widget, parent, x)
     if not (widget and parent and parent._msuf2Width) then return end
     local kind = widget._msuf2ControlKind
     if kind ~= "slider" and kind ~= "dropdown" and kind ~= "textinput" then return end
-
     local available = floor((parent._msuf2Width or 0) - (x or 0) - 18)
     if available <= 0 then return end
-
     if kind == "slider" and widget._msuf2SetLayoutWidth then
         local requested = widget._msuf2RequestedWidth or widget._msuf2RowWidth or 280
         local minWidth = widget._msuf2MinRowWidth or 48
         widget:_msuf2SetLayoutWidth(max(minWidth, min(requested, available)))
         return
     end
-
     local currentW = widget.GetWidth and widget:GetWidth()
     if currentW and currentW > available then
         widget:SetWidth(max(72, available))
-        if widget._msuf2Title and widget._msuf2Title.SetWidth then
-            widget._msuf2Title:SetWidth(max(72, available))
-        end
+        if widget._msuf2Title and widget._msuf2Title.SetWidth then widget._msuf2Title:SetWidth(max(72, available)) end
     end
 end
 
@@ -1847,7 +1628,6 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     parent = parent or widget:GetParent()
     x = x or 0
     y = y or 0
-
     local kind = widget._msuf2ControlKind
     width = tonumber(width)
     if width then
@@ -1865,13 +1645,11 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
         widget._msuf2TitleJustify = titleJustify
         widget._msuf2Title:SetJustifyH(titleJustify)
     end
-
     ClampPlacedControlWidth(widget, parent, x)
     if widget._msuf2Title then
         widget._msuf2Title:ClearAllPoints()
         widget._msuf2Title:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     end
-
     widget:ClearAllPoints()
     if kind == "slider" or kind == "dropdown" or kind == "textinput" or kind == "segment" then
         widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 22)
@@ -1881,12 +1659,9 @@ function W.MoveWidget(widget, parent, x, y, width, titleJustify)
     else
         widget:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     end
-    if kind == "toggle" and widget._msuf2UpdateToggleProxyBounds then
-        widget:_msuf2UpdateToggleProxyBounds()
-    end
+    if kind == "toggle" and widget._msuf2UpdateToggleProxyBounds then widget:_msuf2UpdateToggleProxyBounds() end
     return widget
 end
-
 function W.LabelAt(parent, text, x, y, width, template, color)
     local fs = T.Font(parent, template or "GameFontNormalSmall", Tr(text or ""), color or T.colors.text)
     SetSearchText(fs, text)
@@ -1896,7 +1671,6 @@ function W.LabelAt(parent, text, x, y, width, template, color)
     fs:SetJustifyH("LEFT")
     return fs
 end
-
 function W.DividerAt(parent, y, leftPad, rightPad)
     local line = parent:CreateTexture(nil, "ARTWORK")
     line:SetPoint("TOPLEFT", parent, "TOPLEFT", leftPad or 12, y or 0)
@@ -1905,7 +1679,6 @@ function W.DividerAt(parent, y, leftPad, rightPad)
     line:SetColorTexture(1, 1, 1, 0.06)
     return line
 end
-
 function W.Button(section, label, width)
     local x, y = NextRow(section, 30)
     local btn = T.Button(section, Tr(label or ""), width or 160, 24)
@@ -1914,7 +1687,6 @@ function W.Button(section, label, width)
     btn:SetPoint("TOPLEFT", x, y)
     return btn
 end
-
 local function InstallPinnedPreviewUpdater(scroll)
     if not scroll or scroll._msuf2PinnedPreviewUpdater then return end
     scroll._msuf2PinnedPreviewUpdater = true
@@ -1936,7 +1708,6 @@ local function InstallPinnedPreviewUpdater(scroll)
     scroll:HookScript("OnShow", RefreshIfPinned)
     scroll:HookScript("OnSizeChanged", RefreshIfPinned)
 end
-
 function M.RefreshPinnedPreviews(scroll)
     local list = M._pinnedPreviews
     if type(list) ~= "table" or #list == 0 then return end
@@ -1945,11 +1716,9 @@ function M.RefreshPinnedPreviews(scroll)
         if r and r.update and (not scroll or r.scroll == scroll) then r.update() end
     end
 end
-
 function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
     local list = M._pinnedPreviews
     if type(list) ~= "table" then return end
-
     local writeIndex = 1
     for readIndex = 1, #list do
         local record = list[readIndex]
@@ -1962,13 +1731,10 @@ function M.ReleasePinnedPreviews(reason, keepKey, releaseKey)
         else
             release = true
         end
-
         if release then
             local box = record and record.box
             if record and type(record.restore) == "function" then record.restore() end
-            if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then
-                record.scroll._msuf2PinnedPreviewActiveRecord = nil
-            end
+            if record and record.scroll and record.scroll._msuf2PinnedPreviewActiveRecord == record then record.scroll._msuf2PinnedPreviewActiveRecord = nil end
             if box then
                 if box._msuf2PinnedPreviewRecord == record then box._msuf2PinnedPreviewRecord = nil end
                 if box._msuf2PinnedPreviewPageKey == pageKey then box._msuf2PinnedPreviewPageKey = nil end
@@ -1991,7 +1757,6 @@ function W.AttachPinnedPreview(body, box, opts)
     opts = opts or {}
     local scroll = M.scrollFrame
     if not scroll then return nil end
-
     local buildKey = M._msuf2SearchBuildKey
     local buildEntry = buildKey and M.cache and M.cache[buildKey]
     if buildEntry and buildEntry.hiddenBuild and buildEntry.wrapper and buildEntry.wrapper.HookScript then
@@ -2006,20 +1771,13 @@ function W.AttachPinnedPreview(body, box, opts)
                 self._msuf2DeferredPinnedPreviews = nil
                 for i = 1, #pending do
                     local item = pending[i]
-                    if item and item.body and item.box then
-                        W.AttachPinnedPreview(item.body, item.box, item.opts)
-                    end
+                    if item and item.body and item.box then W.AttachPinnedPreview(item.body, item.box, item.opts) end
                 end
             end)
         end
         return nil
     end
-
-    if type(M.GetPersistentMenuStateTable) == "function" then
-        M.previewPinState = M.GetPersistentMenuStateTable("previewPinState")
-    else
-        M.previewPinState = M.previewPinState or {}
-    end
+    M.previewPinState = MenuStateTable("previewPinState")
     local stateKey = tostring(opts.stateKey or box._msuf2PinStateKey or "preview")
     local pageKey = opts.pageKey or box._msufGFNativePreviewPageKey
     local pageWrapper = opts.wrapper or box._msufGFNativePreviewWrapper
@@ -2029,7 +1787,6 @@ function W.AttachPinnedPreview(body, box, opts)
     local originalFrameLevel = (box.GetFrameLevel and box:GetFrameLevel()) or 1
     local pinned = false
     local record
-
     local pinBtn = box._msuf2PinButton
     if not pinBtn then
         pinBtn = T.Button(box, Tr("Pinned"), opts.buttonWidth or 86, 22)
@@ -2043,7 +1800,6 @@ function W.AttachPinnedPreview(body, box, opts)
         pinBtn:SetSize(opts.buttonWidth or 86, 22)
     end
     pinBtn:SetPoint("TOPRIGHT", box, "TOPRIGHT", -10, -6)
-
     local hint = opts.hint or box.hint or box._hint
     if hint and hint.SetPoint then
         hint:ClearAllPoints()
@@ -2051,7 +1807,6 @@ function W.AttachPinnedPreview(body, box, opts)
         hint:SetPoint("RIGHT", pinBtn, "LEFT", -10, 0)
         hint:SetJustifyH("LEFT")
     end
-
     local placeholder = body.CreateFontString and body:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall") or nil
     if placeholder then
         placeholder:SetPoint("CENTER", body, "CENTER", 0, 0)
@@ -2059,11 +1814,9 @@ function W.AttachPinnedPreview(body, box, opts)
         placeholder:SetTextColor(0.38, 0.44, 0.58, 0.55)
         placeholder:Hide()
     end
-
     local function PinEnabled()
         return M.previewPinState[stateKey] ~= false
     end
-
     local function RefreshButton()
         local enabled = PinEnabled()
         local text = enabled and "Pinned" or "Pin Preview"
@@ -2076,22 +1829,18 @@ function W.AttachPinnedPreview(body, box, opts)
             if pinBtn.SetActive then pinBtn:SetActive(enabled) end
         end
     end
-
     local function Restore()
         if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
         if not pinned then return end
         pinned = false
         box._msuf2PinnedFloating = nil
         if placeholder then placeholder:Hide() end
-        if scroll._msuf2PinnedPreviewActiveRecord == record then
-            scroll._msuf2PinnedPreviewActiveRecord = nil
-        end
+        if scroll._msuf2PinnedPreviewActiveRecord == record then scroll._msuf2PinnedPreviewActiveRecord = nil end
         box:SetParent(originalParent)
         box:ClearAllPoints()
         box:SetPoint(point or "TOPLEFT", relTo or body, relPoint or "TOPLEFT", xOfs or 0, yOfs or 0)
         if box.SetFrameLevel then box:SetFrameLevel(originalFrameLevel) end
     end
-
     local function BodyVisible()
         --- IsVisible checks the full ancestor chain; IsShown only checks the frame itself
         if pageKey and M.activeKey and M.activeKey ~= pageKey then return false end
@@ -2101,7 +1850,6 @@ function W.AttachPinnedPreview(body, box, opts)
         return (not body.IsVisible or body:IsVisible())
             and (not scroll.IsShown or scroll:IsShown())
     end
-
     local function ShouldPin()
         if not PinEnabled() or not BodyVisible() then return false end
         local offset = (scroll.GetVerticalScroll and scroll:GetVerticalScroll()) or 0
@@ -2113,7 +1861,6 @@ function W.AttachPinnedPreview(body, box, opts)
         if bodyTop <= (scrollTop + (opts.threshold or 6)) then return false end
         return true
     end
-
     local function ApplyPinnedState()
         if box._msuf2PinnedPreviewRecord and box._msuf2PinnedPreviewRecord ~= record then return end
         if not BodyVisible() then
@@ -2145,7 +1892,6 @@ function W.AttachPinnedPreview(body, box, opts)
         end
         RefreshButton()
     end
-
     pinBtn:SetScript("OnClick", function()
         M.previewPinState[stateKey] = not PinEnabled()
         if not PinEnabled() then
@@ -2157,19 +1903,12 @@ function W.AttachPinnedPreview(body, box, opts)
     pinBtn:SetScript("OnEnter", function(self)
         self._msuf2Hover = true
         if self.RefreshVisual then self:RefreshVisual() end
-        if GameTooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(Tr("Pin Preview"), 1, 1, 1)
-            GameTooltip:AddLine(Tr("Keeps this preview visible while you edit lower options."), 0.82, 0.82, 0.82, true)
-            GameTooltip:Show()
-        end
     end)
     pinBtn:SetScript("OnLeave", function(self)
         self._msuf2Hover = nil
         if self.RefreshVisual then self:RefreshVisual() end
-        if GameTooltip then GameTooltip:Hide() end
     end)
-
+    M.AddTooltip(pinBtn, "Pin Preview", "Keeps this preview visible while you edit lower options.", { hook = true })
     box._msuf2PinnedPreviewPageKey = pageKey
     box._msuf2PinnedPreviewWrapper = pageWrapper
     record = { scroll = scroll, update = ApplyPinnedState, restore = Restore, box = box, stateKey = stateKey, pageKey = pageKey, pageWrapper = pageWrapper }
@@ -2186,7 +1925,6 @@ function W.AttachPinnedPreview(body, box, opts)
     scroll._msuf2PinnedPreviewLastOffset = nil
     scroll._msuf2PinnedPreviewLastHeight = nil
     InstallPinnedPreviewUpdater(scroll)
-
     if body.HookScript then
         body:HookScript("OnShow", ApplyPinnedState)
         body:HookScript("OnHide", Restore)
@@ -2223,7 +1961,6 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(width)
     title:SetJustifyH("LEFT")
-
     sliderSerial = sliderSerial + 1
     local slider = CreateFrame("Slider", "MSUF2NativeSlider" .. sliderSerial, section)
     slider._msuf2Title = title
@@ -2241,15 +1978,12 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     slider._msuf2MinRowWidth = compactMinTrackW
     HideSliderTemplateParts(slider)
     if T.StyleSlider then T.StyleSlider(slider) end
-
     local function StepButton(text)
         local btn = T.Button(section, text, 18, 20)
         SetSearchText(btn, text)
         return T.CenterButtonLabel(btn)
     end
-
     local minus = StepButton("-")
-
     local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
     edit:SetSize(52, 20)
     edit:SetAutoFocus(false)
@@ -2257,12 +1991,10 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     edit:SetNumeric(false)
     T.SkinEditBox(edit)
     slider.editBox = edit
-
     local plus = StepButton("+")
     slider.minusButton = minus
     slider.plusButton = plus
     slider._msuf2StepButtons = { minus, plus }
-
     local function UpdateFill()
         local fill = slider._msufFill
         if not fill then return end
@@ -2274,7 +2006,6 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         if slider._msuf2UpdateThumb then slider:_msuf2UpdateThumb() end
     end
     slider._msuf2UpdateFill = UpdateFill
-
     function slider:_msuf2SetLayoutWidth(totalWidth)
         totalWidth = tonumber(totalWidth) or width or 280
         self._msuf2RowWidth = totalWidth
@@ -2312,16 +2043,13 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         UpdateFill()
     end
     slider:_msuf2SetLayoutWidth(width)
-
     local function FormatValue(value)
         if type(slider._msuf2ValueFormatter) == "function" then
             local ok, text = pcall(slider._msuf2ValueFormatter, value, slider)
             if ok and text ~= nil then return tostring(text) end
         end
         local st = step or 1
-        if st < 1 then
-            return string.format("%.2f", value)
-        end
+        if st < 1 then return string.format("%.2f", value) end
         return tostring(floor(value + 0.5))
     end
     slider._msuf2FormatValue = FormatValue
@@ -2332,12 +2060,9 @@ function W.Slider(section, label, minVal, maxVal, step, width)
     function slider:SetValueParser(fn)
         self._msuf2ValueParser = (type(fn) == "function") and fn or nil
     end
-
     slider:HookScript("OnValueChanged", function(self, value)
         UpdateFill()
-        if not self._msuf2Editing then
-            edit:SetText(FormatValue(value))
-        end
+        if not self._msuf2Editing then edit:SetText(FormatValue(value)) end
     end)
     slider:HookScript("OnShow", function(self)
         HideSliderTemplateParts(self)
@@ -2368,7 +2093,6 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         slider._msuf2Editing = nil
         self:SetText(FormatValue(slider:GetValue()))
     end)
-
     local function ClampToSlider(value)
         local minV, maxV = slider:GetMinMaxValues()
         if value < minV then value = minV elseif value > maxV then value = maxV end
@@ -2377,23 +2101,18 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         if value < minV then value = minV elseif value > maxV then value = maxV end
         return value
     end
-
     local function StepMultiplier()
         if IsControlKeyDown and IsControlKeyDown() then return 10 end
         if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
         return 1
     end
-
     local function StepBy(direction)
         if slider.IsEnabled and not slider:IsEnabled() then return end
         local amount = (tonumber(slider._msuf2Step) or 1) * StepMultiplier() * direction
         slider:SetValue(ClampToSlider((tonumber(slider:GetValue()) or 0) + amount))
     end
-
     local function SliderValueFromCursor()
-        if not (GetCursorPosition and slider.GetLeft and slider.GetWidth and slider.GetMinMaxValues) then
-            return nil
-        end
+        if not (GetCursorPosition and slider.GetLeft and slider.GetWidth and slider.GetMinMaxValues) then return nil end
         local left = slider:GetLeft()
         local width = slider:GetWidth()
         if not left or not width or width <= 0 then return nil end
@@ -2407,7 +2126,6 @@ function W.Slider(section, label, minVal, maxVal, step, width)
         maxV = tonumber(maxV) or minV
         return ClampToSlider(minV + ((maxV - minV) * pct))
     end
-
     local function SetValueFromCursor()
         if slider.IsEnabled and not slider:IsEnabled() then return end
         local value = SliderValueFromCursor()
@@ -2416,49 +2134,37 @@ function W.Slider(section, label, minVal, maxVal, step, width)
             if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
         end
     end
-
     local function StopSliderInteraction()
         slider._msuf2SliderActive = nil
-        if type(slider._msuf2CommitSliderHistory) == "function" then
-            slider:_msuf2CommitSliderHistory()
-        end
+        if type(slider._msuf2CommitSliderHistory) == "function" then slider:_msuf2CommitSliderHistory() end
         if T.StyleSlider then T.StyleSlider(slider) end
     end
-
     slider:SetScript("OnMouseDown", function(_, button)
         if button and button ~= "LeftButton" then return end
         if slider.IsEnabled and not slider:IsEnabled() then return end
-        if type(slider._msuf2BeginSliderHistory) == "function" then
-            slider:_msuf2BeginSliderHistory()
-        end
+        if type(slider._msuf2BeginSliderHistory) == "function" then slider:_msuf2BeginSliderHistory() end
         slider._msuf2SliderActive = true
         SetValueFromCursor()
     end)
-
     slider:SetScript("OnMouseUp", function(_, button)
         if button and button ~= "LeftButton" then return end
         StopSliderInteraction()
     end)
     slider:HookScript("OnHide", StopSliderInteraction)
-
     slider:EnableMouseWheel(true)
     slider:SetScript("OnMouseWheel", function(_, delta)
         if not delta or delta == 0 then return end
         StepBy(delta > 0 and 1 or -1)
     end)
-
     minus:SetScript("OnClick", function() StepBy(-1) end)
     plus:SetScript("OnClick", function() StepBy(1) end)
-
     return slider
 end
-
 function W.Segment(section, label, values, width)
     local x, y = NextRow(section, 48)
     local title = T.Font(section, "GameFontHighlightSmall", label or "", T.colors.text)
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
-
     local holder = CreateFrame("Frame", nil, section)
     RegisterSearchObject(holder, label, "segment", { anchor = title, values = values })
     holder:SetPoint("TOPLEFT", x, y - 22)
@@ -2467,7 +2173,6 @@ function W.Segment(section, label, values, width)
     holder._msuf2Title = title
     holder.buttons = {}
     holder.values = values or {}
-
     local count = #holder.values
     local gap = 6
     local bw = count > 0 and math.floor(((width or 360) - gap * (count - 1)) / count) or 80
@@ -2479,7 +2184,6 @@ function W.Segment(section, label, values, width)
         btn._msuf2Value = item.value
         holder.buttons[i] = btn
     end
-
     function holder:SetValue(value)
         self.value = value
         for i = 1, #self.buttons do
@@ -2517,11 +2221,7 @@ function W.SegmentTabs(ctx, parent, opts)
         tab = allowed[tab] and tab or defaultTab
         if opts.set then opts.set(tab)
         elseif opts.stateKey then
-            if type(M.PersistMenuStateValue) == "function" then
-                M.PersistMenuStateValue(opts.stateKey, tab)
-            else
-                M[opts.stateKey] = tab
-            end
+            M.SetMenuStateValue(opts.stateKey, tab)
         end
         RefreshTabs()
         if opts.afterSet then opts.afterSet(tab) end
@@ -2529,21 +2229,17 @@ function W.SegmentTabs(ctx, parent, opts)
     segment = W.Segment(parent, opts.label, opts.values, opts.width)
     W.MoveWidget(segment, parent, opts.x or 0, opts.y or 0, opts.width, opts.titleJustify or "LEFT")
     M.BindSegment(ctx, segment, CurrentTab, SetTab)
-    M.AddRefresher(ctx, RefreshTabs); RefreshTabs()
+    M.TrackRefresh(ctx, RefreshTabs)
     return segment, RefreshTabs, CurrentTab, SetTab
 end
-
 local function TextInputEscape(self) self:ClearFocus() end
-
 local function TextInputEnter(self)
     if self._msuf2OnCommit then self._msuf2OnCommit(self:GetText() or "") end
     self:ClearFocus()
 end
-
 local function TextInputBlur(self)
     if self._msuf2CommitOnBlur and self._msuf2OnCommit then self._msuf2OnCommit(self:GetText() or "") end
 end
-
 local function TextInputSetOnValueCommitted(self, fn) self._msuf2OnCommit = fn end
 
 --- Text inputs commit on Enter or focus loss; callers attach the actual profile
@@ -2554,7 +2250,6 @@ function W.TextInput(section, label, width)
     local title = T.Font(section, "GameFontHighlightSmall", Tr(label or ""), T.colors.text)
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
-
     local edit = CreateFrame("EditBox", nil, section, "InputBoxTemplate")
     edit._msuf2Title = title
     edit._msuf2ControlKind = "textinput"
@@ -2571,29 +2266,24 @@ function W.TextInput(section, label, width)
     edit:SetScript("OnEditFocusLost", TextInputBlur)
     return edit
 end
-
 local function ColorSetRGB(self, r, g, b)
     self._msuf2R = tonumber(r) or 1
     self._msuf2G = tonumber(g) or 1
     self._msuf2B = tonumber(b) or 1
     self._msuf2Swatch:SetVertexColor(self._msuf2R, self._msuf2G, self._msuf2B, 1)
 end
-
 local function ColorGetRGB(self) return self._msuf2R or 1, self._msuf2G or 1, self._msuf2B or 1 end
 local function ColorSetOnColorChanged(self, fn) self._msuf2OnColorChanged = fn end
-
 local function ColorApply(btn, r, g, b)
     btn:SetRGB(r, g, b)
     if btn._msuf2OnColorChanged then btn._msuf2OnColorChanged(r, g, b) end
 end
-
 local function ColorPickerCommit()
     local picker, btn = ColorPickerFrame, ColorPickerFrame and ColorPickerFrame._msuf2ColorOwner
     if not (picker and btn) then return end
     local r, g, b = picker:GetColorRGB()
     ColorApply(btn, r, g, b)
 end
-
 local function ColorPickerCancel(prev)
     local btn = ColorPickerFrame and ColorPickerFrame._msuf2ColorOwner
     if not btn then return end
@@ -2601,7 +2291,6 @@ local function ColorPickerCancel(prev)
     if type(prev) == "table" then r, g, b = prev.r or r, prev.g or g, prev.b or b end
     ColorApply(btn, r, g, b)
 end
-
 local function ColorButtonOnClick(self)
     if not ColorPickerFrame then return end
     local r, g, b = self:GetRGB()
@@ -2630,7 +2319,6 @@ function W.Color(section, label)
     SetSearchText(title, label)
     title:SetPoint("TOPLEFT", x, y)
     title:SetWidth(230)
-
     local btn = CreateFrame("Button", nil, section)
     btn._msuf2Title = title
     btn._msuf2ControlKind = "color"

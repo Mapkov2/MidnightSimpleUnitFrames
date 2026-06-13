@@ -2,25 +2,20 @@ local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
-
 MSUF.L = MSUF.L or (_G.MSUF_L) or {}
 local L = MSUF.L
-if not getmetatable(L) then
-    setmetatable(L, { __index = function(_, k) return k end })
-end
+if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
 local isEn = (MSUF and MSUF.LOCALE) == "enUS"
 local function TR(v)
     if type(v) ~= "string" then return v end
     if isEn then return v end
     return L[v] or v
 end
-
 local floor, max, min = math.floor, math.max, math.min
 local format = string.format
 local PreviewAbbreviateNumbers = _G.AbbreviateNumbers or _G.AbbreviateLargeNumbers or _G.ShortenNumber
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
-
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
 _G.MSUF_UFPreview = Preview
@@ -32,18 +27,10 @@ local Model = Preview.Model or {}
 Preview.Model = Model
 local PreviewHelpers = M.PreviewHelpers or {}
 local UnitPage = M.UnitPage or {}
-
 local UNIT_KEYS = { "player", "target", "targettarget", "focustarget", "focus", "boss", "pet" }
-local UNIT_SET = { player = true, target = true, targettarget = true, focustarget = true, focus = true, boss = true, pet = true }
-local UNIT_LABELS = {
-    player = "Player",
-    target = "Target",
-    targettarget = "Target of Target",
-    focustarget = "Focus Target",
-    focus = "Focus",
-    boss = "Boss Frames",
-    pet = "Pet",
-}
+local UNIT_SET = M.KeySetFromWords "player target targettarget focustarget focus boss pet"
+local CONTROL_CHILD_KEYS, CONTROL_NAME_SUFFIXES = M.WordList "minusButton plusButton Button _msufPeelButton", M.WordList "Button Text Low High"
+local UNIT_LABELS = { player = "Player", target = "Target", targettarget = "Target of Target", focustarget = "Focus Target", focus = "Focus", boss = "Boss Frames", pet = "Pet" }
 local UNIT_DATA = {
     -- Preview data is intentionally stylized and stable. Do not replace this with live Unit*
     -- API calls; preview should render identically while the player is offline, in combat, or
@@ -56,18 +43,15 @@ local UNIT_DATA = {
     boss = { name = "Boss Preview", class = "DEATHKNIGHT", hp = 0.55, power = 0.35, powerToken = "MANA", level = "??", elite = true, reactionKind = "enemy", npcKind = "npcBoss", portraitTexture = "Interface\\ICONS\\Achievement_Boss_LichKing" },
     pet = { name = "Companion", class = "HUNTER", hp = 0.79, power = 0.44, powerToken = "FOCUS", level = "80", elite = false, isPet = true, reactionKind = "friendly", portraitTexture = "Interface\\ICONS\\Ability_Hunter_BeastCall" },
 }
-
 local function PreviewRaidGroupNameAllowed(key)
     return key == "player" or key == "target" or key == "targettarget" or key == "focustarget" or key == "focus"
 end
-
 local function PreviewRaidGroupNameText(conf)
     local style = conf and conf.raidGroupNameStyle
     if style == "BRACKET" then return "[2]" end
     if style == "NONE" then return "2" end
     return "(2)"
 end
-
 local function NormalizePreviewRaidGroupNameAnchor(anchor)
     if anchor == "NAMELEFT" or anchor == "NAMERIGHT"
         or anchor == "TOPLEFT" or anchor == "TOPRIGHT"
@@ -78,7 +62,6 @@ local function NormalizePreviewRaidGroupNameAnchor(anchor)
     end
     return "NAMERIGHT"
 end
-
 local function KeyLabelValues(values)
     local out = {}
     for i = 1, #(values or {}) do
@@ -108,7 +91,6 @@ local function PortraitClassItems()
 end
 local PORTRAIT_SHAPE_ITEMS = KeyLabelValues(UnitPage.PORTRAIT_SHAPES)
 local PORTRAIT_BORDER_ITEMS = KeyLabelValues(UnitPage.PORTRAIT_BORDERS)
-
 local PORTRAIT_STYLE_DEFAULTS = {
     portraitRender = "2D",
     portraitClassStyle = "BLIZZARD",
@@ -129,7 +111,6 @@ local PORTRAIT_STYLE_DEFAULTS = {
     portraitBgColorA = 0.85,
     portraitFillBorder = false,
 }
-
 local function CanonKey(key)
     if key == "tot" then return "targettarget" end
     if key == "focus_target" or key == "focustargettarget" then return "focustarget" end
@@ -137,7 +118,6 @@ local function CanonKey(key)
     if UNIT_SET[key] then return key end
     return "player"
 end
-
 local function EnsureDB()
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then
@@ -151,20 +131,17 @@ local function EnsureDB()
         _G.MSUF_DB[UNIT_KEYS[i]] = _G.MSUF_DB[UNIT_KEYS[i]] or {}
     end
 end
-
 local function CurrentPanelKey(panel)
     local key = panel and panel._msufGetCurrentKey and panel._msufGetCurrentKey()
     if key == nil then key = panel and panel._msufLastApplyKey end
     return CanonKey(key)
 end
-
 local function UnitDB(key)
     EnsureDB()
     key = CanonKey(key)
     _G.MSUF_DB[key] = _G.MSUF_DB[key] or {}
     return _G.MSUF_DB[key], _G.MSUF_DB.general, key
 end
-
 local function SeedTextFromGeneral(db)
     if not db then return end
     if type(_G.MSUF_Bars_SeedTextFromGeneral) == "function" then
@@ -197,10 +174,8 @@ local function SeedTextFromGeneral(db)
     if db.raidGroupNameStyle == nil then db.raidGroupNameStyle = "PAREN" end
     db.hpPowerTextOverride = nil
 end
-
 local NormalizeHpMode = M.NormalizeHpMode
 local NormalizePowerMode = M.NormalizePowerMode
-
 local function TextScopeGet(key, field, defaultValue)
     local u, g = UnitDB(key)
     SeedTextFromGeneral(u)
@@ -208,14 +183,12 @@ local function TextScopeGet(key, field, defaultValue)
     if g[field] ~= nil then return g[field] end
     return defaultValue
 end
-
 local function TextScopeHasSlots(key, leftKey, centerKey, rightKey)
     local u, g = UnitDB(key)
     SeedTextFromGeneral(u)
     return (u and (u[leftKey] ~= nil or u[centerKey] ~= nil or u[rightKey] ~= nil))
         or (g and (g[leftKey] ~= nil or g[centerKey] ~= nil or g[rightKey] ~= nil))
 end
-
 local function TextScopeSlotGet(key, field, fallback, normalizer)
     local u, g = UnitDB(key)
     SeedTextFromGeneral(u)
@@ -225,7 +198,6 @@ local function TextScopeSlotGet(key, field, fallback, normalizer)
     if normalizer then value = normalizer(value) end
     return value or fallback or "NONE"
 end
-
 local TOTINLINE_SEP_VALID = {
     [" "] = true, ["."] = true, ["-"] = true, ["/"] = true, ["\\"] = true, ["|"] = true,
     ["<<<"] = true, [">>>"] = true, ["||"] = true, ["---"] = true,
@@ -243,7 +215,6 @@ local function ToTInlineSeparator(v, custom)
     if type(v) ~= "string" or v == "" or not TOTINLINE_SEP_VALID[v] then return "|" end
     return v
 end
-
 local function ShortenPreviewName(name, key, layoutConf)
     name = tostring(name or "")
     key = CanonKey(key)
@@ -253,11 +224,8 @@ local function ShortenPreviewName(name, key, layoutConf)
     local g = db.general or {}
     local u = db[key] or {}
     local shorten = db.shortenNames and true or false
-    if u.fontOverride == true and u.shortenNames ~= nil then
-        shorten = u.shortenNames and true or false
-    end
+    if u.fontOverride == true and u.shortenNames ~= nil then shorten = u.shortenNames and true or false end
     if not shorten then return name end
-
     local maxChars
     if u.fontOverride == true and tonumber(u.shortenNameMaxChars) then
         maxChars = tonumber(u.shortenNameMaxChars)
@@ -266,7 +234,6 @@ local function ShortenPreviewName(name, key, layoutConf)
     end
     maxChars = floor(max(4, min(40, maxChars)) + 0.5)
     if #name <= maxChars then return name end
-
     local mode
     if u.fontOverride == true and u.shortenNameClipSide ~= nil then
         mode = u.shortenNameClipSide
@@ -283,7 +250,6 @@ local function ShortenPreviewName(name, key, layoutConf)
     end
     local anchorConf = layoutConf or u
     if (anchorConf.nameTextAnchor or "LEFT") ~= "LEFT" then showDots = false end
-
     if mode == "RIGHT" then
         local text = name:sub(1, maxChars)
         return showDots and (text .. "...") or text
@@ -291,33 +257,23 @@ local function ShortenPreviewName(name, key, layoutConf)
     local text = name:sub(#name - maxChars + 1)
     return showDots and ("..." .. text) or text
 end
-
 local function TextScopeSet(key, field, value)
     local u = UnitDB(key)
     SeedTextFromGeneral(u)
     u[field] = value
     u.hpPowerTextOverride = nil
 end
-
 local function ForceTextUnit(key, reason)
     key = CanonKey(key)
-    if type(_G.MSUF_UFCore_RequestLayoutForUnit) == "function" then
-        _G.MSUF_UFCore_RequestLayoutForUnit(key, reason or "UNIT_TEXT_OPTIONS", key == "target" or key == "targettarget" or key == "focustarget" or key == "focus")
-    end
-    if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then
-        _G.MSUF_ForceTextLayoutForUnitKey(key)
-    end
+    if type(_G.MSUF_UFCore_RequestLayoutForUnit) == "function" then _G.MSUF_UFCore_RequestLayoutForUnit(key, reason or "UNIT_TEXT_OPTIONS", key == "target" or key == "targettarget" or key == "focustarget" or key == "focus") end
+    if type(_G.MSUF_ForceTextLayoutForUnitKey) == "function" then _G.MSUF_ForceTextLayoutForUnitKey(key) end
 end
-
 local function ApplyPanelUnit(panel, key, reason)
     key = CanonKey(key or CurrentPanelKey(panel))
-    if panel and panel._msufAPI and type(panel._msufAPI.ApplySettingsForKey) == "function" then
-        panel._msufAPI.ApplySettingsForKey(key)
-    end
+    if panel and panel._msufAPI and type(panel._msufAPI.ApplySettingsForKey) == "function" then panel._msufAPI.ApplySettingsForKey(key) end
     if type(_G.MSUF_SyncUnitPositionPopup) == "function" then _G.MSUF_SyncUnitPositionPopup(key, _G.MSUF_DB and _G.MSUF_DB[key]) end
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "UNIT_OPTIONS") end
 end
-
 local function RefreshAllControls(list)
     if not list then return end
     for i = 1, #list do
@@ -325,7 +281,6 @@ local function RefreshAllControls(list)
         if w and type(w.Refresh) == "function" then w:Refresh() end
     end
 end
-
 local function Label(parent, text, anchor, x, y, width)
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     local rel = (anchor and anchor ~= parent) and "BOTTOMLEFT" or "TOPLEFT"
@@ -334,7 +289,6 @@ local function Label(parent, text, anchor, x, y, width)
     if width then fs:SetWidth(width); fs:SetJustifyH("LEFT") end
     return fs
 end
-
 local function PlaceTopLeft(widget, anchor, x, y)
     if not widget or not widget.ClearAllPoints or not widget.SetPoint then return end
     anchor = anchor or (widget.GetParent and widget:GetParent())
@@ -342,11 +296,9 @@ local function PlaceTopLeft(widget, anchor, x, y)
     widget:ClearAllPoints()
     widget:SetPoint("TOPLEFT", anchor, "TOPLEFT", x or 0, y or 0)
 end
-
 local function SetOptionWidth(widget, width)
     if widget and width and widget.SetWidth then widget:SetWidth(width) end
 end
-
 local function AddOptionDivider(parent, anchor, y, width)
     if not parent or not anchor then return nil end
     local line = parent:CreateTexture(nil, "ARTWORK")
@@ -356,7 +308,6 @@ local function AddOptionDivider(parent, anchor, y, width)
     line:SetWidth(width or 260)
     return line
 end
-
 local function SetWidgetEnabled(w, enabled)
     if not w then return end
     enabled = enabled and true or false
@@ -369,7 +320,6 @@ local function SetWidgetEnabled(w, enabled)
     end
     if w.SetAlpha then w:SetAlpha(enabled and 1 or 0.45) end
     if w.EnableMouse then w:EnableMouse(enabled) end
-
     local label = w.Text or w.text
     if not label and w.GetName then
         local n = w:GetName()
@@ -378,7 +328,6 @@ local function SetWidgetEnabled(w, enabled)
     if label and label.SetTextColor then
         if enabled then label:SetTextColor(1, 1, 1, 1) else label:SetTextColor(0.55, 0.55, 0.55, 1) end
     end
-
     if w.editBox then
         if w.editBox.EnableMouse then w.editBox:EnableMouse(enabled) end
         if enabled then
@@ -389,7 +338,7 @@ local function SetWidgetEnabled(w, enabled)
             if w.editBox.SetTextColor then w.editBox:SetTextColor(0.55, 0.55, 0.55, 1) end
         end
     end
-    for _, childKey in ipairs({ "minusButton", "plusButton", "Button", "_msufPeelButton" }) do
+    for _, childKey in ipairs(CONTROL_CHILD_KEYS) do
         local child = w[childKey]
         if child then
             if child.EnableMouse then child:EnableMouse(enabled) end
@@ -405,7 +354,7 @@ local function SetWidgetEnabled(w, enabled)
     if w.GetName then
         local n = w:GetName()
         if n then
-            for _, suffix in ipairs({ "Button", "Text", "Low", "High" }) do
+            for _, suffix in ipairs(CONTROL_NAME_SUFFIXES) do
                 local obj = _G[n .. suffix]
                 if obj then
                     if obj.EnableMouse then obj:EnableMouse(enabled) end
@@ -425,7 +374,6 @@ local function SetWidgetEnabled(w, enabled)
     if type(w.Refresh) == "function" then w:Refresh() end
     if type(w._msufToggleUpdate) == "function" then w._msufToggleUpdate() end
 end
-
 local function AddPlainCheck(parent, name, label, x, y)
     local cb = CreateFrame("CheckButton", name, parent, "UICheckButtonTemplate")
     cb:SetPoint("TOPLEFT", parent, "TOPLEFT", x or 12, y or -8)
@@ -434,9 +382,7 @@ local function AddPlainCheck(parent, name, label, x, y)
     if _G.MSUF_ClampCheckboxText then _G.MSUF_ClampCheckboxText(cb, 180) end
     return cb
 end
-
 local NormalizePortraitClassStyle = M.NormalizePortraitClassStyle
-
 local function EnsureUnitPortraitStyle(key)
     local u = UnitDB(key)
     if not u then return nil end
@@ -448,13 +394,11 @@ local function EnsureUnitPortraitStyle(key)
     u.portraitClassStyle = NormalizePortraitClassStyle(u.portraitClassStyle)
     return u
 end
-
 local function PortraitStyleGet(key, field, defaultValue)
     local u = EnsureUnitPortraitStyle(key)
     if u and u[field] ~= nil then return u[field] end
     return defaultValue
 end
-
 local function PortraitStyleSet(key, field, value)
     local u = EnsureUnitPortraitStyle(key)
     if not u then return end
@@ -465,18 +409,15 @@ local function PortraitStyleSet(key, field, value)
     end
     u[field] = value
 end
-
 local function ApplyPortrait(panel, key, reason)
     key = CanonKey(key or CurrentPanelKey(panel))
     ApplyPanelUnit(panel, key, reason or "UNIT_PORTRAIT_OPTIONS")
 end
-
 local function NormalizeStatusPreviewId(id)
     id = tostring(id or "")
     if id == "eliteicon" then return "elite" end
     return id
 end
-
 local function ClassColor(class)
     if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
         local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(class)
@@ -486,13 +427,10 @@ local function ClassColor(class)
     if c then return c.r, c.g, c.b end
     return 0.12, 0.62, 0.95
 end
-
 local Clamp01 = M.Clamp01
-
 local function SettingsCache()
     return type(_G.MSUF_UFCore_GetSettingsCache) == "function" and _G.MSUF_UFCore_GetSettingsCache() or nil
 end
-
 local function PreviewNPCKind(key, data, cache, forText)
     data = data or {}
     local typeColorEnabled
@@ -515,7 +453,6 @@ local function PreviewNPCKind(key, data, cache, forText)
     end
     return data.reactionKind or "enemy"
 end
-
 local function NPCColor(kind)
     if type(_G.MSUF_UFCore_GetNPCReactionColorFast) == "function" then
         local r, g, b = _G.MSUF_UFCore_GetNPCReactionColorFast(kind)
@@ -536,7 +473,6 @@ local function NPCColor(kind)
     if kind == "npcRegular" then return 0.70, 0.56, 0.33 end
     return 0.85, 0.10, 0.10
 end
-
 local function GradientPreviewColor(pct)
     pct = Clamp01(pct, 0.75)
     if pct < 0.5 then
@@ -546,7 +482,6 @@ local function GradientPreviewColor(pct)
     local t = (pct - 0.5) * 2
     return 1 - t, 1, 0
 end
-
 local function HealthColor(key, data)
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
     local cache = SettingsCache()
@@ -558,9 +493,7 @@ local function HealthColor(key, data)
     end
     data = data or UNIT_DATA.player
     if mode == "class" then
-        if data.isPet and cache and cache.petFrameColorEnabled then
-            return cache.petFrameColorR or 0, cache.petFrameColorG or 0.8, cache.petFrameColorB or 0
-        end
+        if data.isPet and cache and cache.petFrameColorEnabled then return cache.petFrameColorR or 0, cache.petFrameColorG or 0.8, cache.petFrameColorB or 0 end
         if data.isPlayer then return ClassColor(data.class) end
         return NPCColor(PreviewNPCKind(key, data, cache))
     end
@@ -574,7 +507,6 @@ local function HealthColor(key, data)
            (cache and cache.darkBarG) or g.darkBarG or g.darkBarGray or 0.07,
            (cache and cache.darkBarB) or g.darkBarB or g.darkBarGray or 0.07
 end
-
 local function DarkMatchHPColor(r, g, b, cache)
     local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
     if gen and gen.darkMode and not gen.darkBgCustomColor then
@@ -583,7 +515,6 @@ local function DarkMatchHPColor(r, g, b, cache)
     end
     return Clamp01(r, 0), Clamp01(g, 0), Clamp01(b, 0)
 end
-
 local function HealthBackgroundColor(hr, hg, hb, data)
     local cache = SettingsCache()
     local gen = (cache and cache.generalRef) or (_G.MSUF_DB and _G.MSUF_DB.general)
@@ -602,7 +533,6 @@ local function HealthBackgroundColor(hr, hg, hb, data)
     a = a * Clamp01(cache and cache.barBackgroundAlpha, 0.9)
     return r, g, b, a
 end
-
 local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb)
     local cache = SettingsCache()
     local r, g, b, a
@@ -612,13 +542,10 @@ local function PowerBackgroundColor(pr, pg, pb, hr, hg, hb)
         r, g, b, a = _G.MSUF_GetPowerBarBackgroundTintRGBA()
     end
     r, g, b, a = Clamp01(r, pr * 0.16), Clamp01(g, pg * 0.16), Clamp01(b, pb * 0.16), Clamp01(a, 0.9)
-    if cache and cache.powerBarBgMatchHPColor then
-        r, g, b = DarkMatchHPColor(hr, hg, hb, cache)
-    end
+    if cache and cache.powerBarBgMatchHPColor then r, g, b = DarkMatchHPColor(hr, hg, hb, cache) end
     a = a * Clamp01(cache and cache.barBackgroundAlpha, 0.9)
     return r, g, b, a
 end
-
 local function PowerColor(token)
     if type(_G.MSUF_GetResolvedPowerColor) == "function" then
         local r, g, b = _G.MSUF_GetResolvedPowerColor(0, token or "MANA")
@@ -629,12 +556,9 @@ local function PowerColor(token)
     if token == "FOCUS" then return 0.95, 0.45, 0.10 end
     return 0.10, 0.35, 0.95
 end
-
 local function ClassPortraitVisual(class, style)
     local PM = MSUF and MSUF.PortraitMedia
-    if PM and PM.ResolveClassPortrait then
-        return PM.ResolveClassPortrait(class, NormalizePortraitClassStyle(style))
-    end
+    if PM and PM.ResolveClassPortrait then return PM.ResolveClassPortrait(class, NormalizePortraitClassStyle(style)) end
     local coords = class and _G.CLASS_ICON_TCOORDS and _G.CLASS_ICON_TCOORDS[class]
     if coords then
         return {
@@ -647,12 +571,10 @@ local function ClassPortraitVisual(class, style)
     end
     return { texture = "Interface\\ICONS\\INV_Misc_QuestionMark", left = 0, right = 1, top = 0, bottom = 1 }
 end
-
 local function UnitPreviewPortraitTexture(key, data)
     data = data or UNIT_DATA[CanonKey(key)] or UNIT_DATA.player
     return data.portraitTexture or "Interface\\ICONS\\INV_Misc_QuestionMark"
 end
-
 local function FontColor()
     local fn = (MSUF and MSUF.MSUF_GetConfiguredFontColor) or _G.MSUF_GetConfiguredFontColor
     if type(fn) == "function" then
@@ -662,14 +584,10 @@ local function FontColor()
     local g = _G.MSUF_DB and _G.MSUF_DB.general or {}
     return g.fontColorR or 1, g.fontColorG or 1, g.fontColorB or 1
 end
-
 local function NormalizeToTInlineColorMode(value)
-    if value == "TOT_NAME" or value == "TARGET_NAME" or value == "NPC" or value == "DEFAULT" then
-        return value
-    end
+    if value == "TOT_NAME" or value == "TARGET_NAME" or value == "NPC" or value == "DEFAULT" then return value end
     return "AUTO"
 end
-
 local function PreviewNameColorFlags(key)
     local db = _G.MSUF_DB or {}
     local gen = db.general or {}
@@ -684,7 +602,6 @@ local function PreviewNameColorFlags(key)
     end
     return wantClass == true, wantNpc == true, wantNpcClass == true
 end
-
 local function PreviewNameColor(key, data, fallbackR, fallbackG, fallbackB)
     data = data or UNIT_DATA[CanonKey(key)] or UNIT_DATA.player
     local wantClass, wantNpc, wantNpcClass = PreviewNameColorFlags(key)
@@ -692,13 +609,10 @@ local function PreviewNameColor(key, data, fallbackR, fallbackG, fallbackB)
         if wantClass then return ClassColor(data.class) end
     else
         if wantNpcClass and data.class then return ClassColor(data.class) end
-        if wantNpc or wantNpcClass then
-            return NPCColor(PreviewNPCKind(key, data, SettingsCache(), true))
-        end
+        if wantNpc or wantNpcClass then return NPCColor(PreviewNPCKind(key, data, SettingsCache(), true)) end
     end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
-
 local function PreviewToTInlineColor(mode, totData, targetR, targetG, targetB, fallbackR, fallbackG, fallbackB)
     mode = NormalizeToTInlineColorMode(mode)
     if mode == "DEFAULT" then
@@ -709,12 +623,9 @@ local function PreviewToTInlineColor(mode, totData, targetR, targetG, targetB, f
         return PreviewNameColor("targettarget", totData, fallbackR, fallbackG, fallbackB)
     elseif mode == "NPC" then
         local _, wantNpc = PreviewNameColorFlags("targettarget")
-        if wantNpc and totData and not totData.isPlayer then
-            return NPCColor(PreviewNPCKind("targettarget", totData, SettingsCache(), true))
-        end
+        if wantNpc and totData and not totData.isPlayer then return NPCColor(PreviewNPCKind("targettarget", totData, SettingsCache(), true)) end
         return fallbackR, fallbackG, fallbackB
     end
-
     if totData and totData.isPlayer then
         local wantClass = PreviewNameColorFlags("target")
         if wantClass then return ClassColor(totData.class) end
@@ -722,71 +633,48 @@ local function PreviewToTInlineColor(mode, totData, targetR, targetG, targetB, f
     end
     local _, wantNpc, wantNpcClass = PreviewNameColorFlags("target")
     if wantNpcClass and totData and totData.class then return ClassColor(totData.class) end
-    if (wantNpc or wantNpcClass) and totData then
-        return NPCColor(PreviewNPCKind("target", totData, SettingsCache(), true))
-    end
+    if (wantNpc or wantNpcClass) and totData then return NPCColor(PreviewNPCKind("target", totData, SettingsCache(), true)) end
     return NPCColor(totData and totData.reactionKind or "enemy")
 end
-
 local function SetTex(region, tex)
     if region and region.SetTexture then region:SetTexture(tex or TEX_W8) end
 end
-
 local function NormalizePreviewAnchorMode(value, fallback)
     local mode = tonumber(value) or fallback or 3
     if mode < 1 or mode > 5 then mode = fallback or 3 end
     return mode
 end
-
 local function UnitPreviewBarOverrideEnabled(conf)
     return conf and (conf.hlOverride == true or conf.hpPowerTextOverride == true)
 end
-
 local function PreviewHealPredictionEnabled(conf, g)
-    if g == nil then
-        g, conf = conf, nil
-    end
-    if UnitPreviewBarOverrideEnabled(conf) and conf.healPredEnabled ~= nil then
-        return conf.healPredEnabled == true
-    end
+    if g == nil then g, conf = conf, nil end
+    if UnitPreviewBarOverrideEnabled(conf) and conf.healPredEnabled ~= nil then return conf.healPredEnabled == true end
     if g then
         if g.showSelfHealPrediction ~= nil then return g.showSelfHealPrediction == true end
         if g.enableHealPrediction ~= nil then return g.enableHealPrediction ~= false end
     end
     return false
 end
-
 local function PreviewResolveHealPredAnchorMode(conf, g)
-    if UnitPreviewBarOverrideEnabled(conf) and conf.healPredAnchorMode ~= nil then
-        return NormalizePreviewAnchorMode(conf.healPredAnchorMode, 3)
-    end
+    if UnitPreviewBarOverrideEnabled(conf) and conf.healPredAnchorMode ~= nil then return NormalizePreviewAnchorMode(conf.healPredAnchorMode, 3) end
     return NormalizePreviewAnchorMode(g and g.healPredAnchorMode, 3)
 end
-
 local function PreviewResolveAbsorbAnchorMode(conf, g)
-    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbAnchorMode ~= nil then
-        return NormalizePreviewAnchorMode(conf.absorbAnchorMode, 2)
-    end
+    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbAnchorMode ~= nil then return NormalizePreviewAnchorMode(conf.absorbAnchorMode, 2) end
     return NormalizePreviewAnchorMode(g and g.absorbAnchorMode, 2)
 end
-
 local function PreviewAbsorbBarEnabled(conf, g, key)
-    if _G.MSUF_ShouldShowAbsorbTextureTest and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key) then
-        return true
-    end
+    if _G.MSUF_ShouldShowAbsorbTextureTest and _G.MSUF_ShouldShowAbsorbTextureTest(nil, key) then return true end
     local mode
-    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbTextMode ~= nil then
-        mode = tonumber(conf.absorbTextMode)
-    end
+    if UnitPreviewBarOverrideEnabled(conf) and conf.absorbTextMode ~= nil then mode = tonumber(conf.absorbTextMode) end
     if mode == nil and g then mode = tonumber(g.absorbTextMode) end
     if mode then return mode == 2 or mode == 3 end
     return not (g and g.enableAbsorbBar == false)
 end
-
 local function PreviewOverlayWidth(areaW, frac)
     return max(1, floor((tonumber(areaW) or 1) * (tonumber(frac) or 0.1) + 0.5))
 end
-
 local function LayoutUnitPreviewOverlay(tex, hpBG, hpFill, mode, frac, hpReverse, followAnchor, areaW)
     if not (tex and hpBG and hpFill) then return end
     mode = NormalizePreviewAnchorMode(mode, 3)
@@ -810,52 +698,44 @@ local function LayoutUnitPreviewOverlay(tex, hpBG, hpFill, mode, frac, hpReverse
     end
     tex:Show()
 end
-
 local function MakeFS(parent, layer, size)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY")
     fs:SetFont(FONT, size or 12, "OUTLINE")
     fs:SetShadowOffset(1, -1)
     return fs
 end
-
 local function ReadPowerBarEnabled(conf, key)
     if key == "pet" or key == "targettarget" or key == "focustarget" then return false end
     if conf.showPowerBar ~= nil then return conf.showPowerBar ~= false end
     if key == "boss" then return true end
     return true
 end
-
 local function CanDetachPowerBarKey(key)
     key = CanonKey(key)
     return key == "player" or key == "target" or key == "focus"
 end
-
 local function ReadPowerBarHeight(conf)
     local h = tonumber(conf.powerBarHeight) or 3
     if h < 1 then h = 1 elseif h > 20 then h = 20 end
     return h
 end
-
 local function ResolveNameAnchor(anchor, x)
     x = tonumber(x) or 0
     if anchor == "RIGHT" then return "TOPRIGHT", "TOPRIGHT", -x, "RIGHT" end
     if anchor == "CENTER" then return "TOP", "TOP", x, "CENTER" end
     return "TOPLEFT", "TOPLEFT", x, "LEFT"
 end
-
 local function NumText(v)
     if PreviewAbbreviateNumbers then return PreviewAbbreviateNumbers(v) end
     if v >= 1000000 then return format("%.1fm", v / 1000000) end
     if v >= 1000 then return format("%.1fk", v / 1000) end
     return tostring(v)
 end
-
 local function JoinSep(sep)
     sep = tostring(sep or "")
     if sep == "" then return " " end
     return " " .. sep .. " "
 end
-
 local function FormatMode(mode, cur, maxVal, pct, sep, isPower)
     if isPower then mode = NormalizePowerMode(mode) else mode = NormalizeHpMode(mode) end
     if mode == "NONE" then return "" end
@@ -878,97 +758,35 @@ local function FormatMode(mode, cur, maxVal, pct, sep, isPower)
     if mode == "PERCENTCURMAX" then return p .. s .. c .. s .. m end
     return c .. s .. p
 end
-
 local UnitPreviewText = {}
-
 function UnitPreviewText.PlaceHandleAroundRegions(handle, parent, regions, pad)
     return PreviewHelpers.PlaceHandleAroundRegions(handle, parent, regions, pad)
 end
-
-
-Model.UNIT_KEYS = UNIT_KEYS
-Model.UNIT_SET = UNIT_SET
-Model.UNIT_LABELS = UNIT_LABELS
-Model.UNIT_DATA = UNIT_DATA
-Model.PreviewRaidGroupNameAllowed = PreviewRaidGroupNameAllowed
-Model.PreviewRaidGroupNameText = PreviewRaidGroupNameText
-Model.NormalizePreviewRaidGroupNameAnchor = NormalizePreviewRaidGroupNameAnchor
-Model.TEXT_ANCHORS = TEXT_ANCHORS
-Model.HP_MODES = HP_MODES
-Model.POWER_MODES = POWER_MODES
-Model.SEP_ITEMS = SEP_ITEMS
-Model.PORTRAIT_MODE_ITEMS = PORTRAIT_MODE_ITEMS
-Model.PORTRAIT_RENDER_ITEMS = PORTRAIT_RENDER_ITEMS
-Model.PortraitClassItems = PortraitClassItems
-Model.PORTRAIT_SHAPE_ITEMS = PORTRAIT_SHAPE_ITEMS
-Model.PORTRAIT_BORDER_ITEMS = PORTRAIT_BORDER_ITEMS
-Model.PORTRAIT_STYLE_DEFAULTS = PORTRAIT_STYLE_DEFAULTS
-Model.CanonKey = CanonKey
-Model.EnsureDB = EnsureDB
-Model.CurrentPanelKey = CurrentPanelKey
-Model.UnitDB = UnitDB
-Model.SeedTextFromGeneral = SeedTextFromGeneral
-Model.NormalizeHpMode = NormalizeHpMode
-Model.NormalizePowerMode = NormalizePowerMode
-Model.TextScopeGet = TextScopeGet
-Model.TextScopeHasSlots = TextScopeHasSlots
-Model.TextScopeSlotGet = TextScopeSlotGet
-Model.TOTINLINE_SEP_VALID = TOTINLINE_SEP_VALID
-Model.TOTINLINE_CUSTOM_SEPARATOR = TOTINLINE_CUSTOM_SEPARATOR
-Model.TOTINLINE_CUSTOM_SEPARATOR_MAX = TOTINLINE_CUSTOM_SEPARATOR_MAX
-Model.TruncateUtf8Chars = TruncateUtf8Chars
-Model.CleanToTInlineCustomSeparator = CleanToTInlineCustomSeparator
-Model.ToTInlineSeparator = ToTInlineSeparator
-Model.ShortenPreviewName = ShortenPreviewName
-Model.TextScopeSet = TextScopeSet
-Model.ForceTextUnit = ForceTextUnit
-Model.ApplyPanelUnit = ApplyPanelUnit
-Model.RefreshAllControls = RefreshAllControls
-Model.Label = Label
-Model.PlaceTopLeft = PlaceTopLeft
-Model.SetOptionWidth = SetOptionWidth
-Model.AddOptionDivider = AddOptionDivider
-Model.SetWidgetEnabled = SetWidgetEnabled
-Model.AddPlainCheck = AddPlainCheck
-Model.NormalizePortraitClassStyle = NormalizePortraitClassStyle
-Model.EnsureUnitPortraitStyle = EnsureUnitPortraitStyle
-Model.PortraitStyleGet = PortraitStyleGet
-Model.PortraitStyleSet = PortraitStyleSet
-Model.ApplyPortrait = ApplyPortrait
-Model.NormalizeStatusPreviewId = NormalizeStatusPreviewId
-Model.ClassColor = ClassColor
-Model.Clamp01 = Clamp01
-Model.SettingsCache = SettingsCache
-Model.PreviewNPCKind = PreviewNPCKind
-Model.NPCColor = NPCColor
-Model.GradientPreviewColor = GradientPreviewColor
-Model.HealthColor = HealthColor
-Model.DarkMatchHPColor = DarkMatchHPColor
-Model.HealthBackgroundColor = HealthBackgroundColor
-Model.PowerBackgroundColor = PowerBackgroundColor
-Model.PowerColor = PowerColor
-Model.ClassPortraitVisual = ClassPortraitVisual
-Model.UnitPreviewPortraitTexture = UnitPreviewPortraitTexture
-Model.FontColor = FontColor
-Model.NormalizeToTInlineColorMode = NormalizeToTInlineColorMode
-Model.PreviewNameColorFlags = PreviewNameColorFlags
-Model.PreviewNameColor = PreviewNameColor
-Model.PreviewToTInlineColor = PreviewToTInlineColor
-Model.SetTex = SetTex
-Model.NormalizePreviewAnchorMode = NormalizePreviewAnchorMode
-Model.UnitPreviewBarOverrideEnabled = UnitPreviewBarOverrideEnabled
-Model.PreviewHealPredictionEnabled = PreviewHealPredictionEnabled
-Model.PreviewResolveHealPredAnchorMode = PreviewResolveHealPredAnchorMode
-Model.PreviewResolveAbsorbAnchorMode = PreviewResolveAbsorbAnchorMode
-Model.PreviewAbsorbBarEnabled = PreviewAbsorbBarEnabled
-Model.PreviewOverlayWidth = PreviewOverlayWidth
-Model.LayoutUnitPreviewOverlay = LayoutUnitPreviewOverlay
-Model.MakeFS = MakeFS
-Model.ReadPowerBarEnabled = ReadPowerBarEnabled
-Model.CanDetachPowerBarKey = CanDetachPowerBarKey
-Model.ReadPowerBarHeight = ReadPowerBarHeight
-Model.ResolveNameAnchor = ResolveNameAnchor
-Model.NumText = NumText
-Model.JoinSep = JoinSep
-Model.FormatMode = FormatMode
-Model.UnitPreviewText = UnitPreviewText
+M.AssignNamedValues(Model, [[
+    UNIT_KEYS UNIT_SET UNIT_LABELS UNIT_DATA PreviewRaidGroupNameAllowed PreviewRaidGroupNameText NormalizePreviewRaidGroupNameAnchor
+    TEXT_ANCHORS HP_MODES POWER_MODES SEP_ITEMS PORTRAIT_MODE_ITEMS PORTRAIT_RENDER_ITEMS PortraitClassItems
+    PORTRAIT_SHAPE_ITEMS PORTRAIT_BORDER_ITEMS PORTRAIT_STYLE_DEFAULTS CanonKey EnsureDB CurrentPanelKey UnitDB
+    SeedTextFromGeneral NormalizeHpMode NormalizePowerMode TextScopeGet TextScopeHasSlots TextScopeSlotGet
+    TOTINLINE_SEP_VALID TOTINLINE_CUSTOM_SEPARATOR TOTINLINE_CUSTOM_SEPARATOR_MAX TruncateUtf8Chars CleanToTInlineCustomSeparator
+    ToTInlineSeparator ShortenPreviewName TextScopeSet ForceTextUnit ApplyPanelUnit RefreshAllControls Label PlaceTopLeft
+    SetOptionWidth AddOptionDivider SetWidgetEnabled AddPlainCheck NormalizePortraitClassStyle EnsureUnitPortraitStyle
+    PortraitStyleGet PortraitStyleSet ApplyPortrait NormalizeStatusPreviewId ClassColor Clamp01 SettingsCache PreviewNPCKind
+    NPCColor GradientPreviewColor HealthColor DarkMatchHPColor HealthBackgroundColor PowerBackgroundColor PowerColor
+    ClassPortraitVisual UnitPreviewPortraitTexture FontColor NormalizeToTInlineColorMode PreviewNameColorFlags PreviewNameColor
+    PreviewToTInlineColor SetTex NormalizePreviewAnchorMode UnitPreviewBarOverrideEnabled PreviewHealPredictionEnabled
+    PreviewResolveHealPredAnchorMode PreviewResolveAbsorbAnchorMode PreviewAbsorbBarEnabled PreviewOverlayWidth LayoutUnitPreviewOverlay
+    MakeFS ReadPowerBarEnabled CanDetachPowerBarKey ReadPowerBarHeight ResolveNameAnchor NumText JoinSep FormatMode UnitPreviewText
+]],
+    UNIT_KEYS, UNIT_SET, UNIT_LABELS, UNIT_DATA, PreviewRaidGroupNameAllowed, PreviewRaidGroupNameText, NormalizePreviewRaidGroupNameAnchor,
+    TEXT_ANCHORS, HP_MODES, POWER_MODES, SEP_ITEMS, PORTRAIT_MODE_ITEMS, PORTRAIT_RENDER_ITEMS, PortraitClassItems,
+    PORTRAIT_SHAPE_ITEMS, PORTRAIT_BORDER_ITEMS, PORTRAIT_STYLE_DEFAULTS, CanonKey, EnsureDB, CurrentPanelKey, UnitDB,
+    SeedTextFromGeneral, NormalizeHpMode, NormalizePowerMode, TextScopeGet, TextScopeHasSlots, TextScopeSlotGet,
+    TOTINLINE_SEP_VALID, TOTINLINE_CUSTOM_SEPARATOR, TOTINLINE_CUSTOM_SEPARATOR_MAX, TruncateUtf8Chars, CleanToTInlineCustomSeparator,
+    ToTInlineSeparator, ShortenPreviewName, TextScopeSet, ForceTextUnit, ApplyPanelUnit, RefreshAllControls, Label, PlaceTopLeft,
+    SetOptionWidth, AddOptionDivider, SetWidgetEnabled, AddPlainCheck, NormalizePortraitClassStyle, EnsureUnitPortraitStyle,
+    PortraitStyleGet, PortraitStyleSet, ApplyPortrait, NormalizeStatusPreviewId, ClassColor, Clamp01, SettingsCache, PreviewNPCKind,
+    NPCColor, GradientPreviewColor, HealthColor, DarkMatchHPColor, HealthBackgroundColor, PowerBackgroundColor, PowerColor,
+    ClassPortraitVisual, UnitPreviewPortraitTexture, FontColor, NormalizeToTInlineColorMode, PreviewNameColorFlags, PreviewNameColor,
+    PreviewToTInlineColor, SetTex, NormalizePreviewAnchorMode, UnitPreviewBarOverrideEnabled, PreviewHealPredictionEnabled,
+    PreviewResolveHealPredAnchorMode, PreviewResolveAbsorbAnchorMode, PreviewAbsorbBarEnabled, PreviewOverlayWidth, LayoutUnitPreviewOverlay,
+    MakeFS, ReadPowerBarEnabled, CanDetachPowerBarKey, ReadPowerBarHeight, ResolveNameAnchor, NumText, JoinSep, FormatMode, UnitPreviewText)

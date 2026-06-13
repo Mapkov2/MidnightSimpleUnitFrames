@@ -1,27 +1,21 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
-
 local floor = math.floor
 local max = math.max
 local min = math.min
 local VT = M.ValueTextList
-
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, SORT_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS = M.PickDefaults(GP, [[SCOPE_VALUES GROWTH_VALUES BLIZZARD_FALLBACK_VALUES SORT_MODES GF_ANCHOR_TO GF_ANCHOR_POINTS]])
-local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, BindScopeSlider, BindScopeDropdown, ScopeDropdown, ScopeSlider, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionHeaderStatus, SetSectionBadges, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle BindScopeSlider BindScopeDropdown ScopeDropdown ScopeSlider BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionHeaderStatus SetSectionBadges OnOffBadge BadgeNumber OptionText CreateSectionNotice]])
-SetSectionBadges = SetSectionBadges or M.Noop
+local GF, Conf, Val, QueueGF, Set, Bool, Num, ScopeSection, CurrentScope, BindScopeToggle, ScopeDropdown, ScopeSlider, ScopeColor, BuildGrowthDirectionTiles, BuildRoleOrderRows, SetOptionEnabled, SetOptionsEnabled, FinalizeScopePage, SetSectionBadgesAndStatus, TrackSectionRefresh, OnOffBadge, BadgeNumber, OptionText, CreateSectionNotice = M.Pick(GP, [[GF Conf Val QueueGF Set Bool Num ScopeSection CurrentScope BindScopeToggle ScopeDropdown ScopeSlider ScopeColor BuildGrowthDirectionTiles BuildRoleOrderRows SetOptionEnabled SetOptionsEnabled FinalizeScopePage SetSectionBadgesAndStatus TrackSectionRefresh OnOffBadge BadgeNumber OptionText CreateSectionNotice]])
+SetSectionBadgesAndStatus = SetSectionBadgesAndStatus or M.Noop
 OnOffBadge = OnOffBadge or M.OnOffBadge
 BadgeNumber = BadgeNumber or M.BadgeNumber
 OptionText = OptionText or M.OptionText
-
-
 local function ScopeLabel()
     local scope = CurrentScope() or "party"
     for i = 1, #SCOPE_VALUES do
@@ -30,24 +24,18 @@ local function ScopeLabel()
     end
     return tostring(scope)
 end
-
 local function CurrentEditFocusKey()
     local scope = CurrentScope() or "party"
     return "gf_" .. tostring(scope)
 end
-
 local function AttachGroupFocus(widget, component)
-    if W.AttachEditFocus then
-        W.AttachEditFocus(widget, CurrentEditFocusKey, component or "layout", nil, { source = "menu2-group" })
-    end
+    W.AttachGroupEditFocus(widget, CurrentEditFocusKey, component or "layout")
     return widget
 end
-
 local function BuildGFLayout(ctx)
     local b = W.PageBuilder(ctx)
     ScopeSection(ctx, b)
     M.GroupPreview.Add(ctx, b)
-
     local general = b:CollapsibleSection("general", "Frame Basics", 430, false)
     local generalW = general._msuf2Width or b.width or 720
     local generalLeftX = 32
@@ -57,26 +45,24 @@ local function BuildGFLayout(ctx)
     local generalLeftToggleW = max(80, generalLeftW - 34)
     local generalRightToggleW = max(80, generalRightW - 34)
     local offlineSliderW = max(320, min(520, generalW - generalLeftX - 170))
-
     W.LabelAt(general, "Frame", generalLeftX, -38, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     W.LabelAt(general, "Behavior", generalRightX, -38, generalRightW, "GameFontNormalSmall", T.colors.accent)
     local enableGroup = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Use MSUF group frames", generalLeftX, -64, generalLeftW), "layout"), "enabled", false, "rebuild")
     enableGroup._msuf2GroupFrameGateAlwaysEnabled = true
-    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Show player", generalLeftX, -94, generalLeftToggleW), "layout"), "showPlayer", true, "rebuild")
-    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Show while solo", generalLeftX, -124, generalLeftToggleW), "layout"), "showSolo", false, "rebuild")
-    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Smooth health fill", generalRightX, -64, generalRightToggleW), "bars"), "smoothFill", true, "visual")
-    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Reverse fill direction", generalRightX, -94, generalRightToggleW), "bars"), "reverseFill", false, "visual")
-    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Hide during client scene", generalRightX, -124, generalRightToggleW), "layout"), "hideInClientScene", true, "visual")
-    BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, "Click casting / Clique", generalRightX, -154, generalRightToggleW), "layout"), "clickCastEnabled", true, "rebuild")
-
+    M.BuildControlSpecs({
+        { "Show player", generalLeftX, -94, generalLeftToggleW, "layout", "showPlayer", true, "rebuild" },
+        { "Show while solo", generalLeftX, -124, generalLeftToggleW, "layout", "showSolo", false, "rebuild" },
+        { "Smooth health fill", generalRightX, -64, generalRightToggleW, "bars", "smoothFill", true, "visual" },
+        { "Reverse fill direction", generalRightX, -94, generalRightToggleW, "bars", "reverseFill", false, "visual" },
+        { "Hide during client scene", generalRightX, -124, generalRightToggleW, "layout", "hideInClientScene", true, "visual" },
+        { "Click casting / Clique", generalRightX, -154, generalRightToggleW, "layout", "clickCastEnabled", true, "rebuild" },
+    }, { ["*"] = function(s) return BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(general, s[1], s[2], s[3], s[4]), s[5]), s[6], s[7], s[8]) end })
     local fallbackModeW = min(260, generalLeftW)
     local fallbackMode = ScopeDropdown(ctx, general, "If this switch is off", BLIZZARD_FALLBACK_VALUES, fallbackModeW, "blizzardFallbackMode", "AUTO", "rebuild", generalLeftX, -196, fallbackModeW)
     fallbackMode._msuf2GroupFrameGateAlwaysEnabled = true
     AttachGroupFocus(fallbackMode, "layout")
-
     local fallbackHelp = W.Text(general, "Blizzard default is the simple off-state when no MSUF group-frame scope is active. If any MSUF group frames are on, Auto keeps Blizzard group frames hidden to avoid duplicates.", generalRightX, -184, generalRightW, T.colors.muted)
     if fallbackHelp and fallbackHelp.SetWordWrap then fallbackHelp:SetWordWrap(true) end
-
     W.DividerAt(general, -256, generalLeftX, 32)
     W.LabelAt(general, "Offline Members", generalLeftX, -274, generalLeftW, "GameFontNormalSmall", T.colors.accent)
     local hideOfflineEnabled = BindScopeToggle(ctx, AttachGroupFocus(W.SwitchAt(general, "Offline Members", generalLeftX, -300, generalLeftW), "layout"), "hideOfflineEnabled", false, "visual")
@@ -93,28 +79,24 @@ local function BuildGFLayout(ctx)
             Set(CurrentScope(), "enabled", true, "rebuild")
         end)
     end
-
     local function RefreshHideOfflineState()
         local enabled = Bool(CurrentScope(), "hideOfflineEnabled", false)
         local scopeEnabled = Bool(CurrentScope(), "enabled", false)
         SetOptionsEnabled(hideOfflineControls, enabled)
-        SetSectionBadges(general, {
+        local status
+        if not scopeEnabled then
+            status = {
+                hint = "scope disabled",
+                hintColor = { 0.90, 0.84, 0.76, 1 },
+                bg = { 0.105, 0.082, 0.052, 0.44 },
+                arrowColor = { 0.88, 0.62, 0.22, 1 },
+            }
+        end
+        SetSectionBadgesAndStatus(general, {
             OnOffBadge(scopeEnabled, "Enabled", "Disabled"),
             { text = Bool(CurrentScope(), "showPlayer", true) and "Player shown" or "Player hidden", kind = Bool(CurrentScope(), "showPlayer", true) and "info" or "muted" },
             { text = enabled and ("Offline " .. BadgeNumber(Num(CurrentScope(), "hideOfflineDelay", 0)) .. "s") or "Offline visible", kind = enabled and "accent" or "muted" },
-        })
-        if type(SetSectionHeaderStatus) == "function" then
-            if not scopeEnabled then
-                SetSectionHeaderStatus(general, {
-                    hint = "scope disabled",
-                    hintColor = { 0.90, 0.84, 0.76, 1 },
-                    bg = { 0.105, 0.082, 0.052, 0.44 },
-                    arrowColor = { 0.88, 0.62, 0.22, 1 },
-                })
-            else
-                SetSectionHeaderStatus(general, nil)
-            end
-        end
+        }, status)
         if generalNotice then
             local scopeEnabled = Bool(CurrentScope(), "enabled", false)
             generalNotice:SetShown(not scopeEnabled)
@@ -131,10 +113,7 @@ local function BuildGFLayout(ctx)
             end
         end
     end
-    M.AddRefresher(ctx, RefreshHideOfflineState)
-    RefreshHideOfflineState()
-    M.SetCollapsibleRefreshState(general, RefreshHideOfflineState)
-
+    TrackSectionRefresh(ctx, general, RefreshHideOfflineState)
     local advancedLayout = b:CollapsibleSection("layout_advanced", "Geometry", 430, false)
     local advancedLayoutW = advancedLayout._msuf2Width or b.width or 720
     local layoutGap = 16
@@ -144,36 +123,28 @@ local function BuildGFLayout(ctx)
     local advancedRightX = advancedLeftX + advancedLeftW + layoutGap
     local advancedRightW = advancedInnerW - advancedLeftW - layoutGap
     local layoutSliderW = max(180, min(360, advancedLeftW - 64))
-
     local sizeCard = W.ControlCard(advancedLayout, "Size", "Dimensions and spacing for each group member.", advancedLeftX, -38, advancedLeftW, 188)
     local gridCard = W.ControlCard(advancedLayout, "Columns", "Column behavior for raid-like scopes.", advancedLeftX, -244, advancedLeftW, 158)
     local growthCard = W.ControlCard(advancedLayout, "Growth", "How new members fill the group frame.", advancedRightX, -38, advancedRightW, 188)
     local function LayoutSlider(parent, label, minValue, maxValue, step, key, defaultValue, y)
         return AttachGroupFocus(ScopeSlider(ctx, parent, label, minValue, maxValue, step, layoutSliderW, key, defaultValue, "rebuild", 16, y, layoutSliderW, "LEFT"), "layout")
     end
-
     LayoutSlider(sizeCard, "Width", 40, 300, 1, "width", 120, -66)
     LayoutSlider(sizeCard, "Height", 16, 120, 1, "height", 40, -114)
     LayoutSlider(sizeCard, "Spacing", 0, 20, 1, "spacing", 1, -162)
-
     BuildGrowthDirectionTiles(ctx, growthCard, { x = 16, y = -68, tileWidth = 64, tileHeight = 64, gap = 8, advanceCursor = false })
-
     LayoutSlider(gridCard, "Units per column", 1, 40, 1, "unitsPerColumn", 5, -62)
     LayoutSlider(gridCard, "Max columns", 1, 8, 1, "maxColumns", 8, -108)
     local preserveRaidGroups = BindScopeToggle(ctx, AttachGroupFocus(W.ToggleAt(gridCard, "Preserve raid groups", 16, -138, advancedLeftW - 32), "layout"), "preserveRaidGroups", false, "rebuild")
     local function RefreshRaidGroupLayoutState()
         SetOptionEnabled(preserveRaidGroups, CurrentScope() ~= "party")
-        SetSectionBadges(advancedLayout, {
+        SetSectionBadgesAndStatus(advancedLayout, {
             { text = BadgeNumber(Num(CurrentScope(), "width", 120)) .. "x" .. BadgeNumber(Num(CurrentScope(), "height", 40)), kind = "info" },
             { text = OptionText(GROWTH_VALUES, Val(CurrentScope(), "growth", "DOWN"), "Down"), kind = "accent" },
             { text = "Grid " .. BadgeNumber(Num(CurrentScope(), "unitsPerColumn", 5)) .. "/" .. BadgeNumber(Num(CurrentScope(), "maxColumns", 8)), kind = CurrentScope() == "party" and "muted" or "info" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(advancedLayout, nil) end
     end
-    M.AddRefresher(ctx, RefreshRaidGroupLayoutState)
-    RefreshRaidGroupLayoutState()
-    M.SetCollapsibleRefreshState(advancedLayout, RefreshRaidGroupLayoutState)
-
+    TrackSectionRefresh(ctx, advancedLayout, RefreshRaidGroupLayoutState)
     local sorting = b:CollapsibleSection("sorting", "Sorting", 236, false)
     local sortingW = sorting._msuf2Width or b.width or 720
     local sortingGap = 16
@@ -193,7 +164,7 @@ local function BuildGFLayout(ctx)
         sortMode._msuf2Title:SetTextColor(T.colors.dim[1], T.colors.dim[2], T.colors.dim[3], T.colors.dim[4] or 1)
     end
     local refreshSortingControls
-    M.BindDropdown(ctx, sortMode,
+    M.BindDropdownWidget(ctx, sortMode,
         function()
             local conf = Conf(CurrentScope())
             if conf.sortMode then return conf.sortMode end
@@ -207,7 +178,7 @@ local function BuildGFLayout(ctx)
             if refreshSortingControls then refreshSortingControls() end
         end)
     local roleSort = W.ToggleAt(sortCard, "Sort by Role", 16, -110, sortingLeftW - 32)
-    M.BindToggle(ctx, roleSort,
+    M.BindBoolWidget(ctx, roleSort,
         function()
             local conf = Conf(CurrentScope())
             if conf.sortMode then return conf.sortMode == "ROLE" end
@@ -238,16 +209,12 @@ local function BuildGFLayout(ctx)
             if roleRows.Refresh then roleRows.Refresh() end
             if roleRows.SetRowsEnabled then roleRows:SetRowsEnabled(enabled) end
         end
-        SetSectionBadges(sorting, {
+        SetSectionBadgesAndStatus(sorting, {
             { text = OptionText(SORT_MODES, currentMode, "Index"), kind = "info" },
             { text = enabled and "Role order" or "Simple order", kind = enabled and "accent" or "muted" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(sorting, nil) end
     end
-    M.AddRefresher(ctx, refreshSortingControls)
-    refreshSortingControls()
-    M.SetCollapsibleRefreshState(sorting, refreshSortingControls)
-
+    TrackSectionRefresh(ctx, sorting, refreshSortingControls)
     local scale = b:CollapsibleSection("scaling", "Frame Scaling", 380, false)
     local scaleW = scale._msuf2Width or b.width or 720
     local scaleGap = 16
@@ -259,10 +226,10 @@ local function BuildGFLayout(ctx)
     local scaleModeCard = W.ControlCard(scale, "Frame scaling", "Scales frame size, fonts, and icons proportionally.", scaleLeftX, -38, scaleLeftW, 128)
     local manualCard = W.ControlCard(scale, "Manual Scale", "Buff/debuff positions stay relative to their anchors.", scaleLeftX, -184, scaleLeftW, 144)
     local autoCard = W.ControlCard(scale, "Auto Breakpoints", "Automatically scale by group size.", scaleRightX, -38, scaleRightW, 290)
-    local RefreshScalingState
+    local RefreshScalingState = M.RefreshProxy()
     M._msuf2LastGroupScaleMode = M._msuf2LastGroupScaleMode or {}
     local scaleEnabled = W.SwitchAt(scaleModeCard, "Frame scaling", scaleLeftW - 62, -24, 0, "HIDDEN")
-    M.BindToggle(ctx, scaleEnabled,
+    M.BindBoolWidget(ctx, scaleEnabled,
         function() return Val(CurrentScope(), "frameScaleMode", "off") ~= "off" end,
         function(v)
             local scopeKey = CurrentScope()
@@ -273,9 +240,8 @@ local function BuildGFLayout(ctx)
                 if mode == "manual" or mode == "auto" then M._msuf2LastGroupScaleMode[scopeKey] = mode end
                 Set(scopeKey, "frameScaleMode", "off", "rebuild")
             end
-            if RefreshScalingState then RefreshScalingState() end
+            RefreshScalingState()
         end)
-
     local scaleMode = W.Segment(scaleModeCard, "Scale Mode", VT("manual", "Manual", "auto", "Auto"), min(220, scaleLeftW - 32))
     W.MoveWidget(scaleMode, scaleModeCard, 16, -72, min(220, scaleLeftW - 32))
     M.BindSegment(ctx, scaleMode,
@@ -288,50 +254,43 @@ local function BuildGFLayout(ctx)
             local mode = (v == "auto") and "auto" or "manual"
             M._msuf2LastGroupScaleMode[scopeKey] = mode
             Set(scopeKey, "frameScaleMode", mode, "rebuild")
-            if RefreshScalingState then RefreshScalingState() end
+            RefreshScalingState()
         end)
-
     local function BindScaleSlider(widget, key, default, labelFn)
-        M.BindSlider(ctx, widget,
+        M.BindNumberWidget(ctx, widget,
             function() return Num(CurrentScope(), key, default) end,
             function(v)
                 Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), "rebuild")
-            end)
+            end,
+            default, { step = 5, roundStep = true })
         local function RefreshLabel()
-            if widget and widget._msuf2Title then
-                widget._msuf2Title:SetText(labelFn(Num(CurrentScope(), key, default)))
-            end
+            if widget and widget._msuf2Title then widget._msuf2Title:SetText(labelFn(Num(CurrentScope(), key, default))) end
         end
         widget:HookScript("OnValueChanged", function(_, value)
-            if widget._msuf2Title then
-                widget._msuf2Title:SetText(labelFn(floor((tonumber(value) or default or 0) + 0.5)))
-            end
+            if widget._msuf2Title then widget._msuf2Title:SetText(labelFn(floor((tonumber(value) or default or 0) + 0.5))) end
         end)
-        M.AddRefresher(ctx, RefreshLabel)
-        RefreshLabel()
+        M.TrackRefresh(ctx, RefreshLabel)
         return widget
     end
-
     local function AddScaleSlider(parent, spec, width)
-        local slider = BindScaleSlider(W.Slider(parent, "", 50, spec.max or 100, 5, width), spec.key, spec.default, spec.label)
+        local label = spec.label
+        local slider = BindScaleSlider(W.Slider(parent, "", 50, spec.max or 100, 5, width), spec.key, spec.default,
+            spec.labelFn or function(v) return string.format("%s: %d%%", label, v) end)
         W.MoveWidget(slider, parent, 16, spec.y, width - 58, "LEFT")
         return slider
     end
-
-    local manualScale = AddScaleSlider(manualCard, { key = "frameScaleManual", default = 100, max = 150, y = -64, label = function(v) return string.format("Manual Scale: %d%%", v) end }, scaleLeftW)
-
+    local manualScale = AddScaleSlider(manualCard, { key = "frameScaleManual", default = 100, max = 150, y = -64, label = "Manual Scale" }, scaleLeftW)
     local autoLabel = autoCard and autoCard.title
-
-    local scaleAt10 = AddScaleSlider(autoCard, { key = "scaleAt10", default = 100, y = -66, label = function(v) return string.format("1-10 players: %d%%", v) end }, scaleRightW)
-    local scaleAt20 = AddScaleSlider(autoCard, { key = "scaleAt20", default = 85, y = -120, label = function(v) return string.format("11-20 players: %d%%", v) end }, scaleRightW)
-    local scaleAt25 = AddScaleSlider(autoCard, { key = "scaleAt25", default = 80, y = -174, label = function(v) return string.format("21-25 players: %d%%", v) end }, scaleRightW)
-    local scaleOver25 = AddScaleSlider(autoCard, { key = "scaleOver25", default = 70, y = -228, label = function(v) return string.format("26+ players: %d%%", v) end }, scaleRightW)
-    local autoScaleControls = { scaleAt10, scaleAt20, scaleAt25, scaleOver25 }
-
+    local autoScaleControls = {}
+    for i, spec in ipairs({
+        { key = "scaleAt10", default = 100, y = -66, label = "1-10 players" },
+        { key = "scaleAt20", default = 85, y = -120, label = "11-20 players" },
+        { key = "scaleAt25", default = 80, y = -174, label = "21-25 players" },
+        { key = "scaleOver25", default = 70, y = -228, label = "26+ players" },
+    }) do autoScaleControls[i] = AddScaleSlider(autoCard, spec, scaleRightW) end
     local scaleHint = manualCard and manualCard.subtitle
     if scaleHint.SetWordWrap then scaleHint:SetWordWrap(true) end
-
-    RefreshScalingState = function()
+    RefreshScalingState = RefreshScalingState(function()
         local mode = Val(CurrentScope(), "frameScaleMode", "off")
         local scalingOn = mode ~= "off"
         local manualOn = mode == "manual"
@@ -350,15 +309,12 @@ local function BuildGFLayout(ctx)
             end
         end
         if scaleHint then scaleHint:SetAlpha((manualOn or autoOn) and 1 or 0.55) end
-        SetSectionBadges(scale, {
+        SetSectionBadgesAndStatus(scale, {
             OnOffBadge(scalingOn, "Scaling", "Off"),
             { text = manualOn and ("Manual " .. BadgeNumber(Num(CurrentScope(), "frameScaleManual", 100)) .. "%") or (autoOn and "Auto breakpoints" or "Native size"), kind = scalingOn and "info" or "muted" },
         })
-        if type(SetSectionHeaderStatus) == "function" then SetSectionHeaderStatus(scale, nil) end
-    end
-    M.AddRefresher(ctx, RefreshScalingState)
-    RefreshScalingState()
-    M.SetCollapsibleRefreshState(scale, RefreshScalingState)
+    end)
+    TrackSectionRefresh(ctx, scale, RefreshScalingState)
 
     -- Unified, simple transparency: HP bar fill slider, background slider, background
     -- colour, and a toggle that keeps text + portrait opaque while bars fade. Range fade
@@ -371,15 +327,12 @@ local function BuildGFLayout(ctx)
     local transLeftW = floor((transInnerW - transGap) * 0.5)
     local transRightX = transLeftX + transLeftW + transGap
     local transRightW = transInnerW - transLeftW - transGap
-
     local AlphaLabel = M.AlphaLabel
     local Clamp01 = M.Clamp01
-
     local opacityCard = W.ControlCard(transparency, "Opacity", "Fade the health bar and its background.", transLeftX, -38, transLeftW, 150)
     local optionsCard = W.ControlCard(transparency, "Background & Options", "Background colour and readability.", transRightX, -38, transRightW, 150)
-
     local function BindAlphaSlider(widget, key, default, label)
-        M.BindSlider(ctx, widget,
+        M.BindNumberWidget(ctx, widget,
             function() return Num(CurrentScope(), key, default) end,
             function(v)
                 local n = Clamp01(v, default or 0)
@@ -387,17 +340,15 @@ local function BuildGFLayout(ctx)
                 if conf[key] == n then return end
                 conf[key] = n
                 QueueGF(CurrentScope(), "visual")
-            end)
+            end,
+            default)
         return M.BindSliderLiveLabel(ctx, widget, function() return Num(CurrentScope(), key, default) end, function(value) return AlphaLabel(label, tonumber(value) or default or 0) end, true)
     end
-
-    local hpAlpha = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), "hpBarAlpha", 1, "HP Bar")
-    W.MoveWidget(hpAlpha, opacityCard, 16, -62, transLeftW - 58, "LEFT")
-
-    local bgAlpha = BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), "hpBgAlpha", 0.85, "Background")
-    W.MoveWidget(bgAlpha, opacityCard, 16, -116, transLeftW - 58, "LEFT")
-
-    local bgColor = W.Color(optionsCard, "Background Color")
+    M.BuildControlSpecs({
+        { "hpBarAlpha", 1, "HP Bar", -62 },
+        { "hpBgAlpha", 0.85, "Background", -116 },
+    }, { ["*"] = function(s) W.MoveWidget(BindAlphaSlider(W.Slider(opacityCard, "", 0, 1, 0.05, transLeftW), s[1], s[2], s[3]), opacityCard, 16, s[4], transLeftW - 58, "LEFT") end })
+    local bgColor = ScopeColor(ctx, optionsCard, "Background Color", nil, "bgR", "bgG", "bgB", { 0.10, 0.10, 0.10 }, "visual")
     if bgColor._msuf2Title then
         bgColor._msuf2Title:ClearAllPoints()
         bgColor._msuf2Title:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 16, -62)
@@ -407,36 +358,21 @@ local function BuildGFLayout(ctx)
     bgColor:ClearAllPoints()
     bgColor:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 154, -60)
     bgColor:SetSize(34, 16)
-    M.BindColor(ctx, bgColor,
-        function()
-            local conf = Conf(CurrentScope())
-            return conf.bgR or 0.10, conf.bgG or 0.10, conf.bgB or 0.10
-        end,
-        function(r, g, b)
-            local conf = Conf(CurrentScope())
-            conf.bgR, conf.bgG, conf.bgB = r, g, b
-            QueueGF(CurrentScope(), "visual")
-        end)
-
     local exclude = W.ToggleAt(optionsCard, "Keep text + portrait visible", 16, -100, transRightW - 32)
-    M.BindToggle(ctx, exclude,
+    M.BindBoolWidget(ctx, exclude,
         function() return Bool(CurrentScope(), "alphaExcludeTextPortrait", false) end,
         function(v) Set(CurrentScope(), "alphaExcludeTextPortrait", v and true or false, "visual") end)
-
     local anchor = b:CollapsibleSection("anchor", "Anchoring", 220, false)
-
     local anchorTo = W.Dropdown(anchor, "Anchor To", GF_ANCHOR_TO, 200)
     M.UnitSectionsShared.PlaceDropdown(anchor, anchorTo, 14, -38, 200)
-    M.BindDropdown(ctx, anchorTo,
+    M.BindDropdownWidget(ctx, anchorTo,
         function() return Conf(CurrentScope()).anchorToFrame or "FREE" end,
         function(v)
             local conf = Conf(CurrentScope())
             conf.anchorToFrame = (v == "FREE") and nil or v
             QueueGF(CurrentScope(), "rebuild")
         end)
-
     local anchorPoint = ScopeDropdown(ctx, anchor, "Anchor Point", GF_ANCHOR_POINTS, 160, "anchorPoint", "CENTER", "rebuild", 254, -38, 160)
-
     local function IsStandardAnchorTarget(value)
         return value == nil or value == "" or value == "FREE" or value == "player" or value == "target"
             or value == "targettarget" or value == "focustarget" or value == "focus"
@@ -460,21 +396,14 @@ local function BuildGFLayout(ctx)
         pickTitle = "Pick Group Anchor",
         pickKey = function() return "group:anchorPick:" .. tostring(CurrentScope()) end,
     })
-
     local function RefreshAnchorHeader()
-        if type(SetSectionHeaderStatus) ~= "function" then return end
         customAnchor.Refresh()
-        SetSectionBadges(anchor, {
+        SetSectionBadgesAndStatus(anchor, {
             { text = OptionText(GF_ANCHOR_TO, Conf(CurrentScope()).anchorToFrame or "FREE", "Free"), kind = "info" },
             { text = OptionText(GF_ANCHOR_POINTS, Val(CurrentScope(), "anchorPoint", "CENTER"), "CENTER"), kind = "accent" },
         })
-        SetSectionHeaderStatus(anchor, nil)
     end
-    M.AddRefresher(ctx, RefreshAnchorHeader)
-    RefreshAnchorHeader()
-    M.SetCollapsibleRefreshState(anchor, RefreshAnchorHeader)
-
+    TrackSectionRefresh(ctx, anchor, RefreshAnchorHeader)
     FinalizeScopePage(ctx, b)
 end
-
 M.RegisterPage("gf_layout", { title = "MSUF Group Layout", build = BuildGFLayout, version = 18 })

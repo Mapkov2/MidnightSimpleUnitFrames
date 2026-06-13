@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -14,36 +13,30 @@ local ControlGates = M.ControlGates or {}
 local Shared = M.UnitSectionsShared or {}
 local VT = M.ValueTextList
 local WL = M.WordList
-
 local floor = math.floor
 local max = math.max
 local min = math.min
 local Specs = M.GroupSpecs or {}
 local SCOPE_VALUES, GROWTH_VALUES, BLIZZARD_FALLBACK_VALUES, HEALTH_MODES, TEXT_MODES, DELIMITER_VALUES, ANCHORS, AURA_ANCHORS, SORT_MODES, GF_BAR_MODES, GF_ANCHOR_TO, GF_ANCHOR_POINTS, STATUS_ICON_ANCHORS, GF_STATUS_ICON_SPECS, GF_STATUS_ICON_VALUES, PLACED_INDICATOR_TYPES, FRAME_EFFECT_TYPES, SPELL_GROWTH_VALUES, CI_SLOT_VALUES, CI_SLOT_DEFAULTS, DISPEL_OVERLAY_STYLES, DEBUFF_STRIPE_EDGES = M.PickDefaults(Specs, M.GROUP_SPEC_TABLE_KEYS)
-
 local SIMPLE_TEXTURES = Specs.SimpleTextures or function() return {} end
-
 local pendingGF = {}
 local gfFlushQueued = false
 local SCOPE_LABELS = { party = "Party", raid = "Raid", mythicraid = "Mythic Raid" }
 local SCOPE_SHORT_LABELS = { mythicraid = "Mythic" }
 local GROUP_SECTION_HEADER_BG = { 0.060, 0.070, 0.130, 0.48 }
-
+local GF_INDICATOR_COPY_FIELDS = M.CopyFieldsFromSpecs(GF_STATUS_ICON_SPECS, "pvpIcon statusText statusGhostText statusAFKText",
+    [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle]], "enabled iconStyle size anchor x y layer")
 local function GF()
     return MSUF and MSUF.GF
 end
-
 local function RefreshGFPreview()
     -- Preview and live group frames have separate render paths. Refresh both when controls
     -- change so the page does not hide a stale runtime configuration.
     local gf = GF()
-    if gf and type(gf.RefreshPreviewLayout) == "function" then
-        gf.RefreshPreviewLayout()
-    end
+    if gf and type(gf.RefreshPreviewLayout) == "function" then gf.RefreshPreviewLayout() end
     if type(M.RefreshGFNativePreviews) == "function" then M.RefreshGFNativePreviews() end
     if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
 end
-
 local function Conf(kind)
     local gf = GF()
     if gf and type(gf.GetConf) == "function" then return gf.GetConf(kind) end
@@ -52,7 +45,6 @@ local function Conf(kind)
     db[key] = db[key] or {}
     return db[key]
 end
-
 local function Val(kind, key, default)
     local gf = GF()
     if gf and type(gf.Val) == "function" then
@@ -63,7 +55,6 @@ local function Val(kind, key, default)
     if conf[key] ~= nil then return conf[key] end
     return default
 end
-
 local function FlushGF()
     gfFlushQueued = false
     local gf = GF()
@@ -100,7 +91,6 @@ local function FlushGF()
     end
     RefreshGFPreview()
 end
-
 local function QueueGF(kind, mode)
     if kind ~= nil then
         if pendingGF.kind == nil then
@@ -123,7 +113,6 @@ local function QueueGF(kind, mode)
         FlushGF()
     end
 end
-
 local function Set(kind, key, value, mode)
     local function Write()
         local conf = Conf(kind)
@@ -132,41 +121,25 @@ local function Set(kind, key, value, mode)
         QueueGF(kind, mode or "visual")
         return true
     end
-    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-        return M.CaptureHistory("Group " .. tostring(key), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
-    end
-    return Write()
+    return M.RunWithHistory("Group " .. tostring(key), "group:" .. tostring(kind) .. ":" .. tostring(key), Write)
 end
-
 local function Bool(kind, key, default)
     local value = Val(kind, key, default and true or false)
     return value and true or false
 end
-
 local function Num(kind, key, default)
     return tonumber(Val(kind, key, default)) or default or 0
 end
-
 local function CurrentScope()
     return M.gfScope or "party"
 end
-
 local function ScopeLabel(kind)
     return M.Tr(SCOPE_LABELS[kind] or "Party")
 end
-
 local function ScopeShortLabel(kind)
     return M.Tr(SCOPE_SHORT_LABELS[kind] or SCOPE_LABELS[kind] or "Party")
 end
-
-local GF_COPY_EXCLUDE = {
-    offsetX = true,
-    offsetY = true,
-    point = true,
-    positionMode = true,
-    _hlMigrated = true,
-}
-
+local GF_COPY_EXCLUDE = M.KeySetFromWords "offsetX offsetY point positionMode _hlMigrated"
 local GF_COPY_CATEGORIES = {
     { key = "general", label = "Basics", keys = WL [[enabled blizzardFallbackMode showPlayer showSolo clickCastEnabled width height spacing growth groupFilter sortMode sortByRole roleOrder playerFirstInRole unitsPerColumn maxColumns preserveRaidGroups reverseFill smoothFill hideInClientScene hideOfflineEnabled hideOfflineInCombat hideOfflineDelay frameScaleMode frameScaleManual scaleAt10 scaleAt20 scaleAt25 scaleOver25]] },
     { key = "health", label = "Health & Bars", keys = WL [[gfBarMode healthColorMode healthCustomR healthCustomG healthCustomB gfDarkR gfDarkG gfDarkB gfUnifiedR gfUnifiedG gfUnifiedB barTexture barBgTexture powerBarEnabled powerHeight showPower showPowerText powerTextLeft powerTextCenter powerTextRight powerTextDelimiter powerFontSize powerOffsetX powerOffsetY powerTextLayer powerSmoothFill powerShowTank powerShowHealer powerShowDamager dispelOverlayEnabled dispelOverlayStyle dispelOverlayOnHealth dispelOverlayAlpha dispelOverlayTrigger deadBgEnabled deadBgOffline deadBgR deadBgG deadBgB deadBgA]] },
@@ -174,20 +147,18 @@ local GF_COPY_CATEGORIES = {
     { key = "font", label = "Font Override", keys = WL [[fontOverride fontOutline useGlobalFontColor fontR fontG fontB]] },
     { key = "border", label = "Background & Opacity", keys = WL [[bgR bgG bgB hpBarAlpha hpBgAlpha alphaExcludeTextPortrait]] },
     { key = "range", label = "Range Fade", keys = WL [[rangeFadeEnabled rangeFadeAlpha rangeFadeLayerMode offlineAlpha]] },
-    { key = "indicators", label = "Indicators & Status Icons", keys = WL [[showGroupNumber groupNumberSize groupNumberAnchor groupNumberX groupNumberY groupBorderEnabled groupBorderSize groupBorderPadding groupBorderR groupBorderG groupBorderB groupBorderA iconStyle useMidnightIcons roleIconStyle leaderIconStyle assistIconStyle pvpIcon pvpIconSize pvpIconAnchor pvpIconX pvpIconY pvpIconLayer statusText statusTextSize statusTextAnchor statusOffsetX statusOffsetY statusTextLayer statusGhostText statusGhostTextSize statusGhostTextAnchor statusGhostOffsetX statusGhostOffsetY statusGhostTextLayer statusAFKText statusAFKTextSize statusAFKTextAnchor statusAFKOffsetX statusAFKOffsetY statusAFKTextLayer]], prefix = WL [[si_ statusIcon indicator]] },
+    { key = "indicators", label = "Indicators & Status Icons", keys = GF_INDICATOR_COPY_FIELDS, prefix = WL [[si_ statusIcon indicator]] },
     { key = "auras", label = "Auras", tables = WL [[auras]] },
     { key = "highlight", label = "Highlight & Aggro", keys = WL [[targetIndicator targetR targetG targetB]], prefix = WL [[hl dispel]] },
     { key = "dstripe", label = "Debuff Stripe", prefix = WL [[debuffStripe]] },
     { key = "features", label = "Corner/Spell", keys = WL [[ciEnabled ciAlpha]], tables = WL [[spellIndicators]], prefix = WL [[ci]] },
 }
-
 local function DeepCopy(value)
     local gf = GF()
     if gf and type(gf._DeepCopyTable) == "function" then return gf._DeepCopyTable(value) end
     if type(_G.MSUF_DeepCopy) == "function" then return _G.MSUF_DeepCopy(value) end
     return M.DeepCopy(value)
 end
-
 local function NewGFCopyScopes()
     local scopes = {}
     for i = 1, #GF_COPY_CATEGORIES do
@@ -195,12 +166,10 @@ local function NewGFCopyScopes()
     end
     return scopes
 end
-
 local function CopyGroupSettings(srcKind, dstKind, scopes)
     local srcConf = Conf(srcKind)
     local dstConf = Conf(dstKind)
     if not (srcConf and dstConf and srcKind and dstKind) or srcKind == dstKind then return false end
-
     scopes = (type(scopes) == "table") and scopes or NewGFCopyScopes()
     local allowKeys, allowPrefixes, allowTables = {}, {}, {}
     for i = 1, #GF_COPY_CATEGORIES do
@@ -217,7 +186,6 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
             end
         end
     end
-
     for key, value in pairs(srcConf) do
         if not GF_COPY_EXCLUDE[key] then
             local copy = allowKeys[key] or allowTables[key]
@@ -233,12 +201,10 @@ local function CopyGroupSettings(srcKind, dstKind, scopes)
             if copy then dstConf[key] = DeepCopy(value) end
         end
     end
-
     QueueGF(dstKind, "rebuild")
     RefreshGFPreview()
     return true
 end
-
 local function RefreshContext(ctx)
     if not (ctx and ctx.refreshers) then return end
     for i = 1, #ctx.refreshers do
@@ -246,40 +212,31 @@ local function RefreshContext(ctx)
         if type(fn) == "function" then pcall(fn) end
     end
 end
-
 local function SetSectionHeaderStatus(sec, opts)
     if not Shared.SetSectionHeaderStatus then return end
-    if not (opts and opts.bg) then
-        opts = M.Assign({ bg = GROUP_SECTION_HEADER_BG }, opts)
-    end
+    if not (opts and opts.bg) then opts = M.Assign({ bg = GROUP_SECTION_HEADER_BG }, opts) end
     Shared.SetSectionHeaderStatus(sec, opts)
 end
-
 local function SetSectionBadges(sec, specs)
     if W and W.SetCollapsibleBadges then
         if sec then sec._msuf2CollapsibleBadgesOnlyWhenOpen = true end
         W.SetCollapsibleBadges(sec, specs or {})
     end
 end
-
-local ApplyScopeEnabledGate
-
-local function FinalizeScopePage(ctx, builder)
-    if type(ApplyScopeEnabledGate) == "function" then
-        M.AddRefresher(ctx, function() ApplyScopeEnabledGate(ctx) end)
-        ApplyScopeEnabledGate(ctx)
-    end
-    if ctx and ctx.SetContentHeight and builder then
-        ctx:SetContentHeight(math.abs(builder.y) + 42)
-    end
+local function SetSectionBadgesAndStatus(sec, specs, status)
+    SetSectionBadges(sec, specs)
+    SetSectionHeaderStatus(sec, status)
 end
-
+local TrackSectionRefresh = M.TrackCollapsibleRefresh
+local ApplyScopeEnabledGate
+local function FinalizeScopePage(ctx, builder)
+    if type(ApplyScopeEnabledGate) == "function" then M.TrackRefresh(ctx, function() ApplyScopeEnabledGate(ctx) end) end
+    if ctx and ctx.SetContentHeight and builder then ctx:SetContentHeight(math.abs(builder.y) + 42) end
+end
 local OnOffBadge, BadgeNumber, OptionText = M.OnOffBadge, M.BadgeNumber, M.OptionText
-
 local function CreateSectionNotice(sec, topY, buttonLabel, buttonWidth)
     return Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, "_msuf2GroupFrameGateAlwaysEnabled")
 end
-
 local function ScopeSection(ctx, builder)
     local compactTop = (tonumber(builder.width) or 0) < 600
     local h = compactTop and 72 or 40
@@ -287,14 +244,11 @@ local function ScopeSection(ctx, builder)
     sec:SetPoint("TOPLEFT", builder.parent, "TOPLEFT", builder.x, builder.y)
     sec:SetSize(builder.width, h)
     sec._msuf2Width = builder.width
-
     builder.y = builder.y - h - 8
     if ctx.SetContentHeight then ctx:SetContentHeight(math.abs(builder.y) + 28) end
-
     local function MakeTopButton(parent, text, width, opts)
         return W.TopButton(parent, text, width, 24, opts or {})
     end
-
     local function AddScopeTooltip(frame, title, text)
         return M.AddTooltip and M.AddTooltip(frame, title, text, {
             hook = true,
@@ -302,17 +256,10 @@ local function ScopeSection(ctx, builder)
             bodyColor = { 0.85, 0.85, 0.85 },
         }) or frame
     end
-
     local function SelectScope(kind)
         local previousScope = M.gfScope
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("gfScope", kind or "party")
-        else
-            M.gfScope = kind or "party"
-        end
-        if previousScope ~= M.gfScope and M.ShowStatusFeedback then
-            M.ShowStatusFeedback(ScopeShortLabel(M.gfScope) .. " scope", "info", 1.1)
-        end
+        M.SetMenuStateValue("gfScope", kind or "party")
+        if previousScope ~= M.gfScope and M.ShowStatusFeedback then M.ShowStatusFeedback(ScopeShortLabel(M.gfScope) .. " scope", "info", 1.1) end
         local gf = GF()
         if type(_G.MSUF_GF_EM2_SetActivePreviewKind) == "function" then _G.MSUF_GF_EM2_SetActivePreviewKind(M.gfScope) end
         if type(M.SyncGFPagePreviewForKey) == "function" then M.SyncGFPagePreviewForKey(M.activeKey) end
@@ -323,7 +270,6 @@ local function ScopeSection(ctx, builder)
         end
         RefreshContext(ctx)
     end
-
     local scopeBtns = {}
     local previous
     for i = 1, #SCOPE_VALUES do
@@ -344,7 +290,6 @@ local function ScopeSection(ctx, builder)
         scopeBtns[info.value] = btn
         previous = btn
     end
-
     local actionY = compactTop and -42 or -10
     local copy = (W.RoleButton and W.RoleButton(sec, M.Tr("Copy To"), "normal", compactTop and 82 or 86, 24)) or MakeTopButton(sec, M.Tr("Copy To"), compactTop and 82 or 86)
     copy:SetPoint("TOPRIGHT", sec, "TOPRIGHT", -8, actionY)
@@ -363,7 +308,6 @@ local function ScopeSection(ctx, builder)
     reset:SetPoint("RIGHT", edit, "LEFT", -8, 0)
     AddScopeTooltip(reset, "Reset Scopes", "Resets Party, Raid, and Mythic Raid Group Frame settings for the active profile.")
     AddScopeTooltip(edit, "MSUF Edit Mode", "Drag frames to move them. Group aura handles can be selected in previews; Blizzard-controlled aura blocks cannot be dragged.")
-
     local function RefreshTop()
         local current = CurrentScope()
         for i = 1, #SCOPE_VALUES do
@@ -372,7 +316,6 @@ local function ScopeSection(ctx, builder)
         end
         if edit.SetText then edit:SetText(M.IsMSUFEditModeActive() and M.Tr("Exit Edit Mode") or M.Tr("MSUF Edit Mode")) end
     end
-
     local gfResetPopup = M.InstallStaticPopup("MSUF2_GF_RESET_ALL_CONFIRM", {
         text = M.Tr("Reset all Group Frame settings to defaults?\n\nThis resets Party, Raid, and Mythic Raid Group Frames for the active profile. Defaults are read from the current MSUF factory profile, so future default changes are used automatically."),
         button1 = YES or M.Tr("Yes"),
@@ -391,16 +334,11 @@ local function ScopeSection(ctx, builder)
                 end
             end
         end
-        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Reset Group Frames", "group:resetAll", ResetAllGroupFrames)
-        else
-            ResetAllGroupFrames()
-        end
+        M.RunWithHistory("Reset Group Frames", "group:resetAll", ResetAllGroupFrames)
     end
     reset:SetScript("OnClick", function()
         if StaticPopup_Show then StaticPopup_Show("MSUF2_GF_RESET_ALL_CONFIRM") end
     end)
-
     M.WireEditModeButton(ctx, edit, {
         blockConfig = true,
         defer = true,
@@ -415,7 +353,6 @@ local function ScopeSection(ctx, builder)
             if C_Timer and C_Timer.After then C_Timer.After(0, RefreshAfterToggle) else RefreshAfterToggle() end
         end,
     })
-
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
     local copyPopup
     local function SetCopyScopesSelected(selected, feedback)
@@ -426,29 +363,16 @@ local function ScopeSection(ctx, builder)
         end
         if M.ShowStatusFeedback then M.ShowStatusFeedback(feedback, "info", 1.1) end
     end
-
     local function ShowCopyPopup(anchor)
         if copyPopup and copyPopup:IsShown() then copyPopup:Hide(); return end
         if not copyPopup then
-            copyPopup = CreateFrame("Frame", nil, UIParent, T.Template and T.Template() or nil)
+            copyPopup = M.CreateMenuPopupPanel(UIParent)
             copyPopup:SetSize(430, 334)
-            M.ApplyPopupFramePriority(copyPopup)
-            copyPopup:EnableMouse(true)
-            if copyPopup.SetBackdrop then
-                local glassBg = T.colors.glassPopup or { 0.014, 0.024, 0.050, 0.985 }
-                copyPopup:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1, insets = { left = 1, right = 1, top = 1, bottom = 1 } })
-                copyPopup:SetBackdropColor(glassBg[1], glassBg[2], glassBg[3], glassBg[4] or 0.985)
-                copyPopup:SetBackdropBorderColor(0.10, 0.22, 0.44, 0.80)
-            end
-            if T.ApplyGlass then T.ApplyGlass(copyPopup, "popup") end
-
             local title = T.Font(copyPopup, "GameFontNormal", "", T.colors.accent)
             title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
             copyPopup._title = title
-
             local destLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Destination"), T.colors.dim)
             destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
-
             local close = MakeTopButton(copyPopup, "x", 20, {
                 bg = { 0.070, 0.026, 0.034, 0.94 },
                 border = { 0.340, 0.090, 0.110, 0.82 },
@@ -459,7 +383,6 @@ local function ScopeSection(ctx, builder)
             close:SetSize(20, 20)
             close:SetPoint("TOPRIGHT", copyPopup, "TOPRIGHT", -12, -9)
             close:SetScript("OnClick", function() copyPopup:Hide() end)
-
             copyPopup._targets = {}
             local tx = 16
             for i = 1, #SCOPE_VALUES do
@@ -476,22 +399,15 @@ local function ScopeSection(ctx, builder)
                     local function RunCopy()
                         if CopyGroupSettings(CurrentScope(), info.value, M.gfCopyScopes) then
                             RefreshContext(ctx)
-                            if M.ShowStatusFeedback then
-                                M.ShowStatusFeedback("Copied to " .. ScopeShortLabel(info.value), "ok", 1.3)
-                            end
+                            if M.ShowStatusFeedback then M.ShowStatusFeedback("Copied to " .. ScopeShortLabel(info.value), "ok", 1.3) end
                         end
                     end
-                    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-                        M.CaptureHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(info.value), RunCopy)
-                    else
-                        RunCopy()
-                    end
+                    M.RunWithHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(info.value), RunCopy)
                     copyPopup:Hide()
                 end)
                 copyPopup._targets[info.value] = btn
                 tx = tx + width + 6
             end
-
             local catLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Copy categories"), T.colors.dim)
             catLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -90)
             copyPopup._checks = {}
@@ -504,7 +420,6 @@ local function ScopeSection(ctx, builder)
                 cb:SetScript("OnClick", function(self) M.gfCopyScopes[cat.key] = self:GetChecked() and true or false end)
                 copyPopup._checks[i] = cb
             end
-
             local allBtn = MakeTopButton(copyPopup, M.Tr("All"), 48)
             allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
             allBtn:SetScript("OnClick", function()
@@ -516,11 +431,8 @@ local function ScopeSection(ctx, builder)
                 SetCopyScopesSelected(false, "Copy categories cleared")
             end)
         end
-
         local src = CurrentScope()
-        if copyPopup._title then
-            copyPopup._title:SetText(M.Format(M.Tr("Copy from %s"), ScopeLabel(src)))
-        end
+        if copyPopup._title then copyPopup._title:SetText(M.Format(M.Tr("Copy from %s"), ScopeLabel(src))) end
         for i = 1, #GF_COPY_CATEGORIES do
             if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(M.gfCopyScopes[GF_COPY_CATEGORIES[i].key] == true) end
         end
@@ -545,11 +457,8 @@ local function ScopeSection(ctx, builder)
     end
     copy:SetScript("OnClick", function(self) ShowCopyPopup(self) end)
     sec:SetScript("OnHide", function() if copyPopup then copyPopup:Hide() end end)
-
-    M.AddRefresher(ctx, RefreshTop)
-    RefreshTop()
+    M.TrackRefresh(ctx, RefreshTop)
 end
-
 local GroupPage = M.GroupPage or {}
 M.GroupPage = GroupPage
 M.Assign(GroupPage, {
@@ -557,7 +466,7 @@ M.Assign(GroupPage, {
     GF_COPY_CATEGORIES = GF_COPY_CATEGORIES, NewGFCopyScopes = NewGFCopyScopes, CopyGroupSettings = CopyGroupSettings,
 })
 local function BindScopeToggle(ctx, widget, key, default, mode)
-    M.BindToggle(ctx, widget,
+    M.BindBoolWidget(ctx, widget,
         function() return Bool(CurrentScope(), key, default) end,
         function(v)
             Set(CurrentScope(), key, v and true or false, mode or "visual")
@@ -565,61 +474,66 @@ local function BindScopeToggle(ctx, widget, key, default, mode)
         end)
     return widget
 end
-
 local function BindScopeSlider(ctx, widget, key, default, mode)
-    M.BindSlider(ctx, widget,
+    M.BindNumberWidget(ctx, widget,
         function() return Num(CurrentScope(), key, default) end,
-        function(v) Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), mode or "visual") end)
+        function(v) Set(CurrentScope(), key, floor((tonumber(v) or default or 0) + 0.5), mode or "visual") end,
+        default, { step = 1, roundStep = true })
     return widget
 end
-
 local function BindScopeDropdown(ctx, widget, key, default, mode)
-    M.BindDropdown(ctx, widget,
+    M.BindDropdownWidget(ctx, widget,
         function() return Val(CurrentScope(), key, default) end,
         function(v) Set(CurrentScope(), key, v or default, mode or "visual") end)
     return widget
 end
-
 local function ScopeDropdown(ctx, parent, label, values, width, key, default, mode, x, y, placeWidth, justify)
     local control = BindScopeDropdown(ctx, W.Dropdown(parent, label, values, width), key, default, mode)
     if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "LEFT") end
     return control
 end
-
 local function ScopeSlider(ctx, parent, label, minValue, maxValue, step, width, key, default, mode, x, y, placeWidth, justify)
     local control = BindScopeSlider(ctx, W.Slider(parent, label, minValue, maxValue, step, width), key, default, mode)
     if x then W.MoveWidget(control, parent, x, y, placeWidth or width, justify or "CENTER") end
     return control
 end
-
+local function ScopeColor(ctx, parent, label, width, rKey, gKey, bKey, defaults, mode, x, y, placeWidth, justify)
+    local control = W.Color(parent, label)
+    defaults = defaults or {}
+    M.BindColor(ctx, control,
+        function()
+            return Num(CurrentScope(), rKey, defaults[1] or 1),
+                Num(CurrentScope(), gKey, defaults[2] or 1),
+                Num(CurrentScope(), bKey, defaults[3] or 1)
+        end,
+        function(r, g, b)
+            local conf = Conf(CurrentScope())
+            conf[rKey], conf[gKey], conf[bKey] = r, g, b
+            QueueGF(CurrentScope(), mode or "visual")
+        end)
+    if x then W.MoveWidget(control, parent, x, y, placeWidth or width or 220, justify or "LEFT") end
+    return control
+end
 local GROWTH_TILE_VALUES = {
     { value = "DOWN", text = "Down", dx = 0, dy = -1, arrow = "v" },
     { value = "UP", text = "Up", dx = 0, dy = 1, arrow = "^" },
     { value = "RIGHT", text = "Right", dx = 1, dy = 0, arrow = ">" },
     { value = "LEFT", text = "Left", dx = -1, dy = 0, arrow = "<" },
 }
-
 local function BuildGrowthDirectionTiles(ctx, section, opts)
     if not section then return nil end
-
     opts = opts or {}
     local x = opts.x or section._msuf2ContentX or 14
     local y = opts.y or section._msuf2CursorY or -38
     local tileW, tileH, gap = opts.tileWidth or 64, opts.tileHeight or 64, opts.gap or 6
-    if opts.advanceCursor ~= false then
-        section._msuf2CursorY = y - tileH - 40
-    end
-
+    if opts.advanceCursor ~= false then section._msuf2CursorY = y - tileH - 40 end
     local label = T.Font(section, "GameFontNormalSmall", M.Tr("Growth Direction"), T.colors.accent)
     label:SetPoint("TOPLEFT", section, "TOPLEFT", x, y)
-
     local holder = CreateFrame("Frame", nil, section)
     holder:SetPoint("TOPLEFT", section, "TOPLEFT", x, y - 20)
     holder:SetSize((tileW * 4) + (gap * 3), tileH)
     holder._msuf2Label = label
-
     local buttons = {}
-
     local function SetTileVisual(btn, active, hover)
         if not btn then return end
         if btn.SetBackdropColor then
@@ -642,7 +556,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             end
         end
     end
-
     local function DrawMiniPreview(btn, info, raidLike)
         if not btn or not info then return end
         btn._cells = btn._cells or {}
@@ -658,7 +571,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         else
             cols, rows = 5, 1
         end
-
         local pad = 5
         local labelH = 13
         local innerW = tileW - (pad * 2)
@@ -670,7 +582,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         local gridH = (rows * cellH) + ((rows - 1) * cellGap)
         local originX = pad + floor((innerW - gridW) * 0.5 + 0.5)
         local originY = -pad - floor((innerH - gridH) * 0.5 + 0.5)
-
         local positions = {}
         if info.dy ~= 0 then
             local rowStart, rowEnd, rowStep = 0, rows - 1, 1
@@ -689,7 +600,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
                 end
             end
         end
-
         for i = 1, #positions do
             local cell = btn._cells[i]
             if not cell then
@@ -712,7 +622,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         for i = #positions + 1, #btn._cells do
             btn._cells[i]:Hide()
         end
-
         if not btn._firstText then
             btn._firstText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             if btn._firstText.SetFont then btn._firstText:SetFont("Fonts\\FRIZQT__.TTF", 7, "OUTLINE") end
@@ -727,7 +636,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
                 originY - (first.row * (cellH + cellGap)) - (cellH * 0.5))
             btn._firstText:Show()
         end
-
         if not btn._arrow then
             btn._arrow = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             if btn._arrow.SetFont then btn._arrow:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE") end
@@ -746,7 +654,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
         end
         btn._arrow:Show()
     end
-
     local function RefreshGrowthTiles()
         local current = Val(CurrentScope(), "growth", "DOWN")
         local raidLike = CurrentScope() ~= "party"
@@ -759,7 +666,6 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
             end
         end
     end
-
     for i = 1, #GROWTH_TILE_VALUES do
         local info = GROWTH_TILE_VALUES[i]
         local btn = CreateFrame("Button", nil, holder, T.Template and T.Template() or nil)
@@ -772,52 +678,38 @@ local function BuildGrowthDirectionTiles(ctx, section, opts)
                 edgeSize = 1,
             })
         end
-
         local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         if text.SetFont then text:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE") end
         text:SetPoint("BOTTOM", btn, "BOTTOM", 0, 3)
         text:SetText(info.text)
         btn._label = text
-
         btn:SetScript("OnEnter", function(self)
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, true)
-            if GameTooltip then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:AddLine(M.Format(M.Tr("Growth: %s"), M.Tr(info.text or "")), 1, 1, 1)
-                GameTooltip:AddLine(M.Tr("Click to set group frame growth direction."), 0.72, 0.76, 0.86)
-                GameTooltip:Show()
-            end
         end)
         btn:SetScript("OnLeave", function(self)
-            if GameTooltip then GameTooltip:Hide() end
             SetTileVisual(self, Val(CurrentScope(), "growth", "DOWN") == info.value, false)
         end)
+        M.AddTooltip(btn, function() return M.Format(M.Tr("Growth: %s"), M.Tr(info.text or "")) end, "Click to set group frame growth direction.", { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.76, 0.86 } })
         btn:SetScript("OnClick", function()
             Set(CurrentScope(), "growth", info.value, "rebuild")
             RefreshGrowthTiles()
         end)
         buttons[info.value] = btn
     end
-
-    RefreshGrowthTiles()
-    M.AddRefresher(ctx, RefreshGrowthTiles)
+    M.TrackRefresh(ctx, RefreshGrowthTiles)
     return holder
 end
-
 local ROLE_SORT_DEFS = {
     { key = "TANK", label = "Tank", r = 0.30, g = 0.55, b = 0.85 },
     { key = "HEALER", label = "Healer", r = 0.20, g = 0.72, b = 0.35 },
     { key = "DAMAGER", label = "DPS", r = 0.82, g = 0.30, b = 0.30 },
 }
-
 local ROLE_SORT_BY_KEY = {}
 for i = 1, #ROLE_SORT_DEFS do
     ROLE_SORT_BY_KEY[ROLE_SORT_DEFS[i].key] = i
 end
-
 local function BuildRoleOrderRows(ctx, section, opts)
     if not section then return nil end
-
     opts = opts or {}
     local rowW, rowH, rowGap = opts.width or 220, 22, 4
     local x = opts.x or section._msuf2ContentX or 14
@@ -834,15 +726,11 @@ local function BuildRoleOrderRows(ctx, section, opts)
         hint:SetJustifyH("LEFT")
         listY = y - 38
     end
-    if opts.advanceCursor ~= false then
-        section._msuf2CursorY = listY - (#ROLE_SORT_DEFS * (rowH + rowGap)) - 10
-    end
-
+    if opts.advanceCursor ~= false then section._msuf2CursorY = listY - (#ROLE_SORT_DEFS * (rowH + rowGap)) - 10 end
     local function NormalizeRoleToken(token)
         if token == "MELEE" or token == "RANGED" then return "DAMAGER" end
         return token
     end
-
     local holder, rows
     local function SaveOrder()
         local kind = CurrentScope()
@@ -856,13 +744,8 @@ local function BuildRoleOrderRows(ctx, section, opts)
             conf.roleOrder = table.concat(parts, ",")
             QueueGF(kind, "rebuild")
         end
-        if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-            M.CaptureHistory("Role Priority Order", "group:roleOrder:" .. tostring(kind), WriteOrder)
-        else
-            WriteOrder()
-        end
+        M.RunWithHistory("Role Priority Order", "group:roleOrder:" .. tostring(kind), WriteOrder)
     end
-
     local function LoadOrder()
         local conf = Conf(CurrentScope())
         local order = type(conf.roleOrder) == "string" and conf.roleOrder or "TANK,HEALER,DAMAGER"
@@ -885,7 +768,6 @@ local function BuildRoleOrderRows(ctx, section, opts)
         end
         holder:SnapRows()
     end
-
     holder = Shared.MakeDragSortRows(section, ROLE_SORT_DEFS, {
         x = x, y = listY, width = rowW, rowHeight = rowH, gap = rowGap,
         onReorder = SaveOrder,
@@ -897,14 +779,11 @@ local function BuildRoleOrderRows(ctx, section, opts)
         end,
     })
     rows = holder.rows
-
     holder.Refresh = LoadOrder
-    M.AddRefresher(ctx, LoadOrder)
-    LoadOrder()
+    M.TrackRefresh(ctx, LoadOrder)
     holder:SetRowsEnabled(false)
     return holder
 end
-
 local function AurasRoot(kind)
     local conf = Conf(kind)
     conf.auras = conf.auras or {}
@@ -915,22 +794,17 @@ local function AurasRoot(kind)
     conf.auras.externals = conf.auras.externals or {}
     return conf.auras
 end
-
 local function AuraGroup(kind, groupKey)
     local root = AurasRoot(kind)
     root[groupKey] = root[groupKey] or {}
     return root[groupKey]
 end
-
 local function SpellIndicators(kind)
     local conf = Conf(kind)
-    if type(conf.spellIndicators) ~= "table" then
-        conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 }
-    end
+    if type(conf.spellIndicators) ~= "table" then conf.spellIndicators = { enabled = false, spec = "auto", specs = {}, layer = 9 } end
     conf.spellIndicators.specs = conf.spellIndicators.specs or {}
     return conf.spellIndicators
 end
-
 local function IconStyleValues()
     local gf = GF()
     if gf and type(gf.ICON_STYLE_ITEMS) == "table" then return gf.ICON_STYLE_ITEMS end
@@ -940,34 +814,21 @@ local function IconStyleValues()
         "NEON_OUTLINE", "Neon Outline", "RING_SYMBOLS", "Ring Symbols", "DOTS", "Dots",
         "SHAPES", "Shapes", "DIAMONDS", "Diamonds", "SQUARES", "Squares")
 end
-
 local function CurrentGFStatusSpec()
-    if not M.gfStatusIconSelection then
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("gfStatusIconSelection", "roleIcon")
-        else
-            M.gfStatusIconSelection = "roleIcon"
-        end
-    end
+    if not M.gfStatusIconSelection then M.SetMenuStateValue("gfStatusIconSelection", "roleIcon") end
     for i = 1, #GF_STATUS_ICON_SPECS do
         local spec = GF_STATUS_ICON_SPECS[i]
         if spec.value == M.gfStatusIconSelection then return spec end
     end
-    if type(M.PersistMenuStateValue) == "function" then
-        M.PersistMenuStateValue("gfStatusIconSelection", GF_STATUS_ICON_SPECS[1].value)
-    else
-        M.gfStatusIconSelection = GF_STATUS_ICON_SPECS[1].value
-    end
+    M.SetMenuStateValue("gfStatusIconSelection", GF_STATUS_ICON_SPECS[1].value)
     return GF_STATUS_ICON_SPECS[1]
 end
-
 local function QueueSpellIndicators(kind)
     local gf = GF()
     local si = gf and gf.SpellIndicators
     if si and type(si.InvalidateRuntimeCaches) == "function" then si.InvalidateRuntimeCaches() end
     QueueGF(kind or CurrentScope(), "visual")
 end
-
 local function SpellSpecValues()
     local values = VT("auto", "Auto-Detect", "multi", "Multi-Spec")
     local gf = GF()
@@ -979,7 +840,6 @@ local function SpellSpecValues()
     end
     return values
 end
-
 local function SpellTrackedSpecValues()
     local values = {}
     local gf = GF()
@@ -993,7 +853,6 @@ local function SpellTrackedSpecValues()
     if #values == 0 then values[1] = { value = "", text = "No supported specs" } end
     return values
 end
-
 local function CurrentSpellMultiSpec(kind)
     M.gfSpellMultiSpecSelection = M.gfSpellMultiSpecSelection or {}
     local selected = M.gfSpellMultiSpecSelection[kind]
@@ -1005,15 +864,12 @@ local function CurrentSpellMultiSpec(kind)
     M.gfSpellMultiSpecSelection[kind] = selected
     return selected
 end
-
 local function EffectiveSpellSpec(kind)
     local cfg = SpellIndicators(kind)
     local selected = cfg.spec or "auto"
     local gf = GF()
     local si = gf and gf.SpellIndicators
-    if selected ~= "auto" and selected ~= "multi" and si and si.SpecInfo and si.SpecInfo[selected] then
-        return selected
-    end
+    if selected ~= "auto" and selected ~= "multi" and si and si.SpecInfo and si.SpecInfo[selected] then return selected end
     if selected == "multi" then
         local chosen = CurrentSpellMultiSpec(kind)
         if chosen and si and si.SpecInfo and si.SpecInfo[chosen] then return chosen end
@@ -1032,7 +888,6 @@ local function EffectiveSpellSpec(kind)
     end
     return nil
 end
-
 local function SpellAuraValues(kind)
     local gf = GF()
     local si = gf and gf.SpellIndicators
@@ -1049,7 +904,6 @@ local function SpellAuraValues(kind)
     if #values == 0 then values[1] = { value = "", text = "No spells for current spec" } end
     return values
 end
-
 local function CurrentSpellAura(kind)
     M.gfSpellIndicatorSelection = M.gfSpellIndicatorSelection or {}
     local selected = M.gfSpellIndicatorSelection[kind]
@@ -1061,41 +915,32 @@ local function CurrentSpellAura(kind)
     M.gfSpellIndicatorSelection[kind] = selected
     return selected
 end
-
 local function CurrentSpellConfig(kind, create)
     local specKey = EffectiveSpellSpec(kind)
     local auraName = CurrentSpellAura(kind)
     if not (specKey and auraName and auraName ~= "") then return nil end
     local cfg = SpellIndicators(kind)
     cfg.specs[specKey] = cfg.specs[specKey] or {}
-    if create and type(cfg.specs[specKey][auraName]) ~= "table" then
-        cfg.specs[specKey][auraName] = { enabled = true, onlyOwn = true }
-    end
+    if create and type(cfg.specs[specKey][auraName]) ~= "table" then cfg.specs[specKey][auraName] = { enabled = true, onlyOwn = true } end
     return cfg.specs[specKey][auraName], specKey, auraName
 end
-
 local function PlacedConfig(kind, create)
     local cfg = CurrentSpellConfig(kind, create)
     if not cfg then return nil end
-    if create and type(cfg.placed) ~= "table" then
-        cfg.placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18, showCooldownSwipe = true }
-    end
+    if create and type(cfg.placed) ~= "table" then cfg.placed = { type = "icon", anchor = "TOPLEFT", x = 0, y = 0, size = 18, showCooldownSwipe = true } end
     return cfg.placed
 end
-
 local function FrameEffectConfig(kind, create)
     local cfg = CurrentSpellConfig(kind, create)
     if not cfg then return nil end
     if create and type(cfg.frame) ~= "table" then cfg.frame = { type = "none" } end
     return cfg.frame
 end
-
 local function CICategoryValues()
     local gf = GF()
     if gf and type(gf.CI_CATEGORIES) == "table" then return gf.CI_CATEGORIES end
     return VT("none", "None", "dispel", "Dispellable", "aggro", "Aggro/Threat", "custom", "Custom Spell")
 end
-
 local function CIFilterValues()
     local gf = GF()
     if gf and type(gf.CI_CUSTOM_FILTERS) == "table" then return gf.CI_CUSTOM_FILTERS end
@@ -1103,43 +948,27 @@ local function CIFilterValues()
         "HELPFUL|PLAYER", "Buff (cast by me)", "HELPFUL", "Buff (any caster)",
         "HARMFUL|PLAYER", "Debuff (cast by me)", "HARMFUL", "Debuff (any caster)")
 end
-
 local function CIModeValues()
     local gf = GF()
     if gf and type(gf.CI_CUSTOM_MODES) == "table" then return gf.CI_CUSTOM_MODES end
     return VT("present", "Show when present", "missing", "Show when missing")
 end
-
 local function CurrentCISlot()
-    if not M.gfCornerSlotSelection then
-        if type(M.PersistMenuStateValue) == "function" then
-            M.PersistMenuStateValue("gfCornerSlotSelection", "TL")
-        else
-            M.gfCornerSlotSelection = "TL"
-        end
-    end
+    if not M.gfCornerSlotSelection then M.SetMenuStateValue("gfCornerSlotSelection", "TL") end
     for i = 1, #CI_SLOT_VALUES do
         if CI_SLOT_VALUES[i].value == M.gfCornerSlotSelection then return M.gfCornerSlotSelection end
     end
-    if type(M.PersistMenuStateValue) == "function" then
-        M.PersistMenuStateValue("gfCornerSlotSelection", "TL")
-    else
-        M.gfCornerSlotSelection = "TL"
-    end
+    M.SetMenuStateValue("gfCornerSlotSelection", "TL")
     return "TL"
 end
-
 local function CICustomConfig(kind, slot, create)
     local conf = Conf(kind)
     local key = "ciCustom" .. (slot or CurrentCISlot())
-    if create and type(conf[key]) ~= "table" then
-        conf[key] = { spells = "", mode = "present", filter = "HELPFUL|PLAYER", r = 0.40, g = 1.00, b = 0.40 }
-    end
+    if create and type(conf[key]) ~= "table" then conf[key] = { spells = "", mode = "present", filter = "HELPFUL|PLAYER", r = 0.40, g = 1.00, b = 0.40 } end
     return type(conf[key]) == "table" and conf[key] or nil
 end
-
 local function BindNestedToggle(ctx, widget, getTable, key, default, mode)
-    M.BindToggle(ctx, widget,
+    M.BindBoolWidget(ctx, widget,
         function()
             local tbl = getTable()
             local value = tbl[key]
@@ -1155,9 +984,8 @@ local function BindNestedToggle(ctx, widget, getTable, key, default, mode)
         end)
     return widget
 end
-
 local function BindNestedSlider(ctx, widget, getTable, key, default, mode)
-    M.BindSlider(ctx, widget,
+    M.BindNumberWidget(ctx, widget,
         function()
             local tbl = getTable()
             return tonumber(tbl[key]) or default or 0
@@ -1168,12 +996,12 @@ local function BindNestedSlider(ctx, widget, getTable, key, default, mode)
             if tbl[key] == v then return end
             tbl[key] = v
             QueueGF(CurrentScope(), mode or "visual")
-        end)
+        end,
+        default, { step = 1, roundStep = true })
     return widget
 end
-
 local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
-    M.BindDropdown(ctx, widget,
+    M.BindDropdownWidget(ctx, widget,
         function()
             local tbl = getTable()
             return tbl[key] or default
@@ -1185,22 +1013,17 @@ local function BindNestedDropdown(ctx, widget, getTable, key, default, mode)
         end)
     return widget
 end
-
 local SetOptionEnabled = W.SetControlEnabled
 local SetOptionsEnabled = W.SetControlsEnabled
-
 local function ForEachGroupPageControl(parent, callback)
     if not (parent and parent.GetChildren and type(callback) == "function") then return end
     local children = { parent:GetChildren() }
     for i = 1, #children do
         local child = children[i]
-        if child and child._msuf2ControlKind and not child._msuf2GroupFrameGateAlwaysEnabled then
-            callback(child)
-        end
+        if child and child._msuf2ControlKind and not child._msuf2GroupFrameGateAlwaysEnabled then callback(child) end
         ForEachGroupPageControl(child, callback)
     end
 end
-
 ApplyScopeEnabledGate = function(ctx)
     local wrapper = ctx and ctx.wrapper
     if not wrapper then return end
@@ -1218,7 +1041,6 @@ ApplyScopeEnabledGate = function(ctx)
         W.SetControlGateEnabled(control, gateKey, enabled)
     end)
 end
-
 M.Assign(GroupPage, {
     SCOPE_VALUES = SCOPE_VALUES,
     GROWTH_VALUES = GROWTH_VALUES,
@@ -1253,6 +1075,7 @@ M.Assign(GroupPage, {
     BindScopeDropdown = BindScopeDropdown,
     ScopeDropdown = ScopeDropdown,
     ScopeSlider = ScopeSlider,
+    ScopeColor = ScopeColor,
     BuildGrowthDirectionTiles = BuildGrowthDirectionTiles,
     BuildRoleOrderRows = BuildRoleOrderRows,
     AuraGroup = AuraGroup,
@@ -1284,6 +1107,8 @@ M.Assign(GroupPage, {
     FinalizeScopePage = FinalizeScopePage,
     SetSectionHeaderStatus = SetSectionHeaderStatus,
     SetSectionBadges = SetSectionBadges,
+    SetSectionBadgesAndStatus = SetSectionBadgesAndStatus,
+    TrackSectionRefresh = TrackSectionRefresh,
     OnOffBadge = OnOffBadge,
     BadgeNumber = BadgeNumber,
     OptionText = OptionText,

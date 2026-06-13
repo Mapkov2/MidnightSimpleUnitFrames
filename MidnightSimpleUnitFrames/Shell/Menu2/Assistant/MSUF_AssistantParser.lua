@@ -190,7 +190,6 @@ local ParseCastbarTextMoveShortcut = P.ParseCastbarTextMoveShortcut
 local ParseUnitOpacityShortcut = P.ParseUnitOpacityShortcut
 local GroupColorModeScopes = P.GroupColorModeScopes
 local GroupBarColorModeForText = P.GroupBarColorModeForText
-local ParseGroupFrameColorMode = P.ParseGroupFrameColorMode
 local MENU_SELECTOR_VERBS = P.MENU_SELECTOR_VERBS
 local HasMenuSelectorVerb = P.HasMenuSelectorVerb
 local MenuSelectorAction = P.MenuSelectorAction
@@ -317,7 +316,6 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or (P.ParseNameShorteningShortcut and P.ParseNameShorteningShortcut(normalized, ctx))
         or ParseGuidedSetup(normalized)
         or ParseScopedHelp(normalized)
-        or (P.ParseGroupGrowthDirectionShortcut and P.ParseGroupGrowthDirectionShortcut(normalized))
         or (P.ParseGroupPowerBarSizeShortcut and P.ParseGroupPowerBarSizeShortcut(normalized))
         or (P.ParsePowerBarSizeShortcut and P.ParsePowerBarSizeShortcut(normalized))
         or P.ParseMiscRegistryShortcut(normalized, raw)
@@ -325,7 +323,6 @@ function A._ParsePipelineWorkflow(normalized, raw, ctx)
         or ParseNavRailAction(normalized)
         or ParseSupportWorkflow(normalized)
         or ParseMenuWindowAction(normalized)
-        or ParseGroupFrameColorMode(normalized)
         or ParseScopedFontTextColorShortcut(normalized)
         or ParseUnitCopyScopeState(normalized)
         or (P.ParseDashboardScaleShortcut and P.ParseDashboardScaleShortcut(normalized))
@@ -342,8 +339,6 @@ function A._ParsePipelineGeometry(normalized, raw)
         or A._ParseTextSlotOffsetShortcut(normalized)
         or (P.ParseHumanAnchorTarget and P.ParseHumanAnchorTarget(normalized, raw))
         or (P.ParseGroupScaleBreakpointShortcut and P.ParseGroupScaleBreakpointShortcut(normalized))
-        or (P.ParseGroupGrowthDirectionShortcut and P.ParseGroupGrowthDirectionShortcut(normalized))
-        or (P.ParseGroupFrameFillDirectionShortcut and P.ParseGroupFrameFillDirectionShortcut(normalized))
         or (P.ParseCastbarTextSizeShortcut and P.ParseCastbarTextSizeShortcut(normalized))
         or (P.ParseCastbarSizeShortcut and P.ParseCastbarSizeShortcut(normalized))
         or (P.ParseCastbarPlacementShortcut and P.ParseCastbarPlacementShortcut(normalized))
@@ -365,7 +360,6 @@ function A._ParsePipelineGeometry(normalized, raw)
         or P.ParseGenericOffsetMove(normalized)
         or ParseUnsupportedDetailShortcut(normalized)
         or ParseScopedOnlyOverride(normalized, raw)
-        or ParseGroupFrameColorMode(normalized)
         or A._ParseTextLayerShortcut(normalized)
         or A._ParseTextSlotDropdownShortcut(normalized)
         or ParseMenuSelectorState(normalized)
@@ -405,7 +399,6 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
         or ParseUnitStatusPreview(normalized, ctx)
         or ParseGroupStatusIconReset(normalized)
         or ParseUnitStatusIndicatorReset(normalized, ctx)
-        or (P.ParseUnitStatusIconStyle and P.ParseUnitStatusIconStyle(normalized))
         or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
         or ParseUnitStatusIndicatorMove(normalized)
 end

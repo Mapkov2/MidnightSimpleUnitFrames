@@ -9,11 +9,9 @@
 --- Must not own runtime unitframe/groupframe gameplay logic.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 M.Tr = M.Tr or function(text)
     if text == nil then return "" end
     local key = tostring(text)
@@ -26,12 +24,9 @@ M.Tr = M.Tr or function(text)
         if translated ~= nil then return translated end
     end
     local locale = MSUF.L or _G.MSUF_L
-    if type(locale) == "table" and locale[key] ~= nil then
-        return locale[key]
-    end
+    if type(locale) == "table" and locale[key] ~= nil then return locale[key] end
     return key
 end
-
 local L_PROFILE, L_EDIT_ON, L_EDIT_OFF, L_EDIT_MODE_ON, L_EDIT_MODE_OFF, L_EDIT_MODE_OFF_COMBAT, L_IN_COMBAT, L_OUT_OF_COMBAT
 local function RefreshLocaleCache()
     L_PROFILE = M.Tr("Profile:")
@@ -44,23 +39,17 @@ local function RefreshLocaleCache()
     L_OUT_OF_COMBAT = M.Tr("Out of Combat")
 end
 RefreshLocaleCache()
-if type(MSUF.RegisterLocaleCallback) == "function" then
-    MSUF.RegisterLocaleCallback("MSUF_Menu2_Window", RefreshLocaleCache)
-end
-
+if type(MSUF.RegisterLocaleCallback) == "function" then MSUF.RegisterLocaleCallback("MSUF_Menu2_Window", RefreshLocaleCache) end
 local T = M.Theme
 local W = M.Widgets
-
 M.pages = M.pages or {}
 M.pageOrder = M.pageOrder or {}
 M.cache = M.cache or {}
 M._msuf2LayoutVersion = M._msuf2LayoutVersion or 0
-
 local floor = math.floor
 local max = math.max
 local min = math.min
 local IsEditModeActive
-
 local PREVIEW_WARNING_LINES = {
     "|cffff5555MSUF 6.0 Preview Warning:|r This is an alpha/preview build for World of Warcraft 12.1.",
     "|cffffd700MSUF:|r MSUF 6.0 release is planned for 10.08.2026.",
@@ -68,18 +57,12 @@ local PREVIEW_WARNING_LINES = {
     "|cffffd700MSUF:|r Use this build only for preview/testing if you can play without MSUF aura display and aura configuration.",
 }
 local previewWarningShown = {}
-
 local function GetAddonVersion()
     local getMeta = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
-    if type(getMeta) == "function" then
-        return getMeta(addonName or "MidnightSimpleUnitFrames", "Version")
-    end
-    if type(_G.GetAddOnMetadata) == "function" then
-        return _G.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version")
-    end
+    if type(getMeta) == "function" then return getMeta(addonName or "MidnightSimpleUnitFrames", "Version") end
+    if type(_G.GetAddOnMetadata) == "function" then return _G.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version") end
     return nil
 end
-
 local previewBuild
 local function IsMSUF60PreviewBuild()
     if previewBuild ~= nil then return previewBuild end
@@ -95,7 +78,6 @@ local function IsMSUF60PreviewBuild()
         or lower:find("beta", 1, true)) and true or false
     return previewBuild
 end
-
 local function AddPreviewWarningLine(line)
     local chat = _G.DEFAULT_CHAT_FRAME
     if chat and type(chat.AddMessage) == "function" then
@@ -104,7 +86,6 @@ local function AddPreviewWarningLine(line)
         _G.print(line)
     end
 end
-
 local function ShowPreviewWarning(source)
     source = source or "default"
     if previewWarningShown[source] or not IsMSUF60PreviewBuild() then return end
@@ -113,9 +94,6 @@ local function ShowPreviewWarning(source)
         AddPreviewWarningLine(PREVIEW_WARNING_LINES[i])
     end
 end
-
-M.ShowPreviewWarning = ShowPreviewWarning
-
 do
     if IsMSUF60PreviewBuild() then
         local loginWarningFrame = CreateFrame("Frame")
@@ -130,7 +108,6 @@ do
         end)
     end
 end
-
 local ApplyMenuFramePriority = M.ApplyMenuFramePriority
 local ApplyMenuResizeProxyPriority = M.ApplyMenuResizeProxyPriority
 local RefreshMenuFramePriority = M.RefreshMenuFramePriority
@@ -152,7 +129,6 @@ local BuildNav = M.BuildNavRail
 local CreateWindowControlButton = M.CreateWindowControlButton
 local RefreshWindowControls = M.RefreshWindowControls
 local ALIASES = M.ALIASES or {}
-
 local DEFAULT_WINDOW_W, DEFAULT_WINDOW_H = 900, 700
 local MIN_WINDOW_W, MIN_WINDOW_H = 620, 430
 local MAX_WINDOW_W, MAX_WINDOW_H = 1600, 1100
@@ -161,23 +137,19 @@ local NAV_W = 174
 local CONTENT_W = WINDOW_W - NAV_W - 24
 local CONTENT_H = WINDOW_H - 74
 local MENU_BASE_SCALE = 1.08
-
 local function ClampNumber(value, minValue, maxValue, fallback)
     value = tonumber(value) or fallback or minValue
     if value < minValue then value = minValue elseif value > maxValue then value = maxValue end
     return floor(value + 0.5)
 end
-
 local function ClampScale(value)
     value = tonumber(value) or 1
     if value < 0.25 then value = 0.25 elseif value > 1.5 then value = 1.5 end
     return value
 end
-
 local function EffectiveMenuScale(value)
     return ClampScale(ClampScale(value) * MENU_BASE_SCALE)
 end
-
 local function WindowMaxBounds()
     local maxW, maxH = MAX_WINDOW_W, MAX_WINDOW_H
     local parent = _G.UIParent
@@ -190,7 +162,6 @@ local function WindowMaxBounds()
     end
     return max(MIN_WINDOW_W, maxW), max(MIN_WINDOW_H, maxH)
 end
-
 local function ApplyWindowResizeBounds(frame)
     if not frame then return end
     local maxW, maxH = WindowMaxBounds()
@@ -201,7 +172,6 @@ local function ApplyWindowResizeBounds(frame)
         if frame.SetMaxResize then frame:SetMaxResize(maxW, maxH) end
     end
 end
-
 local function SetWindowMetrics(width, height)
     local maxW, maxH = WindowMaxBounds()
     WINDOW_W = ClampNumber(width, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
@@ -209,17 +179,14 @@ local function SetWindowMetrics(width, height)
     CONTENT_W = math.max(420, WINDOW_W - NAV_W - 24)
     CONTENT_H = math.max(320, WINDOW_H - 74)
 end
-
 function M.GetContentMetrics()
     return CONTENT_W, CONTENT_H
 end
-
 local function RefreshWindowMetrics(frame)
     local width = (frame and frame.GetWidth and frame:GetWidth()) or WINDOW_W
     local height = (frame and frame.GetHeight and frame:GetHeight()) or WINDOW_H
     SetWindowMetrics(width, height)
 end
-
 local function ClampWindowSize(frame)
     if not frame then return end
     RefreshWindowMetrics(frame)
@@ -227,7 +194,6 @@ local function ClampWindowSize(frame)
     ApplyWindowResizeBounds(frame)
     if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
 end
-
 local function ReadSavedWindowSize()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return DEFAULT_WINDOW_W, DEFAULT_WINDOW_H end
@@ -235,7 +201,6 @@ local function ReadSavedWindowSize()
     return ClampNumber(g.msuf2WindowW, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W),
         ClampNumber(g.msuf2WindowH, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
 end
-
 local function SaveWindowSize(frame)
     RefreshWindowMetrics(frame)
     local g = M.GetGeneralDB and M.GetGeneralDB()
@@ -243,20 +208,16 @@ local function SaveWindowSize(frame)
     g.msuf2WindowW = WINDOW_W
     g.msuf2WindowH = WINDOW_H
 end
-
 local RebuildActivePageForResize
-
 local SNAP_EDGE_PX = 24
 local SNAP_FRAME_EDGE_PX = 4
 local SNAP_SCREEN_MARGIN = 14
 local MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H = 286, 32
-
 local function IsSlashMenuSnapEnabled()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
     return g.slashMenuSnapEnabled ~= false
 end
-
 local function WindowVisualScale(frame)
     local parent = _G.UIParent
     if not (frame and frame.GetEffectiveScale and parent and parent.GetEffectiveScale) then return 1 end
@@ -264,7 +225,6 @@ local function WindowVisualScale(frame)
     if uiScale == 0 then uiScale = 1 end
     return (frame:GetEffectiveScale() or uiScale) / uiScale
 end
-
 local function CursorPositionInUIParent()
     local parent = _G.UIParent
     if not (parent and parent.GetEffectiveScale and _G.GetCursorPosition) then return nil, nil end
@@ -273,7 +233,6 @@ local function CursorPositionInUIParent()
     local x, y = _G.GetCursorPosition()
     return (x or 0) / scale, (y or 0) / scale
 end
-
 local function CaptureWindowLayout(frame)
     if not (frame and frame.GetLeft and frame.GetTop and frame.GetWidth and frame.GetHeight) then return nil end
     return {
@@ -283,7 +242,6 @@ local function CaptureWindowLayout(frame)
         h = frame:GetHeight() or WINDOW_H,
     }
 end
-
 local function ApplyWindowLayout(frame, layout, rebuild)
     if not (frame and layout and _G.UIParent) then return false end
     local maxW, maxH = WindowMaxBounds()
@@ -300,7 +258,6 @@ local function ApplyWindowLayout(frame, layout, rebuild)
     end
     return true
 end
-
 local function RestoreSlashMenuWindow(frame)
     if not frame then return false end
     local layout = frame._msuf2RestoreLayout
@@ -311,24 +268,18 @@ local function RestoreSlashMenuWindow(frame)
         ClampWindowSize(frame)
         if RebuildActivePageForResize then RebuildActivePageForResize(frame) end
     end
-    if RefreshWindowControls then RefreshWindowControls(frame) end
+    M.CallIf(RefreshWindowControls, frame)
     return true
 end
-
 local function MaximizeSlashMenuWindow(frame)
     if not frame then return false end
-    if frame._msuf2WindowState == "maximized" then
-        return RestoreSlashMenuWindow(frame)
-    end
-
+    if frame._msuf2WindowState == "maximized" then return RestoreSlashMenuWindow(frame) end
     frame._msuf2RestoreLayout = CaptureWindowLayout(frame)
     frame._msuf2WindowState = "maximized"
-
     local parent = _G.UIParent
     if not (parent and parent.GetWidth and parent.GetHeight) then return false end
     local screenW, screenH = parent:GetWidth() or 0, parent:GetHeight() or 0
     if screenW <= 0 or screenH <= 0 then return false end
-
     local scale = WindowVisualScale(frame)
     if scale <= 0 then scale = 1 end
     local maxW, maxH = WindowMaxBounds()
@@ -339,12 +290,10 @@ local function MaximizeSlashMenuWindow(frame)
     local visualW = localW * scale
     local x = max(SNAP_SCREEN_MARGIN, floor((screenW - visualW) * 0.5 + 0.5))
     local yTop = screenH - SNAP_SCREEN_MARGIN
-
     ApplyWindowLayout(frame, { x = x, yTop = yTop, w = localW, h = localH }, true)
-    if RefreshWindowControls then RefreshWindowControls(frame) end
+    M.CallIf(RefreshWindowControls, frame)
     return true
 end
-
 local function RestoreMinimizedSlashMenu(frame)
     if not frame then frame = M.frame end
     if not frame then return false end
@@ -352,43 +301,35 @@ local function RestoreMinimizedSlashMenu(frame)
     frame._msuf2Minimized = nil
     ApplyMenuFramePriority(frame)
     frame:Show()
-    if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
-    if RefreshWindowControls then RefreshWindowControls(frame) end
+    M.CallIf(M.UpdateMenuCombatListener)
+    M.CallIf(RefreshWindowControls, frame)
     return true
 end
-
 local function HideSlashMenuAndMinibar(frame)
     frame = frame or M.frame
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     if frame and frame.Hide then frame:Hide() end
-    if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
+    M.CallIf(M.UpdateMenuCombatListener)
 end
-
 local function MinimizeSlashMenuWindow(frame)
     if not frame then return false end
     if not M.minimizedBar then return false end
     frame._msuf2Minimized = true
-    if M.minimizedBar.title and frame.title and frame.title.GetText then
-        M.minimizedBar.title:SetText(frame.title:GetText() or "MSUF Menu")
-    end
+    if M.minimizedBar.title and frame.title and frame.title.GetText then M.minimizedBar.title:SetText(frame.title:GetText() or "MSUF Menu") end
     ApplyMenuFramePriority(M.minimizedBar)
     M.minimizedBar:Show()
     frame:Hide()
-    if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
+    M.CallIf(M.UpdateMenuCombatListener)
     return true
 end
-
 local function GetSlashMenuSnapLayout(frame)
     if not (frame and IsSlashMenuSnapEnabled()) then return false end
     local parent = _G.UIParent
     if not (parent and parent.GetWidth and parent.GetHeight) then return false end
-
     local cursorX, cursorY = CursorPositionInUIParent()
     if not cursorX then return false end
-
     local screenW, screenH = parent:GetWidth() or 0, parent:GetHeight() or 0
     if screenW <= 0 or screenH <= 0 then return false end
-
     local frameLeft = (frame.GetLeft and frame:GetLeft()) or cursorX
     local frameRight = (frame.GetRight and frame:GetRight()) or cursorX
     local frameTop = (frame.GetTop and frame:GetTop()) or cursorY
@@ -399,12 +340,10 @@ local function GetSlashMenuSnapLayout(frame)
         right = cursorX >= (screenW * 0.5)
         left = not right
     end
-
     local top = cursorY >= (screenH - SNAP_EDGE_PX) or frameTop >= (screenH - SNAP_FRAME_EDGE_PX)
     local bottom = cursorY <= SNAP_EDGE_PX or frameBottom <= SNAP_FRAME_EDGE_PX
     if not (left or right or top or bottom) then return false end
     if bottom and not (left or right) then return false end
-
     local scale = WindowVisualScale(frame)
     if scale <= 0 then scale = 1 end
     local maxW, maxH = WindowMaxBounds()
@@ -412,14 +351,12 @@ local function GetSlashMenuSnapLayout(frame)
     local usableH = max(1, screenH - (SNAP_SCREEN_MARGIN * 2))
     local halfW = usableW * 0.5
     local halfH = usableH * 0.5
-
     local targetW = top and not (left or right) and usableW or halfW
     local targetH = ((left or right) and (top or bottom)) and halfH or usableH
     local localW = ClampNumber(targetW / scale, MIN_WINDOW_W, maxW, DEFAULT_WINDOW_W)
     local localH = ClampNumber(targetH / scale, MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
     local visualW = localW * scale
     local visualH = localH * scale
-
     local x
     if right then
         x = screenW - SNAP_SCREEN_MARGIN - visualW
@@ -427,7 +364,6 @@ local function GetSlashMenuSnapLayout(frame)
         x = SNAP_SCREEN_MARGIN
     end
     if x < SNAP_SCREEN_MARGIN then x = SNAP_SCREEN_MARGIN end
-
     local yTop
     if bottom then
         yTop = SNAP_SCREEN_MARGIN + visualH
@@ -435,7 +371,6 @@ local function GetSlashMenuSnapLayout(frame)
         yTop = screenH - SNAP_SCREEN_MARGIN
     end
     if yTop > screenH - SNAP_SCREEN_MARGIN then yTop = screenH - SNAP_SCREEN_MARGIN end
-
     return {
         x = x,
         yTop = yTop,
@@ -450,22 +385,18 @@ local function GetSlashMenuSnapLayout(frame)
         bottom = bottom,
     }
 end
-
 local function ApplySlashMenuSnap(frame)
     local layout = frame and frame._msuf2LastSnapLayout or nil
     if not layout then layout = GetSlashMenuSnapLayout(frame) end
     if not layout then return false end
-
     if frame._msuf2WindowState == "maximized" then
         frame._msuf2WindowState = "normal"
         frame._msuf2RestoreLayout = nil
     end
-
     ApplyWindowLayout(frame, layout, true)
-    if RefreshWindowControls then RefreshWindowControls(frame) end
+    M.CallIf(RefreshWindowControls, frame)
     return true
 end
-
 local function ApplyScrollMetrics()
     if not M.scrollChild then return end
     local height = CONTENT_H
@@ -473,11 +404,8 @@ local function ApplyScrollMetrics()
     if entry and tonumber(entry.height) then height = math.max(height, entry.height) end
     M.scrollChild:SetSize(CONTENT_W - 10, height)
     if entry and entry.wrapper then entry.wrapper:SetSize(CONTENT_W - 10, height) end
-    if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then
-        M.scrollFrame:_msuf2RefreshScrollBar()
-    end
+    if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
 end
-
 function RebuildActivePageForResize(frame)
     local key = M.activeKey or "home"
     SaveWindowSize(frame)
@@ -487,23 +415,18 @@ function RebuildActivePageForResize(frame)
     M.activeKey = nil
     if M.SelectPage and frame and frame:IsShown() then M.SelectPage(key) end
 end
-
 function M.RegisterPage(key, spec)
     if type(key) ~= "string" or type(spec) ~= "table" then return end
-    if not M.pages[key] then
-        M.pageOrder[#M.pageOrder + 1] = key
-    end
+    if not M.pages[key] then M.pageOrder[#M.pageOrder + 1] = key end
     M.pages[key] = spec
 end
-
 local function HideAllCachedPages()
-    if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("HIDE_ALL_PAGES", nil) end
-    if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("HIDE_ALL_PAGES", nil) end
+    M.CallIf(M.ReleasePinnedPreviews, "HIDE_ALL_PAGES", nil)
+    M.CallIf(M.ReleaseGFNativePreviews, "HIDE_ALL_PAGES", nil)
     for _, entry in pairs(M.cache) do
         if entry.wrapper and entry.wrapper.Hide then entry.wrapper:Hide() end
     end
 end
-
 local function SetTitle(key)
     local frame = M.frame
     if not frame then return end
@@ -519,7 +442,6 @@ local function SetTitle(key)
     end
     if frame.RefreshStatus then frame:RefreshStatus() end
 end
-
 local function UpdateNav(key)
     if not M.navButtons then return end
     local group = M.navGroupForKey and M.navGroupForKey[key]
@@ -533,9 +455,7 @@ local function UpdateNav(key)
     local previousKey = M._msuf2NavActiveKey
     if labelsDirty then
         for pageKey, btn in pairs(M.navButtons) do
-            if btn._msuf2RawLabel and btn.SetText then
-                btn:SetText(M.Tr(btn._msuf2RawLabel))
-            end
+            if btn._msuf2RawLabel and btn.SetText then btn:SetText(M.Tr(btn._msuf2RawLabel)) end
             if btn.SetActive then btn:SetActive(pageKey == key) end
         end
     elseif previousKey ~= key then
@@ -547,34 +467,24 @@ local function UpdateNav(key)
     M._msuf2NavActiveKey = key
     if labelsDirty and M.navHeaders then
         for _, btn in pairs(M.navHeaders) do
-            if btn._msuf2RawLabel and btn.SetText then
-                btn:SetText(string.upper(M.Tr(btn._msuf2RawLabel)))
-            end
+            if btn._msuf2RawLabel and btn.SetText then btn:SetText(string.upper(M.Tr(btn._msuf2RawLabel))) end
         end
     end
-    if labelsDirty and M.nav and M.nav.searchBox then
-        UpdateSearchPlaceholder(M.nav.searchBox)
-    end
+    if labelsDirty and M.nav and M.nav.searchBox then UpdateSearchPlaceholder(M.nav.searchBox) end
 end
-M.UpdateNav = UpdateNav
-
 local function CurrentMenuDataRevision()
     return tonumber(M._msuf2MenuDataRevision) or 0
 end
-
 function M.MarkMenuDataDirty(reason)
     M._msuf2MenuDataRevision = CurrentMenuDataRevision() + 1
     M._msuf2MenuDataDirtyReason = reason
     return M._msuf2MenuDataRevision
 end
-
 local function RunRefreshers(entry, opts)
     if not entry or not entry.refreshers then return end
     opts = opts or {}
     local revision = CurrentMenuDataRevision()
-    if opts.force ~= true and entry._msuf2RefreshRevision == revision then
-        return false
-    end
+    if opts.force ~= true and entry._msuf2RefreshRevision == revision then return false end
     for i = 1, #entry.refreshers do
         local fn = entry.refreshers[i]
         if type(fn) == "function" then pcall(fn) end
@@ -582,16 +492,11 @@ local function RunRefreshers(entry, opts)
     entry._msuf2RefreshRevision = revision
     return true
 end
-M.RunEntryRefreshers = RunRefreshers
-
 IsEditModeActive = M.IsMSUFEditModeActive
-
 local IsEditModeCombatLocked = M.IsEditModeCombatLocked
-
 local function RefreshDashboardEditModeButton()
     local btn = M.dashboardEditModeButton
     if not btn then return end
-
     local active = IsEditModeActive()
     local combatLocked = IsEditModeCombatLocked() and true or false
     if active then
@@ -601,24 +506,20 @@ local function RefreshDashboardEditModeButton()
     else
         btn:SetText(L_EDIT_MODE_OFF)
     end
-
     if btn.SetEnabled then btn:SetEnabled(active or not combatLocked) end
     if btn.SetActive then btn:SetActive(active) end
 end
-M.RefreshDashboardEditModeButton = RefreshDashboardEditModeButton
-
 local editModeUIHooked = false
 local function EnsureEditModeUIHook()
     if editModeUIHooked then return end
     local register = rawget(_G, "MSUF_RegisterAnyEditModeListener")
     if type(register) ~= "function" then return end
-
     register(function()
         RefreshMenuFramePriority()
         local frame = M.frame
         if frame and frame:IsShown() then
             if frame.RefreshStatus then frame:RefreshStatus() end
-            if M.RequestRefresh then M.RequestRefresh(nil, "edit-mode-ui") elseif M.Refresh then M.Refresh() end
+            M.RequestOrRefresh(nil, "edit-mode-ui")
             SyncGroupPagePreviewForKey(M.activeKey)
         else
             RefreshDashboardEditModeButton()
@@ -626,7 +527,6 @@ local function EnsureEditModeUIHook()
     end)
     editModeUIHooked = true
 end
-
 local function CreateContext(key, wrapper, entry)
     local ctx = {
         key = key,
@@ -646,7 +546,6 @@ local function CreateContext(key, wrapper, entry)
     end
     return ctx
 end
-
 local function BuildPlaceholderPage(ctx, requestedKey)
     local b = W.PageBuilder(ctx)
     local sec = b:Section("Native page missing", 130)
@@ -654,11 +553,9 @@ local function BuildPlaceholderPage(ctx, requestedKey)
     W.Text(sec, M.Format("Requested page: %s", tostring(requestedKey or "unknown")), 14, -68, ctx.width - 28, T.colors.dim)
     ctx:SetContentHeight(210)
 end
-
 local function BuildPageEntry(key, hidden)
     if not M.scrollChild then return nil end
     key = ALIASES[key or ""] or key or "home"
-
     local spec = M.pages[key]
     local specVersion = spec and spec.version
     local layoutVersion = M._msuf2LayoutVersion or 0
@@ -684,17 +581,13 @@ local function BuildPageEntry(key, hidden)
         cached = nil
     end
     if cached then return cached end
-
     ClearSearchRegistryPage(key)
-
     local wrapper = CreateFrame("Frame", nil, M.scrollChild)
     wrapper:SetPoint("TOPLEFT", M.scrollChild, "TOPLEFT", 0, 0)
     wrapper:SetSize(CONTENT_W - 10, CONTENT_H)
     if hidden and wrapper.Hide then wrapper:Hide() end
-
     local entry = { wrapper = wrapper, refreshers = {}, height = CONTENT_H, version = specVersion, layoutVersion = layoutVersion, hiddenBuild = hidden and true or false }
     M.cache[key] = entry
-
     local ctx = CreateContext(key, wrapper, entry)
     local prevBuildKey = M._msuf2SearchBuildKey
     M._msuf2SearchBuildKey = key
@@ -709,20 +602,11 @@ local function BuildPageEntry(key, hidden)
         BuildPlaceholderPage(ctx, key)
     end
     M._msuf2SearchBuildKey = prevBuildKey
-
     if hidden and wrapper.Hide then wrapper:Hide() end
     return entry
 end
-M.BuildPageEntry = BuildPageEntry
-
 local PAGE_HISTORY_LIMIT = 30
 local suppressPageHistory
-
-local function ClearTable(tbl)
-    if type(tbl) ~= "table" then return end
-    for key in pairs(tbl) do tbl[key] = nil end
-end
-
 local function NormalizePageKey(key)
     if key == nil then return nil end
     key = ALIASES[key or ""] or key
@@ -730,7 +614,6 @@ local function NormalizePageKey(key)
     if key == "" then return nil end
     return key
 end
-
 local function PushPageHistory(stack, key)
     key = NormalizePageKey(key)
     if not key then return end
@@ -739,16 +622,19 @@ local function PushPageHistory(stack, key)
     while #stack > PAGE_HISTORY_LIMIT do table.remove(stack, 1) end
     return stack
 end
-
+local function EnsurePageHistoryStacks()
+    M.pageBackStack = type(M.pageBackStack) == "table" and M.pageBackStack or {}
+    M.pageForwardStack = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+    return M.pageBackStack, M.pageForwardStack
+end
 local function RecordPageNavigation(fromKey, toKey)
     fromKey = NormalizePageKey(fromKey)
     toKey = NormalizePageKey(toKey)
     if not fromKey or not toKey or fromKey == toKey then return end
     M.pageBackStack = PushPageHistory(M.pageBackStack, fromKey)
-    M.pageForwardStack = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
-    ClearTable(M.pageForwardStack)
+    local _, forward = EnsurePageHistoryStacks()
+    for key in pairs(forward) do forward[key] = nil end
 end
-
 local function OpenHistoryPage(page)
     local open = type(M.Open) == "function" and M.Open or M.SelectPage
     if type(open) ~= "function" then return false end
@@ -757,10 +643,8 @@ local function OpenHistoryPage(page)
     suppressPageHistory = false
     return ok
 end
-
 function M.GetPageHistoryState()
-    local back = type(M.pageBackStack) == "table" and M.pageBackStack or {}
-    local forward = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
+    local back, forward = EnsurePageHistoryStacks()
     return {
         canBack = #back > 0,
         canForward = #forward > 0,
@@ -770,11 +654,10 @@ function M.GetPageHistoryState()
         nextPage = forward[#forward],
     }
 end
-
 function M.GoBackPage()
     if M.BlockCombatAction and M.BlockCombatAction() then return false, "Dashboard back navigation is blocked in combat." end
-    M.pageBackStack = type(M.pageBackStack) == "table" and M.pageBackStack or {}
-    local page = table.remove(M.pageBackStack)
+    local back = EnsurePageHistoryStacks()
+    local page = table.remove(back)
     if type(page) ~= "string" or page == "" then return false, "Dashboard back navigation has no previous native Menu2 page." end
     local current = M.activeKey
     if OpenHistoryPage(page) then
@@ -784,11 +667,10 @@ function M.GoBackPage()
     M.pageBackStack = PushPageHistory(M.pageBackStack, page)
     return false, "Dashboard back navigation is not available right now."
 end
-
 function M.GoForwardPage()
     if M.BlockCombatAction and M.BlockCombatAction() then return false, "Dashboard forward navigation is blocked in combat." end
-    M.pageForwardStack = type(M.pageForwardStack) == "table" and M.pageForwardStack or {}
-    local page = table.remove(M.pageForwardStack)
+    local _, forward = EnsurePageHistoryStacks()
+    local page = table.remove(forward)
     if type(page) ~= "string" or page == "" then return false, "Dashboard forward navigation has no next native Menu2 page." end
     local current = M.activeKey
     if OpenHistoryPage(page) then
@@ -798,7 +680,6 @@ function M.GoForwardPage()
     M.pageForwardStack = PushPageHistory(M.pageForwardStack, page)
     return false, "Dashboard forward navigation is not available right now."
 end
-
 function M.SelectPage(key)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
@@ -810,9 +691,7 @@ function M.SelectPage(key)
             and req.explicit == true
             and req.consumed ~= true
             and (not req.pageKey or tostring(req.pageKey) == tostring(key))
-        if not hasPendingFocus and type(M.CloseAutoFocusedSections) == "function" then
-            M.CloseAutoFocusedSections(key)
-        end
+        if not hasPendingFocus and type(M.CloseAutoFocusedSections) == "function" then M.CloseAutoFocusedSections(key) end
     end
     if key ~= "search" and M.activeKey == "search" then
         BumpSearchInputSerial()
@@ -828,36 +707,31 @@ function M.SelectPage(key)
         if M.activeKey == key then M.activeKey = nil end
     end
     if key == M.activeKey and cached then
-        if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("SELECT_CACHED", key) end
-        if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("SELECT_CACHED", key) end
+        M.CallIf(M.ReleasePinnedPreviews, "SELECT_CACHED", key)
+        M.CallIf(M.ReleaseGFNativePreviews, "SELECT_CACHED", key)
         RunRefreshers(cached)
         SyncBossPagePreviewForKey(key)
         SyncGroupPagePreviewForKey(key)
         if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
         return true
     end
-
     local previousKey = M.activeKey
     local previous = previousKey and M.cache and M.cache[previousKey]
-    if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("SELECT_PAGE", key) end
-    if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("SELECT_PAGE", key) end
+    M.CallIf(M.ReleasePinnedPreviews, "SELECT_PAGE", key)
+    M.CallIf(M.ReleaseGFNativePreviews, "SELECT_PAGE", key)
     if previous and previous.wrapper and previous.wrapper.Hide then
         previous.wrapper:Hide()
     else
         HideAllCachedPages()
     end
-
     local entry = BuildPageEntry(key, false)
     if not entry then return false end
     entry.hiddenBuild = false
-
     M.activeKey = key
     if not suppressPageHistory then RecordPageNavigation(previousKey, key) end
-    if key ~= "search" then M.PersistMenuStateValue("lastPage", key) end
+    if key ~= "search" then M.SetMenuStateValue("lastPage", key) end
     if M.frame then M.frame._msufCurrentKey = key end
-    if M.scrollChild then
-        M.scrollChild:SetHeight(entry.height or CONTENT_H)
-    end
+    if M.scrollChild then M.scrollChild:SetHeight(entry.height or CONTENT_H) end
     if M.scrollFrame then
         if M.scrollFrame.SetVerticalScroll then
             M.scrollFrame:SetVerticalScroll(0)
@@ -874,11 +748,10 @@ function M.SelectPage(key)
     if hasPendingFocus and type(M.FocusRequestedSection) == "function" then M.FocusRequestedSection(key, { flash = true }) end
     return true
 end
-
 local function CreateMinimizedBar(frame)
     if M.minimizedBar then return M.minimizedBar end
     local bar = T.Panel(UIParent, "MSUF2_MinimizedWindow", T.colors.glassShell or T.colors.bg, T.colors.border)
-    if T.ApplyMaterial then T.ApplyMaterial(bar, "shell") elseif T.ApplyGlass then T.ApplyGlass(bar, "shell") end
+    T.ApplySurface(bar, "shell")
     bar:SetSize(MINIMIZED_WINDOW_W, MINIMIZED_WINDOW_H)
     bar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 18, 18)
     ApplyMenuFramePriority(bar)
@@ -889,38 +762,32 @@ local function CreateMinimizedBar(frame)
     bar:SetScript("OnDragStart", function(self) self:StartMoving() end)
     bar:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
     bar:Hide()
-
     local title = T.Font(bar, "GameFontHighlightSmall", "MSUF Menu", T.colors.accent)
     title:SetPoint("LEFT", bar, "LEFT", 12, 0)
     title:SetPoint("RIGHT", bar, "RIGHT", -62, 0)
     title:SetJustifyH("LEFT")
     bar.title = title
-
     local restore = CreateWindowControlButton(bar, "maximize", "Restore", "Restore the minimized MSUF menu.")
     restore:SetPoint("RIGHT", bar, "RIGHT", -31, 0)
     restore:SetScript("OnClick", function() RestoreMinimizedSlashMenu(frame) end)
     bar.restoreButton = restore
-
     local close = T.CloseButton(bar)
     close:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
     close:SetScript("OnClick", function()
         bar:Hide()
         if frame then frame._msuf2Minimized = nil end
-        if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
+        M.CallIf(M.UpdateMenuCombatListener)
     end)
     bar.closeButton = close
-
     M.minimizedBar = bar
     return bar
 end
-
 local function BuildWindow()
     if M.frame then return M.frame end
-
     EnsurePersistentMenuState()
     SetWindowMetrics(ReadSavedWindowSize())
     local f = T.Panel(UIParent, "MSUF2_Window", T.colors.glassShell or T.colors.bg, T.colors.border)
-    if T.ApplyMaterial then T.ApplyMaterial(f, "shell") elseif T.ApplyGlass then T.ApplyGlass(f, "shell") end
+    T.ApplySurface(f, "shell")
     _G.MSUF_StandaloneOptionsWindow = f
     f:SetSize(WINDOW_W, WINDOW_H)
     f:SetPoint("CENTER", UIParent, "CENTER", -60, 10)
@@ -955,49 +822,39 @@ local function BuildWindow()
         ApplyScrollMetrics()
     end)
     f:Hide()
-    if type(UISpecialFrames) == "table" then
-        table.insert(UISpecialFrames, "MSUF2_Window")
-    end
-
+    if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "MSUF2_Window") end
     local title = T.Font(f, "GameFontDisableSmall", "MSUF", T.colors.accent)
     title:SetPoint("TOPLEFT", 12, -6)
     title:SetPoint("TOPRIGHT", f, "TOPRIGHT", -112, -6)
     title:SetJustifyH("LEFT")
     title:SetAlpha(0.50)
     f.title = title
-
     local subtitle = T.Font(f, "GameFontDisableSmall", "", T.colors.muted)
     subtitle:SetPoint("TOPRIGHT", f, "TOPRIGHT", -112, -14)
     subtitle:SetJustifyH("RIGHT")
     subtitle:Hide()
     f.subtitle = subtitle
-
     local close = T.CloseButton(f)
     close:SetPoint("TOPRIGHT", -4, -4)
     close:SetScript("OnClick", function() HideSlashMenuAndMinibar(f) end)
     f.closeButton = close
-
     local maximize = CreateWindowControlButton(f, "maximize", "Maximize", "Maximize or restore the MSUF menu window.")
     maximize:SetPoint("TOPRIGHT", close, "TOPLEFT", -2, 0)
     maximize:SetScript("OnClick", function() MaximizeSlashMenuWindow(f) end)
     f.maximizeButton = maximize
-
     local minimize = CreateWindowControlButton(f, "minimize", "Minimize", "Collapse the MSUF menu to a small taskbar-style bar.")
     minimize:SetPoint("TOPRIGHT", maximize, "TOPLEFT", -2, 0)
     minimize:SetScript("OnClick", function() MinimizeSlashMenuWindow(f) end)
     f.minimizeButton = minimize
-
     local function EnsureResizeProxy()
         if f._msuf2ResizeProxy then return f._msuf2ResizeProxy end
         local proxy = CreateFrame("Frame", nil, UIParent)
         ApplyMenuResizeProxyPriority(proxy, f)
         proxy:Hide()
-
         local fill = proxy:CreateTexture(nil, "BACKGROUND")
         fill:SetAllPoints()
         fill:SetColorTexture(T.colors.bg[1], T.colors.bg[2], T.colors.bg[3], 0.18)
         proxy.fill = fill
-
         local accent = T.colors.accent or { 0.22, 0.78, 0.94, 1 }
         local function Edge(pointA, pointB, width, height)
             local tex = proxy:CreateTexture(nil, "BORDER")
@@ -1012,16 +869,13 @@ local function BuildWindow()
         Edge({ "BOTTOMLEFT", proxy, "BOTTOMLEFT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, nil, 2)
         Edge({ "TOPLEFT", proxy, "TOPLEFT", 0, 0 }, { "BOTTOMLEFT", proxy, "BOTTOMLEFT", 0, 0 }, 2, nil)
         Edge({ "TOPRIGHT", proxy, "TOPRIGHT", 0, 0 }, { "BOTTOMRIGHT", proxy, "BOTTOMRIGHT", 0, 0 }, 2, nil)
-
         local label = T.Font(proxy, "GameFontDisableSmall", "", accent)
         label:SetPoint("BOTTOMRIGHT", proxy, "TOPRIGHT", 0, 4)
         label:SetJustifyH("RIGHT")
         proxy.sizeLabel = label
-
         f._msuf2ResizeProxy = proxy
         return proxy
     end
-
     local function ShowWindowLayoutProxy(layout)
         if not layout then return nil end
         local scale = layout.scale or WindowVisualScale(f)
@@ -1035,13 +889,11 @@ local function BuildWindow()
         proxy:Show()
         return proxy
     end
-
     local function HideWindowLayoutProxy()
         local proxy = f._msuf2ResizeProxy
         if proxy then proxy:Hide() end
         f._msuf2SnapPreviewKey = nil
     end
-
     local FinishWindowDrag
     local function UpdateSnapPreview()
         if not f._msuf2DraggingWindow then return end
@@ -1051,7 +903,6 @@ local function BuildWindow()
             HideWindowLayoutProxy()
             return
         end
-
         f._msuf2LastSnapLayout = layout
         local key = floor((layout.x or 0) + 0.5) .. ":"
             .. floor((layout.yTop or 0) + 0.5) .. ":"
@@ -1061,12 +912,11 @@ local function BuildWindow()
         f._msuf2SnapPreviewKey = key
         ShowWindowLayoutProxy(layout)
     end
-
     local function BeginWindowDrag()
         if f._msuf2WindowState == "maximized" then
             f._msuf2WindowState = "normal"
             f._msuf2RestoreLayout = nil
-            if RefreshWindowControls then RefreshWindowControls(f) end
+            M.CallIf(RefreshWindowControls, f)
         end
         f._msuf2DraggingWindow = true
         f._msuf2SnapPreviewKey = nil
@@ -1077,7 +927,6 @@ local function BuildWindow()
             UpdateSnapPreview()
         end
     end
-
     FinishWindowDrag = function(applySnap)
         f._msuf2DraggingWindow = nil
         f:SetScript("OnUpdate", nil)
@@ -1086,10 +935,8 @@ local function BuildWindow()
         if applySnap then ApplySlashMenuSnap(f) end
         f._msuf2LastSnapLayout = nil
     end
-
     f._msuf2BeginWindowDrag = BeginWindowDrag
     f._msuf2FinishWindowDrag = FinishWindowDrag
-
     local FinishResizeProxy
     local function UpdateResizeProxy()
         local state = f._msuf2ResizeState
@@ -1107,10 +954,8 @@ local function BuildWindow()
         local h = ClampNumber(state.startH + ((state.cursorY - cursorY) / scale), MIN_WINDOW_H, maxH, DEFAULT_WINDOW_H)
         if state.w == w and state.h == h then return end
         state.w, state.h = w, h
-
         ShowWindowLayoutProxy({ x = state.layout.x, yTop = state.layout.yTop, w = w, h = h, scale = scale })
     end
-
     local function BeginResizeProxy(button)
         if button ~= "LeftButton" then return false end
         local cursorX, cursorY = CursorPositionInUIParent()
@@ -1120,7 +965,7 @@ local function BuildWindow()
         f._msuf2ResizeMetricsDirty = nil
         f._msuf2WindowState = "normal"
         f._msuf2RestoreLayout = nil
-        if RefreshWindowControls then RefreshWindowControls(f) end
+        M.CallIf(RefreshWindowControls, f)
         f._msuf2ResizeState = {
             cursorX = cursorX,
             cursorY = cursorY,
@@ -1135,7 +980,6 @@ local function BuildWindow()
         UpdateResizeProxy()
         return true
     end
-
     FinishResizeProxy = function(apply)
         local state = f._msuf2ResizeState
         f._msuf2FinishingResize = true
@@ -1151,20 +995,16 @@ local function BuildWindow()
             f._msuf2FinishingResize = nil
             return
         end
-
         local w = state.w or state.startW
         local h = state.h or state.startH
         local changed = math.abs((w or state.startW) - state.startW) >= 1
             or math.abs((h or state.startH) - state.startH) >= 1
         f._msuf2ResizeState = nil
         f._msuf2ResizeMetricsDirty = nil
-        if apply and changed then
-            ApplyWindowLayout(f, { x = state.layout.x, yTop = state.layout.yTop, w = w, h = h }, true)
-        end
+        if apply and changed then ApplyWindowLayout(f, { x = state.layout.x, yTop = state.layout.yTop, w = w, h = h }, true) end
         f._msuf2LiveResizing = nil
         f._msuf2FinishingResize = nil
     end
-
     local grip = CreateFrame("Button", nil, f)
     grip:SetSize(18, 18)
     grip:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -3, 3)
@@ -1184,14 +1024,12 @@ local function BuildWindow()
     f.resizeGrip = grip
     CreateMinimizedBar(f)
     RefreshWindowControls(f)
-
     local content = CreateFrame("Frame", nil, f)
     content:SetPoint("TOPLEFT", f, "TOPLEFT", 8, -30)
     content:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -8, 8)
     f.content = content
-
     local nav = T.Panel(content, nil, T.colors.glassRail or T.colors.panelNav or T.colors.panel, T.colors.borderSoft)
-    if T.ApplyMaterial then T.ApplyMaterial(nav, "rail") elseif T.ApplyGlass then T.ApplyGlass(nav, "rail") end
+    T.ApplySurface(nav, "rail")
     nav:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
     nav:SetPoint("BOTTOMLEFT", content, "BOTTOMLEFT", 0, 0)
     nav:SetWidth(NAV_W)
@@ -1200,17 +1038,15 @@ local function BuildWindow()
     f._msufNavStack = nav
     M.nav = nav
     BuildNav(nav)
-
     local host = T.Panel(content, nil, T.colors.glassHost or T.colors.panel, T.colors.borderSoft)
-    if T.ApplyMaterial then T.ApplyMaterial(host, "host") elseif T.ApplyGlass then T.ApplyGlass(host, "host") end
+    T.ApplySurface(host, "host")
     host:SetPoint("TOPLEFT", nav, "TOPRIGHT", 8, 0)
     host:SetPoint("BOTTOMRIGHT", content, "BOTTOMRIGHT", 0, 0)
     f.host = host
     f._msufMirrorHost = host
     if T.ApplyMenuAtmosphere then T.ApplyMenuAtmosphere(f, host, nav) end
-
     local status = T.Panel(host, nil, T.colors.glassStatus or T.colors.header, T.colors.borderSoft)
-    if T.ApplyMaterial then T.ApplyMaterial(status, "status") elseif T.ApplyGlass then T.ApplyGlass(status, "status") end
+    T.ApplySurface(status, "status")
     status:SetPoint("TOPLEFT", host, "TOPLEFT", 0, 0)
     status:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, 0)
     status:SetHeight(22)
@@ -1220,7 +1056,6 @@ local function BuildWindow()
     statusTopLine:SetPoint("TOPLEFT", status, "TOPLEFT", 0, 0)
     statusTopLine:SetPoint("TOPRIGHT", status, "TOPRIGHT", 0, 0)
     statusTopLine:SetColorTexture(T.colors.accent[1], T.colors.accent[2], T.colors.accent[3], 0.25)
-
     local function StatusText(point, relativeTo, relativePoint, x, y, justify, alpha)
         local fs = T.Font(status, "GameFontDisableSmall", "", T.colors.muted)
         fs:SetPoint(point, relativeTo, relativePoint, x, y)
@@ -1234,7 +1069,6 @@ local function BuildWindow()
     local sbVersion = StatusText("RIGHT", status, "RIGHT", -10, 0, "RIGHT", 0.50)
     local sbFeedback = StatusText("RIGHT", sbVersion, "LEFT", -18, 0, "RIGHT", 0)
     sbFeedback:SetPoint("LEFT", sbCombat, "RIGHT", 16, 0)
-
     status.profileText = sbProfile
     status.editText = sbEdit
     status.combatText = sbCombat
@@ -1338,14 +1172,14 @@ local function BuildWindow()
         end
         if event == "PLAYER_REGEN_DISABLED" then
             CancelSearchBackgroundIndex()
-            if M.BlockCombatAction then M.BlockCombatAction() end
+            M.CallIf(M.BlockCombatAction)
             HideSlashMenuAndMinibar(f)
             return
         elseif event == "PLAYER_REGEN_ENABLED" and M.activeKey == "search" then
             RefreshSearchResultsPage()
         end
         f:RefreshStatus()
-        if M.RequestRefresh then M.RequestRefresh(nil, event or "menu-status-event") elseif M.Refresh then M.Refresh() end
+        M.RequestOrRefresh(nil, event or "menu-status-event")
         SyncGroupPagePreviewForKey(M.activeKey)
     end)
     f:SetScript("OnShow", function(self)
@@ -1357,14 +1191,14 @@ local function BuildWindow()
         ApplyMenuFramePriority(self)
         self._msuf2Minimized = nil
         if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
-        if M.StartHistorySession then M.StartHistorySession() end
+        M.CallIf(M.StartHistorySession)
         SetStatusEventsRegistered(true)
         EnsureEditModeUIHook()
         if self.RefreshStatus then self:RefreshStatus() end
         if M.scrollFrame and M.scrollFrame._msuf2RefreshScrollBar then M.scrollFrame:_msuf2RefreshScrollBar() end
         SyncBossPagePreviewForKey(M.activeKey)
         SyncGroupPagePreviewForKey(M.activeKey)
-        if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
+        M.CallIf(M.UpdateMenuCombatListener)
     end)
     f:SetScript("OnHide", function()
         if f._msuf2FinishWindowDrag then f:_msuf2FinishWindowDrag(false) end
@@ -1372,33 +1206,29 @@ local function BuildWindow()
         CancelSearchBackgroundIndex()
         SetStatusEventsRegistered(false)
         if W and type(W.CloseDropdown) == "function" then W.CloseDropdown() end
-        if M.EndHistorySession then M.EndHistorySession() end
+        M.CallIf(M.EndHistorySession)
         ResetStatusIndicatorTestModeOnMenuExit()
         SavePersistentMenuState()
         ResetBossPagePreviewCache()
-        if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("WINDOW_HIDE", nil) end
-        if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("WINDOW_HIDE", nil) end
+        M.CallIf(M.ReleasePinnedPreviews, "WINDOW_HIDE", nil)
+        M.CallIf(M.ReleaseGFNativePreviews, "WINDOW_HIDE", nil)
         SyncBossPagePreviewForKey(nil)
         SyncGroupPagePreviewForKey(nil)
-        if M.UpdateMenuCombatListener then M.UpdateMenuCombatListener() end
+        M.CallIf(M.UpdateMenuCombatListener)
     end)
-
     local scroll = CreateFrame("ScrollFrame", nil, host)
     scroll:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, 0)
     scroll:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -22, 0)
     f.scrollFrame = scroll
     M.scrollFrame = scroll
-
     local child = CreateFrame("Frame", nil, scroll)
     child:SetSize(CONTENT_W - 10, CONTENT_H)
     scroll:SetScrollChild(child)
     M.scrollChild = child
-    if T.StyleScrollFrame then T.StyleScrollFrame(scroll, host) end
-
+    M.CallIf(T.StyleScrollFrame, scroll, host)
     M.frame = f
     return f
 end
-
 local function ApplyMenuFrameScale(frame)
     if not (frame and frame.SetScale) then return end
     local g = M.GetGeneralDB()
@@ -1406,10 +1236,11 @@ local function ApplyMenuFrameScale(frame)
     ApplyWindowResizeBounds(frame)
     ClampWindowSize(frame)
 end
-
-M.GetEffectiveMenuScale = EffectiveMenuScale
-M.ApplyMenuFrameScale = ApplyMenuFrameScale
-M.HideSlashMenuAndMinibar = HideSlashMenuAndMinibar
+M.AssignNamedValues(M, [[
+    ShowPreviewWarning UpdateNav RunEntryRefreshers RefreshDashboardEditModeButton BuildPageEntry
+    GetEffectiveMenuScale ApplyMenuFrameScale HideSlashMenuAndMinibar ALIASES
+]], ShowPreviewWarning, UpdateNav, RunRefreshers, RefreshDashboardEditModeButton, BuildPageEntry,
+    EffectiveMenuScale, ApplyMenuFrameScale, HideSlashMenuAndMinibar, ALIASES)
 function M.MinimizeSlashMenuWindow(frame)
     return MinimizeSlashMenuWindow(frame or M.frame)
 end
@@ -1422,12 +1253,10 @@ end
 function M.RestoreMinimizedSlashMenu(frame)
     return RestoreMinimizedSlashMenu(frame or M.frame)
 end
-M.ALIASES = ALIASES
-
 function M.Open(pageKey)
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     EnsurePersistentMenuState()
-    if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
+    M.CallIf(M.ApplyLocaleSelection)
     local f = BuildWindow()
     if M.minimizedBar and M.minimizedBar.Hide then M.minimizedBar:Hide() end
     f._msuf2Minimized = nil
@@ -1437,7 +1266,6 @@ function M.Open(pageKey)
     M.SelectPage(pageKey or "home")
     return true
 end
-
 function M.Toggle(pageKey)
     if M.BlockCombatAction and M.BlockCombatAction() then
         HideSlashMenuAndMinibar(M.frame)
@@ -1455,12 +1283,11 @@ function M.Toggle(pageKey)
     end
     return true
 end
-
 function M.InvalidatePage(key)
     if key then
         if key ~= "search" then MarkSearchIndexDirty() end
-        if M.ReleasePinnedPreviews then M.ReleasePinnedPreviews("INVALIDATE_PAGE", nil, key) end
-        if M.ReleaseGFNativePreviews then M.ReleaseGFNativePreviews("INVALIDATE_PAGE", nil) end
+        M.CallIf(M.ReleasePinnedPreviews, "INVALIDATE_PAGE", nil, key)
+        M.CallIf(M.ReleaseGFNativePreviews, "INVALIDATE_PAGE", nil)
         ClearSearchRegistryPage(key)
         if key == "home" then M.dashboardEditModeButton = nil end
         local entry = M.cache[key]

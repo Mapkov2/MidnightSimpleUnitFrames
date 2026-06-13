@@ -152,6 +152,27 @@ local function SetCenterGridShown(shown)
     if pipH then pipH[method](pipH) end
 end
 
+local function CreateCenterLine(vertical, thickness, subLevel)
+    local tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel)
+    if vertical then
+        tex:SetWidth(thickness); tex:SetPoint("TOP", UIParent, "TOP", 0, 0); tex:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
+    else
+        tex:SetHeight(thickness); tex:SetPoint("LEFT", UIParent, "LEFT", 0, 0); tex:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
+    end
+    return tex
+end
+
+local function CreateCenterPip(vertical, thickness, length, subLevel)
+    local tex = gridFrame:CreateTexture(nil, "BACKGROUND", nil, subLevel)
+    if vertical then
+        tex:SetWidth(thickness); tex:SetHeight(length)
+    else
+        tex:SetHeight(thickness); tex:SetWidth(length)
+    end
+    tex:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    return tex
+end
+
 local function EnsureGridFrame()
     if gridFrame then return gridFrame end
 
@@ -171,46 +192,16 @@ local function EnsureGridFrame()
     bgTex:SetColorTexture(th.bgR, th.bgG, th.bgB, GetBgAlpha())
 
     --- Center crosshair (accent colored, full screen length)
-    crossVShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
-    crossVShadow:SetWidth(3)
-    crossVShadow:SetPoint("TOP", UIParent, "TOP", 0, 0)
-    crossVShadow:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
-
-    crossV = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
-    crossV:SetWidth(1)
-    crossV:SetPoint("TOP", UIParent, "TOP", 0, 0)
-    crossV:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 0)
-
-    crossHShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -6)
-    crossHShadow:SetHeight(3)
-    crossHShadow:SetPoint("LEFT", UIParent, "LEFT", 0, 0)
-    crossHShadow:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
-
-    crossH = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
-    crossH:SetHeight(1)
-    crossH:SetPoint("LEFT", UIParent, "LEFT", 0, 0)
-    crossH:SetPoint("RIGHT", UIParent, "RIGHT", 0, 0)
+    crossVShadow = CreateCenterLine(true, 3, -6)
+    crossV = CreateCenterLine(true, 1, -5)
+    crossHShadow = CreateCenterLine(false, 3, -6)
+    crossH = CreateCenterLine(false, 1, -5)
 
     --- Short white pip at dead center
-    pipVShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
-    pipVShadow:SetWidth(3)
-    pipVShadow:SetHeight(24)
-    pipVShadow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-
-    pipV = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -4)
-    pipV:SetWidth(1)
-    pipV:SetHeight(20)
-    pipV:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-
-    pipHShadow = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -5)
-    pipHShadow:SetHeight(3)
-    pipHShadow:SetWidth(24)
-    pipHShadow:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-
-    pipH = gridFrame:CreateTexture(nil, "BACKGROUND", nil, -4)
-    pipH:SetHeight(1)
-    pipH:SetWidth(20)
-    pipH:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    pipVShadow = CreateCenterPip(true, 3, 24, -5)
+    pipV = CreateCenterPip(true, 1, 20, -4)
+    pipHShadow = CreateCenterPip(false, 3, 24, -5)
+    pipH = CreateCenterPip(false, 1, 20, -4)
     ApplyGridVisibility()
 
     --- Keep legacy global alive (Style scanner etc.)
@@ -1040,10 +1031,7 @@ local function ResolveAnchor(key, conf)
     return anchor
 end
 
-local GROUP_VALID_POINTS = {
-    CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true,
-    TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true,
-}
+local GROUP_VALID_POINTS = { CENTER = true, TOP = true, BOTTOM = true, LEFT = true, RIGHT = true, TOPLEFT = true, TOPRIGHT = true, BOTTOMLEFT = true, BOTTOMRIGHT = true }
 
 local function ResolveGroupAnchor(conf)
     local name = conf and (conf.anchorToFrame or conf.anchorFrame or conf.relativeTo or conf.anchorTo)

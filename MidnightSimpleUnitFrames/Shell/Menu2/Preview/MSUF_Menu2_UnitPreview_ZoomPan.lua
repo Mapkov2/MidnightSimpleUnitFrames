@@ -3,10 +3,8 @@
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
 _G.MSUF_NS = MSUF
-
 local ZoomPan = MSUF.UFPreviewZoomPan or {}
 MSUF.UFPreviewZoomPan = ZoomPan
-
 local H = (MSUF.MSUF2 and MSUF.MSUF2.PreviewHelpers) or (_G.MSUF2 and _G.MSUF2.PreviewHelpers)
 if H and H.InstallZoomPan then
     H.InstallZoomPan(ZoomPan, {
@@ -22,9 +20,7 @@ if H and H.InstallZoomPan then
         buttonFontField = "fs",
         refresh = function(box, reason, deps)
             local preview = deps.Preview or MSUF.UFPreview
-            if preview and type(preview.Refresh) == "function" then
-                preview.Refresh(box, reason)
-            end
+            if preview and type(preview.Refresh) == "function" then preview.Refresh(box, reason) end
         end,
     })
 end

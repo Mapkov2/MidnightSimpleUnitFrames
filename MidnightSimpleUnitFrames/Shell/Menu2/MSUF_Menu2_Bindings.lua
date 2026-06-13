@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -17,7 +16,6 @@ local pendingPreview
 local pendingAlpha
 local pendingCastbar
 local flushQueued = false
-
 local HISTORY_LIMIT = 500
 local historyDepth = 0
 local historyRestoring = false
@@ -27,23 +25,22 @@ local historySessionSnapshot
 local historySessionDirty = false
 local historyTransaction
 local refreshQueued = false
-
 local UNIT_KEYS = KS("player", "target", "targettarget", "focustarget", "focus", "pet", "boss")
-
 local function WipeTable(t)
     for k in pairs(t) do t[k] = nil end
 end
-
+local function EnsureHistoryStacks()
+    M.historyUndo = M.historyUndo or {}
+    M.historyRedo = M.historyRedo or {}
+    return M.historyUndo, M.historyRedo
+end
 function M.EnsureDB()
     local ensure = _G.MSUF_EnsureDB
-    if type(ensure) == "function" then
-        pcall(ensure)
-    end
+    if type(ensure) == "function" then pcall(ensure) end
     _G.MSUF_DB = _G.MSUF_DB or {}
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     return _G.MSUF_DB
 end
-
 function M.GetUnitDB(unit)
     local db = M.EnsureDB()
     unit = (unit == "tot") and "targettarget" or unit
@@ -52,18 +49,14 @@ function M.GetUnitDB(unit)
     db[unit] = db[unit] or {}
     return db[unit], db
 end
-
 function M.GetGeneralDB()
     local db = M.EnsureDB()
     db.general = db.general or {}
     return db.general, db
 end
-
 local function CallGlobal(name, ...)
     local fn = _G[name]
-    if type(fn) == "function" then
-        return pcall(fn, ...)
-    end
+    if type(fn) == "function" then return pcall(fn, ...) end
     return false
 end
 local function CallGlobalList(names)
@@ -79,7 +72,6 @@ local RESTORE_GLOBALS = WL [[
     MSUF_UpdateCastbarVisuals_Immediate MSUF_UpdateCastbarVisuals MSUF_RefreshAllIdentityColors
     MSUF_RefreshAllPowerTextColors MSUF_RefreshAllUnitAlphas MSUF_RefreshAllFrames
 ]]
-
 local function ApplyUnitFrame(unit)
     -- Keep the modern UF apply path first, then fall back to legacy globals for older modules
     -- that still listen outside the UnitFrames engine.
@@ -90,26 +82,18 @@ local function ApplyUnitFrame(unit)
     end
     return false
 end
-
 local function RefreshActiveBossPreview(reason)
     local bossPageActive = _G.MSUF2_BossUnitframePreviewActive == true
     local editPreviewActive = _G.MSUF_UnitEditModeActive == true
         and (_G.MSUF_BossTestMode == true or _G.MSUF_PreviewTestMode == true)
-    if not bossPageActive and not editPreviewActive then
-        return
-    end
-    if bossPageActive and CallGlobal("MSUF_ApplyBossUnitframePreviewState", true, reason or "MSUF2_BOSS_PREVIEW") then
-        return
-    end
+    if not bossPageActive and not editPreviewActive then return end
+    if bossPageActive and CallGlobal("MSUF_ApplyBossUnitframePreviewState", true, reason or "MSUF2_BOSS_PREVIEW") then return end
     CallGlobal("MSUF_SyncBossUnitframePreviewWithUnitEdit")
 end
-
 local IsConfigCombatLocked = M.IsConfigCombatLocked
-
 function M.IsConfigCombatLocked()
     return IsConfigCombatLocked()
 end
-
 function M.ShowConfigCombatLockMessage()
     if type(_G.MSUF_ShowConfigCombatLockMessage) == "function" then
         _G.MSUF_ShowConfigCombatLockMessage()
@@ -117,13 +101,11 @@ function M.ShowConfigCombatLockMessage()
         print("|cffffd700MSUF:|r Menu and Edit Mode are locked in combat. Leave combat to configure MSUF.")
     end
 end
-
 function M.BlockCombatAction()
     if not IsConfigCombatLocked() then return false end
     M.ShowConfigCombatLockMessage()
     return true
 end
-
 function M.StageFactoryReset()
     if M.BlockCombatAction and M.BlockCombatAction() then return false end
     local fn = _G.MSUF_DoFullReset
@@ -131,75 +113,51 @@ function M.StageFactoryReset()
     fn({ skipReload = true })
     return true
 end
-
 local function BlockCombatAndRefresh(ctx)
     if not M.BlockCombatAction() then return false end
-    if M.Refresh then M.Refresh(ctx) end
+    M.CallIf(M.Refresh, ctx)
     return true
 end
-
 local function FlushApply()
     flushQueued = false
-
     local wantPreview = pendingPreview
     pendingPreview = nil
-
     local wantAlpha = pendingAlpha
     pendingAlpha = nil
-
     for unit in pairs(pendingUnits) do
         local opt = pendingOpts[unit] or {}
         local notifyUnit = (unit == "boss") and nil or unit
         local applied = false
-        if opt.notify ~= false then
-            applied = CallGlobal("MSUF_UFCore_NotifyConfigChanged", notifyUnit, true, true, opt.reason or "MSUF2") and true or false
-        end
-        if opt.text then
-            CallGlobal("MSUF_ForceTextLayoutForUnitKey", unit)
-        end
+        if opt.notify ~= false then applied = CallGlobal("MSUF_UFCore_NotifyConfigChanged", notifyUnit, true, true, opt.reason or "MSUF2") and true or false end
+        if opt.text then CallGlobal("MSUF_ForceTextLayoutForUnitKey", unit) end
         if opt.power then
             if not (_G.InCombatLockdown and _G.InCombatLockdown()) then
-                if not CallGlobal("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", unit, true) then
-                    CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All")
-                end
+                if not CallGlobal("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", unit, true) then CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All") end
             end
-            if unit == "player" then
-                CallGlobal("MSUF_ClassPower_Refresh")
-            end
+            if unit == "player" then CallGlobal("MSUF_ClassPower_Refresh") end
         end
-        if not applied then
-            ApplyUnitFrame(unit)
-        end
+        if not applied then ApplyUnitFrame(unit) end
     end
-
     WipeTable(pendingUnits)
     WipeTable(pendingOpts)
-
     if pendingGeneral then
         local opt = pendingGeneral
         pendingGeneral = nil
         local applied = false
         local applyAll = opt.applyAll ~= false
-        if applyAll and opt.notify ~= false then
-            applied = CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, opt.reason or "MSUF2_GENERAL") and true or false
-        end
-        if applyAll and not applied then
-            ApplyUnitFrame(nil)
-        end
+        if applyAll and opt.notify ~= false then applied = CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, opt.reason or "MSUF2_GENERAL") and true or false end
+        if applyAll and not applied then ApplyUnitFrame(nil) end
     end
     if pendingCastbar then
         pendingCastbar = nil
         CallGlobal("MSUF_UpdateCastbarVisuals")
     end
-    if wantAlpha then
-        CallGlobal("MSUF_RefreshAllUnitAlphas")
-    end
+    if wantAlpha then CallGlobal("MSUF_RefreshAllUnitAlphas") end
     if wantPreview then
         CallGlobal("MSUF_UFPreview_RequestRefresh", wantPreview)
         RefreshActiveBossPreview(wantPreview)
     end
 end
-
 local function QueueFlush()
     if flushQueued then return end
     flushQueued = true
@@ -211,9 +169,7 @@ local function QueueFlush()
         FlushApply()
     end
 end
-
 local DeepCopy = M.DeepCopy
-
 local function DeepEqual(a, b, seen)
     if a == b then return true end
     if type(a) ~= type(b) then return false end
@@ -229,7 +185,6 @@ local function DeepEqual(a, b, seen)
     end
     return true
 end
-
 local function DeepReplace(dst, src)
     if type(dst) ~= "table" or type(src) ~= "table" then return end
     for k in pairs(dst) do
@@ -244,26 +199,19 @@ local function DeepReplace(dst, src)
         end
     end
 end
-
 local function SnapshotDB()
     return DeepCopy(M.EnsureDB())
 end
-
 local function CurrentHistorySnapshot()
-    if historySessionActive and type(historySessionSnapshot) == "table" then
-        return historySessionSnapshot
-    end
+    if historySessionActive and type(historySessionSnapshot) == "table" then return historySessionSnapshot end
     return SnapshotDB()
 end
-
 local function QueueMenuRefresh()
     if refreshQueued then return end
     refreshQueued = true
     local function Run()
         refreshQueued = false
-        if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then
-            M.Refresh()
-        end
+        if M.frame and M.frame.IsShown and M.frame:IsShown() and M.Refresh then M.Refresh() end
     end
     if _G.C_Timer and _G.C_Timer.After then
         _G.C_Timer.After(0, Run)
@@ -271,32 +219,24 @@ local function QueueMenuRefresh()
         Run()
     end
 end
-
 local function NotifyHistoryChanged(refreshMenu)
     if M.RefreshHistoryControls then pcall(M.RefreshHistoryControls) end
     if M.frame and M.frame.RefreshStatus then pcall(M.frame.RefreshStatus, M.frame) end
     if refreshMenu == true then QueueMenuRefresh() end
 end
-
 local function FeedbackLabel(text, limit)
     text = tostring(text or "")
     limit = tonumber(limit) or 34
     if #text <= limit then return text end
     return text:sub(1, math.max(1, limit - 3)) .. "..."
 end
-
 local function CommandFeedback(text, kind, seconds)
     local fn = M.ShowStatusFeedback or M.ShowInlineFeedback
     if type(fn) == "function" then fn(text, kind or "info", seconds or 1.25) end
 end
-
 local function PushHistory(label, source, before, after)
     if DeepEqual(before, after) then return false end
-
-    M.historyUndo = M.historyUndo or {}
-    M.historyRedo = M.historyRedo or {}
-
-    local stack = M.historyUndo
+    local stack, redo = EnsureHistoryStacks()
     stack[#stack + 1] = {
         label = label or "MSUF2 change",
         source = source,
@@ -306,8 +246,7 @@ local function PushHistory(label, source, before, after)
     while #stack > HISTORY_LIMIT do
         table.remove(stack, 1)
     end
-
-    WipeTable(M.historyRedo)
+    WipeTable(redo)
     if historySessionActive then
         historySessionSnapshot = after
         historySessionDirty = true
@@ -315,7 +254,6 @@ local function PushHistory(label, source, before, after)
     NotifyHistoryChanged(false)
     return true
 end
-
 local function RebuildActivePage()
     local key = M.activeKey
     if key and M.frame and M.frame.IsShown and M.frame:IsShown() and M.InvalidatePage and M.SelectPage then
@@ -326,14 +264,12 @@ local function RebuildActivePage()
         NotifyHistoryChanged(true)
     end
 end
-
 local function ApplyHistorySnapshot(snapshot, reason)
     if type(snapshot) ~= "table" then return false end
     historyRestoring = true
     DeepReplace(M.EnsureDB(), snapshot)
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
-
     M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
     if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
         pcall(MSUF.MSUF_RequestGameplayApply)
@@ -368,16 +304,14 @@ local function ApplyHistorySnapshot(snapshot, reason)
         if type(MSUF.GF.RefreshPreviewLayout) == "function" then pcall(MSUF.GF.RefreshPreviewLayout) end
         if type(MSUF.GF.RefreshVisuals) == "function" then pcall(MSUF.GF.RefreshVisuals) end
     end
-    if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
-    if M.MarkMenuDataDirty then M.MarkMenuDataDirty(reason or "history") end
+    M.CallIf(M.ApplyLocaleSelection)
+    M.CallIf(M.MarkMenuDataDirty, reason or "history")
     RebuildActivePage()
     return true
 end
-
 function M.IsHistoryCapturing()
     return historyDepth > 0 or historyRestoring
 end
-
 function M.CaptureHistory(label, source, fn)
     if type(fn) ~= "function" then return nil end
     if M.BlockCombatAction() then return false end
@@ -386,7 +320,6 @@ function M.CaptureHistory(label, source, fn)
         if result ~= false and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
         return result
     end
-
     local before = CurrentHistorySnapshot()
     historyDepth = historyDepth + 1
     local ok, result = pcall(fn)
@@ -402,7 +335,10 @@ function M.CaptureHistory(label, source, fn)
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return result
 end
-
+function M.RunWithHistory(label, source, fn)
+    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then return M.CaptureHistory(label, source, fn) end
+    return type(fn) == "function" and fn() or nil
+end
 function M.StartHistorySession()
     if IsConfigCombatLocked() then return false end
     if historyTransaction then
@@ -413,13 +349,11 @@ function M.StartHistorySession()
     historySessionBaseSnapshot = SnapshotDB()
     historySessionSnapshot = historySessionBaseSnapshot
     historySessionDirty = false
-    M.historyUndo = M.historyUndo or {}
-    M.historyRedo = M.historyRedo or {}
-    WipeTable(M.historyUndo)
-    WipeTable(M.historyRedo)
+    local undo, redo = EnsureHistoryStacks()
+    WipeTable(undo)
+    WipeTable(redo)
     NotifyHistoryChanged()
 end
-
 function M.EndHistorySession()
     historySessionActive = false
     if historyTransaction then
@@ -430,7 +364,6 @@ function M.EndHistorySession()
     historySessionSnapshot = nil
     historySessionDirty = false
 end
-
 function M.CheckpointHistory(label, source)
     if M.BlockCombatAction() then return false end
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
@@ -440,7 +373,6 @@ function M.CheckpointHistory(label, source)
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
 end
-
 function M.BeginHistoryTransaction(label, source)
     if M.BlockCombatAction() then return false end
     if historyDepth > 0 or historyRestoring or not historySessionActive or historyTransaction then return false end
@@ -452,7 +384,6 @@ function M.BeginHistoryTransaction(label, source)
     historyDepth = historyDepth + 1
     return true
 end
-
 function M.CommitHistoryTransaction()
     local tx = historyTransaction
     if not tx then return false end
@@ -462,7 +393,6 @@ function M.CommitHistoryTransaction()
     if pushed and M.MarkMenuDataDirty then M.MarkMenuDataDirty("history") end
     return pushed
 end
-
 function M.ResetHistorySession()
     if M.BlockCombatAction() then return false end
     if not historySessionActive or type(historySessionBaseSnapshot) ~= "table" then return false end
@@ -471,12 +401,10 @@ function M.ResetHistorySession()
     if ok then CommandFeedback("Session changes reset", "ok", 1.4) end
     return ok
 end
-
 function M.ClearHistory()
-    M.historyUndo = M.historyUndo or {}
-    M.historyRedo = M.historyRedo or {}
-    WipeTable(M.historyUndo)
-    WipeTable(M.historyRedo)
+    local undo, redo = EnsureHistoryStacks()
+    WipeTable(undo)
+    WipeTable(redo)
     if historySessionActive then
         historySessionBaseSnapshot = SnapshotDB()
         historySessionSnapshot = historySessionBaseSnapshot
@@ -484,51 +412,44 @@ function M.ClearHistory()
     end
     NotifyHistoryChanged()
 end
-
 function M.GetHistoryState()
-    M.historyUndo = M.historyUndo or {}
-    M.historyRedo = M.historyRedo or {}
-    local undo = M.historyUndo[#M.historyUndo]
-    local redo = M.historyRedo[#M.historyRedo]
+    local undoStack, redoStack = EnsureHistoryStacks()
+    local undo = undoStack[#undoStack]
+    local redo = redoStack[#redoStack]
     return {
         canUndo = undo ~= nil,
         canRedo = redo ~= nil,
         canResetAll = historySessionActive and type(historySessionBaseSnapshot) == "table" and historySessionDirty,
         undoLabel = undo and undo.label or nil,
         redoLabel = redo and redo.label or nil,
-        undoCount = #M.historyUndo,
-        redoCount = #M.historyRedo,
+        undoCount = #undoStack,
+        redoCount = #redoStack,
     }
 end
-
 function M.Undo()
     if M.BlockCombatAction() then return false end
-    M.historyUndo = M.historyUndo or {}
-    M.historyRedo = M.historyRedo or {}
-    local entry = table.remove(M.historyUndo)
+    local undo, redo = EnsureHistoryStacks()
+    local entry = table.remove(undo)
     if not entry then return false end
-    M.historyRedo[#M.historyRedo + 1] = entry
+    redo[#redo + 1] = entry
     local ok = ApplyHistorySnapshot(entry.before, "MSUF2_HISTORY_UNDO")
-    if ok and historySessionActive then historySessionDirty = #M.historyUndo > 0 end
+    if ok and historySessionActive then historySessionDirty = #undo > 0 end
     NotifyHistoryChanged()
     if ok then CommandFeedback("Undid " .. FeedbackLabel(entry.label), "info", 1.25) end
     return ok
 end
-
 function M.Redo()
     if M.BlockCombatAction() then return false end
-    M.historyUndo = M.historyUndo or {}
-    M.historyRedo = M.historyRedo or {}
-    local entry = table.remove(M.historyRedo)
+    local undo, redo = EnsureHistoryStacks()
+    local entry = table.remove(redo)
     if not entry then return false end
-    M.historyUndo[#M.historyUndo + 1] = entry
+    undo[#undo + 1] = entry
     local ok = ApplyHistorySnapshot(entry.after, "MSUF2_HISTORY_REDO")
     if ok and historySessionActive then historySessionDirty = true end
     NotifyHistoryChanged()
     if ok then CommandFeedback("Redid " .. FeedbackLabel(entry.label), "info", 1.25) end
     return ok
 end
-
 local function WidgetHistoryLabel(ctx, widget, fallback)
     local fs = widget and (widget._msuf2Title or widget._msuf2Label)
     if fs and fs.GetText then
@@ -541,18 +462,15 @@ local function WidgetHistoryLabel(ctx, widget, fallback)
     end
     return fallback or tostring((ctx and ctx.key) or "MSUF2 option")
 end
-
 local function WidgetHistorySource(ctx, widget, suffix)
     local key = (ctx and ctx.key) or "page"
     local kind = widget and (widget._msuf2ControlKind or widget.GetObjectType and widget:GetObjectType()) or "control"
     return tostring(key) .. ":" .. tostring(kind) .. ":" .. tostring(suffix or WidgetHistoryLabel(ctx, widget))
 end
-
 local function CaptureWidgetChange(ctx, widget, label, fn)
     label = label or WidgetHistoryLabel(ctx, widget)
     return M.CaptureHistory(label, WidgetHistorySource(ctx, widget, label), fn)
 end
-
 function M.RequestUnitApply(unit, reason, opts)
     if M.BlockCombatAction() then return false end
     unit = (unit == "tot") and "targettarget" or unit
@@ -578,7 +496,6 @@ function M.RequestUnitApply(unit, reason, opts)
     end
     QueueFlush()
 end
-
 function M.SetUnitValue(unit, key, value, reason, opts)
     if M.BlockCombatAction() then return false end
     if historyDepth == 0 and not historyRestoring then
@@ -592,7 +509,6 @@ function M.SetUnitValue(unit, key, value, reason, opts)
     M.RequestUnitApply(unit, reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end
-
 function M.RequestGeneralApply(reason, opts)
     if M.BlockCombatAction() then return false end
     M.CheckpointHistory(reason or "MSUF2_GENERAL", "apply:general:" .. tostring(reason or "change"))
@@ -613,7 +529,6 @@ function M.RequestGeneralApply(reason, opts)
     end
     QueueFlush()
 end
-
 function M.SetGeneralValue(key, value, reason, opts)
     if M.BlockCombatAction() then return false end
     if historyDepth == 0 and not historyRestoring then
@@ -628,31 +543,24 @@ function M.SetGeneralValue(key, value, reason, opts)
     M.RequestGeneralApply(reason or ("MSUF2_" .. tostring(key)), opts)
     return true
 end
-
-local UNIT_PAGE_RESETS = {
-    uf_player = { unit = "player", label = "Player" },
-    uf_target = { unit = "target", label = "Target" },
-    uf_targettarget = { unit = "targettarget", label = "Target of Target" },
-    uf_focustarget = { unit = "focustarget", label = "Focus Target" },
-    uf_focus = { unit = "focus", label = "Focus" },
-    uf_boss = { unit = "boss", label = "Boss Frames" },
-    uf_pet = { unit = "pet", label = "Pet" },
-}
-
+local UNIT_PAGE_RESETS = { uf_player = { unit = "player", label = "Player" }, uf_target = { unit = "target", label = "Target" }, uf_targettarget = { unit = "targettarget", label = "Target of Target" }, uf_focustarget = { unit = "focustarget", label = "Focus Target" }, uf_focus = { unit = "focus", label = "Focus" }, uf_boss = { unit = "boss", label = "Boss Frames" }, uf_pet = { unit = "pet", label = "Pet" } }
+local CASTBAR_SUFFIX_KEYS = WL "TimeFormat IconPosition IconSize IconOffsetX IconOffsetY IconSpacing IconBorderStyle SpellNamePosition SpellNameFontSize TextOffsetX TextOffsetY SpellNameAlign SpellNameMaxWidth SpellNameTruncate TimePosition TimeFontSize TimeOffsetX TimeOffsetY"
+local function BuildUnitCastbarResetKeys(spec)
+    local keys = { spec.enable, spec.backend .. "Backend", spec.backend .. "BackendBeforeHide", spec.time, spec.icon, spec.name }
+    for i = 1, #CASTBAR_SUFFIX_KEYS do keys[#keys + 1] = spec.base .. CASTBAR_SUFFIX_KEYS[i] end
+    return keys
+end
 local UNIT_CASTBAR_GENERAL_KEYS = {
-    player = WL("enablePlayerCastbar castbarPlayerBackend castbarPlayerBackendBeforeHide showPlayerCastTime castbarPlayerShowIcon castbarPlayerShowSpellName castbarPlayerTimeFormat castbarPlayerIconPosition castbarPlayerIconSize castbarPlayerIconOffsetX castbarPlayerIconOffsetY castbarPlayerIconSpacing castbarPlayerIconBorderStyle castbarPlayerSpellNamePosition castbarPlayerSpellNameFontSize castbarPlayerTextOffsetX castbarPlayerTextOffsetY castbarPlayerSpellNameAlign castbarPlayerSpellNameMaxWidth castbarPlayerSpellNameTruncate castbarPlayerTimePosition castbarPlayerTimeFontSize castbarPlayerTimeOffsetX castbarPlayerTimeOffsetY"),
-    target = WL("enableTargetCastbar castbarTargetBackend castbarTargetBackendBeforeHide showTargetCastTime castbarTargetShowIcon castbarTargetShowSpellName castbarTargetTimeFormat castbarTargetIconPosition castbarTargetIconSize castbarTargetIconOffsetX castbarTargetIconOffsetY castbarTargetIconSpacing castbarTargetIconBorderStyle castbarTargetSpellNamePosition castbarTargetSpellNameFontSize castbarTargetTextOffsetX castbarTargetTextOffsetY castbarTargetSpellNameAlign castbarTargetSpellNameMaxWidth castbarTargetSpellNameTruncate castbarTargetTimePosition castbarTargetTimeFontSize castbarTargetTimeOffsetX castbarTargetTimeOffsetY"),
-    focus = WL("enableFocusCastbar castbarFocusBackend castbarFocusBackendBeforeHide showFocusCastTime castbarFocusShowIcon castbarFocusShowSpellName castbarFocusTimeFormat castbarFocusIconPosition castbarFocusIconSize castbarFocusIconOffsetX castbarFocusIconOffsetY castbarFocusIconSpacing castbarFocusIconBorderStyle castbarFocusSpellNamePosition castbarFocusSpellNameFontSize castbarFocusTextOffsetX castbarFocusTextOffsetY castbarFocusSpellNameAlign castbarFocusSpellNameMaxWidth castbarFocusSpellNameTruncate castbarFocusTimePosition castbarFocusTimeFontSize castbarFocusTimeOffsetX castbarFocusTimeOffsetY"),
-    boss = WL("enableBossCastbar bossCastbarBackend bossCastbarBackendBeforeHide showBossCastTime showBossCastIcon showBossCastName bossCastTimeFormat bossCastIconPosition bossCastIconSize bossCastIconOffsetX bossCastIconOffsetY bossCastIconSpacing bossCastIconBorderStyle bossCastSpellNamePosition bossCastSpellNameFontSize bossCastTextOffsetX bossCastTextOffsetY bossCastSpellNameAlign bossCastSpellNameMaxWidth bossCastSpellNameTruncate bossCastTimePosition bossCastTimeFontSize bossCastTimeOffsetX bossCastTimeOffsetY"),
+    player = BuildUnitCastbarResetKeys({ base = "castbarPlayer", backend = "castbarPlayer", enable = "enablePlayerCastbar", time = "showPlayerCastTime", icon = "castbarPlayerShowIcon", name = "castbarPlayerShowSpellName" }),
+    target = BuildUnitCastbarResetKeys({ base = "castbarTarget", backend = "castbarTarget", enable = "enableTargetCastbar", time = "showTargetCastTime", icon = "castbarTargetShowIcon", name = "castbarTargetShowSpellName" }),
+    focus = BuildUnitCastbarResetKeys({ base = "castbarFocus", backend = "castbarFocus", enable = "enableFocusCastbar", time = "showFocusCastTime", icon = "castbarFocusShowIcon", name = "castbarFocusShowSpellName" }),
+    boss = BuildUnitCastbarResetKeys({ base = "bossCast", backend = "bossCastbar", enable = "enableBossCastbar", time = "showBossCastTime", icon = "showBossCastIcon", name = "showBossCastName" }),
 }
-
 local function ResetInfo(label, kind, summary)
     return { label = label, kind = kind, summary = summary }
 end
-
 local GROUP_RESET_INFO = ResetInfo("Group Frames", "group", "Party, Raid, and Mythic Raid Group Frame layout, bars, auras, indicators, scope overrides and positions")
 local AURA_STYLE_SUMMARY = "scope-aware Buff and Debuff text, cooldown and stack styling"
-
 local PAGE_RESET_INFO = {
     gf_layout = GROUP_RESET_INFO,
     gf_bars = GROUP_RESET_INFO,
@@ -674,7 +582,6 @@ local PAGE_RESET_INFO = {
     modules = ResetInfo("Modules", "modules", "optional style/module settings such as MSUF Style and dropdown style"),
     profiles = ResetInfo("Profiles", "profile", "the entire active profile"),
 }
-
 for pageKey, info in pairs(UNIT_PAGE_RESETS) do
     PAGE_RESET_INFO[pageKey] = {
         label = info.label,
@@ -683,7 +590,6 @@ for pageKey, info in pairs(UNIT_PAGE_RESETS) do
         summary = info.label .. " unit-frame settings, including layout, text, portrait, power, status icons, transparency, load conditions and this unit's castbar toggles",
     }
 end
-
 local BARS_GENERAL_KEYS = KSW [[
     barTexture barBackgroundTexture enableGradient enablePowerGradient gradientStrength gradientDirection
     gradientDirRight gradientDirLeft gradientDirUp gradientDirDown showSelfHealPrediction healPredAnchorMode
@@ -693,7 +599,6 @@ local BARS_GENERAL_KEYS = KSW [[
     roundedGroupFrames roundedPowerBars roundedMouseover barOutlineColorR barOutlineColorG
     barOutlineColorB barOutlineColorA
 ]]
-
 local BARS_SCOPE_KEYS = KSW [[
     hlOverride hpPowerTextOverride barTexture barBackgroundTexture barBgTexture absorbTextMode absorbAnchorMode healPredEnabled healPredAnchorMode
     absorbBarOpacity healAbsorbBarOpacity barOutlineThickness highlightBorderThickness hlAggroSize
@@ -703,67 +608,40 @@ local BARS_SCOPE_KEYS = KSW [[
     gradientDirection gradientDirRight gradientDirLeft gradientDirUp gradientDirDown powerSmoothFill
     barOutlineColorR barOutlineColorG barOutlineColorB barOutlineColorA
 ]]
-
 local BARS_TABLE_KEYS = KSW [[
     barOutlineThickness smoothPowerBar realtimePowerText roundedFramesEnabled roundedUnitFrames
     roundedGroupFrames roundedPowerBars roundedMouseover
 ]]
-
-local FONT_GENERAL_KEYS = KS("fontKey", "boldText", "noOutline", "textBackdrop", "fontMonochrome", "fontShadowStrength", "fontTextAlpha", "fontBaselineOffset", "nameClassColor", "npcNameRed", "nameNpcClassColor", "colorPowerTextByType", "colorHealthTextByHealth")
-
+local FONT_GENERAL_KEYS = KSW "fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth"
 local FONT_SCOPE_KEYS = KSW [[
     fontOverride fontKey boldText noOutline textBackdrop fontMonochrome fontShadowStrength fontTextAlpha fontBaselineOffset nameClassColor npcNameRed nameNpcClassColor colorPowerTextByType colorHealthTextByHealth
     fontOutline useGlobalFontColor fontR fontG fontB nameColorMode nameShortenEnabled nameClipSide
     nameMaxChars nameNoEllipsis shortenNames shortenNameClipSide shortenNameMaxChars shortenNameShowDots
 ]]
-
 local FONT_ROOT_KEYS = KS("shortenNames", "shortenNameClipSide", "shortenNameMaxChars", "shortenNameShowDots")
 local UNIT_AND_GROUP_RESET_KEYS = WL [[player target targettarget focustarget focus pet boss gf_party gf_raid gf_mythicraid]]
-
 local MISC_GENERAL_KEYS = KSW [[
     menuLocale slashMenuSnapEnabled hideAdvancedMenu showWelcomeMessage versionCheckEnabled disableUnitInfoTooltips
     unitInfoTooltipStyle unitTooltipProvider unitTooltipAnchor unitTooltipMode unitTooltipModifier
     disableBlizzardUnitFrames hardKillBlizzardPlayerFrame
     showMinimapIcon playTargetSelectLostSounds
 ]]
-
 local MISC_UNIT_KEYS = {}
 local MISC_UNIT_RESET_KEYS = WL [[target focus boss]]
-
 local CASTBAR_GENERAL_KEYS = KSW [[
     empowerColorStages enableFocusKickIcon focusKickIconWidth focusKickIconHeight focusKickTextSize
     focusKickIconOffsetX focusKickIconOffsetY kickReadyShowTarget kickReadyShowFocus kickReadyShowBoss
     kickReadyStyle kickReadySize kickReadyAutoSize kickReadyAnchor kickReadyOffsetX kickReadyOffsetY
 ]]
-
 local MODULES_GENERAL_KEYS = KS("styleEnabled")
-
-local COLOR_GENERAL_KEYS = KS(
-    "highlightEnabled", "playerCastbarOverrideEnabled", "playerCastbarOverrideMode",
-    "npcTypeTarget", "npcTypeFocus", "npcTypeBoss", "npcTypeToT")
-
+local COLOR_GENERAL_KEYS = KSW "highlightEnabled playerCastbarOverrideEnabled playerCastbarOverrideMode npcTypeTarget npcTypeFocus npcTypeBoss npcTypeToT"
 local COLOR_GAMEPLAY_KEYS = KS("combatStateColorSync")
-
 local COLOR_BARS_KEYS = KS("classPowerComboPointColorMode")
-
-local AURAS_GENERAL_PREFIXES = {
-    "auras",
-}
-
+local AURAS_GENERAL_PREFIXES = WL "auras"
 local AURAS_SHARED_COLOR_KEYS = KS("pandemicR", "pandemicG", "pandemicB")
-
 local function StartsWith(value, prefix)
     return type(value) == "string" and type(prefix) == "string" and value:sub(1, #prefix) == prefix
 end
-
-local function AnyPrefix(key, prefixes)
-    if type(key) ~= "string" then return false end
-    for i = 1, #(prefixes or {}) do
-        if StartsWith(key, prefixes[i]) then return true end
-    end
-    return false
-end
-
 local function ResetTableToDefaults(dst, src)
     if type(dst) ~= "table" then return end
     for key in pairs(dst) do
@@ -774,13 +652,11 @@ local function ResetTableToDefaults(dst, src)
         dst[key] = DeepCopy(value)
     end
 end
-
 local function ReplaceRootTable(db, defaults, key)
     if type(db) ~= "table" then return end
     db[key] = db[key] or {}
     ResetTableToDefaults(db[key], type(defaults) == "table" and defaults[key] or nil)
 end
-
 local function ResetKeySet(dst, src, keys)
     if type(dst) ~= "table" or type(keys) ~= "table" then return end
     for key in pairs(keys) do
@@ -791,40 +667,29 @@ local function ResetKeySet(dst, src, keys)
         end
     end
 end
-
 local function ResetFilteredKeys(dst, src, filter)
     if type(dst) ~= "table" or type(filter) ~= "function" then return end
     for key in pairs(dst) do
-        if filter(key) then
-            dst[key] = nil
-        end
+        if filter(key) then dst[key] = nil end
     end
     if type(src) ~= "table" then return end
     for key, value in pairs(src) do
-        if filter(key) then
-            dst[key] = DeepCopy(value)
-        end
+        if filter(key) then dst[key] = DeepCopy(value) end
     end
 end
-
 local function ResetRootFiltered(db, defaults, rootKey, filter)
     if type(db) ~= "table" then return end
     db[rootKey] = db[rootKey] or {}
     ResetFilteredKeys(db[rootKey], type(defaults) == "table" and defaults[rootKey] or nil, filter)
 end
-
 local function ResetUnitFiltered(db, defaults, unit, filter)
     if type(db) ~= "table" or type(unit) ~= "string" then return end
     db[unit] = db[unit] or {}
     ResetFilteredKeys(db[unit], type(defaults) == "table" and defaults[unit] or nil, filter)
 end
-
 local function EnsureTargetTargetAlias(db)
-    if type(db) == "table" and type(db.targettarget) == "table" then
-        db.tot = db.targettarget
-    end
+    if type(db) == "table" and type(db.targettarget) == "table" then db.tot = db.targettarget end
 end
-
 local function IsColorKey(key)
     if type(key) ~= "string" then return false end
     if COLOR_GENERAL_KEYS[key] == true then return true end
@@ -850,7 +715,6 @@ local function IsColorKey(key)
     end
     return false
 end
-
 local function IsCastbarKey(key)
     if type(key) ~= "string" then return false end
     if CASTBAR_GENERAL_KEYS[key] == true then return true end
@@ -862,7 +726,6 @@ local function IsCastbarKey(key)
     if lower:find("spellnamefontsize", 1, true) or lower:find("timefontsize", 1, true) then return true end
     return false
 end
-
 local function IsClassPowerBarsKey(key)
     if type(key) ~= "string" then return false end
     return StartsWith(key, "classPower")
@@ -877,23 +740,6 @@ local function IsClassPowerBarsKey(key)
         or key == "showAltMana"
         or key == "classPowerComboPointColorMode"
 end
-
-local function IsBarsGeneralKey(key)
-    return BARS_GENERAL_KEYS[key] == true or BARS_SCOPE_KEYS[key] == true
-end
-
-local function IsBarsScopeKey(key)
-    return BARS_SCOPE_KEYS[key] == true
-end
-
-local function IsFontScopeKey(key)
-    return FONT_SCOPE_KEYS[key] == true
-end
-
-local function IsGameplayColorKey(key)
-    return COLOR_GAMEPLAY_KEYS[key] == true or IsColorKey(key)
-end
-
 local function ResetAurasSharedColors(db, defaults)
     if type(db) ~= "table" then return end
     db.auras3 = db.auras3 or {}
@@ -901,7 +747,6 @@ local function ResetAurasSharedColors(db, defaults)
     local src = type(defaults) == "table" and type(defaults.auras3) == "table" and defaults.auras3.shared or nil
     ResetKeySet(db.auras3.shared, src, AURAS_SHARED_COLOR_KEYS)
 end
-
 local function FactoryDefaults()
     local create = (type(MSUF) == "table" and MSUF.MSUF_CreateFactoryDefaultProfile) or _G.MSUF_CreateFactoryDefaultProfile
     if type(create) ~= "function" then return nil end
@@ -909,7 +754,6 @@ local function FactoryDefaults()
     if ok and type(defaults) == "table" then return defaults end
     return nil
 end
-
 local function ResetUnitPage(db, defaults, unit)
     ReplaceRootTable(db, defaults, unit)
     if unit == "targettarget" then EnsureTargetTargetAlias(db) end
@@ -923,75 +767,62 @@ local function ResetUnitPage(db, defaults, unit)
         end
     end
 end
-
 local function ResetGroupFrames(db, defaults)
     local gf = MSUF and MSUF.GF
-    if gf and type(gf.ResetAllToDefaults) == "function" then
-        return gf.ResetAllToDefaults()
-    end
+    if gf and type(gf.ResetAllToDefaults) == "function" then return gf.ResetAllToDefaults() end
     ReplaceRootTable(db, defaults, "gf_party")
     ReplaceRootTable(db, defaults, "gf_raid")
     ReplaceRootTable(db, defaults, "gf_mythicraid")
     return true
 end
-
 local function ResetBarsPage(db, defaults)
-    ResetRootFiltered(db, defaults, "general", IsBarsGeneralKey)
+    ResetRootFiltered(db, defaults, "general", function(key) return BARS_GENERAL_KEYS[key] == true or BARS_SCOPE_KEYS[key] == true end)
     ResetRootFiltered(db, defaults, "bars", function(key) return BARS_TABLE_KEYS[key] == true end)
     for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do
-        ResetUnitFiltered(db, defaults, key, IsBarsScopeKey)
+        ResetUnitFiltered(db, defaults, key, function(scopeKey) return BARS_SCOPE_KEYS[scopeKey] == true end)
     end
     EnsureTargetTargetAlias(db)
 end
-
 local function ResetFontsPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return FONT_GENERAL_KEYS[key] == true end)
     ResetKeySet(db, defaults, FONT_ROOT_KEYS)
     for _, key in ipairs(UNIT_AND_GROUP_RESET_KEYS) do
-        ResetUnitFiltered(db, defaults, key, IsFontScopeKey)
+        ResetUnitFiltered(db, defaults, key, function(scopeKey) return FONT_SCOPE_KEYS[scopeKey] == true end)
     end
     EnsureTargetTargetAlias(db)
 end
-
 local function ResetAurasPage(db, defaults)
     ReplaceRootTable(db, defaults, "auras3")
-    ResetRootFiltered(db, defaults, "general", function(key) return AnyPrefix(key, AURAS_GENERAL_PREFIXES) end)
+    ResetRootFiltered(db, defaults, "general", function(key) return StartsWith(key, AURAS_GENERAL_PREFIXES[1]) end)
 end
-
 local function ResetCastbarPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key)
         return CASTBAR_GENERAL_KEYS[key] == true or (IsCastbarKey(key) and not IsColorKey(key))
     end)
 end
-
 local function ResetColorsPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", IsColorKey)
     ReplaceRootTable(db, defaults, "classColors")
     ReplaceRootTable(db, defaults, "npcColors")
-    ResetRootFiltered(db, defaults, "gameplay", IsGameplayColorKey)
+    ResetRootFiltered(db, defaults, "gameplay", function(key) return COLOR_GAMEPLAY_KEYS[key] == true or IsColorKey(key) end)
     ResetRootFiltered(db, defaults, "bars", function(key) return COLOR_BARS_KEYS[key] == true end)
     ResetAurasSharedColors(db, defaults)
 end
-
 local function ResetMiscPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return MISC_GENERAL_KEYS[key] == true end)
     for _, key in ipairs(MISC_UNIT_RESET_KEYS) do
         ResetUnitFiltered(db, defaults, key, function(unitKey) return MISC_UNIT_KEYS[unitKey] == true end)
     end
 end
-
 local function ResetClassPowerPage(db, defaults)
     ResetRootFiltered(db, defaults, "bars", IsClassPowerBarsKey)
 end
-
 local function ResetGameplayPage(db, defaults)
     ReplaceRootTable(db, defaults, "gameplay")
 end
-
 local function ResetModulesPage(db, defaults)
     ResetRootFiltered(db, defaults, "general", function(key) return MODULES_GENERAL_KEYS[key] == true end)
 end
-
 local PAGE_RESET_HANDLERS = {
     unit = function(db, defaults, info) ResetUnitPage(db, defaults, info.unit) end,
     group = ResetGroupFrames,
@@ -1005,20 +836,11 @@ local PAGE_RESET_HANDLERS = {
     gameplay = ResetGameplayPage,
     modules = ResetModulesPage,
 }
-
 local function ApplyAfterPageReset(pageKey, info)
     local reason = "MSUF2_RESET_" .. tostring(pageKey or "PAGE")
-    if info and info.unit and M.RequestUnitApply then
-        M.RequestUnitApply(info.unit, reason, { preview = true, text = true, power = true, alpha = true, castbar = true })
-    end
-    if M.RequestGeneralApply then
-        M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true })
-    end
-
-    if info and info.kind == "gameplay" then
-        if M.ApplyGameplay then M.ApplyGameplay() end
-    end
-
+    if info and info.unit and M.RequestUnitApply then M.RequestUnitApply(info.unit, reason, { preview = true, text = true, power = true, alpha = true, castbar = true }) end
+    if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true }) end
+    if info and info.kind == "gameplay" then M.CallIf(M.ApplyGameplay) end
     local auras = MSUF and MSUF.MSUF_Auras3
     if info and (info.kind == "auras" or info.kind == "colors") then
         if auras and type(auras.RequestApply) == "function" then
@@ -1027,7 +849,6 @@ local function ApplyAfterPageReset(pageKey, info)
             pcall(_G.MSUF_Auras3_RefreshAll)
         end
     end
-
     if info and (info.kind == "group" or info.kind == "bars" or info.kind == "fonts" or info.kind == "colors") then
         local gf = MSUF and MSUF.GF
         if gf then
@@ -1037,23 +858,16 @@ local function ApplyAfterPageReset(pageKey, info)
             if type(gf.RequestAuraRefresh) == "function" then pcall(gf.RequestAuraRefresh) end
         end
     end
-
     if info and info.kind == "classpower" then
         CallGlobal("MSUF_ClassPower_Refresh")
         CallGlobal("MSUF_ClassPower_RefreshTextures")
         CallGlobal("MSUF_ClassPower_RefreshCDMWidthBindings", true)
     end
-
-    if info and info.kind == "modules" then
-        CallGlobal("MSUF_ApplyModules")
-    end
-
+    if info and info.kind == "modules" then CallGlobal("MSUF_ApplyModules") end
     CallGlobalList(RESTORE_GLOBALS)
     CallGlobal("MSUF_UFCore_NotifyConfigChanged", nil, true, true, "MSUF2_RESTORE")
-
-    if M.ApplyLocaleSelection then M.ApplyLocaleSelection() end
+    M.CallIf(M.ApplyLocaleSelection)
     if M.ApplyMenuFrameScale and M.frame then pcall(M.ApplyMenuFrameScale, M.frame) end
-
     if pageKey and M.InvalidatePage and M.SelectPage and M.frame and M.frame.IsShown and M.frame:IsShown() then
         M.InvalidatePage(pageKey)
         M.activeKey = nil
@@ -1062,26 +876,19 @@ local function ApplyAfterPageReset(pageKey, info)
         QueueMenuRefresh()
     end
 end
-
 local function ResetProfilePage()
     local name = _G.MSUF_ActiveProfile or "Default"
     if type(_G.MSUF_ResetProfile) ~= "function" then return false end
     pcall(_G.MSUF_ResetProfile, name)
-    if M.ClearHistory then M.ClearHistory() end
+    M.CallIf(M.ClearHistory)
     ApplyAfterPageReset("profiles", PAGE_RESET_INFO.profiles)
-    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then
-        _G.MSUF_ShowReloadRecommendedPopup("Profile reset")
-    end
+    if type(_G.MSUF_ShowReloadRecommendedPopup) == "function" then _G.MSUF_ShowReloadRecommendedPopup("Profile reset") end
     return true
 end
-
 local function ResetPageImpl(pageKey)
     local info = PAGE_RESET_INFO[pageKey or ""]
     if not info then return false end
-    if info.kind == "profile" then
-        return ResetProfilePage()
-    end
-
+    if info.kind == "profile" then return ResetProfilePage() end
     local defaults = FactoryDefaults()
     if type(defaults) ~= "table" then
         if M.ShowStatusFeedback then
@@ -1091,12 +898,10 @@ local function ResetPageImpl(pageKey)
         end
         return false
     end
-
     local db = M.EnsureDB()
     local handler = PAGE_RESET_HANDLERS[info.kind]
     if not handler then return false end
     handler(db, defaults, info)
-
     EnsureTargetTargetAlias(db)
     ApplyAfterPageReset(pageKey, info)
     if M.ShowStatusFeedback then
@@ -1106,15 +911,12 @@ local function ResetPageImpl(pageKey)
     end
     return true
 end
-
 function M.PageHasReset(pageKey)
     return PAGE_RESET_INFO[pageKey or ""] ~= nil
 end
-
 function M.GetPageResetInfo(pageKey)
     return PAGE_RESET_INFO[pageKey or ""]
 end
-
 function M.BuildPageResetWarning(pageKey)
     local info = PAGE_RESET_INFO[pageKey or ""]
     if not info then return nil end
@@ -1134,30 +936,21 @@ function M.BuildPageResetWarning(pageKey)
         tostring((M.Tr and M.Tr(info.summary or title)) or info.summary or title)
     )
 end
-
 function M.ResetPageToDefaults(pageKey)
     if M.BlockCombatAction() then return false end
     local info = PAGE_RESET_INFO[pageKey or ""]
     if not info then return false end
-    if info.kind == "profile" then
+    if info.kind == "profile" then return ResetPageImpl(pageKey) end
+    return M.RunWithHistory("Reset " .. tostring(info.label or pageKey), "page:reset:" .. tostring(pageKey), function()
         return ResetPageImpl(pageKey)
-    end
-    if M.CaptureHistory and not (M.IsHistoryCapturing and M.IsHistoryCapturing()) then
-        return M.CaptureHistory("Reset " .. tostring(info.label or pageKey), "page:reset:" .. tostring(pageKey), function()
-            return ResetPageImpl(pageKey)
-        end)
-    end
-    return ResetPageImpl(pageKey)
+    end)
 end
-
 function M.ShowPageResetConfirm(pageKey)
     if M.BlockCombatAction() then return false end
     if not M.PageHasReset(pageKey) then return false end
     local message = M.BuildPageResetWarning(pageKey)
     if not message then return false end
-    if not _G.StaticPopupDialogs then
-        return M.ResetPageToDefaults(pageKey)
-    end
+    if not _G.StaticPopupDialogs then return M.ResetPageToDefaults(pageKey) end
     M.InstallStaticPopup("MSUF2_PAGE_RESET_CONFIRM", {
         text = "%s",
         button1 = _G.YES or "Yes",
@@ -1172,12 +965,10 @@ function M.ShowPageResetConfirm(pageKey)
     end
     return M.ResetPageToDefaults(pageKey)
 end
-
 function M.AddRefresher(ctx, fn, key)
     if not (ctx and type(fn) == "function") then return end
     local refreshers = ctx.refreshers or (ctx.entry and ctx.entry.refreshers)
     if type(refreshers) ~= "table" then return end
-
     if key ~= nil then
         local seenKeys = ctx._msuf2RefresherKeys or (ctx.entry and ctx.entry._msuf2RefresherKeys)
         if not seenKeys then
@@ -1188,7 +979,6 @@ function M.AddRefresher(ctx, fn, key)
         if seenKeys[key] then return fn end
         seenKeys[key] = true
     end
-
     local seenFns = ctx._msuf2RefresherFns or (ctx.entry and ctx.entry._msuf2RefresherFns)
     if not seenFns then
         seenFns = {}
@@ -1196,21 +986,17 @@ function M.AddRefresher(ctx, fn, key)
     end
     if seenFns[fn] then return fn end
     seenFns[fn] = true
-
     refreshers[#refreshers + 1] = fn
     return fn
 end
-
 function M.AddRefresherOnce(ctx, key, fn)
     if type(fn) ~= "function" then return end
     return M.AddRefresher(ctx, fn, key or fn)
 end
-
 local function ResolveRefreshEntry(ctx)
     if ctx and ctx.entry then return ctx.entry end
     return M.activeKey and M.cache and M.cache[M.activeKey] or nil
 end
-
 local function RunRefreshList(refreshers)
     if type(refreshers) ~= "table" then return end
     for i = 1, #refreshers do
@@ -1218,10 +1004,8 @@ local function RunRefreshList(refreshers)
         if type(fn) == "function" then pcall(fn) end
     end
 end
-
 function M.RequestRefresh(ctx, reason)
-    if M.MarkMenuDataDirty then M.MarkMenuDataDirty(reason or "request-refresh") end
-
+    M.CallIf(M.MarkMenuDataDirty, reason or "request-refresh")
     local entry = ResolveRefreshEntry(ctx)
     if entry then
         if entry._msuf2RefreshQueued then return true end
@@ -1238,7 +1022,6 @@ function M.RequestRefresh(ctx, reason)
         if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
         return true
     end
-
     if M._msuf2RefreshQueued then return true end
     M._msuf2RefreshQueued = true
     local function Run()
@@ -1251,9 +1034,8 @@ function M.RequestRefresh(ctx, reason)
     if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, Run) else Run() end
     return true
 end
-
 function M.Refresh(ctx)
-    if M.MarkMenuDataDirty then M.MarkMenuDataDirty("refresh") end
+    M.CallIf(M.MarkMenuDataDirty, "refresh")
     local entry = ResolveRefreshEntry(ctx)
     if entry and M.RunEntryRefreshers then
         M.RunEntryRefreshers(entry, { force = true })
@@ -1263,7 +1045,6 @@ function M.Refresh(ctx)
     if not refreshers then refreshers = entry and entry.refreshers end
     RunRefreshList(refreshers)
 end
-
 local function MarkCommandSearchDirty()
     if M.SearchBridge and type(M.SearchBridge.MarkSearchIndexDirty) == "function" then
         M.SearchBridge.MarkSearchIndexDirty()
@@ -1271,14 +1052,11 @@ local function MarkCommandSearchDirty()
         M.Search.MarkIndexDirty()
     end
 end
-
 local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
     if not widget then return end
     opts = opts or {}
     local minValue, maxValue
-    if kind == "slider" and widget.GetMinMaxValues then
-        minValue, maxValue = widget:GetMinMaxValues()
-    end
+    if kind == "slider" and widget.GetMinMaxValues then minValue, maxValue = widget:GetMinMaxValues() end
     widget._msuf2CommandAction = {
         kind = kind,
         ctxKey = ctx and ctx.key,
@@ -1299,7 +1077,7 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
             return WidgetHistorySource(ctx, widget, label)
         end,
         refresh = function()
-            if M.RequestRefresh then M.RequestRefresh(ctx, "command-refresh") elseif M.Refresh then M.Refresh(ctx) end
+            M.RequestOrRefresh(ctx, "command-refresh")
         end,
         blockCombat = function()
             return BlockCombatAndRefresh(ctx)
@@ -1307,7 +1085,23 @@ local function AttachCommandAction(ctx, widget, kind, getValue, setValue, opts)
     }
     MarkCommandSearchDirty()
 end
-
+local function AddRefreshCall(ctx, fn, a, b) if type(fn) == "function" then return M.AddRefresher(ctx, function() return fn(a, b) end) end end
+local function RefreshSlider(slider, getValue)
+    local value = tonumber(getValue()) or 0
+    local current = slider.GetValue and tonumber(slider:GetValue()) or nil
+    if current ~= nil and math.abs(current - value) < 0.0001 then
+        if slider.editBox and slider._msuf2FormatValue and not slider._msuf2Editing then slider.editBox:SetText(slider._msuf2FormatValue(value)) end
+        if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
+        return
+    end
+    slider._msuf2Refreshing = true
+    slider:SetValue(value)
+    if slider.editBox and slider._msuf2FormatValue then slider.editBox:SetText(slider._msuf2FormatValue(value)) end
+    if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
+    slider._msuf2Refreshing = nil
+end
+local function RefreshValueControl(control, getValue) control:SetValue(getValue()) end
+local function RefreshTextInput(editBox, getValue) if not editBox:HasFocus() then editBox:SetText(tostring(getValue() or "")) end end
 function M.BindToggle(ctx, widget, getValue, setValue)
     if not widget then return end
     AttachCommandAction(ctx, widget, "toggle", getValue, setValue)
@@ -1333,11 +1127,8 @@ function M.BindToggle(ctx, widget, getValue, setValue)
         end)
         SyncFromValue(self)
     end)
-    M.AddRefresher(ctx, function()
-        SyncFromValue(widget)
-    end)
+    AddRefreshCall(ctx, SyncFromValue, widget)
 end
-
 function M.BindSlider(ctx, slider, getValue, setValue)
     if not slider then return end
     local minValue, maxValue
@@ -1352,14 +1143,12 @@ function M.BindSlider(ctx, slider, getValue, setValue)
         if self._msuf2Refreshing or self._msuf2HistoryTransaction then return end
         if not M.BeginHistoryTransaction then return end
         local label = WidgetHistoryLabel(ctx, self)
-        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label)) then
-            self._msuf2HistoryTransaction = true
-        end
+        if M.BeginHistoryTransaction(label, WidgetHistorySource(ctx, self, label)) then self._msuf2HistoryTransaction = true end
     end
     local function CommitSliderHistory(self)
         if not self._msuf2HistoryTransaction then return end
         self._msuf2HistoryTransaction = nil
-        if M.CommitHistoryTransaction then M.CommitHistoryTransaction() end
+        M.CallIf(M.CommitHistoryTransaction)
     end
     slider._msuf2BeginSliderHistory = BeginSliderHistory
     slider._msuf2CommitSliderHistory = CommitSliderHistory
@@ -1369,35 +1158,15 @@ function M.BindSlider(ctx, slider, getValue, setValue)
     slider:HookScript("OnValueChanged", function(self, value)
         if self._msuf2Refreshing then return end
         if BlockCombatAndRefresh(ctx) then return end
-        if self._msuf2Step and self._msuf2Step >= 1 then
-            value = math.floor(value + 0.5)
-        end
+        if self._msuf2Step and self._msuf2Step >= 1 then value = math.floor(value + 0.5) end
         local current = tonumber(getValue()) or 0
         if math.abs(current - value) < 0.0001 then return end
         CaptureWidgetChange(ctx, self, nil, function()
             setValue(value)
         end)
     end)
-    M.AddRefresher(ctx, function()
-        local value = tonumber(getValue()) or 0
-        local current = slider.GetValue and tonumber(slider:GetValue()) or nil
-        if current ~= nil and math.abs(current - value) < 0.0001 then
-            if slider.editBox and slider._msuf2FormatValue and not slider._msuf2Editing then
-                slider.editBox:SetText(slider._msuf2FormatValue(value))
-            end
-            if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
-            return
-        end
-        slider._msuf2Refreshing = true
-        slider:SetValue(value)
-        if slider.editBox and slider._msuf2FormatValue then
-            slider.editBox:SetText(slider._msuf2FormatValue(value))
-        end
-        if slider._msuf2UpdateFill then slider:_msuf2UpdateFill() end
-        slider._msuf2Refreshing = nil
-    end)
+    AddRefreshCall(ctx, RefreshSlider, slider, getValue)
 end
-
 function M.BindSegment(ctx, segment, getValue, setValue)
     if not segment then return end
     AttachCommandAction(ctx, segment, "segment", getValue, setValue, { values = segment.values })
@@ -1415,11 +1184,8 @@ function M.BindSegment(ctx, segment, getValue, setValue)
             segment:SetValue(self._msuf2Value)
         end)
     end
-    M.AddRefresher(ctx, function()
-        segment:SetValue(getValue())
-    end)
+    AddRefreshCall(ctx, RefreshValueControl, segment, getValue)
 end
-
 function M.BindDropdown(ctx, dropdown, getValue, setValue)
     if not dropdown then return end
     AttachCommandAction(ctx, dropdown, "dropdown", getValue, setValue, { values = dropdown.values })
@@ -1441,11 +1207,8 @@ function M.BindDropdown(ctx, dropdown, getValue, setValue)
             dropdown:SetValue(value)
         end
     end)
-    M.AddRefresher(ctx, function()
-        dropdown:SetValue(getValue())
-    end)
+    AddRefreshCall(ctx, RefreshValueControl, dropdown, getValue)
 end
-
 function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
     if not editBox then return end
     AttachCommandAction(ctx, editBox, "textinput", getValue, setValue)
@@ -1457,12 +1220,8 @@ function M.BindTextInput(ctx, editBox, getValue, setValue, commitOnBlur)
             setValue(value or "")
         end)
     end)
-    M.AddRefresher(ctx, function()
-        if editBox:HasFocus() then return end
-        editBox:SetText(tostring(getValue() or ""))
-    end)
+    AddRefreshCall(ctx, RefreshTextInput, editBox, getValue)
 end
-
 function M.BindColor(ctx, colorButton, getRGB, setRGB)
     if not colorButton then return end
     AttachCommandAction(ctx, colorButton, "color", getRGB, setRGB)

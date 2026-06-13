@@ -2,15 +2,12 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local Specs = M.GroupPreviewSpecs or {}
 local ZoomPan = M.GroupPreviewZoomPan or {}
 M.GroupPreviewZoomPan = ZoomPan
-
 local H = M.PreviewHelpers or {}
 if H.InstallZoomPan then
     H.InstallZoomPan(ZoomPan, {

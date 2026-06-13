@@ -116,6 +116,8 @@ local function HasExactAliasBulkScope(text)
         or (" " .. text .. " "):find(" alle ", 1, true) ~= nil
         or (" " .. text .. " "):find(" jede ", 1, true) ~= nil
         or (" " .. text .. " "):find(" jeder ", 1, true) ~= nil
+        or text:find("group frames", 1, true) ~= nil
+        or text:find("groupframes", 1, true) ~= nil
 end
 
 local function AddMatches(out, seen, index, tokens)

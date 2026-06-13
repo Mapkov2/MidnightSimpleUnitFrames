@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -13,12 +12,11 @@ local PreviewHelpers = M.PreviewHelpers or {}
 local Specs = M.GroupPreviewSpecs or {}
 local GFZoomPan = M.GroupPreviewZoomPan or {}
 local PickDefaults = M.PickDefaults
-
+local F = M.Fallbacks or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
 local MSUF_ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
-
 local LAYER_HEADER_COLOR = { 0.45, 0.50, 0.62, 0.80 }
 local LAYER_TEXT_ON = { 0.76, 0.80, 0.90, 0.95 }
 local LAYER_TEXT_OFF = { 0.30, 0.30, 0.36, 0.55 }
@@ -28,7 +26,6 @@ local SECTION_PAGE, PAGE_FOCUS, GF_PREVIEW_CLASSES, GF_PREVIEW_NAMES, GF_PREVIEW
     SECTION_PAGE PAGE_FOCUS CLASSES NAMES ANCHOR_FRAC AURA_MOCK_ICON_IDS AURA_GROWTH_TABLE STATUS_RUNTIME_KEYS
 ]])
 if not GF_AURA_GROWTH_TABLE.RIGHTDOWN then GF_AURA_GROWTH_TABLE.RIGHTDOWN = { px = 1, py = 0, sx = 0, sy = -1 } end
-
 local function ShallowCopy(src)
     if type(src) ~= "table" then return nil end
     local out = {}
@@ -37,50 +34,40 @@ local function ShallowCopy(src)
     end
     return out
 end
-
 local function SetFSColor(fs, color)
-    if fs and fs.SetTextColor and color then
-        fs:SetTextColor(color[1], color[2], color[3], color[4] or 1)
-    end
+    if fs and fs.SetTextColor and color then fs:SetTextColor(color[1], color[2], color[3], color[4] or 1) end
 end
-
 local function LayerFont(parent, text, color)
     local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     fs:SetText((M.Tr and M.Tr(text or "")) or (text or ""))
     SetFSColor(fs, color or LAYER_TEXT_ON)
     return fs
 end
-
 local function GroupPage()
     M.GroupPage = M.GroupPage or {}
     return M.GroupPage
 end
-
 local function CurrentScope()
     local gp = GroupPage()
     if type(gp.CurrentScope) == "function" then return gp.CurrentScope() end
     return M.gfScope or "party"
 end
-
 local function Conf(kind)
     local gp = GroupPage()
     if type(gp.Conf) == "function" then return gp.Conf(kind) end
     return {}
 end
-
 local function CompiledSpec(kind)
     local gf = MSUF and MSUF.GF
     if gf and type(gf.CompileSpec) == "function" then
         kind = kind or CurrentScope()
         local base = gf.CompileSpec(kind, nil, nil)
         if type(base) ~= "table" then return base end
-
         local spec = ShallowCopy(base) or {}
         local conf = Conf(kind)
         spec.key = "gf_" .. tostring(kind)
         spec.groupKind = kind
         spec._msufMenu2PreviewRuntime = true
-
         if type(base.power) == "table" then
             local power = ShallowCopy(base.power) or {}
             local powerHeight = tonumber(power.height) or 0
@@ -93,28 +80,23 @@ local function CompiledSpec(kind)
             power.height = powerHeight
             spec.power = power
         end
-
         if type(base.status) == "table" then
             local status = ShallowCopy(base.status) or {}
             status.roleValue = GF_PREVIEW_ROLE
             spec.status = status
         end
-
         return spec
     end
     return nil
 end
-
 local function PageForGFSection(sectionKey)
     return SECTION_PAGE[sectionKey or ""]
 end
-
 local function PreviewFocusForPage(pageKey)
     local focus = M.gfPreviewFocus
     if focus and PageForGFSection(focus) == pageKey then return focus end
     return PAGE_FOCUS[pageKey]
 end
-
 local function OpenGFSection(sectionKey)
     M.gfPreviewFocus = sectionKey
     local pageKey = PageForGFSection(sectionKey)
@@ -132,13 +114,11 @@ local function OpenGFSection(sectionKey)
         M.SelectPage(pageKey)
     end
 end
-
 local function PreviewScopeLabel(kind)
     if kind == "raid" then return "Raid" end
     if kind == "mythicraid" then return "Mythic Raid" end
     return "Party"
 end
-
 local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(68, 16)
@@ -189,7 +169,6 @@ local function MakePreviewSectionButton(parent, label, color, sectionKey, onOpen
     end
     return btn
 end
-
 local function ResolvePreviewStatusbarTexture(conf, key)
     conf = conf or {}
     local value = conf[key]
@@ -210,8 +189,7 @@ local function ResolvePreviewStatusbarTexture(conf, key)
     end
     return "Interface\\Buttons\\WHITE8X8"
 end
-
-local function PreviewHealthColor(conf, pct, classToken)
+local function HealthColor(conf, pct, classToken)
     conf = conf or {}
     local gfMode = conf.gfBarMode
     local getCache = _G.MSUF_UFCore_GetSettingsCache
@@ -227,7 +205,6 @@ local function PreviewHealthColor(conf, pct, classToken)
             mode = conf.healthColorMode or "CLASS"
         end
     end
-
     if mode == "dark" then
         return conf.gfDarkR or (cache and cache.darkBarR) or 0,
             conf.gfDarkG or (cache and cache.darkBarG) or 0,
@@ -241,9 +218,7 @@ local function PreviewHealthColor(conf, pct, classToken)
     if mode == "CLASS" then
         local fastClass = _G.MSUF_UFCore_GetClassBarColorFast
         local r, g, b
-        if type(fastClass) == "function" then
-            r, g, b = fastClass(classToken)
-        end
+        if type(fastClass) == "function" then r, g, b = fastClass(classToken) end
         if not r then
             local cc = classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken]
             if cc then r, g, b = cc.r, cc.g, cc.b end
@@ -260,7 +235,6 @@ local function PreviewHealthColor(conf, pct, classToken)
         conf.healthCustomG or 0.8,
         conf.healthCustomB or 0.2
 end
-
 local WHITE8X8 = Specs.WHITE8X8 or "Interface\\Buttons\\WHITE8X8"
 local maskRoot = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\Masks\\"
 local GF_PREVIEW_ROUNDED_MASK = Specs.ROUNDED_MASK or (maskRoot .. "rounded_bar_4x.tga")
@@ -269,12 +243,10 @@ local GF_PREVIEW_MIN_W = Specs.MIN_W or 380
 local GF_PREVIEW_MIN_H = Specs.MIN_H or 130
 local GF_PREVIEW_ZOOM_MIN = Specs.ZOOM_MIN or 0.35
 local GF_PREVIEW_ZOOM_MAX = Specs.ZOOM_MAX or 4.0
-
-local function GFPreviewTr(text)
+local function Tr(text)
     return (M.Tr and M.Tr(text)) or text
 end
-
-local function PreviewClassColor(classToken, dr, dg, db)
+local function ClassColor(classToken, dr, dg, db)
     if type(_G.MSUF_UFCore_GetClassBarColorFast) == "function" then
         local r, g, b = _G.MSUF_UFCore_GetClassBarColorFast(classToken)
         if r then return r, g, b end
@@ -283,12 +255,10 @@ local function PreviewClassColor(classToken, dr, dg, db)
     if c then return c.r, c.g, c.b end
     return dr or 0.06, dg or 0.06, db or 0.07
 end
-
-local function GFPreviewAuraGrowth(growth)
+local function AuraGrowth(growth)
     return GF_AURA_GROWTH_TABLE[growth] or GF_AURA_GROWTH_TABLE.RIGHTDOWN
 end
-
-local function GFPreviewGrowthFromCompiled(primary, wrap, fallback)
+local function GrowthFromCompiled(primary, wrap, fallback)
     if primary == "LEFT" then
         return wrap == "UP" and "LEFTUP" or "LEFTDOWN"
     elseif primary == "UP" then
@@ -298,8 +268,7 @@ local function GFPreviewGrowthFromCompiled(primary, wrap, fallback)
     end
     return wrap == "UP" and "RIGHTUP" or (fallback or "RIGHTDOWN")
 end
-
-local function GFPreviewCompiledAuraLane(auras, key, fallback)
+local function CompiledAuraLane(auras, key, fallback)
     if type(auras) ~= "table" then return fallback or {} end
     local prefix, showKey
     if key == "buff" then
@@ -317,7 +286,7 @@ local function GFPreviewCompiledAuraLane(auras, key, fallback)
         size = auras[prefix .. "IconSize"],
         spacing = auras[prefix .. "Spacing"],
         anchor = auras[prefix .. "Anchor"],
-        growth = GFPreviewGrowthFromCompiled(auras[prefix .. "GrowthX"], auras[prefix .. "GrowthY"], fallback and fallback.growth),
+        growth = GrowthFromCompiled(auras[prefix .. "GrowthX"], auras[prefix .. "GrowthY"], fallback and fallback.growth),
         x = auras[prefix .. "OffsetX"],
         y = auras[prefix .. "OffsetY"],
         layer = auras[prefix .. "Layer"],
@@ -326,8 +295,7 @@ local function GFPreviewCompiledAuraLane(auras, key, fallback)
     }
     return out
 end
-
-local function GFPreviewRuntimeStatusConfig(status, spec)
+local function RuntimeStatusConfig(status, spec)
     if type(status) ~= "table" or type(spec) ~= "table" then return nil end
     local value = spec.value
     if value == "statusText" then
@@ -340,16 +308,14 @@ local function GFPreviewRuntimeStatusConfig(status, spec)
     local key = GF_STATUS_RUNTIME_KEYS[value]
     return key and status[key] or nil
 end
-
-local function GFPreviewInt(value, fallback, minValue, maxValue)
+local function Int(value, fallback, minValue, maxValue)
     local n = floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
     if minValue ~= nil and n < minValue then n = minValue end
     if maxValue ~= nil and n > maxValue then n = maxValue end
     return n
 end
-
 local gfMockSpellTextureCache = {}
-local function GFMockSpellTexture(spellId)
+local function MockSpellTexture(spellId)
     local cached = gfMockSpellTextureCache[spellId]
     if cached then return cached end
     if C_Spell and C_Spell.GetSpellTexture then
@@ -370,8 +336,7 @@ local function GFMockSpellTexture(spellId)
     end
     return "Interface\\Icons\\INV_Misc_QuestionMark"
 end
-
-local function GFPreviewCurrentSpellInfo(kind)
+local function CurrentSpellInfo(kind)
     local gp = GroupPage()
     local gf = MSUF and MSUF.GF
     local si = gf and gf.SpellIndicators
@@ -387,8 +352,7 @@ local function GFPreviewCurrentSpellInfo(kind)
     end
     return nil, specKey, auraName
 end
-
-local function GFPreviewCurrentSpellConfig(kind)
+local function CurrentSpellConfig(kind)
     local gp = GroupPage()
     if type(gp.CurrentSpellConfig) == "function" then
         local cfg = gp.CurrentSpellConfig(kind, false)
@@ -396,146 +360,123 @@ local function GFPreviewCurrentSpellConfig(kind)
     end
     return nil
 end
-
-local function GFPreviewCurrentSpellPlaced(kind)
+local function CurrentSpellPlaced(kind)
     local gp = GroupPage()
     if type(gp.PlacedConfig) == "function" then
         local placed = gp.PlacedConfig(kind, false)
         if type(placed) == "table" then return placed end
     end
-    local cfg = GFPreviewCurrentSpellConfig(kind)
+    local cfg = CurrentSpellConfig(kind)
     return type(cfg and cfg.placed) == "table" and cfg.placed or nil
 end
-
-local function GFPreviewCurrentSpellTexture(kind)
-    local info, specKey, auraName = GFPreviewCurrentSpellInfo(kind)
+local function CurrentSpellTexture(kind)
+    local info, specKey, auraName = CurrentSpellInfo(kind)
     local gf = MSUF and MSUF.GF
     local si = gf and gf.SpellIndicators
     if si and type(si.GetAuraIcon) == "function" and specKey and auraName and auraName ~= "" then
         local ok, icon = pcall(si.GetAuraIcon, specKey, auraName)
         if ok and icon then return icon end
     end
-    if info and info.spellId then return GFMockSpellTexture(info.spellId) end
-    return GFMockSpellTexture(774)
+    if info and info.spellId then return MockSpellTexture(info.spellId) end
+    return MockSpellTexture(774)
 end
-
-local function GFPreviewCurrentSpellColor(kind)
-    local info = GFPreviewCurrentSpellInfo(kind)
+local function CurrentSpellColor(kind)
+    local info = CurrentSpellInfo(kind)
     local c = info and info.color
     return (c and c[1]) or 0.69, (c and c[2]) or 0.50, (c and c[3]) or 0.88
 end
-
-local function GFPreviewRound(value)
+local function Round(value)
     return floor((tonumber(value) or 0) + 0.5)
 end
-
-local function GFPreviewScaleValue(value, scale, minValue)
-    local v = GFPreviewRound((tonumber(value) or 0) * (tonumber(scale) or 1))
+local function ScaleValue(value, scale, minValue)
+    local v = Round((tonumber(value) or 0) * (tonumber(scale) or 1))
     if minValue ~= nil and v < minValue then v = minValue end
     return v
 end
-
-local GFPreviewUpdateHint
+local UpdateHint
 if GFZoomPan.Configure then
     GFZoomPan.Configure({
         T = T,
-        TR = GFPreviewTr,
+        TR = Tr,
         WHITE8X8 = WHITE8X8,
         UpdateHint = function(box, selected)
-            if GFPreviewUpdateHint then GFPreviewUpdateHint(box, selected) end
+            if UpdateHint then UpdateHint(box, selected) end
         end,
     })
 end
-local GFPreviewClampZoom = GFZoomPan.Clamp or function(value)
+local ClampZoom = GFZoomPan.Clamp or function(value)
     value = tonumber(value) or 1
     if value < GF_PREVIEW_ZOOM_MIN then return GF_PREVIEW_ZOOM_MIN end
     if value > GF_PREVIEW_ZOOM_MAX then return GF_PREVIEW_ZOOM_MAX end
     return floor(value * 100 + 0.5) / 100
 end
-local GFPreviewUpdateZoomControls = GFZoomPan.UpdateControls or function() end
-local GFPreviewSetZoom = GFZoomPan.SetZoom or function() end
-local GFPreviewStepZoom = GFZoomPan.Step or function() end
-local GFPreviewStartPan = GFZoomPan.Start or function() return false end
-local GFPreviewStopPan = GFZoomPan.Stop or function() end
-
-local function GFPreviewReadBarsBool(key, default)
+local UpdateZoomControls = GFZoomPan.UpdateControls or F.Noop
+local SetZoom = GFZoomPan.SetZoom or F.Noop
+local StepZoom = GFZoomPan.Step or F.Noop
+local StartPan = GFZoomPan.Start or F.False
+local StopPan = GFZoomPan.Stop or F.Noop
+local function ReadBarsBool(key, default)
     local bars = _G.MSUF_DB and _G.MSUF_DB.bars
     local value = bars and bars[key]
     if value == nil then return default and true or false end
     return value and true or false
 end
-
-local function GFPreviewNormalizeAnchorMode(value, fallback)
+local function NormalizeAnchorMode(value, fallback)
     local mode = tonumber(value) or fallback or 3
     if mode < 1 or mode > 5 then mode = fallback or 3 end
     return mode
 end
-
-local function GFPreviewSharedHealPredictionEnabled()
+local function SharedHealPredictionEnabled()
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if type(gen) ~= "table" then return false end
     if gen.showSelfHealPrediction ~= nil then return gen.showSelfHealPrediction == true end
     if gen.enableHealPrediction ~= nil then return gen.enableHealPrediction ~= false end
     return false
 end
-
-local function GFPreviewHealPredictionEnabled(kind, conf)
+local function HealPredictionEnabled(kind, conf)
     local gf = MSUF and MSUF.GF
-    if gf and type(gf.IsHealPredictionEnabled) == "function" then
-        return gf.IsHealPredictionEnabled(kind, conf) == true
-    end
-    if conf and conf.hlOverride == true and conf.healPredEnabled ~= nil then
-        return conf.healPredEnabled == true
-    end
-    return GFPreviewSharedHealPredictionEnabled()
+    if gf and type(gf.IsHealPredictionEnabled) == "function" then return gf.IsHealPredictionEnabled(kind, conf) == true end
+    if conf and conf.hlOverride == true and conf.healPredEnabled ~= nil then return conf.healPredEnabled == true end
+    return SharedHealPredictionEnabled()
 end
-
-local function GFPreviewHealPredAnchorMode(conf)
-    if conf and conf.hlOverride == true and conf.healPredAnchorMode ~= nil then
-        return GFPreviewNormalizeAnchorMode(conf.healPredAnchorMode, 3)
-    end
+local function HealPredAnchorMode(conf)
+    if conf and conf.hlOverride == true and conf.healPredAnchorMode ~= nil then return NormalizeAnchorMode(conf.healPredAnchorMode, 3) end
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
-    return GFPreviewNormalizeAnchorMode(gen and gen.healPredAnchorMode, 3)
+    return NormalizeAnchorMode(gen and gen.healPredAnchorMode, 3)
 end
-
 local GFRounded = (M.GroupPreviewRounded and M.GroupPreviewRounded.Install and M.GroupPreviewRounded.Install({
     PreviewHelpers = PreviewHelpers,
     Specs = Specs,
     WHITE8X8 = WHITE8X8,
     ROUNDED_MASK = GF_PREVIEW_ROUNDED_MASK,
     ROUNDED_EDGE = GF_PREVIEW_ROUNDED_EDGE,
-    ReadBarsBool = GFPreviewReadBarsBool,
-    Round = GFPreviewRound,
-    HealPredAnchorMode = GFPreviewHealPredAnchorMode,
+    ReadBarsBool = ReadBarsBool,
+    Round = Round,
+    HealPredAnchorMode = HealPredAnchorMode,
 })) or {}
-local GFPreviewSetOutlineShown = GFRounded.SetOutlineShown or function() end
-local GFPreviewLayoutOutline = GFRounded.LayoutOutline or function() end
-local GFPreviewBaseEdgeColor = GFRounded.BaseEdgeColor or function() return 0, 0, 0, 1 end
-local GFPreviewApplyRounded = GFRounded.ApplyRounded or function() return false end
-local function GFPreviewConfigToOffset(value, scale)
-    return GFPreviewRound((tonumber(value) or 0) * (tonumber(scale) or 1))
+local SetOutlineShown = GFRounded.SetOutlineShown or F.Noop
+local LayoutOutline = GFRounded.LayoutOutline or F.Noop
+local BaseEdgeColor = GFRounded.BaseEdgeColor or F.BlackRGBA
+local ApplyRounded = GFRounded.ApplyRounded or F.False
+local function ConfigToOffset(value, scale)
+    return Round((tonumber(value) or 0) * (tonumber(scale) or 1))
 end
-
-local function GFPreviewOffsetToConfig(value, scale)
+local function OffsetToConfig(value, scale)
     scale = tonumber(scale) or 1
     if scale <= 0 then scale = 1 end
-    return GFPreviewRound((tonumber(value) or 0) / scale)
+    return Round((tonumber(value) or 0) / scale)
 end
-
-local function GFPreviewResolveAnchor(rx, ry)
+local function ResolveAnchor(rx, ry)
     local best, bestD = "CENTER", 1e9
     for point, frac in pairs(GF_PREVIEW_ANCHOR_FRAC) do
         local dx = rx - frac[1]
         local dy = ry - (1 - frac[2])
         local d = dx * dx + dy * dy
-        if d < bestD then
-            best, bestD = point, d
-        end
+        if d < bestD then best, bestD = point, d end
     end
     return best
 end
-
-local function GFPreviewHandleOffset(handle, anchorFrame, anchor)
+local function HandleOffset(handle, anchorFrame, anchor)
     local frac = GF_PREVIEW_ANCHOR_FRAC[anchor]
     if not (handle and anchorFrame and frac) then return 0, 0 end
     local hL, hB, hW, hH = handle:GetLeft() or 0, handle:GetBottom() or 0, handle:GetWidth() or 1, handle:GetHeight() or 1
@@ -544,38 +485,31 @@ local function GFPreviewHandleOffset(handle, anchorFrame, anchor)
     local hy = hB + hH * frac[2]
     local ax = aL + aW * frac[1]
     local ay = aB + aH * frac[2]
-    return GFPreviewRound(hx - ax), GFPreviewRound(hy - ay)
+    return Round(hx - ax), Round(hy - ay)
 end
-
-local function GFPreviewPointOffset(px, py, anchorFrame, anchor)
+local function PointOffset(px, py, anchorFrame, anchor)
     local frac = GF_PREVIEW_ANCHOR_FRAC[anchor]
     if not (anchorFrame and frac) then return 0, 0 end
     local aL, aB = anchorFrame:GetLeft() or 0, anchorFrame:GetBottom() or 0
     local aW, aH = anchorFrame:GetWidth() or 1, anchorFrame:GetHeight() or 1
     local ax = aL + aW * frac[1]
     local ay = aB + aH * frac[2]
-    return GFPreviewRound((px or 0) - ax), GFPreviewRound((py or 0) - ay)
+    return Round((px or 0) - ax), Round((py or 0) - ay)
 end
-
-local function GFPreviewMockPowerHeight(kind, conf, zoom, frameScale)
+local function MockPowerHeight(kind, conf, zoom, frameScale)
     local livePowerH
     local gf = MSUF and MSUF.GF
-    if gf and gf.GetEffectivePowerHeight then
-        livePowerH = gf.GetEffectivePowerHeight(kind, nil, GF_PREVIEW_ROLE, conf)
-    end
+    if gf and gf.GetEffectivePowerHeight then livePowerH = gf.GetEffectivePowerHeight(kind, nil, GF_PREVIEW_ROLE, conf) end
     if livePowerH == nil then
         local raw = conf and (tonumber(conf.powerHeight) or 6) or 6
-        if gf and gf.ShouldShowPowerBarForRole and not gf.ShouldShowPowerBarForRole(kind, GF_PREVIEW_ROLE, conf) then
-            raw = 0
-        end
-        livePowerH = raw > 0 and GFPreviewScaleValue(raw, frameScale or 1, 0) or 0
+        if gf and gf.ShouldShowPowerBarForRole and not gf.ShouldShowPowerBarForRole(kind, GF_PREVIEW_ROLE, conf) then raw = 0 end
+        livePowerH = raw > 0 and ScaleValue(raw, frameScale or 1, 0) or 0
     end
     livePowerH = tonumber(livePowerH) or 0
     if livePowerH <= 0 then return 0 end
-    return GFPreviewRound(livePowerH * (tonumber(zoom) or 1))
+    return Round(livePowerH * (tonumber(zoom) or 1))
 end
-
-local function GFPreviewHandleText(handle)
+local function HandleText(handle)
     if not handle then return "Group preview" end
     local label = handle._label
     local text = label and label.GetText and label:GetText()
@@ -584,51 +518,43 @@ local function GFPreviewHandleText(handle)
     if previewText and previewText ~= "" then return previewText end
     return handle._key or "Group preview"
 end
-
-local function GFPreviewClampLayer(value, fallback)
+local function ClampLayer(value, fallback)
     local v = floor((tonumber(value) or fallback or 0) + 0.5)
     if v < 0 then return 0 end
     if v > 30 then return 30 end
     return v
 end
-
-local function GFPreviewStatusSpecs()
+local function StatusSpecs()
     local gp = GroupPage()
-    if type(gp.GF_STATUS_ICON_SPECS) == "table" and #gp.GF_STATUS_ICON_SPECS > 0 then
-        return gp.GF_STATUS_ICON_SPECS
-    end
+    if type(gp.GF_STATUS_ICON_SPECS) == "table" and #gp.GF_STATUS_ICON_SPECS > 0 then return gp.GF_STATUS_ICON_SPECS end
     local sharedSpecs = M.GroupSpecs and M.GroupSpecs.GF_STATUS_ICON_SPECS
     if type(sharedSpecs) == "table" and #sharedSpecs > 0 then return sharedSpecs end
     return {}
 end
-
-local function GFPreviewCurrentStatusSpec()
+local function CurrentStatusSpec()
     local gp = GroupPage()
     if type(gp.CurrentGFStatusSpec) == "function" then
         local spec = gp.CurrentGFStatusSpec()
         if type(spec) == "table" then return spec end
     end
-    local specs = GFPreviewStatusSpecs()
+    local specs = StatusSpecs()
     local selected = M.gfStatusIconSelection or "roleIcon"
     for i = 1, #specs do
         if specs[i].value == selected then return specs[i] end
     end
     return specs[1]
 end
-
-local function GFPreviewStatusSpecIsText(spec)
+local function StatusSpecIsText(spec)
     local value = spec and spec.value
     return value == "statusText" or value == "statusGhostText" or value == "statusAFKText"
 end
-
-local function GFPreviewStatusText(spec)
+local function StatusText(spec)
     local value = spec and spec.value
     if value == "statusGhostText" then return "GHOST" end
     if value == "statusAFKText" then return "AFK" end
     return "DEAD"
 end
-
-local function GFPreviewStatusLabel(spec)
+local function StatusLabel(spec)
     local value = spec and spec.value
     if value == "roleIcon" then return "Role" end
     if value == "leaderIcon" then return "Leader" end
@@ -644,8 +570,7 @@ local function GFPreviewStatusLabel(spec)
     if value == "statusAFKText" then return "AFK/DND" end
     return (spec and spec.text) or "Status"
 end
-
-local function GFPreviewStatusPreviewMode()
+local function StatusPreviewMode()
     local gf = MSUF and MSUF.GF
     if gf and type(gf.GetStatusPreviewMode) == "function" then
         local mode = gf.GetStatusPreviewMode()
@@ -653,34 +578,31 @@ local function GFPreviewStatusPreviewMode()
     end
     return M.gfStatusPreviewMode == "all" and "all" or "current"
 end
-
-local function GFPreviewStatusSpecEnabled(conf, spec)
+local function StatusSpecEnabled(conf, spec)
     if not spec then return false end
     conf = conf or {}
     return conf[spec.enabled] ~= false
 end
-
-local function GFPreviewStatusSpecInMode(spec, selectedSpec)
-    if GFPreviewStatusPreviewMode() == "all" then return true end
+local function StatusSpecInMode(spec, selectedSpec)
+    if StatusPreviewMode() == "all" then return true end
     local selected = selectedSpec and selectedSpec.value or M.gfStatusIconSelection or "roleIcon"
     return spec and spec.value == selected
 end
-
 local GFTextFocus = (M.GroupPreviewTextFocus and M.GroupPreviewTextFocus.Install and M.GroupPreviewTextFocus.Install({
     CurrentScope = CurrentScope,
     min = min,
     max = max,
 })) or {}
-local GFPreviewCurrentTextKind = GFTextFocus.CurrentTextKind or function() return "name" end
-local GFPreviewTextOffsetKeys = GFTextFocus.TextOffsetKeys or function() return "nameOffsetX", "nameOffsetY" end
-local GFPreviewTextLabel = GFTextFocus.TextLabel or function() return "Name Text" end
-local GFPreviewTextMovesTogether = GFTextFocus.TextMovesTogether or function() return true end
-local GFPreviewSetTextMoveTogether = GFTextFocus.SetTextMoveTogether or function() end
-local GFPreviewPlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or function() return false end
-local GFPreviewNormalizeTextFocusKind = GFTextFocus.NormalizeTextFocusKind or function(v) return v end
-local GFPreviewNormalizeTextFocusSlot = GFTextFocus.NormalizeTextFocusSlot or function(v) return v end
-local GFPreviewApplyTextFocus = GFTextFocus.ApplyTextFocus or function() end
-local function GFPreviewHandleOffsets(handle)
+local CurrentTextKind = GFTextFocus.CurrentTextKind or function() return "name" end
+local TextOffsetKeys = GFTextFocus.TextOffsetKeys or function() return "nameOffsetX", "nameOffsetY" end
+local TextLabel = GFTextFocus.TextLabel or function() return "Name Text" end
+local TextMovesTogether = GFTextFocus.TextMovesTogether or F.True
+local SetTextMoveTogether = GFTextFocus.SetTextMoveTogether or F.Noop
+local PlaceHandleAroundRegions = GFTextFocus.PlaceHandleAroundRegions or F.False
+local NormalizeTextFocusKind = GFTextFocus.NormalizeTextFocusKind or F.Identity
+local NormalizeTextFocusSlot = GFTextFocus.NormalizeTextFocusSlot or F.Identity
+local ApplyTextFocus = GFTextFocus.ApplyTextFocus or F.Noop
+local function HandleOffsets(handle)
     if not handle then return nil end
     local conf = Conf(CurrentScope()) or {}
     if handle._cfgGroup then
@@ -688,44 +610,41 @@ local function GFPreviewHandleOffsets(handle)
         local cfg = auras[handle._cfgGroup] or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
     elseif handle._cfgStatus then
-        local spec = handle._statusSpec or GFPreviewCurrentStatusSpec()
+        local spec = handle._statusSpec or CurrentStatusSpec()
         if not spec then return nil end
         return conf[spec.anchor] or spec.defaultAnchor, tonumber(conf[spec.x]) or 0, tonumber(conf[spec.y]) or 0
     elseif handle._cfgSpell then
-        local cfg = GFPreviewCurrentSpellPlaced(CurrentScope()) or {}
+        local cfg = CurrentSpellPlaced(CurrentScope()) or {}
         return cfg.anchor, tonumber(cfg.x) or 0, tonumber(cfg.y) or 0
     elseif handle._cfgText then
-        local kind = handle._cfgTextKind or GFPreviewCurrentTextKind()
+        local kind = handle._cfgTextKind or CurrentTextKind()
         local slot = handle._cfgTextSlot
-        local xKey, yKey = GFPreviewTextOffsetKeys(kind, slot)
-        return (kind == "name" and (conf.nameAnchor or "LEFT") or GFPreviewTextLabel(kind, slot)), tonumber(conf[xKey]) or 0, tonumber(conf[yKey]) or 0
+        local xKey, yKey = TextOffsetKeys(kind, slot)
+        return (kind == "name" and (conf.nameAnchor or "LEFT") or TextLabel(kind, slot)), tonumber(conf[xKey]) or 0, tonumber(conf[yKey]) or 0
     end
     return nil
 end
-
-GFPreviewUpdateHint = function(box, handle)
+UpdateHint = function(box, handle)
     if not (box and box._hint) then return end
     if not handle then
-        box._hint:SetText(GFPreviewTr("click layers to hide - drag handles - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans"))
+        box._hint:SetText(Tr("click layers to hide - drag handles - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans"))
         return
     end
-    local anchor, x, y = GFPreviewHandleOffsets(handle)
-    local nudgeHint = GFPreviewTr("arrows nudge, Shift=5, Ctrl=10 - Ctrl+left drag pans")
+    local anchor, x, y = HandleOffsets(handle)
+    local nudgeHint = Tr("arrows nudge, Shift=5, Ctrl=10 - Ctrl+left drag pans")
     if anchor then
         box._hint:SetText(string.format("%s   %s   x: %d   y: %d   %s",
-            GFPreviewHandleText(handle), tostring(anchor or "CENTER"), GFPreviewRound(x or 0), GFPreviewRound(y or 0), nudgeHint))
+            HandleText(handle), tostring(anchor or "CENTER"), Round(x or 0), Round(y or 0), nudgeHint))
     else
-        box._hint:SetText(string.format("%s   %s", GFPreviewHandleText(handle), nudgeHint))
+        box._hint:SetText(string.format("%s   %s", HandleText(handle), nudgeHint))
     end
 end
-
-local function GFPreviewNudgeStep()
+local function NudgeStep()
     if IsControlKeyDown and IsControlKeyDown() then return 10 end
     if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
     return 1
 end
-
-local function GFPreviewRefreshHandleSelection(box)
+local function RefreshHandleSelection(box)
     if not box then return end
     local selected = box._selectedHandle
     local guidesOn = not (M.gfPreviewLayerVisible and M.gfPreviewLayerVisible.guides == false)
@@ -741,9 +660,7 @@ local function GFPreviewRefreshHandleSelection(box)
             local isSelected = handle == selected
             local isHover = handle._hovering == true
             local isDrag = handle._dragging == true
-            if handle._selectFill then
-                handle._selectFill:SetColorTexture(color[1], color[2], color[3], guidesOn and (isDrag and 0.18 or (isHover and 0.14 or 0)) or 0)
-            end
+            if handle._selectFill then handle._selectFill:SetColorTexture(color[1], color[2], color[3], guidesOn and (isDrag and 0.18 or (isHover and 0.14 or 0)) or 0) end
             if handle._selectBorder then
                 handle._selectBorder:SetShown(guidesOn and (isSelected or isHover))
                 handle._selectBorder:SetBackdropBorderColor(color[1], color[2], color[3], isSelected and 0.70 or 0.72)
@@ -757,79 +674,51 @@ local function GFPreviewRefreshHandleSelection(box)
                 local alpha = guidesOn and 0.42 or 0
                 handle:SetBackdropColor(color[1] * 0.12, color[2] * 0.12, color[3] * 0.12, alpha)
             end
-            if handle._cfgText and handle.SetBackdropColor then
-                handle:SetBackdropColor(0, 0, 0, 0)
-            end
+            if handle._cfgText and handle.SetBackdropColor then handle:SetBackdropColor(0, 0, 0, 0) end
         end
     end
-    GFPreviewUpdateHint(box, selected)
+    UpdateHint(box, selected)
 end
-
-local GFPreviewHelpers = {}
-GFPreviewHelpers.CurrentScope = CurrentScope
-GFPreviewHelpers.Conf = Conf
-GFPreviewHelpers.PreviewScopeLabel = PreviewScopeLabel
-GFPreviewHelpers.SetTextMoveTogether = GFPreviewSetTextMoveTogether
-GFPreviewHelpers.CurrentTextKind = GFPreviewCurrentTextKind
-GFPreviewHelpers.TextOffsetKeys = GFPreviewTextOffsetKeys
-GFPreviewHelpers.NudgeStep = GFPreviewNudgeStep
-GFPreviewHelpers.StatusSpecs = GFPreviewStatusSpecs
-GFPreviewHelpers.TextLabel = GFPreviewTextLabel
-GFPreviewHelpers.PreviewFocusForPage = PreviewFocusForPage
-GFPreviewHelpers.MockPowerHeight = GFPreviewMockPowerHeight
-GFPreviewHelpers.HealPredAnchorMode = GFPreviewHealPredAnchorMode
-GFPreviewHelpers.HealPredictionEnabled = GFPreviewHealPredictionEnabled
-GFPreviewHelpers.SetOutlineShown = GFPreviewSetOutlineShown
-GFPreviewHelpers.LayoutOutline = GFPreviewLayoutOutline
-GFPreviewHelpers.TextMovesTogether = GFPreviewTextMovesTogether
-GFPreviewHelpers.PlaceHandleAroundRegions = GFPreviewPlaceHandleAroundRegions
-GFPreviewHelpers.NormalizeTextFocusKind = GFPreviewNormalizeTextFocusKind
-GFPreviewHelpers.NormalizeTextFocusSlot = GFPreviewNormalizeTextFocusSlot
-GFPreviewHelpers.ApplyTextFocus = GFPreviewApplyTextFocus
-
-local GFPreviewCreateZoomButton = GFZoomPan.CreateButton or function(parent, text, width, tooltip, onClick)
-    local btn = CreateFrame("Button", nil, parent, T.Template())
-    btn:SetSize(width or 24, 18)
-    btn:SetBackdrop({ bgFile = WHITE8X8, edgeFile = WHITE8X8, edgeSize = 1 })
-    btn:SetBackdropColor(0.025, 0.030, 0.045, 0.88)
-    btn:SetBackdropBorderColor(0.12, 0.16, 0.24, 0.92)
-    btn._fs = T.Font(btn, "GameFontDisableSmall", text, { 0.78, 0.84, 0.96, 1 })
-    btn._fs:SetPoint("CENTER")
-    btn:SetScript("OnClick", onClick)
-    return btn
-end
-
-local GFPreviewNativeDeps = {
+local Helpers = {
+    CurrentScope = CurrentScope, Conf = Conf, PreviewScopeLabel = PreviewScopeLabel,
+    SetTextMoveTogether = SetTextMoveTogether, CurrentTextKind = CurrentTextKind, TextOffsetKeys = TextOffsetKeys,
+    NudgeStep = NudgeStep, StatusSpecs = StatusSpecs, TextLabel = TextLabel, PreviewFocusForPage = PreviewFocusForPage,
+    MockPowerHeight = MockPowerHeight, HealPredAnchorMode = HealPredAnchorMode, HealPredictionEnabled = HealPredictionEnabled,
+    SetOutlineShown = SetOutlineShown, LayoutOutline = LayoutOutline, TextMovesTogether = TextMovesTogether,
+    PlaceHandleAroundRegions = PlaceHandleAroundRegions, NormalizeTextFocusKind = NormalizeTextFocusKind,
+    NormalizeTextFocusSlot = NormalizeTextFocusSlot, ApplyTextFocus = ApplyTextFocus,
+}
+local NativeDeps = {
     M = M,
     MSUF = MSUF,
     T = T,
     WHITE8X8 = WHITE8X8,
-    H = GFPreviewHelpers,
-    Helpers = GFPreviewHelpers,
+    H = Helpers,
+    Helpers = Helpers,
     LayerFont = LayerFont,
     LayerHeaderColor = LAYER_HEADER_COLOR,
     MakePreviewSectionButton = MakePreviewSectionButton,
-    CreateZoomButton = GFPreviewCreateZoomButton,
-    TR = GFPreviewTr,
-    Tr = GFPreviewTr,
-    StepZoom = GFPreviewStepZoom,
-    SetZoom = GFPreviewSetZoom,
-    StartPan = GFPreviewStartPan,
-    StopPan = GFPreviewStopPan,
-    ZoomWheel = GFPreviewZoomWheel,
-    UpdateHint = GFPreviewUpdateHint,
-    Round = GFPreviewRound,
-    ResolveAnchor = GFPreviewResolveAnchor,
-    PointOffset = GFPreviewPointOffset,
-    HandleOffset = GFPreviewHandleOffset,
-    OffsetToConfig = GFPreviewOffsetToConfig,
-    CurrentStatusSpec = GFPreviewCurrentStatusSpec,
-    CurrentSpellConfig = GFPreviewCurrentSpellConfig,
-    CurrentSpellPlaced = GFPreviewCurrentSpellPlaced,
-    HandleText = GFPreviewHandleText,
-    HandleOffsets = GFPreviewHandleOffsets,
-    RefreshHandleSelection = GFPreviewRefreshHandleSelection,
-    StatusLabel = GFPreviewStatusLabel,
+    CreateZoomButton = GFZoomPan.CreateButton,
+    TR = Tr,
+    Tr = Tr,
+    StepZoom = StepZoom,
+    SetZoom = SetZoom,
+    StartPan = StartPan,
+    StopPan = StopPan,
+    ZoomWheel = F.Noop,
+    UpdateHint = UpdateHint,
+    Round = Round,
+    ResolveAnchor = ResolveAnchor,
+    PointOffset = PointOffset,
+    HandleOffset = HandleOffset,
+    OffsetToConfig = OffsetToConfig,
+    CurrentStatusSpec = CurrentStatusSpec,
+    CurrentSpellConfig = CurrentSpellConfig,
+    CurrentSpellPlaced = CurrentSpellPlaced,
+    HandleText = HandleText,
+    HandleOffsets = HandleOffsets,
+    RefreshHandleSelection = RefreshHandleSelection,
+    StatusLabel = StatusLabel,
     NAMES = GF_PREVIEW_NAMES,
     CLASSES = GF_PREVIEW_CLASSES,
     AURA_MOCK_ICON_IDS = GF_AURA_MOCK_ICON_IDS,
@@ -842,43 +731,39 @@ local GFPreviewNativeDeps = {
     AUTO_ZOOM_STAGE_PAD_X = Specs.AUTO_ZOOM_STAGE_PAD_X or 48,
     AUTO_ZOOM_STAGE_PAD_Y = Specs.AUTO_ZOOM_STAGE_PAD_Y or 72,
     CompiledSpec = CompiledSpec,
-    CompiledAuraLane = GFPreviewCompiledAuraLane,
-    RuntimeStatusConfig = GFPreviewRuntimeStatusConfig,
-    StatusSpecEnabled = GFPreviewStatusSpecEnabled,
-    StatusSpecInMode = GFPreviewStatusSpecInMode,
-    StatusSpecIsText = GFPreviewStatusSpecIsText,
-    StatusText = GFPreviewStatusText,
-    CurrentSpellTexture = GFPreviewCurrentSpellTexture,
-    CurrentSpellColor = GFPreviewCurrentSpellColor,
-    MockSpellTexture = GFMockSpellTexture,
-    Int = GFPreviewInt,
-    ScaleValue = GFPreviewScaleValue,
-    ClampZoom = GFPreviewClampZoom,
-    UpdateZoomControls = GFPreviewUpdateZoomControls,
-    ConfigToOffset = GFPreviewConfigToOffset,
-    AuraGrowth = GFPreviewAuraGrowth,
-    ApplyRounded = GFPreviewApplyRounded,
-    BaseEdgeColor = GFPreviewBaseEdgeColor,
-    LayoutOutline = GFPreviewLayoutOutline,
-    ClampLayer = GFPreviewClampLayer,
-    HealPredictionEnabled = GFPreviewHealPredictionEnabled,
-    HealPredAnchorMode = GFPreviewHealPredAnchorMode,
-    MockPowerHeight = GFPreviewMockPowerHeight,
-    ClassColor = PreviewClassColor,
-    HealthColor = PreviewHealthColor,
+    CompiledAuraLane = CompiledAuraLane,
+    RuntimeStatusConfig = RuntimeStatusConfig,
+    StatusSpecEnabled = StatusSpecEnabled,
+    StatusSpecInMode = StatusSpecInMode,
+    StatusSpecIsText = StatusSpecIsText,
+    StatusText = StatusText,
+    CurrentSpellTexture = CurrentSpellTexture,
+    CurrentSpellColor = CurrentSpellColor,
+    MockSpellTexture = MockSpellTexture,
+    Int = Int,
+    ScaleValue = ScaleValue,
+    ClampZoom = ClampZoom,
+    UpdateZoomControls = UpdateZoomControls,
+    ConfigToOffset = ConfigToOffset,
+    AuraGrowth = AuraGrowth,
+    ApplyRounded = ApplyRounded,
+    BaseEdgeColor = BaseEdgeColor,
+    LayoutOutline = LayoutOutline,
+    ClampLayer = ClampLayer,
+    HealPredictionEnabled = HealPredictionEnabled,
+    HealPredAnchorMode = HealPredAnchorMode,
+    MockPowerHeight = MockPowerHeight,
+    ClassColor = ClassColor,
+    HealthColor = HealthColor,
     ResolveStatusbarTexture = ResolvePreviewStatusbarTexture,
 }
-
 local function CreateNativeGFPreview(parent, ctx, onOpen)
-    local R = GFPreviewNativeDeps
+    local R = ShallowCopy(NativeDeps) or {}
     local H, T, M = R.Helpers, R.T, R.M
     local width = (ctx.width or 720) - 28
     local box = T.Panel(parent, nil, T.colors.panel2, T.colors.border)
     box:SetSize(width, 300)
-    if parent and parent.GetFrameLevel and box.SetFrameLevel then
-        box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2)
-    end
-
+    if parent and parent.GetFrameLevel and box.SetFrameLevel then box:SetFrameLevel((parent:GetFrameLevel() or 0) + 2) end
     local title = T.Font(box, "GameFontNormal", "", T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", H.PreviewScopeLabel(H.CurrentScope())))
@@ -886,7 +771,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     local hint = T.Font(box, "GameFontDisableSmall", R.Tr("click layers to hide - drag handles - arrows nudge selected - Ctrl+wheel zoom - Ctrl+left drag pans"), T.colors.muted)
     hint:SetPoint("LEFT", title, "RIGHT", 12, 0)
     box._hint = hint
-
     local stage = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
     stage:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -34)
     stage:SetSize(width - 98, 218)
@@ -895,7 +779,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     stage:EnableMouseWheel(true)
     if stage.SetPropagateMouseWheel then stage:SetPropagateMouseWheel(true) end
     box._stage = stage
-
     PreviewHelpers.BuildZoomBar(box, stage, {
         template = T.Template(),
         texture = R.WHITE8X8,
@@ -912,20 +795,18 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         fitReason = "GROUP_PREVIEW_ZOOM_FIT",
         oneReason = "GROUP_PREVIEW_ZOOM_1TO1",
     })
-
+    R.ZoomWheel = box._zoomWheel or R.ZoomWheel
     local bounds = CreateFrame("Frame", nil, stage, T.Template())
     bounds:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8", edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = 1 })
     bounds:SetBackdropColor(0, 0, 0, 0)
     bounds:SetBackdropBorderColor(0.90, 0.05, 0.02, 0.95)
     box._bounds = bounds
-
     local layers = T.Panel(box, nil, T.colors.panel, T.colors.borderSoft)
     layers:SetPoint("TOPLEFT", stage, "TOPRIGHT", 8, 0)
     layers:SetSize(78, 218)
     box._layers = layers
     local layersTitle = R.LayerFont(layers, "LAYERS", R.LayerHeaderColor)
     layersTitle:SetPoint("TOPLEFT", layers, "TOPLEFT", 10, -10)
-
     M.gfPreviewLayerVisible = M.gfPreviewLayerVisible or {
         guides = true,
         bounds = true,
@@ -953,26 +834,19 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         btn._layerKey = def[4]
         btn:SetPoint("TOPLEFT", layers, "TOPLEFT", 8, -26 - ((i - 1) * 16))
         btn:SetScript("OnEnter", function(self)
-            if self._layerAvailable == false and box._hint then
-                box._hint:SetText(string.format((M.Tr and M.Tr("%s is off in settings and cannot be shown in preview.")) or "%s is off in settings and cannot be shown in preview.", self._label and self._label:GetText() or ((M.Tr and M.Tr("Layer")) or "Layer")))
-            end
-            if GameTooltip and self._layerAvailable == false then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText((M.Tr and M.Tr("Layer disabled")) or "Layer disabled", 1, 1, 1)
-                GameTooltip:AddLine((M.Tr and M.Tr("Turn this feature on in settings to make the preview layer available.")) or "Turn this feature on in settings to make the preview layer available.", 0.82, 0.82, 0.82, true)
-                GameTooltip:Show()
-            end
+            if self._layerAvailable == false and box._hint then box._hint:SetText(string.format((M.Tr and M.Tr("%s is off in settings and cannot be shown in preview.")) or "%s is off in settings and cannot be shown in preview.", self._label and self._label:GetText() or ((M.Tr and M.Tr("Layer")) or "Layer"))) end
         end)
         btn:SetScript("OnLeave", function()
-            if GameTooltip then GameTooltip:Hide() end
             R.UpdateHint(box, box._selectedHandle)
         end)
+        M.AddTooltip(btn, "Layer disabled", "Turn this feature on in settings to make the preview layer available.", {
+            hook = true,
+            enabled = function(self) return self._layerAvailable == false end,
+        })
         btn:SetScript("OnClick", function(self)
             local key = self._layerKey
             if self._layerAvailable == false then
-                if box._hint then
-                    box._hint:SetText((self._label and self._label:GetText() or "Layer") .. " is off in settings and cannot be shown in preview.")
-                end
+                if box._hint then box._hint:SetText((self._label and self._label:GetText() or "Layer") .. " is off in settings and cannot be shown in preview.") end
                 return
             end
             if key then
@@ -987,7 +861,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         end)
         box._layerButtons[#box._layerButtons + 1] = btn
     end
-
     local mock = CreateFrame("Frame", nil, stage, T.Template())
     mock:SetBackdrop({ bgFile = R.WHITE8X8 })
     mock:SetBackdropColor(0.08, 0.08, 0.09, 0.92)
@@ -995,45 +868,39 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock:EnableMouse(true)
     mock:EnableMouseWheel(true)
     if mock.SetPropagateMouseWheel then mock:SetPropagateMouseWheel(true) end
-    mock:SetScript("OnMouseWheel", GFPreviewZoomWheel)
+    mock:SetScript("OnMouseWheel", R.ZoomWheel)
     mock:SetScript("OnMouseDown", function(_, button) R.StartPan(stage, box, button) end)
     mock:SetScript("OnMouseUp", function()
         if stage._msufGFPreviewPanning then R.StopPan(stage) end
     end)
     box._mock = mock
-
     mock._health = CreateFrame("StatusBar", nil, mock)
     mock._health:SetMinMaxValues(0, 1)
     mock._health:SetValue(0.72)
     mock._healthBg = mock._health:CreateTexture(nil, "BACKGROUND")
     mock._healthBg:SetAllPoints()
-
     mock._healPred = CreateFrame("StatusBar", nil, mock)
     mock._healPred:SetMinMaxValues(0, 1)
     mock._healPred:SetValue(0.12)
     mock._healPred:SetStatusBarTexture(R.WHITE8X8)
     mock._healPred:SetStatusBarColor(0, 1, 0.4, 0.45)
-
     mock._absorb = CreateFrame("StatusBar", nil, mock)
     mock._absorb:SetMinMaxValues(0, 1)
     mock._absorb:SetValue(1)
     mock._absorb:SetStatusBarTexture(R.WHITE8X8)
     mock._absorb:SetStatusBarColor(0.55, 0.70, 1, 0.55)
-
     mock._power = CreateFrame("StatusBar", nil, mock)
     mock._power:SetMinMaxValues(0, 1)
     mock._power:SetValue(1)
     mock._power:SetStatusBarColor(0.13, 0.27, 0.67, 1)
     mock._powerBg = mock._power:CreateTexture(nil, "BACKGROUND")
     mock._powerBg:SetAllPoints()
-
     mock._nameTextLayer = CreateFrame("Frame", nil, mock)
     mock._nameTextLayer:SetAllPoints(mock)
     mock._healthTextLayer = CreateFrame("Frame", nil, mock)
     mock._healthTextLayer:SetAllPoints(mock)
     mock._powerTextLayer = CreateFrame("Frame", nil, mock)
     mock._powerTextLayer:SetAllPoints(mock)
-
     mock._nameFS = T.Font(mock._nameTextLayer, "GameFontHighlightSmall", "", T.colors.text)
     mock._hpFS = T.Font(mock._healthTextLayer, "GameFontHighlight", "", T.colors.text)
     mock._powerFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
@@ -1043,7 +910,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     mock._powerLeftFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
     mock._powerCenterFS = mock._powerFS
     mock._powerRightFS = T.Font(mock._powerTextLayer, "GameFontHighlightSmall", "", T.colors.text)
-
     box._selectedHandle = nil
     local handleBundle = (M.GroupPreviewHandles and M.GroupPreviewHandles.Install and M.GroupPreviewHandles.Install(box, R)) or {}
     local buffHandle = handleBundle.buffHandle
@@ -1062,7 +928,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end
     local footer = T.Font(box, "GameFontDisableSmall", R.Tr("Click a handle to select - drag layers - Ctrl+wheel zoom - Ctrl+left drag pans"), T.colors.muted)
     footer:SetPoint("TOPLEFT", stage, "BOTTOMLEFT", 0, -8)
-
     if M.GroupPreviewRender and M.GroupPreviewRender.Install then
         local renderDeps = ShallowCopy(R) or {}
         renderDeps.width, renderDeps.mock = width, mock
@@ -1084,7 +949,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             self._msufGFRefreshReason = reason or self._msufGFRefreshReason
             return
         end
-
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
         local serial = self._msufGFRefreshSerial
         self._msufGFRefreshQueued = true
@@ -1104,14 +968,12 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
             if self.Refresh then pcall(self.Refresh, self, self._msufGFRefreshReason) end
             self._msufGFRefreshReason = nil
         end
-
         if C_Timer and C_Timer.After then
             C_Timer.After(0, RunRefresh)
         else
             RunRefresh()
         end
     end
-
     function box:ReleaseRuntimePreview()
         self._msufGFRefreshSerial = (tonumber(self._msufGFRefreshSerial) or 0) + 1
         self._msufGFRefreshQueued = nil
@@ -1119,7 +981,6 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
         pcall(StopHandleDrag, self and self._selectedHandle)
         self._selectedHandle = nil
     end
-
     box:HookScript("OnShow", function(self)
         self:RequestRefresh("GROUP_PREVIEW_SHOW")
     end)
@@ -1137,20 +998,16 @@ local function CreateNativeGFPreview(parent, ctx, onOpen)
     end)
     return box
 end
-
 M.GroupPreview = M.GroupPreview or {}
 M.GroupPreview.CreateNative = CreateNativeGFPreview
 M.GroupPreview.OpenSection = OpenGFSection
-
 function M.FocusGFPreviewTextSlot(kind, slot, active)
     local previews = M._gfNativePreviews
     if not previews then return false end
     local focused = false
     for i = 1, #previews do
         local box = previews[i]
-        if box and not box._msufGFNativePreviewDisposed and box.FocusTextSlot and box.IsShown and box:IsShown() and (not box.IsVisible or box:IsVisible()) then
-            focused = box:FocusTextSlot(kind, slot, active) or focused
-        end
+        if box and not box._msufGFNativePreviewDisposed and box.FocusTextSlot and box.IsShown and box:IsShown() and (not box.IsVisible or box:IsVisible()) then focused = box:FocusTextSlot(kind, slot, active) or focused end
     end
     return focused
 end

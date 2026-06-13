@@ -4,13 +4,33 @@
 --- the hot refresh path that lays out the mock group frame and preview layers.
 local _, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local Render = M.GroupPreviewRender or {}
 M.GroupPreviewRender = Render
+local F = M.Fallbacks or {}
+local function DefaultCompiledAuraLane(_, _, fallback) return fallback or {} end
+local function DefaultInt(value, fallback, minValue, maxValue)
+    local n = math.floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
+    if minValue ~= nil and n < minValue then n = minValue end
+    if maxValue ~= nil and n > maxValue then n = maxValue end
+    return n
+end
+local function NumberOrOne(value) return tonumber(value) or 1 end
+local function DefaultAuraGrowth() return { px = 1, py = 0, sx = 0, sy = -1 } end
+local function DefaultClampLayer(value, fallback) return tonumber(value) or fallback or 0 end
+local function DefaultClassColor(_, r, g, b) return r or 1, g or 1, b or 1 end
+local GROUP_RENDER_FALLBACKS = {
+    CompiledSpec = F.Nil, CompiledAuraLane = DefaultCompiledAuraLane, RuntimeStatusConfig = F.Nil,
+    CurrentStatusSpec = F.Nil, StatusSpecEnabled = F.False, StatusSpecInMode = F.False, StatusSpecIsText = F.False,
+    StatusText = F.Empty, StatusLabel = F.Status, CurrentSpellConfig = F.Nil, CurrentSpellPlaced = F.Nil,
+    CurrentSpellTexture = F.QuestionIcon, CurrentSpellColor = F.WhiteRGB, MockSpellTexture = F.QuestionIcon,
+    Int = DefaultInt, Round = F.Round, ClampZoom = NumberOrOne, UpdateZoomControls = F.Noop,
+    AuraGrowth = DefaultAuraGrowth, ApplyRounded = F.False, ClampLayer = DefaultClampLayer,
+    ClassColor = DefaultClassColor, HealthColor = F.HealthRGB,
+    SelectHandle = F.Noop, NudgeHandlePosition = F.Noop, AddIconPool = F.Noop, RefreshHandleSelection = F.Noop,
+}
 
 --- Installs the group preview renderer into the preview host. Native.lua owns
 --- frame creation and input handles; this function owns repeated composition
@@ -33,52 +53,24 @@ function Render.Install(box, ctx, deps)
     local GF_PREVIEW_MIN_H = tonumber(deps.MIN_H) or 130
     local GF_PREVIEW_ROLE = deps.ROLE or "HEALER"
     local GF_PREVIEW_ANCHOR_FRAC = deps.ANCHOR_FRAC or {}
-
     local buffHandle = deps.buffHandle
     local debuffHandle = deps.debuffHandle
     local statusHandles = deps.statusHandles or {}
     local spellHandle = deps.spellHandle
     local statusSpecs = deps.statusSpecs or {}
-
-    local CompiledSpec = deps.CompiledSpec or function() return nil end
-    local GFPreviewCompiledAuraLane = deps.CompiledAuraLane or function(_, _, fallback) return fallback or {} end
-    local GFPreviewRuntimeStatusConfig = deps.RuntimeStatusConfig or function() return nil end
-    local GFPreviewCurrentStatusSpec = deps.CurrentStatusSpec or function() return nil end
-    local GFPreviewStatusSpecEnabled = deps.StatusSpecEnabled or function() return false end
-    local GFPreviewStatusSpecInMode = deps.StatusSpecInMode or function() return false end
-    local GFPreviewStatusSpecIsText = deps.StatusSpecIsText or function() return false end
-    local GFPreviewStatusText = deps.StatusText or function() return "" end
-    local GFPreviewStatusLabel = deps.StatusLabel or function() return "Status" end
-    local GFPreviewCurrentSpellConfig = deps.CurrentSpellConfig or function() return nil end
-    local GFPreviewCurrentSpellPlaced = deps.CurrentSpellPlaced or function() return nil end
-    local GFPreviewCurrentSpellTexture = deps.CurrentSpellTexture or function() return "Interface\\Icons\\INV_Misc_QuestionMark" end
-    local GFPreviewCurrentSpellColor = deps.CurrentSpellColor or function() return 1, 1, 1 end
-    local GFMockSpellTexture = deps.MockSpellTexture or function() return "Interface\\Icons\\INV_Misc_QuestionMark" end
-    local GFPreviewInt = deps.Int or function(value, fallback, minValue, maxValue)
-        local n = math.floor((tonumber(value) or tonumber(fallback) or 0) + 0.0001)
-        if minValue ~= nil and n < minValue then n = minValue end
-        if maxValue ~= nil and n > maxValue then n = maxValue end
-        return n
-    end
-    local GFPreviewRound = deps.Round or function(value) return math.floor((tonumber(value) or 0) + 0.5) end
-    local GFPreviewScaleValue = deps.ScaleValue or function(value, scale, minValue)
-        local v = GFPreviewRound((tonumber(value) or 0) * (tonumber(scale) or 1))
+    local CompiledSpec, CompiledAuraLane, RuntimeStatusConfig, CurrentStatusSpec, StatusSpecEnabled, StatusSpecInMode, StatusSpecIsText, StatusText, StatusLabel, CurrentSpellConfig, CurrentSpellPlaced, CurrentSpellTexture, CurrentSpellColor, MockSpellTexture = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
+        CompiledSpec CompiledAuraLane RuntimeStatusConfig CurrentStatusSpec StatusSpecEnabled StatusSpecInMode StatusSpecIsText StatusText StatusLabel CurrentSpellConfig CurrentSpellPlaced CurrentSpellTexture CurrentSpellColor MockSpellTexture
+    ]])
+    local Int, Round, ClampZoom, UpdateZoomControls, AuraGrowth, ApplyRounded, ClampLayer, ClassColor, HealthColor, SelectHandle, NudgeHandlePosition, AddIconPool, RefreshHandleSelection = M.PickFallbacks(deps, GROUP_RENDER_FALLBACKS, [[
+        Int Round ClampZoom UpdateZoomControls AuraGrowth ApplyRounded ClampLayer ClassColor HealthColor SelectHandle NudgeHandlePosition AddIconPool RefreshHandleSelection
+    ]])
+    local ScaleValue = deps.ScaleValue or function(value, scale, minValue)
+        local v = Round((tonumber(value) or 0) * (tonumber(scale) or 1))
         if minValue ~= nil and v < minValue then v = minValue end
         return v
     end
-    local GFPreviewClampZoom = deps.ClampZoom or function(value) return tonumber(value) or 1 end
-    local GFPreviewUpdateZoomControls = deps.UpdateZoomControls or function() end
-    local GFPreviewConfigToOffset = deps.ConfigToOffset or function(value, scale) return GFPreviewRound((tonumber(value) or 0) * (tonumber(scale) or 1)) end
-    local GFPreviewAuraGrowth = deps.AuraGrowth or function() return { px = 1, py = 0, sx = 0, sy = -1 } end
-    local GFPreviewApplyRounded = deps.ApplyRounded or function() return false end
-    local GFPreviewClampLayer = deps.ClampLayer or function(value, fallback) return tonumber(value) or fallback or 0 end
-    local PreviewClassColor = deps.ClassColor or function(_, r, g, b) return r or 1, g or 1, b or 1 end
-    local PreviewHealthColor = deps.HealthColor or function() return 0.2, 0.8, 0.2 end
+    local ConfigToOffset = deps.ConfigToOffset or function(value, scale) return Round((tonumber(value) or 0) * (tonumber(scale) or 1)) end
     local ResolvePreviewStatusbarTexture = deps.ResolveStatusbarTexture or function() return WHITE8X8 end
-    local SelectHandle = deps.SelectHandle or function() end
-    local NudgeHandlePosition = deps.NudgeHandlePosition or function() end
-    local AddIconPool = deps.AddIconPool or function() end
-    local GFPreviewRefreshHandleSelection = deps.RefreshHandleSelection or function() end
     --- Refresh is menu-only. It reads compiled/runtime-like specs to draw a mock
     --- group frame and must not rebuild secure headers or subscribe to roster
     --- events.
@@ -100,24 +92,23 @@ function Render.Install(box, ctx, deps)
         local layerVisible = M.gfPreviewLayerVisible or {}
         local soloLayer = M.gfPreviewSoloLayer
         local rawAuras = conf.auras or {}
-        local buffCfg = runtimeAuras and GFPreviewCompiledAuraLane(runtimeAuras, "buff", rawAuras.buff or {}) or (rawAuras.buff or {})
-        local debuffCfg = runtimeAuras and GFPreviewCompiledAuraLane(runtimeAuras, "debuff", rawAuras.debuff or {}) or (rawAuras.debuff or {})
-        local statusSpec = GFPreviewCurrentStatusSpec()
-        local selectedSpellCfg = GFPreviewCurrentSpellConfig(kind)
-        local selectedPlaced = GFPreviewCurrentSpellPlaced(kind)
+        local buffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "buff", rawAuras.buff or {}) or (rawAuras.buff or {})
+        local debuffCfg = runtimeAuras and CompiledAuraLane(runtimeAuras, "debuff", rawAuras.debuff or {}) or (rawAuras.debuff or {})
+        local statusSpec = CurrentStatusSpec()
+        local selectedSpellCfg = CurrentSpellConfig(kind)
+        local selectedPlaced = CurrentSpellPlaced(kind)
         local selectedSpellPlacedEnabled = selectedPlaced and (selectedPlaced.type or "icon") ~= "none"
         local function StatusConfigAvailable(spec)
             if runtimeSpec then
-                local cfg = GFPreviewRuntimeStatusConfig(runtimeStatus, spec)
+                local cfg = RuntimeStatusConfig(runtimeStatus, spec)
                 return cfg and cfg.enabled == true
             end
-            return GFPreviewStatusSpecEnabled(conf, spec)
+            return StatusSpecEnabled(conf, spec)
         end
-
         local statusLayerAvailable = false
         for i = 1, #statusSpecs do
             local spec = statusSpecs[i]
-            if GFPreviewStatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) then
+            if StatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) then
                 statusLayerAvailable = true
                 break
             end
@@ -184,12 +175,10 @@ function Render.Install(box, ctx, deps)
             return 1
         end
         self._title:SetText(string.format((M.Tr and M.Tr("%s - %s")) or "%s - %s", (M.Tr and M.Tr("Group Frame Preview")) or "Group Frame Preview", label))
-
         local stageW = self._stage:GetWidth() or (width - 98)
         local stageH = self._stage:GetHeight() or 218
         if stageW <= 1 then stageW = math.max(260, width - 98) end
         if stageH <= 1 then stageH = 218 end
-
         local liveW, liveH, frameScale = tonumber(runtimeSpec and runtimeSpec.width) or tonumber(conf.width) or 120,
             tonumber(runtimeSpec and runtimeSpec.height) or tonumber(conf.height) or 40,
             1
@@ -204,23 +193,21 @@ function Render.Install(box, ctx, deps)
         autoZoom = max(1.4, min(2.8, autoZoom))
         local manualZoom = tonumber(self._manualZoom)
         local frozenZoom = tonumber(self._dragFrozenScale)
-        local previewScale = manualZoom and GFPreviewClampZoom(manualZoom) or (frozenZoom and GFPreviewClampZoom(frozenZoom) or autoZoom)
+        local previewScale = manualZoom and ClampZoom(manualZoom) or (frozenZoom and ClampZoom(frozenZoom) or autoZoom)
         self._mockAutoScale = autoZoom
         self._mockScale = previewScale
-        GFPreviewUpdateZoomControls(self)
-        local mockW = max(48, GFPreviewRound(liveW * previewScale))
-        local mockH = max(20, GFPreviewRound(liveH * previewScale))
-        local powerH = runtimePower and runtimePower.enabled == true and GFPreviewScaleValue(runtimePower.height, previewScale, 0) or 0
-        if not runtimeSpec then
-            powerH = H.MockPowerHeight(kind, conf, previewScale, frameScale)
-        end
+        UpdateZoomControls(self)
+        local mockW = max(48, Round(liveW * previewScale))
+        local mockH = max(20, Round(liveH * previewScale))
+        local powerH = runtimePower and runtimePower.enabled == true and ScaleValue(runtimePower.height, previewScale, 0) or 0
+        if not runtimeSpec then powerH = H.MockPowerHeight(kind, conf, previewScale, frameScale) end
         local borderEnabled = runtimeSpec and (runtimeBorder.enabled ~= false) or (not runtimeSpec and conf.borderEnabled ~= false)
         local outline = borderEnabled and (tonumber(runtimeBorder and runtimeBorder.thickness) or 1) or 0
         if not runtimeSpec and borderEnabled and gf and gf.GetBarOutlineThickness then outline = tonumber(gf.GetBarOutlineThickness(kind)) or outline end
-        local outlineEdge = max(0, GFPreviewRound(outline * previewScale))
+        local outlineEdge = max(0, Round(outline * previewScale))
         local inset = 0
-        local startX = GFPreviewRound((stageW - mockW) * 0.5)
-        local startY = -GFPreviewRound((stageH - mockH) * 0.5)
+        local startX = Round((stageW - mockW) * 0.5)
+        local startY = -Round((stageH - mockH) * 0.5)
         local mock = self._mock
         mock._previewScale = previewScale
         self._mockBaseOffsetX, self._mockBaseOffsetY = startX, startY
@@ -238,7 +225,6 @@ function Render.Install(box, ctx, deps)
         mock._msufGFPreviewBorderG = bg
         mock._msufGFPreviewBorderB = bb
         mock._msufGFPreviewBorderA = borderEnabled and (runtimeBorder.a or conf.borderA or 1) or 0
-
         local barTex = runtimeHealth.texture or (runtimeSpec and runtimeSpec.texture) or (gf and gf.ResolveBarTexture and gf.ResolveBarTexture(kind)) or ResolvePreviewStatusbarTexture(conf, "barTexture")
         local bgTex = runtimeHealth.backgroundTexture or (runtimeSpec and runtimeSpec.backgroundTexture) or (gf and gf.ResolveBarBgTexture and gf.ResolveBarBgTexture(kind)) or WHITE8X8
         mock._health:SetStatusBarTexture(barTex)
@@ -246,7 +232,7 @@ function Render.Install(box, ctx, deps)
         mock._health:SetPoint("TOPLEFT", mock, "TOPLEFT", inset, -inset)
         mock._health:SetPoint("BOTTOMRIGHT", mock, "BOTTOMRIGHT", -inset, powerH > 0 and (powerH + inset) or inset)
         local hr, hg, hb = runtimeHealth.r, runtimeHealth.g, runtimeHealth.b
-        if not hr then hr, hg, hb = PreviewHealthColor(conf, 0.72, cls) end
+        if not hr then hr, hg, hb = HealthColor(conf, 0.72, cls) end
         local groupVisual = (runtimeSpec and runtimeSpec.group) or {}
         mock._health:SetStatusBarColor(hr, hg, hb, tonumber(groupVisual.hpBarAlpha) or tonumber(conf.hpBarAlpha) or 1)
         local hpReverse = runtimeHealth.reverse == true or (not runtimeSpec and conf.reverseFill == true)
@@ -255,14 +241,9 @@ function Render.Install(box, ctx, deps)
         local hbCfg = runtimeHealth.background or {}
         local hbr, hbg, hbb = hbCfg.r or conf.bgR or 0.06, hbCfg.g or conf.bgG or 0.06, hbCfg.b or conf.bgB or 0.07
         local gen = _G.MSUF_DB and _G.MSUF_DB.general
-        if runtimeHealth.backgroundMatchHealth == true then
-            hbr, hbg, hbb = hr or hbr, hg or hbg, hb or hbb
-        end
-        if not runtimeSpec and gen and gen.barBgClassColor then
-            hbr, hbg, hbb = PreviewClassColor(cls, hbr, hbg, hbb)
-        end
+        if runtimeHealth.backgroundMatchHealth == true then hbr, hbg, hbb = hr or hbr, hg or hbg, hb or hbb end
+        if not runtimeSpec and gen and gen.barBgClassColor then hbr, hbg, hbb = ClassColor(cls, hbr, hbg, hbb) end
         mock._healthBg:SetVertexColor(hbr, hbg, hbb, hbCfg.a or groupVisual.hpBgAlpha or conf.hpBgAlpha or 0.85)
-
         local hpTex = mock._health.GetStatusBarTexture and mock._health:GetStatusBarTexture()
         local healPredMode = tonumber(runtimePrediction.healAnchorMode) or H.HealPredAnchorMode(conf)
         local healPredShown
@@ -288,13 +269,10 @@ function Render.Install(box, ctx, deps)
             mock._healPred:SetValue(1)
         else
             mock._healPred:SetAllPoints(mock._health)
-            if mock._healPred.SetReverseFill then
-                mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true))
-            end
+            if mock._healPred.SetReverseFill then mock._healPred:SetReverseFill((healPredMode == 1) and false or ((healPredMode == 5) and not hpReverse or true)) end
             mock._healPred:SetValue(0.12)
         end
         mock._healPred:SetShown(healPredShown)
-
         mock._absorb:ClearAllPoints()
         mock._absorb:SetStatusBarTexture(runtimePrediction.absorbTexture or runtimePrediction.texture or barTex)
         mock._absorb:SetStatusBarColor(runtimePrediction.absorbR or 0.55, runtimePrediction.absorbG or 0.70, runtimePrediction.absorbB or 1, runtimePrediction.absorbA or 0.55)
@@ -314,9 +292,7 @@ function Render.Install(box, ctx, deps)
             end
         end
         local absorbAnchorTex = hpTex or mock._health
-        if healPredShown and (healPredMode == 3 or healPredMode == 4) and mock._healPred.GetStatusBarTexture then
-            absorbAnchorTex = mock._healPred:GetStatusBarTexture() or absorbAnchorTex
-        end
+        if healPredShown and (healPredMode == 3 or healPredMode == 4) and mock._healPred.GetStatusBarTexture then absorbAnchorTex = mock._healPred:GetStatusBarTexture() or absorbAnchorTex end
         local absorbFollows = (absorbMode == 3 or absorbMode == 4) and absorbAnchorTex
         if absorbFollows then
             if hpReverse then
@@ -330,14 +306,11 @@ function Render.Install(box, ctx, deps)
             end
         else
             mock._absorb:SetAllPoints(mock._health)
-            if mock._absorb.SetReverseFill then
-                mock._absorb:SetReverseFill((absorbMode == 1) and false or ((absorbMode == 5) and not hpReverse or true))
-            end
+            if mock._absorb.SetReverseFill then mock._absorb:SetReverseFill((absorbMode == 1) and false or ((absorbMode == 5) and not hpReverse or true)) end
         end
         if absorbFollows then mock._absorb:SetWidth(max(1, mockW * 0.08)) end
         mock._absorb:SetValue(absorbFollows and 1 or 0.08)
         mock._absorb:SetShown(absorbShown)
-
         if powerH > 0 then
             mock._power:SetStatusBarTexture(runtimePower.texture or barTex)
             mock._power:ClearAllPoints()
@@ -353,26 +326,20 @@ function Render.Install(box, ctx, deps)
             mock._power:Hide()
             mock._powerBg:Hide()
         end
-
-        if GFPreviewApplyRounded(mock, conf, powerH > 0, outlineEdge) then
+        if ApplyRounded(mock, conf, powerH > 0, outlineEdge) then
             H.SetOutlineShown(mock, false)
         else
             H.LayoutOutline(mock, outlineEdge)
         end
-
         local textBaseLevel = (mock.GetFrameLevel and mock:GetFrameLevel()) or 1
         if mock._nameTextLayer then
-            if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then
-                mock._nameTextLayer:SetParent(mock)
-            end
+            if mock._nameTextLayer.GetParent and mock._nameTextLayer:GetParent() ~= mock and mock._nameTextLayer.SetParent then mock._nameTextLayer:SetParent(mock) end
             mock._nameTextLayer:ClearAllPoints()
             mock._nameTextLayer:SetAllPoints(mock)
             mock._nameTextLayer:SetFrameLevel(textBaseLevel + (tonumber(runtimeText.nameLayer) or tonumber(conf.nameTextLayer) or 5))
         end
         if mock._healthTextLayer then
-            if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock and mock._healthTextLayer.SetParent then
-                mock._healthTextLayer:SetParent(mock)
-            end
+            if mock._healthTextLayer.GetParent and mock._healthTextLayer:GetParent() ~= mock and mock._healthTextLayer.SetParent then mock._healthTextLayer:SetParent(mock) end
             mock._healthTextLayer:ClearAllPoints()
             mock._healthTextLayer:SetAllPoints(mock)
             mock._healthTextLayer:SetFrameLevel(textBaseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 5))
@@ -382,7 +349,6 @@ function Render.Install(box, ctx, deps)
             mock._powerTextLayer:SetAllPoints(mock)
             mock._powerTextLayer:SetFrameLevel(textBaseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 2))
         end
-
         local showText = LayerOn("text")
         local fontPath = (runtimeSpec and runtimeSpec.font) or (gf and gf.ResolveFontPath and gf.ResolveFontPath(kind)) or (STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF")
         local fontFlags = (runtimeSpec and runtimeSpec.fontFlags) or (gf and gf.ResolveFontFlags and gf.ResolveFontFlags(kind)) or "OUTLINE"
@@ -421,6 +387,14 @@ function Render.Install(box, ctx, deps)
             fs:SetJustifyH(justify or "LEFT")
             fs._msufPreviewJustifyH = justify or "LEFT"
         end
+        local function PaintPreviewText(fs, size, mode, point, relPoint, x, y, justify, r, g, b, a, shown, text)
+            if not fs then return end
+            SetPreviewFont(fs, size)
+            fs:SetTextColor(r, g, b, a)
+            LayoutPreviewText(fs, point, relPoint, x, y, justify, mock)
+            fs:SetText(text)
+            fs:SetShown(shown and mode ~= "NONE")
+        end
         local fr, fg, fb = T.colors.text[1], T.colors.text[2], T.colors.text[3]
         if runtimeSpec and runtimeSpec.textColor then fr, fg, fb = runtimeSpec.textColor.r, runtimeSpec.textColor.g, runtimeSpec.textColor.b end
         if gf and gf.ResolveFontColor then fr, fg, fb = gf.ResolveFontColor(kind) end
@@ -428,23 +402,21 @@ function Render.Install(box, ctx, deps)
             or (gf and gf.ResolveFontTextAlpha and gf.ResolveFontTextAlpha(kind))
             or 1
         local baselineOffset = (runtimeSpec and 0) or (gf and gf.ResolveFontBaselineOffset and gf.ResolveFontBaselineOffset(kind)) or 0
-        SetPreviewFont(mock._nameFS, max(6, GFPreviewScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
+        SetPreviewFont(mock._nameFS, max(6, ScaleValue((runtimeSpec and runtimeSpec.nameFontSize) or conf.nameFontSize or 12, previewScale, 6)))
         local previewName = GF_PREVIEW_NAMES[5]
         if gf and gf.ResolveNameTruncation and gf.TruncateName then
             local maxC, noEllipsis, clipSide = gf.ResolveNameTruncation(kind)
-            if maxC and maxC > 0 then
-                previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide)
-            end
+            if maxC and maxC > 0 then previewName = gf.TruncateName(previewName, maxC, noEllipsis, clipSide) end
         end
         mock._nameFS:SetText(previewName)
         mock._nameFS:SetTextColor(fr or 1, fg or 1, fb or 1, textAlpha)
         mock._nameFS:ClearAllPoints()
-        local pad4 = GFPreviewScaleValue(4, previewScale, 1)
-        local nox = GFPreviewConfigToOffset(runtimeText.nameX or conf.nameOffsetX or 0, previewScale)
-        local noy = GFPreviewConfigToOffset(runtimeText.nameY or ((conf.nameOffsetY or 0) + baselineOffset), previewScale)
+        local pad4 = ScaleValue(4, previewScale, 1)
+        local nox = ConfigToOffset(runtimeText.nameX or conf.nameOffsetX or 0, previewScale)
+        local noy = ConfigToOffset(runtimeText.nameY or ((conf.nameOffsetY or 0) + baselineOffset), previewScale)
         local nameAnchor = runtimeText.nameAnchor or conf.nameAnchor or "LEFT"
         local nameWidth = max(80, (tonumber(runtimeSpec and runtimeSpec.width) or liveW or 120) * 0.80)
-        mock._nameFS:SetWidth(max(40, GFPreviewScaleValue(nameWidth, previewScale, 40)))
+        mock._nameFS:SetWidth(max(40, ScaleValue(nameWidth, previewScale, 40)))
         if nameAnchor == "CENTER" then
             LayoutPreviewText(mock._nameFS, "TOP", "TOP", nox, noy, "CENTER", mock)
         elseif nameAnchor == "RIGHT" then
@@ -455,8 +427,7 @@ function Render.Install(box, ctx, deps)
         if mock._nameFS.SetWordWrap then mock._nameFS:SetWordWrap(false) end
         if mock._nameFS.SetNonSpaceWrap then mock._nameFS:SetNonSpaceWrap(false) end
         mock._nameFS:SetShown(showText and ((runtimeSpec and runtimeSpec.showName == true) or (not runtimeSpec and conf.showName ~= false)))
-
-        local hpSize = max(7, GFPreviewScaleValue((runtimeSpec and runtimeSpec.healthFontSize) or conf.hpFontSize or 10, previewScale, 6))
+        local hpSize = max(7, ScaleValue((runtimeSpec and runtimeSpec.healthFontSize) or conf.hpFontSize or 10, previewScale, 6))
         local hpTextOn = showText and ((runtimeSpec and runtimeSpec.showHealthText == true) or (not runtimeSpec and conf.showHPText ~= false))
         local hpLeftMode, hpCenterMode, hpRightMode
         if runtimeSpec then
@@ -466,11 +437,6 @@ function Render.Install(box, ctx, deps)
         else
             hpLeftMode, hpCenterMode, hpRightMode = runtimeText.healthLeft or conf.textLeft or "NONE", runtimeText.healthCenter or conf.textCenter or "NONE", runtimeText.healthRight or conf.textRight or "NONE"
         end
-        local hpModes = {
-            { fs = mock._hpLeftFS, mode = hpLeftMode, point = "LEFT", rel = "LEFT", x = pad4 + GFPreviewConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0) + baselineOffset), previewScale), justify = "LEFT" },
-            { fs = mock._hpCenterFS, mode = hpCenterMode, point = "CENTER", rel = "CENTER", x = GFPreviewConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale), justify = "CENTER" },
-            { fs = mock._hpRightFS, mode = hpRightMode, point = "RIGHT", rel = "RIGHT", x = -pad4 + GFPreviewConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0) + baselineOffset), previewScale), justify = "RIGHT" },
-        }
         local fakeHP, fakeMax = 720000, 1000000
         local hpTextR, hpTextG, hpTextB = fr or 1, fg or 1, fb or 1
         if runtimeText.healthColorByHealth == true then
@@ -481,65 +447,65 @@ function Render.Install(box, ctx, deps)
                 hpTextR, hpTextG, hpTextB = (1 - pct) * 2, 1, 0
             end
         end
-        for i = 1, #hpModes do
-            local spec = hpModes[i]
-            local fs = spec.fs
-            SetPreviewFont(fs, hpSize)
-            fs:SetTextColor(hpTextR, hpTextG, hpTextB, textAlpha)
-            LayoutPreviewText(fs, spec.point, spec.rel, spec.x, spec.y, spec.justify, mock)
-            if gf and gf.FormatHealthText then
-                fs:SetText(gf.FormatHealthText(spec.mode, fakeHP, fakeMax, runtimeText.healthDelimiter or conf.textDelimiter or " - ", false))
-            else
-                fs:SetText(spec.mode == "PERCENT" and "72%" or "720k")
-            end
-            fs:SetShown(hpTextOn and spec.mode ~= "NONE")
+        local hpDelimiter = runtimeText.healthDelimiter or conf.textDelimiter or " - "
+        local function PreviewHealthText(mode)
+            if gf and gf.FormatHealthText then return gf.FormatHealthText(mode, fakeHP, fakeMax, hpDelimiter, false) end
+            return mode == "PERCENT" and "72%" or "720k"
         end
-
-        local pwrSize = max(6, GFPreviewScaleValue((runtimeSpec and runtimeSpec.powerFontSize) or conf.powerFontSize or 9, previewScale, 6))
+        PaintPreviewText(mock._hpLeftFS, hpSize, hpLeftMode, "LEFT", "LEFT",
+            pad4 + ConfigToOffset(runtimeText.healthLeftX or ((conf.hpOffsetX or 0) + (conf.hpTextLeftOffsetX or 0)), previewScale),
+            ConfigToOffset(runtimeText.healthLeftY or ((conf.hpOffsetY or 0) + (conf.hpTextLeftOffsetY or 0) + baselineOffset), previewScale),
+            "LEFT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpLeftMode))
+        PaintPreviewText(mock._hpCenterFS, hpSize, hpCenterMode, "CENTER", "CENTER",
+            ConfigToOffset(runtimeText.healthCenterX or ((conf.hpOffsetX or 0) + (conf.hpTextCenterOffsetX or 0)), previewScale),
+            ConfigToOffset(runtimeText.healthCenterY or ((conf.hpOffsetY or 0) + (conf.hpTextCenterOffsetY or 0) + baselineOffset), previewScale),
+            "CENTER", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpCenterMode))
+        PaintPreviewText(mock._hpRightFS, hpSize, hpRightMode, "RIGHT", "RIGHT",
+            -pad4 + ConfigToOffset(runtimeText.healthRightX or ((conf.hpOffsetX or 0) + (conf.hpTextRightOffsetX or 0)), previewScale),
+            ConfigToOffset(runtimeText.healthRightY or ((conf.hpOffsetY or 0) + (conf.hpTextRightOffsetY or 0) + baselineOffset), previewScale),
+            "RIGHT", hpTextR, hpTextG, hpTextB, textAlpha, hpTextOn, PreviewHealthText(hpRightMode))
+        local pwrSize = max(6, ScaleValue((runtimeSpec and runtimeSpec.powerFontSize) or conf.powerFontSize or 9, previewScale, 6))
         local showPowerText = showText
         if runtimeSpec then
             showPowerText = showText and runtimeSpec.showPowerText == true
         elseif gf and gf.IsPowerTextEnabled then
             showPowerText = showText and gf.IsPowerTextEnabled(kind, conf)
         end
-        local powerModes = {
-            { fs = mock._powerLeftFS, mode = runtimeText.powerLeft or conf.powerTextLeft or "NONE", point = "BOTTOMLEFT", rel = "BOTTOMLEFT", x = pad4 + GFPreviewConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset)), previewScale), justify = "LEFT" },
-            { fs = mock._powerCenterFS, mode = runtimeText.powerCenter or conf.powerTextCenter or "NONE", point = "BOTTOM", rel = "BOTTOM", x = GFPreviewConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset)), previewScale), justify = "CENTER" },
-            { fs = mock._powerRightFS, mode = runtimeText.powerRight or conf.powerTextRight or "NONE", point = "BOTTOMRIGHT", rel = "BOTTOMRIGHT", x = -pad4 + GFPreviewConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale), y = GFPreviewConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale), justify = "RIGHT" },
-        }
         local fakePow, fakePowMax = 70, 100
-        for i = 1, #powerModes do
-            local spec = powerModes[i]
-            local fs = spec.fs
-            SetPreviewFont(fs, pwrSize)
-            fs:SetTextColor(fr or 1, fg or 1, fb or 1, textAlpha)
-            LayoutPreviewText(fs, spec.point, spec.rel, spec.x, spec.y, spec.justify, mock)
-            if gf and gf.FormatPowerText then
-                fs:SetText(gf.FormatPowerText(spec.mode, fakePow, fakePowMax, runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "))
-            else
-                fs:SetText(spec.mode == "PERCENT" and "70%" or "70")
-            end
-            fs:SetShown(showPowerText and spec.mode ~= "NONE")
+        local powerDelimiter = runtimeText.powerDelimiter or conf.powerTextDelimiter or conf.textDelimiter or " - "
+        local function PreviewPowerText(mode)
+            if gf and gf.FormatPowerText then return gf.FormatPowerText(mode, fakePow, fakePowMax, powerDelimiter) end
+            return mode == "PERCENT" and "70%" or "70"
         end
-
+        local powerLeftMode = runtimeText.powerLeft or conf.powerTextLeft or "NONE"
+        local powerCenterMode = runtimeText.powerCenter or conf.powerTextCenter or "NONE"
+        local powerRightMode = runtimeText.powerRight or conf.powerTextRight or "NONE"
+        PaintPreviewText(mock._powerLeftFS, pwrSize, powerLeftMode, "BOTTOMLEFT", "BOTTOMLEFT",
+            pad4 + ConfigToOffset(runtimeText.powerLeftX or ((conf.powerOffsetX or 0) + (conf.powerTextLeftOffsetX or 0)), previewScale),
+            ConfigToOffset(1 + (runtimeText.powerLeftY or ((conf.powerOffsetY or 0) + (conf.powerTextLeftOffsetY or 0) + baselineOffset)), previewScale),
+            "LEFT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerLeftMode))
+        PaintPreviewText(mock._powerCenterFS, pwrSize, powerCenterMode, "BOTTOM", "BOTTOM",
+            ConfigToOffset(runtimeText.powerCenterX or ((conf.powerOffsetX or 0) + (conf.powerTextCenterOffsetX or 0)), previewScale),
+            ConfigToOffset(1 + (runtimeText.powerCenterY or ((conf.powerOffsetY or 0) + (conf.powerTextCenterOffsetY or 0) + baselineOffset)), previewScale),
+            "CENTER", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerCenterMode))
+        PaintPreviewText(mock._powerRightFS, pwrSize, powerRightMode, "BOTTOMRIGHT", "BOTTOMRIGHT",
+            -pad4 + ConfigToOffset(runtimeText.powerRightX or ((conf.powerOffsetX or 0) + (conf.powerTextRightOffsetX or 0)), previewScale),
+            ConfigToOffset(1 + (runtimeText.powerRightY or ((conf.powerOffsetY or 0) + (conf.powerTextRightOffsetY or 0) + baselineOffset)), previewScale),
+            "RIGHT", fr or 1, fg or 1, fb or 1, textAlpha, showPowerText, PreviewPowerText(powerRightMode))
         self._bounds:ClearAllPoints()
         local boundsEdge = max(1, outlineEdge)
         self._bounds:SetPoint("TOPLEFT", mock, "TOPLEFT", -boundsEdge, boundsEdge)
         self._bounds:SetSize(mockW + boundsEdge * 2, mockH + boundsEdge * 2)
-        if self._bounds.SetFrameLevel and mock.GetFrameLevel then
-            self._bounds:SetFrameLevel((mock:GetFrameLevel() or 1) + 48)
-        end
+        if self._bounds.SetFrameLevel and mock.GetFrameLevel then self._bounds:SetFrameLevel((mock:GetFrameLevel() or 1) + 48) end
         self._bounds:SetShown(LayerOn("bounds"))
-
         local function LayoutHandle(handle, anchor, x, y, defaultAnchor)
             anchor = anchor or defaultAnchor or "CENTER"
             if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaultAnchor or "CENTER" end
             handle._previewScale = previewScale
             handle._previewWriteScale = previewScale
             handle:ClearAllPoints()
-            handle:SetPoint(anchor, mock, anchor, GFPreviewConfigToOffset(x or 0, previewScale), GFPreviewConfigToOffset(y or 0, previewScale))
+            handle:SetPoint(anchor, mock, anchor, ConfigToOffset(x or 0, previewScale), ConfigToOffset(y or 0, previewScale))
         end
-
         local auraDynamicScale = (runtimeAuras and runtimeAuras.dynamicScaleValue) or (gf and gf.GetPreviewDynamicScale and gf.GetPreviewDynamicScale(conf, kind)) or 1
         local function RuntimeAuraGrowth(growth)
             if growth == "LEFTUP" then
@@ -555,7 +521,6 @@ function Render.Install(box, ctx, deps)
             end
             return 1, -1, false, "TOPLEFT"
         end
-
         local function RuntimeAuraAnchor(anchor, fallback)
             if anchor == "TOPLEFT" or anchor == "TOPRIGHT"
                 or anchor == "BOTTOMLEFT" or anchor == "BOTTOMRIGHT"
@@ -564,10 +529,9 @@ function Render.Install(box, ctx, deps)
             end
             return fallback or "CENTER"
         end
-
         local function RuntimeAuraGridShape(count, perRow, verticalGrowth)
-            count = max(GFPreviewRound(count), 1)
-            perRow = max(GFPreviewRound(perRow), 1)
+            count = max(Round(count), 1)
+            perRow = max(Round(perRow), 1)
             if verticalGrowth == true then
                 local rows = min(count, perRow)
                 return ceil(count / perRow), rows
@@ -575,30 +539,27 @@ function Render.Install(box, ctx, deps)
             local cols = min(count, perRow)
             return cols, ceil(count / perRow)
         end
-
         local function LayoutAuraGroup(handle, groupKey, cfg, defaults)
             cfg = cfg or {}
             defaults = defaults or {}
-            local maxIcons = GFPreviewInt(cfg.max, defaults.max or 6, 0, 40)
-            local perRow = GFPreviewInt(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
+            local maxIcons = Int(cfg.max, defaults.max or 6, 0, 40)
+            local perRow = Int(cfg.perRow, defaults.perRow or maxIcons, 1, 40)
             local rawSize = cfg.size or defaults.size or 16
             local minSize = defaults.minSize or 8
             local laneScale = cfg._compiled and previewScale or (previewScale * auraDynamicScale)
-            local size = max(minSize, GFPreviewScaleValue(rawSize, laneScale, minSize))
-            local spacing = max(0, GFPreviewScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
+            local size = max(minSize, ScaleValue(rawSize, laneScale, minSize))
+            local spacing = max(0, ScaleValue(cfg.spacing or defaults.spacing or 1, previewScale, 0))
             local anchor = RuntimeAuraAnchor(cfg.anchor, defaults.anchor or "CENTER")
             if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = defaults.anchor or "CENTER" end
             if not GF_PREVIEW_ANCHOR_FRAC[anchor] then anchor = "CENTER" end
             local growth = cfg.growth or defaults.growth or "RIGHTDOWN"
-            local gv = GFPreviewAuraGrowth(growth)
+            local gv = AuraGrowth(growth)
             local anchorTarget = mock
             local anchorFrac = GF_PREVIEW_ANCHOR_FRAC[anchor] or GF_PREVIEW_ANCHOR_FRAC.CENTER
             local ids = GF_AURA_MOCK_ICON_IDS[groupKey] or GF_AURA_MOCK_ICON_IDS.debuff
             local step = size + spacing
-
             AddIconPool(handle, maxIcons)
             handle._previewRects = handle._previewRects or {}
-
             local handleW, handleH, originX, originY
             if gv.centered then
                 local minL, minB, maxR, maxT
@@ -614,7 +575,6 @@ function Render.Install(box, ctx, deps)
                         local cy = -(col * step - halfOfs) - size * 0.5
                         left, bottom = -size * 0.5, cy - size * 0.5
                     end
-
                     local right, top = left + size, bottom + size
                     local rect = handle._previewRects[i] or {}
                     rect[1], rect[2], rect.anchor = left, bottom, nil
@@ -624,19 +584,17 @@ function Render.Install(box, ctx, deps)
                     maxR = maxR and max(maxR, right) or right
                     maxT = maxT and max(maxT, top) or top
                 end
-                if not minL then
-                    minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5
-                end
-                handleW = max(1, GFPreviewRound(maxR - minL))
-                handleH = max(1, GFPreviewRound(maxT - minB))
+                if not minL then minL, minB, maxR, maxT = -size * 0.5, -size * 0.5, size * 0.5, size * 0.5 end
+                handleW = max(1, Round(maxR - minL))
+                handleH = max(1, Round(maxT - minB))
                 originX, originY = -minL, -minB
             else
                 local xSign, ySign, verticalGrowth, initialAnchor = RuntimeAuraGrowth(growth)
                 local cols, rows = RuntimeAuraGridShape(maxIcons, perRow, verticalGrowth)
-                handleW = max(1, GFPreviewRound(cols * size + max(cols - 1, 0) * spacing))
-                handleH = max(1, GFPreviewRound(rows * size + max(rows - 1, 0) * spacing))
-                originX = GFPreviewRound(anchorFrac[1] * handleW)
-                originY = GFPreviewRound(anchorFrac[2] * handleH)
+                handleW = max(1, Round(cols * size + max(cols - 1, 0) * spacing))
+                handleH = max(1, Round(rows * size + max(rows - 1, 0) * spacing))
+                originX = Round(anchorFrac[1] * handleW)
+                originY = Round(anchorFrac[2] * handleH)
                 for i = 1, maxIcons do
                     local idx = i - 1
                     local col, row
@@ -664,24 +622,23 @@ function Render.Install(box, ctx, deps)
                     "BOTTOMLEFT",
                     anchorTarget,
                     "CENTER",
-                    GFPreviewConfigToOffset(cfg.x or 0, previewScale) - originX,
-                    GFPreviewConfigToOffset(cfg.y or 0, previewScale) - originY
+                    ConfigToOffset(cfg.x or 0, previewScale) - originX,
+                    ConfigToOffset(cfg.y or 0, previewScale) - originY
                 )
             else
                 handle:SetPoint(
                     anchor,
                     anchorTarget,
                     anchor,
-                    GFPreviewConfigToOffset(cfg.x or 0, previewScale),
-                    GFPreviewConfigToOffset(cfg.y or 0, previewScale)
+                    ConfigToOffset(cfg.x or 0, previewScale),
+                    ConfigToOffset(cfg.y or 0, previewScale)
                 )
             end
-
             for i = 1, maxIcons do
                 local tex = handle._icons and handle._icons[i]
                 local rect = handle._previewRects[i]
                 if tex and rect then
-                    tex:SetTexture(GFMockSpellTexture(ids[((i - 1) % #ids) + 1]))
+                    tex:SetTexture(MockSpellTexture(ids[((i - 1) % #ids) + 1]))
                     tex:SetSize(size, size)
                     tex:ClearAllPoints()
                     if rect.anchor then
@@ -695,10 +652,8 @@ function Render.Install(box, ctx, deps)
             for i = maxIcons + 1, #(handle._icons or {}) do
                 if handle._icons[i] then handle._icons[i]:Hide() end
             end
-
             return size
         end
-
         LayoutAuraGroup(buffHandle, "buff", buffCfg, {
             anchor = "BOTTOMRIGHT", growth = "LEFTUP",
             size = 22, perRow = 4, max = 6, spacing = 1, minSize = 8,
@@ -707,32 +662,29 @@ function Render.Install(box, ctx, deps)
             anchor = "TOPLEFT", growth = "RIGHTDOWN",
             size = 20, perRow = 3, max = 6, spacing = 1, minSize = 8,
         })
-
         local function ConfigureStatusHandle(statusHandle)
             local spec = statusHandle and statusHandle._statusSpec
             if not (statusHandle and spec) then return end
-            local runtimeCfg = GFPreviewRuntimeStatusConfig(runtimeStatus, spec)
+            local runtimeCfg = RuntimeStatusConfig(runtimeStatus, spec)
             local enabled
             if runtimeSpec then
                 enabled = runtimeCfg and runtimeCfg.enabled == true
             else
-                enabled = GFPreviewStatusSpecEnabled(conf, spec)
+                enabled = StatusSpecEnabled(conf, spec)
             end
-            local statusIsText = GFPreviewStatusSpecIsText(spec)
+            local statusIsText = StatusSpecIsText(spec)
             local statusRawSize = tonumber(runtimeCfg and runtimeCfg.size) or tonumber(conf[spec.size]) or tonumber(spec.defaultSize) or 14
-            local statusSize = GFPreviewScaleValue(statusRawSize, previewScale, statusIsText and 10 or 8)
+            local statusSize = ScaleValue(statusRawSize, previewScale, statusIsText and 10 or 8)
             statusHandle._previewText = spec.text or "Status"
             if statusHandle._label and statusHandle._label.SetText then
-                statusHandle._label:SetText(GFPreviewStatusLabel(spec))
+                statusHandle._label:SetText(StatusLabel(spec))
                 statusHandle._label:SetTextColor(0.80, 0.67, 0.20, enabled and 0.95 or 0.55)
             end
             if statusIsText then
                 statusHandle:SetSize(max(42, statusSize * 4), max(18, statusSize + 8))
-                if statusHandle._statusText and statusHandle._statusText.SetFont then
-                    SetPreviewFont(statusHandle._statusText, max(12, statusSize))
-                end
+                if statusHandle._statusText and statusHandle._statusText.SetFont then SetPreviewFont(statusHandle._statusText, max(12, statusSize)) end
                 if statusHandle._statusText then
-                    statusHandle._statusText:SetText(GFPreviewStatusText(spec))
+                    statusHandle._statusText:SetText(StatusText(spec))
                     statusHandle._statusText:SetTextColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.50, enabled and 1 or 0.60)
                     statusHandle._statusText:ClearAllPoints()
                     statusHandle._statusText:SetPoint("CENTER", statusHandle, "CENTER", 0, 0)
@@ -794,20 +746,18 @@ function Render.Install(box, ctx, deps)
                 runtimeCfg and runtimeCfg.y or conf[spec.y],
                 spec.defaultAnchor or "CENTER")
         end
-
         for i = 1, #statusHandles do
             ConfigureStatusHandle(statusHandles[i])
         end
-
-        local selectedSpellIcon = GFPreviewCurrentSpellTexture(kind)
+        local selectedSpellIcon = CurrentSpellTexture(kind)
         local spellType = (selectedPlaced and selectedPlaced.type) or "icon"
         local spellBaseSize = tonumber(selectedPlaced and selectedPlaced.size) or 20
-        local spellSize = max(14, GFPreviewScaleValue(spellBaseSize, previewScale, 10))
-        local spellR, spellG, spellB = GFPreviewCurrentSpellColor(kind)
+        local spellSize = max(14, ScaleValue(spellBaseSize, previewScale, 10))
+        local spellR, spellG, spellB = CurrentSpellColor(kind)
         spellHandle._icons = spellHandle._icons or {}
         local spellTex = spellHandle._icons[1]
         if spellType == "bar" then
-            local barW = max(spellSize * 2, GFPreviewScaleValue((selectedPlaced and selectedPlaced.barWidth) or (spellBaseSize * 3), previewScale, 16))
+            local barW = max(spellSize * 2, ScaleValue((selectedPlaced and selectedPlaced.barWidth) or (spellBaseSize * 3), previewScale, 16))
             spellHandle:SetSize(barW, spellSize)
             if spellTex then
                 spellTex:SetTexture(WHITE8X8)
@@ -829,12 +779,8 @@ function Render.Install(box, ctx, deps)
             end
         elseif spellType == "number" then
             spellHandle:SetSize(max(18, spellSize), max(18, spellSize))
-            if spellTex then
-                spellTex:Hide()
-            end
-            if spellHandle._label and spellHandle._label.SetText then
-                spellHandle._label:SetText("9")
-            end
+            if spellTex then spellTex:Hide() end
+            if spellHandle._label and spellHandle._label.SetText then spellHandle._label:SetText("9") end
         else
             spellHandle:SetSize(spellSize, spellSize)
             if spellTex then
@@ -846,11 +792,8 @@ function Render.Install(box, ctx, deps)
                 spellTex:Show()
             end
         end
-        if spellType ~= "number" and spellHandle._label and spellHandle._label.SetText then
-            spellHandle._label:SetText("SPELL")
-        end
+        if spellType ~= "number" and spellHandle._label and spellHandle._label.SetText then spellHandle._label:SetText("SPELL") end
         LayoutHandle(spellHandle, selectedPlaced and selectedPlaced.anchor, selectedPlaced and selectedPlaced.x, selectedPlaced and selectedPlaced.y, "TOPLEFT")
-
         textHandles.name._previewScale = previewScale
         textHandles.hpGroup._previewScale = previewScale
         textHandles.hpLeft._previewScale = previewScale
@@ -860,16 +803,12 @@ function Render.Install(box, ctx, deps)
         textHandles.powerLeft._previewScale = previewScale
         textHandles.powerCenter._previewScale = previewScale
         textHandles.powerRight._previewScale = previewScale
-        if not H.PlaceHandleAroundRegions(textHandles.name, mock, { mock._nameFS }, 3) then
-            textHandles.name:Hide()
-        end
+        if not H.PlaceHandleAroundRegions(textHandles.name, mock, { mock._nameFS }, 3) then textHandles.name:Hide() end
         if H.TextMovesTogether(kind, "hp") then
             textHandles.hpLeft:Hide()
             textHandles.hpCenter:Hide()
             textHandles.hpRight:Hide()
-            if not H.PlaceHandleAroundRegions(textHandles.hpGroup, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then
-                textHandles.hpGroup:Hide()
-            end
+            if not H.PlaceHandleAroundRegions(textHandles.hpGroup, mock, { mock._hpLeftFS, mock._hpCenterFS, mock._hpRightFS }, 3) then textHandles.hpGroup:Hide() end
         else
             textHandles.hpGroup:Hide()
             if not H.PlaceHandleAroundRegions(textHandles.hpLeft, mock, { mock._hpLeftFS }, 3) then textHandles.hpLeft:Hide() end
@@ -880,9 +819,7 @@ function Render.Install(box, ctx, deps)
             textHandles.powerLeft:Hide()
             textHandles.powerCenter:Hide()
             textHandles.powerRight:Hide()
-            if not H.PlaceHandleAroundRegions(textHandles.powerGroup, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then
-                textHandles.powerGroup:Hide()
-            end
+            if not H.PlaceHandleAroundRegions(textHandles.powerGroup, mock, { mock._powerLeftFS, mock._powerCenterFS, mock._powerRightFS }, 3) then textHandles.powerGroup:Hide() end
         else
             textHandles.powerGroup:Hide()
             if not H.PlaceHandleAroundRegions(textHandles.powerLeft, mock, { mock._powerLeftFS }, 3) then textHandles.powerLeft:Hide() end
@@ -890,23 +827,20 @@ function Render.Install(box, ctx, deps)
             if not H.PlaceHandleAroundRegions(textHandles.powerRight, mock, { mock._powerRightFS }, 3) then textHandles.powerRight:Hide() end
         end
         H.ApplyTextFocus(self, mock)
-
         local baseLevel = mock.GetFrameLevel and mock:GetFrameLevel() or 1
-        buffHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(buffCfg.layer, 5))
-        debuffHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(debuffCfg.layer, 6))
+        buffHandle:SetFrameLevel(baseLevel + ClampLayer(buffCfg.layer, 5))
+        debuffHandle:SetFrameLevel(baseLevel + ClampLayer(debuffCfg.layer, 6))
         for i = 1, #statusHandles do
             local handle = statusHandles[i]
             local spec = handle and handle._statusSpec
             if handle then
-                local runtimeCfg = GFPreviewRuntimeStatusConfig(runtimeStatus, spec)
-                handle:SetFrameLevel(baseLevel + GFPreviewClampLayer(runtimeCfg and runtimeCfg.layer or (spec and conf[spec.layer]), spec and spec.defaultLayer or 7))
+                local runtimeCfg = RuntimeStatusConfig(runtimeStatus, spec)
+                handle:SetFrameLevel(baseLevel + ClampLayer(runtimeCfg and runtimeCfg.layer or (spec and conf[spec.layer]), spec and spec.defaultLayer or 7))
             end
         end
         local spellLayer = conf.spellIndicators and conf.spellIndicators.layer
-        if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.layer ~= nil then
-            spellLayer = runtimeSpec.spellIndicators.layer
-        end
-        spellHandle:SetFrameLevel(baseLevel + GFPreviewClampLayer(spellLayer, 9))
+        if runtimeSpec and runtimeSpec.spellIndicators and runtimeSpec.spellIndicators.layer ~= nil then spellLayer = runtimeSpec.spellIndicators.layer end
+        spellHandle:SetFrameLevel(baseLevel + ClampLayer(spellLayer, 9))
         textHandles.name:SetFrameLevel(baseLevel + (tonumber(runtimeText.nameLayer) or tonumber(conf.nameTextLayer) or 6))
         textHandles.hpGroup:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
         textHandles.hpLeft:SetFrameLevel(baseLevel + (tonumber(runtimeText.healthLayer) or tonumber(conf.textLayer) or 6))
@@ -916,18 +850,14 @@ function Render.Install(box, ctx, deps)
         textHandles.powerLeft:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
         textHandles.powerCenter:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
         textHandles.powerRight:SetFrameLevel(baseLevel + (tonumber(runtimeText.powerLayer) or tonumber(conf.powerTextLayer) or 6))
-
         buffHandle:SetShown(layerAvailable.buff and LayerOn("buff"))
         debuffHandle:SetShown(layerAvailable.debuff and LayerOn("debuff"))
         for i = 1, #statusHandles do
             local handle = statusHandles[i]
             local spec = handle and handle._statusSpec
-            if handle then
-                handle:SetShown(GFPreviewStatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) and LayerOn("status"))
-            end
+            if handle then handle:SetShown(StatusSpecInMode(spec, statusSpec) and StatusConfigAvailable(spec) and LayerOn("status")) end
         end
         spellHandle:SetShown(layerAvailable.si and LayerOn("si"))
-
         buffHandle:SetAlpha(LayerAlpha("buff") * AuraPreviewAlpha(buffCfg))
         debuffHandle:SetAlpha(LayerAlpha("debuff") * AuraPreviewAlpha(debuffCfg))
         for i = 1, #statusHandles do
@@ -943,19 +873,15 @@ function Render.Install(box, ctx, deps)
         textHandles.powerLeft:SetAlpha(LayerAlpha("text"))
         textHandles.powerCenter:SetAlpha(LayerAlpha("text"))
         textHandles.powerRight:SetAlpha(LayerAlpha("text"))
-
         for i = 1, #self._layerButtons do
             local btn = self._layerButtons[i]
             local available = layerAvailable[btn._layerKey] ~= false
             btn._layerAvailable = available
             btn:SetPreviewActive(btn._sectionKey == focus, LayerOn(btn._layerKey), soloLayer == btn._layerKey, available)
         end
-        if self._selectedHandle and self._selectedHandle.IsShown and not self._selectedHandle:IsShown() then
-            SelectHandle(nil)
-        end
-        GFPreviewRefreshHandleSelection(self)
+        if self._selectedHandle and self._selectedHandle.IsShown and not self._selectedHandle:IsShown() then SelectHandle(nil) end
+        RefreshHandleSelection(self)
     end
-
     box:EnableKeyboard(true)
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", function(self, key)
@@ -984,7 +910,6 @@ function Render.Install(box, ctx, deps)
         end
         if self.SetPropagateKeyboardInput then self:SetPropagateKeyboardInput(false) end
         NudgeHandlePosition(handle, dx, dy)
-        GFPreviewRefreshHandleSelection(self)
+        RefreshHandleSelection(self)
     end)
-
 end

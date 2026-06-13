@@ -24,16 +24,7 @@ local FAQ_COMPACT_FIELDS = {
     r = "route",
     y = "priority",
 }
-local FAQ_ARRAY_FIELDS = {
-    "label",
-    "answer",
-    "pageKey",
-    "target",
-    "anchorText",
-    "keywords",
-    "priority",
-    "route",
-}
+local FAQ_ARRAY_FIELDS = M.WordList "label answer pageKey target anchorText keywords priority route"
 
 local function ExpandFAQStringRow(row)
     local out, index = {}, 1

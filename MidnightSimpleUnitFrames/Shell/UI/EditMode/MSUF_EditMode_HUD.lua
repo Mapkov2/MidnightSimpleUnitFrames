@@ -104,10 +104,7 @@ local function SetTip(widget, text)
     widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-local UNIT_KEYS = {
-    player = true, target = true, focus = true, focustarget = true,
-    targettarget = true, pet = true, boss = true,
-}
+local UNIT_KEYS = { player = true, target = true, focus = true, focustarget = true, targettarget = true, pet = true, boss = true }
 
 local GROUP_KEY_TO_KIND = {
     gf_party = "party",
@@ -325,6 +322,37 @@ local function LayoutCenter(anchor, items, gap, sepW)
         b:SetPoint("LEFT", anchor, "CENTER", b._isSep and (x + w/2) or x, 0)
         x = x + w + gap
     end
+end
+
+local function AddRowButton(row, parent, text, width, height, fontSize, onClick, tip)
+    local btn = MakeBtn(parent, text, width, height, fontSize, onClick)
+    if tip then SetTip(btn, tip) end
+    row[#row + 1] = btn
+    return btn
+end
+
+local function AddRowSep(row, parent, height)
+    local sep = MakeSep(parent, height); sep._isSep = true; row[#row + 1] = sep
+    return sep
+end
+
+local function AddAdjustWidget(row, parent, width, height, withStateBg, onMouseWheel, onMouseUp, tip)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetSize(width, height); f:EnableMouse(true); f:EnableMouseWheel(true)
+    if withStateBg then
+        local stateBg = f:CreateTexture(nil, "BACKGROUND")
+        stateBg:SetAllPoints(); stateBg:SetColorTexture(0, 0, 0, 0)
+        f._stateBg = stateBg
+    end
+    local fs = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
+    fs:SetPoint("CENTER")
+    local hl = f:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(); hl:SetColorTexture(1, 1, 1, 0.04)
+    if onMouseUp then f:SetScript("OnMouseUp", onMouseUp) end
+    if onMouseWheel then f:SetScript("OnMouseWheel", onMouseWheel) end
+    if tip then SetTip(f, tip) end
+    row[#row + 1] = f
+    return f, fs
 end
 
 local HELP_KEYS = {
@@ -898,20 +926,18 @@ local function EnsureHUD()
     c1:SetSize(1, BTN_H); c1:SetPoint("CENTER", hudFrame, "CENTER", 0, 0)
     local r1 = {}
 
-    previewBtn = MakeBtn(c1, "Preview", 64, BTN_H, 12, function()
+    previewBtn = AddRowButton(r1, c1, "Preview", 64, BTN_H, 12, function()
         _G.MSUF_UnitPreviewActive = not (_G.MSUF_UnitPreviewActive and true or false)
         if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
         SetActive(previewBtn, _G.MSUF_UnitPreviewActive)
         HUD.SetStatus(HelpText(_G.MSUF_UnitPreviewActive and "EM_PREVIEW_ON" or "EM_PREVIEW_OFF"), "info")
-    end)
-    SetTip(previewBtn, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
-    r1[#r1+1] = previewBtn
+    end, "Show placeholder data on unitframes\nwithout real units (target, focus, etc.)")
 
     previewAddonSlot = CreateFrame("Frame", "MSUF_EM2_HUD_PreviewAddonSlot", c1)
     previewAddonSlot:SetSize(38, BTN_H)
     r1[#r1+1] = previewAddonSlot
 
-    auraBtn = MakeBtn(c1, "Auras", 52, BTN_H, 12, function()
+    auraBtn = AddRowButton(r1, c1, "Auras", 52, BTN_H, 12, function()
         local db = _G.MSUF_DB; if not db then return end
         local a2 = db.auras3; if not a2 then return end
         local sh = a2.shared; if not sh then return end
@@ -920,29 +946,23 @@ local function EnsureHUD()
         if _G.MSUF_Auras3_RefreshEditPreview then _G.MSUF_Auras3_RefreshEditPreview() end
         if _G.MSUF_Auras3_RefreshAll then _G.MSUF_Auras3_RefreshAll() end
         HUD.SetStatus(HelpText(sh.showInEditMode and "EM_AURAS_ON" or "EM_AURAS_OFF"), "info")
-    end)
-    SetTip(auraBtn, "Toggle aura preview icons\nand aura mover boxes.")
-    r1[#r1+1] = auraBtn
+    end, "Toggle aura preview icons\nand aura mover boxes.")
 
-    snapToggle = MakeBtn(c1, "Snap", 48, BTN_H, 12, function()
+    snapToggle = AddRowButton(r1, c1, "Snap", 48, BTN_H, 12, function()
         if EM2.Snap then
             local on = not EM2.Snap.IsEnabled()
             EM2.Snap.SetEnabled(on); SetActive(snapToggle, on)
             HUD.SetStatus(HelpText(on and "EM_SNAP_ON" or "EM_SNAP_OFF"), "info")
         end
-    end)
-    SetTip(snapToggle, "Snap frames to edges of\nother frames while dragging.")
-    r1[#r1+1] = snapToggle
+    end, "Snap frames to edges of\nother frames while dragging.")
 
-    resetBtn = MakeBtn(c1, "Reset", 52, BTN_H, 12, function()
+    resetBtn = AddRowButton(r1, c1, "Reset", 52, BTN_H, 12, function()
         HUD.ResetCurrentPosition()
-    end)
-    SetTip(resetBtn, "Reset the selected frame position.\nSize stays unchanged.")
-    r1[#r1+1] = resetBtn
+    end, "Reset the selected frame position.\nSize stays unchanged.")
 
-    do local s = MakeSep(c1, BTN_H); s._isSep = true; r1[#r1+1] = s end
+    AddRowSep(r1, c1, BTN_H)
 
-    cdmBtn = MakeBtn(c1, "CDM", 46, BTN_H, 12, function()
+    cdmBtn = AddRowButton(r1, c1, "CDM", 46, BTN_H, 12, function()
         local db = _G.MSUF_DB; if not db then return end
         db.general = db.general or {}
         db.general.anchorToCooldown = not (db.general.anchorToCooldown and true or false)
@@ -953,11 +973,9 @@ local function EnsureHUD()
             if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
             if _G.MSUF_EM2_ReforcePreviewFrames then _G.MSUF_EM2_ReforcePreviewFrames() end
         end)
-    end)
-    SetTip(cdmBtn, "Anchor all unitframes to the\nEssential Cooldown Manager.")
-    r1[#r1+1] = cdmBtn
+    end, "Anchor all unitframes to the\nEssential Cooldown Manager.")
 
-    anchorBtn = MakeBtn(c1, "Anchor", 58, BTN_H, 12, function()
+    anchorBtn = AddRowButton(r1, c1, "Anchor", 58, BTN_H, 12, function()
         local ov = type(_G.MSUF_EnsureAnchorPicker) == "function" and _G.MSUF_EnsureAnchorPicker()
         if not ov then return end
         ov._onPick = function(frameName)
@@ -973,9 +991,7 @@ local function EnsureHUD()
             end)
         end
         ov:Show()
-    end)
-    SetTip(anchorBtn, "Pick any frame as global anchor\nfor all unitframes.\nOverrides CDM anchor.")
-    r1[#r1+1] = anchorBtn
+    end, "Pick any frame as global anchor\nfor all unitframes.\nOverrides CDM anchor.")
 
     LayoutCenter(c1, r1, BTN_GAP, SEP_W)
 
@@ -1006,66 +1022,41 @@ local function EnsureHUD()
     c2:SetSize(1, BTN_H2); c2:SetPoint("CENTER", row2Frame, "CENTER", 0, 0)
     local r2 = {}
 
-    undoBtn = MakeBtn(c2, "", 42, BTN_H2, 11, function()
+    undoBtn = AddRowButton(r2, c2, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
-    end)
+    end, "Undo last position change.")
     _G.MSUF_EditModeUndoBtn = undoBtn
     AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
-    SetTip(undoBtn, "Undo last position change.")
-    r2[#r2+1] = undoBtn
 
-    redoBtn = MakeBtn(c2, "", 42, BTN_H2, 11, function()
+    redoBtn = AddRowButton(r2, c2, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
-    end)
+    end, "Redo last undone change.")
     _G.MSUF_EditModeRedoBtn = redoBtn
     AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
-    SetTip(redoBtn, "Redo last undone change.")
-    r2[#r2+1] = redoBtn
 
-    do local s = MakeSep(c2, BTN_H2); s._isSep = true; r2[#r2+1] = s end
+    AddRowSep(r2, c2, BTN_H2)
 
     do
-        local f = CreateFrame("Frame", nil, c2)
-        f:SetSize(80, BTN_H2); f:EnableMouse(true); f:EnableMouseWheel(true)
-        gridWidget = f
-        local stateBg = f:CreateTexture(nil, "BACKGROUND")
-        stateBg:SetAllPoints()
-        stateBg:SetColorTexture(0, 0, 0, 0)
-        f._stateBg = stateBg
-        stepFS = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
-        stepFS:SetPoint("CENTER")
-        local hl = f:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.04)
-        f:SetScript("OnMouseUp", function(_, button)
+        gridWidget, stepFS = AddAdjustWidget(r2, c2, 80, BTN_H2, true, function(_, d)
+            if not EM2.Grid then return end
+            EM2.Grid.SetGridStep(max(4, min(80, EM2.Grid.GetGridStep() + d * 4)))
+            HUD.RefreshControls()
+        end, function(_, button)
             if button ~= "LeftButton" or not EM2.Grid or not EM2.Grid.ToggleEnabled then return end
             EM2.Grid.ToggleEnabled()
             HUD.SetStatus(HelpText((not EM2.Grid.GetEnabled or EM2.Grid.GetEnabled()) and "EM_GRID_ON" or "EM_GRID_OFF"), "info")
             HUD.RefreshControls()
-        end)
-        f:SetScript("OnMouseWheel", function(_, d)
-            if not EM2.Grid then return end
-            EM2.Grid.SetGridStep(max(4, min(80, EM2.Grid.GetGridStep() + d * 4)))
-            HUD.RefreshControls()
-        end)
-        SetTip(f, "Left-click to toggle grid lines.\nScroll to adjust spacing.")
-        r2[#r2+1] = f
+        end, "Left-click to toggle grid lines.\nScroll to adjust spacing.")
     end
 
     do
-        local f = CreateFrame("Frame", nil, c2)
-        f:SetSize(74, BTN_H2); f:EnableMouse(true); f:EnableMouseWheel(true)
-        bgWidget = f
-        alphaFS = MakeFS(f, 11, TH.mutedR, TH.mutedG, TH.mutedB, 0.80)
-        alphaFS:SetPoint("CENTER")
-        local hl = f:CreateTexture(nil, "HIGHLIGHT"); hl:SetAllPoints(); hl:SetColorTexture(1,1,1,0.04)
-        f:SetScript("OnMouseWheel", function(_, d)
+        bgWidget, alphaFS = AddAdjustWidget(r2, c2, 74, BTN_H2, false, function(_, d)
             if not EM2.Grid then return end
             EM2.Grid.SetBgAlpha(max(0, min(1, EM2.Grid.GetBgAlpha() + d * 0.05)))
             HUD.RefreshControls()
-        end)
-        SetTip(f, "Background overlay opacity.\nScroll to adjust.")
-        r2[#r2+1] = f
+        end, nil, "Background overlay opacity.\nScroll to adjust.")
     end
 
     LayoutCenter(c2, r2, BTN_GAP, SEP_W)

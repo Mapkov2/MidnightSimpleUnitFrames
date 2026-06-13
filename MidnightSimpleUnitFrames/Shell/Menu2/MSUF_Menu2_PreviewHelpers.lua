@@ -1,13 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
+local F = M.Fallbacks or {}
 local H = M.PreviewHelpers or {}
 M.PreviewHelpers = H
-
 local CP = M.ClassPowerPreview or {}
 M.ClassPowerPreview = CP
 
@@ -16,6 +14,36 @@ M.ClassPowerPreview = CP
 -- preview modules. Keep preview-only fallbacks here instead of coupling pages to live runtime.
 local floor = math.floor
 CP.WHITE8 = CP.WHITE8 or "Interface\\Buttons\\WHITE8X8"
+CP.MEDIA = CP.MEDIA or ("Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\")
+function CP.ShapeTextures(prefix, axis)
+    local tex = { fill = CP.MEDIA .. prefix .. "_fill.tga", bg = CP.MEDIA .. prefix .. "_bg.tga", edge = CP.MEDIA .. prefix .. "_edge.tga" }
+    tex.axis = axis
+    return tex
+end
+CP.CLASS_SHAPES = CP.CLASS_SHAPES or {
+    CIRCLE = CP.ShapeTextures("pip_circle"),
+    DIAMOND = CP.ShapeTextures("pip_diamond"),
+    HEX = CP.ShapeTextures("pip_hex"),
+}
+CP.POWER_SHAPES = CP.POWER_SHAPES or {
+    ROUND = CP.ShapeTextures("power_round"),
+    CRYSTAL = CP.ShapeTextures("power_crystal"),
+    ORB = CP.ShapeTextures("pip_circle", "VERTICAL"),
+}
+function CP.NormalizeClassShape(value)
+    value = tostring(value or "BAR"):upper()
+    return (value == "CIRCLE" or value == "DIAMOND" or value == "HEX") and value or "BAR"
+end
+function CP.ResolvePowerShape(value, classShape)
+    value = tostring(value or "BAR"):upper()
+    if value == "ROUND" or value == "CRYSTAL" or value == "ORB" or value == "BAR" then return value end
+    if value == "FOLLOW_CLASS" then
+        classShape = CP.NormalizeClassShape(classShape)
+        if classShape == "CIRCLE" then return "ROUND" end
+        if classShape == "DIAMOND" or classShape == "HEX" then return "CRYSTAL" end
+    end
+    return "BAR"
+end
 CP.FALLBACK_COLORS = CP.FALLBACK_COLORS or {
     ARCANE_CHARGES = { 0.45, 0.55, 1.00 },
     CHARGED = { 0.60, 0.20, 0.80 },
@@ -46,7 +74,6 @@ local COMBO_POINT_RAMP_R = CP.COMBO_POINT_RAMP_R or { 0.00, 0.00, 1.00, 1.00, 1.
 local COMBO_POINT_RAMP_G = CP.COMBO_POINT_RAMP_G or { 0.95, 0.95, 1.00, 1.00, 1.00, 0.05, 0.05 }
 local COMBO_POINT_RAMP_B = CP.COMBO_POINT_RAMP_B or { 1.00, 1.00, 0.00, 0.00, 0.00, 0.05, 0.05 }
 CP.COMBO_POINT_RAMP_R, CP.COMBO_POINT_RAMP_G, CP.COMBO_POINT_RAMP_B = COMBO_POINT_RAMP_R, COMBO_POINT_RAMP_G, COMBO_POINT_RAMP_B
-
 function CP.ColorOverride(tableName, token)
     local db = _G.MSUF_DB
     local general = db and db.general
@@ -57,7 +84,6 @@ function CP.ColorOverride(tableName, token)
     if type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b end
     return nil
 end
-
 function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
     -- User overrides should show in preview, then fall back to runtime power-color helpers,
     -- and finally to fixed preview colors when the real runtime is unavailable.
@@ -81,16 +107,13 @@ function CP.ResolveColor(token, fallbackR, fallbackG, fallbackB, powerColorFn)
     end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
-
 function CP.ResolveBaseColor(spec, bars, fallbackR, fallbackG, fallbackB, powerColorFn)
     if bars and bars.classPowerColorByType == false then return 1, 1, 1 end
     return CP.ResolveColor(spec and spec.token, fallbackR, fallbackG, fallbackB, powerColorFn)
 end
-
 function CP.ResolveTextColor(fallbackR, fallbackG, fallbackB, powerColorFn)
     return CP.ResolveColor("RESOURCE_TEXT", fallbackR or 1, fallbackG or 1, fallbackB or 1, powerColorFn)
 end
-
 function CP.ResolveComboColor(bars, slot, baseR, baseG, baseB)
     local mode = bars and bars.classPowerComboPointColorMode
     if mode ~= "ramp" and mode ~= "custom" then return baseR, baseG, baseB end
@@ -102,21 +125,17 @@ function CP.ResolveComboColor(bars, slot, baseR, baseG, baseB)
     end
     return COMBO_POINT_RAMP_R[slot], COMBO_POINT_RAMP_G[slot], COMBO_POINT_RAMP_B[slot]
 end
-
 function CP.IsCharged(spec, bars, slot)
     return spec and spec.token == "COMBO_POINTS"
         and bars and bars.showChargedComboPoints ~= false
         and spec.chargedSlots and spec.chargedSlots[slot] == true
 end
-
 function CP.IsSingleBarMode(mode)
     return mode == "continuous" or mode == "timer_bar" or mode == "stagger" or mode == "aura_single"
 end
-
 function CP.IsEssence(spec)
     return spec and spec.token == "ESSENCE"
 end
-
 function CP.TokenForValue(spec, value)
     if spec and spec.mode == "stagger" then
         value = tonumber(value)
@@ -127,7 +146,6 @@ function CP.TokenForValue(spec, value)
     end
     return spec and spec.token
 end
-
 function CP.FillForSegment(spec, index, valueOverride)
     if not spec then return index <= 3 and 1 or 0 end
     local mode = spec.mode or "segmented"
@@ -147,7 +165,6 @@ function CP.FillForSegment(spec, index, valueOverride)
     end
     return index <= full and 1 or 0
 end
-
 function CP.AnimatedValue(spec, elapsed)
     if not spec then return nil end
     local mode = spec.mode or "segmented"
@@ -170,7 +187,6 @@ function CP.AnimatedValue(spec, elapsed)
     if step <= maxValue then return step end
     return steps - step
 end
-
 function CP.TextForValue(spec, value)
     if not spec then return "" end
     if value == nil then return spec.previewText or "" end
@@ -184,17 +200,14 @@ function CP.TextForValue(spec, value)
     if spec.token == "SOUL_FRAGMENTS_VENG" then return tostring(rounded) .. " / " .. tostring(tonumber(spec.segments) or 6) end
     return tostring(rounded)
 end
-
 local RUNE_PREVIEW_REMAINING = { nil, 7.2, nil, 4.1, nil, 1.4 }
 local RUNE_PREVIEW_OFFSET = { nil, 0.0, nil, 3.1, nil, 6.2 }
 local RUNE_PREVIEW_READY_HOLD = 1.2
-
 function CP.FormatSeconds(remaining)
     remaining = tonumber(remaining) or 0
     if remaining <= 0.05 then return "" end
     return string.format("%.1f", floor((remaining * 10) + 0.5) / 10)
 end
-
 function CP.FillRuneState(out, runeID, totalDuration, elapsed, animated)
     out.id = runeID
     out.total = totalDuration
@@ -228,7 +241,6 @@ function CP.FillRuneState(out, runeID, totalDuration, elapsed, animated)
     end
     return out
 end
-
 function CP.BuildRuneOrder(scratch, bars, spec, elapsed, animated)
     local states = scratch.runeStates
     if not states then
@@ -255,7 +267,6 @@ function CP.BuildRuneOrder(scratch, bars, spec, elapsed, animated)
     end
     return states
 end
-
 function CP.ResolveTexture(key, fallback)
     if key and key ~= "" then
         local resolve = _G.MSUF_ResolveStatusbarTextureKey
@@ -269,18 +280,15 @@ function CP.ResolveTexture(key, fallback)
     end
     return CP.WHITE8
 end
-
 function H.InstallZoomPan(ZoomPan, opts)
     if type(ZoomPan) ~= "table" then return end
     opts = opts or {}
-
     local floor = math.floor
     local minZoom = tonumber(opts.minZoom) or 0.35
     local maxZoom = tonumber(opts.maxZoom) or 4.0
     local steps = opts.steps or { 0.35, 0.50, 0.75, 1.00, 1.25, 1.50, 2.00, 3.00, 4.00 }
     local deps = {}
     local white = "Interface\\Buttons\\WHITE8X8"
-
     local function PathValue(object, path)
         if not object or not path then return nil end
         if type(path) ~= "table" then return object[path] end
@@ -290,26 +298,21 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         return value
     end
-
     local function TR(text)
         local fn = deps.TR
         return (type(fn) == "function" and fn(text)) or text
     end
-
     local function Round(value)
         return floor((tonumber(value) or 0) + 0.5)
     end
-
     local function PanKey(name)
         return tostring(opts.panPrefix or "_msufPreview") .. name
     end
     local PAN_PANNING, PAN_BOX = PanKey("Panning"), PanKey("PanBox")
     local PAN_CURSOR_X, PAN_CURSOR_Y = PanKey("PanCursorX"), PanKey("PanCursorY")
     local PAN_START_X, PAN_START_Y = PanKey("PanStartX"), PanKey("PanStartY")
-
     ZoomPan.MIN = minZoom
     ZoomPan.MAX = maxZoom
-
     function ZoomPan.Configure(nextDeps)
         if opts.configureTableOnly then
             if type(nextDeps) == "table" then deps = nextDeps end
@@ -317,14 +320,12 @@ function H.InstallZoomPan(ZoomPan, opts)
             deps = nextDeps or deps or {}
         end
     end
-
     function ZoomPan.Clamp(value)
         value = tonumber(value) or 1
         if value < minZoom then return minZoom end
         if value > maxZoom then return maxZoom end
         return floor(value * 100 + 0.5) / 100
     end
-
     function ZoomPan.UpdateControls(box)
         if not box then return end
         local zoom = box._manualZoom
@@ -335,11 +336,8 @@ function H.InstallZoomPan(ZoomPan, opts)
             readout:SetText(zoom and string.format("%d%%", pct) or string.format(opts.translateFitText and TR("Fit %d%%") or "Fit %d%%", pct))
         end
         local fitText = PathValue(box, opts.fitButtonTextPath or { "zoomFitButton", "fs" })
-        if fitText then
-            fitText:SetTextColor(zoom and 0.72 or 0.25, zoom and 0.78 or 0.95, zoom and 0.90 or 1.00, 1)
-        end
+        if fitText then fitText:SetTextColor(zoom and 0.72 or 0.25, zoom and 0.78 or 0.95, zoom and 0.90 or 1.00, 1) end
     end
-
     function ZoomPan.ApplyPan(box)
         if opts.panMode == "topLeft" then
             if not (box and box._stage and box._mock) then return end
@@ -349,7 +347,6 @@ function H.InstallZoomPan(ZoomPan, opts)
             box._mock:SetPoint("TOPLEFT", box._stage, "TOPLEFT", x, y)
             return
         end
-
         if not (box and box.canvas and box.mock) then return end
         local panX, panY = tonumber(box._zoomPanX) or 0, tonumber(box._zoomPanY) or 0
         box.mock:ClearAllPoints()
@@ -359,7 +356,6 @@ function H.InstallZoomPan(ZoomPan, opts)
             box.mock.cast:SetPoint("CENTER", box.canvas, "CENTER", (tonumber(box._detachedCastBaseOffsetX) or 0) + panX, (tonumber(box._detachedCastBaseOffsetY) or 0) + panY)
         end
     end
-
     function ZoomPan.SetZoom(box, zoom, reason)
         if not box then return end
         if zoom == nil or zoom == "fit" then
@@ -376,7 +372,6 @@ function H.InstallZoomPan(ZoomPan, opts)
             box:Refresh(reason)
         end
     end
-
     function ZoomPan.Step(box, direction)
         if not box then return end
         local current = ZoomPan.Clamp(box._manualZoom or box._mockScale or box._mockAutoScale or 1)
@@ -398,7 +393,6 @@ function H.InstallZoomPan(ZoomPan, opts)
         end
         ZoomPan.SetZoom(box, nextZoom, opts.stepReason or "UNIT_PREVIEW_ZOOM_STEP")
     end
-
     function ZoomPan.Stop(surface)
         if not surface then return end
         local box = surface[PAN_BOX]
@@ -409,7 +403,6 @@ function H.InstallZoomPan(ZoomPan, opts)
         local update = deps[opts.updateHintKey or "UpdateHandleHint"]
         if box and type(update) == "function" then update(box, box._selectedHandle) end
     end
-
     function ZoomPan.Start(surface, box, button)
         if not (surface and box) then return false end
         local ctrlLeft = button == "LeftButton" and IsControlKeyDown and IsControlKeyDown()
@@ -440,7 +433,6 @@ function H.InstallZoomPan(ZoomPan, opts)
         end)
         return true
     end
-
     function ZoomPan.CreateButton(parent, text, width, tooltip, onClick)
         local T = deps.T
         local template = opts.themeButton and (T and T.Template and T.Template() or nil) or (opts.buttonTemplate or "BackdropTemplate")
@@ -477,17 +469,16 @@ function H.InstallZoomPan(ZoomPan, opts)
         return btn
     end
 end
-
 function H.BuildZoomBar(box, surface, opts)
     if not (box and surface) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or function(text) return text end
+    local tr = opts.Tr or F.Identity
     local tex = opts.texture or "Interface\\Buttons\\WHITE8X8"
     local template = opts.template or "BackdropTemplate"
-    local stepZoom = opts.StepZoom or function() end
-    local setZoom = opts.SetZoom or function() end
-    local startPan = opts.StartPan or function() return false end
-    local stopPan = opts.StopPan or function() end
+    local stepZoom = opts.StepZoom or F.Noop
+    local setZoom = opts.SetZoom or F.Noop
+    local startPan = opts.StartPan or F.False
+    local stopPan = opts.StopPan or F.Noop
     local createButton = opts.CreateZoomButton or function(parent, text, width, tooltip, onClick)
         local btn = CreateFrame("Button", nil, parent, template)
         btn:SetSize(width or 24, 18)
@@ -497,7 +488,6 @@ function H.BuildZoomBar(box, surface, opts)
         return btn
     end
     local prefix = opts.fieldPrefix or ""
-
     local zoomBar = CreateFrame("Frame", nil, surface, template)
     zoomBar:SetSize(opts.width or 160, opts.height or 22)
     zoomBar:SetPoint("TOPRIGHT", surface, "TOPRIGHT", -8, -6)
@@ -531,9 +521,7 @@ function H.BuildZoomBar(box, surface, opts)
     zoomBar:SetScript("OnLeave", function()
         if GameTooltip then GameTooltip:Hide() end
     end)
-
     local zoomOut = AddZoomButton("zoomOutButton", "-", 18, "Zoom out", function() stepZoom(box, -1) end)
-
     local T = opts.T
     local readout
     if opts.themeReadout and T and T.Font then
@@ -546,13 +534,9 @@ function H.BuildZoomBar(box, surface, opts)
     readout:SetSize(54, 18)
     readout:SetJustifyH("CENTER")
     box[prefix .. "zoomReadout"] = readout
-
     local fitButton = AddZoomButton("zoomFitButton", "Fit", 28, "Fit preview", function() setZoom(box, nil, opts.fitReason) end, readout)
-
     local oneButton = AddZoomButton("zoomOneButton", "1:1", 30, "Pixel preview", function() setZoom(box, 1, opts.oneReason) end, fitButton)
-
     AddZoomButton("zoomInButton", "+", 18, "Zoom in", function() stepZoom(box, 1) end, oneButton)
-
     local function ZoomWheel(self, delta)
         local dir = (delta or 0) > 0 and 1 or -1
         if IsControlKeyDown and IsControlKeyDown() then
@@ -570,27 +554,21 @@ function H.BuildZoomBar(box, surface, opts)
     surface:SetScript("OnHide", stopPan)
     return zoomBar, ZoomWheel
 end
-
 local LAYER_BUTTON_FALLBACK_COLOR = { 1, 1, 1 }
-
 local function LayerButtonAvailable(owner, key)
     return not (owner and owner.layerAvailable and owner.layerAvailable[key] == false)
 end
-
 local function LayerButtonOn(owner, key)
     return LayerButtonAvailable(owner, key) and not (owner and owner.layerVisibility and owner.layerVisibility[key] == false)
 end
-
 local function LayerButtonAvailableFor(owner, key, opts)
     if opts and opts.IsAvailable then return opts.IsAvailable(owner, key) end
     return LayerButtonAvailable(owner, key)
 end
-
 local function LayerButtonOnFor(owner, key, opts)
     if opts and opts.IsOn then return opts.IsOn(owner, key) end
     return LayerButtonOn(owner, key)
 end
-
 function H.RefreshLayerButton(btn, owner, opts)
     if not btn then return end
     opts = opts or {}
@@ -618,11 +596,10 @@ function H.RefreshLayerButton(btn, owner, opts)
         btn.off:SetTextColor(0.40, 0.42, 0.50, 0.78)
     end
 end
-
 function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     if not (parent and def) then return nil end
     opts = opts or {}
-    local tr = opts.Tr or function(text) return text end
+    local tr = opts.Tr or F.Identity
     local btn = CreateFrame("Button", nil, parent)
     local h = opts.height or 18
     btn:SetSize((sideW or 80) - 10, h)
@@ -643,7 +620,6 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn.off:SetPoint("RIGHT", btn, "RIGHT", -2, 0)
     btn.off:SetText(opts.offText or "OFF")
     btn.off:SetJustifyH("RIGHT")
-
     function btn:Refresh() H.RefreshLayerButton(self, owner, opts) end
     btn.refresh = btn.Refresh
     btn:SetScript("OnClick", function(self)
@@ -679,7 +655,6 @@ function H.CreateLayerButton(parent, owner, def, index, sideW, opts)
     btn:Refresh()
     return btn
 end
-
 local TEXT_FOCUS_SIDES = { "top", "bottom", "left", "right" }
 local EDGE_ANCHORS = {
     top = { "TOPLEFT", "TOPRIGHT", "SetHeight" },
@@ -687,24 +662,20 @@ local EDGE_ANCHORS = {
     left = { "TOPLEFT", "BOTTOMLEFT", "SetWidth" },
     right = { "TOPRIGHT", "BOTTOMRIGHT", "SetWidth" },
 }
-
 function H.NormalizeTextFocusKind(kind)
     if kind == "name" or kind == "hp" or kind == "power" then return kind end
     return nil
 end
-
 function H.NormalizeTextFocusSlot(slot)
     if slot == "left" or slot == "center" or slot == "right" then return slot end
     return nil
 end
-
 function H.TextFocusColor(kind, colors)
     colors = colors or {}
     if kind == "hp" then return colors.hp or { 0.28, 0.86, 0.45 } end
     if kind == "power" then return colors.power or { 0.95, 0.72, 0.18 } end
     return colors.name or { 0.30, 0.66, 1.00 }
 end
-
 function H.EnsureTextFocusFrame(box, parent)
     if not (box and parent) then return nil end
     local f = box._msufMenuTextFocusFrame
@@ -725,12 +696,9 @@ function H.EnsureTextFocusFrame(box, parent)
     elseif f.SetParent then
         f:SetParent(parent)
     end
-    if f.SetFrameLevel and parent.GetFrameLevel then
-        f:SetFrameLevel((parent:GetFrameLevel() or 0) + 85)
-    end
+    if f.SetFrameLevel and parent.GetFrameLevel then f:SetFrameLevel((parent:GetFrameLevel() or 0) + 85) end
     return f
 end
-
 function H.PaintTextFocusFrame(frame, color, active)
     if not (frame and color) then return end
     local lineAlpha = active and 0.92 or 0.74
@@ -747,7 +715,6 @@ function H.PaintTextFocusFrame(frame, color, active)
         end
     end
 end
-
 function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     if not (handle and parent and parent.GetLeft and regions) then return false end
     opts = opts or {}
@@ -799,7 +766,6 @@ function H.PlaceHandleAroundRegions(handle, parent, regions, pad, opts)
     handle:Show()
     return true
 end
-
 function H.ApplyTextFocus(box, parent, mock, opts)
     opts = opts or {}
     local focus = box and box._msufMenuTextFocus
@@ -817,30 +783,24 @@ function H.ApplyTextFocus(box, parent, mock, opts)
     if not frame then return end
     local color = (opts.Color and opts.Color(focus.kind)) or H.TextFocusColor(focus.kind, opts.colors)
     H.PaintTextFocusFrame(frame, color, focus.active == true)
-    if not (opts.Place and opts.Place(frame, parent, regions, focus.active and 5 or 4)) then
-        frame:Hide()
-    end
+    if not (opts.Place and opts.Place(frame, parent, regions, focus.active and 5 or 4)) then frame:Hide() end
 end
-
 function H.SnapOff(region)
     if region and region.SetSnapToPixelGrid then
         region:SetSnapToPixelGrid(false)
         if region.SetTexelSnappingBias then region:SetTexelSnappingBias(0) end
     end
 end
-
 function H.MaskOwner(mock, tex, anchor)
     local owner = tex and tex.GetParent and tex:GetParent() or nil
     if owner and owner.CreateMaskTexture then return owner end
     if anchor and anchor.CreateMaskTexture then return anchor end
     return mock
 end
-
 function H.EnsureRoundedMask(mock, key, anchor, tex, maskStoreKey, maskTexture, snapOff)
     if not (mock and anchor) then return nil end
     local owner = H.MaskOwner(mock, tex, anchor)
     if not (owner and owner.CreateMaskTexture) then return nil end
-
     maskStoreKey = maskStoreKey or "_msufPreviewRoundedMasks"
     mock[maskStoreKey] = mock[maskStoreKey] or {}
     local store = mock[maskStoreKey]
@@ -849,7 +809,6 @@ function H.EnsureRoundedMask(mock, key, anchor, tex, maskStoreKey, maskTexture, 
         bucket = {}
         store[key] = bucket
     end
-
     local ownerKey = tex or owner
     local mask = bucket[ownerKey]
     if not mask then
@@ -863,7 +822,6 @@ function H.EnsureRoundedMask(mock, key, anchor, tex, maskStoreKey, maskTexture, 
     mask:SetAllPoints(anchor)
     return mask
 end
-
 function H.SetMask(mock, tex, mask, maskedStoreKey)
     if not (mock and tex and tex.AddMaskTexture) then return end
     maskedStoreKey = maskedStoreKey or "_msufPreviewRoundedMasked"
@@ -878,7 +836,6 @@ function H.SetMask(mock, tex, mask, maskedStoreKey)
         if ok then store[tex] = mask end
     end
 end
-
 function H.ClearMasks(mock, maskedStoreKey)
     local store = mock and mock[maskedStoreKey or "_msufPreviewRoundedMasked"]
     if store then
@@ -888,9 +845,7 @@ function H.ClearMasks(mock, maskedStoreKey)
     end
     if mock then mock[maskedStoreKey or "_msufPreviewRoundedMasked"] = nil end
 end
-
 local EDGE_LINE_KEYS = { "top", "bottom", "left", "right" }
-
 function H.SetEdgeLinesShown(frame, shown, opts)
     local lines = frame and frame[(opts and opts.linesKey) or "_lines"]
     if type(lines) ~= "table" then return end
@@ -902,7 +857,6 @@ function H.SetEdgeLinesShown(frame, shown, opts)
         end
     end
 end
-
 function H.LayoutEdgeLines(frame, edge, opts)
     if not (frame and frame.CreateTexture) then return false end
     opts = opts or {}
@@ -936,7 +890,6 @@ function H.LayoutEdgeLines(frame, edge, opts)
     H.SetEdgeLinesShown(frame, true, opts)
     return true
 end
-
 function H.ClampEdgeSize(value, fallback, maxValue)
     local n = tonumber(value)
     if n == nil then n = tonumber(fallback) or 0 end
@@ -946,7 +899,6 @@ function H.ClampEdgeSize(value, fallback, maxValue)
     if n > maxValue then n = maxValue end
     return n
 end
-
 function H.EnsureRoundedVisuals(mock, opts)
     if not (mock and mock.CreateTexture) then return false end
     opts = opts or {}
@@ -965,7 +917,6 @@ function H.EnsureRoundedVisuals(mock, opts)
     mock[edgeKey]:SetTexture(opts.edgeTexture, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
     return true
 end
-
 function H.ForEachRoundedEdge(mock, opts, fn)
     if not (mock and type(fn) == "function") then return end
     opts = opts or {}
@@ -977,7 +928,6 @@ function H.ForEachRoundedEdge(mock, opts, fn)
         if stack[i] then fn(stack[i], i) end
     end
 end
-
 function H.SetRoundedEdgeStackShown(mock, shown, opts)
     opts = opts or {}
     local count = shown and H.ClampEdgeSize(mock and mock[opts.countKey or "_msufPreviewRoundedEdgeCount"], 1, opts.maxEdgeSize or 8) or 0
@@ -991,7 +941,6 @@ function H.SetRoundedEdgeStackShown(mock, shown, opts)
         end
     end)
 end
-
 function H.SetRoundedEdgeStackAlpha(mock, alpha, opts)
     local clamp = opts and opts.clamp01
     alpha = type(clamp) == "function" and clamp(alpha, 1) or math.max(0, math.min(1, tonumber(alpha) or 1))
@@ -999,7 +948,6 @@ function H.SetRoundedEdgeStackAlpha(mock, alpha, opts)
         if edge and edge.SetAlpha then edge:SetAlpha(alpha) end
     end)
 end
-
 function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     if not mock then return false end
     opts = opts or {}
@@ -1039,16 +987,12 @@ function H.ApplyRoundedEdgeStack(mock, edgeSize, opts)
     H.SetRoundedEdgeStackShown(mock, true, opts)
     return true
 end
-
 function H.BaseEdgeColor()
     local fn = _G.MSUF_GetBarOutlineColor
     if type(fn) == "function" then
         local ok, r, g, b = pcall(fn)
-        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
-            return r, g, b, 1
-        end
+        if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then return r, g, b, 1 end
     end
-
     local gen = _G.MSUF_DB and _G.MSUF_DB.general
     if gen then
         return tonumber(gen.barOutlineColorR) or 0,

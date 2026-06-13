@@ -4,74 +4,35 @@
 --- drag loop; drag writes saved offsets and repaints only this preview.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local Preview = M.ClassPowerStackPreview or {}
 M.ClassPowerStackPreview = Preview
-
 local W = M.Widgets
 local T = M.Theme
 local CPPreview = M.ClassPowerPreview or {}
 local Helpers = M.PreviewHelpers or {}
 local ZoomPan = Preview.ZoomPan or {}
 Preview.ZoomPan = ZoomPan
-
 local floor = math.floor
 local max = math.max
 local min = math.min
 local WHITE8 = "Interface\\Buttons\\WHITE8X8"
-local MEDIA = "Interface\\AddOns\\" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "\\Media\\ClassPower\\"
 local PREVIEW_BORDER_COLOR = { 1.00, 0.02, 0.02, 1.00 }
+local CP_SHAPES, POWER_SHAPES = CPPreview.CLASS_SHAPES, CPPreview.POWER_SHAPES
+local NormalizeClassShape, ResolvePowerShape = CPPreview.NormalizeClassShape, CPPreview.ResolvePowerShape
 local CP_OUTLINE_OPTS = {
     linesKey = "_msufCPPreviewEdges",
     maxEdgeSize = 8,
     texture = WHITE8,
     color = function() return PREVIEW_BORDER_COLOR[1], PREVIEW_BORDER_COLOR[2], PREVIEW_BORDER_COLOR[3], PREVIEW_BORDER_COLOR[4] end,
 }
-
-local CP_SHAPES = {
-    CIRCLE = { fill = MEDIA .. "pip_circle_fill.tga", bg = MEDIA .. "pip_circle_bg.tga", edge = MEDIA .. "pip_circle_edge.tga" },
-    DIAMOND = { fill = MEDIA .. "pip_diamond_fill.tga", bg = MEDIA .. "pip_diamond_bg.tga", edge = MEDIA .. "pip_diamond_edge.tga" },
-    HEX = { fill = MEDIA .. "pip_hex_fill.tga", bg = MEDIA .. "pip_hex_bg.tga", edge = MEDIA .. "pip_hex_edge.tga" },
-}
-
-local POWER_SHAPES = {
-    ROUND = { fill = MEDIA .. "power_round_fill.tga", bg = MEDIA .. "power_round_bg.tga", edge = MEDIA .. "power_round_edge.tga" },
-    CRYSTAL = { fill = MEDIA .. "power_crystal_fill.tga", bg = MEDIA .. "power_crystal_bg.tga", edge = MEDIA .. "power_crystal_edge.tga" },
-    ORB = { fill = MEDIA .. "pip_circle_fill.tga", bg = MEDIA .. "pip_circle_bg.tga", edge = MEDIA .. "pip_circle_edge.tga", axis = "VERTICAL" },
-}
-
-local HP_TEXT_REVERSE = {
-    CURMAX = "MAXCUR",
-    MAXCUR = "CURMAX",
-    CURPERCENT = "PERCENTCUR",
-    PERCENTCUR = "CURPERCENT",
-    MAXPERCENT = "PERCENTMAX",
-    PERCENTMAX = "MAXPERCENT",
-    CURMAXPERCENT = "PERCENTCURMAX",
-    PERCENTCURMAX = "CURMAXPERCENT",
-    PERCENTMAXCUR = "CURMAXPERCENT",
-}
-
-local DELIMITERS = {
-    [""] = " ",
-    ["-"] = " - ",
-    ["/"] = " / ",
-    ["\\"] = " \\ ",
-    ["|"] = " | ",
-    ["<"] = " < ",
-    [">"] = " > ",
-    ["~"] = " ~ ",
-    [":"] = " : ",
-}
-
+local HP_TEXT_REVERSE = { CURMAX = "MAXCUR", MAXCUR = "CURMAX", CURPERCENT = "PERCENTCUR", PERCENTCUR = "CURPERCENT", MAXPERCENT = "PERCENTMAX", PERCENTMAX = "MAXPERCENT", CURMAXPERCENT = "PERCENTCURMAX", PERCENTCURMAX = "CURMAXPERCENT", PERCENTMAXCUR = "CURMAXPERCENT" }
+local DELIMITERS = { [""] = " ", ["-"] = " - ", ["/"] = " / ", ["\\"] = " \\ ", ["|"] = " | ", ["<"] = " < ", [">"] = " > ", ["~"] = " ~ ", [":"] = " : " }
 local function TR(text)
     return (M.Tr and M.Tr(text)) or text
 end
-
 local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
     if not (box and box.summary and box.summary.SetText) then return end
     local parts = {}
@@ -84,7 +45,6 @@ local function SetPreviewSummary(box, classFrame, powerFrame, hpFrame)
         box.summary:SetText(TR("Shown here: ") .. table.concat(parts, " + "))
     end
 end
-
 if Helpers.InstallZoomPan and not ZoomPan._msufCPPreviewInstalled then
     ZoomPan._msufCPPreviewInstalled = true
     Helpers.InstallZoomPan(ZoomPan, {
@@ -103,7 +63,6 @@ if Helpers.InstallZoomPan and not ZoomPan._msufCPPreviewInstalled then
         end,
     })
 end
-
 local CP_PREVIEW_LAYERS = {
     { key = "guides", label = "Guides", color = { 0.42, 0.72, 1.00 }, tooltip = "Mover handles and selected borders." },
     { key = "border", label = "Border", color = PREVIEW_BORDER_COLOR, tooltip = "Actual HP, Power and Class Resource outlines." },
@@ -116,18 +75,15 @@ local CP_PREVIEW_LAYERS = {
     { key = "hpText", label = "HP Text", color = { 0.25, 0.90, 0.42 }, tooltip = "Extra player HP text." },
     { key = "bounds", label = "Bounds", color = { 1.00, 0.22, 0.12 }, tooltip = "Preview-only bounds around visible elements." },
 }
-
 local function Round(value)
     return floor((tonumber(value) or 0) + 0.5)
 end
-
 local function Clamp(value, fallback, minValue, maxValue)
     value = tonumber(value) or fallback
     if value < minValue then return minValue end
     if value > maxValue then return maxValue end
     return value
 end
-
 local function Alpha(value, fallback)
     value = tonumber(value)
     if value == nil then value = fallback end
@@ -137,31 +93,26 @@ local function Alpha(value, fallback)
     if value > 1 then return 1 end
     return value
 end
-
 local function EnsureDB()
     if type(M.EnsureDB) == "function" then return M.EnsureDB() end
     _G.MSUF_DB = _G.MSUF_DB or {}
     return _G.MSUF_DB
 end
-
 local function Bars()
     local db = EnsureDB()
     db.bars = db.bars or {}
     return db.bars
 end
-
 local function Player()
     local db = EnsureDB()
     db.player = db.player or {}
     return db.player
 end
-
 local function General()
     local db = EnsureDB()
     db.general = db.general or {}
     return db.general
 end
-
 local function SetShownSafe(region, shown)
     if not region then return end
     if region.SetShown then
@@ -172,23 +123,17 @@ local function SetShownSafe(region, shown)
         region:Hide()
     end
 end
-
 local function PreviewParent(preview)
     return preview and (preview.stage or preview.canvas)
 end
-
 local function PreviewGuidesEnabled()
     local general = General()
-    if general.classPowerPreviewGuidesEnabled ~= nil then
-        return general.classPowerPreviewGuidesEnabled ~= false
-    end
+    if general.classPowerPreviewGuidesEnabled ~= nil then return general.classPowerPreviewGuidesEnabled ~= false end
     return true
 end
-
 local function SetPreviewGuidesEnabled(enabled)
     General().classPowerPreviewGuidesEnabled = enabled ~= false
 end
-
 local function LayerOn(preview, key)
     if not preview then return false end
     local available = preview.layerAvailable
@@ -197,11 +142,9 @@ local function LayerOn(preview, key)
     if visible and visible[key] == false then return false end
     return true
 end
-
 local function GuidesOn(preview)
     return LayerOn(preview, "guides")
 end
-
 local function RefreshLayerButtons(preview)
     local buttons = preview and preview.layerButtons
     if not buttons then return end
@@ -209,46 +152,23 @@ local function RefreshLayerButtons(preview)
         if buttons[i].Refresh then buttons[i]:Refresh() end
     end
 end
-
-local function NormalizeClassShape(value)
-    value = tostring(value or "BAR"):upper()
-    if value == "CIRCLE" or value == "DIAMOND" or value == "HEX" then return value end
-    return "BAR"
-end
-
 local function NormalizeAlign(value)
     value = tostring(value or "CENTER"):upper()
     if value == "LEFT" or value == "RIGHT" then return value end
     return "CENTER"
 end
-
-local function ResolvePowerShape(value, classShape)
-    value = tostring(value or "BAR"):upper()
-    if value == "ROUND" or value == "CRYSTAL" or value == "ORB" or value == "BAR" then return value end
-    if value == "FOLLOW_CLASS" then
-        classShape = NormalizeClassShape(classShape)
-        if classShape == "CIRCLE" then return "ROUND" end
-        if classShape == "DIAMOND" or classShape == "HEX" then return "CRYSTAL" end
-    end
-    return "BAR"
-end
-
 local function ResolveHPShape(bars, player)
     local value = tostring(bars and bars.playerHPBarShape or "BAR"):upper()
-    if value ~= "FOLLOW_POWER" then
-        return ResolvePowerShape(value, bars and bars.classPowerShape)
-    end
+    if value ~= "FOLLOW_POWER" then return ResolvePowerShape(value, bars and bars.classPowerShape) end
     if not (player and player.powerBarDetached == true) then return "BAR" end
     return ResolvePowerShape(player.detachedPowerBarShape or "FOLLOW_CLASS", bars and bars.classPowerShape)
 end
-
 local function ShapeOutlineAlpha(value)
     value = tonumber(value) or 0
     if value <= 0 then return 0 end
     if value >= 8 then return 1 end
     return 0.49 + (value * 0.065)
 end
-
 local function AutoFitPips(segCount, height, gap)
     segCount = floor(tonumber(segCount) or 1)
     if segCount < 1 then segCount = 1 elseif segCount > 10 then segCount = 10 end
@@ -258,15 +178,12 @@ local function AutoFitPips(segCount, height, gap)
     if gap < 0 then gap = 0 elseif gap > 8 then gap = 8 end
     return (segCount * height) + ((segCount - 1) * gap)
 end
-
 local function AnimationEnabled(preview)
     return preview and preview._animationEnabled == true
 end
-
 local function PreviewElapsed(preview)
     return tonumber(preview and preview._animationElapsed) or 0
 end
-
 local function AnimatedMeterFraction(preview, fallback, speed, low, high)
     if not AnimationEnabled(preview) then return fallback end
     speed = tonumber(speed) or 0.42
@@ -276,12 +193,10 @@ local function AnimatedMeterFraction(preview, fallback, speed, low, high)
     local wave = phase <= 1 and phase or (2 - phase)
     return low + (wave * (high - low))
 end
-
 local function PreviewOutline(preview, value, fallback)
     if not LayerOn(preview, "border") then return 0 end
     return Clamp(value, fallback or 0, 0, 8)
 end
-
 local function ResolveTexture(key, fallback)
     if CPPreview.ResolveTexture then return CPPreview.ResolveTexture(key, fallback) end
     if key and key ~= "" and type(_G.MSUF_ResolveStatusbarTextureKey) == "function" then
@@ -295,23 +210,7 @@ local function ResolveTexture(key, fallback)
     end
     return WHITE8
 end
-
-local PREVIEW_CLASS_BY_PREFIX = {
-    deathknight = "DEATHKNIGHT",
-    demonhunter = "DEMONHUNTER",
-    druid = "DRUID",
-    evoker = "EVOKER",
-    hunter = "HUNTER",
-    mage = "MAGE",
-    monk = "MONK",
-    paladin = "PALADIN",
-    priest = "PRIEST",
-    rogue = "ROGUE",
-    shaman = "SHAMAN",
-    warlock = "WARLOCK",
-    warrior = "WARRIOR",
-}
-
+local PREVIEW_CLASS_BY_PREFIX = { deathknight = "DEATHKNIGHT", demonhunter = "DEMONHUNTER", druid = "DRUID", evoker = "EVOKER", hunter = "HUNTER", mage = "MAGE", monk = "MONK", paladin = "PALADIN", priest = "PRIEST", rogue = "ROGUE", shaman = "SHAMAN", warlock = "WARLOCK", warrior = "WARRIOR" }
 local function PreviewClassToken(spec)
     if spec and spec.classToken then return tostring(spec.classToken):upper() end
     if spec and spec.class then return tostring(spec.class):upper() end
@@ -323,7 +222,6 @@ local function PreviewClassToken(spec)
     local prefix = key:match("^([^_]+)")
     return prefix and PREVIEW_CLASS_BY_PREFIX[prefix] or nil
 end
-
 local function ClassColor(dr, dg, db, spec)
     local class = PreviewClassToken(spec)
     if not class and UnitClass then
@@ -338,39 +236,32 @@ local function ClassColor(dr, dg, db, spec)
     if c then return c.r, c.g, c.b end
     return dr or 0.95, dg or 0.82, db or 0.10
 end
-
 local function PowerColor()
     local pbc = _G.PowerBarColor
     local c = pbc and (pbc.ENERGY or pbc.MANA)
     if c then return c.r or c[1] or 1, c.g or c[2] or 0.82, c.b or c[3] or 0.10 end
     return 1.00, 0.86, 0.12
 end
-
 local function CPToken(spec, value)
     if CPPreview.TokenForValue then return CPPreview.TokenForValue(spec, value) end
     return spec and spec.token
 end
-
 local function CPBaseColor(spec, bars, fallbackR, fallbackG, fallbackB)
     if CPPreview.ResolveBaseColor then return CPPreview.ResolveBaseColor(spec, bars, fallbackR, fallbackG, fallbackB) end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
-
 local function CPColor(token, fallbackR, fallbackG, fallbackB)
     if CPPreview.ResolveColor then return CPPreview.ResolveColor(token, fallbackR, fallbackG, fallbackB) end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
-
 local function CPTextColor(fallbackR, fallbackG, fallbackB)
     if CPPreview.ResolveTextColor then return CPPreview.ResolveTextColor(fallbackR, fallbackG, fallbackB) end
     return fallbackR or 1, fallbackG or 1, fallbackB or 1
 end
-
 local function CPBgColor(token)
     if CPPreview.ColorOverride then return CPPreview.ColorOverride("classPowerBgColorOverrides", token) end
     return nil
 end
-
 local function HPColor(bars, spec)
     local mode = tostring(bars and bars.playerHPBarColorMode or "GLOBAL"):upper()
     if mode == "DARK" then
@@ -385,7 +276,6 @@ local function HPColor(bars, spec)
     end
     return ClassColor(0.20, 0.78, 0.26, spec)
 end
-
 local function ShortValue(value)
     value = tonumber(value) or 0
     local abbrev = _G.AbbreviateShortNumber or _G.AbbreviateLargeNumbers
@@ -404,7 +294,6 @@ local function ShortValue(value)
     end
     return tostring(floor(value + 0.5))
 end
-
 local function ModeText(mode, current, maxValue, delimiter)
     mode = tostring(mode or "NONE"):upper()
     if mode == "NONE" then return "" end
@@ -433,7 +322,6 @@ local function ModeText(mode, current, maxValue, delimiter)
     if mode == "PERCENTMAXCUR" then return pctText .. delimiter .. maxText .. delimiter .. curText end
     return curText
 end
-
 local function ApplyFont(region, size)
     if not (region and region.SetFont) then return end
     size = Clamp(size, 12, 6, 48)
@@ -449,14 +337,12 @@ local function ApplyFont(region, size)
     if region.SetShadowColor then region:SetShadowColor(0, 0, 0, 1) end
     if region.SetShadowOffset then region:SetShadowOffset(1, -1) end
 end
-
 local function HideTableRegions(t)
     if not t then return end
     for i = 1, #t do
         if t[i] and t[i].Hide then t[i]:Hide() end
     end
 end
-
 local function EnsureOutlineHost(frame)
     local parent = frame and frame:GetParent()
     if not parent then return nil end
@@ -469,7 +355,6 @@ local function EnsureOutlineHost(frame)
     if host:GetParent() ~= parent then host:SetParent(parent) end
     return host
 end
-
 local function ApplyBarOutline(frame, outline)
     local host = EnsureOutlineHost(frame)
     if not (host and Helpers.LayoutEdgeLines) then return end
@@ -488,13 +373,11 @@ local function ApplyBarOutline(frame, outline)
     host:Show()
     Helpers.LayoutEdgeLines(host, outline, CP_OUTLINE_OPTS)
 end
-
 local function HideBarOutline(frame)
     local host = frame and frame._msufCPPreviewOutlineHost
     if host and Helpers.SetEdgeLinesShown then Helpers.SetEdgeLinesShown(host, false, CP_OUTLINE_OPTS) end
     if host then host:Hide() end
 end
-
 local function CallApply(handle, reason)
     local kind = handle and handle._applyKind
     if kind == "class" or kind == "classText" then
@@ -509,20 +392,14 @@ local function CallApply(handle, reason)
         if type(_G.MSUF_ClassPower_PlayerHP_Refresh) == "function" then _G.MSUF_ClassPower_PlayerHP_Refresh() end
         if kind == "hpText" and type(_G.MSUF_UpdateAllFonts_Immediate) == "function" then _G.MSUF_UpdateAllFonts_Immediate() end
     end
-    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then
-        _G.MSUF_UFPreview_RequestRefresh(reason or "CLASSPOWER_PREVIEW_MOVE")
-    end
-    if type(M.RequestGeneralApply) == "function" then
-        M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE", { preview = true, power = kind == "power" or kind == "powerText", text = kind == "powerText" or kind == "hpText", applyAll = false, notify = false })
-    end
+    if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason or "CLASSPOWER_PREVIEW_MOVE") end
+    if type(M.RequestGeneralApply) == "function" then M.RequestGeneralApply(reason or "MSUF2_CLASSPOWER_PREVIEW_MOVE", { preview = true, power = kind == "power" or kind == "powerText", text = kind == "powerText" or kind == "hpText", applyAll = false, notify = false }) end
 end
-
 local function StoreForHandle(handle)
     if not handle then return nil end
     if handle._store == "player" then return Player() end
     return Bars()
 end
-
 local function ReadHandle(handle)
     local store = StoreForHandle(handle)
     local x = store and tonumber(store[handle._xKey]) or nil
@@ -542,7 +419,6 @@ local function WriteHandle(handle, x, y, skipApply)
     if handle._preview and handle._preview.Refresh then handle._preview:Refresh("DRAG", true) end
     if not skipApply then CallApply(handle, "CLASSPOWER_PREVIEW_MOVE") end
 end
-
 local function RefreshHandleVisuals(preview)
     if not (preview and preview.handles) then return end
     local guidesOn = GuidesOn(preview)
@@ -559,12 +435,10 @@ local function RefreshHandleVisuals(preview)
         if h.SetBackdropBorderColor then h:SetBackdropBorderColor(c[1], c[2], c[3], active and 0.95 or 0.44) end
     end
 end
-
 local function IsTextInputFocused()
     local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
     return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
 end
-
 local function KeyDelta(key)
     if key == "UP" then return 0, 1 end
     if key == "DOWN" then return 0, -1 end
@@ -572,13 +446,11 @@ local function KeyDelta(key)
     if key == "RIGHT" then return 1, 0 end
     return nil, nil
 end
-
 local function NudgeStep()
     if IsControlKeyDown and IsControlKeyDown() then return 10 end
     if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
     return 1
 end
-
 local function CanNudgeHandle(handle)
     local preview = handle and handle._preview
     return handle ~= nil
@@ -586,20 +458,16 @@ local function CanNudgeHandle(handle)
         and handle._msufPlaced == true
         and LayerOn(preview, handle._layerKey or handle._key)
 end
-
 local function ShouldSkipDuplicateNudge(preview, dx, dy)
     if not preview then return false end
     local now = GetTime and GetTime() or 0
     if now <= 0 then return false end
     local sig = tostring(dx or 0) .. ":" .. tostring(dy or 0)
-    if preview._msufCPPreviewLastNudgeSig == sig and (now - (preview._msufCPPreviewLastNudgeAt or 0)) < 0.02 then
-        return true
-    end
+    if preview._msufCPPreviewLastNudgeSig == sig and (now - (preview._msufCPPreviewLastNudgeAt or 0)) < 0.02 then return true end
     preview._msufCPPreviewLastNudgeSig = sig
     preview._msufCPPreviewLastNudgeAt = now
     return false
 end
-
 local function NudgeSelectedHandle(preview, dx, dy)
     local handle = preview and preview.selectedHandle
     if not CanNudgeHandle(handle) or IsTextInputFocused() then return false end
@@ -610,7 +478,6 @@ local function NudgeSelectedHandle(preview, dx, dy)
     WriteHandle(handle, x + ndx, y + ndy, false)
     return true
 end
-
 local function FocusPreviewKeyboardTarget(preview, handle, defer)
     if not preview then return end
     handle = handle or preview.selectedHandle
@@ -632,57 +499,13 @@ local function FocusPreviewKeyboardTarget(preview, handle, defer)
         end)
     end
 end
-
-local function SetArrowBindings(preview, enabled)
-    if InCombatLockdown and InCombatLockdown() then return end
-    local owner = _G.MSUF_CPPreview_NudgeOwner
-    if owner and ClearOverrideBindings then ClearOverrideBindings(owner) end
-    if owner and owner.Hide then owner:Hide() end
-    if not enabled or not preview then
-        if _G.MSUF_CPPreview_ActiveNudgeBox == preview or preview == nil then
-            _G.MSUF_CPPreview_ActiveNudgeBox = nil
-        end
-        return
-    end
-
-    _G.MSUF_CPPreview_ActiveNudgeBox = preview
-    if not owner then
-        owner = CreateFrame("Frame", "MSUF_CPPreview_NudgeOwner", UIParent)
-        _G.MSUF_CPPreview_NudgeOwner = owner
-    end
-    owner:Show()
-
-    local dirs = {
-        LEFT = { -1, 0 },
-        RIGHT = { 1, 0 },
-        UP = { 0, 1 },
-        DOWN = { 0, -1 },
-    }
-    for dir, delta in pairs(dirs) do
-        local btnName = "MSUF_CPPreview_Nudge" .. dir
-        local btn = _G[btnName]
-        if not btn then
-            btn = CreateFrame("Button", btnName, owner, "SecureActionButtonTemplate")
-            btn:SetSize(1, 1)
-            btn:Hide()
-            btn:SetScript("OnClick", function(self)
-                local active = _G.MSUF_CPPreview_ActiveNudgeBox
-                if NudgeSelectedHandle(active, self._msufDx or 0, self._msufDy or 0) then
-                    FocusPreviewKeyboardTarget(active, active and active.selectedHandle, true)
-                end
-            end)
-        end
-        btn._msufDx, btn._msufDy = delta[1], delta[2]
-        if SetOverrideBindingClick then
-            SetOverrideBindingClick(owner, false, dir, btnName)
-            SetOverrideBindingClick(owner, false, "SHIFT-" .. dir, btnName)
-            SetOverrideBindingClick(owner, false, "CTRL-" .. dir, btnName)
-            SetOverrideBindingClick(owner, false, "CTRL-SHIFT-" .. dir, btnName)
-            SetOverrideBindingClick(owner, false, "SHIFT-CTRL-" .. dir, btnName)
-        end
-    end
+local function OnCPPreviewArrowNudge(active, dx, dy)
+    if NudgeSelectedHandle(active, dx, dy) then FocusPreviewKeyboardTarget(active, active and active.selectedHandle, true) end
 end
-
+local CP_PREVIEW_ARROW_BINDINGS = { ownerName = "MSUF_CPPreview_NudgeOwner", activeName = "MSUF_CPPreview_ActiveNudgeBox", buttonPrefix = "MSUF_CPPreview_Nudge", onClick = OnCPPreviewArrowNudge }
+local function SetArrowBindings(preview, enabled)
+    return M.SetPreviewArrowBindings(preview, enabled, CP_PREVIEW_ARROW_BINDINGS)
+end
 local function RegisterPreviewNudgeTarget(preview)
     local fn = _G.MSUF_EM2_SetPreviewNudgeTarget
     if type(fn) ~= "function" or not preview then return end
@@ -704,7 +527,6 @@ local function RegisterPreviewNudgeTarget(preview)
     }
     fn(preview._msufCPPreviewNudgeTarget)
 end
-
 local function SelectHandle(handle)
     local preview = handle and handle._preview
     if not preview then return end
@@ -714,7 +536,6 @@ local function SelectHandle(handle)
     RegisterPreviewNudgeTarget(preview)
     RefreshHandleVisuals(preview)
 end
-
 local function HandleKeyDown(handle, key)
     local preview = handle and handle._preview or handle
     local dx, dy = KeyDelta(key)
@@ -729,14 +550,10 @@ local function HandleKeyDown(handle, key)
         handle:SetPropagateKeyboardInput(true)
     end
 end
-
 local function BeginHistory(handle)
-    if M.BeginHistoryTransaction then
-        return M.BeginHistoryTransaction("Move: " .. tostring(handle and handle._label or "Class Resources preview"), "classPowerPreview:" .. tostring(handle and handle._key or "handle"))
-    end
+    if M.BeginHistoryTransaction then return M.BeginHistoryTransaction("Move: " .. tostring(handle and handle._label or "Class Resources preview"), "classPowerPreview:" .. tostring(handle and handle._key or "handle")) end
     return false
 end
-
 local function CommitHistory(handle)
     if handle and handle._historyTx and M.CommitHistoryTransaction then
         handle._historyTx = nil
@@ -745,7 +562,6 @@ local function CommitHistory(handle)
     if handle then handle._historyTx = nil end
     return false
 end
-
 local function StopHandleDrag(handle, button, skipApply)
     if button and button ~= "LeftButton" then return end
     if not (handle and handle._dragging) then return end
@@ -816,7 +632,6 @@ local function MakeHandle(preview, key, store, xKey, yKey, defaultX, defaultY, l
     h:Hide()
     return h
 end
-
 local function PlaceHandle(handle, region, pad)
     if not (handle and region and region.IsShown and region:IsShown()) then
         if handle then
@@ -833,7 +648,6 @@ local function PlaceHandle(handle, region, pad)
     handle:Show()
     return true
 end
-
 local function PlaceTextHandle(handle, parent, regions)
     if Helpers.PlaceHandleAroundRegions and Helpers.PlaceHandleAroundRegions(handle, parent, regions, 4, { fitText = true }) then
         handle._msufPlaced = true
@@ -854,7 +668,6 @@ local function PlaceTextHandle(handle, parent, regions)
     handle:Hide()
     return false
 end
-
 local function MakeText(parent, layer, justify)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY", "GameFontHighlightSmall")
     fs:SetJustifyH(justify or "CENTER")
@@ -864,7 +677,13 @@ local function MakeText(parent, layer, justify)
     if fs.SetMaxLines then fs:SetMaxLines(1) end
     return fs
 end
-
+local function MakeTexture(parent, layer, subLevel, allPoints, hidden)
+    local tex = parent:CreateTexture(nil, layer, nil, subLevel)
+    tex:SetTexture(WHITE8)
+    if allPoints then tex:SetAllPoints() end
+    if hidden then tex:Hide() end
+    return tex
+end
 local function EnsureClassPower(preview)
     if preview.classPower then return preview.classPower end
     local frame = CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate")
@@ -873,18 +692,9 @@ local function EnsureClassPower(preview)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
     frame.segments, frame.bgs, frame.edges, frame.runeTexts = {}, {}, {}, {}
     for i = 1, 10 do
-        local bg = frame:CreateTexture(nil, "BACKGROUND")
-        bg:SetTexture(WHITE8)
-        bg:Hide()
-        frame.bgs[i] = bg
-        local fill = frame:CreateTexture(nil, "ARTWORK")
-        fill:SetTexture(WHITE8)
-        fill:Hide()
-        frame.segments[i] = fill
-        local edge = frame:CreateTexture(nil, "OVERLAY", nil, 5)
-        edge:SetTexture(WHITE8)
-        edge:Hide()
-        frame.edges[i] = edge
+        frame.bgs[i] = MakeTexture(frame, "BACKGROUND", nil, nil, true)
+        frame.segments[i] = MakeTexture(frame, "ARTWORK", nil, nil, true)
+        frame.edges[i] = MakeTexture(frame, "OVERLAY", 5, nil, true)
         local runeText = MakeText(frame, "OVERLAY", "CENTER")
         runeText:Hide()
         frame.runeTexts[i] = runeText
@@ -894,28 +704,21 @@ local function EnsureClassPower(preview)
     preview.classPower = frame
     return frame
 end
-
 local function EnsureMeter(preview, name)
     if preview[name] then return preview[name] end
     local frame = CreateFrame("Frame", nil, PreviewParent(preview), "BackdropTemplate")
     frame:SetBackdrop({ bgFile = WHITE8, edgeFile = WHITE8, edgeSize = 1 })
     frame:SetBackdropColor(0, 0, 0, 0)
     frame:SetBackdropBorderColor(0, 0, 0, 0)
-    frame.bg = frame:CreateTexture(nil, "BACKGROUND")
-    frame.bg:SetAllPoints()
-    frame.bg:SetTexture(WHITE8)
-    frame.fill = frame:CreateTexture(nil, "ARTWORK")
-    frame.fill:SetTexture(WHITE8)
-    frame.edge = frame:CreateTexture(nil, "OVERLAY", nil, 7)
-    frame.edge:SetAllPoints()
-    frame.edge:Hide()
+    frame.bg = MakeTexture(frame, "BACKGROUND", nil, true)
+    frame.fill = MakeTexture(frame, "ARTWORK")
+    frame.edge = MakeTexture(frame, "OVERLAY", 7, true, true)
     frame.left = MakeText(frame, "OVERLAY", "LEFT")
     frame.center = MakeText(frame, "OVERLAY", "CENTER")
     frame.right = MakeText(frame, "OVERLAY", "RIGHT")
     preview[name] = frame
     return frame
 end
-
 local function RenderMeter(frame, shapeInfo, opts)
     opts = opts or {}
     local w = max(1, floor(tonumber(opts.width) or 1))
@@ -971,7 +774,6 @@ local function RenderMeter(frame, shapeInfo, opts)
         if frac > 0 then frame.fill:Show() else frame.fill:Hide() end
     end
 end
-
 local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth)
     local shape = CP_SHAPES[NormalizeClassShape(bars and bars.classPowerShape)]
     local width
@@ -987,7 +789,6 @@ local function ClassPowerWidth(bars, frameW, height, segCount, maxWidth)
     if maxWidth and width > maxWidth then width = maxWidth end
     return floor(width + 0.5)
 end
-
 local function SegmentCount(spec)
     local count = floor(tonumber(spec and spec.segments) or 5)
     if count < 1 then count = 1 elseif count > 10 then count = 10 end
@@ -1011,7 +812,6 @@ local function RenderClassPower(preview, bars, spec)
         preview.handleClassText:Hide()
         return nil
     end
-
     local h = Clamp(bars.classPowerHeight, 8, 2, 40)
     local count = SegmentCount(spec)
     local w = ClassPowerWidth(bars, preview.playerW, h, count, preview.canvasW - 72)
@@ -1021,7 +821,6 @@ local function RenderClassPower(preview, bars, spec)
     frame:ClearAllPoints()
     frame:SetPoint("BOTTOMLEFT", preview.playerRef, "TOPLEFT", x, y)
     frame:Show()
-
     local shape = NormalizeClassShape(bars.classPowerShape)
     local shapeInfo = CP_SHAPES[shape]
     local token = CPToken(spec)
@@ -1039,7 +838,6 @@ local function RenderClassPower(preview, bars, spec)
         if maxGap < 0 then maxGap = 0 end
         if gap > maxGap then gap = maxGap end
     end
-
     local slot, startX, rowW
     if shapeInfo then
         slot = min(h, max(1, floor((w - ((count - 1) * gap)) / count)))
@@ -1058,7 +856,6 @@ local function RenderClassPower(preview, bars, spec)
         rowW = barSpace
         ApplyBarOutline(frame, outline)
     end
-
     local xPos, prevBoundary = 0, 0
     local elapsed = PreviewElapsed(preview)
     local animated = AnimationEnabled(preview)
@@ -1085,24 +882,19 @@ local function RenderClassPower(preview, bars, spec)
             local sx = startX + xPos
             if bars.classPowerFillReverse == true then sx = w - sx - segW end
             sx = max(0, sx)
-
             bg:ClearAllPoints()
             bg:SetPoint("TOPLEFT", frame, "TOPLEFT", sx, 0)
             bg:SetSize(segW, h)
             bg:SetTexture(shapeInfo and shapeInfo.bg or bgTex)
             bg:SetVertexColor(bgr or 0, bgg or 0, bgb or 0, bgA)
             bg:Show()
-
             local sr, sg, sb = r, g, b
             if CPPreview.IsCharged and CPPreview.IsCharged(spec, bars, i) then
                 sr, sg, sb = CPColor("CHARGED", 0.60, 0.20, 0.80)
             elseif token == "COMBO_POINTS" and CPPreview.ResolveComboColor then
                 sr, sg, sb = CPPreview.ResolveComboColor(bars, i, r, g, b)
             end
-            if spec.threshold and frac > 0 and i > spec.threshold and CPPreview.ResolveColor then
-                sr, sg, sb = CPColor(spec.thresholdToken, sr, sg, sb)
-            end
-
+            if spec.threshold and frac > 0 and i > spec.threshold and CPPreview.ResolveColor then sr, sg, sb = CPColor(spec.thresholdToken, sr, sg, sb) end
             fill:ClearAllPoints()
             fill:SetTexture(shapeInfo and shapeInfo.fill or fgTex)
             fill:SetVertexColor(sr, sg, sb, rune and filledA or (frac > 0 and filledA or emptyA))
@@ -1118,7 +910,6 @@ local function RenderClassPower(preview, bars, spec)
             end
             fill:SetWidth(max(1, drawW))
             if drawW > 0 then fill:Show() else fill:Hide() end
-
             if shapeInfo and outline > 0 then
                 edge:ClearAllPoints()
                 edge:SetPoint("TOPLEFT", frame, "TOPLEFT", sx, 0)
@@ -1151,7 +942,6 @@ local function RenderClassPower(preview, bars, spec)
             if runeText then runeText:Hide() end
         end
     end
-
     if bars.classPowerShowText == true then
         local textSize = Clamp(bars.classPowerFontSize, 16, 6, 48)
         ApplyFont(frame.text, textSize)
@@ -1168,24 +958,17 @@ local function RenderClassPower(preview, bars, spec)
     PlaceHandle(preview.handleClass, frame, 5)
     return frame
 end
-
 local function DetachedPowerShown(player)
     return player.powerBarDetached == true and player.detachedPowerBarAnchorToClassPower == true
 end
-
 local function DetachedPowerWidth(preview, bars, player, classFrame)
     local shape = ResolvePowerShape(player.detachedPowerBarShape or "FOLLOW_CLASS", bars.classPowerShape)
     if shape == "ORB" then return Clamp(player.detachedPowerOrbSize, 54, 20, 160), shape end
-    if player.detachedPowerBarSyncClassPower ~= false and classFrame and classFrame.GetWidth then
-        return max(20, floor(classFrame:GetWidth() + 0.5)), shape
-    end
+    if player.detachedPowerBarSyncClassPower ~= false and classFrame and classFrame.GetWidth then return max(20, floor(classFrame:GetWidth() + 0.5)), shape end
     local widthMode = bars.detachedPowerBarWidthMode
-    if widthMode and widthMode ~= "manual" and classFrame and classFrame.GetWidth then
-        return max(20, floor(classFrame:GetWidth() + 0.5)), shape
-    end
+    if widthMode and widthMode ~= "manual" and classFrame and classFrame.GetWidth then return max(20, floor(classFrame:GetWidth() + 0.5)), shape end
     return Clamp(player.detachedPowerBarWidth, preview.playerW, 20, 800), shape
 end
-
 local function ApplyMeterText(frame, size, x, y, leftText, centerText, rightText)
     ApplyFont(frame.left, size)
     ApplyFont(frame.center, size)
@@ -1223,7 +1006,6 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
         preview.handlePowerText:Hide()
         return nil
     end
-
     local width, shape = DetachedPowerWidth(preview, bars, player, classFrame)
     local shapeInfo = POWER_SHAPES[shape]
     local height = shape == "ORB" and width or Clamp(player.detachedPowerBarHeight, 6, 2, 80)
@@ -1233,7 +1015,6 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
     local bgTex = ResolveTexture(bars.detachedPowerBarBgTexture, fgTex)
     local outline = PreviewOutline(preview, bars.detachedPowerBarOutline, 1)
     local fraction = AnimatedMeterFraction(preview, 0.72, 0.46, 0.08, 0.96)
-
     frame:ClearAllPoints()
     if classFrame and classFrame.IsShown and classFrame:IsShown() then
         frame:SetPoint("TOP", classFrame, "BOTTOM", x, y)
@@ -1256,7 +1037,6 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
         outline = outline,
     })
     frame:Show()
-
     if player.showPower ~= false and player.detachedPowerBarTextOnBar == true then
         local leftMode = tostring(player.powerTextLeft or "NONE"):upper()
         local centerMode = tostring(player.powerTextCenter or player.powerTextMode or "CURPERCENT"):upper()
@@ -1277,7 +1057,6 @@ local function RenderDetachedPower(preview, bars, player, classFrame)
     PlaceHandle(preview.handlePower, frame, 5)
     return frame
 end
-
 local function HPWidth(preview, bars, classFrame, powerFrame)
     local mode = tostring(bars.playerHPBarWidthMode or "class"):lower()
     local width
@@ -1294,7 +1073,6 @@ local function HPWidth(preview, bars, classFrame, powerFrame)
     if width < 20 then width = 20 elseif width > 1200 then width = 1200 end
     return floor(width + 0.5)
 end
-
 local function PlaceHP(frame, preview, bars, classFrame, powerFrame)
     local mode = tostring(bars.playerHPBarAnchor or "CLASS_TOP"):upper()
     local anchor = (mode == "POWER_TOP" or mode == "POWER_BOTTOM") and powerFrame or classFrame
@@ -1309,7 +1087,6 @@ local function PlaceHP(frame, preview, bars, classFrame, powerFrame)
         frame:SetPoint("BOTTOM", anchor, "TOP", x, y + gap)
     end
 end
-
 local function HPTextConfig(bars, player)
     local left, center, right, delimiter, reverse
     if bars.playerHPBarUsePlayerText ~= false then
@@ -1343,7 +1120,6 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
         preview.handleHPText:Hide()
         return nil
     end
-
     local shape = ResolveHPShape(bars, player)
     local shapeInfo = POWER_SHAPES[shape]
     local followPower = tostring(bars.playerHPBarShape or "BAR"):upper() == "FOLLOW_POWER"
@@ -1371,7 +1147,6 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
         outline = PreviewOutline(preview, bars.playerHPBarOutline, 1),
     })
     frame:Show()
-
     if bars.playerHPBarTextEnabled ~= false then
         local leftMode, centerMode, rightMode, delimiter = HPTextConfig(bars, player)
         local maxValue = 1000000
@@ -1390,7 +1165,6 @@ local function RenderPlayerHP(preview, bars, player, classFrame, powerFrame, spe
     PlaceHandle(preview.handleHP, frame, 5)
     return frame
 end
-
 local function PaintPlayerReference(preview, spec)
     local player = preview.playerRef
     local parent = PreviewParent(preview)
@@ -1403,7 +1177,6 @@ local function PaintPlayerReference(preview, spec)
     player.power:SetColorTexture(pr, pg, pb, 0.16)
     player.outline:SetBackdropBorderColor(0.55, 0.62, 0.78, 0.34)
 end
-
 local function CreatePlayerReference(preview)
     local player = CreateFrame("Frame", nil, PreviewParent(preview))
     player.health = player:CreateTexture(nil, "BACKGROUND")
@@ -1423,7 +1196,6 @@ local function CreatePlayerReference(preview)
     player.name:SetTextColor(0.60, 0.66, 0.78, 0.62)
     preview.playerRef = player
 end
-
 local function EnsureBound(preview, key, label, color)
     preview.bounds = preview.bounds or {}
     local frame = preview.bounds[key]
@@ -1445,7 +1217,6 @@ local function EnsureBound(preview, key, label, color)
     preview.bounds[key] = frame
     return frame
 end
-
 local function PlaceBound(preview, key, region, label, color, pad)
     local bound = EnsureBound(preview, key, label, color)
     if not (region and region.IsShown and region:IsShown()) then
@@ -1460,14 +1231,12 @@ local function PlaceBound(preview, key, region, label, color, pad)
     bound._msufPlaced = true
     bound:Show()
 end
-
 local function RefreshBounds(preview, classFrame, powerFrame, hpFrame)
     PlaceBound(preview, "reference", preview.playerRef, "Reference", { 0.60, 0.66, 0.78 }, 1)
     PlaceBound(preview, "class", classFrame, "Class", { 0.30, 0.78, 0.55 }, 1)
     PlaceBound(preview, "power", powerFrame, "Power", { 0.95, 0.72, 0.18 }, 1)
     PlaceBound(preview, "hp", hpFrame, "HP", { 0.25, 0.90, 0.42 }, 1)
 end
-
 local function ApplyPreviewZoom(preview)
     if not (preview and preview.stage) then return end
     local scale = tonumber(preview._manualZoom) or 1
@@ -1484,20 +1253,17 @@ local function ApplyPreviewZoom(preview)
         preview.stage:SetPoint("CENTER", preview.canvas, "CENTER", tonumber(preview._zoomPanX) or 0, tonumber(preview._zoomPanY) or 0)
     end
 end
-
 local function ApplyPreviewBorder(preview)
     if not (preview and preview.canvas and preview.canvas.SetBackdropBorderColor) then return end
     local c = preview._canvasBorderColor or { 0.10, 0.13, 0.18, 0.65 }
     preview.canvas:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
 end
-
 local function HideMeterText(frame)
     if not frame then return end
     SetShownSafe(frame.left, false)
     SetShownSafe(frame.center, false)
     SetShownSafe(frame.right, false)
 end
-
 local function ApplyLayerVisibility(preview)
     if not preview then return end
     local classOn = LayerOn(preview, "class")
@@ -1508,7 +1274,6 @@ local function ApplyLayerVisibility(preview)
     local hpTextOn = hpOn and LayerOn(preview, "hpText")
     local boundsOn = LayerOn(preview, "bounds")
     local guidesOn = GuidesOn(preview)
-
     SetShownSafe(preview.playerRef, LayerOn(preview, "reference"))
     SetShownSafe(preview.classPower, classOn)
     if not classOn then HideBarOutline(preview.classPower) end
@@ -1519,13 +1284,11 @@ local function ApplyLayerVisibility(preview)
     SetShownSafe(preview.playerHP, hpOn)
     if not hpOn then HideBarOutline(preview.playerHP) end
     if not hpTextOn then HideMeterText(preview.playerHP) end
-
     if preview.bounds then
         for _, bound in pairs(preview.bounds) do
             SetShownSafe(bound, boundsOn and bound._msufPlaced == true and LayerOn(preview, bound._layerKey))
         end
     end
-
     for i = 1, #(preview.handles or {}) do
         local handle = preview.handles[i]
         SetShownSafe(handle, guidesOn and handle._msufPlaced == true and LayerOn(preview, handle._layerKey or handle._key))
@@ -1537,12 +1300,10 @@ local function ApplyLayerVisibility(preview)
     end
     ApplyPreviewBorder(preview)
 end
-
 local function LayerAvailable(preview, key)
     local available = preview and preview.layerAvailable
     return not (available and available[key] == false)
 end
-
 local CP_LAYER_BUTTON_OPTS = {
     Tr = TR,
     IsAvailable = LayerAvailable,
@@ -1561,16 +1322,13 @@ local CP_LAYER_BUTTON_OPTS = {
         end
     end,
 }
-
 local function CreateLayerSidebar(box, sideW)
     local sidebar = T.Panel(box, nil, { 0.025, 0.028, 0.04, 0.82 }, T.colors.borderSoft)
     sidebar:SetPoint("TOPLEFT", box.canvas, "TOPRIGHT", 6, 0)
     sidebar:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -12, 12)
     box.sidebar = sidebar
-
     local hdr = T.Font(sidebar, "GameFontDisableSmall", TR("LAYERS"), { 0.45, 0.50, 0.62, 0.8 })
     hdr:SetPoint("TOP", sidebar, "TOP", 0, -5)
-
     box.layerVisibility = {}
     box.layerButtons = {}
     for i = 1, #CP_PREVIEW_LAYERS do
@@ -1579,7 +1337,6 @@ local function CreateLayerSidebar(box, sideW)
         box.layerButtons[#box.layerButtons + 1] = Helpers.CreateLayerButton(sidebar, box, def, i, sideW, CP_LAYER_BUTTON_OPTS)
     end
 end
-
 local function RefreshAnimateButton(preview)
     local btn = preview and preview.animateButton
     if not btn then return end
@@ -1598,14 +1355,12 @@ local function RefreshAnimateButton(preview)
         end
     end
 end
-
 local function StopAnimationDriver(preview)
     local driver = preview and preview.animationDriver
     if not driver then return end
     driver:SetScript("OnUpdate", nil)
     driver:Hide()
 end
-
 local function AnimationOnUpdate(driver, elapsed)
     local preview = driver and driver._preview
     if not (preview and preview._animationEnabled == true and preview.IsShown and preview:IsShown()) then
@@ -1619,7 +1374,6 @@ local function AnimationOnUpdate(driver, elapsed)
     preview._animationAccum = 0
     if preview.Refresh then preview:Refresh("CLASSPOWER_PREVIEW_ANIMATE") end
 end
-
 local function StartAnimationDriver(preview)
     if not (preview and preview._animationEnabled == true) then return end
     if not preview.animationDriver then
@@ -1630,7 +1384,6 @@ local function StartAnimationDriver(preview)
     preview.animationDriver:SetScript("OnUpdate", AnimationOnUpdate)
     preview.animationDriver:Show()
 end
-
 local function SetAnimationEnabled(preview, enabled)
     if not preview then return end
     enabled = enabled == true
@@ -1648,7 +1401,6 @@ local function SetAnimationEnabled(preview, enabled)
     end
     if preview.Refresh then preview:Refresh("CLASSPOWER_PREVIEW_ANIMATE_TOGGLE") end
 end
-
 local function CreateAnimateButton(preview)
     local btn = CreateFrame("Button", nil, preview.canvas, "BackdropTemplate")
     btn:SetSize(72, 22)
@@ -1668,23 +1420,16 @@ local function CreateAnimateButton(preview)
             self:SetBackdropColor(0.05, 0.07, 0.11, 0.98)
             self:SetBackdropBorderColor(0.28, 0.42, 0.68, 1)
         end
-        if GameTooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(TR("Animate Preview"), 1, 1, 1)
-            GameTooltip:AddLine(TR("Animates Class Resource, Player Power, and HP fill values in this preview only."), 0.82, 0.82, 0.82, true)
-            GameTooltip:Show()
-        end
     end)
     btn:SetScript("OnLeave", function(self)
-        if GameTooltip then GameTooltip:Hide() end
         RefreshAnimateButton(self._preview)
     end)
+    M.AddTooltip(btn, "Animate Preview", "Animates Class Resource, Player Power, and HP fill values in this preview only.", { hook = true })
     btn._preview = preview
     preview.animateButton = btn
     RefreshAnimateButton(preview)
     return btn
 end
-
 local function DragUpdate(frame)
     local handle = frame and frame._handle
     if not (handle and handle._dragging) then return end
@@ -1707,7 +1452,6 @@ function Preview.Create(ctx, builder)
     local width = section._msuf2Width or builder.width or ctx.width or 720
     local innerW = max(470, width - 28)
     local sideW = 80
-
     local box = T.Panel(section, nil, { 0.018, 0.022, 0.044, 0.88 }, T.colors.borderSoft)
     box:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -38)
     box:SetSize(innerW, 330)
@@ -1717,7 +1461,6 @@ function Preview.Create(ctx, builder)
     if box.EnableKeyboard then box:EnableKeyboard(true) end
     if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
     box:SetScript("OnKeyDown", HandleKeyDown)
-
     local title = T.Font(box, "GameFontNormal", TR("Class Resources Preview"), T.colors.accent)
     title:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -10)
     local hint = T.Font(box, "GameFontDisableSmall", TR("drag CP / Power / HP handles - arrows nudge selected - Ctrl+wheel zoom - right drag pans"), T.colors.muted)
@@ -1725,12 +1468,10 @@ function Preview.Create(ctx, builder)
     hint:SetPoint("RIGHT", box, "RIGHT", -12, 0)
     hint:SetJustifyH("LEFT")
     box.hint = hint
-
     box.summary = T.Font(box, "GameFontDisableSmall", "", T.colors.muted)
     box.summary:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -30)
     box.summary:SetPoint("RIGHT", box, "RIGHT", -12, 0)
     box.summary:SetJustifyH("LEFT")
-
     box.canvas = T.Panel(box, nil, { 0, 0, 0, 1 }, T.colors.borderSoft)
     box.canvas:SetPoint("TOPLEFT", box, "TOPLEFT", 12, -54)
     box.canvas:SetSize(box.canvasW, box.canvasH)
@@ -1739,12 +1480,10 @@ function Preview.Create(ctx, builder)
     box.canvas:EnableMouse(true)
     box.canvas:EnableMouseWheel(true)
     if box.canvas.SetPropagateMouseWheel then box.canvas:SetPropagateMouseWheel(true) end
-
     box.stage = CreateFrame("Frame", nil, box.canvas)
     box.stage:SetSize(box.canvasW, box.canvasH)
     box.stage:SetPoint("CENTER", box.canvas, "CENTER", 0, 0)
     box.mock = box.stage
-
     if ZoomPan.Configure then ZoomPan.Configure({ TR = TR, WHITE8 = WHITE8 }) end
     if Helpers.BuildZoomBar then
         Helpers.BuildZoomBar(box, box.canvas, {
@@ -1771,13 +1510,10 @@ function Preview.Create(ctx, builder)
     box.canvas:SetScript("OnMouseUp", function(self)
         if ZoomPan.Stop then ZoomPan.Stop(self) end
     end)
-
     CreateLayerSidebar(box, sideW)
-
     box.noResource = T.Font(box.canvas, "GameFontDisableSmall", TR("Class resource is disabled for this preview resource."), T.colors.muted)
     box.noResource:SetPoint("CENTER", box.canvas, "CENTER", 0, 28)
     box.noResource:Hide()
-
     CreatePlayerReference(box)
     box.dragFrame = CreateFrame("Frame", nil, UIParent or box.canvas)
     box.dragFrame:SetAllPoints(UIParent or box.canvas)
@@ -1788,14 +1524,12 @@ function Preview.Create(ctx, builder)
     end)
     box.dragFrame:Hide()
     box.dragUpdate = DragUpdate
-
     box.handleClass = MakeHandle(box, "classPower", "bars", "classPowerOffsetX", "classPowerOffsetY", 0, 0, "Class resource bar", { 0.30, 0.78, 0.55 }, "class", "class")
     box.handleClassText = MakeHandle(box, "classPowerText", "bars", "classPowerTextOffsetX", "classPowerTextOffsetY", 0, 0, "Class resource text", { 0.30, 0.78, 0.55 }, "classText", "classText")
     box.handlePower = MakeHandle(box, "detachedPower", "player", "detachedPowerBarOffsetX", "detachedPowerBarOffsetY", 0, -4, "Player power bar", { 0.95, 0.72, 0.18 }, "power", "power")
     box.handlePowerText = MakeHandle(box, "detachedPowerText", "player", "powerOffsetX", "powerOffsetY", -4, 4, "Player power text", { 0.95, 0.72, 0.18 }, "powerText", "powerText")
     box.handleHP = MakeHandle(box, "playerHP", "bars", "playerHPBarOffsetX", "playerHPBarOffsetY", 0, 0, "Second player HP bar", { 0.25, 0.90, 0.42 }, "hp", "hp")
     box.handleHPText = MakeHandle(box, "playerHPText", "bars", "playerHPBarTextOffsetX", "playerHPBarTextOffsetY", 0, 0, "Second player HP text", { 0.25, 0.90, 0.42 }, "hpText", "hpText")
-
     function section:Refresh()
         local bars = Bars()
         local player = Player()
@@ -1829,13 +1563,10 @@ function Preview.Create(ctx, builder)
     function box:Refresh()
         section:Refresh()
     end
-
     section:SetScript("OnHide", function()
         StopAnimationDriver(box)
         SetArrowBindings(box, false)
-        if box._msufCPPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == box._msufCPPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then
-            _G.MSUF_EM2_SetPreviewNudgeTarget(nil)
-        end
+        if box._msufCPPreviewNudgeTarget and rawget(_G, "MSUF_EM2_ActivePreviewNudgeTarget") == box._msufCPPreviewNudgeTarget and type(_G.MSUF_EM2_SetPreviewNudgeTarget) == "function" then _G.MSUF_EM2_SetPreviewNudgeTarget(nil) end
         if box.SetPropagateKeyboardInput then box:SetPropagateKeyboardInput(true) end
         if box.dragFrame then
             box.dragFrame:SetScript("OnUpdate", nil)
@@ -1846,7 +1577,6 @@ function Preview.Create(ctx, builder)
     section:SetScript("OnShow", function()
         if box._animationEnabled == true then StartAnimationDriver(box) end
     end)
-
     M._msuf2ClassPowerInlinePreview = section
     if W.AttachPinnedPreview then
         W.AttachPinnedPreview(section, box, {
@@ -1860,7 +1590,6 @@ function Preview.Create(ctx, builder)
             wrapper = ctx and ctx.wrapper,
         })
     end
-    if M.AddRefresher then M.AddRefresher(ctx, function() section:Refresh() end) end
-    section:Refresh()
+    M.TrackMethodRefresh(ctx, section, "Refresh")
     return section
 end

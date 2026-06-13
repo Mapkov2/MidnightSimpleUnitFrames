@@ -6,54 +6,45 @@
 --- theme and state APIs.
 local _, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local T = M.Theme
 local NAV = M.navItems or {}
 local SearchBridge = M.SearchBridge or {}
 local floor = math.floor
 local max = math.max
 local abs = math.abs
-
 local NAV_W = 174
 local NAV_BUTTON_H = 20
 local NAV_BUTTON_STEP = 23
-
 local UpdateSearchPlaceholder = SearchBridge.UpdateSearchPlaceholder
 local ScheduleSearchInputQuery = SearchBridge.ScheduleSearchInputQuery
 local RunSearchInputQuery = SearchBridge.RunSearchInputQuery
 local OpenSearchResults = SearchBridge.OpenSearchResults
 local OpenSearchTarget = SearchBridge.OpenSearchTarget
 local BumpSearchInputSerial = SearchBridge.BumpSearchInputSerial
-
 local function IsAdvancedNavHidden()
     local g = M.GetGeneralDB and M.GetGeneralDB()
     if type(g) ~= "table" then return true end
     return g.hideAdvancedMenu ~= false
 end
-
 local function TrimText(text)
     text = tostring(text or "")
     return (text:gsub("^%s+", ""):gsub("%s+$", ""))
 end
-
 local function ShortLabel(text, limit)
     text = TrimText(text)
     limit = tonumber(limit) or 22
     if #text <= limit then return text end
     return text:sub(1, max(1, limit - 3)) .. "..."
 end
-
 local function NormalizeNavToken(text)
     text = tostring(text or ""):lower()
     text = text:gsub("&", " and ")
     text = text:gsub("[^%w]+", "")
     return text
 end
-
 local NAV_HEADER_SPECS = {
     unitframes = { label = "Frames", aliases = { "frames", "frame", "unit frame", "unit frames", "unitframes", "unitframe" } },
     groupframes = { label = "Group Frames", aliases = { "group", "groups", "group frame", "group frames", "groupframes", "raid frames", "party frames" } },
@@ -61,7 +52,6 @@ local NAV_HEADER_SPECS = {
     globalstyle = { label = "Appearance", aliases = { "appearance", "global style", "globalstyle", "style", "global", "look" } },
     modules = { label = "Advanced", aliases = { "advanced", "module", "modules", "advanced menu" } },
 }
-
 local NAV_HEADER_ALIASES = {}
 for id, spec in pairs(NAV_HEADER_SPECS) do
     NAV_HEADER_ALIASES[NormalizeNavToken(id)] = id
@@ -70,11 +60,9 @@ for id, spec in pairs(NAV_HEADER_SPECS) do
         NAV_HEADER_ALIASES[NormalizeNavToken(spec.aliases[i])] = id
     end
 end
-
 local function CurrentNavItems()
     return type(M.navItems) == "table" and M.navItems or NAV or {}
 end
-
 local function ResolveNavHeader(section)
     local token = NormalizeNavToken(section)
     if token == "" then return nil end
@@ -84,17 +72,12 @@ local function ResolveNavHeader(section)
         local item = nav[i]
         if item and item.header then
             local id = tostring(item.id or item.header)
-            if token == NormalizeNavToken(id) or token == NormalizeNavToken(item.header) or aliasId == id then
-                return id, item.header, item
-            end
+            if token == NormalizeNavToken(id) or token == NormalizeNavToken(item.header) or aliasId == id then return id, item.header, item end
         end
     end
-    if aliasId and NAV_HEADER_SPECS[aliasId] then
-        return aliasId, NAV_HEADER_SPECS[aliasId].label, nil
-    end
+    if aliasId and NAV_HEADER_SPECS[aliasId] then return aliasId, NAV_HEADER_SPECS[aliasId].label, nil end
     return nil
 end
-
 local function ReflowNavRail()
     local nav = M.nav
     if nav and type(nav._msuf2NavReflow) == "function" then
@@ -109,19 +92,15 @@ local function ReflowNavRail()
     end
     return false
 end
-
 function M.ResolveNavHeader(section)
     return ResolveNavHeader(section)
 end
-
 function M.SetNavHeaderOpen(section, open)
     local id, label, item = ResolveNavHeader(section)
     if not id then return false, "I do not know that navigation section." end
     if type(M.EnsurePersistentMenuState) == "function" then M.EnsurePersistentMenuState() end
     M.navHeaderState = type(M.navHeaderState) == "table" and M.navHeaderState or {}
-    if M.navHeaderState[id] == nil then
-        M.navHeaderState[id] = not (item and item.defaultOpen == false)
-    end
+    if M.navHeaderState[id] == nil then M.navHeaderState[id] = not (item and item.defaultOpen == false) end
     if open == nil then
         open = not M.navHeaderState[id]
     else
@@ -131,28 +110,21 @@ function M.SetNavHeaderOpen(section, open)
     ReflowNavRail()
     return true, (open and "Opened " or "Closed ") .. tostring(label or id) .. " navigation section.", open, id, label
 end
-
 function M.SetSearchIntroSeen(seen)
     seen = seen and true or false
-    if type(M.PersistMenuStateValue) == "function" then
-        M.PersistMenuStateValue("searchIntroSeen", seen)
-    else
-        M.searchIntroSeen = seen
-    end
+    M.SetMenuStateValue("searchIntroSeen", seen)
     if seen and type(M.HideNavSearchIntro) == "function" then M.HideNavSearchIntro() end
     return true
 end
-
 local function AssistantAPI()
     return (MSUF and MSUF.Assistant) or M.Assistant
 end
-
 local function SubmitAssistantQuery(query)
     query = TrimText(query)
     if query == "" then return false end
     local A = AssistantAPI()
     if not (A and type(A.SubmitDeferred) == "function") then return false end
-    if type(M.SelectPage) == "function" and M.activeKey ~= "home" then M.SelectPage("home") end
+    if M.activeKey ~= "home" then M.CallIf(M.SelectPage, "home") end
     local result = A.SubmitDeferred(query)
     if result and result.status == "combat" then return true end
     if type(A.RequestRefreshUI) == "function" then
@@ -162,7 +134,6 @@ local function SubmitAssistantQuery(query)
     end
     return true
 end
-
 local function CreateNavButton(parent, key, label, indent)
     local btn = T.Button(parent, M.Tr(label), NAV_W - 38 - (indent or 0), NAV_BUTTON_H)
     btn:SetScript("OnClick", function() M.SelectPage(key) end)
@@ -170,12 +141,11 @@ local function CreateNavButton(parent, key, label, indent)
     btn._msuf2NavItem = true
     btn._msuf2NavIndent = indent or 0
     btn._msuf2RawLabel = label
-    if T.AttachNavIcon then T.AttachNavIcon(btn, key, (indent or 0) > 0) end
+    M.CallIf(T.AttachNavIcon, btn, key, (indent or 0) > 0)
     M.navButtons[key] = btn
-    if btn.RefreshVisual then btn:RefreshVisual() end
+    M.CallIf(btn.RefreshVisual, btn)
     return btn
 end
-
 local function ApplyNavHeaderVisual(btn, open)
     if not btn then return end
     local arrow = btn._msuf2NavArrow
@@ -188,58 +158,38 @@ local function ApplyNavHeaderVisual(btn, open)
     end
     if btn.RefreshVisual then btn:RefreshVisual() end
 end
-
 local function AttachNavHoverGrow(btn)
     if not btn or btn._msuf2NavHoverGrow then return end
     btn._msuf2NavHoverGrow = true
     if btn.SetScale then btn:SetScale(1) end
 end
-
 local function AttachHistoryTooltip(btn, getTitle, getText)
     if not btn then return end
-    btn:HookScript("OnEnter", function(self)
-        if not GameTooltip then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        local title = type(getTitle) == "function" and getTitle(self) or getTitle
-        local text = type(getText) == "function" and getText(self) or getText
-        GameTooltip:AddLine(M.Tr(title or ""), 1, 1, 1)
-        if text and text ~= "" then GameTooltip:AddLine(M.Tr(text), 0.72, 0.78, 0.92, true) end
-        GameTooltip:Show()
-    end)
-    btn:HookScript("OnLeave", function()
-        if GameTooltip then GameTooltip:Hide() end
-    end)
+    M.AddTooltip(btn, getTitle, getText, { hook = true, titleAsLine = true, bodyColor = { 0.72, 0.78, 0.92 } })
 end
 M.AttachHistoryTooltip = AttachHistoryTooltip
-
 local function HistoryTooltipText(kind)
     local s = M.GetHistoryState and M.GetHistoryState() or {}
     local label = (kind == "undo") and s.undoLabel or s.redoLabel
     local canUse = (kind == "undo") and s.canUndo or s.canRedo
     if canUse and label then
         local text = M.Format("%s\nUndo: %d   Redo: %d", ShortLabel(label, 36), tonumber(s.undoCount) or 0, tonumber(s.redoCount) or 0)
-        if kind == "undo" and s.canResetAll then
-            text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.")
-        end
+        if kind == "undo" and s.canResetAll then text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.") end
         return text
     end
     local text = M.Format("No %s action in this MSUF2 menu session.\nUndo: %d   Redo: %d",
         kind == "undo" and "undo" or "redo",
         tonumber(s.undoCount) or 0,
         tonumber(s.redoCount) or 0)
-    if kind == "undo" and s.canResetAll then
-        text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.")
-    end
+    if kind == "undo" and s.canResetAll then text = text .. "\n" .. M.Tr("Shift-click: reset all MSUF2 menu changes from this open session.") end
     return text
 end
-
 local function CreateHistoryControls(parent)
     local row = CreateFrame("Frame", nil, parent)
     local rowW = NAV_W - 38
     row:SetSize(rowW, 26)
     local buttonGap = 6
     local buttonW = floor((rowW - buttonGap) * 0.5)
-
     local function StyleHistoryButton(btn, label, texture)
         btn._msuf2SolidPill = true
         if btn._msuf2Label then
@@ -258,7 +208,6 @@ local function CreateHistoryControls(parent)
         btn._msuf2HistoryIcon = icon
         return icon
     end
-
     local undo = T.Button(row, "", buttonW, 22)
     T.SkinDangerButton(undo)
     undo._msuf2SkipHistoryCheckpoint = true
@@ -273,7 +222,6 @@ local function CreateHistoryControls(parent)
             M.Undo()
         end
     end)
-
     local redo = T.Button(row, "", buttonW, 22)
     T.SkinSuccessButton(redo)
     redo._msuf2SkipHistoryCheckpoint = true
@@ -282,9 +230,8 @@ local function CreateHistoryControls(parent)
     redo:SetPoint("LEFT", undo, "RIGHT", buttonGap, 0)
     StyleHistoryButton(redo, "Redo", T.media.historyRedo)
     redo:SetScript("OnClick", function()
-        if M.Redo then M.Redo() end
+        M.CallIf(M.Redo)
     end)
-
     AttachHistoryTooltip(undo, function()
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         return s.undoLabel and ("Undo: " .. ShortLabel(s.undoLabel, 28)) or "Undo"
@@ -293,11 +240,9 @@ local function CreateHistoryControls(parent)
         local s = M.GetHistoryState and M.GetHistoryState() or {}
         return s.redoLabel and ("Redo: " .. ShortLabel(s.redoLabel, 28)) or "Redo"
     end, function() return HistoryTooltipText("redo") end)
-
     row.undo = undo
     row.redo = redo
     M.historyControls = row
-
     function M.RefreshHistoryControls()
         local controls = M.historyControls
         if not controls then return end
@@ -326,13 +271,11 @@ local function CreateHistoryControls(parent)
             end
         end
     end
-
     M.RefreshHistoryControls()
     return row
 end
-
 local function BuildNavRail(parent)
-    if M.EnsurePersistentMenuState then M.EnsurePersistentMenuState() end
+    M.CallIf(M.EnsurePersistentMenuState)
     M.nav = parent
     M.navButtons = {}
     M.navHeaders = {}
@@ -372,46 +315,38 @@ local function BuildNavRail(parent)
     search._msuf2SearchPlaceholder = placeholder
     UpdateSearchPlaceholder(search)
     parent.searchBox = search
-
     local function HideSearchIntro()
         local intro = parent._msuf2SearchIntro
         if intro and intro.Hide then intro:Hide() end
     end
-
     local function MarkSearchIntroSeen()
         M.SetSearchIntroSeen(true)
     end
-
     local function EnsureSearchIntro()
         local intro = parent._msuf2SearchIntro
         if intro then return intro end
-
         local introBg = T.colors.glassPopup or { 0.030, 0.042, 0.085, 0.980 }
         intro = T.Panel(parent, nil, introBg, T.colors.accent)
-        if T.ApplyMaterial then T.ApplyMaterial(intro, { bg = introBg, border = T.colors.accent, glass = "popup" }) elseif T.ApplyGlass then T.ApplyGlass(intro, "popup") end
+        T.ApplySurface(intro, { bg = introBg, border = T.colors.accent, glass = "popup" })
         intro:SetPoint("TOPLEFT", search, "BOTTOMLEFT", -2, -6)
         intro:SetPoint("TOPRIGHT", search, "BOTTOMRIGHT", 2, -6)
         intro:SetHeight(96)
         intro:SetFrameLevel(search:GetFrameLevel() + 6)
         intro:EnableMouse(true)
         intro:Hide()
-
         local title = T.Font(intro, "GameFontNormalSmall", "Ask MSUF", T.colors.text)
         title:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -10)
         title:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -26, -10)
         title:SetJustifyH("LEFT")
-
         local body = T.Font(intro, "GameFontDisableSmall", "Try: \"where do I move raid frames\" or \"make text bigger\".", T.colors.muted)
         body:SetPoint("TOPLEFT", intro, "TOPLEFT", 10, -32)
         body:SetWidth(NAV_W - 36)
         body:SetWordWrap(true)
         body:SetJustifyH("LEFT")
-
         local foot = T.Font(intro, "GameFontDisableSmall", "Press Enter to ask the Assistant.", T.colors.dim)
         foot:SetPoint("BOTTOMLEFT", intro, "BOTTOMLEFT", 10, 10)
         foot:SetPoint("BOTTOMRIGHT", intro, "BOTTOMRIGHT", -10, 10)
         foot:SetJustifyH("LEFT")
-
         local close = CreateFrame("Button", nil, intro)
         close:SetSize(18, 18)
         close:SetPoint("TOPRIGHT", intro, "TOPRIGHT", -4, -4)
@@ -420,11 +355,9 @@ local function BuildNavRail(parent)
         close:SetScript("OnEnter", function() closeText:SetTextColor(1, 1, 1, 0.95) end)
         close:SetScript("OnLeave", function() T.StyleFontString(closeText, T.colors.dim, 0) end)
         close:SetScript("OnClick", HideSearchIntro)
-
         parent._msuf2SearchIntro = intro
         return intro
     end
-
     local function ShowSearchIntro()
         if M.searchIntroSeen == true then return end
         local intro = EnsureSearchIntro()
@@ -438,7 +371,6 @@ local function BuildNavRail(parent)
     end
     M.HideNavSearchIntro = HideSearchIntro
     M.ShowNavSearchIntro = ShowSearchIntro
-
     search:SetScript("OnMouseDown", function(self, button)
         if button == "LeftButton" then self:SetFocus() end
     end)
@@ -494,7 +426,6 @@ local function BuildNavRail(parent)
         BumpSearchInputSerial()
         if not AssistantAPI() then RunSearchInputQuery("", true) end
     end)
-
     local clear = CreateFrame("Button", nil, parent)
     clear:SetSize(16, 16)
     clear:SetFrameLevel(search:GetFrameLevel() + 1)
@@ -515,7 +446,6 @@ local function BuildNavRail(parent)
     search:HookScript("OnTextChanged", function(self)
         clear:SetShown(TrimText(self:GetText() or "") ~= "")
     end)
-
     local listScroll = CreateFrame("ScrollFrame", nil, parent)
     listScroll:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -34)
     listScroll:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -14, 6)
@@ -524,8 +454,7 @@ local function BuildNavRail(parent)
     listScroll:SetScrollChild(list)
     parent._msuf2NavListScroll = listScroll
     parent._msuf2NavList = list
-    if T.StyleScrollFrame then T.StyleScrollFrame(listScroll, parent) end
-
+    M.CallIf(T.StyleScrollFrame, listScroll, parent)
     local created = {}
     for i = 1, #NAV do
         local item = NAV[i]
@@ -559,9 +488,7 @@ local function BuildNavRail(parent)
             AttachNavHoverGrow(btn)
             if item.group then M.navGroupForKey[item.key] = item.group end
             created[#created + 1] = { kind = "page", group = item.group, button = btn }
-            if item.key == "profiles" then
-                created[#created + 1] = { kind = "history", frame = CreateHistoryControls(list) }
-            end
+            if item.key == "profiles" then created[#created + 1] = { kind = "history", frame = CreateHistoryControls(list) } end
         end
     end
     function parent:_msuf2NavReflow()
@@ -598,14 +525,12 @@ local function BuildNavRail(parent)
         local contentH = max(abs(y) + 8, (listScroll.GetHeight and listScroll:GetHeight()) or 1)
         list:SetSize(NAV_W - 18, contentH)
         if listScroll._msuf2RefreshScrollBar then listScroll:_msuf2RefreshScrollBar() end
-        if M.RefreshHistoryControls then M.RefreshHistoryControls() end
+        M.CallIf(M.RefreshHistoryControls)
     end
     parent:_msuf2NavReflow()
 end
-
 M.BuildNavRail = BuildNavRail
-
 function M.RefreshAdvancedNavVisibility()
     if M.nav and M.nav._msuf2NavReflow then M.nav:_msuf2NavReflow() end
-    if M.activeKey and M.UpdateNav then M.UpdateNav(M.activeKey) end
+    if M.activeKey then M.CallIf(M.UpdateNav, M.activeKey) end
 end

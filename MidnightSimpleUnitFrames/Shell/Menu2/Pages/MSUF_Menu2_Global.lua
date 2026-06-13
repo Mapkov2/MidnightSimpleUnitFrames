@@ -1,6 +1,5 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
@@ -10,104 +9,62 @@ _G.MSUF2 = M
 -- fonts/bars/castbars/misc pages. Page files should reuse these helpers for consistent state.
 local W = M.Widgets
 local T = M.Theme
-local VTR = M.ValueTextRows
-
-
+local VTP = M.ValueTextPairs
 local function Call(name, ...)
     local fn = _G[name]
     if type(fn) == "function" then return pcall(fn, ...) end
     return false
 end
-
 local function DB()
     return M.EnsureDB()
 end
-
 local function G()
     return M.GetGeneralDB()
 end
-
 local function Bars()
     local db = DB()
     db.bars = db.bars or {}
     return db.bars
 end
-
 local function Unit(key)
     local db = DB()
     db[key] = db[key] or {}
     return db[key]
 end
-
 local function ReadG(key, default)
     local value = G()[key]
     if value == nil then return default end
     return value
 end
-
 local function Targeted(opts)
     opts = opts or { preview = true }
     opts.applyAll = false
     return opts
 end
-
 local function SetG(key, value, reason, opts)
     M.SetGeneralValue(key, value, reason, Targeted(opts))
 end
-
 local function ReadGBool(key, default)
     local value = ReadG(key, default and true or false)
     return value and true or false
 end
-
 local function SetGBool(key, value, reason, opts)
     SetG(key, value and true or false, reason, opts)
 end
-
 local function ReadB(key, default)
     local value = Bars()[key]
     if value == nil then return default end
     return value
 end
-
 local function SetB(key, value, reason, opts)
     local b = Bars()
     if b[key] == value then return end
     b[key] = value
     M.RequestGeneralApply(reason or ("MSUF2_BARS_" .. tostring(key)), Targeted(opts))
 end
-
-local UNIT_SCOPE_KEYS = {
-    player = true,
-    target = true,
-    targettarget = true,
-    focustarget = true,
-    focus = true,
-    pet = true,
-    boss = true,
-}
-
-local TEXT_SCOPE_KEYS = {
-    hpTextMode = true,
-    textLeft = true,
-    textCenter = true,
-    textRight = true,
-    hpTextReverse = true,
-    hpTextSeparator = true,
-    powerTextMode = true,
-    powerTextLeft = true,
-    powerTextCenter = true,
-    powerTextRight = true,
-    powerTextSeparator = true,
-}
-
-local POWER_BAR_SCOPE_UNITS = {
-    player = true,
-    target = true,
-    focus = true,
-    boss = true,
-}
-
+local UNIT_SCOPE_KEYS = M.KeySetFromWords "player target targettarget focustarget focus pet boss"
+local TEXT_SCOPE_KEYS = M.KeySetFromWords "hpTextMode textLeft textCenter textRight hpTextReverse hpTextSeparator powerTextMode powerTextLeft powerTextCenter powerTextRight powerTextSeparator"
+local POWER_BAR_SCOPE_UNITS = M.KeySetFromWords "player target focus boss"
 local function NormalizeScopeKey(scope)
     scope = tostring(scope or "shared"):lower()
     scope = scope:gsub("%s+", "")
@@ -121,7 +78,6 @@ local function NormalizeScopeKey(scope)
     if scope == "" then return "shared" end
     return scope
 end
-
 local function ScopeDBKeys(scope)
     scope = NormalizeScopeKey(scope)
     if scope == "gf_party" then return { "gf_party" } end
@@ -129,7 +85,6 @@ local function ScopeDBKeys(scope)
     if UNIT_SCOPE_KEYS[scope] then return { scope } end
     return nil
 end
-
 local function ScopeHasOverride(scope, flag)
     local keys = ScopeDBKeys(scope)
     if not keys then return false end
@@ -140,7 +95,6 @@ local function ScopeHasOverride(scope, flag)
     end
     return false
 end
-
 local function ScopeSetOverride(scope, flag, enabled)
     local keys = ScopeDBKeys(scope)
     if not keys then return end
@@ -151,7 +105,6 @@ local function ScopeSetOverride(scope, flag, enabled)
         db[key][flag] = enabled and true or false
     end
 end
-
 local function ScopeRead(scope, flag, sharedTable, key, default)
     scope = NormalizeScopeKey(scope)
     if scope ~= "shared" and ScopeHasOverride(scope, flag) then
@@ -166,7 +119,6 @@ local function ScopeRead(scope, flag, sharedTable, key, default)
     if value == nil then return default end
     return value
 end
-
 local function ScopeWrite(scope, flag, sharedTable, key, value)
     scope = NormalizeScopeKey(scope)
     if scope == "shared" then
@@ -180,7 +132,6 @@ local function ScopeWrite(scope, flag, sharedTable, key, value)
         db[keys[i]][key] = value
     end
 end
-
 local function CurrentFontScope()
     local g = G()
     local raw = g._fontScopeKey
@@ -188,7 +139,6 @@ local function CurrentFontScope()
     if raw ~= scope then g._fontScopeKey = scope end
     return scope
 end
-
 local function CurrentBarsScope()
     local g = G()
     local raw = g.hpPowerTextSelectedKey
@@ -196,69 +146,54 @@ local function CurrentBarsScope()
     if raw ~= scope then g.hpPowerTextSelectedKey = scope end
     return scope
 end
-
 local function IsGFScope(scope)
     scope = NormalizeScopeKey(scope)
     return scope == "gf_party" or scope == "gf_raid"
 end
-
 local function IsTextScopeKey(key)
     return TEXT_SCOPE_KEYS[key] == true
 end
-
 local function BarsFlagForKey(scope, key)
-    if IsTextScopeKey(key) and not IsGFScope(scope) then
-        return "hpPowerTextOverride"
-    end
+    if IsTextScopeKey(key) and not IsGFScope(scope) then return "hpPowerTextOverride" end
     return "hlOverride"
 end
-
 local function FontScopeGet(key, default, rootKey)
     local shared = rootKey and DB() or G()
     return ScopeRead(CurrentFontScope(), "fontOverride", shared, rootKey or key, default)
 end
-
 local function FontScopeSet(key, value, reason, rootKey)
     local shared = rootKey and DB() or G()
     ScopeWrite(CurrentFontScope(), "fontOverride", shared, rootKey or key, value)
     M.RequestGeneralApply(reason or "MSUF2_FONTS_SCOPE", { preview = true, applyAll = false })
 end
-
 local function BarScopeGet(key, default)
     local scope = CurrentBarsScope()
     return ScopeRead(scope, BarsFlagForKey(scope, key), G(), key, default)
 end
-
 local function BarScopeSet(key, value, reason)
     local scope = CurrentBarsScope()
     ScopeWrite(scope, BarsFlagForKey(scope, key), G(), key, value)
     M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_VALUE", { preview = true, applyAll = false })
 end
-
 local function BarScopeGetBars(key, default)
     return ScopeRead(CurrentBarsScope(), "hlOverride", Bars(), key, default)
 end
-
 local function BarScopeSetBars(key, value, reason)
     ScopeWrite(CurrentBarsScope(), "hlOverride", Bars(), key, value)
     M.RequestGeneralApply(reason or "MSUF2_BARS_SCOPE_BAR_VALUE", { preview = true, applyAll = false })
 end
-
 local function NormalizeFontKey(key)
     local fn = _G.MSUF_NormalizeFontKey or (MSUF and MSUF.MSUF_NormalizeFontKey)
     if type(fn) == "function" then return fn(key) end
     return key
 end
-
 local function FontSelectionValue(key, path)
     key = NormalizeFontKey(key)
     local normalizePath = _G.MSUF_NormalizeFontPath
     if type(normalizePath) == "function" then
         path = normalizePath(path)
         local direct = normalizePath(key)
-        if type(direct) == "string" and direct ~= "" and direct:find("\\", 1, true) then
-            return direct
-        end
+        if type(direct) == "string" and direct ~= "" and direct:find("\\", 1, true) then return direct end
     end
     if type(path) == "string" and path ~= "" then return path end
     if type(key) == "string" and key ~= "" then
@@ -270,7 +205,6 @@ local function FontSelectionValue(key, path)
     end
     return key
 end
-
 local function FontValues(includeGlobalDefault)
     local out, used = {}, {}
     if includeGlobalDefault then
@@ -312,7 +246,6 @@ local function FontValues(includeGlobalDefault)
     end
     return out
 end
-
 local function ClearUFFontKeyOverrides()
     local db = DB()
     for key in pairs(UNIT_SCOPE_KEYS) do
@@ -322,48 +255,29 @@ local function ClearUFFontKeyOverrides()
         if type(db[key]) == "table" then db[key].fontKey = nil end
     end
 end
-
 local function FontKeyGet()
     return FontSelectionValue(ReadG("fontKey", "FRIZQT"))
 end
-
 local function FontKeySet(value)
     value = FontSelectionValue(value)
     G().fontKey = value or FontSelectionValue("FRIZQT", "Fonts\\FRIZQT___CYR.TTF")
     ClearUFFontKeyOverrides()
 end
-
 local TextureValues = M.StatusBarTextureItems
-local GLOBAL_SCOPE_VALUES = VTR [[
-shared=Shared
-player=Player
-target=Target
-targettarget=ToT
-focustarget=Focus Target
-focus=Focus
-pet=Pet
-boss=Boss
-gf_party=Party
-gf_raid=Raid
-]]
-
+local GLOBAL_SCOPE_VALUES = VTP "shared=Shared|player=Player|target=Target|targettarget=ToT|focustarget=Focus Target|focus=Focus|pet=Pet|boss=Boss|gf_party=Party|gf_raid=Raid"
 local function CurrentPowerBarScopeUnit()
     local key = CurrentBarsScope()
     return POWER_BAR_SCOPE_UNITS[key] and key or nil
 end
-
 local function ScopeOverrideLabels(values, hasOverride)
     local active = {}
     if type(values) ~= "table" or type(hasOverride) ~= "function" then return active end
     for i = 1, #values do
         local item = values[i]
-        if item.value ~= "shared" and hasOverride(item.value) then
-            active[#active + 1] = M.Tr(item.text or "")
-        end
+        if item.value ~= "shared" and hasOverride(item.value) then active[#active + 1] = M.Tr(item.text or "") end
     end
     return active
 end
-
 local function BuildScopeOverrideSection(ctx, builder, opts)
     if not (W and T and ctx and builder and type(opts) == "table") then return nil end
     local values = opts.values or GLOBAL_SCOPE_VALUES
@@ -379,22 +293,19 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
     local hintY = overrideY - 34
     local scope = builder:Section("", math.max(opts.minHeight or 128, math.abs(hintY) + (opts.heightPad or 42)))
     if scope.title then scope.title:Hide() end
-
     local segment = W.ScopeOverrideBar(ctx, scope, scopeOpts)
     local override = W.ToggleAt(scope, opts.toggleLabel or "Use custom settings for this scope", 14, overrideY, opts.toggleWidth or 260)
-    M.BindToggle(ctx, override, opts.getOverride or function()
+    M.BindBoolWidget(ctx, override, opts.getOverride or function()
         local current = scopeOpts.getValue and scopeOpts.getValue()
         return current ~= "shared" and opts.hasOverride and opts.hasOverride(current)
     end, opts.setOverride or M.Noop)
-
     local overrideInfo = W.Text(scope, "", 14, overrideY, ctx.width - 130, T.colors.text)
     local reset = T.Button(scope, opts.resetLabel or "Reset", opts.resetWidth or 76, 22)
     reset:SetPoint("TOPRIGHT", scope, "TOPRIGHT", -14, overrideY + 8)
     T.CenterButtonLabel(reset)
     if type(opts.reset) == "function" then reset:SetScript("OnClick", opts.reset) end
-
     local hint = W.Text(scope, opts.hint or "", 14, hintY, ctx.width - 28, T.colors.muted)
-    M.AddRefresher(ctx, function()
+    M.TrackRefresh(ctx, function()
         local current = scopeOpts.getValue and scopeOpts.getValue() or "shared"
         local active = (type(opts.activeLabels) == "function" and opts.activeLabels()) or ScopeOverrideLabels(values, opts.hasOverride)
         local shared = current == "shared"
@@ -418,7 +329,6 @@ local function BuildScopeOverrideSection(ctx, builder, opts)
         hintY = hintY,
     }
 end
-
 local function SmoothPowerGet()
     local key = CurrentPowerBarScopeUnit()
     if key then
@@ -429,7 +339,6 @@ local function SmoothPowerGet()
     end
     return ReadB("smoothPowerBar", true) ~= false
 end
-
 local function SmoothPowerSet(enabled, reason)
     enabled = enabled and true or false
     local key = CurrentPowerBarScopeUnit()
@@ -440,21 +349,17 @@ local function SmoothPowerSet(enabled, reason)
     end
     SetB("smoothPowerBar", enabled, reason or "MSUF2_BARS_SMOOTH_POWER", { preview = true })
 end
-
 local NormalizeHpMode = M.NormalizeHpMode
 local NormalizePowerMode = M.NormalizePowerMode
-
 local ApplyBars
-
 local GRADIENT_DIR_KEYS = {
     RIGHT = "gradientDirRight",
     LEFT = "gradientDirLeft",
     UP = "gradientDirUp",
     DOWN = "gradientDirDown",
 }
-
 local PRIORITY_SINGLE = { "dispel", "aggro", "purge", "bossTarget" }
-local DISPEL_TYPE_PRIORITY_ALLOWED = { magic = true, curse = true, disease = true, poison = true, bleed = true }
+local DISPEL_TYPE_PRIORITY_ALLOWED = M.KeySetFromWords "magic curse disease poison bleed"
 local PRIORITY_LABELS = {
     dispel = "Dispel",
     aggro = "Aggro",
@@ -502,32 +407,24 @@ local PRIORITY_KEY_ALIAS = {
     bosstarget = "bossTarget",
     BOSS_TARGET = "bossTarget",
 }
-
 local function NormalizePriorityKey(key)
     if type(key) ~= "string" then return nil end
     return PRIORITY_KEY_ALIAS[key] or key
 end
-
 local function PriorityDefaults()
     return PRIORITY_SINGLE
 end
-
 local function PriorityAllowed(defaults)
     local allowed = {}
     for i = 1, #defaults do allowed[defaults[i]] = true end
     return allowed
 end
-
 local function PriorityOrder()
     local defaults = PriorityDefaults()
     local allowed = PriorityAllowed(defaults)
     local raw = BarScopeGet("hlPrioOrder", nil)
-    if type(raw) ~= "table" then
-        raw = BarScopeGet("highlightPrioOrder", nil)
-    end
-    if type(raw) ~= "table" and CurrentBarsScope() == "shared" then
-        raw = G().highlightPrioOrder
-    end
+    if type(raw) ~= "table" then raw = BarScopeGet("highlightPrioOrder", nil) end
+    if type(raw) ~= "table" and CurrentBarsScope() == "shared" then raw = G().highlightPrioOrder end
     local order = {}
     if type(raw) == "table" then
         local rawUsed = {}
@@ -549,7 +446,6 @@ local function PriorityOrder()
     while #order > #defaults do order[#order] = nil end
     return order
 end
-
 local function PriorityColor(key)
     local fallback = PRIORITY_COLORS[key] or { 1, 1, 1 }
     local r, g, b = fallback[1], fallback[2], fallback[3]
@@ -568,35 +464,20 @@ local function PriorityColor(key)
     end
     return tonumber(r) or fallback[1], tonumber(g) or fallback[2], tonumber(b) or fallback[3]
 end
-
 local function SetPriorityOrder(order)
     BarScopeSet("hlPrioOrder", order, "MSUF2_HIGHLIGHT_PRIORITY_ORDER")
-    if CurrentBarsScope() == "shared" then
-        G().highlightPrioOrder = order
-    end
+    if CurrentBarsScope() == "shared" then G().highlightPrioOrder = order end
 end
-
 local function RefreshBorderTestModes()
-    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then
-        return
-    end
+    if _G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown()) then return end
     local scope = CurrentBarsScope()
     if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" or scope == "gf_mythicraid" then scope = "raid" end
-    if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then
-        _G.MSUF_SetDispelBorderTestMode(true, scope)
-    end
-    if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then
-        _G.MSUF_SetAggroBorderTestMode(true, scope)
-    end
-    if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then
-        _G.MSUF_SetPurgeBorderTestMode(true, scope)
-    end
+    if _G.MSUF_DispelBorderTestMode and type(_G.MSUF_SetDispelBorderTestMode) == "function" then _G.MSUF_SetDispelBorderTestMode(true, scope) end
+    if _G.MSUF_AggroBorderTestMode and type(_G.MSUF_SetAggroBorderTestMode) == "function" then _G.MSUF_SetAggroBorderTestMode(true, scope) end
+    if _G.MSUF_PurgeBorderTestMode and type(_G.MSUF_SetPurgeBorderTestMode) == "function" then _G.MSUF_SetPurgeBorderTestMode(true, scope) end
 end
-
 local function SetAbsorbTextureTest(enabled)
-    if enabled and (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then
-        enabled = false
-    end
+    if enabled and (_G.MSUF_InCombat or (_G.InCombatLockdown and _G.InCombatLockdown())) then enabled = false end
     local scope = CurrentBarsScope()
     if scope == "gf_party" then scope = "party" elseif scope == "gf_raid" or scope == "gf_mythicraid" then scope = "raid" end
     if type(_G.MSUF_SetAbsorbTextureTestMode) == "function" then
@@ -611,7 +492,6 @@ local function SetAbsorbTextureTest(enabled)
         ApplyBars("MSUF2_ABSORB_TEST")
     end
 end
-
 local function ClearAbsorbTextureTest()
     local wasEnabled = _G.MSUF_AbsorbTextureTestMode and true or false
     if type(_G.MSUF_ClearAbsorbTextureTestMode) == "function" then
@@ -628,10 +508,8 @@ local function ClearAbsorbTextureTest()
         end
     end
 end
-
 local SetControlEnabled = W.SetControlEnabled
 local SetControlsEnabled = W.SetControlsEnabled
-
 local function ApplyFonts(reason)
     M.RequestGeneralApply(reason or "MSUF2_FONTS", { preview = true, applyAll = false })
     Call("MSUF_UpdateAllFonts_Immediate")
@@ -644,7 +522,6 @@ local function ApplyFonts(reason)
         if type(gf.MarkAllDirty) == "function" then pcall(gf.MarkAllDirty, (gf.DIRTY_FONT or 4) + (gf.DIRTY_LAYOUT or 32)) end
     end
 end
-
 function ApplyBars(reason)
     M.RequestGeneralApply(reason or "MSUF2_BARS", { preview = true, applyAll = false })
     Call("MSUF_UpdateAllBarTextures_Immediate")
@@ -658,13 +535,11 @@ function ApplyBars(reason)
         if type(gf.MarkAllDirty) == "function" then pcall(gf.MarkAllDirty, (gf.DIRTY_VISUAL or 2) + (gf.DIRTY_LAYOUT or 32)) end
     end
 end
-
 local function ApplyCastbars(reason)
     M.RequestGeneralApply(reason or "MSUF2_CASTBARS", { castbar = true, preview = true, applyAll = false })
     Call("MSUF_UpdateCastbarVisuals")
     Call("MSUF_UpdateCastbarTextures_Immediate")
 end
-
 local GlobalPage = M.GlobalPage or {}
 M.GlobalPage = GlobalPage
 M.Assign(GlobalPage, {

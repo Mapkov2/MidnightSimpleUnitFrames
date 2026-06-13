@@ -5,13 +5,10 @@
 --- owns only the visual treatment and icon state.
 local _, MSUF = ...
 MSUF = MSUF or {}
-
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
 _G.MSUF2 = M
-
 local T = M.Theme
-
 local function PaintWindowControlButton(btn, hover, down)
     if not btn then return end
     local fill = btn._msuf2ControlFill
@@ -48,14 +45,9 @@ local function PaintWindowControlButton(btn, hover, down)
             end
         end
     end
-    if btn._msuf2ControlText then
-        btn._msuf2ControlText:SetTextColor(r, g, b, lineAlpha)
-    end
-    if btn._msuf2ControlTextShadow then
-        btn._msuf2ControlTextShadow:SetTextColor(0.015, 0.020, 0.045, 0.72 * alpha)
-    end
+    if btn._msuf2ControlText then btn._msuf2ControlText:SetTextColor(r, g, b, lineAlpha) end
+    if btn._msuf2ControlTextShadow then btn._msuf2ControlTextShadow:SetTextColor(0.015, 0.020, 0.045, 0.72 * alpha) end
 end
-
 local function SetWindowControlIcon(btn, kind)
     if not btn then return end
     btn._msuf2ControlKind = kind
@@ -65,7 +57,6 @@ local function SetWindowControlIcon(btn, kind)
     end
     if btn._msuf2ControlText then btn._msuf2ControlText:Hide() end
     if btn._msuf2ControlTextShadow then btn._msuf2ControlTextShadow:Hide() end
-
     local function Line(index, w, h, x, y, shadow, customAlpha)
         local line = btn._msuf2ControlLines[index]
         if not line then
@@ -84,14 +75,12 @@ local function SetWindowControlIcon(btn, kind)
         line:Show()
         return line
     end
-
     if kind == "minimize" then
         if not btn._msuf2ControlText then
             local shadow = btn:CreateFontString(nil, "ARTWORK", "GameFontHighlightLarge")
             shadow:SetText("\226\128\147")
             shadow:SetPoint("CENTER", btn, "CENTER", 1, -3)
             btn._msuf2ControlTextShadow = shadow
-
             local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
             text:SetText("\226\128\147")
             text:SetPoint("CENTER", btn, "CENTER", 0, -2)
@@ -114,7 +103,6 @@ local function SetWindowControlIcon(btn, kind)
     end
     PaintWindowControlButton(btn, btn._msuf2ControlHover, btn._msuf2ControlDown)
 end
-
 local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText)
     local btn = CreateFrame("Button", nil, parent)
     btn:SetSize(24, 24)
@@ -149,14 +137,10 @@ local function CreateWindowControlButton(parent, kind, tooltipTitle, tooltipText
     SetWindowControlIcon(btn, kind)
     return btn
 end
-
 local function RefreshWindowControls(frame)
     frame = frame or M.frame
     if not frame then return end
-    if frame.maximizeButton and frame.maximizeButton.SetWindowControlIcon then
-        frame.maximizeButton:SetWindowControlIcon(frame._msuf2WindowState == "maximized" and "restore" or "maximize")
-    end
+    if frame.maximizeButton and frame.maximizeButton.SetWindowControlIcon then frame.maximizeButton:SetWindowControlIcon(frame._msuf2WindowState == "maximized" and "restore" or "maximize") end
 end
-
 M.CreateWindowControlButton = CreateWindowControlButton
 M.RefreshWindowControls = RefreshWindowControls
