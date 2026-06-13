@@ -136,7 +136,58 @@ local function BuildVisibility(frame, spec)
   return table.concat(rules, "; ")
 end
 
+local RegisterUnitWatch = _G.RegisterUnitWatch
+local UnregisterUnitWatch = _G.UnregisterUnitWatch
+
+-- A frame with no load conditions resolves to "[@unit,exists] show; hide",
+-- which is exactly what RegisterUnitWatch does natively -- and far cheaper.
+-- Stacking a RegisterStateDriver("visibility") on top makes the secure
+-- macro-conditional engine re-evaluate that expression on state changes
+-- (including target changes for @target-relative frames). That secure
+-- evaluation is billed to MSUF and was the per-click profiler spike that no
+-- Lua probe could see (oUF/UUF use RegisterUnitWatch alone for this case).
+-- So: only install the state driver when there is REAL conditional work;
+-- otherwise hand visibility to RegisterUnitWatch like UUF does.
+local function VisibilityNeedsDriver(spec)
+  local load = spec and spec.load
+  if load and load.active == true then
+    return true
+  end
+  if load and load.hideInInstance == true then
+    return true
+  end
+  return false
+end
+
 local function RegisterVisibility(frame, spec)
+  -- Existence-only visibility: use the lightweight unit watch, never a secure
+  -- state driver. Tear down any driver left from a previous conditional config.
+  if not VisibilityNeedsDriver(spec) and not ShouldForcePreview(frame) and RegisterUnitWatch then
+    if InCombatLockdown and InCombatLockdown() then
+      -- Combat: don't touch secure registration. If a driver is currently
+      -- installed we must defer the swap-out; otherwise the unit watch from
+      -- spawn already covers us and there is nothing to do.
+      if frame._msufVisibilityExpr ~= nil then
+        UF.MarkDirty(frame.unit)
+        if UF.Factory and UF.Factory.EnsureDeferredDriver then
+          UF.Factory.EnsureDeferredDriver()
+        end
+        return false
+      end
+    elseif frame._msufVisibilityExpr ~= nil then
+      if UnregisterStateDriver then
+        UnregisterStateDriver(frame, "visibility")
+      end
+      frame._msufVisibilityExpr = nil
+    end
+    if frame._msufUnitWatched ~= true then
+      RegisterUnitWatch(frame)
+      frame._msufUnitWatched = true
+    end
+    frame._msufVisibilityManaged = nil
+    return true
+  end
+
   local visibility = BuildVisibility(frame, spec)
   frame._msufVisibilityManaged = true
   if RegisterStateDriver then
@@ -147,6 +198,12 @@ local function RegisterVisibility(frame, spec)
           UF.Factory.EnsureDeferredDriver()
         end
         return false
+      end
+      -- Swapping from unit-watch to driver: the watch and the driver both
+      -- manage visibility, so drop the watch first to avoid double control.
+      if frame._msufUnitWatched == true and UnregisterUnitWatch then
+        UnregisterUnitWatch(frame)
+        frame._msufUnitWatched = nil
       end
       RegisterStateDriver(frame, "visibility", visibility)
       frame._msufVisibilityExpr = visibility
