@@ -10,8 +10,6 @@ local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
-local Registry = A.Registry or { settings = {}, settingsByKey = {}, actions = {}, actionsByKey = {}, todos = {} }
-A.Registry = Registry
 A.Workflow = A.Workflow or {}
 
 local C = A.RegistryCore
@@ -20,6 +18,7 @@ if type(C) ~= "table" then return end
 -- Auras registry domain.
 -- Maps assistant phrases onto Auras3 unit/group settings and filter toggles. The registry
 -- writes saved config only; aura scanning, pooling, and visual refresh stay in Auras3.
+-- C.Registry is the single shared registry table (A.Registry === A.RegistryCore.Registry).
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
 local UNIT_ALIASES = C.UNIT_ALIASES
@@ -31,8 +30,6 @@ local EnsureAuraFallbackDB = C.EnsureAuraFallbackDB
 local AuraRuntimeUnit = C.AuraRuntimeUnit
 local AuraSharedBool = C.AuraSharedBool
 local SetAuraSharedBool = C.SetAuraSharedBool
-local AuraUnitEnabled = C.AuraUnitEnabled
-local SetAuraUnitEnabled = C.SetAuraUnitEnabled
 local AuraLaneMaxKey = C.AuraLaneMaxKey
 local AuraLaneSizeKey = C.AuraLaneSizeKey
 local AuraLaneXKey = C.AuraLaneXKey
@@ -43,8 +40,6 @@ local AuraReadNumber = C.AuraReadNumber
 local AuraWriteNumber = C.AuraWriteNumber
 local AuraReadLanePerRow = C.AuraReadLanePerRow
 local AuraWriteLanePerRow = C.AuraWriteLanePerRow
-local AuraReadLaneGrowth = C.AuraReadLaneGrowth
-local AuraWriteLaneGrowth = C.AuraWriteLaneGrowth
 local AuraReadStackAnchor = C.AuraReadStackAnchor
 local AuraWriteStackAnchor = C.AuraWriteStackAnchor
 local AuraLaneShown = C.AuraLaneShown
