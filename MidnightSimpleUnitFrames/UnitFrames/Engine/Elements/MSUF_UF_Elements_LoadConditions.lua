@@ -1,7 +1,12 @@
+-- UF load-condition element: applies profile visibility rules to unit frames.
+-- Protected visibility or secure state changes must stay behind combat-safe helpers.
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local UF = MSUF.UF
 if not UF then return end
@@ -268,9 +273,10 @@ function UF.RefreshVisibilityDrivers(unit)
   return UF.RefreshElements(unit, { "LoadConditions" }, "MSUF_LOAD_CONDITIONS")
 end
 
-_G.MSUF_RefreshAllUnitVisibilityDrivers = function()
+local function MSUF_RefreshAllUnitVisibilityDrivers()
   return UF.RefreshVisibilityDrivers(nil)
 end
+ExportPublic("MSUF_RefreshAllUnitVisibilityDrivers", MSUF_RefreshAllUnitVisibilityDrivers)
 
 local function SetShown(frame, shown)
   if not frame then
@@ -415,7 +421,7 @@ function UF.ApplyBossPreviewState(active, reason)
   return true
 end
 
-_G.MSUF_ApplyBossUnitframePreviewState = function(active, reason)
+local function MSUF_ApplyBossUnitframePreviewState(active, reason)
   if BossPreviewCombatLocked() then
     _G.MSUF2_BossUnitframePreviewActive = nil
     return false
@@ -423,8 +429,9 @@ _G.MSUF_ApplyBossUnitframePreviewState = function(active, reason)
   _G.MSUF2_BossUnitframePreviewActive = active == true and true or nil
   return UF.ApplyBossPreviewState(active, reason or "MSUF_BOSS_PREVIEW")
 end
+ExportPublic("MSUF_ApplyBossUnitframePreviewState", MSUF_ApplyBossUnitframePreviewState)
 
-_G.MSUF_SyncBossUnitframePreviewWithUnitEdit = function()
+local function MSUF_SyncBossUnitframePreviewWithUnitEdit()
   if BossPreviewCombatLocked() then
     return false
   end
@@ -434,3 +441,4 @@ _G.MSUF_SyncBossUnitframePreviewWithUnitEdit = function()
     or (_G.MSUF_PreviewTestMode == true and editActive)
   return UF.ApplyBossPreviewState(active, active and "MSUF_BOSS_PREVIEW_SYNC" or "MSUF_BOSS_PREVIEW_OFF")
 end
+ExportPublic("MSUF_SyncBossUnitframePreviewWithUnitEdit", MSUF_SyncBossUnitframePreviewWithUnitEdit)

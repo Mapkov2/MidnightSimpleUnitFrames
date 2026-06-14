@@ -1,7 +1,6 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 MSUF.UF = MSUF.UF or {}
 local UF = MSUF.UF
@@ -128,6 +127,8 @@ local function HiddenParent()
 end
 
 local function FlushLooseFrames()
+    -- Protected Blizzard frames cannot always be reparented while combat is
+    -- active. Queue the intended parent changes and replay them on regen.
     local parent = HiddenParent()
     for frame in next, looseFrames do
         if frame and frame.SetParent then
@@ -160,6 +161,8 @@ local function ResetParent(frame, parent)
     if parent == hidden then
         return
     end
+    -- Blizzard code may restore parents after our initial hide. Protected
+    -- frames are re-hidden after combat; unprotected frames can be moved now.
     if InCombatLockdown and InCombatLockdown() and frame.IsProtected and frame:IsProtected() then
         looseFrames[frame] = true
         EnsureWatcher():RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -194,6 +197,8 @@ local function KeepBlizzardCastbar(frame)
     frame.MSUF_BackendAllowShown = true
     frame.showCastbar = true
     if InCombatLockdown and InCombatLockdown() and frame.IsProtected and frame:IsProtected() then
+        -- Player castbar can be intentionally handed back to Blizzard. Delay
+        -- the parent restore if the castbar is protected during combat.
         visibleFrames[frame] = true
         EnsureWatcher():RegisterEvent("PLAYER_REGEN_ENABLED")
         return
@@ -234,6 +239,8 @@ local function HandleFrame(frame, doNotReparent, unit)
             frame:SetParent(parent)
         end
         if not hookedFrames[frame] then
+            -- Hook SetParent once so later Blizzard layout refreshes cannot
+            -- silently pull hidden frames back onto UIParent.
             hooksecurefunc(frame, "SetParent", ResetParent)
             hookedFrames[frame] = true
         end

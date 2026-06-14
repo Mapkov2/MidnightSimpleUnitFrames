@@ -7,7 +7,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
 
 local GF = MSUF.GF or {}
@@ -870,7 +869,11 @@ function GF.SetupHeader(key, kind)
   if (attrChanged or countChanged) and header.SetAttribute and not InCombat() then
     header:SetAttribute("_msufLayoutNonce", (header:GetAttribute("_msufLayoutNonce") or 0) + 1)
   end
-  if GF.ScheduleScan and (newHeader or attrChanged or reused or GF._forceScanHeaders == true) then
+  -- Attribute writes on a hidden header only update the secure layout recipe.
+  -- Scanning children is needed for new/reused headers, explicit roster forces,
+  -- or when a visible header was hide/show cycled and may have retargeted children.
+  local needsChildScan = newHeader or reused or GF._forceScanHeaders == true or wasHiddenForLayout == true
+  if GF.ScheduleScan and needsChildScan then
     GF.ScheduleScan(key, kind)
   end
   return header

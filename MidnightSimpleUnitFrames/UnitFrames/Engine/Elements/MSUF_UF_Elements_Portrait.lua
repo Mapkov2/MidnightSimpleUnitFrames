@@ -1,7 +1,6 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF

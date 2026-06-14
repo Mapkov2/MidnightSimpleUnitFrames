@@ -8,10 +8,17 @@
 --- aborted parsing of the rest of the file on non-Druid characters (meaning
 --- any trailing code added after this block would silently vanish).
 do
+    local _, MSUF = ...
+    MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+    local ExportPublic = MSUF.ExportPublic or function(name, value)
+        _G[name] = value
+        return value
+    end
+
     local balanceBuilders = _G.MSUF_CP_FEATURE_BUILDERS
     if type(balanceBuilders) ~= "table" then
         balanceBuilders = {}
-        _G.MSUF_CP_FEATURE_BUILDERS = balanceBuilders
+        ExportPublic("MSUF_CP_FEATURE_BUILDERS", balanceBuilders)
     end
 
     --- Class gate: Balance-specific runtime setup only applies to Druids.
@@ -376,14 +383,14 @@ end)
 
 _refreshActiveState()
 
-_G.MSUF_BAL_RefreshRuntime = _refreshActiveState
+ExportPublic("MSUF_BAL_RefreshRuntime", _refreshActiveState)
 
-_G.MSUF_BAL_InvalidateColors = function()
+ExportPublic("MSUF_BAL_InvalidateColors", function()
     _refreshConfig()
     if not _active then return end
     _refreshEclipses()
     _applyEclipseColor()
     if _castSpell then _updateOverlay() end
-end
+end)
 
 end --- close do-block started at Balance module header (Druid class gate)

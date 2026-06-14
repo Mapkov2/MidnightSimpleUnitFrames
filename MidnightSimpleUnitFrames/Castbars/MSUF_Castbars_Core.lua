@@ -6,6 +6,11 @@
 --- feature logic in the newer readable modules when possible, and use this file
 --- mainly to preserve old globals and bridge profile/media settings.
 
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+_G[name] = value
+return value
+end
+
 local e,a=...local e=a.Cache and a.Cache.F or{}local e,n,t,S=type,tonumber,ipairs,pairs local t=string.format local m=math.floor
 local i=(a and a.LSM)or _G.MSUF_LSM or(LibStub and LibStub("LibSharedMedia-3.0",true))local l=_G.MSUF_FONT_LIST
 local function c(o,n,r,t)local a=a and a.Util
@@ -35,7 +40,7 @@ end if _G.MSUF_UpdateBossCastbarPreview then
 _G.MSUF_UpdateBossCastbarPreview()end
 if _G.MSUF_SetupBossCastbarPreviewEditMode then _G.MSUF_SetupBossCastbarPreviewEditMode()end end
 MSUF_BossTestMode=MSUF_BossTestMode or false local t
-_G.MSUF_CastbarUnitInfo=_G.MSUF_CastbarUnitInfo or{player={label="Player Castbar",prefix="castbarPlayer",defaultX=0,defaultY=5,showTimeKey="showPlayerCastTime",isBoss=false},target={label="Target Castbar",prefix="castbarTarget",defaultX=65,defaultY=-15,showTimeKey="showTargetCastTime",isBoss=false},focus={label="Focus Castbar",prefix="castbarFocus",defaultX=65,defaultY=-15,showTimeKey="showFocusCastTime",isBoss=false},boss={label="Boss Castbar",prefix=nil,defaultX=0,defaultY=0,showTimeKey="showBossCastTime",isBoss=true},}function MSUF_GetCastbarUnitInfo(t)local e=_G.MSUF_CastbarUnitInfo
+ExportPublic("MSUF_CastbarUnitInfo", _G.MSUF_CastbarUnitInfo or{player={label="Player Castbar",prefix="castbarPlayer",defaultX=0,defaultY=5,showTimeKey="showPlayerCastTime",isBoss=false},target={label="Target Castbar",prefix="castbarTarget",defaultX=65,defaultY=-15,showTimeKey="showTargetCastTime",isBoss=false},focus={label="Focus Castbar",prefix="castbarFocus",defaultX=65,defaultY=-15,showTimeKey="showFocusCastTime",isBoss=false},boss={label="Boss Castbar",prefix=nil,defaultX=0,defaultY=0,showTimeKey="showBossCastTime",isBoss=true},})function MSUF_GetCastbarUnitInfo(t)local e=_G.MSUF_CastbarUnitInfo
 return e and e[t]or nil end
 function MSUF_IsBossCastbarUnit(e)local e=MSUF_GetCastbarUnitInfo(e)return(e and e.isBoss)and true or false end
 function MSUF_GetCastbarPrefix(e)local e=MSUF_GetCastbarUnitInfo(e)return e and e.prefix or nil end
@@ -85,7 +90,7 @@ end function MSUF_GetGlobalFontSettings()if a and a.MSUF_GetGlobalFontSettings t
 end function MSUF_GetCastbarTexture()if not MSUF_DB then MSUF_EnsureDB()end local t=(MSUF_DB and MSUF_DB.general)or nil
 local l=t and t.castbarTexture or nil local o=t and t.barTexture or nil
 local a=_G.MSUF_CastbarTextureCache if not a then
-a={}_G.MSUF_CastbarTextureCache=a
+a={}ExportPublic("MSUF_CastbarTextureCache", a)
 end local i=(l or"").."|"..(o or"")local t=a[i]if t~=nil then
 return t end
 local function n(t)if e(t)~="string"or t==""then
@@ -108,22 +113,22 @@ local e,t=n(l)local t=t
 if not e then local a,n=n(o)e=a t=t and n
 end e=e or"Interface\\TARGETINGFRAME\\UI-StatusBar"if t then a[i]=e
 end return e
-end _G.MSUF_GetCastbarTexture=MSUF_GetCastbarTexture
-_G.MSUF_GetCastbarTexture=MSUF_GetCastbarTexture function MSUF_GetCastbarBackgroundTexture()if not MSUF_DB then MSUF_EnsureDB()end local t=MSUF_DB and MSUF_DB.general
+end ExportPublic("MSUF_GetCastbarTexture", MSUF_GetCastbarTexture)
+function MSUF_GetCastbarBackgroundTexture()if not MSUF_DB then MSUF_EnsureDB()end local t=MSUF_DB and MSUF_DB.general
 local n=t and t.castbarBackgroundTexture or nil local a=t and t.castbarTexture or nil
 local r=t and t.barTexture or nil local t=n
 if t==nil or t==""then t=a
 end if t==nil or t==""then
 t=r end
 local n=_G.MSUF_CastbarBackgroundTextureCache if not n then
-n={}_G.MSUF_CastbarBackgroundTextureCache=n
+n={}ExportPublic("MSUF_CastbarBackgroundTextureCache", n)
 end local r=t or""local a=n[r]if a then
 return a end
 local a if e(MSUF_ResolveStatusbarTextureKey)=="function"then
 a=MSUF_ResolveStatusbarTextureKey(t)end
 if not a or a==""then a="Interface\\TARGETINGFRAME\\UI-StatusBar"end n[r]=a
 return a end
-_G.MSUF_GetCastbarBackgroundTexture=MSUF_GetCastbarBackgroundTexture _G.MSUF_GetCastbarBackgroundTexture=MSUF_GetCastbarBackgroundTexture
+ExportPublic("MSUF_GetCastbarBackgroundTexture", MSUF_GetCastbarBackgroundTexture)
 local function T(e)local t=MSUF_DB and MSUF_DB.general
 if not(e and e.unit and t)then return true end local e=e.unit
 local e=(e=="player"and"showPlayerCastTime")or(e=="target"and"showTargetCastTime")or(e=="focus"and"showFocusCastTime")return(not e)and true or c(nil,t,e,true)end function MSUF_GetCastbarReverseFill(r)if not MSUF_DB then MSUF_EnsureDB()end local t=MSUF_DB and MSUF_DB.general
@@ -131,7 +136,7 @@ local e=t and t.castbarFillDirection or"RTL"local o=t and t.castbarUnifiedDirect
 if e=="LEFT"then e="RTL"elseif e=="RIGHT"then e="LTR"end if e~="RTL"and e~="LTR"then
 e="RTL"end
 local t=_G.MSUF_CastbarReverseFillCache if not t then
-t={}_G.MSUF_CastbarReverseFillCache=t
+t={}ExportPublic("MSUF_CastbarReverseFillCache", t)
 end local a=(e=="RTL"and 4 or 0)+(o and 2 or 0)+(r and 1 or 0)local n=t[a]if n~=nil then
 return n end
 local n=(e=="RTL")local e
@@ -141,8 +146,8 @@ e=not n else
 e=n end
 end t[a]=e and true or false
 return t[a]end
-if not _G.MSUF_CastbarStyleRevision then _G.MSUF_CastbarStyleRevision=1
-end function MSUF_BumpCastbarStyleRevision()local e=_G.MSUF_CastbarStyleRevision or 1 _G.MSUF_CastbarStyleRevision=e+1
+if not _G.MSUF_CastbarStyleRevision then ExportPublic("MSUF_CastbarStyleRevision", 1)
+end function MSUF_BumpCastbarStyleRevision()local e=_G.MSUF_CastbarStyleRevision or 1 ExportPublic("MSUF_CastbarStyleRevision", e+1)
 return _G.MSUF_CastbarStyleRevision end
 function MSUF_GetGlobalCastbarStyleCache()local t=_G.MSUF_CastbarStyleRevision or 1
 local e=_G.MSUF_GlobalCastbarStyleCache if e and e.rev==t then
@@ -152,7 +157,7 @@ if not MSUF_DB then MSUF_EnsureDB()end local t=(MSUF_DB and MSUF_DB.general)or{}
 local a=MSUF_GetCastbarBackgroundTexture()if not a or a==""then
 a=t end
 e.bgTexture=a e.reverseFillNormal=MSUF_GetCastbarReverseFill(false)and true or false
-e.reverseFillChanneled=MSUF_GetCastbarReverseFill(true)and true or false _G.MSUF_GlobalCastbarStyleCache=e
+e.reverseFillChanneled=MSUF_GetCastbarReverseFill(true)and true or false ExportPublic("MSUF_GlobalCastbarStyleCache", e)
 return e end
 function MSUF_RefreshCastbarStyleCache(e)if not e then return end
 local a=_G.MSUF_CastbarStyleRevision or 1 if e.MSUF_castbarStyleRev==a then
@@ -164,7 +169,7 @@ local function l(t,a)MSUF_RefreshCastbarStyleCache(t)local e if t then
 if a then e=(t.MSUF_cachedReverseFillChanneled==true)else e=(t.MSUF_cachedReverseFillNormal==true)end else
 e=MSUF_GetCastbarReverseFill(a)or false end
 return e and true or false end
-_G.MSUF_GetCastbarReverseFillForFrame=l local function o(e)e(MSUF_PlayerCastbar)e(MSUF_TargetCastbar)e(MSUF_FocusCastbar)e(MSUF_PlayerCastbarPreview)e(MSUF_TargetCastbarPreview)e(MSUF_FocusCastbarPreview)end function MSUF_UpdateCastbarTextures()MSUF_BumpCastbarStyleRevision()local r=_G.MSUF_CastbarStyleRevision or 1
+ExportPublic("MSUF_GetCastbarReverseFillForFrame", l) local function o(e)e(MSUF_PlayerCastbar)e(MSUF_TargetCastbar)e(MSUF_FocusCastbar)e(MSUF_PlayerCastbarPreview)e(MSUF_TargetCastbarPreview)e(MSUF_FocusCastbarPreview)end function MSUF_UpdateCastbarTextures()MSUF_BumpCastbarStyleRevision()local r=_G.MSUF_CastbarStyleRevision or 1
 local t=MSUF_GetCastbarTexture()if not t then return end
 local a=t local n=MSUF_GetCastbarBackgroundTexture()if n and n~=""then a=n
 end local function n(e)if e and e.statusBar then e.statusBar:SetStatusBarTexture(t)local a=e.statusBar:GetStatusBarTexture()if a then a:SetHorizTile(true)end
@@ -193,7 +198,7 @@ if e then e.fgK=false
 e.fgC=nil e.bgK=false
 e.bgC=nil end
 d()end
-_G.MSUF_ClearResolvedStatusbarTextureCache=MSUF_ClearResolvedStatusbarTextureCache function MSUF_ResolveStatusbarTextureKey(t)if e(t)~="string"or t==""then return"Interface\\TargetingFrame\\UI-StatusBar"end local a=o[t]if a then return a end local a
+ExportPublic("MSUF_ClearResolvedStatusbarTextureCache", MSUF_ClearResolvedStatusbarTextureCache) function MSUF_ResolveStatusbarTextureKey(t)if e(t)~="string"or t==""then return"Interface\\TargetingFrame\\UI-StatusBar"end local a=o[t]if a then return a end local a
 local n=false local l=_G.MSUF_BUILTIN_BAR_TEXTURES
 if e(l)=="table"then local t=l[t]if e(t)=="string"and t~=""then if r(t)then
 a=t n=true
@@ -212,7 +217,7 @@ if a then if n then o[t]=a end
 return a end
 local e="Interface\\TargetingFrame\\UI-StatusBar"if n then o[t]=e end
 return e end
-_G.MSUF_ResolveStatusbarTextureKey=MSUF_ResolveStatusbarTextureKey _G.MSUF_BUILTIN_BAR_TEXTURES=_G.MSUF_BUILTIN_BAR_TEXTURES or{Blizzard="Interface\\TargetingFrame\\UI-StatusBar",Flat="Interface\\Buttons\\WHITE8x8",RaidHP="Interface\\RaidFrame\\Raid-Bar-Hp-Fill",RaidPower="Interface\\RaidFrame\\Raid-Bar-Resource-Fill",Skills="Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar",Outline="Interface\\Tooltips\\UI-Tooltip-Background",TooltipBorder="Interface\\Tooltips\\UI-Tooltip-Border",DialogBG="Interface\\DialogFrame\\UI-DialogBox-Background",Parchment="Interface\\AchievementFrame\\UI-Achievement-StatsBackground",}function MSUF_GetBarTexture()if not MSUF_DB then MSUF_EnsureDB()end
+ExportPublic("MSUF_ResolveStatusbarTextureKey", MSUF_ResolveStatusbarTextureKey) ExportPublic("MSUF_BUILTIN_BAR_TEXTURES", _G.MSUF_BUILTIN_BAR_TEXTURES or{Blizzard="Interface\\TargetingFrame\\UI-StatusBar",Flat="Interface\\Buttons\\WHITE8x8",RaidHP="Interface\\RaidFrame\\Raid-Bar-Hp-Fill",RaidPower="Interface\\RaidFrame\\Raid-Bar-Resource-Fill",Skills="Interface\\PaperDollInfoFrame\\UI-Character-Skills-Bar",Outline="Interface\\Tooltips\\UI-Tooltip-Background",TooltipBorder="Interface\\Tooltips\\UI-Tooltip-Border",DialogBG="Interface\\DialogFrame\\UI-DialogBox-Background",Parchment="Interface\\AchievementFrame\\UI-Achievement-StatsBackground",})function MSUF_GetBarTexture()if not MSUF_DB then MSUF_EnsureDB()end
 local e=(MSUF_DB and MSUF_DB.general)or nil local e=e and e.barTexture
 return MSUF_ResolveStatusbarTextureKey(e)end
 function MSUF_GetBarBackgroundTexture()if not MSUF_DB then MSUF_EnsureDB()end
@@ -292,9 +297,9 @@ end s(MSUF_PlayerCastbar)s(MSUF_TargetCastbar)s(MSUF_FocusCastbar)local t=_G.MSU
 s(MSUF_PlayerCastbarPreview)s(MSUF_TargetCastbarPreview)s(MSUF_FocusCastbarPreview)if _G.MSUF_BossCastbarPreview then
 s(_G.MSUF_BossCastbarPreview)end
 end if not t and e(_G.MSUF_UpdateBossCastbarPreview)=="function"and not _G.MSUF_BossPreviewRefreshLock then
-_G.MSUF_BossPreviewRefreshLock=true _G.MSUF_UpdateBossCastbarPreview()if _G.MSUF_SetupBossCastbarPreviewEditMode then _G.MSUF_SetupBossCastbarPreviewEditMode()end _G.MSUF_BossPreviewRefreshLock=false
+ExportPublic("MSUF_BossPreviewRefreshLock", true) _G.MSUF_UpdateBossCastbarPreview()if _G.MSUF_SetupBossCastbarPreviewEditMode then _G.MSUF_SetupBossCastbarPreviewEditMode()end ExportPublic("MSUF_BossPreviewRefreshLock", false)
 end local e=_G.MSUF_MAX_BOSS_FRAMES or 5
 for e=1,e do local e=_G["MSUF_boss"..e.."CastBar"]if e then s(e)end end
 end a.Castbars=a.Castbars or{}a.Castbars._GetFontPath=F a.Castbars._GetFontFlags=s
 a.MSUF_GetFontPath=F a.MSUF_GetFontFlags=s
-_G.MSUF_GetFontPath=F _G.MSUF_GetFontFlags=s
+ExportPublic("MSUF_GetFontPath", F) ExportPublic("MSUF_GetFontFlags", s)

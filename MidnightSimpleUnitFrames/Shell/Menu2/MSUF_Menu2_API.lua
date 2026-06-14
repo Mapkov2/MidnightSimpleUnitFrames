@@ -4,19 +4,24 @@
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local M = MSUF.MSUF2 or _G.MSUF2
 if not M then return end
-_G.MSUF2_Open = function(pageKey) M.Open(pageKey) end
-_G.MSUF2_Toggle = function(pageKey) M.Toggle(pageKey) end
-_G.MSUF_OpenStandaloneOptionsWindow = function(pageKey) M.Open(pageKey or "home") end
-_G.MSUF_ShowStandaloneOptionsWindow = function(pageKey) M.Open(pageKey or "home") end
-_G.MSUF_HideStandaloneOptionsWindow = function() M.CallIf(M.HideSlashMenuAndMinibar, M.frame) end
-_G.MSUF_OpenOptionsMenu = function() M.Open("home") end
-_G.MSUF_OpenPage = function(pageKey) return M.SelectPage(pageKey or "home") end
-_G.MSUF_SwitchMirrorPage = function(pageKey) return M.SelectPage(pageKey or "home") end
-_G.MSUF_GetCurrentMirrorPage = function() return M.activeKey or "home" end
-_G.MSUF_GetMirrorPages = function() return M.pages end
+
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
+ExportPublic("MSUF2_Open", function(pageKey) M.Open(pageKey) end)
+ExportPublic("MSUF2_Toggle", function(pageKey) M.Toggle(pageKey) end)
+ExportPublic("MSUF_OpenStandaloneOptionsWindow", function(pageKey) M.Open(pageKey or "home") end)
+ExportPublic("MSUF_ShowStandaloneOptionsWindow", function(pageKey) M.Open(pageKey or "home") end)
+ExportPublic("MSUF_HideStandaloneOptionsWindow", function() M.CallIf(M.HideSlashMenuAndMinibar, M.frame) end)
+ExportPublic("MSUF_OpenOptionsMenu", function() M.Open("home") end)
+ExportPublic("MSUF_OpenPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
+ExportPublic("MSUF_SwitchMirrorPage", function(pageKey) return M.SelectPage(pageKey or "home") end)
+ExportPublic("MSUF_GetCurrentMirrorPage", function() return M.activeKey or "home" end)
+ExportPublic("MSUF_GetMirrorPages", function() return M.pages end)
 do
     local combatFrame
     local combatRegistered = false

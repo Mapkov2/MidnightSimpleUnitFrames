@@ -7,10 +7,17 @@
 --- BUILD, anchoring and sizing in LAYOUT, texture/font refresh in PRESENTATION,
 --- event handlers in RUNTIME, and speculative class mechanics in SPECIALS.
 
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
-    _G.MSUF_CP_CORE_BUILDERS = builders
+    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
 end
 
 --- Layout can be blocked while unit frames are protected. Queue the shared
@@ -206,7 +213,7 @@ end
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
-    _G.MSUF_CP_CORE_BUILDERS = builders
+    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
 end
 
 builders.LAYOUT = function(E)
@@ -242,7 +249,7 @@ builders.LAYOUT = function(E)
             --- combat. Mark the layout dirty and let the unit-frame anchor pass
             --- replay the requested geometry when lockdown ends.
             CP._layoutDirty = true
-            _G.MSUF_ClassPowerLayoutDirty = true
+            ExportPublic("MSUF_ClassPowerLayoutDirty", true)
             RequestUFReanchorAfterCombat()
             return
         end
@@ -349,7 +356,7 @@ builders.LAYOUT = function(E)
                 cachedCooldownAnchor = true
             else
                 CP._layoutDirty = true
-                _G.MSUF_ClassPowerLayoutDirty = true
+                ExportPublic("MSUF_ClassPowerLayoutDirty", true)
                 RequestUFReanchorAfterCombat()
                 return
             end
@@ -399,7 +406,7 @@ builders.LAYOUT = function(E)
         CP.container._msufLayoutInitialized = true
         CP.container._msufStableWidth = userW
         CP._layoutDirty = nil
-        _G.MSUF_ClassPowerLayoutDirty = nil
+        ExportPublic("MSUF_ClassPowerLayoutDirty", nil)
         if not inLockdown and layoutCache and cdmName and userW and userW >= 30 then
             layoutCache["width:" .. cdmName] = math_floor(userW + 0.5)
         end
@@ -612,7 +619,7 @@ builders.LAYOUT = function(E)
                 if sc then sc["PBEmbedLayout"] = nil end
                 if inLockdown then
                     pf._msufPowerBarLayoutDirty = true
-                    _G.MSUF_PowerBarLayoutDirty = true
+                    ExportPublic("MSUF_PowerBarLayoutDirty", true)
                     RequestUFReanchorAfterCombat()
                 else
                     _G.MSUF_ApplyPowerBarEmbedLayout(pf)
@@ -632,7 +639,7 @@ end
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
-    _G.MSUF_CP_CORE_BUILDERS = builders
+    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
 end
 
 builders.PRESENTATION = function(E)
@@ -823,7 +830,7 @@ end
 local builders = _G.MSUF_CP_FEATURE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
-    _G.MSUF_CP_FEATURE_BUILDERS = builders
+    ExportPublic("MSUF_CP_FEATURE_BUILDERS", builders)
 end
 
 builders.RUNTIME = function(env)
@@ -1077,7 +1084,7 @@ end
 local builders = _G.MSUF_CP_FEATURE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
-    _G.MSUF_CP_FEATURE_BUILDERS = builders
+    ExportPublic("MSUF_CP_FEATURE_BUILDERS", builders)
 end
 
 builders.SPECIALS = function(env)

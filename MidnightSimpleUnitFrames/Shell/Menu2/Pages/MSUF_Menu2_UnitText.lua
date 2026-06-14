@@ -1,8 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 Unit text section.
 -- Builds name/HP/power text controls and edit-mode focus hooks. Text rendering, event
@@ -28,7 +31,7 @@ local function BuildText(ctx, builder, unit)
         -- user clicked. Consume that request visually without changing any text settings.
         local req = _G.MSUF_EM2_MenuFocusRequest
         if type(req) == "table" and req.explicit == true and req.consumed ~= true and req.key == unit and (req.component == "name" or req.component == "hp" or req.component == "power") then
-            _G.MSUF_EM2_MenuFocusSection = sec
+            ExportPublic("MSUF_EM2_MenuFocusSection", sec)
             if C_Timer and C_Timer.After then
                 C_Timer.After(0, function()
                     if _G.MSUF_EM2_MenuFocusRequest ~= req or req.consumed == true then return end
@@ -104,29 +107,9 @@ local function BuildText(ctx, builder, unit)
             end
         end
     end
-    local function CurrentSlot(kind)
-        local unitSlots = M.unitTextSlotSelection[unit]
-        local slot = unitSlots and unitSlots[kind] or "center"
-        if slot ~= "left" and slot ~= "center" and slot ~= "right" then slot = "center" end
-        return slot
-    end
-    local function SetCurrentSlot(kind, slot)
-        M.unitTextSlotSelection[unit] = M.unitTextSlotSelection[unit] or {}
-        M.unitTextSlotSelection[unit][kind] = slot or "center"
-    end
-    local function SlotOffsetKeys(kind)
-        return M.TextSlotOffsetKeys(kind, CurrentSlot(kind))
-    end
-    local function MoveTogether(kind)
-        local byUnit = M.unitTextMoveTogether[unit]
-        local value = byUnit and byUnit[kind]
-        if value == nil then return true end
-        return value == true
-    end
-    local function SetMoveTogether(kind, value)
-        M.unitTextMoveTogether[unit] = M.unitTextMoveTogether[unit] or {}
-        M.unitTextMoveTogether[unit][kind] = value ~= false
-    end
+    local textSlotState = UnitSectionShared.MakeTextSlotState(M, function() return unit end, "unitTextSlotSelection", "unitTextMoveTogether")
+    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys
+    local MoveTogether, SetMoveTogether = textSlotState.MoveTogether, textSlotState.SetMoveTogether
     local function FocusPreviewText(kind, slot, active)
         local fn = _G.MSUF_UFPreview_FocusTextSlot
         if type(fn) == "function" then fn(unit, kind, slot, active == true) end
@@ -178,9 +161,7 @@ local function BuildText(ctx, builder, unit)
     end
     local tabFrames = {}
     local tabs, RefreshTextTabs
-    local function TextCard(parent, title, subtitle, x, y, width, height)
-        return W.ControlCard(parent, title, subtitle, x, y, width, height)
-    end
+    local TextCard = UnitSectionShared.TextCard
     local PlaceDropdown, PlaceSlider = UnitSectionShared.PlaceDropdown, UnitSectionShared.PlaceSlider
     local function ReadSlot(unitKey, slotKey, legacyKey, fallback)
         local value = ReadText(unitKey, slotKey, nil)
@@ -197,12 +178,7 @@ local function BuildText(ctx, builder, unit)
         return tonumber(g and g.fontSize) or 14
     end
     local function PreviewText(parent, text, x, y, width)
-        local label = W.Text(parent, "Preview", x, y, width, T.colors.accent)
-        local value = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
-        value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 20)
-        value:SetWidth(width or 220)
-        value:SetJustifyH("LEFT")
-        return label, value
+        return UnitSectionShared.PreviewText(parent, text, x, y, width, T.colors.accent)
     end
     local function SwitchOrToggle(parent, label, x, y, labelWidth)
         return W.ToggleAt(parent, label, x, y, labelWidth)
@@ -215,14 +191,7 @@ local function BuildText(ctx, builder, unit)
         end
         return tostring(value)
     end
-    local function BadgeValue(value)
-        return tostring(value or ""):gsub("%s*/%s*", " + ")
-    end
-    local function BadgeNumber(value)
-        value = tonumber(value) or 0
-        if value == floor(value) then return tostring(floor(value)) end
-        return string.format("%.1f", value)
-    end
+    local BadgeValue, BadgeNumber = UnitSectionShared.TextBadgeValue, UnitSectionShared.TextBadgeNumber
     local UpdateTextHeaderBadges
     local function RefreshTextHeader()
         if not UpdateTextHeaderBadges then
@@ -236,31 +205,22 @@ local function BuildText(ctx, builder, unit)
             ReadBool(unit, "showPower", unit ~= "pet" and unit ~= "targettarget" and unit ~= "focustarget")
         )
     end
+    local TEXT_SUMMARY_SLOTS = {
+        hp = {
+            { "right", "textRight", "hpTextMode", "CURPERCENT" },
+            { "center", "textCenter", "hpTextMode", "NONE" },
+            { "left", "textLeft", "hpTextMode", "NONE" },
+        },
+        power = {
+            { "right", "powerTextRight", "powerTextMode", "CURPERCENT" },
+            { "center", "powerTextCenter", "powerTextMode", "NONE" },
+            { "left", "powerTextLeft", "powerTextMode", "NONE" },
+        },
+    }
     local function TextSlotSummary(kind)
-        local values = kind == "power" and POWER_MODES or HP_MODES
-        local slots
-        if kind == "power" then
-            slots = {
-                { "right", "powerTextRight", "powerTextMode", "CURPERCENT" },
-                { "center", "powerTextCenter", "powerTextMode", "NONE" },
-                { "left", "powerTextLeft", "powerTextMode", "NONE" },
-            }
-        else
-            slots = {
-                { "right", "textRight", "hpTextMode", "CURPERCENT" },
-                { "center", "textCenter", "hpTextMode", "NONE" },
-                { "left", "textLeft", "hpTextMode", "NONE" },
-            }
-        end
-        for i = 1, #slots do
-            local slot = slots[i]
-            local value = ReadSlot(unit, slot[2], slot[3], slot[4])
-            if value and value ~= "NONE" then
-                local slotText = slot[1]:sub(1, 1):upper() .. slot[1]:sub(2)
-                return slotText .. ": " .. BadgeValue(OptionText(values, value))
-            end
-        end
-        return "No slot text"
+        return UnitSectionShared.TextSlotSummary(kind, TEXT_SUMMARY_SLOTS, function(slot)
+            return ReadSlot(unit, slot[2], slot[3], slot[4])
+        end, kind == "power" and POWER_MODES or HP_MODES, OptionText)
     end
     UpdateTextHeaderBadges = function(tab, nameOn, hpOn, powerOn)
         if not W.SetCollapsibleBadges then return end

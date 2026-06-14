@@ -8,7 +8,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
 
 local UF = MSUF.UF
@@ -73,7 +72,27 @@ local function BindStatusRuntime()
   UpdateRaidGroup = UpdateRaidGroup or statusRuntime.UpdateRaidGroup
   UpdateRole = UpdateRole or statusRuntime.UpdateRole
   UpdatePVP = UpdatePVP or statusRuntime.UpdatePVP
-  return UpdateStatusText ~= nil
+  return statusRuntime ~= nil
+end
+
+--- The group status dispatch table stores direct function calls for the enabled
+--- status features. Validate the exact handlers the compiled status will use so
+--- a partial runtime bind unregisters cleanly instead of nil-calling later.
+local function StatusRuntimeReady(status)
+  if not status then return false end
+  BindStatusRuntime()
+  if not statusRuntime then return false end
+  if status.runtimeRaidMarker == true and not UpdateRaidMarker then return false end
+  if status.runtimeLeaderPair == true and not UpdateLeaderPair then return false end
+  if status.role and status.role.enabled == true and not UpdateRole then return false end
+  if status.runtimeReadyCheck == true and not UpdateReadyCheck then return false end
+  if status.runtimeSummon == true and not UpdateSummon then return false end
+  if status.runtimeIncomingRes == true and not UpdateIncomingRes then return false end
+  if status.runtimePhase == true and not UpdatePhase then return false end
+  if status.runtimeRaidGroup == true and not UpdateRaidGroup then return false end
+  if status.runtimeStatusText == true and not UpdateStatusText then return false end
+  if status.runtimePVP == true and not UpdatePVP then return false end
+  return true
 end
 
 local function RunRaidMarker(frame, status)
@@ -131,6 +150,8 @@ local function StatusTextEventRelevant(cfg, event)
   return true
 end
 
+--- Unit flag APIs may return secret values in restricted contexts. Return nil
+--- instead of caching a derived key so the next unrestricted event can refresh.
 local function StatusTextFlagsKey(frame, cfg)
   local unit = frame and frame.unit
   if not IsUnitToken(unit) then return nil end
@@ -309,7 +330,7 @@ local function RunStatusRuntimeFrame(frame, event)
   if not (status and dispatch) then
     status = frame and frame.MSUFSpec and frame.MSUFSpec.status
     if not status then return end
-    if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then return end
+    if not StatusRuntimeReady(status) then return end
     dispatch = status.runtimeDispatch or CompileStatusDispatch(status)
   end
   local kind = STATUS_EVENT_KIND[event]
@@ -490,7 +511,8 @@ end
 function GroupStatusRuntime.UpdateState(frame, event)
   local status = frame and frame._msufGFStatusRuntimeStatus or (frame and frame.MSUFSpec and frame.MSUFSpec.status)
   if not (status and status.runtimeStatusText == true) then return end
-  if not UpdateStatusText and not BindStatusRuntime() then return end
+  BindStatusRuntime()
+  if not UpdateStatusText then return end
   RunStatusText(frame, status, event)
 end
 
@@ -505,7 +527,7 @@ function GroupStatusRuntime.Apply(frame)
     ClearUnitlessRegistration(frame)
     return
   end
-  if (not UpdateStatusText or not UpdateRole or (status.runtimePVP == true and not UpdatePVP)) and not BindStatusRuntime() then
+  if not StatusRuntimeReady(status) then
     ClearUnitlessRegistration(frame)
     return
   end

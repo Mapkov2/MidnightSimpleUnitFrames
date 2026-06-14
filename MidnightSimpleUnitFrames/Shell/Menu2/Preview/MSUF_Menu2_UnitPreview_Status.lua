@@ -5,7 +5,6 @@
 --- and should not call live Unit* status APIs.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
 local SYMBOL_MEDIA = MEDIA .. "Symbols\\"
 local PVP_ALLIANCE_ATLAS = "UI-HUD-UnitFrame-Player-PVP-AllianceIcon"

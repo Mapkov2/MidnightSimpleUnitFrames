@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Advanced Colors page.
 -- Binds global color palettes, class/power overrides, aura colors, and border colors. Color

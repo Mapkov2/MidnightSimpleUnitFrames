@@ -4,6 +4,11 @@
 --- - Do NOT embed large third-party libraries here.
 --- - Delegate profile import/export to MSUF_Profiles.lua (which owns profile semantics).
 local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 --- Simple Lua-table serializer (legacy fallback / debug). Keep it deterministic and safe-ish.
 local function SerializeLuaTable(tbl)
     local function ser(v, indent)
@@ -89,15 +94,15 @@ local function Proxy_ImportExternal(profileString, profileKey)
      return false, "profiles system not loaded"
 end
 --- Export globals (minimal surface).
-_G.MSUF_SerializeDB = _G.MSUF_SerializeDB or MSUF_SerializeDB
+ExportPublic("MSUF_SerializeDB", _G.MSUF_SerializeDB or MSUF_SerializeDB)
 --- IMPORTANT: If load order makes this file load before MSUF_Profiles.lua,
 --- we still want the buttons to work. So we install thin proxies.
-_G.MSUF_ExportSelectionToString = _G.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString
-_G.MSUF_ImportFromString        = _G.MSUF_ImportFromString        or Proxy_ImportFromString
-_G.MSUF_ImportLegacyFromString  = _G.MSUF_ImportLegacyFromString  or Proxy_ImportLegacyFromString
-_G.MSUF_IsUUFImportString       = _G.MSUF_IsUUFImportString       or Proxy_IsUUFImportString
-_G.MSUF_ExportExternal = _G.MSUF_ExportExternal or Proxy_ExportExternal
-_G.MSUF_ImportExternal = _G.MSUF_ImportExternal or Proxy_ImportExternal
+ExportPublic("MSUF_ExportSelectionToString", _G.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString)
+ExportPublic("MSUF_ImportFromString", _G.MSUF_ImportFromString or Proxy_ImportFromString)
+ExportPublic("MSUF_ImportLegacyFromString", _G.MSUF_ImportLegacyFromString or Proxy_ImportLegacyFromString)
+ExportPublic("MSUF_IsUUFImportString", _G.MSUF_IsUUFImportString or Proxy_IsUUFImportString)
+ExportPublic("MSUF_ExportExternal", _G.MSUF_ExportExternal or Proxy_ExportExternal)
+ExportPublic("MSUF_ImportExternal", _G.MSUF_ImportExternal or Proxy_ImportExternal)
 if type(MSUF) == "table" then
     MSUF.MSUF_SerializeDB = MSUF.MSUF_SerializeDB or MSUF_SerializeDB
     MSUF.MSUF_ExportSelectionToString = MSUF.MSUF_ExportSelectionToString or Proxy_ExportSelectionToString

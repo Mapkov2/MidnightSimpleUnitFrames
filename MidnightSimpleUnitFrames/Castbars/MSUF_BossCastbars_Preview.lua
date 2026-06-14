@@ -5,7 +5,12 @@
 --- geometry and styling. They should never subscribe to UNIT_SPELLCAST events;
 --- real boss castbars own live state.
 
-local _ = ...
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
@@ -120,7 +125,7 @@ local function CreateBossCastbarPreview(index)
     end
 
     if index == 1 then
-        _G.MSUF_BossCastbarPreview = preview
+        ExportPublic("MSUF_BossCastbarPreview", preview)
     end
 
     return preview
@@ -211,7 +216,7 @@ local function PositionBossCastbarPreview(preview, index)
     end
 end
 
-function _G.MSUF_UpdateBossCastbarPreview()
+local function UpdateBossCastbarPreview()
     if InCombat() then
         return
     end
@@ -239,8 +244,9 @@ function _G.MSUF_UpdateBossCastbarPreview()
         end
     end
 end
+ExportPublic("MSUF_UpdateBossCastbarPreview", UpdateBossCastbarPreview)
 
-_G.MSUF_HideAllBossCastbarPreviews = HideAllBossCastbarPreviews
-_G.MSUF_CreateBossCastbarPreview = CreateBossCastbarPreview
-_G.MSUF_ApplyBossCastbarPreviewLayout = ApplyBossCastbarPreviewLayout
-_G.MSUF_PositionBossCastbarPreview = PositionBossCastbarPreview
+ExportPublic("MSUF_HideAllBossCastbarPreviews", HideAllBossCastbarPreviews)
+ExportPublic("MSUF_CreateBossCastbarPreview", CreateBossCastbarPreview)
+ExportPublic("MSUF_ApplyBossCastbarPreviewLayout", ApplyBossCastbarPreviewLayout)
+ExportPublic("MSUF_PositionBossCastbarPreview", PositionBossCastbarPreview)

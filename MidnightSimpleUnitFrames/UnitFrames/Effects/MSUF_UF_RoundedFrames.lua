@@ -1,5 +1,9 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 -- Rounded bar mask/edge runtime.
 -- Adds optional mask textures and edge overlays to MSUF bars while respecting combat lockdown:
@@ -34,6 +38,8 @@ local function ResolveBaseEdgeColor(f)
 
   local fn = _G.MSUF_GetBarOutlineColor
   if type(fn) == "function" then
+    -- User skin hooks can be stale during profile swaps; keep failures local to
+    -- rounded-frame coloring instead of breaking the full UF apply pass.
     local ok, r, g, b = pcall(fn)
     if ok and type(r) == "number" and type(g) == "number" and type(b) == "number" then
       return r, g, b, BASE_BORDER_A
@@ -229,6 +235,9 @@ local function EnsureMaskForAnchor(f, maskKey, anchor, tex, maskPath)
   anchor = anchor or f
   local owner = ResolveMaskOwner(f, tex, anchor)
   if not (owner and type(owner.CreateMaskTexture) == "function") then return nil end
+  -- Masks belong to the texture's owning frame, not necessarily the unit frame.
+  -- Cache per owner/texture so detached bars and group children do not fight for
+  -- one mask object with different parents.
   local cacheKey = tex or owner
 
   local masksByOwner = f[maskKey .. "ByOwner"]
@@ -293,6 +302,8 @@ local function MaskTextureWith(f, tex, maskKey, maskedKey, anchor, maskPath)
   if type(tex.AddMaskTexture) ~= "function" then return end
 
   local masked = f[maskedKey]
+  -- Adding a first mask can allocate protected regions on secure frames. If the
+  -- texture was already masked, re-applying is safe; otherwise defer to regen.
   if IsCombatLocked() and not (masked and masked[tex]) then
     DeferApply()
     return
@@ -389,6 +400,8 @@ local function ApplyRoundedEdgeStack(owner, parent, baseEdge, anchor, thickness,
   stack[1] = baseEdge
   stack._msufCount = count
 
+  -- Edge thickness is rendered as a tiny texture stack. Reuse existing textures
+  -- whenever possible; only missing stack entries are gated by combat lockdown.
   for i = 1, count do
     local edge = (i == 1) and baseEdge or stack[i]
     if not edge then
@@ -1084,15 +1097,15 @@ local function ApplyAll()
   MSUF.__msufRoundedPending = nil
   local enabled = IsEnabled()
   if not enabled and not MSUF.__msufRoundedUF_Hooked then
-    _G.MSUF_RoundedUF_Active = nil
+    ExportPublic("MSUF_RoundedUF_Active", nil)
     return
   end
   if IsCombatLocked() then
     if enabled then DeferApply() end
     return
   end
-  _G.MSUF_RoundedUF_Active = enabled and true or nil
-  _G.MSUF_RoundedUF_MouseoverActive = (enabled and RoundedMouseoverEnabled()) and true or nil
+  ExportPublic("MSUF_RoundedUF_Active", enabled and true or nil)
+  ExportPublic("MSUF_RoundedUF_MouseoverActive", (enabled and RoundedMouseoverEnabled()) and true or nil)
   ForEachUnitFrame(function(f)
     if IsGroupFrame(f) then
       ApplyToGroupFrame(f)
@@ -1102,8 +1115,8 @@ local function ApplyAll()
   end)
   ForEachGroupFrame(ApplyToGroupFrame)
   if not enabled then
-    _G.MSUF_RoundedUF_Active = nil
-    _G.MSUF_RoundedUF_MouseoverActive = nil
+    ExportPublic("MSUF_RoundedUF_Active", nil)
+    ExportPublic("MSUF_RoundedUF_MouseoverActive", nil)
     local eventFrame = MSUF.__msufRoundedEventFrame
     if eventFrame and eventFrame.UnregisterEvent then
       eventFrame:UnregisterEvent("PLAYER_REGEN_ENABLED")
@@ -1119,41 +1132,41 @@ local function HookOnce()
   if MSUF.__msufRoundedUF_Hooked then return end
   MSUF.__msufRoundedUF_Hooked = true
 
-  _G.MSUF_RoundedUF_OnApplyAll = function()
+  ExportPublic("MSUF_RoundedUF_OnApplyAll", function()
     UpdateMouseoverEdgeColor()
     ApplyAll()
-  end
-  _G.MSUF_RoundedUF_OnGroupMouseover = function(frame, active)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnGroupMouseover", function(frame, active)
     return HandleGroupMouseover(frame, active)
-  end
-  _G.MSUF_RoundedUF_OnUnitMouseover = function(frame, active)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnUnitMouseover", function(frame, active)
     return HandleUnitMouseover(frame, active)
-  end
-  _G.MSUF_RoundedUF_OnUnitHighlightChanged = function(frame, hlKey, r, g, b, cfg)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnUnitHighlightChanged", function(frame, hlKey, r, g, b, cfg)
     return HandleUnitHighlightChanged(frame, hlKey, r, g, b, cfg)
-  end
-  _G.MSUF_RoundedUF_OnUnitDispelOverlayChanged = function(frame)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnUnitDispelOverlayChanged", function(frame)
     if not frame then return end
     if IsCombatLocked() then DeferApply(); return end
     if RoundedUnitFramesEnabled() then
       ApplyToUnitFrame(frame)
     end
-  end
-  _G.MSUF_RoundedUF_OnGroupFrameApplied = function(frame, kind)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnGroupFrameApplied", function(frame, kind)
     if IsCombatLocked() then DeferApply(); return end
     if frame then ApplyToGroupFrame(frame, kind) end
-  end
-  _G.MSUF_RoundedUF_OnGroupBackdropAlphaChanged = function(frame, kind)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnGroupBackdropAlphaChanged", function(frame, kind)
     RefreshGroupBackdropAlpha(frame, kind)
-  end
-  _G.MSUF_RoundedUF_OnGroupHighlightChanged = function(border)
+  end)
+  ExportPublic("MSUF_RoundedUF_OnGroupHighlightChanged", function(border)
     return HandleGroupHighlightChanged(border)
-  end
-  _G.MSUF_RoundedUF_OnModulesApplied = function()
+  end)
+  ExportPublic("MSUF_RoundedUF_OnModulesApplied", function()
     ApplyAll()
-  end
+  end)
   if SUPPRESS_NATIVE_OUTLINE then
-    _G.MSUF_RoundedUF_OnRareVisualsRefreshed = function(frame)
+    ExportPublic("MSUF_RoundedUF_OnRareVisualsRefreshed", function(frame)
       if frame and RoundedUnitFramesEnabled() then
         if not IsCombatLocked() then
           SuppressNativeOutlineNow(frame)
@@ -1163,7 +1176,7 @@ local function HookOnce()
         HandleUnitHighlightChanged(frame, frame._msufHighlightActiveKey or frame._msufHighlightColorKey or 0,
           frame._msufHighlightOutlineR, frame._msufHighlightOutlineG, frame._msufHighlightOutlineB)
       end
-    end
+    end)
   end
 end
 local Module = {
@@ -1251,9 +1264,10 @@ if not MSUF.__msufRoundedUF_Registered then
   end
 end
 
-_G.MSUF_ApplyRoundedUnitframes = function()
+local function ApplyRoundedUnitframes()
   forceDisabled = false
   UpdateMouseoverEdgeColor()
   if IsEnabled() then HookOnce() end
   ApplyAll()
 end
+ExportPublic("MSUF_ApplyRoundedUnitframes", ApplyRoundedUnitframes)

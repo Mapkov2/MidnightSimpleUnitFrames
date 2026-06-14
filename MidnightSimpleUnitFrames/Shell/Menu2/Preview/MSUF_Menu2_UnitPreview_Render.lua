@@ -4,7 +4,6 @@
 --- refresh path that composes the live preview visuals.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local Render = MSUF.UFPreviewRender or {}
 MSUF.UFPreviewRender = Render
 local MenuState = MSUF.MSUF2 or _G.MSUF2 or {}

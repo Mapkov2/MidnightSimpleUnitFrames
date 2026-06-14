@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 global Castbars page.
 -- Exposes shared castbar backend/visual/text/timing controls and drives a page-local preview.

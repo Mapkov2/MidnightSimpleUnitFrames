@@ -6,7 +6,6 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local Rounded = M.GroupPreviewRounded or {}
 M.GroupPreviewRounded = Rounded
 function Rounded.Install(deps)

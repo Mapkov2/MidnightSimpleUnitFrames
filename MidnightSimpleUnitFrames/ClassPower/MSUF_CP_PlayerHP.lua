@@ -8,10 +8,17 @@
 --- maintain the optional HP bar, but it must not create its own event frame or
 --- take ownership of ClassPower's refresh loop.
 
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
-    _G.MSUF_CP_CORE_BUILDERS = builders
+    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
 end
 
 --- Builds closures bound to the ClassPower controller environment. Nothing in

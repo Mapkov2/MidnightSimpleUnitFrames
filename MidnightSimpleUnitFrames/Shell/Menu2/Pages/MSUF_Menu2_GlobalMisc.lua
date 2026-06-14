@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 global Misc page.
 -- Binds tooltip provider/anchor/modifier behavior and small global UI options. Tooltip

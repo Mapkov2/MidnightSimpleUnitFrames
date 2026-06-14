@@ -8,7 +8,14 @@
 ---
 --- Hooks are installed lazily on first toggle-on; no PLAYER_LOGIN frame needed.
 
-_G.MSUF_DebugPositions = false
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
+ExportPublic("MSUF_DebugPositions", false)
 
 --- ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -17,7 +24,7 @@ local function Dbg(msg)
         DEFAULT_CHAT_FRAME:AddMessage("|cFFFF8800[MSUF-POS]|r " .. tostring(msg))
     end
 end
-_G.MSUF_DbgPos = Dbg
+ExportPublic("MSUF_DbgPos", Dbg)
 
 local function Fmt(n)
     return type(n) == "number" and string.format("%.1f", n) or tostring(n)
@@ -101,7 +108,7 @@ local function UpdateOverlay()
         end
     end
 end
-_G.MSUF_DbgPos_UpdateOverlay = UpdateOverlay
+ExportPublic("MSUF_DbgPos_UpdateOverlay", UpdateOverlay)
 
 local function CreateOverlay()
     if _overlay then
@@ -174,7 +181,7 @@ local function InstallHooks()
             Dbg("CDMBridge:MarkExternalAnchorForReanchor  " .. ECVLine())
             return _origMark(...)
         end
-        _G.MSUF_MarkExternalAnchorForReanchor = DebugMarkExternalAnchorForReanchor
+        ExportPublic("MSUF_MarkExternalAnchorForReanchor", DebugMarkExternalAnchorForReanchor)
     end
 
     --- Flush: runs out-of-combat after a reanchor was queued
@@ -184,13 +191,13 @@ local function InstallHooks()
             Dbg("CDMBridge:FlushCDMBridgeRefresh  " .. ECVLine())
             return _origFlush(...)
         end
-        _G.MSUF_FlushCDMBridgeRefresh = DebugFlushCDMBridgeRefresh
+        ExportPublic("MSUF_FlushCDMBridgeRefresh", DebugFlushCDMBridgeRefresh)
     end
 
     --- Snapshot: read resulting SetPoint data after the call
     _origSnapshot = _G.MSUF_SnapshotFrameToUIParentCenter
     if _origSnapshot then
-        _G.MSUF_SnapshotFrameToUIParentCenter = function(frame, ...)
+        local function DebugSnapshotFrameToUIParentCenter(frame, ...)
             local result = _origSnapshot(frame, ...)
             if result and frame and frame.GetPoint then
                 local _, _, _, px, py = frame:GetPoint(1)
@@ -199,6 +206,7 @@ local function InstallHooks()
             end
             return result
         end
+        ExportPublic("MSUF_SnapshotFrameToUIParentCenter", DebugSnapshotFrameToUIParentCenter)
     end
 end
 
@@ -210,15 +218,15 @@ local function RemoveHooks()
         _combatFrame:UnregisterAllEvents()
     end
 
-    if _origMark     then _G.MSUF_MarkExternalAnchorForReanchor    = _origMark     ; _origMark     = nil end
-    if _origFlush    then _G.MSUF_FlushCDMBridgeRefresh            = _origFlush    ; _origFlush    = nil end
-    if _origSnapshot then _G.MSUF_SnapshotFrameToUIParentCenter    = _origSnapshot ; _origSnapshot = nil end
+    if _origMark     then ExportPublic("MSUF_MarkExternalAnchorForReanchor", _origMark)    ; _origMark     = nil end
+    if _origFlush    then ExportPublic("MSUF_FlushCDMBridgeRefresh", _origFlush)            ; _origFlush    = nil end
+    if _origSnapshot then ExportPublic("MSUF_SnapshotFrameToUIParentCenter", _origSnapshot) ; _origSnapshot = nil end
 end
 
 --- ── toggle ───────────────────────────────────────────────────────────────────
 
-function _G.MSUF_DebugPositions_Toggle()
-    _G.MSUF_DebugPositions = not _G.MSUF_DebugPositions
+local function DebugPositionsToggle()
+    ExportPublic("MSUF_DebugPositions", not _G.MSUF_DebugPositions)
     if _G.MSUF_DebugPositions then
         InstallHooks()
         CreateOverlay()
@@ -234,6 +242,7 @@ function _G.MSUF_DebugPositions_Toggle()
         print("|cFFFF8800[MSUF]|r Position debug |cFFFF4444OFF|r")
     end
 end
+ExportPublic("MSUF_DebugPositions_Toggle", DebugPositionsToggle)
 
 SLASH_MSUFDBGPOS1 = "/msufdbgpos"
 SlashCmdList["MSUFDBGPOS"] = function()

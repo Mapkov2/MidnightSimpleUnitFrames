@@ -2,7 +2,6 @@
 --- Cold-path data specs for the MSUF2 unit frame preview.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local specs = MSUF.UFPreviewSpecs or {}
 MSUF.UFPreviewSpecs = specs
 local PipeRows = (MSUF.MSUF2 or _G.MSUF2).PipeRows

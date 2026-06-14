@@ -13,14 +13,18 @@
 --- scan split.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local A3 = MSUF.MSUF_Auras3
 if type(A3) ~= "table" then
     A3 = {}
     MSUF.MSUF_Auras3 = A3
 end
-_G.MSUF_Auras3 = A3
+
+ExportPublic("MSUF_Auras3", A3)
 
 local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
@@ -500,7 +504,7 @@ local function EnsureRootDB()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then
         db = {}
-        _G.MSUF_DB = db
+        ExportPublic("MSUF_DB", db)
     end
     if type(db.auras3) ~= "table" then db.auras3 = {} end
     local auras = db.auras3
@@ -1449,7 +1453,9 @@ end
 -- Pre-create the visible button pool for single unit frames while out of
 -- combat, so the first swap onto an aura-heavy target never pays a burst of
 -- CreateFrame calls mid-fight. Group frames keep the lazy path: their pools
--- are per-member and prewarming would multiply login cost across the raid.
+-- are per-member, so eager prewarm would multiply login/reload cost across the
+-- raid. If group creation spikes regress, fix them with a budgeted render queue
+-- instead of creating every member's buttons up front.
 local function PrewarmLaneButtons(lane, frame)
     local cfg = lane.config
     if not cfg then return end
@@ -3498,7 +3504,7 @@ function A3.RefreshUnit(unit)
     return A3.RequestUnit(unit, 0)
 end
 
-function _G.MSUF_Auras3_ApplyFontsFromGlobal()
+function A3.ApplyFontsFromGlobal()
     local frames = A3._runtimeFrames
     if not frames then return true end
     for _, frame in pairs(frames) do
@@ -3523,6 +3529,7 @@ function _G.MSUF_Auras3_ApplyFontsFromGlobal()
     end
     return true
 end
+MSUF.ExportPublic("MSUF_Auras3_ApplyFontsFromGlobal", A3.ApplyFontsFromGlobal)
 
 local AurasElement = {
     events = { "UNIT_AURA" },
@@ -3621,6 +3628,6 @@ A3.backendEnabled = true
 A3.unitFrameAuras = true
 MSUF.AuraBackendEnabled = true
 
-_G.MSUF_A3_RequestUnit = A3.RequestUnit
-_G.MSUF_Auras3_RefreshUnit = A3.RefreshUnit
-_G.MSUF_Auras3_RefreshAll = A3.RefreshAll
+MSUF.ExportPublic("MSUF_A3_RequestUnit", A3.RequestUnit)
+MSUF.ExportPublic("MSUF_Auras3_RefreshUnit", A3.RefreshUnit)
+MSUF.ExportPublic("MSUF_Auras3_RefreshAll", A3.RefreshAll)

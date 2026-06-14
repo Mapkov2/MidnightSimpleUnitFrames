@@ -1,7 +1,6 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 --- UnitFrames/Engine/Elements/MSUF_UF_Elements_Power.lua
 ---
@@ -116,6 +115,8 @@ end
 local function StorePowerMax(frame, bar, unit, maxPower, maxSecret)
   if maxSecret == nil then maxSecret = issecretvalue(maxPower) == true end
   if maxSecret then
+    -- Secret max-power values must not leak into text/runtime caches. Keep the
+    -- bar update path functional, but force future reads to ask the client again.
     bar._msufPowerMax = nil
     bar._msufPowerMaxSecret = nil
     bar._msufPowerMaxUnit = nil
@@ -169,6 +170,8 @@ local function ReadPowerMeta(frame, bar, unit, force)
   local needsType = frame and frame._msufPowerBarNeedsType == true
   local powerType, powerToken
   if needsType then
+    -- Alternate power bars need the power type token; plain power bars skip it
+    -- to avoid extra UnitPowerType calls in frequent update paths.
     powerType, powerToken = ReadPowerType(unit)
   end
   local maxPower
@@ -604,6 +607,8 @@ function Power.UpdateValuePlain(frame, event, unit)
   if issecretvalue(unit) == true or unit ~= "player" then
     return Power.UpdateValue(frame, event, unit)
   end
+  -- Player power cannot be a foreign secure unit token, so this fastpath can use
+  -- plain setters and skip secret plumbing unless the unit changes unexpectedly.
   local bar = frame.targetPowerBar
   if not bar or bar._msufShown == false or (bar._msufShown == nil and bar.IsShown and not bar:IsShown()) then
     return

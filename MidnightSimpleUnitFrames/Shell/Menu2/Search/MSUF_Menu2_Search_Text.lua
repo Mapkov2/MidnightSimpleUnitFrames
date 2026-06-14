@@ -1,9 +1,10 @@
+-- Menu2 search text index: provides normalized labels and help strings for Search/Assistant.
+-- Keep entries data-like and side-effect free so lookup remains deterministic.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local Search = M.Search or {}
 M.Search = Search

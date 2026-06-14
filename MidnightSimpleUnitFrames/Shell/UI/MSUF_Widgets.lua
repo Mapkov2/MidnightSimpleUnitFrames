@@ -5,12 +5,17 @@
 --- removed - zero external callers after Widget SDK migration.
 --- ============================================================================
 local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 --- Shared UI primitives used by Menu2 and Edit Mode.
 --- Keep this layer independent from Menu2 load order: Edit Mode loads first.
 local UI = MSUF.UI or _G.MSUF_UI or {}
 MSUF.UI = UI
-_G.MSUF_UI = UI
+ExportPublic("MSUF_UI", UI)
 
 local W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"

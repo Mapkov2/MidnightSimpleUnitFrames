@@ -1,10 +1,8 @@
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -264,6 +262,7 @@ function A._ParsePipelineFeature(normalized, raw, ctx)
         or ParseGroupStatusPreview(normalized)
         or (P.ParseGroupStatusIconDetail and P.ParseGroupStatusIconDetail(normalized))
         or ParseUnitStatusPreview(normalized, ctx)
+        or (P.ParseUnitStatusIconStyle and P.ParseUnitStatusIconStyle(normalized))
         or ParseGroupStatusIconReset(normalized)
         or ParseUnitStatusIndicatorReset(normalized, ctx)
         or (P.ParseUnitStatusIndicatorDetail and P.ParseUnitStatusIndicatorDetail(normalized))
@@ -282,10 +281,16 @@ function A._ParsePipelineFallback(normalized, raw, ctx)
         or ParseSetting(normalized, ctx)
 end
 
-function A.ParseSimpleChange(text)
+local function ParserContext(ctxOverride)
+    if type(ctxOverride) == "table" then return ctxOverride end
+    return A.GetContext and A.GetContext() or {}
+end
+A.ParserContext = ParserContext
+
+function A.ParseSimpleChange(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = A.GetContext and A.GetContext() or {}
+    local ctx = ParserContext(ctxOverride)
     if normalized == "" then return nil end
     local parsed = (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
         or (P.ParseRegistryExactAliasShortcut and P.ParseRegistryExactAliasShortcut(normalized, raw))
@@ -306,10 +311,10 @@ function A.ParseSimpleChange(text)
     return parsed
 end
 
-function A.Parse(text)
+function A.Parse(text, ctxOverride)
     local raw = Trim(text)
     local normalized = Normalize(raw)
-    local ctx = A.GetContext and A.GetContext() or {}
+    local ctx = ParserContext(ctxOverride)
     if normalized == "" then return { kind = "empty" } end
     local exactKeyParsed = (P.ParseExactRegistryKeyShortcut and P.ParseExactRegistryKeyShortcut(normalized, raw))
         or (P.ParseExactActionKeyShortcut and P.ParseExactActionKeyShortcut(normalized, raw))
@@ -396,3 +401,10 @@ function A.Parse(text)
         status = "failed",
     }
 end
+
+A.ParsePlan = A.Parse
+A.ParseForTest = A.Parse
+MSUF.Public = MSUF.Public or {}
+MSUF.Public.Assistant = MSUF.Public.Assistant or {}
+MSUF.Public.Assistant.Parse = A.Parse
+MSUF.Public.Assistant.ParseSimpleChange = A.ParseSimpleChange

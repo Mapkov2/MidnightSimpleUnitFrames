@@ -8,6 +8,10 @@
 
 local _, ns = ...
 ns = ns or {}
+local ExportPublic = ns.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 ns.MSUF_CastbarStyle = ns.MSUF_CastbarStyle or {}
 
@@ -322,7 +326,7 @@ end
 
 --- Re-apply fill direction to every existing castbar after profile changes.
 --- Active timer objects are preserved and only their direction is refreshed.
-function _G.MSUF_UpdateCastbarFillDirection()
+local function UpdateCastbarFillDirection()
     local function Apply(frame)
         if not (frame and frame.statusBar) then
             return
@@ -367,18 +371,20 @@ function _G.MSUF_UpdateCastbarFillDirection()
     end
 end
 
-_G.MSUF_ApplyCastbarOutline = function(frame, force)
+ExportPublic("MSUF_UpdateCastbarFillDirection", UpdateCastbarFillDirection)
+
+ExportPublic("MSUF_ApplyCastbarOutline", function(frame, force)
     return Style:ApplyCastbarOutline(frame, force)
-end
+end)
 
-_G.MSUF_ApplyCastbarOutlineToAll = function(force)
+ExportPublic("MSUF_ApplyCastbarOutlineToAll", function(force)
     return Style:ApplyCastbarOutlineToAll(force)
-end
+end)
 
-_G.MSUF_ApplyBossCastbarTextsLayout = function(frame, options)
+ExportPublic("MSUF_ApplyBossCastbarTextsLayout", function(frame, options)
     return Style:ApplyBossCastbarTextsLayout(frame, options)
-end
+end)
 
-_G.MSUF_ApplyCastbarTimeTextLayout = function(frame, unit)
+ExportPublic("MSUF_ApplyCastbarTimeTextLayout", function(frame, unit)
     return Style:ApplyCastbarTimeTextLayout(frame, unit)
-end
+end)

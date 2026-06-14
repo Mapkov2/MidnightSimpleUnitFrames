@@ -4,9 +4,12 @@
 --- drag loop; drag writes saved offsets and repaints only this preview.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local Preview = M.ClassPowerStackPreview or {}
 M.ClassPowerStackPreview = Preview
 local W = M.Widgets
@@ -95,7 +98,7 @@ local function Alpha(value, fallback)
 end
 local function EnsureDB()
     if type(M.EnsureDB) == "function" then return M.EnsureDB() end
-    _G.MSUF_DB = _G.MSUF_DB or {}
+    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     return _G.MSUF_DB
 end
 local function Bars()
@@ -435,22 +438,10 @@ local function RefreshHandleVisuals(preview)
         if h.SetBackdropBorderColor then h:SetBackdropBorderColor(c[1], c[2], c[3], active and 0.95 or 0.44) end
     end
 end
-local function IsTextInputFocused()
-    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
-    return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
-end
-local function KeyDelta(key)
-    if key == "UP" then return 0, 1 end
-    if key == "DOWN" then return 0, -1 end
-    if key == "LEFT" then return -1, 0 end
-    if key == "RIGHT" then return 1, 0 end
-    return nil, nil
-end
-local function NudgeStep()
-    if IsControlKeyDown and IsControlKeyDown() then return 10 end
-    if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
-    return 1
-end
+-- Shared preview-keyboard helpers keep ClassPower and Unit preview nudging in
+-- lockstep while the DB write/apply behavior remains local to this module.
+local IsTextInputFocused = Helpers.IsTextInputFocused or function() return false end
+local NudgeStep = Helpers.NudgeStep or function() return 1 end
 local function CanNudgeHandle(handle)
     local preview = handle and handle._preview
     return handle ~= nil
@@ -459,14 +450,10 @@ local function CanNudgeHandle(handle)
         and LayerOn(preview, handle._layerKey or handle._key)
 end
 local function ShouldSkipDuplicateNudge(preview, dx, dy)
-    if not preview then return false end
-    local now = GetTime and GetTime() or 0
-    if now <= 0 then return false end
-    local sig = tostring(dx or 0) .. ":" .. tostring(dy or 0)
-    if preview._msufCPPreviewLastNudgeSig == sig and (now - (preview._msufCPPreviewLastNudgeAt or 0)) < 0.02 then return true end
-    preview._msufCPPreviewLastNudgeSig = sig
-    preview._msufCPPreviewLastNudgeAt = now
-    return false
+    return Helpers.ShouldSkipDuplicateNudge and Helpers.ShouldSkipDuplicateNudge(preview, dx, dy, {
+        sigKey = "_msufCPPreviewLastNudgeSig",
+        atKey = "_msufCPPreviewLastNudgeAt",
+    }) or false
 end
 local function NudgeSelectedHandle(preview, dx, dy)
     local handle = preview and preview.selectedHandle
@@ -479,25 +466,7 @@ local function NudgeSelectedHandle(preview, dx, dy)
     return true
 end
 local function FocusPreviewKeyboardTarget(preview, handle, defer)
-    if not preview then return end
-    handle = handle or preview.selectedHandle
-    if preview.EnableKeyboard then preview:EnableKeyboard(true) end
-    if preview.SetPropagateKeyboardInput then preview:SetPropagateKeyboardInput(handle and false or true) end
-    if handle and handle.EnableKeyboard then handle:EnableKeyboard(true) end
-    if handle and handle.SetPropagateKeyboardInput then handle:SetPropagateKeyboardInput(false) end
-    if handle and handle.SetFocus then
-        handle:SetFocus()
-    elseif preview.SetFocus then
-        preview:SetFocus()
-    end
-    if defer and C_Timer and C_Timer.After then
-        local selected = handle
-        C_Timer.After(0, function()
-            if not (preview and preview.IsShown and preview:IsShown()) then return end
-            if selected and preview.selectedHandle ~= selected then return end
-            FocusPreviewKeyboardTarget(preview, selected, false)
-        end)
-    end
+    if Helpers.FocusKeyboardTarget then return Helpers.FocusKeyboardTarget(preview, handle, defer, { selectedField = "selectedHandle" }) end
 end
 local function OnCPPreviewArrowNudge(active, dx, dy)
     if NudgeSelectedHandle(active, dx, dy) then FocusPreviewKeyboardTarget(active, active and active.selectedHandle, true) end
@@ -507,25 +476,22 @@ local function SetArrowBindings(preview, enabled)
     return M.SetPreviewArrowBindings(preview, enabled, CP_PREVIEW_ARROW_BINDINGS)
 end
 local function RegisterPreviewNudgeTarget(preview)
-    local fn = _G.MSUF_EM2_SetPreviewNudgeTarget
-    if type(fn) ~= "function" or not preview then return end
-    preview._msufCPPreviewNudgeTarget = preview._msufCPPreviewNudgeTarget or {
-        frame = preview,
-        IsActive = function()
-            return preview and preview.IsShown and preview:IsShown() and CanNudgeHandle(preview.selectedHandle) and not IsTextInputFocused()
-        end,
-        Nudge = function(_, dx, dy)
-            local handle = preview and preview.selectedHandle
-            if not CanNudgeHandle(handle) then return false end
-            local ndx, ndy = tonumber(dx) or 0, tonumber(dy) or 0
-            if ShouldSkipDuplicateNudge(preview, ndx, ndy) then return true end
-            local x, y = ReadHandle(handle)
-            WriteHandle(handle, x + ndx, y + ndy, false)
-            FocusPreviewKeyboardTarget(preview, handle, true)
-            return true
-        end,
-    }
-    fn(preview._msufCPPreviewNudgeTarget)
+    if Helpers.RegisterEditModeNudgeTarget then
+        Helpers.RegisterEditModeNudgeTarget(preview, {
+            targetField = "_msufCPPreviewNudgeTarget",
+            selectedField = "selectedHandle",
+            canNudge = CanNudgeHandle,
+            nudgeDelta = function(active, dx, dy)
+                local handle = active and active.selectedHandle
+                if not CanNudgeHandle(handle) then return false end
+                local ndx, ndy = tonumber(dx) or 0, tonumber(dy) or 0
+                if ShouldSkipDuplicateNudge(active, ndx, ndy) then return true end
+                local x, y = ReadHandle(handle)
+                WriteHandle(handle, x + ndx, y + ndy, false)
+                return true
+            end,
+        })
+    end
 end
 local function SelectHandle(handle)
     local preview = handle and handle._preview
@@ -537,17 +503,11 @@ local function SelectHandle(handle)
     RefreshHandleVisuals(preview)
 end
 local function HandleKeyDown(handle, key)
-    local preview = handle and handle._preview or handle
-    local dx, dy = KeyDelta(key)
-    if not dx then
-        if handle and handle.SetPropagateKeyboardInput then handle:SetPropagateKeyboardInput(true) end
-        return
-    end
-    if handle and handle.SetPropagateKeyboardInput then handle:SetPropagateKeyboardInput(false) end
-    if NudgeSelectedHandle(preview, dx, dy) then
-        FocusPreviewKeyboardTarget(preview, preview and preview.selectedHandle, true)
-    elseif handle and handle.SetPropagateKeyboardInput then
-        handle:SetPropagateKeyboardInput(true)
+    if Helpers.ArrowKeyDown then
+        return Helpers.ArrowKeyDown(handle, key, {
+            selectedField = "selectedHandle",
+            nudge = NudgeSelectedHandle,
+        })
     end
 end
 local function BeginHistory(handle)

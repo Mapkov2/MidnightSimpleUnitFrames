@@ -12,13 +12,6 @@ local Style = _G.MSUF_EM2_Menu2Style or {}
 local Quick = EM2.QuickPopup or Style.QuickPopup
 if not Quick then return end
 
-local UNIT_PAGE_KEYS = {
-    player = "uf_player",
-    target = "uf_target",
-    focus = "uf_focus",
-    boss = "uf_boss",
-}
-
 local TEST_FUNCS = {
     player = "MSUF_SetPlayerCastbarTestMode",
     target = "MSUF_SetTargetCastbarTestMode",
@@ -30,6 +23,13 @@ local pf
 local Sync
 local Util = EM2.Util or {}
 local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
+local UnitPageKey = Util.UnitPageKey or function() return "uf_player" end
+local UnitLabel = Util.UnitLabel or function(unit) return tostring(unit or "") end
+local NormalizeUnit = Util.NormalizeSimpleUnit or function(unit)
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
+    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    return nil
+end
 
 local function ButtonOpts(sync)
     return {
@@ -37,12 +37,6 @@ local function ButtonOpts(sync)
         hoverKey = "_msufEM2CastHoverWash",
         sync = sync,
     }
-end
-
-local function NormalizeUnit(unit)
-    if unit == "player" or unit == "target" or unit == "focus" or unit == "boss" then return unit end
-    if type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
-    return nil
 end
 
 local function General()
@@ -55,14 +49,6 @@ local function EditableGeneral()
     if not db then return nil end
     db.general = db.general or {}
     return db.general
-end
-
-local function UnitLabel(unit)
-    if unit == "player" then return "Player" end
-    if unit == "target" then return "Target" end
-    if unit == "focus" then return "Focus" end
-    if unit == "boss" then return "Boss" end
-    return tostring(unit or "")
 end
 
 local function Prefix(unit)
@@ -251,7 +237,7 @@ local function OpenUnitCastbar()
     if not (pf and pf.unit) then return end
     CommitShortcutFields()
     local unit = pf.unit
-    local pageKey = UNIT_PAGE_KEYS[unit] or "uf_player"
+    local pageKey = UnitPageKey(unit)
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(unit == "boss" and "boss" or unit, "castbar", nil, { source = "cast-popup", menu = false })
     end
@@ -303,7 +289,7 @@ end
 local function Build()
     if pf then return pf end
 
-    pf = Quick.CreateShell("MSUF_EM2_CastPopup", {
+    pf = Quick.BuildBoundsPopup("MSUF_EM2_CastPopup", {
         height = 282,
         subtitle = "Castbar bounds",
         hoverSource = "cast-popup",
@@ -313,24 +299,24 @@ local function Build()
             local self = pf or s
             if self and self.unit and not _G.MSUF_UnitPreviewActive then SetTest(self.unit, false) end
         end,
+    }, {
+        buttonOpts = ButtonOpts,
+        rows = {
+            { y = -72, label1 = "X", key1 = "xBox", cb1 = function() Apply("position") end, label2 = "Y", key2 = "yBox", cb2 = function() Apply("position") end },
+            { y = -102, label1 = "Width", key1 = "wBox", cb1 = function() Apply("width") end, label2 = "Height", key2 = "hBox", cb2 = function() Apply("height") end },
+        },
+        toggle = {
+            key = "detachBtn", text = "Detach castbar from unitframe", x = 20, y = -140, w = 394, h = 30,
+            onClick = ApplyDetach,
+            opts = function() return ButtonOpts(function() if pf and pf:IsShown() then Sync() end end) end,
+        },
+        buttons = {
+            { text = "Unitframe castbar", x = 20, y = -190, w = 190, h = 30, onClick = OpenUnitCastbar },
+            { text = "General castbar", x = 224, y = -190, w = 190, h = 30, onClick = OpenGeneralCastbars },
+        },
+        wireButton = function(btn) return WirePopupFocus(btn) end,
+        footer = { y = -230, onResetPosition = ResetPosition },
     })
-
-    Quick.ValuePair(pf, pf, -72, "X", "xBox", function() Apply("position") end, "Y", "yBox", function() Apply("position") end, ButtonOpts())
-    Quick.ValuePair(pf, pf, -102, "Width", "wBox", function() Apply("width") end, "Height", "hBox", function() Apply("height") end, ButtonOpts())
-
-    pf.detachBtn = Quick.ToggleButton(pf, "Detach castbar from unitframe", 394, 30, ApplyDetach, ButtonOpts(function()
-        if pf and pf:IsShown() then Sync() end
-    end))
-    pf.detachBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -140)
-
-    WirePopupFocus(Quick.Button(pf, "Unitframe castbar", 190, 30, OpenUnitCastbar, ButtonOpts())):SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -190)
-    WirePopupFocus(Quick.Button(pf, "General castbar", 190, 30, OpenGeneralCastbars, ButtonOpts())):SetPoint("TOPLEFT", pf, "TOPLEFT", 224, -190)
-
-    if Quick.AddFooterControls then
-        Quick.AddFooterControls(pf, { y = -230, onResetPosition = ResetPosition })
-    end
-
-    if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
     return pf
 end
 

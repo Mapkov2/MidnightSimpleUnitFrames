@@ -1,7 +1,12 @@
+-- UF alpha element: applies frame opacity, range fade handoff, and visibility alpha rules.
+-- Keep live alpha updates cheap; range and combat deferral belong to dedicated runtime modules.
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
@@ -299,9 +304,9 @@ UF.ApplyRangeModifier = function(frame, mul, force)
   end
   return true
 end
-_G.MSUF_UF_ApplyRangeModifier = UF.ApplyRangeModifier
+ExportPublic("MSUF_UF_ApplyRangeModifier", UF.ApplyRangeModifier)
 
-_G.MSUF_UF_ApplyCastbarRangeAlpha = function(castbarOrUnit, mul, force)
+local function ApplyCastbarRangeAlphaExport(castbarOrUnit, mul, force)
   local unit = type(castbarOrUnit) == "string" and castbarOrUnit
     or castbarOrUnit and castbarOrUnit.unit
   if not unit then
@@ -316,6 +321,7 @@ _G.MSUF_UF_ApplyCastbarRangeAlpha = function(castbarOrUnit, mul, force)
   end
   return ApplyCastbarRangeAlpha(frame, mul or RangeMul(frame), force == true)
 end
+ExportPublic("MSUF_UF_ApplyCastbarRangeAlpha", ApplyCastbarRangeAlphaExport)
 
 UF.ApplyAlphaFrame = function(frame, event)
   if not frame then
@@ -371,18 +377,20 @@ do
   end
 end
 
-_G.MSUF_RequestAlphaRefresh = function()
+local function RequestAlphaRefresh()
   return Alpha.RequestRefresh()
 end
+ExportPublic("MSUF_RequestAlphaRefresh", RequestAlphaRefresh)
 
-_G.MSUF_RefreshCombatUnitAlphas = function()
+local function RefreshCombatUnitAlphas()
   if _G.MSUF_RefreshAllUnitAlphas then
     return _G.MSUF_RefreshAllUnitAlphas()
   end
   return false
 end
+ExportPublic("MSUF_RefreshCombatUnitAlphas", RefreshCombatUnitAlphas)
 
-_G.MSUF_GetDesiredUnitAlpha = function(key)
+local function GetDesiredUnitAlpha(key)
   local unit = key == "boss" and "boss1" or key
   if unit == "tot" or unit == "targetoftarget" then
     unit = "targettarget"
@@ -394,14 +402,17 @@ _G.MSUF_GetDesiredUnitAlpha = function(key)
   end
   return Clamp01(cfg.hpAlpha, 1)
 end
+ExportPublic("MSUF_GetDesiredUnitAlpha", GetDesiredUnitAlpha)
 
-_G.MSUF_ApplyUnitAlpha = function(frame, key)
+local function ApplyUnitAlpha(frame, key)
   if not frame then
     return false
   end
   Alpha.Update(frame, "MSUF_ALPHA")
   return true
 end
+ExportPublic("MSUF_ApplyUnitAlpha", ApplyUnitAlpha)
 
-_G.MSUF_Alpha_UpdatePreserveMissingHP = function()
+local function AlphaUpdatePreserveMissingHP()
 end
+ExportPublic("MSUF_Alpha_UpdatePreserveMissingHP", AlphaUpdatePreserveMissingHP)

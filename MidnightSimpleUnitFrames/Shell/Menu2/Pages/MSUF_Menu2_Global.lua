@@ -1,8 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- GlobalPage helper module.
 -- Provides DB readers/writers, scope override helpers, and apply fanout used by the global
@@ -483,8 +486,8 @@ local function SetAbsorbTextureTest(enabled)
     if type(_G.MSUF_SetAbsorbTextureTestMode) == "function" then
         _G.MSUF_SetAbsorbTextureTestMode(enabled and true or false, scope)
     else
-        _G.MSUF_AbsorbTextureTestMode = enabled and true or false
-        _G.MSUF_AbsorbTextureTestScope = enabled and scope or nil
+        ExportPublic("MSUF_AbsorbTextureTestMode", enabled and true or false)
+        ExportPublic("MSUF_AbsorbTextureTestScope", enabled and scope or nil)
     end
     if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then
         _G.MSUF_Bars_RefreshAbsorbTextureTestPreview()
@@ -497,8 +500,8 @@ local function ClearAbsorbTextureTest()
     if type(_G.MSUF_ClearAbsorbTextureTestMode) == "function" then
         _G.MSUF_ClearAbsorbTextureTestMode()
     elseif wasEnabled then
-        _G.MSUF_AbsorbTextureTestMode = false
-        _G.MSUF_AbsorbTextureTestScope = nil
+        ExportPublic("MSUF_AbsorbTextureTestMode", false)
+        ExportPublic("MSUF_AbsorbTextureTestScope", nil)
     end
     if wasEnabled then
         if type(_G.MSUF_Bars_RefreshAbsorbTextureTestPreview) == "function" then

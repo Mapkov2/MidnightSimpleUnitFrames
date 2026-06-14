@@ -1,10 +1,10 @@
+-- Assistant registry core: shared DB accessors, value parsers, aliases, and apply helpers.
+-- Cold-path registry domains should call these helpers instead of duplicating Menu2 semantics.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
-
+local ExportPublic = MSUF.ExportPublic or function(name, value) _G[name] = value; return value end
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -48,7 +48,7 @@ A.UnitLabels = UNIT_LABELS
 
 local function EnsureDB()
     if M and type(M.EnsureDB) == "function" then return M.EnsureDB() end
-    _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+    ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
     _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
     return _G.MSUF_DB
 end

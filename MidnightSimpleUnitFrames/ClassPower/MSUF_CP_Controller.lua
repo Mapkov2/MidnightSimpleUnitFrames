@@ -21,6 +21,13 @@
 if _G.__MSUF_ClassPower_Loaded then return end
 _G.__MSUF_ClassPower_Loaded = true
 
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 --- Perf locals (eliminate global lookups in hot paths)
 local type, tonumber, pairs = type, tonumber, pairs
 local math_floor = math.floor
@@ -708,7 +715,7 @@ local function ResolveClassPowerBgColor(powerType)
 end
 
 --- Public: invalidate class power color cache (called from Colors panel)
-_G.MSUF_ClassPower_InvalidateColors = function()
+local function MSUF_ClassPower_InvalidateColors()
     _cachedColorToken = nil
     _cachedBgColorToken = nil
     _cachedChargedR = nil  --- also invalidate charged cache
@@ -722,6 +729,7 @@ _G.MSUF_ClassPower_InvalidateColors = function()
         _G.MSUF_ClassPower_Refresh()
     end
 end
+ExportPublic("MSUF_ClassPower_InvalidateColors", MSUF_ClassPower_InvalidateColors)
 
 --- Charged / Empowered Combo Points (Echoing Reprimand, Supercharged CP, etc.)
 --- GetUnitChargedPowerPoints("player") returns a table of 1-based indices
@@ -1110,7 +1118,7 @@ do
         CP_RefreshTexture = presentation.CP_RefreshTexture or CP_RefreshTexture
     end
 end
-_G.MSUF_CDM_GetScaledWidth = CDM_GetScaledWidth
+ExportPublic("MSUF_CDM_GetScaledWidth", CDM_GetScaledWidth)
 
 --- Legacy color-only refresh / texture refresh now live in
 --- ClassPower presentation helpers.
@@ -1528,7 +1536,7 @@ local function FullRefresh()
     --- Flag is unconditional for Ele spec -> all hot paths (UnitframeCore, Text) override pType to Mana.
     local isEleShaman = (cpEnabled and PLAYER_CLASS == "SHAMAN" and GetSpec and GetSpec() == CPK.SPEC.SHAMAN_ELEMENTAL)
     local eleMaelChanged = ((isEleShaman or false) ~= (_G.MSUF_EleMaelstromActive == true))
-    _G.MSUF_EleMaelstromActive = isEleShaman or false
+    ExportPublic("MSUF_EleMaelstromActive", isEleShaman or false)
     --- Force player power bar refresh so it immediately switches Mana ↔ Maelstrom
     if eleMaelChanged then
         if _G.MSUF_RefreshPlayerPowerBar then
@@ -1541,7 +1549,7 @@ local function FullRefresh()
     local isAugEvokerEB = (cpEnabled and PLAYER_CLASS == "EVOKER" and GetSpec and GetSpec() == CPK.SPEC.EVOKER_AUG
         and b.showEbonMight ~= false)
     local augChanged = ((isAugEvokerEB or false) ~= (_G.MSUF_AugEvokerActive == true))
-    _G.MSUF_AugEvokerActive = isAugEvokerEB or false
+    ExportPublic("MSUF_AugEvokerActive", isAugEvokerEB or false)
     if augChanged then
         if _G.MSUF_RefreshPlayerPowerBar then
             _G.MSUF_RefreshPlayerPowerBar()
@@ -1553,7 +1561,7 @@ local function FullRefresh()
     local isShadowMana = (cpEnabled and PLAYER_CLASS == "PRIEST" and GetSpec and GetSpec() == CPK.SPEC.PRIEST_SHADOW
         and b.showShadowMana == true)
     local shadowChanged = ((isShadowMana or false) ~= (_G.MSUF_ShadowManaActive == true))
-    _G.MSUF_ShadowManaActive = isShadowMana or false
+    ExportPublic("MSUF_ShadowManaActive", isShadowMana or false)
     if shadowChanged then
         if _G.MSUF_RefreshPlayerPowerBar then
             _G.MSUF_RefreshPlayerPowerBar()
@@ -2306,7 +2314,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 --- Public API (for Options, Edit Mode, and other modules)
 
-function _G.MSUF_ClassPower_IsRuntimeActive()
+local function MSUF_ClassPower_IsRuntimeActive()
     return CP.visible == true
         or AM.visible == true
         or PHP.visible == true
@@ -2314,15 +2322,17 @@ function _G.MSUF_ClassPower_IsRuntimeActive()
         or _cpStructuralEventsBound == true
         or CP._cdmWidthEventsActive == true
 end
+ExportPublic("MSUF_ClassPower_IsRuntimeActive", MSUF_ClassPower_IsRuntimeActive)
 
 --- Force full refresh (call after changing DB values)
-function _G.MSUF_ClassPower_Refresh()
+local function MSUF_ClassPower_Refresh()
     _cachedColorToken = nil  --- Invalidate color cache
     _cachedBgColorToken = nil
     FullRefresh()
 end
+ExportPublic("MSUF_ClassPower_Refresh", MSUF_ClassPower_Refresh)
 
-function _G.MSUF_ClassPower_RefreshCDMWidthBindings(syncNow)
+local function MSUF_ClassPower_RefreshCDMWidthBindings(syncNow)
     _CP_RefreshConfig()
     if CP_PlayerHPNeedsRefresh() then
         CP_PlayerHPRefresh(GetPlayerFrame())
@@ -2332,23 +2342,26 @@ function _G.MSUF_ClassPower_RefreshCDMWidthBindings(syncNow)
         CP.CDMWidthSyncLayouts(true)
     end
 end
+ExportPublic("MSUF_ClassPower_RefreshCDMWidthBindings", MSUF_ClassPower_RefreshCDMWidthBindings)
 
-function _G.MSUF_ClassPower_PlayerHP_Refresh()
+local function MSUF_ClassPower_PlayerHP_Refresh()
     _CP_RefreshConfig()
     CP_PlayerHPRefresh(GetPlayerFrame())
     CP_RefreshEventBindings()
     CP_SetStructuralEventsBound(CP_ConfigAnyFeatureEnabled())
 end
+ExportPublic("MSUF_ClassPower_PlayerHP_Refresh", MSUF_ClassPower_PlayerHP_Refresh)
 
-function _G.MSUF_ClassPower_PlayerHP_RefreshTextures()
+local function MSUF_ClassPower_PlayerHP_RefreshTextures()
     if PHP.visible then
         PHP._textureStamp = nil
         CP_PlayerHPRefresh(GetPlayerFrame())
     end
 end
+ExportPublic("MSUF_ClassPower_PlayerHP_RefreshTextures", MSUF_ClassPower_PlayerHP_RefreshTextures)
 
 --- Refresh bar textures (call after texture change in settings)
-function _G.MSUF_ClassPower_RefreshTextures()
+local function MSUF_ClassPower_RefreshTextures()
     if CP.visible then CP_RefreshTexture() end
     if AM.visible then AM_RefreshTexture() end
     if PHP.visible then
@@ -2356,9 +2369,10 @@ function _G.MSUF_ClassPower_RefreshTextures()
         CP_PlayerHPRefresh(GetPlayerFrame())
     end
 end
+ExportPublic("MSUF_ClassPower_RefreshTextures", MSUF_ClassPower_RefreshTextures)
 
 --- Refresh class power text font (called from UpdateAllFonts)
-function _G.MSUF_ClassPower_ApplyFonts()
+local function MSUF_ClassPower_ApplyFonts()
     if CP.visible and _cpDB.showText then
         _cpFontRev = 0  --- force re-apply
         CP_ApplyFont()
@@ -2368,6 +2382,7 @@ function _G.MSUF_ClassPower_ApplyFonts()
         CP_PlayerHPApplyFont()
     end
 end
+ExportPublic("MSUF_ClassPower_ApplyFonts", MSUF_ClassPower_ApplyFonts)
 
 --- Compatibility: hook bar texture change for live refresh.
 --- Options panels should call MSUF_ClassPower_Refresh() after DB changes.
@@ -2380,7 +2395,7 @@ do
         if not _texHooked then
             local origTex = _G.MSUF_TryApplyBarTextureLive
             if type(origTex) == "function" then
-                _G.MSUF_TryApplyBarTextureLive = function(...)
+                ExportPublic("MSUF_TryApplyBarTextureLive", function(...)
                     origTex(...)
                     if CP.visible then CP_RefreshTexture() end
                     if AM.visible then AM_RefreshTexture() end
@@ -2388,7 +2403,7 @@ do
                         PHP._textureStamp = nil
                         CP_PlayerHPRefresh(GetPlayerFrame())
                     end
-                end
+                end)
                 _texHooked = true
             end
         end
@@ -2403,12 +2418,13 @@ end
 --- on BOTH SetMinMaxValues AND SetValue - identical to MidnightRogueBars.
 --- Secret-safe: nil-guarded, no arithmetic on return values.
 --- This section only provides the public toggle API for the options panel.
-_G.MSUF_SmoothPowerBar_Apply = function()
+local function MSUF_SmoothPowerBar_Apply()
     --- Refresh the cached flags in UFCore's DIRECT_APPLY hot path.
     if _G.MSUF_UFCore_RefreshSettingsCache then
         _G.MSUF_UFCore_RefreshSettingsCache("SMOOTH_POWER")
     end
 end
+ExportPublic("MSUF_SmoothPowerBar_Apply", MSUF_SmoothPowerBar_Apply)
 
 --- Phase 4: Module Registration
 do

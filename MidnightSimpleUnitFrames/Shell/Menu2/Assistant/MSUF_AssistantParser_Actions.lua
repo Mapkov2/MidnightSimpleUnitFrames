@@ -1,10 +1,14 @@
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Actions.lua
+--- Action parser shard for concrete Assistant commands.
+---
+--- Returns action/changes plans rather than executing them, keeping undo,
+--- confirmation, and combat gating in the downstream assistant runtime.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -13,10 +17,6 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
-
--- Action parser shard for concrete assistant commands that are not simple setting writes.
--- It still returns plan tables rather than executing the action, which keeps undo,
--- confirmation, and combat gating in one downstream path.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase
@@ -837,6 +837,10 @@ local UNIT_STATUS_MIDNIGHT_STYLE_TERMS = {
     "midnight status style", "midnight status icon", "midnight status icons",
     "status icon midnight style", "status icons midnight style",
     "status indicator midnight style", "status indicators midnight style",
+    "classic style", "use classic style", "classic icon style", "classic icons",
+    "classic status style", "classic status icon", "classic status icons",
+    "status icon classic style", "status icons classic style",
+    "status indicator classic style", "status indicators classic style",
 }
 
 local UNIT_STATUS_ICON_PACK_ALIASES = {

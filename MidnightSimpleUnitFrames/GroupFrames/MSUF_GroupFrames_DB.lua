@@ -4,10 +4,13 @@
 --- Midnight 12.0 secret-safe, zero combat overhead
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 
 MSUF.GF = MSUF.GF or {}
 local GF = MSUF.GF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 --==========================================================================--
 -- GroupFrames API surface (MSUF.GF / _G.MSUF_*)
@@ -2275,13 +2278,13 @@ end
 
 -- Public extension point: other addons register/refresh custom status-icon
 -- packs through these globals. No internal callers by design -- keep exported.
-_G.MSUF_RegisterStatusIconPack = function(key, label, folder, opts)
+ExportPublic("MSUF_RegisterStatusIconPack", function(key, label, folder, opts)
     return GF.RegisterStatusIconPack(key, label, folder, opts)
-end
-_G.MSUF_RefreshStatusIconPacks = function()
+end)
+ExportPublic("MSUF_RefreshStatusIconPacks", function()
     _texturePathExistsCache = {}
     return GF.RefreshExternalStatusIconPacks(true)
-end
+end)
 
 local INDICATOR_STYLE_KEYS = {
     roleIcon   = "roleIconStyle",
@@ -2412,30 +2415,30 @@ function GF.GetIconStyleItems(includeDefault)
     return out
 end
 
-_G.MSUF_GetStatusIconPackValues = function(includeDefault)
+ExportPublic("MSUF_GetStatusIconPackValues", function(includeDefault)
     return GF.GetIconStyleItems(includeDefault == true)
-end
+end)
 
-_G.MSUF_GetRoleStatusIconTexture = function(style, role, useMidnight)
+ExportPublic("MSUF_GetRoleStatusIconTexture", function(style, role, useMidnight)
     return GF.GetStatusIconTexture(style, "role", role, useMidnight == true)
-end
+end)
 
-_G.MSUF_GetLeaderStatusIconTexture = function(style, useMidnight)
+ExportPublic("MSUF_GetLeaderStatusIconTexture", function(style, useMidnight)
     return GF.GetStatusIconTexture(style, "leader", nil, useMidnight == true)
-end
+end)
 
-_G.MSUF_GetAssistStatusIconTexture = function(style, useMidnight)
+ExportPublic("MSUF_GetAssistStatusIconTexture", function(style, useMidnight)
     return GF.GetStatusIconTexture(style, "assist", nil, useMidnight == true)
-end
+end)
 
 ---
 --- Public DB-config bridges: consumed by Options/EditMode/Assistant by global
 --- name. Stable ABI -- keep exported even when internal callers are few.
 ---
-_G.MSUF_GF_EnsureDB   = GF.EnsureDB
-_G.MSUF_GF_GetConf     = GF.GetConf
-_G.MSUF_GF_Val         = GF.Val
-_G.MSUF_GF_GetHighlightVal = GF.GetHighlightVal
-_G.MSUF_GF_InvalidateConfCache = GF.InvalidateConfCache
-_G.MSUF_GF_ResetAllToDefaults = GF.ResetAllToDefaults
+ExportPublic("MSUF_GF_EnsureDB", GF.EnsureDB)
+ExportPublic("MSUF_GF_GetConf", GF.GetConf)
+ExportPublic("MSUF_GF_Val", GF.Val)
+ExportPublic("MSUF_GF_GetHighlightVal", GF.GetHighlightVal)
+ExportPublic("MSUF_GF_InvalidateConfCache", GF.InvalidateConfCache)
+ExportPublic("MSUF_GF_ResetAllToDefaults", GF.ResetAllToDefaults)
 

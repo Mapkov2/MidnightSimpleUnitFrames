@@ -1,7 +1,6 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 --- UnitFrames/Engine/Elements/MSUF_UF_Elements_Health.lua
 ---

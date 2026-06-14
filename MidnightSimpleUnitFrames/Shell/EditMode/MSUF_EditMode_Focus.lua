@@ -2,6 +2,11 @@
 --- Owns visual focus/highlight bookkeeping between edit-mode movers, quick popups, and Menu2.
 --- It should not save positions directly; drag/commit code owns persistent layout writes.
 local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
@@ -50,16 +55,6 @@ local state = {
 
 local hoverFrame
 
-local UNIT_PAGE_KEYS = {
-    player = "uf_player",
-    target = "uf_target",
-    targettarget = "uf_targettarget",
-    focustarget = "uf_focustarget",
-    focus = "uf_focus",
-    pet = "uf_pet",
-    boss = "uf_boss",
-}
-
 local GROUP_KIND_BY_KEY = {
     gf_party = "party",
     gf_raid = "raid",
@@ -69,6 +64,7 @@ local GROUP_KIND_BY_KEY = {
 local NormalizeKey = U.NormalizeFocusKey
 local NormalizeComponent = U.NormalizeFocusComponent
 local NormalizeSlot = U.NormalizeFocusSlot
+local UnitPageKey = U.UnitPageKey or function(unit) return unit == "player" and "uf_player" or false end
 
 local function IsEditActive()
     return EM2.State and EM2.State.IsActive and EM2.State.IsActive()
@@ -145,7 +141,7 @@ end
 local function ClearPassiveMenuFocusRequest()
     local req = _G.MSUF_EM2_MenuFocusRequest
     if type(req) == "table" and req.explicit ~= true then
-        _G.MSUF_EM2_MenuFocusRequest = nil
+        ExportPublic("MSUF_EM2_MenuFocusRequest", nil)
     end
 end
 
@@ -159,7 +155,7 @@ local function ApplyMenuSelection(key, component, slot, opts)
     local M = Menu2()
     local pageKey
     local sectionId
-    local unitPage = UNIT_PAGE_KEYS[key]
+    local unitPage = UnitPageKey(key, false)
     if unitPage then
         pageKey = unitPage
         sectionId = UnitSectionForComponent(component)
@@ -172,7 +168,7 @@ local function ApplyMenuSelection(key, component, slot, opts)
     end
 
     if opts.focusRequest == true then
-        _G.MSUF_EM2_MenuFocusRequest = {
+        ExportPublic("MSUF_EM2_MenuFocusRequest", {
             key = key,
             component = component,
             slot = slot,
@@ -181,7 +177,7 @@ local function ApplyMenuSelection(key, component, slot, opts)
             source = opts.source,
             explicit = true,
             changedAt = GetTime and GetTime() or 0,
-        }
+        })
     else
         ClearPassiveMenuFocusRequest()
     end
@@ -324,13 +320,13 @@ function Focus.SetSelection(key, component, slot, opts)
     state.key = NormalizeKey(key)
     state.component = NormalizeComponent(component)
     state.slot = NormalizeSlot(slot)
-    _G.MSUF_EM2_Selection = {
+    ExportPublic("MSUF_EM2_Selection", {
         key = state.key,
         component = state.component,
         slot = state.slot,
         source = opts.source,
         changedAt = GetTime and GetTime() or 0,
-    }
+    })
     if opts.menu ~= false then
         ApplyMenuSelection(state.key, state.component, state.slot, {
             source = opts.source,
@@ -492,37 +488,45 @@ function Focus.OpenFullSettings(pageKey)
     return OpenMenuPage(pageKey or resolvedPage or "uf_player")
 end
 
-function _G.MSUF_EM2_SetFocusSelection(key, component, slot, opts)
+local function SetFocusSelection(key, component, slot, opts)
     return Focus.SetSelection(key, component, slot, opts)
 end
+ExportPublic("MSUF_EM2_SetFocusSelection", SetFocusSelection)
 
-function _G.MSUF_EM2_SetFocusHover(key, component, slot, opts)
+local function SetFocusHover(key, component, slot, opts)
     return Focus.SetHover(key, component, slot, opts)
 end
+ExportPublic("MSUF_EM2_SetFocusHover", SetFocusHover)
 
-function _G.MSUF_EM2_ClearFocusHover()
+local function ClearFocusHover()
     return Focus.ClearHover()
 end
+ExportPublic("MSUF_EM2_ClearFocusHover", ClearFocusHover)
 
-function _G.MSUF_EM2_PulseFocus(key, component, slot, opts)
+local function PulseFocus(key, component, slot, opts)
     return Focus.Pulse(key, component, slot, opts)
 end
+ExportPublic("MSUF_EM2_PulseFocus", PulseFocus)
 
-function _G.MSUF_EM2_SetPopupFocus(key)
+local function SetPopupFocus(key)
     return Focus.SetPopupFocus(key)
 end
+ExportPublic("MSUF_EM2_SetPopupFocus", SetPopupFocus)
 
-function _G.MSUF_EM2_ClearPopupFocus()
+local function ClearPopupFocus()
     return Focus.ClearPopupFocus()
 end
+ExportPublic("MSUF_EM2_ClearPopupFocus", ClearPopupFocus)
 
-function _G.MSUF_EM2_SyncFocusInspector()
+local function SyncFocusInspector()
     return Focus.RefreshPopupFocus()
 end
+ExportPublic("MSUF_EM2_SyncFocusInspector", SyncFocusInspector)
 
-function _G.MSUF_EM2_OpenFocusSettings(pageKey)
+local function OpenFocusSettings(pageKey)
     return Focus.OpenFullSettings(pageKey)
 end
+ExportPublic("MSUF_EM2_OpenFocusSettings", OpenFocusSettings)
 
 HideLegacyInspector()
 HideOldFocusLayer()

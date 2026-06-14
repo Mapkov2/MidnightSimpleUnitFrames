@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local F = M.Fallbacks or {}
 local H = M.PreviewHelpers or {}
 M.PreviewHelpers = H
@@ -553,6 +552,111 @@ function H.BuildZoomBar(box, surface, opts)
     surface:SetScript("OnMouseUp", stopPan)
     surface:SetScript("OnHide", stopPan)
     return zoomBar, ZoomWheel
+end
+function H.IsTextInputFocused()
+    local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus()
+    return focus and focus.IsObjectType and focus:IsObjectType("EditBox")
+end
+function H.KeyDelta(key)
+    if key == "LEFT" then return -1, 0 end
+    if key == "RIGHT" then return 1, 0 end
+    if key == "UP" then return 0, 1 end
+    if key == "DOWN" then return 0, -1 end
+    return nil, nil
+end
+function H.NudgeStep(opts)
+    opts = opts or {}
+    if IsControlKeyDown and IsControlKeyDown() then return tonumber(opts.ctrlStep) or 10 end
+    if IsShiftKeyDown and IsShiftKeyDown() then return tonumber(opts.shiftStep) or 5 end
+    return tonumber(opts.step) or 1
+end
+function H.ShouldSkipDuplicateNudge(owner, dx, dy, opts)
+    if not owner then return false end
+    opts = opts or {}
+    local now = GetTime and GetTime() or 0
+    if now <= 0 then return false end
+    local sigKey = opts.sigKey or "_msufLastNudgeSig"
+    local atKey = opts.atKey or "_msufLastNudgeAt"
+    local sig = tostring(dx or 0) .. ":" .. tostring(dy or 0)
+    if owner[sigKey] == sig and (now - (owner[atKey] or 0)) < (tonumber(opts.window) or 0.02) then return true end
+    owner[sigKey] = sig
+    owner[atKey] = now
+    return false
+end
+local function SetKeyboardPropagate(frame, propagate)
+    if frame and frame.SetPropagateKeyboardInput then frame:SetPropagateKeyboardInput(propagate == true) end
+end
+function H.FocusKeyboardTarget(owner, handle, defer, opts)
+    if not owner then return end
+    opts = opts or {}
+    local selectedField = opts.selectedField or "_selectedHandle"
+    handle = handle or (selectedField and owner[selectedField])
+    if owner.EnableKeyboard then owner:EnableKeyboard(true) end
+    SetKeyboardPropagate(owner, handle and false or true)
+    if handle and handle.EnableKeyboard then handle:EnableKeyboard(true) end
+    SetKeyboardPropagate(handle, false)
+    if handle and handle.SetFocus then
+        handle:SetFocus()
+    elseif owner.SetFocus then
+        owner:SetFocus()
+    end
+    if defer and _G.C_Timer and _G.C_Timer.After then
+        local selected = handle
+        _G.C_Timer.After(0, function()
+            if not (owner and owner.IsShown and owner:IsShown()) then return end
+            if selected and selected.IsShown and not selected:IsShown() then return end
+            if selected and selectedField and owner[selectedField] ~= selected then return end
+            H.FocusKeyboardTarget(owner, selected, false, opts)
+        end)
+    end
+end
+function H.ArrowKeyDown(self, keyName, opts)
+    opts = opts or {}
+    local owner = (opts.owner and opts.owner(self)) or (self and self._preview) or self or (opts.active and opts.active())
+    local dx, dy = H.KeyDelta(keyName)
+    if not dx then
+        SetKeyboardPropagate(self, true)
+        return false
+    end
+    if H.IsTextInputFocused() then
+        SetKeyboardPropagate(self, true)
+        SetKeyboardPropagate(owner, true)
+        return false
+    end
+    SetKeyboardPropagate(self, false)
+    SetKeyboardPropagate(owner, false)
+    if opts.nudge and opts.nudge(owner, dx, dy) then
+        local selectedField = opts.selectedField or "_selectedHandle"
+        local selected = (opts.selected and opts.selected(owner)) or (owner and selectedField and owner[selectedField])
+        H.FocusKeyboardTarget(owner, selected, true, opts)
+        return true
+    end
+    SetKeyboardPropagate(self, true)
+    SetKeyboardPropagate(owner, true)
+    return false
+end
+function H.RegisterEditModeNudgeTarget(owner, opts)
+    local fn = _G.MSUF_EM2_SetPreviewNudgeTarget
+    if type(fn) ~= "function" or not owner then return end
+    opts = opts or {}
+    local targetField = opts.targetField or "_msufPreviewNudgeTarget"
+    local selectedField = opts.selectedField or "_selectedHandle"
+    local function Selected() return opts.selected and opts.selected(owner) or (selectedField and owner[selectedField]) end
+    owner[targetField] = owner[targetField] or {
+        frame = owner,
+        IsActive = function()
+            if not (owner and owner.IsShown and owner:IsShown()) then return false end
+            local selected = Selected()
+            if opts.canNudge and not opts.canNudge(selected, owner) then return false end
+            return selected ~= nil and not H.IsTextInputFocused()
+        end,
+        Nudge = function(_, dx, dy)
+            local ok = opts.nudgeDelta and opts.nudgeDelta(owner, dx, dy)
+            if ok then H.FocusKeyboardTarget(owner, Selected(), true, opts) end
+            return ok
+        end,
+    }
+    fn(owner[targetField])
 end
 local LAYER_BUTTON_FALLBACK_COLOR = { 1, 1, 1 }
 local function LayerButtonAvailable(owner, key)

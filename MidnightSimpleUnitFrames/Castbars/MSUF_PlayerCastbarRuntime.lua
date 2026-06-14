@@ -6,6 +6,11 @@
 --- Blizzard backend ownership. Keep new shared behavior in Engine/Runtime/Style
 --- when possible; edits here should be narrowly scoped and syntax-checked.
 
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+_G[name] = value
+return value
+end
+
 local s=_G.MSUF_EnsureDBLazy or function()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end
 end local l=_G.MSUF_CastbarRuntime_PlainNumber or function(e)if e==nil then return nil end local n=_G.ToPlain
 if type(n)=="function"then local e=n(e)local e=tonumber(tostring(e))if e~=nil then return e end
@@ -267,8 +272,12 @@ o(e)return
 elseif n=="UNIT_SPELLCAST_NOT_INTERRUPTIBLE"then e.isNotInterruptible=true
 o(e)return
 end end
-_G.MSUF_PlayerCastbar_UpdateLatencyZone=U _G.MSUF_PlayerCastbar_UpdateColorForInterruptible=o
-_G.MSUF_GetInterruptFeedbackColor=I _G.MSUF_PlayerCastbar_HideIfNoLongerCasting=T
-_G.MSUF_PlayerCastbar_ShowInterruptFeedback=C _G.MSUF_PlayerCastbar_GetEffectiveUnit=d
-_G.MSUF_PlayerCastbar_UnhaltedUpdate=t _G.MSUF_PlayerCastbar_Cast=i
-_G.MSUF_PlayerCastbar_OnEvent=_
+ExportPublic("MSUF_PlayerCastbar_UpdateLatencyZone", U)
+ExportPublic("MSUF_PlayerCastbar_UpdateColorForInterruptible", o)
+ExportPublic("MSUF_GetInterruptFeedbackColor", I)
+ExportPublic("MSUF_PlayerCastbar_HideIfNoLongerCasting", T)
+ExportPublic("MSUF_PlayerCastbar_ShowInterruptFeedback", C)
+ExportPublic("MSUF_PlayerCastbar_GetEffectiveUnit", d)
+ExportPublic("MSUF_PlayerCastbar_UnhaltedUpdate", t)
+ExportPublic("MSUF_PlayerCastbar_Cast", i)
+ExportPublic("MSUF_PlayerCastbar_OnEvent", _)

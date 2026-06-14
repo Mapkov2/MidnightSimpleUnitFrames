@@ -3,6 +3,11 @@
 --- _G.MSUF_AnchorPicker._onPick = function(frameName) ... end before showing.
 
 local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 if _G.MSUF_EnsureAnchorPicker then return end
 
@@ -26,6 +31,7 @@ local function ThemeColor(key, fallback)
 end
 
 local function IsBlocked(frame)
+    -- Never let the picker select root/protected/runtime-owned frames as anchors.
     if not frame then return true end
     if frame == UIParent or frame == WorldFrame then return true end
     if frame.IsForbidden and frame:IsForbidden() then return true end
@@ -43,6 +49,7 @@ local function IsBlockedName(name)
 end
 
 local function SafeGetRect(frame)
+    -- Frame geometry can throw on forbidden frames; keep hover probing non-fatal.
     if not frame or not frame.GetRect then return nil end
     if frame.IsForbidden and frame:IsForbidden() then return nil end
     local ok, l, b, w, h = pcall(frame.GetRect, frame)
@@ -54,6 +61,7 @@ local function SafeGetRect(frame)
 end
 
 local function NamedFromFocus(frame)
+    -- Mouse focus often lands on anonymous child regions, so climb to a named parent.
     local seen = 0
     while frame and seen < 40 do
         if not IsBlocked(frame) and frame.GetName then
@@ -82,6 +90,7 @@ end
 
 local lastFrame, lastName
 local function GetNamed()
+    -- Prefer the smallest named frame under the cursor; it is usually the intended anchor.
     local cx, cy = GetCursorPosition()
     local sc = UIParent:GetEffectiveScale() or 1
     cx, cy = cx / sc, cy / sc
@@ -121,11 +130,11 @@ local function GetNamed()
     return lastFrame, lastName
 end
 
-function _G.MSUF_EnsureAnchorPicker()
+local function EnsureAnchorPicker()
     if _G.MSUF_AnchorPicker then return _G.MSUF_AnchorPicker end
 
     local ov = CreateFrame("Frame", "MSUF_AnchorPickerOverlay", UIParent, "BackdropTemplate")
-    _G.MSUF_AnchorPicker = ov
+    ExportPublic("MSUF_AnchorPicker", ov)
     ov:SetAllPoints(UIParent)
     ov:SetFrameStrata("FULLSCREEN_DIALOG"); ov:SetFrameLevel(100)
     ov:EnableMouse(false); ov:EnableKeyboard(true)
@@ -196,6 +205,7 @@ function _G.MSUF_EnsureAnchorPicker()
             self:Hide()
             return
         end
+        -- Cache localized strings per open to keep the 33 ms hover loop allocation-light.
         self._elapsed = 0; self._pickedFrame = nil; self._pickedName = nil
         self._lCtrlHeld = Tr("CTRL: held - click to anchor!")
         self._lCtrlNotHeld = Tr("CTRL: not held")
@@ -221,6 +231,7 @@ function _G.MSUF_EnsureAnchorPicker()
     end)
 
     ov:SetScript("OnUpdate", function(self, elapsed)
+        -- Hit-testing all visible frames is expensive; throttle while keeping hover feedback responsive.
         self._elapsed = (self._elapsed or 0) + elapsed
         if self._elapsed < 0.03 then return end
         self._elapsed = 0
@@ -292,3 +303,4 @@ function _G.MSUF_EnsureAnchorPicker()
 
     return ov
 end
+ExportPublic("MSUF_EnsureAnchorPicker", EnsureAnchorPicker)

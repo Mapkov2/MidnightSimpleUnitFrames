@@ -7,7 +7,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
 
 local UF = MSUF.UF
@@ -15,24 +14,172 @@ local GF = MSUF.GF or {}
 MSUF.GF = GF
 
 local tonumber = tonumber
+local tostring = tostring
 local type = type
 local pairs = pairs
 local floor = math.floor
 local GetNumGroupMembers = _G.GetNumGroupMembers
 local GetTime = _G.GetTime
 local wipe = _G.wipe or table.wipe
-local Clamp01 = UF.Clamp01
-local Num = UF.NumberWithFallback
-local NormalizeDispelDetectTrigger = UF.NormalizeDispelDetectTrigger
-local NormalizeDispelOverlayTrigger = UF.NormalizeDispelOverlayTrigger
-local NormalizeDispelOverlayStyle = UF.NormalizeDispelOverlayStyle
-local NormalizeRangeFadeLayerMode = UF.NormalizeRangeFadeLayerMode
-local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope
-local ScopedValue = UF.ConfigScopedValue
-local CompileBorderPriority = UF.CompileBorderPriority
-local ResolveBarGradient = UF.ResolveBarGradient
-local FillDispelTypeColors = UF.FillDispelTypeColors
-local FillPredictionColors = UF.FillPredictionColors
+local Clamp01 = UF.Clamp01 or function(value, fallback)
+  value = tonumber(value)
+  if value == nil then value = fallback end
+  value = value or 0
+  if value < 0 then return 0 end
+  if value > 1 then return 1 end
+  return value
+end
+local Num = UF.NumberWithFallback or function(value, fallback)
+  -- Perf smoke can load group config without the full UF core helper table.
+  -- Keep the compiled-spec path deterministic instead of depending on load-order side effects.
+  local number = tonumber(value)
+  if number ~= nil then return number end
+  return fallback
+end
+local NormalizeDispelDetectTrigger = UF.NormalizeDispelDetectTrigger or function(value)
+  value = tostring(value or ""):upper()
+  if value == "DISPEL_TYPE" or value == "TYPE" or value == "ANY_DISPEL_TYPE" then return "DISPEL_TYPE" end
+  if value == "ANY_DEBUFF" or value == "DEBUFF" or value == "ANY" or value == "ALL_DEBUFFS" then return "ANY_DEBUFF" end
+  if value == "PLAYER_CAST" or value == "CAST_BY_ME" or value == "MY_DEBUFF" then return "PLAYER_CAST" end
+  return "BY_ME"
+end
+local NormalizeDispelOverlayTrigger = UF.NormalizeDispelOverlayTrigger or function(value)
+  value = tostring(value or ""):upper()
+  if value == "BORDER" or value == "INHERIT" or value == "SAME" then return "BORDER" end
+  return NormalizeDispelDetectTrigger(value)
+end
+local NormalizeDispelOverlayStyle = UF.NormalizeDispelOverlayStyle or function(value)
+  if value == "TOP" or value == "BOTTOM" or value == "LEFT" or value == "RIGHT" then return value end
+  return "FULL"
+end
+local NormalizeRangeFadeLayerMode = UF.NormalizeRangeFadeLayerMode or function(value)
+  if value == "health" or value == "hp" or value == "hpbar" or value == "HP" or value == 2 then return "health" end
+  return "frame"
+end
+local NormalizeAbsorbTestScope = UF.NormalizeAbsorbTestScope or function(scope)
+  scope = tostring(scope or "shared"):lower()
+  scope = scope:gsub("%s+", "")
+  scope = scope:gsub("%-", "_")
+  if scope == "" or scope == "all" or scope == "global" then return "shared" end
+  if scope == "gf_party" or scope == "group_party" or scope == "gfparty" then return "party" end
+  if scope == "gf_raid" or scope == "gf_mythicraid" or scope == "group_raid" or scope == "gfraid" or scope == "mythic" or scope == "mythicraid" then return "raid" end
+  if scope == "focus_target" then return "focustarget" end
+  if scope == "targetoftarget" or scope == "tot" then return "targettarget" end
+  return scope
+end
+local AbsorbTextureTestEnabledForScope = UF.AbsorbTextureTestEnabledForScope or function(scope)
+  if _G.MSUF_AbsorbTextureTestMode ~= true then return false end
+  local wanted = NormalizeAbsorbTestScope(_G.MSUF_AbsorbTextureTestScope)
+  return wanted == "shared" or wanted == NormalizeAbsorbTestScope(scope)
+end
+local ScopedValue = UF.ConfigScopedValue or function(conf, general, key, fallback)
+  if conf and conf.hlOverride == true and conf[key] ~= nil then return conf[key] end
+  if general and general[key] ~= nil then return general[key] end
+  return fallback
+end
+local CompileBorderPriority = UF.CompileBorderPriority or function(conf, general)
+  local function Read(key, legacyKey, fallback)
+    if conf and conf.hlOverride == true then
+      if conf[key] ~= nil then return conf[key] end
+      if legacyKey and conf[legacyKey] ~= nil then return conf[legacyKey] end
+    end
+    if general then
+      if general[key] ~= nil then return general[key] end
+      if legacyKey and general[legacyKey] ~= nil then return general[legacyKey] end
+    end
+    return fallback
+  end
+  local aliases = {
+    Dispel = "dispel", DISPEL = "dispel", Magic = "dispel", MAGIC = "dispel", Curse = "dispel", CURSE = "dispel",
+    Disease = "dispel", DISEASE = "dispel", Poison = "dispel", POISON = "dispel", Bleed = "dispel", BLEED = "dispel",
+    Aggro = "aggro", AGGRO = "aggro", Purge = "purge", PURGE = "purge", BossTarget = "bossTarget",
+    Boss_Target = "bossTarget", ["Boss Target"] = "bossTarget", ["boss target"] = "bossTarget",
+    boss_target = "bossTarget", bosstarget = "bossTarget", BOSS_TARGET = "bossTarget",
+  }
+  local allowed, defaults, order, used = { dispel = true, aggro = true, purge = true, bossTarget = true }, { "dispel", "aggro", "purge", "bossTarget" }, {}, {}
+  local raw = Read("hlPrioOrder", "highlightPrioOrder", nil)
+  if type(raw) == "table" then
+    for i = 1, #raw do
+      local key = raw[i]
+      if type(key) == "string" then key = aliases[key] or key end
+      if allowed[key] and not used[key] then order[#order + 1], used[key] = key, true end
+    end
+  end
+  for i = 1, #defaults do if not used[defaults[i]] then order[#order + 1], used[defaults[i]] = defaults[i], true end end
+  local enabled = Read("hlPrioEnabled", "highlightPrioEnabled", false)
+  return enabled == true or enabled == 1 or enabled == "1", order
+end
+local GRADIENT_DIR_KEYS = { LEFT = true, RIGHT = true, UP = true, DOWN = true }
+local function GradientKeyActive(conf, key)
+  if not (conf and conf.hlOverride == true and conf.gradientOverride == true) then return false end
+  if conf.gradientOverrideVersion ~= 2 then return conf[key] ~= nil end
+  return type(conf.gradientOverrideKeys) == "table" and conf.gradientOverrideKeys[key] == true
+end
+
+local function GradientScopedValue(conf, general, key, fallback)
+  if GradientKeyActive(conf, key) and conf[key] ~= nil then return conf[key] end
+  if general and general[key] ~= nil then return general[key] end
+  return fallback
+end
+
+local function FallbackResolveBarGradient(conf, general, enabledKey)
+  local left = GradientScopedValue(conf, general, "gradientDirLeft", false) == true
+  local right = GradientScopedValue(conf, general, "gradientDirRight", false) == true
+  local up = GradientScopedValue(conf, general, "gradientDirUp", false) == true
+  local down = GradientScopedValue(conf, general, "gradientDirDown", false) == true
+  if not (left or right or up or down) then
+    local legacy = GradientScopedValue(conf, general, "gradientDirection", "RIGHT")
+    if not GRADIENT_DIR_KEYS[legacy] then legacy = "RIGHT" end
+    left, right, up, down = legacy == "LEFT", legacy == "RIGHT", legacy == "UP", legacy == "DOWN"
+  end
+  return {
+    enabled = GradientScopedValue(conf, general, enabledKey, false) == true,
+    strength = Clamp01(GradientScopedValue(conf, general, "gradientStrength", 0.45), 0.45),
+    left = left,
+    right = right,
+    up = up,
+    down = down,
+  }
+end
+
+local DISPEL_TYPE_COLORS = {
+  { "Magic", 0.20, 0.60, 1.00 },
+  { "Curse", 0.60, 0.00, 1.00 },
+  { "Disease", 0.60, 0.40, 0.00 },
+  { "Poison", 0.00, 0.60, 0.00 },
+  { "Bleed", 0.80, 0.10, 0.10 },
+}
+
+local function FallbackFillDispelTypeColors(dst, general, numberFn)
+  for i = 1, #DISPEL_TYPE_COLORS do
+    local color = DISPEL_TYPE_COLORS[i]
+    local key = "type" .. color[1]
+    dst[key .. "R"] = numberFn(general and general["dispelType" .. color[1] .. "R"], color[2])
+    dst[key .. "G"] = numberFn(general and general["dispelType" .. color[1] .. "G"], color[3])
+    dst[key .. "B"] = numberFn(general and general["dispelType" .. color[1] .. "B"], color[4])
+  end
+end
+
+local function FallbackFillPredictionColors(dst, general, conf, scopedValue, numberFn)
+  dst.healR = numberFn(general and general.healPredictionColorR, 0)
+  dst.healG = numberFn(general and general.healPredictionColorG, 1)
+  dst.healB = numberFn(general and general.healPredictionColorB, 0)
+  dst.healA = Clamp01(general and general.healPredictionColorA, 0.45)
+  dst.absorbR = numberFn(general and general.absorbBarColorR, 1)
+  dst.absorbG = numberFn(general and general.absorbBarColorG, 1)
+  dst.absorbB = numberFn(general and general.absorbBarColorB, 1)
+  dst.absorbA = Clamp01(scopedValue(conf, general, "absorbBarOpacity", general and general.absorbBarColorA), 0.75)
+  dst.healAbsorbR = numberFn(general and general.healAbsorbBarColorR, 0.7)
+  dst.healAbsorbG = numberFn(general and general.healAbsorbBarColorG, 0)
+  dst.healAbsorbB = numberFn(general and general.healAbsorbBarColorB, 0)
+  dst.healAbsorbA = Clamp01(scopedValue(conf, general, "healAbsorbBarOpacity", general and general.healAbsorbBarColorA), 1)
+end
+
+-- These mirrors keep isolated compiler tests/load-order probes deterministic.
+-- The live addon still uses the shared UF core helpers whenever they are loaded.
+local ResolveBarGradient = UF.ResolveBarGradient or FallbackResolveBarGradient
+local FillDispelTypeColors = UF.FillDispelTypeColors or FallbackFillDispelTypeColors
+local FillPredictionColors = UF.FillPredictionColors or FallbackFillPredictionColors
 
 local WHITE = "Interface\\Buttons\\WHITE8x8"
 local EMPTY_EVENTS = {}

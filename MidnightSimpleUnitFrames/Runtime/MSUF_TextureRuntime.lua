@@ -8,20 +8,24 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 MSUF.Textures = MSUF.Textures or {}
 
 local type, tonumber = type, tonumber
 local pairs = pairs
 
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local function Export(key, fn, aliasKey, forceAlias)
     if MSUF then MSUF[key] = fn end
-    _G[key] = fn
+    ExportPublic(key, fn)
     if aliasKey then
         if forceAlias then
-            _G[aliasKey] = fn
+            ExportPublic(aliasKey, fn)
         else
-            _G[aliasKey] = _G[aliasKey] or fn
+            ExportPublic(aliasKey, _G[aliasKey] or fn)
         end
     end
     return fn
@@ -144,7 +148,7 @@ end
 Export("MSUF_UpdateAbsorbBarTextures", UpdateAbsorbBarTextures)
 Export("MSUF_UpdateAllBarTextures", UpdateAllBarTextures, "UpdateAllBarTextures", true)
 
-function _G.MSUF_DetachedPowerBar_RefreshTextures()
+local function DetachedPowerBarRefreshTextures()
     local dpb = MSUF.Bars and MSUF.Bars._DetachedPowerBarTextures
     if dpb then
         dpb.fgK = false
@@ -154,14 +158,15 @@ function _G.MSUF_DetachedPowerBar_RefreshTextures()
     end
     UpdateAllBarTextures()
 end
+Export("MSUF_DetachedPowerBar_RefreshTextures", DetachedPowerBarRefreshTextures)
 
 if not _G.MSUF_UpdateAllBarTextures_Immediate then
-    _G.MSUF_UpdateAllBarTextures_Immediate = _G.MSUF_UpdateAllBarTextures
-    _G.MSUF_UpdateAllBarTextures = function()
+    ExportPublic("MSUF_UpdateAllBarTextures_Immediate", _G.MSUF_UpdateAllBarTextures)
+    ExportPublic("MSUF_UpdateAllBarTextures", function()
         local st = _G.MSUF_ApplyCommitState
         if st then st.bars = true end
         ScheduleApplyCommit()
-    end
+    end)
     _G.UpdateAllBarTextures = _G.UpdateAllBarTextures or _G.MSUF_UpdateAllBarTextures
 end
 

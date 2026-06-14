@@ -6,6 +6,13 @@
 --- Edit Mode 2 grid overlay.
 --- Midnight-styled background, pooled grid lines, accent-colored crosshair.
 --- Zero overhead when hidden (no OnUpdate, no timers).
+local _, MSUFRoot = ...
+MSUFRoot = MSUFRoot or _G.MSUF_NS or {}
+local ExportPublic = MSUFRoot.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local function InstallEditLayoutUI(...)
 local addonName, MSUF = ...
 
@@ -205,7 +212,7 @@ local function EnsureGridFrame()
     ApplyGridVisibility()
 
     --- Keep legacy global alive (Style scanner etc.)
-    _G.MSUF_GridFrame = gridFrame
+    ExportPublic("MSUF_GridFrame", gridFrame)
 
     return gridFrame
 end
@@ -752,11 +759,12 @@ local function GetPreviewNudgeTarget()
     return target
 end
 
-function _G.MSUF_EM2_SetPreviewNudgeTarget(target)
+local function MSUF_EM2_SetPreviewNudgeTarget(target)
     if target == nil or type(target) == "table" then
-        _G.MSUF_EM2_ActivePreviewNudgeTarget = target
+        ExportPublic("MSUF_EM2_ActivePreviewNudgeTarget", target)
     end
 end
+ExportPublic("MSUF_EM2_SetPreviewNudgeTarget", MSUF_EM2_SetPreviewNudgeTarget)
 
 local function GetStep()
     local step = 1
@@ -961,9 +969,10 @@ function Nudge.Disable()
     ClearOverrideBindings(owner)
 end
 
-function _G.MSUF_EnableArrowKeyNudge(enable)
+local function MSUF_EnableArrowKeyNudge(enable)
     if enable then Nudge.Enable() else Nudge.Disable() end
 end
+ExportPublic("MSUF_EnableArrowKeyNudge", MSUF_EnableArrowKeyNudge)
 
 local Ticker = {}
 EM2.Ticker = Ticker
@@ -1579,4 +1588,4 @@ end
 
 end
 
-_G.MSUF_InstallEditLayoutUI = InstallEditLayoutUI
+ExportPublic("MSUF_InstallEditLayoutUI", InstallEditLayoutUI)

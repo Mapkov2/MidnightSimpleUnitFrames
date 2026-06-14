@@ -6,6 +6,11 @@
 --- surface; new code should prefer clearer helpers in Runtime/Style/Visuals and
 --- leave these exports stable unless a migration is planned.
 
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+_G[name] = value
+return value
+end
+
 local e,e=...if type(_G.MSUF_HardSyncCastbarPreview)~="function"then
 local function t(e)local n=_G.issecretvalue
 if type(n)=="function"and n(e)==true then return nil end
@@ -14,7 +19,7 @@ if type(n)=="function"and n(e)==true then return nil end
 if type(e)~="number"then return nil end
 local n,r=pcall(function()return e>0 end)
 return(n and r)and e or nil end
-function _G.MSUF_HardSyncCastbarPreview(e,n)if not e or not n then return end
+local function MSUF_HardSyncCastbarPreview(e,n)if not e or not n then return end
 if n.GetScale and e.SetScale then local n=t(n:GetScale())if n then e:SetScale(n)end end
 if e.statusBar and e.statusBar.SetSize then if n.statusBar and n.statusBar.GetSize then
 local n,r=n.statusBar:GetSize()n=t(n)r=t(r)if n and r then
@@ -27,19 +32,20 @@ end if e.latencyBar and e.latencyBar.SetWidth and n.latencyBar and n.latencyBar.
 local n=t(n.latencyBar:GetWidth())if n then
 e.latencyBar:SetWidth(n)end
 end end
+ExportPublic("MSUF_HardSyncCastbarPreview", MSUF_HardSyncCastbarPreview)
 end local function t()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end end
-_G.MSUF_EnsureDBLazy=t function _G.MSUF_GetAnchorFrame()t()local n=(MSUF_DB and MSUF_DB.general)or{}if n.anchorToCooldown then local e=_G["EssentialCooldownViewer"]if e and e.IsShown and e:IsShown()then return e
+ExportPublic("MSUF_EnsureDBLazy", t) local function MSUF_GetAnchorFrame()t()local n=(MSUF_DB and MSUF_DB.general)or{}if n.anchorToCooldown then local e=_G["EssentialCooldownViewer"]if e and e.IsShown and e:IsShown()then return e
 end return UIParent
 end local e=n.anchorName
 if e and e~=""and e~="EssentialCooldownViewer"then local e=_G[e]if e and e.IsShown and e:IsShown()then return e
 end end
-return UIParent end
+return UIParent end ExportPublic("MSUF_GetAnchorFrame", MSUF_GetAnchorFrame)
 local function m(e,t,r,a,n)if not(e and e.SetStatusBarColor)then return end
 n=n or 1 local i,d,l,o=e._msufLastColorR,e._msufLastColorG,e._msufLastColorB,e._msufLastColorA
 if(i==t and d==r and l==a and o==n)or(e._msufLastR==t and e._msufLastG==r and e._msufLastB==a and e._msufLastA==n)then return
 end e._msufLastColorR,e._msufLastColorG,e._msufLastColorB,e._msufLastColorA=t,r,a,n
 e._msufLastR,e._msufLastG,e._msufLastB,e._msufLastA=t,r,a,n e:SetStatusBarColor(t,r,a,n)end if type(_G.MSUF_SetStatusBarColorIfChanged)~="function"then
-function _G.MSUF_SetStatusBarColorIfChanged(a,n,e,t,r)m(a,n,e,t,r)end end
+local function MSUF_SetStatusBarColorIfChanged(a,n,e,t,r)m(a,n,e,t,r)end ExportPublic("MSUF_SetStatusBarColorIfChanged", MSUF_SetStatusBarColorIfChanged) end
 local p={r=nil,g=nil,b=nil,a=nil,obj=nil}local F={r=nil,g=nil,b=nil,a=nil,obj=nil}local function h(e,t,r,a,n)if e.r==t and e.g==r and e.b==a and e.a==n and e.obj then
 return e.obj end
 e.r,e.g,e.b,e.a=t,r,a,n e.obj=CreateColor(t,r,a,n)return e.obj end
@@ -47,7 +53,7 @@ local function v(e)local n=_G.issecretvalue
 if type(n)=="function"and n(e)==true then return true end
 return e~=nil
 end
-function _G.MSUF_Castbar_ApplyNonInterruptibleTint(e,C,c,S,u,s,d,f,_,G,n)local e=e and e.statusBar if not e then return false end
+local function MSUF_Castbar_ApplyNonInterruptibleTint(e,C,c,S,u,s,d,f,_,G,n)local e=e and e.statusBar if not e then return false end
 local t=(n==true)local n=t and c or d
 local r=t and S or f local a=t and u or _
 local o=t and(s or 1)or(G or 1)local i=e.GetStatusBarTexture and e:GetStatusBarTexture()local l=false if i and i.SetVertexColorFromBoolean and CreateColor then
@@ -62,6 +68,7 @@ local d,i,l,t=e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBase
 e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBaseA=n,r,a,o e._msufGlowLastP=nil
 end end
 return l end
+ExportPublic("MSUF_Castbar_ApplyNonInterruptibleTint", MSUF_Castbar_ApplyNonInterruptibleTint)
 local n=_G.MSUF_SetTextIfChanged local function i(e,t)if not(e and e.SetText)then return end if n then
 n(e,t or"")else
 e:SetText(t or"")end
@@ -74,7 +81,7 @@ local e=_G.MSUF_GetCastbarReverseFillForFrame if type(e)=="function"then
 local e=e(n,t and true or false)if e~=nil then
 return(e==true)end
 end return false
-end function _G.MSUF_GetReverseFillSafe(t,e)return n(t,nil,e)end
+end local function MSUF_GetReverseFillSafe(t,e)return n(t,nil,e)end ExportPublic("MSUF_GetReverseFillSafe", MSUF_GetReverseFillSafe)
 local function r(e)if not e then return nil end
 local n=e.unit or e.MSUF_unit or e._msufUnit or e.unitKey if type(n)=="string"and n~=""then
 return n end
@@ -86,14 +93,15 @@ local e=e.GetName and e:GetName()or nil if type(e)=="string"then
 if e:find("Target",1,true)then return"target"end if e:find("Focus",1,true)then return"focus"end
 if e:find("Player",1,true)then return"player"end if e:find("boss",1,true)or e:find("Boss",1,true)then return"boss"end
 end return nil
-end function _G.MSUF_GetCastbarReverseFillForFrame(o,a)t()local n=(MSUF_DB and MSUF_DB.general)or{}local e=(n.castbarFillDirection=="RTL")and true or false if n.castbarOpositeDirectionTarget==true then
+end local function MSUF_GetCastbarReverseFillForFrame(o,a)t()local n=(MSUF_DB and MSUF_DB.general)or{}local e=(n.castbarFillDirection=="RTL")and true or false if n.castbarOpositeDirectionTarget==true then
 local n=r(o)if n=="target"then
 e=not e end
 end if a==true then
 if n.castbarUnifiedDirection~=true then return not e
 end end
 return e end
-function _G.MSUF_ResolveCastbarColors()t()local l=(MSUF_DB and MSUF_DB.general)or{}local n,r,o
+ExportPublic("MSUF_GetCastbarReverseFillForFrame", MSUF_GetCastbarReverseFillForFrame)
+local function MSUF_ResolveCastbarColors()t()local l=(MSUF_DB and MSUF_DB.general)or{}local n,r,o
 if type(_G.MSUF_GetInterruptibleCastColor)=="function"then n,r,o=_G.MSUF_GetInterruptibleCastColor()end if not(n and r and o)then
 local e=l.castbarInterruptibleColor or"teal"local e=(type(_G.MSUF_GetColorFromKey)=="function")and _G.MSUF_GetColorFromKey(e)or nil
 if e and e.GetRGB then n,r,o=e:GetRGB()end end
@@ -104,11 +112,11 @@ local n=l.castbarNonInterruptibleColor or"red"local n=(type(_G.MSUF_GetColorFrom
 if n and n.GetRGB then a,e,t=n:GetRGB()end end
 if not(a and e and t)then a,e,t=0.9,0.1,0.1
 end return n,r,o,a,e,t
-end local function d(e)if not e or e.MSUF_ShakeGroup then return
+end ExportPublic("MSUF_ResolveCastbarColors", MSUF_ResolveCastbarColors) local function d(e)if not e or e.MSUF_ShakeGroup then return
 end local n=e:CreateAnimationGroup("MSUF_ShakeGroup")n:SetLooping("NONE")local r=n:CreateAnimation("Translation")r:SetOffset(4,0)r:SetDuration(0.05)r:SetOrder(1)local a=n:CreateAnimation("Translation")a:SetOffset(-8,0)a:SetDuration(0.10)a:SetOrder(2)local t=n:CreateAnimation("Translation")t:SetOffset(4,0)t:SetDuration(0.05)t:SetOrder(3)e.MSUF_ShakeGroup=n
 e.MSUF_ShakeA1=r e.MSUF_ShakeA2=a
 e.MSUF_ShakeA3=t end
-function _G.MSUF_PlayCastbarShake(e)if not e then
+local function MSUF_PlayCastbarShake(e)if not e then
 return end
 t()local n=(MSUF_DB and MSUF_DB.general)or{}if n.castbarInterruptShake==false then return
 end local n=tonumber(n.castbarShakeStrength)or 8
@@ -120,11 +128,11 @@ e.MSUF_ShakeA1:SetOffset(t,0)end
 if e.MSUF_ShakeA2 and e.MSUF_ShakeA2.SetOffset then e.MSUF_ShakeA2:SetOffset(-n,0)end if e.MSUF_ShakeA3 and e.MSUF_ShakeA3.SetOffset then
 e.MSUF_ShakeA3:SetOffset(t,0)end
 if e.MSUF_ShakeGroup then e.MSUF_ShakeGroup:Stop()e.MSUF_ShakeGroup:Play()end
-end function _G.MSUF_GetInterruptibleCastColor()t()local e=(MSUF_DB and MSUF_DB.general)or{}local t=tonumber(e.castbarInterruptibleR)local n=tonumber(e.castbarInterruptibleG)local e=tonumber(e.castbarInterruptibleB)if t and n and e then
+end ExportPublic("MSUF_PlayCastbarShake", MSUF_PlayCastbarShake) local function MSUF_GetInterruptibleCastColor()t()local e=(MSUF_DB and MSUF_DB.general)or{}local t=tonumber(e.castbarInterruptibleR)local n=tonumber(e.castbarInterruptibleG)local e=tonumber(e.castbarInterruptibleB)if t and n and e then
 return t,n,e,1 end
-end function _G.MSUF_GetNonInterruptibleCastColor()t()local e=(MSUF_DB and MSUF_DB.general)or{}local t=tonumber(e.castbarNonInterruptibleR)local n=tonumber(e.castbarNonInterruptibleG)local e=tonumber(e.castbarNonInterruptibleB)if t and n and e then
+end ExportPublic("MSUF_GetInterruptibleCastColor", MSUF_GetInterruptibleCastColor) local function MSUF_GetNonInterruptibleCastColor()t()local e=(MSUF_DB and MSUF_DB.general)or{}local t=tonumber(e.castbarNonInterruptibleR)local n=tonumber(e.castbarNonInterruptibleG)local e=tonumber(e.castbarNonInterruptibleB)if t and n and e then
 return t,n,e,1 end
-end local function o(e)if type(e)=="number"then return tonumber(tostring(e))end local n=_G.MSUF_ToPlainNumber
+end ExportPublic("MSUF_GetNonInterruptibleCastColor", MSUF_GetNonInterruptibleCastColor) local function o(e)if type(e)=="number"then return tonumber(tostring(e))end local n=_G.MSUF_ToPlainNumber
 if type(n)=="function"then local e=n(e)if type(e)=="number"then return tonumber(tostring(e))end return e
 end local n=type(e)if n=="number"or n=="string"then return tonumber(tostring(e))end return nil
 end local e=nil
@@ -135,7 +143,7 @@ if t and t.castbarShowGlow==false then e=false
 else e=true
 end r=n
 return e end
-function _G.MSUF_ResetCastbarGlowFade(e)if not e or not e.statusBar then return end
+local function MSUF_ResetCastbarGlowFade(e)if not e or not e.statusBar then return end
 local e=e.statusBar if not e._msufGlowApplied then
 return end
 local t,r,a,n=e._msufGlowBaseR,e._msufGlowBaseG,e._msufGlowBaseB,e._msufGlowBaseA if type(t)~="number"or type(r)~="number"or type(a)~="number"then
@@ -144,7 +152,7 @@ return end
 if n==nil then n=1 end e._msufGlowSkipBase=true
 if type(_G.MSUF_SetStatusBarColorIfChanged)=="function"then _G.MSUF_SetStatusBarColorIfChanged(e,t,r,a,n)else e:SetStatusBarColor(t,r,a,n)end e._msufGlowSkipBase=nil
 e._msufGlowApplied=nil e._msufGlowLastP=nil
-end function _G.MSUF_ApplyCastbarGlowFade(e,r,t)if not e or not e.statusBar then return end if(e._msufIsPreview or e.MSUF_testMode)and not _G.MSUF_UnitEditModeActive then
+end ExportPublic("MSUF_ResetCastbarGlowFade", MSUF_ResetCastbarGlowFade) local function MSUF_ApplyCastbarGlowFade(e,r,t)if not e or not e.statusBar then return end if(e._msufIsPreview or e.MSUF_testMode)and not _G.MSUF_UnitEditModeActive then
 return end
 if e.interrupted then return
 end if e.interruptFeedbackEndTime then
@@ -173,8 +181,9 @@ e._msufGlowSkipBase=true if type(_G.MSUF_SetStatusBarColorIfChanged)=="function"
 _G.MSUF_SetStatusBarColorIfChanged(e,l,t,n,o)else
 e:SetStatusBarColor(l,t,n,o)end
 e._msufGlowSkipBase=nil e._msufGlowApplied=true
-end function _G.MSUF_CB_ApplyColor(e,t)if e and e.UpdateColorForInterruptible then local n=e:UpdateColorForInterruptible()if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(e,t)end return n
+end ExportPublic("MSUF_ApplyCastbarGlowFade", MSUF_ApplyCastbarGlowFade) local function MSUF_CB_ApplyColor(e,t)if e and e.UpdateColorForInterruptible then local n=e:UpdateColorForInterruptible()if _G.MSUF_KickReady_RefreshFrame then _G.MSUF_KickReady_RefreshFrame(e,t)end return n
 end end
+ExportPublic("MSUF_CB_ApplyColor", MSUF_CB_ApplyColor)
 local function G(e,t)if not e or e==""then return e,false end
 t=tonumber(t)or 0 if t<=0 then return"",e~=""end
 local n,r,a=1,#e,0
@@ -212,7 +221,7 @@ r=math.floor((tonumber(r)or 30)+0.5)if r<1 then r=1 elseif r>80 then r=80 end
 t=math.floor((tonumber(t)or 0)+0.5)if t<0 then t=0 elseif t>160 then t=160 end
 local a=(_G.MSUF_CastbarStyleRevision or 1)..":"..r..":"..t
 return true,r,t,a end
-function _G.MSUF_GetCastbarSpellNameShorteningConfig(e)return C(e)end
+local function MSUF_GetCastbarSpellNameShorteningConfig(e)return C(e)end ExportPublic("MSUF_GetCastbarSpellNameShorteningConfig", MSUF_GetCastbarSpellNameShorteningConfig)
 local function A(e,t)if t==nil then return t end
 local n=_G.issecretvalue if type(n)=="function"and n(t)==true then return t end
 local n=type(t)
@@ -224,17 +233,18 @@ if e and e._msufRawCastText==n and e._msufShortCastTextKey==S and e._msufShortCa
 local r,o=G(n,a)local r=o and(r.."...")or n
 if e then e._msufRawCastText=n;e._msufShortCastText=r;e._msufShortCastTextKey=S end
 return r end
-function _G.MSUF_ShortenCastbarSpellName(e,t)return A(e,t)end
-function _G.MSUF_RefreshCastbarSpellNameText(e)if not(e and e.castText)then return end
+local function MSUF_ShortenCastbarSpellName(e,t)return A(e,t)end ExportPublic("MSUF_ShortenCastbarSpellName", MSUF_ShortenCastbarSpellName)
+local function MSUF_RefreshCastbarSpellNameText(e)if not(e and e.castText)then return end
 local t=e._msufRawCastText
 if t==nil then return end
 i(e.castText,A(e,t))end
-function _G.MSUF_CB_ApplyTexts(e,r,n,t)if not e then return end
+ExportPublic("MSUF_RefreshCastbarSpellNameText", MSUF_RefreshCastbarSpellNameText)
+local function MSUF_CB_ApplyTexts(e,r,n,t)if not e then return end
 if r~=nil then if n==nil then n=r.castText end
 if t==nil then t=r.timeText end end
 if n~=nil and e.castText then i(e.castText,A(e,n))end if t~=nil and e.timeText then
 i(e.timeText,t)end
-end function _G.MSUF_ClearEmpowerState(e)if not e then return end e.isEmpower=nil
+end ExportPublic("MSUF_CB_ApplyTexts", MSUF_CB_ApplyTexts) local function MSUF_ClearEmpowerState(e)if not e then return end e.isEmpower=nil
 e.empowerStartTime=nil e.empowerStageEnds=nil
 e.empowerTotalBase=nil e.empowerTotalWithGrace=nil
 e.empowerNextStage=nil e.MSUF_empowerLayoutPending=nil
@@ -252,3 +262,4 @@ if e.empowerSegments then for n=1,#e.empowerSegments do
 local e=e.empowerSegments[n]if e then e:Hide()end
 end end
 end
+ExportPublic("MSUF_ClearEmpowerState", MSUF_ClearEmpowerState)

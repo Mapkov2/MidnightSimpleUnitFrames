@@ -1,8 +1,12 @@
 --- Unit preview public API, refresh hooks, and legacy globals.
+-- Bridges preview refresh calls for Menu2 without owning live unit-frame runtime state.
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local Preview = MSUF.MSUF_UFPreview or _G.MSUF_UFPreview
 if not Preview then return end
 local M = (MSUF and MSUF.MSUF2) or _G.MSUF2 or {}
@@ -75,19 +79,19 @@ end
 function Preview.RequestRefreshForBox(box, reason)
     RequestRefreshForBox(box, reason)
 end
-_G.MSUF_UFPreview_RequestRefresh = function(reason)
+ExportPublic("MSUF_UFPreview_RequestRefresh", function(reason)
     if PreviewInCombat() then return end
     Preview.RequestRefresh(reason)
-end
-_G.MSUF_UFPreview_SetStatusPreviewMode = function(mode)
+end)
+ExportPublic("MSUF_UFPreview_SetStatusPreviewMode", function(mode)
     Preview.SetStatusPreviewMode(mode)
-end
-_G.MSUF_UFPreview_GetStatusPreviewMode = function()
+end)
+ExportPublic("MSUF_UFPreview_GetStatusPreviewMode", function()
     return Preview.GetStatusPreviewMode()
-end
-_G.MSUF_UFPreview_SelectStatusIcon = function(id)
+end)
+ExportPublic("MSUF_UFPreview_SelectStatusIcon", function(id)
     Preview.SelectStatusIcon(id)
-end
+end)
 local PREVIEW_HOOK_NAMES = WordList [[
 MSUF_ForceTextLayoutForUnitKey MSUF_UpdateAllFonts MSUF_UpdateAllFonts_Immediate MSUF_UpdateAllBarTextures MSUF_UpdateAllBarTextures_Immediate
 MSUF_UpdateCastbarVisuals MSUF_ApplyCastbarUnitAndSync MSUF_SyncCastbarPositionPopup MSUF_SyncUnitPositionPopup MSUF_ApplyUnitFrameKey_Immediate
@@ -146,4 +150,4 @@ function MSUF.MSUF_Menu2_CreateUnitPreviewBox(parent, panel, width, height)
     if type(build) ~= "function" then return nil end
     return build(parent, panel, width, height)
 end
-_G.MSUF_Menu2_CreateUnitPreviewBox = MSUF.MSUF_Menu2_CreateUnitPreviewBox
+ExportPublic("MSUF_Menu2_CreateUnitPreviewBox", MSUF.MSUF_Menu2_CreateUnitPreviewBox)

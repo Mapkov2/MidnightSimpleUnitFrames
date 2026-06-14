@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Advanced Gameplay page.
 -- Builds controls for optional gameplay helpers such as combat timer, crosshair, melee range,

@@ -1,4 +1,12 @@
 --- EditMode/MSUF_EditMode_HUD.lua - Edit Mode HUD and guided tour
+-- Builds EditMode HUD widgets only; secure frame mutation stays behind EditMode helpers.
+local _, MSUFRoot = ...
+MSUFRoot = MSUFRoot or _G.MSUF_NS or {}
+local ExportPublic = MSUFRoot.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local function InstallEditModeHUD(...)
 local addonName, MSUF = ...
 local EM2 = _G.MSUF_EM2
@@ -927,7 +935,7 @@ local function EnsureHUD()
     local r1 = {}
 
     previewBtn = AddRowButton(r1, c1, "Preview", 64, BTN_H, 12, function()
-        _G.MSUF_UnitPreviewActive = not (_G.MSUF_UnitPreviewActive and true or false)
+        ExportPublic("MSUF_UnitPreviewActive", not (_G.MSUF_UnitPreviewActive and true or false))
         if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
         SetActive(previewBtn, _G.MSUF_UnitPreviewActive)
         HUD.SetStatus(HelpText(_G.MSUF_UnitPreviewActive and "EM_PREVIEW_ON" or "EM_PREVIEW_OFF"), "info")
@@ -1026,14 +1034,14 @@ local function EnsureHUD()
         if _G.MSUF_EM_UndoUndo then _G.MSUF_EM_UndoUndo() end
         HUD.RefreshControls()
     end, "Undo last position change.")
-    _G.MSUF_EditModeUndoBtn = undoBtn
+    ExportPublic("MSUF_EditModeUndoBtn", undoBtn)
     AttachHistoryIcon(undoBtn, MEDIA .. "msuf_history_undo_red.png")
 
     redoBtn = AddRowButton(r2, c2, "", 42, BTN_H2, 11, function()
         if _G.MSUF_EM_UndoRedo then _G.MSUF_EM_UndoRedo() end
         HUD.RefreshControls()
     end, "Redo last undone change.")
-    _G.MSUF_EditModeRedoBtn = redoBtn
+    ExportPublic("MSUF_EditModeRedoBtn", redoBtn)
     AttachHistoryIcon(redoBtn, MEDIA .. "msuf_history_redo_green.png")
 
     AddRowSep(r2, c2, BTN_H2)
@@ -1164,10 +1172,11 @@ end
 
 function HUD.IsShown() return hudFrame and hudFrame:IsShown() or false end
 
-function _G.MSUF_EM2_SetHUDStatus(text, kind, seconds)
+local function MSUF_EM2_SetHUDStatus(text, kind, seconds)
     return HUD.SetStatus(text, kind, seconds)
 end
+ExportPublic("MSUF_EM2_SetHUDStatus", MSUF_EM2_SetHUDStatus)
 
 end
 
-_G.MSUF_InstallEditModeHUD = InstallEditModeHUD
+ExportPublic("MSUF_InstallEditModeHUD", InstallEditModeHUD)

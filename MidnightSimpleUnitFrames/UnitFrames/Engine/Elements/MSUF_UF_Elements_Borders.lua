@@ -1,7 +1,12 @@
+-- UF border element: applies border, outline, and dispel visuals from compiled specs.
+-- Live updates must avoid secret payload comparisons and keep expensive scans outside hotpaths.
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local V = MSUF.UFVisuals or {}
 local UF = V.UF or MSUF.UF
@@ -176,10 +181,10 @@ local function RefreshBorderTestFrames()
 end
 
 local function RefreshBorderTestModesActive()
-  _G.MSUF_BorderTestModesActive = _G.MSUF_AggroBorderTestMode == true
+  ExportPublic("MSUF_BorderTestModesActive", _G.MSUF_AggroBorderTestMode == true
     or _G.MSUF_DispelBorderTestMode == true
     or _G.MSUF_PurgeBorderTestMode == true
-    or _G.MSUF_BossTargetBorderTestMode == true
+    or _G.MSUF_BossTargetBorderTestMode == true)
 end
 
 local function SetBorderTestMode(flag, scopeFlag, active, scope)
@@ -190,21 +195,25 @@ local function SetBorderTestMode(flag, scopeFlag, active, scope)
   return true
 end
 
-_G.MSUF_SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active, scope)
+local SetAggroBorderTestMode = _G.MSUF_SetAggroBorderTestMode or function(active, scope)
   return SetBorderTestMode("MSUF_AggroBorderTestMode", "MSUF_AggroBorderTestScope", active, scope)
 end
+ExportPublic("MSUF_SetAggroBorderTestMode", SetAggroBorderTestMode)
 
-_G.MSUF_SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active, scope)
+local SetDispelBorderTestMode = _G.MSUF_SetDispelBorderTestMode or function(active, scope)
   return SetBorderTestMode("MSUF_DispelBorderTestMode", "MSUF_DispelBorderTestScope", active, scope)
 end
+ExportPublic("MSUF_SetDispelBorderTestMode", SetDispelBorderTestMode)
 
-_G.MSUF_SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(active, scope)
+local SetPurgeBorderTestMode = _G.MSUF_SetPurgeBorderTestMode or function(active, scope)
   return SetBorderTestMode("MSUF_PurgeBorderTestMode", "MSUF_PurgeBorderTestScope", active, scope)
 end
+ExportPublic("MSUF_SetPurgeBorderTestMode", SetPurgeBorderTestMode)
 
-_G.MSUF_SetBossTargetBorderTestMode = _G.MSUF_SetBossTargetBorderTestMode or function(active)
+local SetBossTargetBorderTestMode = _G.MSUF_SetBossTargetBorderTestMode or function(active)
   return SetBorderTestMode("MSUF_BossTargetBorderTestMode", nil, active, "boss")
 end
+ExportPublic("MSUF_SetBossTargetBorderTestMode", SetBossTargetBorderTestMode)
 
 local function AggroTestApplies(frame)
   return _G.MSUF_BorderTestModesActive == true
@@ -647,5 +656,5 @@ local function RefreshUnitDispelFrame()
   return true
 end
 
-_G.MSUF_RefreshUnitDispelOverlays = RefreshUnitDispelFrame
-_G.MSUF_RefreshUnitDispelOverlay = RefreshUnitDispelFrame
+ExportPublic("MSUF_RefreshUnitDispelOverlays", RefreshUnitDispelFrame)
+ExportPublic("MSUF_RefreshUnitDispelOverlay", RefreshUnitDispelFrame)

@@ -1,10 +1,14 @@
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Registry.lua
+--- Registry-backed parser for Assistant setting-change plans.
+---
+--- Ranks declarative registry entries and returns planned changes only; do not
+--- write SavedVariables or touch frames in this parser shard.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -13,11 +17,6 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
-
--- Registry-backed parser for "change a setting" commands.
--- It ranks declarative registry entries and returns planned changes only. Do not write to
--- SavedVariables or touch frames here; confirmation, undo, and combat handling live after
--- parsing in the assistant router/runtime.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase

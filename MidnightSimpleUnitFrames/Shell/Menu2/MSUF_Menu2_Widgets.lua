@@ -8,9 +8,12 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local T = M.Theme
 local W = M.Widgets or {}
 M.Widgets = W
@@ -264,7 +267,7 @@ function M.FocusRequestedSection(pageKey, opts)
         CloseAutoFocusedSections(pageKey)
         return false
     end
-    _G.MSUF_EM2_MenuFocusSection = section
+    ExportPublic("MSUF_EM2_MenuFocusSection", section)
     local focused = W.FocusCollapsibleSection(section, opts)
     if focused then ConsumeMenuFocusRequest(req) end
     return focused
@@ -577,7 +580,7 @@ function W.PageBuilder(ctx)
         self:RelayoutCollapsibles()
         local focusReq = MenuFocusRequestMatches(ctx.key, sectionId)
         if focusReq then
-            _G.MSUF_EM2_MenuFocusSection = body
+            ExportPublic("MSUF_EM2_MenuFocusSection", body)
             if W.FocusCollapsibleSection(body, { flash = true }) then ConsumeMenuFocusRequest(focusReq) end
         end
         return body

@@ -1,6 +1,14 @@
+--- UnitFrames/Range/MSUF_UF_Group_RangeFade.lua
+--- Group-frame range/offline fade runtime.
+---
+--- Runs across many secure header children, so it uses chunked settle passes
+--- and cached unit state; it must never change secure attributes in combat.
+--- Runtime output is alpha only. Layout, click-cast ownership, and secure
+--- header visibility stay in the group runtime/header modules.
+--- Keep scan expansion budgeted; raid-sized groups multiply every range probe.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
 
 local UF = MSUF.UF
@@ -9,9 +17,6 @@ MSUF.GF = GF
 
 if not (UF and UF.RegisterElement) then return end
 
--- Group-frame range/offline fade element.
--- Runs across many secure header children, so it favors chunked settle passes and cached unit
--- state instead of full-group scans on every range event. It never changes secure attributes.
 local CreateFrame = _G.CreateFrame
 local tonumber = tonumber
 local type = type

@@ -1,7 +1,6 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local UF = MSUF.UF
 if not UF then return end
@@ -794,6 +793,8 @@ local function ArmReadyCheckTimer(when)
 end
 
 ReadyCheckTimerCallback = function()
+  -- Ready-check icons share one compact timer queue instead of one timer per frame. The
+  -- callback compacts sparse slots so raid-size checks do not leave long-lived table holes.
   READY_CHECK_TIMER_AT = nil
   local now = GetTime and GetTime() or 0
   local nextAt
@@ -908,6 +909,8 @@ local function UpdatePowerRoleVisibility(frame, status)
   local prev = frame._msufGFPowRoleHidden
   frame._msufGFPowRoleHidden = hidden or nil
   if prev ~= nil and prev ~= hidden then
+    -- Role-driven power visibility changes alter event ownership and layout. Secure header
+    -- changes are avoided in combat; the dirty mark is replayed by group runtime later.
     if frame._msufGFRegEv and gf and type(gf.RegisterUnitEvents) == "function" and unit then
       gf.RegisterUnitEvents(frame, unit)
     end
@@ -964,6 +967,8 @@ local function UpdateReadyCheck(frame, status, event)
     SetTexCoord(tex, 0, 1, 0, 1)
     SetShown(tex, true)
   elseif event == "READY_CHECK_FINISHED" and tex.IsShown and tex:IsShown() and C_Timer and C_Timer.After then
+    -- Blizzard leaves ready-check result icons visible briefly after finish; queue a delayed
+    -- hide so MSUF matches that readable window without polling.
     QueueReadyCheckHide(frame)
   else
     SetShown(tex, false)
@@ -984,6 +989,7 @@ local function UpdateSummon(frame, status)
     summonStatus = C_IncomingSummon.IncomingSummonStatus(unit)
   end
   if issecretvalue(summonStatus) == true then
+    -- Summon status can be restricted; an unknown value means hide the icon, not inspect it.
     summonStatus = nil
   end
   local texture = summonStatus and SUMMON_TEXTURES[summonStatus]

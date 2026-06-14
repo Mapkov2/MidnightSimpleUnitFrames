@@ -4,7 +4,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS or {})
-_G.MSUF_NS = MSUF
 
 local C_Timer = _G.C_Timer
 local type = type
@@ -140,8 +139,13 @@ function Scheduler.ScheduleDelayOnce(key, delay, fn)
     end
 end
 
-_G.MSUF_Scheduler = Scheduler
-_G.MSUF_RunNextFrame = Scheduler.RunNextFrame
-_G.MSUF_ScheduleOnce = Scheduler.ScheduleOnce
-_G.MSUF_ScheduleDelayOnce = Scheduler.ScheduleDelayOnce
-_G.MSUF_Core_RunNextFrame = _G.MSUF_Core_RunNextFrame or Scheduler.RunNextFrame
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
+ExportPublic("MSUF_Scheduler", Scheduler)
+ExportPublic("MSUF_RunNextFrame", Scheduler.RunNextFrame)
+ExportPublic("MSUF_ScheduleOnce", Scheduler.ScheduleOnce)
+ExportPublic("MSUF_ScheduleDelayOnce", Scheduler.ScheduleDelayOnce)
+ExportPublic("MSUF_Core_RunNextFrame", _G.MSUF_Core_RunNextFrame or Scheduler.RunNextFrame)

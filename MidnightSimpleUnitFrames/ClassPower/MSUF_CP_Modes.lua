@@ -6,7 +6,14 @@
 --- Phase 2 ClassPower split: segmented base mode extracted from the core file.
 --- Includes smooth Essence recharge animation (Evoker pip fill).
 
-_G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
+ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
 
 local function CP_GetVisual(E)
     local getVisual = E and E.GetVisual
@@ -298,7 +305,7 @@ end
 --- MSUF_CP_Mode_Fractional.lua
 --- Phase 2 ClassPower split: fractional mode extracted from the core file.
 
-_G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
+ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
 
 _G.MSUF_CP_MODE_BUILDERS.FRACTIONAL = function(E)
     local tonumber = tonumber
@@ -374,7 +381,7 @@ end
 --- DK rune mode. Unified CP tick: exports RuntimeTick for central controller.
 --- No per-bar OnUpdate scripts ? controller drives a single OnUpdate frame.
 
-_G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
+ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
 
 _G.MSUF_CP_MODE_BUILDERS.RUNE = function(E)
     local math_floor = math.floor
@@ -612,7 +619,7 @@ end
 --- Secret-safe: C_UnitAuras fields (applications) and C_Spell returns can be
 --- secret in 12.0. All Lua-side comparisons/arithmetic guarded with NotSecret.
 
-_G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
+ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
 
 _G.MSUF_CP_MODE_BUILDERS.AURA = function(E)
     local type = type
@@ -812,7 +819,7 @@ end
 --- MSUF_CP_Mode_Timer.lua
 --- Phase 3 ClassPower split: timer-bar mode extracted from the core file.
 
-_G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
+ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
 
 _G.MSUF_CP_MODE_BUILDERS.TIMER = function(E)
     local string_format = string.format
@@ -930,7 +937,7 @@ end
 --- Secret-safe: UnitPower/UnitPowerMax return secret values in 12.0.
 --- C API (SetMinMaxValues, SetValue) accepts secrets natively for bar fill.
 
-_G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
+ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
 
 _G.MSUF_CP_MODE_BUILDERS.CONTINUOUS = function(E)
     local tonumber = tonumber
@@ -1012,7 +1019,7 @@ end
 --- Phase 4 ClassPower split: Brewmaster stagger mode extracted from the core
 --- file.
 
-_G.MSUF_CP_MODE_BUILDERS = _G.MSUF_CP_MODE_BUILDERS or {}
+ExportPublic("MSUF_CP_MODE_BUILDERS", _G.MSUF_CP_MODE_BUILDERS or {})
 
 _G.MSUF_CP_MODE_BUILDERS.STAGGER = function(E)
     local type = type

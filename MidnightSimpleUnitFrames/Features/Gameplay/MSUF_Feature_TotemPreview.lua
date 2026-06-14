@@ -1,5 +1,9 @@
 local _, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local S = MSUF.MSUF_GameplayShared or MSUF.Gameplay or {}
 
 -- Blizzard totem/statue preview controller.
@@ -123,6 +127,8 @@ do
 
     local function _AnchorFrameToPlayer(frame, g, offX, offY)
         if not frame then return end
+        -- Preview and live override use the same anchor resolver so saved offsets match what
+        -- the user drags in EditMode.
 
         local playerFrame = _G.MSUF_player
         local anchorFrom = _AnchorValue(g and g.playerTotemsAnchorFrom, "TOPLEFT")
@@ -141,6 +147,8 @@ do
     local function _StoreOriginalLayout(frame)
         if not frame or originalLayout then return end
 
+        -- Blizzard owns TotemFrame layout. Store the full original anchor/parent state before
+        -- MSUF takes temporary preview ownership so it can be restored losslessly.
         local info = {
             parent = frame:GetParent(),
             scale = frame:GetScale(),
@@ -167,6 +175,8 @@ do
     local function _HookBlizzardTotemFrame(frame)
         if not frame or hooked then return end
         hooked = true
+        -- Blizzard may recreate or relayout the frame after our preview state changes; refresh
+        -- when it becomes visible instead of polling.
         frame:HookScript("OnShow", function()
             if _RefreshBlizzardTotems then
                 _RefreshBlizzardTotems()
@@ -184,6 +194,8 @@ do
         end
 
         if not _CanMoveBlizzardTotemFrame() then
+            -- Secure/protected frame layout changes are deferred by returning false to the
+            -- caller; do not partially restore while combat-locked.
             return false
         end
 
@@ -213,6 +225,8 @@ do
         end
         if frame.Layout then frame:Layout() end
 
+        -- Returning true means ownership is back with Blizzard and MSUF should stop applying
+        -- preview offsets until the user enables the helper again.
         return true
     end
 
@@ -516,7 +530,7 @@ do
         _RefreshBlizzardTotems()
     end
 
-    _G.MSUF_PlayerTotems_ForceRefresh = _RefreshBlizzardTotems
+    ExportPublic("MSUF_PlayerTotems_ForceRefresh", _RefreshBlizzardTotems)
 
     function MSUF.MSUF_PlayerTotems_TogglePreview()
         previewWanted = not previewWanted

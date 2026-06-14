@@ -1,9 +1,13 @@
 --- Group Frames DB: first-load Spell Indicator default seeding.
+-- Seeds cold profile data only; runtime indicator rendering lives in UF group modules.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local GF = MSUF.GF or {}
 MSUF.GF = GF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local function IsDefaultsConf(kind, conf)
     if kind == "party" then return conf == GF.PARTY_DEFAULTS end
@@ -155,8 +159,14 @@ function GF.SeedSpellIndicatorDefaultsForSpec(specKey)
     end
 
     if changed then
-        if GF.MarkAllDirty then GF.MarkAllDirty(GF.DIRTY_AURAS or GF.DIRTY_ALL or 0x3F) end
-        if GF.RefreshVisuals and not (InCombatLockdown and InCombatLockdown()) then GF.RefreshVisuals() end
+        local dirty = GF.DIRTY_AURAS or GF.DIRTY_ALL or 0x3F
+        -- Seeding touches only spell-indicator/aura config. Keep the refresh
+        -- masked so first-login spec defaults do not replay every group element.
+        if GF.MarkAllDirty then
+            GF.MarkAllDirty(dirty)
+        elseif GF.RefreshVisuals and not (InCombatLockdown and InCombatLockdown()) then
+            GF.RefreshVisuals(nil, dirty)
+        end
         if GF.RefreshPreviewBox then GF.RefreshPreviewBox() end
         if GF._RequestOptionsResync then GF._RequestOptionsResync() end
     end
@@ -169,8 +179,8 @@ function GF.SeedCurrentSpecSpellIndicatorDefaults()
     return GF.SeedSpellIndicatorDefaultsForSpec(specKey)
 end
 
-_G.MSUF_GF_SeedSpellIndicatorDefaultsForSpec = GF.SeedSpellIndicatorDefaultsForSpec
-_G.MSUF_GF_SeedCurrentSpecSpellIndicatorDefaults = GF.SeedCurrentSpecSpellIndicatorDefaults
+ExportPublic("MSUF_GF_SeedSpellIndicatorDefaultsForSpec", GF.SeedSpellIndicatorDefaultsForSpec)
+ExportPublic("MSUF_GF_SeedCurrentSpecSpellIndicatorDefaults", GF.SeedCurrentSpecSpellIndicatorDefaults)
 
 --- Keep first-load SI defaults in sync with the player's actual spec. This is
 --- intentionally independent from group-frame size, alpha, aura, and role layout

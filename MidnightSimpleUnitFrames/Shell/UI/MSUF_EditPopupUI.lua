@@ -4,6 +4,14 @@ local function InstallEditPopupUI(addonName, MSUF)
     local EM2 = _G.MSUF_EM2
     if not EM2 then return nil end
     if type(EM2.PopupFactory) == "table" and type(EM2.QuickPopup) == "table" then return EM2.PopupFactory end
+    local ExportPublic = type(MSUF) == "table" and MSUF.ExportPublic or nil
+    local function PublishCompat(name, value)
+        if type(ExportPublic) == "function" then
+            return ExportPublic(name, value)
+        end
+        _G[name] = value
+        return value
+    end
 local Factory = {}
 EM2.PopupFactory = Factory
 
@@ -53,7 +61,7 @@ end
 local SharedUI = (type(MSUF) == "table" and MSUF.UI) or _G.MSUF_UI
 local Menu2Style = _G.MSUF_EM2_Menu2Style
 if type(Menu2Style) ~= "table" or Menu2Style == SharedUI then Menu2Style = {} end
-_G.MSUF_EM2_Menu2Style = Menu2Style
+PublishCompat("MSUF_EM2_Menu2Style", Menu2Style)
 
 function Menu2Style.Color(key, fallback)
     return SharedUI and SharedUI.Color and SharedUI.Color(key, fallback) or fallback
@@ -530,6 +538,131 @@ function Quick.CreateShell(name, opts)
     return pf
 end
 
+--- Small placement adapters for quick popups. They deliberately do not hide the
+--- underlying Quick.Button/ValuePair behavior; they only remove repeated
+--- SetPoint boilerplate from popup files.
+function Quick.ButtonAt(parent, text, x, y, w, h, onClick, opts)
+    local b = Quick.Button(parent, text, w, h or 30, onClick, opts)
+    b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    return b
+end
+
+function Quick.MenuButtonAt(parent, text, x, y, w, h, entries, onSelect, opts)
+    -- Compact dropdown used by quick EditMode popups. The host supplies declarative
+    -- entries and the copy/apply callback; this helper owns only popup chrome and
+    -- hover-close behaviour so individual popups do not rebuild small menus by hand.
+    opts = opts or {}
+    local btn = Quick.ButtonAt(parent, text, x, y, w, h or 30, nil, opts.buttonOpts)
+    local c = opts.palette or Quick.RefreshPalette()
+    local menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    menu:SetFrameStrata(opts.strata or "TOOLTIP")
+    menu:SetFrameLevel(opts.frameLevel or 960)
+    menu:SetClampedToScreen(true)
+    menu:EnableMouse(true)
+    menu:SetBackdrop({ bgFile = W8, edgeFile = W8, edgeSize = 1 })
+    menu:SetBackdropColor(c.panelBg[1], c.panelBg[2], c.panelBg[3], 0.98)
+    menu:SetBackdropBorderColor(c.panelEdge[1], c.panelEdge[2], c.panelEdge[3], 0.95)
+    if Menu2Style.Shell then Menu2Style.Shell(menu) end
+    menu:Hide()
+
+    local itemH = opts.itemHeight or 22
+    local function BuildRows()
+        if menu._built then return end
+        menu._built = true
+        local rows = type(entries) == "function" and entries() or entries or {}
+        menu:SetSize(w, #rows * itemH + 6)
+        for i = 1, #rows do
+            local row = rows[i]
+            local item = CreateFrame("Button", nil, menu)
+            item:SetSize(w - 4, itemH)
+            item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (i - 1) * itemH))
+            local bg = item:CreateTexture(nil, "BACKGROUND")
+            bg:SetAllPoints()
+            bg:SetColorTexture(row.highlight and c.btnHover[1] or 0, row.highlight and c.btnHover[2] or 0, row.highlight and c.btnHover[3] or 0, row.highlight and 0.08 or 0)
+            local fs = FS(item, 10, row.highlight and c.title or c.white)
+            fs:SetPoint("LEFT", 8, 0)
+            fs:SetText(Tr(row.label))
+            item:SetScript("OnEnter", function() bg:SetColorTexture(c.btnHover[1], c.btnHover[2], c.btnHover[3], 0.22) end)
+            item:SetScript("OnLeave", function() bg:SetColorTexture(row.highlight and c.btnHover[1] or 0, row.highlight and c.btnHover[2] or 0, row.highlight and c.btnHover[3] or 0, row.highlight and 0.08 or 0) end)
+            item:SetScript("OnClick", function()
+                menu:Hide()
+                if onSelect then onSelect(row, btn, menu) end
+                if opts.flashSelection ~= false and Menu2Style.SetButtonText then
+                    Menu2Style.SetButtonText(btn, row.label)
+                    C_Timer.After(opts.flashSeconds or 1.2, function() Menu2Style.SetButtonText(btn, text) end)
+                end
+            end)
+        end
+    end
+    btn:SetScript("OnClick", function()
+        if menu:IsShown() then menu:Hide(); return end
+        BuildRows()
+        menu:ClearAllPoints()
+        menu:SetPoint(opts.point or "TOP", btn, opts.relativePoint or "BOTTOM", opts.offsetX or 0, opts.offsetY or -3)
+        menu:Show()
+    end)
+    menu:SetScript("OnUpdate", function(self)
+        if not self:IsShown() then return end
+        if btn:IsMouseOver() or self:IsMouseOver() then
+            self._closeTimer = nil
+        else
+            if not self._closeTimer then self._closeTimer = GetTime() + (opts.closeDelay or 0.35)
+            elseif GetTime() >= self._closeTimer then self:Hide() end
+        end
+    end)
+    if parent and parent.HookScript then parent:HookScript("OnHide", function() menu:Hide() end) end
+    btn._menu = menu
+    return btn, menu
+end
+
+function Quick.ToggleAt(parent, text, x, y, w, h, onClick, opts)
+    local b = Quick.ToggleButton(parent, text, w, h or 30, onClick, opts)
+    b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    return b
+end
+
+function Quick.ValuePairAt(owner, parent, x, y, label1, key1, cb1, label2, key2, cb2, opts)
+    opts = opts or {}
+    opts.x = x or opts.x or 0
+    return Quick.ValuePair(owner, parent, y, label1, key1, cb1, label2, key2, cb2, opts)
+end
+
+function Quick.SingleValueAt(owner, parent, x, y, label, key, cb, opts)
+    opts = opts or {}
+    opts.x = x or opts.x or 0
+    return Quick.SingleValue(owner, parent, y, label, key, cb, opts)
+end
+
+local function ResolveQuickSpecValue(value)
+    return type(value) == "function" and value() or value
+end
+
+function Quick.BuildBoundsPopup(name, shellOpts, spec)
+    -- Castbar and aura shortcut popups share one fixed bounds-editor layout. The caller
+    -- still owns DB writes, focus routing, and refresh callbacks; this helper only centralizes
+    -- the chrome so future popup additions do not copy/paste shell rows and footer wiring.
+    spec = spec or {}
+    local pf = Quick.CreateShell(name, shellOpts)
+    local defaultOpts = ResolveQuickSpecValue(spec.buttonOpts)
+    for i = 1, #(spec.rows or {}) do
+        local row = spec.rows[i]
+        Quick.ValuePairAt(pf, pf, row.x or 0, row.y, row.label1, row.key1, row.cb1, row.label2, row.key2, row.cb2, ResolveQuickSpecValue(row.opts) or defaultOpts)
+    end
+    local toggle = spec.toggle
+    if toggle then
+        pf[toggle.key] = Quick.ToggleAt(pf, toggle.text, toggle.x, toggle.y, toggle.w, toggle.h, toggle.onClick, ResolveQuickSpecValue(toggle.opts) or defaultOpts)
+    end
+    for i = 1, #(spec.buttons or {}) do
+        local button = spec.buttons[i]
+        local control = Quick.ButtonAt(pf, button.text, button.x, button.y, button.w, button.h, button.onClick, ResolveQuickSpecValue(button.opts) or defaultOpts)
+        if spec.wireButton then control = spec.wireButton(control, button, pf) or control end
+        if button.key then pf[button.key] = control end
+    end
+    if Quick.AddFooterControls and spec.footer then Quick.AddFooterControls(pf, spec.footer) end
+    if spec.scaleGrip ~= false and EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
+    return pf
+end
+
 --- Shared bottom footer: Undo / Redo + Reset position. Keeps every quick popup
 --- on the same Menu2 visual system and behavior. The host popup supplies:
 ---   opts.onResetPosition  -> called when "Reset position" is clicked
@@ -596,4 +729,12 @@ end
     return Factory
 end
 
-_G.MSUF_InstallEditPopupUI = InstallEditPopupUI
+do
+    local ns = _G.MSUF_NS or _G.MSUF
+    local export = type(ns) == "table" and ns.ExportPublic or nil
+    if type(export) == "function" then
+        export("MSUF_InstallEditPopupUI", InstallEditPopupUI)
+    else
+        _G["MSUF_InstallEditPopupUI"] = InstallEditPopupUI
+    end
+end

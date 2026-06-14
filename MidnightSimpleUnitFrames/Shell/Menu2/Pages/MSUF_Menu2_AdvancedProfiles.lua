@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Advanced Profiles page.
 -- Builds profile copy/import/export/spec-switch controls and Wago/UUF import affordances.
@@ -101,6 +100,10 @@ end
 local function InstallProfilePopup(key, spec)
     return M.InstallStaticPopup and M.InstallStaticPopup(key, spec)
 end
+
+-- Static popups are the safety boundary for destructive profile operations.
+-- Keep the actual profile mutations inside the OnAccept handlers so callers cannot bypass
+-- confirmation by invoking helper functions directly.
 local function EnsureProfilePopups()
     if not _G.StaticPopupDialogs then return end
     InstallProfilePopup("MSUF2_IMPORT_RELOAD_PROMPT", {
@@ -215,6 +218,9 @@ local function BuildProfiles(ctx)
         btn:SetScript("OnClick", onClick)
         return btn
     end
+
+    -- Profile switches rebuild live frames and can taint secure state in combat, so every
+    -- entry point on this page goes through BlockCombatAction before touching profile APIs.
     local current = b:CollapsibleSection("profiles_management", "Profile Management", 238, true)
     local fieldW = min(360, max(300, rightX - 42))
     local profileDrop = W.Dropdown(current, "Active profile", {}, fieldW)
@@ -300,6 +306,9 @@ local function BuildProfiles(ctx)
     end)
     local specs = GetSpecMeta()
     local specRows = max(1, math.ceil((#specs > 0 and #specs or 1) / 2))
+
+    -- Spec-profile rows depend on WoW specialization APIs. The empty-state path keeps the
+    -- page usable for low-level characters and offline smoke tests where those APIs are nil.
     local spec = b:CollapsibleSection("profiles_specs", "Spec Profiles", 120 + (specRows * 58), true)
     local auto = W.SwitchAt(spec, "Auto-switch profile by specialization", 14, -38, 360)
     M.BindBoolWidget(ctx, auto,
@@ -334,6 +343,9 @@ local function BuildProfiles(ctx)
         end
     end
     local io = b:CollapsibleSection("profiles_io", "Export / Import", 424, false)
+
+    -- Import/export shares one text box intentionally: exporting fills the field, importing
+    -- consumes it, and tests can exercise both paths without clipboard APIs.
     local ioActionX = min(max(380, floor(contentW * 0.46)), max(340, contentW - 460))
     local ioLeftW = max(320, min(620, ioActionX - 28))
     local exportKind = W.Dropdown(io, "Export kind", VT("all", "Full profile", "unitframe", "Unitframes", "castbar", "Castbars", "colors", "Colors", "gameplay", "Gameplay", "groupframe", "Group Frames"), 240)
@@ -420,6 +432,9 @@ local function BuildProfiles(ctx)
             PrintProfileMessage("|cffff0000", "Import failed: profile API is not available.")
             return false
         end
+
+        -- New-profile import is transactional at the SavedVariables level: create, switch,
+        -- import, then roll back the created profile if any required step fails.
         return ConfirmUUFBestEffortImport(text, function()
             local previous = ActiveProfileName()
             CallMSUF("MSUF_CreateProfile", name)

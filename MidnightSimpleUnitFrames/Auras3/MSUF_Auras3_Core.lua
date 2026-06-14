@@ -5,7 +5,6 @@
 --- UnitFrame backend split so gameplay aura deltas never enter menu/edit code.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 
 local type = type
 
@@ -14,7 +13,13 @@ if type(A3) ~= "table" then
     A3 = {}
     MSUF.MSUF_Auras3 = A3
 end
-_G.MSUF_Auras3 = A3
+
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
+ExportPublic("MSUF_Auras3", A3)
 
 A3.version = 3
 A3.frontendOnly = false
@@ -25,7 +30,7 @@ A3._unitFrameOwners = A3._unitFrameOwners or {}
 
 MSUF.AuraBackendEnabled = true
 MSUF.AuraCore = MSUF.AuraCore or _G.MSUF_AuraCore or {}
-_G.MSUF_AuraCore = MSUF.AuraCore
+ExportPublic("MSUF_AuraCore", MSUF.AuraCore)
 MSUF.AuraCore.Auras3 = A3
 
 local CT = A3.CooldownText
@@ -47,7 +52,7 @@ local function EnsureRootDB()
     local db = _G.MSUF_DB
     if type(db) ~= "table" then
         db = {}
-        _G.MSUF_DB = db
+        ExportPublic("MSUF_DB", db)
     end
     return db
 end
@@ -163,14 +168,14 @@ CT.UnregisterButton = CT.UnregisterButton or NoopTrue
 CT.Invalidate = CT.Invalidate or NoopTrue
 CT.ForceRecolor = CT.ForceRecolor or NoopTrue
 
-_G.MSUF_A3_RequestUnit = A3.RequestUnit
-_G.MSUF_A3_RefreshAll = A3.RefreshAll
-_G.MSUF_A3_InvalidateCooldownTextCurve = function() return CT.Invalidate("unit") end
-_G.MSUF_A3_ForceCooldownTextRecolor = function() return CT.ForceRecolor("unit") end
-_G.MSUF_Auras3_ApplyFontsFromGlobal = _G.MSUF_Auras3_ApplyFontsFromGlobal or NoopTrue
-_G.MSUF_Auras3_RefreshUnit = A3.RefreshUnit
-_G.MSUF_Auras3_RefreshAll = A3.RefreshAll
-_G.MSUF_Auras3_UpdateUnitAnchor = A3.UpdateUnitAnchor
-_G.MSUF_Auras3_RefreshEditPreview = A3.RefreshEditPreview
-_G.MSUF_A3_RefreshUnit = A3.RefreshUnit
-_G.MSUF_A3_UpdateUnitAnchor = A3.UpdateUnitAnchor
+ExportPublic("MSUF_A3_RequestUnit", A3.RequestUnit)
+ExportPublic("MSUF_A3_RefreshAll", A3.RefreshAll)
+ExportPublic("MSUF_A3_InvalidateCooldownTextCurve", function() return CT.Invalidate("unit") end)
+ExportPublic("MSUF_A3_ForceCooldownTextRecolor", function() return CT.ForceRecolor("unit") end)
+ExportPublic("MSUF_Auras3_ApplyFontsFromGlobal", _G.MSUF_Auras3_ApplyFontsFromGlobal or NoopTrue)
+ExportPublic("MSUF_Auras3_RefreshUnit", A3.RefreshUnit)
+ExportPublic("MSUF_Auras3_RefreshAll", A3.RefreshAll)
+ExportPublic("MSUF_Auras3_UpdateUnitAnchor", A3.UpdateUnitAnchor)
+ExportPublic("MSUF_Auras3_RefreshEditPreview", A3.RefreshEditPreview)
+ExportPublic("MSUF_A3_RefreshUnit", A3.RefreshUnit)
+ExportPublic("MSUF_A3_UpdateUnitAnchor", A3.UpdateUnitAnchor)

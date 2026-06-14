@@ -6,7 +6,6 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local TextFocus = M.GroupPreviewTextFocus or {}
 M.GroupPreviewTextFocus = TextFocus
 local PreviewHelpers = M.PreviewHelpers or {}

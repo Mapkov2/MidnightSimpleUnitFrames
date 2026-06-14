@@ -1,10 +1,14 @@
+--- Shell/Menu2/Assistant/MSUF_AssistantKnowledge.lua
+--- Lightweight knowledge search for Assistant help/support answers.
+---
+--- Indexes registry metadata and curated snippets so help replies do not need
+--- to read live frame state or mutate settings.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -15,9 +19,6 @@ local Registry = A.Registry
 local K = A.Knowledge or {}
 A.Knowledge = K
 
--- Lightweight knowledge search for Assistant help/support answers.
--- It indexes registry metadata and curated snippets so the assistant can explain features
--- without reading live frame state or mutating settings.
 local MAX_RESULTS = 6
 local INDEX_VERSION = 3
 local SEARCH_CACHE_LIMIT = 32

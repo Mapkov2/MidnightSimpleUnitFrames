@@ -5,7 +5,6 @@
 --- Live aura filtering, scanning, cooldown text, and button pooling stay in Auras3 runtime.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local floor, max, min = math.floor, math.max, math.min
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"

@@ -1,7 +1,6 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local C = MSUF.UFBarTextCommon
 if not C then return end
@@ -74,6 +73,8 @@ local Text = MSUF.UFText or {}
 MSUF.UFText = Text
 local Secrets = MSUF.Secrets or {}
 local IsSecret = C.IsSecret or Secrets.IsSecret or function(_) return false end
+-- Retail secret values can flow through health/color APIs during restricted
+-- states. Cache normal numbers, but never persist secret-backed color tuples.
 local nativeSecrets = _G.issecretvalue ~= nil
 local issecretvalue = _G.issecretvalue or function(_) return false end
 
@@ -92,6 +93,8 @@ local function ApplyFontChecked(fs, requested, size, flags)
   if type(safeSet) == "function" then
     return safeSet(fs, requested, size, flags) == true and FontApplied(fs, requested)
   end
+  -- SetFont can fail for missing SharedMedia paths. Treat that as a recoverable
+  -- font miss so callers can fall back to STANDARD_FONT without aborting apply.
   local ok, applied = pcall(fs.SetFont, fs, requested, size, flags)
   return ok and applied ~= false and FontApplied(fs, requested)
 end
@@ -171,6 +174,8 @@ local function SetHealthTextSlotColorSecret(fs, r, g, b, a)
     return
   end
   fs:SetTextColor(r, g, b, a)
+  -- Do not memoize secret colors. Equality checks on later plain numbers would
+  -- otherwise incorrectly skip SetTextColor after the secure value resolves.
   fs._msufTextR, fs._msufTextG, fs._msufTextB, fs._msufTextA = nil, nil, nil, nil
 end
 
@@ -188,6 +193,8 @@ end
 local function SetHealthTextColor(frame, rt, r, g, b, a)
   a = a or 1
   if nativeSecrets then
+    -- With native secret support present, assume health-derived colors may be
+    -- protected even when this particular tuple is not inspectable offline.
     if not SetHealthTextSlotsColor(rt and rt.healthSlots, rt and rt.healthSlotCount, SetHealthTextSlotColorSecret, r, g, b, a) then
       SetHealthTextSlotColorSecret(frame.hpTextLeft, r, g, b, a)
       SetHealthTextSlotColorSecret(frame.hpTextCenter, r, g, b, a)
@@ -228,6 +235,8 @@ end
 
 local function HealthGradientFromValues(hp, hpMax)
   if nativeSecrets and (issecretvalue(hp) == true or issecretvalue(hpMax) == true) then
+    -- Secret health values cannot be normalized safely. Fall back to the runtime
+    -- color provider or the configured base text color.
     return nil
   end
   hp = tonumber(hp)
@@ -292,6 +301,8 @@ local function UpdateHealthTextColor(frame, rt, unit, hp, hpMax)
   if not (rt and rt.healthColorByHealth == true and frame) then
     return
   end
+  -- Bucket non-secret health percentages to avoid text-color churn on every
+  -- health tick while preserving exact updates for secret/runtime-only values.
   if nativeSecrets ~= true
     and type(hp) == "number" and type(hpMax) == "number" and hpMax > 0 then
     local bucket = floor((hp / hpMax) * 100 + 0.5)

@@ -8,7 +8,11 @@
 
 local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
-_G.MSUF_NS = ns
+
+local ExportPublic = ns.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local Backend = {}
 ns.MSUF_CastbarBackend = Backend
@@ -188,13 +192,13 @@ function Backend.IsHide(unit, general)
     return Backend.Get(unit, general) == "HIDE"
 end
 
-_G.MSUF_NormalizeCastbarBackend = Backend.Normalize
-_G.MSUF_NormalizeCastbarBackendForUnit = Backend.NormalizeForUnit
-_G.MSUF_GetCastbarBackendKey = Backend.BackendKey
-_G.MSUF_GetCastbarEnableKey = Backend.LegacyEnableKey
-_G.MSUF_GetCastbarBackend = Backend.Get
-_G.MSUF_SetCastbarBackend = Backend.Set
-_G.MSUF_SyncCastbarBackendLegacyFlags = Backend.Sync
-_G.MSUF_ShouldUseMSUFCastbar = Backend.IsMSUF
-_G.MSUF_ShouldUseBlizzardCastbar = Backend.IsBlizzard
-_G.MSUF_ShouldHideCastbar = Backend.IsHide
+ExportPublic("MSUF_NormalizeCastbarBackend", Backend.Normalize)
+ExportPublic("MSUF_NormalizeCastbarBackendForUnit", Backend.NormalizeForUnit)
+ExportPublic("MSUF_GetCastbarBackendKey", Backend.BackendKey)
+ExportPublic("MSUF_GetCastbarEnableKey", Backend.LegacyEnableKey)
+ExportPublic("MSUF_GetCastbarBackend", Backend.Get)
+ExportPublic("MSUF_SetCastbarBackend", Backend.Set)
+ExportPublic("MSUF_SyncCastbarBackendLegacyFlags", Backend.Sync)
+ExportPublic("MSUF_ShouldUseMSUFCastbar", Backend.IsMSUF)
+ExportPublic("MSUF_ShouldUseBlizzardCastbar", Backend.IsBlizzard)
+ExportPublic("MSUF_ShouldHideCastbar", Backend.IsHide)

@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local T = M.Theme or {}
 M.Theme = T
 local WL = M.WordList
@@ -150,6 +149,8 @@ local function ApplyTextureGradient(tex, orientation, fromColor, toColor, preser
         if tex.SetTexCoord then tex:SetTexCoord(0, 1, 0, 1) end
     end
     if tex.SetGradientAlpha then
+        -- Retail/Era clients expose slightly different gradient APIs; try the richer alpha API
+        -- first, then fall back without failing page construction.
         local ok = pcall(tex.SetGradientAlpha, tex, orientation,
             fromColor[1] or 0, fromColor[2] or 0, fromColor[3] or 0, fromColor[4] or 1,
             toColor[1] or 0, toColor[2] or 0, toColor[3] or 0, toColor[4] or 1)
@@ -210,6 +211,8 @@ function T.StyleFontString(fs, color, bump)
 end
 local function CreateSuperellipseParts(frame, layer, subLevel)
     local parts = {}
+    -- The pill/superellipse skin is three textures, not a nine-slice frame. This keeps
+    -- allocation cheap for dense option rows while still allowing gradient fills.
     local specs = {
         { "L", 0.00, 0.25 },
         { "M", 0.25, 0.75 },
@@ -235,6 +238,7 @@ local function LayoutSuperellipseParts(parts, frame, inset, capW)
     parts.L:ClearAllPoints()
     parts.M:ClearAllPoints()
     parts.R:ClearAllPoints()
+    -- Caps keep their texture aspect while the middle segment stretches to absorb row width.
     parts.L:SetPoint("TOPLEFT", frame, "TOPLEFT", inset, -inset)
     parts.L:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inset, inset)
     parts.L:SetWidth(capW)

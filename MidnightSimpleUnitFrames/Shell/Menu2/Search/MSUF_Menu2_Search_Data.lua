@@ -3,7 +3,6 @@ MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local Data = M.SearchData or {}
 M.SearchData = Data

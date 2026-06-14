@@ -1,10 +1,10 @@
+-- Assistant Aura parser: parses aura-specific natural language into registry-backed plans.
+-- Mutating aura commands must preserve combat safety, confirmation, and undo metadata.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A

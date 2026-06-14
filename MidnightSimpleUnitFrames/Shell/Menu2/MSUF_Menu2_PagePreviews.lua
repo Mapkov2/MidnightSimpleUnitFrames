@@ -7,7 +7,6 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local function BossPagePreviewInCombat()
     return (_G.InCombatLockdown and _G.InCombatLockdown())
         or (_G.UnitAffectingCombat and _G.UnitAffectingCombat("player"))
@@ -62,6 +61,9 @@ end
 local function IsGFBarMenuPreviewKey(key)
     return GF_BAR_MENU_PREVIEW_KEYS[key or ""] == true
 end
+
+-- Status test mode is a temporary visual aid from the menu. Clear it when Menu2 closes so
+-- runtime frames do not keep fake dead/ghost/AFK indicators after the preview is gone.
 local function ResetStatusIndicatorTestModeOnMenuExit()
     if type(M.EnsureDB) ~= "function" then return false end
     local db = M.EnsureDB()
@@ -114,6 +116,9 @@ local function GFPreviewCount(kind)
     if kind == "raid" then return 30 end
     return 5
 end
+
+-- The global Bars page previews party and raid at once. Mythic raid stays hidden here because
+-- it shares raid settings and would add visual noise without showing a different control path.
 local function ShowGFBarMenuPreviews(gf)
     if not gf then return end
     gf.ShowPreview("party", GFPreviewCount("party"))
@@ -161,6 +166,9 @@ local lastGFPreviewActive
 local lastGFPreviewKind
 local lastGFPreviewEditMode
 local lastGFPreviewRuntime
+
+-- Page previews borrow runtime group headers only while the menu owns focus. This cache avoids
+-- repeatedly hiding/restoring secure headers when the selected page key has not changed.
 local function SyncGroupPagePreviewForKey(key, force)
     if _G.InCombatLockdown and _G.InCombatLockdown() then
         SetGFPagePreviewFlag(false)

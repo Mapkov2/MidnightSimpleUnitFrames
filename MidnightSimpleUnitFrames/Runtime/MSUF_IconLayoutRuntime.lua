@@ -8,9 +8,12 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 MSUF.Icons = MSUF.Icons or {}
 MSUF.Icons._layout = MSUF.Icons._layout or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local type, tonumber = type, tonumber
 local math_floor = math.floor
@@ -175,15 +178,17 @@ local function RefreshFrames(applyFn, fieldName)
     end
 end
 
-function _G.MSUF_RefreshLeaderIconFrames()
+local function RefreshLeaderIconFrames()
     RefreshFrames(MSUF_ApplyLeaderIconLayout, "leaderIcon")
 end
 
-function _G.MSUF_RefreshRaidMarkerFrames()
+local function RefreshRaidMarkerFrames()
     RefreshFrames(MSUF_ApplyRaidMarkerLayout, "raidMarkerIcon")
 end
 
-_G.MSUF_ApplyLeaderIconLayout = MSUF_ApplyLeaderIconLayout
-_G.MSUF_ApplyRaidMarkerLayout = MSUF_ApplyRaidMarkerLayout
+ExportPublic("MSUF_RefreshLeaderIconFrames", RefreshLeaderIconFrames)
+ExportPublic("MSUF_RefreshRaidMarkerFrames", RefreshRaidMarkerFrames)
+ExportPublic("MSUF_ApplyLeaderIconLayout", MSUF_ApplyLeaderIconLayout)
+ExportPublic("MSUF_ApplyRaidMarkerLayout", MSUF_ApplyRaidMarkerLayout)
 MSUF.Icons.ApplyLeaderIconLayout = MSUF_ApplyLeaderIconLayout
 MSUF.Icons.ApplyRaidMarkerLayout = MSUF_ApplyRaidMarkerLayout

@@ -1,6 +1,9 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local F = (MSUF.Cache and MSUF.Cache.F) or {}
 if type(F.UnitExists) ~= "function" then F.UnitExists = _G.UnitExists end
 local UnitIsEnemy = _G.UnitIsEnemy
@@ -65,6 +68,6 @@ do
         MSUF_EventBus_Register("PLAYER_TARGET_CHANGED", "MSUF_TARGET_SOUND", _MSUF_TargetSound_OnTargetChanged_Bus)
         MSUF_TargetSoundDriver_ResetState()
      end
-    _G.MSUF_TargetSoundDriver_Ensure = MSUF_TargetSoundDriver_Ensure
-    _G.MSUF_TargetSoundDriver_ResetState = MSUF_TargetSoundDriver_ResetState
+    ExportPublic("MSUF_TargetSoundDriver_Ensure", MSUF_TargetSoundDriver_Ensure)
+    ExportPublic("MSUF_TargetSoundDriver_ResetState", MSUF_TargetSoundDriver_ResetState)
 end

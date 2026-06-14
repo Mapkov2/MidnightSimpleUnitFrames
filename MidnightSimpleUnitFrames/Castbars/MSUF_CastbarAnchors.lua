@@ -17,6 +17,12 @@
 --   install the hooks. All of this is deferred out of combat.
 
 local _G = _G
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local floor = math.floor
 local ceil = math.ceil
 local type = type
@@ -965,21 +971,21 @@ end
 ------------------------------------------------------------------------
 -- _G exports
 ------------------------------------------------------------------------
-_G.MSUF_ReanchorTargetCastBar             = MSUF_ReanchorTargetCastBar
-_G.MSUF_ReanchorFocusCastBar              = MSUF_ReanchorFocusCastBar
-_G.MSUF_NormalizeCastbarWidthSource       = NormalizeWidthSourceKind
-_G.MSUF_NormalizePlayerCastbarWidthSource = NormalizeWidthSourceKind
-_G.MSUF_GetCastbarWidthSourceKey          = function(unit)
+ExportPublic("MSUF_ReanchorTargetCastBar", MSUF_ReanchorTargetCastBar)
+ExportPublic("MSUF_ReanchorFocusCastBar", MSUF_ReanchorFocusCastBar)
+ExportPublic("MSUF_NormalizeCastbarWidthSource", NormalizeWidthSourceKind)
+ExportPublic("MSUF_NormalizePlayerCastbarWidthSource", NormalizeWidthSourceKind)
+ExportPublic("MSUF_GetCastbarWidthSourceKey", function(unit)
     local def = UNIT_CASTBAR[NormalizeUnit(unit)]
     return def and def.match
-end
-_G.MSUF_GetCastbarDesiredSize             = MSUF_GetCastbarDesiredSize
-_G.MSUF_UpdateCastbarWidthSourceSync      = MSUF_UpdateCastbarWidthSourceSync
-_G.MSUF_ApplyCastbarEffectiveSizeUnit     = ApplyCastbarEffectiveSizeUnit
-_G.MSUF_GetPlayerCastbarDesiredSize       = function(g, bar, fallbackW, fallbackH)
+end)
+ExportPublic("MSUF_GetCastbarDesiredSize", MSUF_GetCastbarDesiredSize)
+ExportPublic("MSUF_UpdateCastbarWidthSourceSync", MSUF_UpdateCastbarWidthSourceSync)
+ExportPublic("MSUF_ApplyCastbarEffectiveSizeUnit", ApplyCastbarEffectiveSizeUnit)
+ExportPublic("MSUF_GetPlayerCastbarDesiredSize", function(g, bar, fallbackW, fallbackH)
     return MSUF_GetCastbarDesiredSize("player", g, bar, fallbackW, fallbackH)
-end
-_G.MSUF_ApplyPlayerCastbarSizeAndLayout   = ApplyPlayerCastbarSizeAndLayout
-_G.MSUF_ApplyPlayerCastbarIconLayout      = MSUF_ApplyPlayerCastbarIconLayout
-_G.MSUF_ReanchorPlayerCastBar             = MSUF_ReanchorPlayerCastBar
-_G.MSUF_ReanchorBossCastBar               = MSUF_ReanchorBossCastBar
+end)
+ExportPublic("MSUF_ApplyPlayerCastbarSizeAndLayout", ApplyPlayerCastbarSizeAndLayout)
+ExportPublic("MSUF_ApplyPlayerCastbarIconLayout", MSUF_ApplyPlayerCastbarIconLayout)
+ExportPublic("MSUF_ReanchorPlayerCastBar", MSUF_ReanchorPlayerCastBar)
+ExportPublic("MSUF_ReanchorBossCastBar", MSUF_ReanchorBossCastBar)

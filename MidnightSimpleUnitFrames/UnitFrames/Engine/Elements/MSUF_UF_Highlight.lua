@@ -1,7 +1,10 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 
 -- Unitframe highlight overlay runtime.
@@ -173,9 +176,9 @@ end
 
 Highlight.Refresh()
 
-_G.MSUF_RefreshMouseoverHighlight = Highlight.Refresh
+ExportPublic("MSUF_RefreshMouseoverHighlight", Highlight.Refresh)
 
-function _G.MSUF_HighlightDebug()
+local function HighlightDebug()
   Highlight.Refresh()
   local p = print
   p("MSUF Highlight: loaded=YES enabled=" .. tostring(cfgEnabled)
@@ -196,3 +199,4 @@ function _G.MSUF_HighlightDebug()
   Highlight.Show(f)
   p("MSUF Highlight: forced Show. Border shown = " .. tostring(f._msufHL and f._msufHL:IsShown()))
 end
+ExportPublic("MSUF_HighlightDebug", HighlightDebug)

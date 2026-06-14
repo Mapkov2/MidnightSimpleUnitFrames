@@ -6,10 +6,13 @@
 --- routing does not try to focus protected edit-mode surfaces at unsafe times.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local Search = M.Search or {}
 M.Search = Search
@@ -26,6 +29,12 @@ local ContentHeight = C.ContentHeight
 local DASHBOARD_ROUTE_RECOVERY = C.DASHBOARD_ROUTE_RECOVERY
 local DASHBOARD_ROUTE_SCALING = C.DASHBOARD_ROUTE_SCALING
 local DASHBOARD_ROUTE_CHANGELOG = C.DASHBOARD_ROUTE_CHANGELOG
+local Lines = M.Lines or function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
+local KeySetFromWords = M.KeySetFromWords or function(text)
+    local out = {}
+    for word in tostring(text or ""):gmatch("%S+") do out[word] = true end
+    return out
+end
 
 if not (NormalizeSearchText and BuildSearchQueryClauses and BuildSearchTokenList and SearchEditDistanceWithin and SearchCombatLocked and ContentWidth and ContentHeight) then return end
 
@@ -318,7 +327,7 @@ local function SearchRouteApplySectionRows(route, pageKey, normalized, rows)
     local specs = SECTION_ROW_CACHE[rows]
     if not specs then
         specs = {}
-        for line in M.Lines(rows) do
+        for line in Lines(rows) do
             local id, terms = line:match("^%s*([^=]+)=(.+)$")
             if id and terms then
                 id = id:gsub("^%s+", ""):gsub("%s+$", "")
@@ -344,7 +353,7 @@ local function SearchTermRows(text)
         if v == "false" then return false end
         return v
     end
-    for line in M.Lines(text) do
+    for line in Lines(text) do
         local first, rest = line:match("^([^=]+)=(.*)$")
         if first then
             local second, third = rest:match("^([^=]*)=(.*)$")
@@ -546,7 +555,7 @@ local SEARCH_UNIT_BY_PAGE = {
     uf_boss = "boss",
 }
 
-local SEARCH_AURA_ROUTE_PAGES = M.KeySetFromWords "auras3 auras3_buffs auras3_debuffs auras3_rendering auras3_styling"
+local SEARCH_AURA_ROUTE_PAGES = KeySetFromWords "auras3 auras3_buffs auras3_debuffs auras3_rendering auras3_styling"
 
 local SEARCH_ROUTE_SECTION_ROWS = {
     unit = [[
@@ -844,7 +853,7 @@ local function ApplySearchRoute(pageKey, route)
             end
         end
         if type(db) ~= "table" then
-            _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+            ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
             _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
             db = _G.MSUF_DB.general
         end

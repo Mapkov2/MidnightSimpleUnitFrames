@@ -1,6 +1,9 @@
 local addonName, addonNS = ...
 local MSUF = (_G.MSUF_NS) or addonNS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 --- State/MSUF_Defaults.lua
 ---
@@ -49,9 +52,7 @@ local MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = [[MSUF3:7X17jGPXed/l7K60lqWV7cgOZyW
 if type(MSUF) == "table" then
     MSUF.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
 end
-if _G then
-    _G.MSUF_FACTORY_DEFAULT_PROFILE_COMPACT = MSUF_FACTORY_DEFAULT_PROFILE_COMPACT
-end
+ExportPublic("MSUF_FACTORY_DEFAULT_PROFILE_COMPACT", MSUF_FACTORY_DEFAULT_PROFILE_COMPACT)
 
 local function MSUF_Defaults_TryDecodeCompactString(str)
     if type(str) ~= "string" then  return nil end
@@ -144,7 +145,7 @@ local function MSUF_Defaults_NormalizePortraitClassStyleValue(v)
     if v == "RONDO_COLOR" or v == "RONDO_WOW" or v == "BLIZZARD" then return v end
     return "BLIZZARD"
 end
-_G.MSUF_NormalizePortraitClassStyleValue = MSUF_Defaults_NormalizePortraitClassStyleValue
+ExportPublic("MSUF_NormalizePortraitClassStyleValue", MSUF_Defaults_NormalizePortraitClassStyleValue)
 
 local function MSUF_Defaults_NormalizePortraitRenderDB(db)
     if type(db) ~= "table" then return end
@@ -165,7 +166,7 @@ local function MSUF_Defaults_NormalizePortraitRenderDB(db)
         end
     end
 end
-_G.MSUF_NormalizePortraitRenderDB = MSUF_Defaults_NormalizePortraitRenderDB
+ExportPublic("MSUF_NormalizePortraitRenderDB", MSUF_Defaults_NormalizePortraitRenderDB)
 
 local MSUF_DEFAULT_BOSS_OFFSET_X = 360
 local MSUF_DEFAULT_BOSS_OFFSET_Y = 230
@@ -182,11 +183,12 @@ local MSUF_DEFAULT_UNIT_OFFSETS = {
     pet          = { -275, -250 },
     boss         = { MSUF_DEFAULT_BOSS_OFFSET_X, MSUF_DEFAULT_BOSS_OFFSET_Y },
 }
-function _G.MSUF_GetDefaultUnitOffsets(unit)
+local function MSUF_GetDefaultUnitOffsets(unit)
     local o = unit and MSUF_DEFAULT_UNIT_OFFSETS[unit]
     if o then return o[1], o[2] end
     return 0, 0
 end
+ExportPublic("MSUF_GetDefaultUnitOffsets", MSUF_GetDefaultUnitOffsets)
 
 --- Fresh-install overrides (applied only when the factory profile payload is seeded).
 --- Keep this tiny and explicit: these are the "real defaults" for a wiped/new DB.
@@ -522,8 +524,8 @@ local function MSUF_Defaults_MigrateDispelPriorityProfiles()
     return changed
 end
 
-_G.MSUF_MigrateDispelPriorityProfile = MSUF_Defaults_MigrateDispelPriorityProfile
-_G.MSUF_MigrateDispelPriorityProfiles = MSUF_Defaults_MigrateDispelPriorityProfiles
+ExportPublic("MSUF_MigrateDispelPriorityProfile", MSUF_Defaults_MigrateDispelPriorityProfile)
+ExportPublic("MSUF_MigrateDispelPriorityProfiles", MSUF_Defaults_MigrateDispelPriorityProfiles)
 
 local function MSUF_Defaults_MigrateGroupTooltipProfile(db)
     if type(db) ~= "table" then return false end
@@ -591,7 +593,7 @@ end
 --- Main DB repair pass. This is deliberately broad and cold: it may normalize
 --- several systems in one run, but it is protected by MSUF_DB_LastHeavyRun in
 --- the public wrapper below so normal callers do not pay for it repeatedly.
-function MSUF_EnsureDB_Heavy()
+local function MSUF_EnsureDB_Heavy()
     if type(MSUF_DB) ~= "table" then
         MSUF_DB = {}
     end
@@ -2693,16 +2695,17 @@ local function fill(key, defaults)
 --- Cheap public guard used by the rest of the addon. Pass force=true only after
 --- changing profile tables or importing data, when the full repair/migration
 --- pass must be allowed to run again on the active MSUF_DB reference.
-function _G.MSUF_EnsureDB(force)
+local function MSUF_EnsureDB(force)
     if force ~= true and type(MSUF_DB) == "table" and type(MSUF_DB.general) == "table" and MSUF_DB_LastHeavyRun == MSUF_DB then
          return
     end
     MSUF_EnsureDB_Heavy()
  end
-_G.EnsureDB = _G.EnsureDB or _G.MSUF_EnsureDB
+ExportPublic("MSUF_EnsureDB", MSUF_EnsureDB)
+_G.EnsureDB = _G.EnsureDB or MSUF_EnsureDB
 --- Optional exports for other modules
 MSUF.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile
 MSUF.MSUF_EnsureDB_Heavy = MSUF_EnsureDB_Heavy
-MSUF.MSUF_EnsureDB = _G.MSUF_EnsureDB
-MSUF.EnsureDB = MSUF.EnsureDB or _G.MSUF_EnsureDB
-_G.MSUF_CreateFactoryDefaultProfile = MSUF_Defaults_CreateFactoryProfile
+MSUF.MSUF_EnsureDB = MSUF_EnsureDB
+MSUF.EnsureDB = MSUF.EnsureDB or MSUF_EnsureDB
+ExportPublic("MSUF_CreateFactoryDefaultProfile", MSUF_Defaults_CreateFactoryProfile)

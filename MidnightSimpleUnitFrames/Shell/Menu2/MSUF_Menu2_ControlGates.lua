@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local W = M.Widgets or {}
 local Gates = M.ControlGates or {}
 M.ControlGates = Gates

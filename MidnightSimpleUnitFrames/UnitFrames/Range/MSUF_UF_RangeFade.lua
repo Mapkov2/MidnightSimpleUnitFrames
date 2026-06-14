@@ -1,7 +1,18 @@
+--- UnitFrames/Range/MSUF_UF_RangeFade.lua
+--- Unitframe range/offline alpha runtime.
+---
+--- Range checks are expensive and client-version-dependent, so spell probes,
+--- event bitmasks, and settle timers are cached instead of rescanned per event.
+--- Runtime output is alpha only; geometry and secure ownership are handled by
+--- the unitframe apply layer. Do not widen event masks without profiling.
+
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local UF = MSUF.UF
 if not (UF and UF.RegisterElement) then return end
@@ -9,9 +20,6 @@ if not (UF and UF.RegisterElement) then return end
 local Range = UF.Range or {}
 UF.Range = Range
 
--- Unitframe range fade element.
--- Owns range/offline alpha for target/focus/pet/boss-style frames. Range checks are expensive
--- and client-version-dependent, so spell probes, event bitmasks, and settle timers are cached.
 local CreateFrame = _G.CreateFrame
 local C_Timer = _G.C_Timer
 local UnitCanAssist = _G.UnitCanAssist
@@ -1157,7 +1165,7 @@ function Range.Refresh(unit)
   RebuildPollSet()
 end
 
-_G.MSUF_UF_RangeFade_Refresh = Range.Refresh
+ExportPublic("MSUF_UF_RangeFade_Refresh", Range.Refresh)
 
 local RangeFade = {}
 

@@ -1,10 +1,14 @@
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Geometry.lua
+--- Geometry/layout parser shard for natural-language frame edits.
+---
+--- Produces declarative move/size/anchor plans only; secure/combat-safe frame
+--- application remains in the settings and edit-mode runtimes.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -13,11 +17,6 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
-
--- Geometry and layout parser shard.
--- These helpers translate natural-language move/size/anchor/copy requests into declarative
--- changes. They must not mutate frame anchors directly; secure/combat-safe application is
--- handled by the normal settings and edit-mode runtimes.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase

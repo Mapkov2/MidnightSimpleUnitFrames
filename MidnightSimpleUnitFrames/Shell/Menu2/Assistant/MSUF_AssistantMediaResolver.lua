@@ -1,10 +1,10 @@
+-- Assistant media resolver: normalizes user-facing media names to registered textures/fonts.
+-- Resolver output is read-only lookup data; callers own validation and DB writes.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
