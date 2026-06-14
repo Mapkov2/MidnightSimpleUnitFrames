@@ -22,13 +22,11 @@ if type(C) ~= "table" then return end
 -- Keep this file observational; repair actions belong in explicit workflows with confirmation.
 local Registry = C.Registry
 local UNIT_LABELS = C.UNIT_LABELS
-local AddAliasesForUnit = C.AddAliasesForUnit
 local GeneralDB = C.GeneralDB
 local BarsDB = C.BarsDB or function() return (_G.MSUF_DB and _G.MSUF_DB.bars) or {} end
 local GameplayDB = C.GameplayDB or function() return (_G.MSUF_DB and _G.MSUF_DB.gameplay) or {} end
 local UnitDB = C.UnitDB
 local GroupDB = C.GroupDB
-local AuraSharedBool = C.AuraSharedBool
 local AuraModel = C.AuraModel
 local AuraUnitEnabled = C.AuraUnitEnabled
 local AuraLaneShown = C.AuraLaneShown
@@ -36,9 +34,6 @@ local AuraFiltersEnabled = C.AuraFiltersEnabled
 local AuraReadFilter = C.AuraReadFilter
 local GFAuraLaneShown = C.GFAuraLaneShown
 local GFReadAuraValue = C.GFReadAuraValue
-local GlobalScopeLabel = C.GlobalScopeLabel
-local GlobalScopeHasOverride = C.GlobalScopeHasOverride
-local GlobalScopeRead = C.GlobalScopeRead
 local CASTBAR_KEYS = C.CASTBAR_KEYS
 local GetCastbarBackend = C.GetCastbarBackend
 

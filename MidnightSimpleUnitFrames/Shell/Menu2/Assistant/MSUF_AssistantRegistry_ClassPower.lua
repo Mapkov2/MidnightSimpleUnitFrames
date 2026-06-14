@@ -21,8 +21,6 @@ if type(C) ~= "table" then return end
 -- Exposes class-resource, detached power, and player-HP bridge settings to the assistant.
 -- Presentation updates are delegated to ClassPower runtime helpers after DB writes.
 local Registry = C.Registry
-local UNIT_LABELS = C.UNIT_LABELS
-local AddAliasesForUnit = C.AddAliasesForUnit
 local RegisterBarsBoolean = C.RegisterBarsBoolean
 local RegisterBarsString = C.RegisterBarsString
 local RegisterBarsNumber = C.RegisterBarsNumber

@@ -21,8 +21,6 @@ if type(C) ~= "table" then return end
 -- Covers combat timer/crosshair, totems/statues, and related gameplay helpers. These settings
 -- bridge into gameplay runtimes instead of editing frames directly from the assistant.
 local Registry = C.Registry
-local UNIT_LABELS = C.UNIT_LABELS
-local AddAliasesForUnit = C.AddAliasesForUnit
 local RegisterGameplayBoolean = C.RegisterGameplayBoolean
 local RegisterGameplayNumber = C.RegisterGameplayNumber
 local RegisterGameplayEnum = C.RegisterGameplayEnum
