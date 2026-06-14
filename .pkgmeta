@@ -9,6 +9,8 @@ ignore:
   - .idea
   - CHANGELOG.md
   - dist
+  - MidnightSimpleUnitFrames/docs
+  - MidnightSimpleUnitFrames/scripts
   - tools
   - README.md
   - VERSION
