@@ -135,8 +135,64 @@ jobs:
       - name: Build AddOns zip
         shell: pwsh
         run: |
-          ./tools/update-addon-changelog.ps1 -Version $env:RELEASE_VERSION
-          ./tools/package-release.ps1 -Version $env:RELEASE_VERSION
+          $releaseVersion = $env:RELEASE_VERSION
+          $releaseVersion = $releaseVersion -replace '^refs/tags/', ''
+          $releaseVersion = $releaseVersion -replace '^v(?=\d)', ''
+          if ([string]::IsNullOrWhiteSpace($releaseVersion)) {
+            throw "Release version cannot be empty."
+          }
+
+          $outputDir = "dist"
+          $stagePath = Join-Path $outputDir "package"
+          if (Test-Path -LiteralPath $stagePath) {
+            Remove-Item -LiteralPath $stagePath -Recurse -Force
+          }
+          New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
+
+          Copy-Item -LiteralPath "MidnightSimpleUnitFrames" -Destination $stagePath -Recurse -Force
+
+          foreach ($relativePath in @(
+            "MidnightSimpleUnitFrames/docs",
+            "MidnightSimpleUnitFrames/scripts",
+            "MidnightSimpleUnitFrames/MSUF_PerfyHook.lua"
+          )) {
+            $fullPath = Join-Path $stagePath $relativePath
+            if (Test-Path -LiteralPath $fullPath) {
+              Remove-Item -LiteralPath $fullPath -Recurse -Force
+            }
+          }
+
+          $tocPath = Join-Path $stagePath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc"
+          $tocContent = Get-Content -LiteralPath $tocPath -Raw
+          if ($tocContent -notmatch '(?m)^## Version:') {
+            throw "No TOC version line found in $tocPath."
+          }
+          $tocContent = [regex]::Replace($tocContent, '(?m)^## Version:.*$', "## Version: $releaseVersion", 1)
+          [System.IO.File]::WriteAllText($tocPath, $tocContent, [System.Text.UTF8Encoding]::new($false))
+
+          $fileVersion = $releaseVersion -replace '[\\/:*?"<>|]', '-'
+          $zipPath = Join-Path $outputDir "MidnightSimpleUnitFrames$fileVersion.zip"
+          if (Test-Path -LiteralPath $zipPath) {
+            Remove-Item -LiteralPath $zipPath -Force
+          }
+
+          Get-ChildItem -LiteralPath $stagePath | Compress-Archive -DestinationPath $zipPath -Force
+          Remove-Item -LiteralPath $stagePath -Recurse -Force
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $zipPath))
+          try {
+            $badEntry = $zip.Entries | Where-Object {
+              $_.FullName -match '(^|/)docs/|(^|/)scripts/|(^|/)tools/|(^|/)_local_workflows/'
+            } | Select-Object -First 1
+            if ($badEntry) {
+              throw "Release zip contains local-only path: $($badEntry.FullName)"
+            }
+          } finally {
+            $zip.Dispose()
+          }
+
+          Write-Host "Created $zipPath with TOC version $releaseVersion."
 
       - name: Write GitHub release notes
         shell: pwsh
@@ -294,16 +350,83 @@ jobs:
         env:
           WAGO_API_TOKEN: ${{ secrets.WAGO_API_TOKEN }}
         run: |
+          function Get-TocField {
+            param(
+              [Parameter(Mandatory = $true)][string]$Content,
+              [Parameter(Mandatory = $true)][string]$Name
+            )
+
+            $match = [regex]::Match($Content, "(?m)^##\s+$([regex]::Escape($Name)):\s*(.+?)\s*$")
+            if ($match.Success) {
+              return $match.Groups[1].Value.Trim()
+            }
+
+            return $null
+          }
+
+          function Convert-RetailInterfaceToPatch {
+            param([Parameter(Mandatory = $true)][int]$Interface)
+
+            if ($Interface -lt 100000) {
+              throw "Retail interface value must be six digits. Got: $Interface"
+            }
+
+            $major = [math]::Floor($Interface / 10000)
+            $minor = [math]::Floor(($Interface % 10000) / 100)
+            $patch = $Interface % 100
+            return "$major.$minor.$patch"
+          }
+
           $zip = Get-ChildItem -Path dist -Filter "*.zip" | Select-Object -First 1
           if (-not $zip) {
             throw "No release zip found in dist."
           }
 
-          if ($env:RELEASE_IS_PRERELEASE -eq "true") {
-            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ReleaseName $env:RELEASE_NAME -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY -Prerelease
-          } else {
-            ./tools/publish-wago.ps1 -Version $env:RELEASE_VERSION -ReleaseName $env:RELEASE_NAME -ZipPath $zip.FullName -Stability $env:WAGO_STABILITY
+          if ([string]::IsNullOrWhiteSpace($env:WAGO_API_TOKEN)) {
+            throw "WAGO_API_TOKEN is missing."
           }
+
+          if ($env:WAGO_STABILITY -notin @("stable", "beta", "alpha")) {
+            throw "Invalid Wago stability '$env:WAGO_STABILITY'."
+          }
+
+          if ($env:RELEASE_VERSION -match '(?i)alpha' -and $env:WAGO_STABILITY -ne "alpha") {
+            throw "Alpha tag '$env:RELEASE_VERSION' must upload to Wago as alpha. Got '$env:WAGO_STABILITY'."
+          }
+
+          $tocContent = Get-Content -LiteralPath "MidnightSimpleUnitFrames/MidnightSimpleUnitFrames.toc" -Raw
+          $projectId = Get-TocField -Content $tocContent -Name "X-Wago-ID"
+          if ([string]::IsNullOrWhiteSpace($projectId)) {
+            throw "No Wago project id found in TOC."
+          }
+
+          $interfaceField = Get-TocField -Content $tocContent -Name "Interface"
+          $interfaces = $interfaceField -split ',' |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ -match '^\d+$' } |
+            ForEach-Object { [int]$_ }
+          if (-not $interfaces) {
+            throw "No numeric retail interface found in TOC."
+          }
+
+          $retailPatch = Convert-RetailInterfaceToPatch -Interface (($interfaces | Measure-Object -Maximum).Maximum)
+          $metadata = [ordered]@{
+            label = $env:RELEASE_NAME
+            stability = $env:WAGO_STABILITY
+            changelog = Get-Content -LiteralPath "CHANGELOG.md" -Raw
+            supported_retail_patch = $retailPatch
+          } | ConvertTo-Json -Depth 5 -Compress
+
+          $headers = @{
+            Authorization = "Bearer $env:WAGO_API_TOKEN"
+            Accept = "application/json"
+          }
+          $form = @{
+            metadata = $metadata
+            file = Get-Item -LiteralPath $zip.FullName
+          }
+          Invoke-RestMethod -Method Post -Uri "https://addons.wago.io/api/projects/$projectId/version" -Headers $headers -Form $form | Out-Null
+          Write-Host "Uploaded $($zip.FullName) to Wago project $projectId as $env:RELEASE_NAME / $env:RELEASE_VERSION ($env:WAGO_STABILITY, retail $retailPatch)."
 
       - name: Upload to CurseForge
         uses: BigWigsMods/packager@v2
