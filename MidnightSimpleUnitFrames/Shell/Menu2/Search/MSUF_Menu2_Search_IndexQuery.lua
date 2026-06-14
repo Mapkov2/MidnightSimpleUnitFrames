@@ -9,7 +9,6 @@ MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local T = M.Theme
 local W = M.Widgets

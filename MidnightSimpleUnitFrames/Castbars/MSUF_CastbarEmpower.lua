@@ -1,6 +1,11 @@
 -- Compact empower castbar support.
 -- Computes empower stage timing and draws stage tick/blink visuals for castbars. It is kept
 -- isolated from the main castbar runtime because empower APIs vary by client/build.
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+_G[name] = value
+return value
+end
+
 local s=_G.MSUF_EnsureDBLazy or function()if not MSUF_DB and type(EnsureDB)=="function"then EnsureDB()end
 end local r=_G.MSUF_CastbarRuntime_PlainNumber or function(e)if e==nil then return nil end local t=_G.ToPlain
 if type(t)=="function"then local e=t(e)local e=tonumber(tostring(e))if e~=nil then return e end
@@ -180,10 +185,16 @@ if e.SetScript then e:SetScript("OnUpdate",nil)end if type(_G.MSUF_UnregisterCas
 if e.timeText then MSUF_SetTextIfChanged(e.timeText,"")end if e.latencyBar and e.latencyBar.Hide then
 e.latencyBar:Hide()end
 if e.Hide then e:Hide()end end
-end _G.MSUF_BuildEmpowerTimeline=h
-_G.MSUF_BlinkEmpowerTick=i _G.MSUF_LayoutEmpowerTicks=o
-_G.MSUF_EnsureEmpowerTicks=u _G.MSUF_EnsureEmpowerStageSegments=S
-_G.MSUF_LayoutEmpowerStageSegments=_ _G.MSUF_GetUnifiedDirection=m
-_G.MSUF_GetUnifiedFillEnabled=c _G.MSUF_IsEmpowerColorStagesEnabled=U
-_G.MSUF_GetEmpowerStageBlinkTime=d _G.MSUF_IsEmpowerStageBlinkEnabled=w
-_G.MSUF_PlayerCastbar_EmpowerStart=a _G.MSUF_PlayerCastbar_ClearEmpower=n
+end ExportPublic("MSUF_BuildEmpowerTimeline", h)
+ExportPublic("MSUF_BlinkEmpowerTick", i)
+ExportPublic("MSUF_LayoutEmpowerTicks", o)
+ExportPublic("MSUF_EnsureEmpowerTicks", u)
+ExportPublic("MSUF_EnsureEmpowerStageSegments", S)
+ExportPublic("MSUF_LayoutEmpowerStageSegments", _)
+ExportPublic("MSUF_GetUnifiedDirection", m)
+ExportPublic("MSUF_GetUnifiedFillEnabled", c)
+ExportPublic("MSUF_IsEmpowerColorStagesEnabled", U)
+ExportPublic("MSUF_GetEmpowerStageBlinkTime", d)
+ExportPublic("MSUF_IsEmpowerStageBlinkEnabled", w)
+ExportPublic("MSUF_PlayerCastbar_EmpowerStart", a)
+ExportPublic("MSUF_PlayerCastbar_ClearEmpower", n)

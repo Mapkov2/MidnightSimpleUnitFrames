@@ -1,8 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 global Bars page.
 -- Binds shared/scoped texture, gradient, outline, absorb, and highlight controls. Page code
@@ -909,13 +912,13 @@ local function BuildBars(ctx)
     end
     local aggroTest = BindBorderTestToggle("Test aggro border", -72, "MSUF_AggroBorderTestMode", "MSUF_SetAggroBorderTestMode", function() return ScopeBorderModeOn("aggroOutlineMode", 1) end)
     local dispelTest = BindBorderTestToggle("Test dispel border", -104, "MSUF_DispelBorderTestMode", "MSUF_SetDispelBorderTestMode", function() return ScopeBorderModeOn("dispelOutlineMode", 1) end)
-    _G.MSUF_DispelBorderTestType = _G.MSUF_DispelBorderTestType or "Magic"
+    ExportPublic("MSUF_DispelBorderTestType", _G.MSUF_DispelBorderTestType or "Magic")
     local dispelType = W.Dropdown(previewFrame, "Dispel test type",
         VT("Magic", "Magic", "Curse", "Curse", "Disease", "Disease", "Poison", "Poison", "Bleed", "Bleed"), hlPreviewW)
     M.BindDropdownWidget(ctx, dispelType,
         function() return _G.MSUF_DispelBorderTestType or "Magic" end,
         function(v)
-            _G.MSUF_DispelBorderTestType = v or "Magic"
+            ExportPublic("MSUF_DispelBorderTestType", v or "Magic")
             RefreshBorderTestModes()
         end)
     W.MoveWidget(dispelType, previewFrame, hlPreviewX, -150, hlPreviewW, "LEFT")

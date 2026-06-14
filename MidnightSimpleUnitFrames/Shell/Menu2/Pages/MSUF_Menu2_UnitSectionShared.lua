@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local W = M.Widgets or {}
 local T = M.Theme or {}
 local Shared = M.UnitSectionsShared or {}
@@ -129,6 +128,150 @@ function Shared.CreateSectionNotice(sec, topY, buttonLabel, buttonWidth, gateKey
     notice:Hide()
     return notice, text, button
 end
+local COPY_POPUP_TARGET_STYLE = {
+    bg = { 0.020, 0.048, 0.105, 0.96 }, border = { 0.070, 0.160, 0.330, 0.72 }, textColor = { 0.76, 0.86, 0.98, 1 },
+    hoverBg = { 0.050, 0.110, 0.240, 0.98 }, hoverBorder = { 0.135, 0.300, 0.600, 0.86 },
+    activeBg = { 0.050, 0.110, 0.240, 0.98 }, activeBorder = { 0.135, 0.300, 0.600, 0.86 }, activeTextColor = { 0.88, 0.94, 1.00, 1 },
+    stripe = false,
+}
+local function CopyPopupButton(parent, text, width, role)
+    local btn
+    if role == "target" then
+        btn = W.TopButton(parent, text, width, 22, COPY_POPUP_TARGET_STYLE, false)
+    elseif W.RoleButton then
+        btn = W.RoleButton(parent, text, role == "danger" and "danger" or (role == "action" and "primary" or "normal"), width, 22)
+    else
+        btn = W.TopButton(parent, text, width, 22, nil, false)
+    end
+    btn:SetHeight(22)
+    return btn
+end
+function Shared.MakeScopeCopyPopup(anchorButton, opts)
+    -- Unit and group pages both expose a "copy this scope to another scope" popup.
+    -- Keep the chrome and checkbox bookkeeping here; callers keep the actual copy action
+    -- local so DB writes, history keys, and preview refreshes stay page-specific.
+    opts = opts or {}
+    local popup
+    local categories = opts.categories or {}
+    local scopes = opts.scopes or {}
+    local targets = opts.targets or {}
+    local targetWidths = opts.targetWidths or {}
+    local function SourceKey()
+        return opts.sourceKey and opts.sourceKey()
+    end
+    local function TargetWidth(key, button)
+        return targetWidths[key] or (button and button.GetWidth and button:GetWidth()) or opts.targetWidth or 48
+    end
+    local function SyncChecks()
+        if not (popup and popup._checks) then return end
+        for i = 1, #categories do
+            local cat = categories[i]
+            if popup._checks[i] then popup._checks[i]:SetChecked(scopes[cat.key] == true) end
+        end
+    end
+    local function SetAll(selected, feedback)
+        for i = 1, #categories do
+            local cat = categories[i]
+            scopes[cat.key] = selected and true or false
+            if popup and popup._checks and popup._checks[i] then popup._checks[i]:SetChecked(selected and true or false) end
+        end
+        if feedback and M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(feedback), "info", 1.15) end
+    end
+    local function RefreshTargets()
+        if not popup then return end
+        local source = SourceKey()
+        local selected = opts.selectedTarget and opts.selectedTarget(source)
+        if popup._title then popup._title:SetText(M.Format(M.Tr(opts.titleFormat or "Copy from %s"), opts.sourceLabel and opts.sourceLabel(source) or tostring(source or ""))) end
+        local x = opts.targetX or 16
+        for i = 1, #targets do
+            local item = targets[i]
+            local key = type(item) == "table" and (item.key or item.value) or item
+            local btn = popup._targetBtns and popup._targetBtns[key]
+            if btn then
+                local visible = not opts.isTargetVisible or opts.isTargetVisible(key, source) ~= false
+                btn:SetShown(visible)
+                if visible then
+                    btn:ClearAllPoints()
+                    btn:SetPoint("TOPLEFT", popup, "TOPLEFT", x, opts.targetY or -58)
+                    x = x + TargetWidth(key, btn) + (opts.targetGap or 6)
+                end
+                if btn.SetActive then btn:SetActive(selected == key) end
+            end
+        end
+    end
+    local api = {}
+    function api.GetPopup() return popup end
+    function api.Refresh()
+        SyncChecks()
+        RefreshTargets()
+    end
+    function api.Hide()
+        if popup then popup:Hide() end
+    end
+    function api.Show(anchor)
+        if popup and popup:IsShown() then popup:Hide(); return end
+        if not popup then
+            popup = M.CreateMenuPopupPanel(UIParent)
+            popup:SetSize(opts.width or 420, opts.height or 276)
+            local title = T.Font(popup, "GameFontNormal", "", T.colors.accent)
+            title:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, -12)
+            popup._title = title
+            local close = CopyPopupButton(popup, "x", 20, "danger")
+            close:SetSize(20, 20)
+            close:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -9)
+            close:SetScript("OnClick", function() popup:Hide() end)
+            local destLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.targetLabel or "Destination"), T.colors.dim)
+            destLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.targetLabelY or -40)
+            popup._targetBtns = {}
+            for i = 1, #targets do
+                local item = targets[i]
+                local key = type(item) == "table" and (item.key or item.value) or item
+                local label = type(item) == "table" and (item.text or item.label) or nil
+                label = label or (opts.targetLabelText and opts.targetLabelText(key)) or tostring(key or "")
+                local btn = CopyPopupButton(popup, M.Tr(label), TargetWidth(key), "target")
+                btn._msuf2CopyTarget = key
+                btn:SetScript("OnClick", function()
+                    if opts.onTargetClick then opts.onTargetClick(key, api, popup) end
+                    RefreshTargets()
+                end)
+                popup._targetBtns[key] = btn
+            end
+            local catLabel = T.Font(popup, "GameFontDisableSmall", M.Tr(opts.categoryLabel or "Copy categories"), T.colors.dim)
+            catLabel:SetPoint("TOPLEFT", popup, "TOPLEFT", 16, opts.categoryLabelY or -90)
+            popup._checks = {}
+            local rowsPerColumn = opts.categoryRowsPerColumn or 5
+            for i = 1, #categories do
+                local cat = categories[i]
+                local col = (i > rowsPerColumn) and 1 or 0
+                local row = (i - 1) % rowsPerColumn
+                local cb = W.SwitchAt(popup, cat.label, 16 + col * (opts.categoryColumnWidth or 198), (opts.categoryY or -110) - row * (opts.categoryRowHeight or 28), opts.categoryWidth or 140)
+                cb:SetChecked(scopes[cat.key] == true)
+                cb:SetScript("OnClick", function(self) scopes[cat.key] = self:GetChecked() and true or false end)
+                popup._checks[i] = cb
+            end
+            local allBtn = CopyPopupButton(popup, M.Tr("All"), 48, "normal")
+            allBtn:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 16, 12)
+            allBtn:SetScript("OnClick", function() SetAll(true, opts.allFeedback or "All copy categories selected") end)
+            local noneBtn = CopyPopupButton(popup, M.Tr("None"), 58, "normal")
+            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
+            noneBtn:SetScript("OnClick", function() SetAll(false, opts.noneFeedback or "Copy categories cleared") end)
+            if opts.runLabel then
+                local runBtn = CopyPopupButton(popup, M.Tr(opts.runLabel), opts.runWidth or 128, "action")
+                runBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -14, 11)
+                runBtn:SetScript("OnClick", function()
+                    if opts.onRun then opts.onRun(api, popup) end
+                end)
+                popup._runBtn = runBtn
+            end
+        end
+        api.Refresh()
+        M.ApplyPopupFramePriority(popup)
+        popup:ClearAllPoints()
+        popup:SetPoint("TOPRIGHT", anchor or anchorButton, "BOTTOMRIGHT", 0, -6)
+        popup:Show()
+    end
+    return api
+end
 function Shared.MakeTabFrame(parent, key, topOffset, width, store)
     local frame = CreateFrame("Frame", nil, parent)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, topOffset or -118)
@@ -144,6 +287,75 @@ function Shared.MakeTabFrames(parent, topOffset, width, store, ...)
 end
 function Shared.PlaceDropdown(parent, control, x, y, width) return W.MoveWidget(control, parent, x, y, width or 200, "LEFT") end
 function Shared.PlaceSlider(parent, control, x, y, width) W.MoveWidget(control, parent, x, y, width, "CENTER") end
+function Shared.TextCard(parent, title, subtitle, x, y, width, height)
+    return W.ControlCard(parent, title, subtitle, x, y, width, height)
+end
+function Shared.PreviewText(parent, text, x, y, width, color)
+    local label = W.Text(parent, "Preview", x, y, width, color or T.colors.dim)
+    local value = T.Font(parent, "GameFontNormalSmall", text, T.colors.text)
+    value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 20)
+    value:SetWidth(width or 220)
+    value:SetJustifyH("LEFT")
+    return label, value
+end
+function Shared.TextBadgeValue(value)
+    return tostring(value or ""):gsub("%s*/%s*", " + ")
+end
+function Shared.TextBadgeNumber(value)
+    value = tonumber(value) or 0
+    if value == math.floor(value) then return tostring(math.floor(value)) end
+    return string.format("%.1f", value)
+end
+function Shared.MakeTextSlotState(owner, scopeKeyFn, slotTableName, moveTableName)
+    -- Unit and group text pages both keep transient UI state for the selected text slot
+    -- and for the "move all slots together" toggle. Keep the storage names explicit so
+    -- callers preserve their existing SavedVariables-free behaviour and focus routing.
+    owner = owner or M
+    owner[slotTableName] = owner[slotTableName] or {}
+    owner[moveTableName] = owner[moveTableName] or {}
+    local function ScopeKey()
+        local key = scopeKeyFn and scopeKeyFn()
+        return key or "default"
+    end
+    local state = {}
+    function state.CurrentSlot(kind)
+        local byScope = owner[slotTableName][ScopeKey()]
+        local slot = byScope and byScope[kind] or "center"
+        return (slot == "left" or slot == "center" or slot == "right") and slot or "center"
+    end
+    function state.SetCurrentSlot(kind, slot)
+        local key = ScopeKey()
+        owner[slotTableName][key] = owner[slotTableName][key] or {}
+        owner[slotTableName][key][kind] = slot or "center"
+    end
+    function state.SlotOffsetKeys(kind)
+        return M.TextSlotOffsetKeys(kind, state.CurrentSlot(kind))
+    end
+    function state.MoveTogether(kind)
+        local byScope = owner[moveTableName][ScopeKey()]
+        local value = byScope and byScope[kind]
+        if value == nil then return true end
+        return value == true
+    end
+    function state.SetMoveTogether(kind, value)
+        local key = ScopeKey()
+        owner[moveTableName][key] = owner[moveTableName][key] or {}
+        owner[moveTableName][key][kind] = value ~= false
+    end
+    return state
+end
+function Shared.TextSlotSummary(kind, slotsByKind, readValue, modeValues, optionText)
+    local slots = slotsByKind and slotsByKind[kind]
+    for i = 1, #(slots or {}) do
+        local slot = slots[i]
+        local value = readValue and readValue(slot)
+        if value and value ~= "NONE" then
+            local slotText = slot[1]:sub(1, 1):upper() .. slot[1]:sub(2)
+            return slotText .. ": " .. Shared.TextBadgeValue(optionText(modeValues, value))
+        end
+    end
+    return "No slot text"
+end
 function Shared.ValueTextControlSets(kind, controls, layer, hookControls, currentSlot)
     controls = controls or {}
     local delimiter = controls.delimiter or controls.separator

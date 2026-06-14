@@ -1,10 +1,14 @@
+-- Assistant history: stores submitted prompts and rendered responses for the Menu2 shell.
+-- History is UI/session state; undoable DB snapshots live in the Assistant undo module.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -34,7 +38,7 @@ local function EnsureRootDB()
     if M and type(M.EnsureDB) == "function" then
         db = M.EnsureDB()
     else
-        _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+        ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
         _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
         db = _G.MSUF_DB
     end

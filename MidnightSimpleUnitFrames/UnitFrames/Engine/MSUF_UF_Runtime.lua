@@ -1,7 +1,6 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 MSUF.UF = MSUF.UF or {}
 
@@ -368,7 +367,7 @@ function UF.RequestReanchorAfterCombat()
   return UF.Apply(nil)
 end
 
-function _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
+local function GetUnitFrameScreenCacheKey(key, unit)
   local k = tostring(key or "")
   local u = tostring(unit or "")
   if k == "" then return u ~= "" and u or nil end
@@ -376,7 +375,7 @@ function _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
   return k
 end
 
-function _G.MSUF_GetUnitFrameScreenCacheBucket()
+local function GetUnitFrameScreenCacheBucket()
   local fn = _G.MSUF_GetProfileScopedCache
   if type(fn) ~= "function" then return nil end
   return fn("unitFrameScreenCache")
@@ -419,7 +418,7 @@ local function GetFramePoint(frame, point)
   return cx, cy, "CENTER"
 end
 
-function _G.MSUF_CacheUnitFrameScreenPosition(frame, key, unit, point, allowLocked)
+local function CacheUnitFrameScreenPosition(frame, key, unit, point, allowLocked)
   local uiParent = _G.UIParent
   if not frame or not key or not uiParent or not uiParent.GetCenter then return false end
   if allowLocked ~= true and InCombatLockdown and InCombatLockdown() then return false end
@@ -434,8 +433,8 @@ function _G.MSUF_CacheUnitFrameScreenPosition(frame, key, unit, point, allowLock
   if fs == 0 then fs = 1 end
   if us == 0 then us = 1 end
 
-  local id = _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
-  local bucket = _G.MSUF_GetUnitFrameScreenCacheBucket()
+  local id = GetUnitFrameScreenCacheKey(key, unit)
+  local bucket = GetUnitFrameScreenCacheBucket()
   if not id or not bucket then return false end
 
   local w = frame.GetWidth and frame:GetWidth() or nil
@@ -452,11 +451,11 @@ function _G.MSUF_CacheUnitFrameScreenPosition(frame, key, unit, point, allowLock
   return true
 end
 
-function _G.MSUF_ApplyCachedUnitFrameScreenPosition(frame, key, unit)
+local function ApplyCachedUnitFrameScreenPosition(frame, key, unit)
   local uiParent = _G.UIParent
   if not frame or not key or not uiParent then return false end
-  local bucket = _G.MSUF_GetUnitFrameScreenCacheBucket()
-  local id = _G.MSUF_GetUnitFrameScreenCacheKey(key, unit)
+  local bucket = GetUnitFrameScreenCacheBucket()
+  local id = GetUnitFrameScreenCacheKey(key, unit)
   local cached = bucket and id and bucket[id]
   if type(cached) ~= "table" or (cached.v ~= 2 and cached.v ~= 3) then return false end
   local x, y = tonumber(cached.x), tonumber(cached.y)
@@ -1110,22 +1109,32 @@ end
 
 UF.ApplyUnitFrameKey = UF.Apply
 
-_G.MSUF_UnitFrames = UF.frames
-_G.MSUF_UnitFramesList = UF.frameList
-_G.MSUF_ForEachUnitFrame = UF.ForEachFrame
-_G.MSUF_UFCore_NotifyConfigChanged = UF.NotifyConfigChanged
-_G.MSUF_RefreshAllFrames = UF.RefreshVisuals
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
+
+MSUF.UnitFrames = UF
+ExportPublic("MSUF_UnitFrames", UF.frames)
+ExportPublic("MSUF_UnitFramesList", UF.frameList)
+ExportPublic("MSUF_ForEachUnitFrame", UF.ForEachFrame)
+ExportPublic("MSUF_GetUnitFrameScreenCacheKey", GetUnitFrameScreenCacheKey)
+ExportPublic("MSUF_GetUnitFrameScreenCacheBucket", GetUnitFrameScreenCacheBucket)
+ExportPublic("MSUF_CacheUnitFrameScreenPosition", CacheUnitFrameScreenPosition)
+ExportPublic("MSUF_ApplyCachedUnitFrameScreenPosition", ApplyCachedUnitFrameScreenPosition)
+ExportPublic("MSUF_UFCore_NotifyConfigChanged", UF.NotifyConfigChanged)
+ExportPublic("MSUF_RefreshAllFrames", UF.RefreshVisuals)
 MSUF.MSUF_RefreshAllFrames = UF.RefreshVisuals
-_G.MSUF_RefreshAllIdentityColors = UF.RefreshIdentityColors
-_G.MSUF_RefreshAllPowerTextColors = UF.RefreshPowerTextColors
-_G.MSUF_ForceTextLayoutForUnitKey = UF.RefreshTextLayout
-_G.MSUF_RefreshAllUnitAlphas = UF.RefreshAlphas
-_G.MSUF_ApplyBarOutlineThickness_All = UF.RefreshBorders
-_G.MSUF_ApplyPowerBarBorder_All = UF.RefreshBorders
-_G.MSUF_ApplyReverseFillBars = UF.RefreshHealthLayout
-_G.MSUF_ApplyAllAlpha = UF.RefreshAlphas
-_G.MSUF_ApplyPowerBarEmbedLayout_All = UF.RefreshPowerLayout
-_G.MSUF_ApplyPowerBarEmbedLayout = UF.RefreshPowerLayoutForFrame
-_G.MSUF_ApplyPowerBarEmbedLayout_ForUnitKey = UF.RefreshPowerLayout
-_G.MSUF_ApplyUnitFrameKey_Immediate = UF.ApplyUnitFrameKey
-_G.MSUF_RequestUnitFrameReanchorAfterCombat = UF.RequestReanchorAfterCombat
+ExportPublic("MSUF_RefreshAllIdentityColors", UF.RefreshIdentityColors)
+ExportPublic("MSUF_RefreshAllPowerTextColors", UF.RefreshPowerTextColors)
+ExportPublic("MSUF_ForceTextLayoutForUnitKey", UF.RefreshTextLayout)
+ExportPublic("MSUF_RefreshAllUnitAlphas", UF.RefreshAlphas)
+ExportPublic("MSUF_ApplyBarOutlineThickness_All", UF.RefreshBorders)
+ExportPublic("MSUF_ApplyPowerBarBorder_All", UF.RefreshBorders)
+ExportPublic("MSUF_ApplyReverseFillBars", UF.RefreshHealthLayout)
+ExportPublic("MSUF_ApplyAllAlpha", UF.RefreshAlphas)
+ExportPublic("MSUF_ApplyPowerBarEmbedLayout_All", UF.RefreshPowerLayout)
+ExportPublic("MSUF_ApplyPowerBarEmbedLayout", UF.RefreshPowerLayoutForFrame)
+ExportPublic("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", UF.RefreshPowerLayout)
+ExportPublic("MSUF_ApplyUnitFrameKey_Immediate", UF.ApplyUnitFrameKey)
+ExportPublic("MSUF_RequestUnitFrameReanchorAfterCombat", UF.RequestReanchorAfterCombat)

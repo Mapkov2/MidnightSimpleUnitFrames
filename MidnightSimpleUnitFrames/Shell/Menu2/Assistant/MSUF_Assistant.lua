@@ -1,22 +1,23 @@
+--- Shell/Menu2/Assistant/MSUF_Assistant.lua
+--- Command execution layer for the Menu2 assistant.
+---
+--- Owns job scheduling, combat deferral, confirmations, choice handling, undo
+--- metadata, and the final apply fanout into Menu2/MSUF runtime systems.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
 M.Assistant = A
 
---- Shell/Menu2/Assistant/MSUF_Assistant.lua
----
---- Command execution layer for the Menu2 assistant. Parser/Router decide what
---- the user meant; this file owns job scheduling, combat deferral, confirmations,
---- choice handling, undo metadata, and the final apply fanout into Menu2/MSUF
---- runtime systems.
----
 --- Keep UI mutation and protected-frame work behind the job/combat helpers here.
 --- Parser modules should return plans, not directly change SavedVariables.
 
@@ -202,7 +203,7 @@ local function NoMatchStore(create)
     if type(global) ~= "table" then
         if not create then return nil end
         global = {}
-        _G.MSUF_GlobalDB = global
+        ExportPublic("MSUF_GlobalDB", global)
     end
     if type(global.global) ~= "table" then
         if not create then return nil end

@@ -235,12 +235,17 @@ function MSUF.MSUF_ListModules()
 end
 
 --- Optional globals (useful for debugging / slash commands / external modules)
-_G.MSUF_RegisterModule = MSUF.MSUF_RegisterModule
-_G.MSUF_InitModules = MSUF.MSUF_InitModules
-_G.MSUF_ApplyModules = MSUF.MSUF_ApplyModules
-_G.MSUF_Modules_InitAndApply = MSUF.MSUF_Modules_InitAndApply
-_G.MSUF_RefreshModuleSettings = MSUF.MSUF_RefreshModuleSettings
-_G.MSUF_ShutdownModules = MSUF.MSUF_ShutdownModules
-_G.MSUF_GetModule = MSUF.MSUF_GetModule
-_G.MSUF_ToggleModule = MSUF.MSUF_ToggleModule
-_G.MSUF_ListModules = MSUF.MSUF_ListModules
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
+ExportPublic("MSUF_RegisterModule", MSUF.MSUF_RegisterModule)
+ExportPublic("MSUF_InitModules", MSUF.MSUF_InitModules)
+ExportPublic("MSUF_ApplyModules", MSUF.MSUF_ApplyModules)
+ExportPublic("MSUF_Modules_InitAndApply", MSUF.MSUF_Modules_InitAndApply)
+ExportPublic("MSUF_RefreshModuleSettings", MSUF.MSUF_RefreshModuleSettings)
+ExportPublic("MSUF_ShutdownModules", MSUF.MSUF_ShutdownModules)
+ExportPublic("MSUF_GetModule", MSUF.MSUF_GetModule)
+ExportPublic("MSUF_ToggleModule", MSUF.MSUF_ToggleModule)
+ExportPublic("MSUF_ListModules", MSUF.MSUF_ListModules)

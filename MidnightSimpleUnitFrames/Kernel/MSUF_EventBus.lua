@@ -238,10 +238,21 @@ driver:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 --- Public API
-_G.MSUF_EventBus = bus
-_G.MSUF_EventBus_Register = function(e, k, f, u, o) return bus:Register(e, k, f, u, o) end
-_G.MSUF_EventBus_Unregister = function(e, k) return bus:Unregister(e, k) end
-_G.MSUF_EventBus_UnregisterAll = function(p) return bus:UnregisterAll(p) end
-_G.MSUF_EventBus_SetSafeCalls = function(v) bus.safeCalls = v and true or false end
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
+local function EventBusRegister(e, k, f, u, o) return bus:Register(e, k, f, u, o) end
+local function EventBusUnregister(e, k) return bus:Unregister(e, k) end
+local function EventBusUnregisterAll(p) return bus:UnregisterAll(p) end
+local function EventBusSetSafeCalls(v) bus.safeCalls = v and true or false end
+
+MSUF.EventBus = bus
 MSUF.MSUF_EventBus = bus
+ExportPublic("MSUF_EventBus", bus)
+ExportPublic("MSUF_EventBus_Register", EventBusRegister)
+ExportPublic("MSUF_EventBus_Unregister", EventBusUnregister)
+ExportPublic("MSUF_EventBus_UnregisterAll", EventBusUnregisterAll)
+ExportPublic("MSUF_EventBus_SetSafeCalls", EventBusSetSafeCalls)
 return bus

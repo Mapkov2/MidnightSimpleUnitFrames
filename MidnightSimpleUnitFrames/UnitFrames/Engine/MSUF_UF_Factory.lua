@@ -1,7 +1,12 @@
+-- UF factory: creates and wires unit-frame instances from compiled specs.
+-- Frame creation is cold/warm-path work; live event dispatch belongs to UF runtime/core modules.
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local UF = MSUF.UF
 UF.Factory = UF.Factory or {}
@@ -258,10 +263,10 @@ end
 
 local function RegisterGlobals(unit, frame)
   UF.frames[unit] = frame
-  _G.MSUF_UnitFrames = UF.frames
-  _G[UF.FrameName(unit)] = frame
+  ExportPublic("MSUF_UnitFrames", UF.frames)
+  ExportPublic(UF.FrameName(unit), frame)
   if unit == "targettarget" then
-    _G.MSUF_tot = frame
+    ExportPublic("MSUF_tot", frame)
   end
 
   local found = false
@@ -274,7 +279,7 @@ local function RegisterGlobals(unit, frame)
   if not found then
     UF.frameList[#UF.frameList + 1] = frame
   end
-  _G.MSUF_UnitFramesList = UF.frameList
+  ExportPublic("MSUF_UnitFramesList", UF.frameList)
 end
 
 local function ShowUnitTooltip(frame)
@@ -528,8 +533,8 @@ local function FlushLateAnchorReanchor()
   return true
 end
 
-function _G.MSUF_ScheduleLateAnchorReanchor()
-  _G.MSUF_CDMBridgeDirty = true
+local function ScheduleLateAnchorReanchor()
+  ExportPublic("MSUF_CDMBridgeDirty", true)
   if InCombatLockdown and InCombatLockdown() then
     UF.RequestReanchorAfterCombat()
     return false
@@ -538,7 +543,7 @@ function _G.MSUF_ScheduleLateAnchorReanchor()
   local state = _G.MSUF_LateAnchorReanchorState
   if type(state) ~= "table" then
     state = { pending = false }
-    _G.MSUF_LateAnchorReanchorState = state
+    ExportPublic("MSUF_LateAnchorReanchorState", state)
   end
   if state.pending then return false end
   state.pending = true
@@ -556,14 +561,16 @@ function _G.MSUF_ScheduleLateAnchorReanchor()
   end)
   return true
 end
+ExportPublic("MSUF_ScheduleLateAnchorReanchor", ScheduleLateAnchorReanchor)
 
-function _G.MSUF_ForceReanchorAllUnitFrames_Once()
+local function ForceReanchorAllUnitFramesOnce()
   if InCombatLockdown and InCombatLockdown() then
     UF.RequestReanchorAfterCombat()
     return false
   end
   return Factory.Apply()
 end
+ExportPublic("MSUF_ForceReanchorAllUnitFrames_Once", ForceReanchorAllUnitFramesOnce)
 
 do
   local function ScheduleFromEvent()

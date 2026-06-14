@@ -1,7 +1,10 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 --- UnitFrames/Engine/MSUF_UF_Config.lua
 ---
@@ -138,7 +141,7 @@ local function EnsureDB()
     dbInitialized = true
   end
   if type(_G.MSUF_DB) ~= "table" then
-    _G.MSUF_DB = {}
+    ExportPublic("MSUF_DB", {})
   end
   return _G.MSUF_DB
 end
@@ -378,22 +381,25 @@ local function ResolvePowerBackground(general, bars, health, dst)
   return dst
 end
 
-_G.MSUF_SetAbsorbTextureTestMode = _G.MSUF_SetAbsorbTextureTestMode or function(enabled, scope)
-  _G.MSUF_AbsorbTextureTestMode = enabled == true
-  _G.MSUF_AbsorbTextureTestScope = enabled and NormalizeAbsorbTestScope(scope) or nil
+local SetAbsorbTextureTestMode = _G.MSUF_SetAbsorbTextureTestMode or function(enabled, scope)
+  ExportPublic("MSUF_AbsorbTextureTestMode", enabled == true)
+  ExportPublic("MSUF_AbsorbTextureTestScope", enabled and NormalizeAbsorbTestScope(scope) or nil)
 end
+ExportPublic("MSUF_SetAbsorbTextureTestMode", SetAbsorbTextureTestMode)
 
-_G.MSUF_ClearAbsorbTextureTestMode = _G.MSUF_ClearAbsorbTextureTestMode or function()
-  _G.MSUF_AbsorbTextureTestMode = false
-  _G.MSUF_AbsorbTextureTestScope = nil
+local ClearAbsorbTextureTestMode = _G.MSUF_ClearAbsorbTextureTestMode or function()
+  ExportPublic("MSUF_AbsorbTextureTestMode", false)
+  ExportPublic("MSUF_AbsorbTextureTestScope", nil)
 end
+ExportPublic("MSUF_ClearAbsorbTextureTestMode", ClearAbsorbTextureTestMode)
 
-_G.MSUF_ShouldShowAbsorbTextureTest = _G.MSUF_ShouldShowAbsorbTextureTest or function(frame, scope)
+local ShouldShowAbsorbTextureTest = _G.MSUF_ShouldShowAbsorbTextureTest or function(frame, scope)
   local key = scope
     or frame and (frame.configKey or frame.MSUFUnitKey or frame._msufGFKind or frame.unitKey)
     or nil
   return AbsorbTextureTestEnabledForScope(key)
 end
+ExportPublic("MSUF_ShouldShowAbsorbTextureTest", ShouldShowAbsorbTextureTest)
 
 local HEALTH_TEXT_MODE_ALIASES = {
   FULL_ONLY = "CURRENT",
@@ -1690,11 +1696,12 @@ function Config.Refresh()
   return Config.specs
 end
 
-_G.MSUF_GetBossLayoutDelta = function(index, conf)
+local function MSUF_GetBossLayoutDelta(index, conf)
   local db = EnsureDB()
   conf = conf or (db and db.boss) or {}
   return BossLayoutDelta(conf, index, DEFAULTS.boss)
 end
+ExportPublic("MSUF_GetBossLayoutDelta", MSUF_GetBossLayoutDelta)
 
 function Config.RefreshUnit(unit)
   if not (unit and UF.IsManagedUnit and UF.IsManagedUnit(unit)) then
@@ -1817,7 +1824,7 @@ function Config.GetSettingsCache()
   return BuildSettingsCache(db)
 end
 
-_G.MSUF_UFCore_GetSettingsCache = Config.GetSettingsCache
+ExportPublic("MSUF_UFCore_GetSettingsCache", Config.GetSettingsCache)
 
 function Config.RefreshSettingsCache()
   if ConfigInCombat() then
@@ -1828,9 +1835,9 @@ function Config.RefreshSettingsCache()
   return Config.GetSettingsCache()
 end
 
-_G.MSUF_UFCore_RefreshSettingsCache = Config.RefreshSettingsCache
+ExportPublic("MSUF_UFCore_RefreshSettingsCache", Config.RefreshSettingsCache)
 
-_G.MSUF_UFCore_GetClassBarColorFast = function(classToken)
+local function MSUF_UFCore_GetClassBarColorFast(classToken)
   local cache = Config.GetSettingsCache()
   local c = cache and cache.classColors and cache.classColors[classToken]
   if c then
@@ -1842,8 +1849,9 @@ _G.MSUF_UFCore_GetClassBarColorFast = function(classToken)
   end
   return 0.12, 0.62, 0.95
 end
+ExportPublic("MSUF_UFCore_GetClassBarColorFast", MSUF_UFCore_GetClassBarColorFast)
 
-_G.MSUF_UFCore_GetNPCReactionColorFast = function(kind)
+local function MSUF_UFCore_GetNPCReactionColorFast(kind)
   local cache = Config.GetSettingsCache()
   local c = cache and cache.npcColors and cache.npcColors[kind]
   if c then
@@ -1852,3 +1860,4 @@ _G.MSUF_UFCore_GetNPCReactionColorFast = function(kind)
   local fallback = NPC_COLOR_DEFAULTS[kind] or NPC_COLOR_DEFAULTS.enemy
   return fallback[1], fallback[2], fallback[3]
 end
+ExportPublic("MSUF_UFCore_GetNPCReactionColorFast", MSUF_UFCore_GetNPCReactionColorFast)

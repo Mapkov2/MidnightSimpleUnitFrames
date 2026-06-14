@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 Unit visual sections.
 -- Builds controls for portrait, castbar detail, detached power, border/shape, and related

@@ -2,7 +2,6 @@
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local ZoomPan = MSUF.UFPreviewZoomPan or {}
 MSUF.UFPreviewZoomPan = ZoomPan
 local H = (MSUF.MSUF2 and MSUF.MSUF2.PreviewHelpers) or (_G.MSUF2 and _G.MSUF2.PreviewHelpers)

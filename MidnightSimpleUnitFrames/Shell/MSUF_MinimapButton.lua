@@ -3,9 +3,12 @@
 
 local addonName, addonNS = ...
 local MSUF = (_G.MSUF_NS) or addonNS or {}
-_G.MSUF_NS = MSUF
 
 local _G = _G
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local ICON_PATH = "Interface/AddOns/" .. tostring(addonName or "MidnightSimpleUnitFrames") .. "/Media/MSUF_MinimapIcon.tga"
 
@@ -278,7 +281,7 @@ local function EnsureInitialized()
 end
 
 --- Public API used by Options_Misc.lua
-function _G.MSUF_SetMinimapIconEnabled(enabled)
+local function MSUF_SetMinimapIconEnabled(enabled)
     local g = EnsureGeneralDB()
     if not g then return end
 
@@ -290,6 +293,7 @@ function _G.MSUF_SetMinimapIconEnabled(enabled)
     EnsureInitialized()
     ApplyShowHide(enabled)
 end
+ExportPublic("MSUF_SetMinimapIconEnabled", MSUF_SetMinimapIconEnabled)
 
 --- Init on login (DB is expected to exist by then)
 local initFrame = CreateFrame("Frame")

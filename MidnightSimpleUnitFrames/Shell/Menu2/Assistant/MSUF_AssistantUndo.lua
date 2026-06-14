@@ -1,10 +1,14 @@
+-- Assistant undo runtime: snapshots applied bundles and replays undo/redo safely.
+-- Keep snapshot mutation centralized so parser modules remain pure plan producers.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -229,7 +233,7 @@ end
 
 local function RestoreProfileSnapshot(snapshot)
     if type(snapshot) ~= "table" then return false end
-    if type(_G.MSUF_GlobalDB) ~= "table" then _G.MSUF_GlobalDB = {} end
+    if type(_G.MSUF_GlobalDB) ~= "table" then ExportPublic("MSUF_GlobalDB", {}) end
     if type(snapshot.globalDB) == "table" then
         DeepReplace(_G.MSUF_GlobalDB, snapshot.globalDB)
     end
@@ -262,8 +266,8 @@ local function RestoreProfileSnapshot(snapshot)
         gdb.profiles[active] = DeepCopy(type(snapshot.db) == "table" and snapshot.db or {})
     end
 
-    _G.MSUF_ActiveProfile = active
-    _G.MSUF_DB = gdb.profiles[active]
+    ExportPublic("MSUF_ActiveProfile", active)
+    ExportPublic("MSUF_DB", gdb.profiles[active])
 
     local charKey = snapshot.charKey
     if type(charKey) ~= "string" or charKey == "" then charKey = CurrentCharKey() end

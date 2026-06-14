@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 Group indicators page.
 -- Builds party/raid status icon, placed indicator, frame effect, and spell-indicator controls.

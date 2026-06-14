@@ -8,8 +8,11 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -52,6 +55,7 @@ local nameEventsRegistered = false
 local rosterEventsRegistered = false
 local lastRosterMode
 local lastRosterSignature
+local lastRosterStructureSignature
 local lastDifficultyToken
 local rosterSignatureParts = {}
 local ROSTER_EVENTS = { "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED", "ROLE_CHANGED_INFORM" }
@@ -175,6 +179,14 @@ local function AddPendingRefresh(kind, mask)
   GF._pendingGroupRefreshMaskSet = true
 end
 
+local PENDING_REBUILD_PRIORITY = { roster = 1, rebuild = 2, zone = 3 }
+local function RememberPendingRebuildReason(reason)
+  local current = GF._pendingGroupRebuildReason
+  if not current or (PENDING_REBUILD_PRIORITY[reason] or 0) > (PENDING_REBUILD_PRIORITY[current] or 0) then
+    GF._pendingGroupRebuildReason = reason
+  end
+end
+
 function GF.DeferGroupRuntime(reason, kind, mask)
   -- Group headers are secure/protected. Any refresh that could move, create, or
   -- rebind children while in combat is reduced to flags and replayed on regen.
@@ -183,8 +195,10 @@ function GF.DeferGroupRuntime(reason, kind, mask)
   if reason == "roster" or reason == "zone" then
     GF._pendingGroupRebuild = true
     GF._pendingGroupDropSpecs = true
+    RememberPendingRebuildReason(reason)
   elseif reason == "rebuild" then
     GF._pendingGroupRebuild = true
+    RememberPendingRebuildReason(reason)
   elseif reason == "visibility" then
     GF._pendingGroupVisibility = true
   else
@@ -347,7 +361,7 @@ local function UnitRoleToken(unit)
   return (UnitGroupRolesAssigned and IsUnitToken(unit) and UnitGroupRolesAssigned(unit)) or ""
 end
 
-local function CurrentRosterSignature()
+local function CurrentRosterSignature(includeRoles)
   local mode = RosterMode()
   local parts = rosterSignatureParts
   wipe(parts)
@@ -368,8 +382,10 @@ local function CurrentRosterSignature()
       local subgroup = GetRaidRosterInfo and select(3, GetRaidRosterInfo(i)) or ""
       n = n + 1
       parts[n] = UnitIdentity(unit)
-      n = n + 1
-      parts[n] = UnitRoleToken(unit)
+      if includeRoles ~= false then
+        n = n + 1
+        parts[n] = UnitRoleToken(unit)
+      end
       n = n + 1
       parts[n] = tostring(subgroup or "")
     end
@@ -379,21 +395,28 @@ local function CurrentRosterSignature()
     parts[n] = tostring(count)
     n = n + 1
     parts[n] = UnitIdentity("player")
-    n = n + 1
-    parts[n] = UnitRoleToken("player")
+    if includeRoles ~= false then
+      n = n + 1
+      parts[n] = UnitRoleToken("player")
+    end
     for i = 1, count do
       local unit = "party" .. i
       n = n + 1
       parts[n] = UnitIdentity(unit)
-      n = n + 1
-      parts[n] = UnitRoleToken(unit)
+      if includeRoles ~= false then
+        n = n + 1
+        parts[n] = UnitRoleToken(unit)
+      end
     end
   end
   return table_concat(parts, "\031", 1, n)
 end
 
 local function RefreshRosterSignature()
-  lastRosterSignature = CurrentRosterSignature()
+  -- Track two signatures: structural changes need secure header work, while
+  -- role-only changes are handled by per-frame runtime/status refreshes.
+  lastRosterSignature = CurrentRosterSignature(true)
+  lastRosterStructureSignature = CurrentRosterSignature(false)
 end
 
 local function CurrentDifficultyToken()
@@ -405,8 +428,13 @@ local function CurrentDifficultyToken()
 end
 
 local function RosterSignatureChanged()
-  local current = CurrentRosterSignature()
+  local current = CurrentRosterSignature(true)
   return current ~= lastRosterSignature
+end
+
+local function RosterStructureChanged()
+  local current = CurrentRosterSignature(false)
+  return current ~= lastRosterStructureSignature
 end
 
 local function HeaderKindForKey(key)
@@ -439,9 +467,21 @@ local function ApplyHeaderSceneAlpha(key)
   end
 end
 
-local function ApplyAllSceneAlphas()
+local function ApplySceneAlphas()
   ApplyHeaderSceneAlpha("party")
   ApplyHeaderSceneAlpha("raid")
+end
+
+local RefreshRosterStateBindings
+local RefreshStructuralMask
+
+local function ScanRaidHeaderChildren()
+  local header = GF.headers and GF.headers.raid
+  if not (header and GF.ScheduleScan) then
+    return false
+  end
+  GF.ScheduleScan("raid", LiveRaidKind())
+  return true
 end
 
 local function ScheduleRosterSettle()
@@ -457,8 +497,17 @@ local function ScheduleRosterSettle()
     if token ~= rosterSettleToken or RosterMode() ~= "raid" then
       return
     end
-    GF._forceScanHeaders = true
-    GF.RebuildAll()
+    local structureChanged = GF._forceRecreateHeaders == true or RosterStructureChanged()
+    local stateChanged = RosterSignatureChanged()
+    if structureChanged or not ScanRaidHeaderChildren() then
+      GF._forceScanHeaders = true
+      GF.RebuildAll()
+      return
+    end
+    if stateChanged then
+      RefreshRosterStateBindings()
+      GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+    end
   end
   C_Timer.After(0.15, Run)
   C_Timer.After(0.60, Run)
@@ -546,9 +595,25 @@ local function ScheduleGroupRuntimeNextFrame(key, fn)
   return true
 end
 
+RefreshRosterStateBindings = function()
+  -- Role-only roster changes must update per-frame status/name bindings, but
+  -- they do not need a secure-header scan or a compiled-spec cache drop.
+  GF._forceScanHeaders = nil
+  RefreshRosterSignature()
+  if GF.RefreshGroupNames then GF.RefreshGroupNames() end
+  if GF.RefreshClickCastFrames then GF.RefreshClickCastFrames() end
+end
+
 local function RunScheduledRosterRebuild()
   rosterRebuildQueued = false
-  if GF._forceRecreateHeaders ~= true and not RosterSignatureChanged() then
+  local structureChanged = GF._forceRecreateHeaders == true or RosterStructureChanged()
+  local stateChanged = RosterSignatureChanged()
+  if not structureChanged then
+    if stateChanged then
+      RefreshRosterStateBindings()
+      GF.RefreshVisuals(nil, GF.DIRTY_VISUAL)
+      return
+    end
     if GF.RefreshGroupNames then GF.RefreshGroupNames() end
     if GF.RefreshClickCastFrames then GF.RefreshClickCastFrames() end
     return
@@ -574,7 +639,9 @@ local function RunScheduledZoneRefresh()
     return
   end
   DropSpecs()
-  GF.RefreshAll(true)
+  -- Zone/difficulty changes may rebuild secure headers, but do not require a
+  -- full visual/auras config sweep after the structural pass.
+  RefreshStructuralMask(GF.DIRTY_GEOMETRY)
 end
 
 local function ScheduleZoneRefresh()
@@ -744,6 +811,19 @@ function GF.RefreshAll(preInvalidated)
   return true
 end
 
+RefreshStructuralMask = function(mask)
+  if InCombat() then
+    GF.DeferGroupRuntime("rebuild")
+    GF.DeferGroupRuntime("refresh", nil, mask)
+    return false
+  end
+  local dirty = mask or GF.DIRTY_ALL
+  BumpAuras3ConfigForGroup(dirty)
+  GF.RebuildAll(true, true)
+  GF.RefreshVisuals(nil, dirty, true, true)
+  return true
+end
+
 GF.Refresh = GF.RefreshAll
 GF.RefreshGeometry = GF.RebuildAll
 GF.RefreshOverlays = function(kind) return GF.RefreshVisuals(kind, GF.DIRTY_AURAS) end
@@ -763,12 +843,7 @@ end
 function GF.MarkAllDirty(mask)
   InvalidateSpecs()
   if not mask or mask == GF.DIRTY_ALL or Has(mask, GF.DIRTY_GEOMETRY) or Has(mask, GF.DIRTY_LAYOUT) then
-    if InCombat() then
-      GF.DeferGroupRuntime("rebuild")
-      GF.DeferGroupRuntime("refresh", nil, GF.DIRTY_ALL)
-      return false
-    end
-    return GF.RefreshAll(true)
+    return RefreshStructuralMask(mask)
   end
   return GF.RefreshVisuals(nil, mask, true)
 end
@@ -793,23 +868,26 @@ function GF.EM2_NudgePreview(key, dx, dy)
   if not conf then return false end
   conf.offsetX = floor(((tonumber(conf.offsetX) or 0) + (tonumber(dx) or 0)) + 0.5)
   conf.offsetY = floor(((tonumber(conf.offsetY) or 0) + (tonumber(dy) or 0)) + 0.5)
-  GF.RefreshAll()
+  GF.RebuildAll()
   return true
 end
 
 --- Collapse multiple deferred requests into one post-combat action set. Roster
 --- changes win over simple visual refreshes because unit identity can change.
-local function TakePendingGroupRuntime(rosterChanged)
+local function TakePendingGroupRuntime(rosterChanged, rosterStateChanged)
   local pending = GF._pendingGroupRuntime
   local rebuild = GF._pendingGroupRebuild == true
+  local rebuildReason = GF._pendingGroupRebuildReason
   local dropSpecs = GF._pendingGroupDropSpecs == true
   local visibility = GF._pendingGroupVisibility == true
   local refresh = GF._pendingGroupRefresh == true
   local refreshKind = GF._pendingGroupRefreshKind
   local refreshMask = GF._pendingGroupRefreshMask
+  local stateOnly = false
 
   GF._pendingGroupRuntime = nil
   GF._pendingGroupRebuild = nil
+  GF._pendingGroupRebuildReason = nil
   GF._pendingGroupDropSpecs = nil
   GF._pendingGroupVisibility = nil
   GF._pendingGroupRefresh = nil
@@ -818,7 +896,9 @@ local function TakePendingGroupRuntime(rosterChanged)
   GF._pendingGroupRefreshMaskSet = nil
 
   if pending and not (rebuild or dropSpecs or visibility or refresh) then
-    if pending == "roster" or pending == "zone" then
+    if pending == "roster" then
+      stateOnly = true
+    elseif pending == "zone" then
       rebuild = true
       dropSpecs = true
     elseif pending == "rebuild" then
@@ -833,13 +913,20 @@ local function TakePendingGroupRuntime(rosterChanged)
   if rosterChanged then
     rebuild = true
     dropSpecs = true
+    stateOnly = false
+  elseif rebuildReason == "roster" and GF._forceRecreateHeaders ~= true then
+    rebuild = false
+    dropSpecs = false
+    stateOnly = true
+  elseif rosterStateChanged then
+    stateOnly = true
   end
 
-  return pending or rosterChanged, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask
+  return pending or rosterChanged or stateOnly, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask, stateOnly
 end
 
-local function FlushPendingGroupRuntime(rosterChanged)
-  local hasPending, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask = TakePendingGroupRuntime(rosterChanged)
+local function FlushPendingGroupRuntime(rosterChanged, rosterStateChanged)
+  local hasPending, rebuild, dropSpecs, visibility, refresh, refreshKind, refreshMask, stateOnly = TakePendingGroupRuntime(rosterChanged, rosterStateChanged)
   if not hasPending then
     return false
   end
@@ -853,6 +940,16 @@ local function FlushPendingGroupRuntime(rosterChanged)
   if visibility and not rebuild then
     GF.UpdateGroupVisibility()
   end
+  if stateOnly and not rebuild then
+    RefreshRosterStateBindings()
+    refreshKind = nil
+    if not refresh then
+      refresh = true
+      refreshMask = GF.DIRTY_VISUAL
+    elseif refreshMask ~= nil then
+      refreshMask = OrMask(refreshMask, GF.DIRTY_VISUAL)
+    end
+  end
   if refresh then
     GF.RefreshVisuals(refreshKind, refreshMask, dropSpecs == true)
   end
@@ -863,27 +960,30 @@ end
 --- Headers/Adapter/Visuals stay callable from explicit refresh paths too.
 local function OnEvent(self, event, ...)
   if event == "PLAYER_REGEN_ENABLED" then
-    _G.MSUF_InCombat = false
+    ExportPublic("MSUF_InCombat", false)
     RegisterNameEvents()
     RegisterRosterEvents()
-    local rosterChanged = RosterSignatureChanged()
-    if rosterChanged then
+    local rosterStateChanged = RosterSignatureChanged()
+    local rosterChanged = GF._forceRecreateHeaders == true or RosterStructureChanged()
+    if rosterStateChanged then
       MarkRosterMode()
-      if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
-      GF._forceScanHeaders = true
+      if rosterChanged then
+        if GF.InvalidateGroupSizeCache then GF.InvalidateGroupSizeCache() end
+        GF._forceScanHeaders = true
+      end
     end
-    if not FlushPendingGroupRuntime(rosterChanged) then
+    if not FlushPendingGroupRuntime(rosterChanged, rosterStateChanged) then
       GF.RefreshGroupNames()
       if GF.RefreshClickCastFrames then
         GF.RefreshClickCastFrames()
       end
     end
   elseif event == "PLAYER_REGEN_DISABLED" then
-    _G.MSUF_InCombat = true
+    ExportPublic("MSUF_InCombat", true)
     UnregisterNameEvents()
     UnregisterRosterEvents()
   elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" then
-    _G.MSUF_InCombat = InCombat()
+    ExportPublic("MSUF_InCombat", InCombat())
     if _G.MSUF_InCombat then
       UnregisterNameEvents()
       UnregisterRosterEvents()
@@ -925,10 +1025,10 @@ local function OnEvent(self, event, ...)
     ScheduleZoneRefresh()
   elseif event == "BARBER_SHOP_OPEN" then
     GF._clientSceneActive = true
-    ApplyAllSceneAlphas()
+    ApplySceneAlphas()
   elseif event == "BARBER_SHOP_CLOSE" then
     GF._clientSceneActive = nil
-    ApplyAllSceneAlphas()
+    ApplySceneAlphas()
     GF.UpdateGroupVisibility()
   elseif event == "UNIT_NAME_UPDATE" then
     GF.RefreshGroupNames(select(1, ...))
@@ -958,22 +1058,24 @@ local GF_PUBLIC_ALIASES = {
   { "MSUF_GF_EM2_SetActivePreviewKind", "EM2_SetActivePreviewKind" },
   { "MSUF_GF_EM2_NudgePreview", "EM2_NudgePreview" },
 }
+
+MSUF.GroupFrames = GF
 for i = 1, #GF_PUBLIC_ALIASES do
   local alias, method = GF_PUBLIC_ALIASES[i][1], GF_PUBLIC_ALIASES[i][2]
-  _G[alias] = function(...)
+  ExportPublic(alias, function(...)
     return GF[method](...)
-  end
+  end)
 end
-_G.MSUF_GF_InvalidateCooldownTextCurve = function()
+ExportPublic("MSUF_GF_InvalidateCooldownTextCurve", function()
   local A3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
   local CT = A3 and A3.CooldownText
   if CT and CT.Invalidate then CT.Invalidate("group") end
   return true
-end
-_G.MSUF_GF_ForceCooldownTextRecolor = function()
+end)
+ExportPublic("MSUF_GF_ForceCooldownTextRecolor", function()
   local A3 = MSUF and (MSUF.MSUF_Auras3 or _G.MSUF_Auras3)
   local CT = A3 and A3.CooldownText
   if CT and CT.ForceRecolor then CT.ForceRecolor("group") end
   return GF.RefreshVisuals(nil, GF.DIRTY_AURAS)
-end
-_G.MSUF_GF_ForceAuraTextColorRefresh = function() return GF.RefreshVisuals(nil, GF.DIRTY_AURAS) end
+end)
+ExportPublic("MSUF_GF_ForceAuraTextColorRefresh", function() return GF.RefreshVisuals(nil, GF.DIRTY_AURAS) end)

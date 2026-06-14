@@ -1,4 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!-- Unit/global page modules load after preview APIs, matching the established Menu2 order. -->
     <Script file="Pages\MSUF_Menu2_UnitSectionShared.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitStatusSection.lua"/>
     <Script file="Pages\MSUF_Menu2_UnitText.lua"/>

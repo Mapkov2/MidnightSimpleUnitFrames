@@ -6,6 +6,13 @@
 --- SavedVariables, but it should not decide whether a unit is currently casting
 --- or register spellcast events.
 
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local previousUpdateCastbarVisuals = _G.MSUF_UpdateCastbarVisuals
 local issecretvalue = _G.issecretvalue
 
@@ -24,7 +31,7 @@ local function GeneralDB()
     elseif type(_G.EnsureDB) == "function" and not _G.MSUF_DB then
         _G.EnsureDB()
     end
-    _G.MSUF_DB = _G.MSUF_DB or {}
+    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     return _G.MSUF_DB.general
 end
@@ -527,8 +534,8 @@ local function ApplyCastbarDetailLayout(frame, forcedUnit)
     ApplySpellTextLayout(frame, g, unit, prefix)
 end
 
-_G.MSUF_ApplyCastbarDetailLayout = ApplyCastbarDetailLayout
-_G.MSUF_ApplyCastbarDetailTextLayout = ApplyCastbarDetailLayout
+ExportPublic("MSUF_ApplyCastbarDetailLayout", ApplyCastbarDetailLayout)
+ExportPublic("MSUF_ApplyCastbarDetailTextLayout", ApplyCastbarDetailLayout)
 
 local function ApplyPlayerCastbarDetailFrames()
     ApplyCastbarDetailLayout(_G.MSUF_PlayerCastbar, "player")
@@ -543,11 +550,11 @@ local function HookPlayerCastbarReanchor()
     local previous = _G.MSUF_ReanchorPlayerCastBar
     if type(previous) ~= "function" then return end
     playerReanchorHooked = true
-    _G.MSUF_ReanchorPlayerCastBar = function(...)
+    ExportPublic("MSUF_ReanchorPlayerCastBar", function(...)
         local result = previous(...)
         ApplyPlayerCastbarDetailFrames()
         return result
-    end
+    end)
 end
 
 HookPlayerCastbarReanchor()
@@ -594,7 +601,7 @@ local function RefreshCastbarFrame(frame)
     ApplyCastbarDetailLayout(frame)
 end
 
-function _G.MSUF_UpdateCastbarVisuals(...)
+local function UpdateCastbarVisuals(...)
     if type(previousUpdateCastbarVisuals) == "function" and previousUpdateCastbarVisuals ~= _G.MSUF_UpdateCastbarVisuals then
         previousUpdateCastbarVisuals(...)
     end
@@ -621,3 +628,4 @@ function _G.MSUF_UpdateCastbarVisuals(...)
         end
     end
 end
+ExportPublic("MSUF_UpdateCastbarVisuals", UpdateCastbarVisuals)

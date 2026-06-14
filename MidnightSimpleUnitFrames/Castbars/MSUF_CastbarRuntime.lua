@@ -7,11 +7,16 @@
 --- construction in Frames.
 
 local _, ns = ...
-ns = ns or {}
+ns = ns or _G.MSUF_NS or {}
+
+local ExportPublic = ns.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local Runtime = ns.MSUF_CastbarRuntime or {}
 ns.MSUF_CastbarRuntime = Runtime
-_G.MSUF_CastbarRuntime = Runtime
+ExportPublic("MSUF_CastbarRuntime", Runtime)
 
 local StatusBarInterpolation = _G.Enum and _G.Enum.StatusBarInterpolation
 local StatusBarTimerDirection = _G.Enum and _G.Enum.StatusBarTimerDirection
@@ -448,28 +453,28 @@ end
 
 --- Compatibility globals for older castbar files. New code should call Runtime
 --- methods through ns when possible, but these exports keep load order flexible.
-_G.MSUF_ApplyTimerAndFill = function(statusBar, durationObj, reverseFill, isChanneled)
+ExportPublic("MSUF_ApplyTimerAndFill", function(statusBar, durationObj, reverseFill, isChanneled)
     return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
-end
+end)
 
-_G.MSUF_ApplyCastbarTimerDirection = function(statusBar, durationObj, reverseFill, isChanneled)
+ExportPublic("MSUF_ApplyCastbarTimerDirection", function(statusBar, durationObj, reverseFill, isChanneled)
     return Runtime:ApplyTimer(statusBar, durationObj, reverseFill, isChanneled)
-end
+end)
 
-_G.MSUF_ClearCastbarTimerDuration = function(statusBar)
+ExportPublic("MSUF_ClearCastbarTimerDuration", function(statusBar)
     return Runtime:ClearTimer(statusBar)
-end
+end)
 
-_G.MSUF_Castbar_ApplyActiveDuration = function(frame, state, options)
+ExportPublic("MSUF_Castbar_ApplyActiveDuration", function(frame, state, options)
     return Runtime:ApplyActive(frame, state, options)
-end
+end)
 
-_G.MSUF_ApplyInterruptBarVisuals = function(frame, options)
+ExportPublic("MSUF_ApplyInterruptBarVisuals", function(frame, options)
     return Runtime:ApplyInterrupt(frame, options)
-end
+end)
 
-_G.MSUF_CB_ResetStateOnStop = function(frame, reason, options)
+ExportPublic("MSUF_CB_ResetStateOnStop", function(frame, reason, options)
     return Runtime:Stop(frame, reason, options)
-end
+end)
 
-_G.MSUF_CastbarRuntime_PlainNumber = PlainNumber
+ExportPublic("MSUF_CastbarRuntime_PlainNumber", PlainNumber)

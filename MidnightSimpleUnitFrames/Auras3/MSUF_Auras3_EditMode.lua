@@ -10,7 +10,10 @@
 --- frames to refresh. Do not add aura scanning or per-aura render decisions here.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local type, tonumber, tostring, pairs = type, tonumber, tostring, pairs
 local math_floor, math_min, math_max, math_ceil = math.floor, math.min, math.max, math.ceil
@@ -25,7 +28,7 @@ if type(A3) ~= "table" then
     A3 = {}
     MSUF.MSUF_Auras3 = A3
 end
-_G.MSUF_Auras3 = A3
+ExportPublic("MSUF_Auras3", A3)
 
 if A3.__editModeLoaded then return end
 A3.__editModeLoaded = true
@@ -772,8 +775,8 @@ local function CreateGroup(unit, kind)
     group:Hide()
 
     group:SetScript("OnMouseDown", function(self, button)
-        _G.MSUF_EM2_ActiveAuraGroup = self._msufA3MoverKind
-        _G.MSUF_EM2_ActiveAuraUnit = self._msufA3Unit
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", self._msufA3MoverKind)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", self._msufA3Unit)
 
         if button == "RightButton" then
             if IsEditModeActive() and not IsConfigBlocked() and type(_G.MSUF_OpenAuras3PositionPopup) == "function" then
@@ -1017,17 +1020,17 @@ function A3.RefreshEditPreview(unit)
     return EM.RefreshAll()
 end
 
-_G.MSUF_Auras3_RefreshUnit = A3.RefreshUnit
-_G.MSUF_Auras3_RefreshAll = A3.RefreshAll
-_G.MSUF_Auras3_UpdateUnitAnchor = A3.UpdateUnitAnchor
-_G.MSUF_Auras3_RefreshEditPreview = A3.RefreshEditPreview
-_G.MSUF_A3_RefreshUnit = _G.MSUF_Auras3_RefreshUnit
-_G.MSUF_A3_UpdateUnitAnchor = _G.MSUF_Auras3_UpdateUnitAnchor
+ExportPublic("MSUF_Auras3_RefreshUnit", A3.RefreshUnit)
+ExportPublic("MSUF_Auras3_RefreshAll", A3.RefreshAll)
+ExportPublic("MSUF_Auras3_UpdateUnitAnchor", A3.UpdateUnitAnchor)
+ExportPublic("MSUF_Auras3_RefreshEditPreview", A3.RefreshEditPreview)
+ExportPublic("MSUF_A3_RefreshUnit", A3.RefreshUnit)
+ExportPublic("MSUF_A3_UpdateUnitAnchor", A3.UpdateUnitAnchor)
 
-_G.MSUF_OpenAuras3PositionPopup = function(unit, parent)
+local function OpenAuras3PositionPopup(unit, parent)
     if parent and parent._msufA3MoverKind then
-        _G.MSUF_EM2_ActiveAuraGroup = parent._msufA3MoverKind
-        _G.MSUF_EM2_ActiveAuraUnit = unit
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", parent._msufA3MoverKind)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", unit)
     end
     local EM2 = _G.MSUF_EM2
     if EM2 and EM2.Popups then
@@ -1036,14 +1039,15 @@ _G.MSUF_OpenAuras3PositionPopup = function(unit, parent)
         return EM2.AuraPopup.Open(unit, parent)
     end
 end
+ExportPublic("MSUF_OpenAuras3PositionPopup", OpenAuras3PositionPopup)
 
 local function OnEditModeChanged(active)
     if active then
         EM.RefreshAll()
     else
         EM.HideAll()
-        _G.MSUF_EM2_ActiveAuraGroup = nil
-        _G.MSUF_EM2_ActiveAuraUnit = nil
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
     end
 end
 

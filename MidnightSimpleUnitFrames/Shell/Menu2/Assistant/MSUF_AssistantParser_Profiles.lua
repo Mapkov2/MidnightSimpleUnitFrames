@@ -1,10 +1,14 @@
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Profiles.lua
+--- Profile command parser shard for Assistant plans.
+---
+--- Preserves user-authored profile names while staging profile actions; actual
+--- import/export/copy writes remain in the profile/runtime layer.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -13,11 +17,6 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
-
--- Profile parser shard.
--- Profile names are user-authored text, so helpers here preserve raw fragments where needed
--- and only normalize the command scaffolding around them. The parser stages profile actions;
--- actual import/export/copy writes remain in the profile/runtime layer.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local HasPhrase = P.HasPhrase

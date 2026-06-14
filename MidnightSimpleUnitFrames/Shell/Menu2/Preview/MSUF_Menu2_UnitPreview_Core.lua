@@ -2,7 +2,10 @@
 --- Cold-path shared helpers for the MSUF2 unit frame preview.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local floor = math.floor
 local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local MEDIA = "Interface\\AddOns\\MidnightSimpleUnitFrames\\Media\\"
@@ -11,7 +14,7 @@ local PREVIEW_ROUNDED_MASK = MASK_MEDIA .. "rounded_bar_4x.tga"
 local PREVIEW_ROUNDED_EDGE = MASK_MEDIA .. "rounded_bar_edge_4x.tga"
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
-_G.MSUF_UFPreview = Preview
+ExportPublic("MSUF_UFPreview", Preview)
 local PreviewModel = Preview.Model or {}
 local UnitDB = PreviewModel.UnitDB
 local Clamp01 = PreviewModel.Clamp01

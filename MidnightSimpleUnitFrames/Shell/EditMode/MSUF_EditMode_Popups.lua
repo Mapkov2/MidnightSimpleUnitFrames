@@ -1,5 +1,12 @@
 --- EditMode/MSUF_EditMode_Popups.lua - popup router and unit frame popup.
+-- Owns popup composition only; protected frame edits route through EditMode apply helpers.
 local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
 
@@ -57,8 +64,8 @@ function Popups.Open(key, anchorFrame)
     Popups.CloseAll()
 
     if pType == "unit" then
-        _G.MSUF_EM2_ActiveAuraGroup = nil
-        _G.MSUF_EM2_ActiveAuraUnit  = nil
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
         local unit = key
         if key:match("^boss%d") then unit = "boss" end
         local frame = cfg and cfg.getFrame and cfg.getFrame()
@@ -67,8 +74,8 @@ function Popups.Open(key, anchorFrame)
             if EM2.State then EM2.State.SetPopupOpen(true) end
         end
     elseif pType == "castbar" then
-        _G.MSUF_EM2_ActiveAuraGroup = nil
-        _G.MSUF_EM2_ActiveAuraUnit  = nil
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
         local unit = key
         if key:sub(1, 8) == "castbar_" then unit = key:sub(9) end
         if type(unit) == "string" and unit:match("^boss%d+$") then unit = "boss" end
@@ -80,8 +87,8 @@ function Popups.Open(key, anchorFrame)
         local frame = cfg and cfg.getFrame and cfg.getFrame()
         if EM2.AuraPopup then EM2.AuraPopup.Open(unit, frame or anchorFrame) end
     elseif pType == "gf_party" or pType == "gf_raid" or pType == "gf_mythicraid" then
-        _G.MSUF_EM2_ActiveAuraGroup = nil
-        _G.MSUF_EM2_ActiveAuraUnit  = nil
+        ExportPublic("MSUF_EM2_ActiveAuraGroup", nil)
+        ExportPublic("MSUF_EM2_ActiveAuraUnit", nil)
         local mode = (pType == "gf_raid") and "raid" or ((pType == "gf_mythicraid") and "mythicraid" or "party")
         if _G.MSUF_EM2_ShowGFPopup then
             _G.MSUF_EM2_ShowGFPopup(mode)
@@ -107,11 +114,9 @@ local floor = math.floor
 local max, min = math.max, math.min
 local function DB() return _G.MSUF_DB end
 local function Conf(k) local db=DB(); return db and db[k] end
-local function CK(u) if not u then return nil end; if u=="targettarget" or u=="tot" then return "targettarget" end
-    if u=="focustarget" or u=="focus_target" or u=="focustargettarget" then return "focustarget" end
-    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(u) then return "boss" end; return u end
-local LABELS = { player="Player", target="Target", focus="Focus", focustarget="Focus Target", targettarget="ToT", pet="Pet", boss="Boss" }
-local UNIT_PAGE_KEYS = { player="uf_player", target="uf_target", focus="uf_focus", focustarget="uf_focustarget", targettarget="uf_targettarget", pet="uf_pet", boss="uf_boss" }
+local CK = U.NormalizeUnitKey or function(u) return u end
+local UnitLabel = U.UnitLabel or function(u) return tostring(u or "") end
+local UnitPageKey = U.UnitPageKey or function() return "uf_player" end
 local UNIT_COPY_TARGETS = {
     { key="player", label="Player" },
     { key="target", label="Target" },
@@ -174,7 +179,7 @@ end
 function Sync()
     if not pf or not pf.unit then return end
     local key=CK(pf.unit); local conf=key and Conf(key); if not conf then return end
-    if pf._titleFS then pf._titleFS:SetText(Tr((LABELS[key] or key or "") .. " - Frame")) end
+    if pf._titleFS then pf._titleFS:SetText(Tr(UnitLabel(key) .. " - Frame")) end
     Quick.SetBoxText(pf.xBox,San(conf.offsetX,0)); Quick.SetBoxText(pf.yBox,San(conf.offsetY,0))
     Quick.SetBoxText(pf.wBox,conf.width or (pf.parent and pf.parent:GetWidth()) or 250)
     Quick.SetBoxText(pf.hBox,conf.height or (pf.parent and pf.parent:GetHeight()) or 40)
@@ -234,7 +239,7 @@ local function ApplyMenu2UnitSelection(component, slot)
     if not pf or not pf.unit then return nil end
     local key = CK(pf.unit)
     if not key then return nil end
-    local pageKey = UNIT_PAGE_KEYS[key] or "uf_player"
+    local pageKey = UnitPageKey(key)
     local sectionId = UnitSectionForComponent(component)
 
     if EM2.Focus and EM2.Focus.SetSelection then
@@ -262,7 +267,7 @@ local function OpenMenu2Page(pageKey, component, slot)
     if not pf or not pf.unit then return end
     Apply()
     local key = ApplyMenu2UnitSelection(component, slot)
-    pageKey = pageKey or UNIT_PAGE_KEYS[key or CK(pf.unit)] or "uf_player"
+    pageKey = pageKey or UnitPageKey(key or CK(pf.unit))
     Quick.OpenPage(pageKey, pf)
 end
 
@@ -361,128 +366,39 @@ local function Build()
         blocker = BlockConfigCombatLocked,
     })
 
-    local function MakeButtonIn(parent, text, x, y, w, onClick)
-        local b = Quick.Button(parent, text, w or 66, 30, onClick)
-        b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-        return b
-    end
-
-    local function MakeTinyButton(text, x, y, w, onClick)
-        return MakeButtonIn(pf, text, x, y, w, onClick)
-    end
-
     local function WirePopupFocus(btn, component, slot)
         return U.WirePopupFocus and U.WirePopupFocus(btn, function() return pf and pf.unit and CK(pf.unit) end, component, "unit-popup", slot) or btn
     end
 
-    local function MakeToggleButtonIn(parent, text, x, y, w, onClick)
-        local b = Quick.ToggleButton(parent, text, w, 30, onClick, toggleOpts)
-        b:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-        return b
+    local function CopyMenuEntries()
+        local entries = { { key = "__all__", label = "All units", highlight = true } }
+        for _, target in ipairs(UNIT_COPY_TARGETS) do entries[#entries + 1] = target end
+        return entries
     end
 
-    local function MakeToggleButton(text, x, y, w, onClick)
-        return MakeToggleButtonIn(pf, text, x, y, w, onClick)
-    end
-
-    local function MakeCopyButton(x, y, w)
-        local b = MakeTinyButton("Copy to", x, y, w, nil)
-        local menu = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        menu:SetFrameStrata("TOOLTIP")
-        menu:SetFrameLevel(960)
-        menu:SetClampedToScreen(true)
-        menu:EnableMouse(true)
-        menu:SetBackdrop({ bgFile=W8, edgeFile=W8, edgeSize=1 })
-        menu:SetBackdropColor(C.panelBg[1], C.panelBg[2], C.panelBg[3], 0.98)
-        menu:SetBackdropBorderColor(C.panelEdge[1], C.panelEdge[2], C.panelEdge[3], 0.95)
-        Menu2Style.Shell(menu)
-        menu:Hide()
-
-        --- "All units" first, then each individual target.
-        local entries = { { key = "__all__", label = "All units" } }
-        for _, t in ipairs(UNIT_COPY_TARGETS) do entries[#entries + 1] = t end
-
-        local itemH = 22
-        menu:SetSize(w, #entries * itemH + 6)
-        for i, src in ipairs(entries) do
-            local item = CreateFrame("Button", nil, menu)
-            item:SetSize(w - 4, itemH)
-            item:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(3 + (i - 1) * itemH))
-            local bg = item:CreateTexture(nil, "BACKGROUND")
-            bg:SetAllPoints()
-            bg:SetColorTexture(0, 0, 0, 0)
-            --- Subtle divider under the "All units" entry.
-            if src.key == "__all__" then
-                bg:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.08)
+    local function CopyMenuSelect(entry)
+        if entry.key == "__all__" then
+            local srcKey = pf and pf.unit and CK(pf.unit)
+            for _, target in ipairs(UNIT_COPY_TARGETS) do
+                if target.key ~= srcKey then CopyBoundsTo(target.key) end
             end
-            local fs = FS(item, 10, src.key == "__all__" and C.title or C.white)
-            fs:SetPoint("LEFT", 8, 0)
-            fs:SetText(Tr(src.label))
-            item:SetScript("OnEnter", function()
-                bg:SetColorTexture(C.btnHover[1], C.btnHover[2], C.btnHover[3], 0.22)
-            end)
-            item:SetScript("OnLeave", function()
-                bg:SetColorTexture(src.key == "__all__" and C.btnHover[1] or 0, src.key == "__all__" and C.btnHover[2] or 0, src.key == "__all__" and C.btnHover[3] or 0, src.key == "__all__" and 0.08 or 0)
-            end)
-            item:SetScript("OnClick", function()
-                menu:Hide()
-                if src.key == "__all__" then
-                    local srcKey = pf and pf.unit and CK(pf.unit)
-                    for _, t in ipairs(UNIT_COPY_TARGETS) do
-                        if t.key ~= srcKey then CopyBoundsTo(t.key) end
-                    end
-                else
-                    CopyBoundsTo(src.key)
-                end
-                if b then
-                    Menu2Style.SetButtonText(b, src.label)
-                    C_Timer.After(1.2, function() Menu2Style.SetButtonText(b, "Copy to") end)
-                end
-            end)
+        else
+            CopyBoundsTo(entry.key)
         end
-        b:SetScript("OnClick", function()
-            if menu:IsShown() then menu:Hide(); return end
-            menu:ClearAllPoints()
-            menu:SetPoint("TOP", b, "BOTTOM", 0, -3)
-            menu:Show()
-        end)
-        menu:SetScript("OnUpdate", function(self)
-            if not self:IsShown() then return end
-            if b:IsMouseOver() or self:IsMouseOver() then
-                self._closeTimer = nil
-            else
-                if not self._closeTimer then self._closeTimer = GetTime() + 0.35
-                elseif GetTime() >= self._closeTimer then self:Hide() end
-            end
-        end)
-        pf:HookScript("OnHide", function() menu:Hide() end)
-        return b
     end
 
-    local function MakeValuePairIn(parent, x, y, label1, key1, label2, key2)
-        return Quick.ValuePair(pf, parent, y, label1, key1, Apply, label2, key2, Apply, { x = x or 0 })
-    end
+    Quick.ValuePairAt(pf, pf, 20, -72, "X", "xBox", Apply, "Y", "yBox", Apply)
+    Quick.ValuePairAt(pf, pf, 20, -102, "Width", "wBox", Apply, "Height", "hBox", Apply)
 
-    local function MakeValuePair(y, label1, key1, label2, key2)
-        return MakeValuePairIn(pf, 20, y, label1, key1, label2, key2)
-    end
+    WirePopupFocus(Quick.ButtonAt(pf, "Name", 20, -140, 58, 30, function() OpenMenu2Page(nil, "name") end), "name")
+    WirePopupFocus(Quick.ButtonAt(pf, "HP", 90, -140, 58, 30, function() OpenMenu2Page(nil, "hp") end), "hp")
+    WirePopupFocus(Quick.ButtonAt(pf, "Power", 160, -140, 72, 30, function() OpenMenu2Page(nil, "power") end), "power")
+    WirePopupFocus(Quick.ButtonAt(pf, "Auras", 244, -140, 68, 30, function() OpenMenu2Page(nil, "auras") end), "auras")
+    WirePopupFocus(Quick.ButtonAt(pf, "Cast", 324, -140, 58, 30, function() OpenMenu2Page(nil, "castbar") end), "castbar")
 
-    local function MakeSingleValueIn(parent, x, y, label, key)
-        return Quick.SingleValue(pf, parent, y, label, key, Apply, { x = x or 0 })
-    end
-
-    MakeValuePair(-72, "X", "xBox", "Y", "yBox")
-    MakeValuePair(-102, "Width", "wBox", "Height", "hBox")
-
-    WirePopupFocus(MakeTinyButton("Name", 20, -140, 58, function() OpenMenu2Page(nil, "name") end), "name")
-    WirePopupFocus(MakeTinyButton("HP", 90, -140, 58, function() OpenMenu2Page(nil, "hp") end), "hp")
-    WirePopupFocus(MakeTinyButton("Power", 160, -140, 72, function() OpenMenu2Page(nil, "power") end), "power")
-    WirePopupFocus(MakeTinyButton("Auras", 244, -140, 68, function() OpenMenu2Page(nil, "auras") end), "auras")
-    WirePopupFocus(MakeTinyButton("Cast", 324, -140, 58, function() OpenMenu2Page(nil, "castbar") end), "castbar")
-
-    MakeTinyButton("Open settings", 20, -190, 190, OpenMenu2Settings)
-    MakeCopyButton(224, -190, 190)
-    pf.detachBtn = MakeToggleButton("Detach powerbar", 20, -238, 394, ApplyDetachPower)
+    Quick.ButtonAt(pf, "Open settings", 20, -190, 190, 30, OpenMenu2Settings)
+    Quick.MenuButtonAt(pf, "Copy to", 224, -190, 190, 30, CopyMenuEntries, CopyMenuSelect, { palette = C })
+    pf.detachBtn = Quick.ToggleAt(pf, "Detach powerbar", 20, -238, 394, 30, ApplyDetachPower, toggleOpts)
 
     pf.dpbPanel = CreateFrame("Frame", nil, pf, "BackdropTemplate")
     pf.dpbPanel:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -282)
@@ -497,12 +413,12 @@ local function Build()
     local dpbHint = FS(pf.dpbPanel, 10, C.muted)
     dpbHint:SetPoint("LEFT", dpbTitle, "RIGHT", 10, 0)
     dpbHint:SetText(Tr("position, size, and layer"))
-    pf.dpbTextBtn = MakeToggleButtonIn(pf.dpbPanel, "Text on bar", 16, -36, 112, Apply)
-    pf.dpbSyncBtn = MakeToggleButtonIn(pf.dpbPanel, "Sync class", 140, -36, 112, Apply)
-    pf.dpbAnchorBtn = MakeToggleButtonIn(pf.dpbPanel, "Anchor class", 264, -36, 114, Apply)
-    pf.dpbXYRow = MakeValuePairIn(pf.dpbPanel, 16, -92, "X", "dpbXBox", "Y", "dpbYBox")
-    pf.dpbWHRow = MakeValuePairIn(pf.dpbPanel, 16, -126, "Width", "dpbWBox", "Height", "dpbHBox")
-    pf.dpbLayerRow = MakeSingleValueIn(pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox")
+    pf.dpbTextBtn = Quick.ToggleAt(pf.dpbPanel, "Text on bar", 16, -36, 112, 30, Apply, toggleOpts)
+    pf.dpbSyncBtn = Quick.ToggleAt(pf.dpbPanel, "Sync class", 140, -36, 112, 30, Apply, toggleOpts)
+    pf.dpbAnchorBtn = Quick.ToggleAt(pf.dpbPanel, "Anchor class", 264, -36, 114, 30, Apply, toggleOpts)
+    pf.dpbXYRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -92, "X", "dpbXBox", Apply, "Y", "dpbYBox", Apply)
+    pf.dpbWHRow = Quick.ValuePairAt(pf, pf.dpbPanel, 16, -126, "Width", "dpbWBox", Apply, "Height", "dpbHBox", Apply)
+    pf.dpbLayerRow = Quick.SingleValueAt(pf, pf.dpbPanel, 16, -160, "Layer", "dpbLevelBox", Apply)
     pf.dpbPanel:Hide()
 
     if Quick.AddFooterControls then

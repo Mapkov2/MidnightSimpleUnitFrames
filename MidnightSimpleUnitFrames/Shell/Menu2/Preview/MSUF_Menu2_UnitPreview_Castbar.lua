@@ -5,7 +5,6 @@
 --- does not subscribe to UNIT_SPELLCAST events or mutate live castbar frames.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local format = string.format
 local Preview = MSUF.UFPreview or {}
 local PreviewModel = Preview.Model or {}

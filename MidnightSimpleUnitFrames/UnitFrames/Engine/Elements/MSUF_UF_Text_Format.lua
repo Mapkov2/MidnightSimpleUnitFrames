@@ -1,10 +1,13 @@
+--- UnitFrames/Engine/Elements/MSUF_UF_Text_Format.lua
+--- Allocation-light formatting helpers for unitframe text strings.
+---
+--- Called from frequent UNIT_* events, so number formatting, fallback strings,
+--- and secret-safe branches stay local and avoid per-refresh table churn.
+
 local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 if not Text then return end
 
--- Text formatting helpers for unitframe name/health/power strings.
--- Runtime modules call into this file on frequent UNIT_* events, so formatting tables,
--- short-number helpers, and secret-safe fallbacks are kept local and allocation-light.
 local Apply = MSUF.Apply or {}
 local luaType = type
 local CreateFrame = Text.CreateFrame

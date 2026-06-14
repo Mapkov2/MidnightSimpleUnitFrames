@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Group preview spec data.
 -- Declarative mock layout maps, growth vectors, anchors, classes, and icon IDs for the Menu2

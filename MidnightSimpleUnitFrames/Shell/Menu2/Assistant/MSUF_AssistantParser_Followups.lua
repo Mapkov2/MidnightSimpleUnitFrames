@@ -1,10 +1,10 @@
+-- Assistant follow-up parser: resolves short replies against stored conversation context.
+-- It should produce plans or safe prompts only; execution remains in Assistant runtime.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A

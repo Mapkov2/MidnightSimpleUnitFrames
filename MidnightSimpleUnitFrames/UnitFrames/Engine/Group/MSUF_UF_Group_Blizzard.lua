@@ -7,8 +7,11 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -713,6 +716,6 @@ eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 RegisterRosterEvent()
 
-_G.MSUF_GF_DisableBlizzard = function()
+ExportPublic("MSUF_GF_DisableBlizzard", function()
   return GF.ApplyBlizzardGroupFrameOwnership("legacy-global")
-end
+end)

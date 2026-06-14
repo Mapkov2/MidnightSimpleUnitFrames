@@ -5,7 +5,12 @@
 --- their own frame pool, boss-specific anchoring, encounter/unit lifecycle
 --- handling, and menu-facing enable/position globals.
 
-local _ = ...
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local MAX_BOSS_FRAMES = tonumber(_G.MSUF_MAX_BOSS_FRAMES or _G.MAX_BOSS_FRAMES) or 5
 if MAX_BOSS_FRAMES < 1 or MAX_BOSS_FRAMES > 12 then
@@ -376,7 +381,7 @@ local function EnsureBossCastbars()
     end
 
     local bossCastbars = {}
-    _G.MSUF_BossCastbars = bossCastbars
+    ExportPublic("MSUF_BossCastbars", bossCastbars)
 
     for index = 1, MAX_BOSS_FRAMES do
         local frame = EnsureBossCastbar(index)
@@ -396,7 +401,7 @@ local function RefreshBossPreviewIfAllowed()
     end
 end
 
-function _G.MSUF_ApplyBossCastbarTimeSetting()
+local function ApplyBossCastbarTimeSetting()
     EnsureDB()
 
     local general = _G.MSUF_DB and _G.MSUF_DB.general
@@ -420,7 +425,7 @@ function _G.MSUF_ApplyBossCastbarTimeSetting()
     RefreshBossPreviewIfAllowed()
 end
 
-function _G.MSUF_ApplyBossCastbarPositionSetting(forceLayout)
+local function ApplyBossCastbarPositionSetting(forceLayout)
     local bossCastbars = _G.MSUF_BossCastbars or EnsureBossCastbars()
     if not bossCastbars then
         return
@@ -438,7 +443,7 @@ end
 
 --- Public menu/profile entry. Keep backend flags, event subscriptions, live
 --- frame state, visuals, and previews synchronized from this one path.
-function _G.MSUF_SetBossCastbarsEnabled(enabled)
+local function SetBossCastbarsEnabled(enabled)
     EnsureDB()
 
     enabled = enabled and true or false
@@ -481,17 +486,21 @@ function _G.MSUF_SetBossCastbarsEnabled(enabled)
     RefreshBossPreviewIfAllowed()
 end
 
-function _G.MSUF_ApplyBossCastbarsEnabled()
-    _G.MSUF_SetBossCastbarsEnabled(BossCastbarsEnabled())
+local function ApplyBossCastbarsEnabled()
+    SetBossCastbarsEnabled(BossCastbarsEnabled())
 end
 
 local function OnLogin()
     EnsureBossCastbars()
 
-    if type(_G.MSUF_ApplyBossCastbarPositionSetting) == "function" then
-        _G.MSUF_ApplyBossCastbarPositionSetting(true)
-    end
+    ApplyBossCastbarPositionSetting(true)
 end
+
+ExportPublic("MSUF_ApplyBossCastbarTimeSetting", ApplyBossCastbarTimeSetting)
+ExportPublic("MSUF_ApplyBossCastbarPositionSetting", ApplyBossCastbarPositionSetting)
+ExportPublic("MSUF_SetBossCastbarsEnabled", SetBossCastbarsEnabled)
+ExportPublic("MSUF_ApplyBossCastbarsEnabled", ApplyBossCastbarsEnabled)
+ExportPublic("MSUF_BossCastbar_Stop", StopBossCastbar)
 
 if type(_G.MSUF_EventBus_Register) == "function" then
     _G.MSUF_EventBus_Register("PLAYER_LOGIN", "MSUF_BOSS_CASTBARS", OnLogin, nil, true)
@@ -502,5 +511,3 @@ else
     frame:RegisterEvent("PLAYER_ENTERING_WORLD")
     frame:SetScript("OnEvent", OnLogin)
 end
-
-_G.MSUF_BossCastbar_Stop = StopBossCastbar

@@ -4,9 +4,19 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-local M = MSUF.MSUF2 or {}
+local function EnsureMenu2Namespace()
+    local namespace = MSUF.MSUF2 or _G.MSUF2 or {}
+    MSUF.MSUF2 = namespace
+    if _G.MSUF2 ~= namespace then _G.MSUF2 = namespace end
+    return namespace
+end
+MSUF.GetMenu2Namespace = MSUF.GetMenu2Namespace or EnsureMenu2Namespace
+local M = MSUF.GetMenu2Namespace()
 MSUF.MSUF2 = M
-_G.MSUF2 = M
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local unpack = table.unpack or unpack
 local floor = math.floor
 local abs = math.abs
@@ -55,7 +65,7 @@ M.IsConfigCombatLocked = M.IsConfigCombatLocked or IsConfigCombatLocked
 local function EnsureGeneral()
     local ensureDB = _G.MSUF_EnsureDB
     if type(ensureDB) == "function" then pcall(ensureDB) end
-    _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+    ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
     _G.MSUF_DB.general = type(_G.MSUF_DB.general) == "table" and _G.MSUF_DB.general or {}
     return _G.MSUF_DB.general
 end
@@ -98,7 +108,7 @@ local function AddTooltip(widget, title, body, opts)
     if opts.labelHit and widget._msuf2LabelHit and widget._msuf2LabelHit ~= widget then Wire(widget._msuf2LabelHit) end
     return widget
 end
-_G.MSUF_AddTooltip = _G.MSUF_AddTooltip or AddTooltip
+ExportPublic("MSUF_AddTooltip", _G.MSUF_AddTooltip or AddTooltip)
 M.AddTooltip = M.AddTooltip or AddTooltip
 local PREVIEW_NUDGE_DIRECTIONS = { { "LEFT", -1, 0 }, { "RIGHT", 1, 0 }, { "UP", 0, 1 }, { "DOWN", 0, -1 } }
 local PREVIEW_NUDGE_BINDING_PREFIXES = { "", "SHIFT-", "CTRL-", "CTRL-SHIFT-", "SHIFT-CTRL-" }
@@ -171,7 +181,7 @@ local function LeftJustifyButtonText(btn, leftPad)
         fontString:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
     end
 end
-_G.MSUF_LeftJustifyButtonText = _G.MSUF_LeftJustifyButtonText or LeftJustifyButtonText
+ExportPublic("MSUF_LeftJustifyButtonText", _G.MSUF_LeftJustifyButtonText or LeftJustifyButtonText)
 function M.ValueTextList(...)
     local out = {}
     local n = select("#", ...)
@@ -511,7 +521,7 @@ local function GameplayDB()
     local db
     if type(M.EnsureDB) == "function" then db = M.EnsureDB() end
     if type(db) ~= "table" then
-        _G.MSUF_DB = type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {}
+        ExportPublic("MSUF_DB", type(_G.MSUF_DB) == "table" and _G.MSUF_DB or {})
         db = _G.MSUF_DB
     end
     db.gameplay = type(db.gameplay) == "table" and db.gameplay or {}
@@ -918,7 +928,7 @@ Troubleshoot: If visuals do not update, a quick /reload fixes most UI state issu
 ]]):gmatch("[^|]+") do
     tips[#tips + 1] = (tip:gsub("^%s+", ""):gsub("%s+$", ""))
 end
-function _G.MSUF_GetNextTip()
+local function GetNextTip()
     local g = EnsureGeneral()
     local count = #tips
     if count == 0 then return nil, 0, 0 end
@@ -931,8 +941,9 @@ function _G.MSUF_GetNextTip()
     g.tipCycleIndex = nextIndex
     return tip, index, count
 end
+ExportPublic("MSUF_GetNextTip", GetNextTip)
 local pendingReloadRecommendedLabel
-function _G.MSUF_ShowReloadRecommendedPopup(label)
+local function ShowReloadRecommendedPopup(label)
     if BlockConfigCombatLocked(false) then return end
     if not _G.StaticPopupDialogs then return end
     pendingReloadRecommendedLabel = tostring(label or "")
@@ -950,6 +961,7 @@ function _G.MSUF_ShowReloadRecommendedPopup(label)
     })
     _G.StaticPopup_Show("MSUF_RELOAD_RECOMMENDED", pendingReloadRecommendedLabel)
 end
+ExportPublic("MSUF_ShowReloadRecommendedPopup", ShowReloadRecommendedPopup)
 local copyLinkPopup
 local copyLinkPopupSerial = 0
 local function EnsureCopyLinkPopup()
@@ -1029,7 +1041,7 @@ local function EnsureCopyLinkPopup()
     copyLinkPopup = frame
     return frame
 end
-function _G.MSUF_ShowCopyLink(title, url)
+local function ShowCopyLink(title, url)
     local frame = EnsureCopyLinkPopup()
     if not frame then return end
     if frame.SetFrameStrata then frame:SetFrameStrata("FULLSCREEN_DIALOG") end
@@ -1047,6 +1059,7 @@ function _G.MSUF_ShowCopyLink(title, url)
     if frame._msufOkButton and frame._msufOkButton.Enable then frame._msufOkButton:Enable() end
     if frame._msufOkButton and frame._msufOkButton.Raise then frame._msufOkButton:Raise() end
 end
+ExportPublic("MSUF_ShowCopyLink", ShowCopyLink)
 do
     local version = _G.C_AddOns and _G.C_AddOns.GetAddOnMetadata
         and _G.C_AddOns.GetAddOnMetadata(addonName or "MidnightSimpleUnitFrames", "Version")
@@ -1118,9 +1131,9 @@ local function GetSavedMsufScale()
 end
 local function ScheduleUnitframeReanchorAfterScale()
     if _G.MSUF_ScaleReanchorPending then return end
-    _G.MSUF_ScaleReanchorPending = true
+    ExportPublic("MSUF_ScaleReanchorPending", true)
     local function flush()
-        _G.MSUF_ScaleReanchorPending = false
+        ExportPublic("MSUF_ScaleReanchorPending", false)
         if _G.InCombatLockdown and _G.InCombatLockdown() then
             local UF = _G.MSUF_NS and _G.MSUF_NS.UF
             if UF and UF.RequestReanchorAfterCombat then UF.RequestReanchorAfterCombat() end
@@ -1129,9 +1142,9 @@ local function ScheduleUnitframeReanchorAfterScale()
         if type(_G.MSUF_UpdateAllExternalAnchorProxies) == "function" then _G.MSUF_UpdateAllExternalAnchorProxies() end
         if type(_G.MSUF_ForceReanchorAllUnitFrames_Once) == "function" then
             local previous = _G.MSUF_ExternalAnchorForceReanchor
-            _G.MSUF_ExternalAnchorForceReanchor = true
+            ExportPublic("MSUF_ExternalAnchorForceReanchor", true)
             pcall(_G.MSUF_ForceReanchorAllUnitFrames_Once, true)
-            _G.MSUF_ExternalAnchorForceReanchor = previous
+            ExportPublic("MSUF_ExternalAnchorForceReanchor", previous)
         end
     end
     if _G.C_Timer and _G.C_Timer.After then _G.C_Timer.After(0, flush) else flush() end
@@ -1428,19 +1441,19 @@ local function ResetStandaloneWindowGeometry(frame, silent)
     end
     if not silent then Print("MSUF menu size reset to default.") end
 end
-_G.MSUF_ApplyMsufScale = ApplyMsufScale
-_G.MSUF_GetSavedMsufScale = GetSavedMsufScale
-_G.MSUF_SetScalingDisabled = SetScalingDisabled
+ExportPublic("MSUF_ApplyMsufScale", ApplyMsufScale)
+ExportPublic("MSUF_GetSavedMsufScale", GetSavedMsufScale)
+ExportPublic("MSUF_SetScalingDisabled", SetScalingDisabled)
 if type(_G.MSUF_SetGlobalUiScale_GATED) == "function" then
-    _G.MSUF_SetGlobalUiScale_RAW = SetGlobalUiScale
-    _G.MSUF_SetGlobalUiScale = _G.MSUF_SetGlobalUiScale_GATED
+    ExportPublic("MSUF_SetGlobalUiScale_RAW", SetGlobalUiScale)
+    ExportPublic("MSUF_SetGlobalUiScale", _G.MSUF_SetGlobalUiScale_GATED)
 else
-    _G.MSUF_SetGlobalUiScale = SetGlobalUiScale
+    ExportPublic("MSUF_SetGlobalUiScale", SetGlobalUiScale)
 end
-_G.MSUF_ResetGlobalUiScale = ResetGlobalUiScale
-_G.MSUF_RestoreBlizzardUiScale = RestoreBlizzardUiScale
-_G.MSUF_ResetStandaloneWindowGeometry = ResetStandaloneWindowGeometry
-_G.MSUF_GetPixelPerfectScale = GetPixelPerfectScale
+ExportPublic("MSUF_ResetGlobalUiScale", ResetGlobalUiScale)
+ExportPublic("MSUF_RestoreBlizzardUiScale", RestoreBlizzardUiScale)
+ExportPublic("MSUF_ResetStandaloneWindowGeometry", ResetStandaloneWindowGeometry)
+ExportPublic("MSUF_GetPixelPerfectScale", GetPixelPerfectScale)
 if type(_G.MSUF_InstallGlobalScaleGate) == "function" then _G.MSUF_InstallGlobalScaleGate() end
 local function ApplySavedScaleState(applyGlobalCVar)
     ApplyMsufScale(GetSavedMsufScale())

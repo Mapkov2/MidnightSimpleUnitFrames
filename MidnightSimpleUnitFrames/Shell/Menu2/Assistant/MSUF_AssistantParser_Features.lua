@@ -1,10 +1,14 @@
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Features.lua
+--- Feature shortcut parser for Assistant workflows.
+---
+--- Narrows broad class-power/gameplay/global-bars phrasing into registry plans
+--- without bypassing confirmation, undo, or combat handling.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -13,10 +17,6 @@ M.Assistant = A
 local Registry = A.Registry
 local P = A.Parser or {}
 A.Parser = P
-
--- Feature parser shard for higher-level shortcuts such as class power, gameplay, global
--- bars, diagnostics, and guided setup. Each shortcut should narrow broad human phrasing into
--- registry changes or workflow plans without bypassing the assistant router.
 local HasPhrase = P.HasPhrase
 local ContainsAny = P.ContainsAny
 local CLASS_POWER_TERMS = P.CLASS_POWER_TERMS

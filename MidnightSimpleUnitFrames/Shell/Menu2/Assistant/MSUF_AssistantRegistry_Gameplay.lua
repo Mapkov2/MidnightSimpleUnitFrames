@@ -1,10 +1,10 @@
+-- Assistant Gameplay registry: exposes optional gameplay helper controls and diagnostics.
+-- Actions should call feature-owned helpers so parser metadata does not own runtime state.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A

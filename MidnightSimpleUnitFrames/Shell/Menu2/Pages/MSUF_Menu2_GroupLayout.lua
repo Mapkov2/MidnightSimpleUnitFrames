@@ -1,8 +1,9 @@
+-- Menu2 Group Layout page: builds secure-header layout controls for party and raid frames.
+-- UI writes must delegate rebuild/defer behavior to GroupFrame runtime helpers.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}

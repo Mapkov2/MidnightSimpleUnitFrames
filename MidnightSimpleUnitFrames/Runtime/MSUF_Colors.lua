@@ -6,7 +6,14 @@
 --- The Options panel lives in MSUF_Options_Colors.lua.
 
 local addonName, MSUF = ...
-MSUF = MSUF or {}
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+_G.MSUF = _G.MSUF or MSUF
+MSUF.Public = MSUF.Public or {}
+
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 ---
 --- Local shortcuts (core only - no UI-framework refs)
@@ -89,7 +96,7 @@ local function _PushVisualUpdates_Flush()
     --- MSUF_ScheduleOnce and is unaffected. Cleared at END.
     ---
     --- Same defense-in-depth pattern as _gfRosterFlush.
-    _G.MSUF_ColorStyleRevision = (_G.MSUF_ColorStyleRevision or 0) + 1
+    ExportPublic("MSUF_ColorStyleRevision", (_G.MSUF_ColorStyleRevision or 0) + 1)
     --- Invalidate settings cache so color tint fields (powerBgTint, barBgTint,
     --- aggro/dispel/purge, etc.) are re-read from DB before frames refresh.
     if _G.MSUF_UFCore_RefreshSettingsCache then
@@ -280,7 +287,7 @@ local function GetCastbarTextColor()
     if g.castbarFontR and g.castbarFontG and g.castbarFontB then return g.castbarFontR, g.castbarFontG, g.castbarFontB end
     return GetGlobalFontColor()
 end
-MSUF_GetCastbarTextColor = GetCastbarTextColor
+ExportPublic("MSUF_GetCastbarTextColor", GetCastbarTextColor)
 local function SetCastbarTextColor(r, g, b)
     _setRGB("castbarFontR", "castbarFontG", "castbarFontB", r, g, b, 1, 1, 1)
 end
@@ -303,7 +310,7 @@ local function GetCastbarBackgroundColor()
     if not g then return 0.10, 0.10, 0.10, 0.85 end
     return tonumber(g.castbarBgR) or 0.10, tonumber(g.castbarBgG) or 0.10, tonumber(g.castbarBgB) or 0.10, tonumber(g.castbarBgA) or 0.85
 end
-_G.MSUF_GetCastbarBackgroundColor = GetCastbarBackgroundColor
+ExportPublic("MSUF_GetCastbarBackgroundColor", GetCastbarBackgroundColor)
 local function SetCastbarBackgroundColor(r, g, b, a) _setRGBA("castbarBgR", "castbarBgG", "castbarBgB", "castbarBgA", r, g, b, a, 0.10, 0.10, 0.10, 0.85) end
 local function ResetCastbarBackgroundColor()
     local g = _general(); if not g then return end
@@ -312,10 +319,10 @@ end
 
 --- - Cast Colors (interruptible / non-interruptible / feedback) -
 local function GetInterruptibleCastColor() return _getRGBPalette("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", "castbarInterruptibleColor", "turquoise", 0, 0.9, 0.8) end
-MSUF_GetInterruptibleCastColor = GetInterruptibleCastColor
+ExportPublic("MSUF_GetInterruptibleCastColor", GetInterruptibleCastColor)
 local function SetInterruptibleCastColor(r, g, b) _setRGB("castbarInterruptibleR", "castbarInterruptibleG", "castbarInterruptibleB", r, g, b, 0, 0.9, 0.8) end
 local function GetNonInterruptibleCastColor() return _getRGBTonumber("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", "castbarNonInterruptibleColor", "red", 0.4, 0.01, 0.01) end
-MSUF_GetNonInterruptibleCastColor = GetNonInterruptibleCastColor
+ExportPublic("MSUF_GetNonInterruptibleCastColor", GetNonInterruptibleCastColor)
 local function SetNonInterruptibleCastColor(r, g, b) _setRGB("castbarNonInterruptibleR", "castbarNonInterruptibleG", "castbarNonInterruptibleB", r, g, b, 0.4, 0.01, 0.01) end
 local function GetInterruptFeedbackCastColor() return _getRGBTonumber("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", "castbarInterruptFeedbackColor", "yellow", 1.0, 0.82, 0.0) end
 local function SetInterruptFeedbackCastColor(r, g, b) _setRGB("castbarInterruptFeedbackR", "castbarInterruptFeedbackG", "castbarInterruptFeedbackB", r, g, b, 1.0, 0.82, 0.0) end
@@ -465,7 +472,7 @@ local function SetBarOutlineColor(r, g, b)
     end
     _setRGB("barOutlineColorR", "barOutlineColorG", "barOutlineColorB", r, g, b, 0, 0, 0)
 end
-_G.MSUF_GetBarOutlineColor = GetBarOutlineColor
+ExportPublic("MSUF_GetBarOutlineColor", GetBarOutlineColor)
 
 --- -
 --- Export table
@@ -536,3 +543,4 @@ MSUF._colorsAPI = {
     GetPowerBarBackgroundMatchHP    = GetPowerBarBackgroundMatchHP,
     SetPowerBarBackgroundMatchHP    = SetPowerBarBackgroundMatchHP,
 }
+MSUF.Public.Colors = MSUF._colorsAPI

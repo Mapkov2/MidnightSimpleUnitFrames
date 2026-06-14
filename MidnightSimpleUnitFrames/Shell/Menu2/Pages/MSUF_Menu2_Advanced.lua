@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- AdvancedPage helper module.
 -- Provides shared DB helpers, binding adapters, and layout primitives for advanced option

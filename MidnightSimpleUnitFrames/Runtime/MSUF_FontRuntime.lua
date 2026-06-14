@@ -8,19 +8,23 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 MSUF.Fonts = MSUF.Fonts or {}
 
 local type, tostring, tonumber, pairs = type, tostring, tonumber, pairs
 
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local function Export(key, fn, aliasKey, forceAlias)
     if MSUF then MSUF[key] = fn end
-    _G[key] = fn
+    ExportPublic(key, fn)
     if aliasKey then
         if forceAlias then
-            _G[aliasKey] = fn
+            ExportPublic(aliasKey, fn)
         else
-            _G[aliasKey] = _G[aliasKey] or fn
+            ExportPublic(aliasKey, _G[aliasKey] or fn)
         end
     end
     return fn
@@ -341,8 +345,8 @@ local function UpdateAllFonts(onlyKey)
 
     local pathKey = tostring(path) .. "|" .. tostring(flags) .. "|" .. tostring(fr) .. "|" .. tostring(fg) .. "|" .. tostring(fb)
     if _G.MSUF_FontPathKey ~= pathKey then
-        _G.MSUF_FontPathKey = pathKey
-        _G.MSUF_FontPathSerial = (_G.MSUF_FontPathSerial or 0) + 1
+        ExportPublic("MSUF_FontPathKey", pathKey)
+        ExportPublic("MSUF_FontPathSerial", (_G.MSUF_FontPathSerial or 0) + 1)
     end
 
     _fontState.path = path
@@ -420,26 +424,26 @@ end
 Export("MSUF_UpdateAllFonts", UpdateAllFonts, "UpdateAllFonts")
 
 if type(_G.MSUF_UpdateCastbarVisuals) == "function" and not _G.MSUF_UpdateCastbarVisuals_Immediate then
-    _G.MSUF_UpdateCastbarVisuals_Immediate = _G.MSUF_UpdateCastbarVisuals
-    _G.MSUF_UpdateCastbarVisuals = function()
+    ExportPublic("MSUF_UpdateCastbarVisuals_Immediate", _G.MSUF_UpdateCastbarVisuals)
+    ExportPublic("MSUF_UpdateCastbarVisuals", function()
         local st = _G.MSUF_ApplyCommitState
         if st then st.castbars = true end
         ScheduleApplyCommit()
-    end
+    end)
 end
 
 if type(_G.MSUF_UpdateCastbarTextures) == "function" and not _G.MSUF_UpdateCastbarTextures_Immediate then
-    _G.MSUF_UpdateCastbarTextures_Immediate = _G.MSUF_UpdateCastbarTextures
-    _G.MSUF_UpdateCastbarTextures = function()
+    ExportPublic("MSUF_UpdateCastbarTextures_Immediate", _G.MSUF_UpdateCastbarTextures)
+    ExportPublic("MSUF_UpdateCastbarTextures", function()
         local st = _G.MSUF_ApplyCommitState
         if st then st.castbars = true end
         ScheduleApplyCommit()
-    end
+    end)
 end
 
 if not _G.MSUF_UpdateAllFonts_Immediate then
-    _G.MSUF_UpdateAllFonts_Immediate = _G.MSUF_UpdateAllFonts
-    _G.MSUF_UpdateAllFonts = function(onlyKey)
+    ExportPublic("MSUF_UpdateAllFonts_Immediate", _G.MSUF_UpdateAllFonts)
+    ExportPublic("MSUF_UpdateAllFonts", function(onlyKey)
         local st = _G.MSUF_ApplyCommitState
         if st then
             st.fonts = true
@@ -456,7 +460,7 @@ if not _G.MSUF_UpdateAllFonts_Immediate then
             end
         end
         ScheduleApplyCommit()
-    end
+    end)
     _G.UpdateAllFonts = _G.UpdateAllFonts or _G.MSUF_UpdateAllFonts
 end
 

@@ -8,6 +8,10 @@
 
 local _, ns = ...
 ns = ns or {}
+local ExportPublic = ns.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local Registry = ns.MSUF_CastbarRegistry
 
@@ -240,13 +244,13 @@ function Engine:BuildState(unit, previousState)
 end
 
 if not _G.MSUF_BuildCastState then
-    function _G.MSUF_BuildCastState(unit, previousState)
+    ExportPublic("MSUF_BuildCastState", function(unit, previousState)
         return Engine:BuildState(unit, previousState)
-    end
+    end)
 end
 
 if not _G.MSUF_GetCastbarEngine then
-    _G.MSUF_GetCastbarEngine = function()
+    ExportPublic("MSUF_GetCastbarEngine", function()
         return Engine
-    end
+    end)
 end

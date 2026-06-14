@@ -8,7 +8,6 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local Lines = M.Lines or function(rows) return tostring(rows or ""):gmatch("[^\r\n]+") end
 local PipeRows = M.PipeRows
 if type(PipeRows) ~= "function" then

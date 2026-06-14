@@ -7,9 +7,18 @@
 --- Every moveable element (unit frame, castbar, aura group, class power)
 --- registers here. EditMode core iterates the registry - never hardcoded lists.
 local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+local function PublishCompat(name, value)
+    return ExportPublic(name, value)
+end
 
-_G.MSUF_EM2 = _G.MSUF_EM2 or {}
 local EM2 = _G.MSUF_EM2
+if type(EM2) ~= "table" then EM2 = {} end
+PublishCompat("MSUF_EM2", EM2)
 
 local Util = EM2.Util
 if type(Util) ~= "table" then Util = {} end
@@ -97,7 +106,7 @@ end
 
 function Util.SetMenuFocusRequest(opts)
     if type(opts) ~= "table" then return nil end
-    _G.MSUF_EM2_MenuFocusRequest = {
+    local request = {
         key = opts.key,
         component = opts.component,
         slot = opts.slot,
@@ -107,9 +116,10 @@ function Util.SetMenuFocusRequest(opts)
         explicit = true,
         changedAt = GetTime and GetTime() or 0,
     }
+    PublishCompat("MSUF_EM2_MenuFocusRequest", request)
     local M = _G.MSUF2 or (MSUF and MSUF.MSUF2)
-    if M then M.editModeSelection = _G.MSUF_EM2_MenuFocusRequest end
-    return _G.MSUF_EM2_MenuFocusRequest
+    if M then M.editModeSelection = request end
+    return request
 end
 
 function Util.WirePopupFocus(btn, getKey, component, source, slot)
@@ -141,6 +151,51 @@ function Util.UnitSectionForComponent(component)
     if component == "alpha" or component == "transparency" then return "transparency" end
     if component == "status" or component == "status_icons" then return "status_icons" end
     return "frame_basics"
+end
+
+--- Shared unit metadata used by EditMode focus and quick popups.
+--- Keeping page keys and labels here prevents silent drift between popup buttons,
+--- focus routing, and Menu2 deep-link requests.
+Util.UNIT_PAGE_KEYS = Util.UNIT_PAGE_KEYS or {
+    player = "uf_player",
+    target = "uf_target",
+    targettarget = "uf_targettarget",
+    focustarget = "uf_focustarget",
+    focus = "uf_focus",
+    pet = "uf_pet",
+    boss = "uf_boss",
+}
+Util.UNIT_LABELS = Util.UNIT_LABELS or {
+    player = "Player",
+    target = "Target",
+    targettarget = "ToT",
+    focustarget = "Focus Target",
+    focus = "Focus",
+    pet = "Pet",
+    boss = "Boss",
+}
+function Util.UnitPageKey(unit, fallback)
+    local key = Util.UNIT_PAGE_KEYS[unit]
+    if key then return key end
+    if fallback ~= nil then return fallback end
+    return "uf_player"
+end
+function Util.UnitLabel(unit)
+    return Util.UNIT_LABELS[unit] or tostring(unit or "")
+end
+function Util.NormalizeUnitKey(unit)
+    if not unit then return nil end
+    if unit == "targettarget" or unit == "tot" then return "targettarget" end
+    if unit == "focustarget" or unit == "focus_target" or unit == "focustargettarget" then return "focustarget" end
+    if _G.MSUF_GetBossIndexFromToken and _G.MSUF_GetBossIndexFromToken(unit) then return "boss" end
+    return unit
+end
+function Util.NormalizeSimpleUnit(unit, allowBossIndex)
+    if unit == "boss" then return allowBossIndex and "boss1" or "boss" end
+    if allowBossIndex and type(unit) == "string" and unit:match("^boss%d+$") then return unit end
+    if (not allowBossIndex) and type(unit) == "string" and unit:match("^boss%d+$") then return "boss" end
+    if unit == "player" or unit == "target" or unit == "focus" or unit == "pet" then return unit end
+    return nil
 end
 
 function Util.NormalizeFocusKey(key)
@@ -285,8 +340,8 @@ local ShowConfigCombatLockMessage = Util.ShowConfigCombatLockMessage
 
 --- Legacy global sync (contract with 30+ external files)
 local function SyncLegacy()
-    _G.MSUF_UnitEditModeActive = active
-    _G.MSUF_CurrentEditUnitKey = unitKey
+    PublishCompat("MSUF_UnitEditModeActive", active)
+    PublishCompat("MSUF_CurrentEditUnitKey", unitKey)
     local st = _G.MSUF_EditState
     if st then
         st.active  = active
@@ -295,8 +350,9 @@ local function SyncLegacy()
 end
 
 --- Ensure MSUF_EditState table exists (other files rawget it)
-if not _G.MSUF_EditState then
-    _G.MSUF_EditState = {
+local editState = _G.MSUF_EditState
+if type(editState) ~= "table" then
+    editState = {
         active              = false,
         unitKey             = nil,
         popupOpen           = false,
@@ -304,19 +360,22 @@ if not _G.MSUF_EditState then
         fatalDisabled       = false,
     }
 end
+PublishCompat("MSUF_EditState", editState)
 
 --- AnyEditMode listener notifications
-if not _G.MSUF_AnyEditModeListeners then
-    _G.MSUF_AnyEditModeListeners = {}
-end
+local anyEditModeListeners = _G.MSUF_AnyEditModeListeners
+if type(anyEditModeListeners) ~= "table" then anyEditModeListeners = {} end
+PublishCompat("MSUF_AnyEditModeListeners", anyEditModeListeners)
 
-if not _G.MSUF_RegisterAnyEditModeListener then
-    function _G.MSUF_RegisterAnyEditModeListener(fn)
+local MSUF_RegisterAnyEditModeListener = _G.MSUF_RegisterAnyEditModeListener
+if type(MSUF_RegisterAnyEditModeListener) ~= "function" then
+    MSUF_RegisterAnyEditModeListener = function(fn)
         if type(fn) ~= "function" then return end
         local t = _G.MSUF_AnyEditModeListeners
         t[#t + 1] = fn
     end
 end
+ExportPublic("MSUF_RegisterAnyEditModeListener", MSUF_RegisterAnyEditModeListener)
 
 local lastNotified = nil
 local function NotifyListeners()
@@ -417,9 +476,9 @@ local function FlushPendingCommits()
 end
 
 local function HardHideEditModePreviews()
-    _G.MSUF_UnitPreviewActive = false
-    _G.MSUF_PreviewTestMode = false
-    _G.MSUF_BossTestMode = false
+    PublishCompat("MSUF_UnitPreviewActive", false)
+    PublishCompat("MSUF_PreviewTestMode", false)
+    PublishCompat("MSUF_BossTestMode", false)
 
     local hideCastbars = _G.MSUF_HideAllCastbarPreviews
     if type(hideCastbars) == "function" then
@@ -435,7 +494,7 @@ end
 local function RestoreAfterCombatExit()
     pendingCombatExitApply = false
     ApplyAllSettingsSafe()
-    _G.MSUF_UnitPreviewActive = false
+    PublishCompat("MSUF_UnitPreviewActive", false)
     if _G.MSUF_SyncAllUnitPreviews then
         _G.MSUF_SyncAllUnitPreviews()
     end
@@ -495,7 +554,7 @@ function State.Enter(key)
     end
 
     --- Preview must be active before the apply pipeline queues its boss sync.
-    _G.MSUF_UnitPreviewActive = true
+    PublishCompat("MSUF_UnitPreviewActive", true)
 
     --- Entering edit mode changes no actual settings - it only flips preview
     --- and visibility flags. A full ApplyAllSettings (re-apply every element on
@@ -584,8 +643,8 @@ function State.Exit(source)
     --- Flip state
     active  = false
     unitKey = nil
-    _G.MSUF_BossTestMode = false
-    _G.MSUF_PreviewTestMode = false
+    PublishCompat("MSUF_BossTestMode", false)
+    PublishCompat("MSUF_PreviewTestMode", false)
     SyncLegacy()
 
     --- Arrow keys off
@@ -604,7 +663,7 @@ function State.Exit(source)
     end
 
     --- Preview: disable all previews, restore visibility
-    _G.MSUF_UnitPreviewActive = false
+    PublishCompat("MSUF_UnitPreviewActive", false)
     if combatLocked then
         HardHideEditModePreviews()
     elseif _G.MSUF_SyncAllUnitPreviews then
@@ -649,8 +708,8 @@ function State.CancelAll()
 
     active  = false
     unitKey = nil
-    _G.MSUF_BossTestMode = false
-    _G.MSUF_PreviewTestMode = false
+    PublishCompat("MSUF_BossTestMode", false)
+    PublishCompat("MSUF_PreviewTestMode", false)
     SyncLegacy()
 
     if _G.MSUF_EnableArrowKeyNudge then _G.MSUF_EnableArrowKeyNudge(false) end
@@ -675,7 +734,7 @@ function State.CancelAll()
         ApplyAllSettingsSafe()
     end
 
-    _G.MSUF_UnitPreviewActive = false
+    PublishCompat("MSUF_UnitPreviewActive", false)
     if _G.MSUF_SyncAllUnitPreviews then _G.MSUF_SyncAllUnitPreviews() end
     if _G.MSUF_Auras3_RefreshAll then _G.MSUF_Auras3_RefreshAll() end
 
@@ -787,9 +846,9 @@ end
 
 local function RestoreState(snap)
     if not snap then return end
-    _G.MSUF__UndoRestoring = true
+    PublishCompat("MSUF__UndoRestoring", true)
     local db = _G.MSUF_DB
-    if not db then _G.MSUF__UndoRestoring = false; return end
+    if not db then PublishCompat("MSUF__UndoRestoring", false); return end
 
     if snap.category == "unit" then
         db[snap.key] = db[snap.key] or {}
@@ -826,7 +885,7 @@ local function RestoreState(snap)
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
     Util.SyncMovers()
 
-    _G.MSUF__UndoRestoring = false
+    PublishCompat("MSUF__UndoRestoring", false)
 end
 
 function Undo.BeforeChange(category, key, debounce)
@@ -874,10 +933,15 @@ function Undo.CanUndo() return #undoStack > 0 end
 function Undo.CanRedo() return #redoStack > 0 end
 
 --- Legacy globals
-_G.MSUF_EM_UndoBeforeChange = function(category, key, debounce) Undo.BeforeChange(category, key, debounce) end
-_G.MSUF_EM_UndoClear = function() Undo.Clear() end
-_G.MSUF_EM_UndoUndo = function() Undo.DoUndo() end
-_G.MSUF_EM_UndoRedo = function() Undo.DoRedo() end
+local function MSUF_EM_UndoBeforeChange(category, key, debounce) Undo.BeforeChange(category, key, debounce) end
+local function MSUF_EM_UndoClear() Undo.Clear() end
+local function MSUF_EM_UndoUndo() Undo.DoUndo() end
+local function MSUF_EM_UndoRedo() Undo.DoRedo() end
+
+ExportPublic("MSUF_EM_UndoBeforeChange", MSUF_EM_UndoBeforeChange)
+ExportPublic("MSUF_EM_UndoClear", MSUF_EM_UndoClear)
+ExportPublic("MSUF_EM_UndoUndo", MSUF_EM_UndoUndo)
+ExportPublic("MSUF_EM_UndoRedo", MSUF_EM_UndoRedo)
 
 --- MSUF_EM2_Init.lua
 

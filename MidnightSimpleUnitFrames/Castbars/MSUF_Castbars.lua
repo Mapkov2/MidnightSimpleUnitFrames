@@ -7,6 +7,11 @@
 --- Style, or Visuals; when this file must change, keep edits tiny and validate
 --- with `luac -p` because formatting does not make control flow obvious.
 
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+_G[name] = value
+return value
+end
+
 local d=_G.MSUF_PlayerCastbar_Cast
 local a=_G.MSUF_PlayerCastbar_OnEvent local f=_G.MSUF_PlayerCastbar_UpdateLatencyZone
 local F=_G.MSUF_LayoutEmpowerTicks local C=_G.MSUF_BlinkEmpowerTick
@@ -24,7 +29,7 @@ e.hideTimer:Cancel()end
 e.hideTimer=nil e:SetScript("OnUpdate",nil)e.interruptFeedbackEndTime=nil e.MSUF_castActive=false
 e.MSUF_wantsEmpower=nil if e.timeText then e.timeText:SetText("")end
 if e.latencyBar then e.latencyBar:Hide()end if MSUF_PlayerChannelHasteMarkers_Hide then MSUF_PlayerChannelHasteMarkers_Hide(e)end
-if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(e)end e:Hide()end function _G.MSUF_PlayerCastbar_ApplyBackendState()local e=true local n=_G.MSUF_IsCastbarEnabledForUnit
+if MSUF_UnregisterCastbar then MSUF_UnregisterCastbar(e)end e:Hide()end local function MSUF_PlayerCastbar_ApplyBackendState()local e=true local n=_G.MSUF_IsCastbarEnabledForUnit
 if type(n)=="function"then e=n("player")==true
 end if e then
 MSUF_InitSafePlayerCastbar()if MSUF_PlayerCastbar then
@@ -32,6 +37,7 @@ i(MSUF_PlayerCastbar,true)end
 return MSUF_PlayerCastbar end
 if MSUF_PlayerCastbar then i(MSUF_PlayerCastbar,false)t(MSUF_PlayerCastbar)end
 return nil end
+ExportPublic("MSUF_PlayerCastbar_ApplyBackendState", MSUF_PlayerCastbar_ApplyBackendState)
 function MSUF_InitSafePlayerCastbar()if not MSUF_PlayerCastbar then
 local e=CreateFrame("Frame","MSUF_PlayerCastBar",UIParent)e:SetClampedToScreen(true)MSUF_PlayerCastbar=e e.unit="player"local r=18 e:SetSize(200,r)local n=e:CreateTexture(nil,"BACKGROUND")n:SetAllPoints(e)n:SetColorTexture(0,0,0,1)e.background=n
 local t=e:CreateTexture(nil,"OVERLAY",nil,7)t:SetSize(r,r)t:SetPoint("LEFT",e,"LEFT",0,0)e.icon=t
@@ -62,25 +68,26 @@ local S=math.floor local function T(e,t,n)if not e or not e.timeText then return
 and r==e._msufLastTimeFormat then
 return end
 e._msufLastTimeDecimal=i e._msufLastTimeTotalDecimal=a
-e._msufLastTimeFormat=r MSUF_SetCastTimeText(e,t,n)end _G.MSUF__castbarStyleGlobalRev=_G.MSUF__castbarStyleGlobalRev or 1
-_G.MSUF_CastbarStyleRev=_G.MSUF__castbarStyleGlobalRev local h=_G.MSUF__castbarStyleGlobalRev
+e._msufLastTimeFormat=r MSUF_SetCastTimeText(e,t,n)end ExportPublic("MSUF__castbarStyleGlobalRev", _G.MSUF__castbarStyleGlobalRev or 1)
+ExportPublic("MSUF_CastbarStyleRev", _G.MSUF__castbarStyleGlobalRev) local h=_G.MSUF__castbarStyleGlobalRev
 local G=_G.MSUF__castTimeGlobalRev or 1 local f=GetTimePreciseSec or GetTime
 local r=_G.MSUF_ApplyCastbarGlowFade local m=_G.MSUF_ResetCastbarGlowFade
 local c=_G.MSUF_RefreshCastbarStyleCache if C_Timer and C_Timer.After then
 C_Timer.After(0,function()r=_G.MSUF_ApplyCastbarGlowFade or r
 m=_G.MSUF_ResetCastbarGlowFade or m c=_G.MSUF_RefreshCastbarStyleCache or c
 end)end
-function _G.MSUF_BumpCastbarStyleRev()_G.MSUF__castbarStyleGlobalRev=(_G.MSUF__castbarStyleGlobalRev or 1)+1
-_G.MSUF_CastbarStyleRev=_G.MSUF__castbarStyleGlobalRev h=_G.MSUF__castbarStyleGlobalRev
-end local function e()if _G.MSUF__castbarStyleHooked then return end local n=_G.MSUF_UpdateCastbarVisuals
-if type(n)~="function"then return end _G.MSUF__castbarStyleHooked=true
-_G.MSUF_UpdateCastbarVisuals=function(...)_G.MSUF_BumpCastbarStyleRev()return n(...)end
+local function MSUF_BumpCastbarStyleRev()ExportPublic("MSUF__castbarStyleGlobalRev", (_G.MSUF__castbarStyleGlobalRev or 1)+1)
+ExportPublic("MSUF_CastbarStyleRev", _G.MSUF__castbarStyleGlobalRev) h=_G.MSUF__castbarStyleGlobalRev
+end ExportPublic("MSUF_BumpCastbarStyleRev", MSUF_BumpCastbarStyleRev) local function e()if _G.MSUF__castbarStyleHooked then return end local n=_G.MSUF_UpdateCastbarVisuals
+if type(n)~="function"then return end ExportPublic("MSUF__castbarStyleHooked", true)
+ExportPublic("MSUF_UpdateCastbarVisuals", function(...)_G.MSUF_BumpCastbarStyleRev()return n(...)end)
 end e()if C_Timer and C_Timer.After then C_Timer.After(0,e)end local function e(e,a)if not e then return end local t=_G.MSUF_RefreshCastbarStyleCache
 if type(t)~="function"then return end local n=_G.MSUF__castbarStyleGlobalRev or 1
 if a or e._msufCastbarStyleRev~=n then t(e)e._msufCastbarStyleRev=n end
-end _G.MSUF__castTimeGlobalRev=_G.MSUF__castTimeGlobalRev or 1
-function _G.MSUF_BumpCastTimeRev()_G.MSUF__castTimeGlobalRev=(_G.MSUF__castTimeGlobalRev or 1)+1
+end ExportPublic("MSUF__castTimeGlobalRev", _G.MSUF__castTimeGlobalRev or 1)
+local function MSUF_BumpCastTimeRev()ExportPublic("MSUF__castTimeGlobalRev", (_G.MSUF__castTimeGlobalRev or 1)+1)
 G=_G.MSUF__castTimeGlobalRev end
+ExportPublic("MSUF_BumpCastTimeRev", MSUF_BumpCastTimeRev)
 local function l(n,e)e=tostring(e or""):lower()if n and n._msufIsBossCastbar then return"boss"end if e:match("^boss%d+$")then return"boss"end
 return e end
 local function s(e)if not e or not e.unit then
@@ -103,12 +110,12 @@ end local function U(e,t)if not e or not e.unit then return true
 end local n=_G.MSUF__castTimeGlobalRev or 1
 if t or e._msufCastTimeRev~=n or e._msufCastTimeEnabled==nil then s(e)e._msufCastTimeRev=n end
 return e._msufCastTimeEnabled~=false end
-_G.MSUF_IsCastTimeEnabled=function(e)return U(e,false)end if _G.MSUF_UpdateCastbarVisuals and not _G.__MSUF_CastTimeRevHooked then
+ExportPublic("MSUF_IsCastTimeEnabled", function(e)return U(e,false)end) if _G.MSUF_UpdateCastbarVisuals and not _G.__MSUF_CastTimeRevHooked then
 _G.__MSUF_CastTimeRevHooked=true local e=_G.MSUF_UpdateCastbarVisuals
-_G.MSUF_UpdateCastbarVisuals=function(...)_G.MSUF_BumpCastTimeRev()local e=e(...)if type(_G.MSUF_ReanchorPlayerCastBar)=="function"then
+ExportPublic("MSUF_UpdateCastbarVisuals", function(...)_G.MSUF_BumpCastTimeRev()local e=e(...)if type(_G.MSUF_ReanchorPlayerCastBar)=="function"then
 _G.MSUF_ReanchorPlayerCastBar()end
 if _G.MSUF_ApplyCastbarOutlineToAll then _G.MSUF_ApplyCastbarOutlineToAll(false)end return e
-end end
+end) end
 local e=MSUF_CastbarManager if e then
 if e.SetScript then e:SetScript("OnUpdate",nil)end if e.Hide then e:Hide()end
 if e.active then wipe(e.active)end end

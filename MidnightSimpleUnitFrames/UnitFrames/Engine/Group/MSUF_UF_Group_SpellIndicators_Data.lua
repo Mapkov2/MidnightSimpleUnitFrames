@@ -7,7 +7,10 @@
 
 local _, ns = ...
 ns = ns or (_G.MSUF_NS) or {}
-_G.MSUF_NS = ns
+local ExportPublic = ns.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local GF = ns.GF
 if not GF then return end
@@ -42,6 +45,10 @@ local PALADIN_BLESSING_IDS = {
   BlessingOfFreedom    = 1044,
 }
 
+--- Static data contract: every Spec entry must have SpellIDs, TrackableAuras,
+--- SpecDefaults, and icons for each exposed/default/secret aura. Keep new aura
+--- data in these declarative tables so the repo smoke suite can validate it
+--- without booting the WoW client.
 SI.SpellIDs = {
   PreservationEvoker = {
     Echo            = 364343,
@@ -569,4 +576,4 @@ function SI.GetAuraIcon(specKey, auraName)
   return 136243 -- question mark
 end
 
-_G.MSUF_GF_SpellIndicators = SI
+ExportPublic("MSUF_GF_SpellIndicators", SI)

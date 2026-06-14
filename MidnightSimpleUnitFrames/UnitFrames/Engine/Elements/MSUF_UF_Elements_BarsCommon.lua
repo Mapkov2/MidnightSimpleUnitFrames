@@ -1,7 +1,12 @@
+-- UF bars common element helpers: shared statusbar setup, textures, and geometry utilities.
+-- Keep live unit-event code allocation-light; cold spec/application work belongs in callers.
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local UF = MSUF.UF
 local CreateFrame = CreateFrame
@@ -124,6 +129,8 @@ end
 
 local function SetBarMinMax(bar, maxValue, directValue)
   if directValue then
+    -- Direct mode passes Blizzard values straight to StatusBar APIs. When a value is secret,
+    -- clear Lua comparison caches and let the C-side widget own the payload.
     local maxSecret = issecretvalue(maxValue) == true
     if not maxSecret and bar._msufDirectMaxValuePlain == true and bar._msufDirectMaxValue == maxValue then
       return false
@@ -467,7 +474,7 @@ local function UpdateAllBarGradients(unit)
   return refreshed
 end
 
-_G.MSUF_UpdateAllBarGradients = _G.MSUF_UpdateAllBarGradients or UpdateAllBarGradients
+ExportPublic("MSUF_UpdateAllBarGradients", _G.MSUF_UpdateAllBarGradients or UpdateAllBarGradients)
 MSUF.MSUF_UpdateAllBarGradients = MSUF.MSUF_UpdateAllBarGradients or UpdateAllBarGradients
 
 local function SetFrameLevelCached(frame, level)

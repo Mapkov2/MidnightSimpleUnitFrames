@@ -6,6 +6,13 @@
 --- must not decide castbar ownership or spellcast state; it decorates frames
 --- that the castbar drivers already own.
 
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local SpellAPI = _G.C_Spell
 local TimerAPI = _G.C_Timer
 
@@ -498,35 +505,41 @@ local function ScheduleCooldownRefresh(remaining, remainingResolved)
     end)
 end
 
-function _G.MSUF_KickReady_Init()
+local function KickReady_Init()
     ResolveInterruptSpellID()
     return state.spellID
 end
 
-function _G.MSUF_KickReady_IsReady()
+local function KickReady_IsReady()
     local ready, remaining = InterruptStatus()
     ScheduleCooldownRefresh(remaining, true)
     return ready
 end
 
-function _G.MSUF_KickReady_EvaluateColor(ready)
+local function KickReady_EvaluateColor(ready)
     return ColorForReady(ready)
 end
 
-function _G.MSUF_KickReady_ApplyLayout(frame)
+local function KickReady_ApplyLayout(frame)
     local general = GeneralDB()
     if frame and ShouldShow(general, frame.unit) then
         ApplyBoxLayout(frame, general)
     end
 end
 
-function _G.MSUF_KickReady_RefreshFrame(frame, castState)
+local function KickReady_RefreshFrame(frame, castState)
     local status = {}
     RefreshFrame(frame, castState, status)
     if status.resolved then
         ScheduleCooldownRefresh(status.remaining, true)
     end
 end
+
+ExportPublic("MSUF_KickReady_Init", KickReady_Init)
+ExportPublic("MSUF_KickReady_IsReady", KickReady_IsReady)
+ExportPublic("MSUF_KickReady_EvaluateColor", KickReady_EvaluateColor)
+ExportPublic("MSUF_KickReady_ApplyLayout", KickReady_ApplyLayout)
+ExportPublic("MSUF_KickReady_RefreshFrame", KickReady_RefreshFrame)
 
 local eventFrame = CreateFrame("Frame", "MSUF_InterruptReady_EventFrame")
 eventFrame:RegisterEvent("PLAYER_LOGIN")

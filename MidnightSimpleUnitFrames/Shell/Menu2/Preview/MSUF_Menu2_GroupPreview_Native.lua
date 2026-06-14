@@ -1,8 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Native group preview renderer.
 -- Draws the Menu2 party/raid preview using lightweight mock data and page settings. It should
@@ -102,7 +105,7 @@ local function OpenGFSection(sectionKey)
     local pageKey = PageForGFSection(sectionKey)
     if pageKey and M.SelectPage then
         local scope = CurrentScope()
-        _G.MSUF_EM2_MenuFocusRequest = {
+        ExportPublic("MSUF_EM2_MenuFocusRequest", {
             key = (scope == "raid" and "gf_raid") or (scope == "mythicraid" and "gf_mythicraid") or "gf_party",
             component = sectionKey,
             pageKey = pageKey,
@@ -110,7 +113,7 @@ local function OpenGFSection(sectionKey)
             source = "group-preview",
             explicit = true,
             changedAt = GetTime and GetTime() or 0,
-        }
+        })
         M.SelectPage(pageKey)
     end
 end
@@ -639,11 +642,7 @@ UpdateHint = function(box, handle)
         box._hint:SetText(string.format("%s   %s", HandleText(handle), nudgeHint))
     end
 end
-local function NudgeStep()
-    if IsControlKeyDown and IsControlKeyDown() then return 10 end
-    if IsShiftKeyDown and IsShiftKeyDown() then return 5 end
-    return 1
-end
+local NudgeStep = PreviewHelpers.NudgeStep or F.One
 local function RefreshHandleSelection(box)
     if not box then return end
     local selected = box._selectedHandle

@@ -4,6 +4,10 @@
 -- unless you also update the source changelog used by the packaging tool.
 local _, ns = ...
 ns = ns or {}
+local ExportPublic = ns.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local data = {
     currentVersion = "6.0 Preview 2",
@@ -248,4 +252,4 @@ local data = {
 }
 
 ns.MSUF_Changelog = data
-_G.MSUF_Changelog = data
+ExportPublic("MSUF_Changelog", data)

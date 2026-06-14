@@ -1,9 +1,13 @@
+-- Menu2 bug report page: builds diagnostic copy text and support actions.
+-- Keep it UI/read-only; collecting data should not mutate profiles or runtime frames.
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local BR = M.BugReport or {}
 M.BugReport = BR
 local WL = M.WordList
@@ -20,15 +24,24 @@ local manualDescription
 local function Tr(text)
     return M.Tr and M.Tr(text) or tostring(text or "")
 end
+
+-- Bug report generation walks optional addons and Blizzard APIs; every call stays isolated
+-- so a broken reporter does not create a second Lua error while reporting the first one.
 local function SafePCall(fn, ...)
     if type(fn) ~= "function" then return false end
     return pcall(fn, ...)
 end
+
+-- WoW 12 restricted payloads can be printable-looking userdata/strings. Redact them instead
+-- of branching on their contents or copying them into support text.
 local function IsSecretValue(value)
     if type(_G.issecretvalue) ~= "function" then return false end
     local ok, result = pcall(_G.issecretvalue, value)
     return ok and result == true
 end
+
+-- Addon saved-variable tables can be protected or malformed; table access is guarded before
+-- iteration so report generation remains best-effort.
 local function CanAccessTable(value)
     if type(value) ~= "table" then return false end
     if type(_G.canaccesstable) ~= "function" then return true end
@@ -78,12 +91,18 @@ end
 local function AddMethodKV(lines, key, owner, method, arg)
     if owner and type(owner[method]) == "function" then AddCallKV(lines, key, owner[method], arg) end
 end
+
+-- Table reads are funneled through one helper so secret or inaccessible fields never escape
+-- into report text.
 local function SafeTableValue(tbl, key)
     if type(tbl) ~= "table" or not CanAccessTable(tbl) then return nil end
     local ok, value = pcall(function() return tbl[key] end)
     if ok and not IsSecretValue(value) then return value end
     return nil
 end
+
+-- Counts are capped because BugGrabber/BugSack and profile tables can be large during error
+-- storms; the report needs shape, not a full dump.
 local function TableKeyCount(tbl, limit)
     if type(tbl) ~= "table" or not CanAccessTable(tbl) then return nil end
     local count = 0
@@ -98,6 +117,7 @@ local function TableKeyCount(tbl, limit)
 end
 local function FrameCall(frame, method)
     if frame == nil then return nil end
+    -- Frame methods can be absent, forbidden, or temporarily invalid during UI teardown.
     local okMethod, fn = pcall(function() return frame[method] end)
     if not okMethod or type(fn) ~= "function" then return nil end
     local ok, value = pcall(fn, frame)
@@ -148,6 +168,8 @@ local ERROR_FIELDS = WL [[message error text stack stacktrace trace locals count
 local function TableErrorText(value)
     if type(value) ~= "table" or not CanAccessTable(value) then return "" end
     local parts = {}
+    -- Only known text-ish fields are included; arbitrary table serialization risks protected
+    -- payload reads and huge support blobs.
     for i = 1, #ERROR_FIELDS do
         local key = ERROR_FIELDS[i]
         local ok, field = pcall(function() return value[key] end)
@@ -160,6 +182,8 @@ end
 local function AddBugCandidate(candidates, value, path, depth)
     if #candidates >= 40 then return end
     if IsSecretValue(value) then return end
+    -- Candidate discovery is bounded by depth, sibling count, and total result count to avoid
+    -- turning a malformed error DB into a UI freeze.
     local valueType = type(value)
     if valueType == "string" then
         if IsMSUFErrorText(value) then candidates[#candidates + 1] = { source = path, text = LimitText(value, 16000) } end
@@ -183,6 +207,8 @@ local function TryMethodSource(candidates, sourceName, obj)
         local methodName = methodNames[i]
         local fn = obj[methodName]
         if type(fn) == "function" then
+            -- BugGrabber-style APIs disagree on whether methods expect self; try both without
+            -- making one addon integration fatal for the whole report.
             local ok, value = pcall(fn, obj)
             if not ok then ok, value = pcall(fn) end
             if ok and value ~= nil then AddBugCandidate(candidates, value, sourceName .. ":" .. methodName, 0) end
@@ -197,6 +223,8 @@ end
 local function FindLatestMSUFError()
     if currentReport then return currentReport end
     if InCombat() then return cachedBug end
+    -- Full error-source scans are skipped in combat. The dashboard can still show the last
+    -- cached result, but fresh traversal waits until protected state is available again.
     local candidates = {}
     local sources = {}
     AddLibStubSource(sources)
@@ -306,6 +334,8 @@ local function AddSituationContext(lines)
 end
 local function AddRuntimeContext(lines)
     AddHeader(lines, "Runtime / Restrictions")
+    -- These flags explain why a report might be partial: combat lockdown and Secret Values
+    -- directly affect which state MSUF is allowed to inspect.
     AddCallKV(lines, "InCombatLockdown", _G.InCombatLockdown)
     AddCallKV(lines, "Player affecting combat", _G.UnitAffectingCombat, "player")
     AddKV(lines, "issecretvalue API", type(_G.issecretvalue) == "function")
@@ -436,6 +466,8 @@ local function AddMSUFDBContext(lines)
         return
     end
     AddKV(lines, "Top-level keys", TableKeyCount(db, 1000))
+    -- The profile summary intentionally samples stable scalar fields only. Full profile export
+    -- belongs to profile tooling, not a support report assembled inside the game client.
     for i = 1, #DB_SUMMARY_SECTIONS do
         local key = DB_SUMMARY_SECTIONS[i]
         AddDBSummaryLine(lines, key, SafeTableValue(db, key))
@@ -469,6 +501,8 @@ local function AddMSUFFrameContext(lines)
         Add(lines, "MSUF_UnitFrames registry unavailable.")
     else
         local rows = {}
+        -- Limit frame enumeration to keep reports usable even if an addon leak leaves stale
+        -- frame entries in the registry.
         local ok = pcall(function()
             for key, frame in pairs(frames) do
                 rows[#rows + 1] = { key = tostring(key), frame = frame }
@@ -630,6 +664,8 @@ end
 function BR.BuildText(opts)
     opts = opts or {}
     if InCombat() then return "MSUF Bug Report\n\nReport generation is deferred while combat lockdown is active.\nOpen the dashboard again after combat to build the full report." end
+    -- Build order starts with user/error context, then progressively appends broader system
+    -- context so truncated reports still contain the actionable failure first.
     local bug = currentReport or cachedBug or FindLatestMSUFError()
     local lines = {}
     Add(lines, "MSUF Bug Report")
@@ -702,30 +738,30 @@ function BR.Clear()
     M.SetMenuStateValue("dashboardBugReportOpen", false)
     if type(M.InvalidatePage) == "function" then M.InvalidatePage("home") end
 end
-function _G.MSUF_BugReport_TriggerDummy()
+ExportPublic("MSUF_BugReport_TriggerDummy", function()
     return BR.TriggerDummy()
-end
-function _G.MSUF_BugReport_GetStatus()
+end)
+ExportPublic("MSUF_BugReport_GetStatus", function()
     return BR.GetStatus()
-end
-function _G.MSUF_BugReport_BuildText(opts)
+end)
+ExportPublic("MSUF_BugReport_BuildText", function(opts)
     return BR.BuildText(opts)
-end
-function _G.MSUF_BugReport_Clear()
+end)
+ExportPublic("MSUF_BugReport_Clear", function()
     return BR.Clear()
-end
-function _G.MSUF_BugReport_OpenManual()
+end)
+ExportPublic("MSUF_BugReport_OpenManual", function()
     return BR.OpenManual()
-end
-function _G.MSUF_BugReport_SetManualIssue(issueType, description)
+end)
+ExportPublic("MSUF_BugReport_SetManualIssue", function(issueType, description)
     return BR.SetManualIssue(issueType, description)
-end
-function _G.MSUF_BugReport_GetManualIssue()
+end)
+ExportPublic("MSUF_BugReport_GetManualIssue", function()
     return BR.GetManualIssue()
-end
+end)
 function BR.IsCombatDeferred()
     return InCombat()
 end
-function _G.MSUF_BugReport_IsCombatDeferred()
+ExportPublic("MSUF_BugReport_IsCombatDeferred", function()
     return BR.IsCombatDeferred()
-end
+end)

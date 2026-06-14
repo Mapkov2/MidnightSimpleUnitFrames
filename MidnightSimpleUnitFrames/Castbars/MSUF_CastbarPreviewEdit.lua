@@ -1,6 +1,13 @@
 -- Castbar preview edit bridge.
 -- Maps preview drag/resize handles back to the same DB keys and reanchor helpers used by live
 -- castbars. This is an edit-mode cold path and should not observe live cast events.
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local UNIT_CONFIG = {
     player = {
         w = "castbarPlayerBarWidth",
@@ -142,8 +149,10 @@ local function PulsePreview(unit)
 
     setTestMode(true, true)
 
-    _G.MSUF_CastbarPreviewPulseTimers = _G.MSUF_CastbarPreviewPulseTimers or {}
     local timers = _G.MSUF_CastbarPreviewPulseTimers
+    if not timers then
+        timers = ExportPublic("MSUF_CastbarPreviewPulseTimers", {})
+    end
 
     if type(timers[unit]) == "table" then
         timers[unit].cancelled = true
@@ -222,7 +231,7 @@ local function UsesWidthSource(general, unit)
     return widthSource == "unitframe" or widthSource == "essential" or widthSource == "utility"
 end
 
-function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, unit)
+local function SetupCastbarPreviewEditHandlers(frame, unit)
     if not frame or frame.MSUF_PreviewEditHandlersSetup then
         return
     end
@@ -382,3 +391,5 @@ function _G.MSUF_SetupCastbarPreviewEditHandlers(frame, unit)
         end
     end)
 end
+
+ExportPublic("MSUF_SetupCastbarPreviewEditHandlers", SetupCastbarPreviewEditHandlers)

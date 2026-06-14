@@ -6,9 +6,12 @@
 --- centralized and migration-safe.
 local _, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local MENU_STATE_VERSION = 3
 local MENU_STATE_TABLE_FIELDS = M.WordList [[
     accordionState previewPinState navHeaderState unitTextTabSelection unitTextSlotSelection
@@ -65,7 +68,7 @@ local function MigrateMenuState(state, oldVersion)
     end
 end
 local function EnsurePersistentMenuState()
-    _G.MSUF_GlobalDB = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {}
+    ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
     local gdb = _G.MSUF_GlobalDB
     gdb.char = type(gdb.char) == "table" and gdb.char or {}
     local charKey = MenuCharKey()

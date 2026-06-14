@@ -7,10 +7,17 @@ do
 --- Phase 7B: move AltMana helpers out of MSUF_ClassPower.lua with minimal risk.
 --- No CP value/layout/build flow moved here beyond the isolated AltMana block.
 
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local builders = _G.MSUF_CP_CORE_BUILDERS
 if type(builders) ~= "table" then
     builders = {}
-    _G.MSUF_CP_CORE_BUILDERS = builders
+    ExportPublic("MSUF_CP_CORE_BUILDERS", builders)
 end
 
 builders.ALT_MANA = function(E)

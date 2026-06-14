@@ -1,11 +1,14 @@
+--- UnitFrames/Engine/Elements/MSUF_UF_Text_Runtime.lua
+--- Runtime dispatcher for unitframe text slots.
+---
+--- Decides which text slots refresh for each unit/event, keeps combat-safe
+--- visibility updates isolated, and separates secret-value branches from cache hits.
+
 local _, MSUF = ...
 local Text = MSUF and MSUF.UFText
 local UF = MSUF and MSUF.UF
 if not (Text and UF) then return end
 
--- Text runtime dispatcher for unitframe slots.
--- This layer decides which text slots need refresh for a unit/event, handles combat-safe
--- visibility updates, and keeps secret-value branches separate from plain cached updates.
 local UnitHealth = Text.UnitHealth
 local UnitHealthMax = Text.UnitHealthMax
 local UnitPower = Text.UnitPower

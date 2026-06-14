@@ -11,13 +11,6 @@ local Style = _G.MSUF_EM2_Menu2Style or {}
 local Quick = EM2.QuickPopup or Style.QuickPopup
 if not Quick then return end
 
-local UNIT_PAGE_KEYS = {
-    player = "uf_player",
-    target = "uf_target",
-    focus = "uf_focus",
-    boss = "uf_boss",
-}
-
 local GROUP_LABELS = {
     buff = "Buffs",
     debuff = "Debuffs",
@@ -48,19 +41,23 @@ local pf
 local Sync
 local Util = EM2.Util or {}
 local SyncMovers = (EM2.Util and EM2.Util.SyncMovers) or function() if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end end
+local UnitPageKey = Util.UnitPageKey or function() return "uf_player" end
+local NormalizeSimpleUnit = Util.NormalizeSimpleUnit or function(unit)
+    if unit == "boss" then return "boss1" end
+    if type(unit) == "string" and unit:match("^boss%d+$") then return unit end
+    if unit == "player" or unit == "target" or unit == "focus" then return unit end
+    return nil
+end
+local function NormalizeAuraUnit(unit)
+    local normalized = NormalizeSimpleUnit(unit, true)
+    return normalized ~= "pet" and normalized or nil
+end
 
 local function ButtonOpts(sync)
     return {
         peelSkin = true,
         sync = sync,
     }
-end
-
-local function NormalizeUnit(unit)
-    if unit == "boss" then return "boss1" end
-    if type(unit) == "string" and unit:match("^boss%d+$") then return unit end
-    if unit == "player" or unit == "target" or unit == "focus" then return unit end
-    return nil
 end
 
 local function IsBoss(unit)
@@ -213,7 +210,7 @@ local function OpenUnitAuras()
     if not (pf and pf.unit) then return end
     CommitFields()
     local key = MenuUnit(pf.unit)
-    local pageKey = UNIT_PAGE_KEYS[key] or "uf_player"
+    local pageKey = UnitPageKey(key)
     if EM2.Focus and EM2.Focus.SetSelection then
         EM2.Focus.SetSelection(key, "auras", nil, { source = "aura-popup", menu = false })
     end
@@ -270,31 +267,29 @@ end
 local function Build()
     if pf then return pf end
 
-    pf = Quick.CreateShell("MSUF_EM2_AuraPopup", {
+    pf = Quick.BuildBoundsPopup("MSUF_EM2_AuraPopup", {
         height = 282,
         subtitle = "",
         hoverSource = "aura-popup",
         peelSkin = true,
+    }, {
+        buttonOpts = ButtonOpts,
+        rows = {
+            { y = -72, label1 = "X", key1 = "xBox", cb1 = Apply, label2 = "Y", key2 = "yBox", cb2 = Apply },
+            { y = -102, label1 = "Size", key1 = "sizeBox", cb1 = Apply, label2 = "Spacing", key2 = "spacingBox", cb2 = Apply },
+        },
+        toggle = {
+            key = "bossTogetherBtn", text = "Boss 1-5 together", x = 20, y = -140, w = 394, h = 30,
+            onClick = Apply,
+            opts = function() return ButtonOpts(function() if pf and pf:IsShown() then Sync() end end) end,
+        },
+        buttons = {
+            { key = "unitAurasBtn", text = "Unitframe auras", x = 20, y = -190, w = 190, h = 30, onClick = OpenUnitAuras },
+            { key = "generalAurasBtn", text = "General auras", x = 224, y = -190, w = 190, h = 30, onClick = OpenGeneralAuras },
+        },
+        wireButton = function(btn) return WirePopupFocus(btn) end,
+        footer = { y = -230, onResetPosition = ResetPosition },
     })
-
-    Quick.ValuePair(pf, pf, -72, "X", "xBox", Apply, "Y", "yBox", Apply, ButtonOpts())
-    Quick.ValuePair(pf, pf, -102, "Size", "sizeBox", Apply, "Spacing", "spacingBox", Apply, ButtonOpts())
-
-    pf.bossTogetherBtn = Quick.ToggleButton(pf, "Boss 1-5 together", 394, 30, Apply, ButtonOpts(function()
-        if pf and pf:IsShown() then Sync() end
-    end))
-    pf.bossTogetherBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -140)
-
-    pf.unitAurasBtn = WirePopupFocus(Quick.Button(pf, "Unitframe auras", 190, 30, OpenUnitAuras, ButtonOpts()))
-    pf.unitAurasBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 20, -190)
-    pf.generalAurasBtn = WirePopupFocus(Quick.Button(pf, "General auras", 190, 30, OpenGeneralAuras, ButtonOpts()))
-    pf.generalAurasBtn:SetPoint("TOPLEFT", pf, "TOPLEFT", 224, -190)
-
-    if Quick.AddFooterControls then
-        Quick.AddFooterControls(pf, { y = -230, onResetPosition = ResetPosition })
-    end
-
-    if EM2.AttachPopupScaleGrip then EM2.AttachPopupScaleGrip(pf) end
     return pf
 end
 
@@ -303,7 +298,7 @@ EM2.AuraPopup = AuraPopup
 
 function AuraPopup.Open(unit, parent)
     if Quick.BlockConfigCombatLocked() then return false end
-    unit = NormalizeUnit(unit)
+    unit = NormalizeAuraUnit(unit)
     if not unit then return false end
     Build()
     pf.unit, pf.parent = unit, parent

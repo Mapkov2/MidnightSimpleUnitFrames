@@ -14,6 +14,14 @@
 --- several modules cache table references and only invalidate on the explicit
 --- post-profile apply hook below.
 local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+_G.MSUF = _G.MSUF or MSUF
+MSUF.Public = MSUF.Public or {}
+
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 --- Legacy import accepts only table literals. The sandboxed loadstring path is
 --- intentionally kept narrow so old exports still work without letting arbitrary
@@ -159,20 +167,20 @@ local function MSUF_ProfileIO_DeferPostProfileRuntimeApply(reason, applyAll)
     if not MSUF_ProfileIO_InCombatLockdown() then
         return false
     end
-    _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = {
+    ExportPublic("MSUF_ProfileIO_PendingPostProfileRuntimeApply", {
         reason = reason or "PROFILE_APPLY",
         applyAll = applyAll == true,
-    }
+    })
     local f = _G.MSUF_ProfileIO_PostProfileDeferFrame
     if not f and type(_G.CreateFrame) == "function" then
         f = _G.CreateFrame("Frame")
-        _G.MSUF_ProfileIO_PostProfileDeferFrame = f
+        ExportPublic("MSUF_ProfileIO_PostProfileDeferFrame", f)
         f:SetScript("OnEvent", function(self, event)
             if event ~= "PLAYER_REGEN_ENABLED" then return end
             if MSUF_ProfileIO_InCombatLockdown() then return end
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
             local pending = _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply
-            _G.MSUF_ProfileIO_PendingPostProfileRuntimeApply = nil
+            ExportPublic("MSUF_ProfileIO_PendingPostProfileRuntimeApply", nil)
             if pending and MSUF_ProfileIO_PostProfileRuntimeApply then
                 MSUF_ProfileIO_PostProfileRuntimeApply(pending.reason or "PROFILE_APPLY_AFTER_COMBAT", pending.applyAll == true)
             end
@@ -511,8 +519,8 @@ do
              return nil
         end
      end
-    _G.MSUF_EncodeCompactTable = _G.MSUF_EncodeCompactTable or EncodeCompactTable
-    _G.MSUF_TryDecodeCompactString = _G.MSUF_TryDecodeCompactString or TryDecodeCompactString
+    ExportPublic("MSUF_EncodeCompactTable", _G.MSUF_EncodeCompactTable or EncodeCompactTable)
+    ExportPublic("MSUF_TryDecodeCompactString", _G.MSUF_TryDecodeCompactString or TryDecodeCompactString)
 end
 
 --- Profile lifecycle API. These globals are used by Menu2, assistant actions,
@@ -835,16 +843,16 @@ end
 local function MSUF_RunAfterCombat_SpecProfile(fn)
     if type(fn) ~= "function" then  return end
     if _G.InCombatLockdown and _G.InCombatLockdown() then
-        _G.MSUF_PendingSpecProfileSwitch = fn
+        ExportPublic("MSUF_PendingSpecProfileSwitch", fn)
         local f = _G.MSUF_SpecProfileDeferFrame
         if not f and type(_G.CreateFrame) == "function" then
             f = _G.CreateFrame("Frame")
-            _G.MSUF_SpecProfileDeferFrame = f
+            ExportPublic("MSUF_SpecProfileDeferFrame", f)
             f:RegisterEvent("PLAYER_REGEN_ENABLED")
             f:SetScript("OnEvent", function()
                 local pending = _G.MSUF_PendingSpecProfileSwitch
                 if pending then
-                    _G.MSUF_PendingSpecProfileSwitch = nil
+                    ExportPublic("MSUF_PendingSpecProfileSwitch", nil)
                     pending()
                 end
              end)
@@ -887,7 +895,7 @@ do
         if f then  return end
         if type(_G.CreateFrame) ~= "function" then  return end
         f = _G.CreateFrame("Frame")
-        _G.MSUF_SpecProfileEventFrame = f
+        ExportPublic("MSUF_SpecProfileEventFrame", f)
         f:RegisterEvent("PLAYER_ENTERING_WORLD")
         f:RegisterEvent("PLAYER_LOGIN")
         f:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
@@ -3086,19 +3094,26 @@ function MSUF_ImportExternal(profileString, profileKey)
     return MSUF_ProfileIO_OverwriteProfile(profileKey, tbl)
 end
 --- Expose real implementations under stable, explicit names for load-order proxies.
-_G.MSUF_Profiles_ExportExternal = MSUF_ExportExternal
-_G.MSUF_Profiles_ImportExternal = MSUF_ImportExternal
-_G.MSUF_Profiles_IsUUFImportString = MSUF_ProfileIO_IsUUFImportString
+ExportPublic("MSUF_Profiles_ExportExternal", MSUF_ExportExternal)
+ExportPublic("MSUF_Profiles_ImportExternal", MSUF_ImportExternal)
+ExportPublic("MSUF_Profiles_IsUUFImportString", MSUF_ProfileIO_IsUUFImportString)
 --- Globals for the Options module.
-_G.MSUF_ExportSelectionToString = MSUF_ExportSelectionToString
-_G.MSUF_ImportFromString        = MSUF_ImportFromString
-_G.MSUF_ImportLegacyFromString  = MSUF_ImportLegacyFromString
-_G.MSUF_IsUUFImportString       = MSUF_ProfileIO_IsUUFImportString
+ExportPublic("MSUF_ExportSelectionToString", MSUF_ExportSelectionToString)
+ExportPublic("MSUF_ImportFromString", MSUF_ImportFromString)
+ExportPublic("MSUF_ImportLegacyFromString", MSUF_ImportLegacyFromString)
+ExportPublic("MSUF_IsUUFImportString", MSUF_ProfileIO_IsUUFImportString)
 --- Always expose the real implementations under stable, explicit names.
 --- This lets other modules (or load-order proxies) call the correct logic even if _G.MSUF_ImportFromString was set earlier.
-_G.MSUF_Profiles_ExportSelectionToString = MSUF_ExportSelectionToString
-_G.MSUF_Profiles_ImportFromString        = MSUF_ImportFromString
-_G.MSUF_Profiles_ImportLegacyFromString  = MSUF_ImportLegacyFromString
+ExportPublic("MSUF_Profiles_ExportSelectionToString", MSUF_ExportSelectionToString)
+ExportPublic("MSUF_Profiles_ImportFromString", MSUF_ImportFromString)
+ExportPublic("MSUF_Profiles_ImportLegacyFromString", MSUF_ImportLegacyFromString)
+ExportPublic("MSUF_CreateProfile", MSUF_CreateProfile)
+ExportPublic("MSUF_SwitchProfile", MSUF_SwitchProfile)
+ExportPublic("MSUF_ResetProfile", MSUF_ResetProfile)
+ExportPublic("MSUF_DeleteProfile", MSUF_DeleteProfile)
+ExportPublic("MSUF_CopyProfile", MSUF_CopyProfile)
+ExportPublic("MSUF_RenameProfile", MSUF_RenameProfile)
+ExportPublic("MSUF_GetAllProfiles", MSUF_GetAllProfiles)
 if type(MSUF) == "table" then
     MSUF.MSUF_ExportSelectionToString = MSUF_ExportSelectionToString
     MSUF.MSUF_ImportFromString        = MSUF_ImportFromString

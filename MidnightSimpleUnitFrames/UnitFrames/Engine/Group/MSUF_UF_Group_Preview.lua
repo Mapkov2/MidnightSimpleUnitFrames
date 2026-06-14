@@ -7,8 +7,11 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local GF = MSUF.GF or {}
 MSUF.GF = GF
@@ -582,8 +585,8 @@ function GF.HideOrphanedPreviews()
   return hidden
 end
 
-_G.MSUF_GF_ShowPreview = function(kind, count) return GF.ShowPreview(kind, count) end
-_G.MSUF_GF_HidePreview = function(kind) return GF.HidePreview(kind) end
-_G.MSUF_GF_SetPreviewAnchor = function(kind, parent) return GF.SetPreviewAnchor(kind, parent) end
-_G.MSUF_GF_RefreshPreviewLayout = function(kind) return GF.RefreshPreviewLayout(kind) end
-_G.MSUF_GF_RefreshPreviewBox = _G.MSUF_GF_RefreshPreviewLayout
+ExportPublic("MSUF_GF_ShowPreview", function(kind, count) return GF.ShowPreview(kind, count) end)
+ExportPublic("MSUF_GF_HidePreview", function(kind) return GF.HidePreview(kind) end)
+ExportPublic("MSUF_GF_SetPreviewAnchor", function(kind, parent) return GF.SetPreviewAnchor(kind, parent) end)
+ExportPublic("MSUF_GF_RefreshPreviewLayout", function(kind) return GF.RefreshPreviewLayout(kind) end)
+ExportPublic("MSUF_GF_RefreshPreviewBox", _G.MSUF_GF_RefreshPreviewLayout)

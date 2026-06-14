@@ -5,6 +5,11 @@
 --- MSUF_EM2_Movers.lua ? v9 Ticker-driven
 --- Movers are dumb overlays. All drag math lives in Ticker.lua.
 local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local EM2 = _G.MSUF_EM2
 if not EM2 then return end
 
@@ -362,7 +367,7 @@ local function GetCastbarConf()
     if type(_G.MSUF_EnsureDB) == "function" then _G.MSUF_EnsureDB() end
     local db = _G.MSUF_DB
     if type(db) ~= "table" then
-        _G.MSUF_DB = {}
+        ExportPublic("MSUF_DB", {})
         db = _G.MSUF_DB
     end
     db.general = db.general or {}
@@ -462,7 +467,7 @@ RegisterAll()
 --- MSUF_EditMode.lua is deleted. Every function listed here was exported
 --- by the old EditMode and is called from at least one other file.
 --- --- Edit namespace (old code references _G.MSUF_Edit.*) ---
-_G.MSUF_Edit = _G.MSUF_Edit or {}
+ExportPublic("MSUF_Edit", _G.MSUF_Edit or {})
 local Edit = _G.MSUF_Edit
 Edit.Popups = Edit.Popups or {}
 Edit.Flow   = Edit.Flow   or {}
@@ -471,17 +476,18 @@ Edit.UI     = Edit.UI     or {}
 
 --- --- MSUF_EditState table (rawget'd by A2, Util, etc.) ---
 if not _G.MSUF_EditState then
-    _G.MSUF_EditState = { active = false, unitKey = nil, popupOpen = false }
+    ExportPublic("MSUF_EditState", { active = false, unitKey = nil, popupOpen = false })
 end
 
 --- --- MSUF_IsInEditMode ---
-_G.MSUF_IsInEditMode = function()
+local function MSUF_IsInEditMode()
     if EM2.State then return EM2.State.IsActive() end
     return _G.MSUF_UnitEditModeActive == true
 end
+ExportPublic("MSUF_IsInEditMode", MSUF_IsInEditMode)
 
 --- --- MSUF_GetAnchorFrame ---
-_G.MSUF_GetAnchorFrame = function()
+local function MSUF_GetAnchorFrame()
     local db = _G.MSUF_DB
     local g = db and db.general or {}
     if g.anchorToCooldown then
@@ -496,16 +502,18 @@ _G.MSUF_GetAnchorFrame = function()
     end
     return UIParent
 end
+ExportPublic("MSUF_GetAnchorFrame", MSUF_GetAnchorFrame)
 
 --- --- MSUF_GetCurrentGridStep ---
-_G.MSUF_GetCurrentGridStep = function()
+local function MSUF_GetCurrentGridStep()
     if EM2.Grid then return EM2.Grid.GetGridStep() end
     local db = _G.MSUF_DB
     return (db and db.general and db.general.editModeGridStep) or 20
 end
+ExportPublic("MSUF_GetCurrentGridStep", MSUF_GetCurrentGridStep)
 
 --- --- MSUF_MakeBlizzardOptionsMovable ---
-_G.MSUF_MakeBlizzardOptionsMovable = function()
+local function MSUF_MakeBlizzardOptionsMovable()
     if BlockConfigCombatLocked() then return false end
     local frame = _G.SettingsPanel or _G.InterfaceOptionsFrame
     if not frame then return end
@@ -529,9 +537,10 @@ _G.MSUF_MakeBlizzardOptionsMovable = function()
         if p and p.StopMovingOrSizing then p:StopMovingOrSizing() end
     end)
 end
+ExportPublic("MSUF_MakeBlizzardOptionsMovable", MSUF_MakeBlizzardOptionsMovable)
 
 --- --- MSUF_ResetCurrentEditUnit ---
-_G.MSUF_ResetCurrentEditUnit = function()
+local function MSUF_ResetCurrentEditUnit()
     local key = _G.MSUF_CurrentEditUnitKey
     if not key then return end
     local db = _G.MSUF_DB
@@ -548,6 +557,7 @@ _G.MSUF_ResetCurrentEditUnit = function()
         ApplyAllSettingsSafe()
     end
 end
+ExportPublic("MSUF_ResetCurrentEditUnit", MSUF_ResetCurrentEditUnit)
 
 local function LegacyNoop() end
 local function UpdateGridOverlay()
@@ -565,42 +575,53 @@ local function OpenMoverPopup(prefix, fallback, unit, parent)
     end
 end
 
-_G.MSUF_UpdateEditModeInfo = LegacyNoop
-_G.MSUF_UpdateCastbarEditInfo = LegacyNoop
-_G.MSUF_UpdateGridOverlay = UpdateGridOverlay
-_G.MSUF_UpdateEditModeVisuals = UpdateGridOverlay
-_G.MSUF_CreateGridFrame = function()
+ExportPublic("MSUF_UpdateEditModeInfo", LegacyNoop)
+ExportPublic("MSUF_UpdateCastbarEditInfo", LegacyNoop)
+ExportPublic("MSUF_UpdateGridOverlay", UpdateGridOverlay)
+ExportPublic("MSUF_UpdateEditModeVisuals", UpdateGridOverlay)
+
+local function MSUF_CreateGridFrame()
     if EM2.Grid then EM2.Grid.Show() end
 end
-_G.MSUF_OpenPositionPopup = function(unit, parent)
+ExportPublic("MSUF_CreateGridFrame", MSUF_CreateGridFrame)
+
+local function MSUF_OpenPositionPopup(unit, parent)
     OpenMoverPopup(nil, nil, unit, parent)
 end
-_G.MSUF_OpenCastbarPositionPopup = function(unit, parent)
+ExportPublic("MSUF_OpenPositionPopup", MSUF_OpenPositionPopup)
+
+local function MSUF_OpenCastbarPositionPopup(unit, parent)
     OpenMoverPopup("castbar_", EM2.CastPopup, unit, parent)
 end
-_G.MSUF_OpenAuras3PositionPopup = function(unit, parent)
+ExportPublic("MSUF_OpenCastbarPositionPopup", MSUF_OpenCastbarPositionPopup)
+
+local function MSUF_OpenAuras3PositionPopup(unit, parent)
     OpenMoverPopup("aura_", EM2.AuraPopup, unit, parent)
 end
+ExportPublic("MSUF_OpenAuras3PositionPopup", MSUF_OpenAuras3PositionPopup)
 
 --- --- MSUF_SyncUnitPositionPopup ---
-_G.MSUF_SyncUnitPositionPopup = function(unit)
+local function MSUF_SyncUnitPositionPopup(unit)
     if EM2.UnitPopup and EM2.UnitPopup.Sync then EM2.UnitPopup.Sync() end
     RefreshUFPreview("EM2_SYNC_UNIT_POPUP", unit)
 end
+ExportPublic("MSUF_SyncUnitPositionPopup", MSUF_SyncUnitPositionPopup)
 
 --- --- MSUF_SyncCastbarPositionPopup ---
-_G.MSUF_SyncCastbarPositionPopup = function(unit)
+local function MSUF_SyncCastbarPositionPopup(unit)
     if EM2.CastPopup and EM2.CastPopup.Sync then EM2.CastPopup.Sync() end
     RefreshUFPreview("EM2_SYNC_CASTBAR_POPUP", unit)
 end
+ExportPublic("MSUF_SyncCastbarPositionPopup", MSUF_SyncCastbarPositionPopup)
 
 --- --- MSUF_SyncAuras3PositionPopup ---
-_G.MSUF_SyncAuras3PositionPopup = function(unit)
+local function MSUF_SyncAuras3PositionPopup(unit)
     if EM2.AuraPopup and EM2.AuraPopup.Sync then EM2.AuraPopup.Sync() end
 end
+ExportPublic("MSUF_SyncAuras3PositionPopup", MSUF_SyncAuras3PositionPopup)
 
 --- --- MSUF_SetMSUFEditModeDirect (THE primary entry point) ---
-_G.MSUF_SetMSUFEditModeDirect = function(active, unitKey)
+local function MSUF_SetMSUFEditModeDirect(active, unitKey)
     if not EM2.State then return end
     if active and type(_G.MSUF_BlockConfigCombatLocked) == "function" and _G.MSUF_BlockConfigCombatLocked() then return false end
     if active and IsConfigCombatLocked() then
@@ -611,19 +632,21 @@ _G.MSUF_SetMSUFEditModeDirect = function(active, unitKey)
     else EM2.State.Exit("direct") end
     return true
 end
+ExportPublic("MSUF_SetMSUFEditModeDirect", MSUF_SetMSUFEditModeDirect)
 
 --- --- MSUF_SetMSUFEditModeFromBlizzard ---
-_G.MSUF_SetMSUFEditModeFromBlizzard = function(active)
-    _G.MSUF_SetMSUFEditModeDirect(active, nil)
+local function MSUF_SetMSUFEditModeFromBlizzard(active)
+    MSUF_SetMSUFEditModeDirect(active, nil)
 end
+ExportPublic("MSUF_SetMSUFEditModeFromBlizzard", MSUF_SetMSUFEditModeFromBlizzard)
 
 --- --- Preview System ---
 --- One global flag: MSUF_PreviewTestMode. Mirrors MSUF_BossTestMode exactly.
 --- The core's visibility driver (line 2000) checks this flag to force-show.
 --- The core's UpdateSimpleUnitFrame (line 4017) already applies EditPrev data.
 --- Zero hooks, zero timers, zero pipeline fighting.
-_G.MSUF_UnitPreviewActive = false
-_G.MSUF_PreviewTestMode = false
+ExportPublic("MSUF_UnitPreviewActive", false)
+ExportPublic("MSUF_PreviewTestMode", false)
 
 local PREVIEW_UNITS = { "target", "focus", "focustarget", "targettarget", "pet" }
 local CASTBAR_TEST_FUNCS = {
@@ -667,7 +690,7 @@ local function ForPreviewFrames(fn)
     end
 end
 
-_G.MSUF_EM2_ReforcePreviewFrames = function()
+local function MSUF_EM2_ReforcePreviewFrames()
     if not _G.MSUF_PreviewTestMode then return end
     if IsConfigCombatLocked() then return end
     ForPreviewFrames(function(frame)
@@ -687,24 +710,24 @@ _G.MSUF_EM2_ReforcePreviewFrames = function()
         end
     end
 end
+ExportPublic("MSUF_EM2_ReforcePreviewFrames", MSUF_EM2_ReforcePreviewFrames)
 
-_G.MSUF_EM2_SchedulePreviewReforce = function()
+local function MSUF_EM2_SchedulePreviewReforce()
     C_Timer.After(0.1, function()
-        if _G.MSUF_EM2_ReforcePreviewFrames then
-            _G.MSUF_EM2_ReforcePreviewFrames()
-        end
+        MSUF_EM2_ReforcePreviewFrames()
         if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
     end)
 end
+ExportPublic("MSUF_EM2_SchedulePreviewReforce", MSUF_EM2_SchedulePreviewReforce)
 
-_G.MSUF_SyncAllUnitPreviews = function()
+local function MSUF_SyncAllUnitPreviews()
     local active = _G.MSUF_UnitPreviewActive and true or false
     local editOn = EM2.State and EM2.State.IsActive()
     local want = active and editOn
 
     if IsConfigCombatLocked() then
-        _G.MSUF_PreviewTestMode = false
-        _G.MSUF_BossTestMode = false
+        ExportPublic("MSUF_PreviewTestMode", false)
+        ExportPublic("MSUF_BossTestMode", false)
         if type(_G.MSUF_HideAllCastbarPreviews) == "function" then
             _G.MSUF_HideAllCastbarPreviews()
         end
@@ -712,10 +735,10 @@ _G.MSUF_SyncAllUnitPreviews = function()
     end
 
     --- Set preview flag (core visibility driver reads this)
-    _G.MSUF_PreviewTestMode = want
+    ExportPublic("MSUF_PreviewTestMode", want)
 
     --- 1) Boss: existing system
-    _G.MSUF_BossTestMode = want
+    ExportPublic("MSUF_BossTestMode", want)
     if _G.MSUF_SyncBossUnitframePreviewWithUnitEdit then
         _G.MSUF_SyncBossUnitframePreviewWithUnitEdit()
     end
@@ -785,9 +808,7 @@ do
         C_Timer.After(delay, function()
             if not _G.MSUF_PreviewTestMode then return end
             if IsConfigCombatLocked() then return end
-            if _G.MSUF_EM2_ReforcePreviewFrames then
-                _G.MSUF_EM2_ReforcePreviewFrames()
-            end
+            MSUF_EM2_ReforcePreviewFrames()
         end)
     end
 
@@ -822,7 +843,7 @@ do
         end
     end
 
-    local _origSync = _G.MSUF_SyncAllUnitPreviews
+    local _origSync = MSUF_SyncAllUnitPreviews
     local function SyncAllUnitPreviewsWithPipelineWrappers(...)
         if _G.MSUF_PreviewTestMode then
             InstallPipelineWrappers()
@@ -838,11 +859,12 @@ do
         end
         return unpack(results)
     end
-    _G.MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineWrappers
+    MSUF_SyncAllUnitPreviews = SyncAllUnitPreviewsWithPipelineWrappers
+    ExportPublic("MSUF_SyncAllUnitPreviews", SyncAllUnitPreviewsWithPipelineWrappers)
 end
 
 --- --- MSUF_SyncCastbarEditModeWithUnitEdit (castbar preview sync) ---
-_G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
+local function MSUF_SyncCastbarEditModeWithUnitEdit()
     local db = _G.MSUF_DB
     if not db then return end
     db.general = db.general or {}
@@ -863,11 +885,13 @@ _G.MSUF_SyncCastbarEditModeWithUnitEdit = function()
         SafeRefreshCall(_G.MSUF_UpdateBossCastbarPreview)
     end
 end
+ExportPublic("MSUF_SyncCastbarEditModeWithUnitEdit", MSUF_SyncCastbarEditModeWithUnitEdit)
 
 --- --- MSUF_SyncBossUnitframePreviewWithUnitEdit ---
-_G.MSUF_SyncBossUnitframePreviewWithUnitEdit = _G.MSUF_SyncBossUnitframePreviewWithUnitEdit or function()
+local MSUF_SyncBossUnitframePreviewWithUnitEdit = _G.MSUF_SyncBossUnitframePreviewWithUnitEdit or function()
     --- Provided by MidnightSimpleUnitFrames.lua; stub if not yet available
 end
+ExportPublic("MSUF_SyncBossUnitframePreviewWithUnitEdit", MSUF_SyncBossUnitframePreviewWithUnitEdit)
 
 --- --- Edit.Flow.Exit ---
 Edit.Flow.Exit = function(source, opts)
@@ -876,12 +900,12 @@ end
 
 --- --- Edit.Transitions ---
 Edit.Transitions = Edit.Transitions or {}
-Edit.Transitions.SetMSUFEditModeDirect = _G.MSUF_SetMSUFEditModeDirect
+Edit.Transitions.SetMSUFEditModeDirect = MSUF_SetMSUFEditModeDirect
 
 --- --- AnyEditMode listeners (registration handled in State.lua) ---
 
 --- --- Castbar anchor toggle (detach/attach to unitframe) ---
-_G.MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or function(unit, anchored)
+local MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or function(unit, anchored)
     if not unit then return end
     local db = _G.MSUF_DB; if not db then return end
     db.general = db.general or {}
@@ -933,3 +957,4 @@ _G.MSUF_EM_SetCastbarAnchoredToUnit = _G.MSUF_EM_SetCastbarAnchoredToUnit or fun
     if _G.MSUF_UpdateCastbarVisuals then _G.MSUF_UpdateCastbarVisuals() end
     RefreshUFPreview("EM2_CASTBAR_ANCHOR_TOGGLE", unit)
 end
+ExportPublic("MSUF_EM_SetCastbarAnchoredToUnit", MSUF_EM_SetCastbarAnchoredToUnit)

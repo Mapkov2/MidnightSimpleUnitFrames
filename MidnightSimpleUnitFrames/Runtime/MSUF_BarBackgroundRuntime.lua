@@ -9,8 +9,11 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 MSUF.Bars = MSUF.Bars or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local type, tonumber = type, tonumber
 local UnitClass, UnitExists, UnitIsPlayer = _G.UnitClass, _G.UnitExists, _G.UnitIsPlayer
@@ -74,7 +77,7 @@ do
         return true
     end
 
-    function _G.MSUF_EnsureLegacyCooldownViewerAnchor()
+    local function EnsureLegacyCooldownViewerAnchor()
         if not (_G.CreateFrame and _G.UIParent) then return nil end
         local anchor = _G[LEGACY_CDM_ANCHOR]
         if not anchor then
@@ -92,13 +95,15 @@ do
         if anchor.Show then anchor:Show() end
         return anchor
     end
+    ExportPublic("MSUF_EnsureLegacyCooldownViewerAnchor", EnsureLegacyCooldownViewerAnchor)
 
-    _G.MSUF_PositionLegacyCooldownViewerAnchor = function()
-        local anchor = _G.MSUF_EnsureLegacyCooldownViewerAnchor and _G.MSUF_EnsureLegacyCooldownViewerAnchor()
+    local function PositionLegacyCooldownViewerAnchor()
+        local anchor = EnsureLegacyCooldownViewerAnchor()
         return _ApplyCompatAnchorCache(anchor)
     end
+    ExportPublic("MSUF_PositionLegacyCooldownViewerAnchor", PositionLegacyCooldownViewerAnchor)
 
-    _G.MSUF_EnsureLegacyCooldownViewerAnchor()
+    EnsureLegacyCooldownViewerAnchor()
 end
 
 local function EnsureDBSafe()
@@ -138,7 +143,7 @@ local function MSUF_GetBarBackgroundTintRGBA()
     local r, gg, b = MSUF.Bars._DarkTint(g, MSUF_Clamp01(g.classBarBgR), MSUF_Clamp01(g.classBarBgG), MSUF_Clamp01(g.classBarBgB))
     return r, gg, b, 0.9
 end
-_G.MSUF_GetBarBackgroundTintRGBA = MSUF_GetBarBackgroundTintRGBA
+ExportPublic("MSUF_GetBarBackgroundTintRGBA", MSUF_GetBarBackgroundTintRGBA)
 
 local function MSUF_GetPowerBarBackgroundTintRGBA()
     EnsureDBSafe()
@@ -150,7 +155,7 @@ local function MSUF_GetPowerBarBackgroundTintRGBA()
     local r, gg, b = MSUF.Bars._DarkTint(g, MSUF_Clamp01(ar), MSUF_Clamp01(ag), MSUF_Clamp01(ab))
     return r, gg, b, 0.9
 end
-_G.MSUF_GetPowerBarBackgroundTintRGBA = MSUF_GetPowerBarBackgroundTintRGBA
+ExportPublic("MSUF_GetPowerBarBackgroundTintRGBA", MSUF_GetPowerBarBackgroundTintRGBA)
 
 --- Detached power bar texture resolvers (cache + DB read).
 local _DPB = MSUF.Bars._DetachedPowerBarTextures or {}
@@ -165,16 +170,18 @@ local BLIZZARD_COOLDOWN_VIEWER_FRAMES = {
     BuffIconCooldownViewer = true,
 }
 
-function _G.MSUF_IsBlizzardCooldownViewerFrameName(frameName)
+local function MSUF_IsBlizzardCooldownViewerFrameName(frameName)
     return BLIZZARD_COOLDOWN_VIEWER_FRAMES[frameName] == true
 end
+ExportPublic("MSUF_IsBlizzardCooldownViewerFrameName", MSUF_IsBlizzardCooldownViewerFrameName)
 
-function _G.MSUF_GetEffectiveCooldownFrame(frameName)
-    if _G.MSUF_IsBlizzardCooldownViewerFrameName(frameName) then
+local function MSUF_GetEffectiveCooldownFrame(frameName)
+    if MSUF_IsBlizzardCooldownViewerFrameName(frameName) then
         return nil
     end
     return frameName and _G[frameName] or nil
 end
+ExportPublic("MSUF_GetEffectiveCooldownFrame", MSUF_GetEffectiveCooldownFrame)
 
 function _DPB.ResolveFg()
     local b = _G.MSUF_DB and _G.MSUF_DB.bars or {}
@@ -346,7 +353,7 @@ local function MSUF_GetEffectiveHealthBarBackgroundTintRGBA(frame)
     local bars = (cache and cache.barsRef) or (_G.MSUF_DB and _G.MSUF_DB.bars)
     return _MSUF_ResolveHealthBackgroundRGBA(frame, cache, gen, bars)
 end
-_G.MSUF_GetEffectiveHealthBarBackgroundTintRGBA = MSUF_GetEffectiveHealthBarBackgroundTintRGBA
+ExportPublic("MSUF_GetEffectiveHealthBarBackgroundTintRGBA", MSUF_GetEffectiveHealthBarBackgroundTintRGBA)
 
 local function MSUF_ApplyBarBackgroundVisual(frame)
     if not frame then return end
@@ -409,5 +416,5 @@ local function MSUF_ApplyBarBackgroundVisual(frame)
     end
 end
 
-_G.MSUF_ApplyBarBackgroundVisual = MSUF_ApplyBarBackgroundVisual
+ExportPublic("MSUF_ApplyBarBackgroundVisual", MSUF_ApplyBarBackgroundVisual)
 MSUF.Bars.ApplyBarBackgroundVisual = MSUF_ApplyBarBackgroundVisual

@@ -3,7 +3,6 @@
 --- delegates to routing; this file should not mutate settings or rebuild the search index.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2
 if not M then return end

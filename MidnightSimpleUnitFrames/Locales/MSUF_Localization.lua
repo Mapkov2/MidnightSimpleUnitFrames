@@ -18,7 +18,6 @@
 --- ============================================================================
 local addonName, MSUF = ...
 MSUF = MSUF or {}
-_G.MSUF_NS = MSUF
 
 ---@diagnostic disable-next-line: undefined-global
 local CLIENT_LOCALE = (type(GetLocale) == "function" and GetLocale()) or "enUS"

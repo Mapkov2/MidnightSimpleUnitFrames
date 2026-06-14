@@ -7,6 +7,11 @@
 --- behavior in Frames/Runtime/Visuals where possible, and refactor this file in
 --- small behavior-preserving steps before changing event semantics.
 
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+_G[name] = value
+return value
+end
+
 local e,e=...local n=GetTime
 local e=math.floor local i=_G.C_Timer and _G.C_Timer.NewTicker
 local r local function a(e,t)if not e or not e.unit then return end if not e:IsShown()then
@@ -32,7 +37,7 @@ else if e._msufSafetyTicker and e._msufSafetyTicker.Cancel then
 e._msufSafetyTicker:Cancel()end
 e._msufSafetyTicker=nil e._msufSafetyNext=nil
 e:SetScript("OnUpdate",nil)end
-end _G.MSUF_INTERRUPT_FEEDBACK_DURATION=_G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5
+end ExportPublic("MSUF_INTERRUPT_FEEDBACK_DURATION", _G.MSUF_INTERRUPT_FEEDBACK_DURATION or 0.5)
 local function S(e)e=e or""local n=_G.MSUF_IsCastbarEnabledForUnit if type(n)=="function"then
 local e=n(e)if e~=nil then
 return e end
@@ -70,7 +75,7 @@ local n=t-r if not(type(n)=="number"and n>0)then return nil end
 local n=i._msufLastSBValue i._msufLastSBValue=e
 local n=(n~=nil and e<(n-0.0001))local e=n and(e-r)or(t-e)if type(e)~="number"then return nil end if e<0 then e=0 end
 return e end
-function _G.MSUF_UpdateCastTimeText_FromStatusBar(e)if not(e and e.timeText)then return end
+local function MSUF_UpdateCastTimeText_FromStatusBar(e)if not(e and e.timeText)then return end
 if not(type(MSUF_IsCastTimeEnabled)=="function"and MSUF_IsCastTimeEnabled(e))then MSUF_SetTextIfChanged(e.timeText,"")return end
 local i=a(e)if type(i)=="number"then
 local r if e._msufPlainTotal then
@@ -246,10 +251,10 @@ function t:SetSucceeded()o(self)if self.interrupted then return
 end r(self,false)_G.MSUF_CB_ResetStateOnStop(self,"SUCCEEDED")end
 d(t,a,true)local e=_G["MSUF_"..a]if e then t:ClearAllPoints()if a=="target"then t:SetPoint("BOTTOMLEFT",e,"TOPLEFT",0,5)elseif a=="focus"then t:SetPoint("TOPLEFT",e,"BOTTOMLEFT",0,-5)elseif a=="player"then t:SetPoint("BOTTOM",e,"TOP",0,5)else t:SetPoint("CENTER",UIParent,"CENTER",0,-300)end local e=e:GetWidth()if e and e>0 then t:SetWidth(e)end end
 u(t)t:Hide()if a=="target"then MSUF_TargetCastbar=t
-_G.MSUF_TargetCastBar=t elseif a=="focus"then
-MSUF_FocusCastbar=t _G.MSUF_FocusCastBar=t
+ExportPublic("MSUF_TargetCastBar", t) elseif a=="focus"then
+MSUF_FocusCastbar=t ExportPublic("MSUF_FocusCastBar", t)
 elseif a=="player"then MSUF_PlayerCastbar=t
-_G.MSUF_PlayerCastBar=t end
+ExportPublic("MSUF_PlayerCastBar", t) end
 return t end
 function MSUF_EnsureCastbarManager()if MSUF_CastbarManager and MSUF_RegisterCastbar and MSUF_UnregisterCastbar and MSUF_UpdateCastbarFrame then
 return end
@@ -288,5 +293,8 @@ if MSUF_UpdateCastbarTextures then MSUF_UpdateCastbarTextures()end end
 function MSUF_CastbarDriver_OnEnteringWorld(e)t("target")t("focus")if PetCastingBarFrame then
 PetCastingBarFrame:UnregisterAllEvents()PetCastingBarFrame:Hide()PetCastingBarFrame:HookScript("OnShow",function(e)e:Hide()end)end
 if MSUF_EventBus_Unregister then MSUF_EventBus_Unregister("PLAYER_ENTERING_WORLD","MSUF_CASTBAR_DRIVER_WORLD")end end
-MSUF_EventBus_Register("PLAYER_LOGIN","MSUF_CASTBAR_DRIVER_LOGIN",MSUF_CastbarDriver_OnLogin,nil,true)MSUF_EventBus_Register("PLAYER_ENTERING_WORLD","MSUF_CASTBAR_DRIVER_WORLD",MSUF_CastbarDriver_OnEnteringWorld)_G.MSUF_CreateCastBar=T _G.MSUF_CastbarDriver_EnsureUnit=i
-_G.MSUF_CastbarDriver_ApplyBackendState=t
+MSUF_EventBus_Register("PLAYER_LOGIN","MSUF_CASTBAR_DRIVER_LOGIN",MSUF_CastbarDriver_OnLogin,nil,true)MSUF_EventBus_Register("PLAYER_ENTERING_WORLD","MSUF_CASTBAR_DRIVER_WORLD",MSUF_CastbarDriver_OnEnteringWorld)
+ExportPublic("MSUF_UpdateCastTimeText_FromStatusBar", MSUF_UpdateCastTimeText_FromStatusBar)
+ExportPublic("MSUF_CreateCastBar", T)
+ExportPublic("MSUF_CastbarDriver_EnsureUnit", i)
+ExportPublic("MSUF_CastbarDriver_ApplyBackendState", t)

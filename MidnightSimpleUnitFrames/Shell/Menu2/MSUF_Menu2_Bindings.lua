@@ -1,8 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local KS, KSW, WL = M.KeySet, M.KeySetFromWords, M.WordList
 
 -- Menu2 binding/apply layer.
@@ -37,7 +40,7 @@ end
 function M.EnsureDB()
     local ensure = _G.MSUF_EnsureDB
     if type(ensure) == "function" then pcall(ensure) end
-    _G.MSUF_DB = _G.MSUF_DB or {}
+    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     return _G.MSUF_DB
 end
@@ -62,11 +65,17 @@ end
 local function CallGlobalList(names)
     for i = 1, #(names or {}) do CallGlobal(names[i]) end
 end
+
+-- Profile restore still has to notify several legacy global bridges. Keeping the list here
+-- makes broad fanout reviewable instead of scattered through page widgets.
 local PROFILE_APPLY_GLOBALS = WL [[
     MSUF_GF_InvalidateCooldownTextCurve MSUF_GF_ForceCooldownTextRecolor MSUF_RefreshAllIdentityColors
     MSUF_RefreshAllPowerTextColors MSUF_RefreshAllFrames MSUF_UpdateAllBarTextures_Immediate
     MSUF_UpdateAllBarTextures MSUF_UpdateCastbarVisuals_Immediate MSUF_ClassPower_Refresh MSUF_ClassPower_RefreshTextures
 ]]
+
+-- Undo/redo restores need a slightly wider visual sweep than one slider change because the
+-- restored snapshot may have touched unrelated pages.
 local RESTORE_GLOBALS = WL [[
     MSUF_UpdateAllFonts_Immediate MSUF_UpdateAllBarTextures_Immediate MSUF_UpdateAllBarTextures
     MSUF_UpdateCastbarVisuals_Immediate MSUF_UpdateCastbarVisuals MSUF_RefreshAllIdentityColors
@@ -128,9 +137,12 @@ local function FlushApply()
         local opt = pendingOpts[unit] or {}
         local notifyUnit = (unit == "boss") and nil or unit
         local applied = false
+        -- Unit changes prefer the UF-core dirty path. Legacy ApplyUnitFrame is a fallback for
+        -- modules not yet fully represented in the UF engine.
         if opt.notify ~= false then applied = CallGlobal("MSUF_UFCore_NotifyConfigChanged", notifyUnit, true, true, opt.reason or "MSUF2") and true or false end
         if opt.text then CallGlobal("MSUF_ForceTextLayoutForUnitKey", unit) end
         if opt.power then
+            -- Embedded power layout touches frame anchors and is intentionally skipped in combat.
             if not (_G.InCombatLockdown and _G.InCombatLockdown()) then
                 if not CallGlobal("MSUF_ApplyPowerBarEmbedLayout_ForUnitKey", unit, true) then CallGlobal("MSUF_ApplyPowerBarEmbedLayout_All") end
             end
@@ -161,6 +173,7 @@ end
 local function QueueFlush()
     if flushQueued then return end
     flushQueued = true
+    -- Slider drags and compound Assistant writes collapse to one next-frame apply burst.
     if _G.MSUF_ScheduleOnce then
         _G.MSUF_ScheduleOnce("MSUF2_APPLY", FlushApply)
     elseif C_Timer and C_Timer.After then
@@ -270,6 +283,8 @@ local function ApplyHistorySnapshot(snapshot, reason)
     DeepReplace(M.EnsureDB(), snapshot)
     if historySessionActive then historySessionSnapshot = snapshot end
     historyRestoring = false
+    -- A restored profile snapshot may span UnitFrames, Auras3, ClassPower, GroupFrames, and
+    -- Menu2 state, so restore fanout is centralized and explicit.
     M.RequestGeneralApply(reason or "MSUF2_HISTORY", { preview = true, alpha = true, castbar = true })
     if MSUF and type(MSUF.MSUF_RequestGameplayApply) == "function" then
         pcall(MSUF.MSUF_RequestGameplayApply)
@@ -322,6 +337,8 @@ function M.CaptureHistory(label, source, fn)
     end
     local before = CurrentHistorySnapshot()
     historyDepth = historyDepth + 1
+    -- Widget callbacks are user-facing; failed mutations are reported through the normal error
+    -- handler without committing a broken undo entry.
     local ok, result = pcall(fn)
     historyDepth = historyDepth - 1
     if not ok then
@@ -842,6 +859,8 @@ local function ApplyAfterPageReset(pageKey, info)
     if M.RequestGeneralApply then M.RequestGeneralApply(reason, { preview = true, alpha = true, castbar = true }) end
     if info and info.kind == "gameplay" then M.CallIf(M.ApplyGameplay) end
     local auras = MSUF and MSUF.MSUF_Auras3
+    -- Page reset fanout is intentionally keyed by page kind so a unit reset does not rebuild
+    -- secure group headers or Auras3 lanes unnecessarily.
     if info and (info.kind == "auras" or info.kind == "colors") then
         if auras and type(auras.RequestApply) == "function" then
             pcall(auras.RequestApply)
@@ -1010,6 +1029,8 @@ function M.RequestRefresh(ctx, reason)
     if entry then
         if entry._msuf2RefreshQueued then return true end
         entry._msuf2RefreshQueued = true
+        -- Refreshers are entry-local and de-duplicated, so rebuilding one page does not force
+        -- all Menu2 controls to resync.
         local function Run()
             entry._msuf2RefreshQueued = nil
             if entry._msuf2Invalidated then return end

@@ -1,7 +1,12 @@
+-- Menu2 unit preview model: creates fake preview data and model state for unit pages.
+-- Preview-only state must not leak into live unit frames or profile runtime paths.
 local addonName, addonNS = ...
 local MSUF = addonNS or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 MSUF.L = MSUF.L or (_G.MSUF_L) or {}
 local L = MSUF.L
 if not getmetatable(L) then setmetatable(L, { __index = function(_, k) return k end }) end
@@ -18,7 +23,7 @@ local TEX_W8 = "Interface\\Buttons\\WHITE8X8"
 local FONT = STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
 local Preview = MSUF.UFPreview or {}
 MSUF.UFPreview = Preview
-_G.MSUF_UFPreview = Preview
+ExportPublic("MSUF_UFPreview", Preview)
 
 -- Unit preview model.
 -- Provides deterministic mock units, names, colors, and derived text for Menu2 previews. This
@@ -125,7 +130,7 @@ local function EnsureDB()
     elseif MSUF and type(MSUF.MSUF_EnsureDB or MSUF.EnsureDB) == "function" then
         (MSUF.MSUF_EnsureDB or MSUF.EnsureDB)()
     end
-    _G.MSUF_DB = _G.MSUF_DB or {}
+    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     for i = 1, #UNIT_KEYS do
         _G.MSUF_DB[UNIT_KEYS[i]] = _G.MSUF_DB[UNIT_KEYS[i]] or {}

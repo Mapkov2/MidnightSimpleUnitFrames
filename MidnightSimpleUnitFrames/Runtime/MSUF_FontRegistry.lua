@@ -7,7 +7,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local G = _G
 local type, tostring, ipairs = type, tostring, ipairs

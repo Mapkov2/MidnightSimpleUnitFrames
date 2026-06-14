@@ -1,6 +1,13 @@
 -- Player channel tick marker support.
 -- Adds optional haste/channel tick markers to the player castbar using existing DB fields.
 -- This augments castbar visuals only; cast/channel state remains in the shared runtime.
+local _, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+
 local DEFAULT_TICK_COUNT = 5
 local MAX_TICK_COUNT = 10
 
@@ -211,13 +218,14 @@ local function UpdatePlayerChannelHasteMarkers(frame, force)
     end
 end
 
-function _G.MSUF_UpdateCastbarChannelTicks()
+local function UpdateCastbarChannelTicks()
     UpdatePlayerChannelHasteMarkers(_G.MSUF_PlayerCastbar, true)
     UpdatePlayerChannelHasteMarkers(_G.MSUF_PlayerCastbarPreview, true)
 end
+ExportPublic("MSUF_UpdateCastbarChannelTicks", UpdateCastbarChannelTicks)
 
-_G.MSUF_IsChannelTickLinesEnabled = ChannelTickLinesEnabled
-_G.MSUF_PlayerChannelHasteMarkers_Update = UpdatePlayerChannelHasteMarkers
-_G.MSUF_PlayerChannelHasteMarkers_Hide = HidePlayerChannelTickMarkers
-_G.MSUF_PlayerChannelHasteMarkers_Ensure = EnsurePlayerChannelTickMarkers
-_G.MSUF_ApplyPlayerChannelTickMarkers = _G.MSUF_UpdateCastbarChannelTicks
+ExportPublic("MSUF_IsChannelTickLinesEnabled", ChannelTickLinesEnabled)
+ExportPublic("MSUF_PlayerChannelHasteMarkers_Update", UpdatePlayerChannelHasteMarkers)
+ExportPublic("MSUF_PlayerChannelHasteMarkers_Hide", HidePlayerChannelTickMarkers)
+ExportPublic("MSUF_PlayerChannelHasteMarkers_Ensure", EnsurePlayerChannelTickMarkers)
+ExportPublic("MSUF_ApplyPlayerChannelTickMarkers", UpdateCastbarChannelTicks)

@@ -1,9 +1,10 @@
+-- Menu2 search query aliases: maps natural search wording to known pages and controls.
+-- Data should stay deterministic and side-effect free so Search and Assistant can share it.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
 
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local Data = M.SearchData or {}
 M.SearchData = Data

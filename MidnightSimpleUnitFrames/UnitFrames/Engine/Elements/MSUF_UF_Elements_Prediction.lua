@@ -1,7 +1,12 @@
+--- UnitFrames/Engine/Elements/MSUF_UF_Elements_Prediction.lua
+--- Heal/absorb prediction element for unitframes.
+---
+--- WoW prediction APIs can return unknown/secret values during protected states;
+--- this file clamps and hides uncertain bars instead of caching unsafe math.
+
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local UF = MSUF.UF
 local CreateFrame = CreateFrame

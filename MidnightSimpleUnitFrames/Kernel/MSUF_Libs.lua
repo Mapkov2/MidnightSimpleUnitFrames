@@ -1,5 +1,12 @@
+-- Kernel library adapter: centralizes optional library lookup, cache, and compatibility exports.
+-- Runs during boot; callers should depend on exported helpers rather than direct LibStub probes.
 local addonName, MSUF = ...
-MSUF = MSUF or {}
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+_G.MSUF = _G.MSUF or MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local _MSUF_KnownFileAssetCache = {}
 
@@ -50,7 +57,7 @@ local function MSUF_IsKnownFileAsset(asset)
     return nil
 end
 
-_G.MSUF_IsKnownFileAsset = _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset
+ExportPublic("MSUF_IsKnownFileAsset", _G.MSUF_IsKnownFileAsset or MSUF_IsKnownFileAsset)
 MSUF.Util = MSUF.Util or {}
 MSUF.Util.IsKnownFileAsset = MSUF.Util.IsKnownFileAsset or MSUF_IsKnownFileAsset
 
@@ -241,55 +248,54 @@ do
         return false, requested, "failed"
     end
 
-    function _G.MSUF_NormalizeFontFlags(flags)
+    local function MSUF_NormalizeFontFlags(flags)
         return NormalizeFlags(flags)
     end
 
-    function _G.MSUF_NormalizeFontPath(path)
+    local function MSUF_NormalizeFontPath(path)
         return NormalizeFontPath(path)
     end
 
-    function _G.MSUF_FontPathEquals(a, b)
+    local function MSUF_FontPathEquals(a, b)
         a, b = NormalizeFontPath(a), NormalizeFontPath(b)
         return a ~= nil and b ~= nil and a:lower() == b:lower()
     end
-    _G.MSUF_FontPathMatches = _G.MSUF_FontPathEquals
 
-    function _G.MSUF_FontLooksLikeBundledExpressway(_, path)
+    local function MSUF_FontLooksLikeBundledExpressway(_, path)
         local normalized = NormalizeFontPath(path)
         local key = normalized and normalized:lower() or nil
         return key ~= nil
             and key:find("interface\\addons\\midnightsimpleunitframes\\media\\fonts\\expressway", 1, true) ~= nil
     end
 
-    function _G.MSUF_ResolveFontKeyPath(key)
+    local function MSUF_ResolveFontKeyPath(key)
         return ResolveFontKeyPath(key)
     end
 
-    function _G.MSUF_ResolveFontPath(path, size, flags, fontKey)
+    local function MSUF_ResolveFontPath(path, size, flags, fontKey)
         return ResolveFontPath(path, size, flags, fontKey)
     end
 
-    function _G.MSUF_SetFontSafe(fs, path, size, flags, fontKey)
+    local function MSUF_SetFontSafe(fs, path, size, flags, fontKey)
         return SetFontSafe(fs, path, size, flags, fontKey)
     end
 
-    function _G.MSUF_ClearResolvedFontPathCache()
+    local function MSUF_ClearResolvedFontPathCache()
     end
 
-    function _G.MSUF_PrewarmFontVisualCache()
+    local function MSUF_PrewarmFontVisualCache()
         return true
     end
 
-    function _G.MSUF_GetInternalFontPrimaryPath(key)
+    local function MSUF_GetInternalFontPrimaryPath(key)
         return ResolveFontKeyPath(key)
     end
 
-    function _G.MSUF_GetInternalFontPathCandidates(key, path)
+    local function MSUF_GetInternalFontPathCandidates(key, path)
         return { ResolveFontPath(path, 14, "", key), ResolveFallbackFontPath() }
     end
 
-    function _G.MSUF_DebugFontProbe(key)
+    local function MSUF_DebugFontProbe(key)
         if key == nil and _G.MSUF_DB and _G.MSUF_DB.general then
             key = _G.MSUF_DB.general.fontKey
         end
@@ -317,10 +323,24 @@ do
         }
     end
 
+    ExportPublic("MSUF_NormalizeFontFlags", MSUF_NormalizeFontFlags)
+    ExportPublic("MSUF_NormalizeFontPath", MSUF_NormalizeFontPath)
+    ExportPublic("MSUF_FontPathEquals", MSUF_FontPathEquals)
+    ExportPublic("MSUF_FontPathMatches", MSUF_FontPathEquals)
+    ExportPublic("MSUF_FontLooksLikeBundledExpressway", MSUF_FontLooksLikeBundledExpressway)
+    ExportPublic("MSUF_ResolveFontKeyPath", MSUF_ResolveFontKeyPath)
+    ExportPublic("MSUF_ResolveFontPath", MSUF_ResolveFontPath)
+    ExportPublic("MSUF_SetFontSafe", MSUF_SetFontSafe)
+    ExportPublic("MSUF_ClearResolvedFontPathCache", MSUF_ClearResolvedFontPathCache)
+    ExportPublic("MSUF_PrewarmFontVisualCache", MSUF_PrewarmFontVisualCache)
+    ExportPublic("MSUF_GetInternalFontPrimaryPath", MSUF_GetInternalFontPrimaryPath)
+    ExportPublic("MSUF_GetInternalFontPathCandidates", MSUF_GetInternalFontPathCandidates)
+    ExportPublic("MSUF_DebugFontProbe", MSUF_DebugFontProbe)
+
     MSUF.Util = MSUF.Util or {}
-    MSUF.Util.ResolveFontPath = _G.MSUF_ResolveFontPath
-    MSUF.Util.ResolveFontKeyPath = _G.MSUF_ResolveFontKeyPath
-    MSUF.Util.SetFontSafe = _G.MSUF_SetFontSafe
+    MSUF.Util.ResolveFontPath = MSUF_ResolveFontPath
+    MSUF.Util.ResolveFontKeyPath = MSUF_ResolveFontKeyPath
+    MSUF.Util.SetFontSafe = MSUF_SetFontSafe
 end
 
 --- Shared Lib initialization (loaded BEFORE Options and Main)
@@ -336,7 +356,7 @@ local function TryInitLSM()
     --- LibStub("LibSharedMedia-3.0", true) returns nil if not available.
     if ok and lsm then
         MSUF.LSM = lsm
-        _G.MSUF_LSM = lsm
+        ExportPublic("MSUF_LSM", lsm)
 
         --- Inform Main (which caches LSM in a local upvalue) that LSM is now ready.
         if _G.MSUF_OnLSMReady then
@@ -577,7 +597,7 @@ end
 
 local function OnLSMRegistered(_, mediatype, key)
     if IsCombatLocked() then
-        _G.MSUF_LSM_CombatRefreshPending = true
+        ExportPublic("MSUF_LSM_CombatRefreshPending", true)
         if UnregisterLSMCallback then
             UnregisterLSMCallback()
         end
@@ -603,7 +623,7 @@ UnregisterLSMCallback = function()
         pcall(LSM.UnregisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT)
     end
     _MSUF_LSMCallbackActive = false
-    _G.MSUF_LSM_CallbackActive = false
+    ExportPublic("MSUF_LSM_CallbackActive", false)
     return true
 end
 
@@ -616,7 +636,7 @@ RegisterLSMCallback = function()
     local ok = pcall(LSM.RegisterCallback, LSM_CALLBACK_OWNER, LSM_REGISTERED_EVENT, OnLSMRegistered)
     if ok then
         _MSUF_LSMCallbackActive = true
-        _G.MSUF_LSM_CallbackActive = true
+        ExportPublic("MSUF_LSM_CallbackActive", true)
         return true
     end
     return false
@@ -641,7 +661,7 @@ EnsureLSMCombatFrame = function()
         end
         RegisterLSMCallback()
         RefreshChangedMediaAfterCombat()
-        _G.MSUF_LSM_CombatRefreshPending = nil
+        ExportPublic("MSUF_LSM_CombatRefreshPending", nil)
     end)
     _MSUF_LSMCombatFrame = frame
     return frame
@@ -650,7 +670,7 @@ end
 local function EnsureLSMCallbacks()
     local LSM = MSUF.LSM
     if not LSM then return end
-    _G.MSUF_LSM_CallbacksRegistered = true
+    ExportPublic("MSUF_LSM_CallbacksRegistered", true)
     EnsureLSMCombatFrame()
     SnapshotLSMMediaCounts(LSM)
     RegisterLSMCallback()
@@ -760,8 +780,8 @@ end
 
 MSUF.UI = MSUF.UI or {}
 MSUF.UI.StatusBarTextureItems = StatusBarTextureItems
-_G.MSUF_StatusBarTextureItems = StatusBarTextureItems
-_G.MSUF_RebuildStatusbarChoices = _G.MSUF_RebuildStatusbarChoices or function() end
+ExportPublic("MSUF_StatusBarTextureItems", StatusBarTextureItems)
+ExportPublic("MSUF_RebuildStatusbarChoices", _G.MSUF_RebuildStatusbarChoices or function() end)
 
 --- Bundled fonts (Media/Fonts)
 
@@ -770,7 +790,7 @@ RegisterBundledFonts = function()
 
     if IsCombatLocked() then
         _MSUF_BundledMediaRegistrationPending = true
-        _G.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED = true
+        ExportPublic("MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED", true)
         local frame = EnsureLSMCombatFrame and EnsureLSMCombatFrame()
         if frame then
             frame:RegisterEvent("PLAYER_REGEN_ENABLED")
@@ -783,7 +803,7 @@ RegisterBundledFonts = function()
     local wasDeferred = _MSUF_BundledMediaRegistrationPending == true
         or _G.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED == true
     _MSUF_BundledMediaRegistrationPending = false
-    _G.MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED = nil
+    ExportPublic("MSUF_BUNDLED_MEDIA_REGISTRATION_DEFERRED", nil)
 
     local base = "Interface/AddOns/" .. tostring(addonName) .. "/Media/Fonts/"
     local fonts = {
@@ -876,7 +896,7 @@ RegisterBundledFonts = function()
         MigrateLegacyBarKeys()
     end
 
-    _G.MSUF_BUNDLED_FONTS_REGISTERED = true
+    ExportPublic("MSUF_BUNDLED_FONTS_REGISTERED", true)
     SnapshotLSMMediaCounts(LSM)
     if wasDeferred then
         RefreshFontMedia(nil, true)
@@ -884,7 +904,7 @@ RegisterBundledFonts = function()
     end
 end
 
-_G.MSUF_RegisterBundledMediaWithLSM = RegisterBundledFonts
+ExportPublic("MSUF_RegisterBundledMediaWithLSM", RegisterBundledFonts)
 
 --- Initial attempt (works when libs are already available)
 if TryInitLSM() then
@@ -909,11 +929,10 @@ end
 --- LoD module helpers (GamePlay/etc.; castbars now load with core)
 
 --- Export the core namespace for optional modules/sub-addons.
-_G.MSUF_NS = _G.MSUF_NS or MSUF
 
 --- Safe helper to load a LoD sub-addon at runtime.
 --- Returns true if the addon is loaded after the call.
-function _G.MSUF_EnsureAddonLoaded(addonName)
+local function MSUF_EnsureAddonLoaded(addonName)
     if type(addonName) ~= "string" or addonName == "" then
         return false
     end
@@ -947,14 +966,16 @@ function _G.MSUF_EnsureAddonLoaded(addonName)
     return IsLoaded()
 end
 
+ExportPublic("MSUF_EnsureAddonLoaded", MSUF_EnsureAddonLoaded)
+
 --- Global UI Scale (combat-safe gate)
 --- Fixes: /reload in combat (or any in-combat scale apply) causing ADDON_ACTION_BLOCKED
 --- by deferring Global UI scale changes until PLAYER_REGEN_ENABLED.
 --- Important: We intentionally wrap MSUF_SetGlobalUiScale in-place so ANY caller becomes
 --- combat-safe without needing to edit every callsite (SlashMenu / Options / etc.).
-function _G.MSUF_InstallGlobalScaleGate()
+local function MSUF_InstallGlobalScaleGate()
     if _G.MSUF_GlobalScaleGateInstalled then return end
-    _G.MSUF_GlobalScaleGateInstalled = true
+    ExportPublic("MSUF_GlobalScaleGateInstalled", true)
 
     local function TryWrap()
         local fn = _G.MSUF_SetGlobalUiScale
@@ -969,22 +990,22 @@ function _G.MSUF_InstallGlobalScaleGate()
 
         --- Preserve raw implementation (first one wins)
         if type(_G.MSUF_SetGlobalUiScale_RAW) ~= "function" then
-            _G.MSUF_SetGlobalUiScale_RAW = fn
+            ExportPublic("MSUF_SetGlobalUiScale_RAW", fn)
         end
 
         --- Create/ensure the deferred-apply frame once.
         if not _G.MSUF_GlobalScaleGateFrame then
             local gf = CreateFrame("Frame")
-            _G.MSUF_GlobalScaleGateFrame = gf
+            ExportPublic("MSUF_GlobalScaleGateFrame", gf)
             gf:RegisterEvent("PLAYER_REGEN_ENABLED")
             gf:SetScript("OnEvent", function()
                 local args = _G.MSUF_PendingGlobalScaleArgs
-                _G.MSUF_PendingGlobalScaleArgs = nil
+                ExportPublic("MSUF_PendingGlobalScaleArgs", nil)
 
                 if not args then return end
                 if InCombatLockdown and InCombatLockdown() then
                     --- Still not safe (edge case): keep pending.
-                    _G.MSUF_PendingGlobalScaleArgs = args
+                    ExportPublic("MSUF_PendingGlobalScaleArgs", args)
                     return
                 end
 
@@ -997,13 +1018,13 @@ function _G.MSUF_InstallGlobalScaleGate()
         end
 
         --- Gate wrapper: defer in combat, else passthrough.
-        _G.MSUF_SetGlobalUiScale_GATED = function(...)
+        local gated = function(...)
             local scale = select(1, ...)
             if scale == nil then return end
 
             if InCombatLockdown and InCombatLockdown() then
                 --- Last-call-wins: overwrite pending args.
-                _G.MSUF_PendingGlobalScaleArgs = { ... }
+                ExportPublic("MSUF_PendingGlobalScaleArgs", { ... })
                 return
             end
 
@@ -1013,7 +1034,8 @@ function _G.MSUF_InstallGlobalScaleGate()
             end
         end
 
-        _G.MSUF_SetGlobalUiScale = _G.MSUF_SetGlobalUiScale_GATED
+        ExportPublic("MSUF_SetGlobalUiScale_GATED", gated)
+        ExportPublic("MSUF_SetGlobalUiScale", gated)
         return true
     end
 
@@ -1022,7 +1044,7 @@ function _G.MSUF_InstallGlobalScaleGate()
 
     if not _G.MSUF_GlobalScaleInstallFrame then
         local f = CreateFrame("Frame")
-        _G.MSUF_GlobalScaleInstallFrame = f
+        ExportPublic("MSUF_GlobalScaleInstallFrame", f)
         f:RegisterEvent("ADDON_LOADED")
         f:RegisterEvent("PLAYER_LOGIN")
         f:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -1037,13 +1059,15 @@ function _G.MSUF_InstallGlobalScaleGate()
     end
 end
 
+ExportPublic("MSUF_InstallGlobalScaleGate", MSUF_InstallGlobalScaleGate)
+
 --- Ensure gate is installed as early as possible (before any C_Timer.After(0) scale applies fire).
 if _G.C_Timer and _G.C_Timer.After then
     _G.C_Timer.After(0, function()
-        _G.MSUF_InstallGlobalScaleGate()
+        MSUF_InstallGlobalScaleGate()
     end)
 else
-    _G.MSUF_InstallGlobalScaleGate()
+    MSUF_InstallGlobalScaleGate()
 end
 
 --- Auto-load Gameplay LoD addon on login when any gameplay feature is enabled.
@@ -1067,7 +1091,7 @@ do
         if g.enableCombatCrosshair == true then need = true end
 
         if need then
-            _G.MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Gameplay")
+            MSUF_EnsureAddonLoaded("MidnightSimpleUnitFrames_Gameplay")
 
             --- Apply immediately so event wiring is active without opening the Gameplay menu.
             local ns2 = _G.MSUF_NS

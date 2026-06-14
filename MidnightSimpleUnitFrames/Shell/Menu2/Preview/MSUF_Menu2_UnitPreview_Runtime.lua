@@ -5,7 +5,6 @@
 
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
 local Runtime = MSUF.UFPreviewRuntime or {}
 MSUF.UFPreviewRuntime = Runtime
 local function ClampRuntimeVisualScale(scale)

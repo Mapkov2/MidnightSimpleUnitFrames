@@ -1,8 +1,13 @@
+-- Menu2 Advanced ClassPower page: builds class-resource, detached power, and player HP controls.
+-- Runtime application is delegated to ClassPower refresh helpers and the shared apply queue.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local AP = M.AdvancedPage or {}
@@ -532,12 +537,12 @@ local function ExecuteQuickSetup()
     if StaticPopup_Show then StaticPopup_Show("MSUF2_CLASSPOWER_QUICK_RESULT", QuickTr(popupText)) end
 end
 _G.MSUF2_ClassPowerQuickSetup = ExecuteQuickSetup
-_G.MSUF_QuickSetup_ResetFirstRun = function()
+ExportPublic("MSUF_QuickSetup_ResetFirstRun", function()
     local db = M.EnsureDB()
     db.general = db.general or {}
     db.general[QUICK_SETUP_FLAG] = nil
     quickSetupFirstRunChecked = false
-end
+end)
 local function MaybeOfferQuickSetup()
     if quickSetupFirstRunChecked or QuickWasOffered() then return end
     quickSetupFirstRunChecked = true

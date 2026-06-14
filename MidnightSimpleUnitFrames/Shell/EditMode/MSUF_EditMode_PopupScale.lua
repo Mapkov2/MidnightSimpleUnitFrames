@@ -1,4 +1,5 @@
 --- MSUF_EditMode_PopupScale.lua - shared bottom-right scale grip for EM2 popups
+-- Handles popup resize UI only; persisted geometry writes stay in EditMode popup owners.
 
 local addonName, MSUF = ...
 local EM2 = _G.MSUF_EM2

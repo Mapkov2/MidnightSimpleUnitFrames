@@ -5,6 +5,11 @@
 --- selection. This file owns the draggable icon frame, copied time text, border
 --- coloring, and short interrupt feedback animation.
 
+local ExportPublic = ((select(2, ...) or _G.MSUF_NS or _G.MSUF or {}).ExportPublic) or function(name, value)
+_G[name] = value
+return value
+end
+
 local e,e=...local i=UIParent
 local l=C_Timer and C_Timer.After
 local r=C_Timer and C_Timer.NewTicker
@@ -160,18 +165,14 @@ local i=false
 local function t(e)n()i=true
 if e then S();r()end
 end
-_G.MSUF_FocusKick_EnsureInitialized=t
-function MSUF_InitFocusKickIcon()t(u())if type(_G.MSUF_FocusKickDriver_ForceUpdate)=="function"then _G.MSUF_FocusKickDriver_ForceUpdate()end
+local function InitFocusKickIcon()t(u())if type(_G.MSUF_FocusKickDriver_ForceUpdate)=="function"then _G.MSUF_FocusKickDriver_ForceUpdate()end
 end
-function MSUF_UpdateFocusKickIconOptions()t(u())if e then r()end
+local function UpdateFocusKickIconOptions()t(u())if e then r()end
 if type(_G.MSUF_FocusKickDriver_ForceUpdate)=="function"then _G.MSUF_FocusKickDriver_ForceUpdate()end
 if o then o()end
 end
-_G.MSUF_FocusKick_SetPreviewEnabled=a
-_G.MSUF_FocusKick_IsPreviewEnabled=function()return c end
-_G.MSUF_FocusKick_UpdateAppearance=r
-_G.MSUF_FocusKick_ApplyTimeTextFont=s
-function _G.MSUF_FocusKick_ApplyCastState(t)n()if not u()then
+local function FocusKick_IsPreviewEnabled()return c end
+local function FocusKick_ApplyCastState(t)n()if not u()then
 if e then
 if e.timeText then e.timeText:SetText("");e.timeText:SetAlpha(0)end
 e:Hide()end
@@ -187,5 +188,14 @@ end
 e.MSUF_sourceCastBar=_G.FocusCastBar or _G.MSUF_FocusCastBar
 h(t.isNotInterruptible==true,t.apiNotInterruptibleRaw)e._msufLastCastState=t
 e:Show()r()m()_()end
-function _G.MSUF_FocusKick_PlayInterruptFeedback()if not u()then return end
+local function FocusKick_PlayInterruptFeedback()if not u()then return end
 S()p()end
+ExportPublic("MSUF_FocusKick_EnsureInitialized", t)
+ExportPublic("MSUF_InitFocusKickIcon", InitFocusKickIcon)
+ExportPublic("MSUF_UpdateFocusKickIconOptions", UpdateFocusKickIconOptions)
+ExportPublic("MSUF_FocusKick_SetPreviewEnabled", a)
+ExportPublic("MSUF_FocusKick_IsPreviewEnabled", FocusKick_IsPreviewEnabled)
+ExportPublic("MSUF_FocusKick_UpdateAppearance", r)
+ExportPublic("MSUF_FocusKick_ApplyTimeTextFont", s)
+ExportPublic("MSUF_FocusKick_ApplyCastState", FocusKick_ApplyCastState)
+ExportPublic("MSUF_FocusKick_PlayInterruptFeedback", FocusKick_PlayInterruptFeedback)

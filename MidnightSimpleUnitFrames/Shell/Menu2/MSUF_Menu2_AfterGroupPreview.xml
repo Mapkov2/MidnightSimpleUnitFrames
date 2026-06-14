@@ -1,4 +1,5 @@
 <Ui xmlns="http://www.blizzard.com/wow/ui/">
+    <!-- Group/advanced pages stay in Shell/Menu2; only shared helpers reduce duplication. -->
     <Script file="Pages\MSUF_Menu2_GroupPreview.lua"/>
     <Script file="Pages\MSUF_Menu2_GroupSpecs.lua"/>
     <Script file="Pages\MSUF_Menu2_Group.lua"/>

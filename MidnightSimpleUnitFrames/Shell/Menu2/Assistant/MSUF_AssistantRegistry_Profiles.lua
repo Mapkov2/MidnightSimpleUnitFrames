@@ -1,10 +1,10 @@
+-- Assistant Profiles registry: exposes profile lifecycle, staging, import/export, and diagnostics.
+-- Destructive or copy actions must remain snapshot-backed and confirmation-gated.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
-
+local ExportPublic = MSUF.ExportPublic or function(name, value) _G[name] = value; return value end
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -146,7 +146,7 @@ function Profile.CharMeta(create)
     if type(global) ~= "table" then
         if not create then return nil end
         global = {}
-        _G.MSUF_GlobalDB = global
+        ExportPublic("MSUF_GlobalDB", global)
     end
     if type(global.char) ~= "table" then
         if not create then return nil end

@@ -4,7 +4,10 @@
 --- should not observe unit events, frame state, profile import payloads, or user text input.
 local addonName, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local LibStub = _G.LibStub
 local CreateFrame = _G.CreateFrame
@@ -45,7 +48,7 @@ local function EnsureGlobalAnalytics(create)
     if type(gdb) ~= "table" then
         if not create then return nil end
         gdb = {}
-        _G.MSUF_GlobalDB = gdb
+        ExportPublic("MSUF_GlobalDB", gdb)
     end
 
     local global = gdb.global
@@ -63,6 +66,8 @@ local function EnsureGlobalAnalytics(create)
     end
 
     if analytics.enabled == nil then
+        -- Default-on matches existing beta telemetry behavior, but the flag remains stored in
+        -- GlobalDB so users/builds can disable it persistently.
         analytics.enabled = true
     end
 
@@ -91,6 +96,8 @@ local function EnsureEventFrame()
         if event == "PLAYER_LOGIN" then
             self:UnregisterEvent("PLAYER_LOGIN")
             if IsInCombat() then
+                -- Login can complete during combat reloads. Defer instead of touching analytics
+                -- libraries while protected state is unstable.
                 QueueAfterCombat()
                 return
             end
@@ -130,6 +137,8 @@ local function GetAnalyticsSession()
     local lib = LibStub("WagoAnalytics", true)
     if not lib then return nil end
 
+    -- WagoAnalytics has shipped multiple registration names; probe them defensively and only
+    -- keep a table result that looks like a session object.
     registerAttempted = true
     local ok, result
     if type(lib.RegisterAddon) == "function" then
@@ -213,6 +222,8 @@ local function CollectSessionSnapshot(target)
     local db = EnsureMSUFDB()
     if not db then return end
 
+    -- Snapshot data is coarse feature/config shape only. Do not include unit state, profile
+    -- import strings, user-entered Assistant text, or frame positions.
     local general = type(db.general) == "table" and db.general or {}
     local gameplay = type(db.gameplay) == "table" and db.gameplay or {}
     local auras3 = type(db.auras3) == "table" and db.auras3 or {}
@@ -369,14 +380,14 @@ function Analytics.HandleSlash(rest)
     end
 end
 
-_G.MSUF_Analytics_HandleSlash = function(rest)
+ExportPublic("MSUF_Analytics_HandleSlash", function(rest)
     Analytics.HandleSlash(rest)
-end
-_G.MSUF_Analytics_SetEnabled = function(enabled, quiet)
+end)
+ExportPublic("MSUF_Analytics_SetEnabled", function(enabled, quiet)
     Analytics.SetEnabled(enabled, quiet)
-end
-_G.MSUF_Analytics_IsEnabled = function()
+end)
+ExportPublic("MSUF_Analytics_IsEnabled", function()
     return Analytics.IsEnabled()
-end
+end)
 
 EnsureEventFrame():RegisterEvent("PLAYER_LOGIN")

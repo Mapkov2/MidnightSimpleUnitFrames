@@ -7,6 +7,13 @@
 --- guarded by combat checks and explicit confirmation.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
+local function PublishCompat(name, value)
+    return ExportPublic(name, value)
+end
 
 local function Tr(text)
     if type(text) ~= "string" then return text end
@@ -108,7 +115,7 @@ local function MSUF_DoFullReset(opts)
 	end
  end
 --- Expose for the Slash Menu (button click = hardware event, safe for ReloadUI)
-_G.MSUF_DoFullReset = MSUF_DoFullReset
+PublishCompat("MSUF_DoFullReset", MSUF_DoFullReset)
 local function MSUF_PrintHelp()
     print(Tr("|cff00ff00MSUF commands:|r"))
     print(Tr("  /msuf help      - Show this help."))
@@ -661,7 +668,7 @@ local function MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, loc)
     MSUF_PositionPlayerInfoFrame(f)
     f:Show()
  end
-local function MSUF_ShowUnitInfoTooltip(unit, fallbackName)
+local function ShowUnitInfoTooltip(unit, fallbackName)
     local f = MSUF_GetPlayerInfoFrame()
     if not UnitExists(unit) then
         f:Hide()
@@ -715,26 +722,25 @@ local function MSUF_ShowUnitInfoTooltip(unit, fallbackName)
 
     MSUF_UnitInfo_ShowFrame(f, nameLine, line2, line3, line4, MSUF_UnitInfo_GetLocationText())
  end
-function MSUF_ShowPlayerInfoTooltip()
-    MSUF_ShowUnitInfoTooltip("player", "Player")
+local function ShowPlayerInfoTooltip()
+    ShowUnitInfoTooltip("player", "Player")
  end
-function MSUF_ShowTargetInfoTooltip()
-    MSUF_ShowUnitInfoTooltip("target", "Target")
+local function ShowTargetInfoTooltip()
+    ShowUnitInfoTooltip("target", "Target")
  end
-function MSUF_ShowFocusInfoTooltip()
-    MSUF_ShowUnitInfoTooltip("focus", "Focus")
+local function ShowFocusInfoTooltip()
+    ShowUnitInfoTooltip("focus", "Focus")
  end
-function MSUF_ShowTargetTargetInfoTooltip()
-    MSUF_ShowUnitInfoTooltip("targettarget", "Target of Target")
+local function ShowTargetTargetInfoTooltip()
+    ShowUnitInfoTooltip("targettarget", "Target of Target")
  end
-function MSUF_ShowFocusTargetInfoTooltip()
-    MSUF_ShowUnitInfoTooltip("focustarget", "Focus Target")
+local function ShowFocusTargetInfoTooltip()
+    ShowUnitInfoTooltip("focustarget", "Focus Target")
  end
-function MSUF_ShowPetInfoTooltip()
-    MSUF_ShowUnitInfoTooltip("pet", "Pet")
+local function ShowPetInfoTooltip()
+    ShowUnitInfoTooltip("pet", "Pet")
  end
-_G.MSUF_ShowUnitInfoTooltip = MSUF_ShowUnitInfoTooltip
-function MSUF_HidePlayerInfoTooltip()
+local function HidePlayerInfoTooltip()
     if MSUF_PlayerInfoFrame then
         --- If the Edit Mode tooltip preview is active, restore the preview
         --- instead of hiding the frame (OnLeave from unit frames must not
@@ -748,6 +754,14 @@ function MSUF_HidePlayerInfoTooltip()
         MSUF_PlayerInfoFrame:Hide()
     end
  end
+PublishCompat("MSUF_ShowUnitInfoTooltip", ShowUnitInfoTooltip)
+PublishCompat("MSUF_ShowPlayerInfoTooltip", ShowPlayerInfoTooltip)
+PublishCompat("MSUF_ShowTargetInfoTooltip", ShowTargetInfoTooltip)
+PublishCompat("MSUF_ShowFocusInfoTooltip", ShowFocusInfoTooltip)
+PublishCompat("MSUF_ShowTargetTargetInfoTooltip", ShowTargetTargetInfoTooltip)
+PublishCompat("MSUF_ShowFocusTargetInfoTooltip", ShowFocusTargetInfoTooltip)
+PublishCompat("MSUF_ShowPetInfoTooltip", ShowPetInfoTooltip)
+PublishCompat("MSUF_HidePlayerInfoTooltip", HidePlayerInfoTooltip)
 Tooltips.GetGeneral = Tooltips.GetGeneral or MSUF_GetTooltipGeneral
 Tooltips.Normalize = Tooltips.Normalize or MSUF_NormalizeTooltipSettings
 Tooltips.Refresh = Tooltips.Refresh or MSUF_RefreshTooltipCache
@@ -781,11 +795,11 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
 
     if provider == TOOLTIP_PROVIDER_MSUF then
         MSUF_ClearTrackedGameTooltip(owner, true)
-        MSUF_ShowUnitInfoTooltip(unit, opts and opts.fallbackName)
+        ShowUnitInfoTooltip(unit, opts and opts.fallbackName)
         return true
     end
 
-    MSUF_HidePlayerInfoTooltip()
+    HidePlayerInfoTooltip()
     local gt = MSUF_AnchorGameTooltip(owner, g, anchor)
     if not gt or type(gt.SetUnit) ~= "function" then return false end
     -- Dedupe: re-hovering the same frame/unit (mouse jitter, or OnEnter
@@ -808,13 +822,15 @@ Tooltips.ShowUnit = Tooltips.ShowUnit or function(owner, unit, opts)
     return true
 end
 Tooltips.HideUnit = Tooltips.HideUnit or function(owner)
-    MSUF_HidePlayerInfoTooltip()
+    HidePlayerInfoTooltip()
     MSUF_ClearTrackedGameTooltip(owner)
 end
 --- [8c6] Removed legacy Options UI relayout functions (Player/Bars).
 --- These were dead/duplicate layout builders superseded by MSUF_Options_Core.lua.
-if not _G.MSUF_SetBlizzardEditModeFromMSUF then
-    function _G.MSUF_SetBlizzardEditModeFromMSUF(active)
+do
+    local SetBlizzardEditModeFromMSUF = _G.MSUF_SetBlizzardEditModeFromMSUF
+    if type(SetBlizzardEditModeFromMSUF) ~= "function" then
+        SetBlizzardEditModeFromMSUF = function(active)
         if InCombatLockdown and InCombatLockdown() then
              return
         end
@@ -826,7 +842,7 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
         if not emf then return end
         if active then
             if not _G.MSUF_BlizzEditModeStartedByMSUF then
-                _G.MSUF_BlizzEditModeStartedByMSUF = true
+                PublishCompat("MSUF_BlizzEditModeStartedByMSUF", true)
             end
             local ok = pcall(function()
                 if type(securecallfunction) == "function" and type(_G.ShowUIPanel) == "function" then
@@ -838,11 +854,11 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
                 end
              end)
             if not ok then
-                _G.MSUF_BlizzEditModeStartedByMSUF = nil
+                PublishCompat("MSUF_BlizzEditModeStartedByMSUF", nil)
             end
         else
             if not _G.MSUF_BlizzEditModeStartedByMSUF then return end
-            _G.MSUF_BlizzEditModeStartedByMSUF = nil
+            PublishCompat("MSUF_BlizzEditModeStartedByMSUF", nil)
             pcall(function()
                 if type(securecallfunction) == "function" and type(emf.ExitEditMode) == "function" then
                     securecallfunction(emf.ExitEditMode, emf)
@@ -857,6 +873,8 @@ if not _G.MSUF_SetBlizzardEditModeFromMSUF then
              end)
         end
      end
+    end
+    PublishCompat("MSUF_SetBlizzardEditModeFromMSUF", SetBlizzardEditModeFromMSUF)
 end
 --- [8c6] Removed PLAYER_LOGIN Options relayout hook (Bars).
 MSUF.MSUF_UpdateAllFonts = MSUF.MSUF_UpdateAllFonts or _G.MSUF_UpdateAllFonts
@@ -970,7 +988,7 @@ do
         g.tooltipPosX = nil
         g.tooltipPosY = nil
     end
-    _G.MSUF_Tooltip_ResetPosition = MSUF_Tooltip_ResetPosition
+    PublishCompat("MSUF_Tooltip_ResetPosition", MSUF_Tooltip_ResetPosition)
 
     local function MSUF_Tooltip_HideMiniPopup()
         if tooltipMiniPopup then tooltipMiniPopup:Hide() end
@@ -1318,8 +1336,8 @@ do
     end
 
     --- Expose for CloseAllPositionPopups and external callers
-    _G.MSUF_Tooltip_HideEditPreview = MSUF_Tooltip_HideEditPreview
-    _G.MSUF_Tooltip_ShowEditPreview = MSUF_Tooltip_ShowEditPreview
+    PublishCompat("MSUF_Tooltip_HideEditPreview", MSUF_Tooltip_HideEditPreview)
+    PublishCompat("MSUF_Tooltip_ShowEditPreview", MSUF_Tooltip_ShowEditPreview)
 
     --- Register as AnyEditMode listener (fires on MSUF and/or Blizzard Edit Mode transitions).
     if _G.MSUF_RegisterAnyEditModeListener then

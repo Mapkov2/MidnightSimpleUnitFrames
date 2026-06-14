@@ -2,6 +2,12 @@
 -- This file is intentionally compact legacy code that creates draggable player/target/focus
 -- preview bars for edit-mode/Menu2. Keep new behavior in the shared castbar preview helpers
 -- where possible, and preserve these globals for compatibility.
+local addonName, MSUF = ...
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+_G[name]=value
+return value
+end
 local function _(e)local t=_G.MSUF_NS
 if type(e)~="string"then return e end
 if type(t)=="table"and type(t.Translate)=="function"then return t.Translate(e)end
@@ -44,9 +50,9 @@ elseif e=="focus"then MSUF_FocusCastbarPreview=t end
 if type(_G.MSUF_SetupCastbarPreviewEditHandlers)=="function"then _G.MSUF_SetupCastbarPreviewEditHandlers(t,e)end
 return t
 end
-function MSUF_CreatePlayerCastbarPreview()return s("player")end
-function MSUF_CreateTargetCastbarPreview()return s("target")end
-function MSUF_CreateFocusCastbarPreview()return s("focus")end
+local function MSUF_CreatePlayerCastbarPreview()return s("player")end
+local function MSUF_CreateTargetCastbarPreview()return s("target")end
+local function MSUF_CreateFocusCastbarPreview()return s("focus")end
 local function i(t,e)if not e then return end
 local a,s=r(),o[t]local r,n=u(t,e)if type(_G.MSUF_ApplyPlayerCastbarSizeAndLayout)=="function"then _G.MSUF_ApplyPlayerCastbarSizeAndLayout(e,a,r,n)else e:SetSize(r or 250,n or 18)end
 local n=tonumber(a[t=="player"and"castbarPlayerTimeOffsetX"or t=="target"and"castbarTargetTimeOffsetX"or"castbarFocusTimeOffsetX"])or tonumber(a.castbarPlayerTimeOffsetX)or-2
@@ -62,9 +68,9 @@ e:ClearAllPoints()if a[s.detached]then e:SetPoint("CENTER",o,"CENTER",n,r)elseif
 if type(_G.MSUF_HardSyncCastbarPreview)=="function"then
 _G.MSUF_HardSyncCastbarPreview(e,t=="player"and _G.MSUF_PlayerCastbar or t=="target"and _G.MSUF_TargetCastbar or _G.MSUF_FocusCastbar)end
 end
-function MSUF_PositionPlayerCastbarPreview()i("player",_G.MSUF_PlayerCastbarPreview or s("player"))end
-function MSUF_PositionTargetCastbarPreview()i("target",_G.MSUF_TargetCastbarPreview or s("target"))end
-function MSUF_PositionFocusCastbarPreview()i("focus",_G.MSUF_FocusCastbarPreview or s("focus"))end
+local function MSUF_PositionPlayerCastbarPreview()i("player",_G.MSUF_PlayerCastbarPreview or s("player"))end
+local function MSUF_PositionTargetCastbarPreview()i("target",_G.MSUF_TargetCastbarPreview or s("target"))end
+local function MSUF_PositionFocusCastbarPreview()i("focus",_G.MSUF_FocusCastbarPreview or s("focus"))end
 local function u(e,t)if not e then return end
 e.MSUF_testMode,e._msufTestActive,e.MSUF_testStart,e.MSUF_testDur=nil,nil,nil,nil
 e:SetScript("OnUpdate",nil)if e.statusBar and e.statusBar.SetMinMaxValues then e.statusBar:SetMinMaxValues(0,1);e.statusBar:SetValue(0.5)end
@@ -103,40 +109,44 @@ t=_G[a.name]or s(e)end
 if not n then u(t,e);return end
 i(e,t)S(t,e)if type(_G.MSUF_UpdateCastbarVisuals)=="function"then _G.MSUF_UpdateCastbarVisuals()end
 end
-function _G.MSUF_SetPlayerCastbarTestMode(t,e)a("player",t,e)end
-function _G.MSUF_SetTargetCastbarTestMode(t,e)a("target",t,e)end
-function _G.MSUF_SetFocusCastbarTestMode(e,t)a("focus",e,t)end
+local function MSUF_SetPlayerCastbarTestMode(t,e)a("player",t,e)end
+local function MSUF_SetTargetCastbarTestMode(t,e)a("target",t,e)end
+local function MSUF_SetFocusCastbarTestMode(e,t)a("focus",e,t)end
+ExportPublic("MSUF_SetPlayerCastbarTestMode", MSUF_SetPlayerCastbarTestMode)
+ExportPublic("MSUF_SetTargetCastbarTestMode", MSUF_SetTargetCastbarTestMode)
+ExportPublic("MSUF_SetFocusCastbarTestMode", MSUF_SetFocusCastbarTestMode)
 local function l(a)local e=tonumber(_G.MAX_BOSS_FRAMES)or 5
 if e<1 or e>12 then e=5 end
 if _G.MSUF_BossCastbarPreview then a(_G.MSUF_BossCastbarPreview,1)end
 for t=2,e do local e=_G["MSUF_BossCastbarPreview"..t];if e then a(e,t)end end
 end
-function _G.MSUF_SetBossCastbarTestMode(e,a)local t=r()if e and n()then e=false end
+local function MSUF_SetBossCastbarTestMode(e,a)local t=r()if e and n()then e=false end
 if not a then t.bossCastbarTestMode=e and true or false end
 local a=_G.MSUF_UnitEditModeActive==true and t.bossCastbarTestMode==true
 if not n()and type(_G.MSUF_UpdateBossCastbarPreview)=="function"then _G.MSUF_UpdateBossCastbarPreview()end
 l(function(e)if a then e.unit="boss";e._msufTestShowTime=t.showBossCastTime~=false;S(e,"boss")else u(e,"boss");if e.statusBar and e.statusBar.GetStatusBarTexture then local t=e.statusBar:GetStatusBarTexture();if t then t:SetAlpha(0)end;e.statusBar.MSUF_hideFillTexture=true end end
 end)end
+ExportPublic("MSUF_SetBossCastbarTestMode", MSUF_SetBossCastbarTestMode)
 local function d()local e=r()if not e.castbarPlayerPreviewEnabled then return false end
 if MSUF_DB.boss and MSUF_DB.boss.enabled==false then return false end
 local t=_G.MSUF_ShouldUseMSUFCastbar
 return type(t)=="function"and t("boss",e)==true or e.enableBossCastbar~=false
 end
 local e=false
-function MSUF_RefreshBossPreview()if n()then e=true;return end
+local function MSUF_RefreshBossPreview()if n()then e=true;return end
 if d()and type(_G.MSUF_UpdateBossCastbarPreview)=="function"then _G.MSUF_UpdateBossCastbarPreview()end
 end
 local function S()e=true end
 local function _()if e then e=false;MSUF_RefreshBossPreview()end
 end
 local function u()if _G.MSUF_BossPreviewEventDriver then return end
-_G.MSUF_BossPreviewEventDriver=true
+ExportPublic("MSUF_BossPreviewEventDriver", true)
 local e=_G.MSUF_EventBus_Register
 if type(e)=="function"then
 local t={"INSTANCE_ENCOUNTER_ENGAGE_UNIT","ENCOUNTER_START","ENCOUNTER_END","PLAYER_ENTERING_WORLD","GROUP_ROSTER_UPDATE"}for a=1,#t do e(t[a],"MSUF_BOSS_PREVIEW",MSUF_RefreshBossPreview)end
 e("PLAYER_REGEN_DISABLED","MSUF_BOSS_PREVIEW_COMBAT_START",S)e("PLAYER_REGEN_ENABLED","MSUF_BOSS_PREVIEW_COMBAT_END",_)end
 end
-function MSUF_SetupBossCastbarPreviewEditMode()if n()or not d()then return end
+local function MSUF_SetupBossCastbarPreviewEditMode()if n()or not d()then return end
 if type(_G.MSUF_UpdateBossCastbarPreview)=="function"and not _G.MSUF_BossCastbarPreview then _G.MSUF_UpdateBossCastbarPreview()end
 l(function(e)if e.statusBar and e.statusBar.GetStatusBarTexture then local t=e.statusBar:GetStatusBarTexture();if t then t:SetAlpha(0)end;e.statusBar.MSUF_hideFillTexture=true end
 if type(_G.MSUF_SetupCastbarPreviewEditHandlers)=="function"then _G.MSUF_SetupCastbarPreviewEditHandlers(e,"boss")end
@@ -153,7 +163,7 @@ if not e.MSUF_HideHooked and hooksecurefunc then e.MSUF_HideHooked=true;hooksecu
 end
 end
 end
-function MSUF_UpdatePlayerCastbarPreview()local e=r()if not e.castbarPlayerPreviewEnabled then
+local function MSUF_UpdatePlayerCastbarPreview()local e=r()if not e.castbarPlayerPreviewEnabled then
 for t,e in pairs(o)do local e=_G[e.name];if e then e:Hide()end;a(t,false,true)end
 if type(_G.MSUF_SetBossCastbarTestMode)=="function"then _G.MSUF_SetBossCastbarTestMode(false,true)end
 if _G.MSUF_BossCastbarPreview then _G.MSUF_BossCastbarPreview:Hide()end
@@ -166,29 +176,29 @@ if not n()and type(_G.MSUF_UpdateBossCastbarPreview)=="function"then _G.MSUF_Upd
 if type(_G.MSUF_UpdateCastbarVisuals)=="function"then _G.MSUF_UpdateCastbarVisuals()end
 if type(_G.MSUF_UpdateCastbarTextures)=="function"then _G.MSUF_UpdateCastbarTextures()end
 end
-function MSUF_PositionCastbarPreviewUnit(e)if _G.MSUF_UnitEditModeActive~=true or not r().castbarPlayerPreviewEnabled then return false end
+local function MSUF_PositionCastbarPreviewUnit(e)if _G.MSUF_UnitEditModeActive~=true or not r().castbarPlayerPreviewEnabled then return false end
 if o[e]then local t=s(e);i(e,t);if t then t:Show();return true end end
 if(e=="boss"or tostring(e):match("^boss%d*$"))and not n()and type(_G.MSUF_UpdateBossCastbarPreview)=="function"then _G.MSUF_UpdateBossCastbarPreview();return true end
 return false
 end
-function MSUF_SyncBossCastbarSliders()local e=r()local e={MSUF_CastbarBossXOffsetSlider=e.bossCastbarOffsetX or 0,MSUF_CastbarBossYOffsetSlider=e.bossCastbarOffsetY or 0,MSUF_CastbarBossWidthSlider=e.bossCastbarWidth or 240,MSUF_CastbarBossHeightSlider=e.bossCastbarHeight or 18,}for e,t in pairs(e)do
+local function MSUF_SyncBossCastbarSliders()local e=r()local e={MSUF_CastbarBossXOffsetSlider=e.bossCastbarOffsetX or 0,MSUF_CastbarBossYOffsetSlider=e.bossCastbarOffsetY or 0,MSUF_CastbarBossWidthSlider=e.bossCastbarWidth or 240,MSUF_CastbarBossHeightSlider=e.bossCastbarHeight or 18,}for e,t in pairs(e)do
 local e=_G[e]if e and type(MSUF_SetSliderValueSilent)=="function"and type(MSUF_ClampToSlider)=="function"then
 MSUF_SetSliderValueSilent(e,MSUF_ClampToSlider(e,tonumber(t)or 0))end
 end
 end
-_G.MSUF_HideBlizzardPlayerCastbar=l
-_G.MSUF_CreatePlayerCastbarPreview=_G.MSUF_CreatePlayerCastbarPreview or MSUF_CreatePlayerCastbarPreview
-_G.MSUF_CreateTargetCastbarPreview=_G.MSUF_CreateTargetCastbarPreview or MSUF_CreateTargetCastbarPreview
-_G.MSUF_CreateFocusCastbarPreview=_G.MSUF_CreateFocusCastbarPreview or MSUF_CreateFocusCastbarPreview
-_G.MSUF_PositionPlayerCastbarPreview=MSUF_PositionPlayerCastbarPreview
-_G.MSUF_PositionTargetCastbarPreview=MSUF_PositionTargetCastbarPreview
-_G.MSUF_PositionFocusCastbarPreview=MSUF_PositionFocusCastbarPreview
-_G.MSUF_PositionCastbarPreviewUnit=MSUF_PositionCastbarPreviewUnit
-_G.MSUF_UpdatePlayerCastbarPreview=MSUF_UpdatePlayerCastbarPreview
-_G.MSUF_SetupBossCastbarPreviewEditMode=MSUF_SetupBossCastbarPreviewEditMode
-_G.MSUF_SyncBossCastbarSliders=MSUF_SyncBossCastbarSliders
+ExportPublic("MSUF_HideBlizzardPlayerCastbar", l)
+ExportPublic("MSUF_CreatePlayerCastbarPreview", _G.MSUF_CreatePlayerCastbarPreview or MSUF_CreatePlayerCastbarPreview)
+ExportPublic("MSUF_CreateTargetCastbarPreview", _G.MSUF_CreateTargetCastbarPreview or MSUF_CreateTargetCastbarPreview)
+ExportPublic("MSUF_CreateFocusCastbarPreview", _G.MSUF_CreateFocusCastbarPreview or MSUF_CreateFocusCastbarPreview)
+ExportPublic("MSUF_PositionPlayerCastbarPreview", MSUF_PositionPlayerCastbarPreview)
+ExportPublic("MSUF_PositionTargetCastbarPreview", MSUF_PositionTargetCastbarPreview)
+ExportPublic("MSUF_PositionFocusCastbarPreview", MSUF_PositionFocusCastbarPreview)
+ExportPublic("MSUF_PositionCastbarPreviewUnit", MSUF_PositionCastbarPreviewUnit)
+ExportPublic("MSUF_UpdatePlayerCastbarPreview", MSUF_UpdatePlayerCastbarPreview)
+ExportPublic("MSUF_SetupBossCastbarPreviewEditMode", MSUF_SetupBossCastbarPreviewEditMode)
+ExportPublic("MSUF_SyncBossCastbarSliders", MSUF_SyncBossCastbarSliders)
 u()if hooksecurefunc and type(_G.MSUF_UpdateBossCastbarPreview)=="function"and not _G.MSUF_BossPreviewSetupHooked then
-_G.MSUF_BossPreviewSetupHooked=true
+ExportPublic("MSUF_BossPreviewSetupHooked", true)
 hooksecurefunc("MSUF_UpdateBossCastbarPreview",function()if not n()then MSUF_SetupBossCastbarPreviewEditMode()end end)end
 
 do
@@ -211,7 +221,7 @@ if frame.latencyBar and frame.latencyBar.Hide then frame.latencyBar:Hide()end
 if frame.Hide then frame:Hide()end
 end
 
-function _G.MSUF_HideAllCastbarPreviews()
+local function MSUF_HideAllCastbarPreviews()
 local db=_G.MSUF_DB
 local g=db and db.general
 if g then
@@ -233,4 +243,5 @@ for i=2,maxBoss do
 MSUF_HideCastbarPreviewFrame(_G["MSUF_BossCastbarPreview"..i])
 end
 end
+ExportPublic("MSUF_HideAllCastbarPreviews", MSUF_HideAllCastbarPreviews)
 end

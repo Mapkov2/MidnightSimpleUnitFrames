@@ -8,7 +8,6 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
-_G.MSUF_NS = MSUF
 _G.MSUF = MSUF
 
 local UF = MSUF.UF
@@ -35,10 +34,32 @@ local max = math.max
 local floor = math.floor
 local GetTime = _G.GetTime
 local issecretvalue = _G.issecretvalue or function(_) return false end
-local IsUnitToken = UF.IsUnitToken
-local ReadConnectedCached = UF.ReadConnectedCached
-local ReadDeadCached = UF.ReadDeadCached
-local Clamp01 = UF.Clamp01
+local IsUnitToken = UF.IsUnitToken or function(unit)
+  return issecretvalue(unit) ~= true and type(unit) == "string" and unit ~= ""
+end
+local ReadConnectedCached = UF.ReadConnectedCached or function(_, unit)
+  if not UnitIsConnected then return true, true end
+  local connected = UnitIsConnected(unit)
+  if issecretvalue(connected) == true or connected == nil then return true, false end
+  return connected == true or connected == 1, true
+end
+local ReadDeadCached = UF.ReadDeadCached or function(_, unit)
+  if not (_G.UnitIsDeadOrGhost or _G.UnitIsDead) then return false, true end
+  local dead = _G.UnitIsDeadOrGhost and _G.UnitIsDeadOrGhost(unit) or nil
+  if (issecretvalue(dead) == true or dead == nil) and _G.UnitIsDead then
+    dead = _G.UnitIsDead(unit)
+  end
+  if issecretvalue(dead) == true or dead == nil then return false, false end
+  return dead == true or dead == 1, true
+end
+local Clamp01 = UF.Clamp01 or function(value, fallback)
+  value = tonumber(value)
+  if value == nil then value = fallback end
+  value = value or 0
+  if value < 0 then return 0 end
+  if value > 1 then return 1 end
+  return value
+end
 
 local EMPTY_EVENTS = {}
 local VISUAL_HEALTH_EVENTS = { "UNIT_HEALTH", "UNIT_MAXHEALTH" }

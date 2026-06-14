@@ -1,10 +1,10 @@
+-- Assistant Castbars registry: maps natural-language controls to castbar settings/actions.
+-- Registry writes must stay compatible with live castbar runtime and preview refresh helpers.
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A

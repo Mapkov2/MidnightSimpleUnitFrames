@@ -1,5 +1,9 @@
 local _, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 -- Gameplay feature runtime.
 -- Coordinates optional gameplay overlays such as combat timer, crosshair, totem/statue
@@ -133,6 +137,8 @@ end
 
 local function SetAltDragMouse(frame, enabled, locked, clickThrough)
     if not frame then return end
+    -- Click-through helpers should only catch the mouse while explicitly draggable. Alt-gated
+    -- mouse enablement keeps gameplay overlays from eating normal clicks.
     if frame._msufDragging then
         frame:EnableMouse(true)
     elseif not enabled or locked then
@@ -222,6 +228,8 @@ local RequestCrosshairRangeRefresh
 local function ResolveCrosshairRangeSpellID(g)
     if not g then return 0 end
 
+    -- Resolution is ordered from most explicit to broad fallback so per-spec/per-class helper
+    -- settings do not override a user-selected spell ID.
     local spellID = tonumber(g.crosshairRangeSpellID) or 0
     if spellID > 0 then return spellID end
 
@@ -1543,7 +1551,7 @@ do
         didApply = true
 
         if type(MSUF.MSUF_RequestGameplayApply) == "function" then
-            _G.MSUF_RequestGameplayApply = MSUF.MSUF_RequestGameplayApply
+            ExportPublic("MSUF_RequestGameplayApply", MSUF.MSUF_RequestGameplayApply)
         end
         if type(GameplayDefaults) == "function" then GameplayDefaults() end
         if UpdateSubRogueCache then UpdateSubRogueCache() end

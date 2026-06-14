@@ -7,7 +7,11 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
+
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+  _G[name] = value
+  return value
+end
 
 local EM2 = _G.MSUF_EM2
 if not EM2 or not EM2.Registry then return end
@@ -84,6 +88,32 @@ local function ConfigLocked()
     return _G.MSUF_IsConfigCombatLocked() and true or false
   end
   return (InCombatLockdown and InCombatLockdown()) and true or false
+end
+
+local function GroupGeometryMask(gf)
+  return (gf and (gf.DIRTY_GEOMETRY or gf.DIRTY_LAYOUT or gf.DIRTY_VISUAL)) or nil
+end
+
+local function RefreshGroupGeometry(gf)
+  if not gf or ConfigLocked() then return false end
+  if type(gf.RefreshGeometry) == "function" then
+    return gf.RefreshGeometry()
+  end
+  if type(gf.RefreshAll) == "function" then
+    return gf.RefreshAll()
+  end
+  if type(gf.RefreshVisuals) == "function" then
+    return gf.RefreshVisuals(nil, GroupGeometryMask(gf))
+  end
+  return false
+end
+
+local function RefreshGroupBounds(gf)
+  if not gf or ConfigLocked() then return false end
+  if type(gf.MarkAllDirty) == "function" then
+    return gf.MarkAllDirty(GroupGeometryMask(gf))
+  end
+  return RefreshGroupGeometry(gf)
 end
 
 local function ShowConfigLock()
@@ -686,11 +716,7 @@ local function ShowPreviewOnly()
       gf.UpdateGroupVisibility()
     end
   else
-    if type(gf.RefreshAll) == "function" and not ConfigLocked() then
-      gf.RefreshAll()
-    elseif type(gf.RefreshVisuals) == "function" and not ConfigLocked() then
-      gf.RefreshVisuals()
-    end
+    RefreshGroupGeometry(gf)
   end
 
   SyncAllContainers()
@@ -760,19 +786,20 @@ local function NudgePreviewKind(kind, dx, dy)
   SyncContainer(kind)
   if gf and HasNativePreviewAPI(gf) and gf.RefreshPreviewLayout then
     gf.RefreshPreviewLayout(kind)
-  elseif gf and gf.RefreshAll then
-    gf.RefreshAll()
+  elseif gf then
+    RefreshGroupGeometry(gf)
   end
   if EM2.Movers and EM2.Movers.SyncAll then EM2.Movers.SyncAll() end
   RefreshGFPositionUI(kind)
   return true
 end
 
-function _G.MSUF_GF_EM2_NudgePreview(kind, dx, dy)
+local function GF_EM2_NudgePreview(kind, dx, dy)
   return NudgePreviewKind(kind, dx, dy)
 end
+ExportPublic("MSUF_GF_EM2_NudgePreview", GF_EM2_NudgePreview)
 
-function _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind, source)
+local function GF_EM2_SetPreviewNudgeTarget(kind, source)
   kind = NormalizeKind(kind)
   local key = kind and KIND_TO_KEY[kind]
   if not key then return end
@@ -791,8 +818,9 @@ function _G.MSUF_GF_EM2_SetPreviewNudgeTarget(kind, source)
     })
   end
 end
+ExportPublic("MSUF_GF_EM2_SetPreviewNudgeTarget", GF_EM2_SetPreviewNudgeTarget)
 
-function _G.MSUF_GF_EM2_SetActivePreviewKind(kind)
+local function GF_EM2_SetActivePreviewKind(kind)
   _activePreviewKind = NormalizeKind(kind)
   local gf = GF()
   if gf and type(gf.EM2_SetActivePreviewKind) == "function" then
@@ -802,6 +830,7 @@ function _G.MSUF_GF_EM2_SetActivePreviewKind(kind)
     ShowPreviewOnly()
   end
 end
+ExportPublic("MSUF_GF_EM2_SetActivePreviewKind", GF_EM2_SetActivePreviewKind)
 
 local function EnterEditMode()
   if _em2Active then return end
@@ -830,8 +859,8 @@ local function ExitEditMode()
     if _popups[kind] then _popups[kind]:Hide() end
   end
 
-  if gf and type(gf.RefreshAll) == "function" and not ConfigLocked() then
-    gf.RefreshAll()
+  if gf then
+    RefreshGroupGeometry(gf)
   end
 end
 
@@ -868,7 +897,7 @@ local function InstallStateHooks()
   end
 
   if type(_G.MSUF_SetMSUFEditModeDirect) == "function" and not _G.MSUF_GF_EM2_DirectHooked then
-    _G.MSUF_GF_EM2_DirectHooked = true
+    ExportPublic("MSUF_GF_EM2_DirectHooked", true)
     hooksecurefunc("MSUF_SetMSUFEditModeDirect", function(active)
       if active then EnterEditMode() else ExitEditMode() end
     end)
@@ -960,7 +989,7 @@ local function InstallRuntimeHooks()
       RefreshEditModePreviewAfterRuntimeChange()
       return ret
     end
-    _G.MSUF_GF_RefreshVisuals = gf.RefreshVisuals
+    ExportPublic("MSUF_GF_RefreshVisuals", gf.RefreshVisuals)
   end
 
   local origRebuildAll = gf.RebuildAll
@@ -974,7 +1003,7 @@ local function InstallRuntimeHooks()
       end
       return ret
     end
-    _G.MSUF_GF_RebuildAll = gf.RebuildAll
+    ExportPublic("MSUF_GF_RebuildAll", gf.RebuildAll)
   end
 end
 
@@ -1108,15 +1137,9 @@ local function RefreshAfterPopupApply(mode)
   local gf = GF()
   if not gf then return end
 
-  if gf.MarkAllDirty then
-    gf.MarkAllDirty(gf.DIRTY_ALL or 0x3F)
-  elseif type(gf.RefreshAll) == "function" and not ConfigLocked() then
-    gf.RefreshAll()
-  elseif type(gf.RebuildAll) == "function" and not ConfigLocked() then
-    gf.RebuildAll()
-  elseif type(gf.RefreshVisuals) == "function" then
-    gf.RefreshVisuals()
-  end
+  -- Group popups edit bounds only. Route them through the geometry dirty path
+  -- so Auras3 config and text/color-only runtime work are not swept every time.
+  RefreshGroupBounds(gf)
 
   if _em2Active then
     if _previewShownByEM2 and HasNativePreviewAPI(gf) then
@@ -1155,7 +1178,7 @@ local function GroupSectionForPage(pageKey, component)
   return GROUP_PAGE_SECTION[pageKey] or "layout"
 end
 
-function _G.MSUF_GF_EM2_ResetPosition(kind)
+local function GF_EM2_ResetPosition(kind)
   kind = NormalizeKind(kind)
   if not kind then return false end
   if BlockConfigLocked() then return true end
@@ -1176,6 +1199,7 @@ function _G.MSUF_GF_EM2_ResetPosition(kind)
   end
   return true
 end
+ExportPublic("MSUF_GF_EM2_ResetPosition", GF_EM2_ResetPosition)
 
 local function BuildGFPopup(mode)
   local gf = GF()
@@ -1248,7 +1272,7 @@ local function BuildGFPopup(mode)
     if EM2.Focus and EM2.Focus.SetSelection then
       EM2.Focus.SetSelection(key, component, nil, { source = "group-popup", menu = false })
     end
-    _G.MSUF_EM2_MenuFocusRequest = {
+    ExportPublic("MSUF_EM2_MenuFocusRequest", {
       key = key,
       component = component,
       pageKey = pageKey,
@@ -1256,7 +1280,7 @@ local function BuildGFPopup(mode)
       source = "group-popup",
       explicit = true,
       changedAt = GetTime and GetTime() or 0,
-    }
+    })
     if M then
       M.gfScope = mode
       if type(M.PersistMenuStateValue) == "function" then M.PersistMenuStateValue("gfScope", mode) end
@@ -1361,27 +1385,32 @@ local function HideGFPopup(mode)
   if C_Timer and C_Timer.After then C_Timer.After(0, RefreshFocus) else RefreshFocus() end
 end
 
-_G.MSUF_EM2_ShowGFPopup = ShowGFPopup
-_G.MSUF_EM2_HideGFPopup = HideGFPopup
-_G.MSUF_EM2_SyncGFPopups = function()
+local function SyncGFPopups()
   for _, popup in pairs(_popups) do
     if popup and popup.IsShown and popup:IsShown() and popup.Sync then
       popup.Sync()
     end
   end
 end
-_G.MSUF_EM2_GFPopupIsOpen = function()
+
+local function GFPopupIsOpen()
   for _, popup in pairs(_popups) do
     if popup and popup.IsShown and popup:IsShown() then return true end
   end
   return false
 end
 
-_G.MSUF_GF_EM2_ShowPreview = ShowPreviewOnly
-_G.MSUF_GF_EM2_HidePreview = HidePreviewOnly
-_G.MSUF_GF_EM2_IsPreviewShown = function()
+local function IsPreviewShown()
   return _previewShownByEM2 == true
 end
+
+ExportPublic("MSUF_EM2_ShowGFPopup", ShowGFPopup)
+ExportPublic("MSUF_EM2_HideGFPopup", HideGFPopup)
+ExportPublic("MSUF_EM2_SyncGFPopups", SyncGFPopups)
+ExportPublic("MSUF_EM2_GFPopupIsOpen", GFPopupIsOpen)
+ExportPublic("MSUF_GF_EM2_ShowPreview", ShowPreviewOnly)
+ExportPublic("MSUF_GF_EM2_HidePreview", HidePreviewOnly)
+ExportPublic("MSUF_GF_EM2_IsPreviewShown", IsPreviewShown)
 
 local init = CreateFrame("Frame")
 init:RegisterEvent("PLAYER_LOGIN")

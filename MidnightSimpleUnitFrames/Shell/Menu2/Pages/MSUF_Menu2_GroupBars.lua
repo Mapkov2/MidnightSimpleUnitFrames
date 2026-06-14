@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 Group Bars page.
 -- Builds party/raid health, power, range, dispel overlay, and text controls for the selected
@@ -10,6 +9,7 @@ _G.MSUF2 = M
 local W = M.Widgets
 local T = M.Theme
 local GP = M.GroupPage or {}
+local UnitSectionShared = M.UnitSectionsShared or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
@@ -332,35 +332,9 @@ local function BuildGFBars(ctx)
         if key ~= "name" and key ~= "hp" and key ~= "power" and key ~= "advanced" then key = "name" end
         return key
     end
-    M.gfTextSlotSelection = M.gfTextSlotSelection or {}
-    M.gfTextMoveTogether = M.gfTextMoveTogether or {}
-    local function CurrentSlot(kind)
-        local scope = CurrentScope()
-        local byScope = M.gfTextSlotSelection[scope]
-        local slot = byScope and byScope[kind] or "center"
-        if slot ~= "left" and slot ~= "center" and slot ~= "right" then slot = "center" end
-        return slot
-    end
-    local function SetCurrentSlot(kind, slot)
-        local scope = CurrentScope()
-        M.gfTextSlotSelection[scope] = M.gfTextSlotSelection[scope] or {}
-        M.gfTextSlotSelection[scope][kind] = slot or "center"
-    end
-    local function SlotOffsetKeys(kind)
-        return M.TextSlotOffsetKeys(kind, CurrentSlot(kind))
-    end
-    local function MoveTogether(kind)
-        local scope = CurrentScope()
-        local byScope = M.gfTextMoveTogether[scope]
-        local value = byScope and byScope[kind]
-        if value == nil then return true end
-        return value == true
-    end
-    local function SetMoveTogether(kind, value)
-        local scope = CurrentScope()
-        M.gfTextMoveTogether[scope] = M.gfTextMoveTogether[scope] or {}
-        M.gfTextMoveTogether[scope][kind] = value ~= false
-    end
+    local textSlotState = UnitSectionShared.MakeTextSlotState(M, CurrentScope, "gfTextSlotSelection", "gfTextMoveTogether")
+    local CurrentSlot, SetCurrentSlot, SlotOffsetKeys = textSlotState.CurrentSlot, textSlotState.SetCurrentSlot, textSlotState.SlotOffsetKeys
+    local MoveTogether, SetMoveTogether = textSlotState.MoveTogether, textSlotState.SetMoveTogether
     local refreshTextControls
     local function CurrentScopeKey()
         local scope = CurrentScope()
@@ -430,34 +404,24 @@ local function BuildGFBars(ctx)
         scope = tostring(scope)
         return scope:sub(1, 1):upper() .. scope:sub(2)
     end
-    local function BadgeValue(value)
-        return tostring(value or ""):gsub("%s*/%s*", " + ")
-    end
+    local BadgeValue = UnitSectionShared.TextBadgeValue
+    local GF_TEXT_SUMMARY_SLOTS = {
+        hp = {
+            { "right", "textRight", "NONE" },
+            { "center", "textCenter", "PERCENT" },
+            { "left", "textLeft", "NONE" },
+        },
+        power = {
+            { "right", "powerTextRight", "CURPERCENT" },
+            { "center", "powerTextCenter", "NONE" },
+            { "left", "powerTextLeft", "NONE" },
+        },
+    }
     local function TextSlotSummary(kind)
         local scope = CurrentScope()
-        local slots
-        if kind == "power" then
-            slots = {
-                { "right", "powerTextRight", "CURPERCENT" },
-                { "center", "powerTextCenter", "NONE" },
-                { "left", "powerTextLeft", "NONE" },
-            }
-        else
-            slots = {
-                { "right", "textRight", "NONE" },
-                { "center", "textCenter", "PERCENT" },
-                { "left", "textLeft", "NONE" },
-            }
-        end
-        for i = 1, #slots do
-            local slot = slots[i]
-            local value = Val(scope, slot[2], slot[3])
-            if value and value ~= "NONE" then
-                local slotText = slot[1]:sub(1, 1):upper() .. slot[1]:sub(2)
-                return slotText .. ": " .. BadgeValue(OptionText(TEXT_MODES, value))
-            end
-        end
-        return "No slot text"
+        return UnitSectionShared.TextSlotSummary(kind, GF_TEXT_SUMMARY_SLOTS, function(slot)
+            return Val(scope, slot[2], slot[3])
+        end, TEXT_MODES, OptionText)
     end
     local function UpdateTextHeaderBadges(tab, nameOn, hpOn, powerOn)
         local scope = CurrentScope()
@@ -490,17 +454,11 @@ local function BuildGFBars(ctx)
         SetSectionBadgesAndStatus(text, badges)
     end
     local function PreviewText(parent, textValue, x, y, width)
-        W.Text(parent, "Preview", x, y, width, T.colors.dim)
-        local value = T.Font(parent, "GameFontNormalSmall", textValue, T.colors.text)
-        value:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 20)
-        value:SetWidth(width or 220)
-        value:SetJustifyH("LEFT")
+        local _, value = UnitSectionShared.PreviewText(parent, textValue, x, y, width, T.colors.dim)
         return value
     end
     local tabFrames = {}
-    local function TextCard(parent, title, subtitle, x, y, width, height)
-        return W.ControlCard(parent, title, subtitle, x, y, width, height)
-    end
+    local TextCard = UnitSectionShared.TextCard
     local function IsPowerTextEnabled()
         local gf = GF()
         if gf and type(gf.IsPowerTextEnabled) == "function" then return gf.IsPowerTextEnabled(CurrentScope(), Conf(CurrentScope())) and true or false end

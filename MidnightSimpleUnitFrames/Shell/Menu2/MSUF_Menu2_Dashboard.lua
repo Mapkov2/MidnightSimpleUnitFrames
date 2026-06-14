@@ -1,8 +1,13 @@
+-- Menu2 dashboard: builds dashboard panels, summaries, and launcher actions.
+-- UI construction stays here; profile/runtime mutations route through shared Menu2 or Assistant helpers.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local T = M.Theme
 local W = M.Widgets
 
@@ -345,7 +350,7 @@ local function BuildDashboardUX(ctx)
         if type(_G.MSUF_ShowCopyLink) == "function" then _G.MSUF_ShowCopyLink("Wago MSUF Profiles", "https://wago.io/search/imports/wow/msuf") end
     end
     local function DashboardGlobalState()
-        _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
+        ExportPublic("MSUF_GlobalDB", _G.MSUF_GlobalDB or {})
         local gdb = _G.MSUF_GlobalDB
         gdb.global = (type(gdb.global) == "table") and gdb.global or {}
         gdb.global.dashboard = (type(gdb.global.dashboard) == "table") and gdb.global.dashboard or {}

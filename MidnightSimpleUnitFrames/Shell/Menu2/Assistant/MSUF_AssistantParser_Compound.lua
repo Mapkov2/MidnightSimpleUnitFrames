@@ -1,10 +1,14 @@
+--- Shell/Menu2/Assistant/MSUF_AssistantParser_Compound.lua
+--- Compound command parser for multi-change Assistant input.
+---
+--- Splits one natural sentence into declarative child plans and yields between
+--- chunks so bulk parsing keeps the same confirmation, undo, and budget rules.
+
 local addonName, MSUF = ...
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 local M = MSUF.MSUF2 or _G.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 local A = MSUF.Assistant or {}
 MSUF.Assistant = A
@@ -13,11 +17,6 @@ M.Assistant = A
 local P = A.Parser or {}
 A.Parser = P
 local Registry = A.Registry
-
--- Compound command parser.
--- Splits one natural sentence into smaller setting/action plans and yields between chunks
--- through the assistant scheduler. The output is still declarative so every child change can
--- use the same confirmation, undo, and bulk-safety rules as a standalone command.
 local Trim = P.Trim
 local Normalize = P.Normalize
 local ContainsAny = P.ContainsAny

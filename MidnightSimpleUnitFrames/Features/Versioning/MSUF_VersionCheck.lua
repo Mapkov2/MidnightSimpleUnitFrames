@@ -13,6 +13,10 @@
 
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 --- Constants
 local MSG_PREFIX = "MSUF" --- 4 chars, well within 16-char limit
@@ -206,8 +210,8 @@ MSUF.VersionCheck = {
 --- Slash command: /msuf versiontest
 --- Hooks into existing slash handler cleanly via a global the SlashMenu
 --- can call, or works standalone via /run.
-_G.MSUF_VersionCheck_DebugFakeUpdate = function()
+ExportPublic("MSUF_VersionCheck_DebugFakeUpdate", function()
     if MSUF.VersionCheck and MSUF.VersionCheck.DebugFakeUpdate then
         MSUF.VersionCheck.DebugFakeUpdate()
     end
-end
+end)

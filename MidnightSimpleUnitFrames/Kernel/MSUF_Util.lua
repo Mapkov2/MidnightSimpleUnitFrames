@@ -5,7 +5,12 @@
 --- modules. Feature-specific behavior should stay with the owning module.
 
 local addonName, MSUF = ...
-MSUF = MSUF or {}
+MSUF = MSUF or _G.MSUF_NS or _G.MSUF or {}
+_G.MSUF = _G.MSUF or MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 --- PERF LOCALS (core runtime)
 --- - Reduce global table lookups in high-frequency event/render paths.
@@ -27,28 +32,32 @@ local CreateFrame, GetTime = CreateFrame, GetTime
 --- noticeably heavier than simple substring/tonumber checks.
 --- Returns bossIndex (number) if u is "bossN" (N>=1), otherwise nil.
 --- NOTE: Keep global names stable so call-sites across files can use them.
-if type(_G.MSUF_GetBossIndexFromToken) ~= "function" then
-    function _G.MSUF_GetBossIndexFromToken(u)
-        if type(u) ~= "string" then
-            return nil
-        end
-        --- Fast prefix check
-        if string_sub(u, 1, 4) ~= "boss" then
-            return nil
-        end
-        local n = tonumber(string_sub(u, 5))
-        if n and n >= 1 then
-            return n
-        end
+local GetBossIndexFromToken = _G.MSUF_GetBossIndexFromToken
+if type(GetBossIndexFromToken) ~= "function" then
+    function GetBossIndexFromToken(u)
+    if type(u) ~= "string" then
         return nil
     end
+    --- Fast prefix check
+    if string_sub(u, 1, 4) ~= "boss" then
+        return nil
+    end
+    local n = tonumber(string_sub(u, 5))
+    if n and n >= 1 then
+        return n
+    end
+    return nil
 end
+end
+ExportPublic("MSUF_GetBossIndexFromToken", GetBossIndexFromToken)
 
-if type(_G.MSUF_IsBossUnitToken) ~= "function" then
-    function _G.MSUF_IsBossUnitToken(u)
-        return _G.MSUF_GetBossIndexFromToken(u) ~= nil
+local IsBossUnitToken = _G.MSUF_IsBossUnitToken
+if type(IsBossUnitToken) ~= "function" then
+    function IsBossUnitToken(u)
+    return GetBossIndexFromToken(u) ~= nil
     end
 end
+ExportPublic("MSUF_IsBossUnitToken", IsBossUnitToken)
 
 local MSUF_POWER_BAR_SHOW_KEYS = {
     player = "showPlayerPowerBar",
@@ -66,45 +75,49 @@ local MSUF_POWER_BAR_DEFAULTS = {
     boss = true,
 }
 
-if type(_G.MSUF_CanonPowerBarUnitKey) ~= "function" then
-    function _G.MSUF_CanonPowerBarUnitKey(unitKey)
-        if type(unitKey) ~= "string" then return nil end
-        unitKey = unitKey:lower()
-        if unitKey == "tot" or unitKey == "targetoftarget" or unitKey == "target_of_target" then
-            unitKey = "targettarget"
-        elseif _G.MSUF_GetBossIndexFromToken(unitKey) then
-            unitKey = "boss"
-        end
-        if unitKey == "player" or unitKey == "target" or unitKey == "focus"
-            or unitKey == "targettarget" or unitKey == "focustarget"
-            or unitKey == "pet" or unitKey == "boss" then
-            return unitKey
-        end
-        return nil
+local CanonPowerBarUnitKey = _G.MSUF_CanonPowerBarUnitKey
+if type(CanonPowerBarUnitKey) ~= "function" then
+    function CanonPowerBarUnitKey(unitKey)
+    if type(unitKey) ~= "string" then return nil end
+    unitKey = unitKey:lower()
+    if unitKey == "tot" or unitKey == "targetoftarget" or unitKey == "target_of_target" then
+        unitKey = "targettarget"
+    elseif GetBossIndexFromToken(unitKey) then
+        unitKey = "boss"
     end
+    if unitKey == "player" or unitKey == "target" or unitKey == "focus"
+        or unitKey == "targettarget" or unitKey == "focustarget"
+        or unitKey == "pet" or unitKey == "boss" then
+        return unitKey
+    end
+    return nil
 end
+end
+ExportPublic("MSUF_CanonPowerBarUnitKey", CanonPowerBarUnitKey)
 
-if type(_G.MSUF_ReadUnitPowerBarEnabled) ~= "function" then
-    function _G.MSUF_ReadUnitPowerBarEnabled(unitKey, db)
-        db = db or _G.MSUF_DB
-        local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
-        if not k then return true end
-        local u = db and db[k]
-        if u and u.showPowerBar ~= nil then
-            return u.showPowerBar ~= false
-        end
-        local legacyKey = MSUF_POWER_BAR_SHOW_KEYS[k]
-        local bars = db and db.bars
-        if legacyKey and bars and bars[legacyKey] ~= nil then
-            return bars[legacyKey] ~= false
-        end
-        return MSUF_POWER_BAR_DEFAULTS[k] ~= false
+local ReadUnitPowerBarEnabled = _G.MSUF_ReadUnitPowerBarEnabled
+if type(ReadUnitPowerBarEnabled) ~= "function" then
+    function ReadUnitPowerBarEnabled(unitKey, db)
+    db = db or _G.MSUF_DB
+    local k = CanonPowerBarUnitKey(unitKey)
+    if not k then return true end
+    local u = db and db[k]
+    if u and u.showPowerBar ~= nil then
+        return u.showPowerBar ~= false
     end
+    local legacyKey = MSUF_POWER_BAR_SHOW_KEYS[k]
+    local bars = db and db.bars
+    if legacyKey and bars and bars[legacyKey] ~= nil then
+        return bars[legacyKey] ~= false
+    end
+    return MSUF_POWER_BAR_DEFAULTS[k] ~= false
 end
+end
+ExportPublic("MSUF_ReadUnitPowerBarEnabled", ReadUnitPowerBarEnabled)
 
 local function MSUF_ReadUnitPowerBarNumber(unitKey, field, legacyField, defaultVal, minVal, maxVal, db)
     db = db or _G.MSUF_DB
-    local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+    local k = CanonPowerBarUnitKey(unitKey)
     local u = k and db and db[k]
     local v = u and u[field]
     if type(v) ~= "number" then
@@ -119,7 +132,7 @@ end
 
 local function MSUF_ReadUnitPowerBarBool(unitKey, field, legacyField, defaultVal, db)
     db = db or _G.MSUF_DB
-    local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+    local k = CanonPowerBarUnitKey(unitKey)
     local u = k and db and db[k]
     local v = u and u[field]
     if v == nil then
@@ -130,28 +143,35 @@ local function MSUF_ReadUnitPowerBarBool(unitKey, field, legacyField, defaultVal
     return v == true
 end
 
-if type(_G.MSUF_ReadUnitPowerBarHeight) ~= "function" then
-    function _G.MSUF_ReadUnitPowerBarHeight(unitKey, db)
+local ReadUnitPowerBarHeight = _G.MSUF_ReadUnitPowerBarHeight
+if type(ReadUnitPowerBarHeight) ~= "function" then
+    function ReadUnitPowerBarHeight(unitKey, db)
         return MSUF_ReadUnitPowerBarNumber(unitKey, "powerBarHeight", "powerBarHeight", 3, 1, 80, db)
     end
 end
+ExportPublic("MSUF_ReadUnitPowerBarHeight", ReadUnitPowerBarHeight)
 
-if type(_G.MSUF_ReadUnitPowerBarEmbed) ~= "function" then
-    function _G.MSUF_ReadUnitPowerBarEmbed(unitKey, db)
+local ReadUnitPowerBarEmbed = _G.MSUF_ReadUnitPowerBarEmbed
+if type(ReadUnitPowerBarEmbed) ~= "function" then
+    function ReadUnitPowerBarEmbed(unitKey, db)
         return MSUF_ReadUnitPowerBarBool(unitKey, "embedPowerBarIntoHealth", "embedPowerBarIntoHealth", true, db)
     end
 end
+ExportPublic("MSUF_ReadUnitPowerBarEmbed", ReadUnitPowerBarEmbed)
 
-if type(_G.MSUF_ReadUnitPowerBarBorderEnabled) ~= "function" then
-    function _G.MSUF_ReadUnitPowerBarBorderEnabled(unitKey, db)
+local ReadUnitPowerBarBorderEnabled = _G.MSUF_ReadUnitPowerBarBorderEnabled
+if type(ReadUnitPowerBarBorderEnabled) ~= "function" then
+    function ReadUnitPowerBarBorderEnabled(unitKey, db)
         return MSUF_ReadUnitPowerBarBool(unitKey, "powerBarBorderEnabled", "powerBarBorderEnabled", false, db)
     end
 end
+ExportPublic("MSUF_ReadUnitPowerBarBorderEnabled", ReadUnitPowerBarBorderEnabled)
 
-if type(_G.MSUF_ReadUnitPowerBarBorderThickness) ~= "function" then
-    function _G.MSUF_ReadUnitPowerBarBorderThickness(unitKey, db)
+local ReadUnitPowerBarBorderThickness = _G.MSUF_ReadUnitPowerBarBorderThickness
+if type(ReadUnitPowerBarBorderThickness) ~= "function" then
+    function ReadUnitPowerBarBorderThickness(unitKey, db)
         db = db or _G.MSUF_DB
-        local k = _G.MSUF_CanonPowerBarUnitKey(unitKey)
+        local k = CanonPowerBarUnitKey(unitKey)
         local u = k and db and db[k]
         local v = u and u.powerBarBorderThickness
         if type(v) ~= "number" then
@@ -163,6 +183,7 @@ if type(_G.MSUF_ReadUnitPowerBarBorderThickness) ~= "function" then
         return v
     end
 end
+ExportPublic("MSUF_ReadUnitPowerBarBorderThickness", ReadUnitPowerBarBorderThickness)
 
 --- MSUF_Util.lua
 --- Stateless helpers / pure functions extracted from MidnightSimpleUnitFrames.lua
@@ -170,13 +191,13 @@ end
 
 MSUF.MSUF_Util = MSUF.MSUF_Util or {}
 local U = MSUF.MSUF_Util
-_G.MSUF_Util = U
+ExportPublic("MSUF_Util", U)
 
 --- Shared frame layering for visual effects (highlight borders, overlays, stripes).
 --- Keep this in Foundation so UnitFrames and GroupFrames use identical strata/level
 --- behavior without duplicating hot-path helpers.
 if type(_G.MSUF_FRAME_STRATA_RANK) ~= "table" then
-    _G.MSUF_FRAME_STRATA_RANK = {
+    ExportPublic("MSUF_FRAME_STRATA_RANK", {
         BACKGROUND = 1,
         LOW = 2,
         MEDIUM = 3,
@@ -185,43 +206,48 @@ if type(_G.MSUF_FRAME_STRATA_RANK) ~= "table" then
         FULLSCREEN = 6,
         FULLSCREEN_DIALOG = 7,
         TOOLTIP = 8,
-    }
+    })
 end
 
 if type(_G.MSUF_EFFECT_FRAME_STRATA) ~= "string" or _G.MSUF_EFFECT_FRAME_STRATA == "" then
-    _G.MSUF_EFFECT_FRAME_STRATA = "HIGH"
+    ExportPublic("MSUF_EFFECT_FRAME_STRATA", "HIGH")
 end
 
-if type(_G.MSUF_ClampFrameLevel) ~= "function" then
-    function _G.MSUF_ClampFrameLevel(level)
+local ClampFrameLevel = _G.MSUF_ClampFrameLevel
+if type(ClampFrameLevel) ~= "function" then
+    ClampFrameLevel = function(level)
         level = tonumber(level) or 0
         if level < 0 then return 0 end
         if level > 10000 then return 10000 end
         return level
     end
 end
+ExportPublic("MSUF_ClampFrameLevel", ClampFrameLevel)
 
-if type(_G.MSUF_MaxFrameStrata) ~= "function" then
-    function _G.MSUF_MaxFrameStrata(a, b)
+local MaxFrameStrata = _G.MSUF_MaxFrameStrata
+if type(MaxFrameStrata) ~= "function" then
+    MaxFrameStrata = function(a, b)
         if not a or a == "" then return b end
         if not b or b == "" then return a end
         local rank = _G.MSUF_FRAME_STRATA_RANK
         return ((rank[a] or 0) >= (rank[b] or 0)) and a or b
     end
 end
+ExportPublic("MSUF_MaxFrameStrata", MaxFrameStrata)
 
-if type(_G.MSUF_SyncFrameLayerAbove) ~= "function" then
-    function _G.MSUF_SyncFrameLayerAbove(child, parent, offset, strata)
+local SyncFrameLayerAbove = _G.MSUF_SyncFrameLayerAbove
+if type(SyncFrameLayerAbove) ~= "function" then
+    SyncFrameLayerAbove = function(child, parent, offset, strata)
         if not (child and parent) then return nil end
 
         local parentStrata = parent.GetFrameStrata and parent:GetFrameStrata() or nil
-        local wantStrata = _G.MSUF_MaxFrameStrata(parentStrata, strata or _G.MSUF_EFFECT_FRAME_STRATA)
+        local wantStrata = MaxFrameStrata(parentStrata, strata or _G.MSUF_EFFECT_FRAME_STRATA)
         if wantStrata and child.SetFrameStrata and (not child.GetFrameStrata or child:GetFrameStrata() ~= wantStrata) then
             child:SetFrameStrata(wantStrata)
         end
 
         if child.SetFrameLevel and parent.GetFrameLevel then
-            local level = _G.MSUF_ClampFrameLevel((parent:GetFrameLevel() or 0) + (tonumber(offset) or 1))
+            local level = ClampFrameLevel((parent:GetFrameLevel() or 0) + (tonumber(offset) or 1))
             if not child.GetFrameLevel or child:GetFrameLevel() ~= level then
                 child:SetFrameLevel(level)
             end
@@ -231,6 +257,7 @@ if type(_G.MSUF_SyncFrameLayerAbove) ~= "function" then
         return nil
     end
 end
+ExportPublic("MSUF_SyncFrameLayerAbove", SyncFrameLayerAbove)
 
 --- Atlas helper used by status/state indicator icons.
 --- Some call-sites use a global helper name; provide it here as a safe fallback
@@ -300,8 +327,9 @@ do
         return path
     end
 
-    if type(_G.MSUF_ResolveIconTexturePath) ~= "function" then
-        function _G.MSUF_ResolveIconTexturePath(texture)
+    local ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
+    if type(ResolveIconTexturePath) ~= "function" then
+        ResolveIconTexturePath = function(texture)
             if not MSUF_CanReadTextureValue(texture) then
                 return texture
             end
@@ -334,10 +362,11 @@ do
         end
     end
 
-    if type(_G.MSUF_SetIconTexture) ~= "function" then
-        function _G.MSUF_SetIconTexture(textureRegion, texture, fallback)
+    local SetIconTexture = _G.MSUF_SetIconTexture
+    if type(SetIconTexture) ~= "function" then
+        SetIconTexture = function(textureRegion, texture, fallback)
             if not (textureRegion and textureRegion.SetTexture) then return end
-            local resolver = _G.MSUF_ResolveIconTexturePath
+            local resolver = ResolveIconTexturePath
             local value = (type(resolver) == "function") and resolver(texture) or texture
             if MSUF_CanReadTextureValue(value) and (value == nil or value == "") then
                 value = fallback or ""
@@ -346,11 +375,13 @@ do
         end
     end
 
-    U.ResolveIconTexturePath = _G.MSUF_ResolveIconTexturePath
-    U.SetIconTexture = _G.MSUF_SetIconTexture
+    U.ResolveIconTexturePath = ResolveIconTexturePath
+    U.SetIconTexture = SetIconTexture
+    ExportPublic("MSUF_ResolveIconTexturePath", ResolveIconTexturePath)
+    ExportPublic("MSUF_SetIconTexture", SetIconTexture)
 end
 
-function MSUF_DeepCopy(value, seen)
+local function MSUF_DeepCopy(value, seen)
     if type(value) ~= "table" then
         return value
     end
@@ -366,7 +397,7 @@ function MSUF_DeepCopy(value, seen)
     return copy
 end
 
-function MSUF_CaptureKeys(src, keys)
+local function MSUF_CaptureKeys(src, keys)
     local out = {}
     if type(src) ~= "table" or type(keys) ~= "table" then
         return out
@@ -378,14 +409,14 @@ function MSUF_CaptureKeys(src, keys)
     return out
 end
 
-function MSUF_RestoreKeys(dst, snap)
+local function MSUF_RestoreKeys(dst, snap)
     if type(dst) ~= "table" or type(snap) ~= "table" then return end
     for k, v in pairs(snap) do
         dst[k] = v --- assigning nil removes the key (restores defaults)
     end
 end
 
-function MSUF_GetNumber(v, default, minValue, maxValue)
+local function MSUF_GetNumber(v, default, minValue, maxValue)
     local n = tonumber(v) or default
     if minValue and n < minValue then
         n = minValue
@@ -396,13 +427,13 @@ function MSUF_GetNumber(v, default, minValue, maxValue)
     return n
 end
 
-function MSUF_Clamp(v, lo, hi)
+local function MSUF_Clamp(v, lo, hi)
     if v < lo then return lo end
     if v > hi then return hi end
     return v
 end
 
-function MSUF_SetTextIfChanged(fs, text)
+local function MSUF_SetTextIfChanged(fs, text)
     if not fs then return end
     local v = text
     if v == nil then v = "" end
@@ -438,7 +469,7 @@ local MSUF_CASTBAR_TIME_FORMATS = {
     MAX_ELAPSED = true,
 }
 
-function MSUF_NormalizeCastbarTimeFormat(value)
+local function MSUF_NormalizeCastbarTimeFormat(value)
     if type(value) ~= "string" then return MSUF_CASTBAR_TIME_FORMAT_CURRENT end
     value = value:upper()
     value = value:gsub("%s+", "")
@@ -456,7 +487,7 @@ function MSUF_NormalizeCastbarTimeFormat(value)
     return MSUF_CASTBAR_TIME_FORMAT_CURRENT
 end
 
-function MSUF_GetCastbarTimeFormatDBKey(unit)
+local function MSUF_GetCastbarTimeFormatDBKey(unit)
     unit = tostring(unit or ""):lower()
     if unit == "player" then return "castbarPlayerTimeFormat" end
     if unit == "target" then return "castbarTargetTimeFormat" end
@@ -465,7 +496,7 @@ function MSUF_GetCastbarTimeFormatDBKey(unit)
     return nil
 end
 
-function MSUF_GetCastbarTimeFormat(unit, g)
+local function MSUF_GetCastbarTimeFormat(unit, g)
     local key = MSUF_GetCastbarTimeFormatDBKey(unit)
     if not key then return MSUF_CASTBAR_TIME_FORMAT_CURRENT end
     if not g then
@@ -475,7 +506,7 @@ function MSUF_GetCastbarTimeFormat(unit, g)
     return MSUF_NormalizeCastbarTimeFormat(g and g[key])
 end
 
-function MSUF_FormatCastbarTimeText(mode, current, total)
+local function MSUF_FormatCastbarTimeText(mode, current, total)
     local cur = tonumber(current)
     if type(cur) ~= "number" then return nil end
     if cur < 0 then cur = 0 end
@@ -508,7 +539,7 @@ function MSUF_FormatCastbarTimeText(mode, current, total)
     return string.format("%.1f", cur)
 end
 
-function MSUF_SetCastTimeText(frame, seconds, totalSeconds)
+local function MSUF_SetCastTimeText(frame, seconds, totalSeconds)
     local fs = frame and frame.timeText
     if not fs then return end
 
@@ -540,7 +571,7 @@ function MSUF_SetCastTimeText(frame, seconds, totalSeconds)
     end
 end
 
-function MSUF_SetAlphaIfChanged(f, a)
+local function MSUF_SetAlphaIfChanged(f, a)
     if not f or not f.SetAlpha or a == nil then return end
     local prev = f._msufAlpha
     if prev == nil or math.abs(prev - a) > 0.001 then
@@ -549,7 +580,7 @@ function MSUF_SetAlphaIfChanged(f, a)
     end
 end
 
-function MSUF_SetWidthIfChanged(f, w)
+local function MSUF_SetWidthIfChanged(f, w)
     if not f or not f.SetWidth or not w or w <= 0 then return end
     local prev = f._msufW
     if prev == nil or math.abs(prev - w) > 0.01 then
@@ -558,7 +589,7 @@ function MSUF_SetWidthIfChanged(f, w)
     end
 end
 
-function MSUF_SetHeightIfChanged(f, h)
+local function MSUF_SetHeightIfChanged(f, h)
     if not f or not f.SetHeight or not h or h <= 0 then return end
     local prev = f._msufH
     if prev == nil or math.abs(prev - h) > 0.01 then
@@ -567,7 +598,7 @@ function MSUF_SetHeightIfChanged(f, h)
     end
 end
 
-function MSUF_SetPointIfChanged(f, point, relTo, relPoint, ofsX, ofsY)
+local function MSUF_SetPointIfChanged(f, point, relTo, relPoint, ofsX, ofsY)
     if not f or not f.SetPoint then return end
     local c = f._msufAnchor
     if not c then
@@ -581,7 +612,7 @@ function MSUF_SetPointIfChanged(f, point, relTo, relPoint, ofsX, ofsY)
     end
 end
 
-function MSUF_SetJustifyHIfChanged(fs, justify)
+local function MSUF_SetJustifyHIfChanged(fs, justify)
     if not fs or not fs.SetJustifyH or not justify then return end
     if fs._msufJustifyH ~= justify then
         fs:SetJustifyH(justify)
@@ -589,14 +620,14 @@ function MSUF_SetJustifyHIfChanged(fs, justify)
     end
 end
 
-function MSUF_SetSliderValueSilent(slider, value)
+local function MSUF_SetSliderValueSilent(slider, value)
     if not slider or not slider.SetValue then return end
     slider.MSUF_SkipCallback = true
     slider:SetValue(value)
     slider.MSUF_SkipCallback = false
 end
 
-function MSUF_ClampToSlider(slider, value)
+local function MSUF_ClampToSlider(slider, value)
     if type(value) ~= "number" then return value end
     if slider and type(slider.minVal) == "number" then
         value = math.max(slider.minVal, value)
@@ -631,6 +662,24 @@ U.ClampToSlider = MSUF_ClampToSlider
 MSUF.MSUF_DeepCopy = MSUF_DeepCopy
 MSUF.MSUF_CaptureKeys = MSUF_CaptureKeys
 MSUF.MSUF_RestoreKeys = MSUF_RestoreKeys
+ExportPublic("MSUF_DeepCopy", MSUF_DeepCopy)
+ExportPublic("MSUF_CaptureKeys", MSUF_CaptureKeys)
+ExportPublic("MSUF_RestoreKeys", MSUF_RestoreKeys)
+ExportPublic("MSUF_GetNumber", MSUF_GetNumber)
+ExportPublic("MSUF_Clamp", MSUF_Clamp)
+ExportPublic("MSUF_SetTextIfChanged", MSUF_SetTextIfChanged)
+ExportPublic("MSUF_NormalizeCastbarTimeFormat", MSUF_NormalizeCastbarTimeFormat)
+ExportPublic("MSUF_GetCastbarTimeFormatDBKey", MSUF_GetCastbarTimeFormatDBKey)
+ExportPublic("MSUF_GetCastbarTimeFormat", MSUF_GetCastbarTimeFormat)
+ExportPublic("MSUF_FormatCastbarTimeText", MSUF_FormatCastbarTimeText)
+ExportPublic("MSUF_SetCastTimeText", MSUF_SetCastTimeText)
+ExportPublic("MSUF_SetAlphaIfChanged", MSUF_SetAlphaIfChanged)
+ExportPublic("MSUF_SetWidthIfChanged", MSUF_SetWidthIfChanged)
+ExportPublic("MSUF_SetHeightIfChanged", MSUF_SetHeightIfChanged)
+ExportPublic("MSUF_SetPointIfChanged", MSUF_SetPointIfChanged)
+ExportPublic("MSUF_SetJustifyHIfChanged", MSUF_SetJustifyHIfChanged)
+ExportPublic("MSUF_SetSliderValueSilent", MSUF_SetSliderValueSilent)
+ExportPublic("MSUF_ClampToSlider", MSUF_ClampToSlider)
 
 do
     local UIParent = UIParent
@@ -692,7 +741,7 @@ do
         return out
     end
 
-    function _G.MSUF_Snap(frame, v)
+    local function MSUF_Snap(frame, v)
         if type(v) ~= "number" then
             return v
         end
@@ -700,11 +749,11 @@ do
         return RoundToGrid(v, step)
     end
 
-    function _G.MSUF_Scale(v)
-        return _G.MSUF_Snap(UIParent, v)
+    local function MSUF_Scale(v)
+        return MSUF_Snap(UIParent, v)
     end
 
-    function _G.MSUF_UpdatePixelPerfect()
+    local function MSUF_UpdatePixelPerfect()
         if InCombatLockdown and InCombatLockdown() then
             return false
         end
@@ -713,6 +762,10 @@ do
         EnsureBase()
         return true
     end
+
+    ExportPublic("MSUF_Snap", MSUF_Snap)
+    ExportPublic("MSUF_Scale", MSUF_Scale)
+    ExportPublic("MSUF_UpdatePixelPerfect", MSUF_UpdatePixelPerfect)
 end
 
 --- Phase 2: Global helpers relocated from MSUF_UpdateManager.lua
@@ -721,18 +774,21 @@ end
 --- Fast-path replacement for protected calls.
 --- Intentionally does NOT catch errors (for maximum performance).
 --- Preserves (ok, ...) return convention and returns false if fn is not callable.
-if not _G.MSUF_FastCall then
-    function _G.MSUF_FastCall(fn, ...)
+local FastCall = _G.MSUF_FastCall
+if type(FastCall) ~= "function" then
+    FastCall = function(fn, ...)
         if type(fn) ~= "function" then
              return false
         end
         return true, fn(...)
     end
 end
+ExportPublic("MSUF_FastCall", FastCall)
 
 --- Global helper: "any edit mode" (MSUF Edit Mode OR Blizzard Edit Mode)
-if not _G.MSUF_IsInAnyEditMode then
-    function _G.MSUF_IsInAnyEditMode()
+local IsInAnyEditMode = _G.MSUF_IsInAnyEditMode
+if type(IsInAnyEditMode) ~= "function" then
+    IsInAnyEditMode = function()
         local st = rawget(_G, "MSUF_EditState")
         if st and st.active == true then
              return true
@@ -743,19 +799,23 @@ if not _G.MSUF_IsInAnyEditMode then
          return false
     end
 end
+ExportPublic("MSUF_IsInAnyEditMode", IsInAnyEditMode)
 
 do
     local _lastConfigCombatMessage = 0
 
-    if type(_G.MSUF_IsConfigCombatLocked) ~= "function" then
-        function _G.MSUF_IsConfigCombatLocked()
+    local IsConfigCombatLocked = _G.MSUF_IsConfigCombatLocked
+    if type(IsConfigCombatLocked) ~= "function" then
+        IsConfigCombatLocked = function()
             if InCombatLockdown and InCombatLockdown() then return true end
             return false
         end
     end
+    ExportPublic("MSUF_IsConfigCombatLocked", IsConfigCombatLocked)
 
-    if type(_G.MSUF_ShowConfigCombatLockMessage) ~= "function" then
-        function _G.MSUF_ShowConfigCombatLockMessage()
+    local ShowConfigCombatLockMessage = _G.MSUF_ShowConfigCombatLockMessage
+    if type(ShowConfigCombatLockMessage) ~= "function" then
+        ShowConfigCombatLockMessage = function()
             local now = (GetTime and GetTime()) or 0
             if now > 0 and (now - _lastConfigCombatMessage) < 1.25 then return end
             _lastConfigCombatMessage = now
@@ -775,23 +835,27 @@ do
             if (not shownInline) and print then print(msg) end
         end
     end
+    ExportPublic("MSUF_ShowConfigCombatLockMessage", ShowConfigCombatLockMessage)
 
-    if type(_G.MSUF_BlockConfigCombatLocked) ~= "function" then
-        function _G.MSUF_BlockConfigCombatLocked()
-            local locked = _G.MSUF_IsConfigCombatLocked and _G.MSUF_IsConfigCombatLocked()
+    local BlockConfigCombatLocked = _G.MSUF_BlockConfigCombatLocked
+    if type(BlockConfigCombatLocked) ~= "function" then
+        BlockConfigCombatLocked = function()
+            local locked = IsConfigCombatLocked and IsConfigCombatLocked()
             if locked then
-                if _G.MSUF_ShowConfigCombatLockMessage then _G.MSUF_ShowConfigCombatLockMessage() end
+                if ShowConfigCombatLockMessage then ShowConfigCombatLockMessage() end
                 return true
             end
             return false
         end
     end
+    ExportPublic("MSUF_BlockConfigCombatLocked", BlockConfigCombatLocked)
 end
 
 --- Global helper: restore UIPanelButtonTemplate pieces if another skin/hide pass removed them.
 --- This is defensive and safe to call repeatedly; it only touches obvious regions (Left/Middle/Right/Normal/Font).
-if not _G.MSUF_ForceShowUIPanelButtonPieces then
-    function _G.MSUF_ForceShowUIPanelButtonPieces(btn)
+local ForceShowUIPanelButtonPieces = _G.MSUF_ForceShowUIPanelButtonPieces
+if type(ForceShowUIPanelButtonPieces) ~= "function" then
+    ForceShowUIPanelButtonPieces = function(btn)
         if not btn then return end
 
         local name = (btn.GetName and btn:GetName()) or nil
@@ -822,11 +886,13 @@ if not _G.MSUF_ForceShowUIPanelButtonPieces then
         if btn.SetAlpha then btn:SetAlpha(1) end
     end
 end
+ExportPublic("MSUF_ForceShowUIPanelButtonPieces", ForceShowUIPanelButtonPieces)
 
-if type(_G.MSUF_GetProfileScopedCache) ~= "function" then
-    function _G.MSUF_GetProfileScopedCache(rootKey)
+local GetProfileScopedCache = _G.MSUF_GetProfileScopedCache
+if type(GetProfileScopedCache) ~= "function" then
+    GetProfileScopedCache = function(rootKey)
         if type(rootKey) ~= "string" or rootKey == "" then return nil end
-        _G.MSUF_GlobalDB = type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {}
+        ExportPublic("MSUF_GlobalDB", type(_G.MSUF_GlobalDB) == "table" and _G.MSUF_GlobalDB or {})
         local gdb = _G.MSUF_GlobalDB
         gdb[rootKey] = type(gdb[rootKey]) == "table" and gdb[rootKey] or {}
 
@@ -862,6 +928,7 @@ if type(_G.MSUF_GetProfileScopedCache) ~= "function" then
         return bucket
     end
 end
+ExportPublic("MSUF_GetProfileScopedCache", GetProfileScopedCache)
 
 --- Keybinding support (Bindings.xml auto-discovered by WoW, NOT in TOC)
 BINDING_HEADER_MSUF_HEADER = "Midnight Simple Unit Frames"
@@ -873,7 +940,7 @@ local MSUF_BINDING_COMMANDS = {
 }
 
 local function MSUF_EnsureGlobalBindingState()
-    _G.MSUF_GlobalDB = _G.MSUF_GlobalDB or {}
+    ExportPublic("MSUF_GlobalDB", _G.MSUF_GlobalDB or {})
     local gdb = _G.MSUF_GlobalDB
     gdb.global = gdb.global or {}
     gdb.global.bindings = gdb.global.bindings or {}
@@ -1026,7 +1093,7 @@ end
 --- Clamp a checkbox's label FontString to a max pixel width.
 --- Disables word-wrap so long translations truncate cleanly.
 --- Safe to call on nil / non-checkbox frames (no-op).
-function MSUF_ClampCheckboxText(cb, maxWidth)
+local function MSUF_ClampCheckboxText(cb, maxWidth)
     if not cb or not maxWidth then return end
     local fs = cb.Text or cb.text
     if (not fs) and cb.GetName then
@@ -1038,7 +1105,7 @@ function MSUF_ClampCheckboxText(cb, maxWidth)
     if fs.SetWordWrap then fs:SetWordWrap(false) end
     if fs.SetNonSpaceWrap then fs:SetNonSpaceWrap(false) end
 end
-_G.MSUF_ClampCheckboxText = MSUF_ClampCheckboxText
+ExportPublic("MSUF_ClampCheckboxText", MSUF_ClampCheckboxText)
 
 do
     local f = CreateFrame("Frame")

@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Shared Unit page sections.
 -- Builds reusable controls for per-unit basics, load rules, target-of-target text behavior,
@@ -354,139 +353,36 @@ local function BuildTopActions(ctx, builder, unit, label)
         M.unitCopyTarget = dest
         return dest
     end
-    local copyPopup
-    local function SyncCopyScopeChecks()
-        if not (copyPopup and copyPopup._checks) then return end
-        for i = 1, #UF_COPY_CATEGORIES do
-            local cat = UF_COPY_CATEGORIES[i]
-            if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(copyScopes[cat.key] == true) end
-        end
-    end
-    local function SetCopyScopesSelected(selected, feedback)
-        for i = 1, #UF_COPY_CATEGORIES do
-            local cat = UF_COPY_CATEGORIES[i]
-            copyScopes[cat.key] = selected and true or false
-            if copyPopup and copyPopup._checks and copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(selected and true or false) end
-        end
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Tr(feedback), "info", 1.15) end
-    end
-    local function RefreshCopyPopupTargets()
-        if not copyPopup then return end
-        local dest = NormalizeCopyDest(unit)
-        if copyPopup._title then copyPopup._title:SetText(M.Format(M.Tr("Copy from %s"), UnitTopLabel(unit))) end
-        local x = 16
-        local order = copyPopup._targetOrder or {}
-        local widths = copyPopup._targetWidths or {}
-        for i = 1, #order do
-            local key = order[i]
-            local btn = copyPopup._targetBtns and copyPopup._targetBtns[key]
-            if btn then
-                local visible = key ~= unit
-                btn:SetShown(visible)
-                if visible then
-                    btn:ClearAllPoints()
-                    btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", x, -58)
-                    x = x + (widths[key] or btn:GetWidth() or 48) + 6
-                end
-                if btn.SetActive then btn:SetActive(dest == key) end
+    local copyPopup = UnitSectionShared.MakeScopeCopyPopup and UnitSectionShared.MakeScopeCopyPopup(copy, {
+        width = 420,
+        height = 276,
+        categories = UF_COPY_CATEGORIES,
+        scopes = copyScopes,
+        targets = UF_COPY_TARGET_ORDER,
+        targetWidths = UF_COPY_TARGET_WIDTHS,
+        sourceKey = function() return unit end,
+        sourceLabel = UnitTopLabel,
+        targetLabelText = function(key) return UF_COPY_TARGET_SHORT_LABELS[key] or UnitTopLabel(key) end,
+        selectedTarget = function() return NormalizeCopyDest(unit) end,
+        isTargetVisible = function(key, source) return key ~= source end,
+        onTargetClick = function(key) M.unitCopyTarget = key end,
+        runLabel = "Copy Selected",
+        runWidth = 128,
+        onRun = function(api, popup)
+            local dest = NormalizeCopyDest(unit)
+            local function RunCopy()
+                CopyUnitSettings(unit, dest, copyScopes)
             end
-        end
-    end
-    local function MakePopupButton(parent, text, width, bg, border, textColor, activeBg, activeBorder)
-        local defaultHoverBg = { 0.030, 0.055, 0.120, 0.98 }
-        local defaultHoverBorder = { 0.105, 0.205, 0.410, 0.78 }
-        local btn = MakeTopButton(parent, text, width, false, {
-            bg = bg or { 0.022, 0.040, 0.090, 0.96 },
-            border = border or { 0.075, 0.140, 0.290, 0.70 },
-            textColor = textColor or { 0.76, 0.85, 0.96, 1 },
-            hoverBg = activeBg or defaultHoverBg,
-            hoverBorder = activeBorder or defaultHoverBorder,
-            activeBg = activeBg or { 0.045, 0.095, 0.205, 0.98 },
-            activeBorder = activeBorder or { 0.130, 0.280, 0.560, 0.86 },
-            activeTextColor = { 0.88, 0.94, 1.00, 1 },
-            stripe = false,
-        })
-        btn:SetHeight(22)
-        return btn
-    end
-    local function ShowCopyPopup(anchor)
-        if copyPopup and copyPopup:IsShown() then copyPopup:Hide(); return end
-        if not copyPopup then
-            copyPopup = M.CreateMenuPopupPanel(UIParent)
-            copyPopup:SetSize(420, 276)
-            local title = T.Font(copyPopup, "GameFontNormal", "", T.colors.accent)
-            title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
-            copyPopup._title = title
-            local close = MakePopupButton(copyPopup, "x", 20, { 0.070, 0.026, 0.034, 0.94 }, { 0.34, 0.090, 0.110, 0.82 }, { 0.95, 0.70, 0.70, 1 }, { 0.090, 0.035, 0.045, 0.96 }, { 0.42, 0.12, 0.14, 0.90 })
-            close:SetSize(20, 20)
-            close:SetPoint("TOPRIGHT", copyPopup, "TOPRIGHT", -12, -9)
-            close:SetScript("OnClick", function() copyPopup:Hide() end)
-            local destLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Destination"), T.colors.dim)
-            destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
-            copyPopup._targetBtns = {}
-            copyPopup._targetOrder = UF_COPY_TARGET_ORDER
-            copyPopup._targetWidths = UF_COPY_TARGET_WIDTHS
-            local x = 16
-            for i = 1, #UF_COPY_TARGET_ORDER do
-                local key = UF_COPY_TARGET_ORDER[i]
-                local short = UF_COPY_TARGET_SHORT_LABELS[key]
-                local target = MakePopupButton(copyPopup, short and M.Tr(short) or UnitTopLabel(key), UF_COPY_TARGET_WIDTHS[key], { 0.020, 0.048, 0.105, 0.96 }, { 0.070, 0.160, 0.330, 0.72 }, { 0.76, 0.86, 0.98, 1 }, { 0.050, 0.110, 0.240, 0.98 }, { 0.135, 0.300, 0.600, 0.86 })
-                target:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", x, -58)
-                target._msuf2UnitCopyValue = key
-                target:SetScript("OnClick", function()
-                    M.unitCopyTarget = key
-                    RefreshCopyPopupTargets()
-                end)
-                copyPopup._targetBtns[key] = target
-                x = x + UF_COPY_TARGET_WIDTHS[key] + 6
-            end
-            local catLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Copy categories"), T.colors.dim)
-            catLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -90)
-            copyPopup._checks = {}
-            for i, cat in ipairs(UF_COPY_CATEGORIES) do
-                local col = (i > 5) and 1 or 0
-                local row = (i - 1) % 5
-                local cb = W.SwitchAt(copyPopup, cat.label, 16 + col * 198, -110 - row * 28, 140)
-                cb:SetChecked(copyScopes[cat.key] == true)
-                cb:SetScript("OnClick", function(self)
-                    copyScopes[cat.key] = self:GetChecked() and true or false
-                end)
-                copyPopup._checks[i] = cb
-            end
-            local allBtn = MakePopupButton(copyPopup, M.Tr("All"), 48, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
-            allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
-            allBtn:SetScript("OnClick", function()
-                SetCopyScopesSelected(true, "All copy categories selected")
-            end)
-            local noneBtn = MakePopupButton(copyPopup, M.Tr("None"), 58, { 0.028, 0.065, 0.145, 0.96 }, { 0.105, 0.230, 0.455, 0.72 }, { 0.80, 0.90, 1, 1 })
-            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
-            noneBtn:SetScript("OnClick", function()
-                SetCopyScopesSelected(false, "Copy categories cleared")
-            end)
-            local runBtn = MakePopupButton(copyPopup, M.Tr("Copy Selected"), 128, { 0.050, 0.125, 0.270, 0.98 }, { 0.170, 0.350, 0.610, 0.86 }, { 0.88, 0.96, 1, 1 }, { 0.060, 0.150, 0.320, 0.98 }, { 0.210, 0.420, 0.720, 0.90 })
-            runBtn:SetPoint("BOTTOMRIGHT", copyPopup, "BOTTOMRIGHT", -14, 11)
-            runBtn:SetScript("OnClick", function()
-                local dest = NormalizeCopyDest(unit)
-                local function RunCopy()
-                    CopyUnitSettings(unit, dest, copyScopes)
-                end
-                M.RunWithHistory("Copy Unit Settings", "unit:copy:" .. tostring(unit), RunCopy)
-                if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format(M.Tr("Copied to %s"), UnitTopLabel(dest)), "ok", 1.35) end
-                copyPopup:Hide()
-            end)
-        end
-        SyncCopyScopeChecks()
-        RefreshCopyPopupTargets()
-        M.ApplyPopupFramePriority(copyPopup)
-        copyPopup:ClearAllPoints()
-        copyPopup:SetPoint("TOPRIGHT", anchor or copy, "BOTTOMRIGHT", 0, -6)
-        copyPopup:Show()
-    end
+            M.RunWithHistory("Copy Unit Settings", "unit:copy:" .. tostring(unit), RunCopy)
+            if M.ShowStatusFeedback then M.ShowStatusFeedback(M.Format(M.Tr("Copied to %s"), UnitTopLabel(dest)), "ok", 1.35) end
+            popup:Hide()
+        end,
+    })
     copy:SetScript("OnClick", function(self)
-        ShowCopyPopup(self)
+        if copyPopup then copyPopup.Show(self) end
     end)
     sec:SetScript("OnHide", function()
-        if copyPopup then copyPopup:Hide() end
+        if copyPopup then copyPopup.Hide() end
     end)
 end
 local function AttachBasicsHeaderStatus(sec, unit)

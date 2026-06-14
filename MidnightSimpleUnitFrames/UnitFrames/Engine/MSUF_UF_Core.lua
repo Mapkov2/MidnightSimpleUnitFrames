@@ -1,7 +1,6 @@
 local addonName, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 --- UnitFrames/Engine/MSUF_UF_Core.lua
 ---

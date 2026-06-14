@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 global Fonts page.
 -- Binds shared/scoped font family, size, outline, shadow, alpha, and baseline controls.

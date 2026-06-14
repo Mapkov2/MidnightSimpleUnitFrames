@@ -9,9 +9,12 @@
 --- Must not own runtime unitframe/groupframe gameplay logic.
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 M.Tr = M.Tr or function(text)
     if text == nil then return "" end
     local key = tostring(text)
@@ -788,7 +791,7 @@ local function BuildWindow()
     SetWindowMetrics(ReadSavedWindowSize())
     local f = T.Panel(UIParent, "MSUF2_Window", T.colors.glassShell or T.colors.bg, T.colors.border)
     T.ApplySurface(f, "shell")
-    _G.MSUF_StandaloneOptionsWindow = f
+    ExportPublic("MSUF_StandaloneOptionsWindow", f)
     f:SetSize(WINDOW_W, WINDOW_H)
     f:SetPoint("CENTER", UIParent, "CENTER", -60, 10)
     ApplyMenuFramePriority(f)

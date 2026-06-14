@@ -7,7 +7,6 @@ local _, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 local T = M.Theme
 local function PaintWindowControlButton(btn, hover, down)
     if not btn then return end

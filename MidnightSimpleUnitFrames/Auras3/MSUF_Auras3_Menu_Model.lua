@@ -9,7 +9,10 @@
 --- invalidate prepared runtime config or blacklist hashes.
 local _, MSUF = ...
 MSUF = MSUF or (_G.MSUF_NS) or {}
-_G.MSUF_NS = MSUF
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 local type, tonumber, tostring, pairs, ipairs = type, tonumber, tostring, pairs, ipairs
 local math_floor = math.floor
@@ -688,7 +691,7 @@ end
 local GF_AURA_FILTER = _G.MSUF_GF_AuraFilter
 if type(GF_AURA_FILTER) ~= "table" then
     GF_AURA_FILTER = {}
-    _G.MSUF_GF_AuraFilter = GF_AURA_FILTER
+    ExportPublic("MSUF_GF_AuraFilter", GF_AURA_FILTER)
 end
 GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS = GF_AURA_FILTER.PUBLIC_AURA_PRESET_SPELLS or FALLBACK_PUBLIC_AURA_SPELLS
 GF_AURA_FILTER.PUBLIC_AURA_PRESET_META = GF_AURA_FILTER.PUBLIC_AURA_PRESET_META or FALLBACK_PUBLIC_AURA_META
@@ -701,7 +704,7 @@ end
 
 local function GroupConf(kind)
     local db = _G.MSUF_DB
-    if type(db) ~= "table" then db = {}; _G.MSUF_DB = db end
+    if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
     local key = kind == "raid" and "gf_raid" or (kind == "mythicraid" and "gf_mythicraid" or "gf_party")
     if type(db[key]) ~= "table" then db[key] = {} end
     return db[key]
@@ -793,7 +796,7 @@ function Model.EnsureDB()
         auras, shared = A3.EnsureDB()
     else
         local db = _G.MSUF_DB
-        if type(db) ~= "table" then db = {}; _G.MSUF_DB = db end
+        if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
         if type(db.auras3) ~= "table" then db.auras3 = {} end
         auras = db.auras3
         shared = auras.shared
@@ -813,7 +816,7 @@ end
 
 local function EnsureGeneralDB()
     local db = _G.MSUF_DB
-    if type(db) ~= "table" then db = {}; _G.MSUF_DB = db end
+    if type(db) ~= "table" then db = {}; ExportPublic("MSUF_DB", db) end
     if type(db.general) ~= "table" then db.general = {} end
     DefaultsInto(db.general, DEFAULT_GENERAL)
     return db.general
@@ -1985,4 +1988,4 @@ function Model.Apply(unit, reason)
     if type(_G.MSUF_UFPreview_RequestRefresh) == "function" then _G.MSUF_UFPreview_RequestRefresh(reason) end
 end
 
-_G.MSUF_Auras3_MenuModel = Model
+ExportPublic("MSUF_Auras3_MenuModel", Model)

@@ -1,7 +1,6 @@
 local _, MSUF = ...
 
 MSUF = MSUF or _G.MSUF_NS or {}
-_G.MSUF_NS = MSUF
 
 -- Third-party anchor integration.
 -- Registers MSUF unitframe anchors with external cooldown/utility addons after frames exist.

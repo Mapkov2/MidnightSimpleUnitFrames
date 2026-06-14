@@ -2,7 +2,6 @@ local addonName, MSUF = ...
 MSUF = MSUF or {}
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 Group page foundation.
 -- Owns party/raid/mythicraid option binding, preview sync, and page-local batching. Secure
@@ -354,109 +353,33 @@ local function ScopeSection(ctx, builder)
         end,
     })
     M.gfCopyScopes = (type(M.gfCopyScopes) == "table") and M.gfCopyScopes or NewGFCopyScopes()
-    local copyPopup
-    local function SetCopyScopesSelected(selected, feedback)
-        for i = 1, #GF_COPY_CATEGORIES do
-            local cat = GF_COPY_CATEGORIES[i]
-            M.gfCopyScopes[cat.key] = selected and true or false
-            if copyPopup and copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(selected and true or false) end
-        end
-        if M.ShowStatusFeedback then M.ShowStatusFeedback(feedback, "info", 1.1) end
-    end
-    local function ShowCopyPopup(anchor)
-        if copyPopup and copyPopup:IsShown() then copyPopup:Hide(); return end
-        if not copyPopup then
-            copyPopup = M.CreateMenuPopupPanel(UIParent)
-            copyPopup:SetSize(430, 334)
-            local title = T.Font(copyPopup, "GameFontNormal", "", T.colors.accent)
-            title:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -12)
-            copyPopup._title = title
-            local destLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Destination"), T.colors.dim)
-            destLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -40)
-            local close = MakeTopButton(copyPopup, "x", 20, {
-                bg = { 0.070, 0.026, 0.034, 0.94 },
-                border = { 0.340, 0.090, 0.110, 0.82 },
-                textColor = { 0.95, 0.70, 0.70, 1 },
-                hoverBg = { 0.090, 0.035, 0.045, 0.96 },
-                hoverBorder = { 0.420, 0.120, 0.140, 0.90 },
-            })
-            close:SetSize(20, 20)
-            close:SetPoint("TOPRIGHT", copyPopup, "TOPRIGHT", -12, -9)
-            close:SetScript("OnClick", function() copyPopup:Hide() end)
-            copyPopup._targets = {}
-            local tx = 16
-            for i = 1, #SCOPE_VALUES do
-                local info = SCOPE_VALUES[i]
-                local width = (info.value == "mythicraid") and 70 or 58
-                local btn = MakeTopButton(copyPopup, ScopeShortLabel(info.value), width, {
-                    bg = { 0.020, 0.048, 0.105, 0.96 },
-                    border = { 0.070, 0.160, 0.330, 0.72 },
-                    activeBg = { 0.050, 0.110, 0.240, 0.98 },
-                    activeBorder = { 0.135, 0.300, 0.600, 0.86 },
-                })
-                btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", tx, -58)
-                btn:SetScript("OnClick", function()
-                    local function RunCopy()
-                        if CopyGroupSettings(CurrentScope(), info.value, M.gfCopyScopes) then
-                            RefreshContext(ctx)
-                            if M.ShowStatusFeedback then M.ShowStatusFeedback("Copied to " .. ScopeShortLabel(info.value), "ok", 1.3) end
-                        end
-                    end
-                    M.RunWithHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(info.value), RunCopy)
-                    copyPopup:Hide()
-                end)
-                copyPopup._targets[info.value] = btn
-                tx = tx + width + 6
-            end
-            local catLabel = T.Font(copyPopup, "GameFontDisableSmall", M.Tr("Copy categories"), T.colors.dim)
-            catLabel:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", 16, -90)
-            copyPopup._checks = {}
-            for i = 1, #GF_COPY_CATEGORIES do
-                local cat = GF_COPY_CATEGORIES[i]
-                local col = (i > 6) and 1 or 0
-                local row = (i - 1) % 6
-                local cb = W.SwitchAt(copyPopup, cat.label, 16 + col * 205, -110 - row * 28, 150)
-                cb:SetChecked(M.gfCopyScopes[cat.key] == true)
-                cb:SetScript("OnClick", function(self) M.gfCopyScopes[cat.key] = self:GetChecked() and true or false end)
-                copyPopup._checks[i] = cb
-            end
-            local allBtn = MakeTopButton(copyPopup, M.Tr("All"), 48)
-            allBtn:SetPoint("BOTTOMLEFT", copyPopup, "BOTTOMLEFT", 16, 12)
-            allBtn:SetScript("OnClick", function()
-                SetCopyScopesSelected(true, "All copy categories selected")
-            end)
-            local noneBtn = MakeTopButton(copyPopup, M.Tr("None"), 58)
-            noneBtn:SetPoint("LEFT", allBtn, "RIGHT", 6, 0)
-            noneBtn:SetScript("OnClick", function()
-                SetCopyScopesSelected(false, "Copy categories cleared")
-            end)
-        end
-        local src = CurrentScope()
-        if copyPopup._title then copyPopup._title:SetText(M.Format(M.Tr("Copy from %s"), ScopeLabel(src))) end
-        for i = 1, #GF_COPY_CATEGORIES do
-            if copyPopup._checks[i] then copyPopup._checks[i]:SetChecked(M.gfCopyScopes[GF_COPY_CATEGORIES[i].key] == true) end
-        end
-        local nextX = 16
-        for i = 1, #SCOPE_VALUES do
-            local info = SCOPE_VALUES[i]
-            local btn = copyPopup._targets[info.value]
-            if btn then
-                local shown = info.value ~= src
-                btn:SetShown(shown)
-                if shown then
-                    btn:ClearAllPoints()
-                    btn:SetPoint("TOPLEFT", copyPopup, "TOPLEFT", nextX, -58)
-                    nextX = nextX + btn:GetWidth() + 6
+    local copyPopup = Shared.MakeScopeCopyPopup and Shared.MakeScopeCopyPopup(copy, {
+        width = 430,
+        height = 334,
+        categories = GF_COPY_CATEGORIES,
+        scopes = M.gfCopyScopes,
+        targets = SCOPE_VALUES,
+        targetWidths = { party = 58, raid = 58, mythicraid = 70 },
+        sourceKey = CurrentScope,
+        sourceLabel = ScopeLabel,
+        targetLabelText = ScopeShortLabel,
+        isTargetVisible = function(kind, source) return kind ~= source end,
+        categoryRowsPerColumn = 6,
+        categoryColumnWidth = 205,
+        categoryWidth = 150,
+        onTargetClick = function(kind, api, popup)
+            local function RunCopy()
+                if CopyGroupSettings(CurrentScope(), kind, M.gfCopyScopes) then
+                    RefreshContext(ctx)
+                    if M.ShowStatusFeedback then M.ShowStatusFeedback("Copied to " .. ScopeShortLabel(kind), "ok", 1.3) end
                 end
             end
-        end
-        M.ApplyPopupFramePriority(copyPopup)
-        copyPopup:ClearAllPoints()
-        copyPopup:SetPoint("TOPRIGHT", anchor or copy, "BOTTOMRIGHT", 0, -6)
-        copyPopup:Show()
-    end
-    copy:SetScript("OnClick", function(self) ShowCopyPopup(self) end)
-    sec:SetScript("OnHide", function() if copyPopup then copyPopup:Hide() end end)
+            M.RunWithHistory("Copy Group Settings", "group:copy:" .. tostring(CurrentScope()) .. ":" .. tostring(kind), RunCopy)
+            popup:Hide()
+        end,
+    })
+    copy:SetScript("OnClick", function(self) if copyPopup then copyPopup.Show(self) end end)
+    sec:SetScript("OnHide", function() if copyPopup then copyPopup.Hide() end end)
     M.TrackRefresh(ctx, RefreshTop)
 end
 local GroupPage = M.GroupPage or {}

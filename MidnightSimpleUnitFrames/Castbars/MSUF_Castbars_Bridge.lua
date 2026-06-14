@@ -8,7 +8,11 @@
 
 local _, ns = ...
 ns = ns or _G.MSUF_NS or {}
-_G.MSUF_NS = ns
+
+local ExportPublic = ns.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 
 ns.UF = ns.UF or {}
 
@@ -58,14 +62,17 @@ local function ShouldHide(unit)
     return GetBackend(unit) == "HIDE"
 end
 
-if type(_G.MSUF_IsCastbarEnabledForUnit) ~= "function" then
-    function _G.MSUF_IsCastbarEnabledForUnit(unit)
+local IsCastbarEnabledForUnit = _G.MSUF_IsCastbarEnabledForUnit
+if type(IsCastbarEnabledForUnit) ~= "function" then
+    IsCastbarEnabledForUnit = function(unit)
         return ShouldUseMSUF(unit)
     end
 end
+ExportPublic("MSUF_IsCastbarEnabledForUnit", IsCastbarEnabledForUnit)
 
-if type(_G.MSUF_IsCastTimeEnabled) ~= "function" then
-    function _G.MSUF_IsCastTimeEnabled(frame)
+local IsCastTimeEnabled = _G.MSUF_IsCastTimeEnabled
+if type(IsCastTimeEnabled) ~= "function" then
+    IsCastTimeEnabled = function(frame)
         local general = GeneralDB()
         local unit = frame and frame.unit
 
@@ -88,6 +95,7 @@ if type(_G.MSUF_IsCastTimeEnabled) ~= "function" then
         return true
     end
 end
+ExportPublic("MSUF_IsCastTimeEnabled", IsCastTimeEnabled)
 
 --- Blizzard only has a native player castbar path. When MSUF owns the player
 --- castbar, mark Blizzard's frames as suppressed and hook show attempts.
@@ -114,7 +122,7 @@ local function HideIfSuppressed(frame)
     end
 end
 
-function _G.MSUF_SuppressBlizzardPlayerCastbars()
+local function SuppressBlizzardPlayerCastbars()
     if ShouldUseBlizzard("player") then
         SetBlizzardPlayerCastbarAllowed(true)
         return false
@@ -156,6 +164,7 @@ function _G.MSUF_SuppressBlizzardPlayerCastbars()
 
     return hookedAny
 end
+ExportPublic("MSUF_SuppressBlizzardPlayerCastbars", SuppressBlizzardPlayerCastbars)
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
@@ -169,75 +178,87 @@ eventFrame:SetScript("OnEvent", function(_, event, addonName)
         return
     end
 
-    _G.MSUF_SuppressBlizzardPlayerCastbars()
+    SuppressBlizzardPlayerCastbars()
 end)
 
-_G.MSUF_AreAnyCastbarsEnabled = _G.MSUF_AreAnyCastbarsEnabled or function()
-    if ShouldUseMSUF("player") or ShouldUseMSUF("target") or ShouldUseMSUF("focus") then
-        return true
-    end
-
-    if ShouldUseMSUF("boss") and not (_G.MSUF_DB and _G.MSUF_DB.boss and _G.MSUF_DB.boss.enabled == false) then
-        return true
-    end
-
-    local general = GeneralDB()
-    return general.enableFocusKickIcon == true
-        and not (_G.MSUF_DB and _G.MSUF_DB.focus and _G.MSUF_DB.focus.enabled == false)
-end
-
-_G.MSUF_Castbars_ForceHideAll = _G.MSUF_Castbars_ForceHideAll or function()
-    local function Hide(frame)
-        if frame and frame.Hide then
-            frame:Hide()
+local AreAnyCastbarsEnabled = _G.MSUF_AreAnyCastbarsEnabled
+if type(AreAnyCastbarsEnabled) ~= "function" then
+    AreAnyCastbarsEnabled = function()
+        if ShouldUseMSUF("player") or ShouldUseMSUF("target") or ShouldUseMSUF("focus") then
+            return true
         end
-    end
 
-    Hide(_G.MSUF_PlayerCastBar)
-    Hide(_G.MSUF_PlayerCastbar)
-    Hide(_G.MSUF_TargetCastbar)
-    Hide(_G.TargetCastBar)
-    Hide(_G.MSUF_FocusCastbar)
-    Hide(_G.FocusCastBar)
-
-    local bossCastbars = _G.MSUF_BossCastbars
-    if type(bossCastbars) == "table" then
-        for index = 1, #bossCastbars do
-            Hide(bossCastbars[index])
+        if ShouldUseMSUF("boss") and not (_G.MSUF_DB and _G.MSUF_DB.boss and _G.MSUF_DB.boss.enabled == false) then
+            return true
         end
+
+        local general = GeneralDB()
+        return general.enableFocusKickIcon == true
+            and not (_G.MSUF_DB and _G.MSUF_DB.focus and _G.MSUF_DB.focus.enabled == false)
     end
 end
+ExportPublic("MSUF_AreAnyCastbarsEnabled", AreAnyCastbarsEnabled)
+
+local CastbarsForceHideAll = _G.MSUF_Castbars_ForceHideAll
+if type(CastbarsForceHideAll) ~= "function" then
+    CastbarsForceHideAll = function()
+        local function Hide(frame)
+            if frame and frame.Hide then
+                frame:Hide()
+            end
+        end
+
+        Hide(_G.MSUF_PlayerCastBar)
+        Hide(_G.MSUF_PlayerCastbar)
+        Hide(_G.MSUF_TargetCastbar)
+        Hide(_G.TargetCastBar)
+        Hide(_G.MSUF_FocusCastbar)
+        Hide(_G.FocusCastBar)
+
+        local bossCastbars = _G.MSUF_BossCastbars
+        if type(bossCastbars) == "table" then
+            for index = 1, #bossCastbars do
+                Hide(bossCastbars[index])
+            end
+        end
+    end
+end
+ExportPublic("MSUF_Castbars_ForceHideAll", CastbarsForceHideAll)
 
 --- One refresh entry for menus/profile changes. It syncs legacy backend flags,
 --- applies ownership changes, and hides stale frames if no castbar feature is on.
-_G.MSUF_Castbars_OnSettingsChanged = _G.MSUF_Castbars_OnSettingsChanged or function()
-    local syncBackend = _G.MSUF_SyncCastbarBackendLegacyFlags
-    if type(syncBackend) == "function" then
-        syncBackend(GeneralDB())
-    end
+local CastbarsOnSettingsChanged = _G.MSUF_Castbars_OnSettingsChanged
+if type(CastbarsOnSettingsChanged) ~= "function" then
+    CastbarsOnSettingsChanged = function()
+        local syncBackend = _G.MSUF_SyncCastbarBackendLegacyFlags
+        if type(syncBackend) == "function" then
+            syncBackend(GeneralDB())
+        end
 
-    _G.MSUF_SuppressBlizzardPlayerCastbars()
+        SuppressBlizzardPlayerCastbars()
 
-    local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
-    if type(applyPlayerState) == "function" then
-        applyPlayerState()
-    end
+        local applyPlayerState = _G.MSUF_PlayerCastbar_ApplyBackendState
+        if type(applyPlayerState) == "function" then
+            applyPlayerState()
+        end
 
-    local applyUnitState = _G.MSUF_CastbarDriver_ApplyBackendState
-    if type(applyUnitState) == "function" then
-        applyUnitState("target")
-        applyUnitState("focus")
-    end
+        local applyUnitState = _G.MSUF_CastbarDriver_ApplyBackendState
+        if type(applyUnitState) == "function" then
+            applyUnitState("target")
+            applyUnitState("focus")
+        end
 
-    local applyBossState = _G.MSUF_ApplyBossCastbarsEnabled
-    if type(applyBossState) == "function" then
-        applyBossState()
-    end
+        local applyBossState = _G.MSUF_ApplyBossCastbarsEnabled
+        if type(applyBossState) == "function" then
+            applyBossState()
+        end
 
-    if not _G.MSUF_AreAnyCastbarsEnabled() then
-        _G.MSUF_Castbars_ForceHideAll()
+        if not AreAnyCastbarsEnabled() then
+            CastbarsForceHideAll()
+        end
     end
 end
+ExportPublic("MSUF_Castbars_OnSettingsChanged", CastbarsOnSettingsChanged)
 
 local function RunNextFrame(callback)
     if type(callback) ~= "function" then
@@ -251,7 +272,11 @@ local function RunNextFrame(callback)
     end
 end
 
-_G.MSUF_Castbars_RunNextFrame = _G.MSUF_Castbars_RunNextFrame or RunNextFrame
+local CastbarsRunNextFrame = _G.MSUF_Castbars_RunNextFrame
+if type(CastbarsRunNextFrame) ~= "function" then
+    CastbarsRunNextFrame = RunNextFrame
+end
+ExportPublic("MSUF_Castbars_RunNextFrame", CastbarsRunNextFrame)
 
 --- Module registration lets the kernel disable/shutdown castbars without
 --- knowing about individual player/target/focus/boss implementation files.
@@ -260,13 +285,13 @@ if type(registerModule) == "function" then
     registerModule("Castbars", {
         order = 40,
         IsEnabled = function()
-            return _G.MSUF_AreAnyCastbarsEnabled()
+            return AreAnyCastbarsEnabled()
         end,
         Enable = function() end,
-        Disable = _G.MSUF_Castbars_ForceHideAll,
-        Shutdown = _G.MSUF_Castbars_ForceHideAll,
+        Disable = CastbarsForceHideAll,
+        Shutdown = CastbarsForceHideAll,
         RefreshSettings = function(_, reason)
-            _G.MSUF_Castbars_OnSettingsChanged(reason or "module_refresh")
+            CastbarsOnSettingsChanged(reason or "module_refresh")
 
             if type(_G.MSUF_ApplyPlayerChannelTickMarkers) == "function" then
                 _G.MSUF_ApplyPlayerChannelTickMarkers()

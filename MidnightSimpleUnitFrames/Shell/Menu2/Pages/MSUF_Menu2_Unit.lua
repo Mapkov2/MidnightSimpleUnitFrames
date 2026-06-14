@@ -1,8 +1,11 @@
 local addonName, MSUF = ...
 MSUF = MSUF or {}
+local ExportPublic = MSUF.ExportPublic or function(name, value)
+    _G[name] = value
+    return value
+end
 local M = MSUF.MSUF2 or {}
 MSUF.MSUF2 = M
-_G.MSUF2 = M
 
 -- Menu2 Unit page definitions.
 -- Declares per-unit page metadata, value lists, copy categories, and shared control constants.
@@ -299,7 +302,7 @@ local function ConfirmCopyToAll(callback)
 end
 local function CopyUnitSettings(unit, target, scopes)
     M.EnsureDB()
-    _G.MSUF_DB = _G.MSUF_DB or {}
+    ExportPublic("MSUF_DB", _G.MSUF_DB or {})
     _G.MSUF_DB.general = _G.MSUF_DB.general or {}
     local g = _G.MSUF_DB.general
     local src, srcKey = EnsureUnitDB(unit)
