@@ -9,5 +9,6 @@ _backups/
 # Local MSUF developer toolbelt. These scripts/docs are intentionally local-only
 # and should not ship with the addon or be pushed to GitHub.
 tools/
+_local_workflows/
 MidnightSimpleUnitFrames/scripts/
 MidnightSimpleUnitFrames/docs/
