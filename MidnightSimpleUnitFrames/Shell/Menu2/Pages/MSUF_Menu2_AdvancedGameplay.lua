@@ -13,8 +13,7 @@ local AP = M.AdvancedPage or {}
 local floor = math.floor
 local max = math.max
 local min = math.min
-local Gameplay, MoveWidget, LabelAt, DividerAt, SwitchAt, AddTableControlSpecs, SetControlEnabled = M.Pick(AP, [[Gameplay MoveWidget LabelAt DividerAt SwitchAt AddTableControlSpecs SetControlEnabled]])
-local SetControlsEnabled = W.SetControlsEnabled
+local Gameplay, MoveWidget, LabelAt, DividerAt, SwitchAt, AddTableControlSpecs = M.Pick(AP, [[Gameplay MoveWidget LabelAt DividerAt SwitchAt AddTableControlSpecs]])
 local ApplyGameplay = M.ApplyGameplay
 local VT = M.ValueTextList
 local function BuildGameplay(ctx)
@@ -29,10 +28,10 @@ local function BuildGameplay(ctx)
     local previewRefresh
     local function ApplyGameplayUI()
         -- Gameplay edits often change both enabled state and preview visibility. Apply the
-        -- runtime once, then refresh page-local disabled/preview controls.
+        -- runtime once, then refresh page-local controls. disabledRefresh (BindGateGroup)
+        -- also runs previewRefresh via its `also` hook, so one call covers both.
         ApplyGameplay()
         if disabledRefresh then disabledRefresh() end
-        if previewRefresh then previewRefresh() end
     end
     local anchorValues = VT("none", "None", "player", "Player", "target", "Target", "focus", "Focus")
     local frameAnchors = VT("TOPLEFT", "TOPLEFT", "TOP", "TOP", "TOPRIGHT", "TOPRIGHT", "LEFT", "LEFT", "CENTER", "CENTER", "RIGHT", "RIGHT", "BOTTOMLEFT", "BOTTOMLEFT", "BOTTOM", "BOTTOM", "BOTTOMRIGHT", "BOTTOMRIGHT")
@@ -384,28 +383,21 @@ local function BuildGameplay(ctx)
         bars[4]:SetSize(thick, size * 0.42)
         for i = 1, 4 do bars[i]:SetVertexColor(r or 1, gr or 0, b or 0, g.enableCombatCrosshair and 1 or 0.35) end
     end
-    disabledRefresh = function()
-        local g = Gameplay()
-        local timerOn = g.enableCombatTimer == true
-        SetControlsEnabled(timerControls, timerOn)
-        SetControlEnabled(timerEnable, true)
-        local stateOn = g.enableCombatStateText == true
-        SetControlsEnabled(stateControls, stateOn)
-        SetControlEnabled(stateEnable, true)
-        local totemsOn = hasTotemFrame and g.enablePlayerTotems == true
-        SetControlEnabled(totemEnable, hasTotemFrame)
-        SetControlsEnabled(totemActionControls, hasTotemFrame)
-        SetControlsEnabled(totemControls, totemsOn)
-        local firstOn = isRogue and g.enableFirstDanceTimer == true
-        SetControlEnabled(firstDanceEnable, isRogue)
-        SetControlsEnabled(firstDanceControls, firstOn)
-        local crossOn = g.enableCombatCrosshair == true
-        SetControlEnabled(crossEnable, true)
-        SetControlsEnabled(crossControls, crossOn)
-        local meleeOn = crossOn and g.enableCombatCrosshairMeleeRangeColor == true
-        SetControlsEnabled(meleeControls, meleeOn)
-    end
-    M.TrackRefresh(ctx, function() disabledRefresh(); previewRefresh() end)
+    -- Each row gates a dependent control group by its master toggle. totemActionControls and
+    -- the totem/first-dance enables also depend on class availability (hasTotemFrame/isRogue).
+    disabledRefresh = M.BindGateGroup(ctx, Gameplay, {
+        { enable = timerEnable, controls = timerControls, on = function(g) return g.enableCombatTimer == true end },
+        { enable = stateEnable, controls = stateControls, on = function(g) return g.enableCombatStateText == true end },
+        { enable = totemEnable, enableOn = function() return hasTotemFrame end,
+          controls = totemActionControls, on = function() return hasTotemFrame end },
+        { controls = totemControls, on = function(g) return hasTotemFrame and g.enablePlayerTotems == true end },
+        { enable = firstDanceEnable, enableOn = function() return isRogue end,
+          controls = firstDanceControls, on = function(g) return isRogue and g.enableFirstDanceTimer == true end },
+        { enable = crossEnable, controls = crossControls, on = function(g) return g.enableCombatCrosshair == true end },
+        { controls = meleeControls, on = function(g)
+            return g.enableCombatCrosshair == true and g.enableCombatCrosshairMeleeRangeColor == true
+        end },
+    }, { also = previewRefresh })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("gameplay", { title = "MSUF Gameplay", build = BuildGameplay, version = 3 })

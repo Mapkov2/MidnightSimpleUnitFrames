@@ -706,9 +706,9 @@ local function BuildColors(ctx)
         g.powerBarBgMatchBarColor = nil
         ApplyGlobalOutlineColor()
     end)
-    M.TrackRefresh(ctx, function()
-        SetControlEnabled(powerBg, not (powerBgMatch:GetChecked() and true or false))
-    end)
+    M.BindGateGroup(ctx, nil, {
+        { controls = powerBg, on = function() return not (powerBgMatch:GetChecked() and true or false) end },
+    })
     local dispel = b:CollapsibleSection("colors_dispel", "Dispel", 310, false)
     LabelAt(dispel, "Dispel color shared by Highlight Border and Unit/Group Frame Dispel Overlay.", 12, -8, 620, "GameFontHighlightSmall", T.colors.muted)
     ValueDropdownAt(ctx, dispel, "Color mode", 12, -42, ValueTextPairs "SINGLE=Single color|TYPE=Per debuff type", 220,
@@ -737,11 +737,10 @@ local function BuildColors(ctx)
         ApplyColors()
         CallGlobal("MSUF_PrioRows_Reinit")
     end)
-    M.TrackRefresh(ctx, function()
-        local mode = G().hlDispelColorMode or "SINGLE"
-        SetControlEnabled(singleDispel, mode ~= "TYPE")
-        SetControlsEnabled(typeControls, mode == "TYPE")
-    end)
+    M.BindGateGroup(ctx, function() return (G().hlDispelColorMode or "SINGLE") end, {
+        { controls = singleDispel, on = function(mode) return mode ~= "TYPE" end },
+        { controls = typeControls, on = function(mode) return mode == "TYPE" end },
+    })
     local castbar = b:CollapsibleSection("colors_castbar", "Castbar Colors", 544, false)
     local castW = castbar._msuf2Width or ctx.width or 720
     CH.ApiColorSpecs(ctx, castbar, {
@@ -816,9 +815,9 @@ local function BuildColors(ctx)
         ApplyColors()
         if MSUF and MSUF.UF and MSUF.UF.ForceUpdate then MSUF.UF.ForceUpdate(nil) end
     end)
-    M.TrackRefresh(ctx, function()
-        SetControlEnabled(highlightColor, G().highlightEnabled ~= false)
-    end)
+    M.BindGateGroup(ctx, nil, {
+        { controls = highlightColor, on = function() return G().highlightEnabled ~= false end },
+    })
     local gameplay = b:CollapsibleSection("colors_gameplay", "Gameplay", 310, false)
     CH.TableColorSpecs(ctx, gameplay, Gameplay, {
         { "Combat timer text color", 12, -10, "combatTimerColor", 1, 1, 1 },
@@ -856,9 +855,9 @@ local function BuildColors(ctx)
         gp.crosshairOutRangeColor = { 1, 0, 0 }
         ApplyGameplayColors()
     end)
-    M.TrackRefresh(ctx, function()
-        SetControlEnabled(leaveColor, not (Gameplay().combatStateColorSync == true))
-    end)
+    M.BindGateGroup(ctx, nil, {
+        { controls = leaveColor, on = function() return not (Gameplay().combatStateColorSync == true) end },
+    })
     BuildPowerAndClassPowerColors(ctx, b, CH)
     BuildAuraAndPortraitColors(ctx, b, CH)
     ctx:SetContentHeight(math.abs(b.y) + 42)

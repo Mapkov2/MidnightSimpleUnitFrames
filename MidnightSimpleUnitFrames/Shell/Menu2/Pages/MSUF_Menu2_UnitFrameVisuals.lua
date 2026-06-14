@@ -14,8 +14,7 @@ local max = math.max
 local min = math.min
 local VT = M.ValueTextList
 local POWER_UNITS, CASTBAR_FIELDS, PORTRAIT_RENDER, PORTRAIT_SHAPES, PORTRAIT_BORDERS = M.PickDefaults(UP, [[POWER_UNITS CASTBAR_FIELDS PORTRAIT_RENDER PORTRAIT_SHAPES PORTRAIT_BORDERS]])
-local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, SetControlEnabled, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool SetControlEnabled NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources]])
-local SetControlsEnabled = W.SetControlsEnabled
+local GetConf, GetGeneral, GetBars, Call, UnitTopLabel, ReadBool, SetBool, ReadNumber, SetNumber, ReadGeneralBool, SetGeneralBool, NormalizePortrait, SetPortraitValue, IsPlayerPowerManagedByClassResources = M.Pick(UP, [[GetConf GetGeneral GetBars Call UnitTopLabel ReadBool SetBool ReadNumber SetNumber ReadGeneralBool SetGeneralBool NormalizePortrait SetPortraitValue IsPlayerPowerManagedByClassResources]])
 local CASTBAR_BACKEND_VALUES = VT("MSUF", "MSUF castbar", "BLIZZARD", "Blizzard castbar")
 local CASTBAR_PREFIX = { player = "castbarPlayer", target = "castbarTarget", focus = "castbarFocus", boss = "bossCast" }
 local CASTBAR_ICON_POSITIONS = VT("LEFT", "Left", "RIGHT", "Right", "INSIDE_LEFT", "Inside Left", "INSIDE_RIGHT", "Inside Right")
@@ -140,19 +139,16 @@ local function BuildPortrait(ctx, builder, unit)
     local fillBorder = BindPortraitToggle(borderCard, "Fill border into frame gap", 16, -238, leftW - 32, "portraitFillBorder", false, "MSUF2_PORTRAIT_FILL_BORDER")
     local portraitBg = BindPortraitToggle(styleCard, "Portrait background", 16, -112, rightW - 32, "portraitBgEnabled", false, "MSUF2_PORTRAIT_BG")
     local portraitActiveControls = { portrait, render, shape, size, x, y, border, portraitBg }
-    RefreshPortraitControls = RefreshPortraitControls(function()
-        local conf = GetConf(unit)
-        local active = NormalizePortrait(unit) ~= "OFF"
-        local classRender = active and ((conf.portraitRender or "2D") == "CLASS")
-        local hasBorder = active and ((conf.portraitBorderStyle or "NONE") ~= "NONE")
-        SetControlEnabled(portraitEnable, true)
-        SetControlsEnabled(portraitActiveControls, active)
-        SetControlEnabled(borderSize, hasBorder)
-        SetControlEnabled(fillBorder, hasBorder)
-        SetControlEnabled(classStyle, classRender)
-        SetSectionHeaderStatus(sec, nil)
-    end)
-    M.TrackCollapsibleRefresh(ctx, sec, RefreshPortraitControls)
+    local function PortraitActive() return NormalizePortrait(unit) ~= "OFF" end
+    RefreshPortraitControls = RefreshPortraitControls(M.BindGateGroup(ctx, function() return GetConf(unit) end, {
+        { enable = portraitEnable },
+        { controls = portraitActiveControls, on = PortraitActive },
+        { controls = { borderSize, fillBorder }, on = function(conf) return PortraitActive() and ((conf.portraitBorderStyle or "NONE") ~= "NONE") end },
+        { controls = classStyle, on = function(conf) return PortraitActive() and ((conf.portraitRender or "2D") == "CLASS") end },
+    }, {
+        also = function() SetSectionHeaderStatus(sec, nil) end,
+        track = function(c, r) return M.TrackCollapsibleRefresh(c, sec, r) end,
+    }))
 end
 local function BuildPower(ctx, builder, unit)
     if not POWER_UNITS[unit] then return end
@@ -331,41 +327,49 @@ local function BuildPower(ctx, builder, unit)
         if M.AddTooltip then M.AddTooltip(detachedShape, "Detached Shape", "Orb is a single bottom-to-top filled mana/power sphere. Follow Class Resource maps Circle to Round and Diamond/Hex to Crystal.", { hook = true, owner = "ANCHOR_RIGHT" }) end
         orbSize = BindPowerSlider(detachedCard, AddDetachedControl, "Orb size", 16, sliderTop - 198, detachedSliderW, 20, 160, 1, "detachedPowerOrbSize", 54, "MSUF2_POWER_DETACHED_ORB_SIZE")
     end
-    RefreshPowerEnabled = RefreshPowerEnabled(function()
-        local powerOn = ReadBool(unit, "showPowerBar", true)
-        local detachedOn = powerOn and ReadBool(unit, "powerBarDetached", false)
-        local classManaged = isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit)
-        SetControlsEnabled(powerControls, powerOn)
-        SetControlsEnabled(detachedControls, detachedOn)
-        SetControlEnabled(borderSize, powerOn and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true))
-        SetControlEnabled(show, true)
-        local orbSelected = isPlayer and NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape) == "ORB"
-        if detachedSync then SetControlEnabled(detachedSync, detachedOn and not orbSelected) end
-        if detachedWidth then SetControlEnabled(detachedWidth, detachedOn and not orbSelected) end
-        if detachedHeight then SetControlEnabled(detachedHeight, detachedOn and not orbSelected) end
-        if detachedShape then SetControlEnabled(detachedShape, detachedOn) end
-        if orbSize then SetControlEnabled(orbSize, detachedOn and orbSelected) end
-        if classManaged then
-            SetControlsEnabled(powerControls, false)
-            SetControlsEnabled(detachedControls, false)
-            SetControlEnabled(show, false)
-            SetControlEnabled(borderSize, false)
-        end
-        if classManaged then
-            if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Class Resources") or "Class Resources") end
-            powerNotice:SetMessage("Player power bar is connected to Class Resources. Manage detached power and power text in Class Resources > Detached Power Bar.", "warning")
-            powerNotice:Show()
-        elseif not powerOn then
-            if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
-            powerNotice:SetMessage(UnitTopLabel(unit) .. " power bar is hidden. Turn it on to configure size, embed, or detached settings.", "warning")
-            powerNotice:Show()
-        else
-            if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
-            powerNotice:Hide()
-        end
-        SetSectionHeaderStatus(sec, nil)
-    end)
-    M.TrackCollapsibleRefresh(ctx, sec, RefreshPowerEnabled)
+    local function PowerOn() return ReadBool(unit, "showPowerBar", true) end
+    local function DetachedOn() return PowerOn() and ReadBool(unit, "powerBarDetached", false) end
+    local function OrbSelected() return isPlayer and NormalizeDetachedPowerShape(GetConf(unit).detachedPowerBarShape) == "ORB" end
+    local function ClassManaged() return isPlayer and IsPlayerPowerManagedByClassResources and IsPlayerPowerManagedByClassResources(unit) and true or false end
+    RefreshPowerEnabled = RefreshPowerEnabled(M.BindGateGroup(ctx, nil, {
+        { enable = show, controls = powerControls, on = PowerOn },
+        { controls = detachedControls, on = DetachedOn },
+        { controls = borderSize, on = function() return PowerOn() and ReadBool(unit, "powerBarBorderEnabled", GetBars().powerBarBorderEnabled == true) end },
+        -- Detached width/height/sync exist only when a detached card was built; the `when`
+        -- guard reproduces the original `if detachedX then` existence checks.
+        { controls = detachedSync, when = function() return detachedSync ~= nil end, on = function() return DetachedOn() and not OrbSelected() end },
+        { controls = detachedWidth, when = function() return detachedWidth ~= nil end, on = function() return DetachedOn() and not OrbSelected() end },
+        { controls = detachedHeight, when = function() return detachedHeight ~= nil end, on = function() return DetachedOn() and not OrbSelected() end },
+        { controls = detachedShape, when = function() return detachedShape ~= nil end, on = DetachedOn },
+        { controls = orbSize, when = function() return orbSize ~= nil end, on = function() return DetachedOn() and OrbSelected() end },
+    }, {
+        -- Player power managed by Class Resources force-disables the whole group, overriding
+        -- the rows above. Then update the section notice and header status.
+        override = function(_, setEnabled)
+            if ClassManaged() then
+                setEnabled(powerControls, false)
+                setEnabled(detachedControls, false)
+                setEnabled(show, false)
+                setEnabled(borderSize, false)
+            end
+        end,
+        also = function()
+            if ClassManaged() then
+                if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Class Resources") or "Class Resources") end
+                powerNotice:SetMessage("Player power bar is connected to Class Resources. Manage detached power and power text in Class Resources > Detached Power Bar.", "warning")
+                powerNotice:Show()
+            elseif not PowerOn() then
+                if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
+                powerNotice:SetMessage(UnitTopLabel(unit) .. " power bar is hidden. Turn it on to configure size, embed, or detached settings.", "warning")
+                powerNotice:Show()
+            else
+                if powerNoticeButton and powerNoticeButton.SetText then powerNoticeButton:SetText(M.Tr and M.Tr("Show Power") or "Show Power") end
+                powerNotice:Hide()
+            end
+            SetSectionHeaderStatus(sec, nil)
+        end,
+        track = function(c, r) return M.TrackCollapsibleRefresh(c, sec, r) end,
+    }))
 end
 local function BuildCastbar(ctx, builder, unit)
     local fields = CASTBAR_FIELDS[unit]
@@ -613,33 +617,31 @@ local function BuildCastbar(ctx, builder, unit)
         { "slider", "Y offset", 16, -304, controlWLeft, -300, 300, 1, DetailKey("TimeOffsetY"), 0, "MSUF2_CASTBAR_TIME_Y" },
     })
     local castbarFeatureToggles = { time, interrupt, icon, text }
-    RefreshCastbarEnabled = RefreshCastbarEnabled(function()
-        local backend = ReadCastbarBackend()
-        local enabledOn = (backend ~= "HIDE")
-        local msufOn = (backend == "MSUF")
-        local iconOn = msufOn and ReadGeneralBool(fields.icon, true)
-        local spellOn = msufOn and ReadGeneralBool(fields.text, true)
-        local timeOn = msufOn and ReadGeneralBool(fields.time, true)
-        SetControlsEnabled(castbarFeatureToggles, msufOn)
-        SetControlEnabled(enabled, true)
-        if provider then SetControlEnabled(provider, enabledOn) end
-        SetControlsEnabled(allCastbarControls, msufOn)
-        SetControlsEnabled(iconControls, iconOn)
-        SetControlsEnabled(spellControls, spellOn)
-        SetControlsEnabled(timeControls, timeOn)
-        if not msufOn then
-            if backend == "HIDE" then
-                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is off. Turn it on to use the MSUF castbar.", "warning")
+    local function MsufOn() return ReadCastbarBackend() == "MSUF" end
+    RefreshCastbarEnabled = RefreshCastbarEnabled(M.BindGateGroup(ctx, nil, {
+        { enable = enabled, controls = castbarFeatureToggles, on = MsufOn },
+        { controls = provider, when = function() return provider ~= nil end, on = function() return ReadCastbarBackend() ~= "HIDE" end },
+        { controls = allCastbarControls, on = MsufOn },
+        { controls = iconControls, on = function() return MsufOn() and ReadGeneralBool(fields.icon, true) end },
+        { controls = spellControls, on = function() return MsufOn() and ReadGeneralBool(fields.text, true) end },
+        { controls = timeControls, on = function() return MsufOn() and ReadGeneralBool(fields.time, true) end },
+    }, {
+        also = function()
+            local backend = ReadCastbarBackend()
+            if backend ~= "MSUF" then
+                if backend == "HIDE" then
+                    castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar is off. Turn it on to use the MSUF castbar.", "warning")
+                else
+                    castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", "warning")
+                end
+                castbarNotice:Show()
             else
-                castbarNotice:SetMessage(UnitTopLabel(unit) .. " castbar uses Blizzard. Select MSUF to adjust castbar layout and text behavior.", "warning")
+                castbarNotice:Hide()
             end
-            castbarNotice:Show()
-        else
-            castbarNotice:Hide()
-        end
-        SetSectionHeaderStatus(sec, nil)
-    end)
-    M.TrackCollapsibleRefresh(ctx, sec, RefreshCastbarEnabled)
+            SetSectionHeaderStatus(sec, nil)
+        end,
+        track = function(c, r) return M.TrackCollapsibleRefresh(c, sec, r) end,
+    }))
 end
 if type(UP.RegisterSection) == "function" then
     UP.RegisterSection({ id = "portrait", placement = "after_inline_text", order = 10, build = BuildPortrait })
