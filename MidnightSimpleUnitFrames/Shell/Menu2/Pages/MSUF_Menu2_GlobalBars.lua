@@ -751,11 +751,9 @@ local function BuildBars(ctx)
                 ApplyOutlineRuntime()
             end
         end)
-    M.TrackRefresh(ctx, function()
-        local active = ScopedBarsControlsActive()
-        SetControlEnabled(outlineSlider, active)
-        SetControlEnabled(outlineColor, active)
-    end)
+    M.BindGateGroup(ctx, nil, {
+        { controls = { outlineSlider, outlineColor }, on = ScopedBarsControlsActive },
+    })
     local rounded = b:CollapsibleSection("bars_rounded", "Rounded Texture", 246, true)
     local roundLeftX = 30
     local roundRightX = 330
@@ -790,11 +788,11 @@ local function BuildBars(ctx)
         "rounded preview|rounded example|rounded image|rounded frame preview|preview rounded frames|rounded frames aussehen|vorschau abgerundete frames",
         "Shows a small preview of the rounded frame texture style.", "preview")
     local roundedDependentControls = { roundedControls.units, roundedControls.groups, roundedControls.power, roundedControls.mouseover }
-    M.TrackRefresh(ctx, SyncRoundedControls(function()
-        local active = ReadB("roundedFramesEnabled", false) == true
-        SetControlsEnabled(roundedDependentControls, active)
-        if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end
-    end))
+    SyncRoundedControls(M.BindGateGroup(ctx, nil, {
+        { controls = roundedDependentControls, on = function() return ReadB("roundedFramesEnabled", false) == true end },
+    }, {
+        also = function() if roundedPreview and roundedPreview.RefreshRoundedPreview then roundedPreview:RefreshRoundedPreview() end end,
+    }))
     local highlights = b:CollapsibleSection("bars_highlight", "Highlight Borders", 606, true)
     local hlW = highlights._msuf2Width or ctx.width or 720
     local hlGap = 28
@@ -1085,10 +1083,10 @@ local function BuildBars(ctx)
     M.BindBoolWidget(ctx, realtimePower,
         function() return ReadB("realtimePowerText", true) ~= false end,
         function(v) SetB("realtimePowerText", v and true or false, "MSUF2_BARS_REALTIME_POWER", { preview = true }); ApplyBars("MSUF2_BARS_REALTIME_POWER") end)
-    M.TrackRefresh(ctx, function()
-        SetControlEnabled(smoothPower, CurrentPowerBarScopeUnit() ~= nil)
-        SetControlEnabled(realtimePower, SharedBarsControlsActive())
-    end)
+    M.BindGateGroup(ctx, nil, {
+        { controls = smoothPower, on = function() return CurrentPowerBarScopeUnit() ~= nil end },
+        { controls = realtimePower, on = SharedBarsControlsActive },
+    })
     ctx:SetContentHeight(math.abs(b.y) + 42)
 end
 M.RegisterPage("opt_bars", { title = "MSUF Bars", build = BuildBars, version = 14 })

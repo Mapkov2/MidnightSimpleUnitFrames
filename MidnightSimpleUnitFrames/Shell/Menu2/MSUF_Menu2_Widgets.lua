@@ -624,7 +624,148 @@ function W.PageBuilder(ctx)
             }
         end
     end
+    --- Declarative card layout. Renders one ControlCard whose controls auto-flow
+    --- top-to-bottom using the SAME widget constructors and binders that hand-written
+    --- pages use, so output is pixel-identical to a manually placed card. The point is
+    --- to delete the repeated PlaceDropdown/PlaceSlider/MoveWidget choreography and the
+    --- hand-computed -48/-112/-174 row offsets that came with it.
+    ---
+    --- spec = {
+    ---   title, subtitle, x, y, width, height?,  -- height auto-computed when omitted
+    ---   rows = { <controlSpec>, ... },
+    --- }
+    --- Returns { card = <frame>, controls = <id -> widget>, gate = <fn or nil> }.
+    function b:Card(spec)
+        return W.BuildCard(self.ctx, self.parent, spec)
+    end
     return b
+end
+
+--- Height each auto-flowing widget kind consumes inside a card/section, matching the
+--- NextRow() advances in the individual W.* constructors. Kept here so card height can be
+--- pre-computed without first creating the widgets.
+local CARD_ROW_HEIGHT = {
+    toggle = 30, switch = 30, button = 30,
+    slider = 48, dropdown = 48, segment = 48, textinput = 50,
+    color = 34, text = 24, divider = 14, spacer = 0,
+}
+
+--- Resolve a per-row value that may be a literal or a function (values lists are often
+--- runtime-built, e.g. SharedMedia font lists).
+local function CardResolve(v)
+    if type(v) == "function" then return v() end
+    return v
+end
+
+--- Title-justify each widget kind expects from MoveWidget, matching the hand-written
+--- PlaceDropdown ("LEFT") / PlaceSlider ("CENTER") conventions so converted cards keep
+--- their exact label alignment.
+local CARD_MOVE_JUSTIFY = { slider = "CENTER", dropdown = "LEFT", segment = "LEFT", textinput = "LEFT" }
+
+--- Create + bind one control row, placing it at (x, y) inside the card via the SAME
+--- MoveWidget call the hand-written pages use. Returns the widget, or nil for
+--- non-interactive rows (text/divider/spacer handled by the caller).
+local function BuildCardControl(ctx, card, row, x, y, width)
+    local kind = row.kind or row.type
+    local widget
+    if kind == "toggle" then
+        widget = W.ToggleAt(card, CardResolve(row.label), x, y, width)
+        M.BindBoolWidget(ctx, widget, row.get, row.set)
+        return widget
+    elseif kind == "color" then
+        widget = W.Color(card, CardResolve(row.label))
+        W.MoveWidget(widget, card, x, y)
+        M.BindColor(ctx, widget, row.get, row.set)
+        return widget
+    elseif kind == "slider" then
+        widget = W.Slider(card, CardResolve(row.label), row.min or 0, row.max or 100, row.step or 1, row.width or width)
+        if row.format and widget.SetValueFormatter then widget:SetValueFormatter(row.format) end
+        M.BindNumberWidget(ctx, widget, row.get, row.set, row.default, {
+            step = row.step or 1, roundStep = row.roundStep ~= false,
+        })
+    elseif kind == "segment" then
+        widget = W.Segment(card, CardResolve(row.label), CardResolve(row.values), row.width or width)
+        M.BindSegment(ctx, widget, row.get, row.set)
+    elseif kind == "dropdown" then
+        widget = W.Dropdown(card, CardResolve(row.label), CardResolve(row.values), row.width or width)
+        M.BindDropdownWidget(ctx, widget, row.get, row.set)
+    else
+        return nil
+    end
+    W.MoveWidget(widget, card, x, y, row.width or width, CARD_MOVE_JUSTIFY[kind])
+    return widget
+end
+
+--- Standalone card builder (also reachable as b:Card on a PageBuilder).
+---
+--- Each interactive row is placed explicitly at a cursor that starts at `firstRowY`
+--- (default -52, matching ControlCard's own first-control line) and advances by the
+--- row's height plus `rowGap` (default 6). Pin `firstRowY`/`rowGap`/per-row `height`
+--- to reproduce an existing card's exact spacing, so a conversion stays pixel-identical.
+---
+--- spec = {
+---   title, subtitle, x, y, width, height?, firstRowY?, rowGap?, contentX?,
+---   rows = { { kind, label, get, set, values?/min/max/step?, width?, id?, gate?, height? }, ... },
+--- }
+--- Returns { card = <frame>, controls = <id -> widget>, gate = <fn or nil> }.
+function W.BuildCard(ctx, parent, spec)
+    if not (parent and type(spec) == "table") then return nil end
+    local rows = spec.rows or {}
+    local width = spec.width or (parent._msuf2Width and (parent._msuf2Width - 32)) or 360
+    local contentX = spec.contentX or 16
+    local controlW = max(48, width - 32)
+    local rowGap = spec.rowGap or 6
+    -- Pre-compute card height from the row kinds unless the caller pinned one.
+    local height = spec.height
+    if not height then
+        height = (spec.subtitle and spec.subtitle ~= "") and 64 or 52 -- title (+ subtitle) block
+        for i = 1, #rows do
+            local k = rows[i].kind or rows[i].type
+            height = height + (rows[i].height or CARD_ROW_HEIGHT[k] or 30) + rowGap
+        end
+        height = height + 6 -- bottom padding
+    end
+    local card = W.ControlCard(parent, spec.title, spec.subtitle, spec.x or 0, spec.y or 0, width, height)
+    if not card then return nil end
+    local y = spec.firstRowY or ((spec.subtitle and spec.subtitle ~= "") and -64 or -52)
+    local controls = {}
+    local gated
+    for i = 1, #rows do
+        local row = rows[i]
+        local kind = row.kind or row.type
+        local rowHeight = row.height or CARD_ROW_HEIGHT[kind] or 30
+        if kind == "spacer" then
+            -- no widget; only advances the cursor
+        elseif kind == "text" then
+            local fs = W.LabelAt(card, CardResolve(row.text) or "", contentX, y, controlW, row.template, row.color)
+            if row.id then controls[row.id] = fs end
+        elseif kind == "divider" then
+            W.DividerAt(card, y - 6)
+        else
+            local widget = BuildCardControl(ctx, card, row, contentX, y, controlW)
+            if widget then
+                if row.id then controls[row.id] = widget end
+                if row.gate then
+                    widget._msuf2GateFn = row.gate
+                    gated = gated or {}
+                    gated[#gated + 1] = widget
+                end
+            end
+        end
+        y = y - rowHeight - rowGap
+    end
+    -- Single shared gate refresher: any row.gate returning false disables its control.
+    local gate
+    if gated then
+        gate = function()
+            for i = 1, #gated do
+                local w = gated[i]
+                W.SetControlEnabled(w, w._msuf2GateFn() and true or false)
+            end
+        end
+        if M.TrackRefresh then M.TrackRefresh(ctx, gate) end
+    end
+    return { card = card, controls = controls, gate = gate }
 end
 local function TopButtonStyle(bg, border, textColor, hoverBg, hoverBorder)
     return {

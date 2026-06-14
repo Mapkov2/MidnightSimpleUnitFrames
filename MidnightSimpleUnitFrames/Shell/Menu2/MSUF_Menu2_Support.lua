@@ -432,6 +432,57 @@ end
 
 -- Lets callbacks call a refresh function before its body is assigned later in the page build.
 function M.RefreshProxy() local refresh; return function(fn) if fn then refresh = fn; return fn end; return M.CallIf(refresh) end end
+
+--- Declarative "master toggle gates dependent controls" helper.
+--- Replaces the repeated hand-written refresh closures that read a config value and call
+--- SetControlEnabled/SetControlsEnabled for each control group. The single most duplicated
+--- logic shape in the Pages layer (see disabledRefresh closures), so collapsing each gate
+--- from ~3 lines to one declarative row both shrinks pages and removes copy/paste drift.
+---
+--- source: optional fn returning the config table passed to each entry's predicates.
+--- entries: list of {
+---   on        = fn(cfg) -> bool   -- whether `controls` are enabled (required)
+---   controls  = widget | {widgets} -- gated by `on`
+---   enable    = widget | {widgets} -- the master toggle itself; enabled by `enableOn` (default: always on)
+---   enableOn  = fn(cfg) -> bool    -- optional gate for `enable` (e.g. hasTotemFrame)
+---   when      = fn(cfg) -> bool    -- optional: skip this entry entirely when false (control left untouched)
+--- }
+--- opts.also:    extra fn run at the end of every refresh (e.g. a preview repaint).
+--- opts.override: fn(cfg, setEnabled) run last, for page-specific final adjustments
+---               (e.g. a "managed power" branch that force-disables a group).
+--- opts.track:   custom registration fn(ctx, refresh); defaults to M.TrackRefresh.
+---               Pass M.TrackCollapsibleRefresh-style closures here to keep a page's
+---               existing refresh wiring (collapsible/section refreshers).
+--- opts.noTrack: when true, return the bare refresh fn WITHOUT registering it (caller
+---               wires it into its own combined closure).
+--- Returns the refresh fn.
+function M.BindGateGroup(ctx, source, entries, opts)
+    opts = opts or {}
+    local W = M.Widgets
+    local function setEnabled(target, enabled)
+        if not target then return end
+        if type(target) == "table" and target[1] ~= nil and not target.GetObjectType then
+            W.SetControlsEnabled(target, enabled)
+        else
+            W.SetControlEnabled(target, enabled)
+        end
+    end
+    local function refresh()
+        local cfg = M.CallIf(source)
+        for i = 1, #entries do
+            local e = entries[i]
+            if (not e.when) or e.when(cfg) then
+                if e.enable then setEnabled(e.enable, e.enableOn and (e.enableOn(cfg) and true or false) or true) end
+                if e.controls then setEnabled(e.controls, e.on and (e.on(cfg) and true or false) or false) end
+            end
+        end
+        if opts.override then opts.override(cfg, setEnabled) end
+        M.CallIf(opts.also)
+    end
+    if opts.noTrack then return refresh end
+    if opts.track then return opts.track(ctx, refresh) or refresh end
+    return M.TrackRefresh(ctx, refresh)
+end
 function M.RequestOrRefresh(ctx, reason) if M.RequestRefresh then return M.RequestRefresh(ctx, reason) end; return M.CallIf(M.Refresh, ctx) end
 function M.NormalizeHpMode(mode)
     if type(_G.MSUF_NormalizeHpTextMode) == "function" then return _G.MSUF_NormalizeHpTextMode(mode) end
