@@ -427,6 +427,33 @@ local AURA_SORT_ORDER = {
     { value = 6, text = "Name only" },
 }
 
+local AURA_BUFF_FILTER_VALUES = {
+    { value = "ALL", text = "All buffs" },
+    { value = "PLAYER", text = "Mine only" },
+    { value = "RAID", text = "Raid buffs" },
+    { value = "RAID_PLAYER", text = "Raid + mine" },
+    { value = "RAID_PLAYER_DISPELLABLE", text = "Player dispellable" },
+    { value = "RAID_IN_COMBAT", text = "Raid in combat" },
+    { value = "CROWD_CONTROL", text = "Crowd control" },
+    { value = "BIG_DEFENSIVE", text = "Big defensive" },
+    { value = "EXTERNAL_DEFENSIVE", text = "External defensive" },
+    { value = "CANCELABLE", text = "Cancelable" },
+    { value = "NOT_CANCELABLE", text = "Not cancelable" },
+}
+
+local AURA_DEBUFF_FILTER_VALUES = {
+    { value = "ALL", text = "All debuffs" },
+    { value = "PLAYER", text = "Mine only" },
+    { value = "RAID", text = "Boss / raid" },
+    { value = "DISPELLABLE", text = "Dispellable" },
+    { value = "RAID_IN_COMBAT", text = "Raid in combat" },
+    { value = "CROWD_CONTROL", text = "Crowd control" },
+    { value = "BIG_DEFENSIVE", text = "Big defensive" },
+    { value = "EXTERNAL_DEFENSIVE", text = "External defensive" },
+    { value = "CANCELABLE", text = "Cancelable" },
+    { value = "NOT_CANCELABLE", text = "Not cancelable" },
+}
+
 local PANDEMIC_MODES = {
     { value = "BORDER", text = "Border" },
     { value = "PULSE", text = "Pulse" },
@@ -705,6 +732,7 @@ local AURAS_BUILD_DEPS = {
     AURA_SCOPES = AURA_SCOPES, AURA_GROWTH = AURA_GROWTH, AURA_ROW_WRAP = AURA_ROW_WRAP,
     AURA_STACK_ANCHORS = AURA_STACK_ANCHORS, AURA_IGNORE_CATEGORIES = AURA_IGNORE_CATEGORIES,
     AURA_REMINDERS = AURA_REMINDERS, AURA_SORT_ORDER = AURA_SORT_ORDER,
+    AURA_BUFF_FILTER_VALUES = AURA_BUFF_FILTER_VALUES, AURA_DEBUFF_FILTER_VALUES = AURA_DEBUFF_FILTER_VALUES,
     PANDEMIC_MODES = PANDEMIC_MODES,
 }
 
@@ -726,6 +754,7 @@ local function BuildAuras(ctx)
     local AURA_SCOPES, AURA_GROWTH, AURA_ROW_WRAP = deps.AURA_SCOPES, deps.AURA_GROWTH, deps.AURA_ROW_WRAP
     local AURA_STACK_ANCHORS, AURA_IGNORE_CATEGORIES = deps.AURA_STACK_ANCHORS, deps.AURA_IGNORE_CATEGORIES
     local AURA_REMINDERS, AURA_SORT_ORDER, PANDEMIC_MODES = deps.AURA_REMINDERS, deps.AURA_SORT_ORDER, deps.PANDEMIC_MODES
+    local AURA_BUFF_FILTER_VALUES, AURA_DEBUFF_FILTER_VALUES = deps.AURA_BUFF_FILTER_VALUES, deps.AURA_DEBUFF_FILTER_VALUES
 
     local b = W.PageBuilder(ctx)
     b:GlobalStyleHeader("Unit Auras", "Set where auras appear, choose the edited scope, then tune caps, filters, layout and reminders.", 72)
@@ -1615,25 +1644,25 @@ local function BuildAuras(ctx)
     local privateBorder = SliderAt(ctx, private, "Border thickness", 520, -34, 0, 10, 0.5, 150, AuraShared, "privateAuraBorderScale", 3, ApplyAuras)
     local privateGrow = DropdownAt(ctx, private, "Grow Direction", 12, -92, AURA_GROWTH, 220, AuraShared, "privateGrowth", "RIGHT", ApplyAuras)
 
-    local filters = b:CollapsibleSection("a2_filters", "Aura Filters & Sorting", 320, false)
+    local filters = b:CollapsibleSection("a2_filters", "Aura Filters & Sorting", 360, false)
     LabelAt(filters, "Extra includes", 12, -10, 160, "GameFontNormal", T.colors.accent)
     filters._msuf2IncludeBossBuffs = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Also show boss buffs", 12, -34, AuraBuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras), 330))
     filters._msuf2IncludeBossDebuffs = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Also show boss debuffs", 12, -62, AuraDebuffFilters, "includeBoss", false, ForceAuraFilterOverride, ApplyAuras), 330))
     Track(sharedOnlyControls, FitInlineToggle(ToggleAt(ctx, filters, "Show Sated/Exhaustion", 12, -90, AuraShared, "showSated", true, ApplyAuras), 330))
     filters._msuf2IncludeStealable = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Also show stealable buffs", 12, -118, AuraBuffFilters, "includeStealable", false, ForceAuraFilterOverride, ApplyAuras), 330))
     filters._msuf2IncludeDispellable = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Also show dispellable debuffs", 12, -146, AuraDebuffFilters, "includeDispellable", false, ForceAuraFilterOverride, ApplyAuras), 330))
-    LabelAt(filters, "Narrow filters", 380, -10, 160, "GameFontNormal", T.colors.accent)
+    LabelAt(filters, "Base filters", 380, -10, 160, "GameFontNormal", T.colors.accent)
     Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Only boss auras", 380, -34, AuraFilters, "onlyBossAuras", false, ForceAuraFilterOverride, ApplyAuras), 220))
-    Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Only important buffs", 380, -62, AuraBuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras), 220))
-    Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Only important debuffs", 380, -90, AuraDebuffFilters, "onlyImportant", false, ForceAuraFilterOverride, ApplyAuras), 220))
-    LabelAt(filters, "Dispel exception types", 380, -118, 190, "GameFontNormalSmall", T.colors.muted)
-    filters._msuf2DispelMagic = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Magic", 380, -142, AuraDebuffFilters, "dispelMagic", false, ForceAuraFilterOverride, ApplyAuras), 136))
-    filters._msuf2DispelPoison = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Poison", 540, -142, AuraDebuffFilters, "dispelPoison", false, ForceAuraFilterOverride, ApplyAuras), 136))
-    filters._msuf2DispelCurse = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Curse", 380, -166, AuraDebuffFilters, "dispelCurse", false, ForceAuraFilterOverride, ApplyAuras), 136))
-    filters._msuf2DispelDisease = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Disease", 540, -166, AuraDebuffFilters, "dispelDisease", false, ForceAuraFilterOverride, ApplyAuras), 136))
-    DividerAt(filters, -198)
-    Track(sharedOnlyControls, SliderAt(ctx, filters, "Sated threshold", 30, -222, 0, 600, 5, 200, AuraShared, "satedShowAtSeconds", 0, ApplyAuras))
-    Track(capsOverrideControls, ValueDropdownAt(ctx, filters, "Sort order", 380, -222, AURA_SORT_ORDER, 270,
+    filters._msuf2BuffFilterToken = Track(filterOverrideControls, ScopedDropdownAt(ctx, filters, "Buff filter", 380, -72, AURA_BUFF_FILTER_VALUES, 270, AuraBuffFilters, "filterToken", "ALL", ForceAuraFilterOverride, ApplyAuras))
+    filters._msuf2DebuffFilterToken = Track(filterOverrideControls, ScopedDropdownAt(ctx, filters, "Debuff filter", 380, -136, AURA_DEBUFF_FILTER_VALUES, 270, AuraDebuffFilters, "filterToken", "ALL", ForceAuraFilterOverride, ApplyAuras))
+    LabelAt(filters, "Dispel exception types", 380, -198, 190, "GameFontNormalSmall", T.colors.muted)
+    filters._msuf2DispelMagic = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Magic", 380, -222, AuraDebuffFilters, "dispelMagic", false, ForceAuraFilterOverride, ApplyAuras), 136))
+    filters._msuf2DispelPoison = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Poison", 540, -222, AuraDebuffFilters, "dispelPoison", false, ForceAuraFilterOverride, ApplyAuras), 136))
+    filters._msuf2DispelCurse = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Curse", 380, -246, AuraDebuffFilters, "dispelCurse", false, ForceAuraFilterOverride, ApplyAuras), 136))
+    filters._msuf2DispelDisease = Track(filterOverrideControls, FitInlineToggle(ScopedToggleAt(ctx, filters, "Disease", 540, -246, AuraDebuffFilters, "dispelDisease", false, ForceAuraFilterOverride, ApplyAuras), 136))
+    DividerAt(filters, -278)
+    Track(sharedOnlyControls, SliderAt(ctx, filters, "Sated threshold", 30, -302, 0, 600, 5, 200, AuraShared, "satedShowAtSeconds", 0, ApplyAuras))
+    Track(capsOverrideControls, ValueDropdownAt(ctx, filters, "Sort order", 380, -302, AURA_SORT_ORDER, 270,
         function()
             local c = AuraCaps()
             if type(c.sortOrder) == "number" then return c.sortOrder end
@@ -1720,8 +1749,8 @@ local function BuildAuras(ctx)
         local df = AuraDebuffFilters()
         local buffOnlyMine = BoolValue(bf, "onlyMine", false)
         local debuffOnlyMine = BoolValue(df, "onlyMine", false)
-        local buffNarrow = buffOnlyMine or BoolValue(bf, "onlyImportant", false)
-        local debuffNarrow = debuffOnlyMine or BoolValue(df, "onlyImportant", false)
+        local buffNarrow = buffOnlyMine or (bf.filterToken ~= nil and bf.filterToken ~= "ALL")
+        local debuffNarrow = debuffOnlyMine or (df.filterToken ~= nil and df.filterToken ~= "ALL")
         local dispelTypesEnabled = filtersEditable and debuffNarrow and BoolValue(df, "includeDispellable", false)
         SetControlEnabled(filters._msuf2IncludeBossBuffs, filtersEditable and buffOnlyMine)
         SetControlEnabled(filters._msuf2IncludeBossDebuffs, filtersEditable and debuffOnlyMine)

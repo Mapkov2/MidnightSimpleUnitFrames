@@ -977,7 +977,9 @@ function GF.EnsureDB()
                         g.filterMode  = nil
                     end
                     -- Ensure new keys exist with defaults
-                    if g.filterToken == nil then
+                    if g.filterToken == "IMPORTANT" then
+                        g.filterToken = (gk == "debuff") and "ALL" or "RAID"
+                    elseif g.filterToken == nil then
                         g.filterToken = (gk == "debuff") and "ALL" or "RAID"
                     end
                     if type(g.blacklistCats) ~= "table" then

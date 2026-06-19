@@ -38,9 +38,13 @@ local BUFF_TOKENS = {
     PLAYER           = "HELPFUL|PLAYER",
     RAID             = "HELPFUL|RAID",
     RAID_PLAYER      = "HELPFUL|RAID|PLAYER",
+    RAID_PLAYER_DISPELLABLE = "HELPFUL|RAID_PLAYER_DISPELLABLE",
+    RAID_IN_COMBAT   = "HELPFUL|RAID_IN_COMBAT",
+    CROWD_CONTROL    = "HELPFUL|CROWD_CONTROL",
+    BIG_DEFENSIVE    = "HELPFUL|BIG_DEFENSIVE",
+    EXTERNAL_DEFENSIVE = "HELPFUL|EXTERNAL_DEFENSIVE",
     CANCELABLE       = "HELPFUL|CANCELABLE",
     NOT_CANCELABLE   = "HELPFUL|NOT_CANCELABLE",
-    IMPORTANT        = "HELPFUL|IMPORTANT",
 }
 
 local DEBUFF_TOKENS = {
@@ -48,8 +52,12 @@ local DEBUFF_TOKENS = {
     PLAYER           = "HARMFUL|PLAYER",
     RAID             = "HARMFUL|RAID",
     DISPELLABLE      = "HARMFUL|RAID_PLAYER_DISPELLABLE",
+    RAID_IN_COMBAT   = "HARMFUL|RAID_IN_COMBAT",
     CROWD_CONTROL    = "HARMFUL|CROWD_CONTROL",
-    IMPORTANT        = "HARMFUL|IMPORTANT",
+    BIG_DEFENSIVE    = "HARMFUL|BIG_DEFENSIVE",
+    EXTERNAL_DEFENSIVE = "HARMFUL|EXTERNAL_DEFENSIVE",
+    CANCELABLE       = "HARMFUL|CANCELABLE",
+    NOT_CANCELABLE   = "HARMFUL|NOT_CANCELABLE",
 }
 
 -- Externals always use BIG_DEFENSIVE (unchanged)
@@ -68,11 +76,13 @@ end
 
 -- Resolve buff filter string from DB key
 local function ResolveBuffFilter(filterToken)
+    if filterToken == "IMPORTANT" then return BUFF_TOKENS.RAID end
     return BUFF_TOKENS[filterToken] or BUFF_TOKENS.RAID
 end
 
 -- Resolve debuff filter string from DB key
 local function ResolveDebuffFilter(filterToken)
+    if filterToken == "IMPORTANT" then return DEBUFF_TOKENS.ALL end
     -- RAID_PLAYER_DISPELLABLE is empty on classes with no defensive dispel.
     -- Fall back to plain HARMFUL so DPS-only classes can still use the
     -- debuff group instead of seeing an empty icon set.
@@ -92,9 +102,13 @@ local BUFF_FILTER_ITEMS = {
     { key = "PLAYER",         label = "My Buffs Only"     },
     { key = "RAID",           label = "Raid Buffs"        },
     { key = "RAID_PLAYER",    label = "Raid + My Buffs"   },
+    { key = "RAID_PLAYER_DISPELLABLE", label = "Player Dispellable" },
+    { key = "RAID_IN_COMBAT", label = "Raid in Combat"    },
+    { key = "CROWD_CONTROL",  label = "Crowd Control"     },
+    { key = "BIG_DEFENSIVE",  label = "Big Defensive"     },
+    { key = "EXTERNAL_DEFENSIVE", label = "External Defensive" },
     { key = "CANCELABLE",     label = "Cancelable"        },
     { key = "NOT_CANCELABLE", label = "Not Cancelable"    },
-    { key = "IMPORTANT",      label = "Important"         },
 }
 
 local DEBUFF_FILTER_ITEMS = {
@@ -102,8 +116,12 @@ local DEBUFF_FILTER_ITEMS = {
     { key = "PLAYER",         label = "My Debuffs Only"   },
     { key = "RAID",           label = "Boss / Raid"       },
     { key = "DISPELLABLE",    label = "Dispellable"       },
+    { key = "RAID_IN_COMBAT", label = "Raid in Combat"    },
     { key = "CROWD_CONTROL",  label = "Crowd Control"     },
-    { key = "IMPORTANT",      label = "Important"         },
+    { key = "BIG_DEFENSIVE",  label = "Big Defensive"     },
+    { key = "EXTERNAL_DEFENSIVE", label = "External Defensive" },
+    { key = "CANCELABLE",     label = "Cancelable"        },
+    { key = "NOT_CANCELABLE", label = "Not Cancelable"    },
 }
 
 ------------------------------------------------------------------------

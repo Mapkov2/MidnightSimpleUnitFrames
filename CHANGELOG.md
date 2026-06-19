@@ -1,5 +1,13 @@
 # Changelog
 
+## 5.60 - 2026-06-19
+
+### Fixes
+
+- Removed the obsolete Important aura filter after WoW 12.0.7.
+- Added new aura filters for unit and group frames: Cancelable, Not Cancelable, Raid in Combat, Crowd Control, Big Defensive, External Defensive, and Player Dispellable.
+- Fixed group-frame right-click unit menus so the context menu opens directly in instanced combat without needing a prior left-click target selection.
+
 ## 5.59 - 2026-06-13
 
 ### WoW 12.0.7 Fixes

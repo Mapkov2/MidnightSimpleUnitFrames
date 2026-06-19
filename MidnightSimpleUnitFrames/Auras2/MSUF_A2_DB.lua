@@ -305,6 +305,39 @@ local function Default(t, key, value)
     if t[key] == nil then t[key] = value end
 end
 
+local A2_BUFF_FILTER_TOKENS = {
+    ALL = true,
+    PLAYER = true,
+    RAID = true,
+    RAID_PLAYER = true,
+    RAID_PLAYER_DISPELLABLE = true,
+    RAID_IN_COMBAT = true,
+    CROWD_CONTROL = true,
+    BIG_DEFENSIVE = true,
+    EXTERNAL_DEFENSIVE = true,
+    CANCELABLE = true,
+    NOT_CANCELABLE = true,
+}
+
+local A2_DEBUFF_FILTER_TOKENS = {
+    ALL = true,
+    PLAYER = true,
+    RAID = true,
+    DISPELLABLE = true,
+    RAID_IN_COMBAT = true,
+    CROWD_CONTROL = true,
+    BIG_DEFENSIVE = true,
+    EXTERNAL_DEFENSIVE = true,
+    CANCELABLE = true,
+    NOT_CANCELABLE = true,
+}
+
+local function SanitizeFilterToken(token, valid, defaultToken)
+    token = tostring(token or defaultToken or "ALL")
+    if token == "IMPORTANT" then return defaultToken or "ALL" end
+    return valid[token] and token or (defaultToken or "ALL")
+end
+
 -- Normalize a filter config table to the expected schema.
 -- sharedSettings is used only for one-time migration from legacy toggles.
 function Filters.NormalizeFilters(f, sharedSettings, migrateFlagKey)
@@ -323,34 +356,27 @@ function Filters.NormalizeFilters(f, sharedSettings, migrateFlagKey)
         f[migrateFlagKey] = true
     end
 
-    -- IMPORTANT split toggle migration (v1):
-    -- Legacy config used f.onlyImportantAuras (single toggle) to force both buffs+debuffs to IMPORTANT.
-    -- New config uses per-type toggles: f.buffs.onlyImportant and f.debuffs.onlyImportant.
-    if not f._msufA2_onlyImportantSplitMigrated_v1 then
-        if f.onlyImportantAuras == true then
-            if b.onlyImportant == nil then b.onlyImportant = true end
-            if d.onlyImportant == nil then d.onlyImportant = true end
-            -- Deprecate legacy master flag so users can independently toggle buffs/debuffs.
-            f.onlyImportantAuras = false
-        end
-        f._msufA2_onlyImportantSplitMigrated_v1 = true
-    end
+    -- Patch 12.0.7 removed Blizzard's IMPORTANT aura filter token. Drop legacy
+    -- saved values instead of migrating them to another narrow filter.
+    f.onlyImportantAuras = nil
+    f._msufA2_onlyImportantSplitMigrated_v1 = nil
+    b.onlyImportant = nil
+    d.onlyImportant = nil
 
     Default(f, "hidePermanent", false)
     Default(b, "onlyMine", false)
     Default(b, "includeBoss", false)
     Default(b, "includeStealable", false)
-    Default(b, "onlyImportant", false)
+    b.filterToken = SanitizeFilterToken(b.filterToken, A2_BUFF_FILTER_TOKENS, "ALL")
     Default(d, "onlyMine", false)
     Default(d, "includeBoss", false)
     Default(d, "includeDispellable", false)
-    Default(d, "onlyImportant", false)
+    d.filterToken = SanitizeFilterToken(d.filterToken, A2_DEBUFF_FILTER_TOKENS, "ALL")
     Default(d, "dispelMagic", false)
     Default(d, "dispelCurse", false)
     Default(d, "dispelPoison", false)
     Default(d, "dispelDisease", false)
     Default(f, "onlyBossAuras", false)
-    Default(f, "onlyImportantAuras", false)
     Default(f, "onlyRaidInCombatAuras", false)
     -- Aura sort order (passed to C_UnitAuras.GetAuraSlots).
     -- 0=Unsorted (default/legacy), 1=Default, 2=BigDefensive, 3=Expiration,
@@ -425,7 +451,7 @@ end
 -- Returns:
 --   tf, masterOn,
 --   onlyBossAuras,
---   onlyImportantBuffs, onlyImportantDebuffs,
+--   buffFilterToken, debuffFilterToken,
 --   buffsOnlyMine, debuffsOnlyMine,
 --   buffsIncludeBoss, debuffsIncludeBoss,
 --   hidePermanentBuffs,
@@ -439,11 +465,7 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
     local masterOn = (tf and tf.enabled == true) and true or false
     local onlyBossAuras = (masterOn and tf and tf.onlyBossAuras == true) and true or false
 
-    -- Legacy (deprecated): a single toggle that forced BOTH buffs+debuffs to IMPORTANT.
-    local legacyOnlyImportant = (masterOn and tf and tf.onlyImportantAuras == true) and true or false
-
-    local onlyImportantBuffs, onlyImportantDebuffs = false, false
-
+    local buffFilterToken, debuffFilterToken = "ALL", "ALL"
     local buffsOnlyMine, debuffsOnlyMine = false, false
     local buffsIncludeBoss, buffsIncludeStealable, debuffsIncludeBoss = false, false, false
     local hidePermanentBuffs = false
@@ -455,17 +477,8 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
         local b = tf.buffs
         local d = tf.debuffs
 
-        -- IMPORTANT per-type toggles (preferred). Fall back to legacyOnlyImportant only if missing.
-        if b and b.onlyImportant ~= nil then
-            onlyImportantBuffs = (b.onlyImportant == true)
-        else
-            onlyImportantBuffs = legacyOnlyImportant
-        end
-        if d and d.onlyImportant ~= nil then
-            onlyImportantDebuffs = (d.onlyImportant == true)
-        else
-            onlyImportantDebuffs = legacyOnlyImportant
-        end
+        buffFilterToken = SanitizeFilterToken(b and b.filterToken, A2_BUFF_FILTER_TOKENS, "ALL")
+        debuffFilterToken = SanitizeFilterToken(d and d.filterToken, A2_DEBUFF_FILTER_TOKENS, "ALL")
 
         if b and b.onlyMine ~= nil then
             buffsOnlyMine = (b.onlyMine == true)
@@ -499,12 +512,12 @@ function Filters.ResolveRuntimeFlags(a2, shared, unitKey)
         buffsOnlyMine = (shared and shared.onlyMyBuffs == true) or false
         debuffsOnlyMine = (shared and shared.onlyMyDebuffs == true) or false
         hidePermanentBuffs = (shared and shared.hidePermanent == true) or false
-        onlyImportantBuffs = false
-        onlyImportantDebuffs = false
+        buffFilterToken = "ALL"
+        debuffFilterToken = "ALL"
         sortOrder = (shared and type(shared.sortOrder) == "number") and shared.sortOrder or 0
     end
 
-    return tf, masterOn, onlyBossAuras, onlyImportantBuffs, onlyImportantDebuffs,
+    return tf, masterOn, onlyBossAuras, buffFilterToken, debuffFilterToken,
         buffsOnlyMine, debuffsOnlyMine,
         buffsIncludeBoss, debuffsIncludeBoss,
         hidePermanentBuffs,
@@ -599,7 +612,7 @@ local function _DoApply()
     -- 4.0b1 fix:
     -- Auras2 now has a cached "update-only" fast path that reuses the previous
     -- filtered result when the aura structure did not change. Options edits
-    -- (Important/Only Mine/Only Boss/ignore list/caps/layout, etc.) can therefore
+    -- (base filter/Only Mine/Only Boss/ignore list/caps/layout, etc.) can therefore
     -- look stale unless we explicitly bump the config generation and wipe cached
     -- filter results before asking for a refresh.
     local invalidate = API.InvalidateDB

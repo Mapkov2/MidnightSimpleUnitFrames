@@ -1386,7 +1386,7 @@ local function RenderUnit(entry)
         if Filters and Filters.ResolveRuntimeFlags then
             cfg.tf, cfg.masterOn,
             cfg.onlyBossAuras,
-            cfg.onlyImportantBuffs, cfg.onlyImportantDebuffs,
+            cfg.buffFilterToken, cfg.debuffFilterToken,
             cfg.buffsOnlyMine, cfg.debuffsOnlyMine,
             cfg.buffsIncludeBoss, cfg.debuffsIncludeBoss,
             cfg.hidePermanentBuffs,
@@ -1399,8 +1399,8 @@ local function RenderUnit(entry)
             cfg.tf = nil
             cfg.masterOn = false
             cfg.onlyBossAuras = false
-            cfg.onlyImportantBuffs = false
-            cfg.onlyImportantDebuffs = false
+            cfg.buffFilterToken = "ALL"
+            cfg.debuffFilterToken = "ALL"
             cfg.buffsOnlyMine = false
             cfg.debuffsOnlyMine = false
             cfg.buffsIncludeBoss = false

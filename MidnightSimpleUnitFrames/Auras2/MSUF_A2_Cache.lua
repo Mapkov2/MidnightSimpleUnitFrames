@@ -125,9 +125,30 @@ local HELPFUL         = "HELPFUL"
 local HARMFUL         = "HARMFUL"
 local HELPFUL_PLAYER  = "HELPFUL|PLAYER"
 local HARMFUL_PLAYER  = "HARMFUL|PLAYER"
-local HELPFUL_IMPORTANT = "HELPFUL|IMPORTANT"
-local HARMFUL_IMPORTANT = "HARMFUL|IMPORTANT"
 local HARMFUL_DISPELLABLE = "HARMFUL|RAID_PLAYER_DISPELLABLE"
+local BUFF_FILTER_TOKENS = {
+    PLAYER = HELPFUL_PLAYER,
+    RAID = "HELPFUL|RAID",
+    RAID_PLAYER = "HELPFUL|RAID|PLAYER",
+    RAID_PLAYER_DISPELLABLE = "HELPFUL|RAID_PLAYER_DISPELLABLE",
+    RAID_IN_COMBAT = "HELPFUL|RAID_IN_COMBAT",
+    CROWD_CONTROL = "HELPFUL|CROWD_CONTROL",
+    BIG_DEFENSIVE = "HELPFUL|BIG_DEFENSIVE",
+    EXTERNAL_DEFENSIVE = "HELPFUL|EXTERNAL_DEFENSIVE",
+    CANCELABLE = "HELPFUL|CANCELABLE",
+    NOT_CANCELABLE = "HELPFUL|NOT_CANCELABLE",
+}
+local DEBUFF_FILTER_TOKENS = {
+    PLAYER = HARMFUL_PLAYER,
+    RAID = "HARMFUL|RAID",
+    DISPELLABLE = HARMFUL_DISPELLABLE,
+    RAID_IN_COMBAT = "HARMFUL|RAID_IN_COMBAT",
+    CROWD_CONTROL = "HARMFUL|CROWD_CONTROL",
+    BIG_DEFENSIVE = "HARMFUL|BIG_DEFENSIVE",
+    EXTERNAL_DEFENSIVE = "HARMFUL|EXTERNAL_DEFENSIVE",
+    CANCELABLE = "HARMFUL|CANCELABLE",
+    NOT_CANCELABLE = "HARMFUL|NOT_CANCELABLE",
+}
 
 -- Sated/Exhaustion spellID hashtable (O(1) lookup, built once at load)
 -- Zero steady-state cost: spellId check happens only on ADD.
@@ -433,6 +454,13 @@ local function ReadAccessibleBool(v)
     if v == true then return true end
     if v == false then return false end
     return nil
+end
+
+local function AuraPassesTokenFilter(unit, aid, filter, lIsFiltered)
+    if not filter or not lIsFiltered then return true end
+    local filtered = ReadAccessibleBool(lIsFiltered(unit, aid, filter))
+    if filtered == true then return false end
+    return true
 end
 
 local function BuffIsStealable(aura)
@@ -818,7 +846,7 @@ function Cache.InvalidateAll()
         s.structureChanged = true
         s.structureEpoch = (s.structureEpoch or 0) + 1
         s.updatedIDs = nil
-        -- Clear fast-path filter cache: options changes (Important, OnlyMine,
+        -- Clear fast-path filter cache: options changes (base filter, OnlyMine,
         -- Caps, IgnoreList, etc.) must force a full re-filter on next
         -- FilterAndSort, even when no aura add/remove occurred.
         s._lastFilterGen = nil
@@ -933,10 +961,8 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
 
         if cfg._onlyBoss and ReadBossFlag(data) == 0 then return false end
 
-        if cfg._onlyImpBuffs and lIsFiltered then
-            if ReadAccessibleBool(lIsFiltered(unit, aid, HELPFUL_IMPORTANT)) == true then
-                if not (cfg._includeStealableBuffs and BuffIsStealable(data)) then return false end
-            end
+        if cfg._buffFilter and not AuraPassesTokenFilter(unit, aid, cfg._buffFilter, lIsFiltered) then
+            if not (cfg._includeStealableBuffs and BuffIsStealable(data)) then return false end
         end
     else
         if cfg._debuffsOnlyMine and not cfg._useMergeDebuffs and not isOwn then
@@ -946,11 +972,9 @@ local function FilterAura(data, aid, unit, isHelpful, isOwn, cfg, secretsNow, no
         end
         if cfg._onlyBoss and ReadBossFlag(data) == 0 then return false end
 
-        if cfg._onlyImpDebuffs and lIsFiltered then
-            if ReadAccessibleBool(lIsFiltered(unit, aid, HARMFUL_IMPORTANT)) == true then
-                if not (cfg._includeDispellableDebuffs and DebuffMatchesDispelException(unit, aid, data, cfg, lIsFiltered)) then
-                    return false
-                end
+        if cfg._debuffFilter and not AuraPassesTokenFilter(unit, aid, cfg._debuffFilter, lIsFiltered) then
+            if not (cfg._includeDispellableDebuffs and DebuffMatchesDispelException(unit, aid, data, cfg, lIsFiltered)) then
+                return false
             end
         end
     end
@@ -1013,14 +1037,14 @@ local function PrepareFilterConfig(cfg, cfgGen)
     cfg._debuffsOnlyMine  = cfg.debuffsOnlyMine
     cfg._hidePermanent    = cfg.hidePermanentBuffs
     cfg._onlyBoss         = cfg.onlyBossAuras
-    cfg._onlyImpBuffs     = cfg.onlyImportantBuffs
-    cfg._onlyImpDebuffs   = cfg.onlyImportantDebuffs
+    cfg._buffFilter       = BUFF_FILTER_TOKENS[cfg.buffFilterToken]
+    cfg._debuffFilter     = DEBUFF_FILTER_TOKENS[cfg.debuffFilterToken]
     cfg._includeStealableBuffs = (cfg.buffsIncludeStealable == true)
-        and (cfg._buffsOnlyMine or cfg._onlyImpBuffs)
+        and (cfg._buffsOnlyMine or cfg._buffFilter ~= nil)
     cfg._useMergeBuffs    = cfg.buffsOnlyMine and (cfg.buffsIncludeBoss or cfg._includeStealableBuffs)
     cfg._useMergeDebuffs  = cfg.debuffsOnlyMine and cfg.debuffsIncludeBoss
     cfg._includeDispellableDebuffs = (cfg.debuffsIncludeDispellable == true)
-        and (cfg._debuffsOnlyMine or cfg._onlyImpDebuffs)
+        and (cfg._debuffsOnlyMine or cfg._debuffFilter ~= nil)
     cfg._debuffDispelMagic = (cfg.debuffDispelMagic == true)
     cfg._debuffDispelCurse = (cfg.debuffDispelCurse == true)
     cfg._debuffDispelPoison = (cfg.debuffDispelPoison == true)
@@ -1037,7 +1061,7 @@ local function PrepareFilterConfig(cfg, cfgGen)
     cfg._ignoreHash = (type(ic) == "table" and next(ic) ~= nil) and Cache.BuildIgnoreHash(ic) or nil
     cfg._noFilters = not cfg._ignoreHash and not cfg._checkSated and not cfg._onlyBoss
         and not cfg._buffsOnlyMine and not cfg._debuffsOnlyMine
-        and not cfg._hidePermanent and not cfg._onlyImpBuffs and not cfg._onlyImpDebuffs
+        and not cfg._hidePermanent and not cfg._buffFilter and not cfg._debuffFilter
         and not cfg._useMergeBuffs and not cfg._useMergeDebuffs
         and not cfg._includeStealableBuffs
         and not cfg._includeDispellableDebuffs
