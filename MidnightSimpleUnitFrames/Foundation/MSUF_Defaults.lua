@@ -1812,14 +1812,14 @@ filters = {
                     enabled = true,
                     hidePermanent = false,
                     onlyBossAuras = false,
-                    onlyImportantAuras = false,
                     buffs = {
+                        filterToken = "ALL",
                         includeBoss = false,
                         includeStealable = false,
                         onlyMine = false,
-                        onlyImportant = false,
                     },
                     debuffs = {
+                        filterToken = "ALL",
                         dispelCurse = false,
                         dispelDisease = false,
                         dispelEnrage = false,
@@ -1828,7 +1828,6 @@ filters = {
                         includeBoss = false,
                         includeDispellable = false,
                         onlyMine = false,
-                        onlyImportant = false,
                     },
                 },
             },
@@ -1849,14 +1848,14 @@ filters = {
                         enabled = true,
                         hidePermanent = false,
                         onlyBossAuras = false,
-                        onlyImportantAuras = false,
                         buffs = {
+                            filterToken = "ALL",
                             includeBoss = false,
                             includeStealable = false,
                             onlyMine = false,
-                            onlyImportant = false,
                         },
                         debuffs = {
+                            filterToken = "ALL",
                             dispelCurse = false,
                             dispelDisease = false,
                             dispelEnrage = false,
@@ -1865,7 +1864,6 @@ filters = {
                             includeBoss = false,
                             includeDispellable = false,
                             onlyMine = false,
-                            onlyImportant = false,
                         },
                     },
                 },
@@ -1885,14 +1883,14 @@ filters = {
                         enabled = true,
                         hidePermanent = false,
                         onlyBossAuras = false,
-                        onlyImportantAuras = false,
                         buffs = {
+                            filterToken = "ALL",
                             includeBoss = false,
                             includeStealable = false,
                             onlyMine = false,
-                            onlyImportant = false,
                         },
                         debuffs = {
+                            filterToken = "ALL",
                             dispelCurse = false,
                             dispelDisease = false,
                             dispelEnrage = false,
@@ -1901,7 +1899,6 @@ filters = {
                             includeBoss = false,
                             includeDispellable = false,
                             onlyMine = false,
-                            onlyImportant = false,
                         },
                     },
                 },
@@ -1926,14 +1923,14 @@ filters = {
                     enabled = true,
                     hidePermanent = false,
                     onlyBossAuras = false,
-                    onlyImportantAuras = false,
                     buffs = {
+                        filterToken = "ALL",
                         includeBoss = false,
                         includeStealable = false,
                         onlyMine = false,
-                        onlyImportant = false,
                     },
                     debuffs = {
+                        filterToken = "ALL",
                         dispelCurse = false,
                         dispelDisease = false,
                         dispelEnrage = false,
@@ -1942,49 +1939,41 @@ filters = {
                         includeBoss = false,
                         includeDispellable = false,
                         onlyMine = false,
-                        onlyImportant = false,
                     },
                 },
             }
         end
     end
-    -- Auras 2.0: ensure curated IMPORTANT filter keys exist for existing profiles
-    -- IMPORTANT = Blizzard curated "important" aura list for unitframe aura APIs.
-    -- Split toggles: Buffs + Debuffs have their own IMPORTANT toggle (like Unhalted).
+    -- Auras 2.0: ensure modern filter-token keys exist for existing profiles.
+    -- Patch 12.0.7 removed Blizzard's IMPORTANT aura filter token, so legacy
+    -- IMPORTANT settings are deleted instead of migrated.
     if MSUF_DB and MSUF_DB.auras2 then
         local a2 = MSUF_DB.auras2
         if type(a2.bossHealAuras) ~= "table" then a2.bossHealAuras = {} end
         if a2.bossHealAuras.highlightOwn == nil then a2.bossHealAuras.highlightOwn = false end
         if a2.bossHealAuras.hideOthers == nil then a2.bossHealAuras.hideOthers = false end
 
-        local function EnsureImportantSplit(f)
+        local function EnsureAuraFilterTokens(f)
             if not f then return end
             f.buffs = (type(f.buffs) == "table") and f.buffs or {}
             f.debuffs = (type(f.debuffs) == "table") and f.debuffs or {}
             local b, d = f.buffs, f.debuffs
 
-            -- One-time migration: legacy onlyImportantAuras -> per-type toggles
-            if f._msufA2_onlyImportantSplitMigrated_v1 ~= true then
-                if f.onlyImportantAuras == true then
-                    if b.onlyImportant == nil then b.onlyImportant = true end
-                    if d.onlyImportant == nil then d.onlyImportant = true end
-                    f.onlyImportantAuras = false
-                end
-                f._msufA2_onlyImportantSplitMigrated_v1 = true
-            end
-
-            if f.onlyImportantAuras == nil then f.onlyImportantAuras = false end
-            if b.onlyImportant == nil then b.onlyImportant = false end
-            if d.onlyImportant == nil then d.onlyImportant = false end
+            f.onlyImportantAuras = nil
+            f._msufA2_onlyImportantSplitMigrated_v1 = nil
+            b.onlyImportant = nil
+            d.onlyImportant = nil
+            if b.filterToken == nil or b.filterToken == "IMPORTANT" then b.filterToken = "ALL" end
+            if d.filterToken == nil or d.filterToken == "IMPORTANT" then d.filterToken = "ALL" end
         end
 
         if a2.shared and a2.shared.filters then
-            EnsureImportantSplit(a2.shared.filters)
+            EnsureAuraFilterTokens(a2.shared.filters)
         end
         if a2.perUnit then
             for _, pu in pairs(a2.perUnit) do
                 if pu and pu.filters then
-                    EnsureImportantSplit(pu.filters)
+                    EnsureAuraFilterTokens(pu.filters)
                 end
             end
         end

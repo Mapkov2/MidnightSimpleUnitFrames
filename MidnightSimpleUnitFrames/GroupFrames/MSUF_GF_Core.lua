@@ -173,6 +173,62 @@ local function MarkPostCombatHeaderRecovery()
 end
 
 ------------------------------------------------------------------------
+-- Secure right-click unit menu
+------------------------------------------------------------------------
+local _groupUnitDropDown
+
+local function ResolveGroupButtonUnit(btn)
+    if btn and btn.GetAttribute then
+        local unit = btn:GetAttribute("unit")
+        if type(unit) == "string" and unit ~= "" then return unit end
+    end
+
+    local unit = btn and btn.unit
+    if type(unit) == "string" and unit ~= "" then return unit end
+
+    return nil
+end
+
+local function ResolveGroupUnitMenuType(unit)
+    if not unit then return "RAID_PLAYER" end
+    if unit == "player" or (_G.UnitIsUnit and _G.UnitIsUnit(unit, "player")) then
+        return "SELF"
+    end
+    if _G.UnitInRaid and _G.UnitInRaid(unit) then return "RAID_PLAYER" end
+    if _G.UnitInParty and _G.UnitInParty(unit) then return "PARTY" end
+    if type(unit) == "string" and unit:sub(1, 5) == "party" then return "PARTY" end
+    return "RAID_PLAYER"
+end
+
+local function EnsureGroupUnitDropDown()
+    if _groupUnitDropDown and _groupUnitDropDown.GetName then return _groupUnitDropDown end
+    _groupUnitDropDown = _G.MSUFGroupUnitPopupDropDown
+    if _groupUnitDropDown and _groupUnitDropDown.GetName then return _groupUnitDropDown end
+    _groupUnitDropDown = CreateFrame("Frame", "MSUFGroupUnitPopupDropDown", UIParent, "UIDropDownMenuTemplate")
+    return _groupUnitDropDown
+end
+
+local function OpenGroupUnitMenu(btn)
+    local unit = ResolveGroupButtonUnit(btn)
+    if not (unit and UnitExists and UnitExists(unit)) then return end
+
+    local menuType = ResolveGroupUnitMenuType(unit)
+    local openMenu = _G.UnitPopup_OpenMenu
+    if type(openMenu) == "function" then
+        local ok = pcall(openMenu, menuType, { unit = unit })
+        if ok then return end
+    end
+
+    local showMenu = _G.UnitPopup_ShowMenu
+    if type(showMenu) == "function" then
+        local dd = EnsureGroupUnitDropDown()
+        showMenu(dd, menuType, unit, UnitName and UnitName(unit))
+    end
+end
+
+GF.OpenUnitMenu = OpenGroupUnitMenu
+
+------------------------------------------------------------------------
 -- Click-cast compatibility
 ------------------------------------------------------------------------
 if type(_G.ClickCastFrames) ~= "table" then _G.ClickCastFrames = {} end
@@ -1057,16 +1113,10 @@ local function BuildFrameHierarchy(f, kind)
     -- ClickCast integration; effects refresh this after OnEnter/OnLeave are set.
     if not f._msufGFIsPreviewFrame then GF.RegisterClickCastFrame(f, false) end
 
-    -- Unit menu
-    f.menu = function(btn)
-        if btn.unit and UnitExists(btn.unit) then
-            local which = "PARTY"
-            if _G.IsInRaid and _G.IsInRaid() then which = "RAID_PLAYER" end
-            if UnitPopup_ShowMenu then
-                UnitPopup_ShowMenu(btn, which, btn.unit, UnitName(btn.unit))
-            end
-        end
-    end
+    -- SecureUnitButtonTemplate invokes this for *type2=togglemenu. Use the
+    -- modern UnitPopup_OpenMenu path and resolve the unit directly from the
+    -- secure attribute so the first right-click works before target selection.
+    f.menu = OpenGroupUnitMenu
 end
 
 ------------------------------------------------------------------------
@@ -1355,7 +1405,8 @@ local function GF_InitButton(f, kind)
     f._msufGFKind = kind
     f.msufConfigKey = GF.GetConfigDBKey and GF.GetConfigDBKey(kind) or ((kind == "raid") and "gf_raid" or "gf_party")
 
-    -- RegisterForClicks MUST happen here, NOT in initialConfigFunction
+    -- Register clicks from normal Lua. RegisterForClicks is not available
+    -- inside SecureGroupHeader's restricted initialConfigFunction.
     if f.RegisterForClicks then
         f:RegisterForClicks("AnyUp")
     end

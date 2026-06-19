@@ -1032,6 +1032,8 @@ local function MSUF_ProfileIO_NormalizeGFAuraGroupForExport(auras, groupKey, def
         else
             group.filterToken = defaultToken
         end
+    elseif group.filterToken == "IMPORTANT" then
+        group.filterToken = defaultToken
     end
 
     if type(group.blacklistCats) ~= "table" then
